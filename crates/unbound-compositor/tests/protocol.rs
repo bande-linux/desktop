@@ -1,5 +1,7 @@
 mod common;
 
+use std::time::Duration;
+
 use common::{RED, ShmImage, TestClient, quadrants};
 use smithay::utils::{Point, Size};
 use unbound_compositor::Headless;
@@ -97,4 +99,31 @@ fn closing_the_client_unmaps_its_window() {
     server.dispatch().expect("server dispatch");
 
     assert!(server.windows().is_empty());
+}
+
+#[test]
+fn frame_callback_is_done_once_the_frame_is_presented() {
+    let mut server = server();
+    let mut client = TestClient::connect(&mut server);
+    let pixels = quadrants(4, 4, 16);
+    client.show_window(
+        &mut server,
+        &ShmImage {
+            width: 4,
+            height: 4,
+            stride: 16,
+            format: Format::Argb8888,
+            bytes: &pixels,
+        },
+    );
+    client.request_frame(&mut server);
+    assert!(server.take_redraw());
+    assert_eq!(client.frames_done(), 0);
+
+    server
+        .frame_done(Duration::from_millis(16))
+        .expect("frame done");
+    client.exchange(&mut server);
+
+    assert_eq!(client.frames_done(), 1);
 }

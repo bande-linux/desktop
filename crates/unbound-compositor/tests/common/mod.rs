@@ -6,6 +6,7 @@ use std::os::unix::net::UnixStream;
 
 use unbound_compositor::Headless;
 use wayland_client::protocol::wl_buffer::WlBuffer;
+use wayland_client::protocol::wl_callback::{self, WlCallback};
 use wayland_client::protocol::wl_compositor::WlCompositor;
 use wayland_client::protocol::wl_registry::{self, WlRegistry};
 use wayland_client::protocol::wl_shm::{Format, WlShm};
@@ -52,6 +53,7 @@ struct Globals {
     shm: Option<WlShm>,
     wm_base: Option<XdgWmBase>,
     configured: bool,
+    frames_done: usize,
 }
 
 pub struct TestClient {
@@ -124,6 +126,17 @@ impl TestClient {
         self.exchange(server);
         self.windows.push((surface, xdg_surface, toplevel));
     }
+
+    pub fn request_frame(&mut self, server: &mut Headless) {
+        let (surface, _, _) = self.windows.last().expect("a shown window");
+        surface.frame(&self.queue.handle(), ());
+        surface.commit();
+        self.exchange(server);
+    }
+
+    pub fn frames_done(&self) -> usize {
+        self.globals.frames_done
+    }
 }
 
 impl Dispatch<WlRegistry, ()> for Globals {
@@ -176,6 +189,21 @@ impl Dispatch<XdgSurface, ()> for Globals {
         if let xdg_surface::Event::Configure { serial } = event {
             xdg_surface.ack_configure(serial);
             globals.configured = true;
+        }
+    }
+}
+
+impl Dispatch<WlCallback, ()> for Globals {
+    fn event(
+        globals: &mut Self,
+        _: &WlCallback,
+        event: wl_callback::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        if let wl_callback::Event::Done { .. } = event {
+            globals.frames_done += 1;
         }
     }
 }

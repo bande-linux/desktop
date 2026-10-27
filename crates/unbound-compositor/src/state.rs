@@ -1,6 +1,8 @@
 use std::io;
+use std::os::fd::OwnedFd;
 use std::os::unix::net::UnixStream;
 use std::sync::Arc;
+use std::time::Duration;
 
 use smithay::input::{Seat, SeatHandler, SeatState};
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
@@ -51,6 +53,7 @@ pub struct State {
     shm_state: ShmState,
     seat_state: SeatState<State>,
     windows: Vec<Window>,
+    needs_redraw: bool,
 }
 
 pub struct Headless {
@@ -69,6 +72,7 @@ impl Headless {
             shm_state: ShmState::new::<State>(&handle, []),
             seat_state: SeatState::new(),
             windows: Vec::new(),
+            needs_redraw: false,
         };
         Ok(Self { display, state })
     }
@@ -81,6 +85,30 @@ impl Headless {
 
     pub fn dispatch(&mut self) -> io::Result<()> {
         self.display.dispatch_clients(&mut self.state)?;
+        self.display.flush_clients()
+    }
+
+    pub fn poll_fd(&mut self) -> io::Result<OwnedFd> {
+        self.display.backend().poll_fd().try_clone_to_owned()
+    }
+
+    pub fn take_redraw(&mut self) -> bool {
+        std::mem::take(&mut self.state.needs_redraw)
+    }
+
+    pub fn frame_done(&mut self, time: Duration) -> io::Result<()> {
+        let millis = u32::try_from(time.as_millis()).unwrap_or(u32::MAX);
+        for window in &self.state.windows {
+            with_states(window.toplevel.wl_surface(), |states| {
+                states
+                    .cached_state
+                    .get::<SurfaceAttributes>()
+                    .current()
+                    .frame_callbacks
+                    .drain(..)
+                    .for_each(|callback| callback.done(millis));
+            });
+        }
         self.display.flush_clients()
     }
 
@@ -165,6 +193,7 @@ impl CompositorHandler for State {
         else {
             return;
         };
+        self.needs_redraw = true;
         let assignment = with_states(surface, |states| {
             states
                 .cached_state
@@ -219,6 +248,7 @@ impl XdgShellHandler for State {
 
     fn toplevel_destroyed(&mut self, toplevel: ToplevelSurface) {
         self.windows.retain(|window| window.toplevel != toplevel);
+        self.needs_redraw = true;
     }
 
     fn new_popup(&mut self, _surface: PopupSurface, _positioner: PositionerState) {}

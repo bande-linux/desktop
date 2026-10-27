@@ -15,7 +15,7 @@ Following an exhaustive architectural audit, Unbound implements a pragmatic, roc
 3. **Full Desktop Session Infrastructure**: Complete implementation of all essential desktop services—XDG Desktop Portals (PipeWire screen sharing, file pickers), clipboard managers (primary & selection), idle/lock state machines (`ext-session-lock-v1`), polkit agent, power management, audio/media key routing, and input methods (CJK).
 4. **NVIDIA Explicit Sync**: Native `linux-drm-syncobj-v1` integration for tearing-free, glitch-free rendering on modern NVIDIA 560+ hardware.
 5. **Robust Display Management**: Privileged session handling via **`greetd`**, pairing with an unprivileged, beautiful Rust client (`unbound-greeter`).
-6. **Zero-Human-in-the-Loop Software Factory**: An autonomous SDLC orchestrator (`unbound-factory`) managing git worktrees, automated out-of-scope task discovery, pre-PR peer reviewer agents, and Kubernetes CI verification (headless Wayland via Lavapipe + ephemeral Debian 12 QEMU microVM boot tests).
+6. **Zero-Human-in-the-Loop Software Factory**: An autonomous SDLC orchestrator (`unbound-factory`) managing git worktrees, automated out-of-scope task discovery, pre-PR peer reviewer agents, and CI verification on self-hosted arm64 runners (headless Wayland via Lavapipe + ephemeral Debian 12 arm64 VM boot tests).
 
 ---
 
@@ -349,7 +349,7 @@ graph TD
         R6["unbound-linux/toolkit (Shared wgpu widget library & semantic tokens)"]
         R7["unbound-linux/apps (Launcher, Miller columns files, settings, terminal)"]
         R8["unbound-linux/factory (Autonomous SDLC orchestrator CLI)"]
-        R9["unbound-linux/infrastructure (K8s Lavapipe runners & QEMU CI)"]
+        R9["unbound-linux/runners (Self-hosted arm64 CI runners)"]
     end
 
     GH["gh repo create unbound-linux/{repo} --public"] --> R1 & R2 & R3 & R4 & R5 & R6 & R7 & R8 & R9
@@ -371,7 +371,7 @@ repos=(
   "toolkit:Shared Rust UI widget library (wgpu, semantic colors, text navigation, AccessKit)"
   "apps:Core productivity applications (launcher, Miller columns file manager, settings, terminal)"
   "factory:Zero-human-in-the-loop autonomous SDLC orchestrator CLI"
-  "infrastructure:Kubernetes CI/CD manifests, Lavapipe headless Wayland runners & QEMU tests"
+  "runners:Self-hosted arm64 CI runners (Docker on Apple Silicon)"
 )
 
 for entry in "${repos[@]}"; do
@@ -385,7 +385,7 @@ for entry in "${repos[@]}"; do
 {
   "required_status_checks": {
     "strict": true,
-    "contexts": ["k8s-ci/lavapipe-test", "k8s-ci/qemu-debian-boot"]
+    "contexts": ["ci/lavapipe-test", "ci/vm-boot"]
   },
   "enforce_admins": false,
   "required_pull_request_reviews": null,
@@ -414,7 +414,7 @@ sequenceDiagram
     participant Git as Git Repo / Worktree Manager
     participant Worker as Autonomous Worker Agent
     participant Reviewer as Pre-PR Reviewer Agent
-    participant CI as K8s CI & Merge Queue
+    participant CI as CI (self-hosted runners) & Merge Queue
     participant Main as Git main Branch
 
     loop Continuous Autonomous SDLC Loop
@@ -446,7 +446,7 @@ sequenceDiagram
         deactivate Reviewer
 
         Reviewer->>CI: Submit PR to Serialized Merge Queue (Bors-NG / GH Queue)
-        CI->>CI: Rebase onto main tip + run Lavapipe & KubeVirt VM boot tests
+        CI->>CI: Rebase onto main tip + run Lavapipe & VM boot tests
         CI->>Main: Atomic squash merge to main
         CI->>DAG: Mark task VERIFIED_COMPLETE (unlock downstream dependencies)
         CI->>Outbox: Release lease & record state transition event
@@ -546,14 +546,16 @@ All factory operations (task leasing, branch creation, test runs, CI merges, and
 
 ---
 
-## 8. Kubernetes CI/CD Infrastructure & Test Harness
+## 8. CI Infrastructure & Test Harness
+
+All CI runs on the organization's self-hosted runners: Docker containers on an Apple Silicon Mac mini, registered to `unbound-linux` with the labels `self-hosted, Linux, ARM64, unbound` (setup: [`unbound-linux/runners`](https://github.com/unbound-linux/runners)). Workflows select them with `runs-on: [self-hosted, unbound]`. Builds and tests run natively on arm64, the architecture Unbound targets.
 
 ### 8.1 Headless Wayland Graphics Testing (VKMS + Lavapipe + SSIM Visual Regression)
 - **VKMS (Virtual Kernel Mode Setting)**:
-  - Cluster nodes run a privileged DaemonSet ensuring `modprobe vkms` is loaded, exposing `/dev/dri/cardX` and `/dev/dri/renderD128` virtual devices.
+  - The runners' Docker engine VM loads `vkms` and passes `/dev/dri/cardX` and `/dev/dri/renderD128` to the job containers. Not yet verified on the current engine VM.
   - Provides virtual CRTCs, planes, connectors, and VBLANK timers, allowing Smithay to execute true atomic DRM modesetting without physical GPU hardware.
 - **Lavapipe Software Vulkan**:
-  - Pods configure `MESA_VK_DEVICE_SELECT=lavapipe` for CPU-based Vulkan shader execution.
+  - Jobs configure `MESA_VK_DEVICE_SELECT=lavapipe` for CPU-based Vulkan shader execution.
 - **Offscreen Render-to-Texture Unit Testing**:
   - The compositor renders directly to CPU-accessible offscreen framebuffer textures.
   - Geometry calculations, rounded corners, Kawase blur shaders, and damage tracking regions are verified with zero screen attached.
@@ -561,15 +563,15 @@ All factory operations (task leasing, branch creation, test runs, CI merges, and
   - Key UI components (panels, launcher, greeter, dialogs) render test scenes compared against committed golden baseline images.
   - Asserts Structural Similarity Index (SSIM) $\ge 0.995$; changes falling below threshold reject the PR unless accompanied by an explicit baseline update artifact.
 
-### 8.2 Ephemeral Debian 12 MicroVM Boot Validation (KubeVirt ContainerDisks)
+### 8.2 Ephemeral Debian 12 arm64 VM Boot Validation (QEMU/KVM)
 Testing desktop sessions requires true `systemd` PID 1, PAM, and seat management. Rather than brittle privileged docker-in-docker setups:
-- **OCI ContainerDisk Packaging**:
-  - Vanilla Debian 12 (Bookworm) minimal root filesystem baked into an OCI container image: `ghcr.io/unbound-linux/ci-debian-12:latest`.
-- **KubeVirt `VirtualMachineInstance` Lifecycle**:
-  - CI job triggers an ephemeral KubeVirt VMI backed by the ContainerDisk, booting in $< 3$ seconds via KVM virtualization.
+- **Base Image**:
+  - Vanilla Debian 12 (Bookworm) arm64 minimal disk image, published as `ghcr.io/unbound-linux/ci-debian-12:latest`.
+- **VM Lifecycle**:
+  - The CI job boots an ephemeral arm64 QEMU VM with KVM acceleration from the base image. This needs nested virtualization enabled in the runners' Docker engine VM (off today) and `/dev/kvm` passed to the runner containers.
   - `cloud-init` injects compiled `.deb` packages and runs:
     ```bash
-    apt-get update && apt-get install -y ./unbound-desktop_amd64.deb
+    apt-get update && apt-get install -y ./unbound-desktop_arm64.deb
     systemctl enable greetd
     reboot
     ```
@@ -578,27 +580,26 @@ Testing desktop sessions requires true `systemd` PID 1, PAM, and seat management
   - **Synthetic PAM Login**: Submits synthetic credentials over virtual terminal to verify pam_systemd seat handover.
   - **Compositor Startup**: Verifies `unbound-compositor` binds `wayland-1` and claims `seat0`.
   - **QMP Framebuffer Grab**: QEMU QMP socket captures screen buffer (`screendump /tmp/boot.ppm`), confirming login greeter and panels render cleanly.
-- **Teardown**: Deletion of the VMI custom resource immediately cleans up compute and ephemeral disks.
+- **Teardown**: The VM and its disk overlay are removed when the job ends.
+- **Real Hardware**: Boot tests on an Apple Silicon Mac running Unbound Linux follow once the hardware test rig has its own runner.
 
-### 8.3 Distributed Compilation with `sccache` & MinIO
-- MinIO deployed as a Kubernetes StatefulSet in the CI namespace.
-- Shared S3-compatible compilation cache injected across all worker pods:
+### 8.3 Compilation Cache with `sccache`
+- Each runner keeps an `sccache` cache in a Docker volume that persists between jobs:
   ```env
-  SCCACHE_BUCKET=unbound-build-cache
-  SCCACHE_ENDPOINT=minio.ci.svc.cluster.local:9000
-  SCCACHE_S3_USE_SSL=false
+  SCCACHE_DIR=/cache/sccache
+  SCCACHE_CACHE_SIZE=50G
   ```
-- Configured with LRU cache eviction at 50 GB capacity, cutting clean crate build times from minutes down to $< 15$ seconds.
+- Cuts clean crate build times from minutes down to $< 15$ seconds. The cache volume is not yet part of the runners' compose setup.
 
 ### 8.4 CI Container Image Pipeline (`ci-builder`)
-- Canonical builder image: `ghcr.io/unbound-linux/ci-builder:latest`.
+- Canonical builder image: `ghcr.io/unbound-linux/ci-builder:latest`, built for `linux/arm64` on the runners.
 - Bundles: Debian 12, Rust stable toolchain, Mesa Lavapipe/LLVMpipe, VKMS headers, `sccache`, `cargo-deb`, `cargo-mutants`, and `kani-verifier`.
 - Rebuilt automatically on weekly schedule or toolchain updates.
 
 ### 8.5 Factory & CI Observability
 - `unbound-factory` exposes a Prometheus `/metrics` endpoint:
   - `unbound_tasks_completed_total{status="merged|escalated"}`
-  - `unbound_ci_duration_seconds{tier="lavapipe|kubevirt"}`
+  - `unbound_ci_duration_seconds{tier="lavapipe|vm-boot"}`
   - `unbound_token_spend_total{model="reasoning|fast"}`
   - `unbound_sccache_hit_ratio`
 - Central Grafana dashboard for multi-agent throughput, test flakiness tracking, and queue depth.
@@ -611,7 +612,7 @@ Rather than a slow, single-threaded waterfall, the project is structured into pa
 
 ```mermaid
 flowchart TD
-    P1["Phase 1: Factory Scaffolding & K8s CI<br/>- Automated gh repo create for unbound-linux org<br/>- unbound-factory CLI orchestrator & HTDAG scheduler<br/>- K8s VKMS DaemonSet & KubeVirt CI runners"]
+    P1["Phase 1: Factory Scaffolding & CI<br/>- Automated gh repo create for unbound-linux org<br/>- unbound-factory CLI orchestrator & HTDAG scheduler<br/>- Self-hosted arm64 runners, VKMS & VM boot tests"]
     
     P2["Phase 2: Compositor & Shared Toolkit<br/>- Smithay DRM/KMS + linux-drm-syncobj-v1 explicit sync<br/>- unbound-toolkit widget library & AccessKit bindings<br/>- Spring physics layout & gesture engine"]
 
@@ -640,14 +641,14 @@ flowchart TD
 
 ## 10. Debian Packaging Dependencies (`unbound-desktop`)
 
-The meta-package `unbound-desktop_amd64.deb` pulls the complete, verified Debian runtime stack:
+The meta-package `unbound-desktop_arm64.deb` pulls the complete, verified Debian runtime stack:
 
 ```control
 Package: unbound-desktop
 Version: 0.1.0
 Section: x11
 Priority: optional
-Architecture: amd64
+Architecture: arm64
 Depends: 
   unbound-compositor (= 0.1.0),
   unbound-shell (= 0.1.0),
@@ -696,7 +697,7 @@ flowchart TD
     T3["Tier 3: Mutation Testing (Anti-Vacuity Gate)<br/>cargo-mutants: AST mutant injection (≥ 90% kill score required)"] --> T4
     T4["Tier 4: Bounded Model Checking<br/>Kani: Mathematical proof of panic-freedom in sync queues"] --> T5
     T5["Tier 5: Offscreen Visual Regression<br/>wgpu render-to-texture with SSIM ≥ 0.995 vs golden baselines"] --> VM
-    VM["System Gate: KubeVirt Debian 12 MicroVM<br/>Clean boot → greetd → PAM auth → compositor session verification"]
+    VM["System Gate: Debian 12 arm64 VM (QEMU/KVM)<br/>Clean boot → greetd → PAM auth → compositor session verification"]
 ```
 
 ### Automated CI Quality Gates:
@@ -706,7 +707,7 @@ flowchart TD
 4. **Tier 3 (Mutation Gate via `cargo-mutants`)**: Injects mutations into the Rust AST (swapping operators, replacing functions with defaults). **PR is blocked if mutant survival rate exceeds 10%**, guaranteeing agent-authored tests assert real behavioral semantics.
 5. **Tier 4 (Formal Verification via `Kani`)**: Proves panic-freedom and invariant preservation in Smithay explicit sync buffer queues and PAM authentication helpers.
 6. **Tier 5 (Visual Regression via SSIM)**: Offscreen render-to-texture compared against golden baselines (SSIM $\ge 0.995$).
-7. **System Gate (KubeVirt MicroVM Boot)**: Ephemeral VM boots clean Debian 12 server, installs `.deb`, and verifies end-to-end `greetd` -> PAM login -> `unbound-compositor` startup.
+7. **System Gate (QEMU/KVM VM Boot)**: Ephemeral arm64 VM boots clean Debian 12 server, installs `.deb`, and verifies end-to-end `greetd` -> PAM login -> `unbound-compositor` startup.
 
 ---
 

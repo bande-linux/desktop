@@ -21,7 +21,7 @@ It marries the organizational depth and workflow polish of **macOS** (Miller col
 * **NVIDIA Explicit Sync**: Native `linux-drm-syncobj-v1` integration for tearing-free, glitch-free rendering on modern NVIDIA 560+ hardware.
 * **Full Session Infrastructure**: Native XDG Desktop Portals (`xdg-desktop-portal-unbound` with PipeWire screen casting), clipboard management (`wl_data_device`, `zwp_primary_selection`, persistent `ext-data-control-v1`), screen lock (`ext-session-lock-v1` with crash resilience), idle management, polkit agent, and CJK input methods.
 * **Robust Display Management**: Privileged PAM session handling via **`greetd`**, paired with an unprivileged, modern GPU-accelerated client (**`unbound-greeter`**).
-* **Autonomous Software Factory**: Driven by a zero-human-in-the-loop autonomous SDLC engine (`unbound-factory`) backed by Kubernetes CI/CD (headless Wayland via Lavapipe + ephemeral Debian 12 QEMU microVM boot tests).
+* **Autonomous Software Factory**: Driven by a zero-human-in-the-loop autonomous SDLC engine (`unbound-factory`) backed by self-hosted arm64 CI runners (headless Wayland via Lavapipe + ephemeral Debian 12 arm64 VM boot tests).
 
 ---
 
@@ -39,7 +39,7 @@ The Unbound ecosystem is maintained under the **[`unbound-linux`](https://github
 | **[`unbound-linux/toolkit`](https://github.com/unbound-linux/toolkit)** | Shared Rust UI widget library (wgpu, semantic colors, text navigation, AccessKit) | Planning |
 | **[`unbound-linux/apps`](https://github.com/unbound-linux/apps)** | Productivity applications (launcher, Miller columns file manager, settings, terminal) | Planning |
 | **[`unbound-linux/factory`](https://github.com/unbound-linux/factory)** | Autonomous SDLC orchestrator CLI daemon and worker loop | Planning |
-| **[`unbound-linux/infrastructure`](https://github.com/unbound-linux/infrastructure)** | Kubernetes CI/CD manifests, Lavapipe headless Wayland runners & QEMU tests | Planning |
+| **[`unbound-linux/runners`](https://github.com/unbound-linux/runners)** | Self-hosted arm64 CI runners (Docker on Apple Silicon) | Active |
 
 For complete technical specifications, see **[Master Architecture & Execution Plan](docs/ARCHITECTURE.md)**.
 

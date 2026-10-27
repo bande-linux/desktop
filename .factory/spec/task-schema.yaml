@@ -28,7 +28,7 @@ properties:
       - toolkit
       - apps
       - factory
-      - infrastructure
+      - runners
   priority:
     type: string
     enum: [P0, P1, P2, P3]

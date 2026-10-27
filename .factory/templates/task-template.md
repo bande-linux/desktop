@@ -1,7 +1,7 @@
 ---
 id: "task-000"
 title: "Imperative task description"
-repository: "compositor" # desktop | compositor | shell | greeter | portal | toolkit | apps | factory | infrastructure
+repository: "compositor" # desktop | compositor | shell | greeter | portal | toolkit | apps | factory | runners
 priority: "P1" # P0 | P1 | P2 | P3
 component: "crate-or-subsystem-name"
 dependencies: [] # e.g. ["task-001", "task-002"]

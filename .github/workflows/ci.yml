@@ -44,3 +44,46 @@ jobs:
           name: rendered-frames
           path: target/tmp/*.png
           if-no-files-found: ignore
+
+  deb:
+    name: ci/deb
+    runs-on: [self-hosted, unbound]
+    timeout-minutes: 30
+    env:
+      CARGO_DEB_VERSION: 3.8.0
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install
+      - name: Install build and smoke-test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libxkbcommon-dev libvulkan1 mesa-vulkan-drivers
+      - name: Install cargo-deb
+        run: |
+          root=/cache/tools/cargo-deb-$CARGO_DEB_VERSION
+          test -x "$root/bin/cargo-deb" \
+            || cargo install cargo-deb --version "$CARGO_DEB_VERSION" --locked --root "$root"
+          echo "$root/bin" >> "$GITHUB_PATH"
+      - run: cargo deb --package unbound-compositor --locked
+      - name: Inspect the package
+        run: |
+          deb=$(ls target/debian/*.deb)
+          dpkg-deb --info "$deb"
+          dpkg-deb --contents "$deb"
+          test "$(dpkg-deb --field "$deb" Architecture)" = arm64
+      - name: Smoke-test the packaged binary
+        run: |
+          root=$(mktemp -d)
+          dpkg-deb --extract target/debian/*.deb "$root"
+          export XDG_RUNTIME_DIR=$(mktemp -d)
+          status=0
+          timeout 10 "$root/usr/bin/unbound-compositor" > "$root/stdout" || status=$?
+          cat "$root/stdout"
+          test "$status" = 124
+          grep -q '^WAYLAND_DISPLAY=wayland-' "$root/stdout"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: unbound-compositor-deb
+          path: target/debian/*.deb
+          if-no-files-found: error

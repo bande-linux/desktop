@@ -44,8 +44,8 @@ tiers:
     scope: "Panels, launcher, greeter, dialogs compared against golden reference textures"
 
   system_gate:
-    name: "Debian 12 arm64 VM Boot (QEMU/KVM)"
-    base_image: "ghcr.io/unbound-linux/ci-debian-12:latest"
+    name: "Debian 13 arm64 VM Boot (QEMU/KVM)"
+    base_image: "ghcr.io/unbound-linux/ci-debian-13:latest"
     assertions:
       - "greetd.service active running"
       - "synthetic PAM login success"

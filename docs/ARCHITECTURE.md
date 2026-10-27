@@ -15,7 +15,7 @@ Following an exhaustive architectural audit, Unbound implements a pragmatic, roc
 3. **Full Desktop Session Infrastructure**: Complete implementation of all essential desktop services—XDG Desktop Portals (PipeWire screen sharing, file pickers), clipboard managers (primary & selection), idle/lock state machines (`ext-session-lock-v1`), polkit agent, power management, audio/media key routing, and input methods (CJK).
 4. **NVIDIA Explicit Sync**: Native `linux-drm-syncobj-v1` integration for tearing-free, glitch-free rendering on modern NVIDIA 560+ hardware.
 5. **Robust Display Management**: Privileged session handling via **`greetd`**, pairing with an unprivileged, beautiful Rust client (`unbound-greeter`).
-6. **Zero-Human-in-the-Loop Software Factory**: An autonomous SDLC orchestrator (`unbound-factory`) managing git worktrees, automated out-of-scope task discovery, pre-PR peer reviewer agents, and CI verification on self-hosted arm64 runners (headless Wayland via Lavapipe + ephemeral Debian 12 arm64 VM boot tests).
+6. **Zero-Human-in-the-Loop Software Factory**: An autonomous SDLC orchestrator (`unbound-factory`) managing git worktrees, automated out-of-scope task discovery, pre-PR peer reviewer agents, and CI verification on self-hosted arm64 runners (headless Wayland via Lavapipe + ephemeral Debian 13 arm64 VM boot tests).
 
 ---
 
@@ -563,10 +563,10 @@ All CI runs on the organization's self-hosted runners: Docker containers on an A
   - Key UI components (panels, launcher, greeter, dialogs) render test scenes compared against committed golden baseline images.
   - Asserts Structural Similarity Index (SSIM) $\ge 0.995$; changes falling below threshold reject the PR unless accompanied by an explicit baseline update artifact.
 
-### 8.2 Ephemeral Debian 12 arm64 VM Boot Validation (QEMU/KVM)
+### 8.2 Ephemeral Debian 13 arm64 VM Boot Validation (QEMU/KVM)
 Testing desktop sessions requires true `systemd` PID 1, PAM, and seat management. Rather than brittle privileged docker-in-docker setups:
 - **Base Image**:
-  - Vanilla Debian 12 (Bookworm) arm64 minimal disk image, published as `ghcr.io/unbound-linux/ci-debian-12:latest`.
+  - Vanilla Debian 13 (Trixie) arm64 minimal disk image, published as `ghcr.io/unbound-linux/ci-debian-13:latest`.
 - **VM Lifecycle**:
   - The CI job boots an ephemeral arm64 QEMU VM with KVM acceleration from the base image. This needs nested virtualization enabled in the runners' Docker engine VM (off today) and `/dev/kvm` passed to the runner containers.
   - `cloud-init` injects compiled `.deb` packages and runs:
@@ -593,7 +593,7 @@ Testing desktop sessions requires true `systemd` PID 1, PAM, and seat management
 
 ### 8.4 CI Container Image Pipeline (`ci-builder`)
 - Canonical builder image: `ghcr.io/unbound-linux/ci-builder:latest`, built for `linux/arm64` on the runners.
-- Bundles: Debian 12, Rust stable toolchain, Mesa Lavapipe/LLVMpipe, VKMS headers, `sccache`, `cargo-deb`, `cargo-mutants`, and `kani-verifier`.
+- Bundles: Debian 13, Rust stable toolchain, Mesa Lavapipe/LLVMpipe, VKMS headers, `sccache`, `cargo-deb`, `cargo-mutants`, and `kani-verifier`.
 - Rebuilt automatically on weekly schedule or toolchain updates.
 
 ### 8.5 Factory & CI Observability
@@ -697,7 +697,7 @@ flowchart TD
     T3["Tier 3: Mutation Testing (Anti-Vacuity Gate)<br/>cargo-mutants: AST mutant injection (≥ 90% kill score required)"] --> T4
     T4["Tier 4: Bounded Model Checking<br/>Kani: Mathematical proof of panic-freedom in sync queues"] --> T5
     T5["Tier 5: Offscreen Visual Regression<br/>wgpu render-to-texture with SSIM ≥ 0.995 vs golden baselines"] --> VM
-    VM["System Gate: Debian 12 arm64 VM (QEMU/KVM)<br/>Clean boot → greetd → PAM auth → compositor session verification"]
+    VM["System Gate: Debian 13 arm64 VM (QEMU/KVM)<br/>Clean boot → greetd → PAM auth → compositor session verification"]
 ```
 
 ### Automated CI Quality Gates:
@@ -707,7 +707,7 @@ flowchart TD
 4. **Tier 3 (Mutation Gate via `cargo-mutants`)**: Injects mutations into the Rust AST (swapping operators, replacing functions with defaults). **PR is blocked if mutant survival rate exceeds 10%**, guaranteeing agent-authored tests assert real behavioral semantics.
 5. **Tier 4 (Formal Verification via `Kani`)**: Proves panic-freedom and invariant preservation in Smithay explicit sync buffer queues and PAM authentication helpers.
 6. **Tier 5 (Visual Regression via SSIM)**: Offscreen render-to-texture compared against golden baselines (SSIM $\ge 0.995$).
-7. **System Gate (QEMU/KVM VM Boot)**: Ephemeral arm64 VM boots clean Debian 12 server, installs `.deb`, and verifies end-to-end `greetd` -> PAM login -> `unbound-compositor` startup.
+7. **System Gate (QEMU/KVM VM Boot)**: Ephemeral arm64 VM boots clean Debian 13 server, installs `.deb`, and verifies end-to-end `greetd` -> PAM login -> `unbound-compositor` startup.
 
 ---
 

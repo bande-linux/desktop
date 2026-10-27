@@ -3,7 +3,7 @@
 > Next-Generation, High-Performance Linux Desktop Environment built in **Rust** for **Debian** & Wayland.
 
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](#license)
-[![Debian](https://img.shields.io/badge/Debian-12%20(Bookworm)-red.svg)](https://www.debian.org)
+[![Debian](https://img.shields.io/badge/Debian-13%20(Trixie)-red.svg)](https://www.debian.org)
 [![Wayland](https://img.shields.io/badge/Wayland-Pure%20Native-orange.svg)](https://wayland.freedesktop.org)
 [![Rust](https://img.shields.io/badge/Rust-2024%20Edition-black.svg)](https://www.rust-lang.org)
 
@@ -21,7 +21,7 @@ It marries the organizational depth and workflow polish of **macOS** (Miller col
 * **NVIDIA Explicit Sync**: Native `linux-drm-syncobj-v1` integration for tearing-free, glitch-free rendering on modern NVIDIA 560+ hardware.
 * **Full Session Infrastructure**: Native XDG Desktop Portals (`xdg-desktop-portal-unbound` with PipeWire screen casting), clipboard management (`wl_data_device`, `zwp_primary_selection`, persistent `ext-data-control-v1`), screen lock (`ext-session-lock-v1` with crash resilience), idle management, polkit agent, and CJK input methods.
 * **Robust Display Management**: Privileged PAM session handling via **`greetd`**, paired with an unprivileged, modern GPU-accelerated client (**`unbound-greeter`**).
-* **Autonomous Software Factory**: Driven by a zero-human-in-the-loop autonomous SDLC engine (`unbound-factory`) backed by self-hosted arm64 CI runners (headless Wayland via Lavapipe + ephemeral Debian 12 arm64 VM boot tests).
+* **Autonomous Software Factory**: Driven by a zero-human-in-the-loop autonomous SDLC engine (`unbound-factory`) backed by self-hosted arm64 CI runners (headless Wayland via Lavapipe + ephemeral Debian 13 arm64 VM boot tests).
 
 ---
 
@@ -47,12 +47,12 @@ For complete technical specifications, see **[Master Architecture & Execution Pl
 
 ## 🚀 Installation on Minimal Debian Server (Target)
 
-Unbound is designed to install onto a bare-minimum Debian 12 (Bookworm) server installation and boot directly into a hardware-accelerated session upon reboot:
+Unbound is designed to install onto a bare-minimum Debian 13 (Trixie) server installation and boot directly into a hardware-accelerated session upon reboot:
 
 ```bash
 # Add Unbound repository
 curl -fsSL https://repo.unbound-linux.org/pubkey.gpg | sudo gpg --dearmor -o /etc/apt/keyrings/unbound-linux.gpg
-echo "deb [signed-by=/etc/apt/keyrings/unbound-linux.gpg] https://repo.unbound-linux.org/debian bookworm main" | sudo tee /etc/apt/sources.list.d/unbound-linux.list
+echo "deb [signed-by=/etc/apt/keyrings/unbound-linux.gpg] https://repo.unbound-linux.org/debian trixie main" | sudo tee /etc/apt/sources.list.d/unbound-linux.list
 
 # Install full desktop suite
 sudo apt-get update && sudo apt-get install -y unbound-desktop

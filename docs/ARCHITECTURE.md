@@ -374,13 +374,17 @@ repos=(
   "runners:Self-hosted arm64 CI runners (Docker on Apple Silicon)"
 )
 
+packaged=" desktop compositor shell greeter portal apps "
+
 for entry in "${repos[@]}"; do
   name="${entry%%:*}"
   desc="${entry#*:}"
   echo "==> Creating $ORG/$name..."
   gh repo create "$ORG/$name" --public --description "$desc" --enable-issues --enable-wiki=false || true
-  
-  # Configure branch protection on main
+
+  [[ "$packaged" == *" $name "* ]] || continue
+
+  # Only repos that ship a .deb can pass the lavapipe and VM boot checks
   gh api "repos/$ORG/$name/branches/main/protection" --input - <<EOF || true
 {
   "required_status_checks": {

@@ -1,0 +1,24 @@
+# Rust / Cargo
+/target
+Cargo.lock
+**/*.rs.bk
+*.swp
+*.bak
+
+# Debian Packaging
+*.deb
+debian/.debhelper/
+debian/debhelper-build-stamp
+debian/files
+debian/*.substvars
+
+# IDE & Editor
+.vscode/
+.idea/
+*.iml
+*.DS_Store
+
+# Factory Local Worktrees & Cache
+.worktrees/
+.factory/cache/
+.sccache/

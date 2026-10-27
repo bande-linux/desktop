@@ -65,7 +65,7 @@ sudo reboot
 
 ## 🛠️ Development & Documentation
 
-* **[Master Architecture Plan](docs/ARCHITECTURE.md)**: Exhaustive technical design document covering the compositor, desktop session infrastructure, 30-protocol Wayland matrix, D-Bus interfaces, and 9-phase roadmap.
+* **[Master Architecture Plan](docs/ARCHITECTURE.md)**: Exhaustive technical design document covering the compositor, desktop session infrastructure, 30-protocol Wayland matrix, D-Bus interfaces, and 8-phase roadmap.
 
 ---
 

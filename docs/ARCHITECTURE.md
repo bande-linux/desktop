@@ -552,9 +552,10 @@ All CI runs on the organization's self-hosted runners: Docker containers on an A
 
 ### 8.1 Headless Wayland Graphics Testing (VKMS + Lavapipe + SSIM Visual Regression)
 - **VKMS (Virtual Kernel Mode Setting)**:
-  - The runners' Docker engine VM loads `vkms` and passes `/dev/dri/cardX` and `/dev/dri/renderD128` to the job containers. Not yet verified on the current engine VM.
+  - Runs inside a QEMU/KVM guest, not in the job containers: the runners' Docker engine kernel cannot load modules, and neither Debian 12's nor Debian 13's stock kernel ships `vkms`. VKMS tests boot a guest kernel we build with `CONFIG_DRM_VKMS`.
   - Provides virtual CRTCs, planes, connectors, and VBLANK timers, allowing Smithay to execute true atomic DRM modesetting without physical GPU hardware.
 - **Lavapipe Software Vulkan**:
+  - Runs directly in the job containers; needs no kernel support.
   - Jobs configure `MESA_VK_DEVICE_SELECT=lavapipe` for CPU-based Vulkan shader execution.
 - **Offscreen Render-to-Texture Unit Testing**:
   - The compositor renders directly to CPU-accessible offscreen framebuffer textures.
@@ -593,7 +594,7 @@ Testing desktop sessions requires true `systemd` PID 1, PAM, and seat management
 
 ### 8.4 CI Container Image Pipeline (`ci-builder`)
 - Canonical builder image: `ghcr.io/unbound-linux/ci-builder:latest`, built for `linux/arm64` on the runners.
-- Bundles: Debian 13, Rust stable toolchain, Mesa Lavapipe/LLVMpipe, VKMS headers, `sccache`, `cargo-deb`, `cargo-mutants`, and `kani-verifier`.
+- Bundles: Debian 13, Rust stable toolchain, Mesa Lavapipe/LLVMpipe, `sccache`, `cargo-deb`, `cargo-mutants`, and `kani-verifier`.
 - Rebuilt automatically on weekly schedule or toolchain updates.
 
 ### 8.5 Factory & CI Observability

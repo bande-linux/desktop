@@ -688,7 +688,7 @@ Description: Unbound Desktop Environment (Complete Meta-Package)
 
 ## 11. Multi-Tier Verification Funnel & Acceptance Plan
 
-To ensure bulletproof reliability in an autonomous factory where AI agents write code and tests, Unbound enforces a **6-Tier Verification Funnel**:
+To ensure bulletproof reliability in an autonomous factory where AI agents write code and tests, Unbound enforces a **6-Tier Verification Funnel** (Tiers 0–5) followed by a VM boot system gate:
 
 ```mermaid
 flowchart TD

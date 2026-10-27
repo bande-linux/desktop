@@ -1,0 +1,15 @@
+[workspace]
+resolver = "3"
+members = ["crates/unbound-compositor"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/unbound-linux/desktop"
+
+[workspace.dependencies]
+smithay = { version = "=0.7.0", default-features = false, features = ["wayland_frontend"] }
+tempfile = "=3.27.0"
+wayland-client = "=0.31.15"
+wayland-protocols = { version = "=0.32.13", features = ["client"] }

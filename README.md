@@ -1,4 +1,4 @@
-# Unbound Desktop Environment (`unbound-linuxsktop`)
+# Unbound Desktop Environment (`unbound-desktop`)
 
 > Next-Generation, High-Performance Linux Desktop Environment built in **Rust** for **Debian** & Wayland.
 
@@ -55,7 +55,7 @@ curl -fsSL https://repo.unbound-linux.org/pubkey.gpg | sudo gpg --dearmor -o /et
 echo "deb [signed-by=/etc/apt/keyrings/unbound-linux.gpg] https://repo.unbound-linux.org/debian bookworm main" | sudo tee /etc/apt/sources.list.d/unbound-linux.list
 
 # Install full desktop suite
-sudo apt-get update && sudo apt-get install -y unbound-linuxsktop
+sudo apt-get update && sudo apt-get install -y unbound-desktop
 
 # Reboot directly into Unbound
 sudo reboot

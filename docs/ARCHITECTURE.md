@@ -3,7 +3,7 @@
 **GitHub Organization**: [`https://github.com/unbound-linux`](https://github.com/unbound-linux)
 
 ## Goal Description
-Build **Unbound** (`unbound-linuxsktop`), an ultra-modern, production-grade Linux Desktop Environment built in **Rust**, targeting **Debian** as its primary operating system.
+Build **Unbound** (`unbound-desktop`), an ultra-modern, production-grade Linux Desktop Environment built in **Rust**, targeting **Debian** as its primary operating system.
 
 Unbound marries the organizational depth and workflow polish of **macOS** (Miller columns, exhaustive settings taxonomy, instant file previews, unkillable force-quit watchdog) with the desktop layout ergonomics of modern Linux (modular, repositionable panels—defaulting to an ergonomic left vertical taskbar, with seamless support for bottom, right, or top layouts).
 
@@ -569,7 +569,7 @@ Testing desktop sessions requires true `systemd` PID 1, PAM, and seat management
   - CI job triggers an ephemeral KubeVirt VMI backed by the ContainerDisk, booting in $< 3$ seconds via KVM virtualization.
   - `cloud-init` injects compiled `.deb` packages and runs:
     ```bash
-    apt-get update && apt-get install -y ./unbound-linuxsktop_amd64.deb
+    apt-get update && apt-get install -y ./unbound-desktop_amd64.deb
     systemctl enable greetd
     reboot
     ```
@@ -625,7 +625,7 @@ flowchart TD
 
     P7["Phase 7: XWayland & Legacy Compatibility<br/>- xwayland-satellite bridge wrapper<br/>- CSD/SSD decoration negotiation<br/>- GTK/Qt/cursor theming auto-propagation"]
 
-    P8["Phase 8: Window Tiling, Polish & Packaging<br/>- Half/quarter window tiling zones<br/>- Full Debian meta-package (unbound-linuxsktop.deb)<br/>- 120Hz/240Hz frame latency tuning & fractional scale polish"]
+    P8["Phase 8: Window Tiling, Polish & Packaging<br/>- Half/quarter window tiling zones<br/>- Full Debian meta-package (unbound-desktop.deb)<br/>- 120Hz/240Hz frame latency tuning & fractional scale polish"]
 
     P1 --> P3
     P2 --> P3
@@ -638,12 +638,12 @@ flowchart TD
 
 ---
 
-## 10. Debian Packaging Dependencies (`unbound-linuxsktop`)
+## 10. Debian Packaging Dependencies (`unbound-desktop`)
 
-The meta-package `unbound-linuxsktop_amd64.deb` pulls the complete, verified Debian runtime stack:
+The meta-package `unbound-desktop_amd64.deb` pulls the complete, verified Debian runtime stack:
 
 ```control
-Package: unbound-linuxsktop
+Package: unbound-desktop
 Version: 0.1.0
 Section: x11
 Priority: optional

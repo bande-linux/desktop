@@ -560,13 +560,22 @@ All CI runs on the organization's self-hosted runners: Docker containers on an A
   - Provides virtual CRTCs, planes, connectors, and VBLANK timers, allowing Smithay to execute true atomic DRM modesetting without physical GPU hardware.
 - **Lavapipe Software Vulkan**:
   - Runs directly in the job containers; needs no kernel support.
-  - Jobs configure `MESA_VK_DEVICE_SELECT=lavapipe` for CPU-based Vulkan shader execution.
+  - Jobs install `mesa-vulkan-drivers` and `libvulkan1`; lavapipe is then the only Vulkan device in the container. The renderer accepts any Vulkan adapter, and the render test prints the one it ran on.
 - **Offscreen Render-to-Texture Unit Testing**:
   - The compositor renders directly to CPU-accessible offscreen framebuffer textures.
   - Geometry calculations, rounded corners, Kawase blur shaders, and damage tracking regions are verified with zero screen attached.
 - **Automated SSIM Visual Regression Pipeline**:
   - Key UI components (panels, launcher, greeter, dialogs) render test scenes compared against committed golden baseline images.
   - Asserts Structural Similarity Index (SSIM) $\ge 0.995$; changes falling below threshold reject the PR unless accompanied by an explicit baseline update artifact.
+  - Baselines live next to the tests (`crates/<crate>/tests/golden/*.png`) and are computed from the scene description, not captured from the renderer. Besides SSIM, the first test also bounds every channel to within 2 of the baseline, since SSIM alone tolerates small uniform colour shifts. On failure CI uploads the rendered frames.
+
+### 8.1.1 CI Workflow (`.github/workflows/ci.yml`)
+Runs on every push to any branch and on pull requests. Job names are the status-check contexts:
+- `ci/lint`: `cargo fmt --check` and `cargo clippy --workspace --all-targets -- -D warnings`.
+- `ci/lavapipe-test`: `cargo test --workspace`, including the offscreen render test on lavapipe.
+- `ci/deb`: `cargo deb`, then checks the package architecture, starts the packaged binary as a smoke test, and uploads the `.deb` as an artifact.
+
+The Rust toolchain is pinned in `rust-toolchain.toml`, dependencies are pinned to exact versions, and `Cargo.lock` is committed. Until `ci-builder` exists, jobs install system packages with `apt-get` on the runner image (Ubuntu 24.04), so `.deb` files are built against Ubuntu's glibc rather than Debian 13's.
 
 ### 8.2 Ephemeral Debian 13 arm64 VM Boot Validation (QEMU/KVM)
 Testing desktop sessions requires true `systemd` PID 1, PAM, and seat management. Rather than brittle privileged docker-in-docker setups:
@@ -598,7 +607,7 @@ Testing desktop sessions requires true `systemd` PID 1, PAM, and seat management
 
 ### 8.4 CI Container Image Pipeline (`ci-builder`)
 - Canonical builder image: `ghcr.io/unbound-linux/ci-builder:latest`, built for `linux/arm64` on the runners.
-- Bundles: Debian 13, Rust stable toolchain, Mesa Lavapipe/LLVMpipe, `sccache`, `cargo-deb`, `cargo-mutants`, and `kani-verifier`.
+- Bundles: Debian 13, the Rust toolchain pinned in `rust-toolchain.toml`, Mesa Lavapipe/LLVMpipe, `sccache`, `cargo-deb`, `cargo-mutants`, and `kani-verifier`.
 - Rebuilt automatically on weekly schedule or toolchain updates.
 
 ### 8.5 Factory & CI Observability

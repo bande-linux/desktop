@@ -7,7 +7,9 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+pollster.workspace = true
 smithay.workspace = true
+wgpu.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

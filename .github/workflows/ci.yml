@@ -35,5 +35,12 @@ jobs:
       - name: Install build and test dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends pkg-config libxkbcommon-dev
-      - run: cargo test --workspace --locked
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libxkbcommon-dev libvulkan1 mesa-vulkan-drivers
+      - run: cargo test --workspace --locked -- --show-output
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: rendered-frames
+          path: target/tmp/*.png
+          if-no-files-found: ignore

@@ -569,7 +569,7 @@ Testing desktop sessions requires true `systemd` PID 1, PAM, and seat management
 - **Base Image**:
   - Vanilla Debian 13 (Trixie) arm64 minimal disk image, published as `ghcr.io/unbound-linux/ci-debian-13:latest`.
 - **VM Lifecycle**:
-  - The CI job boots an ephemeral arm64 QEMU VM with KVM acceleration from the base image. This needs nested virtualization enabled in the runners' Docker engine VM (off today) and `/dev/kvm` passed to the runner containers.
+  - The CI job boots an ephemeral arm64 QEMU VM with KVM acceleration from the base image. The runners' Docker engine VM has nested virtualization enabled and passes `/dev/kvm` to the runner containers; QEMU runs with `-machine virt,its=off`.
   - `cloud-init` injects compiled `.deb` packages and runs:
     ```bash
     apt-get update && apt-get install -y ./unbound-desktop_arm64.deb
@@ -590,7 +590,7 @@ Testing desktop sessions requires true `systemd` PID 1, PAM, and seat management
   SCCACHE_DIR=/cache/sccache
   SCCACHE_CACHE_SIZE=50G
   ```
-- Cuts clean crate build times from minutes down to $< 15$ seconds. The cache volume is not yet part of the runners' compose setup.
+- Cuts clean crate build times from minutes down to $< 15$ seconds.
 
 ### 8.4 CI Container Image Pipeline (`ci-builder`)
 - Canonical builder image: `ghcr.io/unbound-linux/ci-builder:latest`, built for `linux/arm64` on the runners.

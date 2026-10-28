@@ -19,14 +19,8 @@ unbound-test-wayland.workspace = true
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "x11"
-depends = "$auto, init-system-helpers (>= 1.66)"
 extended-description = """\
 Takes over each new clipboard and primary selection through \
 ext-data-control-v1 and serves it after the copying application has \
-quit. Runs as a systemd user service in the graphical session; the \
-Unbound compositor offers ext-data-control to this executable only."""
-maintainer-scripts = "debian/"
-assets = [
-    ["target/release/unbound-clipboard", "usr/bin/", "755"],
-    ["debian/unbound-clipboard.service", "usr/lib/systemd/user/", "644"],
-]
+quit. unbound-compositor starts it on a socket pair and offers \
+ext-data-control on that connection only."""

@@ -85,18 +85,12 @@ jobs:
           service="$root/usr/share/dbus-1/services/org.unbound.Notify.service"
           grep -qx 'Name=org.freedesktop.Notifications' "$service"
           test -x "$root$(sed -n 's/^Exec=//p' "$service")"
-      - name: Check the clipboard daemon's user service
+      - name: Check the clipboard daemon's package
         run: |
           deb=$(ls target/debian/unbound-clipboard_*.deb)
-          root=$(mktemp -d)
-          dpkg-deb --extract "$deb" "$root"
-          unit="$root/usr/lib/systemd/user/unbound-clipboard.service"
-          grep -qx 'WantedBy=graphical-session.target' "$unit"
-          test -x "$root$(sed -n 's/^ExecStart=//p' "$unit")"
-          control=$(mktemp -d)
-          dpkg-deb --control "$deb" "$control"
-          grep -q 'deb-systemd-helper --user enable unbound-clipboard.service' "$control/postinst"
-          grep -q 'deb-systemd-helper --user purge unbound-clipboard.service' "$control/postrm"
+          dpkg-deb --contents "$deb" | grep -q ' ./usr/bin/unbound-clipboard$'
+          dpkg-deb --field target/debian/unbound-compositor_*.deb Recommends \
+            | grep -qx 'unbound-clipboard'
       - name: Smoke-test the packaged compositor
         run: |
           root=$(mktemp -d)

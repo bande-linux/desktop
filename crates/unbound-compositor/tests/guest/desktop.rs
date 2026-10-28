@@ -118,18 +118,21 @@ fn the_launcher_opens_a_terminal_that_takes_typing() {
     thread::sleep(Duration::from_secs(1));
     scanout().save("m14-terminal-typed");
 
-    let panel = (32, 200);
-    let panel_color = pixel(&desktop, panel.0, panel.1);
+    let icon = (32, 33);
+    let icon_color = pixel(&desktop, icon.0, icon.1);
+    let terminal_color = pixel(&scanout(), center_x, desktop.height / 2);
     keyboard.chord(&[KEY_LEFTCTRL, KEY_LEFTMETA], KEY_F);
     wait_for("the terminal to cover the panel", STARTUP, || {
-        pixel(&scanout(), panel.0, panel.1) != panel_color
+        let now = scanout();
+        pixel(&now, icon.0, icon.1) == terminal_color
+            && pixel(&now, now.width - 8, 8) == terminal_color
     });
     thread::sleep(Duration::from_secs(1));
     scanout().save("m15-terminal-full-screen");
 
     keyboard.chord(&[KEY_LEFTCTRL, KEY_LEFTMETA], KEY_F);
     wait_for("the panel to come back", STARTUP, || {
-        pixel(&scanout(), panel.0, panel.1) == panel_color
+        pixel(&scanout(), icon.0, icon.1) == icon_color
     });
     thread::sleep(Duration::from_secs(1));
     scanout().save("m15-terminal-windowed");

@@ -25,6 +25,10 @@ pub trait Manager {
 
     fn get_session(&self, session_id: &str) -> zbus::Result<OwnedObjectPath>;
 
+    fn can_suspend(&self) -> zbus::Result<String>;
+
+    fn suspend(&self, interactive: bool) -> zbus::Result<()>;
+
     #[zbus(signal)]
     fn prepare_for_sleep(&self, start: bool) -> zbus::Result<()>;
 }
@@ -38,6 +42,14 @@ pub trait Session {
 
     #[zbus(property)]
     fn locked_hint(&self) -> zbus::Result<bool>;
+}
+
+pub fn own_session(system: &Connection) -> zbus::Result<SessionProxyBlocking<'static>> {
+    let path = ManagerProxyBlocking::new(system)?.get_session("auto")?;
+    SessionProxyBlocking::builder(system)
+        .path(path)?
+        .cache_properties(CacheProperties::No)
+        .build()
 }
 
 pub fn inhibit(
@@ -58,10 +70,7 @@ pub struct SleepGuard {
 impl SleepGuard {
     pub fn start(system: &Connection, lock_wait: Duration) -> zbus::Result<Self> {
         let manager = ManagerProxyBlocking::new(system)?;
-        let session = SessionProxyBlocking::builder(system)
-            .path(manager.get_session("auto")?)?
-            .cache_properties(CacheProperties::No)
-            .build()?;
+        let session = own_session(system)?;
         let take = {
             let system = system.clone();
             move || {

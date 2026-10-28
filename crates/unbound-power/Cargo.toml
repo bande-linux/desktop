@@ -10,13 +10,15 @@ unbound-notify = { path = "../unbound-notify" }
 zbus.workspace = true
 
 [dev-dependencies]
+tempfile.workspace = true
+unbound-config = { path = "../unbound-config" }
 unbound-test-bus.workspace = true
 
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "x11"
 depends = "$auto, dbus-session-bus | default-dbus-session-bus, init-system-helpers (>= 1.66), default-logind | logind"
-recommends = "upower"
+recommends = "upower, unbound-config"
 extended-description = """\
 Locks the session before the computer sleeps through a logind delay \
 inhibitor, posts low and critical battery notifications from UPower, and \

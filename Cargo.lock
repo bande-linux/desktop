@@ -1777,6 +1777,8 @@ dependencies = [
 name = "unbound-power"
 version = "0.1.0"
 dependencies = [
+ "tempfile",
+ "unbound-config",
  "unbound-notify",
  "unbound-test-bus",
  "zbus",

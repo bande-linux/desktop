@@ -120,8 +120,8 @@ private buses.
 - [ ] Drive the idle machine from `ext-idle-notify-v1` once the compositor offers it
   (M17), dim through the backlight, and count logind `idle` block inhibitors of
   other programs (`BlockInhibited`) as inhibition.
-- [ ] Decide the suspend stage: `config.kdl` has no `idle suspend-after`, and the
-  plan names suspend without a delay.
+- [x] `idle suspend-after`, by default when the display turns off as on a desktop
+  Mac, carried out by `unbound-power` through logind.
 - [ ] Toolkit surfaces: notification banners and center, the polkit dialog (then
   package `unbound-polkit`), each drawing the existing model.
 - [ ] Notification polish that waits for the UI: keep a banner while the pointer is

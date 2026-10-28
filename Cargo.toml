@@ -25,6 +25,7 @@ unbound-render = { path = "crates/unbound-render" }
 unbound-test-bus = { path = "crates/unbound-test-bus" }
 unbound-test-wayland = { path = "crates/unbound-test-wayland" }
 unbound-toolkit = { path = "crates/unbound-toolkit" }
+wayland-backend = { version = "=0.3.17", features = ["log"] }
 wayland-client = "=0.31.15"
 wayland-protocols = { version = "=0.32.13", features = ["client", "staging", "unstable"] }
 wgpu = { version = "=30.0.1", default-features = false, features = ["std", "parking_lot", "vulkan", "wgsl"] }

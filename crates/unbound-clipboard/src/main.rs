@@ -11,7 +11,8 @@ use wayland_client::globals::{GlobalListContents, registry_queue_init};
 use wayland_client::protocol::wl_registry::WlRegistry;
 use wayland_client::protocol::wl_seat::WlSeat;
 use wayland_client::{
-    Connection, Dispatch, Proxy, QueueHandle, delegate_noop, event_created_child,
+    Connection, Dispatch, DispatchError, Proxy, QueueHandle, WaylandError, delegate_noop,
+    event_created_child,
 };
 use wayland_protocols::ext::data_control::v1::client::ext_data_control_device_v1::{
     self, ExtDataControlDeviceV1,
@@ -76,11 +77,28 @@ impl Daemon {
 fn main() -> ExitCode {
     match run() {
         Ok(()) => ExitCode::SUCCESS,
+        Err(error) if compositor_gone(error.as_ref()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("unbound-clipboard: {error}");
             ExitCode::FAILURE
         }
     }
+}
+
+fn compositor_gone(error: &(dyn Error + 'static)) -> bool {
+    let io = match error.downcast_ref::<DispatchError>() {
+        Some(DispatchError::Backend(WaylandError::Io(io))) => Some(io),
+        _ => match error.downcast_ref::<WaylandError>() {
+            Some(WaylandError::Io(io)) => Some(io),
+            _ => error.downcast_ref::<std::io::Error>(),
+        },
+    };
+    io.is_some_and(|io| {
+        matches!(
+            io.kind(),
+            ErrorKind::BrokenPipe | ErrorKind::ConnectionReset | ErrorKind::UnexpectedEof
+        )
+    })
 }
 
 fn run() -> Result<(), Box<dyn Error>> {

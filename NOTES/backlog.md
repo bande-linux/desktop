@@ -27,12 +27,15 @@ hardware. Things noticed in passing go to the end of this file, not into a diff.
   Baseline with the wgpu renderer on the runners: typical frame p50 11.4 ms / p99
   39.1 ms, full repaint p50 12.4 ms / p99 35.5 ms, start 2214 ms, idle RSS 93.6 MiB.
   Budgets are reported, not enforced, until M6.
-- [ ] **M6 `unbound-render`: Vulkan (`ash`) compositor renderer**
+- [x] **M6 `unbound-render`: Vulkan (`ash`) compositor renderer** (`desktop/milestone-6`)
   Persistent per-surface textures, `wl_shm` uploads limited to buffer damage,
   damage-limited repaint of the output, readback only on request; the compositor drops
   `wgpu`. *Done when* the golden test passes on lavapipe, tests show that repainted
   pixels equal the damaged area and uploaded bytes equal the damaged rows, and `ci/perf`
   enforces the lavapipe budgets of `docs/RENDERING.md`.
+  Result on the runners: typical frame p50 0.28 ms / p99 0.51 ms (was 11.4 / 39.1),
+  full repaint p50 4.6 ms / p99 11.4 ms, start p50 30 ms (was 2214), idle RSS 89 MiB.
+  Opaque windows also hide what lies below them from shading.
 - [ ] **M7 `linux-dmabuf-v1` with Vulkan import**
   Single-plane LINEAR ARGB/XRGB8888 buffers imported through
   `VK_EXT_external_memory_dma_buf`; version 3 global while there is no DRM device
@@ -73,3 +76,8 @@ hardware. Things noticed in passing go to the end of this file, not into a diff.
 - Input-to-photon measured with a camera or photodiode on a real Mac.
 
 ## Noticed in passing
+
+- `unbound-render` uploads through a staging buffer; `VK_EXT_host_image_copy` (on
+  lavapipe) would copy straight from the shm pool into the texture.
+- `unbound-bench` reuses `unbound-test-wayland`, whose helpers panic on failure; fine for
+  a measuring tool, but its errors read as test assertions.

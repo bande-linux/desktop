@@ -14,7 +14,7 @@ use crate::render::{RenderError, Snapshot};
 use crate::scene::Scene;
 use crate::text::GlyphRun;
 
-const TARGET_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+const OFFSCREEN_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
 pub struct GpuRenderer {
     adapter: wgpu::Adapter,
@@ -24,6 +24,7 @@ pub struct GpuRenderer {
     resources: Resources,
     outlines: GlyphOutlines,
     scene: vello_gpu::Scene,
+    depth: Option<(RenderSize, wgpu::TextureView)>,
 }
 
 impl GpuRenderer {
@@ -37,15 +38,24 @@ impl GpuRenderer {
         let (device, queue) =
             pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default()))
                 .map_err(RenderError::Device)?;
+        Ok(Self::with_device(adapter, device, queue, OFFSCREEN_FORMAT))
+    }
+
+    pub(crate) fn with_device(
+        adapter: wgpu::Adapter,
+        device: wgpu::Device,
+        queue: wgpu::Queue,
+        format: wgpu::TextureFormat,
+    ) -> Self {
         let (renderer, resources) = Renderer::new(
             &device,
             &RenderTargetConfig {
-                format: TARGET_FORMAT,
+                format,
                 width: 1,
                 height: 1,
             },
         );
-        Ok(Self {
+        Self {
             adapter,
             device,
             queue,
@@ -53,14 +63,63 @@ impl GpuRenderer {
             resources,
             outlines: GlyphOutlines::default(),
             scene: vello_gpu::Scene::new(1, 1),
-        })
+            depth: None,
+        }
     }
 
     pub fn adapter_info(&self) -> wgpu::AdapterInfo {
         self.adapter.get_info()
     }
 
+    pub(crate) fn device(&self) -> &wgpu::Device {
+        &self.device
+    }
+
     pub fn render(&mut self, scene: &Scene) -> Result<Snapshot, RenderError> {
+        let target = self.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("toolkit target"),
+            size: wgpu::Extent3d {
+                width: scene.width,
+                height: scene.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: OFFSCREEN_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let encoder = self.draw(scene, &target)?;
+        let rgba = self.read_back(encoder, &target)?;
+        Ok(Snapshot {
+            width: scene.width,
+            height: scene.height,
+            rgba,
+        })
+    }
+
+    pub(crate) fn present(
+        &mut self,
+        scene: &Scene,
+        surface: &wgpu::Surface<'static>,
+    ) -> Result<(), RenderError> {
+        let frame = match surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(frame)
+            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
+            other => return Err(RenderError::Gpu(format!("no surface texture: {other:?}"))),
+        };
+        let encoder = self.draw(scene, &frame.texture)?;
+        self.queue.submit([encoder.finish()]);
+        self.queue.present(frame);
+        Ok(())
+    }
+
+    fn draw(
+        &mut self,
+        scene: &Scene,
+        target: &wgpu::Texture,
+    ) -> Result<wgpu::CommandEncoder, RenderError> {
         let (width, height) = crate::render::extent(scene)?;
         self.scene.reset_and_resize(width, height);
         draw::encode(
@@ -73,23 +132,17 @@ impl GpuRenderer {
         );
         self.outlines.end_frame();
 
-        let target = self.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("toolkit target"),
-            size: wgpu::Extent3d {
-                width: scene.width,
-                height: scene.height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: TARGET_FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
-        let view = target.create_view(&wgpu::TextureViewDescriptor::default());
         let size = RenderSize { width, height };
-        let depth = Renderer::create_depth_texture_view(&self.device, &size);
+        if self
+            .depth
+            .as_ref()
+            .is_none_or(|(cached, _)| *cached != size)
+        {
+            let view = Renderer::create_depth_texture_view(&self.device, &size);
+            self.depth = Some((size.clone(), view));
+        }
+        let depth = self.depth.as_ref().map(|(_, view)| view);
+        let view = target.create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
@@ -102,19 +155,14 @@ impl GpuRenderer {
                 &mut encoder,
                 &size,
                 &view,
-                Some(&depth),
+                depth,
                 &TextureBindings::new(),
                 TargetInit::Clear(ClearSettings::Viewport {
                     color: draw::color(scene.background),
                 }),
             )
             .map_err(|error| RenderError::Gpu(error.to_string()))?;
-        let rgba = self.read_back(encoder, &target)?;
-        Ok(Snapshot {
-            width: scene.width,
-            height: scene.height,
-            rgba,
-        })
+        Ok(encoder)
     }
 
     fn read_back(

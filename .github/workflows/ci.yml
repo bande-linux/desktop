@@ -72,6 +72,7 @@ jobs:
           dpkg-deb --info "$deb"
           dpkg-deb --contents "$deb"
           test "$(dpkg-deb --field "$deb" Architecture)" = arm64
+          dpkg-deb --field "$deb" Depends | grep -F 'mesa-vulkan-drivers | vulkan-icd'
       - name: Smoke-test the packaged binary
         run: |
           root=$(mktemp -d)

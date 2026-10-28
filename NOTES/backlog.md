@@ -11,7 +11,13 @@ hardware. Things noticed in passing go to the end of this file, not into a diff.
 Target: plan phases 1-6 done plus enough protocols for Firefox on Wayland. Pure Wayland:
 XWayland is deferred, to revisit only if a needed app has no Wayland path (macOS
 precedent: XQuartz is a separate, optional install). Progress is tracked per milestone
-below; the estimate at the head of `desktop/milestone-15` is about 52% of the plan.
+below. Estimate at the head of `desktop/milestone-17`: about 60% of the way to the target,
+counting the six phases and Firefox equally: phase 1 done; phase 2 about 90% (explicit sync
+left); phase 3 about 75% (idle not yet driving `unbound-power`, environment propagation);
+phase 4 about 35% (panel and launcher, no menu bar, greeter, AT-SPI or input methods);
+phase 5 about 40% (portal and power without their UIs, no audio, network or Bluetooth);
+phase 6 about 30% (launcher and terminal; no files, settings or screenshots); Firefox
+pending its guest test.
 
 ## Done
 
@@ -167,6 +173,22 @@ below; the estimate at the head of `desktop/milestone-15` is about 52% of the pl
   `m16-firefox-full-screen`. No new protocol was needed for this; `cursor-shape-v1` waits
   for themed cursors (until then clients draw their own cursor surfaces) and
   `xdg-decoration` for server-side title bars. *Done when* the guest test is green.
+- [ ] **M17 Lock screen and idle** (`desktop/milestone-17`)
+  `ext-session-lock-v1` (only shell clients see it, as only loginwindow locks a Mac):
+  locked after a blank frame, only the lock surface drawn and given input, focus
+  restored on unlock, blank and still locked if the locker dies, a new locker may take
+  over a dead one's lock, Super shortcuts off while locked. `unbound-lock`: date, time,
+  initial, name and a secure field, PAM (`/etc/pam.d/unbound-lock`, libpam loaded at run
+  time) off the UI thread, a rejected password clears and shakes the field (macOS).
+  `Ctrl+Super+Q` (macOS Control-Command-Q) and logind's `Lock` signal start it; the
+  compositor sets logind's `LockedHint`, which `unbound-power` waits for before sleep.
+  `ext-idle-notify-v1` v2 and `idle-inhibit-v1` (a visible inhibitor holds off ordinary
+  idle, not input idle). Toolkit: `SecureField`, `Role::Lock`. Guest screendumps
+  `m17-lock-screen`, `m17-lock-rejected`, `m17-unlocked`. Not done: `unbound-power` does
+  not yet watch `ext-idle-notify` (it needs `WAYLAND_DISPLAY` in the systemd user
+  environment: phase 3's environment propagation), so idle does not yet dim, lock or
+  sleep; the lock screen shows no Touch ID-style alternatives, no wallpaper and no
+  battery or network state.
 - [ ] **M19 `linux-drm-syncobj-v1` explicit sync (P0)**
   Acquire points through `DrmSyncPointBlocker`, release points from frame completion.
   *Done when* guest tests show a commit is not presented before its acquire point
@@ -278,3 +300,7 @@ boot framebuffer, K3 USB input. Later, the Apple DCP and agx drivers unlock:
   does not touch the compositor, and milestone-8's tip passed with the runners idle.
 - Every crate's `cargo-deb` metadata says `section = "x11"`; the pure-Wayland plan's
   meta-package now uses `misc`. Change the crates in a commit of their own.
+- `unbound-lock` keeps the password in a `String` until PAM's copy is zeroed; zeroize the
+  field's buffer too.
+- The lock screen ignores logind's `Unlock` signal (`loginctl unlock-session`); decide
+  whether an administrator's unlock should be honoured.

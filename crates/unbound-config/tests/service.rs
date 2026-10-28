@@ -10,7 +10,7 @@ use unbound_test_bus::SessionBus;
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::{DBusProxy, PropertiesProxy};
 use zbus::names::InterfaceName;
-use zbus::zvariant::OwnedValue;
+use zbus::zvariant::{OwnedValue, Value};
 
 const INTERFACE: &str = "org.unbound.Config";
 const SIGNAL_WAIT: Duration = Duration::from_secs(5);
@@ -92,8 +92,10 @@ fn start(initial: &str) -> Fixture {
         &service_connection,
         &path,
         Arc::new(ConfigStore::default()),
-        move |error| {
-            let _ = error_sender.send(error);
+        move |result: Result<(), ReloadError>| {
+            if let Err(error) = result {
+                let _ = error_sender.send(error);
+            }
         },
     )
     .expect("config service");
@@ -189,4 +191,114 @@ fn an_invalid_file_changes_nothing_and_reports_where_it_is_wrong() {
         String::try_from(get(&fixture.client, "PanelEdge")).expect("string"),
         "left"
     );
+}
+
+fn set(connection: &Connection, property: &str, value: Value<'_>) -> zbus::fdo::Result<()> {
+    properties(connection).set(
+        InterfaceName::from_static_str_unchecked(INTERFACE),
+        property,
+        value,
+    )
+}
+
+#[test]
+fn setting_a_property_rewrites_the_file_and_signals_the_change_once() {
+    let fixture = start("// mine\npanel {\n    edge \"left\" // keep\n}\n");
+    let changes = watch_changes(&fixture.client);
+
+    set(&fixture.client, "PanelEdge", Value::from("bottom")).expect("Set");
+
+    assert_eq!(
+        std::fs::read_to_string(&fixture.path).expect("read"),
+        "// mine\npanel {\n    edge \"bottom\" // keep\n}\n"
+    );
+    assert_eq!(
+        String::try_from(get(&fixture.client, "PanelEdge")).expect("string"),
+        "bottom"
+    );
+    let changed = changes
+        .recv_timeout(SIGNAL_WAIT)
+        .expect("PropertiesChanged");
+    assert_eq!(
+        changed.keys().map(String::as_str).collect::<Vec<_>>(),
+        ["PanelEdge"]
+    );
+    assert!(changes.recv_timeout(QUIET_WAIT).is_err());
+    assert!(fixture.errors.try_recv().is_err());
+}
+
+#[test]
+fn a_value_the_schema_rejects_leaves_the_file_alone() {
+    let initial = "appearance \"dark\"\n";
+    let fixture = start(initial);
+
+    let unknown = set(&fixture.client, "Appearance", Value::from("sepia"));
+    assert!(
+        matches!(unknown, Err(zbus::fdo::Error::InvalidArgs(_))),
+        "{unknown:?}"
+    );
+    let too_late = set(&fixture.client, "IdleDimAfter", Value::from(3600u64));
+    assert!(
+        matches!(too_late, Err(zbus::fdo::Error::InvalidArgs(_))),
+        "{too_late:?}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&fixture.path).expect("read"),
+        initial
+    );
+}
+
+#[test]
+fn an_invalid_file_is_not_overwritten_by_a_setting() {
+    let invalid = "panel {\n    edge \"middle\"\n}\n";
+    let fixture = start(invalid);
+
+    let result = set(&fixture.client, "Appearance", Value::from("dark"));
+    assert!(
+        matches!(result, Err(zbus::fdo::Error::Failed(_))),
+        "{result:?}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&fixture.path).expect("read"),
+        invalid
+    );
+}
+
+#[test]
+fn set_output_writes_the_connector_and_publishes_outputs() {
+    let fixture = start("");
+    let changes = watch_changes(&fixture.client);
+    let scale = Value::from(1.25f64);
+    let vrr = Value::from(true);
+
+    fixture
+        .client
+        .call_method(
+            Some(BUS_NAME),
+            OBJECT_PATH,
+            Some(INTERFACE),
+            "SetOutput",
+            &(
+                "eDP-1",
+                HashMap::from([("scale", &scale), ("variable-refresh-rate", &vrr)]),
+            ),
+        )
+        .expect("SetOutput");
+
+    let changed = changes
+        .recv_timeout(SIGNAL_WAIT)
+        .expect("PropertiesChanged");
+    assert_eq!(
+        changed.keys().map(String::as_str).collect::<Vec<_>>(),
+        ["Outputs"]
+    );
+    let outputs: HashMap<String, HashMap<String, OwnedValue>> = get(&fixture.client, "Outputs")
+        .try_into()
+        .expect("a{sa{sv}}");
+    assert_eq!(f64::try_from(&outputs["eDP-1"]["scale"]).expect("d"), 1.25);
+    assert!(bool::try_from(&outputs["eDP-1"]["variable-refresh-rate"]).expect("b"));
+    let written =
+        unbound_config::Config::parse(&std::fs::read_to_string(&fixture.path).expect("read"))
+            .expect("valid file");
+    assert_eq!(written.outputs["eDP-1"].scale, Some(1.25));
 }

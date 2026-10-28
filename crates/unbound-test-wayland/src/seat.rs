@@ -21,6 +21,12 @@ pub(crate) struct Input {
 
 pub(crate) struct Devices;
 
+impl Input {
+    pub(crate) fn keyboard_surface(&self) -> Option<&WlSurface> {
+        self.keyboard_focus.as_ref()
+    }
+}
+
 impl TestClient {
     pub fn use_seat(&mut self, server: &mut Headless) {
         let registry = self.globals.registry.as_ref().expect("registry");

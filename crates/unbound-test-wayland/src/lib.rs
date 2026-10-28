@@ -2,6 +2,7 @@ pub mod clipboard;
 pub use shell::{Anchor, KeyboardInteractivity, Layer, LayerRequest};
 pub use toplevel::{Configured, PopupRequest};
 pub use wayland_protocols::xdg::shell::client::xdg_toplevel::{ResizeEdge, State as ToplevelState};
+mod lock;
 mod seat;
 mod shell;
 mod toplevel;
@@ -99,6 +100,7 @@ struct Globals {
     input: seat::Input,
     shell: shell::Shell,
     toplevels: toplevel::Toplevels,
+    lock: lock::SessionLock,
 }
 
 pub struct TestClient {

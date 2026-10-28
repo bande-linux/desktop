@@ -11,7 +11,8 @@ use smithay::utils::{Clock, Monotonic, Size};
 use smithay::wayland::socket::ListeningSocketSource;
 use unbound_compositor::{
     CLIPBOARD_DAEMON, DrmOutput, FrameClock, FrameOutput, FrameScheduler, Headless, LAUNCHER,
-    PANEL, REFRESH, Renderer, SessionRequest, SessionRole, follow_session,
+    PANEL, REFRESH, Renderer, SessionRequest, SessionRole, export_session_environment,
+    follow_session,
 };
 
 const HEADLESS_SIZE: (i32, i32) = (1920, 1080);
@@ -126,6 +127,12 @@ fn listen<O: 'static>(
     let socket = ListeningSocketSource::new_auto()?;
     println!("WAYLAND_DISPLAY={}", socket.socket_name().to_string_lossy());
     app.compositor.set_socket_name(socket.socket_name());
+    let socket_name = socket.socket_name().to_string_lossy().into_owned();
+    let exported = zbus::blocking::Connection::session()
+        .and_then(|session| export_session_environment(&session, &socket_name));
+    if let Err(error) = exported {
+        eprintln!("unbound-compositor: cannot export the session environment: {error}");
+    }
     handle.insert_source(socket, |stream, _, app| {
         if let Err(error) = app.compositor.insert_client(stream) {
             eprintln!("unbound-compositor: rejected client: {error}");

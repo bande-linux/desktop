@@ -2985,6 +2985,7 @@ dependencies = [
  "smithay",
  "unbound-protocols",
  "unbound-render",
+ "unbound-test-bus",
  "unbound-test-wayland",
  "wayland-client",
  "wayland-protocols",

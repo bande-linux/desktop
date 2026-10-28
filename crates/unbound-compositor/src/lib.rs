@@ -1,6 +1,7 @@
 mod clock;
 mod cursor;
 mod drm;
+mod environment;
 mod grab;
 mod idle;
 mod input;
@@ -17,6 +18,7 @@ mod window;
 pub use clock::{FrameClock, FrameOutput, FrameScheduler, Poll, SAFETY_MARGIN, Submission, Vblank};
 pub use cursor::{ARROW_FILL, ARROW_HEIGHT, ARROW_OUTLINE, ARROW_WIDTH};
 pub use drm::{DrmBackendError, DrmNotifiers, DrmOutput};
+pub use environment::{DESKTOP_NAME, export_session_environment, session_environment};
 pub use logind::{SessionRequest, follow_session};
 pub use render::{BACKGROUND, FrameStats, Renderer, Snapshot};
 pub use session::{

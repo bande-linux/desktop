@@ -16,6 +16,7 @@ zbus.workspace = true
 image.workspace = true
 image-compare.workspace = true
 rustix = { workspace = true, features = ["fs", "mm"] }
+unbound-test-bus.workspace = true
 unbound-test-wayland.workspace = true
 wayland-client.workspace = true
 wayland-protocols.workspace = true

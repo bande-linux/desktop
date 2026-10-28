@@ -102,6 +102,32 @@ hardware. Things noticed in passing go to the end of this file, not into a diff.
   `ext-idle-notify-v1`, `idle-inhibit`, driven by the `idle` config.
 - [ ] **M18 Watchdog** `wl_display` ping heartbeat, unresponsive marking after 3 s.
 
+## Desktop services track (`desktop/track-services`)
+
+Built beside M9–M14 without the screen work; each item is headless and tested on
+private buses.
+
+- [x] Notification presentation model: banners and Notification Center, stacking by
+  app, timeouts, urgency, `transient`, actions, Do Not Disturb (`unbound-notify`).
+- [x] Writable `org.unbound.Config` that edits `config.kdl` in place, the
+  `unbound-config` session daemon, and the invalid-file notification.
+- [x] `unbound-power`: lock before sleep through a logind delay inhibitor, UPower
+  battery alerts, `org.freedesktop.ScreenSaver` turned into logind idle inhibitors;
+  the idle state machine as logic.
+- [x] `unbound-polkit` agent protocol, tested against Debian 13's polkitd (`ci/polkit`).
+- [x] Packaging of `unbound-config` and `unbound-power` as systemd user units with
+  D-Bus activation, checked in `ci/deb`.
+- [ ] Drive the idle machine from `ext-idle-notify-v1` once the compositor offers it
+  (M17), dim through the backlight, and count logind `idle` block inhibitors of
+  other programs (`BlockInhibited`) as inhibition.
+- [ ] Decide the suspend stage: `config.kdl` has no `idle suspend-after`, and the
+  plan names suspend without a delay.
+- [ ] Toolkit surfaces: notification banners and center, the polkit dialog (then
+  package `unbound-polkit`), each drawing the existing model.
+- [ ] Notification polish that waits for the UI: keep a banner while the pointer is
+  over it, as macOS does; persist Do Not Disturb across daemon restarts; bound the
+  center per app.
+
 ## Needs hardware
 
 Kernel steps owned by the user: K1 boot the M2 mini to userspace, K2 `simpledrm` on the
@@ -123,3 +149,6 @@ boot framebuffer, K3 USB input. Later, the Apple DCP and agx drivers unlock:
   lavapipe) would copy straight from the shm pool into the texture.
 - `unbound-bench` reuses `unbound-test-wayland`, whose helpers panic on failure; fine for
   a measuring tool, but its errors read as test assertions.
+- `ci/perf` fails on `frame_typical_p99` (16–23 ms against 8.33 ms) and once
+  `frame_full_p99` while other jobs share the runners' Mac mini; the services branch
+  does not touch the compositor, and milestone-8's tip passed with the runners idle.

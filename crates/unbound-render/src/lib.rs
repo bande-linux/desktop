@@ -9,7 +9,7 @@ use std::fmt;
 use std::fs::File;
 use std::io::{Seek, SeekFrom};
 use std::marker::PhantomData;
-use std::os::fd::{AsRawFd, BorrowedFd, IntoRawFd};
+use std::os::fd::{AsRawFd, BorrowedFd, IntoRawFd, OwnedFd};
 use std::rc::Rc;
 use std::slice;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -22,6 +22,7 @@ use smithay::backend::renderer::sync::SyncPoint;
 use smithay::backend::renderer::{
     Bind, ContextId, DebugFlags, Offscreen, Renderer, RendererSuper, Texture, TextureFilter,
 };
+use smithay::reexports::rustix::mm;
 use smithay::utils::{Buffer as BufferCoords, Physical, Size, Transform};
 
 pub use frame::VulkanFrame;
@@ -212,9 +213,17 @@ struct Imported {
 }
 
 struct Export {
-    imported: Imported,
-    offset: u64,
-    row_texels: u32,
+    fd: OwnedFd,
+    mapping: *mut u8,
+    length: usize,
+    offset: usize,
+    stride: usize,
+}
+
+impl Drop for Export {
+    fn drop(&mut self) {
+        let _ = unsafe { mm::munmap(self.mapping.cast(), self.length) };
+    }
 }
 
 struct Target {
@@ -959,9 +968,6 @@ impl VulkanRenderer {
         let (image, vk_format) = match image {
             Ok(created) => created,
             Err(error) => {
-                if let Some(export) = &export {
-                    self.destroy_imported(&export.imported);
-                }
                 return Err(error);
             }
         };
@@ -988,9 +994,6 @@ impl VulkanRenderer {
     fn forget_target(&mut self, id: u64) {
         if let Some(removed) = self.targets.remove(&id) {
             self.destroy_image(&removed.image);
-            if let Some(export) = &removed.export {
-                self.destroy_imported(&export.imported);
-            }
         }
     }
 
@@ -1176,18 +1179,31 @@ impl VulkanRenderer {
     fn dmabuf_export(&self, dmabuf: &Dmabuf) -> Result<Export, RenderError> {
         let layout = import::single_plane_layout(dmabuf)?;
         target_format(dmabuf.format().code).ok_or(RenderError::UnsupportedFormat)?;
-        let imported = self.import_dmabuf_memory(
-            layout.fd,
-            vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::TRANSFER_DST,
-        )?;
-        if layout.end(dmabuf.size()) > imported.size {
-            self.destroy_imported(&imported);
+        let fd = layout.fd.try_clone_to_owned()?;
+        let length = usize::try_from(File::from(fd.try_clone()?).seek(SeekFrom::End(0))?)
+            .map_err(|_| RenderError::BufferOutOfBounds)?;
+        let end = usize::try_from(layout.end(dmabuf.size()))
+            .map_err(|_| RenderError::BufferOutOfBounds)?;
+        if end > length {
             return Err(RenderError::BufferOutOfBounds);
         }
+        let mapping = unsafe {
+            mm::mmap(
+                std::ptr::null_mut(),
+                length,
+                mm::ProtFlags::READ | mm::ProtFlags::WRITE,
+                mm::MapFlags::SHARED,
+                &fd,
+                0,
+            )
+        }
+        .map_err(std::io::Error::from)?;
         Ok(Export {
-            imported,
-            offset: u64::from(layout.offset),
-            row_texels: layout.stride / BYTES_PER_PIXEL as u32,
+            fd,
+            mapping: mapping.cast(),
+            length,
+            offset: layout.offset as usize,
+            stride: layout.stride as usize,
         })
     }
 }
@@ -1325,9 +1341,6 @@ impl Drop for VulkanRenderer {
         }
         for (_, target) in std::mem::take(&mut self.targets) {
             self.destroy_image(&target.image);
-            if let Some(export) = &target.export {
-                self.destroy_imported(&export.imported);
-            }
         }
         for staging in std::mem::take(&mut self.staging) {
             self.destroy_staging(&staging);

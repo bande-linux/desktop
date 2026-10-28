@@ -203,7 +203,7 @@ impl Window {
     }
 
     pub fn size(&self) -> (u32, u32) {
-        self.size
+        self.state.suggested_size.unwrap_or(self.size)
     }
 
     pub fn is_closed(&self) -> bool {
@@ -240,9 +240,8 @@ impl Window {
     pub fn draw(&mut self, scene: &Scene) -> Result<FramePath, WindowError> {
         self.wait_for_frame()?;
         self.queue.dispatch_pending(&mut self.state)?;
-        if let Some(size) = self.state.suggested_size.take() {
-            self.size = size;
-        }
+        self.state.suggested_size = None;
+        self.size = (scene.width, scene.height);
         self.poll_gpu();
         self.surface.frame(&self.queue.handle(), ());
         self.state.frame_pending = true;

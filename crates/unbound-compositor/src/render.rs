@@ -6,6 +6,7 @@ use smithay::backend::renderer::{Bind, Color32F, Offscreen};
 use smithay::utils::{Physical, Size, Transform};
 use unbound_render::{DeviceInfo, OffscreenTarget, RenderError, VulkanRenderer};
 
+use crate::clock::{FrameOutput, Submission};
 use crate::state::Headless;
 
 pub const BACKGROUND: [u8; 3] = [0x20, 0x28, 0x30];
@@ -117,5 +118,14 @@ impl Renderer {
             size: compositor.output_size(),
             rgba: self.vulkan.read_target(&output.target)?,
         })
+    }
+}
+
+impl FrameOutput for Renderer {
+    type Error = RenderError;
+
+    fn submit(&mut self, compositor: &mut Headless) -> Result<Submission, RenderError> {
+        self.render(compositor)?;
+        Ok(Submission::AtVblank)
     }
 }

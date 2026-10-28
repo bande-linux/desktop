@@ -188,8 +188,7 @@ pending its guest test.
   `ext-idle-notify` (one notification per policy threshold) to dim, lock and sleep, and
   the compositor exports `WAYLAND_DISPLAY`, `XDG_CURRENT_DESKTOP` and `XDG_SESSION_TYPE`
   to systemd user units and D-Bus activation. Not done: dimming has no backlight to act
-  on yet; the lock screen shows no wallpaper and no battery or network state;
-  `RestartIdleTimers` after an inhibition ends is not acted on by the Wayland watcher.
+  on yet; the lock screen shows no wallpaper and no battery or network state.
 - [ ] **M19 `linux-drm-syncobj-v1` explicit sync (P0)**
   Acquire points through `DrmSyncPointBlocker`, release points from frame completion.
   *Done when* guest tests show a commit is not presented before its acquire point

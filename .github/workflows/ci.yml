@@ -58,7 +58,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            pkg-config libxkbcommon-dev libvulkan1 mesa-vulkan-drivers
+            pkg-config libxkbcommon-dev libvulkan1 mesa-vulkan-drivers dbus-daemon dbus-bin
       - name: Install cargo-deb
         run: |
           root=/cache/tools/cargo-deb-$CARGO_DEB_VERSION
@@ -66,7 +66,7 @@ jobs:
             || cargo install cargo-deb --version "$CARGO_DEB_VERSION" --locked --root "$root"
           echo "$root/bin" >> "$GITHUB_PATH"
       - run: |
-          for package in unbound-compositor unbound-notify unbound-clipboard; do
+          for package in unbound-compositor unbound-notify unbound-clipboard unbound-config; do
             cargo deb --package "$package" --locked
           done
       - name: Inspect the packages
@@ -91,6 +91,39 @@ jobs:
           dpkg-deb --contents "$deb" | grep -q ' ./usr/bin/unbound-clipboard$'
           dpkg-deb --field target/debian/unbound-compositor_*.deb Recommends \
             | grep -qx 'unbound-clipboard'
+      - name: Check the settings service's user unit and D-Bus activation
+        run: |
+          root=$(mktemp -d)
+          dpkg-deb --extract target/debian/unbound-config_*.deb "$root"
+          service="$root/usr/share/dbus-1/services/org.unbound.Config.service"
+          unit="$root/usr/lib/systemd/user/unbound-config.service"
+          grep -qx 'Name=org.unbound.Config' "$service"
+          grep -qx 'SystemdService=unbound-config.service' "$service"
+          grep -qx 'BusName=org.unbound.Config' "$unit"
+          grep -qx 'WantedBy=graphical-session.target' "$unit"
+          test -x "$root$(sed -n 's/^Exec=//p' "$service")"
+          test -x "$root$(sed -n 's/^ExecStart=//p' "$unit")"
+          dpkg-deb --ctrl-tarfile target/debian/unbound-config_*.deb | tar -t | grep -qx './postinst'
+      - name: Smoke-test the packaged settings service
+        run: |
+          root=$(mktemp -d)
+          dpkg-deb --extract target/debian/unbound-config_*.deb "$root"
+          export XDG_CONFIG_HOME=$(mktemp -d)
+          mkdir -p "$XDG_CONFIG_HOME/unbound"
+          echo 'panel { edge "top"; }' > "$XDG_CONFIG_HOME/unbound/config.kdl"
+          dbus-run-session -- bash -c '
+            "$1/usr/bin/unbound-config" &
+            daemon=$!
+            for attempt in $(seq 50); do
+              reply=$(dbus-send --session --print-reply --dest=org.unbound.Config /org/unbound/Config \
+                org.freedesktop.DBus.Properties.Get string:org.unbound.Config string:PanelEdge 2>/dev/null) \
+                && break
+              sleep 0.1
+            done
+            kill "$daemon"
+            echo "$reply"
+            grep -q "string \"top\"" <<< "$reply"
+          ' bash "$root"
       - name: Smoke-test the packaged compositor
         run: |
           root=$(mktemp -d)

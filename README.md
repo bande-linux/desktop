@@ -69,7 +69,7 @@ sudo reboot
   * [`crates/unbound-compositor`](crates/unbound-compositor): a headless Smithay compositor (`wl_compositor`, `wl_shm`, `linux-dmabuf-v1`, `xdg_wm_base`, `wl_output`, `wp_presentation`, clipboard, primary selection and `ext-data-control-v1`) that renders with `unbound-render`, packaged as `unbound-compositor` for arm64. DRM/KMS output is not implemented yet.
   * [`crates/unbound-render`](crates/unbound-render): the compositor's Vulkan renderer on `ash`, with persistent textures, damage-limited uploads and repaints, and occlusion of what opaque windows hide.
   * [`crates/unbound-toolkit`](crates/unbound-toolkit): semantic colour and spacing tokens, and offscreen fills and text on `wgpu`.
-  * [`crates/unbound-config`](crates/unbound-config): parsing, validation and atomic application of `config.kdl`, watched on disk and published as `org.unbound.Config` on D-Bus.
+  * [`crates/unbound-config`](crates/unbound-config): parsing, validation and atomic application of `config.kdl`, watched on disk and published as `org.unbound.Config` on D-Bus by the `unbound-config` session daemon, which also writes settings back to the file and reports an invalid file as a notification.
   * [`crates/unbound-spring`](crates/unbound-spring): the damped spring model for animations.
   * [`crates/unbound-notify`](crates/unbound-notify): an `org.freedesktop.Notifications` daemon (specification 1.2), started by D-Bus activation; no UI yet.
   * [`crates/unbound-clipboard`](crates/unbound-clipboard): a clipboard daemon that keeps the clipboard and primary selection after the copying client quits; the compositor starts it and offers it `ext-data-control-v1` on that connection only.

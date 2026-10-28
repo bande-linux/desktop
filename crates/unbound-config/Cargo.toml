@@ -14,3 +14,21 @@ zbus.workspace = true
 tempfile.workspace = true
 unbound-notify = { path = "../unbound-notify" }
 unbound-test-bus.workspace = true
+
+[package.metadata.deb]
+maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+section = "x11"
+depends = "$auto, dbus-session-bus | default-dbus-session-bus, init-system-helpers (>= 1.66)"
+recommends = "xdg-utils"
+extended-description = """\
+Serves ~/.config/unbound/config.kdl as org.unbound.Config on the session \
+bus, applies changes to the file atomically, writes settings back without \
+disturbing comments, and reports an invalid file as a notification with \
+its line and column. Started with the graphical session or by D-Bus \
+activation."""
+maintainer-scripts = "debian/"
+assets = [
+    ["target/release/unbound-config", "usr/bin/", "755"],
+    ["debian/unbound-config.service", "usr/lib/systemd/user/", "644"],
+    ["debian/org.unbound.Config.service", "usr/share/dbus-1/services/", "644"],
+]

@@ -1,0 +1,33 @@
+[package]
+name = "xdg-desktop-portal-unbound"
+description = "Unbound backend for xdg-desktop-portal"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+blocking = "=1.7.0"
+unbound-toolkit.workspace = true
+zbus.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+unbound-config = { path = "../unbound-config" }
+unbound-test-bus.workspace = true
+
+[package.metadata.deb]
+maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+section = "x11"
+depends = "$auto, xdg-desktop-portal (>= 1.18), dbus-session-bus | default-dbus-session-bus"
+recommends = "unbound-config, xdg-desktop-portal-gtk"
+extended-description = """\
+Implements xdg-desktop-portal's Settings backend for the Unbound desktop: \
+the colour scheme and accent colour follow the appearance in config.kdl. \
+Interfaces Unbound cannot show yet fall back to the GTK backend."""
+assets = [
+    ["target/release/xdg-desktop-portal-unbound", "usr/libexec/", "755"],
+    ["debian/xdg-desktop-portal-unbound.service", "usr/lib/systemd/user/", "644"],
+    ["debian/org.freedesktop.impl.portal.desktop.unbound.service", "usr/share/dbus-1/services/", "644"],
+    ["debian/unbound.portal", "usr/share/xdg-desktop-portal/portals/", "644"],
+    ["debian/unbound-portals.conf", "usr/share/xdg-desktop-portal/", "644"],
+]

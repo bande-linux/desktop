@@ -1,4 +1,5 @@
 pub mod clipboard;
+mod seat;
 mod udmabuf;
 
 use std::io::Write;
@@ -90,6 +91,7 @@ struct Globals {
     registry: Option<WlRegistry>,
     advertised: Vec<(u32, String)>,
     clipboard: clipboard::Clipboard,
+    input: seat::Input,
 }
 
 pub struct TestClient {
@@ -426,7 +428,6 @@ delegate_noop!(Globals: WlShmPool);
 delegate_noop!(Globals: ignore WlShm);
 delegate_noop!(Globals: ignore WlSurface);
 delegate_noop!(Globals: ignore WlBuffer);
-delegate_noop!(Globals: ignore XdgToplevel);
 delegate_noop!(Globals: ignore ZwpLinuxDmabufV1);
 delegate_noop!(Globals: ignore WpPresentation);
 

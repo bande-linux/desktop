@@ -1,5 +1,7 @@
 pub mod clipboard;
+pub use shell::{Anchor, Layer, LayerRequest};
 mod seat;
+mod shell;
 mod udmabuf;
 
 use std::io::Write;
@@ -92,6 +94,7 @@ struct Globals {
     advertised: Vec<(u32, String)>,
     clipboard: clipboard::Clipboard,
     input: seat::Input,
+    shell: shell::Shell,
 }
 
 pub struct TestClient {
@@ -141,7 +144,7 @@ impl TestClient {
         roundtrip(server, &mut [self]);
     }
 
-    fn bind<I>(&self, interface: &str, version: u32) -> I
+    pub(crate) fn bind<I>(&self, interface: &str, version: u32) -> I
     where
         I: wayland_client::Proxy + 'static,
         Globals: Dispatch<I, ()>,
@@ -161,12 +164,23 @@ impl TestClient {
     }
 
     pub fn show_window_in(&mut self, server: &mut Headless, image: &ShmImage, memory: Memory) {
+        self.map_window(server, image, memory, |_, _| {});
+    }
+
+    fn map_window(
+        &mut self,
+        server: &mut Headless,
+        image: &ShmImage,
+        memory: Memory,
+        prepare: impl FnOnce(&Self, &WlSurface),
+    ) {
         let qh = self.queue.handle();
         let compositor = self.globals.compositor.as_ref().expect("wl_compositor");
         let wm_base = self.globals.wm_base.as_ref().expect("xdg_wm_base");
         let surface = compositor.create_surface(&qh, ());
         let xdg_surface = wm_base.get_xdg_surface(&surface, &qh, ());
         let toplevel = xdg_surface.get_toplevel(&qh, ());
+        prepare(self, &surface);
         self.globals.configured = false;
         surface.commit();
         self.exchange(server);
@@ -263,7 +277,7 @@ impl TestClient {
         buffer
     }
 
-    fn shm_buffer(&self, image: &ShmImage) -> WlBuffer {
+    pub(crate) fn shm_buffer(&self, image: &ShmImage) -> WlBuffer {
         let qh = self.queue.handle();
         let mut file = tempfile::tempfile().expect("shm file");
         file.write_all(image.bytes).expect("shm write");

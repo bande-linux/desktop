@@ -116,11 +116,11 @@ fn a_dmabuf_whose_rows_run_past_its_file_is_out_of_bounds() {
 }
 
 #[test]
-fn a_dmabuf_with_a_modifier_that_was_not_offered_is_an_invalid_format() {
+fn an_immediate_dmabuf_with_a_modifier_that_was_not_offered_is_an_invalid_buffer() {
     let mut server = server();
     let mut client = TestClient::connect(&mut server);
 
     client.create_dmabuf(&mut server, &solid(RED, 4), INTEL_X_TILED);
 
-    assert_eq!(client.protocol_error(), Some(Error::InvalidFormat as u32));
+    assert_eq!(client.protocol_error(), Some(Error::InvalidWlBuffer as u32));
 }

@@ -486,7 +486,7 @@ impl DmabufHandler for State {
         dmabuf: Dmabuf,
         notifier: ImportNotifier,
     ) {
-        if dmabuf.num_planes() == 1 {
+        if dmabuf.num_planes() == 1 && dmabuf.format().modifier == Modifier::Linear {
             let _ = notifier.successful::<State>();
         } else {
             notifier.failed();

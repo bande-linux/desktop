@@ -145,6 +145,28 @@ jobs:
           path: target/debian/*.deb
           if-no-files-found: error
 
+  polkit:
+    name: ci/polkit
+    runs-on: [self-hosted, unbound]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install
+      - name: Build the polkitd test
+        run: |
+          cargo test --package unbound-polkit --test polkitd --locked --no-run --message-format=json \
+            | jq -r 'select(.reason == "compiler-artifact" and .target.name == "polkitd") | .executable // empty' \
+            > polkitd-test-path
+          test -s polkitd-test-path
+      - name: Authenticate through the agent against polkitd on Debian 13
+        run: |
+          image=unbound-polkit-test:${{ github.sha }}
+          docker build --quiet --tag "$image" crates/unbound-polkit/tests/polkitd
+          container=$(docker create "$image")
+          trap 'docker rm --force "$container" >/dev/null; docker rmi "$image" >/dev/null' EXIT
+          docker cp "$(cat polkitd-test-path)" "$container:/polkitd-test"
+          docker start --attach "$container"
+
   perf:
     name: ci/perf
     needs: [test, deb]

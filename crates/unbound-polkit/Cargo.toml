@@ -1,0 +1,15 @@
+[package]
+name = "unbound-polkit"
+description = "Unbound polkit authentication agent"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+blocking = "=1.7.0"
+rustix.workspace = true
+zbus.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+unbound-test-bus.workspace = true

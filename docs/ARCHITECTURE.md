@@ -210,6 +210,9 @@ graph LR
      ```
    - Launches core services bound to `graphical-session.target`: PipeWire, wireplumber, `unbound-portal`, `unbound-polkit`. `unbound-notify` is started by D-Bus activation and `unbound-clipboard` by the compositor.
 
+7. **Polkit Authentication Agent (`unbound-polkit`)**:
+   - Implemented in `crates/unbound-polkit` as a library: an `org.freedesktop.PolicyKit1.AuthenticationAgent` object that registers with polkitd for a logind session or a process, runs `/usr/lib/polkit-1/polkit-agent-helper-1` for the chosen user (the cookie on standard input, PAM prompts and results as escaped lines, as polkit 126's own agent library does) and answers `CancelAuthentication` by stopping the helper. It authenticates as the requesting user when polkitd lists them, otherwise as the first listed user, as macOS pre-fills the dialog with the current administrator. A wrong password is reported and asked for again until the user cancels, as the macOS authorization dialog shakes and stays open. The dialog itself is the `Conversation` trait (prompt, notices, close), waiting for a toolkit window; until then no agent binary is packaged. `ci/polkit` runs the agent against the real polkitd and PAM of Debian 13 in a container.
+
 ### Tier 2 Subsystems (v1.1 Enhanced Desktop Polish)
 - **Status Notifier Item (System Tray)**: Implementation of `org.kde.StatusNotifierWatcher` and `org.kde.StatusNotifierItem` for third-party background icons (Steam, Nextcloud, Slack).
 - **Network & Bluetooth UIs**: Direct integration with NetworkManager (`org.freedesktop.NetworkManager`) and BlueZ (`org.bluez`) for one-click Wi-Fi selection and Bluetooth pairing in the control panel.
@@ -603,6 +606,7 @@ All CI runs on the organization's self-hosted runners: Docker containers on an A
 Runs on every push to any branch and on pull requests. Job names are the status-check contexts:
 - `ci/lint`: `cargo fmt --check` and `cargo clippy --workspace --all-targets -- -D warnings`.
 - `ci/lavapipe-test`: `cargo test --workspace`, including the compositor and toolkit render tests on lavapipe. D-Bus tests start a private `dbus-daemon` session bus each (`crates/unbound-test-bus`). The toolkit's text test uses DejaVu Sans from `fonts-dejavu-core`; its expected image is built in the test from the scene with `ab_glyph`, so it does not depend on the font version.
+- `ci/polkit`: builds the `unbound-polkit` polkitd test, starts a Debian 13 container (through the runner's Docker socket) with a system bus, polkitd, a test action and a user with a random password, and runs the test there: `pkcheck` must be authorized after the agent enters the password, after a wrong password and a retry, and must be refused when the dialog is cancelled.
 - `ci/perf`: builds `unbound-compositor` and `unbound-bench` in release mode and measures frame times, compositor start time and idle memory on lavapipe against the budgets in [`RENDERING.md`](RENDERING.md); the table goes to the job summary and `perf.json` is uploaded.
 - `ci/deb`: `cargo deb` for `unbound-compositor`, `unbound-notify`, `unbound-clipboard` and `unbound-config`, then checks each package's architecture, the notification daemon's D-Bus activation file, the user units and activation files of `unbound-config` and `unbound-power`, starts the packaged settings service on a private bus to read a property, that the clipboard daemon is packaged and recommended by the compositor, starts the packaged compositor as a smoke test, and uploads the `.deb` files as artifacts.
 

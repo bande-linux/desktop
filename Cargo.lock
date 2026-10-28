@@ -1763,6 +1763,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "unbound-polkit"
+version = "0.1.0"
+dependencies = [
+ "blocking",
+ "rustix",
+ "tempfile",
+ "unbound-test-bus",
+ "zbus",
+]
+
+[[package]]
 name = "unbound-power"
 version = "0.1.0"
 dependencies = [

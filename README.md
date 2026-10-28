@@ -73,6 +73,7 @@ sudo reboot
   * [`crates/unbound-spring`](crates/unbound-spring): the damped spring model for animations.
   * [`crates/unbound-notify`](crates/unbound-notify): an `org.freedesktop.Notifications` daemon (specification 1.2), started by D-Bus activation; no UI yet.
   * [`crates/unbound-power`](crates/unbound-power): a session service that locks before sleep through logind, posts battery alerts from UPower and serves `org.freedesktop.ScreenSaver` idle inhibition; also the idle state machine.
+  * [`crates/unbound-polkit`](crates/unbound-polkit): the polkit authentication agent protocol, tested against polkitd; its dialog awaits the toolkit.
   * [`crates/unbound-clipboard`](crates/unbound-clipboard): a clipboard daemon that keeps the clipboard and primary selection after the copying client quits; the compositor starts it and offers it `ext-data-control-v1` on that connection only.
   * [`crates/unbound-bench`](crates/unbound-bench): frame time, start time and memory measurements that `ci/perf` runs on every push.
   * [`crates/unbound-test-bus`](crates/unbound-test-bus): private session buses for D-Bus tests.

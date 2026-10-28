@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use unbound_render::RenderError;
 
@@ -68,11 +68,11 @@ impl FrameClock {
         }
     }
 
-    pub fn record_render(&mut self, took: Duration) {
+    pub fn record_render(&mut self, deadline_to_done: Duration) {
         if self.render_times.len() == REMEMBERED_RENDERS {
             self.render_times.pop_front();
         }
-        self.render_times.push_back(took);
+        self.render_times.push_back(deadline_to_done);
     }
 }
 
@@ -110,10 +110,11 @@ impl FrameScheduler {
 
     pub fn poll(
         &mut self,
-        mut now: Duration,
+        clock: impl Fn() -> Duration,
         compositor: &mut Headless,
         renderer: &mut Renderer,
     ) -> Result<Poll, RenderError> {
+        let mut now = clock();
         self.wanted |= compositor.take_redraw();
         let mut presented = None;
         loop {
@@ -138,11 +139,10 @@ impl FrameScheduler {
                     compositor.take_redraw();
                     self.wanted = false;
                     compositor.latch();
-                    let started = Instant::now();
+                    let deadline = self.clock.deadline(vblank);
                     renderer.render(compositor)?;
-                    let took = started.elapsed();
-                    self.clock.record_render(took);
-                    now += took;
+                    now = clock();
+                    self.clock.record_render(now.saturating_sub(deadline));
                     self.phase = if now <= vblank.time {
                         Phase::Rendered(vblank)
                     } else {

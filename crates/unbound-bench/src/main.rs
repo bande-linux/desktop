@@ -261,7 +261,7 @@ fn presentation_latency() -> Result<(Vec<Duration>, usize), Box<dyn Error>> {
         server.dispatch()?;
         let due = scheduler.clock().frame_for(committed);
         let presented = loop {
-            let poll = scheduler.poll(now(), &mut server, &mut renderer)?;
+            let poll = scheduler.poll(now, &mut server, &mut renderer)?;
             if let Some(presented) = poll.presented {
                 break presented;
             }

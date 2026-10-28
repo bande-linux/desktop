@@ -68,7 +68,7 @@ fn run() -> Result<(), Box<dyn Error>> {
                 Some(CLIPBOARD_DAEMON_RESTART_THROTTLE)
             }
         };
-        let frame = scheduler.poll(now(), &mut compositor, &mut renderer)?;
+        let frame = scheduler.poll(now, &mut compositor, &mut renderer)?;
         let frame_wait = frame.wake_at.map(|at| at.saturating_sub(now()));
         timeout = clipboard_daemon_retry.into_iter().chain(frame_wait).min();
     }

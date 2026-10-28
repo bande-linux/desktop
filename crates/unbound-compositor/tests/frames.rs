@@ -1,13 +1,14 @@
 use std::time::Duration;
 
 use smithay::utils::Size;
-use unbound_compositor::{FrameClock, FrameScheduler, Headless, REFRESH, Renderer, Vblank};
+use unbound_compositor::{
+    FrameClock, FrameScheduler, Headless, REFRESH, Renderer, SAFETY_MARGIN, Vblank,
+};
 use unbound_test_wayland::{Presented, RED, ShmImage, TestClient};
 use wayland_client::protocol::wl_shm::Format;
 
 const SIDE: i32 = 16;
 const MICROSECOND: Duration = Duration::from_micros(1);
-const WARM_UP_FRAMES: usize = 16;
 
 fn image(pixels: &[u8]) -> ShmImage<'_> {
     ShmImage {
@@ -44,15 +45,8 @@ impl Session {
             scheduler: FrameScheduler::new(FrameClock::new(Duration::ZERO, REFRESH)),
             pixels,
         };
-        let mut last = session.run_from(Duration::ZERO);
-        for _ in 0..WARM_UP_FRAMES {
-            session
-                .client
-                .commit_buffer(0, &image(&session.pixels), (0, 0, SIDE, SIDE));
-            session.server.dispatch().expect("server dispatch");
-            last = session.run_from(last.time);
-        }
-        (session, last)
+        let mapped = session.run_from(Duration::ZERO);
+        (session, mapped)
     }
 
     fn deadline_of_next_vblank(&self, after: Vblank) -> (Vblank, Duration) {
@@ -72,7 +66,7 @@ impl Session {
         loop {
             let poll = self
                 .scheduler
-                .poll(now, &mut self.server, &mut self.renderer)
+                .poll(|| now, &mut self.server, &mut self.renderer)
                 .expect("frame");
             if let Some(vblank) = poll.presented {
                 self.client.exchange(&mut self.server);
@@ -87,7 +81,7 @@ impl Session {
 fn a_commit_before_the_deadline_is_presented_at_the_next_vblank() {
     let (mut session, last) = Session::with_a_window();
     let (next, deadline) = session.deadline_of_next_vblank(last);
-    assert!(deadline > last.time, "the renders fit a refresh interval");
+    assert_eq!(deadline, next.time - SAFETY_MARGIN);
 
     session.commit_with_feedback();
     let presented = session.run_from(deadline);
@@ -137,7 +131,7 @@ fn nothing_is_composed_while_no_client_commits() {
 
     let poll = session
         .scheduler
-        .poll(last.time, &mut session.server, &mut session.renderer)
+        .poll(|| last.time, &mut session.server, &mut session.renderer)
         .expect("frame");
 
     assert_eq!(poll.wake_at, None);

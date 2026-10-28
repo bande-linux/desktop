@@ -1,0 +1,13 @@
+[package]
+name = "unbound-test-wayland"
+description = "Wayland test clients for Unbound compositor tests"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+tempfile.workspace = true
+unbound-compositor.workspace = true
+wayland-client.workspace = true
+wayland-protocols.workspace = true

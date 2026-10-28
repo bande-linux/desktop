@@ -17,7 +17,9 @@ smithay = { version = "=0.7.0", default-features = false, features = ["wayland_f
 tempfile = "=3.27.0"
 notify = "=8.2.0"
 zbus = "=5.19.0"
+unbound-compositor = { path = "crates/unbound-compositor" }
 unbound-test-bus = { path = "crates/unbound-test-bus" }
+unbound-test-wayland = { path = "crates/unbound-test-wayland" }
 unbound-toolkit = { path = "crates/unbound-toolkit" }
 wayland-client = "=0.31.15"
 wayland-protocols = { version = "=0.32.13", features = ["client", "staging", "unstable"] }

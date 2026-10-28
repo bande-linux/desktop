@@ -1,10 +1,8 @@
-mod common;
-
 use std::time::Duration;
 
-use common::{RED, ShmImage, TestClient, quadrants};
 use smithay::utils::{Point, Size};
 use unbound_compositor::Headless;
+use unbound_test_wayland::{RED, ShmImage, TestClient, quadrants};
 use wayland_client::protocol::wl_shm::Format;
 
 fn server() -> Headless {

@@ -1,12 +1,10 @@
-mod common;
-
 use std::path::Path;
 
-use common::{ShmImage, TestClient, quadrants};
 use image::{RgbaImage, buffer::ConvertBuffer};
 use image_compare::Algorithm;
 use smithay::utils::Size;
 use unbound_compositor::{Headless, Renderer};
+use unbound_test_wayland::{ShmImage, TestClient, quadrants};
 use wayland_client::protocol::wl_shm::Format;
 
 const MIN_SSIM: f64 = 0.995;

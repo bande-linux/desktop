@@ -1710,10 +1710,9 @@ dependencies = [
  "image",
  "image-compare",
  "smithay",
- "tempfile",
+ "unbound-test-wayland",
  "unbound-toolkit",
  "wayland-client",
- "wayland-protocols",
  "wgpu",
 ]
 
@@ -1745,6 +1744,16 @@ name = "unbound-test-bus"
 version = "0.1.0"
 dependencies = [
  "zbus",
+]
+
+[[package]]
+name = "unbound-test-wayland"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
+ "unbound-compositor",
+ "wayland-client",
+ "wayland-protocols",
 ]
 
 [[package]]

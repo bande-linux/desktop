@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 pub mod clipboard;
 
 use std::io::Write;

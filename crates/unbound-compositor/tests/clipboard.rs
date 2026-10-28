@@ -1,11 +1,9 @@
-mod common;
-
 use std::io::Read;
 
-use common::clipboard::TEXT;
-use common::{ShmImage, TestClient, quadrants, roundtrip};
 use smithay::utils::Size;
 use unbound_compositor::Headless;
+use unbound_test_wayland::clipboard::TEXT;
+use unbound_test_wayland::{ShmImage, TestClient, quadrants, roundtrip};
 use wayland_client::protocol::wl_shm::Format;
 
 fn server() -> Headless {

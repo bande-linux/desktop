@@ -125,6 +125,7 @@ pub enum WindowEvent {
     Pasted(String),
     ShowLauncher,
     CaptureScreen,
+    CaptureArea,
     AppsChanged,
 }
 

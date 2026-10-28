@@ -85,6 +85,7 @@ impl Dispatch<UnboundShellV1, ()> for State {
         match event {
             unbound_shell_v1::Event::ShowLauncher => state.events.push(WindowEvent::ShowLauncher),
             unbound_shell_v1::Event::CaptureScreen => state.events.push(WindowEvent::CaptureScreen),
+            unbound_shell_v1::Event::CaptureArea => state.events.push(WindowEvent::CaptureArea),
             _ => {}
         }
     }

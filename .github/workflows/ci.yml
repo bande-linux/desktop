@@ -107,6 +107,53 @@ jobs:
           path: target/debian/*.deb
           if-no-files-found: error
 
+  vm:
+    name: ci/vm
+    runs-on: [self-hosted, unbound]
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install
+      - name: Install build and guest dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libxkbcommon-dev jq e2fsprogs qemu-system-arm
+      - name: Restore the guest kernel
+        id: kernel
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            vm/Image
+            vm/config
+          key: vm-kernel-${{ hashFiles('ci/vm/kernel.sh', 'ci/vm/kernel.config') }}
+      - name: Build the guest kernel
+        if: steps.kernel.outputs.cache-hit != 'true'
+        run: ci/vm/kernel.sh vm
+      - if: steps.kernel.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            vm/Image
+            vm/config
+          key: ${{ steps.kernel.outputs.cache-primary-key }}
+      - name: Restore the guest root image
+        id: rootfs
+        uses: actions/cache/restore@v6
+        with:
+          path: vm/rootfs.img
+          key: vm-rootfs-${{ hashFiles('ci/vm/rootfs.sh', 'ci/vm/Dockerfile', 'ci/vm/init') }}
+      - name: Build the guest root image
+        if: steps.rootfs.outputs.cache-hit != 'true'
+        run: ci/vm/rootfs.sh vm
+      - if: steps.rootfs.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: vm/rootfs.img
+          key: ${{ steps.rootfs.outputs.cache-primary-key }}
+      - name: Run the guest tests in a KVM guest with vkms and virtio-gpu
+        run: ci/vm/guest-tests.sh vm
+
   perf:
     name: ci/perf
     needs: [test, deb]

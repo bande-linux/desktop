@@ -78,6 +78,7 @@ pub struct Placement {
 pub struct FrameStats {
     pub uploaded_bytes: u64,
     pub repainted_pixels: u64,
+    pub shaded_pixels: u64,
 }
 
 struct Image {
@@ -733,7 +734,7 @@ impl Renderer {
             )?;
         }
         self.record_copies();
-        self.record_repaint(fresh, &repaint, background, placements);
+        let shaded_pixels = self.record_repaint(fresh, &repaint, background, placements);
         unsafe { self.device.end_command_buffer(commands) }?;
         self.submit_and_wait()?;
 
@@ -742,6 +743,7 @@ impl Renderer {
         Ok(FrameStats {
             uploaded_bytes: std::mem::take(&mut self.uploaded_bytes),
             repainted_pixels: repaint.iter().map(Rect::area).sum(),
+            shaded_pixels,
         })
     }
 
@@ -826,9 +828,9 @@ impl Renderer {
         repaint: &[Rect],
         background: [u8; 3],
         placements: &[Placement],
-    ) {
+    ) -> u64 {
         let Some(target) = &self.target else {
-            return;
+            return 0;
         };
         let device = &self.device;
         let commands = self.command_buffer;
@@ -854,7 +856,7 @@ impl Renderer {
             ),
         );
         if repaint.is_empty() {
-            return;
+            return 0;
         }
 
         let extent = vk::Extent2D {
@@ -898,6 +900,20 @@ impl Renderer {
                 }],
             );
         }
+        let visible: Vec<(&Texture, Rect)> = placements
+            .iter()
+            .filter_map(|placement| {
+                let texture = self.textures.get(&placement.texture)?;
+                let quad = Rect::new(
+                    placement.x,
+                    placement.y,
+                    texture.image.width,
+                    texture.image.height,
+                );
+                texture.readable.then_some((texture, quad))
+            })
+            .collect();
+        let mut shaded = 0;
         for area in repaint {
             let scissor = vk::Rect2D {
                 offset: vk::Offset2D {
@@ -909,35 +925,42 @@ impl Renderer {
                     height: area.height.unsigned_abs(),
                 },
             };
-            unsafe {
-                device.cmd_set_scissor(commands, 0, slice::from_ref(&scissor));
-                device.cmd_clear_attachments(
-                    commands,
-                    slice::from_ref(&clear),
-                    &[vk::ClearRect {
-                        rect: scissor,
-                        base_array_layer: 0,
-                        layer_count: 1,
-                    }],
-                );
-            }
-            for placement in placements {
-                let Some(texture) = self.textures.get(&placement.texture) else {
-                    continue;
-                };
-                let quad = Rect::new(
-                    placement.x,
-                    placement.y,
-                    texture.image.width,
-                    texture.image.height,
-                );
-                if !texture.readable || quad.intersection(area).is_none() {
-                    continue;
+            unsafe { device.cmd_set_scissor(commands, 0, slice::from_ref(&scissor)) };
+            let layers: Vec<(&Texture, Rect, Rect)> = visible
+                .iter()
+                .filter_map(|(texture, quad)| Some((*texture, *quad, quad.intersection(area)?)))
+                .collect();
+            let lowest = layers
+                .iter()
+                .rposition(|(texture, _, part)| texture.opaque && part == area);
+            if lowest.is_none() {
+                unsafe {
+                    device.cmd_clear_attachments(
+                        commands,
+                        slice::from_ref(&clear),
+                        &[vk::ClearRect {
+                            rect: scissor,
+                            base_array_layer: 0,
+                            layer_count: 1,
+                        }],
+                    );
                 }
-                self.record_quad(texture, quad, extent);
+                shaded += area.area();
+            }
+            for (index, (texture, quad, part)) in
+                layers.iter().enumerate().skip(lowest.unwrap_or(0))
+            {
+                let hidden = layers[index + 1..]
+                    .iter()
+                    .any(|(above, _, cover)| above.opaque && cover.contains(part));
+                if !hidden {
+                    self.record_quad(texture, *quad, extent);
+                    shaded += part.area();
+                }
             }
         }
         unsafe { device.cmd_end_rendering(commands) };
+        shaded
     }
 
     fn record_quad(&self, texture: &Texture, quad: Rect, target: vk::Extent2D) {

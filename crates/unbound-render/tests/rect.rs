@@ -36,3 +36,12 @@ fn a_merge_that_reaches_an_earlier_rect_absorbs_it() {
 
     assert_eq!(merged, vec![Rect::new(0, 0, 50, 10)]);
 }
+
+#[test]
+fn a_rect_contains_itself_and_not_a_larger_one() {
+    let window = Rect::new(10, 10, 20, 20);
+
+    assert!(window.contains(&window));
+    assert!(window.contains(&Rect::new(15, 15, 5, 5)));
+    assert!(!window.contains(&Rect::new(5, 10, 20, 20)));
+}

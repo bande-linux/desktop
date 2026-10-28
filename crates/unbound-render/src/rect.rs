@@ -41,6 +41,13 @@ impl Rect {
         (!overlap.is_empty()).then_some(overlap)
     }
 
+    pub fn contains(&self, other: &Self) -> bool {
+        other.x >= self.x
+            && other.y >= self.y
+            && other.x + other.width <= self.x + self.width
+            && other.y + other.height <= self.y + self.height
+    }
+
     fn bounding(&self, other: &Self) -> Self {
         let left = self.x.min(other.x);
         let top = self.y.min(other.y);

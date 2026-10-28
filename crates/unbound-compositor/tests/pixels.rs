@@ -129,6 +129,7 @@ fn only_the_damaged_part_of_a_new_buffer_is_uploaded_and_repainted() {
         FrameStats {
             uploaded_bytes: 16 * 16 * 4,
             repainted_pixels: 16 * 16,
+            shaded_pixels: 16 * 16,
         }
     );
     let origin = server.windows()[0].location();
@@ -209,4 +210,43 @@ fn premultiplied_argb_is_blended_over_what_lies_below() {
         .zip(expected)
         .all(|(actual, expected)| actual.abs_diff(expected) <= 1);
     assert!(close, "expected {expected:?}, rendered {actual:?}");
+}
+
+#[test]
+fn an_opaque_window_hides_the_window_below_it() {
+    let mut server = server();
+    let mut client = TestClient::connect(&mut server);
+    let red = solid(RED, 32);
+    let green = solid(GREEN, 32);
+    client.show_window(&mut server, &image(&red, 32, Format::Xrgb8888));
+    client.show_window(&mut server, &image(&green, 32, Format::Xrgb8888));
+    let mut renderer = Renderer::new().expect("Vulkan renderer");
+
+    let (stats, snapshot) = render(&mut renderer, &mut server);
+
+    let output = (OUTPUT.0 * OUTPUT.1) as u64;
+    assert_eq!(stats.shaded_pixels, output + 32 * 32);
+    let origin = server.windows()[1].location();
+    assert_eq!(pixel(&snapshot, origin.x, origin.y), opaque_rgba(GREEN));
+}
+
+#[test]
+fn damage_inside_an_opaque_window_shades_only_that_window() {
+    let mut server = server();
+    let mut client = TestClient::connect(&mut server);
+    let red = solid(RED, 32);
+    let green = solid(GREEN, 32);
+    client.show_window(&mut server, &image(&red, 32, Format::Xrgb8888));
+    client.show_window(&mut server, &image(&green, 32, Format::Xrgb8888));
+    let mut renderer = Renderer::new().expect("Vulkan renderer");
+    render(&mut renderer, &mut server);
+
+    let blue = solid(BLUE, 32);
+    client.commit_buffer(1, &image(&blue, 32, Format::Xrgb8888), (0, 0, 32, 32));
+    client.exchange(&mut server);
+    let (stats, snapshot) = render(&mut renderer, &mut server);
+
+    assert_eq!(stats.shaded_pixels, 32 * 32);
+    let origin = server.windows()[1].location();
+    assert_eq!(pixel(&snapshot, origin.x, origin.y), opaque_rgba(BLUE));
 }

@@ -14,6 +14,7 @@ image = { version = "=0.25.10", default-features = false, features = ["png"] }
 kdl = { version = "=6.7.1", default-features = false, features = ["span"] }
 image-compare = "=0.5.0"
 pollster = "=1.0.1"
+raw-window-handle = "=0.6.2"
 rustix = { version = "=1.1.6", features = ["event", "process"] }
 skrifa = "=0.44.0"
 smithay = { version = "=0.7.0", default-features = false, features = ["wayland_frontend"] }

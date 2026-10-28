@@ -6,6 +6,7 @@ mod render;
 mod scene;
 mod text;
 mod tokens;
+mod window;
 
 pub use cpu::CpuRenderer;
 pub use gpu::GpuRenderer;
@@ -16,3 +17,4 @@ pub use text::{
     TextAlign, TextStyle, TextSystem,
 };
 pub use tokens::{Color, Palette, Scheme, Spacing};
+pub use window::{FramePath, Window, WindowError};

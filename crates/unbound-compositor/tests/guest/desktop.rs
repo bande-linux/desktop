@@ -173,6 +173,13 @@ impl Drop for Firefox {
     }
 }
 
+const PROFILE: &str = "/tmp/firefox-profile";
+const PAGE: &str = "/tmp/unbound-page.html";
+const FIRST_RUN_OFF: &str = r#"user_pref("browser.aboutwelcome.enabled", false);
+user_pref("browser.startup.homepage_override.mstone", "ignore");
+user_pref("datareporting.policy.dataSubmissionPolicyBypassNotification", true);
+user_pref("toolkit.telemetry.reportingpolicy.firstRun", false);
+"#;
 const FIREFOX_STARTUP: Duration = Duration::from_secs(240);
 const PAGE_COLOR: [u8; 3] = [0xFF, 0x00, 0xFF];
 
@@ -186,14 +193,16 @@ fn firefox_runs_on_wayland_and_opens_a_context_menu() {
     let mut keyboard = VirtualDevice::keyboard_and_mouse();
     let desktop = start_desktop();
     wait_for("the panel", STARTUP, || running("unbound-panel"));
-    fs::create_dir_all("/tmp/firefox-profile").expect("profile directory");
+    fs::create_dir_all(PROFILE).expect("profile directory");
+    fs::write(format!("{PROFILE}/user.js"), FIRST_RUN_OFF).expect("profile preferences");
+    fs::write(PAGE, "<body style='margin:0;background:#ff00ff'></body>").expect("test page");
     let _firefox = Firefox(
         Command::new("firefox-esr")
             .args([
                 "--new-instance",
                 "--profile",
-                "/tmp/firefox-profile",
-                "data:text/html,<body style='margin:0;background:%23ff00ff'>",
+                PROFILE,
+                &format!("file://{PAGE}"),
             ])
             .env("XDG_RUNTIME_DIR", RUNTIME_DIR)
             .env("WAYLAND_DISPLAY", &desktop.display)

@@ -11,7 +11,7 @@ The project is hosted under the official GitHub organization **[`unbound-linux`]
 
 Following an exhaustive architectural audit, Unbound implements a pragmatic, rock-solid systems foundation:
 1. **Layered Graphics Engine**: Leverages **Smithay** for kernel DRM/KMS atomic modesetting, libinput, and session management, while building a **100% custom Vulkan/wgpu scene graph, render pipeline, physics layout engine, and shell** above it.
-2. **Seamless Legacy & Gaming Compatibility**: Clean **XWayland isolation via `xwayland-satellite`**, ensuring full compatibility with Steam, Proton, Wine, and legacy GUI apps with zero X11 pollution inside the core compositor.
+2. **Pure Wayland**: No X11 code, X libraries, X server or XWayland bridge anywhere in the desktop. Every app runs as a native Wayland client; X11-only programs are not supported.
 3. **Full Desktop Session Infrastructure**: Complete implementation of all essential desktop services—XDG Desktop Portals (PipeWire screen sharing, file pickers), clipboard managers (primary & selection), idle/lock state machines (`ext-session-lock-v1`), polkit agent, power management, audio/media key routing, and input methods (CJK).
 4. **Robust Display Management**: Privileged session handling via **`greetd`**, pairing with an unprivileged, beautiful Rust client (`unbound-greeter`).
 5. **Zero-Human-in-the-Loop Software Factory**: An autonomous SDLC orchestrator (`unbound-factory`) managing git worktrees, automated out-of-scope task discovery, pre-PR peer reviewer agents, and CI verification on self-hosted arm64 runners (headless Wayland via Lavapipe + ephemeral Debian 13 arm64 VM boot tests).
@@ -33,14 +33,12 @@ graph TB
         RENDER[Custom Vulkan / wgpu Multi-Pass Render Pipeline]
         SCENE[Spatial Scene Graph & Damage Tracker]
         PHYSICS[Apple-Grade Spring Physics Engine]
-        XWAYLAND[External XWayland Bridge: xwayland-satellite]
         WATCHDOG[Wayland Ping-Pong Heartbeat Watchdog]
 
         SMITHAY --> RENDER
         SYNC --> RENDER
         RENDER --> SCENE
         SCENE --> PHYSICS
-        SMITHAY <--> XWAYLAND
     end
 
     subgraph "Two-Tier IPC Architecture"
@@ -93,11 +91,11 @@ To avoid 8–12 months of low-level DRM/KMS resource-lifetime debugging and kern
 - **Physics Layout Engine**: Custom spring dynamics simulation ($\ddot{x} + 2\zeta\omega\dot{x} + \omega^2\Delta x = 0$) powering fluid window snapping, minimize-to-panel curves, and workspace sliding.
   - Implemented in `crates/unbound-spring` as the closed-form solution for under-, critically and overdamped springs, parameterised by angular frequency $\omega$ and damping ratio $\zeta$. A trajectory depends only on elapsed time, never on frame rate, and retargeting keeps position and velocity continuous.
 
-### 1.2 XWayland Compatibility via `xwayland-satellite`
-Instead of polluting the compositor with legacy X11 C-libraries or abandoning gaming entirely:
-- **Architecture**: Unbound embeds an external bridge utilizing **`xwayland-satellite`** (pioneered by niri).
-- **Mechanism**: Connects to `unbound-compositor` strictly as a standard Wayland client using `xdg_wm_base` and `wp_viewporter`.
-- **Isolation**: Keeps **zero X11 code** inside `unbound-compositor`. Automatically spawns on demand when Steam, Proton, Wine, or legacy GTK2 apps start, and auto-restarts cleanly if the XWayland server crashes.
+### 1.2 Pure Wayland: No X11
+Unbound is a Wayland-only desktop by design:
+- **Rule**: No X11 code, X libraries, X server or XWayland bridge in any component: compositor, shell, toolkit, services or packaging.
+- **Not built**: An `xwayland-satellite` bridge (or Smithay's `xwayland`/`xwm` features) is deliberately not built. Apps are expected to run natively on Wayland (GTK, Qt, Firefox, Chromium, SDL and winit all do).
+- **Why**: Every frame, input event and protocol path stays on one modern stack with one security model, and nothing in the latency budget pays for X11 translation.
 
 ### 1.3 Two-Tier IPC Strategy
 - **Control Plane (D-Bus via `zbus`)**: Used for all policy, state negotiation, and desktop integration (`org.freedesktop.*` standards and `org.unbound.*` domain). Fully inspectable via `busctl`, robustly typed, async, and pure Rust.
@@ -691,7 +689,7 @@ flowchart TD
 
     P6["Phase 6: Core Productivity Applications<br/>- unbound-launcher: Universal search & math palette (Super+Space)<br/>- unbound-screenshot: Drag-to-app interactive capture<br/>- unbound-files: Miller columns file manager + undo stack<br/>- unbound-settings: KDL preferences + deep search<br/>- unbound-term: GPU-accelerated terminal (wgpu)<br/>- unbound-monitor: Activity monitor & GPU profiler"]
 
-    P7["Phase 7: XWayland & Legacy Compatibility<br/>- xwayland-satellite bridge wrapper<br/>- CSD/SSD decoration negotiation<br/>- GTK/Qt/cursor theming auto-propagation"]
+    P7["Phase 7: Decorations & Theming Integration<br/>- CSD/SSD decoration negotiation<br/>- GTK/Qt/cursor theming auto-propagation"]
 
     P8["Phase 8: Window Tiling, Polish & Packaging<br/>- Half/quarter window tiling zones<br/>- Full Debian meta-package (unbound-desktop.deb)<br/>- 120Hz/240Hz frame latency tuning & fractional scale polish"]
 
@@ -713,7 +711,7 @@ The meta-package `unbound-desktop_arm64.deb` pulls the complete, verified Debian
 ```control
 Package: unbound-desktop
 Version: 0.1.0
-Section: x11
+Section: misc
 Priority: optional
 Architecture: arm64
 Depends: 
@@ -723,7 +721,6 @@ Depends:
   unbound-portal (= 0.1.0),
   unbound-apps (= 0.1.0),
   greetd (>= 0.9.0),
-  xwayland,
   xdg-desktop-portal (>= 1.16.0),
   libpam0g,
   libseat1,

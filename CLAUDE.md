@@ -1,5 +1,7 @@
 # AI Agent Rules
 
+**Pure Wayland only**: no X11 code, X libraries, X server or XWayland bridge anywhere in the desktop. Do not enable Smithay's `xwayland`/`xwm` features or add X11 dependencies.
+
 ## Core Directives
 1. **Never write code comments**: Zero inline, block, or trailing comments. No AI watermarks or commented-out code. Make code self-documenting through clear naming and types.
 2. **Never add useless tests**: No tautological tests, mock-only verifications, or tests of language/compiler guarantees. Every test must test real domain logic and fail if that logic breaks.

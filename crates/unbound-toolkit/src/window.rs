@@ -36,6 +36,8 @@ use crate::gpu::GpuRenderer;
 use crate::render::RenderError;
 use crate::scene::Scene;
 
+pub const RENDERER_VARIABLE: &str = "UNBOUND_RENDERER";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FramePath {
     Cpu,
@@ -179,16 +181,21 @@ impl Window {
             queue.blocking_dispatch(&mut state)?;
         }
 
-        let display = connection.backend().display_ptr() as usize;
-        let wl_surface = surface.id().as_ptr() as usize;
-        let (sender, receiver) = mpsc::channel();
-        thread::spawn(move || {
-            let _ = sender.send(open_gpu(display, wl_surface));
-        });
+        let gpu = if std::env::var_os(RENDERER_VARIABLE).is_some_and(|value| value == "cpu") {
+            Gpu::Unavailable
+        } else {
+            let display = connection.backend().display_ptr() as usize;
+            let wl_surface = surface.id().as_ptr() as usize;
+            let (sender, receiver) = mpsc::channel();
+            thread::spawn(move || {
+                let _ = sender.send(open_gpu(display, wl_surface));
+            });
+            Gpu::Starting(receiver)
+        };
 
         let size = state.suggested_size.unwrap_or(size);
         Ok(Self {
-            gpu: Gpu::Starting(receiver),
+            gpu,
             cpu: CpuRenderer::new(),
             buffers: Vec::new(),
             rgba: Vec::new(),

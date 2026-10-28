@@ -17,4 +17,4 @@ pub use text::{
     TextAlign, TextStyle, TextSystem,
 };
 pub use tokens::{Color, Palette, Scheme, Spacing};
-pub use window::{FramePath, Window, WindowError};
+pub use window::{FramePath, RENDERER_VARIABLE, Window, WindowError};

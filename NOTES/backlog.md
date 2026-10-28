@@ -11,13 +11,13 @@ hardware. Things noticed in passing go to the end of this file, not into a diff.
 Target: plan phases 1-6 done plus enough protocols for Firefox on Wayland. Pure Wayland:
 XWayland is deferred, to revisit only if a needed app has no Wayland path (macOS
 precedent: XQuartz is a separate, optional install). Progress is tracked per milestone
-below. Estimate at the head of `desktop/milestone-17`: about 62% of the way to the target,
+below. Estimate at the head of `desktop/milestone-17`: about 65% of the way to the target,
 counting the six phases and Firefox equally: phase 1 done; phase 2 about 90% (explicit sync
 left); phase 3 about 85% (backlight dimming, Do Not Disturb persistence);
 phase 4 about 35% (panel and launcher, no menu bar, greeter, AT-SPI or input methods);
 phase 5 about 40% (portal and power without their UIs, no audio, network or Bluetooth);
 phase 6 about 30% (launcher and terminal; no files, settings or screenshots); Firefox
-pending its guest test.
+runs natively on Wayland in the guest.
 
 ## Done
 
@@ -152,7 +152,7 @@ pending its guest test.
   the guest. Not done: the mini (K3 input), live `PanelEdge`/appearance changes over
   `org.unbound.Config` (read at start), kept apps from `config.kdl`, hover names on the
   panel, locale time formats, terminal mouse reporting, AT-SPI publication.
-- [x] **M15 Window management** (`desktop/milestone-15`)
+- [x] **M15 Window management** (`desktop/milestone-15`, CI green in run 40781875368)
   xdg move and resize grabs from the client's button press, zoom (maximize) into the
   area outside exclusive zones and back, full screen above top layers, minimize, the
   `Activated` state on the key window only, xdg popups placed by their positioner with
@@ -165,14 +165,15 @@ pending its guest test.
   `m15-terminal-minimized`. Not done: title bars (the toolkit draws none yet, so our
   own apps cannot be dragged; macOS precedent is app-drawn title bars with the traffic
   lights), `xdg-decoration`, layer-surface popups beyond placement, snapping (phase 8).
-- [ ] **M16 Firefox on Wayland** (`desktop/milestone-16`)
+- [x] **M16 Firefox on Wayland** (`desktop/milestone-16`, CI green in run 40784918925)
   The guest image carries `firefox-esr` (no X server, no XWayland); `desktop::firefox_runs_on_wayland_and_opens_a_context_menu`
   starts it on the compositor's socket with `MOZ_ENABLE_WAYLAND=1`, waits for a page colour
   on the CRTC, opens the page's context menu (an xdg popup) and takes the window full
   screen, saving `m16-firefox-page`, `m16-firefox-context-menu` and
   `m16-firefox-full-screen`. No new protocol was needed for this; `cursor-shape-v1` waits
   for themed cursors (until then clients draw their own cursor surfaces) and
-  `xdg-decoration` for server-side title bars. *Done when* the guest test is green.
+  `xdg-decoration` for server-side title bars. The guest opens a local page (Firefox does
+  not render a `data:` URL from its command line) with first-run pages turned off.
 - [ ] **M17 Lock screen and idle** (`desktop/milestone-17`)
   `ext-session-lock-v1` (only shell clients see it, as only loginwindow locks a Mac):
   locked after a blank frame, only the lock surface drawn and given input, focus

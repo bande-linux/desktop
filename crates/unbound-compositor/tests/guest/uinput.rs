@@ -11,6 +11,7 @@ pub const EV_REL: u16 = 2;
 pub const REL_X: u16 = 0;
 pub const REL_Y: u16 = 1;
 pub const KEY_3: u16 = 4;
+pub const KEY_4: u16 = 5;
 pub const KEY_A: u16 = 30;
 pub const KEY_ENTER: u16 = 28;
 pub const KEY_LEFTSHIFT: u16 = 42;

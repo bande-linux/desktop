@@ -10,8 +10,8 @@ use unbound_compositor::BACKGROUND;
 
 use crate::card::{Scanout, card_with_driver};
 use crate::uinput::{
-    KEY_3, KEY_ENTER, KEY_ESC, KEY_F, KEY_F10, KEY_LEFTCTRL, KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_M,
-    KEY_Q, KEY_SPACE, VirtualDevice,
+    BTN_LEFT, EV_KEY, EV_REL, KEY_3, KEY_4, KEY_ENTER, KEY_ESC, KEY_F, KEY_F10, KEY_LEFTCTRL,
+    KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_M, KEY_Q, KEY_SPACE, REL_X, REL_Y, VirtualDevice,
 };
 
 const COMPOSITOR: &str = "/usr/bin/unbound-compositor";
@@ -357,6 +357,71 @@ fn super_shift_3_saves_the_screen_to_the_desktop() {
             .count()
     };
     let differing = differing(&screen).min(differing(&after));
+    let cursor = (unbound_compositor::ARROW_WIDTH * unbound_compositor::ARROW_HEIGHT) as usize;
+    assert!(
+        differing <= cursor,
+        "{differing} pixels differ from the screen"
+    );
+}
+
+#[test]
+#[ignore = "needs the ci/vm guest"]
+fn super_shift_4_saves_a_dragged_out_area_to_the_desktop() {
+    let desktop_folder = Path::new("/root/Desktop");
+    let _ = fs::remove_dir_all(desktop_folder);
+    let mut mouse = VirtualDevice::keyboard_and_mouse();
+    let _desktop = start_desktop();
+    let icon = (32, 33);
+    wait_for("the panel and the screenshot tool", STARTUP, || {
+        running("unbound-panel")
+            && running("unbound-screenshot")
+            && current_scanout().is_some_and(|scanout| pixel(&scanout, icon.0, 200) != BACKGROUND)
+    });
+    for _ in 0..20 {
+        mouse.frame(&[(EV_REL, REL_X, -200), (EV_REL, REL_Y, -200)]);
+    }
+    thread::sleep(Duration::from_secs(1));
+
+    mouse.chord(&[KEY_LEFTMETA, KEY_LEFTSHIFT], KEY_4);
+    thread::sleep(Duration::from_secs(1));
+    mouse.frame(&[(EV_KEY, BTN_LEFT, 1)]);
+    for _ in 0..30 {
+        mouse.frame(&[(EV_REL, REL_X, 8), (EV_REL, REL_Y, 5)]);
+        thread::sleep(Duration::from_millis(10));
+    }
+    thread::sleep(Duration::from_secs(1));
+    let selecting = scanout();
+    selecting.save("m19-area-selection");
+    let screen_under_selection = pixel(&selecting, 2, 2);
+    mouse.frame(&[(EV_KEY, BTN_LEFT, 0)]);
+    wait_for("a saved area screenshot", STARTUP, || {
+        saved_screenshots(desktop_folder).len() == 1
+    });
+    thread::sleep(Duration::from_secs(1));
+    let screen = scanout();
+    screen.save("m19-after-area-capture");
+
+    let saved = image::open(saved_screenshots(desktop_folder).remove(0))
+        .expect("the screenshot is a PNG")
+        .to_rgb8();
+    let (width, height) = (saved.width() as usize, saved.height() as usize);
+    assert!(width > 20 && width < screen.width, "width {width}");
+    assert!(height > 20 && height < screen.height, "height {height}");
+    let shot = Scanout {
+        width,
+        height,
+        rgb: saved.pixels().map(|pixel| pixel.0).collect(),
+    };
+    shot.save("m19-area-screenshot");
+    assert_ne!(
+        screen_under_selection,
+        pixel(&screen, 2, 2),
+        "the selection is drawn over the screen while dragging"
+    );
+    let differing = (0..height)
+        .flat_map(|y| (0..width).map(move |x| (x, y)))
+        .filter(|&(x, y)| shot.rgb[y * width + x] != pixel(&screen, x, y))
+        .count();
     let cursor = (unbound_compositor::ARROW_WIDTH * unbound_compositor::ARROW_HEIGHT) as usize;
     assert!(
         differing <= cursor,

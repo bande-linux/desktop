@@ -67,7 +67,7 @@ jobs:
           echo "$root/bin" >> "$GITHUB_PATH"
       - run: |
           for package in unbound-compositor unbound-notify unbound-clipboard unbound-config unbound-power \
-              xdg-desktop-portal-unbound; do
+              xdg-desktop-portal-unbound unbound-tray; do
             cargo deb --package "$package" --locked
           done
       - name: Inspect the packages
@@ -95,7 +95,8 @@ jobs:
       - name: Check the session services' user units and D-Bus activation
         run: |
           for entry in unbound-config:org.unbound.Config:org.unbound.Config \
-              unbound-power:org.unbound.Power:org.freedesktop.ScreenSaver; do
+              unbound-power:org.unbound.Power:org.freedesktop.ScreenSaver \
+              unbound-tray:org.unbound.Tray:org.kde.StatusNotifierWatcher; do
             IFS=: read -r package file name <<< "$entry"
             deb=$(ls target/debian/"$package"_*.deb)
             root=$(mktemp -d)

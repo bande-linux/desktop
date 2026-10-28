@@ -6,6 +6,7 @@ use std::process::ExitCode;
 use std::sync::{Arc, Mutex};
 
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
+use rustix::process::{DumpableBehavior, set_dumpable_behavior};
 use wayland_client::globals::{GlobalListContents, registry_queue_init};
 use wayland_client::protocol::wl_registry::WlRegistry;
 use wayland_client::protocol::wl_seat::WlSeat;
@@ -83,6 +84,7 @@ fn main() -> ExitCode {
 }
 
 fn run() -> Result<(), Box<dyn Error>> {
+    set_dumpable_behavior(DumpableBehavior::NotDumpable)?;
     let connection = Connection::connect_to_env()?;
     let (globals, mut queue) = registry_queue_init::<Daemon>(&connection)?;
     let qh = queue.handle();

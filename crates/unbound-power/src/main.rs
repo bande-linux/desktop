@@ -33,6 +33,14 @@ fn serve() -> Result<Services, Box<dyn Error>> {
     ));
     controller::follow_config(&session, &idle)?;
     controller::follow_lock(&system, &idle)?;
+    match wayland_client::Connection::connect_to_env() {
+        Ok(connection) => {
+            if let Err(error) = unbound_power::wayland::watch_idle(connection, Arc::clone(&idle)) {
+                eprintln!("unbound-power: cannot watch for idle: {error}");
+            }
+        }
+        Err(error) => eprintln!("unbound-power: cannot watch for idle without Wayland: {error}"),
+    }
     Ok((guard, inhibitions, idle))
 }
 

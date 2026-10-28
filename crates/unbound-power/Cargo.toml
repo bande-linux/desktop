@@ -6,11 +6,16 @@ edition.workspace = true
 repository.workspace = true
 
 [dependencies]
+rustix.workspace = true
 unbound-notify = { path = "../unbound-notify" }
+wayland-client.workspace = true
+wayland-protocols.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+smithay.workspace = true
+unbound-compositor.workspace = true
 unbound-config = { path = "../unbound-config" }
 unbound-test-bus.workspace = true
 

@@ -2,6 +2,9 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
 use std::time::Duration;
 
+use std::io::{self, Write};
+use std::os::unix::net::UnixStream;
+
 use zbus::blocking::Connection;
 
 use crate::idle::{Command, IdleMachine, Policy};
@@ -28,6 +31,7 @@ type Executor = Box<dyn Fn(Command) + Send + Sync>;
 pub struct IdleController {
     machine: Mutex<IdleMachine>,
     execute: Executor,
+    policy_listeners: Mutex<Vec<UnixStream>>,
 }
 
 impl IdleController {
@@ -35,6 +39,7 @@ impl IdleController {
         Self {
             machine: Mutex::new(IdleMachine::new(policy)),
             execute: Box::new(execute),
+            policy_listeners: Mutex::new(Vec::new()),
         }
     }
 
@@ -66,6 +71,20 @@ impl IdleController {
 
     pub fn set_policy(&self, policy: Policy) {
         self.run(|machine| machine.set_policy(policy));
+        self.policy_listeners
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .retain_mut(|listener| listener.write_all(&[1]).is_ok());
+    }
+
+    pub fn policy_changes(&self) -> io::Result<UnixStream> {
+        let (changes, listener) = UnixStream::pair()?;
+        listener.set_nonblocking(true)?;
+        self.policy_listeners
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(listener);
+        Ok(changes)
     }
 
     pub fn thresholds(&self) -> Vec<Duration> {

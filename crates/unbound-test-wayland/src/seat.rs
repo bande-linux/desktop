@@ -15,6 +15,8 @@ pub(crate) struct Input {
     buttons: Vec<(u32, bool)>,
     closed: Vec<XdgToplevel>,
     scrolled: f64,
+    pub(crate) seat: Option<WlSeat>,
+    pub(crate) button_serial: u32,
 }
 
 pub(crate) struct Devices;
@@ -28,7 +30,8 @@ impl TestClient {
             .iter()
             .find(|(_, interface)| interface == "wl_seat")
             .expect("wl_seat is advertised");
-        let _: WlSeat = registry.bind(*name, 7, &self.queue.handle(), Devices);
+        let seat: WlSeat = registry.bind(*name, 7, &self.queue.handle(), Devices);
+        self.globals.input.seat = Some(seat);
         self.exchange(server);
     }
 
@@ -143,9 +146,17 @@ impl Dispatch<WlPointer, Devices> for Globals {
                 value,
                 ..
             } => input.scrolled += value,
-            wl_pointer::Event::Button { button, state, .. } => input
-                .buttons
-                .push((button, pressed(state, wl_pointer::ButtonState::Pressed))),
+            wl_pointer::Event::Button {
+                serial,
+                button,
+                state,
+                ..
+            } => {
+                input.button_serial = serial;
+                input
+                    .buttons
+                    .push((button, pressed(state, wl_pointer::ButtonState::Pressed)));
+            }
             _ => {}
         }
     }
@@ -160,8 +171,16 @@ impl Dispatch<XdgToplevel, ()> for Globals {
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
-        if let xdg_toplevel::Event::Close = event {
-            globals.input.closed.push(toplevel.clone());
+        match event {
+            xdg_toplevel::Event::Close => globals.input.closed.push(toplevel.clone()),
+            xdg_toplevel::Event::Configure {
+                width,
+                height,
+                states,
+            } => globals
+                .toplevels
+                .configured(toplevel, width, height, &states),
+            _ => {}
         }
     }
 }

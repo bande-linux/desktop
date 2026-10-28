@@ -37,14 +37,16 @@ impl Session {
                 }
             })
             .expect("DRM events");
-        Self {
+        let mut session = Self {
             card: Card::open(&path).expect("second vkms fd for readback"),
             output,
             server,
             client,
             events,
             _notifiers: session,
-        }
+        };
+        session.present();
+        session
     }
 
     fn output_size(&self) -> (usize, usize) {

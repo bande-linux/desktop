@@ -15,6 +15,7 @@ image.workspace = true
 image-compare.workspace = true
 unbound-test-wayland.workspace = true
 wayland-client.workspace = true
+wayland-protocols.workspace = true
 
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"

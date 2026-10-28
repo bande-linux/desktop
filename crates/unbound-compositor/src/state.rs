@@ -9,6 +9,8 @@ use std::time::{Duration, Instant};
 
 use rustix::io::{FdFlags, fcntl_setfd};
 
+use smithay::backend::allocator::dmabuf::Dmabuf;
+use smithay::backend::allocator::{Buffer, Format as DmabufFormat, Fourcc, Modifier};
 use smithay::input::keyboard::XkbConfig;
 use smithay::input::{Seat, SeatHandler, SeatState};
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
@@ -24,6 +26,9 @@ use smithay::wayland::compositor::{
     BufferAssignment, CompositorClientState, CompositorHandler, CompositorState, Damage,
     SurfaceAttributes, with_states,
 };
+use smithay::wayland::dmabuf::{
+    DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier, get_dmabuf,
+};
 use smithay::wayland::selection::SelectionHandler;
 use smithay::wayland::selection::data_device::{
     ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler,
@@ -38,7 +43,7 @@ use smithay::wayland::shell::xdg::{
 };
 use smithay::wayland::shm::{ShmHandler, ShmState, with_buffer_contents};
 use smithay::{
-    delegate_compositor, delegate_data_device, delegate_ext_data_control,
+    delegate_compositor, delegate_data_device, delegate_dmabuf, delegate_ext_data_control,
     delegate_primary_selection, delegate_seat, delegate_shm, delegate_xdg_shell,
 };
 use unbound_render::Rect;
@@ -83,6 +88,8 @@ pub struct State {
     compositor_state: CompositorState,
     xdg_shell_state: XdgShellState,
     shm_state: ShmState,
+    dmabuf_state: DmabufState,
+    _dmabuf_global: DmabufGlobal,
     seat_state: SeatState<State>,
     seat: Seat<State>,
     data_device_state: DataDeviceState,
@@ -125,12 +132,22 @@ impl Headless {
                     .get_data::<ClientState>()
                     .is_some_and(|state| state.clipboard_daemon)
             });
+        let mut dmabuf_state = DmabufState::new();
+        let dmabuf_global = dmabuf_state.create_global::<State>(
+            &handle,
+            DMABUF_FOURCCS.map(|code| DmabufFormat {
+                code,
+                modifier: Modifier::Linear,
+            }),
+        );
         let state = State {
             display_handle: handle.clone(),
             output_size,
             compositor_state: CompositorState::new::<State>(&handle),
             xdg_shell_state: XdgShellState::new::<State>(&handle),
             shm_state: ShmState::new::<State>(&handle, []),
+            dmabuf_state,
+            _dmabuf_global: dmabuf_global,
             seat_state,
             seat,
             data_device_state: DataDeviceState::new::<State>(&handle),
@@ -268,6 +285,15 @@ impl ClientData for ClientState {
     fn disconnected(&self, _client_id: ClientId, _reason: DisconnectReason) {}
 }
 
+const DMABUF_FOURCCS: [Fourcc; 2] = [Fourcc::Argb8888, Fourcc::Xrgb8888];
+
+fn buffer_size(buffer: &WlBuffer) -> Option<Size<i32, Physical>> {
+    match get_dmabuf(buffer) {
+        Ok(dmabuf) => Some(Size::from((dmabuf.size().w, dmabuf.size().h))),
+        Err(_) => shm_size(buffer),
+    }
+}
+
 fn shm_size(buffer: &WlBuffer) -> Option<Size<i32, Physical>> {
     let data = with_buffer_contents(buffer, |_, _, data| data).ok()?;
     matches!(data.format, Format::Argb8888 | Format::Xrgb8888)
@@ -395,7 +421,7 @@ impl CompositorHandler for State {
         let before = window.bounds();
         let mut updated = Vec::new();
         match assignment {
-            Some(BufferAssignment::NewBuffer(buffer)) => match shm_size(&buffer) {
+            Some(BufferAssignment::NewBuffer(buffer)) => match buffer_size(&buffer) {
                 Some(size) => {
                     if window.size.is_none() {
                         window.location = centered(self.output_size, size);
@@ -447,6 +473,25 @@ impl CompositorHandler for State {
 
 impl BufferHandler for State {
     fn buffer_destroyed(&mut self, _buffer: &WlBuffer) {}
+}
+
+impl DmabufHandler for State {
+    fn dmabuf_state(&mut self) -> &mut DmabufState {
+        &mut self.dmabuf_state
+    }
+
+    fn dmabuf_imported(
+        &mut self,
+        _global: &DmabufGlobal,
+        dmabuf: Dmabuf,
+        notifier: ImportNotifier,
+    ) {
+        if dmabuf.num_planes() == 1 {
+            let _ = notifier.successful::<State>();
+        } else {
+            notifier.failed();
+        }
+    }
 }
 
 impl ShmHandler for State {
@@ -546,6 +591,7 @@ impl DataControlHandler for State {
 
 delegate_compositor!(State);
 delegate_data_device!(State);
+delegate_dmabuf!(State);
 delegate_ext_data_control!(State);
 delegate_primary_selection!(State);
 delegate_seat!(State);

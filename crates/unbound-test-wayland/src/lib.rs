@@ -14,6 +14,10 @@ use wayland_client::protocol::wl_shm::{Format, WlShm};
 use wayland_client::protocol::wl_shm_pool::WlShmPool;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Connection, Dispatch, EventQueue, QueueHandle, delegate_noop};
+use wayland_protocols::wp::linux_dmabuf::zv1::client::zwp_linux_buffer_params_v1::{
+    Flags, ZwpLinuxBufferParamsV1,
+};
+use wayland_protocols::wp::linux_dmabuf::zv1::client::zwp_linux_dmabuf_v1::ZwpLinuxDmabufV1;
 use wayland_protocols::xdg::shell::client::xdg_surface::{self, XdgSurface};
 use wayland_protocols::xdg::shell::client::xdg_toplevel::XdgToplevel;
 use wayland_protocols::xdg::shell::client::xdg_wm_base::{self, XdgWmBase};
@@ -22,6 +26,16 @@ pub const RED: [u8; 4] = [0x00, 0x00, 0xff, 0xff];
 pub const GREEN: [u8; 4] = [0x00, 0xff, 0x00, 0xff];
 pub const BLUE: [u8; 4] = [0xff, 0x00, 0x00, 0xff];
 pub const HALF_WHITE: [u8; 4] = [0x80, 0x80, 0x80, 0x80];
+
+pub const LINEAR: u64 = 0;
+
+const PAGE: u64 = 4096;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Memory {
+    Shm,
+    Dmabuf,
+}
 
 pub fn quadrants(width: usize, height: usize, stride: usize) -> Vec<u8> {
     let mut pixels = vec![0u8; stride * height];
@@ -52,6 +66,7 @@ pub struct ShmImage<'a> {
 struct Globals {
     compositor: Option<WlCompositor>,
     shm: Option<WlShm>,
+    dmabuf: Option<ZwpLinuxDmabufV1>,
     wm_base: Option<XdgWmBase>,
     configured: bool,
     frames_done: usize,
@@ -123,6 +138,10 @@ impl TestClient {
     }
 
     pub fn show_window(&mut self, server: &mut Headless, image: &ShmImage) {
+        self.show_window_in(server, image, Memory::Shm);
+    }
+
+    pub fn show_window_in(&mut self, server: &mut Headless, image: &ShmImage, memory: Memory) {
         let qh = self.queue.handle();
         let compositor = self.globals.compositor.as_ref().expect("wl_compositor");
         let wm_base = self.globals.wm_base.as_ref().expect("xdg_wm_base");
@@ -134,18 +153,89 @@ impl TestClient {
         self.exchange(server);
         assert!(self.globals.configured, "initial configure");
 
-        self.attach(&surface, image, (0, 0, image.width, image.height));
+        self.attach(&surface, image, (0, 0, image.width, image.height), memory);
         self.exchange(server);
         self.windows.push((surface, xdg_surface, toplevel));
     }
 
     pub fn commit_buffer(&mut self, index: usize, image: &ShmImage, damage: (i32, i32, i32, i32)) {
+        self.commit_buffer_in(index, image, damage, Memory::Shm);
+    }
+
+    pub fn commit_buffer_in(
+        &mut self,
+        index: usize,
+        image: &ShmImage,
+        damage: (i32, i32, i32, i32),
+        memory: Memory,
+    ) {
         let surface = self.windows[index].0.clone();
-        self.attach(&surface, image, damage);
+        self.attach(&surface, image, damage, memory);
         self.connection.flush().expect("client flush");
     }
 
-    fn attach(&self, surface: &WlSurface, image: &ShmImage, damage: (i32, i32, i32, i32)) {
+    fn attach(
+        &self,
+        surface: &WlSurface,
+        image: &ShmImage,
+        damage: (i32, i32, i32, i32),
+        memory: Memory,
+    ) {
+        let buffer = match memory {
+            Memory::Shm => self.shm_buffer(image),
+            Memory::Dmabuf => self.dmabuf_buffer(image, LINEAR),
+        };
+        let (x, y, width, height) = damage;
+        surface.attach(Some(&buffer), 0, 0);
+        surface.damage_buffer(x, y, width, height);
+        surface.commit();
+    }
+
+    pub fn create_dmabuf(&mut self, server: &mut Headless, image: &ShmImage, modifier: u64) {
+        self.dmabuf_buffer(image, modifier);
+        let _ = self.connection.flush();
+        server.dispatch().expect("server dispatch");
+        if let Some(guard) = self.connection.prepare_read() {
+            let _ = guard.read();
+        }
+        let _ = self.queue.dispatch_pending(&mut self.globals);
+    }
+
+    pub fn protocol_error(&self) -> Option<u32> {
+        self.connection.protocol_error().map(|error| error.code)
+    }
+
+    fn dmabuf_buffer(&self, image: &ShmImage, modifier: u64) -> WlBuffer {
+        let qh = self.queue.handle();
+        let file = tempfile::tempfile().expect("dma-buf file");
+        (&file).write_all(image.bytes).expect("dma-buf write");
+        let length = u64::try_from(image.bytes.len()).expect("dma-buf size");
+        file.set_len(length.next_multiple_of(PAGE))
+            .expect("dma-buf length");
+        let dmabuf = self.globals.dmabuf.as_ref().expect("zwp_linux_dmabuf_v1");
+        let params = dmabuf.create_params(&qh, ());
+        let stride = u32::try_from(image.stride).expect("stride");
+        params.add(
+            file.as_fd(),
+            0,
+            0,
+            stride,
+            (modifier >> 32) as u32,
+            modifier as u32,
+        );
+        let buffer = params.create_immed(
+            image.width,
+            image.height,
+            fourcc(image.format),
+            Flags::empty(),
+            &qh,
+            (),
+        );
+        params.destroy();
+        buffer
+    }
+
+    fn shm_buffer(&self, image: &ShmImage) -> WlBuffer {
         let qh = self.queue.handle();
         let mut file = tempfile::tempfile().expect("shm file");
         file.write_all(image.bytes).expect("shm write");
@@ -161,11 +251,8 @@ impl TestClient {
             &qh,
             (),
         );
-        let (x, y, width, height) = damage;
-        surface.attach(Some(&buffer), 0, 0);
-        surface.damage_buffer(x, y, width, height);
-        surface.commit();
         pool.destroy();
+        buffer
     }
 
     pub fn close_window(&mut self, server: &mut Headless, index: usize) {
@@ -241,6 +328,7 @@ impl Dispatch<WlRegistry, ()> for Globals {
                 "wl_compositor" => globals.compositor = Some(registry.bind(name, 4, qh, ())),
                 "wl_shm" => globals.shm = Some(registry.bind(name, 1, qh, ())),
                 "xdg_wm_base" => globals.wm_base = Some(registry.bind(name, 1, qh, ())),
+                "zwp_linux_dmabuf_v1" => globals.dmabuf = Some(registry.bind(name, 3, qh, ())),
                 _ => {}
             }
         }
@@ -299,3 +387,14 @@ delegate_noop!(Globals: ignore WlShm);
 delegate_noop!(Globals: ignore WlSurface);
 delegate_noop!(Globals: ignore WlBuffer);
 delegate_noop!(Globals: ignore XdgToplevel);
+delegate_noop!(Globals: ignore ZwpLinuxDmabufV1);
+delegate_noop!(Globals: ignore ZwpLinuxBufferParamsV1);
+
+fn fourcc(format: Format) -> u32 {
+    let code = match format {
+        Format::Argb8888 => *b"AR24",
+        Format::Xrgb8888 => *b"XR24",
+        other => panic!("no dma-buf fourcc for {other:?}"),
+    };
+    u32::from_le_bytes(code)
+}

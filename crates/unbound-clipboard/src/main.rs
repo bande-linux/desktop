@@ -7,12 +7,12 @@ use std::sync::{Arc, Mutex};
 
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use rustix::process::{DumpableBehavior, set_dumpable_behavior};
+use wayland_client::backend::WaylandError;
 use wayland_client::globals::{GlobalListContents, registry_queue_init};
 use wayland_client::protocol::wl_registry::WlRegistry;
 use wayland_client::protocol::wl_seat::WlSeat;
 use wayland_client::{
-    Connection, Dispatch, DispatchError, Proxy, QueueHandle, WaylandError, delegate_noop,
-    event_created_child,
+    Connection, Dispatch, DispatchError, Proxy, QueueHandle, delegate_noop, event_created_child,
 };
 use wayland_protocols::ext::data_control::v1::client::ext_data_control_device_v1::{
     self, ExtDataControlDeviceV1,

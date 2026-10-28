@@ -6,6 +6,7 @@ mod render;
 mod scene;
 mod text;
 mod tokens;
+pub mod ui;
 mod window;
 
 pub use cpu::CpuRenderer;

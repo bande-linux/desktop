@@ -8,6 +8,7 @@ edition = "2024"
 repository = "https://github.com/unbound-linux/desktop"
 
 [workspace.dependencies]
+accesskit = "=0.25.2"
 ab_glyph = "=0.2.32"
 ash = "=0.38.0"
 image = { version = "=0.25.10", default-features = false, features = ["png"] }

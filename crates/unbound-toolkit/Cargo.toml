@@ -6,6 +6,7 @@ edition.workspace = true
 repository.workspace = true
 
 [dependencies]
+accesskit.workspace = true
 fontique.workspace = true
 parley.workspace = true
 pollster.workspace = true
@@ -20,6 +21,7 @@ wayland-protocols.workspace = true
 wgpu.workspace = true
 
 [dev-dependencies]
+accesskit.workspace = true
 ab_glyph.workspace = true
 image.workspace = true
 smithay.workspace = true

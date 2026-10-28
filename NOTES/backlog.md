@@ -6,6 +6,13 @@ before, and is done when its definition of done holds on the self-hosted runners
 (`ci/lint`, `ci/lavapipe-test`, `ci/deb`, and the jobs it adds) without real GPU or DRM
 hardware. Things noticed in passing go to the end of this file, not into a diff.
 
+## Toward the daily driver (75%)
+
+Target: plan phases 1-6 done plus enough protocols for Firefox on Wayland. Pure Wayland:
+XWayland is deferred, to revisit only if a needed app has no Wayland path (macOS
+precedent: XQuartz is a separate, optional install). Progress is tracked per milestone
+below; the estimate at the head of `desktop/milestone-15` is about 52% of the plan.
+
 ## Done
 
 - [x] **M1** Headless Smithay compositor, wgpu offscreen render on lavapipe, golden-image
@@ -139,13 +146,26 @@ hardware. Things noticed in passing go to the end of this file, not into a diff.
   the guest. Not done: the mini (K3 input), live `PanelEdge`/appearance changes over
   `org.unbound.Config` (read at start), kept apps from `config.kdl`, hover names on the
   panel, locale time formats, terminal mouse reporting, AT-SPI publication.
-- [ ] **M15 `linux-drm-syncobj-v1` explicit sync (P0)**
+- [x] **M15 Window management** (`desktop/milestone-15`)
+  xdg move and resize grabs from the client's button press, zoom (maximize) into the
+  area outside exclusive zones and back, full screen above top layers, minimize, the
+  `Activated` state on the key window only, xdg popups placed by their positioner with
+  grabs that a click outside dismisses without delivering it, `Super+M` and
+  `Ctrl+Super+F`. macOS precedents: windows stay below the menu bar while dragged;
+  minimizing an app's last window leaves the app active with no key window; the shell's
+  activation (the Dock) brings back the latest minimized window; a click outside an
+  open menu closes it and is consumed. Headless tests in `tests/window.rs`; the guest
+  desktop test saves `m15-terminal-full-screen`, `m15-terminal-windowed` and
+  `m15-terminal-minimized`. Not done: title bars (the toolkit draws none yet, so our
+  own apps cannot be dragged; macOS precedent is app-drawn title bars with the traffic
+  lights), `xdg-decoration`, layer-surface popups beyond placement, snapping (phase 8).
+- [ ] **M16 `linux-drm-syncobj-v1` explicit sync (P0)**
   Acquire points through `DrmSyncPointBlocker`, release points from frame completion.
   *Done when* guest tests show a commit is not presented before its acquire point
   signals and the release point signals after the buffer leaves use.
   Also wait for a dma-buf's implicit fence (`DmabufBlocker`) before latching a commit
   from a client without explicit sync.
-- [ ] **M16 Toolkit on Vello and Parley**
+- [ ] **Toolkit on Vello and Parley** (track; moved into `desktop/integration`)
   `vello_cpu` first frame into `wl_shm`, `vello_gpu` afterwards, Parley text; goldens
   re-derived from scene descriptions; panel, launcher and terminal move over; a toolkit
   sample app whose start time and RSS `ci/perf` measures.
@@ -163,9 +183,9 @@ hardware. Things noticed in passing go to the end of this file, not into a diff.
   AT-SPI with `accesskit_unix` (test on a private bus via `unbound-test-bus`); scroll view
   on `unbound-spring` and tab view; damage-limited redraw with an exact-metric bench;
   `wp_fractional_scale_v1`.
-- [ ] **M17 Session lock and idle** `ext-session-lock-v1` with blank fallback,
+- [ ] **Session lock and idle** `ext-session-lock-v1` with blank fallback,
   `ext-idle-notify-v1`, `idle-inhibit`, driven by the `idle` config.
-- [ ] **M18 Watchdog** `wl_display` ping heartbeat, unresponsive marking after 3 s.
+- [ ] **Watchdog** `wl_display` ping heartbeat, unresponsive marking after 3 s.
 
 ## Desktop services track (`desktop/track-services`)
 
@@ -248,3 +268,5 @@ boot framebuffer, K3 USB input. Later, the Apple DCP and agx drivers unlock:
 - `ci/perf` fails on `frame_typical_p99` (16–23 ms against 8.33 ms) and once
   `frame_full_p99` while other jobs share the runners' Mac mini; the services branch
   does not touch the compositor, and milestone-8's tip passed with the runners idle.
+- Every crate's `cargo-deb` metadata says `section = "x11"`; the pure-Wayland plan's
+  meta-package now uses `misc`. Change the crates in a commit of their own.

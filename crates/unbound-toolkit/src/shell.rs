@@ -82,8 +82,10 @@ impl Dispatch<UnboundShellV1, ()> for State {
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
-        if let unbound_shell_v1::Event::ShowLauncher = event {
-            state.events.push(WindowEvent::ShowLauncher);
+        match event {
+            unbound_shell_v1::Event::ShowLauncher => state.events.push(WindowEvent::ShowLauncher),
+            unbound_shell_v1::Event::CaptureScreen => state.events.push(WindowEvent::CaptureScreen),
+            _ => {}
         }
     }
 }

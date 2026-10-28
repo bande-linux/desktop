@@ -39,6 +39,7 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::{
     self, ZwlrLayerSurfaceV1,
 };
 
+use crate::capture::Capture;
 use crate::clipboard::Clipboard;
 use crate::cpu::CpuRenderer;
 use crate::gpu::GpuRenderer;
@@ -123,6 +124,7 @@ pub enum WindowEvent {
     CloseRequested,
     Pasted(String),
     ShowLauncher,
+    CaptureScreen,
     AppsChanged,
 }
 
@@ -135,6 +137,7 @@ pub enum WindowError {
     Io(io::Error),
     Render(RenderError),
     LockRefused,
+    CaptureFailed(u32),
 }
 
 impl fmt::Display for WindowError {
@@ -147,6 +150,12 @@ impl fmt::Display for WindowError {
             Self::Io(error) => write!(f, "{error}"),
             Self::Render(error) => write!(f, "{error}"),
             Self::LockRefused => write!(f, "the compositor refused to lock the session"),
+            Self::CaptureFailed(reason) => {
+                write!(
+                    f,
+                    "the compositor could not capture the screen (reason {reason})"
+                )
+            }
         }
     }
 }
@@ -180,7 +189,7 @@ impl From<RenderError> for WindowError {
 #[derive(Default)]
 pub(crate) struct State {
     compositor: Option<WlCompositor>,
-    shm: Option<WlShm>,
+    pub(crate) shm: Option<WlShm>,
     wm_base: Option<XdgWmBase>,
     layer_shell: Option<ZwlrLayerShellV1>,
     pub(crate) activation: Option<XdgActivationV1>,
@@ -195,6 +204,7 @@ pub(crate) struct State {
     pub(crate) clipboard: Clipboard,
     pub(crate) shell: Shell,
     pub(crate) lock: SessionLock,
+    pub(crate) capture: Capture,
 }
 
 impl State {
@@ -746,7 +756,13 @@ impl Dispatch<WlRegistry, ()> for State {
                     state.lock.output = Some(registry.bind(name, 1, handle, ()));
                 }
                 "unbound_shell_v1" => {
-                    state.shell.protocol = Some(registry.bind(name, 1, handle, ()));
+                    state.shell.protocol = Some(registry.bind(name, version.min(2), handle, ()));
+                }
+                "ext_output_image_capture_source_manager_v1" => {
+                    state.capture.sources = Some(registry.bind(name, 1, handle, ()));
+                }
+                "ext_image_copy_capture_manager_v1" => {
+                    state.capture.manager = Some(registry.bind(name, 1, handle, ()));
                 }
                 "ext_foreign_toplevel_list_v1" => {
                     let _: ExtForeignToplevelListV1 = registry.bind(name, 1, handle, ());

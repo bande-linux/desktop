@@ -1,3 +1,4 @@
+mod capture;
 mod clipboard;
 mod cpu;
 mod draw;
@@ -14,6 +15,7 @@ mod tokens;
 pub mod ui;
 mod window;
 
+pub use capture::ScreenImage;
 pub use cpu::CpuRenderer;
 pub use gpu::GpuRenderer;
 pub use render::{RenderError, Snapshot};

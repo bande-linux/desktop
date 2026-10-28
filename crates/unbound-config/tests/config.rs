@@ -5,7 +5,8 @@ use std::thread;
 use std::time::Duration;
 
 use unbound_config::{
-    Appearance, Config, ConfigError, ConfigStore, Output, PanelEdge, ReloadError, config_path,
+    Appearance, Config, ConfigError, ConfigStore, Output, PanelEdge, ReloadError, Suspend,
+    config_path,
 };
 
 fn error_at(source: &str) -> (usize, usize) {
@@ -252,4 +253,35 @@ fn the_file_lives_under_the_xdg_config_home() {
         Some(Path::new("/home/ada/.config/unbound/config.kdl").to_path_buf())
     );
     assert_eq!(config_path(None, None), None);
+}
+
+#[test]
+fn the_computer_sleeps_when_the_display_turns_off_unless_told_otherwise() {
+    let default = Config::parse("").expect("valid");
+    assert_eq!(default.idle.suspend, Suspend::WithDisplayOff);
+    assert_eq!(
+        default.idle.suspend_after(),
+        Some(Duration::from_secs(10 * 60))
+    );
+
+    let later_lock = Config::parse("idle {\n    lock-after \"20m\"\n}\n").expect("valid");
+    assert_eq!(
+        later_lock.idle.suspend_after(),
+        Some(Duration::from_secs(20 * 60))
+    );
+
+    let explicit = Config::parse("idle {\n    suspend-after \"1h\"\n}\n").expect("valid");
+    assert_eq!(
+        explicit.idle.suspend_after(),
+        Some(Duration::from_secs(3600))
+    );
+
+    let never = Config::parse("idle {\n    suspend-after \"never\"\n}\n").expect("valid");
+    assert_eq!(never.idle.suspend_after(), None);
+}
+
+#[test]
+fn the_computer_must_not_sleep_before_the_display_turns_off() {
+    assert_eq!(error_at("idle {\n    suspend-after \"5m\"\n}\n"), (2, 5));
+    assert_eq!(error_at("idle {\n    suspend-after \"soon\"\n}\n"), (2, 19));
 }

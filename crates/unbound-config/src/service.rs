@@ -1,18 +1,24 @@
 use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fmt;
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::time::Duration;
 
 use notify::event::{AccessKind, AccessMode, ModifyKind};
 use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use zbus::blocking::Connection;
+use zbus::fdo::Error::{Failed, InvalidArgs};
+use zbus::object_server::SignalEmitter;
 use zbus::zvariant::{OwnedValue, Value};
 
-use crate::{Appearance, Config, ConfigStore, PanelEdge, ReloadError};
+use crate::{Appearance, Config, ConfigStore, Output, PanelEdge, ReloadError, Setting};
 
 pub const BUS_NAME: &str = "org.unbound.Config";
 pub const OBJECT_PATH: &str = "/org/unbound/Config";
+
+const STAGING_NAME: &str = ".config.kdl.new";
 
 #[derive(Debug)]
 pub enum ServiceError {
@@ -50,12 +56,18 @@ pub struct ConfigService {
     _connection: Connection,
 }
 
+type Published = Arc<Mutex<Arc<Config>>>;
+
+fn lock(published: &Published) -> MutexGuard<'_, Arc<Config>> {
+    published.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
 impl ConfigService {
     pub fn start(
         connection: &Connection,
         path: &Path,
         store: Arc<ConfigStore>,
-        on_error: impl Fn(ReloadError) + Send + 'static,
+        on_reload: impl Fn(Result<(), ReloadError>) + Send + 'static,
     ) -> Result<Self, ServiceError> {
         let directory = path
             .parent()
@@ -66,16 +78,17 @@ impl ConfigService {
             .to_owned();
         std::fs::create_dir_all(directory).map_err(|error| ServiceError::Watch(error.into()))?;
 
-        if path.exists()
-            && let Err(error) = store.reload(path)
-        {
-            on_error(error);
+        if path.exists() {
+            on_reload(store.reload(path).map(drop));
         }
+        let published = Arc::new(Mutex::new(store.current()));
 
         connection.object_server().at(
             OBJECT_PATH,
             ConfigInterface {
                 store: Arc::clone(&store),
+                path: path.to_path_buf(),
+                published: Arc::clone(&published),
             },
         )?;
         connection.request_name(BUS_NAME)?;
@@ -84,7 +97,6 @@ impl ConfigService {
             .interface::<_, ConfigInterface>(OBJECT_PATH)?;
 
         let watched = path.to_path_buf();
-        let mut published = store.current();
         let mut watcher =
             notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
                 let Ok(event) = event else { return };
@@ -99,12 +111,14 @@ impl ConfigService {
                 if !relevant {
                     return;
                 }
+                let mut published = lock(&published);
                 match store.reload(&watched) {
                     Ok(config) => {
                         publish_changes(&interface, &published, &config);
-                        published = config;
+                        *published = config;
+                        on_reload(Ok(()));
                     }
-                    Err(error) => on_error(error),
+                    Err(error) => on_reload(Err(error)),
                 }
             })?;
         watcher.watch(directory, RecursiveMode::NonRecursive)?;
@@ -135,37 +149,122 @@ fn publish_changes(
         if before.idle.lock_after != after.idle.lock_after {
             let _ = guard.idle_lock_after_changed(emitter).await;
         }
+        if before.idle.suspend_after() != after.idle.suspend_after() {
+            let _ = guard.idle_suspend_after_changed(emitter).await;
+        }
         if before.outputs != after.outputs {
             let _ = guard.outputs_changed(emitter).await;
         }
     });
 }
 
+fn keyword<T: Copy>(
+    choices: &[T],
+    name: impl Fn(T) -> &'static str,
+    value: &str,
+) -> zbus::fdo::Result<T> {
+    choices
+        .iter()
+        .copied()
+        .find(|choice| name(*choice) == value)
+        .ok_or_else(|| {
+            let names: Vec<_> = choices
+                .iter()
+                .map(|choice| format!("\"{}\"", name(*choice)))
+                .collect();
+            InvalidArgs(format!("expected one of {}", names.join(", ")))
+        })
+}
+
+fn output_settings(settings: &HashMap<String, OwnedValue>) -> zbus::fdo::Result<Output> {
+    let mut output = Output::default();
+    for (key, value) in settings {
+        let mismatch = || InvalidArgs(format!("`{key}` has the wrong type"));
+        match key.as_str() {
+            "scale" => output.scale = Some(f64::try_from(value).map_err(|_| mismatch())?),
+            "refresh-rate" => {
+                output.refresh_rate = Some(f64::try_from(value).map_err(|_| mismatch())?)
+            }
+            "variable-refresh-rate" => {
+                output.variable_refresh_rate = Some(bool::try_from(value).map_err(|_| mismatch())?)
+            }
+            _ => return Err(InvalidArgs(format!("unknown output setting `{key}`"))),
+        }
+    }
+    Ok(output)
+}
+
 struct ConfigInterface {
     store: Arc<ConfigStore>,
+    path: PathBuf,
+    published: Published,
+}
+
+impl ConfigInterface {
+    fn write(&self, setting: &Setting) -> zbus::fdo::Result<()> {
+        let mut published = lock(&self.published);
+        let source = match std::fs::read_to_string(&self.path) {
+            Ok(source) => source,
+            Err(error) if error.kind() == ErrorKind::NotFound => String::new(),
+            Err(error) => {
+                return Err(Failed(format!("cannot read the configuration: {error}")));
+            }
+        };
+        if let Err(error) = Config::parse(&source) {
+            return Err(Failed(format!(
+                "the configuration is invalid at {error} and must be fixed first"
+            )));
+        }
+        let edited = setting
+            .apply(&source)
+            .map_err(|error| InvalidArgs(error.message))?;
+        let staging = self.path.with_file_name(STAGING_NAME);
+        std::fs::write(&staging, &edited)
+            .and_then(|()| std::fs::rename(&staging, &self.path))
+            .map_err(|error| Failed(format!("cannot write the configuration: {error}")))?;
+        *published = self
+            .store
+            .apply(&edited)
+            .map_err(|error| Failed(error.to_string()))?;
+        Ok(())
+    }
 }
 
 #[zbus::interface(name = "org.unbound.Config")]
 impl ConfigInterface {
     #[zbus(property)]
     fn appearance(&self) -> String {
-        match self.store.current().appearance {
-            Appearance::Dark => "dark",
-            Appearance::Light => "light",
-            Appearance::Automatic => "automatic",
-        }
-        .to_owned()
+        self.store.current().appearance.keyword().to_owned()
+    }
+
+    #[zbus(property)]
+    fn set_appearance(&self, value: String) -> zbus::fdo::Result<()> {
+        let appearance = keyword(
+            &[Appearance::Dark, Appearance::Light, Appearance::Automatic],
+            Appearance::keyword,
+            &value,
+        )?;
+        self.write(&Setting::Appearance(appearance))
     }
 
     #[zbus(property)]
     fn panel_edge(&self) -> String {
-        match self.store.current().panel_edge {
-            PanelEdge::Left => "left",
-            PanelEdge::Bottom => "bottom",
-            PanelEdge::Right => "right",
-            PanelEdge::Top => "top",
-        }
-        .to_owned()
+        self.store.current().panel_edge.keyword().to_owned()
+    }
+
+    #[zbus(property)]
+    fn set_panel_edge(&self, value: String) -> zbus::fdo::Result<()> {
+        let edge = keyword(
+            &[
+                PanelEdge::Left,
+                PanelEdge::Bottom,
+                PanelEdge::Right,
+                PanelEdge::Top,
+            ],
+            PanelEdge::keyword,
+            &value,
+        )?;
+        self.write(&Setting::PanelEdge(edge))
     }
 
     #[zbus(property)]
@@ -174,8 +273,42 @@ impl ConfigInterface {
     }
 
     #[zbus(property)]
+    fn set_idle_dim_after(&self, seconds: u64) -> zbus::fdo::Result<()> {
+        self.write(&Setting::IdleDimAfter(Duration::from_secs(seconds)))
+    }
+
+    #[zbus(property)]
     fn idle_lock_after(&self) -> u64 {
         self.store.current().idle.lock_after.as_secs()
+    }
+
+    #[zbus(property)]
+    async fn set_idle_lock_after(
+        &self,
+        seconds: u64,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+    ) -> zbus::fdo::Result<()> {
+        let before = self.store.current().idle.suspend_after();
+        self.write(&Setting::IdleLockAfter(Duration::from_secs(seconds)))?;
+        if before != self.store.current().idle.suspend_after() {
+            self.idle_suspend_after_changed(&emitter).await?;
+        }
+        Ok(())
+    }
+
+    #[zbus(property)]
+    fn idle_suspend_after(&self) -> u64 {
+        self.store
+            .current()
+            .idle
+            .suspend_after()
+            .map_or(0, |after| after.as_secs())
+    }
+
+    #[zbus(property)]
+    fn set_idle_suspend_after(&self, seconds: u64) -> zbus::fdo::Result<()> {
+        let after = (seconds > 0).then(|| Duration::from_secs(seconds));
+        self.write(&Setting::IdleSuspendAfter(after))
     }
 
     #[zbus(property)]
@@ -205,5 +338,19 @@ impl ConfigInterface {
                 (connector.clone(), settings)
             })
             .collect()
+    }
+
+    async fn set_output(
+        &self,
+        connector: String,
+        settings: HashMap<String, OwnedValue>,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+    ) -> zbus::fdo::Result<()> {
+        let before = self.store.current();
+        self.write(&Setting::Output(connector, output_settings(&settings)?))?;
+        if before.outputs != self.store.current().outputs {
+            self.outputs_changed(&emitter).await?;
+        }
+        Ok(())
     }
 }

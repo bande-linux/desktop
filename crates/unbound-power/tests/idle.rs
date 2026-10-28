@@ -1,0 +1,131 @@
+use std::time::Duration;
+
+use unbound_power::idle::{Command, IdleMachine, Policy, Stage};
+
+const MINUTE: Duration = Duration::from_secs(60);
+
+fn plan_defaults() -> Policy {
+    Policy {
+        dim_after: 5 * MINUTE,
+        lock_after: 10 * MINUTE,
+        suspend_after: None,
+    }
+}
+
+fn with_suspend() -> Policy {
+    Policy {
+        suspend_after: Some(30 * MINUTE),
+        ..plan_defaults()
+    }
+}
+
+#[test]
+fn the_screen_dims_after_five_minutes_and_locks_after_ten() {
+    let mut idle = IdleMachine::new(plan_defaults());
+    assert_eq!(idle.idle_for(5 * MINUTE), [Command::Dim]);
+    assert_eq!(idle.stage(), Stage::Dimmed);
+    assert_eq!(idle.idle_for(10 * MINUTE), [Command::Lock]);
+    assert_eq!(idle.stage(), Stage::Locked);
+}
+
+#[test]
+fn the_idle_timers_to_request_are_the_distinct_thresholds_in_order() {
+    assert_eq!(
+        IdleMachine::new(with_suspend()).thresholds(),
+        [5 * MINUTE, 10 * MINUTE, 30 * MINUTE]
+    );
+    let same = Policy {
+        dim_after: 10 * MINUTE,
+        ..plan_defaults()
+    };
+    assert_eq!(IdleMachine::new(same).thresholds(), [10 * MINUTE]);
+}
+
+#[test]
+fn a_late_notification_runs_every_stage_it_passed_in_order() {
+    let mut idle = IdleMachine::new(with_suspend());
+    assert_eq!(
+        idle.idle_for(30 * MINUTE),
+        [Command::Dim, Command::Lock, Command::Suspend]
+    );
+}
+
+#[test]
+fn each_stage_runs_once() {
+    let mut idle = IdleMachine::new(with_suspend());
+    idle.idle_for(30 * MINUTE);
+    assert!(idle.idle_for(30 * MINUTE).is_empty());
+}
+
+#[test]
+fn activity_undims_and_starts_over_but_does_not_unlock() {
+    let mut idle = IdleMachine::new(plan_defaults());
+    idle.idle_for(10 * MINUTE);
+
+    assert_eq!(idle.resumed(), [Command::Undim]);
+    assert_eq!(idle.stage(), Stage::Active);
+    assert_eq!(idle.idle_for(5 * MINUTE), [Command::Dim]);
+    assert!(
+        idle.idle_for(10 * MINUTE).is_empty(),
+        "the session is still locked"
+    );
+}
+
+#[test]
+fn activity_while_bright_does_nothing() {
+    let mut idle = IdleMachine::new(plan_defaults());
+    assert!(idle.resumed().is_empty());
+}
+
+#[test]
+fn a_session_the_user_locked_is_not_locked_again() {
+    let mut idle = IdleMachine::new(plan_defaults());
+    idle.set_locked(true);
+    assert_eq!(idle.idle_for(10 * MINUTE), [Command::Dim]);
+}
+
+#[test]
+fn an_unlocked_session_locks_again_at_the_next_lock_stage() {
+    let mut idle = IdleMachine::new(plan_defaults());
+    idle.idle_for(10 * MINUTE);
+    idle.resumed();
+    idle.set_locked(false);
+    assert_eq!(idle.idle_for(10 * MINUTE), [Command::Dim, Command::Lock]);
+}
+
+#[test]
+fn an_inhibitor_keeps_the_screen_on_and_its_release_restarts_the_timers() {
+    let mut idle = IdleMachine::new(with_suspend());
+    assert!(idle.set_inhibited(true).is_empty());
+    assert!(idle.idle_for(30 * MINUTE).is_empty());
+    assert_eq!(idle.stage(), Stage::Active);
+
+    assert_eq!(idle.set_inhibited(false), [Command::RestartIdleTimers]);
+    assert_eq!(idle.idle_for(5 * MINUTE), [Command::Dim]);
+}
+
+#[test]
+fn an_inhibitor_taken_while_dimmed_brightens_the_screen() {
+    let mut idle = IdleMachine::new(plan_defaults());
+    idle.idle_for(5 * MINUTE);
+    assert_eq!(idle.set_inhibited(true), [Command::Undim]);
+    assert_eq!(idle.stage(), Stage::Active);
+}
+
+#[test]
+fn the_session_locks_before_the_computer_sleeps() {
+    let mut idle = IdleMachine::new(plan_defaults());
+    assert_eq!(idle.preparing_for_sleep(), [Command::Lock]);
+    assert!(idle.preparing_for_sleep().is_empty(), "already locked");
+}
+
+#[test]
+fn a_new_policy_restarts_the_timers_only_when_it_differs() {
+    let mut idle = IdleMachine::new(plan_defaults());
+    assert!(idle.set_policy(plan_defaults()).is_empty());
+    assert_eq!(
+        idle.set_policy(with_suspend()),
+        [Command::RestartIdleTimers]
+    );
+    assert_eq!(idle.thresholds().len(), 3);
+}

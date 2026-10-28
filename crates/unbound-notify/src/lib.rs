@@ -1,122 +1,191 @@
-use std::collections::{BTreeMap, HashMap};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+mod center;
+pub mod client;
+
+use std::collections::HashMap;
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::thread;
-use std::time::Duration;
+use std::time::Instant;
 
 use zbus::blocking::Connection;
 use zbus::object_server::SignalEmitter;
 use zbus::zvariant::OwnedValue;
 
+pub use center::{
+    BANNER_DURATION, Center, CloseReason, Invoked, Notification, Presentation, Stack, Timeout,
+    Urgency,
+};
+
 pub const BUS_NAME: &str = "org.freedesktop.Notifications";
 pub const OBJECT_PATH: &str = "/org/freedesktop/Notifications";
 pub const SPEC_VERSION: &str = "1.2";
-pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CloseReason {
-    Expired = 1,
-    Dismissed = 2,
-    Closed = 3,
+type Presenter = Box<dyn FnMut(&Presentation) + Send>;
+
+struct State {
+    center: Center,
+    presented: Presentation,
+    presenter: Presenter,
+    stopped: bool,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Notification {
-    pub id: u32,
-    pub app_name: String,
-    pub app_icon: String,
-    pub summary: String,
-    pub body: String,
-    pub actions: Vec<(String, String)>,
-    pub resident: bool,
-}
-
-#[derive(Default)]
-struct Registry {
-    last_id: u32,
-    generation: u64,
-    active: BTreeMap<u32, (Notification, u64)>,
-}
-
-impl Registry {
-    fn fresh_id(&mut self) -> u32 {
-        loop {
-            self.last_id = self.last_id.wrapping_add(1);
-            if self.last_id != 0 && !self.active.contains_key(&self.last_id) {
-                return self.last_id;
-            }
+impl State {
+    fn present(&mut self) {
+        let presentation = self.center.presentation();
+        if presentation != self.presented {
+            (self.presenter)(&presentation);
+            self.presented = presentation;
         }
     }
 }
 
-type Shared = Arc<Mutex<Registry>>;
+struct Shared {
+    state: Mutex<State>,
+    deadline_changed: Condvar,
+}
 
-fn lock(registry: &Shared) -> MutexGuard<'_, Registry> {
-    registry.lock().unwrap_or_else(PoisonError::into_inner)
+impl Shared {
+    fn lock(&self) -> MutexGuard<'_, State> {
+        self.state.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn update<T>(&self, change: impl FnOnce(&mut Center) -> T) -> T {
+        let mut state = self.lock();
+        let result = change(&mut state.center);
+        state.present();
+        self.deadline_changed.notify_all();
+        result
+    }
 }
 
 pub struct NotificationServer {
     connection: Connection,
-    registry: Shared,
+    shared: Arc<Shared>,
 }
 
 impl NotificationServer {
     pub fn start(connection: &Connection) -> zbus::Result<Self> {
-        let registry = Shared::default();
+        Self::start_presenting(connection, |_| {})
+    }
+
+    pub fn start_presenting(
+        connection: &Connection,
+        presenter: impl FnMut(&Presentation) + Send + 'static,
+    ) -> zbus::Result<Self> {
+        let shared = Arc::new(Shared {
+            state: Mutex::new(State {
+                center: Center::default(),
+                presented: Presentation::default(),
+                presenter: Box::new(presenter),
+                stopped: false,
+            }),
+            deadline_changed: Condvar::new(),
+        });
         connection.object_server().at(
             OBJECT_PATH,
             Notifications {
-                registry: Arc::clone(&registry),
-                connection: connection.clone(),
+                shared: Arc::clone(&shared),
+            },
+        )?;
+        connection.object_server().at(
+            OBJECT_PATH,
+            NotificationCenter {
+                shared: Arc::clone(&shared),
             },
         )?;
         connection.request_name(BUS_NAME)?;
+        let timer = Arc::clone(&shared);
+        let timer_connection = connection.clone();
+        thread::spawn(move || expire(&timer, &timer_connection));
         Ok(Self {
             connection: connection.clone(),
-            registry,
+            shared,
         })
     }
 
     pub fn active(&self) -> Vec<Notification> {
-        lock(&self.registry)
-            .active
-            .values()
-            .map(|(notification, _)| notification.clone())
-            .collect()
+        self.shared.lock().center.notifications().cloned().collect()
     }
 
     pub fn dismiss(&self, id: u32) -> zbus::Result<bool> {
-        if lock(&self.registry).active.remove(&id).is_none() {
-            return Ok(false);
+        let closed = self.shared.update(|center| center.close(id));
+        if closed {
+            emit_closed(&self.connection, id, CloseReason::Dismissed)?;
         }
-        emit_closed(&self.connection, id, CloseReason::Dismissed)?;
-        Ok(true)
+        Ok(closed)
+    }
+
+    pub fn clear(&self, group: &str) -> zbus::Result<()> {
+        for id in self.shared.update(|center| center.clear(group)) {
+            emit_closed(&self.connection, id, CloseReason::Dismissed)?;
+        }
+        Ok(())
     }
 
     pub fn invoke_action(&self, id: u32, action_key: &str) -> zbus::Result<bool> {
-        let resident = {
-            let mut registry = lock(&self.registry);
-            let Some((notification, _)) = registry.active.get(&id) else {
-                return Ok(false);
-            };
-            if !notification
-                .actions
-                .iter()
-                .any(|(key, _)| key == action_key)
-            {
-                return Ok(false);
-            }
-            let resident = notification.resident;
-            if !resident {
-                registry.active.remove(&id);
-            }
-            resident
+        let Some(Invoked { closed }) = self.shared.update(|center| center.invoke(id, action_key))
+        else {
+            return Ok(false);
         };
         let emitter = SignalEmitter::new(self.connection.inner(), OBJECT_PATH)?;
         zbus::block_on(Notifications::action_invoked(&emitter, id, action_key))?;
-        if !resident {
+        if closed {
             emit_closed(&self.connection, id, CloseReason::Dismissed)?;
         }
         Ok(true)
+    }
+
+    pub fn set_do_not_disturb(&self, enabled: bool) -> zbus::Result<()> {
+        self.shared
+            .update(|center| center.set_do_not_disturb(enabled));
+        let interface = self
+            .connection
+            .object_server()
+            .interface::<_, NotificationCenter>(OBJECT_PATH)?;
+        zbus::block_on(
+            interface
+                .get()
+                .do_not_disturb_changed(interface.signal_emitter()),
+        )
+    }
+}
+
+impl Drop for NotificationServer {
+    fn drop(&mut self) {
+        self.shared.lock().stopped = true;
+        self.shared.deadline_changed.notify_all();
+    }
+}
+
+fn expire(shared: &Shared, connection: &Connection) {
+    let mut state = shared.lock();
+    loop {
+        if state.stopped {
+            return;
+        }
+        let expired = state.center.advance(Instant::now());
+        state.present();
+        if !expired.is_empty() {
+            drop(state);
+            for id in expired {
+                let _ = emit_closed(connection, id, CloseReason::Expired);
+            }
+            state = shared.lock();
+            continue;
+        }
+        state = match state.center.next_deadline() {
+            Some(deadline) => {
+                let wait = deadline.saturating_duration_since(Instant::now());
+                shared
+                    .deadline_changed
+                    .wait_timeout(state, wait)
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .0
+            }
+            None => shared
+                .deadline_changed
+                .wait(state)
+                .unwrap_or_else(PoisonError::into_inner),
+        };
     }
 }
 
@@ -129,35 +198,23 @@ fn emit_closed(connection: &Connection, id: u32, reason: CloseReason) -> zbus::R
     ))
 }
 
-fn schedule_expiry(
-    connection: Connection,
-    registry: Shared,
-    id: u32,
-    generation: u64,
-    after: Duration,
-) {
-    thread::spawn(move || {
-        thread::sleep(after);
-        let expired = {
-            let mut registry = lock(&registry);
-            let current = registry.active.get(&id).map(|(_, current)| *current);
-            current == Some(generation) && registry.active.remove(&id).is_some()
-        };
-        if expired {
-            let _ = emit_closed(&connection, id, CloseReason::Expired);
-        }
-    });
+fn hint<'a, T: TryFrom<&'a OwnedValue>>(
+    hints: &'a HashMap<String, OwnedValue>,
+    name: &str,
+) -> Option<T> {
+    hints.get(name).and_then(|value| T::try_from(value).ok())
 }
 
 struct Notifications {
-    registry: Shared,
-    connection: Connection,
+    shared: Arc<Shared>,
 }
 
 #[zbus::interface(name = "org.freedesktop.Notifications")]
 impl Notifications {
     fn get_capabilities(&self) -> Vec<String> {
-        vec!["actions".to_owned(), "body".to_owned()]
+        ["actions", "body", "persistence"]
+            .map(str::to_owned)
+            .to_vec()
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -172,52 +229,37 @@ impl Notifications {
         hints: HashMap<String, OwnedValue>,
         expire_timeout: i32,
     ) -> u32 {
-        let resident = hints
-            .get("resident")
-            .and_then(|value| bool::try_from(value).ok())
-            .unwrap_or(false);
-        let (id, generation) = {
-            let mut registry = lock(&self.registry);
-            let id = match replaces_id {
-                0 => registry.fresh_id(),
-                id => id,
-            };
-            registry.generation += 1;
-            let generation = registry.generation;
-            let notification = Notification {
-                id,
-                app_name,
-                app_icon,
-                summary,
-                body,
-                actions: actions
-                    .as_chunks::<2>()
-                    .0
-                    .iter()
-                    .map(|[key, label]| (key.clone(), label.clone()))
-                    .collect(),
-                resident,
-            };
-            registry.active.insert(id, (notification, generation));
-            (id, generation)
+        let urgency = match hint::<u8>(&hints, "urgency") {
+            Some(0) => Urgency::Low,
+            Some(2) => Urgency::Critical,
+            _ => Urgency::Normal,
         };
-        let timeout = match expire_timeout {
-            0 => None,
-            milliseconds if milliseconds > 0 => {
-                Some(Duration::from_millis(milliseconds.unsigned_abs().into()))
-            }
-            _ => Some(DEFAULT_TIMEOUT),
+        let notification = Notification {
+            id: replaces_id,
+            app_name,
+            app_icon,
+            summary,
+            body,
+            actions: actions
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|[key, label]| (key.clone(), label.clone()))
+                .collect(),
+            urgency,
+            desktop_entry: hint::<&str>(&hints, "desktop-entry")
+                .filter(|entry| !entry.is_empty())
+                .map(str::to_owned),
+            resident: hint(&hints, "resident").unwrap_or(false),
+            transient: hint(&hints, "transient").unwrap_or(false),
         };
-        if let Some(timeout) = timeout {
-            schedule_expiry(
-                self.connection.clone(),
-                Arc::clone(&self.registry),
-                id,
-                generation,
-                timeout,
-            );
-        }
-        id
+        self.shared.update(|center| {
+            center.post(
+                notification,
+                Timeout::from_milliseconds(expire_timeout),
+                Instant::now(),
+            )
+        })
     }
 
     async fn close_notification(
@@ -225,7 +267,7 @@ impl Notifications {
         id: u32,
         #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
     ) -> zbus::fdo::Result<()> {
-        if lock(&self.registry).active.remove(&id).is_none() {
+        if !self.shared.update(|center| center.close(id)) {
             return Err(zbus::fdo::Error::Failed(String::new()));
         }
         Self::notification_closed(&emitter, id, CloseReason::Closed as u32).await?;
@@ -254,4 +296,22 @@ impl Notifications {
         id: u32,
         action_key: &str,
     ) -> zbus::Result<()>;
+}
+
+struct NotificationCenter {
+    shared: Arc<Shared>,
+}
+
+#[zbus::interface(name = "org.unbound.NotificationCenter")]
+impl NotificationCenter {
+    #[zbus(property)]
+    fn do_not_disturb(&self) -> bool {
+        self.shared.lock().center.do_not_disturb()
+    }
+
+    #[zbus(property)]
+    fn set_do_not_disturb(&mut self, enabled: bool) {
+        self.shared
+            .update(|center| center.set_do_not_disturb(enabled));
+    }
 }

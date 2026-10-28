@@ -2661,6 +2661,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "unbound-automount"
+version = "0.1.0"
+dependencies = [
+ "unbound-notify",
+ "unbound-test-bus",
+ "zbus",
+]
+
+[[package]]
 name = "unbound-bench"
 version = "0.1.0"
 dependencies = [
@@ -2708,6 +2717,7 @@ dependencies = [
  "kdl",
  "notify",
  "tempfile",
+ "unbound-notify",
  "unbound-test-bus",
  "zbus",
 ]
@@ -2716,6 +2726,28 @@ dependencies = [
 name = "unbound-notify"
 version = "0.1.0"
 dependencies = [
+ "unbound-test-bus",
+ "zbus",
+]
+
+[[package]]
+name = "unbound-polkit"
+version = "0.1.0"
+dependencies = [
+ "blocking",
+ "rustix 1.1.6",
+ "tempfile",
+ "unbound-test-bus",
+ "zbus",
+]
+
+[[package]]
+name = "unbound-power"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
+ "unbound-config",
+ "unbound-notify",
  "unbound-test-bus",
  "zbus",
 ]
@@ -2780,6 +2812,14 @@ dependencies = [
  "wayland-client",
  "wayland-protocols",
  "wgpu",
+]
+
+[[package]]
+name = "unbound-tray"
+version = "0.1.0"
+dependencies = [
+ "unbound-test-bus",
+ "zbus",
 ]
 
 [[package]]
@@ -3646,6 +3686,18 @@ name = "writeable"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
+
+[[package]]
+name = "xdg-desktop-portal-unbound"
+version = "0.1.0"
+dependencies = [
+ "blocking",
+ "tempfile",
+ "unbound-config",
+ "unbound-test-bus",
+ "unbound-toolkit",
+ "zbus",
+]
 
 [[package]]
 name = "xkbcommon"

@@ -61,7 +61,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            pkg-config libxkbcommon-dev libgbm-dev libinput-dev libseat-dev libudev-dev libvulkan1 mesa-vulkan-drivers
+            pkg-config libxkbcommon-dev libgbm-dev libinput-dev libseat-dev libudev-dev libvulkan1 mesa-vulkan-drivers dbus-daemon dbus-bin
       - name: Install cargo-deb
         run: |
           root=/cache/tools/cargo-deb-$CARGO_DEB_VERSION
@@ -69,7 +69,8 @@ jobs:
             || cargo install cargo-deb --version "$CARGO_DEB_VERSION" --locked --root "$root"
           echo "$root/bin" >> "$GITHUB_PATH"
       - run: |
-          for package in unbound-compositor unbound-notify unbound-clipboard; do
+          for package in unbound-compositor unbound-notify unbound-clipboard unbound-config unbound-power \
+              xdg-desktop-portal-unbound unbound-tray unbound-automount; do
             cargo deb --package "$package" --locked
           done
       - name: Inspect the packages
@@ -94,6 +95,65 @@ jobs:
           dpkg-deb --contents "$deb" | grep -q ' ./usr/bin/unbound-clipboard$'
           dpkg-deb --field target/debian/unbound-compositor_*.deb Recommends \
             | grep -qx 'unbound-clipboard'
+      - name: Check the session services' user units and D-Bus activation
+        run: |
+          for entry in unbound-config:org.unbound.Config:org.unbound.Config \
+              unbound-power:org.unbound.Power:org.freedesktop.ScreenSaver \
+              unbound-tray:org.unbound.Tray:org.kde.StatusNotifierWatcher; do
+            IFS=: read -r package file name <<< "$entry"
+            deb=$(ls target/debian/"$package"_*.deb)
+            root=$(mktemp -d)
+            dpkg-deb --extract "$deb" "$root"
+            service="$root/usr/share/dbus-1/services/$file.service"
+            unit="$root/usr/lib/systemd/user/$package.service"
+            grep -qx "Name=$name" "$service"
+            grep -qx "SystemdService=$package.service" "$service"
+            grep -qx "BusName=$name" "$unit"
+            grep -qx 'WantedBy=graphical-session.target' "$unit"
+            test -x "$root$(sed -n 's/^Exec=//p' "$service")"
+            test -x "$root$(sed -n 's/^ExecStart=//p' "$unit")"
+            dpkg-deb --ctrl-tarfile "$deb" | tar -t | grep -qx './postinst'
+          done
+      - name: Check the automount service's user unit
+        run: |
+          deb=$(ls target/debian/unbound-automount_*.deb)
+          root=$(mktemp -d)
+          dpkg-deb --extract "$deb" "$root"
+          unit="$root/usr/lib/systemd/user/unbound-automount.service"
+          grep -qx 'WantedBy=graphical-session.target' "$unit"
+          test -x "$root$(sed -n 's/^ExecStart=//p' "$unit")"
+          dpkg-deb --field "$deb" Depends | grep -q 'udisks2'
+      - name: Check the portal backend's registration
+        run: |
+          root=$(mktemp -d)
+          dpkg-deb --extract target/debian/xdg-desktop-portal-unbound_*.deb "$root"
+          portal="$root/usr/share/xdg-desktop-portal/portals/unbound.portal"
+          service="$root/usr/share/dbus-1/services/org.freedesktop.impl.portal.desktop.unbound.service"
+          grep -qx 'DBusName=org.freedesktop.impl.portal.desktop.unbound' "$portal"
+          grep -qx 'Name=org.freedesktop.impl.portal.desktop.unbound' "$service"
+          test -x "$root$(sed -n 's/^Exec=//p' "$service")"
+          grep -q '^org.freedesktop.impl.portal.Settings=unbound;' \
+            "$root/usr/share/xdg-desktop-portal/unbound-portals.conf"
+      - name: Smoke-test the packaged settings service
+        run: |
+          root=$(mktemp -d)
+          dpkg-deb --extract target/debian/unbound-config_*.deb "$root"
+          export XDG_CONFIG_HOME=$(mktemp -d)
+          mkdir -p "$XDG_CONFIG_HOME/unbound"
+          echo 'panel { edge "top"; }' > "$XDG_CONFIG_HOME/unbound/config.kdl"
+          dbus-run-session -- bash -c '
+            "$1/usr/bin/unbound-config" &
+            daemon=$!
+            for attempt in $(seq 50); do
+              reply=$(dbus-send --session --print-reply --dest=org.unbound.Config /org/unbound/Config \
+                org.freedesktop.DBus.Properties.Get string:org.unbound.Config string:PanelEdge 2>/dev/null) \
+                && break
+              sleep 0.1
+            done
+            kill "$daemon"
+            echo "$reply"
+            grep -q "string \"top\"" <<< "$reply"
+          ' bash "$root"
       - name: Smoke-test the packaged compositor
         run: |
           root=$(mktemp -d)
@@ -132,6 +192,47 @@ jobs:
           name: screendumps
           path: screendumps/*.png
           if-no-files-found: ignore
+
+  polkit:
+    name: ci/polkit
+    runs-on: [self-hosted, unbound]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install
+      - name: Build the polkitd test
+        run: |
+          cargo test --package unbound-polkit --test polkitd --locked --no-run --message-format=json \
+            | jq -r 'select(.reason == "compiler-artifact" and .target.name == "polkitd") | .executable // empty' \
+            > polkitd-test-path
+          test -s polkitd-test-path
+      - name: Authenticate through the agent against polkitd on Debian 13
+        run: |
+          image=unbound-polkit-test:${{ github.sha }}
+          docker build --quiet --tag "$image" crates/unbound-polkit/tests/polkitd
+          container=$(docker create "$image")
+          trap 'docker rm --force "$container" >/dev/null; docker rmi "$image" >/dev/null' EXIT
+          docker cp "$(cat polkitd-test-path)" "$container:/polkitd-test"
+          docker start --attach "$container"
+
+  portal:
+    name: ci/portal
+    needs: [deb]
+    runs-on: [self-hosted, unbound]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          name: unbound-debs
+          path: portal-test
+      - name: Read the colour scheme through xdg-desktop-portal on Debian 13
+        run: |
+          cp crates/xdg-desktop-portal-unbound/tests/frontend/* portal-test/
+          image=unbound-portal-test:${{ github.sha }}
+          docker build --quiet --tag "$image" portal-test
+          trap 'docker rmi --force "$image" >/dev/null' EXIT
+          docker run --rm "$image"
 
   perf:
     name: ci/perf

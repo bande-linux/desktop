@@ -132,15 +132,15 @@ fn server_information_reports_spec_version_1_2() {
 }
 
 #[test]
-fn capabilities_include_actions_and_body() {
+fn capabilities_include_actions_body_and_persistence() {
     let fixture = start();
     let capabilities = fixture.client.get_capabilities().expect("GetCapabilities");
-    assert!(
-        capabilities
-            .iter()
-            .any(|capability| capability == "actions")
-    );
-    assert!(capabilities.iter().any(|capability| capability == "body"));
+    for expected in ["actions", "body", "persistence"] {
+        assert!(
+            capabilities.iter().any(|capability| capability == expected),
+            "{expected} missing from {capabilities:?}"
+        );
+    }
 }
 
 #[test]

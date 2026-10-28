@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=org.unbound.Config
+Exec=/usr/bin/unbound-config
+SystemdService=unbound-config.service

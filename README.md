@@ -69,9 +69,14 @@ sudo reboot
   * [`crates/unbound-compositor`](crates/unbound-compositor): a headless Smithay compositor (`wl_compositor`, `wl_shm`, `linux-dmabuf-v1`, `xdg_wm_base`, `wl_output`, `wp_presentation`, clipboard, primary selection and `ext-data-control-v1`) that renders with `unbound-render`, packaged as `unbound-compositor` for arm64. DRM/KMS output is not implemented yet.
   * [`crates/unbound-render`](crates/unbound-render): the compositor's Vulkan renderer on `ash`, with persistent textures, damage-limited uploads and repaints, and occlusion of what opaque windows hide.
   * [`crates/unbound-toolkit`](crates/unbound-toolkit): semantic colour and spacing tokens, and offscreen fills and text on `wgpu`.
-  * [`crates/unbound-config`](crates/unbound-config): parsing, validation and atomic application of `config.kdl`, watched on disk and published as `org.unbound.Config` on D-Bus.
+  * [`crates/unbound-config`](crates/unbound-config): parsing, validation and atomic application of `config.kdl`, watched on disk and published as `org.unbound.Config` on D-Bus by the `unbound-config` session daemon, which also writes settings back to the file and reports an invalid file as a notification.
   * [`crates/unbound-spring`](crates/unbound-spring): the damped spring model for animations.
   * [`crates/unbound-notify`](crates/unbound-notify): an `org.freedesktop.Notifications` daemon (specification 1.2), started by D-Bus activation; no UI yet.
+  * [`crates/unbound-power`](crates/unbound-power): a session service that locks before sleep through logind, posts battery alerts from UPower and serves `org.freedesktop.ScreenSaver` idle inhibition; also the idle state machine.
+  * [`crates/unbound-polkit`](crates/unbound-polkit): the polkit authentication agent protocol, tested against polkitd; its dialog awaits the toolkit.
+  * [`crates/xdg-desktop-portal-unbound`](crates/xdg-desktop-portal-unbound): the xdg-desktop-portal backend; `Settings` is live, `FileChooser`, `Screenshot` and `ScreenCast` wait for their UI and capture implementations.
+  * [`crates/unbound-tray`](crates/unbound-tray): the `org.kde.StatusNotifierWatcher` registry for tray icons.
+  * [`crates/unbound-automount`](crates/unbound-automount): mounts removable drives through UDisks2 and warns about drives pulled without ejecting.
   * [`crates/unbound-clipboard`](crates/unbound-clipboard): a clipboard daemon that keeps the clipboard and primary selection after the copying client quits; the compositor starts it and offers it `ext-data-control-v1` on that connection only.
   * [`crates/unbound-bench`](crates/unbound-bench): frame time, start time and memory measurements that `ci/perf` runs on every push.
   * [`crates/unbound-test-bus`](crates/unbound-test-bus): private session buses for D-Bus tests.

@@ -88,6 +88,7 @@ To avoid 8–12 months of low-level DRM/KMS resource-lifetime debugging and kern
 - **Kernel/Protocol Abstraction**: **`smithay`** handles low-level DRM/KMS atomic modesetting, libinput device management, multi-GPU dmabuf import/export, and standard Wayland protocol dispatching.
 - **Custom Scene Graph & Vulkan Pipeline**: 100% custom **`wgpu` / Vulkan** renderer. Implements dual-pass Kawase blur shaders, subpixel font rendering, dynamic rounded-corner clipping, and damage-region tracking.
 - **Physics Layout Engine**: Custom spring dynamics simulation ($\ddot{x} + 2\zeta\omega\dot{x} + \omega^2\Delta x = 0$) powering fluid window snapping, minimize-to-panel curves, and workspace sliding.
+  - Implemented in `crates/unbound-spring` as the closed-form solution for under-, critically and overdamped springs, parameterised by angular frequency $\omega$ and damping ratio $\zeta$. A trajectory depends only on elapsed time, never on frame rate, and retargeting keeps position and velocity continuous.
 - **NVIDIA Explicit Sync (`linux-drm-syncobj-v1`)**: Mandatory P0 protocol implementation ensuring zero frame corruption and tearing on NVIDIA 560+ proprietary drivers.
 
 ### 1.2 XWayland Compatibility via `xwayland-satellite`
@@ -145,6 +146,7 @@ To prevent visual fragmentation, inconsistent shortcut handling, and toolkit dri
 - **Semantic Color Tokens**: Built on dynamic roles (`surfaceBackground`, `surfaceElevated`, `labelPrimary`, `labelMuted`, `accentColor`, `separatorColor`) with live D-Bus dark/light mode switching.
 - **Built-in Accessibility**: Every primitive widget directly produces and maintains an **`AccessKit`** accessibility tree node, making AT-SPI2 screen-reader integration native to the toolkit rather than an afterthought.
 - **Standard Controls**: Reusable spring-physics scroll views, text fields, sliders, toggle switches, and tab views with identical keyboard and gesture ergonomics.
+- **Implemented so far (`crates/unbound-toolkit`)**: the six colour roles for light and dark schemes, each label meeting WCAG AA contrast (4.5:1) and the accent 3:1 on both surfaces; a spacing scale of 2, 4, 8, 12, 16, 24 and 32 px; and an offscreen wgpu renderer for solid fills and text. Text is laid out with `ab_glyph` (advance plus kerning, glyph origins snapped to whole pixels) and drawn from an 8-bit coverage atlas. The toolkit also owns the Vulkan device setup and frame readback that the compositor reuses.
 
 ---
 
@@ -589,7 +591,7 @@ All CI runs on the organization's self-hosted runners: Docker containers on an A
 ### 8.1.1 CI Workflow (`.github/workflows/ci.yml`)
 Runs on every push to any branch and on pull requests. Job names are the status-check contexts:
 - `ci/lint`: `cargo fmt --check` and `cargo clippy --workspace --all-targets -- -D warnings`.
-- `ci/lavapipe-test`: `cargo test --workspace`, including the offscreen render test on lavapipe.
+- `ci/lavapipe-test`: `cargo test --workspace`, including the compositor and toolkit render tests on lavapipe. The toolkit's text test uses DejaVu Sans from `fonts-dejavu-core`; its expected image is built in the test from the scene with `ab_glyph`, so it does not depend on the font version.
 - `ci/deb`: `cargo deb`, then checks the package architecture, starts the packaged binary as a smoke test, and uploads the `.deb` as an artifact.
 
 The Rust toolchain is pinned in `rust-toolchain.toml`, dependencies are pinned to exact versions, and `Cargo.lock` is committed. Until `ci-builder` exists, jobs install system packages with `apt-get` on the runner image (Ubuntu 24.04), so `.deb` files are built against Ubuntu's glibc rather than Debian 13's.

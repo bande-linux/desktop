@@ -66,7 +66,11 @@ sudo reboot
 ## 🛠️ Development & Documentation
 
 * **[Master Architecture Plan](docs/ARCHITECTURE.md)**: Exhaustive technical design document covering the compositor, desktop session infrastructure, 30-protocol Wayland matrix, D-Bus interfaces, and 8-phase roadmap.
-* **Workspace**: this repository is the Cargo workspace root. It currently holds one crate, [`crates/unbound-compositor`](crates/unbound-compositor): a headless Smithay compositor (`wl_compositor`, `wl_shm`, `xdg_wm_base`) that renders through `wgpu` on Vulkan, packaged as `unbound-compositor` for arm64. DRM/KMS output is not implemented yet.
+* **Workspace**: this repository is the Cargo workspace root. Its crates:
+  * [`crates/unbound-compositor`](crates/unbound-compositor): a headless Smithay compositor (`wl_compositor`, `wl_shm`, `xdg_wm_base`) that renders through `wgpu` on Vulkan, packaged as `unbound-compositor` for arm64. DRM/KMS output is not implemented yet.
+  * [`crates/unbound-toolkit`](crates/unbound-toolkit): semantic colour and spacing tokens, and offscreen fills and text on `wgpu`.
+  * [`crates/unbound-config`](crates/unbound-config): parsing, validation and atomic application of `config.kdl`.
+  * [`crates/unbound-spring`](crates/unbound-spring): the damped spring model for animations.
 
 ---
 

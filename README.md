@@ -71,7 +71,7 @@ sudo reboot
   * [`crates/unbound-config`](crates/unbound-config): parsing, validation and atomic application of `config.kdl`, watched on disk and published as `org.unbound.Config` on D-Bus.
   * [`crates/unbound-spring`](crates/unbound-spring): the damped spring model for animations.
   * [`crates/unbound-notify`](crates/unbound-notify): an `org.freedesktop.Notifications` daemon (specification 1.2), started by D-Bus activation; no UI yet.
-  * [`crates/unbound-clipboard`](crates/unbound-clipboard): a clipboard daemon that keeps the clipboard and primary selection after the copying client quits, packaged as a systemd user service.
+  * [`crates/unbound-clipboard`](crates/unbound-clipboard): a clipboard daemon that keeps the clipboard and primary selection after the copying client quits; the compositor starts it and offers it `ext-data-control-v1` on that connection only.
   * [`crates/unbound-test-bus`](crates/unbound-test-bus): private session buses for D-Bus tests.
   * [`crates/unbound-test-wayland`](crates/unbound-test-wayland): Wayland test clients for the compositor and clipboard tests.
 

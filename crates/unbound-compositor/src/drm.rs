@@ -280,7 +280,7 @@ impl FrameOutput for DrmOutput {
             &mut self.renderer,
             &elements,
             background(),
-            FrameFlags::DEFAULT,
+            FrameFlags::DEFAULT | FrameFlags::ALLOW_PRIMARY_PLANE_SCANOUT_ANY,
         )?;
         self.scanned_out = matches!(frame.primary_element, PrimaryPlaneElement::Element(_));
         if frame.is_empty {

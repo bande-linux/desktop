@@ -39,13 +39,6 @@ impl Rect {
             (self.height - 2.0 * amount).max(0.0),
         )
     }
-
-    pub fn contains(self, point: Point) -> bool {
-        point.x >= self.x
-            && point.y >= self.y
-            && point.x < self.x + self.width
-            && point.y < self.y + self.height
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]

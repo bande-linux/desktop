@@ -76,10 +76,6 @@ impl TextSystem {
         }
     }
 
-    pub fn has_family(&mut self, name: &str) -> bool {
-        self.fonts.collection.family_by_name(name).is_some()
-    }
-
     pub fn paragraph(
         &mut self,
         text: &str,
@@ -169,13 +165,6 @@ impl Paragraph {
 
     pub fn height(&self) -> f32 {
         self.layout.height()
-    }
-
-    pub fn first_baseline(&self) -> f32 {
-        self.layout
-            .lines()
-            .next()
-            .map_or(0.0, |line| line.metrics().baseline)
     }
 
     pub fn line_count(&self) -> usize {

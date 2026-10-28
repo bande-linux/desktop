@@ -2257,6 +2257,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "scoped-tls"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e1cf6437eb19a8f4a6cc0f7dca544973b0b78843adbfeb3683d1a94a0024a294"
+
+[[package]]
 name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2652,7 +2658,9 @@ dependencies = [
  "smithay",
  "tempfile",
  "unbound-compositor",
+ "unbound-sample",
  "unbound-test-wayland",
+ "unbound-toolkit",
  "wayland-client",
 ]
 
@@ -2713,6 +2721,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "unbound-sample"
+version = "0.1.0"
+dependencies = [
+ "unbound-toolkit",
+]
+
+[[package]]
 name = "unbound-spring"
 version = "0.1.0"
 
@@ -2743,9 +2758,16 @@ dependencies = [
  "image",
  "parley",
  "pollster",
+ "raw-window-handle",
+ "rustix 1.1.6",
  "skrifa",
+ "smithay",
+ "unbound-compositor",
  "vello_cpu",
  "vello_gpu",
+ "wayland-backend",
+ "wayland-client",
+ "wayland-protocols",
  "wgpu",
 ]
 
@@ -2951,6 +2973,7 @@ dependencies = [
  "downcast-rs",
  "log",
  "rustix 1.1.6",
+ "scoped-tls",
  "smallvec",
  "wayland-sys",
 ]
@@ -3036,6 +3059,9 @@ version = "0.31.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8eab23fefc9e41f8e841df4a9c707e8a8c4ed26e944ef69297184de2785e3be"
 dependencies = [
+ "dlib",
+ "log",
+ "once_cell",
  "pkg-config",
 ]
 

@@ -52,10 +52,19 @@ hardware. Things noticed in passing go to the end of this file, not into a diff.
   Scheduling tests run on a virtual clock. On the runners' real clock: commit-to-present
   p50 11.4 ms / p99 16.3 ms, 4 of 120 frames after their promised vblank, reported
   only (see `docs/RENDERING.md`).
-- [ ] **M9 KVM test rig (`ci/vm`)**
+- [x] **M9 KVM test rig (`ci/vm`)** (`desktop/milestone-9`)
   Guest kernel built with `CONFIG_DRM_VKMS` and virtio-gpu, Debian 13 arm64 root image,
   QEMU with `-machine virt,its=off`; the job boots the guest and runs test binaries in
   it. *Done when* `ci/vm` boots and a guest test opens `/dev/dri/card0`.
+  `ci/vm/kernel.sh` builds Linux 6.12.114 (Debian 13's series) from arm64 defconfig without
+  modules or SoC platforms plus `kernel.config` (vkms, virtio-gpu, 9p, udmabuf, sw_sync,
+  uinput); `rootfs.sh` exports a `debian:13-slim` image through the runners' Docker engine
+  into an ext4 image. Both are cached with `actions/cache` keyed on their recipes (kernel
+  build about 6 min, cached boot about 1 s). The guest runs `cargo test` executables of
+  every `guest` test target over 9p with `--ignored`; tests check card0, vkms's CRTC,
+  virtual and writeback connectors and primary, cursor and overlay planes, and virtio-gpu.
+  `ci/perf` now gates only exact counts and idle RSS; wall-clock budgets are reported with
+  the host load, since the shared host moved unchanged code's p50 tenfold.
 - [ ] **M10 DRM/KMS backend**
   libseat session, atomic modesetting through Smithay's `DrmCompositor`,
   `unbound-render` implementing Smithay's renderer traits, direct scanout and overlay

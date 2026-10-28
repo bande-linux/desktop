@@ -70,7 +70,8 @@ jobs:
           echo "$root/bin" >> "$GITHUB_PATH"
       - run: |
           for package in unbound-compositor unbound-notify unbound-clipboard unbound-config unbound-power \
-              xdg-desktop-portal-unbound unbound-tray unbound-automount; do
+              xdg-desktop-portal-unbound unbound-tray unbound-automount \
+              unbound-panel unbound-launcher unbound-term; do
             cargo deb --package "$package" --locked
           done
       - name: Inspect the packages
@@ -94,7 +95,18 @@ jobs:
           deb=$(ls target/debian/unbound-clipboard_*.deb)
           dpkg-deb --contents "$deb" | grep -q ' ./usr/bin/unbound-clipboard$'
           dpkg-deb --field target/debian/unbound-compositor_*.deb Recommends \
-            | grep -qx 'unbound-clipboard'
+            | grep -qw 'unbound-clipboard'
+      - name: Check the shell's packages
+        run: |
+          for package in unbound-panel unbound-launcher unbound-term; do
+            dpkg-deb --field target/debian/unbound-compositor_*.deb Recommends | grep -q "$package"
+            dpkg-deb --contents target/debian/"$package"_*.deb | grep -q " ./usr/bin/$package\$"
+          done
+          root=$(mktemp -d)
+          dpkg-deb --extract target/debian/unbound-term_*.deb "$root"
+          grep -qx 'Exec=unbound-term' "$root/usr/share/applications/unbound-term.desktop"
+          grep -qx 'Icon=unbound-term' "$root/usr/share/applications/unbound-term.desktop"
+          test -s "$root/usr/share/icons/hicolor/scalable/apps/unbound-term.svg"
       - name: Check the session services' user units and D-Bus activation
         run: |
           for entry in unbound-config:org.unbound.Config:org.unbound.Config \

@@ -23,7 +23,7 @@ wayland-protocols.workspace = true
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "x11"
 depends = "$auto, libvulkan1, mesa-vulkan-drivers | vulkan-icd"
-recommends = "unbound-clipboard"
+recommends = "unbound-clipboard, unbound-panel, unbound-launcher, unbound-term"
 extended-description = """\
 Headless Wayland compositor built on Smithay. It serves wl_compositor, \
 wl_shm, linux-dmabuf-v1 and xdg_wm_base clients and renders their windows offscreen \

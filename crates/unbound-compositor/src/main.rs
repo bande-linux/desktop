@@ -195,6 +195,14 @@ where
             .poll(now, compositor, output)
             .map_err(Into::into)?;
         let frame_wait = frame.wake_at.map(|at| at.saturating_sub(now()));
-        timeout = upkeep.retry_in.into_iter().chain(frame_wait).min();
+        let idle_wait = compositor
+            .idle_tick(now())
+            .map(|at| at.saturating_sub(now()));
+        timeout = upkeep
+            .retry_in
+            .into_iter()
+            .chain(frame_wait)
+            .chain(idle_wait)
+            .min();
     }
 }

@@ -2,6 +2,7 @@ mod clock;
 mod cursor;
 mod drm;
 mod grab;
+mod idle;
 mod input;
 mod lock;
 mod logind;

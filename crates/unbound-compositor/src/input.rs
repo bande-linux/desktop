@@ -112,6 +112,7 @@ impl State {
 
 impl Headless {
     pub fn handle_input<B: InputBackend>(&mut self, event: InputEvent<B>) -> io::Result<()> {
+        self.state.note_activity();
         match event {
             InputEvent::DeviceAdded { .. } => self.state.input_devices += 1,
             InputEvent::DeviceRemoved { .. } => {
@@ -155,6 +156,7 @@ impl Headless {
     }
 
     pub fn scroll(&mut self, frame: AxisFrame) {
+        self.state.note_activity();
         let state = &mut self.state;
         let Some(pointer) = state.seat.get_pointer() else {
             return;
@@ -172,6 +174,7 @@ impl Headless {
     }
 
     pub fn move_pointer_to(&mut self, location: Point<f64, Logical>, time: u32) {
+        self.state.note_activity();
         let size = self.output_size();
         let location: Point<f64, Logical> = (
             location.x.clamp(0.0, f64::from(size.w - 1)),
@@ -199,6 +202,7 @@ impl Headless {
     }
 
     pub fn press_button(&mut self, button: u32, pressed: bool, time: u32) {
+        self.state.note_activity();
         let state = &mut self.state;
         if !pressed && state.swallowed_button == Some(button) {
             state.swallowed_button = None;
@@ -241,6 +245,7 @@ impl Headless {
     }
 
     pub fn key(&mut self, evdev_code: u32, pressed: bool, time: u32) {
+        self.state.note_activity();
         let state = &mut self.state;
         let Some(keyboard) = state.seat.get_keyboard() else {
             return;

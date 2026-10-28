@@ -137,6 +137,8 @@ pub struct State {
     pub(crate) windows: Vec<Window>,
     pub(crate) popups: PopupManager,
     pub(crate) lock_screen_requested: bool,
+    pub(crate) idle: crate::idle::Idle,
+    _idle_inhibit_state: smithay::wayland::idle_inhibit::IdleInhibitManagerState,
     pub(crate) lock_states: Option<std::sync::mpsc::Sender<bool>>,
     pub(crate) lock: Option<Lock>,
     pub(crate) session_lock_state: SessionLockManagerState,
@@ -182,6 +184,7 @@ impl Headless {
         seat.add_keyboard(XkbConfig::default(), 600, 25)
             .map_err(io::Error::other)?;
         seat.add_pointer();
+        crate::idle::create_global(&handle);
         let primary_selection_state = PrimarySelectionState::new::<State>(&handle);
         let data_control_state =
             DataControlState::new::<State, _>(&handle, Some(&primary_selection_state), |client| {
@@ -258,6 +261,10 @@ impl Headless {
             windows: Vec::new(),
             popups: PopupManager::default(),
             lock_screen_requested: false,
+            idle: crate::idle::Idle::default(),
+            _idle_inhibit_state: smithay::wayland::idle_inhibit::IdleInhibitManagerState::new::<
+                State,
+            >(&handle),
             lock_states: None,
             lock: None,
             session_lock_state: SessionLockManagerState::new::<State, _>(&handle, shell::is_shell),

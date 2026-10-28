@@ -16,7 +16,9 @@ use smithay::backend::renderer::utils::{on_commit_buffer_handler, with_renderer_
 use smithay::backend::renderer::element::memory::{
     MemoryRenderBuffer, MemoryRenderBufferRenderElement,
 };
-use smithay::desktop::{LayerSurface as MappedLayer, WindowSurfaceType, layer_map_for_output};
+use smithay::desktop::{
+    LayerSurface as MappedLayer, PopupGrab, PopupManager, WindowSurfaceType, layer_map_for_output,
+};
 use smithay::input::keyboard::XkbConfig;
 use smithay::input::pointer::{CursorImageAttributes, CursorImageStatus};
 use smithay::render_elements;
@@ -35,7 +37,8 @@ use smithay::reexports::wayland_server::{Client, Display, DisplayHandle, Resourc
 use smithay::utils::{Logical, Physical, Point, SERIAL_COUNTER, Serial, Size};
 use smithay::wayland::buffer::BufferHandler;
 use smithay::wayland::compositor::{
-    CompositorClientState, CompositorHandler, CompositorState, SurfaceAttributes, with_states,
+    CompositorClientState, CompositorHandler, CompositorState, SurfaceAttributes,
+    TraversalAction, with_states, with_surface_tree_downward,
 };
 use smithay::wayland::dmabuf::{
     DmabufFeedback, DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier, get_dmabuf,
@@ -57,9 +60,9 @@ use smithay::wayland::selection::primary_selection::{
     PrimarySelectionHandler, PrimarySelectionState, set_primary_focus,
 };
 use smithay::wayland::shell::xdg::{
-    PopupSurface, PositionerState, ToplevelSurface, XdgShellHandler, XdgShellState,
+    Configure, PopupSurface, PositionerState, ToplevelSurface, XdgShellHandler, XdgShellState,
 };
-use smithay::wayland::foreign_toplevel_list::{ForeignToplevelHandle, ForeignToplevelListState};
+use smithay::wayland::foreign_toplevel_list::ForeignToplevelListState;
 use smithay::wayland::shell::wlr_layer::{
     KeyboardInteractivity, Layer, LayerSurface, LayerSurfaceData, WlrLayerShellHandler, WlrLayerShellState,
 };
@@ -81,6 +84,7 @@ use crate::clock::Vblank;
 use crate::cursor;
 use crate::session::{SessionClient, SessionRole};
 use crate::shell;
+use crate::window::Window;
 
 pub const REFRESH: Duration = Duration::from_nanos(1_000_000_000 / 120);
 
@@ -97,31 +101,14 @@ pub struct OutputConfig {
     pub scanout: Option<ScanoutDevice>,
 }
 
-pub struct Window {
-    pub(crate) toplevel: ToplevelSurface,
-    pub(crate) location: Point<i32, Physical>,
-    pub(crate) size: Option<Size<i32, Physical>>,
-    pub(crate) foreign: Option<ForeignToplevelHandle>,
-}
-
 pub(crate) struct ExclusiveLayer {
     pub(crate) surface: WlSurface,
     pub(crate) previous: Option<WlSurface>,
 }
 
-impl Window {
-    pub fn location(&self) -> Point<i32, Physical> {
-        self.location
-    }
-
-    pub fn size(&self) -> Option<Size<i32, Physical>> {
-        self.size
-    }
-}
-
 pub struct State {
     display_handle: DisplayHandle,
-    output_size: Size<i32, Physical>,
+    pub(crate) output_size: Size<i32, Physical>,
     refresh: Duration,
     scanout_node: Option<DrmNode>,
     compositor_state: CompositorState,
@@ -146,6 +133,10 @@ pub struct State {
     primary_selection_state: PrimarySelectionState,
     data_control_state: DataControlState,
     pub(crate) windows: Vec<Window>,
+    pub(crate) popups: PopupManager,
+    pub(crate) popup_grab: Option<PopupGrab<State>>,
+    pub(crate) swallowed_button: Option<u32>,
+    pub(crate) minimize_sequence: u64,
     pub(crate) needs_redraw: bool,
     pub(crate) pointer_location: Point<f64, Logical>,
     pub(crate) cursor_shown: bool,
@@ -227,7 +218,14 @@ impl Headless {
             refresh: config.refresh,
             scanout_node: config.scanout.as_ref().map(|scanout| scanout.node),
             compositor_state: CompositorState::new::<State>(&handle),
-            xdg_shell_state: XdgShellState::new::<State>(&handle),
+            xdg_shell_state: XdgShellState::new_with_capabilities::<State>(
+                &handle,
+                [
+                    xdg_toplevel::WmCapabilities::Maximize,
+                    xdg_toplevel::WmCapabilities::Fullscreen,
+                    xdg_toplevel::WmCapabilities::Minimize,
+                ],
+            ),
             shm_state: ShmState::new::<State>(&handle, []),
             dmabuf_state,
             _dmabuf_global: dmabuf_global,
@@ -251,6 +249,10 @@ impl Headless {
             primary_selection_state,
             data_control_state,
             windows: Vec::new(),
+            popups: PopupManager::default(),
+            popup_grab: None,
+            swallowed_button: None,
+            minimize_sequence: 0,
             needs_redraw: false,
             pointer_location: (
                 f64::from(output_size.w) / 2.0,
@@ -285,6 +287,7 @@ impl Headless {
 
     pub fn dispatch(&mut self) -> io::Result<()> {
         self.display.dispatch_clients(&mut self.state)?;
+        self.state.popups.cleanup();
         self.display.flush_clients()
     }
 
@@ -297,32 +300,42 @@ impl Headless {
     }
 
     pub fn latch(&mut self) {
-        let layers = layer_map_for_output(&self.state.output)
-            .layers()
-            .map(|layer| layer.wl_surface().clone())
-            .collect::<Vec<_>>();
-        let windows = self
+        let unmapped = self
             .state
             .windows
             .iter()
-            .map(|window| window.toplevel.wl_surface().clone());
-        for surface in windows.chain(layers) {
-            with_states(&surface, |states| {
-                self.latched_feedback.append(
-                    &mut states
-                        .cached_state
-                        .get::<PresentationFeedbackCachedState>()
-                        .current()
-                        .callbacks,
-                );
-                self.latched_frame_callbacks.append(
-                    &mut states
-                        .cached_state
-                        .get::<SurfaceAttributes>()
-                        .current()
-                        .frame_callbacks,
-                );
-            });
+            .filter(|window| window.size.is_none())
+            .map(|window| window.surface().clone());
+        let roots = self
+            .state
+            .stack()
+            .into_iter()
+            .map(|(surface, _)| surface)
+            .chain(unmapped)
+            .collect::<Vec<_>>();
+        for root in roots {
+            with_surface_tree_downward(
+                &root,
+                (),
+                |_, _, _| TraversalAction::DoChildren(()),
+                |_, states, _| {
+                    self.latched_feedback.append(
+                        &mut states
+                            .cached_state
+                            .get::<PresentationFeedbackCachedState>()
+                            .current()
+                            .callbacks,
+                    );
+                    self.latched_frame_callbacks.append(
+                        &mut states
+                            .cached_state
+                            .get::<SurfaceAttributes>()
+                            .current()
+                            .frame_callbacks,
+                    );
+                },
+                |_, _, _| true,
+            );
         }
     }
 
@@ -352,38 +365,31 @@ impl Headless {
     }
 
     pub fn render_elements(&self, renderer: &mut VulkanRenderer) -> Vec<OutputElement> {
-        let layers = |layer: Layer| self.state.placed_layers(layer);
-        let windows = self
-            .state
-            .windows
-            .iter()
-            .rev()
-            .filter(|window| window.size.is_some())
-            .map(|window| (window.toplevel.wl_surface().clone(), window.location))
-            .collect::<Vec<_>>();
         let mut elements: Vec<OutputElement> = self.cursor_elements(renderer);
         elements.extend(
-            [
-                layers(Layer::Overlay),
-                layers(Layer::Top),
-                windows,
-                layers(Layer::Bottom),
-                layers(Layer::Background),
-            ]
-            .into_iter()
-            .flatten()
-            .flat_map(|(surface, location)| {
-                render_elements_from_surface_tree(
-                    renderer,
-                    &surface,
-                    location,
-                    1.0,
-                    1.0,
-                    ElementKind::Unspecified,
-                )
-            }),
+            self.state
+                .stack()
+                .into_iter()
+                .flat_map(|(surface, location)| {
+                    render_elements_from_surface_tree(
+                        renderer,
+                        &surface,
+                        location,
+                        1.0,
+                        1.0,
+                        ElementKind::Unspecified,
+                    )
+                }),
         );
         elements
+    }
+
+    pub fn popup_count(&self) -> usize {
+        self.state
+            .stack()
+            .iter()
+            .filter(|(surface, _)| self.state.popups.find_popup(surface).is_some())
+            .count()
     }
 
     pub fn usable_area(&self) -> Rect {
@@ -451,6 +457,16 @@ const MONOTONIC: u32 = 1;
 
 const DMABUF_FOURCCS: [Fourcc; 2] = [Fourcc::Argb8888, Fourcc::Xrgb8888];
 
+pub(crate) fn mapped_size(surface: &WlSurface) -> Option<Size<i32, Physical>> {
+    with_renderer_surface_state(surface, |state| {
+        let buffer = state.buffer()?;
+        buffer_size(buffer)?;
+        let size = state.surface_size()?;
+        Some(Size::from((size.w, size.h)))
+    })
+    .flatten()
+}
+
 fn buffer_size(buffer: &WlBuffer) -> Option<Size<i32, Physical>> {
     match get_dmabuf(buffer) {
         Ok(dmabuf) => Some(Size::from((dmabuf.size().w, dmabuf.size().h))),
@@ -486,6 +502,7 @@ impl State {
                 self.windows.push(window);
                 self.needs_redraw = true;
             }
+            self.sync_activated();
             return;
         }
         if let Some(surface) = &surface
@@ -501,13 +518,14 @@ impl State {
         if let Some(keyboard) = self.seat.get_keyboard() {
             keyboard.set_focus(self, surface, SERIAL_COUNTER.next_serial());
         }
+        self.sync_activated();
     }
 
     fn frontmost(&self, owner: Option<&Client>) -> Option<WlSurface> {
         self.windows
             .iter()
             .rev()
-            .filter(|window| window.size.is_some())
+            .filter(|window| window.visible())
             .map(|window| window.toplevel.wl_surface())
             .find(|surface| {
                 surface
@@ -517,7 +535,7 @@ impl State {
             .cloned()
     }
 
-    fn refocus_after_losing(&mut self, lost: &WlSurface) {
+    pub(crate) fn refocus_after_losing(&mut self, lost: &WlSurface) {
         if self.focused().as_ref() != Some(lost) {
             return;
         }
@@ -563,7 +581,7 @@ pub struct Rect {
     pub size: Size<i32, Physical>,
 }
 
-fn centered(area: Rect, window: Size<i32, Physical>) -> Point<i32, Physical> {
+pub(crate) fn centered(area: Rect, window: Size<i32, Physical>) -> Point<i32, Physical> {
     (
         area.location.x + (area.size.w - window.w) / 2,
         area.location.y + (area.size.h - window.h) / 2,
@@ -572,7 +590,7 @@ fn centered(area: Rect, window: Size<i32, Physical>) -> Point<i32, Physical> {
 }
 
 impl State {
-    fn usable_area(&self) -> Rect {
+    pub(crate) fn usable_area(&self) -> Rect {
         let zone = layer_map_for_output(&self.output).non_exclusive_zone();
         Rect {
             location: (zone.loc.x, zone.loc.y).into(),
@@ -592,6 +610,58 @@ impl State {
                 ))
             })
             .collect()
+    }
+
+    pub(crate) fn layer_origin(&self, surface: &WlSurface) -> Option<Point<i32, Physical>> {
+        let map = layer_map_for_output(&self.output);
+        let layer = map.layer_for_surface(surface, WindowSurfaceType::TOPLEVEL)?;
+        let geometry = map.layer_geometry(layer)?;
+        Some((geometry.loc.x, geometry.loc.y).into())
+    }
+
+    pub(crate) fn stack(&self) -> Vec<(WlSurface, Point<i32, Physical>)> {
+        let with_popups = |surface: WlSurface, origin, geometry_origin| {
+            let mut entries = self.popup_surfaces(&surface, geometry_origin);
+            entries.push((surface, origin));
+            entries
+        };
+        let layers = |layer: Layer| {
+            self.placed_layers(layer)
+                .into_iter()
+                .flat_map(|(surface, at)| with_popups(surface, at, at))
+                .collect::<Vec<_>>()
+        };
+        let visible = self
+            .windows
+            .iter()
+            .rev()
+            .filter(|window| window.visible())
+            .collect::<Vec<_>>();
+        let fullscreen_in_front = visible
+            .first()
+            .is_some_and(|window| window.has_state(xdg_toplevel::State::Fullscreen));
+        let (front, rest) = visible.split_at(usize::from(fullscreen_in_front));
+        let windows = |windows: &[&Window]| {
+            windows
+                .iter()
+                .flat_map(|window| {
+                    with_popups(
+                        window.surface().clone(),
+                        window.surface_origin(),
+                        window.location,
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        [
+            layers(Layer::Overlay),
+            windows(front),
+            layers(Layer::Top),
+            windows(rest),
+            layers(Layer::Bottom),
+            layers(Layer::Background),
+        ]
+        .concat()
     }
 
     fn commit_layer(&mut self, surface: &WlSurface) -> bool {
@@ -637,6 +707,7 @@ impl State {
                 surface: surface.clone(),
                 previous,
             });
+            self.sync_activated();
         } else if !exclusive && current {
             self.release_exclusive_layer();
         }
@@ -649,7 +720,7 @@ impl State {
         let previous = layer.previous.filter(|previous| {
             self.windows
                 .iter()
-                .any(|window| window.toplevel.wl_surface() == previous && window.size.is_some())
+                .any(|window| window.surface() == previous && window.visible())
         });
         let next = previous.or_else(|| self.frontmost(None));
         self.focus(next);
@@ -671,45 +742,30 @@ impl CompositorHandler for State {
     fn commit(&mut self, surface: &WlSurface) {
         on_commit_buffer_handler::<Self>(surface);
         self.needs_redraw = true;
-        if self.commit_layer(surface) {
+        if self.commit_popup(surface) || self.commit_layer(surface) {
             return;
         }
-        let area = self.usable_area();
-        let Some(window) = self
-            .windows
-            .iter_mut()
-            .find(|window| window.toplevel.wl_surface() == surface)
-        else {
-            return;
-        };
-        let size = with_renderer_surface_state(surface, |state| {
-            let buffer = state.buffer()?;
-            buffer_size(buffer)?;
-            let size = state.surface_size()?;
-            Some(Size::from((size.w, size.h)))
-        })
-        .flatten();
-        let mapped = window.size.is_some();
-        if !mapped && let Some(size) = size {
-            window.location = centered(area, size);
-        }
-        window.size = size;
-        let surface = window.toplevel.wl_surface().clone();
-        if size.is_some() {
-            self.publish_toplevel(&surface);
-        } else {
-            self.withdraw_toplevel(&surface);
-        }
-        match (mapped, size.is_some()) {
+        self.commit_window(surface);
+    }
+}
+
+impl State {
+    pub(crate) fn after_window_commit(
+        &mut self,
+        surface: &WlSurface,
+        was_mapped: bool,
+        mapped: bool,
+    ) {
+        match (was_mapped, mapped) {
             (false, true)
-                if self.pending_activation.as_ref() == Some(&surface)
-                    || self.takes_focus_when_mapped(&surface) =>
+                if self.pending_activation.as_ref() == Some(surface)
+                    || self.takes_focus_when_mapped(surface) =>
             {
                 self.pending_activation = None;
-                self.focus(Some(surface));
+                self.focus(Some(surface.clone()));
             }
-            (false, true) => self.place_behind_frontmost(&surface),
-            (true, false) => self.refocus_after_losing(&surface),
+            (false, true) => self.place_behind_frontmost(surface),
+            (true, false) => self.refocus_after_losing(surface),
             _ => {}
         }
     }
@@ -753,25 +809,12 @@ impl XdgShellHandler for State {
     }
 
     fn new_toplevel(&mut self, toplevel: ToplevelSurface) {
-        toplevel.with_pending_state(|state| {
-            state.states.set(xdg_toplevel::State::Activated);
-        });
-        toplevel.send_configure();
-        self.windows.push(Window {
-            toplevel,
-            location: Point::default(),
-            size: None,
-            foreign: None,
-        });
+        self.windows.push(Window::new(toplevel));
     }
 
     fn toplevel_destroyed(&mut self, toplevel: ToplevelSurface) {
         self.withdraw_toplevel(toplevel.wl_surface());
-        if let Some(index) = self
-            .windows
-            .iter()
-            .position(|window| window.toplevel == toplevel)
-        {
+        if let Some(index) = self.window_index(toplevel.wl_surface()) {
             self.windows.remove(index);
         }
         self.needs_redraw = true;
@@ -786,16 +829,67 @@ impl XdgShellHandler for State {
         self.publish_toplevel(toplevel.wl_surface());
     }
 
-    fn new_popup(&mut self, _surface: PopupSurface, _positioner: PositionerState) {}
+    fn ack_configure(&mut self, surface: WlSurface, configure: Configure) {
+        if let Configure::Toplevel(configure) = configure
+            && let Some(index) = self.window_index(&surface)
+        {
+            self.windows[index].acked = Some(configure.serial);
+        }
+    }
 
-    fn grab(&mut self, _surface: PopupSurface, _seat: WlSeat, _serial: Serial) {}
+    fn move_request(&mut self, surface: ToplevelSurface, seat: WlSeat, serial: Serial) {
+        self.request_move(surface.wl_surface(), &seat, serial);
+    }
+
+    fn resize_request(
+        &mut self,
+        surface: ToplevelSurface,
+        seat: WlSeat,
+        serial: Serial,
+        edges: xdg_toplevel::ResizeEdge,
+    ) {
+        self.request_resize(surface.wl_surface(), &seat, serial, edges);
+    }
+
+    fn maximize_request(&mut self, surface: ToplevelSurface) {
+        self.maximize(surface.wl_surface());
+    }
+
+    fn unmaximize_request(&mut self, surface: ToplevelSurface) {
+        self.unmaximize(surface.wl_surface());
+    }
+
+    fn fullscreen_request(&mut self, surface: ToplevelSurface, _output: Option<WlOutput>) {
+        self.fullscreen(surface.wl_surface());
+    }
+
+    fn unfullscreen_request(&mut self, surface: ToplevelSurface) {
+        self.unfullscreen(surface.wl_surface());
+    }
+
+    fn minimize_request(&mut self, surface: ToplevelSurface) {
+        self.minimize(surface.wl_surface());
+    }
+
+    fn new_popup(&mut self, surface: PopupSurface, positioner: PositionerState) {
+        State::new_popup(self, surface, positioner);
+    }
+
+    fn grab(&mut self, surface: PopupSurface, seat: WlSeat, serial: Serial) {
+        self.grab_popup(surface, &seat, serial);
+    }
 
     fn reposition_request(
         &mut self,
-        _surface: PopupSurface,
-        _positioner: PositionerState,
-        _token: u32,
+        surface: PopupSurface,
+        positioner: PositionerState,
+        token: u32,
     ) {
+        self.reposition_popup(surface, positioner, token);
+    }
+
+    fn popup_destroyed(&mut self, _surface: PopupSurface) {
+        self.needs_redraw = true;
     }
 }
 
@@ -933,10 +1027,11 @@ impl XdgActivationHandler for State {
         _token_data: XdgActivationTokenData,
         surface: WlSurface,
     ) {
+        self.unminimize(&surface);
         let mapped = self
             .windows
             .iter()
-            .any(|window| window.toplevel.wl_surface() == &surface && window.size.is_some());
+            .any(|window| window.surface() == &surface && window.visible());
         if mapped {
             self.focus(Some(surface));
         } else {

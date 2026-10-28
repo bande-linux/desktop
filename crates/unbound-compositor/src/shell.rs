@@ -61,8 +61,20 @@ impl State {
                 window.size.is_some() && toplevel_names(window.toplevel.wl_surface()).1 == app_id
             });
         self.windows = rest;
+        if chosen.iter().all(|window| window.is_minimized())
+            && let Some(latest) = chosen.iter_mut().max_by_key(|window| window.minimized)
+        {
+            latest.minimized = None;
+            let latest = chosen.iter().position(|window| !window.is_minimized());
+            if let Some(index) = latest {
+                let window = chosen.remove(index);
+                chosen.push(window);
+            }
+        }
         let frontmost = chosen
-            .last()
+            .iter()
+            .rev()
+            .find(|window| window.visible())
             .map(|window| window.toplevel.wl_surface().clone());
         self.windows.append(&mut chosen);
         if let Some(frontmost) = frontmost {

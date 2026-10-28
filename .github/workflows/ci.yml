@@ -66,7 +66,7 @@ jobs:
             || cargo install cargo-deb --version "$CARGO_DEB_VERSION" --locked --root "$root"
           echo "$root/bin" >> "$GITHUB_PATH"
       - run: |
-          for package in unbound-compositor unbound-notify; do
+          for package in unbound-compositor unbound-notify unbound-clipboard; do
             cargo deb --package "$package" --locked
           done
       - name: Inspect the packages
@@ -85,6 +85,18 @@ jobs:
           service="$root/usr/share/dbus-1/services/org.unbound.Notify.service"
           grep -qx 'Name=org.freedesktop.Notifications' "$service"
           test -x "$root$(sed -n 's/^Exec=//p' "$service")"
+      - name: Check the clipboard daemon's user service
+        run: |
+          deb=$(ls target/debian/unbound-clipboard_*.deb)
+          root=$(mktemp -d)
+          dpkg-deb --extract "$deb" "$root"
+          unit="$root/usr/lib/systemd/user/unbound-clipboard.service"
+          grep -qx 'WantedBy=graphical-session.target' "$unit"
+          test -x "$root$(sed -n 's/^ExecStart=//p' "$unit")"
+          control=$(mktemp -d)
+          dpkg-deb --control "$deb" "$control"
+          grep -q 'deb-systemd-helper --user enable unbound-clipboard.service' "$control/postinst"
+          grep -q 'deb-systemd-helper --user purge unbound-clipboard.service' "$control/postrm"
       - name: Smoke-test the packaged compositor
         run: |
           root=$(mktemp -d)

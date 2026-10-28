@@ -1,0 +1,10 @@
+#!/bin/sh
+set -e
+if [ "$1" = configure ]; then
+	if ! deb-systemd-helper --user debian-installed unbound-clipboard.service \
+		|| deb-systemd-helper --quiet --user was-enabled unbound-clipboard.service; then
+		deb-systemd-helper --user enable unbound-clipboard.service >/dev/null || true
+	else
+		deb-systemd-helper --user update-state unbound-clipboard.service >/dev/null || true
+	fi
+fi

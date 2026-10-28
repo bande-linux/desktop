@@ -129,9 +129,12 @@ hardware. Things noticed in passing go to the end of this file, not into a diff.
   `vello_cpu` first frame into `wl_shm`, `vello_gpu` afterwards, Parley text; goldens
   re-derived from scene descriptions; panel, launcher and terminal move over; a toolkit
   sample app whose start time and RSS `ci/perf` measures.
-  Track `desktop/track-toolkit`. Done: Vello CPU and GPU renderers for fills, strokes,
-  gradients, rounded rectangles, clips and shadows; Parley text in Inter with fallback;
-  goldens from exact coverage, both renderers within 2/255.
+  Track `desktop/track-toolkit` (merged with M12 for the compositor's damage handling).
+  Done: Vello CPU and GPU renderers for fills, strokes, gradients, rounded rectangles, clips
+  and shadows; Parley text in Inter with fallback; goldens from exact coverage, both
+  renderers within 2/255; `Window` with the first frame on the CPU in `wl_shm` and later
+  frames on a Vulkan surface; `unbound-sample` measured by `ci/perf`. Next: layout and
+  widgets, AccessKit, damage-limited redraw, fractional scale.
 - [ ] **M17 Session lock and idle** `ext-session-lock-v1` with blank fallback,
   `ext-idle-notify-v1`, `idle-inhibit`, driven by the `idle` config.
 - [ ] **M18 Watchdog** `wl_display` ping heartbeat, unresponsive marking after 3 s.

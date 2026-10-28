@@ -1,69 +1,216 @@
-use ab_glyph::{Font as _, FontVec, GlyphId, InvalidFont, PxScale, ScaleFont as _, point};
+use std::fmt;
+use std::sync::Arc;
 
-pub struct Font {
-    inner: FontVec,
+use parley::fontique::GenericFamily;
+use parley::{
+    Alignment, AlignmentOptions, FontContext, FontData, FontFamily, FontFamilyName, FontWeight,
+    Layout, LayoutContext, PositionedLayoutItem, StyleProperty,
+};
+
+use crate::tokens::Color;
+
+pub const FONT_FAMILY: &str = "Inter";
+pub const DISPLAY_FONT_FAMILY: &str = "Inter Display";
+pub const DISPLAY_SIZE: f32 = 20.0;
+
+static TEXT_FAMILIES: [FontFamilyName<'static>; 2] = [
+    FontFamilyName::named(FONT_FAMILY),
+    FontFamilyName::Generic(GenericFamily::SansSerif),
+];
+
+static DISPLAY_FAMILIES: [FontFamilyName<'static>; 3] = [
+    FontFamilyName::named(DISPLAY_FONT_FAMILY),
+    FontFamilyName::named(FONT_FAMILY),
+    FontFamilyName::Generic(GenericFamily::SansSerif),
+];
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TextStyle {
+    pub size: f32,
+    pub weight: f32,
+    pub color: Color,
+}
+
+impl TextStyle {
+    pub const REGULAR: f32 = 400.0;
+    pub const MEDIUM: f32 = 500.0;
+    pub const SEMIBOLD: f32 = 600.0;
+
+    pub const fn new(size: f32, color: Color) -> Self {
+        Self {
+            size,
+            weight: Self::REGULAR,
+            color,
+        }
+    }
+
+    pub const fn weight(self, weight: f32) -> Self {
+        Self { weight, ..self }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TextAlign {
+    #[default]
+    Start,
+    Center,
+    End,
+}
+
+pub struct TextSystem {
+    fonts: FontContext,
+    layouts: LayoutContext<Color>,
+}
+
+impl Default for TextSystem {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl TextSystem {
+    pub fn new() -> Self {
+        Self {
+            fonts: FontContext::new(),
+            layouts: LayoutContext::new(),
+        }
+    }
+
+    pub fn has_family(&mut self, name: &str) -> bool {
+        self.fonts.collection.family_by_name(name).is_some()
+    }
+
+    pub fn paragraph(
+        &mut self,
+        text: &str,
+        style: TextStyle,
+        max_width: Option<f32>,
+        align: TextAlign,
+    ) -> Paragraph {
+        let mut builder = self
+            .layouts
+            .ranged_builder(&mut self.fonts, text, 1.0, true);
+        let families = if style.size >= DISPLAY_SIZE {
+            DISPLAY_FAMILIES.as_slice()
+        } else {
+            TEXT_FAMILIES.as_slice()
+        };
+        builder.push_default(StyleProperty::FontFamily(FontFamily::List(families.into())));
+        builder.push_default(StyleProperty::FontSize(style.size));
+        builder.push_default(StyleProperty::FontWeight(FontWeight::new(style.weight)));
+        builder.push_default(StyleProperty::Brush(style.color));
+        let mut layout = builder.build(text);
+        layout.break_all_lines(max_width);
+        let alignment = match align {
+            TextAlign::Start => Alignment::Start,
+            TextAlign::Center => Alignment::Center,
+            TextAlign::End => Alignment::End,
+        };
+        layout.align(alignment, AlignmentOptions::default());
+        Paragraph {
+            layout: Arc::new(layout),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct Paragraph {
+    layout: Arc<Layout<Color>>,
+}
+
+impl fmt::Debug for Paragraph {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Paragraph")
+            .field("width", &self.width())
+            .field("height", &self.height())
+            .finish_non_exhaustive()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) struct PlacedGlyph {
-    pub id: GlyphId,
-    pub x: i32,
-    pub baseline: i32,
+pub struct PositionedGlyph {
+    pub id: u32,
+    pub x: f32,
+    pub y: f32,
 }
 
-pub(crate) struct Coverage {
-    pub left: i32,
-    pub top: i32,
-    pub width: u32,
-    pub height: u32,
-    pub alpha: Vec<u8>,
+#[derive(Clone)]
+pub struct GlyphRun {
+    pub(crate) font: FontData,
+    pub size: f32,
+    pub color: Color,
+    pub skew_degrees: Option<f32>,
+    pub(crate) coords: Vec<i16>,
+    pub glyphs: Vec<PositionedGlyph>,
 }
 
-impl Font {
-    pub fn from_bytes(bytes: Vec<u8>) -> Result<Self, InvalidFont> {
-        FontVec::try_from_vec(bytes).map(|inner| Self { inner })
+impl GlyphRun {
+    pub fn font_bytes(&self) -> &[u8] {
+        self.font.data.data()
     }
 
-    pub(crate) fn layout(&self, text: &str, size: f32, x: i32, baseline: i32) -> Vec<PlacedGlyph> {
-        let scaled = self.inner.as_scaled(PxScale::from(size));
-        let mut pen = x as f32;
-        let mut previous = None;
-        text.chars()
-            .map(|character| {
-                let id = scaled.glyph_id(character);
-                if let Some(previous) = previous {
-                    pen += scaled.kern(previous, id);
-                }
-                previous = Some(id);
-                let glyph = PlacedGlyph {
-                    id,
-                    x: pen.round() as i32,
-                    baseline,
+    pub fn font_index(&self) -> u32 {
+        self.font.index
+    }
+
+    pub(crate) fn font_blob_id(&self) -> u64 {
+        self.font.data.id()
+    }
+
+    pub fn variation_coords(&self) -> &[i16] {
+        &self.coords
+    }
+}
+
+impl Paragraph {
+    pub fn width(&self) -> f32 {
+        self.layout.width()
+    }
+
+    pub fn height(&self) -> f32 {
+        self.layout.height()
+    }
+
+    pub fn first_baseline(&self) -> f32 {
+        self.layout
+            .lines()
+            .next()
+            .map_or(0.0, |line| line.metrics().baseline)
+    }
+
+    pub fn line_count(&self) -> usize {
+        self.layout.len()
+    }
+
+    pub fn glyph_runs(&self) -> Vec<GlyphRun> {
+        let mut runs = Vec::new();
+        for line in self.layout.lines() {
+            for item in line.items() {
+                let PositionedLayoutItem::GlyphRun(glyph_run) = item else {
+                    continue;
                 };
-                pen += scaled.h_advance(id);
-                glyph
-            })
-            .collect()
-    }
-
-    pub(crate) fn coverage(&self, id: GlyphId, size: f32) -> Option<Coverage> {
-        let glyph = id.with_scale_and_position(PxScale::from(size), point(0.0, 0.0));
-        let outlined = self.inner.outline_glyph(glyph)?;
-        let bounds = outlined.px_bounds();
-        let width = bounds.width() as u32;
-        let height = bounds.height() as u32;
-        let mut alpha = vec![0u8; (width * height) as usize];
-        outlined.draw(|x, y, coverage| {
-            if let Some(texel) = alpha.get_mut((y * width + x) as usize) {
-                *texel = (coverage.clamp(0.0, 1.0) * 255.0).round() as u8;
+                let run = glyph_run.run();
+                runs.push(GlyphRun {
+                    font: run.font().clone(),
+                    size: run.font_size(),
+                    color: glyph_run.style().brush,
+                    skew_degrees: run.synthesis().skew(),
+                    coords: run
+                        .normalized_coords()
+                        .iter()
+                        .map(|coord| coord.to_bits())
+                        .collect(),
+                    glyphs: glyph_run
+                        .positioned_glyphs()
+                        .map(|glyph| PositionedGlyph {
+                            id: glyph.id,
+                            x: glyph.x,
+                            y: glyph.y,
+                        })
+                        .collect(),
+                });
             }
-        });
-        Some(Coverage {
-            left: bounds.min.x as i32,
-            top: bounds.min.y as i32,
-            width,
-            height,
-            alpha,
-        })
+        }
+        runs
     }
 }

@@ -1,177 +1,200 @@
-use std::path::Path;
+mod support;
 
-use ab_glyph::{Font as _, FontVec, PxScale, ScaleFont as _, point};
-use image::{RgbImage, buffer::ConvertBuffer};
-use image_compare::Algorithm;
 use unbound_toolkit::{
-    Color, Font, Gpu, Item, Palette, Rect, Renderer, Scene, Scheme, Snapshot, Spacing,
+    Color, CpuRenderer, GpuRenderer, Item, Paint, Palette, Point, Rect, Scene, Scheme, Shape,
+    Spacing, Stop, TextAlign, TextStyle, TextSystem,
 };
 
-const FONT_PATH: &str = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
-const MIN_SSIM: f64 = 0.995;
-const MAX_CHANNEL_DELTA: u8 = 2;
+use support::{Reference, assert_all_match, compare};
 
-fn settings_card(palette: &Palette) -> Scene {
-    let inset = Spacing::L as i32;
-    let content = inset + Spacing::L as i32;
+fn shapes(palette: &Palette) -> Scene {
     Scene {
-        width: 320,
-        height: 200,
+        width: 240,
+        height: 160,
         background: palette.surface_background,
         items: vec![
             Item::Fill {
-                rect: Rect {
-                    x: inset,
-                    y: inset,
-                    width: 320 - 2 * Spacing::L,
-                    height: 200 - 2 * Spacing::L,
-                },
-                color: palette.surface_elevated,
-            },
-            Item::Text {
-                x: content,
-                baseline: 52,
-                size: 20.0,
-                color: palette.label_primary,
-                text: "Unbound Settings".to_owned(),
+                shape: Shape::rect(Rect::new(8.0, 8.0, 64.0, 40.0)),
+                paint: palette.accent_color.into(),
             },
             Item::Fill {
-                rect: Rect {
-                    x: inset,
-                    y: 68,
-                    width: 320 - 2 * Spacing::L,
-                    height: 1,
-                },
-                color: palette.separator_color,
-            },
-            Item::Text {
-                x: content,
-                baseline: 100,
-                size: 14.0,
-                color: palette.label_muted,
-                text: "Displays, Sound & Network: AVA Wo".to_owned(),
+                shape: Shape::rect(Rect::new(80.25, 8.5, 63.5, 39.75)),
+                paint: palette.label_primary.into(),
             },
             Item::Fill {
-                rect: Rect {
-                    x: content,
-                    y: 128,
-                    width: 96,
-                    height: 32,
+                shape: Shape::rounded(Rect::new(152.0, 8.0, 80.0, 40.0), 10.0),
+                paint: palette.surface_elevated.into(),
+            },
+            Item::Stroke {
+                shape: Shape::rounded(Rect::new(152.5, 8.5, 79.0, 39.0), 9.5),
+                width: 1.0,
+                paint: palette.separator_color.into(),
+            },
+            Item::Fill {
+                shape: Shape::rounded(Rect::new(8.0, 64.0, 224.0, 32.0), 16.0),
+                paint: Paint::LinearGradient {
+                    start: Point::new(8.0, 0.0),
+                    end: Point::new(232.0, 0.0),
+                    stops: vec![
+                        Stop {
+                            offset: 0.0,
+                            color: palette.accent_color,
+                        },
+                        Stop {
+                            offset: 1.0,
+                            color: palette.surface_elevated,
+                        },
+                    ],
                 },
-                color: palette.accent_color,
+            },
+            Item::Fill {
+                shape: Shape::rounded(Rect::new(20.3, 108.7, 30.0, 30.0), 15.0),
+                paint: palette.label_muted.into(),
+            },
+            Item::Fill {
+                shape: Shape::rect(Rect::new(64.0, 112.0, 160.0, 1.0)),
+                paint: palette.separator_color.into(),
+            },
+            Item::Fill {
+                shape: Shape::rect(Rect::new(64.0, 120.0, 160.0, 24.0)),
+                paint: palette.accent_color.with_alpha(128).into(),
             },
         ],
     }
 }
 
-fn reference(scene: &Scene, font: &FontVec) -> RgbImage {
-    let rgb = |color: Color| image::Rgb([color.r, color.g, color.b]);
-    let mut image = RgbImage::from_pixel(scene.width, scene.height, rgb(scene.background));
-    for item in &scene.items {
-        match item {
-            Item::Fill { rect, color } => {
-                for y in rect.y..rect.y + rect.height as i32 {
-                    for x in rect.x..rect.x + rect.width as i32 {
-                        image.put_pixel(x as u32, y as u32, rgb(*color));
-                    }
-                }
-            }
-            Item::Text {
-                x,
-                baseline,
-                size,
-                color,
-                text,
-            } => {
-                let scale = PxScale::from(*size);
-                let scaled = font.as_scaled(scale);
-                let mut pen = *x as f32;
-                let mut previous = None;
-                for character in text.chars() {
-                    let id = scaled.glyph_id(character);
-                    if let Some(previous) = previous {
-                        pen += scaled.kern(previous, id);
-                    }
-                    previous = Some(id);
-                    let origin = point(pen.round(), *baseline as f32);
-                    pen += scaled.h_advance(id);
-                    let Some(outlined) =
-                        font.outline_glyph(id.with_scale_and_position(scale, origin))
-                    else {
-                        continue;
-                    };
-                    let bounds = outlined.px_bounds();
-                    outlined.draw(|gx, gy, coverage| {
-                        let px = bounds.min.x as i32 + gx as i32;
-                        let py = bounds.min.y as i32 + gy as i32;
-                        if px < 0 || py < 0 || px >= scene.width as i32 || py >= scene.height as i32
-                        {
-                            return;
-                        }
-                        let alpha =
-                            f64::from((coverage.clamp(0.0, 1.0) * 255.0).round() as u8) / 255.0;
-                        let pixel = image.get_pixel_mut(px as u32, py as u32);
-                        for (channel, ink) in pixel.0.iter_mut().zip([color.r, color.g, color.b]) {
-                            let blended =
-                                f64::from(ink) * alpha + f64::from(*channel) * (1.0 - alpha);
-                            *channel = blended.round() as u8;
-                        }
-                    });
-                }
-            }
-        }
+fn shadow(palette: &Palette) -> Scene {
+    let card = Shape::rounded(Rect::new(40.0, 32.0, 160.0, 96.0), 12.0);
+    Scene {
+        width: 240,
+        height: 180,
+        background: palette.surface_background,
+        items: vec![
+            Item::Shadow {
+                shape: card,
+                offset: Point::new(0.0, 8.0),
+                blur_radius: 24.0,
+                color: Color::hex(0x000000).with_alpha(64),
+            },
+            Item::Fill {
+                shape: card,
+                paint: palette.surface_elevated.into(),
+            },
+        ],
     }
-    image
 }
 
-fn compare(name: &str, snapshot: Snapshot, expected: &RgbImage) {
-    let actual: RgbImage =
-        image::RgbaImage::from_raw(snapshot.width, snapshot.height, snapshot.rgba)
-            .expect("snapshot dimensions")
-            .convert();
-    let directory = Path::new(env!("CARGO_TARGET_TMPDIR"));
-    let actual_path = directory.join(format!("{name}-actual.png"));
-    actual.save(&actual_path).expect("save rendered frame");
-    expected
-        .save(directory.join(format!("{name}-expected.png")))
-        .expect("save reference");
-
-    let ssim = image_compare::rgb_similarity_structure(&Algorithm::MSSIMSimple, &actual, expected)
-        .expect("SSIM")
-        .score;
-    let max_delta = actual
-        .as_raw()
-        .iter()
-        .zip(expected.as_raw())
-        .map(|(a, b)| a.abs_diff(*b))
-        .max()
-        .unwrap_or(0);
-    assert!(
-        ssim >= MIN_SSIM && max_delta <= MAX_CHANNEL_DELTA,
-        "{name}: SSIM {ssim:.5} (min {MIN_SSIM}), max channel delta {max_delta} (max {MAX_CHANNEL_DELTA}); see {}",
-        actual_path.display()
+fn settings_card(palette: &Palette, text: &mut TextSystem) -> Scene {
+    let inset = Spacing::L as f32;
+    let content = inset + Spacing::L as f32;
+    let card = Shape::rounded(
+        Rect::new(inset, inset, 320.0 - 2.0 * inset, 200.0 - 2.0 * inset),
+        10.0,
     );
+    let title = text.paragraph(
+        "Unbound Settings",
+        TextStyle::new(20.0, palette.label_primary).weight(TextStyle::SEMIBOLD),
+        None,
+        TextAlign::Start,
+    );
+    let body = text.paragraph(
+        "Displays, Sound & Network: AVA Wo",
+        TextStyle::new(13.0, palette.label_muted),
+        Some(320.0 - 2.0 * content),
+        TextAlign::Start,
+    );
+    let button = text.paragraph(
+        "Apply",
+        TextStyle::new(13.0, Color::hex(0xFFFFFF)),
+        Some(96.0),
+        TextAlign::Center,
+    );
+    Scene {
+        width: 320,
+        height: 200,
+        background: palette.surface_background,
+        items: vec![
+            Item::Shadow {
+                shape: card,
+                offset: Point::new(0.0, 2.0),
+                blur_radius: 8.0,
+                color: Color::hex(0x000000).with_alpha(40),
+            },
+            Item::Fill {
+                shape: card,
+                paint: palette.surface_elevated.into(),
+            },
+            Item::Text {
+                origin: Point::new(content, 30.0),
+                paragraph: title,
+            },
+            Item::Fill {
+                shape: Shape::rect(Rect::new(inset, 68.0, 320.0 - 2.0 * inset, 1.0)),
+                paint: palette.separator_color.into(),
+            },
+            Item::Text {
+                origin: Point::new(content + 0.4, 84.0),
+                paragraph: body,
+            },
+            Item::Fill {
+                shape: Shape::rounded(Rect::new(content, 128.0, 96.0, 32.0), 6.0),
+                paint: palette.accent_color.into(),
+            },
+            Item::Text {
+                origin: Point::new(content, 136.0),
+                paragraph: button,
+            },
+        ],
+    }
+}
+
+fn scenes(text: &mut TextSystem) -> Vec<(String, Scene)> {
+    let mut scenes = Vec::new();
+    for (name, scheme) in [("light", Scheme::Light), ("dark", Scheme::Dark)] {
+        let palette = Palette::for_scheme(scheme);
+        scenes.push((format!("shapes-{name}"), shapes(&palette)));
+        scenes.push((format!("shadow-{name}"), shadow(&palette)));
+        scenes.push((
+            format!("settings-card-{name}"),
+            settings_card(&palette, text),
+        ));
+    }
+    scenes
 }
 
 #[test]
-fn settings_card_matches_a_cpu_reference_in_both_schemes() {
-    let bytes = std::fs::read(FONT_PATH).expect("DejaVu Sans (fonts-dejavu-core)");
-    let font = Font::from_bytes(bytes.clone()).expect("font");
-    let reference_font = FontVec::try_from_vec(bytes).expect("font");
-    let renderer = Renderer::new(Gpu::new().expect("Vulkan device"));
+fn cpu_frames_match_references_computed_from_the_scene() {
+    let mut text = TextSystem::new();
+    let mut renderer = CpuRenderer::new();
+    let results: Vec<_> = scenes(&mut text)
+        .into_iter()
+        .map(|(name, scene)| {
+            let name = format!("cpu-{name}");
+            let snapshot = renderer.render(&scene).expect("CPU frame");
+            let comparison = compare(&name, &snapshot, &Reference::draw(&scene));
+            (name, comparison)
+        })
+        .collect();
+    assert_all_match(&results);
+}
+
+#[test]
+fn gpu_frames_match_the_same_references() {
+    let mut text = TextSystem::new();
+    let mut renderer = GpuRenderer::new().expect("Vulkan device");
     let info = renderer.adapter_info();
     println!(
         "adapter: {} ({:?}, {})",
         info.name, info.device_type, info.driver
     );
-
-    for (name, scheme) in [("light", Scheme::Light), ("dark", Scheme::Dark)] {
-        let scene = settings_card(&Palette::for_scheme(scheme));
-        let snapshot = renderer.render(&scene, &font).expect("rendered frame");
-        compare(
-            &format!("settings-card-{name}"),
-            snapshot,
-            &reference(&scene, &reference_font),
-        );
-    }
+    let results: Vec<_> = scenes(&mut text)
+        .into_iter()
+        .map(|(name, scene)| {
+            let name = format!("gpu-{name}");
+            let snapshot = renderer.render(&scene).expect("GPU frame");
+            let comparison = compare(&name, &snapshot, &Reference::draw(&scene));
+            (name, comparison)
+        })
+        .collect();
+    assert_all_match(&results);
 }

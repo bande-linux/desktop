@@ -1,15 +1,19 @@
 [package]
 name = "unbound-toolkit"
-description = "Shared Unbound UI toolkit: design tokens and wgpu drawing"
+description = "Shared Unbound UI toolkit: design tokens, Vello drawing and Parley text"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
 
 [dependencies]
-ab_glyph.workspace = true
+fontique.workspace = true
+parley.workspace = true
 pollster.workspace = true
+skrifa.workspace = true
+vello_cpu.workspace = true
+vello_gpu.workspace = true
 wgpu.workspace = true
 
 [dev-dependencies]
+ab_glyph.workspace = true
 image.workspace = true
-image-compare.workspace = true

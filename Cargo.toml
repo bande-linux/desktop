@@ -15,16 +15,21 @@ kdl = { version = "=6.7.1", default-features = false, features = ["span"] }
 image-compare = "=0.5.0"
 pollster = "=1.0.1"
 rustix = { version = "=1.1.6", features = ["event", "process"] }
+skrifa = "=0.44.0"
 smithay = { version = "=0.7.0", default-features = false, features = ["wayland_frontend"] }
 tempfile = "=3.27.0"
 naga = { version = "=30.0.1", features = ["wgsl-in", "spv-out"] }
 notify = "=8.2.0"
+fontique = { version = "=0.12.0", features = ["fontconfig-dlopen"] }
+parley = { version = "=0.12.0", features = ["complex-scripts"] }
 zbus = "=5.19.0"
 unbound-compositor = { path = "crates/unbound-compositor" }
 unbound-render = { path = "crates/unbound-render" }
 unbound-test-bus = { path = "crates/unbound-test-bus" }
 unbound-test-wayland = { path = "crates/unbound-test-wayland" }
 unbound-toolkit = { path = "crates/unbound-toolkit" }
+vello_cpu = "=0.3.0"
+vello_gpu = { version = "=0.3.0", default-features = false, features = ["wgpu", "text"] }
 wayland-backend = { version = "=0.3.17", features = ["log"] }
 wayland-client = "=0.31.15"
 wayland-protocols = { version = "=0.32.13", features = ["client", "staging", "unstable"] }

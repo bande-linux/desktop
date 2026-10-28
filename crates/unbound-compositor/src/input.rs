@@ -24,10 +24,14 @@ enum Shortcut {
     QuitApp,
     NextApp,
     ShowLauncher,
+    MinimizeWindow,
+    ToggleFullscreen,
 }
 
-fn shortcut(keysym: u32) -> Option<Shortcut> {
+fn shortcut(keysym: u32, ctrl: bool) -> Option<Shortcut> {
     match keysym {
+        keysyms::KEY_f | keysyms::KEY_F if ctrl => Some(Shortcut::ToggleFullscreen),
+        keysyms::KEY_m | keysyms::KEY_M => Some(Shortcut::MinimizeWindow),
         keysyms::KEY_w | keysyms::KEY_W => Some(Shortcut::CloseWindow),
         keysyms::KEY_q | keysyms::KEY_Q => Some(Shortcut::QuitApp),
         keysyms::KEY_Tab | keysyms::KEY_ISO_Left_Tab => Some(Shortcut::NextApp),
@@ -83,6 +87,16 @@ impl State {
                     .cloned();
                 if next.is_some() {
                     self.focus(next);
+                }
+            }
+            Shortcut::MinimizeWindow => {
+                if let Some(window) = self.toplevel_of(&focused) {
+                    self.minimize(&window);
+                }
+            }
+            Shortcut::ToggleFullscreen => {
+                if let Some(window) = self.toplevel_of(&focused) {
+                    self.toggle_fullscreen(&window);
                 }
             }
             Shortcut::ShowLauncher => {}
@@ -245,7 +259,9 @@ impl Headless {
                         FilterResult::Forward
                     };
                 }
-                match shortcut(keysym.modified_sym().raw()).filter(|_| modifiers.logo) {
+                match shortcut(keysym.modified_sym().raw(), modifiers.ctrl)
+                    .filter(|_| modifiers.logo)
+                {
                     Some(shortcut) => {
                         state.held_shortcut_keys.push(evdev_code);
                         FilterResult::Intercept(Some(shortcut))

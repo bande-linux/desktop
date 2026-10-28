@@ -392,3 +392,68 @@ fn a_click_outside_a_grabbing_popup_dismisses_it_and_is_not_delivered() {
     assert!(editor.keyboard_focus_on(0));
     assert_eq!(server.popup_count(), 0);
 }
+
+const KEY_LEFTCTRL: u32 = 29;
+const KEY_F: u32 = 33;
+const KEY_M: u32 = 50;
+const KEY_LEFTMETA: u32 = 125;
+
+fn chord(server: &mut Headless, keys: &[u32]) {
+    for &key in keys {
+        server.key(key, true, 0);
+    }
+    for &key in keys.iter().rev() {
+        server.key(key, false, 0);
+    }
+}
+
+#[test]
+fn ctrl_super_f_toggles_full_screen_for_the_key_window() {
+    let mut server = server();
+    let mut editor = app(&mut server, RED);
+    click(&mut server, 110, 80);
+    roundtrip(&mut server, &mut [&mut editor]);
+
+    chord(&mut server, &[KEY_LEFTCTRL, KEY_LEFTMETA, KEY_F]);
+    roundtrip(&mut server, &mut [&mut editor]);
+    let configured = editor.configured(0).expect("a configure");
+    assert!(configured.states.contains(&ToplevelState::Fullscreen));
+    assert_eq!((configured.width, configured.height), OUTPUT);
+    assert!(!editor.keys().iter().any(|(key, _)| *key == KEY_F));
+
+    chord(&mut server, &[KEY_LEFTCTRL, KEY_LEFTMETA, KEY_F]);
+    roundtrip(&mut server, &mut [&mut editor]);
+    let configured = editor.configured(0).expect("a configure");
+    assert!(!configured.states.contains(&ToplevelState::Fullscreen));
+}
+
+#[test]
+fn super_f_without_ctrl_reaches_the_app() {
+    let mut server = server();
+    let mut editor = app(&mut server, RED);
+    click(&mut server, 110, 80);
+    roundtrip(&mut server, &mut [&mut editor]);
+
+    chord(&mut server, &[KEY_LEFTMETA, KEY_F]);
+    roundtrip(&mut server, &mut [&mut editor]);
+
+    let configured = editor.configured(0).expect("a configure");
+    assert!(!configured.states.contains(&ToplevelState::Fullscreen));
+    assert!(editor.keys().contains(&(KEY_F, true)));
+}
+
+#[test]
+fn super_m_minimizes_the_key_window() {
+    let mut server = server();
+    let mut renderer = Renderer::new().expect("renderer");
+    let mut editor = app(&mut server, RED);
+    click(&mut server, 110, 80);
+    roundtrip(&mut server, &mut [&mut editor]);
+
+    chord(&mut server, &[KEY_LEFTMETA, KEY_M]);
+    roundtrip(&mut server, &mut [&mut editor]);
+
+    assert!(server.windows()[0].is_minimized());
+    assert_ne!(pixel(&mut renderer, &mut server, 110, 80), rgb(RED));
+    assert!(!editor.keyboard_focus_on(0));
+}

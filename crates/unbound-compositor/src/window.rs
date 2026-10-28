@@ -343,6 +343,20 @@ impl State {
         }
     }
 
+    pub(crate) fn toggle_fullscreen(&mut self, surface: &WlSurface) {
+        let Some(index) = self.window_index(surface) else {
+            return;
+        };
+        let fullscreen = self.windows[index]
+            .toplevel
+            .with_pending_state(|pending| pending.states.contains(xdg_toplevel::State::Fullscreen));
+        if fullscreen {
+            self.unfullscreen(surface);
+        } else {
+            self.fullscreen(surface);
+        }
+    }
+
     pub(crate) fn minimize(&mut self, surface: &WlSurface) {
         let Some(index) = self.window_index(surface) else {
             return;

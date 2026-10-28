@@ -13,6 +13,9 @@ pub const REL_Y: u16 = 1;
 pub const KEY_A: u16 = 30;
 pub const KEY_ENTER: u16 = 28;
 pub const KEY_LEFTSHIFT: u16 = 42;
+pub const KEY_LEFTCTRL: u16 = 29;
+pub const KEY_F: u16 = 33;
+pub const KEY_M: u16 = 50;
 pub const KEY_SPACE: u16 = 57;
 pub const KEY_LEFTMETA: u16 = 125;
 pub const BTN_LEFT: u16 = 0x110;
@@ -123,10 +126,14 @@ impl VirtualDevice {
         thread::sleep(Duration::from_millis(15));
     }
 
-    pub fn chord(&mut self, modifier: u16, key: u16) {
-        self.frame(&[(EV_KEY, modifier, 1)]);
+    pub fn chord(&mut self, modifiers: &[u16], key: u16) {
+        for &modifier in modifiers {
+            self.frame(&[(EV_KEY, modifier, 1)]);
+        }
         self.tap(key);
-        self.frame(&[(EV_KEY, modifier, 0)]);
+        for &modifier in modifiers.iter().rev() {
+            self.frame(&[(EV_KEY, modifier, 0)]);
+        }
         thread::sleep(Duration::from_millis(15));
     }
 
@@ -135,7 +142,7 @@ impl VirtualDevice {
             let (key, shifted) =
                 us_key(character).unwrap_or_else(|| panic!("no key for {character:?}"));
             if shifted {
-                self.chord(KEY_LEFTSHIFT, key);
+                self.chord(&[KEY_LEFTSHIFT], key);
             } else {
                 self.tap(key);
             }

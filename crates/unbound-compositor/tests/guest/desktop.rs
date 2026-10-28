@@ -8,7 +8,9 @@ use std::time::{Duration, Instant};
 use unbound_compositor::BACKGROUND;
 
 use crate::card::{Scanout, card_with_driver};
-use crate::uinput::{KEY_ENTER, KEY_LEFTMETA, KEY_SPACE, VirtualDevice};
+use crate::uinput::{
+    KEY_ENTER, KEY_F, KEY_LEFTCTRL, KEY_LEFTMETA, KEY_M, KEY_SPACE, VirtualDevice,
+};
 
 const COMPOSITOR: &str = "/usr/bin/unbound-compositor";
 const RUNTIME_DIR: &str = "/run/user/0";
@@ -92,7 +94,7 @@ fn the_launcher_opens_a_terminal_that_takes_typing() {
     let (center_x, card_y) = (desktop.width / 2, desktop.height * 24 / 100 + 20);
     let before = pixel(&desktop, center_x, card_y);
 
-    keyboard.chord(KEY_LEFTMETA, KEY_SPACE);
+    keyboard.chord(&[KEY_LEFTMETA], KEY_SPACE);
     wait_for("the launcher", STARTUP, || {
         pixel(&scanout(), center_x, card_y) != before
     });
@@ -115,4 +117,27 @@ fn the_launcher_opens_a_terminal_that_takes_typing() {
     keyboard.type_text("ls /usr/share/applications\n");
     thread::sleep(Duration::from_secs(1));
     scanout().save("m14-terminal-typed");
+
+    let panel = (32, 200);
+    let panel_color = pixel(&desktop, panel.0, panel.1);
+    keyboard.chord(&[KEY_LEFTCTRL, KEY_LEFTMETA], KEY_F);
+    wait_for("the terminal to cover the panel", STARTUP, || {
+        pixel(&scanout(), panel.0, panel.1) != panel_color
+    });
+    thread::sleep(Duration::from_secs(1));
+    scanout().save("m15-terminal-full-screen");
+
+    keyboard.chord(&[KEY_LEFTCTRL, KEY_LEFTMETA], KEY_F);
+    wait_for("the panel to come back", STARTUP, || {
+        pixel(&scanout(), panel.0, panel.1) == panel_color
+    });
+    thread::sleep(Duration::from_secs(1));
+    scanout().save("m15-terminal-windowed");
+
+    keyboard.chord(&[KEY_LEFTMETA], KEY_M);
+    wait_for("the terminal to minimize", STARTUP, || {
+        let now = scanout();
+        pixel(&now, now.width / 2, now.height / 2) == pixel(&desktop, center_x, desktop.height / 2)
+    });
+    scanout().save("m15-terminal-minimized");
 }

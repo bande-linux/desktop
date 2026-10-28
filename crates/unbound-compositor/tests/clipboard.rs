@@ -47,6 +47,7 @@ fn text_copied_in_one_client_pastes_in_another() {
     source.exchange(&mut server);
 
     let mut target = focused_client(&mut server);
+    roundtrip(&mut server, &mut [&mut source, &mut target]);
     assert!(!source.has_keyboard_focus());
     assert_eq!(target.selection_mimes(), Some(vec![TEXT.to_owned()]));
 
@@ -60,6 +61,7 @@ fn a_client_without_keyboard_focus_cannot_set_the_selection() {
     let mut server = server();
     let mut background = focused_client(&mut server);
     let mut foreground = focused_client(&mut server);
+    roundtrip(&mut server, &mut [&mut background, &mut foreground]);
     assert!(!background.has_keyboard_focus());
 
     background.copy(TEXT, b"stolen focus");

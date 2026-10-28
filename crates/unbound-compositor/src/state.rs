@@ -3,6 +3,7 @@ use std::os::fd::OwnedFd;
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use smithay::input::keyboard::XkbConfig;
@@ -78,6 +79,7 @@ pub struct State {
 pub struct Headless {
     display: Display<State>,
     state: State,
+    clipboard_daemons: Vec<PathBuf>,
 }
 
 pub const CLIPBOARD_DAEMON: &str = "/usr/bin/unbound-clipboard";
@@ -103,18 +105,12 @@ impl Headless {
         seat.add_keyboard(XkbConfig::default(), 600, 25)
             .map_err(io::Error::other)?;
         let primary_selection_state = PrimarySelectionState::new::<State>(&handle);
-        let trusted: Vec<PathBuf> = clipboard_daemons
-            .iter()
-            .map(|path| path.canonicalize().unwrap_or_else(|_| path.to_path_buf()))
-            .collect();
-        let filter_handle = handle.clone();
-        let data_control_state = DataControlState::new::<State, _>(
-            &handle,
-            Some(&primary_selection_state),
-            move |client| {
-                executable(&filter_handle, client).is_some_and(|path| trusted.contains(&path))
-            },
-        );
+        let data_control_state =
+            DataControlState::new::<State, _>(&handle, Some(&primary_selection_state), |client| {
+                client
+                    .get_data::<ClientState>()
+                    .is_some_and(|state| state.clipboard_daemon.load(Ordering::Relaxed))
+            });
         let state = State {
             display_handle: handle.clone(),
             output_size,
@@ -129,13 +125,27 @@ impl Headless {
             windows: Vec::new(),
             needs_redraw: false,
         };
-        Ok(Self { display, state })
+        let clipboard_daemons = clipboard_daemons
+            .iter()
+            .map(|path| path.canonicalize().unwrap_or_else(|_| path.to_path_buf()))
+            .collect();
+        Ok(Self {
+            display,
+            state,
+            clipboard_daemons,
+        })
     }
 
     pub fn insert_client(&mut self, stream: UnixStream) -> io::Result<Client> {
-        self.display
-            .handle()
-            .insert_client(stream, Arc::new(ClientState::default()))
+        let mut handle = self.display.handle();
+        let client_state = Arc::new(ClientState::default());
+        let client = handle.insert_client(stream, client_state.clone())?;
+        let clipboard_daemon =
+            executable(&handle, &client).is_some_and(|path| self.clipboard_daemons.contains(&path));
+        client_state
+            .clipboard_daemon
+            .store(clipboard_daemon, Ordering::Relaxed);
+        Ok(client)
     }
 
     pub fn dispatch(&mut self) -> io::Result<()> {
@@ -179,6 +189,7 @@ impl Headless {
 #[derive(Default)]
 struct ClientState {
     compositor_state: CompositorClientState,
+    clipboard_daemon: AtomicBool,
 }
 
 impl ClientData for ClientState {

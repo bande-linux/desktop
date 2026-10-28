@@ -3,6 +3,9 @@ mod rect;
 use std::collections::HashMap;
 use std::ffi::CStr;
 use std::fmt;
+use std::fs::File;
+use std::io::{Seek, SeekFrom};
+use std::os::fd::{AsRawFd, BorrowedFd, FromRawFd, IntoRawFd, OwnedFd};
 use std::slice;
 
 use ash::vk;
@@ -14,6 +17,11 @@ const TARGET_FORMAT: vk::Format = vk::Format::R8G8B8A8_UNORM;
 const TEXTURE_FORMAT: vk::Format = vk::Format::B8G8R8A8_UNORM;
 const BYTES_PER_PIXEL: usize = 4;
 const MIN_STAGING_BYTES: usize = 4 << 20;
+const REQUIRED_EXTENSIONS: [&CStr; 3] = [
+    ash::khr::push_descriptor::NAME,
+    ash::khr::external_memory_fd::NAME,
+    ash::ext::external_memory_dma_buf::NAME,
+];
 
 #[derive(Debug)]
 pub enum RenderError {
@@ -22,6 +30,8 @@ pub enum RenderError {
     NoDevice,
     NoMemoryType,
     BufferOutOfBounds,
+    UnalignedDmabuf,
+    Io(std::io::Error),
     NothingRendered,
 }
 
@@ -30,9 +40,15 @@ impl fmt::Display for RenderError {
         match self {
             Self::Loading(error) => write!(f, "cannot load the Vulkan library: {error}"),
             Self::Vulkan(result) => write!(f, "Vulkan call failed: {result}"),
-            Self::NoDevice => f.write_str("no Vulkan 1.3 device with push descriptors"),
+            Self::NoDevice => {
+                f.write_str("no Vulkan 1.3 device with push descriptors and dma-buf import")
+            }
             Self::NoMemoryType => f.write_str("no suitable Vulkan memory type"),
             Self::BufferOutOfBounds => f.write_str("buffer rows lie outside its pool"),
+            Self::UnalignedDmabuf => {
+                f.write_str("dma-buf offset or stride is not a multiple of the pixel size")
+            }
+            Self::Io(error) => write!(f, "cannot size the dma-buf: {error}"),
             Self::NothingRendered => f.write_str("no frame has been rendered yet"),
         }
     }
@@ -46,6 +62,12 @@ impl From<vk::Result> for RenderError {
     }
 }
 
+impl From<std::io::Error> for RenderError {
+    fn from(error: std::io::Error) -> Self {
+        Self::Io(error)
+    }
+}
+
 impl From<ash::LoadingError> for RenderError {
     fn from(error: ash::LoadingError) -> Self {
         Self::Loading(error)
@@ -56,6 +78,15 @@ impl From<ash::LoadingError> for RenderError {
 pub struct DeviceInfo {
     pub name: String,
     pub driver: String,
+}
+
+pub struct DmabufView<'a> {
+    pub fd: BorrowedFd<'a>,
+    pub offset: u32,
+    pub stride: u32,
+    pub width: i32,
+    pub height: i32,
+    pub opaque: bool,
 }
 
 pub struct ShmView<'a> {
@@ -105,15 +136,22 @@ struct Staging {
 
 struct PendingCopy {
     texture: u64,
-    staging: usize,
-    offset: usize,
+    source: vk::Buffer,
+    offset: u64,
+    row_texels: u32,
     rect: Rect,
+}
+
+struct Imported {
+    buffer: vk::Buffer,
+    memory: vk::DeviceMemory,
 }
 
 pub struct Renderer {
     instance: ash::Instance,
     device: ash::Device,
     push_descriptor: ash::khr::push_descriptor::Device,
+    external_memory_fd: ash::khr::external_memory_fd::Device,
     queue: vk::Queue,
     memory: vk::PhysicalDeviceMemoryProperties,
     info: DeviceInfo,
@@ -127,6 +165,7 @@ pub struct Renderer {
     textures: HashMap<u64, Texture>,
     staging: Vec<Staging>,
     copies: Vec<PendingCopy>,
+    imports: HashMap<u64, Imported>,
     uploaded_bytes: u64,
     _entry: ash::Entry,
 }
@@ -162,10 +201,12 @@ fn choose_device(instance: &ash::Instance) -> Result<Chosen, RenderError> {
             }
             let extensions =
                 unsafe { instance.enumerate_device_extension_properties(physical) }.ok()?;
-            extensions
+            REQUIRED_EXTENSIONS
                 .iter()
-                .any(|extension| {
-                    extension.extension_name_as_c_str() == Ok(ash::khr::push_descriptor::NAME)
+                .all(|required| {
+                    extensions
+                        .iter()
+                        .any(|extension| extension.extension_name_as_c_str() == Ok(*required))
                 })
                 .then_some(())?;
             let family = unsafe { instance.get_physical_device_queue_family_properties(physical) }
@@ -218,7 +259,7 @@ impl Renderer {
         let mut vulkan13 = vk::PhysicalDeviceVulkan13Features::default()
             .dynamic_rendering(true)
             .synchronization2(true);
-        let extensions = [ash::khr::push_descriptor::NAME.as_ptr()];
+        let extensions = REQUIRED_EXTENSIONS.map(CStr::as_ptr);
         let device = match unsafe {
             instance.create_device(
                 chosen.physical,
@@ -237,6 +278,7 @@ impl Renderer {
         };
         let mut renderer = Self {
             push_descriptor: ash::khr::push_descriptor::Device::new(&instance, &device),
+            external_memory_fd: ash::khr::external_memory_fd::Device::new(&instance, &device),
             queue: unsafe { device.get_device_queue(chosen.family, 0) },
             memory: unsafe { instance.get_physical_device_memory_properties(chosen.physical) },
             info: chosen.info,
@@ -250,6 +292,7 @@ impl Renderer {
             textures: HashMap::new(),
             staging: Vec::new(),
             copies: Vec::new(),
+            imports: HashMap::new(),
             uploaded_bytes: 0,
             instance,
             device,
@@ -594,52 +637,179 @@ impl Renderer {
         view: &ShmView,
         damage: &[Rect],
     ) -> Result<(), RenderError> {
-        let bounds = Rect::new(0, 0, view.width, view.height);
+        let rects = self.prepare_texture(texture, view.width, view.height, view.opaque, damage)?;
+        for rect in rects {
+            self.stage(texture, view, rect)?;
+        }
+        Ok(())
+    }
+
+    pub fn upload_dmabuf(
+        &mut self,
+        texture: u64,
+        import: u64,
+        view: &DmabufView,
+        damage: &[Rect],
+    ) -> Result<(), RenderError> {
+        let pixel = BYTES_PER_PIXEL as u32;
+        if !view.offset.is_multiple_of(pixel) || !view.stride.is_multiple_of(pixel) {
+            return Err(RenderError::UnalignedDmabuf);
+        }
+        if !self.imports.contains_key(&import) {
+            let imported = self.import_dmabuf(view.fd)?;
+            self.imports.insert(import, imported);
+        }
+        let source = self
+            .imports
+            .get(&import)
+            .map(|imported| imported.buffer)
+            .ok_or(RenderError::BufferOutOfBounds)?;
+        let rects = self.prepare_texture(texture, view.width, view.height, view.opaque, damage)?;
+        for rect in rects {
+            let offset = u64::from(view.offset)
+                + u64::from(rect.y.unsigned_abs()) * u64::from(view.stride)
+                + u64::from(rect.x.unsigned_abs()) * u64::from(pixel);
+            self.copies.push(PendingCopy {
+                texture,
+                source,
+                offset,
+                row_texels: view.stride / pixel,
+                rect,
+            });
+            self.uploaded_bytes += rect.area() * u64::from(pixel);
+        }
+        Ok(())
+    }
+
+    fn import_dmabuf(&self, fd: BorrowedFd) -> Result<Imported, RenderError> {
+        let mut file = File::from(fd.try_clone_to_owned()?);
+        let size = file.seek(SeekFrom::End(0))?;
+        let mut external = vk::ExternalMemoryBufferCreateInfo::default()
+            .handle_types(vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT);
+        let buffer = unsafe {
+            self.device.create_buffer(
+                &vk::BufferCreateInfo::default()
+                    .size(size)
+                    .usage(vk::BufferUsageFlags::TRANSFER_SRC)
+                    .sharing_mode(vk::SharingMode::EXCLUSIVE)
+                    .push_next(&mut external),
+                None,
+            )
+        }?;
+        match self.bind_dmabuf(buffer, file, size) {
+            Ok(memory) => Ok(Imported { buffer, memory }),
+            Err(error) => {
+                unsafe { self.device.destroy_buffer(buffer, None) };
+                Err(error)
+            }
+        }
+    }
+
+    fn bind_dmabuf(
+        &self,
+        buffer: vk::Buffer,
+        file: File,
+        size: u64,
+    ) -> Result<vk::DeviceMemory, RenderError> {
+        let requirements = unsafe { self.device.get_buffer_memory_requirements(buffer) };
+        if requirements.size > size {
+            return Err(RenderError::BufferOutOfBounds);
+        }
+        let mut properties = vk::MemoryFdPropertiesKHR::default();
+        unsafe {
+            self.external_memory_fd.get_memory_fd_properties(
+                vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT,
+                file.as_raw_fd(),
+                &mut properties,
+            )
+        }?;
+        let kind = self.memory_type(
+            requirements.memory_type_bits & properties.memory_type_bits,
+            vk::MemoryPropertyFlags::empty(),
+        )?;
+        let fd = file.into_raw_fd();
+        let mut import = vk::ImportMemoryFdInfoKHR::default()
+            .handle_type(vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT)
+            .fd(fd);
+        let memory = unsafe {
+            self.device.allocate_memory(
+                &vk::MemoryAllocateInfo::default()
+                    .allocation_size(size)
+                    .memory_type_index(kind)
+                    .push_next(&mut import),
+                None,
+            )
+        };
+        let memory = match memory {
+            Ok(memory) => memory,
+            Err(error) => {
+                drop(unsafe { OwnedFd::from_raw_fd(fd) });
+                return Err(error.into());
+            }
+        };
+        if let Err(error) = unsafe { self.device.bind_buffer_memory(buffer, memory, 0) } {
+            unsafe { self.device.free_memory(memory, None) };
+            return Err(error.into());
+        }
+        Ok(memory)
+    }
+
+    pub fn forget_dmabuf(&mut self, import: u64) {
+        if let Some(imported) = self.imports.remove(&import) {
+            self.copies.retain(|copy| copy.source != imported.buffer);
+            unsafe {
+                self.device.destroy_buffer(imported.buffer, None);
+                self.device.free_memory(imported.memory, None);
+            }
+        }
+    }
+
+    fn prepare_texture(
+        &mut self,
+        texture: u64,
+        width: i32,
+        height: i32,
+        opaque: bool,
+        damage: &[Rect],
+    ) -> Result<Vec<Rect>, RenderError> {
+        let bounds = Rect::new(0, 0, width, height);
         let reusable = self.textures.get(&texture).is_some_and(|existing| {
-            existing.image.width == view.width && existing.image.height == view.height
+            existing.image.width == width && existing.image.height == height
         });
         if !reusable {
             self.forget(texture);
             let image = self.create_image(
-                view.width,
-                view.height,
+                width,
+                height,
                 TEXTURE_FORMAT,
                 vk::ImageUsageFlags::SAMPLED | vk::ImageUsageFlags::TRANSFER_DST,
-                alpha_swizzle(view.opaque),
+                alpha_swizzle(opaque),
             )?;
             self.textures.insert(
                 texture,
                 Texture {
                     image,
-                    opaque: view.opaque,
+                    opaque,
                     readable: false,
                 },
             );
         }
         if let Some(existing) = self.textures.get(&texture)
-            && existing.opaque != view.opaque
+            && existing.opaque != opaque
         {
-            let replacement = self.create_view(
-                existing.image.image,
-                TEXTURE_FORMAT,
-                alpha_swizzle(view.opaque),
-            )?;
+            let replacement =
+                self.create_view(existing.image.image, TEXTURE_FORMAT, alpha_swizzle(opaque))?;
             if let Some(existing) = self.textures.get_mut(&texture) {
                 let replaced = std::mem::replace(&mut existing.image.view, replacement);
-                existing.opaque = view.opaque;
+                existing.opaque = opaque;
                 unsafe { self.device.destroy_image_view(replaced, None) };
             }
         }
-
-        let rects = if reusable {
+        Ok(if reusable {
             disjoint(damage.iter().copied(), bounds)
         } else {
             vec![bounds]
-        };
-        for rect in rects {
-            self.stage(texture, view, rect)?;
-        }
-        Ok(())
+        })
     }
 
     fn stage(&mut self, texture: u64, view: &ShmView, rect: Rect) -> Result<(), RenderError> {
@@ -667,8 +837,9 @@ impl Renderer {
         }
         self.copies.push(PendingCopy {
             texture,
-            staging: index,
-            offset,
+            source: self.staging[index].buffer,
+            offset: offset as u64,
+            row_texels: 0,
             rect,
         });
         self.uploaded_bytes += (row_bytes * rows) as u64;
@@ -782,7 +953,8 @@ impl Renderer {
             );
             for copy in copies {
                 let region = vk::BufferImageCopy::default()
-                    .buffer_offset(copy.offset as u64)
+                    .buffer_offset(copy.offset)
+                    .buffer_row_length(copy.row_texels)
                     .image_subresource(COLOR_LAYERS)
                     .image_offset(vk::Offset3D {
                         x: copy.rect.x,
@@ -797,7 +969,7 @@ impl Renderer {
                 unsafe {
                     device.cmd_copy_buffer_to_image(
                         commands,
-                        self.staging[copy.staging].buffer,
+                        copy.source,
                         image,
                         vk::ImageLayout::TRANSFER_DST_OPTIMAL,
                         slice::from_ref(&region),
@@ -1125,6 +1297,12 @@ impl Drop for Renderer {
         }
         for staging in std::mem::take(&mut self.staging) {
             self.destroy_staging(&staging);
+        }
+        for (_, imported) in std::mem::take(&mut self.imports) {
+            unsafe {
+                self.device.destroy_buffer(imported.buffer, None);
+                self.device.free_memory(imported.memory, None);
+            }
         }
         unsafe {
             self.device.destroy_pipeline(self.pipeline, None);

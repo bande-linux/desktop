@@ -44,11 +44,14 @@ hardware. Things noticed in passing go to the end of this file, not into a diff.
   Runners have no dma-buf exporter (no `/dev/udmabuf`, no DRM device), so tests back
   the buffers with a file that lavapipe imports through the same dma-buf path; real
   PRIME dma-bufs are exercised once the KVM rig (M9) exists.
-- [ ] **M8 Frame scheduling and `wp_presentation_time`**
+- [x] **M8 Frame scheduling and `wp_presentation_time`** (`desktop/milestone-8`)
   Virtual 120 Hz vblank clock in the headless backend, composing at the deadline, frame
   callbacks and presentation feedback after presentation. *Done when* tests show a
   commit before the deadline is presented at the next vblank with the feedback's
   refresh interval and sequence, and `ci/perf` reports commit-to-present frames.
+  Scheduling tests run on a virtual clock. On the runners' real clock: commit-to-present
+  p50 11.4 ms / p99 16.3 ms, 4 of 120 frames after their promised vblank, reported
+  only (see `docs/RENDERING.md`).
 - [ ] **M9 KVM test rig (`ci/vm`)**
   Guest kernel built with `CONFIG_DRM_VKMS` and virtio-gpu, Debian 13 arm64 root image,
   QEMU with `-machine virt,its=off`; the job boots the guest and runs test binaries in
@@ -111,6 +114,10 @@ boot framebuffer, K3 USB input. Later, the Apple DCP and agx drivers unlock:
 - Input-to-photon measured with a camera or photodiode on a real Mac.
 
 ## Noticed in passing
+
+- The frame clock predicts with the maximum of the last 16 deadline-to-done times, so
+  one late wake-up moves every deadline earlier for 16 frames (p50 latency rose from
+  6.7 to 11.4 ms on the runners); a high percentile would track it with less latency.
 
 - `unbound-render` uploads through a staging buffer; `VK_EXT_host_image_copy` (on
   lavapipe) would copy straight from the shm pool into the texture.

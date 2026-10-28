@@ -2,7 +2,6 @@ mod frame;
 mod import;
 mod rect;
 
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ffi::CStr;
 use std::fmt;
@@ -10,9 +9,9 @@ use std::fs::File;
 use std::io::{Seek, SeekFrom};
 use std::marker::PhantomData;
 use std::os::fd::{AsRawFd, BorrowedFd, IntoRawFd, OwnedFd};
-use std::rc::Rc;
 use std::slice;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use ash::vk;
 use smithay::backend::allocator::dmabuf::{Dmabuf, WeakDmabuf};
@@ -122,7 +121,7 @@ enum Resource {
     Target(u64),
 }
 
-type Graveyard = Rc<RefCell<Vec<Resource>>>;
+type Graveyard = Arc<Mutex<Vec<Resource>>>;
 
 #[derive(Debug)]
 struct Owned {
@@ -132,13 +131,16 @@ struct Owned {
 
 impl Drop for Owned {
     fn drop(&mut self) {
-        self.graveyard.borrow_mut().push(self.resource);
+        self.graveyard
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(self.resource);
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct VulkanTexture {
-    _owned: Rc<Owned>,
+    _owned: Arc<Owned>,
     id: u64,
     renderer: u64,
     width: i32,
@@ -1021,7 +1023,12 @@ impl VulkanRenderer {
                 self.destroy_imported(&imported);
             }
         }
-        let dead = std::mem::take(&mut *self.graveyard.borrow_mut());
+        let dead = std::mem::take(
+            &mut *self
+                .graveyard
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner),
+        );
         for resource in dead {
             match resource {
                 Resource::Texture(id) => self.forget_texture(id),

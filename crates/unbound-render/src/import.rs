@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::os::fd::BorrowedFd;
-use std::rc::Rc;
 use std::slice;
+use std::sync::Arc;
 
 use ash::vk;
 use smithay::backend::allocator::dmabuf::Dmabuf;
@@ -115,7 +115,7 @@ impl VulkanRenderer {
             },
         );
         Ok(VulkanTexture {
-            _owned: Rc::new(self.owned(Resource::Texture(id))),
+            _owned: Arc::new(self.owned(Resource::Texture(id))),
             id,
             renderer: self.id,
             width,

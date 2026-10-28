@@ -23,6 +23,11 @@ cat > "$share/run" <<'GUEST'
 set -u
 echo "Guest kernel $(uname -r)"
 ls -l /dev/dri
+SEATD_VTBOUND=0 seatd -l error &
+for _ in $(seq 50); do
+    [ -S /run/seatd.sock ] && break
+    sleep 0.1
+done
 status=0
 for test in bin/*; do
     echo "Running ${test#bin/} in the guest"

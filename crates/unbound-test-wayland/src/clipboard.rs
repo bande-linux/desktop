@@ -50,6 +50,7 @@ pub(super) struct Clipboard {
     sources: Vec<WlDataSource>,
     primary_sources: Vec<ZwpPrimarySelectionSourceV1>,
     control_sources: Vec<ExtDataControlSourceV1>,
+    cancelled_sources: usize,
 }
 
 fn mimes<P: Proxy>(offer: &P) -> Vec<String> {
@@ -130,6 +131,10 @@ impl TestClient {
             .expect("data control device")
             .set_selection(Some(&source));
         clipboard.control_sources.push(source);
+    }
+
+    pub fn cancelled_sources(&self) -> usize {
+        self.globals.clipboard.cancelled_sources
     }
 
     pub fn selection_mimes(&self) -> Option<Vec<String>> {
@@ -242,15 +247,17 @@ impl Dispatch<WlDataOffer, Mimes> for Globals {
 
 impl Dispatch<WlDataSource, Vec<u8>> for Globals {
     fn event(
-        _: &mut Self,
+        globals: &mut Self,
         _: &WlDataSource,
         event: wl_data_source::Event,
         payload: &Vec<u8>,
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
-        if let wl_data_source::Event::Send { fd, .. } = event {
-            serve(payload, fd);
+        match event {
+            wl_data_source::Event::Send { fd, .. } => serve(payload, fd),
+            wl_data_source::Event::Cancelled => globals.clipboard.cancelled_sources += 1,
+            _ => {}
         }
     }
 }
@@ -291,15 +298,19 @@ impl Dispatch<ZwpPrimarySelectionOfferV1, Mimes> for Globals {
 
 impl Dispatch<ZwpPrimarySelectionSourceV1, Vec<u8>> for Globals {
     fn event(
-        _: &mut Self,
+        globals: &mut Self,
         _: &ZwpPrimarySelectionSourceV1,
         event: zwp_primary_selection_source_v1::Event,
         payload: &Vec<u8>,
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
-        if let zwp_primary_selection_source_v1::Event::Send { fd, .. } = event {
-            serve(payload, fd);
+        match event {
+            zwp_primary_selection_source_v1::Event::Send { fd, .. } => serve(payload, fd),
+            zwp_primary_selection_source_v1::Event::Cancelled => {
+                globals.clipboard.cancelled_sources += 1
+            }
+            _ => {}
         }
     }
 }

@@ -3,6 +3,7 @@ pub mod clipboard;
 use std::io::Write;
 use std::os::fd::AsFd;
 use std::os::unix::net::UnixStream;
+use std::time::{Duration, Instant};
 
 use unbound_compositor::Headless;
 use wayland_client::protocol::wl_buffer::WlBuffer;
@@ -170,6 +171,22 @@ pub fn roundtrip(server: &mut Headless, clients: &mut [&mut TestClient]) {
                 .dispatch_pending(&mut client.globals)
                 .expect("client dispatch");
         }
+    }
+}
+
+pub fn roundtrip_until(
+    server: &mut Headless,
+    clients: &mut [&mut TestClient],
+    condition: impl Fn(&[&mut TestClient]) -> bool,
+) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        roundtrip(server, clients);
+        if condition(clients) {
+            return;
+        }
+        assert!(Instant::now() < deadline, "condition not met within 10 s");
+        std::thread::sleep(Duration::from_millis(5));
     }
 }
 

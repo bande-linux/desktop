@@ -1704,6 +1704,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "unbound-clipboard"
+version = "0.1.0"
+dependencies = [
+ "rustix",
+ "smithay",
+ "tempfile",
+ "unbound-compositor",
+ "unbound-test-wayland",
+ "wayland-client",
+ "wayland-protocols",
+]
+
+[[package]]
 name = "unbound-compositor"
 version = "0.1.0"
 dependencies = [

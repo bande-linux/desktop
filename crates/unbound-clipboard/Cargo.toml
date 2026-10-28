@@ -1,0 +1,17 @@
+[package]
+name = "unbound-clipboard"
+description = "Unbound clipboard daemon: keeps the selection after the copying app quits"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+rustix.workspace = true
+wayland-client.workspace = true
+wayland-protocols.workspace = true
+
+[dev-dependencies]
+smithay.workspace = true
+tempfile.workspace = true
+unbound-compositor.workspace = true
+unbound-test-wayland.workspace = true

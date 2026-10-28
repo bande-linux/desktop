@@ -1,0 +1,267 @@
+use std::error::Error;
+use std::fs::File;
+use std::io::{ErrorKind, PipeReader, Read, Write};
+use std::os::fd::{AsFd, OwnedFd};
+use std::process::ExitCode;
+use std::sync::{Arc, Mutex};
+
+use rustix::event::{PollFd, PollFlags, Timespec, poll};
+use wayland_client::globals::{GlobalListContents, registry_queue_init};
+use wayland_client::protocol::wl_registry::WlRegistry;
+use wayland_client::protocol::wl_seat::WlSeat;
+use wayland_client::{
+    Connection, Dispatch, Proxy, QueueHandle, delegate_noop, event_created_child,
+};
+use wayland_protocols::ext::data_control::v1::client::ext_data_control_device_v1::{
+    self, ExtDataControlDeviceV1,
+};
+use wayland_protocols::ext::data_control::v1::client::ext_data_control_manager_v1::ExtDataControlManagerV1;
+use wayland_protocols::ext::data_control::v1::client::ext_data_control_offer_v1::{
+    self, ExtDataControlOfferV1,
+};
+use wayland_protocols::ext::data_control::v1::client::ext_data_control_source_v1::{
+    self, ExtDataControlSourceV1,
+};
+
+const SOURCE_SILENCE_LIMIT: Timespec = Timespec {
+    tv_sec: 2,
+    tv_nsec: 0,
+};
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Selection {
+    Clipboard,
+    Primary,
+}
+
+impl Selection {
+    const ALL: [Selection; 2] = [Selection::Clipboard, Selection::Primary];
+
+    fn index(self) -> usize {
+        self as usize
+    }
+}
+
+type Mimes = Mutex<Vec<String>>;
+type Contents = Vec<(String, Vec<u8>)>;
+
+struct Saved {
+    selection: Selection,
+    contents: Contents,
+}
+
+#[derive(Default)]
+struct Daemon {
+    owned: [Option<ExtDataControlSourceV1>; 2],
+    pending: [Option<ExtDataControlOfferV1>; 2],
+    finished: bool,
+}
+
+impl Daemon {
+    fn offered(&mut self, selection: Selection, offer: Option<ExtDataControlOfferV1>) {
+        let Some(offer) = offer else {
+            return;
+        };
+        if self.owned[selection.index()].is_some() {
+            offer.destroy();
+            return;
+        }
+        if let Some(stale) = self.pending[selection.index()].replace(offer) {
+            stale.destroy();
+        }
+    }
+}
+
+fn main() -> ExitCode {
+    match run() {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("unbound-clipboard: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn run() -> Result<(), Box<dyn Error>> {
+    let connection = Connection::connect_to_env()?;
+    let (globals, mut queue) = registry_queue_init::<Daemon>(&connection)?;
+    let qh = queue.handle();
+    let seat: WlSeat = globals.bind(&qh, 1..=1, ())?;
+    let manager: ExtDataControlManagerV1 = globals.bind(&qh, 1..=1, ())?;
+    let device = manager.get_data_device(&seat, &qh, ());
+    let mut daemon = Daemon::default();
+
+    while !daemon.finished {
+        queue.blocking_dispatch(&mut daemon)?;
+        for selection in Selection::ALL {
+            let Some(offer) = daemon.pending[selection.index()].take() else {
+                continue;
+            };
+            let contents = read_offer(&connection, &offer)?;
+            offer.destroy();
+            queue.roundtrip(&mut daemon)?;
+            if daemon.pending[selection.index()].is_some() || contents.is_empty() {
+                continue;
+            }
+            take_over(&manager, &device, &qh, &mut daemon, selection, contents);
+        }
+    }
+    Ok(())
+}
+
+fn read_offer(
+    connection: &Connection,
+    offer: &ExtDataControlOfferV1,
+) -> Result<Contents, Box<dyn Error>> {
+    let mimes = offer
+        .data::<Mimes>()
+        .and_then(|mimes| mimes.lock().ok().map(|mimes| mimes.clone()))
+        .unwrap_or_default();
+    let mut contents = Vec::with_capacity(mimes.len());
+    for mime in mimes {
+        let (reader, writer) = std::io::pipe()?;
+        offer.receive(mime.clone(), writer.as_fd());
+        connection.flush()?;
+        drop(writer);
+        if let Some(bytes) = read_until_closed(reader)? {
+            contents.push((mime, bytes));
+        }
+    }
+    Ok(contents)
+}
+
+fn read_until_closed(mut reader: PipeReader) -> std::io::Result<Option<Vec<u8>>> {
+    let mut bytes = Vec::new();
+    let mut chunk = [0u8; 64 * 1024];
+    loop {
+        let mut fds = [PollFd::new(&reader, PollFlags::IN)];
+        if poll(&mut fds, Some(&SOURCE_SILENCE_LIMIT))? == 0 {
+            return Ok(None);
+        }
+        match reader.read(&mut chunk) {
+            Ok(0) => return Ok(Some(bytes)),
+            Ok(read) => bytes.extend_from_slice(&chunk[..read]),
+            Err(error) if error.kind() == ErrorKind::Interrupted => {}
+            Err(error) => return Err(error),
+        }
+    }
+}
+
+fn take_over(
+    manager: &ExtDataControlManagerV1,
+    device: &ExtDataControlDeviceV1,
+    qh: &QueueHandle<Daemon>,
+    daemon: &mut Daemon,
+    selection: Selection,
+    contents: Contents,
+) {
+    let mimes: Vec<String> = contents.iter().map(|(mime, _)| mime.clone()).collect();
+    let source = manager.create_data_source(
+        qh,
+        Arc::new(Saved {
+            selection,
+            contents,
+        }),
+    );
+    for mime in mimes {
+        source.offer(mime);
+    }
+    match selection {
+        Selection::Clipboard => device.set_selection(Some(&source)),
+        Selection::Primary => device.set_primary_selection(Some(&source)),
+    }
+    if let Some(replaced) = daemon.owned[selection.index()].replace(source) {
+        replaced.destroy();
+    }
+}
+
+fn serve(saved: Arc<Saved>, mime: String, fd: OwnedFd) {
+    std::thread::spawn(move || {
+        if let Some((_, bytes)) = saved.contents.iter().find(|(offered, _)| *offered == mime) {
+            let _ = File::from(fd).write_all(bytes);
+        }
+    });
+}
+
+impl Dispatch<ExtDataControlDeviceV1, ()> for Daemon {
+    fn event(
+        daemon: &mut Self,
+        _: &ExtDataControlDeviceV1,
+        event: ext_data_control_device_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        match event {
+            ext_data_control_device_v1::Event::Selection { id } => {
+                daemon.offered(Selection::Clipboard, id)
+            }
+            ext_data_control_device_v1::Event::PrimarySelection { id } => {
+                daemon.offered(Selection::Primary, id)
+            }
+            ext_data_control_device_v1::Event::Finished => daemon.finished = true,
+            _ => {}
+        }
+    }
+
+    event_created_child!(Daemon, ExtDataControlDeviceV1, [
+        ext_data_control_device_v1::EVT_DATA_OFFER_OPCODE => (ExtDataControlOfferV1, Mimes::default()),
+    ]);
+}
+
+impl Dispatch<ExtDataControlOfferV1, Mimes> for Daemon {
+    fn event(
+        _: &mut Self,
+        _: &ExtDataControlOfferV1,
+        event: ext_data_control_offer_v1::Event,
+        mimes: &Mimes,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        if let ext_data_control_offer_v1::Event::Offer { mime_type } = event
+            && let Ok(mut mimes) = mimes.lock()
+        {
+            mimes.push(mime_type);
+        }
+    }
+}
+
+impl Dispatch<ExtDataControlSourceV1, Arc<Saved>> for Daemon {
+    fn event(
+        daemon: &mut Self,
+        source: &ExtDataControlSourceV1,
+        event: ext_data_control_source_v1::Event,
+        saved: &Arc<Saved>,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        match event {
+            ext_data_control_source_v1::Event::Send { mime_type, fd } => {
+                serve(Arc::clone(saved), mime_type, fd)
+            }
+            ext_data_control_source_v1::Event::Cancelled => {
+                let owned = &mut daemon.owned[saved.selection.index()];
+                if owned.as_ref() == Some(source) {
+                    *owned = None;
+                }
+                source.destroy();
+            }
+            _ => {}
+        }
+    }
+}
+
+impl Dispatch<WlRegistry, GlobalListContents> for Daemon {
+    fn event(
+        _: &mut Self,
+        _: &WlRegistry,
+        _: <WlRegistry as Proxy>::Event,
+        _: &GlobalListContents,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+    }
+}
+
+delegate_noop!(Daemon: ignore WlSeat);
+delegate_noop!(Daemon: ExtDataControlManagerV1);

@@ -1704,6 +1704,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "unbound-bench"
+version = "0.1.0"
+dependencies = [
+ "smithay",
+ "tempfile",
+ "unbound-compositor",
+ "unbound-test-wayland",
+ "wayland-client",
+]
+
+[[package]]
 name = "unbound-clipboard"
 version = "0.1.0"
 dependencies = [

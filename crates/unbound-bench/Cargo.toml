@@ -1,0 +1,14 @@
+[package]
+name = "unbound-bench"
+description = "Performance measurements for Unbound, run by ci/perf"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+smithay.workspace = true
+tempfile.workspace = true
+unbound-compositor.workspace = true
+unbound-test-wayland.workspace = true
+wayland-client.workspace = true

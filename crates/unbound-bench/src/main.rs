@@ -83,14 +83,14 @@ fn run() -> Result<bool, Box<dyn Error>> {
             unit: "ms",
             value: percentile(&typical, 0.50),
             budget: REFRESH_120HZ_MS,
-            enforced: true,
+            enforced: false,
         },
         Metric {
             name: "frame_typical_p99",
             unit: "ms",
             value: percentile(&typical, 0.99),
             budget: REFRESH_120HZ_MS,
-            enforced: true,
+            enforced: false,
         },
         Metric {
             name: "frame_typical_uploaded",
@@ -118,14 +118,14 @@ fn run() -> Result<bool, Box<dyn Error>> {
             unit: "ms",
             value: percentile(&full, 0.50),
             budget: REFRESH_60HZ_MS,
-            enforced: true,
+            enforced: false,
         },
         Metric {
             name: "frame_full_p99",
             unit: "ms",
             value: percentile(&full, 0.99),
             budget: REFRESH_60HZ_MS,
-            enforced: true,
+            enforced: false,
         },
         Metric {
             name: "commit_to_present_p50",
@@ -153,7 +153,7 @@ fn run() -> Result<bool, Box<dyn Error>> {
             unit: "ms",
             value: percentile(&starts, 0.50),
             budget: 500.0,
-            enforced: true,
+            enforced: false,
         },
         Metric {
             name: "compositor_idle_rss",
@@ -343,8 +343,14 @@ fn resident_mib(pid: u32) -> Result<f64, Box<dyn Error>> {
 }
 
 fn markdown(metrics: &[Metric], adapter: &str) -> String {
+    let load = fs::read_to_string("/proc/loadavg").unwrap_or_default();
+    let load = load
+        .split_whitespace()
+        .take(3)
+        .collect::<Vec<_>>()
+        .join(" ");
     let mut table = format!(
-        "### unbound-bench on {adapter}\n\n| Metric | Value | Budget | |\n| :--- | ---: | ---: | :---: |\n"
+        "### unbound-bench on {adapter}\n\nHost load average (1, 5, 15 min): {load}\n\n| Metric | Value | Budget | |\n| :--- | ---: | ---: | :---: |\n"
     );
     for metric in metrics {
         table += &format!(

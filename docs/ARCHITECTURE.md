@@ -85,7 +85,7 @@ graph TB
 ### 1.1 The Layered Compositor Architecture (`unbound-linux/compositor`)
 To avoid 8–12 months of low-level DRM/KMS resource-lifetime debugging and kernel edge-case panics, Unbound employs a high-velocity, production-grade layered design (the proven COSMIC/niri architecture):
 - **Kernel/Protocol Abstraction**: **`smithay`** handles low-level DRM/KMS atomic modesetting, libinput device management, multi-GPU dmabuf import/export, and standard Wayland protocol dispatching.
-- **Custom Scene Graph & Vulkan Pipeline**: 100% custom **`wgpu` / Vulkan** renderer. Implements dual-pass Kawase blur shaders, subpixel font rendering, dynamic rounded-corner clipping, and damage-region tracking.
+- **Custom Scene Graph & Vulkan Pipeline**: 100% custom Vulkan renderer on `ash`; the choice over `wgpu` and Smithay's GLES renderer, and the performance targets, are recorded in [`RENDERING.md`](RENDERING.md). Implements dual-pass Kawase blur shaders, subpixel font rendering, dynamic rounded-corner clipping, and damage-region tracking.
 - **Physics Layout Engine**: Custom spring dynamics simulation ($\ddot{x} + 2\zeta\omega\dot{x} + \omega^2\Delta x = 0$) powering fluid window snapping, minimize-to-panel curves, and workspace sliding.
   - Implemented in `crates/unbound-spring` as the closed-form solution for under-, critically and overdamped springs, parameterised by angular frequency $\omega$ and damping ratio $\zeta$. A trajectory depends only on elapsed time, never on frame rate, and retargeting keeps position and velocity continuous.
 
@@ -598,6 +598,7 @@ All CI runs on the organization's self-hosted runners: Docker containers on an A
 Runs on every push to any branch and on pull requests. Job names are the status-check contexts:
 - `ci/lint`: `cargo fmt --check` and `cargo clippy --workspace --all-targets -- -D warnings`.
 - `ci/lavapipe-test`: `cargo test --workspace`, including the compositor and toolkit render tests on lavapipe. D-Bus tests start a private `dbus-daemon` session bus each (`crates/unbound-test-bus`). The toolkit's text test uses DejaVu Sans from `fonts-dejavu-core`; its expected image is built in the test from the scene with `ab_glyph`, so it does not depend on the font version.
+- `ci/perf`: builds `unbound-compositor` and `unbound-bench` in release mode and measures frame times, compositor start time and idle memory on lavapipe against the budgets in [`RENDERING.md`](RENDERING.md); the table goes to the job summary and `perf.json` is uploaded.
 - `ci/deb`: `cargo deb` for `unbound-compositor`, `unbound-notify` and `unbound-clipboard`, then checks each package's architecture, the notification daemon's D-Bus activation file, that the clipboard daemon is packaged and recommended by the compositor, starts the packaged compositor as a smoke test, and uploads the `.deb` files as artifacts.
 
 The Rust toolchain is pinned in `rust-toolchain.toml`, dependencies are pinned to exact versions, and `Cargo.lock` is committed. Until `ci-builder` exists, jobs install system packages with `apt-get` on the runner image (Ubuntu 24.04), so `.deb` files are built against Ubuntu's glibc rather than Debian 13's.

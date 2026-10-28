@@ -42,6 +42,7 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::{
 use crate::clipboard::Clipboard;
 use crate::cpu::CpuRenderer;
 use crate::gpu::GpuRenderer;
+use crate::lock::{Locked, SessionLock};
 use crate::render::RenderError;
 use crate::scene::Scene;
 use crate::seat::Input;
@@ -101,6 +102,7 @@ pub struct LayerOptions {
 pub enum Role {
     Toplevel { title: String, app_id: String },
     Layer(LayerOptions),
+    Lock,
 }
 
 impl Role {
@@ -132,6 +134,7 @@ pub enum WindowError {
     Missing(&'static str),
     Io(io::Error),
     Render(RenderError),
+    LockRefused,
 }
 
 impl fmt::Display for WindowError {
@@ -143,6 +146,7 @@ impl fmt::Display for WindowError {
             Self::Missing(global) => write!(f, "the compositor does not offer {global}"),
             Self::Io(error) => write!(f, "{error}"),
             Self::Render(error) => write!(f, "{error}"),
+            Self::LockRefused => write!(f, "the compositor refused to lock the session"),
         }
     }
 }
@@ -190,6 +194,16 @@ pub(crate) struct State {
     pub(crate) input: Input,
     pub(crate) clipboard: Clipboard,
     pub(crate) shell: Shell,
+    pub(crate) lock: SessionLock,
+}
+
+impl State {
+    pub(crate) fn configure(&mut self, width: u32, height: u32) {
+        self.configured = true;
+        if width > 0 && height > 0 {
+            self.suggested_size = Some((width, height));
+        }
+    }
 }
 
 struct ShmBuffer {
@@ -216,6 +230,7 @@ enum Gpu {
 enum ShellSurface {
     Toplevel(XdgSurface, XdgToplevel),
     Layer(ZwlrLayerSurfaceV1),
+    Lock(Locked),
 }
 
 pub struct Window {
@@ -325,6 +340,7 @@ impl Window {
                 });
                 ShellSurface::Layer(layer_surface)
             }
+            Role::Lock => ShellSurface::Lock(Locked::lock(&mut state, &mut queue, &surface)?),
         };
         if let (Some(activation), Ok(token)) = (
             state.activation.as_ref(),
@@ -332,7 +348,9 @@ impl Window {
         ) {
             activation.activate(token, &surface);
         }
-        surface.commit();
+        if !matches!(role, ShellSurface::Lock(_)) {
+            surface.commit();
+        }
         while !state.configured {
             queue.blocking_dispatch(&mut state)?;
         }
@@ -364,6 +382,13 @@ impl Window {
             visible: true,
             needs_redraw: true,
         })
+    }
+
+    pub fn unlock(&mut self) -> Result<(), WindowError> {
+        if let ShellSurface::Lock(locked) = &self.role {
+            locked.unlock();
+        }
+        self.flush()
     }
 
     pub fn size(&self) -> (u32, u32) {
@@ -584,6 +609,7 @@ impl Drop for Window {
                 xdg_surface.destroy();
             }
             ShellSurface::Layer(layer_surface) => layer_surface.destroy(),
+            ShellSurface::Lock(_) => {}
         }
         self.surface.destroy();
         let _ = self.connection.flush();
@@ -713,6 +739,12 @@ impl Dispatch<WlRegistry, ()> for State {
                     state.data_device_manager =
                         Some(registry.bind(name, version.min(3), handle, ()));
                 }
+                "ext_session_lock_manager_v1" => {
+                    state.lock.manager = Some(registry.bind(name, 1, handle, ()));
+                }
+                "wl_output" if state.lock.output.is_none() => {
+                    state.lock.output = Some(registry.bind(name, 1, handle, ()));
+                }
                 "unbound_shell_v1" => {
                     state.shell.protocol = Some(registry.bind(name, 1, handle, ()));
                 }
@@ -794,10 +826,7 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for State {
                 height,
             } => {
                 layer_surface.ack_configure(serial);
-                state.configured = true;
-                if width > 0 && height > 0 {
-                    state.suggested_size = Some((width, height));
-                }
+                state.configure(width, height);
             }
             zwlr_layer_surface_v1::Event::Closed => {
                 state.closed = true;

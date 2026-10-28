@@ -2,6 +2,7 @@ mod clipboard;
 mod cpu;
 mod draw;
 mod gpu;
+mod lock;
 mod outline;
 mod render;
 mod run;

@@ -21,6 +21,7 @@ done < "$share/executables"
 
 cat > "$share/run" <<'GUEST'
 set -u
+export RUST_BACKTRACE=1
 echo "Guest kernel $(uname -r)"
 ls -l /dev/dri
 SEATD_VTBOUND=0 seatd -l error &

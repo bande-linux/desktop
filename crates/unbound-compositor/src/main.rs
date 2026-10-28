@@ -11,7 +11,7 @@ use smithay::utils::{Clock, Monotonic, Size};
 use smithay::wayland::socket::ListeningSocketSource;
 use unbound_compositor::{
     CLIPBOARD_DAEMON, DrmOutput, FrameClock, FrameOutput, FrameScheduler, Headless, LAUNCHER,
-    PANEL, REFRESH, Renderer, SessionRequest, SessionRole, export_session_environment,
+    PANEL, REFRESH, Renderer, SCREENSHOT, SessionRequest, SessionRole, export_session_environment,
     follow_session,
 };
 
@@ -175,6 +175,7 @@ where
         (CLIPBOARD_DAEMON, SessionRole::ClipboardDaemon),
         (PANEL, SessionRole::Shell),
         (LAUNCHER, SessionRole::Shell),
+        (SCREENSHOT, SessionRole::Shell),
     ] {
         if let Err(error) = app
             .compositor

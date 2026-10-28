@@ -156,7 +156,7 @@ jobs:
 
   perf:
     name: ci/perf
-    needs: [test, deb]
+    needs: [test, deb, vm]
     runs-on: [self-hosted, unbound]
     timeout-minutes: 30
     steps:

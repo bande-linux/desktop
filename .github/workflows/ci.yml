@@ -66,7 +66,7 @@ jobs:
             || cargo install cargo-deb --version "$CARGO_DEB_VERSION" --locked --root "$root"
           echo "$root/bin" >> "$GITHUB_PATH"
       - run: |
-          for package in unbound-compositor unbound-notify unbound-clipboard unbound-config; do
+          for package in unbound-compositor unbound-notify unbound-clipboard unbound-config unbound-power; do
             cargo deb --package "$package" --locked
           done
       - name: Inspect the packages
@@ -91,19 +91,24 @@ jobs:
           dpkg-deb --contents "$deb" | grep -q ' ./usr/bin/unbound-clipboard$'
           dpkg-deb --field target/debian/unbound-compositor_*.deb Recommends \
             | grep -qx 'unbound-clipboard'
-      - name: Check the settings service's user unit and D-Bus activation
+      - name: Check the session services' user units and D-Bus activation
         run: |
-          root=$(mktemp -d)
-          dpkg-deb --extract target/debian/unbound-config_*.deb "$root"
-          service="$root/usr/share/dbus-1/services/org.unbound.Config.service"
-          unit="$root/usr/lib/systemd/user/unbound-config.service"
-          grep -qx 'Name=org.unbound.Config' "$service"
-          grep -qx 'SystemdService=unbound-config.service' "$service"
-          grep -qx 'BusName=org.unbound.Config' "$unit"
-          grep -qx 'WantedBy=graphical-session.target' "$unit"
-          test -x "$root$(sed -n 's/^Exec=//p' "$service")"
-          test -x "$root$(sed -n 's/^ExecStart=//p' "$unit")"
-          dpkg-deb --ctrl-tarfile target/debian/unbound-config_*.deb | tar -t | grep -qx './postinst'
+          for entry in unbound-config:org.unbound.Config:org.unbound.Config \
+              unbound-power:org.unbound.Power:org.freedesktop.ScreenSaver; do
+            IFS=: read -r package file name <<< "$entry"
+            deb=$(ls target/debian/"$package"_*.deb)
+            root=$(mktemp -d)
+            dpkg-deb --extract "$deb" "$root"
+            service="$root/usr/share/dbus-1/services/$file.service"
+            unit="$root/usr/lib/systemd/user/$package.service"
+            grep -qx "Name=$name" "$service"
+            grep -qx "SystemdService=$package.service" "$service"
+            grep -qx "BusName=$name" "$unit"
+            grep -qx 'WantedBy=graphical-session.target' "$unit"
+            test -x "$root$(sed -n 's/^Exec=//p' "$service")"
+            test -x "$root$(sed -n 's/^ExecStart=//p' "$unit")"
+            dpkg-deb --ctrl-tarfile "$deb" | tar -t | grep -qx './postinst'
+          done
       - name: Smoke-test the packaged settings service
         run: |
           root=$(mktemp -d)

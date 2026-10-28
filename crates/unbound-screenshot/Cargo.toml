@@ -1,0 +1,23 @@
+[package]
+name = "unbound-screenshot"
+description = "Unbound screenshots: saves pictures of the screen taken with Super+Shift+3"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+image.workspace = true
+jiff.workspace = true
+unbound-toolkit.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[package.metadata.deb]
+maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+section = "misc"
+depends = "$auto"
+extended-description = """\
+The screenshot tool of the Unbound desktop. Super+Shift+3 saves a picture \
+of the whole screen to the desktop folder as a PNG named after the moment \
+it was taken. unbound-compositor starts it and keeps it running."""

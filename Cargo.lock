@@ -3106,6 +3106,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "unbound-screenshot"
+version = "0.1.0"
+dependencies = [
+ "image",
+ "jiff",
+ "tempfile",
+ "unbound-toolkit",
+]
+
+[[package]]
 name = "unbound-spring"
 version = "0.1.0"
 

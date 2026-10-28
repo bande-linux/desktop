@@ -4,6 +4,7 @@ use std::os::unix::net::UnixStream;
 use std::sync::Arc;
 use std::time::Duration;
 
+use smithay::input::keyboard::XkbConfig;
 use smithay::input::{Seat, SeatHandler, SeatState};
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::reexports::wayland_server::backend::{ClientData, ClientId, DisconnectReason};
@@ -11,18 +12,30 @@ use smithay::reexports::wayland_server::protocol::wl_buffer::WlBuffer;
 use smithay::reexports::wayland_server::protocol::wl_seat::WlSeat;
 use smithay::reexports::wayland_server::protocol::wl_shm::Format;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
-use smithay::reexports::wayland_server::{Client, Display};
-use smithay::utils::{Physical, Point, Serial, Size};
+use smithay::reexports::wayland_server::{Client, Display, DisplayHandle, Resource};
+use smithay::utils::{Physical, Point, SERIAL_COUNTER, Serial, Size};
 use smithay::wayland::buffer::BufferHandler;
 use smithay::wayland::compositor::{
     BufferAssignment, CompositorClientState, CompositorHandler, CompositorState, SurfaceAttributes,
     with_states,
 };
+use smithay::wayland::selection::SelectionHandler;
+use smithay::wayland::selection::data_device::{
+    ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler,
+    set_data_device_focus,
+};
+use smithay::wayland::selection::ext_data_control::{DataControlHandler, DataControlState};
+use smithay::wayland::selection::primary_selection::{
+    PrimarySelectionHandler, PrimarySelectionState, set_primary_focus,
+};
 use smithay::wayland::shell::xdg::{
     PopupSurface, PositionerState, ToplevelSurface, XdgShellHandler, XdgShellState,
 };
 use smithay::wayland::shm::{BufferData, ShmHandler, ShmState, with_buffer_contents};
-use smithay::{delegate_compositor, delegate_shm, delegate_xdg_shell};
+use smithay::{
+    delegate_compositor, delegate_data_device, delegate_ext_data_control,
+    delegate_primary_selection, delegate_seat, delegate_shm, delegate_xdg_shell,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Frame {
@@ -47,11 +60,16 @@ impl Window {
 }
 
 pub struct State {
+    display_handle: DisplayHandle,
     output_size: Size<i32, Physical>,
     compositor_state: CompositorState,
     xdg_shell_state: XdgShellState,
     shm_state: ShmState,
     seat_state: SeatState<State>,
+    seat: Seat<State>,
+    data_device_state: DataDeviceState,
+    primary_selection_state: PrimarySelectionState,
+    data_control_state: DataControlState,
     windows: Vec<Window>,
     needs_redraw: bool,
 }
@@ -65,12 +83,24 @@ impl Headless {
     pub fn new(output_size: Size<i32, Physical>) -> io::Result<Self> {
         let display = Display::new().map_err(io::Error::other)?;
         let handle = display.handle();
+        let mut seat_state = SeatState::new();
+        let mut seat = seat_state.new_wl_seat(&handle, "seat0");
+        seat.add_keyboard(XkbConfig::default(), 600, 25)
+            .map_err(io::Error::other)?;
+        let primary_selection_state = PrimarySelectionState::new::<State>(&handle);
+        let data_control_state =
+            DataControlState::new::<State, _>(&handle, Some(&primary_selection_state), |_| true);
         let state = State {
+            display_handle: handle.clone(),
             output_size,
             compositor_state: CompositorState::new::<State>(&handle),
             xdg_shell_state: XdgShellState::new::<State>(&handle),
             shm_state: ShmState::new::<State>(&handle, []),
-            seat_state: SeatState::new(),
+            seat_state,
+            seat,
+            data_device_state: DataDeviceState::new::<State>(&handle),
+            primary_selection_state,
+            data_control_state,
             windows: Vec::new(),
             needs_redraw: false,
         };
@@ -169,6 +199,14 @@ fn frame_from_shm(pool: &[u8], data: BufferData) -> Option<Frame> {
     })
 }
 
+impl State {
+    fn focus(&mut self, surface: Option<WlSurface>) {
+        if let Some(keyboard) = self.seat.get_keyboard() {
+            keyboard.set_focus(self, surface, SERIAL_COUNTER.next_serial());
+        }
+    }
+}
+
 fn centered(output: Size<i32, Physical>, window: Size<i32, Physical>) -> Point<i32, Physical> {
     ((output.w - window.w) / 2, (output.h - window.h) / 2).into()
 }
@@ -194,6 +232,7 @@ impl CompositorHandler for State {
             return;
         };
         self.needs_redraw = true;
+        let was_mapped = window.frame.is_some();
         let assignment = with_states(surface, |states| {
             states
                 .cached_state
@@ -215,6 +254,10 @@ impl CompositorHandler for State {
             }
             Some(BufferAssignment::Removed) => window.frame = None,
             None => {}
+        }
+        if !was_mapped && window.frame.is_some() {
+            let surface = window.toplevel.wl_surface().clone();
+            self.focus(Some(surface));
         }
     }
 }
@@ -249,6 +292,19 @@ impl XdgShellHandler for State {
     fn toplevel_destroyed(&mut self, toplevel: ToplevelSurface) {
         self.windows.retain(|window| window.toplevel != toplevel);
         self.needs_redraw = true;
+        let focused = self
+            .seat
+            .get_keyboard()
+            .and_then(|keyboard| keyboard.current_focus());
+        if focused.as_ref() == Some(toplevel.wl_surface()) {
+            let next = self
+                .windows
+                .iter()
+                .rev()
+                .find(|window| window.frame.is_some())
+                .map(|window| window.toplevel.wl_surface().clone());
+            self.focus(next);
+        }
     }
 
     fn new_popup(&mut self, _surface: PopupSurface, _positioner: PositionerState) {}
@@ -273,9 +329,43 @@ impl SeatHandler for State {
         &mut self.seat_state
     }
 
-    fn focus_changed(&mut self, _seat: &Seat<Self>, _focused: Option<&WlSurface>) {}
+    fn focus_changed(&mut self, seat: &Seat<Self>, focused: Option<&WlSurface>) {
+        let client = focused.and_then(|surface| self.display_handle.get_client(surface.id()).ok());
+        set_data_device_focus(&self.display_handle, seat, client.clone());
+        set_primary_focus(&self.display_handle, seat, client);
+    }
+}
+
+impl SelectionHandler for State {
+    type SelectionUserData = ();
+}
+
+impl DataDeviceHandler for State {
+    fn data_device_state(&self) -> &DataDeviceState {
+        &self.data_device_state
+    }
+}
+
+impl ClientDndGrabHandler for State {}
+
+impl ServerDndGrabHandler for State {}
+
+impl PrimarySelectionHandler for State {
+    fn primary_selection_state(&self) -> &PrimarySelectionState {
+        &self.primary_selection_state
+    }
+}
+
+impl DataControlHandler for State {
+    fn data_control_state(&self) -> &DataControlState {
+        &self.data_control_state
+    }
 }
 
 delegate_compositor!(State);
+delegate_data_device!(State);
+delegate_ext_data_control!(State);
+delegate_primary_selection!(State);
+delegate_seat!(State);
 delegate_shm!(State);
 delegate_xdg_shell!(State);

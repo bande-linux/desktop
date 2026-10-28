@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+pub mod clipboard;
+
 use std::io::Write;
 use std::os::fd::AsFd;
 use std::os::unix::net::UnixStream;
@@ -54,6 +56,9 @@ struct Globals {
     wm_base: Option<XdgWmBase>,
     configured: bool,
     frames_done: usize,
+    registry: Option<WlRegistry>,
+    advertised: Vec<(u32, String)>,
+    clipboard: clipboard::Clipboard,
 }
 
 pub struct TestClient {
@@ -81,16 +86,22 @@ impl TestClient {
     }
 
     pub fn exchange(&mut self, server: &mut Headless) {
-        for _ in 0..4 {
-            self.connection.flush().expect("client flush");
-            server.dispatch().expect("server dispatch");
-            if let Some(guard) = self.connection.prepare_read() {
-                let _ = guard.read();
-            }
-            self.queue
-                .dispatch_pending(&mut self.globals)
-                .expect("client dispatch");
-        }
+        roundtrip(server, &mut [self]);
+    }
+
+    fn bind<I>(&self, interface: &str, version: u32) -> I
+    where
+        I: wayland_client::Proxy + 'static,
+        Globals: Dispatch<I, ()>,
+    {
+        let registry = self.globals.registry.as_ref().expect("registry");
+        let (name, _) = self
+            .globals
+            .advertised
+            .iter()
+            .find(|(_, advertised)| advertised == interface)
+            .unwrap_or_else(|| panic!("{interface} is not advertised"));
+        registry.bind(*name, version, &self.queue.handle(), ())
     }
 
     pub fn show_window(&mut self, server: &mut Headless, image: &ShmImage) {
@@ -139,6 +150,24 @@ impl TestClient {
     }
 }
 
+pub fn roundtrip(server: &mut Headless, clients: &mut [&mut TestClient]) {
+    for _ in 0..4 {
+        for client in clients.iter_mut() {
+            client.connection.flush().expect("client flush");
+        }
+        server.dispatch().expect("server dispatch");
+        for client in clients.iter_mut() {
+            if let Some(guard) = client.connection.prepare_read() {
+                let _ = guard.read();
+            }
+            client
+                .queue
+                .dispatch_pending(&mut client.globals)
+                .expect("client dispatch");
+        }
+    }
+}
+
 impl Dispatch<WlRegistry, ()> for Globals {
     fn event(
         globals: &mut Self,
@@ -152,6 +181,8 @@ impl Dispatch<WlRegistry, ()> for Globals {
             name, interface, ..
         } = event
         {
+            globals.registry = Some(registry.clone());
+            globals.advertised.push((name, interface.clone()));
             match interface.as_str() {
                 "wl_compositor" => globals.compositor = Some(registry.bind(name, 4, qh, ())),
                 "wl_shm" => globals.shm = Some(registry.bind(name, 1, qh, ())),

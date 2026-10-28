@@ -19,11 +19,14 @@ hardware. Things noticed in passing go to the end of this file, not into a diff.
 
 ## Next
 
-- [ ] **M5 Rendering decision and performance harness**
+- [x] **M5 Rendering decision and performance harness** (`desktop/milestone-5`)
   `docs/RENDERING.md`; `crates/unbound-bench` measuring the compositor's typical and
   full-repaint frame times at 1920×1080, start time to listening socket and idle RSS;
   `ci/perf` runs it on every push, uploads `perf.json` and writes a summary table.
   *Done when* `ci/perf` is green and reports every metric.
+  Baseline with the wgpu renderer on the runners: typical frame p50 11.4 ms / p99
+  39.1 ms, full repaint p50 12.4 ms / p99 35.5 ms, start 2214 ms, idle RSS 93.6 MiB.
+  Budgets are reported, not enforced, until M6.
 - [ ] **M6 `unbound-render`: Vulkan (`ash`) compositor renderer**
   Persistent per-surface textures, `wl_shm` uploads limited to buffer damage,
   damage-limited repaint of the output, readback only on request; the compositor drops

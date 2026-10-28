@@ -1,0 +1,255 @@
+use std::path::Path;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread;
+use std::time::Duration;
+
+use unbound_config::{
+    Appearance, Config, ConfigError, ConfigStore, Output, PanelEdge, ReloadError, config_path,
+};
+
+fn error_at(source: &str) -> (usize, usize) {
+    let ConfigError { line, column, .. } = Config::parse(source).expect_err("invalid config");
+    (line, column)
+}
+
+#[test]
+fn an_empty_file_gives_the_plan_defaults() {
+    let config = Config::parse("").expect("empty config");
+    assert_eq!(config.panel_edge, PanelEdge::Left);
+    assert_eq!(config.idle.dim_after, Duration::from_secs(5 * 60));
+    assert_eq!(config.idle.lock_after, Duration::from_secs(10 * 60));
+    assert!(config.outputs.is_empty());
+}
+
+#[test]
+fn every_setting_is_read() {
+    let config = Config::parse(
+        r#"
+appearance "dark"
+panel {
+    edge "bottom"
+}
+idle {
+    dim-after "90s"
+    lock-after "1h"
+}
+output "eDP-1" {
+    scale 1.5
+    refresh-rate 120
+    variable-refresh-rate #true
+}
+output "HDMI-A-1" {
+    scale 1
+}
+"#,
+    )
+    .expect("valid config");
+
+    assert_eq!(config.appearance, Appearance::Dark);
+    assert_eq!(config.panel_edge, PanelEdge::Bottom);
+    assert_eq!(config.idle.dim_after, Duration::from_secs(90));
+    assert_eq!(config.idle.lock_after, Duration::from_secs(3600));
+    assert_eq!(
+        config.outputs.get("eDP-1"),
+        Some(&Output {
+            scale: Some(1.5),
+            refresh_rate: Some(120.0),
+            variable_refresh_rate: Some(true),
+        })
+    );
+    assert_eq!(
+        config.outputs.get("HDMI-A-1"),
+        Some(&Output {
+            scale: Some(1.0),
+            ..Output::default()
+        })
+    );
+}
+
+#[test]
+fn panel_accepts_each_of_the_four_edges() {
+    for (name, edge) in [
+        ("left", PanelEdge::Left),
+        ("bottom", PanelEdge::Bottom),
+        ("right", PanelEdge::Right),
+        ("top", PanelEdge::Top),
+    ] {
+        let config = Config::parse(&format!("panel {{\n    edge \"{name}\"\n}}\n"));
+        assert_eq!(config.map(|config| config.panel_edge), Ok(edge));
+    }
+}
+
+#[test]
+fn appearance_accepts_dark_light_and_automatic() {
+    for (name, appearance) in [
+        ("dark", Appearance::Dark),
+        ("light", Appearance::Light),
+        ("automatic", Appearance::Automatic),
+    ] {
+        let config = Config::parse(&format!("appearance \"{name}\"\n"));
+        assert_eq!(config.map(|config| config.appearance), Ok(appearance));
+    }
+}
+
+#[test]
+fn a_syntax_error_reports_its_line_and_column() {
+    assert_eq!(error_at("panel {\n    edge \"left\n}\n"), (2, 10));
+    assert_eq!(
+        error_at("appearance \"dark\"\npanel {\n    edge \"left\"\n"),
+        (2, 7)
+    );
+}
+
+#[test]
+fn an_unknown_setting_is_reported_where_it_starts() {
+    assert_eq!(
+        error_at("appearance \"dark\"\n  wallpaper \"x.png\"\n"),
+        (2, 3)
+    );
+    assert_eq!(error_at("panel {\n    autohide #true\n}\n"), (2, 5));
+}
+
+#[test]
+fn a_value_outside_its_choices_is_reported_at_the_value() {
+    assert_eq!(error_at("panel {\n    edge \"middle\"\n}\n"), (2, 10));
+    assert_eq!(error_at("appearance \"sepia\"\n"), (1, 12));
+}
+
+#[test]
+fn display_scale_must_stay_within_100_to_200_percent() {
+    assert!(Config::parse("output \"eDP-1\" {\n    scale 2.0\n}\n").is_ok());
+    assert_eq!(error_at("output \"eDP-1\" {\n    scale 2.5\n}\n"), (2, 11));
+    assert_eq!(error_at("output \"eDP-1\" {\n    scale 0.75\n}\n"), (2, 11));
+}
+
+#[test]
+fn refresh_rate_must_stay_within_60_to_240_hz() {
+    assert!(Config::parse("output \"DP-1\" {\n    refresh-rate 240\n}\n").is_ok());
+    assert_eq!(
+        error_at("output \"DP-1\" {\n    refresh-rate 30\n}\n"),
+        (2, 18)
+    );
+    assert_eq!(
+        error_at("output \"DP-1\" {\n    refresh-rate 360\n}\n"),
+        (2, 18)
+    );
+}
+
+#[test]
+fn the_screen_must_dim_before_it_locks() {
+    assert_eq!(
+        error_at("idle {\n    dim-after \"10m\"\n    lock-after \"5m\"\n}\n"),
+        (3, 5)
+    );
+}
+
+#[test]
+fn durations_need_a_positive_amount_and_a_unit() {
+    for duration in ["5", "0m", "m", "-5m", "5 m", "1d"] {
+        let source = format!("idle {{\n    dim-after \"{duration}\"\n}}\n");
+        assert_eq!(error_at(&source), (2, 15), "duration {duration:?}");
+    }
+}
+
+#[test]
+fn a_setting_given_twice_is_reported_at_the_second_one() {
+    assert_eq!(
+        error_at("appearance \"dark\"\nappearance \"light\"\n"),
+        (2, 1)
+    );
+    assert_eq!(
+        error_at("output \"eDP-1\" {\n}\noutput \"eDP-1\" {\n}\n"),
+        (3, 1)
+    );
+}
+
+#[test]
+fn a_valid_file_replaces_the_active_configuration() {
+    let store = ConfigStore::default();
+    let applied = store
+        .apply("panel {\n    edge \"top\"\n}\n")
+        .expect("valid");
+    assert!(Arc::ptr_eq(&applied, &store.current()));
+    assert_eq!(store.current().panel_edge, PanelEdge::Top);
+}
+
+#[test]
+fn an_invalid_file_leaves_the_active_configuration_untouched() {
+    let store = ConfigStore::default();
+    store.apply("appearance \"light\"\n").expect("valid");
+    let before = store.current();
+
+    let error = store
+        .apply("appearance \"dark\"\npanel {\n    edge \"middle\"\n}\n")
+        .expect_err("invalid");
+
+    assert_eq!((error.line, error.column), (3, 10));
+    assert!(Arc::ptr_eq(&before, &store.current()));
+    assert_eq!(store.current().appearance, Appearance::Light);
+}
+
+#[test]
+fn readers_never_observe_a_partially_applied_configuration() {
+    let first = "appearance \"dark\"\npanel {\n    edge \"top\"\n}\n";
+    let second = "appearance \"light\"\npanel {\n    edge \"bottom\"\n}\n";
+    let store = ConfigStore::new(Config::parse(first).expect("valid"));
+    let done = AtomicBool::new(false);
+
+    thread::scope(|scope| {
+        for _ in 0..4 {
+            scope.spawn(|| {
+                while !done.load(Ordering::Relaxed) {
+                    let config = store.current();
+                    let pair = (config.appearance, config.panel_edge);
+                    assert!(
+                        pair == (Appearance::Dark, PanelEdge::Top)
+                            || pair == (Appearance::Light, PanelEdge::Bottom),
+                        "torn configuration {pair:?}"
+                    );
+                }
+            });
+        }
+        for round in 0..2000 {
+            let source = if round % 2 == 0 { second } else { first };
+            store.apply(source).expect("valid");
+        }
+        done.store(true, Ordering::Relaxed);
+    });
+}
+
+#[test]
+fn reloading_reads_the_file_and_keeps_the_old_configuration_on_failure() {
+    let directory = tempfile::tempdir().expect("temp dir");
+    let path = directory.path().join("config.kdl");
+    let store = ConfigStore::default();
+
+    assert!(matches!(store.reload(&path), Err(ReloadError::Read(_))));
+    assert_eq!(*store.current(), Config::default());
+
+    std::fs::write(&path, "panel {\n    edge \"right\"\n}\n").expect("write");
+    store.reload(&path).expect("valid file");
+    assert_eq!(store.current().panel_edge, PanelEdge::Right);
+
+    std::fs::write(&path, "panel {\n    edge \"right\"\n").expect("write");
+    assert!(matches!(store.reload(&path), Err(ReloadError::Invalid(_))));
+    assert_eq!(store.current().panel_edge, PanelEdge::Right);
+}
+
+#[test]
+fn the_file_lives_under_the_xdg_config_home() {
+    let home = Path::new("/home/ada");
+    assert_eq!(
+        config_path(None, Some(home)),
+        Some(Path::new("/home/ada/.config/unbound/config.kdl").to_path_buf())
+    );
+    assert_eq!(
+        config_path(Some(Path::new("/srv/config")), Some(home)),
+        Some(Path::new("/srv/config/unbound/config.kdl").to_path_buf())
+    );
+    assert_eq!(
+        config_path(Some(Path::new("relative/config")), Some(home)),
+        Some(Path::new("/home/ada/.config/unbound/config.kdl").to_path_buf())
+    );
+    assert_eq!(config_path(None, None), None);
+}

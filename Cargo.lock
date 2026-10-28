@@ -177,7 +177,7 @@ version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "af491d569909a7e4dee0ad7db7f5341fef5c614d5b8ec8cf765732aba3cff681"
 dependencies = [
- "unicode-width",
+ "unicode-width 0.2.2",
 ]
 
 [[package]]
@@ -519,6 +519,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "kdl"
+version = "6.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "082ddf81b2acd76fe04412655d17befedfff1837db772f8e74c38050d25ed670"
+dependencies = [
+ "miette",
+ "num-traits",
+ "winnow",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.191"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -580,6 +591,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6b0ca1155a9ecc25aa12e8313a119f32edf0255fea2f44839c4ac0a12b2ac157"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "miette"
+version = "7.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5f98efec8807c63c752b5bd61f862c165c115b0a35685bdcfd9238c7aeb592b7"
+dependencies = [
+ "cfg-if",
+ "unicode-width 0.1.14",
 ]
 
 [[package]]
@@ -1210,6 +1231,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "unbound-config"
+version = "0.1.0"
+dependencies = [
+ "kdl",
+ "tempfile",
+]
+
+[[package]]
 name = "unbound-spring"
 version = "0.1.0"
 
@@ -1218,6 +1247,12 @@ name = "unicode-ident"
 version = "1.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
+
+[[package]]
+name = "unicode-width"
+version = "0.1.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7dd6e30e90baa6f72411720665d41d89b9a3d039dc45b8faea1ddd07f617f6af"
 
 [[package]]
 name = "unicode-width"
@@ -1652,6 +1687,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3949bd5b99cafdf1c7ca86b43ca564028dfe27d66958f2470940f73d86d75b37"
 dependencies = [
  "windows-link",
+]
+
+[[package]]
+name = "winnow"
+version = "0.7.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df79d97927682d2fd8adb29682d1140b343be4ac0f08fd68b7765d9c059d3945"
+dependencies = [
+ "memchr",
 ]
 
 [[package]]

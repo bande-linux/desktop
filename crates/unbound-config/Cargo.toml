@@ -1,0 +1,12 @@
+[package]
+name = "unbound-config"
+description = "Unbound KDL configuration"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+kdl.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

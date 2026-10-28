@@ -9,6 +9,7 @@ repository = "https://github.com/unbound-linux/desktop"
 
 [workspace.dependencies]
 image = { version = "=0.25.10", default-features = false, features = ["png"] }
+kdl = { version = "=6.7.1", default-features = false, features = ["span"] }
 image-compare = "=0.5.0"
 pollster = "=1.0.1"
 smithay = { version = "=0.7.0", default-features = false, features = ["wayland_frontend"] }

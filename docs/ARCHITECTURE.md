@@ -108,6 +108,23 @@ Instead of polluting the compositor with legacy X11 C-libraries or abandoning ga
     1. Inotify detects file change and triggers parsing into an isolated shadow memory structure.
     2. If validation passes: atomically swaps the active runtime configuration and emits D-Bus property signals (`org.unbound.Config`) to trigger live subscriber redraws.
     3. If validation fails: current active configuration remains untouched in memory with zero interruption. The compositor posts a non-modal on-screen toast detailing the exact syntax error, file line/column, and an actionable "Open in Editor" button.
+- **Implemented schema (`crates/unbound-config`)**: KDL 2.0 syntax. The file is `$XDG_CONFIG_HOME/unbound/config.kdl`, or `~/.config/unbound/config.kdl` when `XDG_CONFIG_HOME` is unset or relative. Every setting is optional; unknown settings, duplicates and out-of-range values are rejected with the line and column of the offending node or value.
+  ```kdl
+  appearance "automatic"        // "dark" | "light" | "automatic"
+  panel {
+      edge "left"               // "left" | "bottom" | "right" | "top"
+  }
+  idle {
+      dim-after "5m"            // positive "<n>s" | "<n>m" | "<n>h"
+      lock-after "10m"          // not shorter than dim-after
+  }
+  output "eDP-1" {              // once per connector
+      scale 1.5                 // 1.0 to 2.0 (100%-200%)
+      refresh-rate 120          // 60 to 240 Hz
+      variable-refresh-rate #true
+  }
+  ```
+  The values shown for `appearance`, `panel` and `idle` are the defaults. A valid file is parsed into a shadow `Config` and swapped in as one `Arc`, so readers see either the old or the new configuration, never a mix. The inotify watch, the D-Bus signal and the toast are not built yet.
 
 ### 1.5 Semantic Keyboard Modifier & Text Navigation Architecture
 To solve Linux's historical `Ctrl+C` collision (where `Ctrl+C` conflates clipboard copy with terminal `SIGINT` and forces awkward `Ctrl+Shift+C` exceptions), Unbound establishes an immutable, system-wide semantic modifier hierarchy:

@@ -135,8 +135,14 @@ hardware. Things noticed in passing go to the end of this file, not into a diff.
   renderers within 2/255; `Window` with the first frame on the CPU in `wl_shm` and later
   frames on a Vulkan surface; `unbound-sample` measured by `ci/perf`; widgets (stack, label,
   button, switch, slider, text field with the section 1.5 bindings) with AccessKit nodes and
-  actions. Next: `wl_seat` input in `Window`, the AccessKit tree on AT-SPI
-  (`accesskit_unix`), scroll and tab views, damage-limited redraw, fractional scale.
+  actions. Paused at 798fa67: lint, tests and clippy pass locally (`--locked`); CI for
+  that commit was not awaited (earlier commits: lint/test/deb green at bd3c763).
+  Next, in order: `wl_seat` pointer and keyboard in `Window` (xkbcommon keymap, map to
+  `ui::Event`; test with `Headless::move_pointer_to`/`press_button`/`key`); drive a `Ui`
+  from `Window` and move `unbound-sample` onto widgets; publish `Ui::accessibility` on
+  AT-SPI with `accesskit_unix` (test on a private bus via `unbound-test-bus`); scroll view
+  on `unbound-spring` and tab view; damage-limited redraw with an exact-metric bench;
+  `wp_fractional_scale_v1`.
 - [ ] **M17 Session lock and idle** `ext-session-lock-v1` with blank fallback,
   `ext-idle-notify-v1`, `idle-inhibit`, driven by the `idle` config.
 - [ ] **M18 Watchdog** `wl_display` ping heartbeat, unresponsive marking after 3 s.

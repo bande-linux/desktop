@@ -3,6 +3,7 @@ mod cursor;
 mod drm;
 mod grab;
 mod input;
+mod lock;
 mod popup;
 mod render;
 mod scanout;

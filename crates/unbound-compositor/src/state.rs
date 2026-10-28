@@ -67,6 +67,7 @@ use smithay::wayland::shell::wlr_layer::{
     KeyboardInteractivity, Layer, LayerSurface, LayerSurfaceData, WlrLayerShellHandler, WlrLayerShellState,
 };
 use smithay::wayland::shm::{ShmHandler, ShmState, with_buffer_contents};
+use smithay::wayland::session_lock::SessionLockManagerState;
 use smithay::wayland::viewporter::ViewporterState;
 use smithay::wayland::xdg_activation::{
     XdgActivationHandler, XdgActivationState, XdgActivationToken, XdgActivationTokenData,
@@ -82,6 +83,7 @@ use unbound_render::VulkanRenderer;
 
 use crate::clock::Vblank;
 use crate::cursor;
+use crate::lock::Lock;
 use crate::session::{SessionClient, SessionRole};
 use crate::shell;
 use crate::window::Window;
@@ -134,6 +136,8 @@ pub struct State {
     data_control_state: DataControlState,
     pub(crate) windows: Vec<Window>,
     pub(crate) popups: PopupManager,
+    pub(crate) lock: Option<Lock>,
+    pub(crate) session_lock_state: SessionLockManagerState,
     pub(crate) popup_grab: Option<PopupGrab<State>>,
     pub(crate) swallowed_button: Option<u32>,
     pub(crate) minimize_sequence: u64,
@@ -250,6 +254,8 @@ impl Headless {
             data_control_state,
             windows: Vec::new(),
             popups: PopupManager::default(),
+            lock: None,
+            session_lock_state: SessionLockManagerState::new::<State, _>(&handle, shell::is_shell),
             popup_grab: None,
             swallowed_button: None,
             minimize_sequence: 0,
@@ -300,6 +306,7 @@ impl Headless {
     }
 
     pub fn latch(&mut self) {
+        self.state.latch_lock();
         let unmapped = self
             .state
             .windows
@@ -353,6 +360,7 @@ impl Headless {
         for callback in self.latched_frame_callbacks.drain(..) {
             callback.done(millis);
         }
+        self.state.confirm_lock();
         self.display.flush_clients()
     }
 
@@ -488,6 +496,9 @@ impl State {
     }
 
     pub(crate) fn focus(&mut self, surface: Option<WlSurface>) {
+        if self.redirect_focus_while_locked(&surface) {
+            return;
+        }
         if let Some(exclusive) = &mut self.exclusive_layer
             && surface.as_ref() != Some(&exclusive.surface)
         {
@@ -521,7 +532,7 @@ impl State {
         self.sync_activated();
     }
 
-    fn frontmost(&self, owner: Option<&Client>) -> Option<WlSurface> {
+    pub(crate) fn frontmost(&self, owner: Option<&Client>) -> Option<WlSurface> {
         self.windows
             .iter()
             .rev()
@@ -620,6 +631,9 @@ impl State {
     }
 
     pub(crate) fn stack(&self) -> Vec<(WlSurface, Point<i32, Physical>)> {
+        if self.is_locked() {
+            return self.locked_stack();
+        }
         let with_popups = |surface: WlSurface, origin, geometry_origin| {
             let mut entries = self.popup_surfaces(&surface, geometry_origin);
             entries.push((surface, origin));
@@ -742,7 +756,10 @@ impl CompositorHandler for State {
     fn commit(&mut self, surface: &WlSurface) {
         on_commit_buffer_handler::<Self>(surface);
         self.needs_redraw = true;
-        if self.commit_popup(surface) || self.commit_layer(surface) {
+        if self.commit_lock_surface(surface)
+            || self.commit_popup(surface)
+            || self.commit_layer(surface)
+        {
             return;
         }
         self.commit_window(surface);

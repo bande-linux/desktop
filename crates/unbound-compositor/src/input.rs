@@ -260,7 +260,7 @@ impl Headless {
                     };
                 }
                 match shortcut(keysym.modified_sym().raw(), modifiers.ctrl)
-                    .filter(|_| modifiers.logo)
+                    .filter(|_| modifiers.logo && !state.is_locked())
                 {
                     Some(shortcut) => {
                         state.held_shortcut_keys.push(evdev_code);

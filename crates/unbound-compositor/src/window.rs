@@ -239,7 +239,7 @@ impl State {
         }
     }
 
-    fn key_window(&self) -> Option<WlSurface> {
+    pub(crate) fn key_window(&self) -> Option<WlSurface> {
         let focused = match &self.exclusive_layer {
             Some(layer) => layer.previous.clone(),
             None => self.focused(),

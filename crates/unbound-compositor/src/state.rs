@@ -84,7 +84,7 @@ use unbound_render::VulkanRenderer;
 use crate::clock::Vblank;
 use crate::cursor;
 use crate::lock::Lock;
-use crate::session::{SessionClient, SessionRole};
+use crate::session::{LockScreen, SessionClient, SessionRole};
 use crate::shell;
 use crate::window::Window;
 
@@ -136,6 +136,7 @@ pub struct State {
     data_control_state: DataControlState,
     pub(crate) windows: Vec<Window>,
     pub(crate) popups: PopupManager,
+    pub(crate) lock_screen_requested: bool,
     pub(crate) lock: Option<Lock>,
     pub(crate) session_lock_state: SessionLockManagerState,
     pub(crate) popup_grab: Option<PopupGrab<State>>,
@@ -156,6 +157,7 @@ pub struct Headless {
     latched_feedback: Vec<PresentationFeedbackCallback>,
     latched_frame_callbacks: Vec<WlCallback>,
     pub(crate) session_clients: Vec<SessionClient>,
+    pub(crate) lock_screen: LockScreen,
     pub(crate) socket_name: Option<OsString>,
 }
 
@@ -254,6 +256,7 @@ impl Headless {
             data_control_state,
             windows: Vec::new(),
             popups: PopupManager::default(),
+            lock_screen_requested: false,
             lock: None,
             session_lock_state: SessionLockManagerState::new::<State, _>(&handle, shell::is_shell),
             popup_grab: None,
@@ -277,6 +280,7 @@ impl Headless {
             latched_feedback: Vec::new(),
             latched_frame_callbacks: Vec::new(),
             session_clients: Vec::new(),
+            lock_screen: LockScreen::new(),
             socket_name: None,
         })
     }

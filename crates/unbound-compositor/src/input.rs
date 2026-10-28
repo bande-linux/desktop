@@ -25,12 +25,14 @@ enum Shortcut {
     NextApp,
     ShowLauncher,
     MinimizeWindow,
+    LockScreen,
     ToggleFullscreen,
 }
 
 fn shortcut(keysym: u32, ctrl: bool) -> Option<Shortcut> {
     match keysym {
         keysyms::KEY_f | keysyms::KEY_F if ctrl => Some(Shortcut::ToggleFullscreen),
+        keysyms::KEY_q | keysyms::KEY_Q if ctrl => Some(Shortcut::LockScreen),
         keysyms::KEY_m | keysyms::KEY_M => Some(Shortcut::MinimizeWindow),
         keysyms::KEY_w | keysyms::KEY_W => Some(Shortcut::CloseWindow),
         keysyms::KEY_q | keysyms::KEY_Q => Some(Shortcut::QuitApp),
@@ -55,6 +57,10 @@ impl State {
     fn run(&mut self, shortcut: Shortcut) {
         if shortcut == Shortcut::ShowLauncher {
             self.show_launcher();
+            return;
+        }
+        if shortcut == Shortcut::LockScreen {
+            self.lock_screen_requested = !self.is_locked();
             return;
         }
         let Some(focused) = self.focused() else {
@@ -99,7 +105,7 @@ impl State {
                     self.toggle_fullscreen(&window);
                 }
             }
-            Shortcut::ShowLauncher => {}
+            Shortcut::ShowLauncher | Shortcut::LockScreen => {}
         }
     }
 }

@@ -22,6 +22,7 @@ pub enum SessionRole {
 pub const CLIPBOARD_DAEMON: &str = "/usr/bin/unbound-clipboard";
 pub const PANEL: &str = "/usr/bin/unbound-panel";
 pub const LAUNCHER: &str = "/usr/bin/unbound-launcher";
+pub const LOCK_SCREEN: &str = "/usr/bin/unbound-lock";
 
 pub const SESSION_CLIENT_RESTART_THROTTLE: Duration = Duration::from_secs(10);
 
@@ -30,6 +31,22 @@ pub(crate) struct SessionClient {
     role: SessionRole,
     child: Option<Child>,
     last_restart: Option<Instant>,
+}
+
+pub(crate) struct LockScreen {
+    executable: PathBuf,
+    child: Option<Child>,
+    started: Option<Instant>,
+}
+
+impl LockScreen {
+    pub(crate) fn new() -> Self {
+        Self {
+            executable: PathBuf::from(LOCK_SCREEN),
+            child: None,
+            started: None,
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -74,8 +91,54 @@ impl Headless {
             .map(Child::id)
     }
 
+    pub fn set_lock_screen(&mut self, executable: &Path) {
+        self.lock_screen.executable = executable.to_path_buf();
+    }
+
+    pub fn lock_screen_pid(&self) -> Option<u32> {
+        self.lock_screen.child.as_ref().map(Child::id)
+    }
+
+    fn keep_lock_screen(&mut self, upkeep: &mut SessionUpkeep) {
+        if let Some(child) = self.lock_screen.child.as_mut() {
+            match child.try_wait() {
+                Ok(None) => {
+                    self.state.lock_screen_requested = false;
+                    return;
+                }
+                Ok(Some(_)) => self.lock_screen.child = None,
+                Err(error) => {
+                    upkeep
+                        .failures
+                        .push((self.lock_screen.executable.clone(), error));
+                    return;
+                }
+            }
+        }
+        let relock = self.state.lock_needs_locker();
+        if !self.state.lock_screen_requested && !relock {
+            return;
+        }
+        if relock
+            && let Some(since) = self.lock_screen.started.map(|started| started.elapsed())
+            && since < SESSION_CLIENT_RESTART_THROTTLE
+        {
+            let wait = SESSION_CLIENT_RESTART_THROTTLE - since;
+            upkeep.retry_in = Some(upkeep.retry_in.map_or(wait, |retry| retry.min(wait)));
+            return;
+        }
+        self.state.lock_screen_requested = false;
+        self.lock_screen.started = Some(Instant::now());
+        let executable = self.lock_screen.executable.clone();
+        match self.spawn_session_client(&executable, SessionRole::Shell) {
+            Ok(child) => self.lock_screen.child = Some(child),
+            Err(error) => upkeep.failures.push((executable, error)),
+        }
+    }
+
     pub fn keep_session_clients_running(&mut self) -> SessionUpkeep {
         let mut upkeep = SessionUpkeep::default();
+        self.keep_lock_screen(&mut upkeep);
         for index in 0..self.session_clients.len() {
             let client = &mut self.session_clients[index];
             if let Some(child) = client.child.as_mut() {

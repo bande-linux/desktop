@@ -219,3 +219,42 @@ fn a_new_locker_takes_over_after_the_first_one_dies() {
     roundtrip(&mut server, &mut [&mut second, &mut editor]);
     assert!(editor.keyboard_focus_on(0));
 }
+
+const KEY_LEFTCTRL: u32 = 29;
+
+#[test]
+fn ctrl_super_q_starts_the_lock_screen_without_quitting_the_app() {
+    let (mut server, mut editor) = focused_app();
+    server.set_lock_screen(std::path::Path::new("/bin/true"));
+
+    for key in [KEY_LEFTCTRL, KEY_LEFTMETA, KEY_Q] {
+        server.key(key, true, 1);
+    }
+    for key in [KEY_Q, KEY_LEFTMETA, KEY_LEFTCTRL] {
+        server.key(key, false, 2);
+    }
+    roundtrip(&mut server, &mut [&mut editor]);
+    let upkeep = server.keep_session_clients_running();
+
+    assert!(upkeep.failures.is_empty());
+    assert!(server.lock_screen_pid().is_some());
+    assert!(!editor.close_requested(0));
+    assert!(!editor.keys().iter().any(|(key, _)| *key == KEY_Q));
+}
+
+#[test]
+fn the_lock_screen_is_started_again_when_the_locker_dies_while_locked() {
+    let (mut server, mut editor) = focused_app();
+    server.set_lock_screen(std::path::Path::new("/bin/true"));
+    let mut lock = locker(&mut server);
+    lock.lock_session(&mut server);
+    present_frame(&mut server, 1);
+    server.keep_session_clients_running();
+    assert!(server.lock_screen_pid().is_none());
+
+    drop(lock);
+    roundtrip(&mut server, &mut [&mut editor]);
+    server.keep_session_clients_running();
+
+    assert!(server.lock_screen_pid().is_some());
+}

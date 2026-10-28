@@ -33,6 +33,12 @@ impl State {
         self.lock.is_some()
     }
 
+    pub(crate) fn lock_needs_locker(&self) -> bool {
+        self.lock
+            .as_ref()
+            .is_some_and(|lock| !lock.owner_alive(&self.display_handle))
+    }
+
     fn lock_surface(&self) -> Option<&WlSurface> {
         self.lock
             .as_ref()?

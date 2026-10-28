@@ -1,0 +1,32 @@
+[package]
+name = "unbound-lock"
+description = "Unbound lock screen: locks the session until the user's password is entered"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+accesskit.workspace = true
+jiff.workspace = true
+libc.workspace = true
+libloading.workspace = true
+rustix.workspace = true
+unbound-config.workspace = true
+unbound-toolkit.workspace = true
+
+[dev-dependencies]
+image.workspace = true
+image-compare.workspace = true
+
+[package.metadata.deb]
+maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+section = "misc"
+depends = "$auto, fonts-inter, libpam0g, libpam-runtime"
+assets = [
+    ["target/release/unbound-lock", "usr/bin/", "755"],
+    ["data/unbound-lock.pam", "etc/pam.d/unbound-lock", "644"],
+]
+extended-description = """\
+The lock screen of the Unbound desktop. Control-Super-Q, or the session \
+going idle or to sleep, starts it; it covers every output through \
+ext-session-lock-v1 and unlocks once PAM accepts the user's password."""

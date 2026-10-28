@@ -14,6 +14,8 @@ ab_glyph = "=0.2.32"
 ash = "=0.38.0"
 image = { version = "=0.25.10", default-features = false, features = ["png"] }
 jiff = "=0.2.38"
+libc = "=0.2.191"
+libloading = "=0.8.9"
 kdl = { version = "=6.7.1", default-features = false, features = ["span"] }
 image-compare = "=0.5.0"
 pollster = "=1.0.1"
@@ -32,6 +34,7 @@ unbound-apps = { path = "crates/unbound-apps" }
 unbound-config = { path = "crates/unbound-config" }
 unbound-compositor = { path = "crates/unbound-compositor" }
 unbound-protocols = { path = "crates/unbound-protocols" }
+unbound-lock = { path = "crates/unbound-lock" }
 unbound-render = { path = "crates/unbound-render" }
 unbound-sample = { path = "crates/unbound-sample" }
 unbound-test-bus = { path = "crates/unbound-test-bus" }

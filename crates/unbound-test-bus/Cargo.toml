@@ -1,0 +1,10 @@
+[package]
+name = "unbound-test-bus"
+description = "Private dbus-daemon session buses for Unbound tests"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+zbus.workspace = true

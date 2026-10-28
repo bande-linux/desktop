@@ -7,6 +7,9 @@ repository.workspace = true
 
 [dependencies]
 kdl.workspace = true
+notify.workspace = true
+zbus.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+unbound-test-bus.workspace = true

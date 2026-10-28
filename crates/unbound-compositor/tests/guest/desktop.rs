@@ -44,7 +44,12 @@ fn pixel(scanout: &Scanout, x: usize, y: usize) -> [u8; 3] {
 fn wait_for(what: &str, timeout: Duration, mut done: impl FnMut() -> bool) {
     let started = Instant::now();
     while !done() {
-        assert!(started.elapsed() < timeout, "timed out waiting for {what}");
+        if started.elapsed() >= timeout {
+            if let Some(scanout) = current_scanout() {
+                scanout.save(&format!("timed-out-{}", what.replace(' ', "-")));
+            }
+            panic!("timed out waiting for {what}");
+        }
         thread::sleep(Duration::from_millis(100));
     }
 }

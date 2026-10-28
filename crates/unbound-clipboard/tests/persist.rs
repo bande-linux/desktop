@@ -1,47 +1,30 @@
 use std::io::Read;
-use std::os::unix::net::UnixListener;
+use std::os::fd::{AsRawFd, BorrowedFd};
+use std::os::unix::net::{UnixListener, UnixStream};
+use std::os::unix::process::CommandExt;
 use std::path::Path;
-use std::process::{Child, Command};
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 
+use rustix::io::{FdFlags, fcntl_setfd};
 use smithay::utils::Size;
-use tempfile::TempDir;
 use unbound_compositor::Headless;
 use unbound_test_wayland::clipboard::TEXT;
 use unbound_test_wayland::{ShmImage, TestClient, quadrants, roundtrip, roundtrip_until};
 use wayland_client::protocol::wl_shm::Format;
 
-struct Session {
-    server: Headless,
-    daemon: Child,
-    _runtime: TempDir,
+const DAEMON: &str = env!("CARGO_BIN_EXE_unbound-clipboard");
+
+fn server() -> Headless {
+    Headless::new(Size::from((256, 192))).expect("headless compositor")
 }
 
-impl Drop for Session {
-    fn drop(&mut self) {
-        let _ = self.daemon.kill();
-        let _ = self.daemon.wait();
-    }
-}
-
-fn session_with_daemon() -> Session {
-    let daemon_exe = Path::new(env!("CARGO_BIN_EXE_unbound-clipboard"));
-    let mut server = Headless::with_clipboard_daemons(Size::from((256, 192)), &[daemon_exe])
-        .expect("headless compositor");
-    let runtime = tempfile::tempdir().expect("runtime dir");
-    let listener = UnixListener::bind(runtime.path().join("wayland-test")).expect("socket");
-    let daemon = Command::new(daemon_exe)
-        .env("XDG_RUNTIME_DIR", runtime.path())
-        .env("WAYLAND_DISPLAY", "wayland-test")
-        .env_remove("WAYLAND_SOCKET")
-        .spawn()
-        .expect("spawn unbound-clipboard");
-    let (stream, _) = listener.accept().expect("daemon connects");
-    server.insert_client(stream).expect("insert daemon");
-    Session {
-        server,
-        daemon,
-        _runtime: runtime,
-    }
+fn server_with_daemon() -> Headless {
+    let mut server = server();
+    server
+        .start_clipboard_daemon(Path::new(DAEMON))
+        .expect("start unbound-clipboard");
+    server
 }
 
 fn focused_client(server: &mut Headless) -> TestClient {
@@ -82,8 +65,8 @@ fn paste(server: &mut Headless, target: &mut TestClient) -> String {
 
 #[test]
 fn a_copy_pastes_after_its_source_has_quit() {
-    let mut session = session_with_daemon();
-    let server = &mut session.server;
+    let mut server = server_with_daemon();
+    let server = &mut server;
     let mut source = focused_client(server);
     source.copy(TEXT, b"kept by the daemon");
     wait_for_takeover(server, &mut source);
@@ -95,8 +78,8 @@ fn a_copy_pastes_after_its_source_has_quit() {
 
 #[test]
 fn a_primary_selection_pastes_after_its_source_has_quit() {
-    let mut session = session_with_daemon();
-    let server = &mut session.server;
+    let mut server = server_with_daemon();
+    let server = &mut server;
     let mut source = focused_client(server);
     source.copy_primary(TEXT, b"selected text");
     wait_for_takeover(server, &mut source);
@@ -111,8 +94,8 @@ fn a_primary_selection_pastes_after_its_source_has_quit() {
 
 #[test]
 fn the_latest_copy_wins_after_both_sources_have_quit() {
-    let mut session = session_with_daemon();
-    let server = &mut session.server;
+    let mut server = server_with_daemon();
+    let server = &mut server;
     let mut first = focused_client(server);
     first.copy(TEXT, b"first");
     wait_for_takeover(server, &mut first);
@@ -125,4 +108,78 @@ fn the_latest_copy_wins_after_both_sources_have_quit() {
 
     let mut target = focused_client(server);
     assert_eq!(paste(server, &mut target), "second");
+}
+
+#[test]
+fn a_daemon_that_dies_is_restarted_and_keeps_new_copies() {
+    let mut server = server_with_daemon();
+    let first = server.clipboard_daemon_pid().expect("daemon started");
+    let killed = Command::new("kill")
+        .args(["-KILL", &first.to_string()])
+        .status()
+        .expect("kill");
+    assert!(killed.success());
+
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while server.clipboard_daemon_pid() == Some(first) || server.clipboard_daemon_pid().is_none() {
+        assert!(
+            Instant::now() < deadline,
+            "daemon not restarted within 10 s"
+        );
+        server.dispatch().expect("server dispatch");
+        assert_eq!(
+            server.keep_clipboard_daemon_running().expect("restart"),
+            None
+        );
+        std::thread::sleep(Duration::from_millis(5));
+    }
+
+    let server = &mut server;
+    let mut source = focused_client(server);
+    source.copy(TEXT, b"after the restart");
+    wait_for_takeover(server, &mut source);
+    drop(source);
+
+    let mut target = focused_client(server);
+    assert_eq!(paste(server, &mut target), "after the restart");
+}
+
+#[test]
+fn the_daemon_binary_on_an_ordinary_connection_gets_no_data_control() {
+    let mut server = server();
+    let runtime = tempfile::tempdir().expect("runtime dir");
+    let socket = runtime.path().join("wayland-test");
+    let listener = UnixListener::bind(&socket).expect("listen");
+    let connected = UnixStream::connect(&socket).expect("connect");
+    let (accepted, _) = listener.accept().expect("accept");
+    server.insert_client(accepted).expect("insert client");
+
+    let inherited = connected.as_raw_fd();
+    let mut command = Command::new(DAEMON);
+    command
+        .env("WAYLAND_SOCKET", inherited.to_string())
+        .env_remove("WAYLAND_DISPLAY")
+        .stderr(Stdio::piped());
+    unsafe {
+        command.pre_exec(move || {
+            fcntl_setfd(BorrowedFd::borrow_raw(inherited), FdFlags::empty())
+                .map_err(std::io::Error::from)
+        });
+    }
+    let mut daemon = command.spawn().expect("exec unbound-clipboard");
+    drop(connected);
+
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let status = loop {
+        server.dispatch().expect("server dispatch");
+        if let Some(status) = daemon.try_wait().expect("wait") {
+            break status;
+        }
+        assert!(Instant::now() < deadline, "daemon still running after 10 s");
+        std::thread::sleep(Duration::from_millis(5));
+    };
+    assert!(!status.success());
+
+    let observer = TestClient::connect(&mut server);
+    assert!(!observer.advertises("ext_data_control_manager_v1"));
 }

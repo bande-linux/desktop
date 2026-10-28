@@ -71,6 +71,18 @@ impl TestClient {
     pub fn connect(server: &mut Headless) -> Self {
         let (client_end, server_end) = UnixStream::pair().expect("socket pair");
         server.insert_client(server_end).expect("insert client");
+        Self::from_socket(server, client_end)
+    }
+
+    pub fn connect_as_clipboard_daemon(server: &mut Headless) -> Self {
+        let (client_end, server_end) = UnixStream::pair().expect("socket pair");
+        server
+            .insert_clipboard_daemon(server_end)
+            .expect("insert clipboard daemon");
+        Self::from_socket(server, client_end)
+    }
+
+    fn from_socket(server: &mut Headless, client_end: UnixStream) -> Self {
         let connection = Connection::from_socket(client_end).expect("client connection");
         let queue = connection.new_event_queue();
         connection.display().get_registry(&queue.handle(), ());

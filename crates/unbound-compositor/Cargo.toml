@@ -6,6 +6,7 @@ edition.workspace = true
 repository.workspace = true
 
 [dependencies]
+rustix.workspace = true
 smithay.workspace = true
 unbound-toolkit.workspace = true
 wgpu.workspace = true

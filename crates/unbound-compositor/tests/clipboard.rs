@@ -83,12 +83,6 @@ fn primary_selection_pastes_in_another_client() {
     assert_eq!(read_all(pipe), "middle click");
 }
 
-fn server_trusting_this_test() -> Headless {
-    let this_test = std::env::current_exe().expect("test executable");
-    Headless::with_clipboard_daemons(Size::from((256, 192)), &[this_test.as_path()])
-        .expect("headless compositor")
-}
-
 #[test]
 fn data_control_is_hidden_from_clients_that_are_not_the_clipboard_daemon() {
     let mut server = server();
@@ -98,16 +92,16 @@ fn data_control_is_hidden_from_clients_that_are_not_the_clipboard_daemon() {
 }
 
 #[test]
-fn data_control_is_offered_to_the_trusted_executable() {
-    let mut server = server_trusting_this_test();
-    let client = TestClient::connect(&mut server);
-    assert!(client.advertises("ext_data_control_manager_v1"));
+fn data_control_is_offered_to_the_clipboard_daemon_connection() {
+    let mut server = server();
+    let daemon = TestClient::connect_as_clipboard_daemon(&mut server);
+    assert!(daemon.advertises("ext_data_control_manager_v1"));
 }
 
 #[test]
 fn a_data_control_manager_keeps_the_selection_after_the_source_exits() {
-    let mut server = server_trusting_this_test();
-    let mut manager = TestClient::connect(&mut server);
+    let mut server = server();
+    let mut manager = TestClient::connect_as_clipboard_daemon(&mut server);
     manager.join_data_control(&mut server);
 
     let mut source = focused_client(&mut server);

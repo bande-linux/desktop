@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::path::Path;
 use std::process::ExitCode;
 use std::time::Instant;
 
@@ -6,7 +7,7 @@ use smithay::reexports::calloop::generic::Generic;
 use smithay::reexports::calloop::{EventLoop, Interest, Mode, PostAction};
 use smithay::utils::Size;
 use smithay::wayland::socket::ListeningSocketSource;
-use unbound_compositor::{Headless, Renderer};
+use unbound_compositor::{CLIPBOARD_DAEMON, CLIPBOARD_DAEMON_RESTART_THROTTLE, Headless, Renderer};
 
 const OUTPUT_SIZE: (i32, i32) = (1920, 1080);
 
@@ -47,9 +48,21 @@ fn run() -> Result<(), Box<dyn Error>> {
         },
     )?;
 
+    if let Err(error) = compositor.start_clipboard_daemon(Path::new(CLIPBOARD_DAEMON)) {
+        eprintln!("unbound-compositor: cannot start {CLIPBOARD_DAEMON}: {error}");
+    }
+
     let start = Instant::now();
+    let mut clipboard_daemon_retry = None;
     loop {
-        event_loop.dispatch(None, &mut compositor)?;
+        event_loop.dispatch(clipboard_daemon_retry, &mut compositor)?;
+        clipboard_daemon_retry = match compositor.keep_clipboard_daemon_running() {
+            Ok(retry) => retry,
+            Err(error) => {
+                eprintln!("unbound-compositor: cannot restart {CLIPBOARD_DAEMON}: {error}");
+                Some(CLIPBOARD_DAEMON_RESTART_THROTTLE)
+            }
+        };
         if compositor.take_redraw() {
             renderer.render(&compositor)?;
             compositor.frame_done(start.elapsed())?;

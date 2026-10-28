@@ -1,10 +1,13 @@
 use std::io;
-use std::os::fd::OwnedFd;
+use std::os::fd::{AsRawFd, BorrowedFd, OwnedFd};
 use std::os::unix::net::UnixStream;
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
+use std::process::{Child, Command};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
+
+use rustix::io::{FdFlags, fcntl_setfd};
 
 use smithay::input::keyboard::XkbConfig;
 use smithay::input::{Seat, SeatHandler, SeatState};
@@ -79,25 +82,21 @@ pub struct State {
 pub struct Headless {
     display: Display<State>,
     state: State,
-    clipboard_daemons: Vec<PathBuf>,
+    clipboard_daemon: Option<ClipboardDaemon>,
 }
 
 pub const CLIPBOARD_DAEMON: &str = "/usr/bin/unbound-clipboard";
 
-fn executable(handle: &DisplayHandle, client: &Client) -> Option<PathBuf> {
-    let credentials = client.get_credentials(handle).ok()?;
-    std::fs::read_link(format!("/proc/{}/exe", credentials.pid)).ok()
+pub const CLIPBOARD_DAEMON_RESTART_THROTTLE: Duration = Duration::from_secs(10);
+
+struct ClipboardDaemon {
+    executable: PathBuf,
+    child: Option<Child>,
+    last_restart: Option<Instant>,
 }
 
 impl Headless {
     pub fn new(output_size: Size<i32, Physical>) -> io::Result<Self> {
-        Self::with_clipboard_daemons(output_size, &[Path::new(CLIPBOARD_DAEMON)])
-    }
-
-    pub fn with_clipboard_daemons(
-        output_size: Size<i32, Physical>,
-        clipboard_daemons: &[&Path],
-    ) -> io::Result<Self> {
         let display = Display::new().map_err(io::Error::other)?;
         let handle = display.handle();
         let mut seat_state = SeatState::new();
@@ -109,7 +108,7 @@ impl Headless {
             DataControlState::new::<State, _>(&handle, Some(&primary_selection_state), |client| {
                 client
                     .get_data::<ClientState>()
-                    .is_some_and(|state| state.clipboard_daemon.load(Ordering::Relaxed))
+                    .is_some_and(|state| state.clipboard_daemon)
             });
         let state = State {
             display_handle: handle.clone(),
@@ -125,27 +124,82 @@ impl Headless {
             windows: Vec::new(),
             needs_redraw: false,
         };
-        let clipboard_daemons = clipboard_daemons
-            .iter()
-            .map(|path| path.canonicalize().unwrap_or_else(|_| path.to_path_buf()))
-            .collect();
         Ok(Self {
             display,
             state,
-            clipboard_daemons,
+            clipboard_daemon: None,
         })
     }
 
     pub fn insert_client(&mut self, stream: UnixStream) -> io::Result<Client> {
-        let mut handle = self.display.handle();
-        let client_state = Arc::new(ClientState::default());
-        let client = handle.insert_client(stream, client_state.clone())?;
-        let clipboard_daemon =
-            executable(&handle, &client).is_some_and(|path| self.clipboard_daemons.contains(&path));
-        client_state
-            .clipboard_daemon
-            .store(clipboard_daemon, Ordering::Relaxed);
-        Ok(client)
+        self.display
+            .handle()
+            .insert_client(stream, Arc::new(ClientState::default()))
+    }
+
+    pub fn insert_clipboard_daemon(&mut self, stream: UnixStream) -> io::Result<Client> {
+        let state = ClientState {
+            clipboard_daemon: true,
+            ..ClientState::default()
+        };
+        self.display.handle().insert_client(stream, Arc::new(state))
+    }
+
+    pub fn start_clipboard_daemon(&mut self, executable: &Path) -> io::Result<()> {
+        let child = self.spawn_clipboard_daemon(executable)?;
+        self.clipboard_daemon = Some(ClipboardDaemon {
+            executable: executable.to_path_buf(),
+            child: Some(child),
+            last_restart: None,
+        });
+        Ok(())
+    }
+
+    pub fn clipboard_daemon_pid(&self) -> Option<u32> {
+        let child = self.clipboard_daemon.as_ref()?.child.as_ref()?;
+        Some(child.id())
+    }
+
+    pub fn keep_clipboard_daemon_running(&mut self) -> io::Result<Option<Duration>> {
+        let Some(daemon) = self.clipboard_daemon.as_mut() else {
+            return Ok(None);
+        };
+        if let Some(child) = daemon.child.as_mut() {
+            if child.try_wait()?.is_none() {
+                return Ok(None);
+            }
+            daemon.child = None;
+        }
+        if let Some(since) = daemon.last_restart.map(|last| last.elapsed())
+            && since < CLIPBOARD_DAEMON_RESTART_THROTTLE
+        {
+            return Ok(Some(CLIPBOARD_DAEMON_RESTART_THROTTLE - since));
+        }
+        daemon.last_restart = Some(Instant::now());
+        let executable = daemon.executable.clone();
+        let child = self.spawn_clipboard_daemon(&executable)?;
+        if let Some(daemon) = self.clipboard_daemon.as_mut() {
+            daemon.child = Some(child);
+        }
+        Ok(None)
+    }
+
+    fn spawn_clipboard_daemon(&mut self, executable: &Path) -> io::Result<Child> {
+        let (compositor_end, daemon_end) = UnixStream::pair()?;
+        self.insert_clipboard_daemon(compositor_end)?;
+        let daemon_end = OwnedFd::from(daemon_end);
+        let inherited = daemon_end.as_raw_fd();
+        let mut command = Command::new(executable);
+        command
+            .env("WAYLAND_SOCKET", inherited.to_string())
+            .env_remove("WAYLAND_DISPLAY");
+        unsafe {
+            command.pre_exec(move || {
+                fcntl_setfd(BorrowedFd::borrow_raw(inherited), FdFlags::empty())
+                    .map_err(io::Error::from)
+            });
+        }
+        command.spawn()
     }
 
     pub fn dispatch(&mut self) -> io::Result<()> {
@@ -189,7 +243,7 @@ impl Headless {
 #[derive(Default)]
 struct ClientState {
     compositor_state: CompositorClientState,
-    clipboard_daemon: AtomicBool,
+    clipboard_daemon: bool,
 }
 
 impl ClientData for ClientState {

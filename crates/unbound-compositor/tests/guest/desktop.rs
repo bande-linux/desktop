@@ -48,7 +48,12 @@ fn pixel(scanout: &Scanout, x: usize, y: usize) -> [u8; 3] {
 fn wait_for(what: &str, timeout: Duration, mut done: impl FnMut() -> bool) {
     let started = Instant::now();
     while !done() {
-        assert!(started.elapsed() < timeout, "timed out waiting for {what}");
+        if started.elapsed() >= timeout {
+            if let Some(scanout) = current_scanout() {
+                scanout.save(&format!("timed-out-{}", what.replace(' ', "-")));
+            }
+            panic!("timed out waiting for {what}");
+        }
         thread::sleep(Duration::from_millis(100));
     }
 }
@@ -129,21 +134,24 @@ fn the_launcher_opens_a_terminal_that_takes_typing() {
     thread::sleep(Duration::from_secs(1));
     scanout().save("m14-terminal-typed");
 
-    let icon = (32, 33);
-    let icon_color = pixel(&desktop, icon.0, icon.1);
     let terminal_color = pixel(&scanout(), center_x, desktop.height / 2);
+    let corners = |scanout: &Scanout| {
+        [
+            pixel(scanout, scanout.width - 8, 8),
+            pixel(scanout, scanout.width - 8, scanout.height - 8),
+        ]
+    };
+    let background = corners(&desktop);
     keyboard.chord(&[KEY_LEFTCTRL, KEY_LEFTMETA], KEY_F);
-    wait_for("the terminal to cover the panel", STARTUP, || {
-        let now = scanout();
-        pixel(&now, icon.0, icon.1) == terminal_color
-            && pixel(&now, now.width - 8, 8) == terminal_color
+    wait_for("the terminal to fill the screen", STARTUP, || {
+        corners(&scanout()) == [terminal_color; 2]
     });
     thread::sleep(Duration::from_secs(1));
     scanout().save("m15-terminal-full-screen");
 
     keyboard.chord(&[KEY_LEFTCTRL, KEY_LEFTMETA], KEY_F);
-    wait_for("the panel to come back", STARTUP, || {
-        pixel(&scanout(), icon.0, icon.1) == icon_color
+    wait_for("the terminal to return to its window", STARTUP, || {
+        corners(&scanout()) == background
     });
     thread::sleep(Duration::from_secs(1));
     scanout().save("m15-terminal-windowed");

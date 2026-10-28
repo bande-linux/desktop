@@ -34,9 +34,27 @@ pub enum PanelEdge {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Suspend {
+    WithDisplayOff,
+    After(Duration),
+    Never,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Idle {
     pub dim_after: Duration,
     pub lock_after: Duration,
+    pub suspend: Suspend,
+}
+
+impl Idle {
+    pub fn suspend_after(&self) -> Option<Duration> {
+        match self.suspend {
+            Suspend::WithDisplayOff => Some(self.lock_after),
+            Suspend::After(after) => Some(after),
+            Suspend::Never => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -62,6 +80,7 @@ impl Default for Config {
             idle: Idle {
                 dim_after: Duration::from_secs(5 * 60),
                 lock_after: Duration::from_secs(10 * 60),
+                suspend: Suspend::WithDisplayOff,
             },
             outputs: BTreeMap::new(),
         }
@@ -264,21 +283,38 @@ impl Parser<'_> {
 
     fn idle(&self, node: &KdlNode, mut idle: Idle) -> Result<Idle, ConfigError> {
         self.no_arguments(node)?;
-        let mut offending = node;
+        let mut lock_node = node;
+        let mut suspend_node = node;
         for child in self.children(node)? {
             match child.name().value() {
                 "dim-after" => idle.dim_after = self.duration(child)?,
                 "lock-after" => {
                     idle.lock_after = self.duration(child)?;
-                    offending = child;
+                    lock_node = child;
+                }
+                "suspend-after" => {
+                    idle.suspend = match self.argument(child)?.value().as_string() {
+                        Some("never") => Suspend::Never,
+                        _ => Suspend::After(self.duration(child).map_err(|error| ConfigError {
+                            message: format!("{} or \"never\"", error.message),
+                            ..error
+                        })?),
+                    };
+                    suspend_node = child;
                 }
                 _ => return Err(self.unknown_child("idle", child)),
             }
         }
         if idle.lock_after < idle.dim_after {
             return Err(self.at_node(
-                offending,
+                lock_node,
                 "`idle lock-after` must not be shorter than `idle dim-after`",
+            ));
+        }
+        if matches!(idle.suspend, Suspend::After(after) if after < idle.lock_after) {
+            return Err(self.at_node(
+                suspend_node,
+                "`idle suspend-after` must not be shorter than `idle lock-after`",
             ));
         }
         Ok(idle)

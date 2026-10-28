@@ -10,6 +10,7 @@ pub enum Setting {
     PanelEdge(PanelEdge),
     IdleDimAfter(Duration),
     IdleLockAfter(Duration),
+    IdleSuspendAfter(Option<Duration>),
     Output(String, Output),
 }
 
@@ -45,6 +46,12 @@ impl Setting {
                 Some("idle"),
                 "lock-after",
                 Some(duration(*after).into()),
+            ),
+            Self::IdleSuspendAfter(after) => set(
+                &mut document,
+                Some("idle"),
+                "suspend-after",
+                Some(after.map_or_else(|| "never".to_owned(), duration).into()),
             ),
             Self::Output(connector, output) => set_output(&mut document, connector, output),
         }

@@ -149,6 +149,9 @@ fn publish_changes(
         if before.idle.lock_after != after.idle.lock_after {
             let _ = guard.idle_lock_after_changed(emitter).await;
         }
+        if before.idle.suspend_after() != after.idle.suspend_after() {
+            let _ = guard.idle_suspend_after_changed(emitter).await;
+        }
         if before.outputs != after.outputs {
             let _ = guard.outputs_changed(emitter).await;
         }
@@ -280,8 +283,32 @@ impl ConfigInterface {
     }
 
     #[zbus(property)]
-    fn set_idle_lock_after(&self, seconds: u64) -> zbus::fdo::Result<()> {
-        self.write(&Setting::IdleLockAfter(Duration::from_secs(seconds)))
+    async fn set_idle_lock_after(
+        &self,
+        seconds: u64,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+    ) -> zbus::fdo::Result<()> {
+        let before = self.store.current().idle.suspend_after();
+        self.write(&Setting::IdleLockAfter(Duration::from_secs(seconds)))?;
+        if before != self.store.current().idle.suspend_after() {
+            self.idle_suspend_after_changed(&emitter).await?;
+        }
+        Ok(())
+    }
+
+    #[zbus(property)]
+    fn idle_suspend_after(&self) -> u64 {
+        self.store
+            .current()
+            .idle
+            .suspend_after()
+            .map_or(0, |after| after.as_secs())
+    }
+
+    #[zbus(property)]
+    fn set_idle_suspend_after(&self, seconds: u64) -> zbus::fdo::Result<()> {
+        let after = (seconds > 0).then(|| Duration::from_secs(seconds));
+        self.write(&Setting::IdleSuspendAfter(after))
     }
 
     #[zbus(property)]

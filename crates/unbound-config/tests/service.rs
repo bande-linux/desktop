@@ -302,3 +302,44 @@ fn set_output_writes_the_connector_and_publishes_outputs() {
             .expect("valid file");
     assert_eq!(written.outputs["eDP-1"].scale, Some(1.25));
 }
+
+#[test]
+fn moving_the_lock_moves_a_suspend_that_follows_the_display() {
+    let fixture = start("");
+    let changes = watch_changes(&fixture.client);
+    assert_eq!(
+        u64::try_from(get(&fixture.client, "IdleSuspendAfter")).expect("u64"),
+        600
+    );
+
+    set(&fixture.client, "IdleLockAfter", Value::from(1200u64)).expect("Set");
+
+    let mut changed = Changes::new();
+    while changed.len() < 2 {
+        changed.extend(
+            changes
+                .recv_timeout(SIGNAL_WAIT)
+                .expect("PropertiesChanged"),
+        );
+    }
+    assert_eq!(
+        u64::try_from(changed["IdleSuspendAfter"].try_clone().expect("clone")).expect("u64"),
+        1200
+    );
+    assert!(changed.contains_key("IdleLockAfter"));
+}
+
+#[test]
+fn suspend_after_zero_means_never() {
+    let fixture = start("");
+    set(&fixture.client, "IdleSuspendAfter", Value::from(0u64)).expect("Set");
+    assert_eq!(
+        u64::try_from(get(&fixture.client, "IdleSuspendAfter")).expect("u64"),
+        0
+    );
+    assert!(
+        std::fs::read_to_string(&fixture.path)
+            .expect("read")
+            .contains("suspend-after \"never\"")
+    );
+}

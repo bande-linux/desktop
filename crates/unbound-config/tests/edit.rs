@@ -125,3 +125,18 @@ fn an_output_is_added_changed_and_removed_by_connector() {
     );
     assert_eq!(removed, "output \"eDP-1\" {\n    scale 2.0\n}\n");
 }
+
+#[test]
+fn suspend_after_is_written_as_a_duration_or_never() {
+    assert_eq!(
+        apply(Setting::IdleSuspendAfter(None), ""),
+        "idle {\n    suspend-after \"never\"\n}\n"
+    );
+    assert_eq!(
+        apply(
+            Setting::IdleSuspendAfter(Some(Duration::from_secs(3600))),
+            "idle {\n    suspend-after \"never\"\n}\n"
+        ),
+        "idle {\n    suspend-after \"1h\"\n}\n"
+    );
+}

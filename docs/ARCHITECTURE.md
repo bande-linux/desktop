@@ -125,7 +125,7 @@ Instead of polluting the compositor with legacy X11 C-libraries or abandoning ga
       variable-refresh-rate #true
   }
   ```
-  The values shown for `appearance`, `panel` and `idle` are the defaults. A valid file is parsed into a shadow `Config` and swapped in as one `Arc`, so readers see either the old or the new configuration, never a mix. The inotify watch, the D-Bus signal and the toast are not built yet.
+  The values shown for `appearance`, `panel` and `idle` are the defaults. A valid file is parsed into a shadow `Config` and swapped in as one `Arc`, so readers see either the old or the new configuration, never a mix. `ConfigService` owns `org.unbound.Config` on the session bus and serves the active values as properties of interface `org.unbound.Config` at `/org/unbound/Config` (`Appearance`, `PanelEdge`, `IdleDimAfter` and `IdleLockAfter` in seconds, `Outputs` as `a{sa{sv}}`). It watches the directory and reloads when the file is closed after writing or renamed into place; `PropertiesChanged` lists only the properties that changed. Invalid files are reported to the caller with line and column; the toast is not built yet.
 
 ### 1.5 Semantic Keyboard Modifier & Text Navigation Architecture
 To solve Linux's historical `Ctrl+C` collision (where `Ctrl+C` conflates clipboard copy with terminal `SIGINT` and forces awkward `Ctrl+Shift+C` exceptions), Unbound establishes an immutable, system-wide semantic modifier hierarchy:
@@ -177,6 +177,7 @@ graph LR
    - Primary selection (middle-click paste) via `zwp_primary_selection_v1`.
    - Standard clipboard via `wl_data_device_manager`.
    - Persistent clipboard history daemon via `ext-data-control-v1` (retains copied contents after source application exits).
+   - Implemented in the compositor so far: `wl_data_device_manager` v3, `zwp_primary_selection_device_manager_v1` and `ext_data_control_manager_v1` on one seat, with selections offered to the keyboard-focused client only. The compositor keeps a selection whose source has exited; the daemon is expected to take each new selection over as soon as it has read it. Any client may bind data control for now. The daemon itself is not built.
 2. **Screen Lock & Idle State Machine (`unbound-lock`)**:
    - Built on `ext-session-lock-v1`.
    - **Crash Resilience**: If the lock-screen UI crashes, the compositor maintains lock enforcement by rendering a blank fallback color and re-spawning the lock client.
@@ -591,7 +592,7 @@ All CI runs on the organization's self-hosted runners: Docker containers on an A
 ### 8.1.1 CI Workflow (`.github/workflows/ci.yml`)
 Runs on every push to any branch and on pull requests. Job names are the status-check contexts:
 - `ci/lint`: `cargo fmt --check` and `cargo clippy --workspace --all-targets -- -D warnings`.
-- `ci/lavapipe-test`: `cargo test --workspace`, including the compositor and toolkit render tests on lavapipe. The toolkit's text test uses DejaVu Sans from `fonts-dejavu-core`; its expected image is built in the test from the scene with `ab_glyph`, so it does not depend on the font version.
+- `ci/lavapipe-test`: `cargo test --workspace`, including the compositor and toolkit render tests on lavapipe. D-Bus tests start a private `dbus-daemon` session bus each (`crates/unbound-test-bus`). The toolkit's text test uses DejaVu Sans from `fonts-dejavu-core`; its expected image is built in the test from the scene with `ab_glyph`, so it does not depend on the font version.
 - `ci/deb`: `cargo deb`, then checks the package architecture, starts the packaged binary as a smoke test, and uploads the `.deb` as an artifact.
 
 The Rust toolchain is pinned in `rust-toolchain.toml`, dependencies are pinned to exact versions, and `Cargo.lock` is committed. Until `ci-builder` exists, jobs install system packages with `apt-get` on the runner image (Ubuntu 24.04), so `.deb` files are built against Ubuntu's glibc rather than Debian 13's.

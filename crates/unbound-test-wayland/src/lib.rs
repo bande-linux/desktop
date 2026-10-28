@@ -134,6 +134,19 @@ impl TestClient {
         self.exchange(server);
         assert!(self.globals.configured, "initial configure");
 
+        self.attach(&surface, image, (0, 0, image.width, image.height));
+        self.exchange(server);
+        self.windows.push((surface, xdg_surface, toplevel));
+    }
+
+    pub fn commit_buffer(&mut self, index: usize, image: &ShmImage, damage: (i32, i32, i32, i32)) {
+        let surface = self.windows[index].0.clone();
+        self.attach(&surface, image, damage);
+        self.connection.flush().expect("client flush");
+    }
+
+    fn attach(&self, surface: &WlSurface, image: &ShmImage, damage: (i32, i32, i32, i32)) {
+        let qh = self.queue.handle();
         let mut file = tempfile::tempfile().expect("shm file");
         file.write_all(image.bytes).expect("shm write");
         let size = i32::try_from(image.bytes.len()).expect("shm size");
@@ -148,12 +161,11 @@ impl TestClient {
             &qh,
             (),
         );
+        let (x, y, width, height) = damage;
         surface.attach(Some(&buffer), 0, 0);
-        surface.damage_buffer(0, 0, image.width, image.height);
+        surface.damage_buffer(x, y, width, height);
         surface.commit();
         pool.destroy();
-        self.exchange(server);
-        self.windows.push((surface, xdg_surface, toplevel));
     }
 
     pub fn close_window(&mut self, server: &mut Headless, index: usize) {

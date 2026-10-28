@@ -1,0 +1,15 @@
+[package]
+name = "unbound-toolkit"
+description = "Shared Unbound UI toolkit: design tokens and wgpu drawing"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+ab_glyph.workspace = true
+pollster.workspace = true
+wgpu.workspace = true
+
+[dev-dependencies]
+image.workspace = true
+image-compare.workspace = true

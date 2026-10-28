@@ -47,7 +47,6 @@ pub(super) struct Clipboard {
     selection: Option<WlDataOffer>,
     primary: Option<ZwpPrimarySelectionOfferV1>,
     control_selection: Option<ExtDataControlOfferV1>,
-    control_selection_events: usize,
     sources: Vec<WlDataSource>,
     primary_sources: Vec<ZwpPrimarySelectionSourceV1>,
     control_sources: Vec<ExtDataControlSourceV1>,
@@ -143,10 +142,6 @@ impl TestClient {
 
     pub fn control_mimes(&self) -> Option<Vec<String>> {
         self.globals.clipboard.control_selection.as_ref().map(mimes)
-    }
-
-    pub fn control_selection_events(&self) -> usize {
-        self.globals.clipboard.control_selection_events
     }
 
     pub fn request_paste(&mut self, mime: &str) -> PipeReader {
@@ -320,7 +315,6 @@ impl Dispatch<ExtDataControlDeviceV1, ()> for Globals {
     ) {
         if let ext_data_control_device_v1::Event::Selection { id } = event {
             globals.clipboard.control_selection = id;
-            globals.clipboard.control_selection_events += 1;
         }
     }
 

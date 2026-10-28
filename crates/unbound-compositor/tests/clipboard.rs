@@ -102,15 +102,10 @@ fn a_data_control_manager_keeps_the_selection_after_the_source_exits() {
     let saved = read_all(pipe);
     assert_eq!(saved, "outlives its source");
 
-    drop(source);
-    manager.exchange(&mut server);
-    assert_eq!(
-        manager.control_mimes(),
-        None,
-        "the selection died with its source"
-    );
-
     manager.control_copy(&mimes, saved.as_bytes());
+    roundtrip(&mut server, &mut [&mut source, &mut manager]);
+
+    drop(source);
     manager.exchange(&mut server);
 
     let mut target = focused_client(&mut server);

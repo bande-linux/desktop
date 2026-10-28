@@ -320,6 +320,11 @@ fn an_exclusive_overlay_takes_the_keyboard_and_returns_it_when_hidden() {
     roundtrip(&mut server, &mut [&mut app, &mut shell]);
 
     assert!(app.keyboard_focus_on(0));
+
+    assert!(
+        shell.reconfigure_layer(&mut server, 0),
+        "a layer committed without a buffer after unmapping is configured again"
+    );
 }
 
 #[test]

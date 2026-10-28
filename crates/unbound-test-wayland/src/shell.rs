@@ -107,6 +107,13 @@ impl TestClient {
         self.exchange(server);
     }
 
+    pub fn reconfigure_layer(&mut self, server: &mut Headless, index: usize) -> bool {
+        self.globals.shell.layer_size = None;
+        self.globals.shell.layers[index].0.commit();
+        self.exchange(server);
+        self.globals.shell.layer_size.is_some()
+    }
+
     pub fn close_layer(&mut self, server: &mut Headless, index: usize) {
         let (surface, layer_surface) = self.globals.shell.layers.remove(index);
         layer_surface.destroy();

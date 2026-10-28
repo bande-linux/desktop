@@ -399,4 +399,22 @@ fn a_launcher_overlay_takes_the_keyboard_while_shown_and_returns_it_when_hidden(
     );
 
     assert!(typed(&app.seen).is_empty());
+
+    launcher.send(b's');
+    let focused_before = launcher
+        .seen
+        .iter()
+        .filter(|event| **event == WindowEvent::Focus(true))
+        .count();
+    desktop.wait_for(
+        &mut [&mut launcher],
+        |events| {
+            events
+                .iter()
+                .filter(|event| **event == WindowEvent::Focus(true))
+                .count()
+                > focused_before
+        },
+        |_| true,
+    );
 }

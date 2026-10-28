@@ -616,7 +616,7 @@ impl State {
                 .get::<LayerSurfaceData>()
                 .is_some_and(|data| data.lock().is_ok_and(|data| data.initial_configure_sent))
         });
-        if !configured {
+        if !configured || !mapped {
             layer.layer_surface().send_configure();
         }
         true

@@ -2934,6 +2934,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "unbound-launcher"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "image",
+ "image-compare",
+ "unbound-apps",
+ "unbound-config",
+ "unbound-toolkit",
+]
+
+[[package]]
 name = "unbound-notify"
 version = "0.1.0"
 dependencies = [

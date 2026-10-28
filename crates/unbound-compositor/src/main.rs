@@ -9,8 +9,8 @@ use smithay::reexports::calloop::{EventLoop, Interest, LoopHandle, Mode, PostAct
 use smithay::utils::{Clock, Monotonic, Size};
 use smithay::wayland::socket::ListeningSocketSource;
 use unbound_compositor::{
-    CLIPBOARD_DAEMON, CLIPBOARD_DAEMON_RESTART_THROTTLE, DrmOutput, FrameClock, FrameOutput,
-    FrameScheduler, Headless, REFRESH, Renderer,
+    CLIPBOARD_DAEMON, DrmOutput, FrameClock, FrameOutput, FrameScheduler, Headless, LAUNCHER,
+    PANEL, REFRESH, Renderer, SessionRole,
 };
 
 const HEADLESS_SIZE: (i32, i32) = (1920, 1080);
@@ -124,6 +124,7 @@ fn listen<O: 'static>(
 ) -> Result<(), Box<dyn Error>> {
     let socket = ListeningSocketSource::new_auto()?;
     println!("WAYLAND_DISPLAY={}", socket.socket_name().to_string_lossy());
+    app.compositor.set_socket_name(socket.socket_name());
     handle.insert_source(socket, |stream, _, app| {
         if let Err(error) = app.compositor.insert_client(stream) {
             eprintln!("unbound-compositor: rejected client: {error}");
@@ -148,22 +149,28 @@ where
     O::Error: Into<Box<dyn Error>>,
 {
     listen(&event_loop.handle(), &mut app)?;
-    if let Err(error) = app
-        .compositor
-        .start_clipboard_daemon(Path::new(CLIPBOARD_DAEMON))
-    {
-        eprintln!("unbound-compositor: cannot start {CLIPBOARD_DAEMON}: {error}");
+    for (executable, role) in [
+        (CLIPBOARD_DAEMON, SessionRole::ClipboardDaemon),
+        (PANEL, SessionRole::Shell),
+        (LAUNCHER, SessionRole::Shell),
+    ] {
+        if let Err(error) = app
+            .compositor
+            .start_session_client(Path::new(executable), role)
+        {
+            eprintln!("unbound-compositor: cannot start {executable}: {error}");
+        }
     }
     let mut timeout = None;
     loop {
         event_loop.dispatch(timeout, &mut app)?;
-        let clipboard_daemon_retry = match app.compositor.keep_clipboard_daemon_running() {
-            Ok(retry) => retry,
-            Err(error) => {
-                eprintln!("unbound-compositor: cannot restart {CLIPBOARD_DAEMON}: {error}");
-                Some(CLIPBOARD_DAEMON_RESTART_THROTTLE)
-            }
-        };
+        let upkeep = app.compositor.keep_session_clients_running();
+        for (executable, error) in &upkeep.failures {
+            eprintln!(
+                "unbound-compositor: cannot restart {}: {error}",
+                executable.display()
+            );
+        }
         let App {
             compositor,
             output,
@@ -173,6 +180,6 @@ where
             .poll(now, compositor, output)
             .map_err(Into::into)?;
         let frame_wait = frame.wake_at.map(|at| at.saturating_sub(now()));
-        timeout = clipboard_daemon_retry.into_iter().chain(frame_wait).min();
+        timeout = upkeep.retry_in.into_iter().chain(frame_wait).min();
     }
 }

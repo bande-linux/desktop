@@ -1,7 +1,8 @@
 use smithay::utils::{Point, Size};
 use unbound_compositor::{Headless, Renderer};
 use unbound_test_wayland::{
-    Anchor, BLUE, GREEN, Layer, LayerRequest, RED, ShmImage, TestClient, roundtrip,
+    Anchor, BLUE, GREEN, KeyboardInteractivity, Layer, LayerRequest, RED, ShmImage, TestClient,
+    roundtrip,
 };
 use wayland_client::protocol::wl_shm::Format;
 
@@ -32,6 +33,7 @@ fn panel(layer: Layer, anchor: Anchor, size: (u32, u32), exclusive_zone: i32) ->
         anchor,
         size,
         exclusive_zone,
+        keyboard: KeyboardInteractivity::None,
         color: GREEN,
     }
 }
@@ -234,4 +236,221 @@ fn surfaces_are_told_to_render_at_scale_one() {
     app.show_window(&mut server, &image(&pixels, 32, 32));
 
     assert_eq!(app.preferred_scale(&mut server, 0), Some(120));
+}
+
+const KEY_SPACE: u32 = 57;
+const KEY_LEFTMETA: u32 = 125;
+const KEY_A: u32 = 30;
+
+fn launcher() -> LayerRequest {
+    LayerRequest {
+        keyboard: KeyboardInteractivity::Exclusive,
+        ..panel(
+            Layer::Overlay,
+            Anchor::Top | Anchor::Bottom | Anchor::Left | Anchor::Right,
+            (0, 0),
+            0,
+        )
+    }
+}
+
+fn press(server: &mut Headless, keys: &[u32]) {
+    for key in keys {
+        server.key(*key, true, 0);
+    }
+    for key in keys.iter().rev() {
+        server.key(*key, false, 0);
+    }
+}
+
+#[test]
+fn super_space_asks_the_shell_for_the_launcher_and_is_not_delivered_to_the_app() {
+    let mut server = server();
+    let mut app = TestClient::connect(&mut server);
+    app.use_seat(&mut server);
+    let pixels = red(32, 32);
+    app.show_window(&mut server, &image(&pixels, 32, 32));
+    let mut shell = TestClient::connect_as_shell(&mut server);
+    shell.join_shell(&mut server);
+
+    press(&mut server, &[KEY_LEFTMETA, KEY_SPACE]);
+    roundtrip(&mut server, &mut [&mut app, &mut shell]);
+
+    assert_eq!(shell.launcher_requests(), 1);
+    assert!(
+        app.keys().iter().all(|(key, _)| *key != KEY_SPACE),
+        "the app saw {:?}",
+        app.keys()
+    );
+}
+
+#[test]
+fn the_shell_protocol_and_the_window_list_are_hidden_from_apps() {
+    let mut server = server();
+    let app = TestClient::connect(&mut server);
+    let shell = TestClient::connect_as_shell(&mut server);
+
+    assert!(!app.advertises("unbound_shell_v1"));
+    assert!(!app.advertises("ext_foreign_toplevel_list_v1"));
+    assert!(shell.advertises("unbound_shell_v1"));
+    assert!(shell.advertises("ext_foreign_toplevel_list_v1"));
+}
+
+#[test]
+fn an_exclusive_overlay_takes_the_keyboard_and_returns_it_when_hidden() {
+    let mut server = server();
+    let mut app = TestClient::connect(&mut server);
+    app.use_seat(&mut server);
+    let pixels = red(32, 32);
+    app.show_window(&mut server, &image(&pixels, 32, 32));
+    let mut shell = TestClient::connect_as_shell(&mut server);
+    shell.use_seat(&mut server);
+    roundtrip(&mut server, &mut [&mut app, &mut shell]);
+    assert!(app.keyboard_focus_on(0));
+
+    shell.show_layer(&mut server, &launcher());
+    press(&mut server, &[KEY_A]);
+    roundtrip(&mut server, &mut [&mut app, &mut shell]);
+
+    assert!(!app.keyboard_focus_on(0));
+    assert_eq!(shell.keys(), [(KEY_A, true), (KEY_A, false)]);
+    assert!(app.keys().is_empty());
+
+    shell.hide_layer(&mut server, 0);
+    roundtrip(&mut server, &mut [&mut app, &mut shell]);
+
+    assert!(app.keyboard_focus_on(0));
+}
+
+#[test]
+fn a_click_on_a_window_under_an_exclusive_overlay_does_not_take_the_keyboard() {
+    let mut server = server();
+    let mut app = TestClient::connect(&mut server);
+    app.use_seat(&mut server);
+    let pixels = red(32, 32);
+    app.show_window(&mut server, &image(&pixels, 32, 32));
+    let mut shell = TestClient::connect_as_shell(&mut server);
+    shell.use_seat(&mut server);
+    shell.show_layer(&mut server, &launcher());
+    let window = server.windows()[0].location();
+
+    server.move_pointer_to(
+        Point::from((f64::from(window.x + 4), f64::from(window.y + 4))),
+        0,
+    );
+    server.press_button(BTN_LEFT, true, 0);
+    server.press_button(BTN_LEFT, false, 0);
+    press(&mut server, &[KEY_A]);
+    roundtrip(&mut server, &mut [&mut app, &mut shell]);
+
+    assert!(app.keys().is_empty());
+    assert_eq!(shell.keys(), [(KEY_A, true), (KEY_A, false)]);
+
+    shell.close_layer(&mut server, 0);
+    roundtrip(&mut server, &mut [&mut app, &mut shell]);
+    assert!(app.keyboard_focus_on(0));
+}
+
+#[test]
+fn the_shell_sees_running_apps_and_brings_one_forward() {
+    let mut server = server();
+    let mut shell = TestClient::connect_as_shell(&mut server);
+    shell.join_shell(&mut server);
+    let mut editor = TestClient::connect(&mut server);
+    editor.use_seat(&mut server);
+    let pixels = red(32, 32);
+    editor.show_window(&mut server, &image(&pixels, 32, 32));
+    editor.set_app_id(&mut server, 0, "org.example.Editor");
+    let mut terminal = TestClient::connect(&mut server);
+    terminal.use_seat(&mut server);
+    terminal.show_window(&mut server, &image(&pixels, 32, 32));
+    terminal.set_app_id(&mut server, 0, "unbound-term");
+    let token = terminal.activation_token(&mut server);
+    terminal.activate(&mut server, 0, &token);
+    roundtrip(&mut server, &mut [&mut shell, &mut editor, &mut terminal]);
+    assert!(terminal.keyboard_focus_on(0));
+
+    let mut running = shell.running_app_ids();
+    running.sort();
+    assert_eq!(running, ["org.example.Editor", "unbound-term"]);
+
+    shell.activate_app(&mut server, "org.example.Editor");
+    roundtrip(&mut server, &mut [&mut shell, &mut editor, &mut terminal]);
+
+    assert!(editor.keyboard_focus_on(0));
+
+    editor.close_window(&mut server, 0);
+    roundtrip(&mut server, &mut [&mut shell, &mut editor, &mut terminal]);
+    assert_eq!(shell.running_app_ids(), ["unbound-term"]);
+}
+
+#[test]
+fn the_shell_can_hand_activation_to_an_app_without_holding_the_keyboard() {
+    let mut server = server();
+    let pixels = red(32, 32);
+    let mut launched = TestClient::connect(&mut server);
+    launched.use_seat(&mut server);
+    launched.show_window(&mut server, &image(&pixels, 32, 32));
+    let mut app = TestClient::connect(&mut server);
+    app.use_seat(&mut server);
+    app.show_window(&mut server, &image(&pixels, 32, 32));
+    roundtrip(&mut server, &mut [&mut app, &mut launched]);
+    assert!(app.keyboard_focus_on(0));
+    let mut shell = TestClient::connect_as_shell(&mut server);
+    let token = shell.activation_token(&mut server);
+
+    launched.show_window_activated(&mut server, &image(&pixels, 32, 32), &token);
+    roundtrip(&mut server, &mut [&mut app, &mut launched]);
+
+    assert!(launched.keyboard_focus_on(1));
+}
+
+#[test]
+fn layer_surfaces_receive_frame_callbacks() {
+    let mut server = server();
+    let mut shell = TestClient::connect_as_shell(&mut server);
+    shell.show_layer(
+        &mut server,
+        &panel(
+            Layer::Top,
+            Anchor::Left | Anchor::Top | Anchor::Bottom,
+            (40, 0),
+            40,
+        ),
+    );
+    shell.request_layer_frame(&mut server, 0);
+
+    server.latch();
+    server
+        .present(unbound_compositor::Vblank {
+            time: std::time::Duration::from_millis(8),
+            sequence: 1,
+        })
+        .expect("present");
+    shell.exchange(&mut server);
+
+    assert_eq!(shell.frames_done(), 1);
+}
+
+#[test]
+fn wheel_scrolling_reaches_the_window_under_the_pointer() {
+    let mut server = server();
+    let mut app = TestClient::connect(&mut server);
+    app.use_seat(&mut server);
+    let pixels = red(32, 32);
+    app.show_window(&mut server, &image(&pixels, 32, 32));
+    let window = server.windows()[0].location();
+    server.move_pointer_to(
+        Point::from((f64::from(window.x + 4), f64::from(window.y + 4))),
+        0,
+    );
+
+    server.scroll(
+        smithay::input::pointer::AxisFrame::new(0)
+            .source(smithay::backend::input::AxisSource::Wheel)
+            .value(smithay::backend::input::Axis::Vertical, 30.0),
+    );
+    app.exchange(&mut server);
+
+    assert_eq!(app.scrolled(), 30.0);
 }

@@ -2704,6 +2704,7 @@ dependencies = [
  "image-compare",
  "rustix 1.1.6",
  "smithay",
+ "unbound-protocols",
  "unbound-render",
  "unbound-test-wayland",
  "wayland-client",
@@ -2753,6 +2754,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "unbound-protocols"
+version = "0.1.0"
+dependencies = [
+ "wayland-backend",
+ "wayland-client",
+ "wayland-scanner",
+ "wayland-server",
+]
+
+[[package]]
 name = "unbound-render"
 version = "0.1.0"
 dependencies = [
@@ -2786,6 +2797,7 @@ dependencies = [
  "rustix 1.1.6",
  "tempfile",
  "unbound-compositor",
+ "unbound-protocols",
  "wayland-client",
  "wayland-protocols",
  "wayland-protocols-wlr",

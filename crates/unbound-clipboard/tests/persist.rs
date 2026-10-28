@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use rustix::io::{FdFlags, fcntl_setfd};
 use smithay::utils::Size;
-use unbound_compositor::Headless;
+use unbound_compositor::{Headless, SessionRole};
 use unbound_test_wayland::clipboard::TEXT;
 use unbound_test_wayland::{ShmImage, TestClient, quadrants, roundtrip, roundtrip_until};
 use wayland_client::protocol::wl_shm::Format;
@@ -22,7 +22,7 @@ fn server() -> Headless {
 fn server_with_daemon() -> Headless {
     let mut server = server();
     server
-        .start_clipboard_daemon(Path::new(DAEMON))
+        .start_session_client(Path::new(DAEMON), SessionRole::ClipboardDaemon)
         .expect("start unbound-clipboard");
     server
 }
@@ -113,7 +113,9 @@ fn the_latest_copy_wins_after_both_sources_have_quit() {
 #[test]
 fn a_daemon_that_dies_is_restarted_and_keeps_new_copies() {
     let mut server = server_with_daemon();
-    let first = server.clipboard_daemon_pid().expect("daemon started");
+    let first = server
+        .session_client_pid(Path::new(DAEMON))
+        .expect("daemon started");
     let killed = Command::new("kill")
         .args(["-KILL", &first.to_string()])
         .status()
@@ -121,16 +123,17 @@ fn a_daemon_that_dies_is_restarted_and_keeps_new_copies() {
     assert!(killed.success());
 
     let deadline = Instant::now() + Duration::from_secs(10);
-    while server.clipboard_daemon_pid() == Some(first) || server.clipboard_daemon_pid().is_none() {
+    while server.session_client_pid(Path::new(DAEMON)) == Some(first)
+        || server.session_client_pid(Path::new(DAEMON)).is_none()
+    {
         assert!(
             Instant::now() < deadline,
             "daemon not restarted within 10 s"
         );
         server.dispatch().expect("server dispatch");
-        assert_eq!(
-            server.keep_clipboard_daemon_running().expect("restart"),
-            None
-        );
+        let upkeep = server.keep_session_clients_running();
+        assert!(upkeep.failures.is_empty(), "{:?}", upkeep.failures);
+        assert_eq!(upkeep.retry_in, None);
         std::thread::sleep(Duration::from_millis(5));
     }
 

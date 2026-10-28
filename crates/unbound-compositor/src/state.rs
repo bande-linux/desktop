@@ -1,13 +1,9 @@
+use std::ffi::OsString;
 use std::io;
-use std::os::fd::{AsRawFd, BorrowedFd, OwnedFd};
+use std::os::fd::OwnedFd;
 use std::os::unix::net::UnixStream;
-use std::os::unix::process::CommandExt;
-use std::path::{Path, PathBuf};
-use std::process::{Child, Command};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
-
-use rustix::io::{FdFlags, fcntl_setfd};
+use std::time::Duration;
 
 use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::{Buffer, Format as DmabufFormat, Fourcc, Modifier};
@@ -63,8 +59,9 @@ use smithay::wayland::selection::primary_selection::{
 use smithay::wayland::shell::xdg::{
     PopupSurface, PositionerState, ToplevelSurface, XdgShellHandler, XdgShellState,
 };
+use smithay::wayland::foreign_toplevel_list::{ForeignToplevelHandle, ForeignToplevelListState};
 use smithay::wayland::shell::wlr_layer::{
-    Layer, LayerSurface, LayerSurfaceData, WlrLayerShellHandler, WlrLayerShellState,
+    KeyboardInteractivity, Layer, LayerSurface, LayerSurfaceData, WlrLayerShellHandler, WlrLayerShellState,
 };
 use smithay::wayland::shm::{ShmHandler, ShmState, with_buffer_contents};
 use smithay::wayland::viewporter::ViewporterState;
@@ -77,10 +74,13 @@ use smithay::{
     delegate_primary_selection, delegate_seat, delegate_shm, delegate_viewporter,
     delegate_xdg_activation, delegate_xdg_shell,
 };
+use unbound_protocols::server::unbound_shell_v1::UnboundShellV1;
 use unbound_render::VulkanRenderer;
 
 use crate::clock::Vblank;
 use crate::cursor;
+use crate::session::{SessionClient, SessionRole};
+use crate::shell;
 
 pub const REFRESH: Duration = Duration::from_nanos(1_000_000_000 / 120);
 
@@ -101,6 +101,12 @@ pub struct Window {
     pub(crate) toplevel: ToplevelSurface,
     pub(crate) location: Point<i32, Physical>,
     pub(crate) size: Option<Size<i32, Physical>>,
+    pub(crate) foreign: Option<ForeignToplevelHandle>,
+}
+
+pub(crate) struct ExclusiveLayer {
+    pub(crate) surface: WlSurface,
+    pub(crate) previous: Option<WlSurface>,
 }
 
 impl Window {
@@ -131,6 +137,9 @@ pub struct State {
     _viewporter_state: ViewporterState,
     _fractional_scale_state: FractionalScaleManagerState,
     pending_activation: Option<WlSurface>,
+    pub(crate) shell_resources: Vec<UnboundShellV1>,
+    pub(crate) foreign_toplevel_state: ForeignToplevelListState,
+    pub(crate) exclusive_layer: Option<ExclusiveLayer>,
     seat_state: SeatState<State>,
     pub(crate) seat: Seat<State>,
     data_device_state: DataDeviceState,
@@ -151,17 +160,8 @@ pub struct Headless {
     pub(crate) state: State,
     latched_feedback: Vec<PresentationFeedbackCallback>,
     latched_frame_callbacks: Vec<WlCallback>,
-    clipboard_daemon: Option<ClipboardDaemon>,
-}
-
-pub const CLIPBOARD_DAEMON: &str = "/usr/bin/unbound-clipboard";
-
-pub const CLIPBOARD_DAEMON_RESTART_THROTTLE: Duration = Duration::from_secs(10);
-
-struct ClipboardDaemon {
-    executable: PathBuf,
-    child: Option<Child>,
-    last_restart: Option<Instant>,
+    pub(crate) session_clients: Vec<SessionClient>,
+    pub(crate) socket_name: Option<OsString>,
 }
 
 impl Headless {
@@ -189,7 +189,7 @@ impl Headless {
             DataControlState::new::<State, _>(&handle, Some(&primary_selection_state), |client| {
                 client
                     .get_data::<ClientState>()
-                    .is_some_and(|state| state.clipboard_daemon)
+                    .is_some_and(|state| state.role == Some(SessionRole::ClipboardDaemon))
             });
         let mut dmabuf_state = DmabufState::new();
         let dmabuf_global = match &config.scanout {
@@ -220,6 +220,7 @@ impl Headless {
         output.change_current_state(Some(mode), None, None, Some((0, 0).into()));
         output.set_preferred(mode);
         output.create_global::<State>(&handle);
+        handle.create_global::<State, UnboundShellV1, ()>(1, ());
         let state = State {
             display_handle: handle.clone(),
             output_size,
@@ -238,6 +239,12 @@ impl Headless {
             _viewporter_state: ViewporterState::new::<State>(&handle),
             _fractional_scale_state: FractionalScaleManagerState::new::<State>(&handle),
             pending_activation: None,
+            shell_resources: Vec::new(),
+            foreign_toplevel_state: ForeignToplevelListState::new_with_filter::<State>(
+                &handle,
+                shell::is_shell,
+            ),
+            exclusive_layer: None,
             seat_state,
             seat,
             data_device_state: DataDeviceState::new::<State>(&handle),
@@ -261,7 +268,8 @@ impl Headless {
             state,
             latched_feedback: Vec::new(),
             latched_frame_callbacks: Vec::new(),
-            clipboard_daemon: None,
+            session_clients: Vec::new(),
+            socket_name: None,
         })
     }
 
@@ -271,69 +279,8 @@ impl Headless {
             .insert_client(stream, Arc::new(ClientState::default()))
     }
 
-    pub fn insert_clipboard_daemon(&mut self, stream: UnixStream) -> io::Result<Client> {
-        let state = ClientState {
-            clipboard_daemon: true,
-            ..ClientState::default()
-        };
-        self.display.handle().insert_client(stream, Arc::new(state))
-    }
-
-    pub fn start_clipboard_daemon(&mut self, executable: &Path) -> io::Result<()> {
-        let child = self.spawn_clipboard_daemon(executable)?;
-        self.clipboard_daemon = Some(ClipboardDaemon {
-            executable: executable.to_path_buf(),
-            child: Some(child),
-            last_restart: None,
-        });
-        Ok(())
-    }
-
-    pub fn clipboard_daemon_pid(&self) -> Option<u32> {
-        let child = self.clipboard_daemon.as_ref()?.child.as_ref()?;
-        Some(child.id())
-    }
-
-    pub fn keep_clipboard_daemon_running(&mut self) -> io::Result<Option<Duration>> {
-        let Some(daemon) = self.clipboard_daemon.as_mut() else {
-            return Ok(None);
-        };
-        if let Some(child) = daemon.child.as_mut() {
-            if child.try_wait()?.is_none() {
-                return Ok(None);
-            }
-            daemon.child = None;
-        }
-        if let Some(since) = daemon.last_restart.map(|last| last.elapsed())
-            && since < CLIPBOARD_DAEMON_RESTART_THROTTLE
-        {
-            return Ok(Some(CLIPBOARD_DAEMON_RESTART_THROTTLE - since));
-        }
-        daemon.last_restart = Some(Instant::now());
-        let executable = daemon.executable.clone();
-        let child = self.spawn_clipboard_daemon(&executable)?;
-        if let Some(daemon) = self.clipboard_daemon.as_mut() {
-            daemon.child = Some(child);
-        }
-        Ok(None)
-    }
-
-    fn spawn_clipboard_daemon(&mut self, executable: &Path) -> io::Result<Child> {
-        let (compositor_end, daemon_end) = UnixStream::pair()?;
-        self.insert_clipboard_daemon(compositor_end)?;
-        let daemon_end = OwnedFd::from(daemon_end);
-        let inherited = daemon_end.as_raw_fd();
-        let mut command = Command::new(executable);
-        command
-            .env("WAYLAND_SOCKET", inherited.to_string())
-            .env_remove("WAYLAND_DISPLAY");
-        unsafe {
-            command.pre_exec(move || {
-                fcntl_setfd(BorrowedFd::borrow_raw(inherited), FdFlags::empty())
-                    .map_err(io::Error::from)
-            });
-        }
-        command.spawn()
+    pub(crate) fn display_handle(&self) -> DisplayHandle {
+        self.display.handle()
     }
 
     pub fn dispatch(&mut self) -> io::Result<()> {
@@ -350,8 +297,17 @@ impl Headless {
     }
 
     pub fn latch(&mut self) {
-        for window in &self.state.windows {
-            with_states(window.toplevel.wl_surface(), |states| {
+        let layers = layer_map_for_output(&self.state.output)
+            .layers()
+            .map(|layer| layer.wl_surface().clone())
+            .collect::<Vec<_>>();
+        let windows = self
+            .state
+            .windows
+            .iter()
+            .map(|window| window.toplevel.wl_surface().clone());
+        for surface in windows.chain(layers) {
+            with_states(&surface, |states| {
                 self.latched_feedback.append(
                     &mut states
                         .cached_state
@@ -481,9 +437,9 @@ impl Headless {
 }
 
 #[derive(Default)]
-struct ClientState {
-    compositor_state: CompositorClientState,
-    clipboard_daemon: bool,
+pub(crate) struct ClientState {
+    pub(crate) compositor_state: CompositorClientState,
+    pub(crate) role: Option<SessionRole>,
 }
 
 impl ClientData for ClientState {
@@ -516,6 +472,22 @@ impl State {
     }
 
     pub(crate) fn focus(&mut self, surface: Option<WlSurface>) {
+        if let Some(exclusive) = &mut self.exclusive_layer
+            && surface.as_ref() != Some(&exclusive.surface)
+        {
+            exclusive.previous = surface.clone();
+            if let Some(surface) = &surface
+                && let Some(index) = self
+                    .windows
+                    .iter()
+                    .position(|window| window.toplevel.wl_surface() == surface)
+            {
+                let window = self.windows.remove(index);
+                self.windows.push(window);
+                self.needs_redraw = true;
+            }
+            return;
+        }
         if let Some(surface) = &surface
             && let Some(index) = self
                 .windows
@@ -631,6 +603,13 @@ impl State {
             return false;
         };
         map.arrange();
+        let mapped =
+            with_renderer_surface_state(surface, |state| state.buffer().is_some()).unwrap_or(false);
+        let exclusive = mapped
+            && matches!(layer.layer(), Layer::Top | Layer::Overlay)
+            && layer.cached_state().keyboard_interactivity == KeyboardInteractivity::Exclusive;
+        drop(map);
+        self.follow_exclusive_layer(surface, exclusive);
         let configured = with_states(surface, |states| {
             states
                 .data_map
@@ -641,6 +620,39 @@ impl State {
             layer.layer_surface().send_configure();
         }
         true
+    }
+
+    fn follow_exclusive_layer(&mut self, surface: &WlSurface, exclusive: bool) {
+        let current = self
+            .exclusive_layer
+            .as_ref()
+            .is_some_and(|layer| &layer.surface == surface);
+        if exclusive && !current {
+            let previous = match self.exclusive_layer.take() {
+                Some(layer) => layer.previous,
+                None => self.focused(),
+            };
+            self.focus(Some(surface.clone()));
+            self.exclusive_layer = Some(ExclusiveLayer {
+                surface: surface.clone(),
+                previous,
+            });
+        } else if !exclusive && current {
+            self.release_exclusive_layer();
+        }
+    }
+
+    pub(crate) fn release_exclusive_layer(&mut self) {
+        let Some(layer) = self.exclusive_layer.take() else {
+            return;
+        };
+        let previous = layer.previous.filter(|previous| {
+            self.windows
+                .iter()
+                .any(|window| window.toplevel.wl_surface() == previous && window.size.is_some())
+        });
+        let next = previous.or_else(|| self.frontmost(None));
+        self.focus(next);
     }
 }
 
@@ -683,6 +695,11 @@ impl CompositorHandler for State {
         }
         window.size = size;
         let surface = window.toplevel.wl_surface().clone();
+        if size.is_some() {
+            self.publish_toplevel(&surface);
+        } else {
+            self.withdraw_toplevel(&surface);
+        }
         match (mapped, size.is_some()) {
             (false, true)
                 if self.pending_activation.as_ref() == Some(&surface)
@@ -744,10 +761,12 @@ impl XdgShellHandler for State {
             toplevel,
             location: Point::default(),
             size: None,
+            foreign: None,
         });
     }
 
     fn toplevel_destroyed(&mut self, toplevel: ToplevelSurface) {
+        self.withdraw_toplevel(toplevel.wl_surface());
         if let Some(index) = self
             .windows
             .iter()
@@ -757,6 +776,14 @@ impl XdgShellHandler for State {
         }
         self.needs_redraw = true;
         self.refocus_after_losing(toplevel.wl_surface());
+    }
+
+    fn title_changed(&mut self, toplevel: ToplevelSurface) {
+        self.publish_toplevel(toplevel.wl_surface());
+    }
+
+    fn app_id_changed(&mut self, toplevel: ToplevelSurface) {
+        self.publish_toplevel(toplevel.wl_surface());
     }
 
     fn new_popup(&mut self, _surface: PopupSurface, _positioner: PositionerState) {}
@@ -869,7 +896,15 @@ impl WlrLayerShellHandler for State {
         if let Some(mapped) = mapped {
             map.unmap_layer(&mapped);
         }
+        drop(map);
         self.needs_redraw = true;
+        if self
+            .exclusive_layer
+            .as_ref()
+            .is_some_and(|layer| &layer.surface == surface.wl_surface())
+        {
+            self.release_exclusive_layer();
+        }
     }
 }
 
@@ -879,6 +914,13 @@ impl XdgActivationHandler for State {
     }
 
     fn token_created(&mut self, _token: XdgActivationToken, data: XdgActivationTokenData) -> bool {
+        if data
+            .client_id
+            .as_ref()
+            .is_some_and(|id| shell::is_shell_client(&self.display_handle, id))
+        {
+            return true;
+        }
         match self.focused() {
             None => true,
             Some(focused) => focused.client().map(|client| client.id()) == data.client_id,

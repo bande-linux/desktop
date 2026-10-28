@@ -1,0 +1,16 @@
+[package]
+name = "unbound-protocols"
+description = "Unbound's private Wayland protocols between the compositor and its shell clients"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[features]
+client = ["dep:wayland-client"]
+server = ["dep:wayland-server"]
+
+[dependencies]
+wayland-backend.workspace = true
+wayland-client = { workspace = true, optional = true }
+wayland-scanner.workspace = true
+wayland-server = { workspace = true, optional = true }

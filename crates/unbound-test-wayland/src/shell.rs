@@ -1,6 +1,14 @@
+use unbound_compositor::SessionRole;
+use unbound_protocols::client::unbound_shell_v1::{self, UnboundShellV1};
 use wayland_client::protocol::wl_shm::Format;
 use wayland_client::protocol::wl_surface::WlSurface;
-use wayland_client::{Connection, Dispatch, QueueHandle, delegate_noop};
+use wayland_client::{Connection, Dispatch, QueueHandle, delegate_noop, event_created_child};
+use wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_handle_v1::{
+    self, ExtForeignToplevelHandleV1,
+};
+use wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_list_v1::{
+    self, ExtForeignToplevelListV1,
+};
 use wayland_protocols::wp::fractional_scale::v1::client::wp_fractional_scale_manager_v1::WpFractionalScaleManagerV1;
 use wayland_protocols::wp::fractional_scale::v1::client::wp_fractional_scale_v1::{
     self, WpFractionalScaleV1,
@@ -13,9 +21,11 @@ use wayland_protocols::xdg::activation::v1::client::xdg_activation_token_v1::{
 use wayland_protocols::xdg::activation::v1::client::xdg_activation_v1::XdgActivationV1;
 pub use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_shell_v1::Layer;
 use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_shell_v1::ZwlrLayerShellV1;
-pub use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::Anchor;
 use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::{
     self, ZwlrLayerSurfaceV1,
+};
+pub use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::{
+    Anchor, KeyboardInteractivity,
 };
 
 use crate::{Globals, Headless, Memory, ShmImage, TestClient};
@@ -26,6 +36,9 @@ pub(crate) struct Shell {
     token: Option<String>,
     preferred_scale: Option<u32>,
     layers: Vec<(WlSurface, ZwlrLayerSurfaceV1)>,
+    shell: Option<UnboundShellV1>,
+    launcher_requests: usize,
+    toplevels: Vec<(ExtForeignToplevelHandleV1, String, bool)>,
 }
 
 pub struct LayerRequest {
@@ -33,6 +46,7 @@ pub struct LayerRequest {
     pub anchor: Anchor,
     pub size: (u32, u32),
     pub exclusive_zone: i32,
+    pub keyboard: KeyboardInteractivity,
     pub color: [u8; 4],
 }
 
@@ -53,6 +67,7 @@ impl TestClient {
         layer_surface.set_size(request.size.0, request.size.1);
         layer_surface.set_anchor(request.anchor);
         layer_surface.set_exclusive_zone(request.exclusive_zone);
+        layer_surface.set_keyboard_interactivity(request.keyboard);
         self.globals.shell.layer_size = None;
         surface.commit();
         self.exchange(server);
@@ -75,6 +90,67 @@ impl TestClient {
         self.exchange(server);
         self.globals.shell.layers.push((surface, layer_surface));
         (width, height)
+    }
+
+    pub fn connect_as_shell(server: &mut Headless) -> Self {
+        let (client_end, server_end) = std::os::unix::net::UnixStream::pair().expect("socket pair");
+        server
+            .insert_session_client(server_end, SessionRole::Shell)
+            .expect("insert shell client");
+        Self::from_socket(server, client_end)
+    }
+
+    pub fn hide_layer(&mut self, server: &mut Headless, index: usize) {
+        let surface = &self.globals.shell.layers[index].0;
+        surface.attach(None, 0, 0);
+        surface.commit();
+        self.exchange(server);
+    }
+
+    pub fn close_layer(&mut self, server: &mut Headless, index: usize) {
+        let (surface, layer_surface) = self.globals.shell.layers.remove(index);
+        layer_surface.destroy();
+        surface.destroy();
+        self.exchange(server);
+    }
+
+    pub fn request_layer_frame(&mut self, server: &mut Headless, index: usize) {
+        let surface = &self.globals.shell.layers[index].0;
+        surface.frame(&self.queue.handle(), ());
+        surface.commit();
+        self.exchange(server);
+    }
+
+    pub fn join_shell(&mut self, server: &mut Headless) {
+        let shell: UnboundShellV1 = self.bind("unbound_shell_v1", 1);
+        self.globals.shell.shell = Some(shell);
+        let _: ExtForeignToplevelListV1 = self.bind("ext_foreign_toplevel_list_v1", 1);
+        self.exchange(server);
+    }
+
+    pub fn launcher_requests(&self) -> usize {
+        self.globals.shell.launcher_requests
+    }
+
+    pub fn activate_app(&mut self, server: &mut Headless, app_id: &str) {
+        let shell = self.globals.shell.shell.as_ref().expect("joined the shell");
+        shell.activate_app(app_id.to_owned());
+        self.exchange(server);
+    }
+
+    pub fn running_app_ids(&self) -> Vec<String> {
+        self.globals
+            .shell
+            .toplevels
+            .iter()
+            .filter(|(_, _, closed)| !closed)
+            .map(|(_, app_id, _)| app_id.clone())
+            .collect()
+    }
+
+    pub fn set_app_id(&mut self, server: &mut Headless, index: usize, app_id: &str) {
+        self.windows[index].2.set_app_id(app_id.to_owned());
+        self.exchange(server);
     }
 
     pub fn activation_token(&mut self, server: &mut Headless) -> String {
@@ -183,3 +259,65 @@ delegate_noop!(Globals: ignore XdgActivationV1);
 delegate_noop!(Globals: ignore WpViewporter);
 delegate_noop!(Globals: ignore WpViewport);
 delegate_noop!(Globals: ignore WpFractionalScaleManagerV1);
+
+impl Dispatch<UnboundShellV1, ()> for Globals {
+    fn event(
+        globals: &mut Self,
+        _: &UnboundShellV1,
+        event: unbound_shell_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        if let unbound_shell_v1::Event::ShowLauncher = event {
+            globals.shell.launcher_requests += 1;
+        }
+    }
+}
+
+impl Dispatch<ExtForeignToplevelListV1, ()> for Globals {
+    fn event(
+        globals: &mut Self,
+        _: &ExtForeignToplevelListV1,
+        event: ext_foreign_toplevel_list_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        if let ext_foreign_toplevel_list_v1::Event::Toplevel { toplevel } = event {
+            globals
+                .shell
+                .toplevels
+                .push((toplevel, String::new(), false));
+        }
+    }
+
+    event_created_child!(Globals, ExtForeignToplevelListV1, [
+        ext_foreign_toplevel_list_v1::EVT_TOPLEVEL_OPCODE => (ExtForeignToplevelHandleV1, ()),
+    ]);
+}
+
+impl Dispatch<ExtForeignToplevelHandleV1, ()> for Globals {
+    fn event(
+        globals: &mut Self,
+        handle: &ExtForeignToplevelHandleV1,
+        event: ext_foreign_toplevel_handle_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        let Some(entry) = globals
+            .shell
+            .toplevels
+            .iter_mut()
+            .find(|(known, _, _)| known == handle)
+        else {
+            return;
+        };
+        match event {
+            ext_foreign_toplevel_handle_v1::Event::AppId { app_id } => entry.1 = app_id,
+            ext_foreign_toplevel_handle_v1::Event::Closed => entry.2 = true,
+            _ => {}
+        }
+    }
+}

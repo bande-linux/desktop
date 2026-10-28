@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="unbound_shell_v1">
+  <interface name="unbound_shell_v1" version="1">
+    <description summary="requests and events between the compositor and the shell">
+      Offered only on the connections of the shell clients the compositor starts
+      itself (the panel and the launcher), never on the listening socket.
+    </description>
+
+    <request name="destroy" type="destructor"/>
+
+    <request name="activate_app">
+      <description summary="bring an app forward">
+        Focuses and raises the frontmost window of the app with this app id and
+        raises its other windows behind it, as clicking a running app in the Dock
+        does. Ignored when the app has no mapped window.
+      </description>
+      <arg name="app_id" type="string"/>
+    </request>
+
+    <event name="show_launcher">
+      <description summary="the user pressed the launcher shortcut"/>
+    </event>
+  </interface>
+</protocol>

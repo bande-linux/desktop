@@ -14,6 +14,7 @@ pub(crate) struct Input {
     keys: Vec<(u32, bool)>,
     buttons: Vec<(u32, bool)>,
     closed: Vec<XdgToplevel>,
+    scrolled: f64,
 }
 
 pub(crate) struct Devices;
@@ -46,6 +47,10 @@ impl TestClient {
 
     pub fn keys(&self) -> &[(u32, bool)] {
         &self.globals.input.keys
+    }
+
+    pub fn scrolled(&self) -> f64 {
+        self.globals.input.scrolled
     }
 
     pub fn buttons(&self) -> &[(u32, bool)] {
@@ -133,6 +138,11 @@ impl Dispatch<WlPointer, Devices> for Globals {
                     focus.2 = surface_y;
                 }
             }
+            wl_pointer::Event::Axis {
+                axis: WEnum::Value(wl_pointer::Axis::VerticalScroll),
+                value,
+                ..
+            } => input.scrolled += value,
             wl_pointer::Event::Button { button, state, .. } => input
                 .buttons
                 .push((button, pressed(state, wl_pointer::ButtonState::Pressed))),

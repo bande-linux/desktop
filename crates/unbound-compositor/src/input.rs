@@ -1,13 +1,13 @@
 use std::io;
 
 use smithay::backend::input::{
-    AbsolutePositionEvent, ButtonState, Event, InputBackend, InputEvent, KeyState,
-    KeyboardKeyEvent, PointerButtonEvent, PointerMotionEvent,
+    AbsolutePositionEvent, Axis, ButtonState, Event, InputBackend, InputEvent, KeyState,
+    KeyboardKeyEvent, PointerAxisEvent, PointerButtonEvent, PointerMotionEvent,
 };
 use smithay::desktop::WindowSurfaceType;
 use smithay::desktop::utils::under_from_surface_tree;
 use smithay::input::keyboard::{FilterResult, Keycode, keysyms};
-use smithay::input::pointer::{ButtonEvent, MotionEvent};
+use smithay::input::pointer::{AxisFrame, ButtonEvent, MotionEvent};
 use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Point, SERIAL_COUNTER};
@@ -18,11 +18,14 @@ use crate::state::{Headless, State};
 
 const EVDEV_OFFSET: u32 = 8;
 
+const SCROLL_PER_DETENT: f64 = 15.0;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Shortcut {
     CloseWindow,
     QuitApp,
     NextApp,
+    ShowLauncher,
 }
 
 fn shortcut(keysym: u32) -> Option<Shortcut> {
@@ -30,6 +33,7 @@ fn shortcut(keysym: u32) -> Option<Shortcut> {
         keysyms::KEY_w | keysyms::KEY_W => Some(Shortcut::CloseWindow),
         keysyms::KEY_q | keysyms::KEY_Q => Some(Shortcut::QuitApp),
         keysyms::KEY_Tab | keysyms::KEY_ISO_Left_Tab => Some(Shortcut::NextApp),
+        keysyms::KEY_space => Some(Shortcut::ShowLauncher),
         _ => None,
     }
 }
@@ -76,6 +80,10 @@ impl State {
     }
 
     fn run(&mut self, shortcut: Shortcut) {
+        if shortcut == Shortcut::ShowLauncher {
+            self.show_launcher();
+            return;
+        }
         let Some(focused) = self.focused() else {
             return;
         };
@@ -108,6 +116,7 @@ impl State {
                     self.focus(next);
                 }
             }
+            Shortcut::ShowLauncher => {}
         }
     }
 }
@@ -137,9 +146,32 @@ impl Headless {
                 let pressed = event.state() == ButtonState::Pressed;
                 self.press_button(event.button_code(), pressed, event.time_msec());
             }
+            InputEvent::PointerAxis { event } => {
+                let mut frame = AxisFrame::new(event.time_msec()).source(event.source());
+                for axis in [Axis::Horizontal, Axis::Vertical] {
+                    if let Some(amount) = event.amount(axis) {
+                        frame = frame.value(axis, amount);
+                    } else if let Some(v120) = event.amount_v120(axis) {
+                        frame = frame.value(axis, v120 / 120.0 * SCROLL_PER_DETENT);
+                    }
+                    if let Some(v120) = event.amount_v120(axis) {
+                        frame = frame.v120(axis, v120 as i32);
+                    }
+                }
+                self.scroll(frame);
+            }
             _ => return Ok(()),
         }
         self.flush()
+    }
+
+    pub fn scroll(&mut self, frame: AxisFrame) {
+        let state = &mut self.state;
+        let Some(pointer) = state.seat.get_pointer() else {
+            return;
+        };
+        pointer.axis(state, frame);
+        pointer.frame(state);
     }
 
     pub fn input_devices(&self) -> usize {

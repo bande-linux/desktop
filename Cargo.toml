@@ -26,6 +26,7 @@ fontique = { version = "=0.12.0", features = ["fontconfig-dlopen"] }
 parley = { version = "=0.12.0", features = ["complex-scripts"] }
 zbus = "=5.19.0"
 unbound-compositor = { path = "crates/unbound-compositor" }
+unbound-protocols = { path = "crates/unbound-protocols" }
 unbound-render = { path = "crates/unbound-render" }
 unbound-sample = { path = "crates/unbound-sample" }
 unbound-test-bus = { path = "crates/unbound-test-bus" }
@@ -37,6 +38,9 @@ wayland-backend = { version = "=0.3.17", features = ["log"] }
 wayland-client = "=0.31.15"
 wayland-protocols = { version = "=0.32.13", features = ["client", "staging", "unstable"] }
 wayland-protocols-wlr = { version = "=0.3.12", features = ["client"] }
+wayland-scanner = "=0.31.11"
+wayland-server = "=0.31.14"
+xkbcommon = "=0.8.0"
 wgpu = { version = "=30.0.1", default-features = false, features = ["std", "parking_lot", "vulkan", "wgsl"] }
 
 [profile.dev]

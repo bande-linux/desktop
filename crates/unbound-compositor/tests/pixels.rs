@@ -250,3 +250,30 @@ fn damage_inside_an_opaque_window_shades_only_that_window() {
     let origin = server.windows()[1].location();
     assert_eq!(pixel(&snapshot, origin.x, origin.y), opaque_rgba(BLUE));
 }
+
+#[test]
+fn damage_far_beyond_the_buffer_uploads_and_repaints_only_the_buffer() {
+    let mut server = server();
+    let mut client = TestClient::connect(&mut server);
+    let red = solid(RED, 16);
+    client.show_window(&mut server, &image(&red, 16, Format::Xrgb8888));
+    let mut renderer = Renderer::new().expect("Vulkan renderer");
+    render(&mut renderer, &mut server);
+
+    let blue = solid(BLUE, 16);
+    client.commit_buffer(
+        0,
+        &image(&blue, 16, Format::Xrgb8888),
+        (0, 0, i32::MAX, i32::MAX),
+    );
+    client.exchange(&mut server);
+    let (stats, snapshot) = render(&mut renderer, &mut server);
+
+    assert_eq!(stats.uploaded_bytes, 16 * 16 * 4);
+    assert_eq!(stats.repainted_pixels, 16 * 16);
+    let origin = server.windows()[0].location();
+    assert_eq!(
+        pixel(&snapshot, origin.x + 15, origin.y + 15),
+        opaque_rgba(BLUE)
+    );
+}

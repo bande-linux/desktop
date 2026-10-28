@@ -1,6 +1,7 @@
 use std::io;
 use std::os::fd::OwnedFd;
 use std::os::unix::net::UnixStream;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -79,8 +80,22 @@ pub struct Headless {
     state: State,
 }
 
+pub const CLIPBOARD_DAEMON: &str = "/usr/bin/unbound-clipboard";
+
+fn executable(handle: &DisplayHandle, client: &Client) -> Option<PathBuf> {
+    let credentials = client.get_credentials(handle).ok()?;
+    std::fs::read_link(format!("/proc/{}/exe", credentials.pid)).ok()
+}
+
 impl Headless {
     pub fn new(output_size: Size<i32, Physical>) -> io::Result<Self> {
+        Self::with_clipboard_daemons(output_size, &[Path::new(CLIPBOARD_DAEMON)])
+    }
+
+    pub fn with_clipboard_daemons(
+        output_size: Size<i32, Physical>,
+        clipboard_daemons: &[&Path],
+    ) -> io::Result<Self> {
         let display = Display::new().map_err(io::Error::other)?;
         let handle = display.handle();
         let mut seat_state = SeatState::new();
@@ -88,8 +103,18 @@ impl Headless {
         seat.add_keyboard(XkbConfig::default(), 600, 25)
             .map_err(io::Error::other)?;
         let primary_selection_state = PrimarySelectionState::new::<State>(&handle);
-        let data_control_state =
-            DataControlState::new::<State, _>(&handle, Some(&primary_selection_state), |_| true);
+        let trusted: Vec<PathBuf> = clipboard_daemons
+            .iter()
+            .map(|path| path.canonicalize().unwrap_or_else(|_| path.to_path_buf()))
+            .collect();
+        let filter_handle = handle.clone();
+        let data_control_state = DataControlState::new::<State, _>(
+            &handle,
+            Some(&primary_selection_state),
+            move |client| {
+                executable(&filter_handle, client).is_some_and(|path| trusted.contains(&path))
+            },
+        );
         let state = State {
             display_handle: handle.clone(),
             output_size,

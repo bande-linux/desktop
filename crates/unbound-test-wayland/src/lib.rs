@@ -83,6 +83,13 @@ impl TestClient {
         client
     }
 
+    pub fn advertises(&self, interface: &str) -> bool {
+        self.globals
+            .advertised
+            .iter()
+            .any(|(_, advertised)| advertised == interface)
+    }
+
     pub fn exchange(&mut self, server: &mut Headless) {
         roundtrip(server, &mut [self]);
     }

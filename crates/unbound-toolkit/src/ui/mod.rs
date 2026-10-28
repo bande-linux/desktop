@@ -72,6 +72,12 @@ pub enum Key {
     Tab,
     Escape,
     Space,
+    Home,
+    End,
+    PageUp,
+    PageDown,
+    Insert,
+    Function(u8),
     Character(char),
 }
 

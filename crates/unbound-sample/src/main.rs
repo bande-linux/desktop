@@ -1,9 +1,12 @@
 use std::process::ExitCode;
 
-use unbound_toolkit::{Palette, Scheme, TextSystem, Window, WindowError};
+use unbound_toolkit::{Palette, Role, Scheme, TextSystem, Window, WindowError};
 
 fn run() -> Result<(), WindowError> {
-    let mut window = Window::open("Unbound Sample", unbound_sample::SIZE)?;
+    let mut window = Window::open(
+        Role::toplevel("Unbound Sample", "unbound-sample"),
+        unbound_sample::SIZE,
+    )?;
     let mut text = TextSystem::new();
     let palette = Palette::for_scheme(Scheme::Light);
     let mut drawn = window.size();

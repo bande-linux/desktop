@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 
 use smithay::utils::Size;
 use unbound_compositor::{FrameClock, FrameScheduler, Headless, REFRESH, Renderer};
-use unbound_toolkit::{Color, FramePath, Scene, Window};
+use unbound_toolkit::{Color, FramePath, Role, Scene, Window};
 
 const OUTPUT: (i32, i32) = (320, 240);
 const WINDOW: (u32, u32) = (200, 120);
@@ -30,7 +30,12 @@ fn the_first_frame_is_drawn_on_the_cpu_and_later_frames_on_the_gpu() {
     let (presented, on_screen) = mpsc::channel();
     let (checked, check_done) = mpsc::channel::<()>();
     let client = thread::spawn(move || {
-        let mut window = Window::open_on(client_end, "toolkit test", WINDOW).expect("window");
+        let mut window = Window::open_on(
+            client_end,
+            Role::toplevel("toolkit test", "unbound-toolkit-test"),
+            WINDOW,
+        )
+        .expect("window");
         let mut paths = Vec::new();
         for color in [RED, BLUE] {
             paths.push(window.draw(&filled(color)).expect("frame"));

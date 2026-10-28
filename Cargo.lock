@@ -2818,12 +2818,15 @@ dependencies = [
  "skrifa",
  "smithay",
  "unbound-compositor",
+ "unbound-protocols",
  "vello_cpu",
  "vello_gpu",
  "wayland-backend",
  "wayland-client",
  "wayland-protocols",
+ "wayland-protocols-wlr",
  "wgpu",
+ "xkbcommon",
 ]
 
 [[package]]

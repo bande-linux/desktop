@@ -21,7 +21,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends pkg-config libxkbcommon-dev
+          sudo apt-get install -y --no-install-recommends pkg-config libxkbcommon-dev libgbm-dev libseat-dev
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
@@ -36,7 +36,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            pkg-config libxkbcommon-dev libvulkan1 mesa-vulkan-drivers fonts-dejavu-core dbus-daemon
+            pkg-config libxkbcommon-dev libgbm-dev libseat-dev libvulkan1 mesa-vulkan-drivers fonts-dejavu-core dbus-daemon
       - run: cargo test --workspace --locked -- --show-output
       - uses: actions/upload-artifact@v7
         if: failure()
@@ -58,7 +58,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            pkg-config libxkbcommon-dev libvulkan1 mesa-vulkan-drivers
+            pkg-config libxkbcommon-dev libgbm-dev libseat-dev libvulkan1 mesa-vulkan-drivers
       - name: Install cargo-deb
         run: |
           root=/cache/tools/cargo-deb-$CARGO_DEB_VERSION
@@ -97,7 +97,7 @@ jobs:
           dpkg-deb --extract target/debian/unbound-compositor_*.deb "$root"
           export XDG_RUNTIME_DIR=$(mktemp -d)
           status=0
-          timeout 10 "$root/usr/bin/unbound-compositor" > "$root/stdout" || status=$?
+          timeout 10 "$root/usr/bin/unbound-compositor" --headless > "$root/stdout" || status=$?
           cat "$root/stdout"
           test "$status" = 124
           grep -q '^WAYLAND_DISPLAY=wayland-' "$root/stdout"
@@ -118,7 +118,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            pkg-config libxkbcommon-dev jq e2fsprogs qemu-system-arm
+            pkg-config libxkbcommon-dev libgbm-dev libseat-dev jq e2fsprogs qemu-system-arm
       - name: Build or reuse the guest kernel and root image
         run: ci/vm/images.sh vm
       - name: Run the guest tests in a KVM guest with vkms and virtio-gpu
@@ -136,7 +136,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            pkg-config libxkbcommon-dev libvulkan1 mesa-vulkan-drivers
+            pkg-config libxkbcommon-dev libgbm-dev libseat-dev libvulkan1 mesa-vulkan-drivers
       - run: cargo build --release --locked --package unbound-compositor --package unbound-bench
       - name: Measure against the budgets in docs/RENDERING.md
         shell: bash

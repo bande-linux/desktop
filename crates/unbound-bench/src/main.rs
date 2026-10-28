@@ -310,6 +310,7 @@ fn compositor_start(executable: &Path) -> Result<(Duration, f64), Box<dyn Error>
     let runtime = tempfile::tempdir()?;
     let started = Instant::now();
     let mut child = Command::new(executable)
+        .arg("--headless")
         .env("XDG_RUNTIME_DIR", runtime.path())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())

@@ -11,6 +11,7 @@ use rustix::io::{FdFlags, fcntl_setfd};
 
 use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::{Buffer, Format as DmabufFormat, Fourcc, Modifier};
+use smithay::backend::drm::DrmNode;
 use smithay::backend::renderer::element::Kind as ElementKind;
 use smithay::backend::renderer::element::surface::{
     WaylandSurfaceRenderElement, render_elements_from_surface_tree,
@@ -34,7 +35,7 @@ use smithay::wayland::compositor::{
     CompositorClientState, CompositorHandler, CompositorState, SurfaceAttributes, with_states,
 };
 use smithay::wayland::dmabuf::{
-    DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier, get_dmabuf,
+    DmabufFeedback, DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier, get_dmabuf,
 };
 use smithay::wayland::output::{OutputHandler, OutputManagerState};
 use smithay::wayland::presentation::{
@@ -64,7 +65,18 @@ use crate::clock::Vblank;
 
 pub const REFRESH: Duration = Duration::from_nanos(1_000_000_000 / 120);
 
-const REFRESH_MILLIHERTZ: i32 = 120_000;
+pub struct ScanoutDevice {
+    pub node: DrmNode,
+    pub feedback: DmabufFeedback,
+}
+
+pub struct OutputConfig {
+    pub name: String,
+    pub model: String,
+    pub size: Size<i32, Physical>,
+    pub refresh: Duration,
+    pub scanout: Option<ScanoutDevice>,
+}
 
 pub struct Window {
     toplevel: ToplevelSurface,
@@ -85,6 +97,8 @@ impl Window {
 pub struct State {
     display_handle: DisplayHandle,
     output_size: Size<i32, Physical>,
+    refresh: Duration,
+    scanout_node: Option<DrmNode>,
     compositor_state: CompositorState,
     xdg_shell_state: XdgShellState,
     shm_state: ShmState,
@@ -122,6 +136,17 @@ struct ClipboardDaemon {
 
 impl Headless {
     pub fn new(output_size: Size<i32, Physical>) -> io::Result<Self> {
+        Self::with_output(OutputConfig {
+            name: "HEADLESS-1".to_owned(),
+            model: "Headless".to_owned(),
+            size: output_size,
+            refresh: REFRESH,
+            scanout: None,
+        })
+    }
+
+    pub fn with_output(config: OutputConfig) -> io::Result<Self> {
+        let output_size = config.size;
         let display = Display::new().map_err(io::Error::other)?;
         let handle = display.handle();
         let mut seat_state = SeatState::new();
@@ -136,25 +161,30 @@ impl Headless {
                     .is_some_and(|state| state.clipboard_daemon)
             });
         let mut dmabuf_state = DmabufState::new();
-        let dmabuf_global = dmabuf_state.create_global::<State>(
-            &handle,
-            DMABUF_FOURCCS.map(|code| DmabufFormat {
-                code,
-                modifier: Modifier::Linear,
-            }),
-        );
+        let dmabuf_global = match &config.scanout {
+            Some(scanout) => dmabuf_state
+                .create_global_with_default_feedback::<State>(&handle, &scanout.feedback),
+            None => dmabuf_state.create_global::<State>(
+                &handle,
+                DMABUF_FOURCCS.map(|code| DmabufFormat {
+                    code,
+                    modifier: Modifier::Linear,
+                }),
+            ),
+        };
         let output = Output::new(
-            "HEADLESS-1".to_owned(),
+            config.name,
             PhysicalProperties {
                 size: (0, 0).into(),
                 subpixel: Subpixel::Unknown,
                 make: "Unbound".to_owned(),
-                model: "Headless".to_owned(),
+                model: config.model,
             },
         );
+        let millihertz = 1_000_000_000_000u128 / config.refresh.as_nanos().max(1);
         let mode = Mode {
             size: (output_size.w, output_size.h).into(),
-            refresh: REFRESH_MILLIHERTZ,
+            refresh: i32::try_from(millihertz).unwrap_or(i32::MAX),
         };
         output.change_current_state(Some(mode), None, None, Some((0, 0).into()));
         output.set_preferred(mode);
@@ -162,6 +192,8 @@ impl Headless {
         let state = State {
             display_handle: handle.clone(),
             output_size,
+            refresh: config.refresh,
+            scanout_node: config.scanout.as_ref().map(|scanout| scanout.node),
             compositor_state: CompositorState::new::<State>(&handle),
             xdg_shell_state: XdgShellState::new::<State>(&handle),
             shm_state: ShmState::new::<State>(&handle, []),
@@ -297,7 +329,7 @@ impl Headless {
             feedback.presented(
                 &self.state.output,
                 vblank.time,
-                Refresh::fixed(REFRESH),
+                Refresh::fixed(self.state.refresh),
                 vblank.sequence,
                 Kind::Vsync,
             );
@@ -506,6 +538,7 @@ impl DmabufHandler for State {
         notifier: ImportNotifier,
     ) {
         if dmabuf.num_planes() == 1 && dmabuf.format().modifier == Modifier::Linear {
+            dmabuf.set_node(self.scanout_node);
             let _ = notifier.successful::<State>();
         } else {
             notifier.failed();

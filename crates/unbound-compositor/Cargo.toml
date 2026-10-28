@@ -7,13 +7,12 @@ repository.workspace = true
 
 [dependencies]
 rustix.workspace = true
-smithay.workspace = true
+smithay = { workspace = true, features = ["backend_drm", "backend_gbm", "backend_session_libseat"] }
 unbound-render.workspace = true
 
 [dev-dependencies]
 image.workspace = true
 image-compare.workspace = true
-smithay = { workspace = true, features = ["backend_drm"] }
 unbound-test-wayland.workspace = true
 wayland-client.workspace = true
 wayland-protocols.workspace = true

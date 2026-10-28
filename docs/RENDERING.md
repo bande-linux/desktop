@@ -98,7 +98,15 @@ CI cannot measure photons or a real GPU, so `ci/perf` measures on lavapipe with
 - **Exact metrics**, independent of machine load, compared exactly: pixels repainted per
   frame equal the damaged area; bytes uploaded per frame equal the damaged rows; frames
   between a commit before the deadline and its presentation equal 1 on a virtual 120 Hz
-  clock.
+  clock. The frame scheduler reads time through an injected clock, so the scheduling
+  tests run on virtual time that does not move while a frame renders and are
+  independent of the runners' load.
+- **Real-clock presentation metrics**, reported against the targets but not gated:
+  commit-to-present latency p50/p99 (target ≤ 2 refresh intervals) and the number of
+  frames presented after the vblank their deadline promised, for commits at 100 phases
+  of a real 120 Hz clock. On a host shared by five runners, a sleeping thread's wake-up
+  is late by more than the 1 ms margin often enough that a gate would only measure the
+  neighbours.
 - **Timed metrics**, gated by budgets that hold on lavapipe on a shared 8-core runner:
   typical frame at 1920×1080 p99 ≤ 8.33 ms (lavapipe must keep 120 Hz when damage is
   small), full repaint of 8 windows p99 ≤ 16.7 ms, median of five compositor starts to listening socket

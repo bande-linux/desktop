@@ -92,12 +92,24 @@ hardware. Things noticed in passing go to the end of this file, not into a diff.
   golden image within the SSIM bound.
   *Depends on* kernel work done by the user (not in this repo, nor the `hil` repo):
   K1 boot to userspace, K2 `simpledrm` on the boot framebuffer; and on M10.
-- [ ] **M12 Keyboard and pointer input**
+  *Status (2026-10-28)*: blocked on K1. The latest `hil` run (`kis-2`, 10:13) ends at
+  m1n1's "Vectoring to next stage" with no kernel output. Once K1 and K2 land, under the
+  shared lock (`mkdir hil-host/mini.lock`, short sessions): boot the `ci/vm` root image
+  contents plus the `ci/deb` packages, start seatd and run the `guest` test binary's
+  `scanout::a_composed_window_is_scanned_out_on_vkms` with the card chosen by connected
+  connector instead of by the vkms driver name, then release the lease and the lock.
+- [x] **M12 Keyboard and pointer input** (`desktop/milestone-12`)
   libinput through the libseat session, xkbcommon keymaps, `wl_keyboard`/`wl_pointer`
   with focus-follows-click and the macOS focus rules of section 1.7, cursor drawn by the
   compositor, and the `Super`-based shortcut layer of section 1.5. *Done when* guest
   tests inject events through `uinput` and clients receive them with the right focus,
   and on the mini once K3 (USB input in the kernel) lands.
+  Headless tests drive the seat directly (click-to-focus and raise, keys to the focused
+  client only, surface-local pointer enter, empty-desktop click, Super+W/Q/Tab, the arrow
+  drawn once the pointer moves); the guest test creates a uinput keyboard-and-mouse,
+  which libinput finds through udev, and checks that a click moves keyboard focus to the
+  window under the pointer and that its keys and buttons reach only that client. Scroll
+  axes, keyboard repeat settings, a hardware cursor plane and the mini (K3) are not done.
 - [ ] **M13 Shell protocols** `wlr-layer-shell`, `xdg_activation_v1` (replaces the
   first-window focus stand-in), `wp_viewporter`, `wp_fractional_scale_v1`. *Done when*
   a layer surface reserves its exclusive zone and toplevels are placed outside it.

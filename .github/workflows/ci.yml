@@ -65,18 +65,30 @@ jobs:
           test -x "$root/bin/cargo-deb" \
             || cargo install cargo-deb --version "$CARGO_DEB_VERSION" --locked --root "$root"
           echo "$root/bin" >> "$GITHUB_PATH"
-      - run: cargo deb --package unbound-compositor --locked
-      - name: Inspect the package
+      - run: |
+          for package in unbound-compositor unbound-notify; do
+            cargo deb --package "$package" --locked
+          done
+      - name: Inspect the packages
         run: |
-          deb=$(ls target/debian/*.deb)
-          dpkg-deb --info "$deb"
-          dpkg-deb --contents "$deb"
-          test "$(dpkg-deb --field "$deb" Architecture)" = arm64
-          dpkg-deb --field "$deb" Depends | grep -F 'mesa-vulkan-drivers | vulkan-icd'
-      - name: Smoke-test the packaged binary
+          for deb in target/debian/*.deb; do
+            dpkg-deb --info "$deb"
+            dpkg-deb --contents "$deb"
+            test "$(dpkg-deb --field "$deb" Architecture)" = arm64
+          done
+          dpkg-deb --field target/debian/unbound-compositor_*.deb Depends \
+            | grep -F 'mesa-vulkan-drivers | vulkan-icd'
+      - name: Check that the notification daemon is D-Bus activatable
         run: |
           root=$(mktemp -d)
-          dpkg-deb --extract target/debian/*.deb "$root"
+          dpkg-deb --extract target/debian/unbound-notify_*.deb "$root"
+          service="$root/usr/share/dbus-1/services/org.unbound.Notify.service"
+          grep -qx 'Name=org.freedesktop.Notifications' "$service"
+          test -x "$root$(sed -n 's/^Exec=//p' "$service")"
+      - name: Smoke-test the packaged compositor
+        run: |
+          root=$(mktemp -d)
+          dpkg-deb --extract target/debian/unbound-compositor_*.deb "$root"
           export XDG_RUNTIME_DIR=$(mktemp -d)
           status=0
           timeout 10 "$root/usr/bin/unbound-compositor" > "$root/stdout" || status=$?
@@ -85,6 +97,6 @@ jobs:
           grep -q '^WAYLAND_DISPLAY=wayland-' "$root/stdout"
       - uses: actions/upload-artifact@v7
         with:
-          name: unbound-compositor-deb
+          name: unbound-debs
           path: target/debian/*.deb
           if-no-files-found: error

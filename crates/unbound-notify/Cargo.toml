@@ -10,3 +10,17 @@ zbus.workspace = true
 
 [dev-dependencies]
 unbound-test-bus.workspace = true
+
+[package.metadata.deb]
+maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+section = "x11"
+depends = "$auto, dbus-session-bus | default-dbus-session-bus"
+provides = "notification-daemon"
+extended-description = """\
+Serves org.freedesktop.Notifications (specification 1.2) on the session \
+bus. The bus starts it on the first notification through D-Bus \
+activation."""
+assets = [
+    ["target/release/unbound-notify", "usr/bin/", "755"],
+    ["debian/org.unbound.Notify.service", "usr/share/dbus-1/services/", "644"],
+]

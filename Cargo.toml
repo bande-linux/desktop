@@ -12,6 +12,7 @@ accesskit = "=0.25.2"
 ab_glyph = "=0.2.32"
 ash = "=0.38.0"
 image = { version = "=0.25.10", default-features = false, features = ["png"] }
+jiff = "=0.2.38"
 kdl = { version = "=6.7.1", default-features = false, features = ["span"] }
 image-compare = "=0.5.0"
 pollster = "=1.0.1"
@@ -27,6 +28,7 @@ fontique = { version = "=0.12.0", features = ["fontconfig-dlopen"] }
 parley = { version = "=0.12.0", features = ["complex-scripts"] }
 zbus = "=5.19.0"
 unbound-apps = { path = "crates/unbound-apps" }
+unbound-config = { path = "crates/unbound-config" }
 unbound-compositor = { path = "crates/unbound-compositor" }
 unbound-protocols = { path = "crates/unbound-protocols" }
 unbound-render = { path = "crates/unbound-render" }

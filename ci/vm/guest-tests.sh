@@ -18,9 +18,11 @@ cargo build --workspace --locked --bins --message-format=json \
     | jq -r 'select(.reason == "compiler-artifact" and .executable != null and .target.kind == ["bin"]) | .executable' \
     > "$share/apps"
 mkdir -p "$share/usr/bin" "$share/usr/share/applications" "$share/usr/share/icons/hicolor/scalable/apps"
-for app in unbound-compositor unbound-clipboard unbound-panel unbound-launcher unbound-term; do
+for app in unbound-compositor unbound-clipboard unbound-panel unbound-launcher unbound-term unbound-lock; do
     cp "$(grep "/$app\$" "$share/apps")" "$share/usr/bin/"
 done
+mkdir -p "$share/etc/pam.d"
+cp crates/unbound-lock/data/unbound-lock.pam "$share/etc/pam.d/unbound-lock"
 cp crates/unbound-term/data/unbound-term.desktop "$share/usr/share/applications/"
 cp crates/unbound-term/data/unbound-term.svg "$share/usr/share/icons/hicolor/scalable/apps/"
 
@@ -34,7 +36,7 @@ set -u
 export RUST_BACKTRACE=1 UNBOUND_SCREENDUMPS=/share/screendumps
 echo "Guest kernel $(uname -r)"
 ls -l /dev/dri
-cp -r /share/usr /
+cp -r /share/usr /share/etc /
 /usr/lib/systemd/systemd-udevd --daemon
 udevadm trigger --action=add
 udevadm settle

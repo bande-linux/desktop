@@ -71,7 +71,7 @@ jobs:
       - run: |
           for package in unbound-compositor unbound-notify unbound-clipboard unbound-config unbound-power \
               xdg-desktop-portal-unbound unbound-tray unbound-automount \
-              unbound-panel unbound-launcher unbound-term; do
+              unbound-panel unbound-launcher unbound-term unbound-lock; do
             cargo deb --package "$package" --locked
           done
       - name: Inspect the packages
@@ -98,7 +98,7 @@ jobs:
             | grep -qw 'unbound-clipboard'
       - name: Check the shell's packages
         run: |
-          for package in unbound-panel unbound-launcher unbound-term; do
+          for package in unbound-panel unbound-launcher unbound-term unbound-lock; do
             dpkg-deb --field target/debian/unbound-compositor_*.deb Recommends | grep -q "$package"
             dpkg-deb --contents target/debian/"$package"_*.deb | grep -q " ./usr/bin/$package\$"
           done
@@ -107,6 +107,9 @@ jobs:
           grep -qx 'Exec=unbound-term' "$root/usr/share/applications/unbound-term.desktop"
           grep -qx 'Icon=unbound-term' "$root/usr/share/applications/unbound-term.desktop"
           test -s "$root/usr/share/icons/hicolor/scalable/apps/unbound-term.svg"
+          dpkg-deb --extract target/debian/unbound-lock_*.deb "$root"
+          grep -qx '@include common-auth' "$root/etc/pam.d/unbound-lock"
+          dpkg-deb --field target/debian/unbound-lock_*.deb Depends | grep -q libpam0g
       - name: Check the session services' user units and D-Bus activation
         run: |
           for entry in unbound-config:org.unbound.Config:org.unbound.Config \

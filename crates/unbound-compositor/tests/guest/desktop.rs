@@ -9,7 +9,7 @@ use unbound_compositor::BACKGROUND;
 
 use crate::card::{Scanout, card_with_driver};
 use crate::uinput::{
-    KEY_ENTER, KEY_ESC, KEY_F, KEY_F10, KEY_LEFTCTRL, KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_M,
+    KEY_ENTER, KEY_ESC, KEY_F, KEY_F10, KEY_LEFTCTRL, KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_M, KEY_Q,
     KEY_SPACE, VirtualDevice,
 };
 
@@ -238,4 +238,44 @@ fn firefox_runs_on_wayland_and_opens_a_context_menu() {
     });
     thread::sleep(Duration::from_secs(1));
     scanout().save("m16-firefox-full-screen");
+}
+
+const GUEST_PASSWORD: &str = "unbound-test";
+
+#[test]
+#[ignore = "needs the ci/vm guest"]
+fn ctrl_super_q_locks_and_the_password_unlocks() {
+    let mut keyboard = VirtualDevice::keyboard_and_mouse();
+    let _desktop = start_desktop();
+    let icon = (32, 33);
+    wait_for("the panel", STARTUP, || {
+        running("unbound-panel")
+            && current_scanout().is_some_and(|scanout| pixel(&scanout, icon.0, 200) != BACKGROUND)
+    });
+    thread::sleep(Duration::from_secs(1));
+    let unlocked = scanout();
+
+    keyboard.chord(&[KEY_LEFTCTRL, KEY_LEFTMETA], KEY_Q);
+    wait_for("the lock screen", STARTUP, || {
+        running("unbound-lock") && pixel(&scanout(), icon.0, 200) == BACKGROUND
+    });
+    thread::sleep(Duration::from_secs(2));
+    let locked = scanout();
+    locked.save("m17-lock-screen");
+
+    keyboard.type_text("wrong password\n");
+    thread::sleep(Duration::from_secs(4));
+    scanout().save("m17-lock-rejected");
+    assert!(running("unbound-lock"));
+
+    keyboard.type_text(GUEST_PASSWORD);
+    keyboard.type_text("\n");
+    wait_for("the desktop to come back", STARTUP, || {
+        pixel(&scanout(), icon.0, 200) == pixel(&unlocked, icon.0, 200)
+    });
+    wait_for("the lock screen to exit", STARTUP, || {
+        !running("unbound-lock")
+    });
+    thread::sleep(Duration::from_secs(1));
+    scanout().save("m17-unlocked");
 }

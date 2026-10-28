@@ -16,6 +16,7 @@ pub const KEY_LEFTSHIFT: u16 = 42;
 pub const KEY_LEFTCTRL: u16 = 29;
 pub const KEY_F: u16 = 33;
 pub const KEY_M: u16 = 50;
+pub const KEY_Q: u16 = 16;
 pub const KEY_ESC: u16 = 1;
 pub const KEY_F10: u16 = 68;
 pub const KEY_SPACE: u16 = 57;

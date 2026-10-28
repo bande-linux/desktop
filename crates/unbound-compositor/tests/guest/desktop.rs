@@ -9,7 +9,8 @@ use unbound_compositor::BACKGROUND;
 
 use crate::card::{Scanout, card_with_driver};
 use crate::uinput::{
-    KEY_ENTER, KEY_F, KEY_LEFTCTRL, KEY_LEFTMETA, KEY_M, KEY_SPACE, VirtualDevice,
+    KEY_ENTER, KEY_ESC, KEY_F, KEY_F10, KEY_LEFTCTRL, KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_M,
+    KEY_SPACE, VirtualDevice,
 };
 
 const COMPOSITOR: &str = "/usr/bin/unbound-compositor";
@@ -17,14 +18,17 @@ const RUNTIME_DIR: &str = "/run/user/0";
 const TYPED: &str = "/tmp/typed-in-unbound-term";
 const STARTUP: Duration = Duration::from_secs(60);
 
-struct Desktop(Child);
+struct Desktop {
+    compositor: Child,
+    display: String,
+}
 
 impl Drop for Desktop {
     fn drop(&mut self) {
         let _ = Command::new("kill")
-            .args(["-TERM", &self.0.id().to_string()])
+            .args(["-TERM", &self.compositor.id().to_string()])
             .status();
-        let _ = self.0.wait();
+        let _ = self.compositor.wait();
     }
 }
 
@@ -73,8 +77,15 @@ fn start_desktop() -> Desktop {
     BufReader::new(stdout)
         .read_line(&mut line)
         .expect("the compositor's socket line");
-    assert!(line.starts_with("WAYLAND_DISPLAY="), "{line}");
-    Desktop(child)
+    let display = line
+        .trim()
+        .strip_prefix("WAYLAND_DISPLAY=")
+        .unwrap_or_else(|| panic!("{line}"))
+        .to_owned();
+    Desktop {
+        compositor: child,
+        display,
+    }
 }
 
 #[test]
@@ -143,4 +154,63 @@ fn the_launcher_opens_a_terminal_that_takes_typing() {
         pixel(&now, now.width / 2, now.height / 2) == pixel(&desktop, center_x, desktop.height / 2)
     });
     scanout().save("m15-terminal-minimized");
+}
+
+const FIREFOX_STARTUP: Duration = Duration::from_secs(240);
+const PAGE_COLOR: [u8; 3] = [0xFF, 0x00, 0xFF];
+
+fn page_pixels(scanout: &Scanout) -> usize {
+    scanout.rgb.iter().filter(|rgb| **rgb == PAGE_COLOR).count()
+}
+
+#[test]
+#[ignore = "needs the ci/vm guest"]
+fn firefox_runs_on_wayland_and_opens_a_context_menu() {
+    let mut keyboard = VirtualDevice::keyboard_and_mouse();
+    let desktop = start_desktop();
+    wait_for("the panel", STARTUP, || running("unbound-panel"));
+    fs::create_dir_all("/tmp/firefox-profile").expect("profile directory");
+    let mut firefox = Command::new("firefox-esr")
+        .args([
+            "--new-instance",
+            "--profile",
+            "/tmp/firefox-profile",
+            "data:text/html,<body style='margin:0;background:%23ff00ff'>",
+        ])
+        .env("XDG_RUNTIME_DIR", RUNTIME_DIR)
+        .env("WAYLAND_DISPLAY", &desktop.display)
+        .env("MOZ_ENABLE_WAYLAND", "1")
+        .env_remove("DISPLAY")
+        .env("HOME", "/root")
+        .spawn()
+        .expect("start firefox-esr");
+
+    wait_for("Firefox to draw the page", FIREFOX_STARTUP, || {
+        page_pixels(&scanout()) > 10_000
+    });
+    thread::sleep(Duration::from_secs(2));
+    let page = scanout();
+    page.save("m16-firefox-page");
+
+    keyboard.chord(&[KEY_LEFTSHIFT], KEY_F10);
+    wait_for("the context menu", STARTUP, || {
+        page_pixels(&scanout()) < page_pixels(&page)
+    });
+    thread::sleep(Duration::from_secs(1));
+    scanout().save("m16-firefox-context-menu");
+
+    keyboard.tap(KEY_ESC);
+    wait_for("the context menu to close", STARTUP, || {
+        page_pixels(&scanout()) == page_pixels(&page)
+    });
+
+    keyboard.chord(&[KEY_LEFTCTRL, KEY_LEFTMETA], KEY_F);
+    wait_for("Firefox to go full screen", FIREFOX_STARTUP, || {
+        page_pixels(&scanout()) > page_pixels(&page)
+    });
+    thread::sleep(Duration::from_secs(1));
+    scanout().save("m16-firefox-full-screen");
+
+    let _ = firefox.kill();
+    let _ = firefox.wait();
 }

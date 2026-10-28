@@ -1,0 +1,12 @@
+[package]
+name = "unbound-render"
+description = "Unbound's Vulkan compositor renderer"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+ash.workspace = true
+
+[build-dependencies]
+naga.workspace = true

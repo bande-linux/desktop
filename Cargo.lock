@@ -1735,10 +1735,9 @@ dependencies = [
  "image-compare",
  "rustix",
  "smithay",
+ "unbound-render",
  "unbound-test-wayland",
- "unbound-toolkit",
  "wayland-client",
- "wgpu",
 ]
 
 [[package]]
@@ -1758,6 +1757,14 @@ version = "0.1.0"
 dependencies = [
  "unbound-test-bus",
  "zbus",
+]
+
+[[package]]
+name = "unbound-render"
+version = "0.1.0"
+dependencies = [
+ "ash",
+ "naga",
 ]
 
 [[package]]

@@ -9,6 +9,7 @@ repository = "https://github.com/unbound-linux/desktop"
 
 [workspace.dependencies]
 ab_glyph = "=0.2.32"
+ash = "=0.38.0"
 image = { version = "=0.25.10", default-features = false, features = ["png"] }
 kdl = { version = "=6.7.1", default-features = false, features = ["span"] }
 image-compare = "=0.5.0"
@@ -16,9 +17,11 @@ pollster = "=1.0.1"
 rustix = { version = "=1.1.6", features = ["event", "process"] }
 smithay = { version = "=0.7.0", default-features = false, features = ["wayland_frontend"] }
 tempfile = "=3.27.0"
+naga = { version = "=30.0.1", features = ["wgsl-in", "spv-out"] }
 notify = "=8.2.0"
 zbus = "=5.19.0"
 unbound-compositor = { path = "crates/unbound-compositor" }
+unbound-render = { path = "crates/unbound-render" }
 unbound-test-bus = { path = "crates/unbound-test-bus" }
 unbound-test-wayland = { path = "crates/unbound-test-wayland" }
 unbound-toolkit = { path = "crates/unbound-toolkit" }

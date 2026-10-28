@@ -3,12 +3,30 @@ pub struct Color {
     pub r: u8,
     pub g: u8,
     pub b: u8,
+    pub a: u8,
 }
 
 impl Color {
+    pub const TRANSPARENT: Self = Self::hex(0).with_alpha(0);
+
     pub const fn hex(rgb: u32) -> Self {
         let [_, r, g, b] = rgb.to_be_bytes();
-        Self { r, g, b }
+        Self {
+            r,
+            g,
+            b,
+            a: u8::MAX,
+        }
+    }
+
+    pub const fn with_alpha(self, a: u8) -> Self {
+        Self { a, ..self }
+    }
+}
+
+impl Default for Color {
+    fn default() -> Self {
+        Self::TRANSPARENT
     }
 }
 

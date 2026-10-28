@@ -141,6 +141,20 @@ hardware. Things noticed in passing go to the end of this file, not into a diff.
   `vello_cpu` first frame into `wl_shm`, `vello_gpu` afterwards, Parley text; goldens
   re-derived from scene descriptions; panel, launcher and terminal move over; a toolkit
   sample app whose start time and RSS `ci/perf` measures.
+  Track `desktop/track-toolkit` (merged with M12 for the compositor's damage handling).
+  Done: Vello CPU and GPU renderers for fills, strokes, gradients, rounded rectangles, clips
+  and shadows; Parley text in Inter with fallback; goldens from exact coverage, both
+  renderers within 2/255; `Window` with the first frame on the CPU in `wl_shm` and later
+  frames on a Vulkan surface; `unbound-sample` measured by `ci/perf`; widgets (stack, label,
+  button, switch, slider, text field with the section 1.5 bindings) with AccessKit nodes and
+  actions. Paused at 798fa67: lint, tests and clippy pass locally (`--locked`); CI for
+  that commit was not awaited (earlier commits: lint/test/deb green at bd3c763).
+  Next, in order: `wl_seat` pointer and keyboard in `Window` (xkbcommon keymap, map to
+  `ui::Event`; test with `Headless::move_pointer_to`/`press_button`/`key`); drive a `Ui`
+  from `Window` and move `unbound-sample` onto widgets; publish `Ui::accessibility` on
+  AT-SPI with `accesskit_unix` (test on a private bus via `unbound-test-bus`); scroll view
+  on `unbound-spring` and tab view; damage-limited redraw with an exact-metric bench;
+  `wp_fractional_scale_v1`.
 - [ ] **M17 Session lock and idle** `ext-session-lock-v1` with blank fallback,
   `ext-idle-notify-v1`, `idle-inhibit`, driven by the `idle` config.
 - [ ] **M18 Watchdog** `wl_display` ping heartbeat, unresponsive marking after 3 s.
@@ -174,3 +188,8 @@ boot framebuffer, K3 USB input. Later, the Apple DCP and agx drivers unlock:
   `main`.
 - DrmCompositor's plane tests exclude modesets, so the first frame after taking the
   output is always composed.
+- `image-compare` 0.5.0's SSIM sums the window's (co)variances instead of averaging them,
+  so its stabilising constant is 64 times too small and near-flat windows score low: two
+  gradients differing by 1 per channel scored 0.968. The toolkit's tests compute SSIM
+  themselves; `unbound-compositor`'s golden test still uses the crate.
+- `ci/lavapipe-test` installs `fonts-dejavu-core`, which no test uses any more.

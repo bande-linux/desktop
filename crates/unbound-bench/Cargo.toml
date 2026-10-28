@@ -10,5 +10,7 @@ publish = false
 smithay.workspace = true
 tempfile.workspace = true
 unbound-compositor.workspace = true
+unbound-sample.workspace = true
 unbound-test-wayland.workspace = true
+unbound-toolkit.workspace = true
 wayland-client.workspace = true

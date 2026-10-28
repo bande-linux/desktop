@@ -1,15 +1,28 @@
 [package]
 name = "unbound-toolkit"
-description = "Shared Unbound UI toolkit: design tokens and wgpu drawing"
+description = "Shared Unbound UI toolkit: design tokens, Vello drawing and Parley text"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
 
 [dependencies]
-ab_glyph.workspace = true
+accesskit.workspace = true
+fontique.workspace = true
+parley.workspace = true
 pollster.workspace = true
+raw-window-handle.workspace = true
+rustix = { workspace = true, features = ["fs"] }
+skrifa.workspace = true
+vello_cpu.workspace = true
+vello_gpu.workspace = true
+wayland-backend = { workspace = true, features = ["client_system", "dlopen"] }
+wayland-client.workspace = true
+wayland-protocols.workspace = true
 wgpu.workspace = true
 
 [dev-dependencies]
+accesskit.workspace = true
+ab_glyph.workspace = true
 image.workspace = true
-image-compare.workspace = true
+smithay.workspace = true
+unbound-compositor.workspace = true

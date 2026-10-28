@@ -37,6 +37,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             pkg-config libxkbcommon-dev libgbm-dev libinput-dev libseat-dev libudev-dev libvulkan1 mesa-vulkan-drivers fonts-dejavu-core dbus-daemon
+      - name: Install the toolkit's fonts, fontconfig and libwayland-client
+        run: |
+          sudo apt-get install -y --no-install-recommends fonts-inter fonts-noto-cjk libfontconfig1 libwayland-client0
       - run: cargo test --workspace --locked -- --show-output
       - uses: actions/upload-artifact@v7
         if: failure()
@@ -155,4 +158,20 @@ jobs:
         with:
           name: perf
           path: perf.json
+          if-no-files-found: ignore
+      - name: Install the toolkit sample's fonts and libraries
+        run: |
+          sudo apt-get install -y --no-install-recommends fonts-inter libfontconfig1 libwayland-client0
+      - run: cargo build --release --locked --package unbound-sample --package unbound-bench
+      - name: Measure the toolkit sample against the budgets in docs/RENDERING.md
+        shell: bash
+        run: |
+          target/release/unbound-toolkit-bench \
+            --sample target/release/unbound-sample --json perf-toolkit.json \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: perf-toolkit
+          path: perf-toolkit.json
           if-no-files-found: ignore

@@ -8,23 +8,31 @@ edition = "2024"
 repository = "https://github.com/unbound-linux/desktop"
 
 [workspace.dependencies]
+accesskit = "=0.25.2"
 ab_glyph = "=0.2.32"
 ash = "=0.38.0"
 image = { version = "=0.25.10", default-features = false, features = ["png"] }
 kdl = { version = "=6.7.1", default-features = false, features = ["span"] }
 image-compare = "=0.5.0"
 pollster = "=1.0.1"
+raw-window-handle = "=0.6.2"
 rustix = { version = "=1.1.6", features = ["event", "process"] }
+skrifa = "=0.44.0"
 smithay = { version = "=0.7.0", default-features = false, features = ["wayland_frontend"] }
 tempfile = "=3.27.0"
 naga = { version = "=30.0.1", features = ["wgsl-in", "spv-out"] }
 notify = "=8.2.0"
+fontique = { version = "=0.12.0", features = ["fontconfig-dlopen"] }
+parley = { version = "=0.12.0", features = ["complex-scripts"] }
 zbus = "=5.19.0"
 unbound-compositor = { path = "crates/unbound-compositor" }
 unbound-render = { path = "crates/unbound-render" }
+unbound-sample = { path = "crates/unbound-sample" }
 unbound-test-bus = { path = "crates/unbound-test-bus" }
 unbound-test-wayland = { path = "crates/unbound-test-wayland" }
 unbound-toolkit = { path = "crates/unbound-toolkit" }
+vello_cpu = "=0.3.0"
+vello_gpu = { version = "=0.3.0", default-features = false, features = ["wgpu", "text"] }
 wayland-backend = { version = "=0.3.17", features = ["log"] }
 wayland-client = "=0.31.15"
 wayland-protocols = { version = "=0.32.13", features = ["client", "staging", "unstable"] }

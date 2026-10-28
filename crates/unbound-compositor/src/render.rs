@@ -1,14 +1,10 @@
-use std::fmt;
-use std::sync::mpsc;
-
 use smithay::utils::{Physical, Size};
+use unbound_toolkit::{Gpu, GpuError};
 use wgpu::util::DeviceExt;
 
 use crate::state::{Frame, Headless};
 
 pub const BACKGROUND: [u8; 3] = [0x20, 0x28, 0x30];
-
-const OUTPUT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
 const SHADER: &str = r"
 struct VertexOutput {
@@ -30,25 +26,6 @@ fn fragment(input: VertexOutput) -> @location(0) vec4<f32> {
 }
 ";
 
-#[derive(Debug)]
-pub enum RenderError {
-    Adapter(wgpu::RequestAdapterError),
-    Device(wgpu::RequestDeviceError),
-    Readback(String),
-}
-
-impl fmt::Display for RenderError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Adapter(error) => write!(f, "no usable Vulkan adapter: {error}"),
-            Self::Device(error) => write!(f, "cannot open the Vulkan device: {error}"),
-            Self::Readback(error) => write!(f, "cannot read the rendered frame back: {error}"),
-        }
-    }
-}
-
-impl std::error::Error for RenderError {}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Snapshot {
     pub size: Size<i32, Physical>,
@@ -56,24 +33,15 @@ pub struct Snapshot {
 }
 
 pub struct Renderer {
-    adapter: wgpu::Adapter,
-    device: wgpu::Device,
-    queue: wgpu::Queue,
+    gpu: Gpu,
     layout: wgpu::BindGroupLayout,
     pipeline: wgpu::RenderPipeline,
 }
 
 impl Renderer {
-    pub fn new() -> Result<Self, RenderError> {
-        let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-        descriptor.backends = wgpu::Backends::VULKAN;
-        let instance = wgpu::Instance::new(descriptor.with_env());
-        let adapter =
-            pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
-                .map_err(RenderError::Adapter)?;
-        let (device, queue) =
-            pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default()))
-                .map_err(RenderError::Device)?;
+    pub fn new() -> Result<Self, GpuError> {
+        let gpu = Gpu::new()?;
+        let device = &gpu.device;
 
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("frame"),
@@ -119,7 +87,7 @@ impl Renderer {
                 entry_point: Some("fragment"),
                 compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: OUTPUT_FORMAT,
+                    format: Gpu::TARGET_FORMAT,
                     blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
@@ -129,31 +97,20 @@ impl Renderer {
         });
 
         Ok(Self {
-            adapter,
-            device,
-            queue,
+            gpu,
             layout,
             pipeline,
         })
     }
 
     pub fn adapter_info(&self) -> wgpu::AdapterInfo {
-        self.adapter.get_info()
+        self.gpu.adapter.get_info()
     }
 
-    pub fn render(&self, compositor: &Headless) -> Result<Snapshot, RenderError> {
+    pub fn render(&self, compositor: &Headless) -> Result<Snapshot, GpuError> {
         let size = compositor.output_size();
         let extent = extent(size);
-        let target = self.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("output"),
-            size: extent,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: OUTPUT_FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
+        let target = self.gpu.render_target(extent.width, extent.height);
         let target_view = target.create_view(&wgpu::TextureViewDescriptor::default());
 
         let quads: Vec<_> = compositor
@@ -164,6 +121,7 @@ impl Renderer {
             .collect();
 
         let mut encoder = self
+            .gpu
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
         {
@@ -191,48 +149,7 @@ impl Renderer {
             }
         }
 
-        let row_bytes = extent.width * 4;
-        let padded_row_bytes = row_bytes.next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
-        let readback = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("readback"),
-            size: u64::from(padded_row_bytes) * u64::from(extent.height),
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
-        encoder.copy_texture_to_buffer(
-            target.as_image_copy(),
-            wgpu::TexelCopyBufferInfo {
-                buffer: &readback,
-                layout: wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(padded_row_bytes),
-                    rows_per_image: None,
-                },
-            },
-            extent,
-        );
-        self.queue.submit([encoder.finish()]);
-
-        let slice = readback.slice(..);
-        let (sender, receiver) = mpsc::channel();
-        slice.map_async(wgpu::MapMode::Read, move |result| {
-            let _ = sender.send(result);
-        });
-        self.device
-            .poll(wgpu::PollType::wait_indefinitely())
-            .map_err(|error| RenderError::Readback(error.to_string()))?;
-        receiver
-            .recv()
-            .map_err(|error| RenderError::Readback(error.to_string()))?
-            .map_err(|error| RenderError::Readback(error.to_string()))?;
-        let mapped = slice
-            .get_mapped_range()
-            .map_err(|error| RenderError::Readback(error.to_string()))?;
-        let rgba = mapped
-            .chunks(padded_row_bytes as usize)
-            .flat_map(|row| &row[..row_bytes as usize])
-            .copied()
-            .collect();
+        let rgba = self.gpu.finish_and_read(encoder, &target)?;
         Ok(Snapshot { size, rgba })
     }
 
@@ -243,8 +160,8 @@ impl Renderer {
         output: Size<i32, Physical>,
     ) -> (wgpu::BindGroup, wgpu::Buffer) {
         let extent = extent(frame.size);
-        let texture = self.device.create_texture_with_data(
-            &self.queue,
+        let texture = self.gpu.device.create_texture_with_data(
+            &self.gpu.queue,
             &wgpu::TextureDescriptor {
                 label: Some("window"),
                 size: extent,
@@ -259,14 +176,17 @@ impl Renderer {
             &frame.bgra_premultiplied,
         );
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("window"),
-            layout: &self.layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::TextureView(&view),
-            }],
-        });
+        let bind_group = self
+            .gpu
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("window"),
+                layout: &self.layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                }],
+            });
 
         let to_clip_x = |x: i32| 2.0 * x as f32 / output.w as f32 - 1.0;
         let to_clip_y = |y: i32| 1.0 - 2.0 * y as f32 / output.h as f32;
@@ -288,6 +208,7 @@ impl Renderer {
             .flat_map(|value| value.to_ne_bytes())
             .collect();
         let vertices = self
+            .gpu
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("window"),

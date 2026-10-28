@@ -1253,9 +1253,9 @@ version = "0.1.0"
 dependencies = [
  "image",
  "image-compare",
- "pollster",
  "smithay",
  "tempfile",
+ "unbound-toolkit",
  "wayland-client",
  "wayland-protocols",
  "wgpu",

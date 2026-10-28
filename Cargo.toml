@@ -15,6 +15,7 @@ image-compare = "=0.5.0"
 pollster = "=1.0.1"
 smithay = { version = "=0.7.0", default-features = false, features = ["wayland_frontend"] }
 tempfile = "=3.27.0"
+unbound-toolkit = { path = "crates/unbound-toolkit" }
 wayland-client = "=0.31.15"
 wayland-protocols = { version = "=0.32.13", features = ["client"] }
 wgpu = { version = "=30.0.1", default-features = false, features = ["std", "parking_lot", "vulkan", "wgsl"] }

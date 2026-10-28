@@ -174,7 +174,7 @@ runs natively on Wayland in the guest.
   for themed cursors (until then clients draw their own cursor surfaces) and
   `xdg-decoration` for server-side title bars. The guest opens a local page (Firefox does
   not render a `data:` URL from its command line) with first-run pages turned off.
-- [ ] **M17 Lock screen and idle** (`desktop/milestone-17`)
+- [x] **M17 Lock screen and idle** (`desktop/milestone-17`, CI green in run 40786134854)
   `ext-session-lock-v1` (only shell clients see it, as only loginwindow locks a Mac):
   locked after a blank frame, only the lock surface drawn and given input, focus
   restored on unlock, blank and still locked if the locker dies, a new locker may take
@@ -305,3 +305,6 @@ boot framebuffer, K3 USB input. Later, the Apple DCP and agx drivers unlock:
   field's buffer too.
 - The lock screen ignores logind's `Unlock` signal (`loginctl unlock-session`); decide
   whether an administrator's unlock should be honoured.
+- `ci/lavapipe-test` and `ci/vm` sometimes lose the linker to the OOM killer (`ld terminated
+  with signal 9`) when two runs share the runners' Mac mini; a rerun passes. Limiting link
+  jobs or giving the runners more memory would end it.

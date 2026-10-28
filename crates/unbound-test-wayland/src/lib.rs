@@ -144,6 +144,14 @@ impl TestClient {
         self.windows.push((surface, xdg_surface, toplevel));
     }
 
+    pub fn close_window(&mut self, server: &mut Headless, index: usize) {
+        let (surface, xdg_surface, toplevel) = self.windows.remove(index);
+        toplevel.destroy();
+        xdg_surface.destroy();
+        surface.destroy();
+        self.exchange(server);
+    }
+
     pub fn request_frame(&mut self, server: &mut Headless) {
         let (surface, _, _) = self.windows.last().expect("a shown window");
         surface.frame(&self.queue.handle(), ());

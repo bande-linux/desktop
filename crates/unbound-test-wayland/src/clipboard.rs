@@ -8,6 +8,7 @@ use wayland_client::protocol::wl_data_offer::{self, WlDataOffer};
 use wayland_client::protocol::wl_data_source::{self, WlDataSource};
 use wayland_client::protocol::wl_keyboard::{self, WlKeyboard};
 use wayland_client::protocol::wl_seat::WlSeat;
+use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Connection, Dispatch, Proxy, QueueHandle, delegate_noop, event_created_child};
 use wayland_protocols::ext::data_control::v1::client::ext_data_control_device_v1::{
     self, ExtDataControlDeviceV1,
@@ -39,7 +40,7 @@ type Mimes = Mutex<Vec<String>>;
 #[derive(Default)]
 pub(super) struct Clipboard {
     keyboard: Option<WlKeyboard>,
-    focused: bool,
+    focused: Option<WlSurface>,
     last_enter_serial: Option<u32>,
     data_device: Option<WlDataDevice>,
     primary_device: Option<ZwpPrimarySelectionDeviceV1>,
@@ -83,7 +84,14 @@ impl TestClient {
     }
 
     pub fn has_keyboard_focus(&self) -> bool {
-        self.globals.clipboard.focused
+        self.globals.clipboard.focused.is_some()
+    }
+
+    pub fn focused_window(&self) -> Option<usize> {
+        let focused = self.globals.clipboard.focused.as_ref()?;
+        self.windows
+            .iter()
+            .position(|(surface, _, _)| surface == focused)
     }
 
     pub fn copy(&mut self, mime: &str, payload: &[u8]) {
@@ -201,11 +209,13 @@ impl Dispatch<WlKeyboard, ()> for Globals {
         _: &QueueHandle<Self>,
     ) {
         match event {
-            wl_keyboard::Event::Enter { serial, .. } => {
-                globals.clipboard.focused = true;
+            wl_keyboard::Event::Enter {
+                serial, surface, ..
+            } => {
+                globals.clipboard.focused = Some(surface);
                 globals.clipboard.last_enter_serial = Some(serial);
             }
-            wl_keyboard::Event::Leave { .. } => globals.clipboard.focused = false,
+            wl_keyboard::Event::Leave { .. } => globals.clipboard.focused = None,
             _ => {}
         }
     }

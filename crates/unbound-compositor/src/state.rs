@@ -236,10 +236,79 @@ fn frame_from_shm(pool: &[u8], data: BufferData) -> Option<Frame> {
 }
 
 impl State {
+    fn focused(&self) -> Option<WlSurface> {
+        self.seat
+            .get_keyboard()
+            .and_then(|keyboard| keyboard.current_focus())
+    }
+
     fn focus(&mut self, surface: Option<WlSurface>) {
+        if let Some(surface) = &surface
+            && let Some(index) = self
+                .windows
+                .iter()
+                .position(|window| window.toplevel.wl_surface() == surface)
+        {
+            let window = self.windows.remove(index);
+            self.windows.push(window);
+            self.needs_redraw = true;
+        }
         if let Some(keyboard) = self.seat.get_keyboard() {
             keyboard.set_focus(self, surface, SERIAL_COUNTER.next_serial());
         }
+    }
+
+    fn frontmost(&self, owner: Option<&Client>) -> Option<WlSurface> {
+        self.windows
+            .iter()
+            .rev()
+            .filter(|window| window.frame.is_some())
+            .map(|window| window.toplevel.wl_surface())
+            .find(|surface| {
+                surface
+                    .client()
+                    .is_some_and(|client| owner.is_none_or(|owner| &client == owner))
+            })
+            .cloned()
+    }
+
+    fn refocus_after_losing(&mut self, lost: &WlSurface) {
+        if self.focused().as_ref() != Some(lost) {
+            return;
+        }
+        let next = match lost.client() {
+            Some(owner) => self.frontmost(Some(&owner)),
+            None => self.frontmost(None),
+        };
+        self.focus(next);
+    }
+
+    fn takes_focus_when_mapped(&self, surface: &WlSurface) -> bool {
+        let Some(focused) = self.focused() else {
+            return true;
+        };
+        let owner = surface.client();
+        if focused.client() == owner {
+            return true;
+        }
+        !self.windows.iter().any(|window| {
+            window.frame.is_some()
+                && window.toplevel.wl_surface() != surface
+                && window.toplevel.wl_surface().client() == owner
+        })
+    }
+
+    fn place_behind_frontmost(&mut self, surface: &WlSurface) {
+        let Some(index) = self
+            .windows
+            .iter()
+            .position(|window| window.toplevel.wl_surface() == surface)
+        else {
+            return;
+        };
+        let window = self.windows.remove(index);
+        let behind = self.windows.len().saturating_sub(1);
+        self.windows.insert(behind, window);
     }
 }
 
@@ -291,9 +360,13 @@ impl CompositorHandler for State {
             Some(BufferAssignment::Removed) => window.frame = None,
             None => {}
         }
-        if !was_mapped && window.frame.is_some() {
-            let surface = window.toplevel.wl_surface().clone();
-            self.focus(Some(surface));
+        let is_mapped = window.frame.is_some();
+        let surface = window.toplevel.wl_surface().clone();
+        match (was_mapped, is_mapped) {
+            (false, true) if self.takes_focus_when_mapped(&surface) => self.focus(Some(surface)),
+            (false, true) => self.place_behind_frontmost(&surface),
+            (true, false) => self.refocus_after_losing(&surface),
+            _ => {}
         }
     }
 }
@@ -328,19 +401,7 @@ impl XdgShellHandler for State {
     fn toplevel_destroyed(&mut self, toplevel: ToplevelSurface) {
         self.windows.retain(|window| window.toplevel != toplevel);
         self.needs_redraw = true;
-        let focused = self
-            .seat
-            .get_keyboard()
-            .and_then(|keyboard| keyboard.current_focus());
-        if focused.as_ref() == Some(toplevel.wl_surface()) {
-            let next = self
-                .windows
-                .iter()
-                .rev()
-                .find(|window| window.frame.is_some())
-                .map(|window| window.toplevel.wl_surface().clone());
-            self.focus(next);
-        }
+        self.refocus_after_losing(toplevel.wl_surface());
     }
 
     fn new_popup(&mut self, _surface: PopupSurface, _positioner: PositionerState) {}

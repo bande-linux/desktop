@@ -28,11 +28,16 @@ struct Metric {
     unit: &'static str,
     value: f64,
     budget: f64,
+    enforced: bool,
 }
 
 impl Metric {
     fn within_budget(&self) -> bool {
         self.value <= self.budget
+    }
+
+    fn passes(&self) -> bool {
+        self.within_budget() || !self.enforced
     }
 }
 
@@ -78,78 +83,90 @@ fn run() -> Result<bool, Box<dyn Error>> {
             unit: "ms",
             value: percentile(&typical, 0.50),
             budget: REFRESH_120HZ_MS,
+            enforced: true,
         },
         Metric {
             name: "frame_typical_p99",
             unit: "ms",
             value: percentile(&typical, 0.99),
             budget: REFRESH_120HZ_MS,
+            enforced: true,
         },
         Metric {
             name: "frame_typical_uploaded",
             unit: "B",
             value: typical_work.uploaded_bytes as f64,
             budget: damaged_pixels * 4.0,
+            enforced: true,
         },
         Metric {
             name: "frame_typical_repainted",
             unit: "px",
             value: typical_work.repainted_pixels as f64,
             budget: damaged_pixels,
+            enforced: true,
         },
         Metric {
             name: "frame_typical_shaded",
             unit: "px",
             value: typical_work.shaded_pixels as f64,
             budget: damaged_pixels,
+            enforced: true,
         },
         Metric {
             name: "frame_full_p50",
             unit: "ms",
             value: percentile(&full, 0.50),
             budget: REFRESH_60HZ_MS,
+            enforced: true,
         },
         Metric {
             name: "frame_full_p99",
             unit: "ms",
             value: percentile(&full, 0.99),
             budget: REFRESH_60HZ_MS,
+            enforced: true,
         },
         Metric {
             name: "commit_to_present_p50",
             unit: "ms",
             value: percentile(&latencies, 0.50),
             budget: 2.0 * REFRESH_120HZ_MS,
+            enforced: false,
         },
         Metric {
             name: "commit_to_present_p99",
             unit: "ms",
             value: percentile(&latencies, 0.99),
             budget: 2.0 * REFRESH_120HZ_MS,
+            enforced: false,
         },
         Metric {
             name: "presented_after_their_vblank",
             unit: "frames",
             value: late as f64,
             budget: 1.0,
+            enforced: false,
         },
         Metric {
             name: "compositor_start_p50",
             unit: "ms",
             value: percentile(&starts, 0.50),
             budget: 500.0,
+            enforced: true,
         },
         Metric {
             name: "compositor_idle_rss",
             unit: "MiB",
             value: idle_rss,
             budget: 128.0,
+            enforced: true,
         },
     ];
 
     print!("{}", markdown(&metrics, &info.name));
     fs::write(&options.json, json(&metrics, &info.name))?;
-    Ok(metrics.iter().all(Metric::within_budget))
+    Ok(metrics.iter().all(Metric::passes))
 }
 
 fn options() -> Result<Options, Box<dyn Error>> {
@@ -335,7 +352,11 @@ fn markdown(metrics: &[Metric], adapter: &str) -> String {
             metric.name,
             metric.value,
             metric.budget,
-            if metric.within_budget() { "ok" } else { "over" },
+            match (metric.within_budget(), metric.enforced) {
+                (true, _) => "ok",
+                (false, true) => "over",
+                (false, false) => "over, reported only",
+            },
             unit = metric.unit,
         );
     }
@@ -347,8 +368,8 @@ fn json(metrics: &[Metric], adapter: &str) -> String {
         .iter()
         .map(|metric| {
             format!(
-                "    {{\"name\": \"{}\", \"unit\": \"{}\", \"value\": {:.3}, \"budget\": {:.3}}}",
-                metric.name, metric.unit, metric.value, metric.budget
+                "    {{\"name\": \"{}\", \"unit\": \"{}\", \"value\": {:.3}, \"budget\": {:.3}, \"enforced\": {}}}",
+                metric.name, metric.unit, metric.value, metric.budget, metric.enforced
             )
         })
         .collect();

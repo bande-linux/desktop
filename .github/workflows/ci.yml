@@ -106,3 +106,29 @@ jobs:
           name: unbound-debs
           path: target/debian/*.deb
           if-no-files-found: error
+
+  perf:
+    name: ci/perf
+    runs-on: [self-hosted, unbound]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install
+      - name: Install build and runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libxkbcommon-dev libvulkan1 mesa-vulkan-drivers
+      - run: cargo build --release --locked --package unbound-compositor --package unbound-bench
+      - name: Measure against the budgets in docs/RENDERING.md
+        shell: bash
+        run: |
+          target/release/unbound-bench \
+            --compositor target/release/unbound-compositor --json perf.json \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: perf
+          path: perf.json
+          if-no-files-found: ignore

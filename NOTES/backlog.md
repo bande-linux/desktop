@@ -98,6 +98,9 @@ hardware. Things noticed in passing go to the end of this file, not into a diff.
   `vello_cpu` first frame into `wl_shm`, `vello_gpu` afterwards, Parley text; goldens
   re-derived from scene descriptions; panel, launcher and terminal move over; a toolkit
   sample app whose start time and RSS `ci/perf` measures.
+  Track `desktop/track-toolkit`. Done: Vello CPU and GPU renderers for fills, strokes,
+  gradients, rounded rectangles, clips and shadows; Parley text in Inter with fallback;
+  goldens from exact coverage, both renderers within 2/255.
 - [ ] **M17 Session lock and idle** `ext-session-lock-v1` with blank fallback,
   `ext-idle-notify-v1`, `idle-inhibit`, driven by the `idle` config.
 - [ ] **M18 Watchdog** `wl_display` ping heartbeat, unresponsive marking after 3 s.
@@ -123,3 +126,9 @@ boot framebuffer, K3 USB input. Later, the Apple DCP and agx drivers unlock:
   lavapipe) would copy straight from the shm pool into the texture.
 - `unbound-bench` reuses `unbound-test-wayland`, whose helpers panic on failure; fine for
   a measuring tool, but its errors read as test assertions.
+
+- `image-compare` 0.5.0's SSIM sums the window's (co)variances instead of averaging them,
+  so its stabilising constant is 64 times too small and near-flat windows score low: two
+  gradients differing by 1 per channel scored 0.968. The toolkit's tests compute SSIM
+  themselves; `unbound-compositor`'s golden test still uses the crate.
+- `ci/lavapipe-test` installs `fonts-dejavu-core`, which no test uses any more.

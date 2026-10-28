@@ -133,8 +133,10 @@ hardware. Things noticed in passing go to the end of this file, not into a diff.
   Done: Vello CPU and GPU renderers for fills, strokes, gradients, rounded rectangles, clips
   and shadows; Parley text in Inter with fallback; goldens from exact coverage, both
   renderers within 2/255; `Window` with the first frame on the CPU in `wl_shm` and later
-  frames on a Vulkan surface; `unbound-sample` measured by `ci/perf`. Next: layout and
-  widgets, AccessKit, damage-limited redraw, fractional scale.
+  frames on a Vulkan surface; `unbound-sample` measured by `ci/perf`; widgets (stack, label,
+  button, switch, slider, text field with the section 1.5 bindings) with AccessKit nodes and
+  actions. Next: `wl_seat` input in `Window`, the AccessKit tree on AT-SPI
+  (`accesskit_unix`), scroll and tab views, damage-limited redraw, fractional scale.
 - [ ] **M17 Session lock and idle** `ext-session-lock-v1` with blank fallback,
   `ext-idle-notify-v1`, `idle-inhibit`, driven by the `idle` config.
 - [ ] **M18 Watchdog** `wl_display` ping heartbeat, unresponsive marking after 3 s.

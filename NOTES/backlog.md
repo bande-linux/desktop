@@ -131,6 +131,14 @@ hardware. Things noticed in passing go to the end of this file, not into a diff.
   `unbound-term` (PTY, scrollback, `Super+C`/`Super+V`), all on the current toolkit.
   *Done when* golden tests cover each surface, a guest session test launches the
   terminal from the launcher and types into it, and the same works on the mini.
+  Built on the Vello toolkit (`desktop/milestone-14`, on `desktop/integration`): toolkit
+  windows as layer surfaces with seat input (xkb, repeat), clipboard, activation and images;
+  `unbound-apps` (desktop entries, theme icons, launching); compositor shell protocol,
+  window list, exclusive-layer keyboard focus, layer frame callbacks, wheel scrolling; the
+  three apps with goldens; `desktop::the_launcher_opens_a_terminal_that_takes_typing` in
+  the guest. Not done: the mini (K3 input), live `PanelEdge`/appearance changes over
+  `org.unbound.Config` (read at start), kept apps from `config.kdl`, hover names on the
+  panel, locale time formats, terminal mouse reporting, AT-SPI publication.
 - [ ] **M15 `linux-drm-syncobj-v1` explicit sync (P0)**
   Acquire points through `DrmSyncPointBlocker`, release points from frame completion.
   *Done when* guest tests show a commit is not presented before its acquire point
@@ -233,7 +241,10 @@ boot framebuffer, K3 USB input. Later, the Apple DCP and agx drivers unlock:
   so its stabilising constant is 64 times too small and near-flat windows score low: two
   gradients differing by 1 per channel scored 0.968. The toolkit's tests compute SSIM
   themselves; `unbound-compositor`'s golden test still uses the crate.
-- `ci/lavapipe-test` installs `fonts-dejavu-core`, which no test uses any more.
+- `unbound-term`'s goldens use DejaVu Sans Mono from `fonts-dejavu-core`, which
+  `ci/lavapipe-test` installs.
+- The first-window focus stand-in (M13) is still in place; apps started from the terminal
+  carry no activation token yet.
 - `ci/perf` fails on `frame_typical_p99` (16–23 ms against 8.33 ms) and once
   `frame_full_p99` while other jobs share the runners' Mac mini; the services branch
   does not touch the compositor, and milestone-8's tip passed with the runners idle.

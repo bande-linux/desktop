@@ -21,7 +21,7 @@ done < "$share/executables"
 
 cat > "$share/run" <<'GUEST'
 set -u
-export RUST_BACKTRACE=1
+export RUST_BACKTRACE=1 UNBOUND_SCREENDUMPS=/share/screendumps
 echo "Guest kernel $(uname -r)"
 ls -l /dev/dri
 /usr/lib/systemd/systemd-udevd --daemon
@@ -40,4 +40,10 @@ done
 exit "$status"
 GUEST
 
-"$here/run.sh" "$images" "$share"
+status=0
+"$here/run.sh" "$images" "$share" || status=$?
+if [ -d "$share/screendumps" ]; then
+    mkdir -p screendumps
+    cp "$share"/screendumps/*.png screendumps/
+fi
+exit "$status"

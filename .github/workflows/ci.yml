@@ -123,6 +123,12 @@ jobs:
         run: ci/vm/images.sh vm
       - name: Run the guest tests in a KVM guest with vkms and virtio-gpu
         run: ci/vm/guest-tests.sh vm
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: screendumps
+          path: screendumps/*.png
+          if-no-files-found: ignore
 
   perf:
     name: ci/perf

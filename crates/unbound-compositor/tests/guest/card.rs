@@ -86,6 +86,21 @@ pub struct Scanout {
     pub rgb: Vec<[u8; 3]>,
 }
 
+impl Scanout {
+    pub fn save(&self, name: &str) {
+        let Some(directory) = std::env::var_os("UNBOUND_SCREENDUMPS") else {
+            return;
+        };
+        let bytes: Vec<u8> = self.rgb.iter().flatten().copied().collect();
+        let image = image::RgbImage::from_raw(self.width as u32, self.height as u32, bytes)
+            .expect("screendump dimensions");
+        std::fs::create_dir_all(&directory).expect("screendump directory");
+        image
+            .save(Path::new(&directory).join(format!("{name}.png")))
+            .expect("save the screendump");
+    }
+}
+
 impl Card {
     pub fn scanout(&self) -> Scanout {
         let resources = self.resource_handles().expect("KMS resources");

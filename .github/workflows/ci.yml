@@ -37,6 +37,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             pkg-config libxkbcommon-dev libvulkan1 mesa-vulkan-drivers fonts-dejavu-core dbus-daemon
+      - name: Install the toolkit's fonts and fontconfig
+        run: |
+          sudo apt-get install -y --no-install-recommends fonts-inter fonts-noto-cjk libfontconfig1
       - run: cargo test --workspace --locked -- --show-output
       - uses: actions/upload-artifact@v7
         if: failure()

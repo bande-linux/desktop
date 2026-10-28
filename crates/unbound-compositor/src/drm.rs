@@ -174,7 +174,7 @@ impl DrmOutput {
         let surface =
             device.create_surface(chosen.crtc, chosen.mode, &[chosen.connector.handle()])?;
         let scanout_formats = surface.plane_info().formats.clone();
-        let gbm = GbmDevice::new(fd.clone())?;
+        let gbm = GbmDevice::new(fd.clone()).ok();
         let renderer = VulkanRenderer::new()?;
         let renderer_formats = renderer.dmabuf_formats();
         let (width, height) = chosen.mode.size();
@@ -192,7 +192,7 @@ impl DrmOutput {
             COLOR_FORMATS,
             renderer_formats.clone(),
             Size::from(CURSOR_SIZE),
-            Some(gbm),
+            gbm,
         )?;
         let scanout: FormatSet = scanout_formats
             .iter()

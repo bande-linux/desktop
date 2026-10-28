@@ -13,12 +13,12 @@ use smithay::wayland::dmabuf::get_dmabuf;
 
 #[derive(Debug)]
 pub(crate) struct ScanoutExporter {
-    gbm: GbmDevice<DrmDeviceFd>,
+    gbm: Option<GbmDevice<DrmDeviceFd>>,
     node: DrmNode,
 }
 
 impl ScanoutExporter {
-    pub(crate) fn new(gbm: GbmDevice<DrmDeviceFd>, node: DrmNode) -> Self {
+    pub(crate) fn new(gbm: Option<GbmDevice<DrmDeviceFd>>, node: DrmNode) -> Self {
         Self { gbm, node }
     }
 }
@@ -83,7 +83,10 @@ impl ExportFramebuffer<DumbBuffer> for ScanoutExporter {
                     .map_err(ScanoutExportError::Composed)
             }
             ExportBuffer::Wayland(buffer) => {
-                framebuffer_from_wayland_buffer(drm, &self.gbm, buffer, use_opaque)
+                let Some(gbm) = &self.gbm else {
+                    return Ok(None);
+                };
+                framebuffer_from_wayland_buffer(drm, gbm, buffer, use_opaque)
                     .map(|framebuffer| framebuffer.map(ScanoutFramebuffer::Client))
                     .map_err(ScanoutExportError::Client)
             }
@@ -93,6 +96,7 @@ impl ExportFramebuffer<DumbBuffer> for ScanoutExporter {
     fn can_add_framebuffer(&self, buffer: &ExportBuffer<'_, DumbBuffer>) -> bool {
         match buffer {
             ExportBuffer::Allocator(_) => true,
+            ExportBuffer::Wayland(_) if self.gbm.is_none() => false,
             ExportBuffer::Wayland(buffer) => get_dmabuf(buffer)
                 .ok()
                 .is_some_and(|dmabuf| dmabuf.node() == Some(self.node)),

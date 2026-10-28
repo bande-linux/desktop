@@ -1,6 +1,7 @@
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::os::unix::fs::PermissionsExt;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -9,8 +10,8 @@ use unbound_compositor::BACKGROUND;
 
 use crate::card::{Scanout, card_with_driver};
 use crate::uinput::{
-    KEY_ENTER, KEY_ESC, KEY_F, KEY_F10, KEY_LEFTCTRL, KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_M, KEY_Q,
-    KEY_SPACE, VirtualDevice,
+    KEY_3, KEY_ENTER, KEY_ESC, KEY_F, KEY_F10, KEY_LEFTCTRL, KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_M,
+    KEY_Q, KEY_SPACE, VirtualDevice,
 };
 
 const COMPOSITOR: &str = "/usr/bin/unbound-compositor";
@@ -278,4 +279,84 @@ fn ctrl_super_q_locks_and_the_password_unlocks() {
     });
     thread::sleep(Duration::from_secs(1));
     scanout().save("m17-unlocked");
+}
+
+fn saved_screenshots(desktop: &Path) -> Vec<PathBuf> {
+    fs::read_dir(desktop)
+        .map(|entries| {
+            entries
+                .filter_map(Result::ok)
+                .map(|entry| entry.path())
+                .filter(|path| {
+                    path.file_name()
+                        .and_then(|name| name.to_str())
+                        .is_some_and(|name| {
+                            name.starts_with("Screenshot ") && name.ends_with(".png")
+                        })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+#[test]
+#[ignore = "needs the ci/vm guest"]
+fn super_shift_3_saves_the_screen_to_the_desktop() {
+    let desktop_folder = Path::new("/root/Desktop");
+    let _ = fs::remove_dir_all(desktop_folder);
+    let mut keyboard = VirtualDevice::keyboard_and_mouse();
+    let _desktop = start_desktop();
+    let icon = (32, 33);
+    wait_for("the panel and the screenshot tool", STARTUP, || {
+        running("unbound-panel")
+            && running("unbound-screenshot")
+            && current_scanout().is_some_and(|scanout| pixel(&scanout, icon.0, 200) != BACKGROUND)
+    });
+    thread::sleep(Duration::from_secs(1));
+    let screen = scanout();
+
+    keyboard.chord(&[KEY_LEFTMETA, KEY_LEFTSHIFT], KEY_3);
+    wait_for("a saved screenshot", STARTUP, || {
+        saved_screenshots(desktop_folder).len() == 1
+    });
+
+    let path = saved_screenshots(desktop_folder).remove(0);
+    let name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default();
+    assert_eq!(
+        name.len(),
+        "Screenshot 2026-10-29 at 09.05.07.png".len(),
+        "{name}"
+    );
+    assert_eq!(&name[21..25], " at ", "{name}");
+    let saved = image::open(&path)
+        .expect("the screenshot is a PNG")
+        .to_rgb8();
+    assert_eq!(
+        saved.dimensions(),
+        (screen.width as u32, screen.height as u32)
+    );
+    let shot = Scanout {
+        width: screen.width,
+        height: screen.height,
+        rgb: saved.pixels().map(|pixel| pixel.0).collect(),
+    };
+    let after = scanout();
+    shot.save("m18-screenshot");
+    screen.save("m18-screen-before-capture");
+    let differing = |shown: &Scanout| {
+        shot.rgb
+            .iter()
+            .zip(&shown.rgb)
+            .filter(|(saved, shown)| saved != shown)
+            .count()
+    };
+    let differing = differing(&screen).min(differing(&after));
+    let cursor = (unbound_compositor::ARROW_WIDTH * unbound_compositor::ARROW_HEIGHT) as usize;
+    assert!(
+        differing <= cursor,
+        "{differing} pixels differ from the screen"
+    );
 }

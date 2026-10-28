@@ -3,7 +3,7 @@ use parley::{PlainEditor, StyleProperty};
 
 use super::{Context, Event, Key, Modifiers, Size, Widget, WidgetId};
 use crate::scene::{Item, Paint, Point, Rect, Shape};
-use crate::text::{Paragraph, families};
+use crate::text::{Paragraph, TextAlign, TextStyle, families};
 use crate::tokens::Color;
 
 pub const TEXT_FIELD_HEIGHT: f32 = 22.0;
@@ -15,6 +15,9 @@ const CARET_WIDTH: f32 = 1.0;
 pub struct TextField {
     id: WidgetId,
     placeholder: String,
+    placeholder_paragraph: Option<Paragraph>,
+    font_size: f32,
+    bordered: bool,
     editor: PlainEditor<Color>,
     on_change: Box<dyn FnMut(&str)>,
     selecting: bool,
@@ -32,11 +35,34 @@ impl TextField {
         Self {
             id: WidgetId::next(),
             placeholder: placeholder.to_owned(),
+            placeholder_paragraph: None,
+            font_size: FONT_SIZE,
+            bordered: true,
             editor,
             on_change: Box::new(on_change),
             selecting: false,
             paragraph: None,
             frame: Rect::default(),
+        }
+    }
+
+    pub fn borderless(mut self, font_size: f32) -> Self {
+        let text = self.editor.raw_text().to_owned();
+        self.editor = PlainEditor::new(font_size);
+        self.editor.set_text(&text);
+        self.editor
+            .edit_styles()
+            .insert(StyleProperty::FontFamily(families(font_size)));
+        self.font_size = font_size;
+        self.bordered = false;
+        self
+    }
+
+    fn height(&self) -> f32 {
+        if self.bordered {
+            TEXT_FIELD_HEIGHT
+        } else {
+            (self.font_size * 1.5).ceil()
         }
     }
 
@@ -117,11 +143,19 @@ impl Widget for TextField {
         self.paragraph = Some(Paragraph::from_layout(
             self.editor.layout(fonts, layouts).clone(),
         ));
-        Size::new(available.width, TEXT_FIELD_HEIGHT)
+        self.placeholder_paragraph = (!self.placeholder.is_empty()).then(|| {
+            cx.text.paragraph(
+                &self.placeholder,
+                TextStyle::new(self.font_size, cx.palette.label_muted),
+                None,
+                TextAlign::Start,
+            )
+        });
+        Size::new(available.width, self.height())
     }
 
     fn place(&mut self, _cx: &mut Context, frame: Rect) {
-        self.frame = Rect::new(frame.x, frame.y, frame.width, TEXT_FIELD_HEIGHT);
+        self.frame = Rect::new(frame.x, frame.y, frame.width, self.height());
     }
 
     fn frame(&self) -> Rect {
@@ -130,21 +164,31 @@ impl Widget for TextField {
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
         let shape = Shape::rounded(self.frame, RADIUS);
-        items.push(Item::Fill {
-            shape,
-            paint: cx.palette.surface_elevated.into(),
-        });
-        items.push(Item::Stroke {
-            shape: Shape::rounded(self.frame.inset(0.5), RADIUS - 0.5),
-            width: 1.0,
-            paint: cx.palette.separator_color.into(),
-        });
         let focused = cx.is_focused(self.id);
-        if focused {
-            super::focus_ring(cx, shape, items);
+        if self.bordered {
+            items.push(Item::Fill {
+                shape,
+                paint: cx.palette.surface_elevated.into(),
+            });
+            items.push(Item::Stroke {
+                shape: Shape::rounded(self.frame.inset(0.5), RADIUS - 0.5),
+                width: 1.0,
+                paint: cx.palette.separator_color.into(),
+            });
+            if focused {
+                super::focus_ring(cx, shape, items);
+            }
         }
         let origin = self.text_origin();
         let mut content = Vec::new();
+        if self.editor.raw_text().is_empty()
+            && let Some(placeholder) = &self.placeholder_paragraph
+        {
+            content.push(Item::Text {
+                origin,
+                paragraph: placeholder.clone(),
+            });
+        }
         self.editor.selection_geometry_with(|bounds, _| {
             content.push(Item::Fill {
                 shape: Shape::rect(Rect::new(

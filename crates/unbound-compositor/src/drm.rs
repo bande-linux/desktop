@@ -4,9 +4,9 @@ use std::time::Duration;
 
 use smithay::backend::allocator::Fourcc;
 use smithay::backend::allocator::format::FormatSet;
-use smithay::backend::allocator::gbm::{GbmAllocator, GbmBufferFlags, GbmDevice};
+use smithay::backend::allocator::dumb::DumbAllocator;
+use smithay::backend::allocator::gbm::GbmDevice;
 use smithay::backend::drm::compositor::{DrmCompositor, FrameFlags, PrimaryPlaneElement};
-use smithay::backend::drm::exporter::gbm::GbmFramebufferExporter;
 use smithay::backend::drm::{
     DrmDevice, DrmDeviceFd, DrmDeviceNotifier, DrmEventMetadata, DrmEventTime, DrmNode,
 };
@@ -25,12 +25,12 @@ use unbound_render::VulkanRenderer;
 
 use crate::clock::{FrameOutput, Submission, Vblank};
 use crate::render::background;
+use crate::scanout::ScanoutExporter;
 use crate::state::{Headless, OutputConfig, REFRESH, ScanoutDevice};
 
 pub type DrmBackendError = Box<dyn Error>;
 
-type GbmDrmCompositor =
-    DrmCompositor<GbmAllocator<DrmDeviceFd>, GbmFramebufferExporter<DrmDeviceFd>, (), DrmDeviceFd>;
+type OutputCompositor = DrmCompositor<DumbAllocator, ScanoutExporter, (), DrmDeviceFd>;
 
 const CURSOR_SIZE: (u32, u32) = (64, 64);
 const COLOR_FORMATS: [Fourcc; 2] = [Fourcc::Xrgb8888, Fourcc::Argb8888];
@@ -39,7 +39,7 @@ pub struct DrmOutput {
     session: LibSeatSession,
     path: PathBuf,
     device: DrmDevice,
-    compositor: GbmDrmCompositor,
+    compositor: OutputCompositor,
     renderer: VulkanRenderer,
     connector: String,
     size: Size<i32, Physical>,
@@ -184,11 +184,8 @@ impl DrmOutput {
             },
             surface,
             None,
-            GbmAllocator::new(
-                gbm.clone(),
-                GbmBufferFlags::RENDERING | GbmBufferFlags::SCANOUT,
-            ),
-            GbmFramebufferExporter::new(gbm.clone(), Some(node)),
+            DumbAllocator::new(fd.clone()),
+            ScanoutExporter::new(gbm.clone(), node),
             COLOR_FORMATS,
             renderer_formats.clone(),
             Size::from(CURSOR_SIZE),

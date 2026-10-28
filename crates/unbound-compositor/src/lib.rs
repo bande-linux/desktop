@@ -1,6 +1,7 @@
 mod clock;
 mod drm;
 mod render;
+mod scanout;
 mod state;
 
 pub use clock::{FrameClock, FrameOutput, FrameScheduler, Poll, SAFETY_MARGIN, Submission, Vblank};

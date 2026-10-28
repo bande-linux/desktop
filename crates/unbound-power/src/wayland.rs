@@ -67,7 +67,7 @@ pub fn watch_idle(
     connection: Connection,
     controller: Arc<IdleController>,
 ) -> Result<JoinHandle<Result<(), WatchError>>, WatchError> {
-    let mut policy_changes = controller.policy_changes().map_err(WatchError::Io)?;
+    let mut timer_restarts = controller.idle_timer_restarts().map_err(WatchError::Io)?;
     let mut queue = connection.new_event_queue();
     connection.display().get_registry(&queue.handle(), ());
     let mut watcher = Watcher {
@@ -93,9 +93,9 @@ pub fn watch_idle(
             let Some(guard) = queue.prepare_read() else {
                 continue;
             };
-            let (wayland_ready, policy_changed) = {
+            let (wayland_ready, timers_restarted) = {
                 let connection_fd = guard.connection_fd();
-                let changes_fd = policy_changes.as_fd();
+                let changes_fd = timer_restarts.as_fd();
                 let mut fds = [
                     PollFd::new(&connection_fd, PollFlags::IN),
                     PollFd::new(&changes_fd, PollFlags::IN),
@@ -115,9 +115,9 @@ pub fn watch_idle(
             } else {
                 drop(guard);
             }
-            if policy_changed {
+            if timers_restarted {
                 let mut drained = [0u8; 64];
-                if policy_changes.read(&mut drained).map_err(WatchError::Io)? == 0 {
+                if timer_restarts.read(&mut drained).map_err(WatchError::Io)? == 0 {
                     return Ok(());
                 }
                 for notification in notifications.drain(..) {

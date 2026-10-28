@@ -46,7 +46,11 @@ fn run_until(server: &mut Headless, at: Duration, received: &Receiver<Command>) 
     while start.elapsed() < Duration::from_millis(300) {
         server.dispatch().expect("dispatch");
         server.idle_tick(at);
-        seen.extend(received.try_iter());
+        seen.extend(
+            received
+                .try_iter()
+                .filter(|command| *command != Command::RestartIdleTimers),
+        );
         std::thread::sleep(Duration::from_millis(2));
     }
     seen
@@ -82,7 +86,24 @@ fn a_new_policy_replaces_the_idle_thresholds() {
     run_until(&mut server, SECOND, &received);
 
     controller.set_policy(policy(2, 100));
+    run_until(&mut server, 2 * SECOND, &received);
     let seen = run_until(&mut server, 4 * SECOND, &received);
 
     assert!(seen.contains(&Command::Dim), "{seen:?}");
+}
+
+#[test]
+fn idle_counts_again_from_the_end_of_an_inhibition() {
+    let mut server = Headless::new(Size::from((64, 64))).expect("compositor");
+    let (controller, received) = watched(&mut server, policy(5, 100));
+    run_until(&mut server, SECOND, &received);
+    controller.set_inhibited(true);
+    assert_eq!(run_until(&mut server, 10 * SECOND, &received), []);
+
+    controller.set_inhibited(false);
+    assert_eq!(run_until(&mut server, 11 * SECOND, &received), []);
+    assert_eq!(
+        run_until(&mut server, 16 * SECOND, &received),
+        [Command::Dim]
+    );
 }

@@ -31,7 +31,7 @@ type Executor = Box<dyn Fn(Command) + Send + Sync>;
 pub struct IdleController {
     machine: Mutex<IdleMachine>,
     execute: Executor,
-    policy_listeners: Mutex<Vec<UnixStream>>,
+    timer_listeners: Mutex<Vec<UnixStream>>,
 }
 
 impl IdleController {
@@ -39,15 +39,25 @@ impl IdleController {
         Self {
             machine: Mutex::new(IdleMachine::new(policy)),
             execute: Box::new(execute),
-            policy_listeners: Mutex::new(Vec::new()),
+            timer_listeners: Mutex::new(Vec::new()),
         }
     }
 
     fn run(&self, step: impl FnOnce(&mut IdleMachine) -> Vec<Command>) {
         let commands = step(&mut self.machine.lock().unwrap_or_else(PoisonError::into_inner));
         for command in commands {
+            if command == Command::RestartIdleTimers {
+                self.restart_idle_timers();
+            }
             (self.execute)(command);
         }
+    }
+
+    fn restart_idle_timers(&self) {
+        self.timer_listeners
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .retain_mut(|listener| listener.write_all(&[1]).is_ok());
     }
 
     pub fn idle_for(&self, idle: Duration) {
@@ -71,16 +81,13 @@ impl IdleController {
 
     pub fn set_policy(&self, policy: Policy) {
         self.run(|machine| machine.set_policy(policy));
-        self.policy_listeners
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .retain_mut(|listener| listener.write_all(&[1]).is_ok());
+        self.restart_idle_timers();
     }
 
-    pub fn policy_changes(&self) -> io::Result<UnixStream> {
+    pub fn idle_timer_restarts(&self) -> io::Result<UnixStream> {
         let (changes, listener) = UnixStream::pair()?;
         listener.set_nonblocking(true)?;
-        self.policy_listeners
+        self.timer_listeners
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .push(listener);

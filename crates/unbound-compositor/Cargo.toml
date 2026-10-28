@@ -10,6 +10,7 @@ rustix.workspace = true
 smithay = { workspace = true, features = ["backend_drm", "backend_gbm", "backend_libinput", "backend_session_libseat", "backend_udev", "desktop"] }
 unbound-protocols = { workspace = true, features = ["server"] }
 unbound-render.workspace = true
+zbus.workspace = true
 
 [dev-dependencies]
 image.workspace = true

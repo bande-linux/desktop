@@ -95,6 +95,14 @@ impl Headless {
         self.lock_screen.executable = executable.to_path_buf();
     }
 
+    pub fn request_lock_screen(&mut self) {
+        self.state.lock_screen_requested = !self.state.is_locked();
+    }
+
+    pub fn report_lock_states(&mut self, states: std::sync::mpsc::Sender<bool>) {
+        self.state.lock_states = Some(states);
+    }
+
     pub fn lock_screen_pid(&self) -> Option<u32> {
         self.lock_screen.child.as_ref().map(Child::id)
     }

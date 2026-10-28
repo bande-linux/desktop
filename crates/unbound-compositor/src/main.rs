@@ -4,13 +4,14 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use smithay::backend::drm::DrmEvent;
+use smithay::reexports::calloop::channel::Event;
 use smithay::reexports::calloop::generic::Generic;
 use smithay::reexports::calloop::{EventLoop, Interest, LoopHandle, Mode, PostAction};
 use smithay::utils::{Clock, Monotonic, Size};
 use smithay::wayland::socket::ListeningSocketSource;
 use unbound_compositor::{
     CLIPBOARD_DAEMON, DrmOutput, FrameClock, FrameOutput, FrameScheduler, Headless, LAUNCHER,
-    PANEL, REFRESH, Renderer, SessionRole,
+    PANEL, REFRESH, Renderer, SessionRequest, SessionRole, follow_session,
 };
 
 const HEADLESS_SIZE: (i32, i32) = (1920, 1080);
@@ -149,6 +150,20 @@ where
     O::Error: Into<Box<dyn Error>>,
 {
     listen(&event_loop.handle(), &mut app)?;
+    let (lock_states, reported) = std::sync::mpsc::channel();
+    match follow_session(reported) {
+        Ok(requests) => {
+            app.compositor.report_lock_states(lock_states);
+            event_loop
+                .handle()
+                .insert_source(requests, |event, _, app| {
+                    if let Event::Msg(SessionRequest::Lock) = event {
+                        app.compositor.request_lock_screen();
+                    }
+                })?;
+        }
+        Err(error) => eprintln!("unbound-compositor: cannot follow the logind session: {error}"),
+    }
     for (executable, role) in [
         (CLIPBOARD_DAEMON, SessionRole::ClipboardDaemon),
         (PANEL, SessionRole::Shell),

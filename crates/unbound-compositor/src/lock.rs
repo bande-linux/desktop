@@ -101,6 +101,13 @@ impl State {
             && let Some(confirmation) = lock.confirmation.take()
         {
             confirmation.lock();
+            self.report_lock_state(true);
+        }
+    }
+
+    fn report_lock_state(&self, locked: bool) {
+        if let Some(states) = &self.lock_states {
+            let _ = states.send(locked);
         }
     }
 
@@ -149,6 +156,7 @@ impl SessionLockHandler for State {
         let Some(lock) = self.lock.take() else {
             return;
         };
+        self.report_lock_state(false);
         self.needs_redraw = true;
         let previous = lock.previous.filter(|previous| {
             self.windows

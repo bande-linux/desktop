@@ -258,3 +258,33 @@ fn the_lock_screen_is_started_again_when_the_locker_dies_while_locked() {
 
     assert!(server.lock_screen_pid().is_some());
 }
+
+#[test]
+fn logind_hears_the_session_is_locked_once_blank_and_unlocked_after() {
+    let (mut server, mut editor) = focused_app();
+    let (states, reported) = std::sync::mpsc::channel();
+    server.report_lock_states(states);
+    let mut lock = locker(&mut server);
+
+    lock.lock_session(&mut server);
+    roundtrip(&mut server, &mut [&mut lock, &mut editor]);
+    assert!(reported.try_recv().is_err());
+    present_frame(&mut server, 1);
+    assert_eq!(reported.try_recv(), Ok(true));
+
+    lock.show_lock_surface(&mut server, BLUE);
+    lock.unlock_session(&mut server);
+    roundtrip(&mut server, &mut [&mut lock, &mut editor]);
+    assert_eq!(reported.try_recv(), Ok(false));
+}
+
+#[test]
+fn a_lock_request_from_logind_starts_the_lock_screen() {
+    let (mut server, _editor) = focused_app();
+    server.set_lock_screen(std::path::Path::new("/bin/true"));
+
+    server.request_lock_screen();
+    server.keep_session_clients_running();
+
+    assert!(server.lock_screen_pid().is_some());
+}

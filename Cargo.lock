@@ -2988,6 +2988,7 @@ dependencies = [
  "unbound-test-wayland",
  "wayland-client",
  "wayland-protocols",
+ "zbus",
 ]
 
 [[package]]

@@ -4,14 +4,25 @@ use std::os::unix::net::UnixStream;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use rustix::io::{FdFlags, fcntl_setfd};
 
 use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::{Buffer, Format as DmabufFormat, Fourcc, Modifier};
+use smithay::backend::drm::DrmNode;
+use smithay::backend::renderer::element::Kind as ElementKind;
+use smithay::backend::renderer::element::surface::{
+    WaylandSurfaceRenderElement, render_elements_from_surface_tree,
+};
+use smithay::backend::renderer::utils::{on_commit_buffer_handler, with_renderer_surface_state};
+use smithay::backend::renderer::element::memory::{
+    MemoryRenderBuffer, MemoryRenderBufferRenderElement,
+};
 use smithay::input::keyboard::XkbConfig;
+use smithay::input::pointer::{CursorImageAttributes, CursorImageStatus};
+use smithay::render_elements;
 use smithay::output::{Mode, Output, PhysicalProperties, Subpixel};
 use smithay::input::{Seat, SeatHandler, SeatState};
 use smithay::reexports::wayland_protocols::wp::presentation_time::server::wp_presentation_feedback::Kind;
@@ -23,14 +34,13 @@ use smithay::reexports::wayland_server::protocol::wl_seat::WlSeat;
 use smithay::reexports::wayland_server::protocol::wl_shm::Format;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{Client, Display, DisplayHandle, Resource};
-use smithay::utils::{Physical, Point, SERIAL_COUNTER, Serial, Size};
+use smithay::utils::{Logical, Physical, Point, SERIAL_COUNTER, Serial, Size};
 use smithay::wayland::buffer::BufferHandler;
 use smithay::wayland::compositor::{
-    BufferAssignment, CompositorClientState, CompositorHandler, CompositorState, Damage,
-    SurfaceAttributes, with_states,
+    CompositorClientState, CompositorHandler, CompositorState, SurfaceAttributes, with_states,
 };
 use smithay::wayland::dmabuf::{
-    DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier, get_dmabuf,
+    DmabufFeedback, DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier, get_dmabuf,
 };
 use smithay::wayland::output::{OutputHandler, OutputManagerState};
 use smithay::wayland::presentation::{
@@ -54,25 +64,30 @@ use smithay::{
     delegate_output, delegate_presentation, delegate_primary_selection, delegate_seat,
     delegate_shm, delegate_xdg_shell,
 };
-use unbound_render::Rect;
+use unbound_render::VulkanRenderer;
 
 use crate::clock::Vblank;
+use crate::cursor;
 
 pub const REFRESH: Duration = Duration::from_nanos(1_000_000_000 / 120);
 
-const REFRESH_MILLIHERTZ: i32 = 120_000;
+pub struct ScanoutDevice {
+    pub node: DrmNode,
+    pub feedback: DmabufFeedback,
+}
 
-pub(crate) struct PendingBuffer {
-    pub(crate) buffer: WlBuffer,
-    pub(crate) damage: Vec<Rect>,
+pub struct OutputConfig {
+    pub name: String,
+    pub model: String,
+    pub size: Size<i32, Physical>,
+    pub refresh: Duration,
+    pub scanout: Option<ScanoutDevice>,
 }
 
 pub struct Window {
-    pub(crate) id: u64,
-    toplevel: ToplevelSurface,
-    location: Point<i32, Physical>,
-    size: Option<Size<i32, Physical>>,
-    pub(crate) pending: Option<PendingBuffer>,
+    pub(crate) toplevel: ToplevelSurface,
+    pub(crate) location: Point<i32, Physical>,
+    pub(crate) size: Option<Size<i32, Physical>>,
 }
 
 impl Window {
@@ -83,22 +98,13 @@ impl Window {
     pub fn size(&self) -> Option<Size<i32, Physical>> {
         self.size
     }
-
-    fn bounds(&self) -> Option<Rect> {
-        let size = self.size?;
-        Some(Rect::new(self.location.x, self.location.y, size.w, size.h))
-    }
-
-    fn release_pending(&mut self) {
-        if let Some(pending) = self.pending.take() {
-            pending.buffer.release();
-        }
-    }
 }
 
 pub struct State {
     display_handle: DisplayHandle,
     output_size: Size<i32, Physical>,
+    refresh: Duration,
+    scanout_node: Option<DrmNode>,
     compositor_state: CompositorState,
     xdg_shell_state: XdgShellState,
     shm_state: ShmState,
@@ -108,14 +114,18 @@ pub struct State {
     _output_manager_state: OutputManagerState,
     _presentation_state: PresentationState,
     seat_state: SeatState<State>,
-    seat: Seat<State>,
+    pub(crate) seat: Seat<State>,
     data_device_state: DataDeviceState,
     primary_selection_state: PrimarySelectionState,
     data_control_state: DataControlState,
     pub(crate) windows: Vec<Window>,
-    next_window_id: u64,
-    pub(crate) damage: Vec<Rect>,
-    needs_redraw: bool,
+    pub(crate) needs_redraw: bool,
+    pub(crate) pointer_location: Point<f64, Logical>,
+    pub(crate) cursor_shown: bool,
+    cursor_status: CursorImageStatus,
+    cursor_arrow: MemoryRenderBuffer,
+    pub(crate) held_shortcut_keys: Vec<u32>,
+    pub(crate) input_devices: usize,
 }
 
 pub struct Headless {
@@ -138,12 +148,24 @@ struct ClipboardDaemon {
 
 impl Headless {
     pub fn new(output_size: Size<i32, Physical>) -> io::Result<Self> {
+        Self::with_output(OutputConfig {
+            name: "HEADLESS-1".to_owned(),
+            model: "Headless".to_owned(),
+            size: output_size,
+            refresh: REFRESH,
+            scanout: None,
+        })
+    }
+
+    pub fn with_output(config: OutputConfig) -> io::Result<Self> {
+        let output_size = config.size;
         let display = Display::new().map_err(io::Error::other)?;
         let handle = display.handle();
         let mut seat_state = SeatState::new();
         let mut seat = seat_state.new_wl_seat(&handle, "seat0");
         seat.add_keyboard(XkbConfig::default(), 600, 25)
             .map_err(io::Error::other)?;
+        seat.add_pointer();
         let primary_selection_state = PrimarySelectionState::new::<State>(&handle);
         let data_control_state =
             DataControlState::new::<State, _>(&handle, Some(&primary_selection_state), |client| {
@@ -152,25 +174,30 @@ impl Headless {
                     .is_some_and(|state| state.clipboard_daemon)
             });
         let mut dmabuf_state = DmabufState::new();
-        let dmabuf_global = dmabuf_state.create_global::<State>(
-            &handle,
-            DMABUF_FOURCCS.map(|code| DmabufFormat {
-                code,
-                modifier: Modifier::Linear,
-            }),
-        );
+        let dmabuf_global = match &config.scanout {
+            Some(scanout) => dmabuf_state
+                .create_global_with_default_feedback::<State>(&handle, &scanout.feedback),
+            None => dmabuf_state.create_global::<State>(
+                &handle,
+                DMABUF_FOURCCS.map(|code| DmabufFormat {
+                    code,
+                    modifier: Modifier::Linear,
+                }),
+            ),
+        };
         let output = Output::new(
-            "HEADLESS-1".to_owned(),
+            config.name,
             PhysicalProperties {
                 size: (0, 0).into(),
                 subpixel: Subpixel::Unknown,
                 make: "Unbound".to_owned(),
-                model: "Headless".to_owned(),
+                model: config.model,
             },
         );
+        let millihertz = 1_000_000_000_000u128 / config.refresh.as_nanos().max(1);
         let mode = Mode {
             size: (output_size.w, output_size.h).into(),
-            refresh: REFRESH_MILLIHERTZ,
+            refresh: i32::try_from(millihertz).unwrap_or(i32::MAX),
         };
         output.change_current_state(Some(mode), None, None, Some((0, 0).into()));
         output.set_preferred(mode);
@@ -178,6 +205,8 @@ impl Headless {
         let state = State {
             display_handle: handle.clone(),
             output_size,
+            refresh: config.refresh,
+            scanout_node: config.scanout.as_ref().map(|scanout| scanout.node),
             compositor_state: CompositorState::new::<State>(&handle),
             xdg_shell_state: XdgShellState::new::<State>(&handle),
             shm_state: ShmState::new::<State>(&handle, []),
@@ -192,9 +221,17 @@ impl Headless {
             primary_selection_state,
             data_control_state,
             windows: Vec::new(),
-            next_window_id: 0,
-            damage: Vec::new(),
             needs_redraw: false,
+            pointer_location: (
+                f64::from(output_size.w) / 2.0,
+                f64::from(output_size.h) / 2.0,
+            )
+                .into(),
+            cursor_shown: false,
+            cursor_status: CursorImageStatus::default_named(),
+            cursor_arrow: cursor::arrow(),
+            held_shortcut_keys: Vec::new(),
+            input_devices: 0,
         };
         Ok(Self {
             display,
@@ -315,7 +352,7 @@ impl Headless {
             feedback.presented(
                 &self.state.output,
                 vblank.time,
-                Refresh::fixed(REFRESH),
+                Refresh::fixed(self.state.refresh),
                 vblank.sequence,
                 Kind::Vsync,
             );
@@ -333,6 +370,73 @@ impl Headless {
 
     pub fn windows(&self) -> &[Window] {
         &self.state.windows
+    }
+
+    pub fn render_elements(&self, renderer: &mut VulkanRenderer) -> Vec<OutputElement> {
+        let mut elements: Vec<OutputElement> = self.cursor_elements(renderer);
+        elements.extend(
+            self.state
+                .windows
+                .iter()
+                .rev()
+                .filter(|window| window.size.is_some())
+                .flat_map(|window| {
+                    render_elements_from_surface_tree(
+                        renderer,
+                        window.toplevel.wl_surface(),
+                        window.location,
+                        1.0,
+                        1.0,
+                        ElementKind::Unspecified,
+                    )
+                }),
+        );
+        elements
+    }
+
+    fn cursor_elements(&self, renderer: &mut VulkanRenderer) -> Vec<OutputElement> {
+        let state = &self.state;
+        if !state.cursor_shown {
+            return Vec::new();
+        }
+        let at = state.pointer_location;
+        let at: Point<i32, Physical> = (at.x.round() as i32, at.y.round() as i32).into();
+        match &state.cursor_status {
+            CursorImageStatus::Hidden => Vec::new(),
+            CursorImageStatus::Surface(surface) => {
+                let hotspot = with_states(surface, |states| {
+                    states
+                        .data_map
+                        .get::<Mutex<CursorImageAttributes>>()
+                        .and_then(|attributes| attributes.lock().ok().map(|a| a.hotspot))
+                        .unwrap_or_default()
+                });
+                render_elements_from_surface_tree(
+                    renderer,
+                    surface,
+                    (at.x - hotspot.x, at.y - hotspot.y),
+                    1.0,
+                    1.0,
+                    ElementKind::Cursor,
+                )
+            }
+            CursorImageStatus::Named(_) => MemoryRenderBufferRenderElement::from_buffer(
+                renderer,
+                (f64::from(at.x), f64::from(at.y)),
+                &state.cursor_arrow,
+                None,
+                None,
+                None,
+                ElementKind::Cursor,
+            )
+            .map(OutputElement::Cursor)
+            .into_iter()
+            .collect(),
+        }
+    }
+
+    pub(crate) fn flush(&mut self) -> io::Result<()> {
+        self.display.flush_clients()
     }
 }
 
@@ -364,22 +468,14 @@ fn shm_size(buffer: &WlBuffer) -> Option<Size<i32, Physical>> {
         .then(|| Size::from((data.width, data.height)))
 }
 
-fn buffer_rect(damage: &Damage) -> Rect {
-    let (x, y, width, height) = match damage {
-        Damage::Surface(rect) => (rect.loc.x, rect.loc.y, rect.size.w, rect.size.h),
-        Damage::Buffer(rect) => (rect.loc.x, rect.loc.y, rect.size.w, rect.size.h),
-    };
-    Rect::new(x, y, width, height)
-}
-
 impl State {
-    fn focused(&self) -> Option<WlSurface> {
+    pub(crate) fn focused(&self) -> Option<WlSurface> {
         self.seat
             .get_keyboard()
             .and_then(|keyboard| keyboard.current_focus())
     }
 
-    fn focus(&mut self, surface: Option<WlSurface>) {
+    pub(crate) fn focus(&mut self, surface: Option<WlSurface>) {
         if let Some(surface) = &surface
             && let Some(index) = self
                 .windows
@@ -387,9 +483,6 @@ impl State {
                 .position(|window| window.toplevel.wl_surface() == surface)
         {
             let window = self.windows.remove(index);
-            if index < self.windows.len() {
-                self.damage.extend(window.bounds());
-            }
             self.windows.push(window);
             self.needs_redraw = true;
         }
@@ -469,6 +562,8 @@ impl CompositorHandler for State {
     }
 
     fn commit(&mut self, surface: &WlSurface) {
+        on_commit_buffer_handler::<Self>(surface);
+        self.needs_redraw = true;
         let Some(window) = self
             .windows
             .iter_mut()
@@ -476,57 +571,17 @@ impl CompositorHandler for State {
         else {
             return;
         };
-        self.needs_redraw = true;
-        let (assignment, damage) = with_states(surface, |states| {
-            let mut attributes = states.cached_state.get::<SurfaceAttributes>();
-            let current = attributes.current();
-            (current.buffer.take(), std::mem::take(&mut current.damage))
-        });
-        let before = window.bounds();
-        let mut updated = Vec::new();
-        match assignment {
-            Some(BufferAssignment::NewBuffer(buffer)) => match buffer_size(&buffer) {
-                Some(size) => {
-                    if window.size.is_none() {
-                        window.location = centered(self.output_size, size);
-                    }
-                    if window.size == Some(size) {
-                        updated = damage.iter().map(buffer_rect).collect();
-                    } else {
-                        updated = vec![Rect::new(0, 0, size.w, size.h)];
-                    }
-                    window.size = Some(size);
-                    let mut pending = updated.clone();
-                    if let Some(previous) = window.pending.take() {
-                        previous.buffer.release();
-                        pending.extend(previous.damage);
-                    }
-                    window.pending = Some(PendingBuffer {
-                        buffer,
-                        damage: pending,
-                    });
-                }
-                None => buffer.release(),
-            },
-            Some(BufferAssignment::Removed) => {
-                window.size = None;
-                window.release_pending();
-            }
-            None => {}
+        let size = with_renderer_surface_state(surface, |state| {
+            state.buffer().and_then(|buffer| buffer_size(buffer))
+        })
+        .flatten();
+        let mapped = window.size.is_some();
+        if !mapped && let Some(size) = size {
+            window.location = centered(self.output_size, size);
         }
-        let after = window.bounds();
-        if before != after {
-            self.damage.extend(before);
-            self.damage.extend(after);
-        } else if let Some(bounds) = after {
-            self.damage.extend(
-                updated
-                    .iter()
-                    .filter_map(|rect| rect.translated(bounds.x, bounds.y).intersection(&bounds)),
-            );
-        }
+        window.size = size;
         let surface = window.toplevel.wl_surface().clone();
-        match (before.is_some(), after.is_some()) {
+        match (mapped, size.is_some()) {
             (false, true) if self.takes_focus_when_mapped(&surface) => self.focus(Some(surface)),
             (false, true) => self.place_behind_frontmost(&surface),
             (true, false) => self.refocus_after_losing(&surface),
@@ -551,6 +606,7 @@ impl DmabufHandler for State {
         notifier: ImportNotifier,
     ) {
         if dmabuf.num_planes() == 1 && dmabuf.format().modifier == Modifier::Linear {
+            dmabuf.set_node(self.scanout_node);
             let _ = notifier.successful::<State>();
         } else {
             notifier.failed();
@@ -576,13 +632,10 @@ impl XdgShellHandler for State {
             state.states.set(xdg_toplevel::State::Activated);
         });
         toplevel.send_configure();
-        self.next_window_id += 1;
         self.windows.push(Window {
-            id: self.next_window_id,
             toplevel,
             location: Point::default(),
             size: None,
-            pending: None,
         });
     }
 
@@ -592,9 +645,7 @@ impl XdgShellHandler for State {
             .iter()
             .position(|window| window.toplevel == toplevel)
         {
-            let mut window = self.windows.remove(index);
-            window.release_pending();
-            self.damage.extend(window.bounds());
+            self.windows.remove(index);
         }
         self.needs_redraw = true;
         self.refocus_after_losing(toplevel.wl_surface());
@@ -613,6 +664,12 @@ impl XdgShellHandler for State {
     }
 }
 
+render_elements! {
+    pub OutputElement<=VulkanRenderer>;
+    Surface=WaylandSurfaceRenderElement<VulkanRenderer>,
+    Cursor=MemoryRenderBufferRenderElement<VulkanRenderer>,
+}
+
 impl SeatHandler for State {
     type KeyboardFocus = WlSurface;
     type PointerFocus = WlSurface;
@@ -620,6 +677,11 @@ impl SeatHandler for State {
 
     fn seat_state(&mut self) -> &mut SeatState<Self> {
         &mut self.seat_state
+    }
+
+    fn cursor_image(&mut self, _seat: &Seat<Self>, image: CursorImageStatus) {
+        self.cursor_status = image;
+        self.needs_redraw = true;
     }
 
     fn focus_changed(&mut self, seat: &Seat<Self>, focused: Option<&WlSurface>) {

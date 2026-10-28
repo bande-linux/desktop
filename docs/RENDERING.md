@@ -107,14 +107,17 @@ CI cannot measure photons or a real GPU, so `ci/perf` measures on lavapipe with
   of a real 120 Hz clock. On a host shared by five runners, a sleeping thread's wake-up
   is late by more than the 1 ms margin often enough that a gate would only measure the
   neighbours.
-- **Timed metrics**, gated by budgets that hold on lavapipe on a shared 8-core runner:
-  typical frame at 1920×1080 p99 ≤ 8.33 ms (lavapipe must keep 120 Hz when damage is
-  small), full repaint of 8 windows p99 ≤ 16.7 ms, median of five compositor starts to listening socket
-  ≤ 500 ms, compositor idle RSS ≤ 128 MB (lavapipe's LLVM JIT included). `ci/perf` runs after the
-  build-heavy jobs of its workflow, which share the runners' host. Each run writes
-  `perf.json` as an artifact and a table to the job summary so trends are visible per
-  commit. The exact metrics also count pixels shaded, which an opaque window above a
-  damaged area keeps to that area.
+- **Timed metrics**, reported against budgets but not gated: typical frame at 1920×1080
+  p99 ≤ 8.33 ms (lavapipe must keep 120 Hz when damage is small), full repaint of 8 windows
+  p99 ≤ 16.7 ms, median of five compositor starts to listening socket ≤ 500 ms. The runners
+  share one 8-core host with other repositories' kernel builds and hardware jobs, and under
+  that load the unchanged renderer's typical-frame p50 moved from 0.28 ms to 3 ms; a wall-clock gate
+  would measure the neighbours, not the change. The summary prints the host's load average
+  next to them. They become gates again when they run on a runner reserved for measurement.
+- **Gated metrics**: every exact metric above, and compositor idle RSS ≤ 128 MB (lavapipe's
+  LLVM JIT included). Each run writes `perf.json` as an artifact and a table to the job
+  summary so trends are visible per commit. The exact metrics also count pixels shaded,
+  which an opaque window above a damaged area keeps to that area.
 
 Measuring true input-to-photon needs a camera or photodiode on a real Mac; that is a
 hardware-rig task. Until then the exact frame-latency metric is the gate.

@@ -225,7 +225,7 @@ fn an_opaque_window_hides_the_window_below_it() {
     let (stats, snapshot) = render(&mut renderer, &mut server);
 
     let output = (OUTPUT.0 * OUTPUT.1) as u64;
-    assert_eq!(stats.shaded_pixels, output + 32 * 32);
+    assert_eq!(stats.shaded_pixels, output);
     let origin = server.windows()[1].location();
     assert_eq!(pixel(&snapshot, origin.x, origin.y), opaque_rgba(GREEN));
 }

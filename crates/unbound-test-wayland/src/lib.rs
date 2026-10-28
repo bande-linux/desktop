@@ -1,7 +1,9 @@
 pub mod clipboard;
+mod seat;
+mod udmabuf;
 
 use std::io::Write;
-use std::os::fd::AsFd;
+use std::os::fd::{AsFd, OwnedFd};
 use std::os::unix::net::UnixStream;
 use std::time::{Duration, Instant};
 
@@ -47,6 +49,7 @@ pub struct Presented {
 pub enum Memory {
     Shm,
     Dmabuf,
+    Udmabuf,
 }
 
 pub fn quadrants(width: usize, height: usize, stride: usize) -> Vec<u8> {
@@ -88,6 +91,7 @@ struct Globals {
     registry: Option<WlRegistry>,
     advertised: Vec<(u32, String)>,
     clipboard: clipboard::Clipboard,
+    input: seat::Input,
 }
 
 pub struct TestClient {
@@ -199,6 +203,11 @@ impl TestClient {
         let buffer = match memory {
             Memory::Shm => self.shm_buffer(image),
             Memory::Dmabuf => self.dmabuf_buffer(image, LINEAR),
+            Memory::Udmabuf => self.wrap_dmabuf(
+                &udmabuf::create(image.bytes).expect("udmabuf from a sealed memfd"),
+                image,
+                LINEAR,
+            ),
         };
         let (x, y, width, height) = damage;
         surface.attach(Some(&buffer), 0, 0);
@@ -221,17 +230,21 @@ impl TestClient {
     }
 
     fn dmabuf_buffer(&self, image: &ShmImage, modifier: u64) -> WlBuffer {
-        let qh = self.queue.handle();
         let file = tempfile::tempfile().expect("dma-buf file");
         (&file).write_all(image.bytes).expect("dma-buf write");
         let length = u64::try_from(image.bytes.len()).expect("dma-buf size");
         file.set_len(length.next_multiple_of(PAGE))
             .expect("dma-buf length");
+        self.wrap_dmabuf(&OwnedFd::from(file), image, modifier)
+    }
+
+    fn wrap_dmabuf(&self, fd: &OwnedFd, image: &ShmImage, modifier: u64) -> WlBuffer {
+        let qh = self.queue.handle();
         let dmabuf = self.globals.dmabuf.as_ref().expect("zwp_linux_dmabuf_v1");
         let params = dmabuf.create_params(&qh, ());
         let stride = u32::try_from(image.stride).expect("stride");
         params.add(
-            file.as_fd(),
+            fd.as_fd(),
             0,
             0,
             stride,
@@ -415,7 +428,6 @@ delegate_noop!(Globals: WlShmPool);
 delegate_noop!(Globals: ignore WlShm);
 delegate_noop!(Globals: ignore WlSurface);
 delegate_noop!(Globals: ignore WlBuffer);
-delegate_noop!(Globals: ignore XdgToplevel);
 delegate_noop!(Globals: ignore ZwpLinuxDmabufV1);
 delegate_noop!(Globals: ignore WpPresentation);
 

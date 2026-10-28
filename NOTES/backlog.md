@@ -52,15 +52,34 @@ hardware. Things noticed in passing go to the end of this file, not into a diff.
   Scheduling tests run on a virtual clock. On the runners' real clock: commit-to-present
   p50 11.4 ms / p99 16.3 ms, 4 of 120 frames after their promised vblank, reported
   only (see `docs/RENDERING.md`).
-- [ ] **M9 KVM test rig (`ci/vm`)**
+- [x] **M9 KVM test rig (`ci/vm`)** (`desktop/milestone-9`)
   Guest kernel built with `CONFIG_DRM_VKMS` and virtio-gpu, Debian 13 arm64 root image,
   QEMU with `-machine virt,its=off`; the job boots the guest and runs test binaries in
   it. *Done when* `ci/vm` boots and a guest test opens `/dev/dri/card0`.
-- [ ] **M10 DRM/KMS backend**
+  `ci/vm/kernel.sh` builds Linux 6.12.114 (Debian 13's series) from arm64 defconfig without
+  modules or SoC platforms plus `kernel.config` (vkms, virtio-gpu, 9p, udmabuf, sw_sync,
+  uinput); `rootfs.sh` exports a `debian:13-slim` image through the runners' Docker engine
+  into an ext4 image. Both are cached with `actions/cache` keyed on their recipes (kernel
+  build about 6 min, cached boot about 1 s). The guest runs `cargo test` executables of
+  every `guest` test target over 9p with `--ignored`; tests check card0, vkms's CRTC,
+  virtual and writeback connectors and primary, cursor and overlay planes, and virtio-gpu.
+  `ci/perf` now gates only exact counts and idle RSS; wall-clock budgets are reported with
+  the host load, since the shared host moved unchanged code's p50 tenfold.
+- [x] **M10 DRM/KMS backend** (`desktop/milestone-10`)
   libseat session, atomic modesetting through Smithay's `DrmCompositor`,
   `unbound-render` implementing Smithay's renderer traits, direct scanout and overlay
   planes. *Done when* the compositor drives VKMS in the guest, a fullscreen opaque
   window is scanned out directly, and the writeback/screendump matches the golden.
+  `unbound-render` now implements `Renderer`, `Frame`, `ImportMemWl`, `ImportDmaWl`,
+  `Offscreen` and `Bind<Dmabuf>`; both outputs compose Smithay surface elements (headless
+  through `OutputDamageTracker`, DRM through `DrmCompositor`), so the M6 exact metrics now
+  cover the shipping path (perf unchanged: typical p50 0.28 ms). The DRM output renders
+  into dumb buffers written through a CPU mapping (lavapipe cannot import GBM's read-only
+  exports), linux-dmabuf v4 feedback names the card, and client dma-bufs are imported for
+  scanout through GBM. Guest tests read the CRTC's framebuffer back through PRIME: a
+  composed ARGB window matches the scene, and a fullscreen XRGB udmabuf window is put on
+  the primary plane and matches it. `unbound-compositor` defaults to DRM; `--headless`
+  keeps the offscreen output for CI and the bench.
 - [ ] **M11 First boot on the M2 Mac mini (hardware smoke test)**
   The compositor on the real M2 mini through the `hil` service (unbound-linux/hil; the
   host is the user's laptop, the mini on USB-C). The mini exposes the bootloader's
@@ -73,12 +92,24 @@ hardware. Things noticed in passing go to the end of this file, not into a diff.
   golden image within the SSIM bound.
   *Depends on* kernel work done by the user (not in this repo, nor the `hil` repo):
   K1 boot to userspace, K2 `simpledrm` on the boot framebuffer; and on M10.
-- [ ] **M12 Keyboard and pointer input**
+  *Status (2026-10-28)*: blocked on K1. The latest `hil` run (`kis-2`, 10:13) ends at
+  m1n1's "Vectoring to next stage" with no kernel output. Once K1 and K2 land, under the
+  shared lock (`mkdir hil-host/mini.lock`, short sessions): boot the `ci/vm` root image
+  contents plus the `ci/deb` packages, start seatd and run the `guest` test binary's
+  `scanout::a_composed_window_is_scanned_out_on_vkms` with the card chosen by connected
+  connector instead of by the vkms driver name, then release the lease and the lock.
+- [x] **M12 Keyboard and pointer input** (`desktop/milestone-12`)
   libinput through the libseat session, xkbcommon keymaps, `wl_keyboard`/`wl_pointer`
   with focus-follows-click and the macOS focus rules of section 1.7, cursor drawn by the
   compositor, and the `Super`-based shortcut layer of section 1.5. *Done when* guest
   tests inject events through `uinput` and clients receive them with the right focus,
   and on the mini once K3 (USB input in the kernel) lands.
+  Headless tests drive the seat directly (click-to-focus and raise, keys to the focused
+  client only, surface-local pointer enter, empty-desktop click, Super+W/Q/Tab, the arrow
+  drawn once the pointer moves); the guest test creates a uinput keyboard-and-mouse,
+  which libinput finds through udev, and checks that a click moves keyboard focus to the
+  window under the pointer and that its keys and buttons reach only that client. Scroll
+  axes, keyboard repeat settings, a hardware cursor plane and the mini (K3) are not done.
 - [ ] **M13 Shell protocols** `wlr-layer-shell`, `xdg_activation_v1` (replaces the
   first-window focus stand-in), `wp_viewporter`, `wp_fractional_scale_v1`. *Done when*
   a layer surface reserves its exclusive zone and toplevels are placed outside it.
@@ -126,7 +157,14 @@ boot framebuffer, K3 USB input. Later, the Apple DCP and agx drivers unlock:
   lavapipe) would copy straight from the shm pool into the texture.
 - `unbound-bench` reuses `unbound-test-wayland`, whose helpers panic on failure; fine for
   a measuring tool, but its errors read as test assertions.
-
+- Overlay-plane assignment is enabled (vkms has eight overlays) but no test puts a
+  non-fullscreen window on one yet; a guest test with a dma-buf window above a composed one
+  would cover it.
+- Smithay logs and skips a surface whose buffer fails to import; the compositor has no
+  tracing subscriber, so such failures are silent. Install one (stderr, `RUST_LOG`) in
+  `main`.
+- DrmCompositor's plane tests exclude modesets, so the first frame after taking the
+  output is always composed.
 - `image-compare` 0.5.0's SSIM sums the window's (co)variances instead of averaging them,
   so its stabilising constant is 64 times too small and near-flat windows score low: two
   gradients differing by 1 per channel scored 0.968. The toolkit's tests compute SSIM

@@ -1,9 +1,7 @@
 use std::collections::VecDeque;
+use std::io;
 use std::time::Duration;
 
-use unbound_render::RenderError;
-
-use crate::render::Renderer;
 use crate::state::Headless;
 
 pub const SAFETY_MARGIN: Duration = Duration::from_millis(1);
@@ -33,6 +31,10 @@ impl FrameClock {
 
     pub fn refresh(&self) -> Duration {
         self.refresh
+    }
+
+    pub fn anchor(&mut self, vblank: Duration) {
+        self.origin = vblank;
     }
 
     pub fn vblank_after(&self, now: Duration) -> Vblank {
@@ -77,10 +79,23 @@ impl FrameClock {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Submission {
+    AtVblank,
+    AwaitingFlip,
+}
+
+pub trait FrameOutput {
+    type Error: From<io::Error>;
+
+    fn submit(&mut self, compositor: &mut Headless) -> Result<Submission, Self::Error>;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Phase {
     Idle,
     Waiting(Vblank),
     Rendered(Vblank),
+    Flipping,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -108,12 +123,12 @@ impl FrameScheduler {
         &self.clock
     }
 
-    pub fn poll(
+    pub fn poll<O: FrameOutput>(
         &mut self,
         clock: impl Fn() -> Duration,
         compositor: &mut Headless,
-        renderer: &mut Renderer,
-    ) -> Result<Poll, RenderError> {
+        output: &mut O,
+    ) -> Result<Poll, O::Error> {
         let mut now = clock();
         self.wanted |= compositor.take_redraw();
         let mut presented = None;
@@ -140,14 +155,20 @@ impl FrameScheduler {
                     self.wanted = false;
                     compositor.latch();
                     let deadline = self.clock.deadline(vblank);
-                    renderer.render(compositor)?;
+                    let submission = output.submit(compositor)?;
                     now = clock();
                     self.clock.record_render(now.saturating_sub(deadline));
-                    self.phase = if now <= vblank.time {
-                        Phase::Rendered(vblank)
-                    } else {
-                        Phase::Rendered(self.clock.vblank_after(now))
+                    self.phase = match submission {
+                        Submission::AwaitingFlip => Phase::Flipping,
+                        Submission::AtVblank if now <= vblank.time => Phase::Rendered(vblank),
+                        Submission::AtVblank => Phase::Rendered(self.clock.vblank_after(now)),
                     };
+                }
+                Phase::Flipping => {
+                    return Ok(Poll {
+                        wake_at: None,
+                        presented,
+                    });
                 }
                 Phase::Rendered(vblank) if now < vblank.time => {
                     return Ok(Poll {
@@ -156,11 +177,18 @@ impl FrameScheduler {
                     });
                 }
                 Phase::Rendered(vblank) => {
-                    compositor.present(vblank).map_err(RenderError::Io)?;
+                    compositor.present(vblank)?;
                     presented = Some(vblank);
                     self.phase = Phase::Idle;
                 }
             }
         }
+    }
+
+    pub fn flipped(&mut self, vblank: Vblank, compositor: &mut Headless) -> io::Result<()> {
+        compositor.present(vblank)?;
+        self.clock.anchor(vblank.time);
+        self.phase = Phase::Idle;
+        Ok(())
     }
 }

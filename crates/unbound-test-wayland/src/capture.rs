@@ -1,0 +1,160 @@
+use std::fs::File;
+use std::io::{Read, Seek, SeekFrom};
+use std::os::fd::AsFd;
+
+use wayland_client::protocol::wl_output::WlOutput;
+use wayland_client::protocol::wl_shm::Format;
+use wayland_client::{Connection, Dispatch, QueueHandle, WEnum, delegate_noop};
+use wayland_protocols::ext::image_capture_source::v1::client::ext_image_capture_source_v1::ExtImageCaptureSourceV1;
+use wayland_protocols::ext::image_capture_source::v1::client::ext_output_image_capture_source_manager_v1::ExtOutputImageCaptureSourceManagerV1;
+use wayland_protocols::ext::image_copy_capture::v1::client::ext_image_copy_capture_frame_v1::{
+    self, ExtImageCopyCaptureFrameV1,
+};
+use wayland_protocols::ext::image_copy_capture::v1::client::ext_image_copy_capture_manager_v1::{
+    ExtImageCopyCaptureManagerV1, Options,
+};
+use wayland_protocols::ext::image_copy_capture::v1::client::ext_image_copy_capture_session_v1::{
+    self, ExtImageCopyCaptureSessionV1,
+};
+
+use crate::{Globals, Headless, TestClient};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CaptureOutcome {
+    Ready(Vec<u8>),
+    Failed(u32),
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CaptureConstraints {
+    pub size: Option<(u32, u32)>,
+    pub shm_formats: Vec<Format>,
+    pub done: bool,
+    pub stopped: bool,
+}
+
+#[derive(Default)]
+pub(crate) struct Capture {
+    session: Option<ExtImageCopyCaptureSessionV1>,
+    constraints: CaptureConstraints,
+    memory: Option<File>,
+    outcome: Option<CaptureOutcome>,
+}
+
+impl TestClient {
+    pub fn can_capture_screen(&self) -> bool {
+        self.advertises("ext_output_image_capture_source_manager_v1")
+            && self.advertises("ext_image_copy_capture_manager_v1")
+    }
+
+    pub fn start_screen_capture(
+        &mut self,
+        server: &mut Headless,
+        paint_cursors: bool,
+    ) -> CaptureConstraints {
+        let qh = self.queue.handle();
+        let output: WlOutput = self.bind("wl_output", 1);
+        let sources: ExtOutputImageCaptureSourceManagerV1 =
+            self.bind("ext_output_image_capture_source_manager_v1", 1);
+        let manager: ExtImageCopyCaptureManagerV1 =
+            self.bind("ext_image_copy_capture_manager_v1", 1);
+        let source = sources.create_source(&output, &qh, ());
+        let options = if paint_cursors {
+            Options::PaintCursors
+        } else {
+            Options::empty()
+        };
+        self.globals.capture = Capture {
+            session: Some(manager.create_session(&source, options, &qh, ())),
+            ..Capture::default()
+        };
+        self.exchange(server);
+        self.globals.capture.constraints.clone()
+    }
+
+    pub fn capture_frame(&mut self, server: &mut Headless, (width, height): (i32, i32)) {
+        let qh = self.queue.handle();
+        let stride = width * 4;
+        let file = tempfile::tempfile().expect("capture file");
+        file.set_len(u64::try_from(stride * height).expect("capture size"))
+            .expect("capture length");
+        let shm = self.globals.shm.as_ref().expect("wl_shm");
+        let pool = shm.create_pool(file.as_fd(), stride * height, &qh, ());
+        let buffer = pool.create_buffer(0, width, height, stride, Format::Argb8888, &qh, ());
+        pool.destroy();
+        let session = self
+            .globals
+            .capture
+            .session
+            .as_ref()
+            .expect("start_screen_capture first");
+        let frame = session.create_frame(&qh, ());
+        frame.attach_buffer(&buffer);
+        frame.damage_buffer(0, 0, width, height);
+        frame.capture();
+        self.globals.capture.memory = Some(file);
+        self.globals.capture.outcome = None;
+        self.exchange(server);
+    }
+
+    pub fn capture_outcome(&self) -> Option<&CaptureOutcome> {
+        self.globals.capture.outcome.as_ref()
+    }
+}
+
+impl Dispatch<ExtImageCopyCaptureSessionV1, ()> for Globals {
+    fn event(
+        globals: &mut Self,
+        _: &ExtImageCopyCaptureSessionV1,
+        event: ext_image_copy_capture_session_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        let constraints = &mut globals.capture.constraints;
+        match event {
+            ext_image_copy_capture_session_v1::Event::BufferSize { width, height } => {
+                constraints.size = Some((width, height));
+            }
+            ext_image_copy_capture_session_v1::Event::ShmFormat {
+                format: WEnum::Value(format),
+            } => constraints.shm_formats.push(format),
+            ext_image_copy_capture_session_v1::Event::Done => constraints.done = true,
+            ext_image_copy_capture_session_v1::Event::Stopped => constraints.stopped = true,
+            _ => {}
+        }
+    }
+}
+
+impl Dispatch<ExtImageCopyCaptureFrameV1, ()> for Globals {
+    fn event(
+        globals: &mut Self,
+        frame: &ExtImageCopyCaptureFrameV1,
+        event: ext_image_copy_capture_frame_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        let capture = &mut globals.capture;
+        match event {
+            ext_image_copy_capture_frame_v1::Event::Ready => {
+                let mut pixels = Vec::new();
+                if let Some(file) = capture.memory.as_mut() {
+                    file.seek(SeekFrom::Start(0)).expect("capture seek");
+                    file.read_to_end(&mut pixels).expect("capture read");
+                }
+                capture.outcome = Some(CaptureOutcome::Ready(pixels));
+                frame.destroy();
+            }
+            ext_image_copy_capture_frame_v1::Event::Failed { reason } => {
+                capture.outcome = Some(CaptureOutcome::Failed(reason.into()));
+                frame.destroy();
+            }
+            _ => {}
+        }
+    }
+}
+
+delegate_noop!(Globals: ExtOutputImageCaptureSourceManagerV1);
+delegate_noop!(Globals: ExtImageCaptureSourceV1);
+delegate_noop!(Globals: ExtImageCopyCaptureManagerV1);

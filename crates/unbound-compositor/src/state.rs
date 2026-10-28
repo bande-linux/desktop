@@ -118,7 +118,7 @@ pub struct State {
     shm_state: ShmState,
     dmabuf_state: DmabufState,
     _dmabuf_global: DmabufGlobal,
-    output: Output,
+    pub(crate) output: Output,
     _output_manager_state: OutputManagerState,
     _presentation_state: PresentationState,
     layer_shell_state: WlrLayerShellState,
@@ -152,6 +152,7 @@ pub struct State {
     cursor_arrow: MemoryRenderBuffer,
     pub(crate) held_shortcut_keys: Vec<u32>,
     pub(crate) input_devices: usize,
+    pub(crate) pending_captures: Vec<crate::capture::PendingCapture>,
 }
 
 pub struct Headless {
@@ -222,6 +223,7 @@ impl Headless {
         output.set_preferred(mode);
         output.create_global::<State>(&handle);
         handle.create_global::<State, UnboundShellV1, ()>(1, ());
+        State::create_capture_globals(&handle);
         let state = State {
             display_handle: handle.clone(),
             output_size,
@@ -282,6 +284,7 @@ impl Headless {
             cursor_arrow: cursor::arrow(),
             held_shortcut_keys: Vec::new(),
             input_devices: 0,
+            pending_captures: Vec::new(),
         };
         Ok(Self {
             display,
@@ -386,7 +389,19 @@ impl Headless {
     }
 
     pub fn render_elements(&self, renderer: &mut VulkanRenderer) -> Vec<OutputElement> {
-        let mut elements: Vec<OutputElement> = self.cursor_elements(renderer);
+        self.scene_elements(renderer, true)
+    }
+
+    pub(crate) fn scene_elements(
+        &self,
+        renderer: &mut VulkanRenderer,
+        with_cursor: bool,
+    ) -> Vec<OutputElement> {
+        let mut elements: Vec<OutputElement> = if with_cursor {
+            self.cursor_elements(renderer)
+        } else {
+            Vec::new()
+        };
         elements.extend(
             self.state
                 .stack()

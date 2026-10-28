@@ -1,3 +1,4 @@
+mod capture;
 mod clock;
 mod cursor;
 mod drm;

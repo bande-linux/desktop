@@ -306,6 +306,7 @@ impl FrameOutput for DrmOutput {
             background(),
             FrameFlags::DEFAULT | FrameFlags::ALLOW_PRIMARY_PLANE_SCANOUT_ANY,
         )?;
+        compositor.copy_captures(&mut self.renderer);
         self.scanned_out = matches!(frame.primary_element, PrimaryPlaneElement::Element(_));
         if frame.is_empty {
             return Ok(Submission::AtVblank);

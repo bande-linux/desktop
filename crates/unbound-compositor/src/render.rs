@@ -105,6 +105,8 @@ impl Renderer {
             });
         self.output = Some(output);
         let counters = self.vulkan.take_counters();
+        compositor.copy_captures(&mut self.vulkan);
+        self.vulkan.take_counters();
         Ok(FrameStats {
             uploaded_bytes: counters.uploaded_bytes,
             repainted_pixels: rendered?,

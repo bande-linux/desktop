@@ -12,10 +12,13 @@ use rustix::io::{FdFlags, fcntl_setfd};
 use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::{Buffer, Format as DmabufFormat, Fourcc, Modifier};
 use smithay::input::keyboard::XkbConfig;
+use smithay::output::{Mode, Output, PhysicalProperties, Subpixel};
 use smithay::input::{Seat, SeatHandler, SeatState};
+use smithay::reexports::wayland_protocols::wp::presentation_time::server::wp_presentation_feedback::Kind;
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::reexports::wayland_server::backend::{ClientData, ClientId, DisconnectReason};
 use smithay::reexports::wayland_server::protocol::wl_buffer::WlBuffer;
+use smithay::reexports::wayland_server::protocol::wl_callback::WlCallback;
 use smithay::reexports::wayland_server::protocol::wl_seat::WlSeat;
 use smithay::reexports::wayland_server::protocol::wl_shm::Format;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
@@ -28,6 +31,10 @@ use smithay::wayland::compositor::{
 };
 use smithay::wayland::dmabuf::{
     DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier, get_dmabuf,
+};
+use smithay::wayland::output::{OutputHandler, OutputManagerState};
+use smithay::wayland::presentation::{
+    PresentationFeedbackCachedState, PresentationFeedbackCallback, PresentationState, Refresh,
 };
 use smithay::wayland::selection::SelectionHandler;
 use smithay::wayland::selection::data_device::{
@@ -44,9 +51,16 @@ use smithay::wayland::shell::xdg::{
 use smithay::wayland::shm::{ShmHandler, ShmState, with_buffer_contents};
 use smithay::{
     delegate_compositor, delegate_data_device, delegate_dmabuf, delegate_ext_data_control,
-    delegate_primary_selection, delegate_seat, delegate_shm, delegate_xdg_shell,
+    delegate_output, delegate_presentation, delegate_primary_selection, delegate_seat,
+    delegate_shm, delegate_xdg_shell,
 };
 use unbound_render::Rect;
+
+use crate::clock::Vblank;
+
+pub const REFRESH: Duration = Duration::from_nanos(1_000_000_000 / 120);
+
+const REFRESH_MILLIHERTZ: i32 = 120_000;
 
 pub(crate) struct PendingBuffer {
     pub(crate) buffer: WlBuffer,
@@ -90,6 +104,9 @@ pub struct State {
     shm_state: ShmState,
     dmabuf_state: DmabufState,
     _dmabuf_global: DmabufGlobal,
+    output: Output,
+    _output_manager_state: OutputManagerState,
+    _presentation_state: PresentationState,
     seat_state: SeatState<State>,
     seat: Seat<State>,
     data_device_state: DataDeviceState,
@@ -104,6 +121,8 @@ pub struct State {
 pub struct Headless {
     display: Display<State>,
     pub(crate) state: State,
+    latched_feedback: Vec<PresentationFeedbackCallback>,
+    latched_frame_callbacks: Vec<WlCallback>,
     clipboard_daemon: Option<ClipboardDaemon>,
 }
 
@@ -140,6 +159,22 @@ impl Headless {
                 modifier: Modifier::Linear,
             }),
         );
+        let output = Output::new(
+            "HEADLESS-1".to_owned(),
+            PhysicalProperties {
+                size: (0, 0).into(),
+                subpixel: Subpixel::Unknown,
+                make: "Unbound".to_owned(),
+                model: "Headless".to_owned(),
+            },
+        );
+        let mode = Mode {
+            size: (output_size.w, output_size.h).into(),
+            refresh: REFRESH_MILLIHERTZ,
+        };
+        output.change_current_state(Some(mode), None, None, Some((0, 0).into()));
+        output.set_preferred(mode);
+        output.create_global::<State>(&handle);
         let state = State {
             display_handle: handle.clone(),
             output_size,
@@ -148,6 +183,9 @@ impl Headless {
             shm_state: ShmState::new::<State>(&handle, []),
             dmabuf_state,
             _dmabuf_global: dmabuf_global,
+            output,
+            _output_manager_state: OutputManagerState::new(),
+            _presentation_state: PresentationState::new::<State>(&handle, MONOTONIC),
             seat_state,
             seat,
             data_device_state: DataDeviceState::new::<State>(&handle),
@@ -161,6 +199,8 @@ impl Headless {
         Ok(Self {
             display,
             state,
+            latched_feedback: Vec::new(),
+            latched_frame_callbacks: Vec::new(),
             clipboard_daemon: None,
         })
     }
@@ -249,18 +289,40 @@ impl Headless {
         std::mem::take(&mut self.state.needs_redraw)
     }
 
-    pub fn frame_done(&mut self, time: Duration) -> io::Result<()> {
-        let millis = u32::try_from(time.as_millis()).unwrap_or(u32::MAX);
+    pub fn latch(&mut self) {
         for window in &self.state.windows {
             with_states(window.toplevel.wl_surface(), |states| {
-                states
-                    .cached_state
-                    .get::<SurfaceAttributes>()
-                    .current()
-                    .frame_callbacks
-                    .drain(..)
-                    .for_each(|callback| callback.done(millis));
+                self.latched_feedback.append(
+                    &mut states
+                        .cached_state
+                        .get::<PresentationFeedbackCachedState>()
+                        .current()
+                        .callbacks,
+                );
+                self.latched_frame_callbacks.append(
+                    &mut states
+                        .cached_state
+                        .get::<SurfaceAttributes>()
+                        .current()
+                        .frame_callbacks,
+                );
             });
+        }
+    }
+
+    pub fn present(&mut self, vblank: Vblank) -> io::Result<()> {
+        for feedback in self.latched_feedback.drain(..) {
+            feedback.presented(
+                &self.state.output,
+                vblank.time,
+                Refresh::fixed(REFRESH),
+                vblank.sequence,
+                Kind::Vsync,
+            );
+        }
+        let millis = (vblank.time.as_millis() % (1 << 32)) as u32;
+        for callback in self.latched_frame_callbacks.drain(..) {
+            callback.done(millis);
         }
         self.display.flush_clients()
     }
@@ -284,6 +346,8 @@ impl ClientData for ClientState {
     fn initialized(&self, _client_id: ClientId) {}
     fn disconnected(&self, _client_id: ClientId, _reason: DisconnectReason) {}
 }
+
+const MONOTONIC: u32 = 1;
 
 const DMABUF_FOURCCS: [Fourcc; 2] = [Fourcc::Argb8888, Fourcc::Xrgb8888];
 
@@ -494,6 +558,8 @@ impl DmabufHandler for State {
     }
 }
 
+impl OutputHandler for State {}
+
 impl ShmHandler for State {
     fn shm_state(&self) -> &ShmState {
         &self.shm_state
@@ -592,6 +658,8 @@ impl DataControlHandler for State {
 delegate_compositor!(State);
 delegate_data_device!(State);
 delegate_dmabuf!(State);
+delegate_output!(State);
+delegate_presentation!(State);
 delegate_ext_data_control!(State);
 delegate_primary_selection!(State);
 delegate_seat!(State);

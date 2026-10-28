@@ -18,6 +18,10 @@ use wayland_protocols::wp::linux_dmabuf::zv1::client::zwp_linux_buffer_params_v1
     Flags, ZwpLinuxBufferParamsV1,
 };
 use wayland_protocols::wp::linux_dmabuf::zv1::client::zwp_linux_dmabuf_v1::ZwpLinuxDmabufV1;
+use wayland_protocols::wp::presentation_time::client::wp_presentation::WpPresentation;
+use wayland_protocols::wp::presentation_time::client::wp_presentation_feedback::{
+    self, WpPresentationFeedback,
+};
 use wayland_protocols::xdg::shell::client::xdg_surface::{self, XdgSurface};
 use wayland_protocols::xdg::shell::client::xdg_toplevel::XdgToplevel;
 use wayland_protocols::xdg::shell::client::xdg_wm_base::{self, XdgWmBase};
@@ -30,6 +34,14 @@ pub const HALF_WHITE: [u8; 4] = [0x80, 0x80, 0x80, 0x80];
 pub const LINEAR: u64 = 0;
 
 const PAGE: u64 = 4096;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Presented {
+    pub time: Duration,
+    pub refresh: Duration,
+    pub sequence: u64,
+    pub vsync: bool,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Memory {
@@ -67,6 +79,9 @@ struct Globals {
     compositor: Option<WlCompositor>,
     shm: Option<WlShm>,
     dmabuf: Option<ZwpLinuxDmabufV1>,
+    presentation: Option<WpPresentation>,
+    presented: Vec<Presented>,
+    discarded: usize,
     wm_base: Option<XdgWmBase>,
     configured: bool,
     frames_done: usize,
@@ -270,6 +285,19 @@ impl TestClient {
         self.exchange(server);
     }
 
+    pub fn request_presentation(&mut self, index: usize) {
+        let presentation = self.globals.presentation.as_ref().expect("wp_presentation");
+        presentation.feedback(&self.windows[index].0, &self.queue.handle(), ());
+    }
+
+    pub fn presented(&self) -> &[Presented] {
+        &self.globals.presented
+    }
+
+    pub fn discarded(&self) -> usize {
+        self.globals.discarded
+    }
+
     pub fn frames_done(&self) -> usize {
         self.globals.frames_done
     }
@@ -329,6 +357,7 @@ impl Dispatch<WlRegistry, ()> for Globals {
                 "wl_shm" => globals.shm = Some(registry.bind(name, 1, qh, ())),
                 "xdg_wm_base" => globals.wm_base = Some(registry.bind(name, 1, qh, ())),
                 "zwp_linux_dmabuf_v1" => globals.dmabuf = Some(registry.bind(name, 3, qh, ())),
+                "wp_presentation" => globals.presentation = Some(registry.bind(name, 1, qh, ())),
                 _ => {}
             }
         }
@@ -388,6 +417,43 @@ delegate_noop!(Globals: ignore WlSurface);
 delegate_noop!(Globals: ignore WlBuffer);
 delegate_noop!(Globals: ignore XdgToplevel);
 delegate_noop!(Globals: ignore ZwpLinuxDmabufV1);
+delegate_noop!(Globals: ignore WpPresentation);
+
+impl Dispatch<WpPresentationFeedback, ()> for Globals {
+    fn event(
+        globals: &mut Self,
+        _: &WpPresentationFeedback,
+        event: wp_presentation_feedback::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        match event {
+            wp_presentation_feedback::Event::Presented {
+                tv_sec_hi,
+                tv_sec_lo,
+                tv_nsec,
+                refresh,
+                seq_hi,
+                seq_lo,
+                flags,
+            } => {
+                let seconds = (u64::from(tv_sec_hi) << 32) | u64::from(tv_sec_lo);
+                let vsync = flags
+                    .into_result()
+                    .is_ok_and(|flags| flags.contains(wp_presentation_feedback::Kind::Vsync));
+                globals.presented.push(Presented {
+                    time: Duration::new(seconds, tv_nsec),
+                    refresh: Duration::from_nanos(u64::from(refresh)),
+                    sequence: (u64::from(seq_hi) << 32) | u64::from(seq_lo),
+                    vsync,
+                });
+            }
+            wp_presentation_feedback::Event::Discarded => globals.discarded += 1,
+            _ => {}
+        }
+    }
+}
 delegate_noop!(Globals: ignore ZwpLinuxBufferParamsV1);
 
 fn fourcc(format: Format) -> u32 {

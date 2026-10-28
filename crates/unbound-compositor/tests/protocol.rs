@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use smithay::utils::{Point, Size};
-use unbound_compositor::Headless;
+use unbound_compositor::{Headless, Vblank};
 use unbound_test_wayland::{ShmImage, TestClient, quadrants};
 use wayland_client::protocol::wl_shm::Format;
 
@@ -74,9 +74,13 @@ fn frame_callback_is_done_once_the_frame_is_presented() {
     assert!(server.take_redraw());
     assert_eq!(client.frames_done(), 0);
 
+    server.latch();
     server
-        .frame_done(Duration::from_millis(16))
-        .expect("frame done");
+        .present(Vblank {
+            sequence: 2,
+            time: Duration::from_millis(16),
+        })
+        .expect("presented");
     client.exchange(&mut server);
 
     assert_eq!(client.frames_done(), 1);

@@ -65,11 +65,21 @@ hardware. Things noticed in passing go to the end of this file, not into a diff.
   virtual and writeback connectors and primary, cursor and overlay planes, and virtio-gpu.
   `ci/perf` now gates only exact counts and idle RSS; wall-clock budgets are reported with
   the host load, since the shared host moved unchanged code's p50 tenfold.
-- [ ] **M10 DRM/KMS backend**
+- [x] **M10 DRM/KMS backend** (`desktop/milestone-10`)
   libseat session, atomic modesetting through Smithay's `DrmCompositor`,
   `unbound-render` implementing Smithay's renderer traits, direct scanout and overlay
   planes. *Done when* the compositor drives VKMS in the guest, a fullscreen opaque
   window is scanned out directly, and the writeback/screendump matches the golden.
+  `unbound-render` now implements `Renderer`, `Frame`, `ImportMemWl`, `ImportDmaWl`,
+  `Offscreen` and `Bind<Dmabuf>`; both outputs compose Smithay surface elements (headless
+  through `OutputDamageTracker`, DRM through `DrmCompositor`), so the M6 exact metrics now
+  cover the shipping path (perf unchanged: typical p50 0.28 ms). The DRM output renders
+  into dumb buffers written through a CPU mapping (lavapipe cannot import GBM's read-only
+  exports), linux-dmabuf v4 feedback names the card, and client dma-bufs are imported for
+  scanout through GBM. Guest tests read the CRTC's framebuffer back through PRIME: a
+  composed ARGB window matches the scene, and a fullscreen XRGB udmabuf window is put on
+  the primary plane and matches it. `unbound-compositor` defaults to DRM; `--headless`
+  keeps the offscreen output for CI and the bench.
 - [ ] **M11 First boot on the M2 Mac mini (hardware smoke test)**
   The compositor on the real M2 mini through the `hil` service (unbound-linux/hil; the
   host is the user's laptop, the mini on USB-C). The mini exposes the bootloader's
@@ -132,3 +142,11 @@ boot framebuffer, K3 USB input. Later, the Apple DCP and agx drivers unlock:
   lavapipe) would copy straight from the shm pool into the texture.
 - `unbound-bench` reuses `unbound-test-wayland`, whose helpers panic on failure; fine for
   a measuring tool, but its errors read as test assertions.
+- Overlay-plane assignment is enabled (vkms has eight overlays) but no test puts a
+  non-fullscreen window on one yet; a guest test with a dma-buf window above a composed one
+  would cover it.
+- Smithay logs and skips a surface whose buffer fails to import; the compositor has no
+  tracing subscriber, so such failures are silent. Install one (stderr, `RUST_LOG`) in
+  `main`.
+- DrmCompositor's plane tests exclude modesets, so the first frame after taking the
+  output is always composed.

@@ -5,8 +5,9 @@ use std::time::Duration;
 
 use unbound_notify::NotificationServer;
 use unbound_test_bus::SessionBus;
-use zbus::blocking::Connection;
+use zbus::blocking::{Connection, MessageIterator};
 use zbus::zvariant::Value;
+use zbus::{MatchRule, message};
 
 const SIGNAL_WAIT: Duration = Duration::from_secs(5);
 const QUIET_WAIT: Duration = Duration::from_millis(500);
@@ -38,12 +39,6 @@ trait Notifications {
     fn close_notification(&self, id: u32) -> zbus::Result<()>;
 
     fn get_server_information(&self) -> zbus::Result<(String, String, String, String)>;
-
-    #[zbus(signal)]
-    fn notification_closed(&self, id: u32, reason: u32) -> zbus::Result<()>;
-
-    #[zbus(signal)]
-    fn action_invoked(&self, id: u32, action_key: String) -> zbus::Result<()>;
 }
 
 #[derive(Debug, PartialEq)]
@@ -67,20 +62,27 @@ fn start() -> Fixture {
     let client = NotificationsProxyBlocking::new(&connection).expect("proxy");
 
     let (sender, events) = mpsc::channel();
-    let closed = client.receive_notification_closed().expect("subscribe");
-    let closed_sender = sender.clone();
+    let rule = MatchRule::builder()
+        .msg_type(message::Type::Signal)
+        .interface("org.freedesktop.Notifications")
+        .expect("interface")
+        .build();
+    let signals = MessageIterator::for_match_rule(rule, &connection, None).expect("subscribe");
     thread::spawn(move || {
-        for signal in closed {
-            if let Ok(arguments) = signal.args() {
-                let _ = closed_sender.send(Event::Closed(arguments.id, arguments.reason));
-            }
-        }
-    });
-    let actions = client.receive_action_invoked().expect("subscribe");
-    thread::spawn(move || {
-        for signal in actions {
-            if let Ok(arguments) = signal.args() {
-                let _ = sender.send(Event::Action(arguments.id, arguments.action_key));
+        for signal in signals.flatten() {
+            let header = signal.header();
+            let body = signal.body();
+            let event = match header.member().map(|member| member.as_str()) {
+                Some("NotificationClosed") => body
+                    .deserialize::<(u32, u32)>()
+                    .map(|(id, reason)| Event::Closed(id, reason)),
+                Some("ActionInvoked") => body
+                    .deserialize::<(u32, String)>()
+                    .map(|(id, key)| Event::Action(id, key)),
+                _ => continue,
+            };
+            if let Ok(event) = event {
+                let _ = sender.send(event);
             }
         }
     });

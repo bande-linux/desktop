@@ -159,7 +159,15 @@ below; the estimate at the head of `desktop/milestone-15` is about 52% of the pl
   `m15-terminal-minimized`. Not done: title bars (the toolkit draws none yet, so our
   own apps cannot be dragged; macOS precedent is app-drawn title bars with the traffic
   lights), `xdg-decoration`, layer-surface popups beyond placement, snapping (phase 8).
-- [ ] **M16 `linux-drm-syncobj-v1` explicit sync (P0)**
+- [ ] **M16 Firefox on Wayland** (`desktop/milestone-16`)
+  The guest image carries `firefox-esr` (no X server, no XWayland); `desktop::firefox_runs_on_wayland_and_opens_a_context_menu`
+  starts it on the compositor's socket with `MOZ_ENABLE_WAYLAND=1`, waits for a page colour
+  on the CRTC, opens the page's context menu (an xdg popup) and takes the window full
+  screen, saving `m16-firefox-page`, `m16-firefox-context-menu` and
+  `m16-firefox-full-screen`. No new protocol was needed for this; `cursor-shape-v1` waits
+  for themed cursors (until then clients draw their own cursor surfaces) and
+  `xdg-decoration` for server-side title bars. *Done when* the guest test is green.
+- [ ] **M19 `linux-drm-syncobj-v1` explicit sync (P0)**
   Acquire points through `DrmSyncPointBlocker`, release points from frame completion.
   *Done when* guest tests show a commit is not presented before its acquire point
   signals and the release point signals after the buffer leaves use.

@@ -110,9 +110,18 @@ hardware. Things noticed in passing go to the end of this file, not into a diff.
   which libinput finds through udev, and checks that a click moves keyboard focus to the
   window under the pointer and that its keys and buttons reach only that client. Scroll
   axes, keyboard repeat settings, a hardware cursor plane and the mini (K3) are not done.
-- [ ] **M13 Shell protocols** `wlr-layer-shell`, `xdg_activation_v1` (replaces the
-  first-window focus stand-in), `wp_viewporter`, `wp_fractional_scale_v1`. *Done when*
-  a layer surface reserves its exclusive zone and toplevels are placed outside it.
+- [x] **M13 Shell protocols** (`desktop/milestone-13`) `wlr-layer-shell`,
+  `xdg_activation_v1`, `wp_viewporter`, `wp_fractional_scale_v1`. *Done when* a layer
+  surface reserves its exclusive zone and toplevels are placed outside it.
+  Layers come from Smithay's layer map, drawn background, bottom, windows, top, overlay;
+  new windows are centered in the area outside every exclusive zone (macOS's visible
+  frame). A token is valid only if the focused app requested it (macOS cooperative
+  activation) and activates its window now or when it maps; clicks on layer surfaces keep
+  the key window (as the Dock does). Viewport destinations set the window size; surfaces
+  are told scale 1.0. Not done: keyboard focus for layer surfaces with keyboard
+  interactivity, layer popups, re-placing windows when a zone appears later. The
+  first-window focus stand-in stays until the launcher (M14) passes activation tokens,
+  since without it apps started from a terminal would open unfocused.
 - [ ] **M14 Minimal shell: first usable desktop**
   `unbound-panel` (left edge by default, from `config.kdl`) with app buttons and a
   clock, `unbound-launcher` on `Super+Space` listing `.desktop` entries, and a minimal

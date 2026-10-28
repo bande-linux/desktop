@@ -1,3 +1,9 @@
+use std::fmt;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+use vello_cpu::{PixelMetadata, Pixmap};
+
 use crate::text::Paragraph;
 use crate::tokens::Color;
 
@@ -79,6 +85,62 @@ impl From<Color> for Paint {
     }
 }
 
+#[derive(Clone)]
+pub struct Image {
+    id: u64,
+    pub(crate) pixmap: Arc<Pixmap>,
+}
+
+impl fmt::Debug for Image {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Image")
+            .field("width", &self.width())
+            .field("height", &self.height())
+            .finish_non_exhaustive()
+    }
+}
+
+impl Image {
+    pub fn from_rgba(width: u32, height: u32, mut rgba: Vec<u8>) -> Option<Self> {
+        let (width, height) = (u16::try_from(width).ok()?, u16::try_from(height).ok()?);
+        if rgba.len() != usize::from(width) * usize::from(height) * 4 || width == 0 || height == 0 {
+            return None;
+        }
+        for pixel in rgba.as_chunks_mut::<4>().0 {
+            let alpha = u16::from(pixel[3]);
+            for channel in &mut pixel[..3] {
+                *channel = ((u16::from(*channel) * alpha + 127) / 255) as u8;
+            }
+        }
+        static NEXT: AtomicU64 = AtomicU64::new(1);
+        Some(Self {
+            id: NEXT.fetch_add(1, Ordering::Relaxed),
+            pixmap: Arc::new(Pixmap::from_parts(
+                rgba,
+                width,
+                height,
+                PixelMetadata::default(),
+            )),
+        })
+    }
+
+    pub(crate) fn id(&self) -> u64 {
+        self.id
+    }
+
+    pub fn premultiplied_rgba(&self) -> &[u8] {
+        self.pixmap.data_as_u8_slice()
+    }
+
+    pub fn width(&self) -> u32 {
+        u32::from(self.pixmap.width())
+    }
+
+    pub fn height(&self) -> u32 {
+        u32::from(self.pixmap.height())
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Item {
     Fill {
@@ -103,6 +165,10 @@ pub enum Item {
     Clip {
         shape: Shape,
         items: Vec<Item>,
+    },
+    Image {
+        rect: Rect,
+        image: Image,
     },
 }
 

@@ -3,7 +3,7 @@ use vello_cpu::{
     Glyph, PaintType, PixmapMut, RasterizerSettings, RenderContext, Resources, TargetInit,
 };
 
-use crate::draw::{self, Canvas};
+use crate::draw::{self, Canvas, ImageIds};
 use crate::outline::GlyphOutlines;
 use crate::render::{RenderError, Snapshot};
 use crate::scene::Scene;
@@ -13,6 +13,7 @@ pub struct CpuRenderer {
     context: RenderContext,
     resources: Resources,
     outlines: GlyphOutlines,
+    image_ids: ImageIds,
 }
 
 impl Default for CpuRenderer {
@@ -27,6 +28,7 @@ impl CpuRenderer {
             context: RenderContext::new(1, 1),
             resources: Resources::new(),
             outlines: GlyphOutlines::default(),
+            image_ids: ImageIds::new(),
         }
     }
 
@@ -43,12 +45,21 @@ impl CpuRenderer {
     pub fn render_into(&mut self, scene: &Scene, rgba: &mut [u8]) -> Result<(), RenderError> {
         let (width, height) = crate::render::extent(scene)?;
         self.context.reset_and_resize(width, height);
+        let mut images = Vec::new();
+        draw::images(&scene.items, &mut images);
+        for image in images {
+            if !self.image_ids.contains_key(&image.id()) {
+                let id = self.resources.register_image(image.pixmap.clone());
+                self.image_ids.insert(image.id(), id);
+            }
+        }
         draw::encode(
             &mut CpuCanvas {
                 context: &mut self.context,
                 resources: &mut self.resources,
             },
             &mut self.outlines,
+            &self.image_ids,
             &scene.items,
         );
         self.outlines.end_frame();
@@ -78,6 +89,14 @@ impl Canvas for CpuCanvas<'_> {
 
     fn set_transform(&mut self, transform: Affine) {
         self.context.set_transform(transform);
+    }
+
+    fn set_paint_transform(&mut self, transform: Affine) {
+        self.context.set_paint_transform(transform);
+    }
+
+    fn reset_paint_transform(&mut self) {
+        self.context.reset_paint_transform();
     }
 
     fn fill_path(&mut self, path: &BezPath) {

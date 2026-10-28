@@ -261,6 +261,33 @@ impl Reference {
                     }
                 }
                 Item::Clip { shape, items } => self.items(items, Some(*shape)),
+                Item::Image { rect, image } => {
+                    assert!(
+                        rect.width as u32 == image.width()
+                            && rect.height as u32 == image.height()
+                            && rect.x.fract() == 0.0
+                            && rect.y.fract() == 0.0,
+                        "the reference draws images at their own size on whole pixels"
+                    );
+                    let pixels = image.premultiplied_rgba();
+                    let (left, top) = (rect.x as i64, rect.y as i64);
+                    let width = i64::from(image.width());
+                    self.blend(
+                        clip,
+                        |x, y| area_coverage(&Shape::rect(*rect), x, y),
+                        |x, y| {
+                            let at = (((i64::from(y) - top) * width + i64::from(x) - left) * 4)
+                                .max(0) as usize;
+                            let [r, g, b, a] =
+                                [0, 1, 2, 3].map(|channel| f64::from(pixels[at + channel]) / 255.0);
+                            if a == 0.0 {
+                                [0.0; 4]
+                            } else {
+                                [r / a, g / a, b / a, a]
+                            }
+                        },
+                    );
+                }
             }
         }
     }

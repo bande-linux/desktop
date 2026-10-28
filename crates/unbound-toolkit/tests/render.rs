@@ -1,8 +1,8 @@
 mod support;
 
 use unbound_toolkit::{
-    Color, CpuRenderer, GpuRenderer, Item, Paint, Palette, Point, Rect, Scene, Scheme, Shape,
-    Spacing, Stop, TextAlign, TextStyle, TextSystem,
+    Color, CpuRenderer, GpuRenderer, Image, Item, Paint, Palette, Point, Rect, Scene, Scheme,
+    Shape, Spacing, Stop, TextAlign, TextStyle, TextSystem,
 };
 
 use support::{Reference, assert_all_match, compare};
@@ -148,12 +148,34 @@ fn settings_card(palette: &Palette, text: &mut TextSystem) -> Scene {
     }
 }
 
+fn icon(palette: &Palette) -> Scene {
+    let (width, height) = (48u32, 32u32);
+    let rgba = (0..height)
+        .flat_map(|y| {
+            (0..width).flat_map(move |x| {
+                let alpha = if (x / 8 + y / 8) % 2 == 0 { 255 } else { 96 };
+                [(x * 5) as u8, (y * 7) as u8, 200, alpha]
+            })
+        })
+        .collect();
+    Scene {
+        width: 96,
+        height: 64,
+        background: palette.surface_background,
+        items: vec![Item::Image {
+            rect: Rect::new(20.0, 12.0, width as f32, height as f32),
+            image: Image::from_rgba(width, height, rgba).expect("icon pixels"),
+        }],
+    }
+}
+
 fn scenes(text: &mut TextSystem) -> Vec<(String, Scene)> {
     let mut scenes = Vec::new();
     for (name, scheme) in [("light", Scheme::Light), ("dark", Scheme::Dark)] {
         let palette = Palette::for_scheme(scheme);
         scenes.push((format!("shapes-{name}"), shapes(&palette)));
         scenes.push((format!("shadow-{name}"), shadow(&palette)));
+        scenes.push((format!("icon-{name}"), icon(&palette)));
         scenes.push((
             format!("settings-card-{name}"),
             settings_card(&palette, text),

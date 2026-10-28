@@ -1,16 +1,21 @@
+use std::collections::HashMap;
 use vello_cpu::color::{AlphaColor, Srgb};
 use vello_cpu::kurbo::{self, Affine, BezPath, Shape as _, Stroke, StrokeOpts};
 use vello_cpu::peniko::Gradient;
-use vello_cpu::{Glyph, PaintType};
+
+use vello_cpu::peniko::{ImageQuality, ImageSampler};
+use vello_cpu::{Glyph, ImageId, ImageSource, PaintType};
 
 use crate::outline::{GlyphOutlines, TOLERANCE};
-use crate::scene::{Item, Paint, Shape};
+use crate::scene::{Image, Item, Paint, Shape};
 use crate::text::GlyphRun;
 use crate::tokens::Color;
 
 pub(crate) trait Canvas {
     fn set_paint(&mut self, paint: PaintType);
     fn set_transform(&mut self, transform: Affine);
+    fn set_paint_transform(&mut self, transform: Affine);
+    fn reset_paint_transform(&mut self);
     fn fill_path(&mut self, path: &BezPath);
     fn fill_blurred_rounded_rect(&mut self, rect: &kurbo::Rect, radius: f32, std_dev: f32);
     fn push_clip_layer(&mut self, path: &BezPath);
@@ -79,7 +84,24 @@ fn stroke_path(shape: &Shape, width: f32) -> BezPath {
     ))
 }
 
-pub(crate) fn encode(canvas: &mut impl Canvas, outlines: &mut GlyphOutlines, items: &[Item]) {
+pub(crate) type ImageIds = HashMap<u64, ImageId>;
+
+pub(crate) fn images(items: &[Item], found: &mut Vec<Image>) {
+    for item in items {
+        match item {
+            Item::Image { image, .. } => found.push(image.clone()),
+            Item::Clip { items, .. } => images(items, found),
+            _ => {}
+        }
+    }
+}
+
+pub(crate) fn encode(
+    canvas: &mut impl Canvas,
+    outlines: &mut GlyphOutlines,
+    image_ids: &ImageIds,
+    items: &[Item],
+) {
     for item in items {
         match item {
             Item::Fill { shape, paint: fill } => {
@@ -139,8 +161,36 @@ pub(crate) fn encode(canvas: &mut impl Canvas, outlines: &mut GlyphOutlines, ite
             }
             Item::Clip { shape, items } => {
                 canvas.push_clip_layer(&path(shape));
-                encode(canvas, outlines, items);
+                encode(canvas, outlines, image_ids, items);
                 canvas.pop_layer();
+            }
+            Item::Image { rect: area, image } => {
+                let Some(id) = image_ids.get(&image.id()) else {
+                    continue;
+                };
+                let shape = Shape::rect(*area);
+                let native = area.width == image.width() as f32
+                    && area.height == image.height() as f32
+                    && area.x.fract() == 0.0
+                    && area.y.fract() == 0.0;
+                let quality = if native {
+                    ImageQuality::Low
+                } else {
+                    ImageQuality::High
+                };
+                canvas.set_paint(PaintType::Image(vello_cpu::Image {
+                    image: ImageSource::opaque_id(*id),
+                    sampler: ImageSampler::default().with_quality(quality),
+                }));
+                canvas.set_paint_transform(
+                    Affine::translate((f64::from(area.x), f64::from(area.y)))
+                        * Affine::scale_non_uniform(
+                            f64::from(area.width) / f64::from(image.width()),
+                            f64::from(area.height) / f64::from(image.height()),
+                        ),
+                );
+                canvas.fill_path(&path(&shape));
+                canvas.reset_paint_transform();
             }
         }
     }

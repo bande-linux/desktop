@@ -8,7 +8,7 @@ use vello_gpu::{
     TextureBindings,
 };
 
-use crate::draw::{self, Canvas};
+use crate::draw::{self, Canvas, ImageIds};
 use crate::outline::GlyphOutlines;
 use crate::render::{RenderError, Snapshot};
 use crate::scene::Scene;
@@ -25,6 +25,7 @@ pub struct GpuRenderer {
     outlines: GlyphOutlines,
     scene: vello_gpu::Scene,
     depth: Option<(RenderSize, wgpu::TextureView)>,
+    image_ids: ImageIds,
 }
 
 impl GpuRenderer {
@@ -64,6 +65,7 @@ impl GpuRenderer {
             outlines: GlyphOutlines::default(),
             scene: vello_gpu::Scene::new(1, 1),
             depth: None,
+            image_ids: ImageIds::new(),
         }
     }
 
@@ -122,12 +124,14 @@ impl GpuRenderer {
     ) -> Result<wgpu::CommandEncoder, RenderError> {
         let (width, height) = crate::render::extent(scene)?;
         self.scene.reset_and_resize(width, height);
+        self.upload_images(scene);
         draw::encode(
             &mut GpuCanvas {
                 scene: &mut self.scene,
                 resources: &mut self.resources,
             },
             &mut self.outlines,
+            &self.image_ids,
             &scene.items,
         );
         self.outlines.end_frame();
@@ -163,6 +167,29 @@ impl GpuRenderer {
             )
             .map_err(|error| RenderError::Gpu(error.to_string()))?;
         Ok(encoder)
+    }
+
+    fn upload_images(&mut self, scene: &Scene) {
+        let mut images = Vec::new();
+        draw::images(&scene.items, &mut images);
+        images.retain(|image| !self.image_ids.contains_key(&image.id()));
+        if images.is_empty() {
+            return;
+        }
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+        for image in images {
+            let id = self.renderer.upload_image(
+                &mut self.resources,
+                &self.device,
+                &self.queue,
+                &mut encoder,
+                &image.pixmap,
+            );
+            self.image_ids.insert(image.id(), id);
+        }
+        self.queue.submit([encoder.finish()]);
     }
 
     fn read_back(
@@ -227,6 +254,14 @@ impl Canvas for GpuCanvas<'_> {
 
     fn set_transform(&mut self, transform: Affine) {
         self.scene.set_transform(transform);
+    }
+
+    fn set_paint_transform(&mut self, transform: Affine) {
+        self.scene.set_paint_transform(transform);
+    }
+
+    fn reset_paint_transform(&mut self) {
+        self.scene.reset_paint_transform();
     }
 
     fn fill_path(&mut self, path: &BezPath) {

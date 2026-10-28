@@ -80,7 +80,7 @@ hardware. Things noticed in passing go to the end of this file, not into a diff.
   composed ARGB window matches the scene, and a fullscreen XRGB udmabuf window is put on
   the primary plane and matches it. `unbound-compositor` defaults to DRM; `--headless`
   keeps the offscreen output for CI and the bench.
-- [ ] **M11 First boot on the M2 Mac mini (hardware smoke test)**
+- [x] **M11 First boot on the M2 Mac mini (hardware smoke test)**
   The compositor on the real M2 mini through the `hil` service (unbound-linux/hil; the
   host is the user's laptop, the mini on USB-C). The mini exposes the bootloader's
   framebuffer through `simpledrm` (no DCP, no GPU), so composition is lavapipe on the
@@ -92,12 +92,15 @@ hardware. Things noticed in passing go to the end of this file, not into a diff.
   golden image within the SSIM bound.
   *Depends on* kernel work done by the user (not in this repo, nor the `hil` repo):
   K1 boot to userspace, K2 `simpledrm` on the boot framebuffer; and on M10.
-  *Status (2026-10-28)*: blocked on K1. The latest `hil` run (`kis-2`, 10:13) ends at
-  m1n1's "Vectoring to next stage" with no kernel output. Once K1 and K2 land, under the
-  shared lock (`mkdir hil-host/mini.lock`, short sessions): boot the `ci/vm` root image
-  contents plus the `ci/deb` packages, start seatd and run the `guest` test binary's
-  `scanout::a_composed_window_is_scanned_out_on_vkms` with the card chosen by connected
-  connector instead of by the vkms driver name, then release the lease and the lock.
+  *Result (2026-10-28, `desktop/milestone-11`)*: with K1 and K2 done, `ci/hil/initramfs.sh`
+  builds a 38 MB initramfs (guest test binary, seatd, lavapipe's library closure; Mesa's
+  GBM backend left out, which the compositor now tolerates). Booted through
+  `hil-host/boot-kis.sh` under the mini lock, `scanout::a_composed_window_is_scanned_out`
+  passed on simpledrm at 1920×1080: libseat took the card, lavapipe composed the window
+  and the framebuffer read back through PRIME matched the scene. The screendump is at
+  `/Volumes/Unbound/hil/hw2/m11/mini-composed-window.png`. The upload runs at about
+  60 KB/s, so the run takes about 12 minutes. Not automated in CI; input on the mini (K3)
+  needs a person at the keyboard.
 - [x] **M12 Keyboard and pointer input** (`desktop/milestone-12`)
   libinput through the libseat session, xkbcommon keymaps, `wl_keyboard`/`wl_pointer`
   with focus-follows-click and the macOS focus rules of section 1.7, cursor drawn by the

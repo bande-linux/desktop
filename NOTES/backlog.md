@@ -11,9 +11,9 @@ hardware. Things noticed in passing go to the end of this file, not into a diff.
 Target: plan phases 1-6 done plus enough protocols for Firefox on Wayland. Pure Wayland:
 XWayland is deferred, to revisit only if a needed app has no Wayland path (macOS
 precedent: XQuartz is a separate, optional install). Progress is tracked per milestone
-below. Estimate at the head of `desktop/milestone-17`: about 60% of the way to the target,
+below. Estimate at the head of `desktop/milestone-17`: about 62% of the way to the target,
 counting the six phases and Firefox equally: phase 1 done; phase 2 about 90% (explicit sync
-left); phase 3 about 75% (idle not yet driving `unbound-power`, environment propagation);
+left); phase 3 about 85% (backlight dimming, Do Not Disturb persistence);
 phase 4 about 35% (panel and launcher, no menu bar, greeter, AT-SPI or input methods);
 phase 5 about 40% (portal and power without their UIs, no audio, network or Bluetooth);
 phase 6 about 30% (launcher and terminal; no files, settings or screenshots); Firefox
@@ -184,11 +184,12 @@ pending its guest test.
   compositor sets logind's `LockedHint`, which `unbound-power` waits for before sleep.
   `ext-idle-notify-v1` v2 and `idle-inhibit-v1` (a visible inhibitor holds off ordinary
   idle, not input idle). Toolkit: `SecureField`, `Role::Lock`. Guest screendumps
-  `m17-lock-screen`, `m17-lock-rejected`, `m17-unlocked`. Not done: `unbound-power` does
-  not yet watch `ext-idle-notify` (it needs `WAYLAND_DISPLAY` in the systemd user
-  environment: phase 3's environment propagation), so idle does not yet dim, lock or
-  sleep; the lock screen shows no Touch ID-style alternatives, no wallpaper and no
-  battery or network state.
+  `m17-lock-screen`, `m17-lock-rejected`, `m17-unlocked`. `unbound-power` watches
+  `ext-idle-notify` (one notification per policy threshold) to dim, lock and sleep, and
+  the compositor exports `WAYLAND_DISPLAY`, `XDG_CURRENT_DESKTOP` and `XDG_SESSION_TYPE`
+  to systemd user units and D-Bus activation. Not done: dimming has no backlight to act
+  on yet; the lock screen shows no wallpaper and no battery or network state;
+  `RestartIdleTimers` after an inhibition ends is not acted on by the Wayland watcher.
 - [ ] **M19 `linux-drm-syncobj-v1` explicit sync (P0)**
   Acquire points through `DrmSyncPointBlocker`, release points from frame completion.
   *Done when* guest tests show a commit is not presented before its acquire point

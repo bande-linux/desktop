@@ -107,6 +107,12 @@ hardware. Things noticed in passing go to the end of this file, not into a diff.
 Built beside M9–M14 without the screen work; each item is headless and tested on
 private buses.
 
+Paused at `adfee74`. Run 40687701440 (automount, d3a6bfe) was still queued, so
+`unbound-tray`, `unbound-automount` and `ci/portal` (its `download-artifact@v7`) are
+green locally but not yet on CI; check that run first. `ci/perf` failures are the
+main track's. Next: the unchecked items below, then theming propagation (GTK
+`settings.ini`, cursor theme) and Do Not Disturb persistence.
+
 - [x] Notification presentation model: banners and Notification Center, stacking by
   app, timeouts, urgency, `transient`, actions, Do Not Disturb (`unbound-notify`).
 - [x] Writable `org.unbound.Config` that edits `config.kdl` in place, the
@@ -117,6 +123,15 @@ private buses.
 - [x] `unbound-polkit` agent protocol, tested against Debian 13's polkitd (`ci/polkit`).
 - [x] Packaging of `unbound-config` and `unbound-power` as systemd user units with
   D-Bus activation, checked in `ci/deb`.
+- [x] `xdg-desktop-portal-unbound`: live `Settings`; `FileChooser`, `Screenshot` and
+  `ScreenCast` protocols over UI and capture traits; `ci/portal` against Debian 13's
+  frontend.
+- [x] `unbound-tray` (`org.kde.StatusNotifierWatcher`) and `unbound-automount`
+  (UDisks2 mounting, "not ejected properly" warning).
+- [ ] Register `FileChooser`, `Screenshot` and `ScreenCast` once the toolkit dialogs
+  and the compositor's capture (PipeWire) implement their traits.
+- [ ] Resolve `appearance "automatic"` to dark or light on a schedule; the portal
+  reports no preference until then.
 - [ ] Drive the idle machine from `ext-idle-notify-v1` once the compositor offers it
   (M17), dim through the backlight, and count logind `idle` block inhibitors of
   other programs (`BlockInhibited`) as inhibition.

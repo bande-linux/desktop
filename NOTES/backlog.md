@@ -58,23 +58,51 @@ hardware. Things noticed in passing go to the end of this file, not into a diff.
   `unbound-render` implementing Smithay's renderer traits, direct scanout and overlay
   planes. *Done when* the compositor drives VKMS in the guest, a fullscreen opaque
   window is scanned out directly, and the writeback/screendump matches the golden.
-- [ ] **M11 `linux-drm-syncobj-v1` explicit sync (P0)**
+- [ ] **M11 First boot on the M2 Mac mini (hardware smoke test)**
+  The compositor on the real M2 mini through the `hil` service (unbound-linux/hil; the
+  host is the user's laptop, the mini on USB-C). The mini exposes the bootloader's
+  framebuffer through `simpledrm` (no DCP, no GPU), so composition is lavapipe on the
+  CPU, and `simpledrm` has one primary plane and no overlays, so `DrmCompositor` falls
+  back to composing everything; the frame clock follows page-flip completion. The M9
+  VM stays the gate on every push; this runs on demand and on milestone tips.
+  *Done when* the mini boots, `unbound-compositor` takes the display through libseat,
+  a test client maps a window, and a screendump or framebuffer readback matches the
+  golden image within the SSIM bound.
+  *Depends on* kernel work done by the user (not in this repo, nor the `hil` repo):
+  K1 boot to userspace, K2 `simpledrm` on the boot framebuffer; and on M10.
+- [ ] **M12 Keyboard and pointer input**
+  libinput through the libseat session, xkbcommon keymaps, `wl_keyboard`/`wl_pointer`
+  with focus-follows-click and the macOS focus rules of section 1.7, cursor drawn by the
+  compositor, and the `Super`-based shortcut layer of section 1.5. *Done when* guest
+  tests inject events through `uinput` and clients receive them with the right focus,
+  and on the mini once K3 (USB input in the kernel) lands.
+- [ ] **M13 Shell protocols** `wlr-layer-shell`, `xdg_activation_v1` (replaces the
+  first-window focus stand-in), `wp_viewporter`, `wp_fractional_scale_v1`. *Done when*
+  a layer surface reserves its exclusive zone and toplevels are placed outside it.
+- [ ] **M14 Minimal shell: first usable desktop**
+  `unbound-panel` (left edge by default, from `config.kdl`) with app buttons and a
+  clock, `unbound-launcher` on `Super+Space` listing `.desktop` entries, and a minimal
+  `unbound-term` (PTY, scrollback, `Super+C`/`Super+V`), all on the current toolkit.
+  *Done when* golden tests cover each surface, a guest session test launches the
+  terminal from the launcher and types into it, and the same works on the mini.
+- [ ] **M15 `linux-drm-syncobj-v1` explicit sync (P0)**
   Acquire points through `DrmSyncPointBlocker`, release points from frame completion.
   *Done when* guest tests show a commit is not presented before its acquire point
   signals and the release point signals after the buffer leaves use.
   Also wait for a dma-buf's implicit fence (`DmabufBlocker`) before latching a commit
   from a client without explicit sync.
-- [ ] **M12 Toolkit on Vello and Parley**
+- [ ] **M16 Toolkit on Vello and Parley**
   `vello_cpu` first frame into `wl_shm`, `vello_gpu` afterwards, Parley text; goldens
-  re-derived from scene descriptions; a toolkit sample app whose start time and RSS
-  `ci/perf` measures.
-- [ ] **M13 Shell protocols** `xdg_activation_v1` (replaces the first-window focus
-  stand-in), `wlr-layer-shell`, `wp_viewporter`, `wp_fractional_scale_v1`.
-- [ ] **M14 Session lock and idle** `ext-session-lock-v1` with blank fallback,
+  re-derived from scene descriptions; panel, launcher and terminal move over; a toolkit
+  sample app whose start time and RSS `ci/perf` measures.
+- [ ] **M17 Session lock and idle** `ext-session-lock-v1` with blank fallback,
   `ext-idle-notify-v1`, `idle-inhibit`, driven by the `idle` config.
-- [ ] **M15 Watchdog** `wl_display` ping heartbeat, unresponsive marking after 3 s.
+- [ ] **M18 Watchdog** `wl_display` ping heartbeat, unresponsive marking after 3 s.
 
 ## Needs hardware
+
+Kernel steps owned by the user: K1 boot the M2 mini to userspace, K2 `simpledrm` on the
+boot framebuffer, K3 USB input. Later, the Apple DCP and agx drivers unlock:
 
 - Overlay planes and direct scanout on Apple's display controller.
 - `VK_KHR_external_semaphore_fd` release path and frame timings on Honeykrisp.

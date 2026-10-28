@@ -164,6 +164,15 @@ fn the_launcher_opens_a_terminal_that_takes_typing() {
     scanout().save("m15-terminal-minimized");
 }
 
+struct Firefox(Child);
+
+impl Drop for Firefox {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
 const FIREFOX_STARTUP: Duration = Duration::from_secs(240);
 const PAGE_COLOR: [u8; 3] = [0xFF, 0x00, 0xFF];
 
@@ -178,23 +187,25 @@ fn firefox_runs_on_wayland_and_opens_a_context_menu() {
     let desktop = start_desktop();
     wait_for("the panel", STARTUP, || running("unbound-panel"));
     fs::create_dir_all("/tmp/firefox-profile").expect("profile directory");
-    let mut firefox = Command::new("firefox-esr")
-        .args([
-            "--new-instance",
-            "--profile",
-            "/tmp/firefox-profile",
-            "data:text/html,<body style='margin:0;background:%23ff00ff'>",
-        ])
-        .env("XDG_RUNTIME_DIR", RUNTIME_DIR)
-        .env("WAYLAND_DISPLAY", &desktop.display)
-        .env("MOZ_ENABLE_WAYLAND", "1")
-        .env_remove("DISPLAY")
-        .env("HOME", "/root")
-        .spawn()
-        .expect("start firefox-esr");
+    let _firefox = Firefox(
+        Command::new("firefox-esr")
+            .args([
+                "--new-instance",
+                "--profile",
+                "/tmp/firefox-profile",
+                "data:text/html,<body style='margin:0;background:%23ff00ff'>",
+            ])
+            .env("XDG_RUNTIME_DIR", RUNTIME_DIR)
+            .env("WAYLAND_DISPLAY", &desktop.display)
+            .env("MOZ_ENABLE_WAYLAND", "1")
+            .env_remove("DISPLAY")
+            .env("HOME", "/root")
+            .spawn()
+            .expect("start firefox-esr"),
+    );
 
     wait_for("Firefox to draw the page", FIREFOX_STARTUP, || {
-        page_pixels(&scanout()) > 10_000
+        current_scanout().is_some_and(|scanout| page_pixels(&scanout) > 10_000)
     });
     thread::sleep(Duration::from_secs(2));
     let page = scanout();
@@ -218,7 +229,4 @@ fn firefox_runs_on_wayland_and_opens_a_context_menu() {
     });
     thread::sleep(Duration::from_secs(1));
     scanout().save("m16-firefox-full-screen");
-
-    let _ = firefox.kill();
-    let _ = firefox.wait();
 }

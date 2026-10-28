@@ -14,6 +14,16 @@ if [ ! -s "$share/executables" ]; then
     exit 1
 fi
 
+cargo build --workspace --locked --bins --message-format=json \
+    | jq -r 'select(.reason == "compiler-artifact" and .executable != null and .target.kind == ["bin"]) | .executable' \
+    > "$share/apps"
+mkdir -p "$share/usr/bin" "$share/usr/share/applications" "$share/usr/share/icons/hicolor/scalable/apps"
+for app in unbound-compositor unbound-clipboard unbound-panel unbound-launcher unbound-term; do
+    cp "$(grep "/$app\$" "$share/apps")" "$share/usr/bin/"
+done
+cp crates/unbound-term/data/unbound-term.desktop "$share/usr/share/applications/"
+cp crates/unbound-term/data/unbound-term.svg "$share/usr/share/icons/hicolor/scalable/apps/"
+
 mkdir "$share/bin"
 while read -r executable; do
     cp "$executable" "$share/bin/$(basename "$executable")"
@@ -24,6 +34,7 @@ set -u
 export RUST_BACKTRACE=1 UNBOUND_SCREENDUMPS=/share/screendumps
 echo "Guest kernel $(uname -r)"
 ls -l /dev/dri
+cp -r /share/usr /
 /usr/lib/systemd/systemd-udevd --daemon
 udevadm trigger --action=add
 udevadm settle

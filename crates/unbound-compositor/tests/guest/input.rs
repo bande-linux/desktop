@@ -1,97 +1,11 @@
-use std::fs::{File, OpenOptions};
-use std::io::Write;
 use std::time::{Duration, Instant};
 
-use rustix::ioctl::{IntegerSetter, NoArg, Opcode, Setter, ioctl, opcode};
 use unbound_compositor::Headless;
 use unbound_test_wayland::{RED, ShmImage, TestClient};
 use wayland_client::protocol::wl_shm::Format;
 
 use crate::session::Session;
-
-const EV_SYN: u16 = 0;
-const EV_KEY: u16 = 1;
-const EV_REL: u16 = 2;
-const REL_X: u16 = 0;
-const REL_Y: u16 = 1;
-const KEY_A: u16 = 30;
-const BTN_LEFT: u16 = 0x110;
-const BUS_VIRTUAL: u16 = 6;
-
-#[repr(C)]
-struct UinputSetup {
-    bustype: u16,
-    vendor: u16,
-    product: u16,
-    version: u16,
-    name: [u8; 80],
-    ff_effects_max: u32,
-}
-
-const UI_DEV_CREATE: Opcode = opcode::none(b'U', 1);
-const UI_DEV_SETUP: Opcode = opcode::write::<UinputSetup>(b'U', 3);
-const UI_SET_EVBIT: Opcode = opcode::write::<i32>(b'U', 100);
-const UI_SET_KEYBIT: Opcode = opcode::write::<i32>(b'U', 101);
-const UI_SET_RELBIT: Opcode = opcode::write::<i32>(b'U', 102);
-
-fn set_bit<const OPCODE: Opcode>(device: &File, value: u16) {
-    unsafe {
-        ioctl(
-            device,
-            IntegerSetter::<OPCODE>::new_usize(usize::from(value)),
-        )
-    }
-    .expect("configure the virtual device");
-}
-
-struct VirtualDevice(File);
-
-impl VirtualDevice {
-    fn keyboard_and_mouse() -> Self {
-        let device = OpenOptions::new()
-            .write(true)
-            .open("/dev/uinput")
-            .expect("open /dev/uinput");
-        for event in [EV_KEY, EV_REL] {
-            set_bit::<UI_SET_EVBIT>(&device, event);
-        }
-        for key in [KEY_A, BTN_LEFT] {
-            set_bit::<UI_SET_KEYBIT>(&device, key);
-        }
-        for axis in [REL_X, REL_Y] {
-            set_bit::<UI_SET_RELBIT>(&device, axis);
-        }
-        let mut name = [0u8; 80];
-        name[..19].copy_from_slice(b"unbound-test-uinput");
-        let setup = UinputSetup {
-            bustype: BUS_VIRTUAL,
-            vendor: 1,
-            product: 1,
-            version: 1,
-            name,
-            ff_effects_max: 0,
-        };
-        unsafe { ioctl(&device, Setter::<UI_DEV_SETUP, UinputSetup>::new(setup)) }
-            .expect("set up the device");
-        unsafe { ioctl(&device, NoArg::<UI_DEV_CREATE>::new()) }.expect("create the device");
-        Self(device)
-    }
-
-    fn emit(&mut self, kind: u16, code: u16, value: i32) {
-        let mut event = [0u8; 24];
-        event[16..18].copy_from_slice(&kind.to_ne_bytes());
-        event[18..20].copy_from_slice(&code.to_ne_bytes());
-        event[20..24].copy_from_slice(&value.to_ne_bytes());
-        self.0.write_all(&event).expect("write an input event");
-    }
-
-    fn frame(&mut self, events: &[(u16, u16, i32)]) {
-        for &(kind, code, value) in events {
-            self.emit(kind, code, value);
-        }
-        self.emit(EV_SYN, 0, 0);
-    }
-}
+use crate::uinput::{BTN_LEFT, EV_KEY, EV_REL, KEY_A, REL_X, VirtualDevice};
 
 fn window(client: &mut TestClient, server: &mut Headless, width: i32, height: i32) {
     let pixels = RED.repeat((width * height) as usize);

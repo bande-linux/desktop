@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 use std::time::{Duration, Instant};
 
-use smithay::utils::Size;
-use unbound_compositor::{FrameStats, Headless, Renderer};
+use smithay::utils::{Clock, Monotonic, Size};
+use unbound_compositor::{FrameClock, FrameScheduler, FrameStats, Headless, REFRESH, Renderer};
 use unbound_test_wayland::{ShmImage, TestClient, quadrants};
 use wayland_client::protocol::wl_shm::Format;
 
@@ -18,6 +18,7 @@ const TYPICAL_DAMAGE: i32 = 64;
 const FRAMES: usize = 240;
 const IDLE_SETTLE: Duration = Duration::from_secs(1);
 const STARTS: usize = 5;
+const PRESENTATIONS: u32 = 120;
 
 const REFRESH_120HZ_MS: f64 = 1000.0 / 120.0;
 const REFRESH_60HZ_MS: f64 = 1000.0 / 60.0;
@@ -62,6 +63,7 @@ fn run() -> Result<bool, Box<dyn Error>> {
     let (typical, typical_work) = frame_times(Repaint::OneWindowCorner)?;
     let (full, _) = frame_times(Repaint::EveryWindow)?;
     let damaged_pixels = (TYPICAL_DAMAGE * TYPICAL_DAMAGE) as f64;
+    let (latencies, late) = presentation_latency()?;
     let mut starts = Vec::with_capacity(STARTS);
     let mut idle_rss = 0.0;
     for _ in 0..STARTS {
@@ -112,6 +114,24 @@ fn run() -> Result<bool, Box<dyn Error>> {
             unit: "ms",
             value: percentile(&full, 0.99),
             budget: REFRESH_60HZ_MS,
+        },
+        Metric {
+            name: "commit_to_present_p50",
+            unit: "ms",
+            value: percentile(&latencies, 0.50),
+            budget: 2.0 * REFRESH_120HZ_MS,
+        },
+        Metric {
+            name: "commit_to_present_p99",
+            unit: "ms",
+            value: percentile(&latencies, 0.99),
+            budget: 2.0 * REFRESH_120HZ_MS,
+        },
+        Metric {
+            name: "presented_after_their_vblank",
+            unit: "frames",
+            value: late as f64,
+            budget: 1.0,
         },
         Metric {
             name: "compositor_start_p50",
@@ -180,7 +200,6 @@ fn frame_times(repaint: Repaint) -> Result<(Vec<Duration>, FrameStats), Box<dyn 
     }
     renderer.render(&mut server)?;
 
-    let start = Instant::now();
     let mut times = Vec::with_capacity(FRAMES);
     let mut most = FrameStats::default();
     for frame in 0..FRAMES {
@@ -206,12 +225,61 @@ fn frame_times(repaint: Repaint) -> Result<(Vec<Duration>, FrameStats), Box<dyn 
             most.uploaded_bytes = most.uploaded_bytes.max(stats.uploaded_bytes);
             most.repainted_pixels = most.repainted_pixels.max(stats.repainted_pixels);
             most.shaded_pixels = most.shaded_pixels.max(stats.shaded_pixels);
-            server.frame_done(start.elapsed())?;
         }
         times.push(composed.elapsed());
         client.exchange(&mut server);
     }
     Ok((times, most))
+}
+
+fn presentation_latency() -> Result<(Vec<Duration>, usize), Box<dyn Error>> {
+    let mut server = Headless::new(Size::from(OUTPUT))?;
+    let mut client = TestClient::connect(&mut server);
+    let mut renderer = Renderer::new()?;
+    let stride = WINDOW_WIDTH * 4;
+    let pixels = quadrants(WINDOW_WIDTH, WINDOW_HEIGHT, stride);
+    let image = ShmImage {
+        width: WINDOW_WIDTH as i32,
+        height: WINDOW_HEIGHT as i32,
+        stride: stride as i32,
+        format: Format::Xrgb8888,
+        bytes: &pixels,
+    };
+    client.show_window(&mut server, &image);
+    let clock = Clock::<Monotonic>::new();
+    let now = || Duration::from(clock.now());
+    let mut scheduler = FrameScheduler::new(FrameClock::new(now(), REFRESH));
+
+    let mut latencies = Vec::new();
+    let mut late = 0;
+    for presentation in 0..=PRESENTATIONS {
+        let phase = REFRESH * (presentation * 37 % 100) / 100;
+        let vblank = scheduler.clock().vblank_after(now());
+        sleep_until(now, vblank.time + phase);
+        let committed = now();
+        client.commit_buffer(0, &image, (0, 0, TYPICAL_DAMAGE, TYPICAL_DAMAGE));
+        server.dispatch()?;
+        let due = scheduler.clock().frame_for(committed);
+        let presented = loop {
+            let poll = scheduler.poll(now(), &mut server, &mut renderer)?;
+            if let Some(presented) = poll.presented {
+                break presented;
+            }
+            if let Some(wake_at) = poll.wake_at {
+                sleep_until(now, wake_at);
+            }
+        };
+        client.exchange(&mut server);
+        if presentation > 0 {
+            latencies.push(presented.time.saturating_sub(committed));
+            late += usize::from(presented.sequence > due.sequence);
+        }
+    }
+    Ok((latencies, late))
+}
+
+fn sleep_until(now: impl Fn() -> Duration, at: Duration) {
+    std::thread::sleep(at.saturating_sub(now()));
 }
 
 fn percentile(times: &[Duration], fraction: f64) -> f64 {

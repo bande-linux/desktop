@@ -181,3 +181,41 @@ fn the_session_stays_locked_and_blank_when_the_lock_client_dies() {
     assert_eq!(pixel(&mut renderer, &mut server, INSIDE_WINDOW), BACKGROUND);
     assert!(editor.keys().is_empty());
 }
+
+#[test]
+fn a_second_lock_is_refused_while_the_first_locker_is_alive() {
+    let (mut server, mut editor) = focused_app();
+    let mut first = locker(&mut server);
+    first.lock_session(&mut server);
+    present_frame(&mut server, 1);
+    let mut second = locker(&mut server);
+
+    second.lock_session(&mut server);
+    roundtrip(&mut server, &mut [&mut first, &mut second, &mut editor]);
+
+    assert!(second.lock_refused());
+    assert!(first.session_locked());
+}
+
+#[test]
+fn a_new_locker_takes_over_after_the_first_one_dies() {
+    let (mut server, mut editor) = focused_app();
+    let mut renderer = Renderer::new().expect("renderer");
+    let mut first = locker(&mut server);
+    first.lock_session(&mut server);
+    present_frame(&mut server, 1);
+    drop(first);
+    roundtrip(&mut server, &mut [&mut editor]);
+
+    let mut second = locker(&mut server);
+    second.lock_session(&mut server);
+    present_frame(&mut server, 2);
+    roundtrip(&mut server, &mut [&mut second, &mut editor]);
+    assert!(second.session_locked());
+    second.show_lock_surface(&mut server, BLUE);
+    assert_eq!(pixel(&mut renderer, &mut server, INSIDE_WINDOW), rgb(BLUE));
+
+    second.unlock_session(&mut server);
+    roundtrip(&mut server, &mut [&mut second, &mut editor]);
+    assert!(editor.keyboard_focus_on(0));
+}

@@ -109,7 +109,7 @@ pub(crate) struct ExclusiveLayer {
 }
 
 pub struct State {
-    display_handle: DisplayHandle,
+    pub(crate) display_handle: DisplayHandle,
     pub(crate) output_size: Size<i32, Physical>,
     refresh: Duration,
     scanout_node: Option<DrmNode>,

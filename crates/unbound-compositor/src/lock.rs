@@ -1,5 +1,7 @@
+use smithay::reexports::wayland_server::backend::ClientId;
 use smithay::reexports::wayland_server::protocol::wl_output::WlOutput;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
+use smithay::reexports::wayland_server::{DisplayHandle, Resource};
 use smithay::utils::{Physical, Point, SERIAL_COUNTER};
 use smithay::wayland::session_lock::{
     LockSurface, SessionLockHandler, SessionLockManagerState, SessionLocker,
@@ -8,10 +10,22 @@ use smithay::wayland::session_lock::{
 use crate::state::{State, mapped_size};
 
 pub(crate) struct Lock {
+    owner: Option<ClientId>,
     surface: Option<LockSurface>,
     previous: Option<WlSurface>,
     confirmation: Option<SessionLocker>,
     blank_latched: bool,
+}
+
+impl Lock {
+    fn owner_alive(&self, display: &DisplayHandle) -> bool {
+        self.owner.as_ref().is_some_and(|owner| {
+            display
+                .backend_handle()
+                .get_client_data(owner.clone())
+                .is_ok()
+        })
+    }
 }
 
 impl State {
@@ -98,9 +112,24 @@ impl SessionLockHandler for State {
     }
 
     fn lock(&mut self, confirmation: SessionLocker) {
+        let owner = confirmation
+            .ext_session_lock()
+            .client()
+            .map(|client| client.id());
+        if let Some(lock) = &mut self.lock {
+            if lock.owner_alive(&self.display_handle) {
+                return;
+            }
+            lock.owner = owner;
+            lock.surface = None;
+            lock.confirmation = Some(confirmation);
+            lock.blank_latched = false;
+            return;
+        }
         self.release_grabs();
         let previous = self.key_window();
         self.lock = Some(Lock {
+            owner,
             surface: None,
             previous,
             confirmation: Some(confirmation),
@@ -132,6 +161,13 @@ impl SessionLockHandler for State {
     }
 
     fn new_surface(&mut self, surface: LockSurface, _output: WlOutput) {
+        let client = surface.wl_surface().client().map(|client| client.id());
+        let Some(lock) = &self.lock else {
+            return;
+        };
+        if client.is_none() || client != lock.owner {
+            return;
+        }
         let size = self.output_size;
         surface.with_pending_state(|state| {
             state.size = Some((size.w.unsigned_abs(), size.h.unsigned_abs()).into());

@@ -1,5 +1,6 @@
 mod button;
 mod label;
+mod secure_field;
 mod slider;
 mod stack;
 mod text_field;
@@ -11,6 +12,7 @@ use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId, TreeInfo, Tre
 
 pub use button::{BUTTON_HEIGHT, Button};
 pub use label::Label;
+pub use secure_field::SecureField;
 pub use slider::{SLIDER_HEIGHT, Slider};
 pub use stack::{Axis, Stack};
 pub use text_field::{TEXT_FIELD_HEIGHT, TextField};

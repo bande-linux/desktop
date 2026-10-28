@@ -3,8 +3,8 @@ use std::rc::Rc;
 
 use accesskit::{Action, ActionData, ActionRequest, Node, NodeId, Role, Toggled, TreeId};
 use unbound_toolkit::ui::{
-    Axis, BUTTON_HEIGHT, Button, Context, Event, Key, Label, Modifiers, SWITCH_SIZE, Size, Slider,
-    Stack, TEXT_FIELD_HEIGHT, TextField, Toggle, Ui, Widget, WidgetId,
+    Axis, BUTTON_HEIGHT, Button, Context, Event, Key, Label, Modifiers, SWITCH_SIZE, SecureField,
+    Size, Slider, Stack, TEXT_FIELD_HEIGHT, TextField, Toggle, Ui, Widget, WidgetId,
 };
 use unbound_toolkit::{Palette, Point, Rect, Scheme, TextSystem};
 
@@ -365,4 +365,82 @@ fn assistive_technology_can_set_a_text_fields_value() {
         data: None,
     });
     assert_eq!(ui.focus(), Some(ids[4]));
+}
+
+struct Secret {
+    cx: Context,
+    field: SecureField,
+    submitted: Rc<RefCell<Vec<String>>>,
+}
+
+impl Secret {
+    fn new() -> Self {
+        let submitted = Rc::new(RefCell::new(Vec::new()));
+        let log = submitted.clone();
+        let mut field = SecureField::new("Password", 13.0, move |secret| {
+            log.borrow_mut().push(secret.to_owned())
+        });
+        let mut cx = context();
+        laid_out(&mut field, &mut cx);
+        Self {
+            cx,
+            field,
+            submitted,
+        }
+    }
+
+    fn type_text(&mut self, text: &str) {
+        for character in text.chars() {
+            self.press(Key::Character(character), NONE);
+        }
+    }
+
+    fn press(&mut self, pressed: Key, modifiers: Modifiers) -> bool {
+        self.field.handle(&mut self.cx, &key(pressed, modifiers))
+    }
+
+    fn submit(&mut self) -> String {
+        self.press(Key::Enter, NONE);
+        self.submitted
+            .borrow()
+            .last()
+            .cloned()
+            .expect("a submission")
+    }
+}
+
+#[test]
+fn a_secure_field_submits_what_was_typed_and_backspace_removes_one_character() {
+    let mut secret = Secret::new();
+    secret.type_text("hunter2");
+    secret.press(Key::Backspace, NONE);
+    assert_eq!(secret.submit(), "hunter");
+}
+
+#[test]
+fn logo_or_alt_backspace_clears_a_secure_field_since_its_words_are_hidden() {
+    for modifiers in [LOGO, ALT] {
+        let mut secret = Secret::new();
+        secret.type_text("two words");
+        secret.press(Key::Backspace, modifiers);
+        assert_eq!(secret.submit(), "");
+    }
+}
+
+#[test]
+fn a_secure_field_does_not_take_copy_or_paste_shortcuts() {
+    let mut secret = Secret::new();
+    secret.type_text("abc");
+    assert!(!secret.press(Key::Character('c'), LOGO));
+    assert!(!secret.press(Key::Character('v'), LOGO));
+    assert_eq!(secret.submit(), "abc");
+}
+
+#[test]
+fn a_secure_field_is_a_password_input_that_never_exposes_its_value() {
+    let mut secret = Secret::new();
+    secret.type_text("abc");
+    let node = secret.field.access(&secret.cx);
+    assert_eq!(node.role(), Role::PasswordInput);
+    assert_eq!(node.value(), None);
 }

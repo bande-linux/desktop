@@ -11,12 +11,12 @@ hardware. Things noticed in passing go to the end of this file, not into a diff.
 Target: plan phases 1-6 done plus enough protocols for Firefox on Wayland. Pure Wayland:
 XWayland is deferred, to revisit only if a needed app has no Wayland path (macOS
 precedent: XQuartz is a separate, optional install). Progress is tracked per milestone
-below. Estimate at the head of `desktop/milestone-17`: about 65% of the way to the target,
+below. Estimate at the head of `desktop/milestone-18`: about 67% of the way to the target,
 counting the six phases and Firefox equally: phase 1 done; phase 2 about 90% (explicit sync
 left); phase 3 about 85% (backlight dimming, Do Not Disturb persistence);
 phase 4 about 35% (panel and launcher, no menu bar, greeter, AT-SPI or input methods);
 phase 5 about 40% (portal and power without their UIs, no audio, network or Bluetooth);
-phase 6 about 30% (launcher and terminal; no files, settings or screenshots); Firefox
+phase 6 about 40% (launcher, terminal and full-screen screenshots; no files or settings); Firefox
 runs natively on Wayland in the guest.
 
 ## Done
@@ -190,12 +190,31 @@ runs natively on Wayland in the guest.
   the compositor exports `WAYLAND_DISPLAY`, `XDG_CURRENT_DESKTOP` and `XDG_SESSION_TYPE`
   to systemd user units and D-Bus activation. Not done: dimming has no backlight to act
   on yet; the lock screen shows no wallpaper and no battery or network state.
-- [ ] **M19 `linux-drm-syncobj-v1` explicit sync (P0)**
+- [x] **M18 Full-screen screenshots** (`desktop/milestone-18`)
+  `ext-image-capture-source-v1` (output sources) and `ext-image-copy-capture-v1` into
+  `wl_shm` buffers, offered to shell clients only (on a Mac capture needs the Screen
+  Recording permission; here the shell is the only trusted capturer and apps will go
+  through the portal). The cursor is left out unless `paint_cursors` is asked for, as in
+  macOS screenshots; a locked screen captures only the lock surface; pointer cursor
+  sessions report `stopped`. `unbound_shell_v1` v2 sends `capture_screen` on
+  Super+Shift+3 (Command-Shift-3), matched on the unshifted key so it holds on any layout.
+  `unbound-screenshot`, a shell client the compositor keeps running, writes
+  `Screenshot YYYY-MM-DD at HH.MM.SS.png` (macOS's name) into the XDG desktop folder
+  through a hidden partial file, numbering a taken name ` (2)`. Toolkit:
+  `Window::capture_screen`. Guest screendumps `m18-screenshot`,
+  `m18-screen-before-capture`. Not done: the floating thumbnail, Super+Shift+4 region and
+  window selection, Super+Shift+5, the shutter sound, dma-buf capture targets, toplevel
+  sources, and the portal's `Screenshot` backed by this capture.
+- [ ] **Explicit sync: `linux-drm-syncobj-v1` (P0)**
   Acquire points through `DrmSyncPointBlocker`, release points from frame completion.
   *Done when* guest tests show a commit is not presented before its acquire point
   signals and the release point signals after the buffer leaves use.
   Also wait for a dma-buf's implicit fence (`DmabufBlocker`) before latching a commit
   from a client without explicit sync.
+  Deferred behind the screenshot and app milestones: neither vkms nor virtio-gpu in the
+  guest's 6.12 kernel offers DRM syncobjs (virtio-gpu gains them in a later series), so the guest
+  cannot test the protocol; the implicit-fence half can be tested now with `sw_sync`
+  fences imported into a udmabuf (`DMA_BUF_IOCTL_IMPORT_SYNC_FILE`).
 - [ ] **Toolkit on Vello and Parley** (track; moved into `desktop/integration`)
   `vello_cpu` first frame into `wl_shm`, `vello_gpu` afterwards, Parley text; goldens
   re-derived from scene descriptions; panel, launcher and terminal move over; a toolkit

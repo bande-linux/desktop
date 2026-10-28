@@ -103,13 +103,13 @@ impl Scanout {
 
 impl Card {
     pub fn scanout(&self) -> Scanout {
+        self.current_scanout().expect("a framebuffer on the CRTC")
+    }
+
+    pub fn current_scanout(&self) -> Option<Scanout> {
         let resources = self.resource_handles().expect("KMS resources");
         let crtc = resources.crtcs()[0];
-        let framebuffer = self
-            .get_crtc(crtc)
-            .expect("CRTC state")
-            .framebuffer()
-            .expect("a framebuffer on the CRTC");
+        let framebuffer = self.get_crtc(crtc).expect("CRTC state").framebuffer()?;
         let info = self
             .get_planar_framebuffer(framebuffer)
             .expect("framebuffer layout");
@@ -154,6 +154,6 @@ impl Card {
             .collect();
         unsafe { munmap(mapped, length) }.expect("unmap the scanned-out buffer");
         self.close_buffer(handle).expect("close the GEM handle");
-        Scanout { width, height, rgb }
+        Some(Scanout { width, height, rgb })
     }
 }

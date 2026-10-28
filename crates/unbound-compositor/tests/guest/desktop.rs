@@ -26,9 +26,13 @@ impl Drop for Desktop {
     }
 }
 
-fn scanout() -> Scanout {
+fn current_scanout() -> Option<Scanout> {
     card_with_driver(&std::env::var("UNBOUND_TEST_DRIVER").unwrap_or_else(|_| "vkms".to_owned()))
-        .scanout()
+        .current_scanout()
+}
+
+fn scanout() -> Scanout {
+    current_scanout().expect("a framebuffer on the CRTC")
 }
 
 fn pixel(scanout: &Scanout, x: usize, y: usize) -> [u8; 3] {
@@ -79,7 +83,8 @@ fn the_launcher_opens_a_terminal_that_takes_typing() {
     let _desktop = start_desktop();
 
     wait_for("the panel", STARTUP, || {
-        running("unbound-panel") && pixel(&scanout(), 32, 200) != BACKGROUND
+        running("unbound-panel")
+            && current_scanout().is_some_and(|scanout| pixel(&scanout, 32, 200) != BACKGROUND)
     });
     thread::sleep(Duration::from_secs(1));
     let desktop = scanout();

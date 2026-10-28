@@ -1,0 +1,12 @@
+[package]
+name = "unbound-notify"
+description = "Unbound notification daemon (org.freedesktop.Notifications)"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+zbus.workspace = true
+
+[dev-dependencies]
+unbound-test-bus.workspace = true

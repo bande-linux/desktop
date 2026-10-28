@@ -1729,6 +1729,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "unbound-notify"
+version = "0.1.0"
+dependencies = [
+ "unbound-test-bus",
+ "zbus",
+]
+
+[[package]]
 name = "unbound-spring"
 version = "0.1.0"
 

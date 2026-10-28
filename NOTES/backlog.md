@@ -36,11 +36,14 @@ hardware. Things noticed in passing go to the end of this file, not into a diff.
   Result on the runners: typical frame p50 0.28 ms / p99 0.51 ms (was 11.4 / 39.1),
   full repaint p50 4.6 ms / p99 11.4 ms, start p50 30 ms (was 2214), idle RSS 89 MiB.
   Opaque windows also hide what lies below them from shading.
-- [ ] **M7 `linux-dmabuf-v1` with Vulkan import**
+- [x] **M7 `linux-dmabuf-v1` with Vulkan import** (`desktop/milestone-7`)
   Single-plane LINEAR ARGB/XRGB8888 buffers imported through
   `VK_EXT_external_memory_dma_buf`; version 3 global while there is no DRM device
   (feedback needs one). *Done when* a dmabuf window renders to the golden image on
   lavapipe and invalid buffers fail with the protocol's errors.
+  Runners have no dma-buf exporter (no `/dev/udmabuf`, no DRM device), so tests back
+  the buffers with a file that lavapipe imports through the same dma-buf path; real
+  PRIME dma-bufs are exercised once the KVM rig (M9) exists.
 - [ ] **M8 Frame scheduling and `wp_presentation_time`**
   Virtual 120 Hz vblank clock in the headless backend, composing at the deadline, frame
   callbacks and presentation feedback after presentation. *Done when* tests show a
@@ -59,6 +62,8 @@ hardware. Things noticed in passing go to the end of this file, not into a diff.
   Acquire points through `DrmSyncPointBlocker`, release points from frame completion.
   *Done when* guest tests show a commit is not presented before its acquire point
   signals and the release point signals after the buffer leaves use.
+  Also wait for a dma-buf's implicit fence (`DmabufBlocker`) before latching a commit
+  from a client without explicit sync.
 - [ ] **M12 Toolkit on Vello and Parley**
   `vello_cpu` first frame into `wl_shm`, `vello_gpu` afterwards, Parley text; goldens
   re-derived from scene descriptions; a toolkit sample app whose start time and RSS
@@ -73,6 +78,8 @@ hardware. Things noticed in passing go to the end of this file, not into a diff.
 
 - Overlay planes and direct scanout on Apple's display controller.
 - `VK_KHR_external_semaphore_fd` release path and frame timings on Honeykrisp.
+- Zero-copy sampling of dma-bufs through `VK_EXT_image_drm_format_modifier` (and
+  linux-dmabuf feedback with tiled modifiers) on Honeykrisp, instead of the copy.
 - Input-to-photon measured with a camera or photodiode on a real Mac.
 
 ## Noticed in passing

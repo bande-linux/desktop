@@ -12,6 +12,12 @@ use crate::tokens::Color;
 pub const FONT_FAMILY: &str = "Inter";
 pub const DISPLAY_FONT_FAMILY: &str = "Inter Display";
 pub const DISPLAY_SIZE: f32 = 20.0;
+pub const MONOSPACE_FONT_FAMILY: &str = "DejaVu Sans Mono";
+
+static MONOSPACE_FAMILIES: [FontFamilyName<'static>; 2] = [
+    FontFamilyName::named(MONOSPACE_FONT_FAMILY),
+    FontFamilyName::Generic(GenericFamily::Monospace),
+];
 
 static TEXT_FAMILIES: [FontFamilyName<'static>; 2] = [
     FontFamilyName::named(FONT_FAMILY),
@@ -33,11 +39,19 @@ pub(crate) fn families(size: f32) -> FontFamily<'static> {
     FontFamily::List(families.into())
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum Typeface {
+    #[default]
+    Interface,
+    Monospace,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TextStyle {
     pub size: f32,
     pub weight: f32,
     pub color: Color,
+    pub typeface: Typeface,
 }
 
 impl TextStyle {
@@ -50,6 +64,14 @@ impl TextStyle {
             size,
             weight: Self::REGULAR,
             color,
+            typeface: Typeface::Interface,
+        }
+    }
+
+    pub const fn monospace(self) -> Self {
+        Self {
+            typeface: Typeface::Monospace,
+            ..self
         }
     }
 
@@ -99,10 +121,10 @@ impl TextSystem {
         let mut builder = self
             .layouts
             .ranged_builder(&mut self.fonts, text, 1.0, true);
-        let families = if style.size >= DISPLAY_SIZE {
-            DISPLAY_FAMILIES.as_slice()
-        } else {
-            TEXT_FAMILIES.as_slice()
+        let families = match style.typeface {
+            Typeface::Monospace => MONOSPACE_FAMILIES.as_slice(),
+            Typeface::Interface if style.size >= DISPLAY_SIZE => DISPLAY_FAMILIES.as_slice(),
+            Typeface::Interface => TEXT_FAMILIES.as_slice(),
         };
         builder.push_default(StyleProperty::FontFamily(FontFamily::List(families.into())));
         builder.push_default(StyleProperty::FontSize(style.size));

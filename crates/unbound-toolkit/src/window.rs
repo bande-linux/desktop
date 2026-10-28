@@ -370,6 +370,12 @@ impl Window {
         self.state.suggested_size.unwrap_or(self.size)
     }
 
+    pub fn set_title(&mut self, title: &str) {
+        if let ShellSurface::Toplevel(_, toplevel) = &self.role {
+            toplevel.set_title(title.to_owned());
+        }
+    }
+
     pub fn is_closed(&self) -> bool {
         self.state.closed
     }

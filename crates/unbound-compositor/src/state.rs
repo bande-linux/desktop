@@ -11,6 +11,11 @@ use rustix::io::{FdFlags, fcntl_setfd};
 
 use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::{Buffer, Format as DmabufFormat, Fourcc, Modifier};
+use smithay::backend::renderer::element::Kind as ElementKind;
+use smithay::backend::renderer::element::surface::{
+    WaylandSurfaceRenderElement, render_elements_from_surface_tree,
+};
+use smithay::backend::renderer::utils::{on_commit_buffer_handler, with_renderer_surface_state};
 use smithay::input::keyboard::XkbConfig;
 use smithay::output::{Mode, Output, PhysicalProperties, Subpixel};
 use smithay::input::{Seat, SeatHandler, SeatState};
@@ -26,8 +31,7 @@ use smithay::reexports::wayland_server::{Client, Display, DisplayHandle, Resourc
 use smithay::utils::{Physical, Point, SERIAL_COUNTER, Serial, Size};
 use smithay::wayland::buffer::BufferHandler;
 use smithay::wayland::compositor::{
-    BufferAssignment, CompositorClientState, CompositorHandler, CompositorState, Damage,
-    SurfaceAttributes, with_states,
+    CompositorClientState, CompositorHandler, CompositorState, SurfaceAttributes, with_states,
 };
 use smithay::wayland::dmabuf::{
     DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier, get_dmabuf,
@@ -54,7 +58,7 @@ use smithay::{
     delegate_output, delegate_presentation, delegate_primary_selection, delegate_seat,
     delegate_shm, delegate_xdg_shell,
 };
-use unbound_render::Rect;
+use unbound_render::VulkanRenderer;
 
 use crate::clock::Vblank;
 
@@ -62,17 +66,10 @@ pub const REFRESH: Duration = Duration::from_nanos(1_000_000_000 / 120);
 
 const REFRESH_MILLIHERTZ: i32 = 120_000;
 
-pub(crate) struct PendingBuffer {
-    pub(crate) buffer: WlBuffer,
-    pub(crate) damage: Vec<Rect>,
-}
-
 pub struct Window {
-    pub(crate) id: u64,
     toplevel: ToplevelSurface,
     location: Point<i32, Physical>,
     size: Option<Size<i32, Physical>>,
-    pub(crate) pending: Option<PendingBuffer>,
 }
 
 impl Window {
@@ -82,17 +79,6 @@ impl Window {
 
     pub fn size(&self) -> Option<Size<i32, Physical>> {
         self.size
-    }
-
-    fn bounds(&self) -> Option<Rect> {
-        let size = self.size?;
-        Some(Rect::new(self.location.x, self.location.y, size.w, size.h))
-    }
-
-    fn release_pending(&mut self) {
-        if let Some(pending) = self.pending.take() {
-            pending.buffer.release();
-        }
     }
 }
 
@@ -112,15 +98,13 @@ pub struct State {
     data_device_state: DataDeviceState,
     primary_selection_state: PrimarySelectionState,
     data_control_state: DataControlState,
-    pub(crate) windows: Vec<Window>,
-    next_window_id: u64,
-    pub(crate) damage: Vec<Rect>,
+    windows: Vec<Window>,
     needs_redraw: bool,
 }
 
 pub struct Headless {
     display: Display<State>,
-    pub(crate) state: State,
+    state: State,
     latched_feedback: Vec<PresentationFeedbackCallback>,
     latched_frame_callbacks: Vec<WlCallback>,
     clipboard_daemon: Option<ClipboardDaemon>,
@@ -192,8 +176,6 @@ impl Headless {
             primary_selection_state,
             data_control_state,
             windows: Vec::new(),
-            next_window_id: 0,
-            damage: Vec::new(),
             needs_redraw: false,
         };
         Ok(Self {
@@ -334,6 +316,28 @@ impl Headless {
     pub fn windows(&self) -> &[Window] {
         &self.state.windows
     }
+
+    pub fn render_elements(
+        &self,
+        renderer: &mut VulkanRenderer,
+    ) -> Vec<WaylandSurfaceRenderElement<VulkanRenderer>> {
+        self.state
+            .windows
+            .iter()
+            .rev()
+            .filter(|window| window.size.is_some())
+            .flat_map(|window| {
+                render_elements_from_surface_tree(
+                    renderer,
+                    window.toplevel.wl_surface(),
+                    window.location,
+                    1.0,
+                    1.0,
+                    ElementKind::Unspecified,
+                )
+            })
+            .collect()
+    }
 }
 
 #[derive(Default)]
@@ -364,14 +368,6 @@ fn shm_size(buffer: &WlBuffer) -> Option<Size<i32, Physical>> {
         .then(|| Size::from((data.width, data.height)))
 }
 
-fn buffer_rect(damage: &Damage) -> Rect {
-    let (x, y, width, height) = match damage {
-        Damage::Surface(rect) => (rect.loc.x, rect.loc.y, rect.size.w, rect.size.h),
-        Damage::Buffer(rect) => (rect.loc.x, rect.loc.y, rect.size.w, rect.size.h),
-    };
-    Rect::new(x, y, width, height)
-}
-
 impl State {
     fn focused(&self) -> Option<WlSurface> {
         self.seat
@@ -387,9 +383,6 @@ impl State {
                 .position(|window| window.toplevel.wl_surface() == surface)
         {
             let window = self.windows.remove(index);
-            if index < self.windows.len() {
-                self.damage.extend(window.bounds());
-            }
             self.windows.push(window);
             self.needs_redraw = true;
         }
@@ -469,6 +462,8 @@ impl CompositorHandler for State {
     }
 
     fn commit(&mut self, surface: &WlSurface) {
+        on_commit_buffer_handler::<Self>(surface);
+        self.needs_redraw = true;
         let Some(window) = self
             .windows
             .iter_mut()
@@ -476,57 +471,17 @@ impl CompositorHandler for State {
         else {
             return;
         };
-        self.needs_redraw = true;
-        let (assignment, damage) = with_states(surface, |states| {
-            let mut attributes = states.cached_state.get::<SurfaceAttributes>();
-            let current = attributes.current();
-            (current.buffer.take(), std::mem::take(&mut current.damage))
-        });
-        let before = window.bounds();
-        let mut updated = Vec::new();
-        match assignment {
-            Some(BufferAssignment::NewBuffer(buffer)) => match buffer_size(&buffer) {
-                Some(size) => {
-                    if window.size.is_none() {
-                        window.location = centered(self.output_size, size);
-                    }
-                    if window.size == Some(size) {
-                        updated = damage.iter().map(buffer_rect).collect();
-                    } else {
-                        updated = vec![Rect::new(0, 0, size.w, size.h)];
-                    }
-                    window.size = Some(size);
-                    let mut pending = updated.clone();
-                    if let Some(previous) = window.pending.take() {
-                        previous.buffer.release();
-                        pending.extend(previous.damage);
-                    }
-                    window.pending = Some(PendingBuffer {
-                        buffer,
-                        damage: pending,
-                    });
-                }
-                None => buffer.release(),
-            },
-            Some(BufferAssignment::Removed) => {
-                window.size = None;
-                window.release_pending();
-            }
-            None => {}
+        let size = with_renderer_surface_state(surface, |state| {
+            state.buffer().and_then(|buffer| buffer_size(buffer))
+        })
+        .flatten();
+        let mapped = window.size.is_some();
+        if !mapped && let Some(size) = size {
+            window.location = centered(self.output_size, size);
         }
-        let after = window.bounds();
-        if before != after {
-            self.damage.extend(before);
-            self.damage.extend(after);
-        } else if let Some(bounds) = after {
-            self.damage.extend(
-                updated
-                    .iter()
-                    .filter_map(|rect| rect.translated(bounds.x, bounds.y).intersection(&bounds)),
-            );
-        }
+        window.size = size;
         let surface = window.toplevel.wl_surface().clone();
-        match (before.is_some(), after.is_some()) {
+        match (mapped, size.is_some()) {
             (false, true) if self.takes_focus_when_mapped(&surface) => self.focus(Some(surface)),
             (false, true) => self.place_behind_frontmost(&surface),
             (true, false) => self.refocus_after_losing(&surface),
@@ -576,13 +531,10 @@ impl XdgShellHandler for State {
             state.states.set(xdg_toplevel::State::Activated);
         });
         toplevel.send_configure();
-        self.next_window_id += 1;
         self.windows.push(Window {
-            id: self.next_window_id,
             toplevel,
             location: Point::default(),
             size: None,
-            pending: None,
         });
     }
 
@@ -592,9 +544,7 @@ impl XdgShellHandler for State {
             .iter()
             .position(|window| window.toplevel == toplevel)
         {
-            let mut window = self.windows.remove(index);
-            window.release_pending();
-            self.damage.extend(window.bounds());
+            self.windows.remove(index);
         }
         self.needs_redraw = true;
         self.refocus_after_losing(toplevel.wl_surface());

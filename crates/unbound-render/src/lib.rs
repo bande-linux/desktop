@@ -1,20 +1,33 @@
+mod frame;
+mod import;
 mod rect;
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ffi::CStr;
 use std::fmt;
 use std::fs::File;
 use std::io::{Seek, SeekFrom};
+use std::marker::PhantomData;
 use std::os::fd::{AsRawFd, BorrowedFd, FromRawFd, IntoRawFd, OwnedFd};
+use std::rc::Rc;
 use std::slice;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use ash::vk;
+use smithay::backend::allocator::dmabuf::{Dmabuf, WeakDmabuf};
+use smithay::backend::allocator::format::FormatSet;
+use smithay::backend::allocator::{Buffer, Format, Fourcc, Modifier};
+use smithay::backend::renderer::sync::SyncPoint;
+use smithay::backend::renderer::{
+    Bind, ContextId, DebugFlags, Offscreen, Renderer, RendererSuper, Texture, TextureFilter,
+};
+use smithay::utils::{Buffer as BufferCoords, Physical, Size, Transform};
 
+pub use frame::VulkanFrame;
 pub use rect::{Rect, disjoint};
 
 const SPIRV: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/compose.spv"));
-const TARGET_FORMAT: vk::Format = vk::Format::R8G8B8A8_UNORM;
-const TEXTURE_FORMAT: vk::Format = vk::Format::B8G8R8A8_UNORM;
 const BYTES_PER_PIXEL: usize = 4;
 const MIN_STAGING_BYTES: usize = 4 << 20;
 const REQUIRED_EXTENSIONS: [&CStr; 3] = [
@@ -22,6 +35,10 @@ const REQUIRED_EXTENSIONS: [&CStr; 3] = [
     ash::khr::external_memory_fd::NAME,
     ash::ext::external_memory_dma_buf::NAME,
 ];
+const TARGET_FORMATS: [vk::Format; 2] = [vk::Format::B8G8R8A8_UNORM, vk::Format::R8G8B8A8_UNORM];
+const TEXTURE_FOURCCS: [Fourcc; 2] = [Fourcc::Argb8888, Fourcc::Xrgb8888];
+
+static NEXT_RENDERER: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug)]
 pub enum RenderError {
@@ -31,8 +48,13 @@ pub enum RenderError {
     NoMemoryType,
     BufferOutOfBounds,
     UnalignedDmabuf,
-    Io(std::io::Error),
+    UnsupportedFormat,
+    UnsupportedTransform,
+    UnknownBuffer,
+    ForeignResource,
+    Interrupted,
     NothingRendered,
+    Io(std::io::Error),
 }
 
 impl fmt::Display for RenderError {
@@ -48,8 +70,15 @@ impl fmt::Display for RenderError {
             Self::UnalignedDmabuf => {
                 f.write_str("dma-buf offset or stride is not a multiple of the pixel size")
             }
-            Self::Io(error) => write!(f, "cannot size the dma-buf: {error}"),
+            Self::UnsupportedFormat => f.write_str("pixel format or layout is not supported"),
+            Self::UnsupportedTransform => f.write_str("only untransformed rendering is supported"),
+            Self::UnknownBuffer => f.write_str("buffer is neither wl_shm nor a dma-buf"),
+            Self::ForeignResource => {
+                f.write_str("texture or render target belongs to another renderer")
+            }
+            Self::Interrupted => f.write_str("waiting for a sync point was interrupted"),
             Self::NothingRendered => f.write_str("no frame has been rendered yet"),
+            Self::Io(error) => write!(f, "cannot size the dma-buf: {error}"),
         }
     }
 }
@@ -80,36 +109,87 @@ pub struct DeviceInfo {
     pub driver: String,
 }
 
-pub struct DmabufView<'a> {
-    pub fd: BorrowedFd<'a>,
-    pub offset: u32,
-    pub stride: u32,
-    pub width: i32,
-    pub height: i32,
-    pub opaque: bool,
-}
-
-pub struct ShmView<'a> {
-    pub pool: &'a [u8],
-    pub offset: usize,
-    pub stride: usize,
-    pub width: i32,
-    pub height: i32,
-    pub opaque: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Placement {
-    pub texture: u64,
-    pub x: i32,
-    pub y: i32,
-}
-
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub struct FrameStats {
+pub struct Counters {
     pub uploaded_bytes: u64,
-    pub repainted_pixels: u64,
     pub shaded_pixels: u64,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum Resource {
+    Texture(u64),
+    Target(u64),
+}
+
+type Graveyard = Rc<RefCell<Vec<Resource>>>;
+
+#[derive(Debug)]
+struct Owned {
+    resource: Resource,
+    graveyard: Graveyard,
+}
+
+impl Drop for Owned {
+    fn drop(&mut self) {
+        self.graveyard.borrow_mut().push(self.resource);
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct VulkanTexture {
+    _owned: Rc<Owned>,
+    id: u64,
+    renderer: u64,
+    width: i32,
+    height: i32,
+    format: Fourcc,
+}
+
+impl Texture for VulkanTexture {
+    fn width(&self) -> u32 {
+        self.width.unsigned_abs()
+    }
+
+    fn height(&self) -> u32 {
+        self.height.unsigned_abs()
+    }
+
+    fn format(&self) -> Option<Fourcc> {
+        Some(self.format)
+    }
+}
+
+#[derive(Debug)]
+pub struct OffscreenTarget {
+    _owned: Owned,
+    id: u64,
+    renderer: u64,
+    width: i32,
+    height: i32,
+    format: Fourcc,
+}
+
+#[derive(Debug)]
+pub struct VulkanFramebuffer<'buffer> {
+    id: u64,
+    width: i32,
+    height: i32,
+    format: Fourcc,
+    _target: PhantomData<&'buffer mut ()>,
+}
+
+impl Texture for VulkanFramebuffer<'_> {
+    fn width(&self) -> u32 {
+        self.width.unsigned_abs()
+    }
+
+    fn height(&self) -> u32 {
+        self.height.unsigned_abs()
+    }
+
+    fn format(&self) -> Option<Fourcc> {
+        Some(self.format)
+    }
 }
 
 struct Image {
@@ -120,10 +200,28 @@ struct Image {
     height: i32,
 }
 
-struct Texture {
+struct TextureImage {
     image: Image,
-    opaque: bool,
     readable: bool,
+}
+
+struct Imported {
+    buffer: vk::Buffer,
+    memory: vk::DeviceMemory,
+    size: u64,
+}
+
+struct Export {
+    imported: Imported,
+    offset: u64,
+    row_texels: u32,
+}
+
+struct Target {
+    image: Image,
+    format: vk::Format,
+    rendered: bool,
+    export: Option<Export>,
 }
 
 struct Staging {
@@ -142,12 +240,7 @@ struct PendingCopy {
     rect: Rect,
 }
 
-struct Imported {
-    buffer: vk::Buffer,
-    memory: vk::DeviceMemory,
-}
-
-pub struct Renderer {
+pub struct VulkanRenderer {
     instance: ash::Instance,
     device: ash::Device,
     push_descriptor: ash::khr::push_descriptor::Device,
@@ -160,14 +253,31 @@ pub struct Renderer {
     fence: vk::Fence,
     set_layout: vk::DescriptorSetLayout,
     pipeline_layout: vk::PipelineLayout,
-    pipeline: vk::Pipeline,
-    target: Option<Image>,
-    textures: HashMap<u64, Texture>,
+    pipelines: HashMap<(vk::Format, bool), vk::Pipeline>,
+    id: u64,
+    context: ContextId<VulkanTexture>,
+    debug_flags: DebugFlags,
+    graveyard: Graveyard,
+    next_resource: u64,
+    textures: HashMap<u64, TextureImage>,
+    targets: HashMap<u64, Target>,
+    dmabuf_targets: HashMap<WeakDmabuf, u64>,
+    dmabuf_textures: HashMap<WeakDmabuf, VulkanTexture>,
+    imports: HashMap<WeakDmabuf, Imported>,
     staging: Vec<Staging>,
     copies: Vec<PendingCopy>,
-    imports: HashMap<u64, Imported>,
-    uploaded_bytes: u64,
+    counters: Counters,
     _entry: ash::Entry,
+}
+
+impl fmt::Debug for VulkanRenderer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("VulkanRenderer")
+            .field("device", &self.info)
+            .field("textures", &self.textures.len())
+            .field("targets", &self.targets.len())
+            .finish_non_exhaustive()
+    }
 }
 
 struct Chosen {
@@ -233,7 +343,33 @@ fn choose_device(instance: &ash::Instance) -> Result<Chosen, RenderError> {
         .ok_or(RenderError::NoDevice)
 }
 
-impl Renderer {
+fn target_format(format: Fourcc) -> Option<vk::Format> {
+    match format {
+        Fourcc::Argb8888 | Fourcc::Xrgb8888 => Some(vk::Format::B8G8R8A8_UNORM),
+        Fourcc::Abgr8888 | Fourcc::Xbgr8888 => Some(vk::Format::R8G8B8A8_UNORM),
+        _ => None,
+    }
+}
+
+fn is_opaque(format: Fourcc) -> Option<bool> {
+    match format {
+        Fourcc::Argb8888 => Some(false),
+        Fourcc::Xrgb8888 => Some(true),
+        _ => None,
+    }
+}
+
+fn linear_formats() -> FormatSet {
+    TEXTURE_FOURCCS
+        .iter()
+        .map(|&code| Format {
+            code,
+            modifier: Modifier::Linear,
+        })
+        .collect()
+}
+
+impl VulkanRenderer {
     pub fn new() -> Result<Self, RenderError> {
         let entry = unsafe { ash::Entry::load() }?;
         let application = vk::ApplicationInfo::default()
@@ -287,13 +423,20 @@ impl Renderer {
             fence: vk::Fence::null(),
             set_layout: vk::DescriptorSetLayout::null(),
             pipeline_layout: vk::PipelineLayout::null(),
-            pipeline: vk::Pipeline::null(),
-            target: None,
+            pipelines: HashMap::new(),
+            id: NEXT_RENDERER.fetch_add(1, Ordering::Relaxed),
+            context: ContextId::new(),
+            debug_flags: DebugFlags::empty(),
+            graveyard: Graveyard::default(),
+            next_resource: 0,
             textures: HashMap::new(),
+            targets: HashMap::new(),
+            dmabuf_targets: HashMap::new(),
+            dmabuf_textures: HashMap::new(),
+            imports: HashMap::new(),
             staging: Vec::new(),
             copies: Vec::new(),
-            imports: HashMap::new(),
-            uploaded_bytes: 0,
+            counters: Counters::default(),
             instance,
             device,
             _entry: entry,
@@ -340,7 +483,7 @@ impl Renderer {
         }?;
         let quad = vk::PushConstantRange::default()
             .stage_flags(vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT)
-            .size(QUAD_BYTES);
+            .size(frame::QUAD_BYTES);
         self.pipeline_layout = unsafe {
             device.create_pipeline_layout(
                 &vk::PipelineLayoutCreateInfo::default()
@@ -349,11 +492,20 @@ impl Renderer {
                 None,
             )
         }?;
-        self.pipeline = self.create_pipeline()?;
+        for format in TARGET_FORMATS {
+            for solid in [false, true] {
+                let pipeline = self.create_pipeline(format, solid)?;
+                self.pipelines.insert((format, solid), pipeline);
+            }
+        }
         Ok(())
     }
 
-    fn create_pipeline(&self) -> Result<vk::Pipeline, RenderError> {
+    fn create_pipeline(
+        &self,
+        format: vk::Format,
+        solid: bool,
+    ) -> Result<vk::Pipeline, RenderError> {
         let words: Vec<u32> = SPIRV
             .as_chunks::<4>()
             .0
@@ -372,7 +524,7 @@ impl Renderer {
             vk::PipelineShaderStageCreateInfo::default()
                 .stage(vk::ShaderStageFlags::FRAGMENT)
                 .module(module)
-                .name(c"fragment"),
+                .name(if solid { c"solid" } else { c"fragment" }),
         ];
         let vertex_input = vk::PipelineVertexInputStateCreateInfo::default();
         let assembly = vk::PipelineInputAssemblyStateCreateInfo::default()
@@ -399,7 +551,7 @@ impl Renderer {
             .attachments(slice::from_ref(&premultiplied));
         let dynamic_states = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
         let dynamic = vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dynamic_states);
-        let formats = [TARGET_FORMAT];
+        let formats = [format];
         let mut rendering =
             vk::PipelineRenderingCreateInfo::default().color_attachment_formats(&formats);
         let info = vk::GraphicsPipelineCreateInfo::default()
@@ -430,6 +582,54 @@ impl Renderer {
 
     pub fn device_info(&self) -> &DeviceInfo {
         &self.info
+    }
+
+    pub fn take_counters(&mut self) -> Counters {
+        std::mem::take(&mut self.counters)
+    }
+
+    pub fn read_target(&mut self, target: &OffscreenTarget) -> Result<Vec<u8>, RenderError> {
+        if target.renderer != self.id {
+            return Err(RenderError::ForeignResource);
+        }
+        let (image, width, height, rendered) = match self.targets.get(&target.id) {
+            Some(found) => (
+                found.image.image,
+                found.image.width,
+                found.image.height,
+                found.rendered,
+            ),
+            None => return Err(RenderError::ForeignResource),
+        };
+        let row_bytes = width.unsigned_abs() as usize * BYTES_PER_PIXEL;
+        let bytes = row_bytes * height.unsigned_abs() as usize;
+        if !rendered {
+            return Ok(vec![0; bytes]);
+        }
+        let readback = self.create_staging(bytes)?;
+        let result = self
+            .copy_target_to(&readback, image, width, height)
+            .map(|()| {
+                let mut pixels = vec![0u8; bytes];
+                unsafe {
+                    std::ptr::copy_nonoverlapping(readback.mapped, pixels.as_mut_ptr(), bytes)
+                };
+                pixels
+            });
+        self.destroy_staging(&readback);
+        result
+    }
+
+    fn next_id(&mut self) -> u64 {
+        self.next_resource += 1;
+        self.next_resource
+    }
+
+    fn owned(&self, resource: Resource) -> Owned {
+        Owned {
+            resource,
+            graveyard: self.graveyard.clone(),
+        }
     }
 
     fn memory_type(
@@ -552,6 +752,13 @@ impl Renderer {
         }
     }
 
+    fn destroy_imported(&self, imported: &Imported) {
+        unsafe {
+            self.device.destroy_buffer(imported.buffer, None);
+            self.device.free_memory(imported.memory, None);
+        }
+    }
+
     fn create_staging(&self, capacity: usize) -> Result<Staging, RenderError> {
         let buffer = unsafe {
             self.device.create_buffer(
@@ -631,57 +838,29 @@ impl Renderer {
         Ok((index, offset))
     }
 
-    pub fn upload(
-        &mut self,
-        texture: u64,
-        view: &ShmView,
-        damage: &[Rect],
-    ) -> Result<(), RenderError> {
-        let rects = self.prepare_texture(texture, view.width, view.height, view.opaque, damage)?;
-        for rect in rects {
-            self.stage(texture, view, rect)?;
+    fn recycle_staging(&mut self) {
+        let Some(largest) = self
+            .staging
+            .iter()
+            .enumerate()
+            .max_by_key(|(_, staging)| staging.capacity)
+            .map(|(index, _)| index)
+        else {
+            return;
+        };
+        let mut kept = self.staging.swap_remove(largest);
+        kept.used = 0;
+        for staging in std::mem::take(&mut self.staging) {
+            self.destroy_staging(&staging);
         }
-        Ok(())
+        self.staging.push(kept);
     }
 
-    pub fn upload_dmabuf(
-        &mut self,
-        texture: u64,
-        import: u64,
-        view: &DmabufView,
-        damage: &[Rect],
-    ) -> Result<(), RenderError> {
-        let pixel = BYTES_PER_PIXEL as u32;
-        if !view.offset.is_multiple_of(pixel) || !view.stride.is_multiple_of(pixel) {
-            return Err(RenderError::UnalignedDmabuf);
-        }
-        if !self.imports.contains_key(&import) {
-            let imported = self.import_dmabuf(view.fd)?;
-            self.imports.insert(import, imported);
-        }
-        let source = self
-            .imports
-            .get(&import)
-            .map(|imported| imported.buffer)
-            .ok_or(RenderError::BufferOutOfBounds)?;
-        let rects = self.prepare_texture(texture, view.width, view.height, view.opaque, damage)?;
-        for rect in rects {
-            let offset = u64::from(view.offset)
-                + u64::from(rect.y.unsigned_abs()) * u64::from(view.stride)
-                + u64::from(rect.x.unsigned_abs()) * u64::from(pixel);
-            self.copies.push(PendingCopy {
-                texture,
-                source,
-                offset,
-                row_texels: view.stride / pixel,
-                rect,
-            });
-            self.uploaded_bytes += rect.area() * u64::from(pixel);
-        }
-        Ok(())
-    }
-
-    fn import_dmabuf(&self, fd: BorrowedFd) -> Result<Imported, RenderError> {
+    fn import_dmabuf_memory(
+        &self,
+        fd: BorrowedFd,
+        usage: vk::BufferUsageFlags,
+    ) -> Result<Imported, RenderError> {
         let mut file = File::from(fd.try_clone_to_owned()?);
         let size = file.seek(SeekFrom::End(0))?;
         let mut external = vk::ExternalMemoryBufferCreateInfo::default()
@@ -690,14 +869,18 @@ impl Renderer {
             self.device.create_buffer(
                 &vk::BufferCreateInfo::default()
                     .size(size)
-                    .usage(vk::BufferUsageFlags::TRANSFER_SRC)
+                    .usage(usage)
                     .sharing_mode(vk::SharingMode::EXCLUSIVE)
                     .push_next(&mut external),
                 None,
             )
         }?;
         match self.bind_dmabuf(buffer, file, size) {
-            Ok(memory) => Ok(Imported { buffer, memory }),
+            Ok(memory) => Ok(Imported {
+                buffer,
+                memory,
+                size,
+            }),
             Err(error) => {
                 unsafe { self.device.destroy_buffer(buffer, None) };
                 Err(error)
@@ -754,168 +937,120 @@ impl Renderer {
         Ok(memory)
     }
 
-    pub fn forget_dmabuf(&mut self, import: u64) {
-        if let Some(imported) = self.imports.remove(&import) {
-            self.copies.retain(|copy| copy.source != imported.buffer);
-            unsafe {
-                self.device.destroy_buffer(imported.buffer, None);
-                self.device.free_memory(imported.memory, None);
-            }
-        }
-    }
-
-    fn prepare_texture(
+    fn create_target(
         &mut self,
-        texture: u64,
         width: i32,
         height: i32,
-        opaque: bool,
-        damage: &[Rect],
-    ) -> Result<Vec<Rect>, RenderError> {
-        let bounds = Rect::new(0, 0, width, height);
-        let reusable = self.textures.get(&texture).is_some_and(|existing| {
-            existing.image.width == width && existing.image.height == height
-        });
-        if !reusable {
-            self.forget(texture);
-            let image = self.create_image(
-                width,
-                height,
-                TEXTURE_FORMAT,
-                vk::ImageUsageFlags::SAMPLED | vk::ImageUsageFlags::TRANSFER_DST,
-                alpha_swizzle(opaque),
-            )?;
-            self.textures.insert(
-                texture,
-                Texture {
-                    image,
-                    opaque,
-                    readable: false,
-                },
-            );
-        }
-        if let Some(existing) = self.textures.get(&texture)
-            && existing.opaque != opaque
-        {
-            let replacement =
-                self.create_view(existing.image.image, TEXTURE_FORMAT, alpha_swizzle(opaque))?;
-            if let Some(existing) = self.textures.get_mut(&texture) {
-                let replaced = std::mem::replace(&mut existing.image.view, replacement);
-                existing.opaque = opaque;
-                unsafe { self.device.destroy_image_view(replaced, None) };
+        format: Fourcc,
+        export: Option<Export>,
+    ) -> Result<u64, RenderError> {
+        let image = target_format(format)
+            .ok_or(RenderError::UnsupportedFormat)
+            .and_then(|vk_format| {
+                let image = self.create_image(
+                    width,
+                    height,
+                    vk_format,
+                    vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_SRC,
+                    vk::ComponentSwizzle::IDENTITY,
+                )?;
+                Ok((image, vk_format))
+            });
+        let (image, vk_format) = match image {
+            Ok(created) => created,
+            Err(error) => {
+                if let Some(export) = &export {
+                    self.destroy_imported(&export.imported);
+                }
+                return Err(error);
             }
-        }
-        Ok(if reusable {
-            disjoint(damage.iter().copied(), bounds)
-        } else {
-            vec![bounds]
-        })
+        };
+        let id = self.next_id();
+        self.targets.insert(
+            id,
+            Target {
+                image,
+                format: vk_format,
+                rendered: false,
+                export,
+            },
+        );
+        Ok(id)
     }
 
-    fn stage(&mut self, texture: u64, view: &ShmView, rect: Rect) -> Result<(), RenderError> {
-        let row_bytes = rect.width.unsigned_abs() as usize * BYTES_PER_PIXEL;
-        let rows = rect.height.unsigned_abs() as usize;
-        let (index, offset) = self.reserve(row_bytes * rows)?;
-        let left = rect.x.unsigned_abs() as usize * BYTES_PER_PIXEL;
-        let top = rect.y.unsigned_abs() as usize;
-        let staging = &self.staging[index];
-        for row in 0..rows {
-            let start = view.offset + (top + row) * view.stride + left;
-            let source = view
-                .pool
-                .get(start..start + row_bytes)
-                .ok_or(RenderError::BufferOutOfBounds)?;
-            let destination = offset + row * row_bytes;
-            debug_assert!(destination + row_bytes <= staging.capacity);
-            unsafe {
-                std::ptr::copy_nonoverlapping(
-                    source.as_ptr(),
-                    staging.mapped.add(destination),
-                    row_bytes,
-                );
+    fn forget_texture(&mut self, id: u64) {
+        if let Some(removed) = self.textures.remove(&id) {
+            self.destroy_image(&removed.image);
+        }
+        self.copies.retain(|copy| copy.texture != id);
+    }
+
+    fn forget_target(&mut self, id: u64) {
+        if let Some(removed) = self.targets.remove(&id) {
+            self.destroy_image(&removed.image);
+            if let Some(export) = &removed.export {
+                self.destroy_imported(&export.imported);
             }
         }
-        self.copies.push(PendingCopy {
-            texture,
-            source: self.staging[index].buffer,
-            offset: offset as u64,
-            row_texels: 0,
-            rect,
-        });
-        self.uploaded_bytes += (row_bytes * rows) as u64;
+    }
+
+    fn collect_garbage(&mut self) {
+        self.dmabuf_textures.retain(|weak, _| !weak.is_gone());
+        let gone_targets: Vec<u64> = self
+            .dmabuf_targets
+            .iter()
+            .filter(|(weak, _)| weak.is_gone())
+            .map(|(_, &id)| id)
+            .collect();
+        self.dmabuf_targets.retain(|weak, _| !weak.is_gone());
+        for id in gone_targets {
+            self.forget_target(id);
+        }
+        let gone_imports: Vec<WeakDmabuf> = self
+            .imports
+            .keys()
+            .filter(|weak| weak.is_gone())
+            .cloned()
+            .collect();
+        for weak in gone_imports {
+            if let Some(imported) = self.imports.remove(&weak) {
+                self.copies.retain(|copy| copy.source != imported.buffer);
+                self.destroy_imported(&imported);
+            }
+        }
+        let dead = std::mem::take(&mut *self.graveyard.borrow_mut());
+        for resource in dead {
+            match resource {
+                Resource::Texture(id) => self.forget_texture(id),
+                Resource::Target(id) => self.forget_target(id),
+            }
+        }
+    }
+
+    fn submit_and_wait(&self) -> Result<(), RenderError> {
+        let submit =
+            vk::SubmitInfo::default().command_buffers(slice::from_ref(&self.command_buffer));
+        unsafe {
+            self.device
+                .queue_submit(self.queue, slice::from_ref(&submit), self.fence)?;
+            self.device
+                .wait_for_fences(slice::from_ref(&self.fence), true, u64::MAX)?;
+            self.device.reset_fences(slice::from_ref(&self.fence))?;
+        }
         Ok(())
     }
 
-    pub fn forget(&mut self, texture: u64) {
-        if let Some(removed) = self.textures.remove(&texture) {
-            self.destroy_image(&removed.image);
-        }
-        self.copies.retain(|copy| copy.texture != texture);
-    }
-
-    pub fn retain_textures(&mut self, alive: impl Fn(u64) -> bool) {
-        let dead: Vec<u64> = self
-            .textures
-            .keys()
-            .copied()
-            .filter(|texture| !alive(*texture))
-            .collect();
-        dead.into_iter().for_each(|texture| self.forget(texture));
-    }
-
-    pub fn render(
-        &mut self,
-        width: i32,
-        height: i32,
-        background: [u8; 3],
-        placements: &[Placement],
-        damage: &[Rect],
-    ) -> Result<FrameStats, RenderError> {
-        let bounds = Rect::new(0, 0, width, height);
-        let fresh = self
-            .target
-            .as_ref()
-            .is_none_or(|target| target.width != width || target.height != height);
-        if fresh {
-            if let Some(old) = self.target.take() {
-                self.destroy_image(&old);
-            }
-            self.target = Some(self.create_image(
-                width,
-                height,
-                TARGET_FORMAT,
-                vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_SRC,
-                vk::ComponentSwizzle::IDENTITY,
-            )?);
-        }
-        let repaint = if fresh {
-            vec![bounds]
-        } else {
-            disjoint(damage.iter().copied(), bounds)
-        };
-
-        let commands = self.command_buffer;
+    fn begin_commands(&self) -> Result<(), RenderError> {
         unsafe {
             self.device
-                .reset_command_buffer(commands, vk::CommandBufferResetFlags::empty())?;
+                .reset_command_buffer(self.command_buffer, vk::CommandBufferResetFlags::empty())?;
             self.device.begin_command_buffer(
-                commands,
+                self.command_buffer,
                 &vk::CommandBufferBeginInfo::default()
                     .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
             )?;
         }
-        self.record_copies();
-        let shaded_pixels = self.record_repaint(fresh, &repaint, background, placements);
-        unsafe { self.device.end_command_buffer(commands) }?;
-        self.submit_and_wait()?;
-
-        self.copies.clear();
-        self.recycle_staging();
-        Ok(FrameStats {
-            uploaded_bytes: std::mem::take(&mut self.uploaded_bytes),
-            repainted_pixels: repaint.iter().map(Rect::area).sum(),
-            shaded_pixels,
-        })
+        Ok(())
     }
 
     fn record_copies(&mut self) {
@@ -992,235 +1127,7 @@ impl Renderer {
                 ),
             );
         }
-    }
-
-    fn record_repaint(
-        &self,
-        fresh: bool,
-        repaint: &[Rect],
-        background: [u8; 3],
-        placements: &[Placement],
-    ) -> u64 {
-        let Some(target) = &self.target else {
-            return 0;
-        };
-        let device = &self.device;
-        let commands = self.command_buffer;
-        let attachment_access =
-            vk::AccessFlags2::COLOR_ATTACHMENT_READ | vk::AccessFlags2::COLOR_ATTACHMENT_WRITE;
-        barrier(
-            device,
-            commands,
-            target.image,
-            (
-                if fresh {
-                    vk::ImageLayout::UNDEFINED
-                } else {
-                    vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL
-                },
-                vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT,
-                vk::AccessFlags2::COLOR_ATTACHMENT_WRITE,
-            ),
-            (
-                vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT,
-                attachment_access,
-            ),
-        );
-        if repaint.is_empty() {
-            return 0;
-        }
-
-        let extent = vk::Extent2D {
-            width: target.width.unsigned_abs(),
-            height: target.height.unsigned_abs(),
-        };
-        let attachment = vk::RenderingAttachmentInfo::default()
-            .image_view(target.view)
-            .image_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-            .load_op(vk::AttachmentLoadOp::LOAD)
-            .store_op(vk::AttachmentStoreOp::STORE);
-        let [red, green, blue] = background.map(|channel| f32::from(channel) / 255.0);
-        let clear = vk::ClearAttachment {
-            aspect_mask: vk::ImageAspectFlags::COLOR,
-            color_attachment: 0,
-            clear_value: vk::ClearValue {
-                color: vk::ClearColorValue {
-                    float32: [red, green, blue, 1.0],
-                },
-            },
-        };
-        unsafe {
-            device.cmd_begin_rendering(
-                commands,
-                &vk::RenderingInfo::default()
-                    .render_area(extent.into())
-                    .layer_count(1)
-                    .color_attachments(slice::from_ref(&attachment)),
-            );
-            device.cmd_bind_pipeline(commands, vk::PipelineBindPoint::GRAPHICS, self.pipeline);
-            device.cmd_set_viewport(
-                commands,
-                0,
-                &[vk::Viewport {
-                    x: 0.0,
-                    y: 0.0,
-                    width: extent.width as f32,
-                    height: extent.height as f32,
-                    min_depth: 0.0,
-                    max_depth: 1.0,
-                }],
-            );
-        }
-        let visible: Vec<(&Texture, Rect)> = placements
-            .iter()
-            .filter_map(|placement| {
-                let texture = self.textures.get(&placement.texture)?;
-                let quad = Rect::new(
-                    placement.x,
-                    placement.y,
-                    texture.image.width,
-                    texture.image.height,
-                );
-                texture.readable.then_some((texture, quad))
-            })
-            .collect();
-        let mut shaded = 0;
-        for area in repaint {
-            let scissor = vk::Rect2D {
-                offset: vk::Offset2D {
-                    x: area.x,
-                    y: area.y,
-                },
-                extent: vk::Extent2D {
-                    width: area.width.unsigned_abs(),
-                    height: area.height.unsigned_abs(),
-                },
-            };
-            unsafe { device.cmd_set_scissor(commands, 0, slice::from_ref(&scissor)) };
-            let layers: Vec<(&Texture, Rect, Rect)> = visible
-                .iter()
-                .filter_map(|(texture, quad)| Some((*texture, *quad, quad.intersection(area)?)))
-                .collect();
-            let lowest = layers
-                .iter()
-                .rposition(|(texture, _, part)| texture.opaque && part == area);
-            if lowest.is_none() {
-                unsafe {
-                    device.cmd_clear_attachments(
-                        commands,
-                        slice::from_ref(&clear),
-                        &[vk::ClearRect {
-                            rect: scissor,
-                            base_array_layer: 0,
-                            layer_count: 1,
-                        }],
-                    );
-                }
-                shaded += area.area();
-            }
-            for (index, (texture, quad, part)) in
-                layers.iter().enumerate().skip(lowest.unwrap_or(0))
-            {
-                let hidden = layers[index + 1..]
-                    .iter()
-                    .any(|(above, _, cover)| above.opaque && cover.contains(part));
-                if !hidden {
-                    self.record_quad(texture, *quad, extent);
-                    shaded += part.area();
-                }
-            }
-        }
-        unsafe { device.cmd_end_rendering(commands) };
-        shaded
-    }
-
-    fn record_quad(&self, texture: &Texture, quad: Rect, target: vk::Extent2D) {
-        let image_info = vk::DescriptorImageInfo::default()
-            .image_view(texture.image.view)
-            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
-        let write = vk::WriteDescriptorSet::default()
-            .dst_binding(0)
-            .descriptor_type(vk::DescriptorType::SAMPLED_IMAGE)
-            .image_info(slice::from_ref(&image_info));
-        let constants: Vec<u8> = [
-            target.width as f32,
-            target.height as f32,
-            quad.x as f32,
-            quad.y as f32,
-            quad.width as f32,
-            quad.height as f32,
-        ]
-        .iter()
-        .flat_map(|value| value.to_ne_bytes())
-        .collect();
-        unsafe {
-            self.push_descriptor.cmd_push_descriptor_set(
-                self.command_buffer,
-                vk::PipelineBindPoint::GRAPHICS,
-                self.pipeline_layout,
-                0,
-                slice::from_ref(&write),
-            );
-            self.device.cmd_push_constants(
-                self.command_buffer,
-                self.pipeline_layout,
-                vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
-                0,
-                &constants,
-            );
-            self.device.cmd_draw(self.command_buffer, 4, 1, 0, 0);
-        }
-    }
-
-    fn submit_and_wait(&self) -> Result<(), RenderError> {
-        let submit =
-            vk::SubmitInfo::default().command_buffers(slice::from_ref(&self.command_buffer));
-        unsafe {
-            self.device
-                .queue_submit(self.queue, slice::from_ref(&submit), self.fence)?;
-            self.device
-                .wait_for_fences(slice::from_ref(&self.fence), true, u64::MAX)?;
-            self.device.reset_fences(slice::from_ref(&self.fence))?;
-        }
-        Ok(())
-    }
-
-    fn recycle_staging(&mut self) {
-        let Some(largest) = self
-            .staging
-            .iter()
-            .enumerate()
-            .max_by_key(|(_, staging)| staging.capacity)
-            .map(|(index, _)| index)
-        else {
-            return;
-        };
-        let mut kept = self.staging.swap_remove(largest);
-        kept.used = 0;
-        for staging in std::mem::take(&mut self.staging) {
-            self.destroy_staging(&staging);
-        }
-        self.staging.push(kept);
-    }
-
-    pub fn read_back(&mut self) -> Result<Vec<u8>, RenderError> {
-        let (image, width, height) = match &self.target {
-            Some(target) => (target.image, target.width, target.height),
-            None => return Err(RenderError::NothingRendered),
-        };
-        let row_bytes = width.unsigned_abs() as usize * BYTES_PER_PIXEL;
-        let bytes = row_bytes * height.unsigned_abs() as usize;
-        let readback = self.create_staging(bytes)?;
-        let result = self
-            .copy_target_to(&readback, image, width, height)
-            .map(|()| {
-                let mut rgba = vec![0u8; bytes];
-                unsafe { std::ptr::copy_nonoverlapping(readback.mapped, rgba.as_mut_ptr(), bytes) };
-                rgba
-            });
-        self.destroy_staging(&readback);
-        result
+        self.copies.clear();
     }
 
     fn copy_target_to(
@@ -1232,16 +1139,6 @@ impl Renderer {
     ) -> Result<(), RenderError> {
         let device = &self.device;
         let commands = self.command_buffer;
-        let attachment = (
-            vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-            vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT,
-            vk::AccessFlags2::COLOR_ATTACHMENT_WRITE,
-        );
-        let source = (
-            vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-            vk::PipelineStageFlags2::COPY,
-            vk::AccessFlags2::TRANSFER_READ,
-        );
         let region = vk::BufferImageCopy::default()
             .image_subresource(COLOR_LAYERS)
             .image_extent(vk::Extent3D {
@@ -1249,15 +1146,8 @@ impl Renderer {
                 height: height.unsigned_abs(),
                 depth: 1,
             });
-        unsafe {
-            device.reset_command_buffer(commands, vk::CommandBufferResetFlags::empty())?;
-            device.begin_command_buffer(
-                commands,
-                &vk::CommandBufferBeginInfo::default()
-                    .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
-            )?;
-        }
-        barrier(device, commands, image, attachment, source);
+        self.begin_commands()?;
+        barrier(device, commands, image, ATTACHMENT, TRANSFER_SOURCE);
         unsafe {
             device.cmd_copy_image_to_buffer(
                 commands,
@@ -1267,7 +1157,7 @@ impl Renderer {
                 slice::from_ref(&region),
             );
         }
-        barrier(device, commands, image, source, attachment);
+        barrier(device, commands, image, TRANSFER_SOURCE, ATTACHMENT);
         let host_read = vk::MemoryBarrier2::default()
             .src_stage_mask(vk::PipelineStageFlags2::COPY)
             .src_access_mask(vk::AccessFlags2::TRANSFER_WRITE)
@@ -1282,30 +1172,173 @@ impl Renderer {
         }
         self.submit_and_wait()
     }
+
+    fn dmabuf_export(&self, dmabuf: &Dmabuf) -> Result<Export, RenderError> {
+        let layout = import::single_plane_layout(dmabuf)?;
+        target_format(dmabuf.format().code).ok_or(RenderError::UnsupportedFormat)?;
+        let imported = self.import_dmabuf_memory(
+            layout.fd,
+            vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::TRANSFER_DST,
+        )?;
+        if layout.end(dmabuf.size()) > imported.size {
+            self.destroy_imported(&imported);
+            return Err(RenderError::BufferOutOfBounds);
+        }
+        Ok(Export {
+            imported,
+            offset: u64::from(layout.offset),
+            row_texels: layout.stride / BYTES_PER_PIXEL as u32,
+        })
+    }
 }
 
-impl Drop for Renderer {
+impl RendererSuper for VulkanRenderer {
+    type Error = RenderError;
+    type TextureId = VulkanTexture;
+    type Framebuffer<'buffer> = VulkanFramebuffer<'buffer>;
+    type Frame<'frame, 'buffer>
+        = VulkanFrame<'frame, 'buffer>
+    where
+        'buffer: 'frame,
+        Self: 'frame;
+}
+
+impl Renderer for VulkanRenderer {
+    fn context_id(&self) -> ContextId<VulkanTexture> {
+        self.context.clone()
+    }
+
+    fn downscale_filter(&mut self, _filter: TextureFilter) -> Result<(), RenderError> {
+        Ok(())
+    }
+
+    fn upscale_filter(&mut self, _filter: TextureFilter) -> Result<(), RenderError> {
+        Ok(())
+    }
+
+    fn set_debug_flags(&mut self, flags: DebugFlags) {
+        self.debug_flags = flags;
+    }
+
+    fn debug_flags(&self) -> DebugFlags {
+        self.debug_flags
+    }
+
+    fn render<'frame, 'buffer>(
+        &'frame mut self,
+        framebuffer: &'frame mut VulkanFramebuffer<'buffer>,
+        _output_size: Size<i32, Physical>,
+        dst_transform: Transform,
+    ) -> Result<VulkanFrame<'frame, 'buffer>, RenderError>
+    where
+        'buffer: 'frame,
+    {
+        if dst_transform != Transform::Normal {
+            return Err(RenderError::UnsupportedTransform);
+        }
+        self.collect_garbage();
+        VulkanFrame::begin(self, framebuffer)
+    }
+
+    fn wait(&mut self, sync: &SyncPoint) -> Result<(), RenderError> {
+        sync.wait().map_err(|_| RenderError::Interrupted)
+    }
+
+    fn cleanup_texture_cache(&mut self) -> Result<(), RenderError> {
+        self.collect_garbage();
+        Ok(())
+    }
+}
+
+impl Offscreen<OffscreenTarget> for VulkanRenderer {
+    fn create_buffer(
+        &mut self,
+        format: Fourcc,
+        size: Size<i32, BufferCoords>,
+    ) -> Result<OffscreenTarget, RenderError> {
+        self.collect_garbage();
+        let id = self.create_target(size.w, size.h, format, None)?;
+        Ok(OffscreenTarget {
+            _owned: self.owned(Resource::Target(id)),
+            id,
+            renderer: self.id,
+            width: size.w,
+            height: size.h,
+            format,
+        })
+    }
+}
+
+impl Bind<OffscreenTarget> for VulkanRenderer {
+    fn bind<'a>(
+        &mut self,
+        target: &'a mut OffscreenTarget,
+    ) -> Result<VulkanFramebuffer<'a>, RenderError> {
+        if target.renderer != self.id || !self.targets.contains_key(&target.id) {
+            return Err(RenderError::ForeignResource);
+        }
+        Ok(VulkanFramebuffer {
+            id: target.id,
+            width: target.width,
+            height: target.height,
+            format: target.format,
+            _target: PhantomData,
+        })
+    }
+}
+
+impl Bind<Dmabuf> for VulkanRenderer {
+    fn bind<'a>(&mut self, dmabuf: &'a mut Dmabuf) -> Result<VulkanFramebuffer<'a>, RenderError> {
+        let format = dmabuf.format().code;
+        let size = dmabuf.size();
+        let id = match self.dmabuf_targets.get(&dmabuf.weak()) {
+            Some(&id) => id,
+            None => {
+                let export = self.dmabuf_export(dmabuf)?;
+                let id = self.create_target(size.w, size.h, format, Some(export))?;
+                self.dmabuf_targets.insert(dmabuf.weak(), id);
+                id
+            }
+        };
+        Ok(VulkanFramebuffer {
+            id,
+            width: size.w,
+            height: size.h,
+            format,
+            _target: PhantomData,
+        })
+    }
+
+    fn supported_formats(&self) -> Option<FormatSet> {
+        Some(linear_formats())
+    }
+}
+
+impl Drop for VulkanRenderer {
     fn drop(&mut self) {
         unsafe {
             let _ = self.device.device_wait_idle();
         }
+        self.dmabuf_textures.clear();
         for (_, texture) in std::mem::take(&mut self.textures) {
             self.destroy_image(&texture.image);
         }
-        if let Some(target) = self.target.take() {
-            self.destroy_image(&target);
+        for (_, target) in std::mem::take(&mut self.targets) {
+            self.destroy_image(&target.image);
+            if let Some(export) = &target.export {
+                self.destroy_imported(&export.imported);
+            }
         }
         for staging in std::mem::take(&mut self.staging) {
             self.destroy_staging(&staging);
         }
         for (_, imported) in std::mem::take(&mut self.imports) {
-            unsafe {
-                self.device.destroy_buffer(imported.buffer, None);
-                self.device.free_memory(imported.memory, None);
-            }
+            self.destroy_imported(&imported);
         }
         unsafe {
-            self.device.destroy_pipeline(self.pipeline, None);
+            for (_, pipeline) in self.pipelines.drain() {
+                self.device.destroy_pipeline(pipeline, None);
+            }
             self.device
                 .destroy_pipeline_layout(self.pipeline_layout, None);
             self.device
@@ -1317,8 +1350,6 @@ impl Drop for Renderer {
         }
     }
 }
-
-const QUAD_BYTES: u32 = 6 * 4;
 
 const COLOR_RANGE: vk::ImageSubresourceRange = vk::ImageSubresourceRange {
     aspect_mask: vk::ImageAspectFlags::COLOR,
@@ -1335,6 +1366,20 @@ const COLOR_LAYERS: vk::ImageSubresourceLayers = vk::ImageSubresourceLayers {
     layer_count: 1,
 };
 
+type Usage = (vk::ImageLayout, vk::PipelineStageFlags2, vk::AccessFlags2);
+
+const ATTACHMENT: Usage = (
+    vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+    vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT,
+    vk::AccessFlags2::COLOR_ATTACHMENT_WRITE,
+);
+
+const TRANSFER_SOURCE: Usage = (
+    vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+    vk::PipelineStageFlags2::COPY,
+    vk::AccessFlags2::TRANSFER_READ,
+);
+
 fn alpha_swizzle(opaque: bool) -> vk::ComponentSwizzle {
     if opaque {
         vk::ComponentSwizzle::ONE
@@ -1342,8 +1387,6 @@ fn alpha_swizzle(opaque: bool) -> vk::ComponentSwizzle {
         vk::ComponentSwizzle::IDENTITY
     }
 }
-
-type Usage = (vk::ImageLayout, vk::PipelineStageFlags2, vk::AccessFlags2);
 
 fn barrier(
     device: &ash::Device,

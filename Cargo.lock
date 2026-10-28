@@ -1828,6 +1828,7 @@ version = "0.1.0"
 dependencies = [
  "ash",
  "naga",
+ "smithay",
 ]
 
 [[package]]

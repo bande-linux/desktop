@@ -150,6 +150,13 @@ To prevent visual fragmentation, inconsistent shortcut handling, and toolkit dri
 
 ---
 
+### 1.7 macOS as the Behaviour Reference
+Where this plan does not settle how the desktop behaves, Unbound does what macOS does. Each such decision is recorded here with its macOS precedent:
+- **Background clipboard access**: macOS treats reading the pasteboard without a user paste as a per-app privacy permission, while copy and paste by the user always work. Unbound keeps `wl_data_device` and primary selection as they are, since both already require keyboard focus, and offers `ext-data-control-v1`, the background read path, only to `unbound-clipboard`. The compositor reads the executable of a connecting client from `/proc/<pid>/exe`, using the pid from the socket's peer credentials, once when it accepts the client, and offers the global only when that is `/usr/bin/unbound-clipboard`. The kernel records the pid at `connect()`, so a client cannot claim another process's pid. This check is not a boundary against processes of the same user: one can connect, fork, and exec `/usr/bin/unbound-clipboard` before the compositor accepts it, or start the real daemon with `LD_PRELOAD`. Whether to replace it with a daemon the compositor starts on a socket pair is an open decision.
+- **Clipboard persistence**: the macOS pasteboard keeps its contents after the copying app quits. `unbound-clipboard` reads every MIME type of each new clipboard and primary selection and offers it as its own, so a paste works after the source has exited.
+- **Keyboard focus**: closing or hiding the focused window focuses the frontmost remaining window of the same app; if the app has none, no window is focused, as a macOS app stays active without a key window. When the app quits, the frontmost window of another app is focused, as macOS activates the next app. Focusing a window raises it. An app that is not focused does not take focus by opening another window; the window opens behind the focused one. An app's first window takes focus, standing in for app launch until `xdg_activation_v1` is implemented.
+- **Notification daemon start**: `unbound-notify` is started by D-Bus activation on the first notification, as Debian's notification daemons are; `unbound-clipboard` has to run before anything is copied, so it is a systemd user service in `graphical-session.target`.
+
 ## 2. Desktop Session Infrastructure Specification
 
 A real desktop environment requires extensive invisible infrastructure to function. Unbound categorizes these into strict delivery tiers:
@@ -177,7 +184,7 @@ graph LR
    - Primary selection (middle-click paste) via `zwp_primary_selection_v1`.
    - Standard clipboard via `wl_data_device_manager`.
    - Persistent clipboard history daemon via `ext-data-control-v1` (retains copied contents after source application exits).
-   - Implemented in the compositor so far: `wl_data_device_manager` v3, `zwp_primary_selection_device_manager_v1` and `ext_data_control_manager_v1` on one seat, with selections offered to the keyboard-focused client only. The compositor keeps a selection whose source has exited; the daemon is expected to take each new selection over as soon as it has read it. Any client may bind data control for now. The daemon itself is not built.
+   - Implemented: `wl_data_device_manager` v3, `zwp_primary_selection_device_manager_v1` and `ext_data_control_manager_v1` on one seat, with selections offered to the keyboard-focused client only. Data control is offered to `unbound-clipboard` alone (section 1.7). The daemon takes each new clipboard and primary selection over as soon as it has read it; a selection it set itself is recognised while its source is live, and a source that stays silent for two seconds is skipped. History is not implemented.
 2. **Screen Lock & Idle State Machine (`unbound-lock`)**:
    - Built on `ext-session-lock-v1`.
    - **Crash Resilience**: If the lock-screen UI crashes, the compositor maintains lock enforcement by rendering a blank fallback color and re-spawning the lock client.
@@ -198,7 +205,7 @@ graph LR
      systemctl --user import-environment WAYLAND_DISPLAY XDG_SESSION_TYPE XDG_CURRENT_DESKTOP
      dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_SESSION_TYPE XDG_CURRENT_DESKTOP
      ```
-   - Launches core services bound to `graphical-session.target`: PipeWire, wireplumber, `unbound-portal`, `unbound-notify`, `unbound-polkit`.
+   - Launches core services bound to `graphical-session.target`: PipeWire, wireplumber, `unbound-portal`, `unbound-clipboard`, `unbound-polkit`. `unbound-notify` is started by D-Bus activation instead.
 
 ### Tier 2 Subsystems (v1.1 Enhanced Desktop Polish)
 - **Status Notifier Item (System Tray)**: Implementation of `org.kde.StatusNotifierWatcher` and `org.kde.StatusNotifierItem` for third-party background icons (Steam, Nextcloud, Slack).
@@ -593,7 +600,7 @@ All CI runs on the organization's self-hosted runners: Docker containers on an A
 Runs on every push to any branch and on pull requests. Job names are the status-check contexts:
 - `ci/lint`: `cargo fmt --check` and `cargo clippy --workspace --all-targets -- -D warnings`.
 - `ci/lavapipe-test`: `cargo test --workspace`, including the compositor and toolkit render tests on lavapipe. D-Bus tests start a private `dbus-daemon` session bus each (`crates/unbound-test-bus`). The toolkit's text test uses DejaVu Sans from `fonts-dejavu-core`; its expected image is built in the test from the scene with `ab_glyph`, so it does not depend on the font version.
-- `ci/deb`: `cargo deb`, then checks the package architecture, starts the packaged binary as a smoke test, and uploads the `.deb` as an artifact.
+- `ci/deb`: `cargo deb` for `unbound-compositor`, `unbound-notify` and `unbound-clipboard`, then checks each package's architecture, the notification daemon's D-Bus activation file, the clipboard daemon's user unit and maintainer scripts, starts the packaged compositor as a smoke test, and uploads the `.deb` files as artifacts.
 
 The Rust toolchain is pinned in `rust-toolchain.toml`, dependencies are pinned to exact versions, and `Cargo.lock` is committed. Until `ci-builder` exists, jobs install system packages with `apt-get` on the runner image (Ubuntu 24.04), so `.deb` files are built against Ubuntu's glibc rather than Debian 13's.
 

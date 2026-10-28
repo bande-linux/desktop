@@ -89,6 +89,12 @@ fn run() -> Result<bool, Box<dyn Error>> {
             budget: damaged_pixels,
         },
         Metric {
+            name: "frame_typical_shaded",
+            unit: "px",
+            value: typical_work.shaded_pixels as f64,
+            budget: damaged_pixels,
+        },
+        Metric {
             name: "frame_full_p50",
             unit: "ms",
             value: percentile(&full, 0.50),
@@ -192,6 +198,7 @@ fn frame_times(repaint: Repaint) -> Result<(Vec<Duration>, FrameStats), Box<dyn 
             let stats = renderer.render(&mut server)?;
             most.uploaded_bytes = most.uploaded_bytes.max(stats.uploaded_bytes);
             most.repainted_pixels = most.repainted_pixels.max(stats.repainted_pixels);
+            most.shaded_pixels = most.shaded_pixels.max(stats.shaded_pixels);
             server.frame_done(start.elapsed())?;
         }
         times.push(composed.elapsed());

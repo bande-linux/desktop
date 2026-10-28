@@ -241,6 +241,8 @@ fn surfaces_are_told_to_render_at_scale_one() {
 const KEY_SPACE: u32 = 57;
 const KEY_LEFTMETA: u32 = 125;
 const KEY_A: u32 = 30;
+const KEY_3: u32 = 4;
+const KEY_LEFTSHIFT: u32 = 42;
 
 fn launcher() -> LayerRequest {
     LayerRequest {
@@ -282,6 +284,30 @@ fn super_space_asks_the_shell_for_the_launcher_and_is_not_delivered_to_the_app()
         "the app saw {:?}",
         app.keys()
     );
+}
+
+#[test]
+fn super_shift_3_asks_the_shell_for_a_screen_capture_and_is_not_delivered_to_the_app() {
+    let mut server = server();
+    let mut app = TestClient::connect(&mut server);
+    app.use_seat(&mut server);
+    let pixels = red(32, 32);
+    app.show_window(&mut server, &image(&pixels, 32, 32));
+    let mut shell = TestClient::connect_as_shell(&mut server);
+    shell.join_shell(&mut server);
+
+    press(&mut server, &[KEY_LEFTMETA, KEY_3]);
+    roundtrip(&mut server, &mut [&mut app, &mut shell]);
+    assert_eq!(shell.screen_capture_requests(), 0);
+    let threes = |app: &TestClient| app.keys().iter().filter(|(key, _)| *key == KEY_3).count();
+    let seen = threes(&app);
+
+    press(&mut server, &[KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_3]);
+    roundtrip(&mut server, &mut [&mut app, &mut shell]);
+
+    assert_eq!(shell.screen_capture_requests(), 1);
+    assert_eq!(shell.launcher_requests(), 0);
+    assert_eq!(threes(&app), seen, "the app saw {:?}", app.keys());
 }
 
 #[test]

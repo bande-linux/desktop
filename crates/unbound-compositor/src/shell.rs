@@ -1,7 +1,7 @@
 use smithay::reexports::wayland_server::backend::ClientId;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{
-    Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New,
+    Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource,
 };
 use smithay::wayland::compositor::with_states;
 use smithay::wayland::foreign_toplevel_list::{
@@ -51,6 +51,14 @@ impl State {
     pub(crate) fn show_launcher(&mut self) {
         for shell in &self.shell_resources {
             shell.show_launcher();
+        }
+    }
+
+    pub(crate) fn capture_screen(&mut self) {
+        for shell in &self.shell_resources {
+            if shell.version() >= unbound_shell_v1::EVT_CAPTURE_SCREEN_SINCE {
+                shell.capture_screen();
+            }
         }
     }
 

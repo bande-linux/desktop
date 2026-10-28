@@ -222,7 +222,7 @@ impl Headless {
         output.change_current_state(Some(mode), None, None, Some((0, 0).into()));
         output.set_preferred(mode);
         output.create_global::<State>(&handle);
-        handle.create_global::<State, UnboundShellV1, ()>(1, ());
+        handle.create_global::<State, UnboundShellV1, ()>(2, ());
         State::create_capture_globals(&handle);
         let state = State {
             display_handle: handle.clone(),

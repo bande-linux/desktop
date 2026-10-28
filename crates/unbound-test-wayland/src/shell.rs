@@ -38,6 +38,7 @@ pub(crate) struct Shell {
     layers: Vec<(WlSurface, ZwlrLayerSurfaceV1)>,
     shell: Option<UnboundShellV1>,
     launcher_requests: usize,
+    capture_requests: usize,
     toplevels: Vec<(ExtForeignToplevelHandleV1, String, bool)>,
 }
 
@@ -129,7 +130,7 @@ impl TestClient {
     }
 
     pub fn join_shell(&mut self, server: &mut Headless) {
-        let shell: UnboundShellV1 = self.bind("unbound_shell_v1", 1);
+        let shell: UnboundShellV1 = self.bind("unbound_shell_v1", 2);
         self.globals.shell.shell = Some(shell);
         let _: ExtForeignToplevelListV1 = self.bind("ext_foreign_toplevel_list_v1", 1);
         self.exchange(server);
@@ -137,6 +138,10 @@ impl TestClient {
 
     pub fn launcher_requests(&self) -> usize {
         self.globals.shell.launcher_requests
+    }
+
+    pub fn screen_capture_requests(&self) -> usize {
+        self.globals.shell.capture_requests
     }
 
     pub fn activate_app(&mut self, server: &mut Headless, app_id: &str) {
@@ -276,8 +281,10 @@ impl Dispatch<UnboundShellV1, ()> for Globals {
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
-        if let unbound_shell_v1::Event::ShowLauncher = event {
-            globals.shell.launcher_requests += 1;
+        match event {
+            unbound_shell_v1::Event::ShowLauncher => globals.shell.launcher_requests += 1,
+            unbound_shell_v1::Event::CaptureScreen => globals.shell.capture_requests += 1,
+            _ => {}
         }
     }
 }

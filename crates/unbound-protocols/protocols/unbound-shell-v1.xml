@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <protocol name="unbound_shell_v1">
-  <interface name="unbound_shell_v1" version="1">
+  <interface name="unbound_shell_v1" version="2">
     <description summary="requests and events between the compositor and the shell">
       Offered only on the connections of the shell clients the compositor starts
       itself (the panel and the launcher), never on the listening socket.
@@ -19,6 +19,13 @@
 
     <event name="show_launcher">
       <description summary="the user pressed the launcher shortcut"/>
+    </event>
+
+    <event name="capture_screen" since="2">
+      <description summary="the user pressed the full-screen capture shortcut">
+        Sent for Super+Shift+3, as Command-Shift-3 takes a picture of the whole
+        screen on a Mac.
+      </description>
     </event>
   </interface>
 </protocol>

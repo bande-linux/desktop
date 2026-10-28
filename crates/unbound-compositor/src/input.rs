@@ -27,9 +27,13 @@ enum Shortcut {
     MinimizeWindow,
     LockScreen,
     ToggleFullscreen,
+    CaptureScreen,
 }
 
-fn shortcut(keysym: u32, ctrl: bool) -> Option<Shortcut> {
+fn shortcut(keysym: u32, unshifted: Option<u32>, ctrl: bool, shift: bool) -> Option<Shortcut> {
+    if shift && unshifted == Some(keysyms::KEY_3) {
+        return Some(Shortcut::CaptureScreen);
+    }
     match keysym {
         keysyms::KEY_f | keysyms::KEY_F if ctrl => Some(Shortcut::ToggleFullscreen),
         keysyms::KEY_q | keysyms::KEY_Q if ctrl => Some(Shortcut::LockScreen),
@@ -57,6 +61,10 @@ impl State {
     fn run(&mut self, shortcut: Shortcut) {
         if shortcut == Shortcut::ShowLauncher {
             self.show_launcher();
+            return;
+        }
+        if shortcut == Shortcut::CaptureScreen {
+            self.capture_screen();
             return;
         }
         if shortcut == Shortcut::LockScreen {
@@ -105,7 +113,7 @@ impl State {
                     self.toggle_fullscreen(&window);
                 }
             }
-            Shortcut::ShowLauncher | Shortcut::LockScreen => {}
+            Shortcut::ShowLauncher | Shortcut::LockScreen | Shortcut::CaptureScreen => {}
         }
     }
 }
@@ -270,8 +278,16 @@ impl Headless {
                         FilterResult::Forward
                     };
                 }
-                match shortcut(keysym.modified_sym().raw(), modifiers.ctrl)
-                    .filter(|_| modifiers.logo && !state.is_locked())
+                let unshifted = keysym
+                    .raw_latin_sym_or_raw_current_sym()
+                    .map(|sym| sym.raw());
+                match shortcut(
+                    keysym.modified_sym().raw(),
+                    unshifted,
+                    modifiers.ctrl,
+                    modifiers.shift,
+                )
+                .filter(|_| modifiers.logo && !state.is_locked())
                 {
                     Some(shortcut) => {
                         state.held_shortcut_keys.push(evdev_code);

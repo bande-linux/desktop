@@ -1,16 +1,14 @@
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 
+use unbound_notify::client::{self, Request};
+use unbound_notify::{BUS_NAME as NOTIFICATIONS, OBJECT_PATH as NOTIFICATIONS_PATH, Urgency};
 use zbus::blocking::{Connection, MessageIterator};
-use zbus::zvariant::Value;
 use zbus::{MatchRule, message};
 
 use crate::ReloadError;
 
-const NOTIFICATIONS: &str = "org.freedesktop.Notifications";
-const NOTIFICATIONS_PATH: &str = "/org/freedesktop/Notifications";
 pub const EDIT_ACTION: &str = "edit";
 
 pub struct ErrorNotifier {
@@ -79,13 +77,7 @@ impl ErrorNotifier {
         let (summary, detail) = match result {
             Ok(()) => {
                 if let Some(id) = shown.take() {
-                    let _ = self.connection.call_method(
-                        Some(NOTIFICATIONS),
-                        NOTIFICATIONS_PATH,
-                        Some(NOTIFICATIONS),
-                        "CloseNotification",
-                        &id,
-                    );
+                    let _ = client::close(&self.connection, id);
                 }
                 return;
             }
@@ -101,24 +93,19 @@ impl ErrorNotifier {
             }
         };
         let body = format!("{detail} The previous settings stay in effect.");
-        let hints: HashMap<&str, Value<'_>> = HashMap::new();
-        let reply = self.connection.call_method(
-            Some(NOTIFICATIONS),
-            NOTIFICATIONS_PATH,
-            Some(NOTIFICATIONS),
-            "Notify",
-            &(
-                "Unbound",
-                shown.unwrap_or(0),
-                "preferences-system",
-                summary,
-                body,
-                vec![EDIT_ACTION, "Open in Editor"],
-                hints,
-                -1i32,
-            ),
+        let reply = client::notify(
+            &self.connection,
+            &Request {
+                app_name: "Unbound",
+                replaces_id: shown.unwrap_or(0),
+                app_icon: "preferences-system",
+                summary: &summary,
+                body: &body,
+                actions: &[(EDIT_ACTION, "Open in Editor")],
+                urgency: Urgency::Normal,
+            },
         );
-        match reply.and_then(|reply| reply.body().deserialize::<u32>()) {
+        match reply {
             Ok(id) => *shown = Some(id),
             Err(error) => eprintln!("unbound-config: cannot post the error notification: {error}"),
         }

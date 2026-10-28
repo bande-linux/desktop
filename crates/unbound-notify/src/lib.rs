@@ -1,4 +1,5 @@
 mod center;
+pub mod client;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};

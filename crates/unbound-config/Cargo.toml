@@ -8,11 +8,11 @@ repository.workspace = true
 [dependencies]
 kdl.workspace = true
 notify.workspace = true
+unbound-notify = { path = "../unbound-notify" }
 zbus.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
-unbound-notify = { path = "../unbound-notify" }
 unbound-test-bus.workspace = true
 
 [package.metadata.deb]

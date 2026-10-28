@@ -20,6 +20,7 @@ use smithay::backend::renderer::utils::{on_commit_buffer_handler, with_renderer_
 use smithay::backend::renderer::element::memory::{
     MemoryRenderBuffer, MemoryRenderBufferRenderElement,
 };
+use smithay::desktop::{LayerSurface as MappedLayer, WindowSurfaceType, layer_map_for_output};
 use smithay::input::keyboard::XkbConfig;
 use smithay::input::pointer::{CursorImageAttributes, CursorImageStatus};
 use smithay::render_elements;
@@ -29,6 +30,7 @@ use smithay::reexports::wayland_protocols::wp::presentation_time::server::wp_pre
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::reexports::wayland_server::backend::{ClientData, ClientId, DisconnectReason};
 use smithay::reexports::wayland_server::protocol::wl_buffer::WlBuffer;
+use smithay::reexports::wayland_server::protocol::wl_output::WlOutput;
 use smithay::reexports::wayland_server::protocol::wl_callback::WlCallback;
 use smithay::reexports::wayland_server::protocol::wl_seat::WlSeat;
 use smithay::reexports::wayland_server::protocol::wl_shm::Format;
@@ -41,6 +43,9 @@ use smithay::wayland::compositor::{
 };
 use smithay::wayland::dmabuf::{
     DmabufFeedback, DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier, get_dmabuf,
+};
+use smithay::wayland::fractional_scale::{
+    FractionalScaleHandler, FractionalScaleManagerState, with_fractional_scale,
 };
 use smithay::wayland::output::{OutputHandler, OutputManagerState};
 use smithay::wayland::presentation::{
@@ -58,11 +63,19 @@ use smithay::wayland::selection::primary_selection::{
 use smithay::wayland::shell::xdg::{
     PopupSurface, PositionerState, ToplevelSurface, XdgShellHandler, XdgShellState,
 };
+use smithay::wayland::shell::wlr_layer::{
+    Layer, LayerSurface, LayerSurfaceData, WlrLayerShellHandler, WlrLayerShellState,
+};
 use smithay::wayland::shm::{ShmHandler, ShmState, with_buffer_contents};
+use smithay::wayland::viewporter::ViewporterState;
+use smithay::wayland::xdg_activation::{
+    XdgActivationHandler, XdgActivationState, XdgActivationToken, XdgActivationTokenData,
+};
 use smithay::{
     delegate_compositor, delegate_data_device, delegate_dmabuf, delegate_ext_data_control,
-    delegate_output, delegate_presentation, delegate_primary_selection, delegate_seat,
-    delegate_shm, delegate_xdg_shell,
+    delegate_fractional_scale, delegate_layer_shell, delegate_output, delegate_presentation,
+    delegate_primary_selection, delegate_seat, delegate_shm, delegate_viewporter,
+    delegate_xdg_activation, delegate_xdg_shell,
 };
 use unbound_render::VulkanRenderer;
 
@@ -113,6 +126,11 @@ pub struct State {
     output: Output,
     _output_manager_state: OutputManagerState,
     _presentation_state: PresentationState,
+    layer_shell_state: WlrLayerShellState,
+    activation_state: XdgActivationState,
+    _viewporter_state: ViewporterState,
+    _fractional_scale_state: FractionalScaleManagerState,
+    pending_activation: Option<WlSurface>,
     seat_state: SeatState<State>,
     pub(crate) seat: Seat<State>,
     data_device_state: DataDeviceState,
@@ -215,6 +233,11 @@ impl Headless {
             output,
             _output_manager_state: OutputManagerState::new(),
             _presentation_state: PresentationState::new::<State>(&handle, MONOTONIC),
+            layer_shell_state: WlrLayerShellState::new::<State>(&handle),
+            activation_state: XdgActivationState::new::<State>(&handle),
+            _viewporter_state: ViewporterState::new::<State>(&handle),
+            _fractional_scale_state: FractionalScaleManagerState::new::<State>(&handle),
+            pending_activation: None,
             seat_state,
             seat,
             data_device_state: DataDeviceState::new::<State>(&handle),
@@ -373,25 +396,42 @@ impl Headless {
     }
 
     pub fn render_elements(&self, renderer: &mut VulkanRenderer) -> Vec<OutputElement> {
+        let layers = |layer: Layer| self.state.placed_layers(layer);
+        let windows = self
+            .state
+            .windows
+            .iter()
+            .rev()
+            .filter(|window| window.size.is_some())
+            .map(|window| (window.toplevel.wl_surface().clone(), window.location))
+            .collect::<Vec<_>>();
         let mut elements: Vec<OutputElement> = self.cursor_elements(renderer);
         elements.extend(
-            self.state
-                .windows
-                .iter()
-                .rev()
-                .filter(|window| window.size.is_some())
-                .flat_map(|window| {
-                    render_elements_from_surface_tree(
-                        renderer,
-                        window.toplevel.wl_surface(),
-                        window.location,
-                        1.0,
-                        1.0,
-                        ElementKind::Unspecified,
-                    )
-                }),
+            [
+                layers(Layer::Overlay),
+                layers(Layer::Top),
+                windows,
+                layers(Layer::Bottom),
+                layers(Layer::Background),
+            ]
+            .into_iter()
+            .flatten()
+            .flat_map(|(surface, location)| {
+                render_elements_from_surface_tree(
+                    renderer,
+                    &surface,
+                    location,
+                    1.0,
+                    1.0,
+                    ElementKind::Unspecified,
+                )
+            }),
         );
         elements
+    }
+
+    pub fn usable_area(&self) -> Rect {
+        self.state.usable_area()
     }
 
     fn cursor_elements(&self, renderer: &mut VulkanRenderer) -> Vec<OutputElement> {
@@ -545,8 +585,63 @@ impl State {
     }
 }
 
-fn centered(output: Size<i32, Physical>, window: Size<i32, Physical>) -> Point<i32, Physical> {
-    ((output.w - window.w) / 2, (output.h - window.h) / 2).into()
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Rect {
+    pub location: Point<i32, Physical>,
+    pub size: Size<i32, Physical>,
+}
+
+fn centered(area: Rect, window: Size<i32, Physical>) -> Point<i32, Physical> {
+    (
+        area.location.x + (area.size.w - window.w) / 2,
+        area.location.y + (area.size.h - window.h) / 2,
+    )
+        .into()
+}
+
+impl State {
+    fn usable_area(&self) -> Rect {
+        let zone = layer_map_for_output(&self.output).non_exclusive_zone();
+        Rect {
+            location: (zone.loc.x, zone.loc.y).into(),
+            size: (zone.size.w, zone.size.h).into(),
+        }
+    }
+
+    pub(crate) fn placed_layers(&self, layer: Layer) -> Vec<(WlSurface, Point<i32, Physical>)> {
+        let map = layer_map_for_output(&self.output);
+        map.layers_on(layer)
+            .rev()
+            .filter_map(|mapped| {
+                let geometry = map.layer_geometry(mapped)?;
+                Some((
+                    mapped.wl_surface().clone(),
+                    (geometry.loc.x, geometry.loc.y).into(),
+                ))
+            })
+            .collect()
+    }
+
+    fn commit_layer(&mut self, surface: &WlSurface) -> bool {
+        let mut map = layer_map_for_output(&self.output);
+        let Some(layer) = map
+            .layer_for_surface(surface, WindowSurfaceType::TOPLEVEL)
+            .cloned()
+        else {
+            return false;
+        };
+        map.arrange();
+        let configured = with_states(surface, |states| {
+            states
+                .data_map
+                .get::<LayerSurfaceData>()
+                .is_some_and(|data| data.lock().is_ok_and(|data| data.initial_configure_sent))
+        });
+        if !configured {
+            layer.layer_surface().send_configure();
+        }
+        true
+    }
 }
 
 impl CompositorHandler for State {
@@ -564,6 +659,10 @@ impl CompositorHandler for State {
     fn commit(&mut self, surface: &WlSurface) {
         on_commit_buffer_handler::<Self>(surface);
         self.needs_redraw = true;
+        if self.commit_layer(surface) {
+            return;
+        }
+        let area = self.usable_area();
         let Some(window) = self
             .windows
             .iter_mut()
@@ -572,17 +671,26 @@ impl CompositorHandler for State {
             return;
         };
         let size = with_renderer_surface_state(surface, |state| {
-            state.buffer().and_then(|buffer| buffer_size(buffer))
+            let buffer = state.buffer()?;
+            buffer_size(buffer)?;
+            let size = state.surface_size()?;
+            Some(Size::from((size.w, size.h)))
         })
         .flatten();
         let mapped = window.size.is_some();
         if !mapped && let Some(size) = size {
-            window.location = centered(self.output_size, size);
+            window.location = centered(area, size);
         }
         window.size = size;
         let surface = window.toplevel.wl_surface().clone();
         match (mapped, size.is_some()) {
-            (false, true) if self.takes_focus_when_mapped(&surface) => self.focus(Some(surface)),
+            (false, true)
+                if self.pending_activation.as_ref() == Some(&surface)
+                    || self.takes_focus_when_mapped(&surface) =>
+            {
+                self.pending_activation = None;
+                self.focus(Some(surface));
+            }
             (false, true) => self.place_behind_frontmost(&surface),
             (true, false) => self.refocus_after_losing(&surface),
             _ => {}
@@ -727,3 +835,78 @@ delegate_primary_selection!(State);
 delegate_seat!(State);
 delegate_shm!(State);
 delegate_xdg_shell!(State);
+delegate_layer_shell!(State);
+delegate_xdg_activation!(State);
+delegate_viewporter!(State);
+delegate_fractional_scale!(State);
+
+impl WlrLayerShellHandler for State {
+    fn shell_state(&mut self) -> &mut WlrLayerShellState {
+        &mut self.layer_shell_state
+    }
+
+    fn new_layer_surface(
+        &mut self,
+        surface: LayerSurface,
+        _output: Option<WlOutput>,
+        _layer: Layer,
+        namespace: String,
+    ) {
+        let mapped = MappedLayer::new(surface.clone(), namespace);
+        if layer_map_for_output(&self.output)
+            .map_layer(&mapped)
+            .is_err()
+        {
+            surface.send_close();
+        }
+    }
+
+    fn layer_destroyed(&mut self, surface: LayerSurface) {
+        let mut map = layer_map_for_output(&self.output);
+        let mapped = map
+            .layer_for_surface(surface.wl_surface(), WindowSurfaceType::TOPLEVEL)
+            .cloned();
+        if let Some(mapped) = mapped {
+            map.unmap_layer(&mapped);
+        }
+        self.needs_redraw = true;
+    }
+}
+
+impl XdgActivationHandler for State {
+    fn activation_state(&mut self) -> &mut XdgActivationState {
+        &mut self.activation_state
+    }
+
+    fn token_created(&mut self, _token: XdgActivationToken, data: XdgActivationTokenData) -> bool {
+        match self.focused() {
+            None => true,
+            Some(focused) => focused.client().map(|client| client.id()) == data.client_id,
+        }
+    }
+
+    fn request_activation(
+        &mut self,
+        _token: XdgActivationToken,
+        _token_data: XdgActivationTokenData,
+        surface: WlSurface,
+    ) {
+        let mapped = self
+            .windows
+            .iter()
+            .any(|window| window.toplevel.wl_surface() == &surface && window.size.is_some());
+        if mapped {
+            self.focus(Some(surface));
+        } else {
+            self.pending_activation = Some(surface);
+        }
+    }
+}
+
+impl FractionalScaleHandler for State {
+    fn new_fractional_scale(&mut self, surface: WlSurface) {
+        with_states(&surface, |states| {
+            with_fractional_scale(states, |scale| scale.set_preferred_scale(1.0));
+        });
+    }
+}

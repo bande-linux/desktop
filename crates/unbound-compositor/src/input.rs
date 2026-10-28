@@ -12,6 +12,7 @@ use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Point, SERIAL_COUNTER};
 use smithay::wayland::compositor::get_parent;
+use smithay::wayland::shell::wlr_layer::Layer;
 
 use crate::state::{Headless, State};
 
@@ -38,16 +39,27 @@ impl State {
         &self,
         location: Point<f64, Logical>,
     ) -> Option<(WlSurface, Point<f64, Logical>)> {
-        self.windows.iter().rev().find_map(|window| {
-            window.size?;
-            let origin: Point<i32, Logical> = (window.location.x, window.location.y).into();
-            under_from_surface_tree(
-                window.toplevel.wl_surface(),
-                location,
-                origin,
-                WindowSurfaceType::ALL,
-            )
-            .map(|(surface, at)| (surface, at.to_f64()))
+        let layers = |layer: Layer| self.placed_layers(layer);
+        let windows = self
+            .windows
+            .iter()
+            .rev()
+            .filter(|window| window.size.is_some())
+            .map(|window| (window.toplevel.wl_surface().clone(), window.location))
+            .collect::<Vec<_>>();
+        [
+            layers(Layer::Overlay),
+            layers(Layer::Top),
+            windows,
+            layers(Layer::Bottom),
+            layers(Layer::Background),
+        ]
+        .into_iter()
+        .flatten()
+        .find_map(|(surface, origin)| {
+            let origin: Point<i32, Logical> = (origin.x, origin.y).into();
+            under_from_surface_tree(&surface, location, origin, WindowSurfaceType::ALL)
+                .map(|(surface, at)| (surface, at.to_f64()))
         })
     }
 
@@ -168,10 +180,14 @@ impl Headless {
     pub fn press_button(&mut self, button: u32, pressed: bool, time: u32) {
         let state = &mut self.state;
         if pressed {
-            let clicked = state
-                .surface_under(state.pointer_location)
-                .and_then(|(surface, _)| state.window_owning(&surface));
-            state.focus(clicked);
+            match state.surface_under(state.pointer_location) {
+                Some((surface, _)) => {
+                    if let Some(window) = state.window_owning(&surface) {
+                        state.focus(Some(window));
+                    }
+                }
+                None => state.focus(None),
+            }
         }
         let Some(pointer) = state.seat.get_pointer() else {
             return;

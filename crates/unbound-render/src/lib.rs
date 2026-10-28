@@ -9,7 +9,7 @@ use std::fmt;
 use std::fs::File;
 use std::io::{Seek, SeekFrom};
 use std::marker::PhantomData;
-use std::os::fd::{AsRawFd, BorrowedFd, FromRawFd, IntoRawFd, OwnedFd};
+use std::os::fd::{AsRawFd, BorrowedFd, IntoRawFd};
 use std::rc::Rc;
 use std::slice;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -926,7 +926,7 @@ impl VulkanRenderer {
         let memory = match memory {
             Ok(memory) => memory,
             Err(error) => {
-                drop(unsafe { OwnedFd::from_raw_fd(fd) });
+                unsafe { smithay::reexports::rustix::io::close(fd) };
                 return Err(error.into());
             }
         };

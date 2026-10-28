@@ -39,6 +39,7 @@ pub(crate) struct Shell {
     shell: Option<UnboundShellV1>,
     launcher_requests: usize,
     capture_requests: usize,
+    area_capture_requests: usize,
     toplevels: Vec<(ExtForeignToplevelHandleV1, String, bool)>,
 }
 
@@ -142,6 +143,10 @@ impl TestClient {
 
     pub fn screen_capture_requests(&self) -> usize {
         self.globals.shell.capture_requests
+    }
+
+    pub fn area_capture_requests(&self) -> usize {
+        self.globals.shell.area_capture_requests
     }
 
     pub fn activate_app(&mut self, server: &mut Headless, app_id: &str) {
@@ -284,6 +289,7 @@ impl Dispatch<UnboundShellV1, ()> for Globals {
         match event {
             unbound_shell_v1::Event::ShowLauncher => globals.shell.launcher_requests += 1,
             unbound_shell_v1::Event::CaptureScreen => globals.shell.capture_requests += 1,
+            unbound_shell_v1::Event::CaptureArea => globals.shell.area_capture_requests += 1,
             _ => {}
         }
     }

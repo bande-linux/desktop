@@ -242,6 +242,7 @@ const KEY_SPACE: u32 = 57;
 const KEY_LEFTMETA: u32 = 125;
 const KEY_A: u32 = 30;
 const KEY_3: u32 = 4;
+const KEY_4: u32 = 5;
 const KEY_LEFTSHIFT: u32 = 42;
 
 fn launcher() -> LayerRequest {
@@ -308,6 +309,19 @@ fn super_shift_3_asks_the_shell_for_a_screen_capture_and_is_not_delivered_to_the
     assert_eq!(shell.screen_capture_requests(), 1);
     assert_eq!(shell.launcher_requests(), 0);
     assert_eq!(threes(&app), seen, "the app saw {:?}", app.keys());
+}
+
+#[test]
+fn super_shift_4_asks_the_shell_for_an_area_capture() {
+    let mut server = server();
+    let mut shell = TestClient::connect_as_shell(&mut server);
+    shell.join_shell(&mut server);
+
+    press(&mut server, &[KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_4]);
+    roundtrip(&mut server, &mut [&mut shell]);
+
+    assert_eq!(shell.area_capture_requests(), 1);
+    assert_eq!(shell.screen_capture_requests(), 0);
 }
 
 #[test]

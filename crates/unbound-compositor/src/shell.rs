@@ -62,6 +62,14 @@ impl State {
         }
     }
 
+    pub(crate) fn capture_area(&mut self) {
+        for shell in &self.shell_resources {
+            if shell.version() >= unbound_shell_v1::EVT_CAPTURE_AREA_SINCE {
+                shell.capture_area();
+            }
+        }
+    }
+
     pub(crate) fn activate_app(&mut self, app_id: &str) {
         let (mut chosen, rest): (Vec<_>, Vec<_>) = std::mem::take(&mut self.windows)
             .into_iter()

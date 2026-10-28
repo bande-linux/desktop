@@ -28,11 +28,14 @@ enum Shortcut {
     LockScreen,
     ToggleFullscreen,
     CaptureScreen,
+    CaptureArea,
 }
 
 fn shortcut(keysym: u32, unshifted: Option<u32>, ctrl: bool, shift: bool) -> Option<Shortcut> {
-    if shift && unshifted == Some(keysyms::KEY_3) {
-        return Some(Shortcut::CaptureScreen);
+    match unshifted.filter(|_| shift) {
+        Some(keysyms::KEY_3) => return Some(Shortcut::CaptureScreen),
+        Some(keysyms::KEY_4) => return Some(Shortcut::CaptureArea),
+        _ => {}
     }
     match keysym {
         keysyms::KEY_f | keysyms::KEY_F if ctrl => Some(Shortcut::ToggleFullscreen),
@@ -65,6 +68,10 @@ impl State {
         }
         if shortcut == Shortcut::CaptureScreen {
             self.capture_screen();
+            return;
+        }
+        if shortcut == Shortcut::CaptureArea {
+            self.capture_area();
             return;
         }
         if shortcut == Shortcut::LockScreen {
@@ -113,7 +120,10 @@ impl State {
                     self.toggle_fullscreen(&window);
                 }
             }
-            Shortcut::ShowLauncher | Shortcut::LockScreen | Shortcut::CaptureScreen => {}
+            Shortcut::ShowLauncher
+            | Shortcut::LockScreen
+            | Shortcut::CaptureScreen
+            | Shortcut::CaptureArea => {}
         }
     }
 }

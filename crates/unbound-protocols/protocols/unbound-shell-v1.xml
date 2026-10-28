@@ -27,5 +27,12 @@
         screen on a Mac.
       </description>
     </event>
+
+    <event name="capture_area" since="2">
+      <description summary="the user pressed the area capture shortcut">
+        Sent for Super+Shift+4, as Command-Shift-4 lets the user drag out the part
+        of the screen to take a picture of on a Mac.
+      </description>
+    </event>
   </interface>
 </protocol>

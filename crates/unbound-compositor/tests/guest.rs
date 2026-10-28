@@ -19,10 +19,13 @@ impl ControlDevice for Card {}
 
 impl Card {
     fn open(path: &Path) -> io::Result<Self> {
-        let card = Card(OpenOptions::new().read(true).write(true).open(path)?);
-        card.set_client_capability(ClientCapability::Atomic, true)?;
-        card.set_client_capability(ClientCapability::WritebackConnectors, true)?;
-        Ok(card)
+        Ok(Card(OpenOptions::new().read(true).write(true).open(path)?))
+    }
+
+    fn with_writeback_connectors(self) -> io::Result<Self> {
+        self.set_client_capability(ClientCapability::Atomic, true)?;
+        self.set_client_capability(ClientCapability::WritebackConnectors, true)?;
+        Ok(self)
     }
 
     fn driver(&self) -> String {
@@ -82,7 +85,9 @@ fn card0_is_a_modesetting_device() {
 #[test]
 #[ignore = "needs the ci/vm guest"]
 fn vkms_has_a_connected_output_writeback_and_every_plane_type() {
-    let card = card_with_driver("vkms");
+    let card = card_with_driver("vkms")
+        .with_writeback_connectors()
+        .expect("atomic modesetting with writeback connectors");
     let resources = card.resource_handles().expect("KMS resources");
     assert_eq!(resources.crtcs().len(), 1);
 
@@ -118,5 +123,11 @@ fn vkms_has_a_connected_output_writeback_and_every_plane_type() {
 #[ignore = "needs the ci/vm guest"]
 fn virtio_gpu_is_present_beside_vkms() {
     let card = card_with_driver("virtio_gpu");
-    assert!(!card.resource_handles().expect("KMS resources").crtcs().is_empty());
+    assert!(
+        !card
+            .resource_handles()
+            .expect("KMS resources")
+            .crtcs()
+            .is_empty()
+    );
 }

@@ -1,25 +1,38 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+use unbound_screenshot::area::{AreaOutcome, AreaSelection, Region, crop};
 use unbound_screenshot::{desktop_dir, save};
 use unbound_toolkit::{
-    App, Color, Edges, KeyboardFocus, LayerKind, LayerOptions, Role, Scene, Window, WindowError,
-    WindowEvent,
+    App, Edges, KeyboardFocus, LayerKind, LayerOptions, Role, Scene, TextSystem, Window,
+    WindowError, WindowEvent,
 };
 
 struct Screenshots {
     home: PathBuf,
     config_home: PathBuf,
+    text: TextSystem,
+    selection: Option<AreaSelection>,
 }
 
 impl Screenshots {
-    fn capture(&self, window: &mut Window) {
+    fn capture(&self, window: &mut Window, region: Option<Region>) {
         let image = match window.capture_screen() {
             Ok(image) => image,
             Err(error) => {
                 eprintln!("unbound-screenshot: cannot capture the screen: {error}");
                 return;
             }
+        };
+        let image = match region {
+            Some(region) => match crop(&image, region) {
+                Some(cropped) => cropped,
+                None => {
+                    eprintln!("unbound-screenshot: the chosen area is not on the screen");
+                    return;
+                }
+            },
+            None => image,
         };
         let user_dirs = std::fs::read_to_string(self.config_home.join("user-dirs.dirs")).ok();
         let dir = desktop_dir(&self.home, user_dirs.as_deref());
@@ -32,22 +45,47 @@ impl Screenshots {
             ),
         }
     }
+
+    fn end_selection(&mut self, window: &mut Window) {
+        self.selection = None;
+        if let Err(error) = window.hide() {
+            eprintln!("unbound-screenshot: cannot hide the selection: {error}");
+        }
+    }
 }
 
 impl App for Screenshots {
     fn scene(&mut self, window: &mut Window) -> Scene {
         let (width, height) = window.size();
-        Scene {
-            width,
-            height,
-            background: Color::TRANSPARENT,
-            items: Vec::new(),
+        match &self.selection {
+            Some(selection) => selection.scene(width, height, &mut self.text),
+            None => AreaSelection::default().scene(width, height, &mut self.text),
         }
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
-        if event == WindowEvent::CaptureScreen {
-            self.capture(window);
+        match event {
+            WindowEvent::CaptureScreen if self.selection.is_none() => self.capture(window, None),
+            WindowEvent::CaptureArea if self.selection.is_none() => {
+                self.selection = Some(AreaSelection::default());
+                if let Err(error) = window.show() {
+                    eprintln!("unbound-screenshot: cannot show the selection: {error}");
+                }
+            }
+            WindowEvent::Input(input) => {
+                let Some(selection) = self.selection.as_mut() else {
+                    return;
+                };
+                match selection.handle(&input) {
+                    AreaOutcome::Selecting => window.request_redraw(),
+                    AreaOutcome::Cancelled => self.end_selection(window),
+                    AreaOutcome::Chosen(region) => {
+                        self.end_selection(window);
+                        self.capture(window, Some(region));
+                    }
+                }
+            }
+            _ => {}
         }
     }
 }
@@ -64,13 +102,19 @@ fn run() -> Result<(), WindowError> {
             layer: LayerKind::Overlay,
             anchor: Edges::ALL,
             exclusive_zone: -1,
-            keyboard: KeyboardFocus::None,
+            keyboard: KeyboardFocus::Exclusive,
             namespace: "screenshot".to_owned(),
         }),
         (0, 0),
     )?;
     window.hide()?;
-    unbound_toolkit::run(&mut window, &mut Screenshots { home, config_home })
+    let mut screenshots = Screenshots {
+        home,
+        config_home,
+        text: TextSystem::new(),
+        selection: None,
+    };
+    unbound_toolkit::run(&mut window, &mut screenshots)
 }
 
 fn main() -> ExitCode {

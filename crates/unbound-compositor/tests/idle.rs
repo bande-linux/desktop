@@ -91,3 +91,18 @@ fn a_visible_window_inhibiting_idle_holds_off_only_the_inhibitable_notification(
     tick(&mut server, &mut power, 61 * SECOND);
     assert_eq!(power.idle_events(inhibitable), [IdleEvent::Idled]);
 }
+
+#[test]
+fn a_notification_counts_from_when_it_was_made() {
+    let mut server = server();
+    let mut power = watcher(&mut server);
+    tick(&mut server, &mut power, SECOND);
+    tick(&mut server, &mut power, 30 * SECOND);
+
+    let watch = power.watch_idle(&mut server, 5_000, false);
+    assert_eq!(
+        tick(&mut server, &mut power, 31 * SECOND),
+        Some(36 * SECOND)
+    );
+    assert!(power.idle_events(watch).is_empty());
+}

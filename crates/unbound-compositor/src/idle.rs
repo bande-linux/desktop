@@ -22,6 +22,7 @@ pub(crate) struct Watch {
     timeout: Duration,
     obeys_inhibitors: bool,
     idled: bool,
+    since: Option<Duration>,
 }
 
 #[derive(Default)]
@@ -77,10 +78,11 @@ impl Headless {
         let last = state.idle.last_activity.unwrap_or(now);
         let mut next = None::<Duration>;
         for watch in state.idle.watches.iter_mut().filter(|watch| !watch.idled) {
+            let since = *watch.since.get_or_insert(now);
             if watch.obeys_inhibitors && inhibited {
                 continue;
             }
-            let due = last + watch.timeout;
+            let due = last.max(since) + watch.timeout;
             if now >= due {
                 watch.notification.idled();
                 watch.idled = true;
@@ -130,6 +132,7 @@ impl Dispatch<ExtIdleNotifierV1, ()> for State {
             timeout: Duration::from_millis(u64::from(timeout)),
             obeys_inhibitors,
             idled: false,
+            since: None,
         });
     }
 }

@@ -6,7 +6,7 @@ use std::process::{Command, ExitCode, Stdio};
 use std::time::{Duration, Instant};
 
 use smithay::utils::Size;
-use unbound_compositor::{Headless, Renderer};
+use unbound_compositor::{FrameStats, Headless, Renderer};
 use unbound_test_wayland::{ShmImage, TestClient, quadrants};
 use wayland_client::protocol::wl_shm::Format;
 
@@ -52,15 +52,15 @@ fn main() -> ExitCode {
 
 fn run() -> Result<bool, Box<dyn Error>> {
     let options = options()?;
-    let renderer = Renderer::new()?;
-    let info = renderer.adapter_info();
+    let info = Renderer::new()?.device_info().clone();
     eprintln!(
         "unbound-bench: rendering on {} ({})",
         info.name, info.driver
     );
 
-    let typical = frame_times(&renderer, Repaint::OneWindowCorner)?;
-    let full = frame_times(&renderer, Repaint::EveryWindow)?;
+    let (typical, typical_work) = frame_times(Repaint::OneWindowCorner)?;
+    let (full, _) = frame_times(Repaint::EveryWindow)?;
+    let damaged_pixels = (TYPICAL_DAMAGE * TYPICAL_DAMAGE) as f64;
     let (start, idle_rss) = compositor_start(&options.compositor)?;
 
     let metrics = [
@@ -75,6 +75,18 @@ fn run() -> Result<bool, Box<dyn Error>> {
             unit: "ms",
             value: percentile(&typical, 0.99),
             budget: REFRESH_120HZ_MS,
+        },
+        Metric {
+            name: "frame_typical_uploaded",
+            unit: "B",
+            value: typical_work.uploaded_bytes as f64,
+            budget: damaged_pixels * 4.0,
+        },
+        Metric {
+            name: "frame_typical_repainted",
+            unit: "px",
+            value: typical_work.repainted_pixels as f64,
+            budget: damaged_pixels,
         },
         Metric {
             name: "frame_full_p50",
@@ -131,7 +143,8 @@ enum Repaint {
     EveryWindow,
 }
 
-fn frame_times(renderer: &Renderer, repaint: Repaint) -> Result<Vec<Duration>, Box<dyn Error>> {
+fn frame_times(repaint: Repaint) -> Result<(Vec<Duration>, FrameStats), Box<dyn Error>> {
+    let mut renderer = Renderer::new()?;
     let mut server = Headless::new(Size::from(OUTPUT))?;
     let mut client = TestClient::connect(&mut server);
     let stride = WINDOW_WIDTH * 4;
@@ -152,9 +165,11 @@ fn frame_times(renderer: &Renderer, repaint: Repaint) -> Result<Vec<Duration>, B
     for _ in 0..WINDOWS {
         client.show_window(&mut server, &image(&frames[0]));
     }
+    renderer.render(&mut server)?;
 
     let start = Instant::now();
     let mut times = Vec::with_capacity(FRAMES);
+    let mut most = FrameStats::default();
     for frame in 0..FRAMES {
         let bytes = &frames[(frame + 1) % 2];
         match repaint {
@@ -174,13 +189,15 @@ fn frame_times(renderer: &Renderer, repaint: Repaint) -> Result<Vec<Duration>, B
         let composed = Instant::now();
         server.dispatch()?;
         if server.take_redraw() {
-            renderer.render(&server)?;
+            let stats = renderer.render(&mut server)?;
+            most.uploaded_bytes = most.uploaded_bytes.max(stats.uploaded_bytes);
+            most.repainted_pixels = most.repainted_pixels.max(stats.repainted_pixels);
             server.frame_done(start.elapsed())?;
         }
         times.push(composed.elapsed());
         client.exchange(&mut server);
     }
-    Ok(times)
+    Ok((times, most))
 }
 
 fn percentile(times: &[Duration], fraction: f64) -> f64 {

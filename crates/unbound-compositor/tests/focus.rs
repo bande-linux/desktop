@@ -33,7 +33,7 @@ fn stacking_by_side(server: &Headless) -> Vec<i32> {
     server
         .windows()
         .iter()
-        .map(|window| window.frame().expect("mapped").size.w)
+        .map(|window| window.size().expect("mapped").w)
         .collect()
 }
 

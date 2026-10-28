@@ -8,8 +8,7 @@ repository.workspace = true
 [dependencies]
 rustix.workspace = true
 smithay.workspace = true
-unbound-toolkit.workspace = true
-wgpu.workspace = true
+unbound-render.workspace = true
 
 [dev-dependencies]
 image.workspace = true
@@ -25,4 +24,4 @@ recommends = "unbound-clipboard"
 extended-description = """\
 Headless Wayland compositor built on Smithay. It serves wl_compositor, \
 wl_shm and xdg_wm_base clients and renders their windows offscreen \
-through wgpu on Vulkan, including Mesa's lavapipe CPU driver."""
+with its own Vulkan renderer, including on Mesa's lavapipe CPU driver."""

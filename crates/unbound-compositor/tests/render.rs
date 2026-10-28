@@ -26,13 +26,11 @@ fn centered_window_matches_the_golden_image() {
         },
     );
 
-    let renderer = Renderer::new().expect("Vulkan renderer");
-    let info = renderer.adapter_info();
-    println!(
-        "adapter: {} ({:?}, {})",
-        info.name, info.device_type, info.driver
-    );
-    let snapshot = renderer.render(&server).expect("rendered frame");
+    let mut renderer = Renderer::new().expect("Vulkan renderer");
+    let info = renderer.device_info();
+    println!("device: {} ({})", info.name, info.driver);
+    renderer.render(&mut server).expect("rendered frame");
+    let snapshot = renderer.snapshot(&server).expect("read back frame");
 
     let actual = RgbaImage::from_raw(
         snapshot.size.w.unsigned_abs(),

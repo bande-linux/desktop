@@ -22,8 +22,8 @@ fn main() -> ExitCode {
 }
 
 fn run() -> Result<(), Box<dyn Error>> {
-    let renderer = Renderer::new()?;
-    let info = renderer.adapter_info();
+    let mut renderer = Renderer::new()?;
+    let info = renderer.device_info();
     eprintln!(
         "unbound-compositor: rendering on {} ({})",
         info.name, info.driver
@@ -64,7 +64,7 @@ fn run() -> Result<(), Box<dyn Error>> {
             }
         };
         if compositor.take_redraw() {
-            renderer.render(&compositor)?;
+            renderer.render(&mut compositor)?;
             compositor.frame_done(start.elapsed())?;
         }
     }

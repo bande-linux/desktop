@@ -21,8 +21,8 @@ use smithay::reexports::wayland_server::{Client, Display, DisplayHandle, Resourc
 use smithay::utils::{Physical, Point, SERIAL_COUNTER, Serial, Size};
 use smithay::wayland::buffer::BufferHandler;
 use smithay::wayland::compositor::{
-    BufferAssignment, CompositorClientState, CompositorHandler, CompositorState, SurfaceAttributes,
-    with_states,
+    BufferAssignment, CompositorClientState, CompositorHandler, CompositorState, Damage,
+    SurfaceAttributes, with_states,
 };
 use smithay::wayland::selection::SelectionHandler;
 use smithay::wayland::selection::data_device::{
@@ -36,22 +36,24 @@ use smithay::wayland::selection::primary_selection::{
 use smithay::wayland::shell::xdg::{
     PopupSurface, PositionerState, ToplevelSurface, XdgShellHandler, XdgShellState,
 };
-use smithay::wayland::shm::{BufferData, ShmHandler, ShmState, with_buffer_contents};
+use smithay::wayland::shm::{ShmHandler, ShmState, with_buffer_contents};
 use smithay::{
     delegate_compositor, delegate_data_device, delegate_ext_data_control,
     delegate_primary_selection, delegate_seat, delegate_shm, delegate_xdg_shell,
 };
+use unbound_render::Rect;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Frame {
-    pub size: Size<i32, Physical>,
-    pub bgra_premultiplied: Vec<u8>,
+pub(crate) struct PendingBuffer {
+    pub(crate) buffer: WlBuffer,
+    pub(crate) damage: Vec<Rect>,
 }
 
 pub struct Window {
+    pub(crate) id: u64,
     toplevel: ToplevelSurface,
     location: Point<i32, Physical>,
-    frame: Option<Frame>,
+    size: Option<Size<i32, Physical>>,
+    pub(crate) pending: Option<PendingBuffer>,
 }
 
 impl Window {
@@ -59,8 +61,19 @@ impl Window {
         self.location
     }
 
-    pub fn frame(&self) -> Option<&Frame> {
-        self.frame.as_ref()
+    pub fn size(&self) -> Option<Size<i32, Physical>> {
+        self.size
+    }
+
+    fn bounds(&self) -> Option<Rect> {
+        let size = self.size?;
+        Some(Rect::new(self.location.x, self.location.y, size.w, size.h))
+    }
+
+    fn release_pending(&mut self) {
+        if let Some(pending) = self.pending.take() {
+            pending.buffer.release();
+        }
     }
 }
 
@@ -75,13 +88,15 @@ pub struct State {
     data_device_state: DataDeviceState,
     primary_selection_state: PrimarySelectionState,
     data_control_state: DataControlState,
-    windows: Vec<Window>,
+    pub(crate) windows: Vec<Window>,
+    next_window_id: u64,
+    pub(crate) damage: Vec<Rect>,
     needs_redraw: bool,
 }
 
 pub struct Headless {
     display: Display<State>,
-    state: State,
+    pub(crate) state: State,
     clipboard_daemon: Option<ClipboardDaemon>,
 }
 
@@ -122,6 +137,8 @@ impl Headless {
             primary_selection_state,
             data_control_state,
             windows: Vec::new(),
+            next_window_id: 0,
+            damage: Vec::new(),
             needs_redraw: false,
         };
         Ok(Self {
@@ -251,42 +268,18 @@ impl ClientData for ClientState {
     fn disconnected(&self, _client_id: ClientId, _reason: DisconnectReason) {}
 }
 
-fn copy_shm_frame(buffer: &WlBuffer) -> Option<Frame> {
-    with_buffer_contents(buffer, |ptr, len, data| {
-        let pool = unsafe { std::slice::from_raw_parts(ptr, len) };
-        frame_from_shm(pool, data)
-    })
-    .ok()
-    .flatten()
+fn shm_size(buffer: &WlBuffer) -> Option<Size<i32, Physical>> {
+    let data = with_buffer_contents(buffer, |_, _, data| data).ok()?;
+    matches!(data.format, Format::Argb8888 | Format::Xrgb8888)
+        .then(|| Size::from((data.width, data.height)))
 }
 
-fn frame_from_shm(pool: &[u8], data: BufferData) -> Option<Frame> {
-    let opaque = match data.format {
-        Format::Argb8888 => false,
-        Format::Xrgb8888 => true,
-        _ => return None,
+fn buffer_rect(damage: &Damage) -> Rect {
+    let (x, y, width, height) = match damage {
+        Damage::Surface(rect) => (rect.loc.x, rect.loc.y, rect.size.w, rect.size.h),
+        Damage::Buffer(rect) => (rect.loc.x, rect.loc.y, rect.size.w, rect.size.h),
     };
-    let width = usize::try_from(data.width).ok()?;
-    let height = usize::try_from(data.height).ok()?;
-    let stride = usize::try_from(data.stride).ok()?;
-    let offset = usize::try_from(data.offset).ok()?;
-    let row_bytes = width.checked_mul(4)?;
-    let mut pixels = Vec::with_capacity(row_bytes * height);
-    for row in 0..height {
-        let start = offset.checked_add(row.checked_mul(stride)?)?;
-        pixels.extend_from_slice(pool.get(start..start.checked_add(row_bytes)?)?);
-    }
-    if opaque {
-        pixels
-            .as_chunks_mut::<4>()
-            .0
-            .iter_mut()
-            .for_each(|pixel| pixel[3] = u8::MAX);
-    }
-    Some(Frame {
-        size: (data.width, data.height).into(),
-        bgra_premultiplied: pixels,
-    })
+    Rect::new(x, y, width, height)
 }
 
 impl State {
@@ -304,6 +297,9 @@ impl State {
                 .position(|window| window.toplevel.wl_surface() == surface)
         {
             let window = self.windows.remove(index);
+            if index < self.windows.len() {
+                self.damage.extend(window.bounds());
+            }
             self.windows.push(window);
             self.needs_redraw = true;
         }
@@ -316,7 +312,7 @@ impl State {
         self.windows
             .iter()
             .rev()
-            .filter(|window| window.frame.is_some())
+            .filter(|window| window.size.is_some())
             .map(|window| window.toplevel.wl_surface())
             .find(|surface| {
                 surface
@@ -346,7 +342,7 @@ impl State {
             return true;
         }
         !self.windows.iter().any(|window| {
-            window.frame.is_some()
+            window.size.is_some()
                 && window.toplevel.wl_surface() != surface
                 && window.toplevel.wl_surface().client() == owner
         })
@@ -391,32 +387,56 @@ impl CompositorHandler for State {
             return;
         };
         self.needs_redraw = true;
-        let was_mapped = window.frame.is_some();
-        let assignment = with_states(surface, |states| {
-            states
-                .cached_state
-                .get::<SurfaceAttributes>()
-                .current()
-                .buffer
-                .take()
+        let (assignment, damage) = with_states(surface, |states| {
+            let mut attributes = states.cached_state.get::<SurfaceAttributes>();
+            let current = attributes.current();
+            (current.buffer.take(), std::mem::take(&mut current.damage))
         });
+        let before = window.bounds();
+        let mut updated = Vec::new();
         match assignment {
-            Some(BufferAssignment::NewBuffer(buffer)) => {
-                let frame = copy_shm_frame(&buffer);
-                buffer.release();
-                if let Some(frame) = frame {
-                    if window.frame.is_none() {
-                        window.location = centered(self.output_size, frame.size);
+            Some(BufferAssignment::NewBuffer(buffer)) => match shm_size(&buffer) {
+                Some(size) => {
+                    if window.size.is_none() {
+                        window.location = centered(self.output_size, size);
                     }
-                    window.frame = Some(frame);
+                    if window.size == Some(size) {
+                        updated = damage.iter().map(buffer_rect).collect();
+                    } else {
+                        updated = vec![Rect::new(0, 0, size.w, size.h)];
+                    }
+                    window.size = Some(size);
+                    let mut pending = updated.clone();
+                    if let Some(previous) = window.pending.take() {
+                        previous.buffer.release();
+                        pending.extend(previous.damage);
+                    }
+                    window.pending = Some(PendingBuffer {
+                        buffer,
+                        damage: pending,
+                    });
                 }
+                None => buffer.release(),
+            },
+            Some(BufferAssignment::Removed) => {
+                window.size = None;
+                window.release_pending();
             }
-            Some(BufferAssignment::Removed) => window.frame = None,
             None => {}
         }
-        let is_mapped = window.frame.is_some();
+        let after = window.bounds();
+        if before != after {
+            self.damage.extend(before);
+            self.damage.extend(after);
+        } else if let Some(bounds) = after {
+            self.damage.extend(
+                updated
+                    .iter()
+                    .filter_map(|rect| rect.translated(bounds.x, bounds.y).intersection(&bounds)),
+            );
+        }
         let surface = window.toplevel.wl_surface().clone();
-        match (was_mapped, is_mapped) {
+        match (before.is_some(), after.is_some()) {
             (false, true) if self.takes_focus_when_mapped(&surface) => self.focus(Some(surface)),
             (false, true) => self.place_behind_frontmost(&surface),
             (true, false) => self.refocus_after_losing(&surface),
@@ -445,15 +465,26 @@ impl XdgShellHandler for State {
             state.states.set(xdg_toplevel::State::Activated);
         });
         toplevel.send_configure();
+        self.next_window_id += 1;
         self.windows.push(Window {
+            id: self.next_window_id,
             toplevel,
             location: Point::default(),
-            frame: None,
+            size: None,
+            pending: None,
         });
     }
 
     fn toplevel_destroyed(&mut self, toplevel: ToplevelSurface) {
-        self.windows.retain(|window| window.toplevel != toplevel);
+        if let Some(index) = self
+            .windows
+            .iter()
+            .position(|window| window.toplevel == toplevel)
+        {
+            let mut window = self.windows.remove(index);
+            window.release_pending();
+            self.damage.extend(window.bounds());
+        }
         self.needs_redraw = true;
         self.refocus_after_losing(toplevel.wl_surface());
     }

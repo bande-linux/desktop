@@ -6,7 +6,8 @@ use unbound_test_wayland::{Presented, RED, ShmImage, TestClient};
 use wayland_client::protocol::wl_shm::Format;
 
 const SIDE: i32 = 16;
-const HALF_MILLISECOND: Duration = Duration::from_micros(500);
+const MICROSECOND: Duration = Duration::from_micros(1);
+const WARM_UP_FRAMES: usize = 16;
 
 fn image(pixels: &[u8]) -> ShmImage<'_> {
     ShmImage {
@@ -43,8 +44,21 @@ impl Session {
             scheduler: FrameScheduler::new(FrameClock::new(Duration::ZERO, REFRESH)),
             pixels,
         };
-        let mapped = session.run_from(Duration::ZERO);
-        (session, mapped)
+        let mut last = session.run_from(Duration::ZERO);
+        for _ in 0..WARM_UP_FRAMES {
+            session
+                .client
+                .commit_buffer(0, &image(&session.pixels), (0, 0, SIDE, SIDE));
+            session.server.dispatch().expect("server dispatch");
+            last = session.run_from(last.time);
+        }
+        (session, last)
+    }
+
+    fn deadline_of_next_vblank(&self, after: Vblank) -> (Vblank, Duration) {
+        let clock = self.scheduler.clock();
+        let next = clock.vblank_after(after.time);
+        (next, clock.deadline(next))
     }
 
     fn commit_with_feedback(&mut self) {
@@ -71,20 +85,20 @@ impl Session {
 
 #[test]
 fn a_commit_before_the_deadline_is_presented_at_the_next_vblank() {
-    let (mut session, mapped) = Session::with_a_window();
-    let committed = mapped.time;
+    let (mut session, last) = Session::with_a_window();
+    let (next, deadline) = session.deadline_of_next_vblank(last);
+    assert!(deadline > last.time, "the renders fit a refresh interval");
 
     session.commit_with_feedback();
-    let presented = session.run_from(committed);
+    let presented = session.run_from(deadline);
 
-    let next = mapped.sequence + 1;
-    assert_eq!(presented.sequence, next);
+    assert_eq!(presented.sequence, last.sequence + 1);
     assert_eq!(
         session.client.presented(),
         [Presented {
-            time: vblank_time(next),
+            time: vblank_time(next.sequence),
             refresh: REFRESH,
-            sequence: next,
+            sequence: next.sequence,
             vsync: true,
         }]
     );
@@ -92,24 +106,26 @@ fn a_commit_before_the_deadline_is_presented_at_the_next_vblank() {
 
 #[test]
 fn a_commit_after_the_deadline_is_presented_one_vblank_later() {
-    let (mut session, mapped) = Session::with_a_window();
-    let next = mapped.sequence + 1;
-    let committed = vblank_time(next) - HALF_MILLISECOND;
+    let (mut session, last) = Session::with_a_window();
+    let (next, deadline) = session.deadline_of_next_vblank(last);
 
     session.commit_with_feedback();
-    let presented = session.run_from(committed);
+    let presented = session.run_from(deadline + MICROSECOND);
 
-    assert_eq!(presented.sequence, next + 1);
-    assert_eq!(session.client.presented()[0].time, vblank_time(next + 1));
+    assert_eq!(presented.sequence, next.sequence + 1);
+    assert_eq!(
+        session.client.presented()[0].time,
+        vblank_time(next.sequence + 1)
+    );
 }
 
 #[test]
 fn a_commit_superseded_before_the_deadline_is_discarded() {
-    let (mut session, mapped) = Session::with_a_window();
+    let (mut session, last) = Session::with_a_window();
 
     session.commit_with_feedback();
     session.commit_with_feedback();
-    session.run_from(mapped.time);
+    session.run_from(last.time);
 
     assert_eq!(session.client.discarded(), 1);
     assert_eq!(session.client.presented().len(), 1);
@@ -117,11 +133,11 @@ fn a_commit_superseded_before_the_deadline_is_discarded() {
 
 #[test]
 fn nothing_is_composed_while_no_client_commits() {
-    let (mut session, mapped) = Session::with_a_window();
+    let (mut session, last) = Session::with_a_window();
 
     let poll = session
         .scheduler
-        .poll(mapped.time, &mut session.server, &mut session.renderer)
+        .poll(last.time, &mut session.server, &mut session.renderer)
         .expect("frame");
 
     assert_eq!(poll.wake_at, None);

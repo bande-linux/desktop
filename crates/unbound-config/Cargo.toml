@@ -12,4 +12,5 @@ zbus.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+unbound-notify = { path = "../unbound-notify" }
 unbound-test-bus.workspace = true

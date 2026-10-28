@@ -1,4 +1,5 @@
 mod edit;
+mod report;
 mod service;
 mod store;
 
@@ -10,6 +11,7 @@ use std::time::Duration;
 use kdl::{KdlDocument, KdlEntry, KdlNode, KdlValue};
 
 pub use edit::Setting;
+pub use report::{EDIT_ACTION, ErrorNotifier};
 pub use service::{BUS_NAME, ConfigService, OBJECT_PATH, ServiceError};
 pub use store::{ConfigStore, ReloadError};
 

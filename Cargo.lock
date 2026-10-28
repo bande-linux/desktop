@@ -1749,6 +1749,7 @@ dependencies = [
  "kdl",
  "notify",
  "tempfile",
+ "unbound-notify",
  "unbound-test-bus",
  "zbus",
 ]

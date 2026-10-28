@@ -24,6 +24,9 @@ set -u
 export RUST_BACKTRACE=1
 echo "Guest kernel $(uname -r)"
 ls -l /dev/dri
+/usr/lib/systemd/systemd-udevd --daemon
+udevadm trigger --action=add
+udevadm settle
 SEATD_VTBOUND=0 seatd -l error &
 for _ in $(seq 50); do
     [ -S /run/seatd.sock ] && break

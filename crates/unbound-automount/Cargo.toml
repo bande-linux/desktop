@@ -1,0 +1,27 @@
+[package]
+name = "unbound-automount"
+description = "Unbound removable media mounting"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+unbound-notify = { path = "../unbound-notify" }
+zbus.workspace = true
+
+[dev-dependencies]
+unbound-test-bus.workspace = true
+
+[package.metadata.deb]
+maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+section = "x11"
+depends = "$auto, dbus-session-bus | default-dbus-session-bus, init-system-helpers (>= 1.66), udisks2"
+extended-description = """\
+Mounts removable drives through UDisks2 as they appear, and warns when a \
+mounted drive is disconnected without being ejected. Started with the \
+graphical session."""
+maintainer-scripts = "debian/"
+assets = [
+    ["target/release/unbound-automount", "usr/bin/", "755"],
+    ["debian/unbound-automount.service", "usr/lib/systemd/user/", "644"],
+]

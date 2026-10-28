@@ -67,7 +67,7 @@ jobs:
           echo "$root/bin" >> "$GITHUB_PATH"
       - run: |
           for package in unbound-compositor unbound-notify unbound-clipboard unbound-config unbound-power \
-              xdg-desktop-portal-unbound unbound-tray; do
+              xdg-desktop-portal-unbound unbound-tray unbound-automount; do
             cargo deb --package "$package" --locked
           done
       - name: Inspect the packages
@@ -111,6 +111,15 @@ jobs:
             test -x "$root$(sed -n 's/^ExecStart=//p' "$unit")"
             dpkg-deb --ctrl-tarfile "$deb" | tar -t | grep -qx './postinst'
           done
+      - name: Check the automount service's user unit
+        run: |
+          deb=$(ls target/debian/unbound-automount_*.deb)
+          root=$(mktemp -d)
+          dpkg-deb --extract "$deb" "$root"
+          unit="$root/usr/lib/systemd/user/unbound-automount.service"
+          grep -qx 'WantedBy=graphical-session.target' "$unit"
+          test -x "$root$(sed -n 's/^ExecStart=//p' "$unit")"
+          dpkg-deb --field "$deb" Depends | grep -q 'udisks2'
       - name: Check the portal backend's registration
         run: |
           root=$(mktemp -d)

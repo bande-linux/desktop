@@ -1704,6 +1704,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "unbound-automount"
+version = "0.1.0"
+dependencies = [
+ "unbound-notify",
+ "unbound-test-bus",
+ "zbus",
+]
+
+[[package]]
 name = "unbound-bench"
 version = "0.1.0"
 dependencies = [

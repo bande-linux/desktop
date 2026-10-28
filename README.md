@@ -18,7 +18,6 @@ It marries the organizational depth and workflow polish of **macOS** (Miller col
 ### Core Highlights
 * **Layered Graphics Engine**: Built on **Smithay** for kernel DRM/KMS atomic modesetting, libinput, and session management, paired with a custom **`wgpu` / Vulkan** render pipeline and Apple-grade spring physics layout engine.
 * **Seamless Gaming & Legacy Compatibility**: Dedicated external XWayland bridge via **`xwayland-satellite`** (full day-one compatibility with Steam, Proton, and Wine with zero X11 pollution inside the core compositor).
-* **NVIDIA Explicit Sync**: Native `linux-drm-syncobj-v1` integration for tearing-free, glitch-free rendering on modern NVIDIA 560+ hardware.
 * **Full Session Infrastructure**: Native XDG Desktop Portals (`xdg-desktop-portal-unbound` with PipeWire screen casting), clipboard management (`wl_data_device`, `zwp_primary_selection`, persistent `ext-data-control-v1`), screen lock (`ext-session-lock-v1` with crash resilience), idle management, polkit agent, and CJK input methods.
 * **Robust Display Management**: Privileged PAM session handling via **`greetd`**, paired with an unprivileged, modern GPU-accelerated client (**`unbound-greeter`**).
 * **Autonomous Software Factory**: Driven by a zero-human-in-the-loop autonomous SDLC engine (`unbound-factory`) backed by self-hosted arm64 CI runners (headless Wayland via Lavapipe + ephemeral Debian 13 arm64 VM boot tests).

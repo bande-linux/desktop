@@ -13,9 +13,8 @@ Following an exhaustive architectural audit, Unbound implements a pragmatic, roc
 1. **Layered Graphics Engine**: Leverages **Smithay** for kernel DRM/KMS atomic modesetting, libinput, and session management, while building a **100% custom Vulkan/wgpu scene graph, render pipeline, physics layout engine, and shell** above it.
 2. **Seamless Legacy & Gaming Compatibility**: Clean **XWayland isolation via `xwayland-satellite`**, ensuring full compatibility with Steam, Proton, Wine, and legacy GUI apps with zero X11 pollution inside the core compositor.
 3. **Full Desktop Session Infrastructure**: Complete implementation of all essential desktop services—XDG Desktop Portals (PipeWire screen sharing, file pickers), clipboard managers (primary & selection), idle/lock state machines (`ext-session-lock-v1`), polkit agent, power management, audio/media key routing, and input methods (CJK).
-4. **NVIDIA Explicit Sync**: Native `linux-drm-syncobj-v1` integration for tearing-free, glitch-free rendering on modern NVIDIA 560+ hardware.
-5. **Robust Display Management**: Privileged session handling via **`greetd`**, pairing with an unprivileged, beautiful Rust client (`unbound-greeter`).
-6. **Zero-Human-in-the-Loop Software Factory**: An autonomous SDLC orchestrator (`unbound-factory`) managing git worktrees, automated out-of-scope task discovery, pre-PR peer reviewer agents, and CI verification on self-hosted arm64 runners (headless Wayland via Lavapipe + ephemeral Debian 13 arm64 VM boot tests).
+4. **Robust Display Management**: Privileged session handling via **`greetd`**, pairing with an unprivileged, beautiful Rust client (`unbound-greeter`).
+5. **Zero-Human-in-the-Loop Software Factory**: An autonomous SDLC orchestrator (`unbound-factory`) managing git worktrees, automated out-of-scope task discovery, pre-PR peer reviewer agents, and CI verification on self-hosted arm64 runners (headless Wayland via Lavapipe + ephemeral Debian 13 arm64 VM boot tests).
 
 ---
 
@@ -30,7 +29,7 @@ graph TB
 
     subgraph "Core Server (unbound-linux/compositor)"
         SMITHAY[Smithay Kernel & Protocol Core]
-        SYNC[linux-drm-syncobj-v1: NVIDIA Explicit Sync]
+        SYNC[linux-drm-syncobj-v1: Explicit Sync]
         RENDER[Custom Vulkan / wgpu Multi-Pass Render Pipeline]
         SCENE[Spatial Scene Graph & Damage Tracker]
         PHYSICS[Apple-Grade Spring Physics Engine]
@@ -89,7 +88,6 @@ To avoid 8–12 months of low-level DRM/KMS resource-lifetime debugging and kern
 - **Custom Scene Graph & Vulkan Pipeline**: 100% custom **`wgpu` / Vulkan** renderer. Implements dual-pass Kawase blur shaders, subpixel font rendering, dynamic rounded-corner clipping, and damage-region tracking.
 - **Physics Layout Engine**: Custom spring dynamics simulation ($\ddot{x} + 2\zeta\omega\dot{x} + \omega^2\Delta x = 0$) powering fluid window snapping, minimize-to-panel curves, and workspace sliding.
   - Implemented in `crates/unbound-spring` as the closed-form solution for under-, critically and overdamped springs, parameterised by angular frequency $\omega$ and damping ratio $\zeta$. A trajectory depends only on elapsed time, never on frame rate, and retargeting keeps position and velocity continuous.
-- **NVIDIA Explicit Sync (`linux-drm-syncobj-v1`)**: Mandatory P0 protocol implementation ensuring zero frame corruption and tearing on NVIDIA 560+ proprietary drivers.
 
 ### 1.2 XWayland Compatibility via `xwayland-satellite`
 Instead of polluting the compositor with legacy X11 C-libraries or abandoning gaming entirely:
@@ -226,7 +224,7 @@ To ensure absolute completeness, `unbound-compositor` implements the standard pr
 | `wl_shm` | Shared memory fallback rendering | **P0** | Phase 2 |
 | `wl_seat` (`pointer`, `keyboard`, `touch`) | Multi-device user input | **P0** | Phase 2 |
 | `linux-dmabuf-v1` | Zero-copy hardware GPU memory import | **P0** | Phase 2 |
-| `linux-drm-syncobj-v1` | Explicit sync (NVIDIA 560+ support) | **P0** | Phase 2 |
+| `linux-drm-syncobj-v1` | Explicit sync | **P0** | Phase 2 |
 | `xdg_wm_base` | Desktop application windows | **P0** | Phase 2 |
 | `wlr-layer-shell-unstable-v1` | Top bar, taskbar, notifications, overlays | **P0** | Phase 2 |
 | `wp_fractional_scale_v1` / `wp_viewporter` | Pristine Retina/HiDPI rendering | **P0** | Phase 2 |
@@ -717,7 +715,7 @@ Depends:
   fonts-noto-cjk,
   adwaita-icon-theme
 Recommends:
-  nvidia-driver (>= 560.0.0) | libvulkan1
+  libvulkan1
 Description: Unbound Desktop Environment (Complete Meta-Package)
  Full-featured, modern, high-performance desktop environment written in Rust
  for Debian, featuring Wayland, modular panels, Miller column file browsing,

@@ -110,7 +110,7 @@ fn window(client: &mut TestClient, server: &mut Headless, width: i32, height: i3
 #[test]
 #[ignore = "needs the ci/vm guest"]
 fn uinput_events_reach_the_window_under_the_pointer_after_a_click() {
-    let mut session = Session::on_vkms();
+    let mut session = Session::open();
     let input = session
         .output
         .input_backend()

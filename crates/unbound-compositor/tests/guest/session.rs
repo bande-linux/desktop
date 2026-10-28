@@ -25,10 +25,11 @@ pub struct Session {
 }
 
 impl Session {
-    pub fn on_vkms() -> Self {
-        let path = card_path("vkms");
+    pub fn open() -> Self {
+        let driver = std::env::var("UNBOUND_TEST_DRIVER").unwrap_or_else(|_| "vkms".to_owned());
+        let path = card_path(&driver);
         let (output, DrmNotifiers { session, device }) =
-            DrmOutput::open(Some(&path)).expect("the compositor takes vkms through libseat");
+            DrmOutput::open(Some(&path)).expect("the compositor takes the card through libseat");
         let mut server = Headless::with_output(output.output_config()).expect("compositor state");
         let client = TestClient::connect(&mut server);
         let events = EventLoop::try_new().expect("event loop");

@@ -55,8 +55,8 @@ fn assert_matches(scanout: &Scanout, expected: impl Fn(usize, usize) -> [u8; 3])
 
 #[test]
 #[ignore = "needs the ci/vm guest"]
-fn a_composed_window_is_scanned_out_on_vkms() {
-    let mut session = Session::on_vkms();
+fn a_composed_window_is_scanned_out() {
+    let mut session = Session::open();
     let (width, height) = session.output_size();
     let (window_width, window_height) = (96, 64);
     let pixels = quadrants(window_width, window_height, window_width * 4);
@@ -97,7 +97,7 @@ fn a_composed_window_is_scanned_out_on_vkms() {
 #[test]
 #[ignore = "needs the ci/vm guest"]
 fn a_fullscreen_opaque_dmabuf_window_is_scanned_out_directly() {
-    let mut session = Session::on_vkms();
+    let mut session = Session::open();
     let (width, height) = session.output_size();
     let pixels = quadrants(width, height, width * 4);
     session.client.show_window_in(

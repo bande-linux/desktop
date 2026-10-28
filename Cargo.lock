@@ -1763,6 +1763,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "unbound-power"
+version = "0.1.0"
+dependencies = [
+ "unbound-notify",
+ "unbound-test-bus",
+ "zbus",
+]
+
+[[package]]
 name = "unbound-render"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,30 @@
+[package]
+name = "unbound-power"
+description = "Unbound power service: sleep locking, battery alerts and idle inhibition"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+unbound-notify = { path = "../unbound-notify" }
+zbus.workspace = true
+
+[dev-dependencies]
+unbound-test-bus.workspace = true
+
+[package.metadata.deb]
+maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+section = "x11"
+depends = "$auto, dbus-session-bus | default-dbus-session-bus, init-system-helpers (>= 1.66), default-logind | logind"
+recommends = "upower"
+extended-description = """\
+Locks the session before the computer sleeps through a logind delay \
+inhibitor, posts low and critical battery notifications from UPower, and \
+serves org.freedesktop.ScreenSaver so applications can keep the screen \
+on, holding a logind idle inhibitor for each request."""
+maintainer-scripts = "debian/"
+assets = [
+    ["target/release/unbound-power", "usr/bin/", "755"],
+    ["debian/unbound-power.service", "usr/lib/systemd/user/", "644"],
+    ["debian/org.unbound.Power.service", "usr/share/dbus-1/services/", "644"],
+]

@@ -24,6 +24,15 @@ static DISPLAY_FAMILIES: [FontFamilyName<'static>; 3] = [
     FontFamilyName::Generic(GenericFamily::SansSerif),
 ];
 
+pub(crate) fn families(size: f32) -> FontFamily<'static> {
+    let families = if size >= DISPLAY_SIZE {
+        DISPLAY_FAMILIES.as_slice()
+    } else {
+        TEXT_FAMILIES.as_slice()
+    };
+    FontFamily::List(families.into())
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TextStyle {
     pub size: f32,
@@ -74,6 +83,10 @@ impl TextSystem {
             fonts: FontContext::new(),
             layouts: LayoutContext::new(),
         }
+    }
+
+    pub(crate) fn contexts(&mut self) -> (&mut FontContext, &mut LayoutContext<Color>) {
+        (&mut self.fonts, &mut self.layouts)
     }
 
     pub fn paragraph(
@@ -159,6 +172,12 @@ impl GlyphRun {
 }
 
 impl Paragraph {
+    pub(crate) fn from_layout(layout: Layout<Color>) -> Self {
+        Self {
+            layout: Arc::new(layout),
+        }
+    }
+
     pub fn width(&self) -> f32 {
         self.layout.width()
     }

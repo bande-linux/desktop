@@ -17,6 +17,7 @@ const WINDOW_HEIGHT: usize = 480;
 const TYPICAL_DAMAGE: i32 = 64;
 const FRAMES: usize = 240;
 const IDLE_SETTLE: Duration = Duration::from_secs(1);
+const STARTS: usize = 5;
 
 const REFRESH_120HZ_MS: f64 = 1000.0 / 120.0;
 const REFRESH_60HZ_MS: f64 = 1000.0 / 60.0;
@@ -61,7 +62,13 @@ fn run() -> Result<bool, Box<dyn Error>> {
     let (typical, typical_work) = frame_times(Repaint::OneWindowCorner)?;
     let (full, _) = frame_times(Repaint::EveryWindow)?;
     let damaged_pixels = (TYPICAL_DAMAGE * TYPICAL_DAMAGE) as f64;
-    let (start, idle_rss) = compositor_start(&options.compositor)?;
+    let mut starts = Vec::with_capacity(STARTS);
+    let mut idle_rss = 0.0;
+    for _ in 0..STARTS {
+        let (start, rss) = compositor_start(&options.compositor)?;
+        starts.push(start);
+        idle_rss = rss;
+    }
 
     let metrics = [
         Metric {
@@ -107,9 +114,9 @@ fn run() -> Result<bool, Box<dyn Error>> {
             budget: REFRESH_60HZ_MS,
         },
         Metric {
-            name: "compositor_start",
+            name: "compositor_start_p50",
             unit: "ms",
-            value: start.as_secs_f64() * 1000.0,
+            value: percentile(&starts, 0.50),
             budget: 500.0,
         },
         Metric {

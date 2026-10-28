@@ -77,7 +77,7 @@ fn run_headless() -> Result<(), Box<dyn Error>> {
 }
 
 fn run_drm(device: Option<&Path>) -> Result<(), Box<dyn Error>> {
-    let (output, notifiers) = DrmOutput::open(device)?;
+    let (mut output, notifiers) = DrmOutput::open(device)?;
     eprintln!(
         "unbound-compositor: driving {} at {:.2} Hz",
         output.path().display(),
@@ -102,6 +102,12 @@ fn run_drm(device: Option<&Path>) -> Result<(), Box<dyn Error>> {
             }
         }
         DrmEvent::Error(error) => eprintln!("unbound-compositor: DRM error: {error}"),
+    })?;
+    let input = output.input_backend()?;
+    handle.insert_source(input, |event, _, app| {
+        if let Err(error) = app.compositor.handle_input(event) {
+            eprintln!("unbound-compositor: cannot deliver input: {error}");
+        }
     })?;
     let refresh = output.refresh();
     let app = App {

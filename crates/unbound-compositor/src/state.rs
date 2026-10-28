@@ -4,7 +4,7 @@ use std::os::unix::net::UnixStream;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use rustix::io::{FdFlags, fcntl_setfd};
@@ -17,7 +17,12 @@ use smithay::backend::renderer::element::surface::{
     WaylandSurfaceRenderElement, render_elements_from_surface_tree,
 };
 use smithay::backend::renderer::utils::{on_commit_buffer_handler, with_renderer_surface_state};
+use smithay::backend::renderer::element::memory::{
+    MemoryRenderBuffer, MemoryRenderBufferRenderElement,
+};
 use smithay::input::keyboard::XkbConfig;
+use smithay::input::pointer::{CursorImageAttributes, CursorImageStatus};
+use smithay::render_elements;
 use smithay::output::{Mode, Output, PhysicalProperties, Subpixel};
 use smithay::input::{Seat, SeatHandler, SeatState};
 use smithay::reexports::wayland_protocols::wp::presentation_time::server::wp_presentation_feedback::Kind;
@@ -29,7 +34,7 @@ use smithay::reexports::wayland_server::protocol::wl_seat::WlSeat;
 use smithay::reexports::wayland_server::protocol::wl_shm::Format;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{Client, Display, DisplayHandle, Resource};
-use smithay::utils::{Physical, Point, SERIAL_COUNTER, Serial, Size};
+use smithay::utils::{Logical, Physical, Point, SERIAL_COUNTER, Serial, Size};
 use smithay::wayland::buffer::BufferHandler;
 use smithay::wayland::compositor::{
     CompositorClientState, CompositorHandler, CompositorState, SurfaceAttributes, with_states,
@@ -62,6 +67,7 @@ use smithay::{
 use unbound_render::VulkanRenderer;
 
 use crate::clock::Vblank;
+use crate::cursor;
 
 pub const REFRESH: Duration = Duration::from_nanos(1_000_000_000 / 120);
 
@@ -79,9 +85,9 @@ pub struct OutputConfig {
 }
 
 pub struct Window {
-    toplevel: ToplevelSurface,
-    location: Point<i32, Physical>,
-    size: Option<Size<i32, Physical>>,
+    pub(crate) toplevel: ToplevelSurface,
+    pub(crate) location: Point<i32, Physical>,
+    pub(crate) size: Option<Size<i32, Physical>>,
 }
 
 impl Window {
@@ -108,17 +114,23 @@ pub struct State {
     _output_manager_state: OutputManagerState,
     _presentation_state: PresentationState,
     seat_state: SeatState<State>,
-    seat: Seat<State>,
+    pub(crate) seat: Seat<State>,
     data_device_state: DataDeviceState,
     primary_selection_state: PrimarySelectionState,
     data_control_state: DataControlState,
-    windows: Vec<Window>,
-    needs_redraw: bool,
+    pub(crate) windows: Vec<Window>,
+    pub(crate) needs_redraw: bool,
+    pub(crate) pointer_location: Point<f64, Logical>,
+    pub(crate) cursor_shown: bool,
+    cursor_status: CursorImageStatus,
+    cursor_arrow: MemoryRenderBuffer,
+    pub(crate) held_shortcut_keys: Vec<u32>,
+    pub(crate) input_devices: usize,
 }
 
 pub struct Headless {
     display: Display<State>,
-    state: State,
+    pub(crate) state: State,
     latched_feedback: Vec<PresentationFeedbackCallback>,
     latched_frame_callbacks: Vec<WlCallback>,
     clipboard_daemon: Option<ClipboardDaemon>,
@@ -153,6 +165,7 @@ impl Headless {
         let mut seat = seat_state.new_wl_seat(&handle, "seat0");
         seat.add_keyboard(XkbConfig::default(), 600, 25)
             .map_err(io::Error::other)?;
+        seat.add_pointer();
         let primary_selection_state = PrimarySelectionState::new::<State>(&handle);
         let data_control_state =
             DataControlState::new::<State, _>(&handle, Some(&primary_selection_state), |client| {
@@ -209,6 +222,16 @@ impl Headless {
             data_control_state,
             windows: Vec::new(),
             needs_redraw: false,
+            pointer_location: (
+                f64::from(output_size.w) / 2.0,
+                f64::from(output_size.h) / 2.0,
+            )
+                .into(),
+            cursor_shown: false,
+            cursor_status: CursorImageStatus::default_named(),
+            cursor_arrow: cursor::arrow(),
+            held_shortcut_keys: Vec::new(),
+            input_devices: 0,
         };
         Ok(Self {
             display,
@@ -349,26 +372,71 @@ impl Headless {
         &self.state.windows
     }
 
-    pub fn render_elements(
-        &self,
-        renderer: &mut VulkanRenderer,
-    ) -> Vec<WaylandSurfaceRenderElement<VulkanRenderer>> {
-        self.state
-            .windows
-            .iter()
-            .rev()
-            .filter(|window| window.size.is_some())
-            .flat_map(|window| {
+    pub fn render_elements(&self, renderer: &mut VulkanRenderer) -> Vec<OutputElement> {
+        let mut elements: Vec<OutputElement> = self.cursor_elements(renderer);
+        elements.extend(
+            self.state
+                .windows
+                .iter()
+                .rev()
+                .filter(|window| window.size.is_some())
+                .flat_map(|window| {
+                    render_elements_from_surface_tree(
+                        renderer,
+                        window.toplevel.wl_surface(),
+                        window.location,
+                        1.0,
+                        1.0,
+                        ElementKind::Unspecified,
+                    )
+                }),
+        );
+        elements
+    }
+
+    fn cursor_elements(&self, renderer: &mut VulkanRenderer) -> Vec<OutputElement> {
+        let state = &self.state;
+        if !state.cursor_shown {
+            return Vec::new();
+        }
+        let at = state.pointer_location;
+        let at: Point<i32, Physical> = (at.x.round() as i32, at.y.round() as i32).into();
+        match &state.cursor_status {
+            CursorImageStatus::Hidden => Vec::new(),
+            CursorImageStatus::Surface(surface) => {
+                let hotspot = with_states(surface, |states| {
+                    states
+                        .data_map
+                        .get::<Mutex<CursorImageAttributes>>()
+                        .and_then(|attributes| attributes.lock().ok().map(|a| a.hotspot))
+                        .unwrap_or_default()
+                });
                 render_elements_from_surface_tree(
                     renderer,
-                    window.toplevel.wl_surface(),
-                    window.location,
+                    surface,
+                    (at.x - hotspot.x, at.y - hotspot.y),
                     1.0,
                     1.0,
-                    ElementKind::Unspecified,
+                    ElementKind::Cursor,
                 )
-            })
-            .collect()
+            }
+            CursorImageStatus::Named(_) => MemoryRenderBufferRenderElement::from_buffer(
+                renderer,
+                (f64::from(at.x), f64::from(at.y)),
+                &state.cursor_arrow,
+                None,
+                None,
+                None,
+                ElementKind::Cursor,
+            )
+            .map(OutputElement::Cursor)
+            .into_iter()
+            .collect(),
+        }
+    }
+
+    pub(crate) fn flush(&mut self) -> io::Result<()> {
+        self.display.flush_clients()
     }
 }
 
@@ -401,13 +469,13 @@ fn shm_size(buffer: &WlBuffer) -> Option<Size<i32, Physical>> {
 }
 
 impl State {
-    fn focused(&self) -> Option<WlSurface> {
+    pub(crate) fn focused(&self) -> Option<WlSurface> {
         self.seat
             .get_keyboard()
             .and_then(|keyboard| keyboard.current_focus())
     }
 
-    fn focus(&mut self, surface: Option<WlSurface>) {
+    pub(crate) fn focus(&mut self, surface: Option<WlSurface>) {
         if let Some(surface) = &surface
             && let Some(index) = self
                 .windows
@@ -596,6 +664,12 @@ impl XdgShellHandler for State {
     }
 }
 
+render_elements! {
+    pub OutputElement<=VulkanRenderer>;
+    Surface=WaylandSurfaceRenderElement<VulkanRenderer>,
+    Cursor=MemoryRenderBufferRenderElement<VulkanRenderer>,
+}
+
 impl SeatHandler for State {
     type KeyboardFocus = WlSurface;
     type PointerFocus = WlSurface;
@@ -603,6 +677,11 @@ impl SeatHandler for State {
 
     fn seat_state(&mut self) -> &mut SeatState<Self> {
         &mut self.seat_state
+    }
+
+    fn cursor_image(&mut self, _seat: &Seat<Self>, image: CursorImageStatus) {
+        self.cursor_status = image;
+        self.needs_redraw = true;
     }
 
     fn focus_changed(&mut self, seat: &Seat<Self>, focused: Option<&WlSurface>) {

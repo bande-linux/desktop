@@ -7,7 +7,7 @@ repository.workspace = true
 
 [dependencies]
 rustix.workspace = true
-smithay = { workspace = true, features = ["backend_drm", "backend_gbm", "backend_session_libseat"] }
+smithay = { workspace = true, features = ["backend_drm", "backend_gbm", "backend_libinput", "backend_session_libseat", "backend_udev", "desktop"] }
 unbound-render.workspace = true
 
 [dev-dependencies]

@@ -10,10 +10,12 @@ use smithay::backend::drm::compositor::{DrmCompositor, FrameFlags, PrimaryPlaneE
 use smithay::backend::drm::{
     DrmDevice, DrmDeviceFd, DrmDeviceNotifier, DrmEventMetadata, DrmEventTime, DrmNode,
 };
+use smithay::backend::libinput::{LibinputInputBackend, LibinputSessionInterface};
 use smithay::backend::renderer::ImportDma;
 use smithay::backend::session::libseat::{LibSeatSession, LibSeatSessionNotifier};
 use smithay::backend::session::{Event as SessionEvent, Session};
 use smithay::output::OutputModeSource;
+use smithay::reexports::input::Libinput;
 use smithay::reexports::drm::control::{
     Device as ControlDevice, Mode, ModeTypeFlags, connector, crtc,
 };
@@ -47,6 +49,7 @@ pub struct DrmOutput {
     node: DrmNode,
     feedback: DmabufFeedback,
     scanned_out: bool,
+    libinput: Option<Libinput>,
 }
 
 pub struct DrmNotifiers {
@@ -216,6 +219,7 @@ impl DrmOutput {
             node,
             feedback,
             scanned_out: false,
+            libinput: None,
         })
     }
 
@@ -259,10 +263,30 @@ impl DrmOutput {
         })
     }
 
+    pub fn input_backend(&mut self) -> Result<LibinputInputBackend, DrmBackendError> {
+        let mut libinput =
+            Libinput::new_with_udev(LibinputSessionInterface::from(self.session.clone()));
+        libinput
+            .udev_assign_seat(&self.session.seat())
+            .map_err(|()| format!("libinput cannot use seat {}", self.session.seat()))?;
+        self.libinput = Some(libinput.clone());
+        Ok(LibinputInputBackend::new(libinput))
+    }
+
     pub fn session_changed(&mut self, event: SessionEvent) -> Result<(), DrmBackendError> {
         match event {
-            SessionEvent::PauseSession => self.device.pause(),
+            SessionEvent::PauseSession => {
+                if let Some(libinput) = self.libinput.as_mut() {
+                    libinput.suspend();
+                }
+                self.device.pause();
+            }
             SessionEvent::ActivateSession => {
+                if let Some(libinput) = self.libinput.as_mut() {
+                    libinput
+                        .resume()
+                        .map_err(|()| "libinput cannot resume its devices")?;
+                }
                 self.device.activate(true)?;
                 self.compositor.reset_state()?;
             }

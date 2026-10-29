@@ -42,6 +42,10 @@ impl FilesView {
         }
     }
 
+    pub fn set_palette(&mut self, palette: Palette) {
+        self.palette = palette;
+    }
+
     pub fn browser(&self) -> &Browser {
         &self.browser
     }

@@ -7,7 +7,6 @@ repository.workspace = true
 
 [dependencies]
 image.workspace = true
-unbound-config.workspace = true
 unbound-toolkit.workspace = true
 
 [dev-dependencies]

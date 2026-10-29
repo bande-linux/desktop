@@ -47,6 +47,10 @@ impl MenuBar {
         changed
     }
 
+    pub fn set_palette(&mut self, palette: Palette) {
+        self.palette = palette;
+    }
+
     pub fn set_clock(&mut self, clock: String) -> bool {
         let changed = self.clock != clock;
         self.clock = clock;

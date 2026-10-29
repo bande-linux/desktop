@@ -1,9 +1,8 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use unbound_config::{Appearance, Config, config_path};
 use unbound_files::{Browser, FilesView};
-use unbound_toolkit::{App, Palette, Role, Scene, Scheme, TextSystem, Window, WindowEvent};
+use unbound_toolkit::{App, Appearance, Role, Scene, TextSystem, Window, WindowEvent};
 
 const APP_ID: &str = "org.unbound.Files";
 const WINDOW_SIZE: (u32, u32) = (920, 560);
@@ -20,7 +19,9 @@ impl App for Files {
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
-        if let WindowEvent::Input(input) = event
+        if let WindowEvent::AppearanceChanged(appearance) = event {
+            self.view.set_palette(appearance.palette());
+        } else if let WindowEvent::Input(input) = event
             && self.view.handle(&input)
         {
             let title = self.view.title();
@@ -33,28 +34,16 @@ impl App for Files {
     }
 }
 
-fn scheme(home: Option<&std::path::Path>) -> Scheme {
-    let config_home = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from);
-    let config = config_path(config_home.as_deref(), home)
-        .and_then(|path| std::fs::read_to_string(path).ok())
-        .and_then(|source| Config::parse(&source).ok())
-        .unwrap_or_default();
-    match config.appearance {
-        Appearance::Dark => Scheme::Dark,
-        Appearance::Light | Appearance::Automatic => Scheme::Light,
-    }
-}
-
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let home = std::env::var_os("HOME").map(PathBuf::from);
     let start = std::env::args_os()
         .nth(1)
         .map(PathBuf::from)
-        .or_else(|| home.clone())
+        .or(home)
         .unwrap_or_else(|| PathBuf::from("/"));
     let view = FilesView::new(
         Browser::open(&start)?,
-        Palette::for_scheme(scheme(home.as_deref())),
+        Appearance::default().palette(),
         TextSystem::new(),
     );
     let title = view.title();

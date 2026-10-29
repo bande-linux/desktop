@@ -97,9 +97,9 @@ impl Widget for Toggle {
 
     fn handle(&mut self, _cx: &mut Context, event: &Event) -> bool {
         match event {
-            Event::PointerDown(_) => self.pressed = true,
-            Event::PointerUp(point) => {
-                let activate = self.pressed && contains(self.frame, *point);
+            Event::PointerDown(pointer) if pointer.is_primary() => self.pressed = true,
+            Event::PointerUp(pointer) if pointer.is_primary() => {
+                let activate = self.pressed && contains(self.frame, pointer.position);
                 self.pressed = false;
                 if activate {
                     self.flip();

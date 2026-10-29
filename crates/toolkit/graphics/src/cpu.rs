@@ -118,6 +118,10 @@ impl Canvas for CpuCanvas<'_> {
         self.context.push_clip_layer(path);
     }
 
+    fn push_opacity_layer(&mut self, alpha: f32) {
+        self.context.push_opacity_layer(alpha);
+    }
+
     fn pop_layer(&mut self) {
         self.context.pop_layer();
     }

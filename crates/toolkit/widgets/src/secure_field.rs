@@ -1,6 +1,6 @@
 use accesskit::{Action, ActionData, ActionRequest, Node, Role};
 
-use super::{Context, Event, Key, Size, Widget, WidgetId};
+use super::{Context, Cursor, Event, Key, Size, Widget, WidgetId};
 use unbound_graphics::{Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle};
 
 const BULLET: char = '\u{25CF}';
@@ -142,7 +142,7 @@ impl Widget for SecureField {
 
     fn handle(&mut self, _cx: &mut Context, event: &Event) -> bool {
         let Event::Key { key, modifiers } = event else {
-            return matches!(event, Event::PointerDown(_));
+            return matches!(event, Event::PointerDown(pointer) if pointer.is_primary());
         };
         if modifiers.control {
             return false;
@@ -158,6 +158,10 @@ impl Widget for SecureField {
             _ => return false,
         }
         true
+    }
+
+    fn cursor(&self, _point: Point) -> Option<Cursor> {
+        Some(Cursor::Text)
     }
 
     fn accepts_focus(&self, _cx: &Context) -> bool {

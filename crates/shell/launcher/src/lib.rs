@@ -245,11 +245,13 @@ impl Widget for ResultRow {
 
     fn handle(&mut self, _cx: &mut Context, event: &Event) -> bool {
         match event {
-            Event::PointerDown(_) => {
+            Event::PointerDown(pointer) if pointer.is_primary() => {
                 self.model.borrow_mut().selected = self.position;
                 true
             }
-            Event::PointerUp(point) if contains(self.frame, *point) => {
+            Event::PointerUp(pointer)
+                if pointer.is_primary() && contains(self.frame, pointer.position) =>
+            {
                 let mut model = self.model.borrow_mut();
                 model.selected = self.position;
                 model.open_selected();
@@ -434,7 +436,9 @@ impl Widget for Backdrop {
     }
 
     fn handle(&mut self, _cx: &mut Context, event: &Event) -> bool {
-        if let Event::PointerDown(_) = event {
+        if let Event::PointerDown(pointer) = event
+            && pointer.is_primary()
+        {
             self.model.borrow_mut().actions.push(LauncherAction::Close);
             return true;
         }

@@ -64,7 +64,18 @@ and live on `SettingChanged`, and delivers `WindowEvent::AppearanceChanged`. App
   creates the Vulkan device and a surface on the window; once it is ready, frames are drawn by
   `GpuRenderer` straight into the surface (mailbox when offered). Frames are paced by
   `wl_surface.frame`. Windows follow the output's fractional scale through `wp_viewporter`.
-  Text input v3 and the clipboard are supported. `UNBOUND_RENDERER=cpu` keeps a window on
+  Text input v3 and the clipboard are supported.
+  - **Window frame.** A toplevel gets its frame from the toolkit, as an `NSWindow` does: a
+    28 pt title bar with the title centred in semibold and close, minimise and zoom at the
+    top left. Rounded corners and the shadow are the compositor's, cut at the window geometry
+    (`set_window_geometry`), so every app looks alike. The controls are grey in inactive windows and
+    turn coloured with their symbols while the pointer is over the group, also in inactive
+    windows; they act on release inside. A drag on the bar moves the window, a double click
+    zooms. A transparent 6 pt band outside every edge resizes, with corners reaching 14 pt
+    along the edges, and the pointer shows the direction. Maximised, tiled and full-screen
+    windows have no band, and full screen hides the title bar. `Window::size` and pointer
+    positions are in the content's coordinates; the app draws only its content. The title bar
+    and its buttons are published to screen readers above the app's tree. `UNBOUND_RENDERER=cpu` keeps a window on
   `CpuRenderer`. `crates/testing/sample` is a settings card on the toolkit that `ci/perf` starts
   to measure.
 - **Widgets.** `ui` holds the widget tree: `Stack` (rows and columns with spacing and padding; a
@@ -83,9 +94,17 @@ and live on `SettingChanged`, and delivers `WindowEvent::AppearanceChanged`. App
   toggled state or numeric range, and its actions. `Ui::accessibility` returns the `TreeUpdate`
   with the focus, and `Ui::perform` carries out Focus, Click, SetValue, Increment, Decrement and
   ReplaceSelectedText requests. The tree is published on AT-SPI through `accesskit_unix`.
-- **Input.** Pointer input is limited today: only the left button, no click count or modifiers
-  on pointer events, no hover per widget and no popups. The order in which this grows is in
-  [decision 0002](../decisions/0002-toolkit.md).
+- **Input.** `wl_seat` up to version 9. Pointer events carry the button (primary, secondary,
+  middle, back, forward), the click count (a press within 500 ms and 4 pt of the previous press
+  of the same button counts up) and the modifiers; Ctrl+primary is a secondary click. Scrolling
+  arrives as `Event::Scroll` with its source (wheel, finger, continuous) and phase (a finger
+  scroll begins, changes and ends at `axis_stop`, so momentum can start from its end).
+  Modifier-only changes arrive as `Event::ModifiersChanged`. `Ui` sends `PointerEnter` and
+  `PointerLeave` to every widget on the hit path, bubbles scrolling from the innermost widget
+  outwards, and reports the hovered widget's cursor, which `Window::set_cursor` shows through
+  `wp_cursor_shape_v1`. A close request (close button, Super+W) asks `App::should_close`, so an
+  app can keep its window open, ask first or close a tab instead; `Window::close` closes it.
+  Text fields select a word on double click and everything on triple click.
 
 Since `wayland-backend` is built with `client_system`, every Wayland client in a workspace
 build, `unbound-test-wayland` included, goes through libwayland.

@@ -12,13 +12,13 @@ const DEVICES: &str = r#"
 context.objects = [
     { factory = adapter args = { factory.name = support.null-audio-sink node.name = "speakers"
         node.description = "MacBook Pro Speakers" media.class = "Audio/Sink" audio.position = [ FL FR ]
-        priority.session = 2000 object.linger = true } }
+        priority.session = 2000 node.always-process = true object.linger = true } }
     { factory = adapter args = { factory.name = support.null-audio-sink node.name = "headphones"
         node.description = "AirPods" media.class = "Audio/Sink" audio.position = [ FL FR ]
-        priority.session = 1000 object.linger = true } }
+        priority.session = 1000 node.always-process = true object.linger = true } }
     { factory = adapter args = { factory.name = support.null-audio-sink node.name = "microphone"
         node.description = "MacBook Pro Microphone" media.class = "Audio/Source/Virtual" audio.position = [ MONO ]
-        priority.session = 3000 object.linger = true } }
+        priority.session = 3000 node.always-process = true object.linger = true } }
 ]
 "#;
 

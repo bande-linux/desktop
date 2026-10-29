@@ -21,6 +21,8 @@ image-compare = "=0.5.0"
 pollster = "=1.0.1"
 raw-window-handle = "=0.6.2"
 resvg = { version = "=0.49.0", default-features = false }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.145"
 rustix = { version = "=1.1.6", features = ["event", "process"] }
 skrifa = "=0.44.0"
 smithay = { version = "=0.7.0", default-features = false, features = ["wayland_frontend"] }
@@ -34,6 +36,7 @@ unbound-apps = { path = "crates/unbound-apps" }
 unbound-config = { path = "crates/unbound-config" }
 unbound-compositor = { path = "crates/unbound-compositor" }
 unbound-protocols = { path = "crates/unbound-protocols" }
+unbound-greeter = { path = "crates/unbound-greeter" }
 unbound-lock = { path = "crates/unbound-lock" }
 unbound-render = { path = "crates/unbound-render" }
 unbound-sample = { path = "crates/unbound-sample" }

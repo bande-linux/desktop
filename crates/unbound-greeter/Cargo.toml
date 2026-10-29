@@ -1,0 +1,27 @@
+[package]
+name = "unbound-greeter"
+description = "Unbound login window: signs users in through greetd"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+jiff.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+unbound-lock.workspace = true
+unbound-toolkit.workspace = true
+
+[package.metadata.deb]
+maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+section = "x11"
+depends = "$auto, fonts-inter, greetd, unbound-compositor"
+extended-description = """\
+The login window of the Unbound desktop: greetd runs it as its greeter \
+inside unbound-compositor --greeter, and it lists the people who can \
+sign in, asks for the chosen person's password and has greetd start \
+their Unbound session."""
+assets = [
+    ["target/release/unbound-greeter", "usr/bin/", "755"],
+    ["data/config.toml", "usr/share/unbound-greeter/greetd-config.toml", "644"],
+]

@@ -113,6 +113,7 @@ impl AreaSelection {
                 weight: TextStyle::REGULAR,
                 color: CROSSHAIR,
                 typeface: Typeface::Interface,
+                tabular: true,
             };
             items.push(Item::Text {
                 origin: Point::new(at.x + READOUT_OFFSET, at.y + READOUT_OFFSET),

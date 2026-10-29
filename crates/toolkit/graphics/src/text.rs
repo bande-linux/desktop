@@ -52,6 +52,7 @@ pub struct TextStyle {
     pub weight: f32,
     pub color: Color,
     pub typeface: Typeface,
+    pub tabular: bool,
 }
 
 impl TextStyle {
@@ -65,6 +66,14 @@ impl TextStyle {
             weight: Self::REGULAR,
             color,
             typeface: Typeface::Interface,
+            tabular: false,
+        }
+    }
+
+    pub const fn tabular(self) -> Self {
+        Self {
+            tabular: true,
+            ..self
         }
     }
 
@@ -130,6 +139,9 @@ impl TextSystem {
         builder.push_default(StyleProperty::FontSize(style.size));
         builder.push_default(StyleProperty::FontWeight(FontWeight::new(style.weight)));
         builder.push_default(StyleProperty::Brush(style.color));
+        if style.tabular {
+            builder.push_default(StyleProperty::FontFeatures("\"tnum\" on".into()));
+        }
         let mut layout = builder.build(text);
         layout.break_all_lines(max_width);
         let alignment = match align {

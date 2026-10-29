@@ -63,6 +63,23 @@ fn han_characters_fall_back_to_a_font_that_has_them() {
 }
 
 #[test]
+fn tabular_digits_share_one_width_so_changing_numbers_do_not_jitter() {
+    let mut text = TextSystem::new();
+    let proportional = TextStyle::new(13.0, Color::hex(0));
+    let mut width = |content: &str, style: TextStyle| {
+        advance(&text.paragraph(content, style, None, TextAlign::Start))
+    };
+    let (ones, zeros) = (width("1111", proportional), width("0000", proportional));
+    assert!(ones < zeros - 1.0, "1111 is {ones} px, 0000 is {zeros} px");
+    let tabular = proportional.tabular();
+    let (ones, zeros) = (width("1111", tabular), width("0000", tabular));
+    assert!(
+        (ones - zeros).abs() < 0.01,
+        "1111 is {ones} px, 0000 is {zeros} px"
+    );
+}
+
+#[test]
 fn glyph_pairs_are_kerned_by_the_font() {
     let mut text = TextSystem::new();
     let style = TextStyle::new(20.0, Color::hex(0));

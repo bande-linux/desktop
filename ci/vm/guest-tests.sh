@@ -6,17 +6,24 @@ here=$(dirname "$(realpath "$0")")
 share=$(mktemp -d)
 trap 'rm -rf "$share"' EXIT
 
-cargo test --workspace --locked --no-run --message-format=json \
-    | jq -r 'select(.reason == "compiler-artifact" and .target.name == "guest" and .executable != null) | .executable' \
-    > "$share/executables"
+cargo_json() {
+    if ! cargo "$@" --message-format=json > "$share/cargo.json"; then
+        jq -r 'select(.reason == "compiler-message") | .message.rendered' "$share/cargo.json" >&2
+        return 1
+    fi
+}
+
+cargo_json test --workspace --locked --no-run
+jq -r 'select(.reason == "compiler-artifact" and .target.name == "guest" and .executable != null) | .executable' \
+    "$share/cargo.json" > "$share/executables"
 if [ ! -s "$share/executables" ]; then
     echo "No guest test executables were built" >&2
     exit 1
 fi
 
-cargo build --workspace --locked --bins --message-format=json \
-    | jq -r 'select(.reason == "compiler-artifact" and .executable != null and .target.kind == ["bin"]) | .executable' \
-    > "$share/apps"
+cargo_json build --workspace --locked --bins
+jq -r 'select(.reason == "compiler-artifact" and .executable != null and .target.kind == ["bin"]) | .executable' \
+    "$share/cargo.json" > "$share/apps"
 mkdir -p "$share/usr/bin" "$share/usr/share/applications" "$share/usr/share/icons/hicolor/scalable/apps"
 for app in unbound-compositor unbound-clipboard unbound-panel unbound-launcher unbound-term unbound-lock unbound-screenshot unbound-files unbound-greeter; do
     cp "$(grep "/$app\$" "$share/apps")" "$share/usr/bin/"

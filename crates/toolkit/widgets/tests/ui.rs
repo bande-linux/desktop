@@ -6,9 +6,9 @@ use std::rc::Rc;
 use accesskit::{Action, ActionData, ActionRequest, Node, NodeId, Role, Toggled, TreeId};
 use unbound_graphics::{Palette, Point, Rect, Scheme, TextSystem};
 use unbound_widgets::{
-    Axis, BUTTON_HEIGHT, Button, Context, Cursor, Event, Key, Label, Modifiers, Pointer,
-    PointerButton, SWITCH_SIZE, Scroll, SecureField, Size, Slider, Stack, TEXT_FIELD_HEIGHT,
-    TextField, Toggle, Ui, Widget, WidgetId,
+    Axis, BUTTON_HEIGHT, Button, Context, ContextMenu, Cursor, Event, Key, Label, Menu, MenuItem,
+    Modifiers, Pointer, PointerButton, SWITCH_SIZE, Scroll, SecureField, Size, Slider, Stack,
+    TEXT_FIELD_HEIGHT, TextField, Toggle, Ui, Widget, WidgetId,
 };
 
 const NONE: Modifiers = Modifiers {
@@ -240,6 +240,38 @@ fn a_horizontal_stack_centres_children_vertically() {
     let toggle = ui.widget(toggle_id).expect("toggle").frame();
     assert_eq!(toggle.x, label.x + label.width + 12.0);
     assert!((centre(label).y - centre(toggle).y).abs() <= 0.5);
+}
+
+#[test]
+fn a_secondary_click_asks_the_widget_under_the_pointer_for_its_menu_and_routes_the_choice_back() {
+    let chosen = Rc::new(RefCell::new(Vec::new()));
+    let sink = chosen.clone();
+    let area = ContextMenu::new(
+        Label::new("Report.pdf"),
+        || Menu::new(vec![MenuItem::new("Rename", "rename")]),
+        move |action| sink.borrow_mut().push(action.to_owned()),
+    );
+    let id = area.id();
+    let mut ui = Ui::new(Box::new(area), context());
+    ui.layout(AREA);
+    let at = centre(ui.widget(id).expect("area").frame());
+    ui.handle(&Event::PointerDown(Pointer::at(at)));
+    assert!(
+        ui.take_menu_request().is_none(),
+        "a primary click has no menu"
+    );
+    ui.handle(&Event::PointerUp(Pointer::at(at)));
+    let secondary = Pointer {
+        button: PointerButton::Secondary,
+        ..Pointer::at(at)
+    };
+    ui.handle(&Event::PointerDown(secondary));
+    let (menu, point) = ui.take_menu_request().expect("a menu");
+    assert_eq!(point, at);
+    assert_eq!(menu.items.len(), 1);
+    assert!(ui.menu_action("rename"));
+    assert_eq!(*chosen.borrow(), ["rename"]);
+    assert!(!ui.menu_action("rename"), "a choice is delivered once");
 }
 
 #[test]

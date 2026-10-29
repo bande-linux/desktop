@@ -4,6 +4,7 @@ mod capture;
 mod chrome;
 mod clipboard;
 mod lock;
+mod popup;
 mod run;
 mod scale;
 mod seat;
@@ -21,6 +22,7 @@ static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", E
 
 pub use capture::ScreenImage;
 pub use chrome::TITLE_BAR_HEIGHT;
+pub use popup::MenuPlacement;
 pub use run::{App, run};
 pub use unbound_protocols::client::unbound_shell_v1::VolumeKey;
 pub use window::{

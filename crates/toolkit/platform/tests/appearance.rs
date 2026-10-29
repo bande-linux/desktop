@@ -66,7 +66,7 @@ impl App for Follower {
 }
 
 #[test]
-fn the_window_follows_the_portal_colour_scheme_and_accent() {
+fn the_window_follows_the_portal_colour_scheme_accent_and_reduced_motion() {
     let bus = SessionBus::start().expect("private session bus");
     unsafe {
         std::env::set_var("DBUS_SESSION_BUS_ADDRESS", bus.address());
@@ -129,6 +129,7 @@ fn the_window_follows_the_portal_colour_scheme_and_accent() {
                     );
                     change(APPEARANCE, "contrast", Value::from(1u32));
                     change(APPEARANCE, "accent-color", Value::from((-1.0, -1.0, -1.0)));
+                    change(APPEARANCE, "reduced-motion", Value::from(1u32));
                 }
                 2 => change(APPEARANCE, "color-scheme", Value::from(0u32)),
                 _ => {}
@@ -141,19 +142,20 @@ fn the_window_follows_the_portal_colour_scheme_and_accent() {
     let dark = Appearance {
         scheme: Scheme::Dark,
         accent,
+        reduce_motion: false,
     };
-    let dark_without_accent = Appearance {
+    let dark_reduced = Appearance {
         scheme: Scheme::Dark,
         accent: None,
+        reduce_motion: true,
     };
-    let light = Appearance::default();
+    let light = Appearance {
+        reduce_motion: true,
+        ..Appearance::default()
+    };
     assert_eq!(
         app.join().expect("app thread"),
-        [
-            (dark, dark),
-            (dark_without_accent, dark_without_accent),
-            (light, light)
-        ]
+        [(dark, dark), (dark_reduced, dark_reduced), (light, light)]
     );
     assert_eq!(dark.palette().accent_color, Color::hex(0xCC3366));
 }

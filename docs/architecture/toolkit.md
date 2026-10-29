@@ -90,6 +90,15 @@ and live on `SettingChanged`, and delivers `WindowEvent::AppearanceChanged`. App
   line ends, Alt+Left/Right by word, Shift extending, Up/Down to the ends of a single-line field
   (as `NSTextField`), Alt+Backspace and Super+Backspace deleting a word and to the line start,
   Super+A selecting all.
+- **Animation.** `ui::Animated` holds a value that springs to its target with a preset from
+  `unbound-spring` (`Spring::QUICK`, `STANDARD`, `GENTLE`, `FADE`, ...). A new target retargets
+  from the current position and velocity, so a reversed action never jumps or queues. Values
+  are sampled at the frame's time; while any value moves, `Ui::is_animating` is true and an app
+  returns it from `App::animating`, which asks for the next frame after each one drawn. With
+  Reduce Motion (`reduced-motion` of `org.freedesktop.appearance`, in
+  `Appearance::reduce_motion`, applied by `Ui::set_appearance`) every spring but `FADE` jumps
+  to its target, so movement is gone and fades stay. Switches slide their knob and blend their
+  track; the window controls' symbols fade in.
 - **Accessibility.** Every widget produces an AccessKit node: role, label or value, bounds,
   toggled state or numeric range, and its actions. `Ui::accessibility` returns the `TreeUpdate`
   with the focus, and `Ui::perform` carries out Focus, Click, SetValue, Increment, Decrement and

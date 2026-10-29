@@ -22,6 +22,19 @@ impl Color {
     pub const fn with_alpha(self, a: u8) -> Self {
         Self { a, ..self }
     }
+
+    pub fn mix(self, other: Self, amount: f32) -> Self {
+        let amount = amount.clamp(0.0, 1.0);
+        let channel = |from: u8, to: u8| {
+            (f32::from(from) + (f32::from(to) - f32::from(from)) * amount).round() as u8
+        };
+        Self {
+            r: channel(self.r, other.r),
+            g: channel(self.g, other.g),
+            b: channel(self.b, other.b),
+            a: channel(self.a, other.a),
+        }
+    }
 }
 
 impl Default for Color {
@@ -41,6 +54,7 @@ pub enum Scheme {
 pub struct Appearance {
     pub scheme: Scheme,
     pub accent: Option<Color>,
+    pub reduce_motion: bool,
 }
 
 impl Appearance {

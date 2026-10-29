@@ -35,6 +35,10 @@ pub trait App {
         true
     }
 
+    fn animating(&self) -> bool {
+        false
+    }
+
     fn text_input_area(&self) -> Option<Rect> {
         None
     }
@@ -89,6 +93,9 @@ pub fn run(window: &mut Window, app: &mut impl App) -> Result<(), WindowError> {
         if frame_drawn {
             let scene = app.scene(window);
             window.draw(&scene)?;
+            if app.animating() {
+                window.request_redraw();
+            }
         }
         window.set_text_input_area(app.text_input_area());
         if window.accessibility.wants_tree(frame_drawn)
@@ -101,7 +108,11 @@ pub fn run(window: &mut Window, app: &mut impl App) -> Result<(), WindowError> {
             continue;
         };
 
-        let deadline = earliest([window.state.input.repeat_deadline(), app.deadline()]);
+        let deadline = earliest([
+            window.state.input.repeat_deadline(),
+            window.deadline(),
+            app.deadline(),
+        ]);
         let (wayland_ready, accessibility_ready, appearance_ready, pastes_ready, sources_ready) = {
             let connection = guard.connection_fd();
             let accessibility = window.accessibility.fd();
@@ -151,7 +162,7 @@ pub fn run(window: &mut Window, app: &mut impl App) -> Result<(), WindowError> {
         }
         if accessibility_ready {
             for request in window.accessibility.take_requests() {
-                if !window.perform_chrome(&request) {
+                if !window.perform_window_action(&request) {
                     app.event(window, WindowEvent::Accessibility(request));
                 }
             }
@@ -167,6 +178,9 @@ pub fn run(window: &mut Window, app: &mut impl App) -> Result<(), WindowError> {
             app.source_ready(window, index);
         }
         let now = Instant::now();
+        if window.deadline().is_some_and(|deadline| deadline <= now) {
+            window.tick(now);
+        }
         if app.deadline().is_some_and(|deadline| deadline <= now) {
             app.tick(window, now);
         }

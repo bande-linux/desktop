@@ -3698,9 +3698,13 @@ dependencies = [
  "accesskit",
  "image",
  "image-compare",
+ "tempfile",
  "tracing",
+ "unbound-files",
  "unbound-l10n",
  "unbound-log",
+ "unbound-search",
+ "unbound-spring",
  "unbound-toolkit",
  "unbound-xdg",
 ]

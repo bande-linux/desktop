@@ -8,6 +8,7 @@ pub const FUZZY: u32 = 400;
 const LENGTH_PENALTY_LIMIT: u32 = 99;
 const FUZZY_GAP_PENALTY: u32 = 12;
 const FUZZY_FLOOR: u32 = 150;
+const MIN_LOOSE_LENGTH: usize = 3;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Query {
@@ -93,6 +94,9 @@ impl Query {
             if initials.starts_with(query) {
                 return Some(INITIALS - penalty(extra));
             }
+        }
+        if query.chars().count() < MIN_LOOSE_LENGTH {
+            return None;
         }
         if let Some(position) = folded.find(query) {
             return Some(SUBSTRING - penalty(folded[..position].chars().count()));

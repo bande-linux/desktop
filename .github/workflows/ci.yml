@@ -193,6 +193,7 @@ jobs:
           sed -i "s|^ExecStart=/|ExecStart=$root/|" "$units"/*
           grep -qx 'Type=notify' "$units/unbound-compositor.service"
           grep -qx 'BindsTo=graphical-session.target' "$units/unbound-compositor.service"
+          grep -qx 'Wants=xdg-desktop-autostart.target' "$units/unbound-session.target"
           ! grep -l 'WantedBy=graphical-session.target' "$units"/*
           export XDG_RUNTIME_DIR=$(mktemp -d)
           findings=$(cd "$units" && SYSTEMD_LOG_LEVEL=warning systemd-analyze --user verify ./* 2>&1) || true

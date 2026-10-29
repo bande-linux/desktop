@@ -29,3 +29,4 @@ ab_glyph.workspace = true
 image.workspace = true
 smithay.workspace = true
 unbound-compositor.workspace = true
+unbound-test-wayland.workspace = true

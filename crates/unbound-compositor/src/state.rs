@@ -90,7 +90,10 @@ use crate::session::{LockScreen, SessionClient, SessionRole};
 use crate::shell;
 use crate::window::Window;
 use smithay::wayland::cursor_shape::CursorShapeManagerState;
+use smithay::wayland::input_method::InputMethodManagerState;
 use smithay::wayland::tablet_manager::TabletSeatHandler;
+use smithay::wayland::text_input::TextInputManagerState;
+use smithay::wayland::virtual_keyboard::VirtualKeyboardManagerState;
 
 pub const REFRESH: Duration = Duration::from_nanos(1_000_000_000 / 120);
 
@@ -133,6 +136,9 @@ pub struct State {
     _fractional_scale_state: FractionalScaleManagerState,
     _cursor_shape_state: CursorShapeManagerState,
     _decoration_state: XdgDecorationState,
+    _text_input_state: TextInputManagerState,
+    _input_method_state: InputMethodManagerState,
+    _virtual_keyboard_state: VirtualKeyboardManagerState,
     pending_activation: Option<WlSurface>,
     pub(crate) shell_resources: Vec<UnboundShellV1>,
     pub(crate) foreign_toplevel_state: ForeignToplevelListState,
@@ -266,6 +272,11 @@ impl Headless {
             _fractional_scale_state: FractionalScaleManagerState::new::<State>(&handle),
             _decoration_state: XdgDecorationState::new::<State>(&handle),
             _cursor_shape_state: CursorShapeManagerState::new::<State>(&handle),
+            _text_input_state: TextInputManagerState::new::<State>(&handle),
+            _input_method_state: InputMethodManagerState::new::<State, _>(&handle, |_| true),
+            _virtual_keyboard_state: VirtualKeyboardManagerState::new::<State, _>(&handle, |_| {
+                true
+            }),
             pending_activation: None,
             shell_resources: Vec::new(),
             foreign_toplevel_state: ForeignToplevelListState::new_with_filter::<State>(

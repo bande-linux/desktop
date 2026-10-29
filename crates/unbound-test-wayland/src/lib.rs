@@ -13,6 +13,7 @@ mod cursor;
 mod decoration;
 mod fence;
 mod idle;
+mod ime;
 mod lock;
 mod seat;
 mod shell;
@@ -116,6 +117,8 @@ struct Globals {
     capture: capture::Capture,
     idle: idle::Idle,
     decoration_modes: Vec<decoration::DecorationMode>,
+    text_input: ime::TextInput,
+    input_method: ime::InputMethod,
 }
 
 pub struct TestClient {

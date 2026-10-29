@@ -7,7 +7,7 @@ use unbound_apps::{
 use unbound_config::{Appearance, Config, config_path};
 use unbound_launcher::{ICON_SIZE, Launcher, LauncherAction, LauncherApp};
 use unbound_toolkit::{
-    App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Palette, Role, Scene, Scheme,
+    App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Palette, Rect, Role, Scene, Scheme,
     TextSystem, Window, WindowError, WindowEvent,
 };
 
@@ -62,6 +62,10 @@ impl App for LauncherShell {
             }
             _ => {}
         }
+    }
+
+    fn text_input_area(&self) -> Option<Rect> {
+        self.launcher.ui.text_input_area()
     }
 }
 

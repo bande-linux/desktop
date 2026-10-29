@@ -6,6 +6,7 @@ mod drm;
 mod environment;
 mod grab;
 mod idle;
+mod ime;
 mod input;
 mod lock;
 mod logind;

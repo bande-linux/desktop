@@ -279,6 +279,23 @@ runs natively on Wayland in the guest.
   compositor intercepts them, so nothing repeats), choosing the output and Wi-Fi network
   from the panel, brightness keys, closing the panel on a click elsewhere or Escape, the
   menu bar's battery and Wi-Fi items.
+- [ ] **Input methods** (`desktop/input-method`) phase 4: the compositor offers
+  `zwp_text_input_v3`, `zwp_input_method_v2` and `zwp_virtual_keyboard_v1` (what Fcitx5 and
+  IBus use) through Smithay, which moves text-input focus with keyboard focus. Candidate
+  windows are popups of the focused surface, placed below the text being composed and
+  flipped above it when the screen ends below, kept on screen horizontally (as macOS places
+  its candidate window). The toolkit binds text-input v3 on its seat: preedit and commit
+  strings become `Event::Preedit` and `Event::Commit`, applied on `done`; a text field
+  shows the preedit underlined through Parley's compose support and reports its
+  composition area, which the run loop sends as the cursor rectangle (`App::text_input_area`)
+  and which enables and disables text input as focus moves; secure fields report none, so
+  passwords never reach an input method. Tests: committed text reaches the focused client,
+  keys go to the input method while it grabs the keyboard, both candidate placements, and a
+  toolkit text field receiving composed Japanese. The session target wants
+  `xdg-desktop-autostart.target`, so XDG autostart entries run (as Login Items do), Fcitx5's
+  among them; the compositor package suggests `fcitx5`. Not done: surrounding text and content type; while an input
+  method grabs the keyboard, an xdg popup's keyboard grab is refused (Smithay's popup grab
+  check), so menus opened from a focused text field close at once.
 - [ ] **Toolkit on Vello and Parley** (track; moved into `desktop/integration`)
   `vello_cpu` first frame into `wl_shm`, `vello_gpu` afterwards, Parley text; goldens
   re-derived from scene descriptions; panel, launcher and terminal move over; a toolkit

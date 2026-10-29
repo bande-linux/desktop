@@ -11,6 +11,7 @@ mod scene;
 mod seat;
 mod shell;
 mod text;
+mod text_input;
 mod tokens;
 pub mod ui;
 mod window;

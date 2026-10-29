@@ -1,0 +1,305 @@
+use std::sync::mpsc::{Receiver, RecvTimeoutError};
+use std::time::Duration;
+
+use unbound_audio::{Audio, Level, Snapshot};
+use unbound_bluetooth::Bluetooth as BlueZ;
+use unbound_inbox::Outbox;
+use unbound_network::NetworkManager;
+use zbus::blocking::Connection;
+use zbus::proxy::CacheProperties;
+use zbus::zvariant::OwnedObjectPath;
+
+use crate::Update;
+use crate::menus::Command;
+use crate::session::Ending;
+use crate::status::{Battery, Bluetooth, Gadget, Output, Power, Sound, Wifi};
+
+const REFRESH: Duration = Duration::from_secs(3);
+const SOUND_POLL: Duration = Duration::from_millis(200);
+const UPOWER_CHARGING: u32 = 1;
+const UPOWER_FULL: u32 = 4;
+const UPOWER_BATTERY: u32 = 2;
+
+#[zbus::proxy(
+    interface = "org.freedesktop.UPower.Device",
+    default_service = "org.freedesktop.UPower",
+    default_path = "/org/freedesktop/UPower/devices/DisplayDevice",
+    gen_async = false,
+    blocking_name = "DisplayDevice"
+)]
+trait UPowerDevice {
+    #[zbus(property, name = "Type")]
+    fn kind(&self) -> zbus::Result<u32>;
+
+    #[zbus(property)]
+    fn is_present(&self) -> zbus::Result<bool>;
+
+    #[zbus(property)]
+    fn percentage(&self) -> zbus::Result<f64>;
+
+    #[zbus(property)]
+    fn state(&self) -> zbus::Result<u32>;
+
+    #[zbus(property)]
+    fn time_to_empty(&self) -> zbus::Result<i64>;
+
+    #[zbus(property)]
+    fn time_to_full(&self) -> zbus::Result<i64>;
+}
+
+#[zbus::proxy(
+    interface = "org.freedesktop.login1.Manager",
+    default_service = "org.freedesktop.login1",
+    default_path = "/org/freedesktop/login1",
+    gen_async = false,
+    blocking_name = "Login"
+)]
+trait LoginManager {
+    fn suspend(&self, interactive: bool) -> zbus::Result<()>;
+
+    fn reboot(&self, interactive: bool) -> zbus::Result<()>;
+
+    fn power_off(&self, interactive: bool) -> zbus::Result<()>;
+
+    fn get_session(&self, session_id: &str) -> zbus::Result<OwnedObjectPath>;
+}
+
+fn seconds(value: i64) -> Option<Duration> {
+    u64::try_from(value)
+        .ok()
+        .filter(|seconds| *seconds > 0)
+        .map(Duration::from_secs)
+}
+
+pub fn battery_of(state: u32, percent: f64, to_empty: i64, to_full: i64) -> Battery {
+    let power = match state {
+        UPOWER_FULL => Power::Full,
+        UPOWER_CHARGING => Power::Charging {
+            until_full: seconds(to_full),
+        },
+        _ if percent >= 100.0 => Power::Full,
+        _ => Power::Battery {
+            remaining: seconds(to_empty),
+        },
+    };
+    Battery { percent, power }
+}
+
+fn battery(system: &Connection) -> Option<Battery> {
+    let device = DisplayDevice::builder(system)
+        .cache_properties(CacheProperties::No)
+        .build()
+        .ok()?;
+    if !device.is_present().ok()? || device.kind().ok()? != UPOWER_BATTERY {
+        return None;
+    }
+    Some(battery_of(
+        device.state().unwrap_or(0),
+        device.percentage().ok()?,
+        device.time_to_empty().unwrap_or(0),
+        device.time_to_full().unwrap_or(0),
+    ))
+}
+
+fn wifi(network: &NetworkManager) -> Option<Wifi> {
+    if !network.has_wifi().ok()? {
+        return None;
+    }
+    let enabled = network.wifi_enabled().ok()?;
+    Some(Wifi {
+        enabled,
+        networks: if enabled {
+            network.networks().unwrap_or_default()
+        } else {
+            Vec::new()
+        },
+    })
+}
+
+fn bluetooth(bluez: &BlueZ) -> Option<Bluetooth> {
+    if !bluez.available().ok()? {
+        return None;
+    }
+    let powered = bluez.powered().ok()?;
+    Some(Bluetooth {
+        powered,
+        devices: bluez
+            .paired_devices()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|device| Gadget {
+                address: device.address,
+                name: device.name,
+                connected: device.connected,
+            })
+            .collect(),
+    })
+}
+
+pub type Devices = (Option<Battery>, Option<Wifi>, Option<Bluetooth>);
+
+pub enum Control {
+    Run(Command),
+    Scan,
+    End(Ending),
+}
+
+fn report<E: std::fmt::Display>(what: &str, result: Result<(), E>) {
+    if let Err(error) = result {
+        tracing::warn!("cannot {what}: {error}");
+    }
+}
+
+fn run(system: &Connection, network: &NetworkManager, bluez: &BlueZ, command: Command) {
+    let login = || Login::new(system);
+    match command {
+        Command::SetWifi(on) => report("switch Wi-Fi", network.set_wifi_enabled(on)),
+        Command::Join(ssid) => {
+            let found = network
+                .networks()
+                .unwrap_or_default()
+                .into_iter()
+                .find(|candidate| candidate.ssid == ssid);
+            if let Some(found) = found {
+                report("join the network", network.join(&found, None).map(|_| ()));
+            }
+        }
+        Command::SetBluetooth(on) => report("switch Bluetooth", bluez.set_powered(on)),
+        Command::ToggleGadget(address) => {
+            let device = bluez
+                .paired_devices()
+                .unwrap_or_default()
+                .into_iter()
+                .find(|device| device.address == address);
+            if let Some(device) = device {
+                let result = if device.connected {
+                    bluez.disconnect(&device)
+                } else {
+                    bluez.connect(&device)
+                };
+                report("connect the device", result);
+            }
+        }
+        Command::Sleep => report("sleep", login().and_then(|login| login.suspend(true))),
+        Command::LockScreen => report("lock the screen", own_session(system, "Lock")),
+        _ => {}
+    }
+}
+
+fn own_session(system: &Connection, method: &str) -> zbus::Result<()> {
+    let path = Login::new(system)?.get_session("auto")?;
+    system.call_method(
+        Some("org.freedesktop.login1"),
+        path.as_str(),
+        Some("org.freedesktop.login1.Session"),
+        method,
+        &(),
+    )?;
+    Ok(())
+}
+
+pub fn end_session(system: &Connection, ending: Ending) -> zbus::Result<()> {
+    let login = Login::new(system)?;
+    match ending {
+        Ending::Restart => login.reboot(true),
+        Ending::ShutDown => login.power_off(true),
+        Ending::LogOut => own_session(system, "Terminate"),
+    }
+}
+
+pub fn run_controls(system: &Connection, controls: &Receiver<Control>, outbox: &Outbox<Update>) {
+    let network = NetworkManager::new(system);
+    let bluez = BlueZ::new(system);
+    let mut shown: Option<Devices> = None;
+    loop {
+        match controls.recv_timeout(REFRESH) {
+            Ok(Control::Run(command)) => run(system, &network, &bluez, command),
+            Ok(Control::Scan) => report("scan for networks", network.scan()),
+            Ok(Control::End(ending)) => report("end the session", end_session(system, ending)),
+            Err(RecvTimeoutError::Timeout) => {}
+            Err(RecvTimeoutError::Disconnected) => return,
+        }
+        let devices = (battery(system), wifi(&network), bluetooth(&bluez));
+        if shown.as_ref() != Some(&devices) {
+            shown = Some(devices.clone());
+            if !outbox.send(Update::Devices(devices)) {
+                return;
+            }
+        }
+    }
+}
+
+pub enum SoundControl {
+    SetMuted(bool),
+    UseOutput(String),
+    Nudge(f32),
+}
+
+pub fn sound_of(snapshot: &Snapshot) -> Option<Sound> {
+    let output = snapshot.default_output()?;
+    Some(Sound {
+        volume: output.level.volume,
+        muted: output.level.muted,
+        outputs: snapshot
+            .outputs
+            .iter()
+            .map(|device| Output {
+                name: device.name.clone(),
+                description: device.description.clone(),
+            })
+            .collect(),
+        default_output: snapshot.default_output.clone(),
+    })
+}
+
+fn control_sound(audio: &Audio, control: SoundControl) -> Result<(), unbound_audio::Error> {
+    let snapshot = audio.snapshot();
+    match control {
+        SoundControl::UseOutput(name) => match snapshot.device(&name) {
+            Some(device) => audio.set_default(device),
+            None => Ok(()),
+        },
+        SoundControl::SetMuted(muted) => match snapshot.default_output() {
+            Some(output) => audio.set_muted(output, muted),
+            None => Ok(()),
+        },
+        SoundControl::Nudge(delta) => match snapshot.default_output() {
+            Some(output) => audio.set_level(
+                output,
+                Level {
+                    volume: (output.level.volume + delta).clamp(0.0, 1.0),
+                    muted: false,
+                },
+            ),
+            None => Ok(()),
+        },
+    }
+}
+
+pub fn run_sound(controls: &Receiver<SoundControl>, outbox: &Outbox<Update>) {
+    let audio = match Audio::connect() {
+        Ok(audio) => audio,
+        Err(error) => {
+            tracing::warn!("no sound: {error}");
+            return;
+        }
+    };
+    let mut generation = None;
+    loop {
+        loop {
+            match controls.try_recv() {
+                Ok(control) => report("change the sound", control_sound(&audio, control)),
+                Err(std::sync::mpsc::TryRecvError::Empty) => break,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => return,
+            }
+        }
+        if let Some(snapshot) = audio.wait_until(SOUND_POLL, |snapshot| {
+            Some(snapshot.generation) != generation
+        }) {
+            generation = Some(snapshot.generation);
+            if !outbox.send(Update::Sound(sound_of(&snapshot))) {
+                return;
+            }
+        }
+    }
+}

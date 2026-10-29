@@ -3742,11 +3742,18 @@ dependencies = [
 name = "unbound-menubar"
 version = "0.1.0"
 dependencies = [
+ "accesskit",
  "jiff",
  "tracing",
+ "unbound-audio",
+ "unbound-bluetooth",
+ "unbound-inbox",
+ "unbound-l10n",
  "unbound-log",
+ "unbound-network",
  "unbound-toolkit",
  "unbound-xdg",
+ "zbus",
 ]
 
 [[package]]

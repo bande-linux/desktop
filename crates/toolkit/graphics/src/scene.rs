@@ -107,27 +107,31 @@ impl Image {
     pub fn load(path: &Path, size: u32) -> Option<Self> {
         let bytes = fs::read(path).ok()?;
         if path.extension().is_some_and(|extension| extension == "svg") {
-            let tree = usvg::Tree::from_data(&bytes, &usvg::Options::default()).ok()?;
-            let mut pixmap = tiny_skia::Pixmap::new(size, size)?;
-            let view = tree.size();
-            let scale = size as f32 / view.width().max(view.height());
-            let offset_x = (size as f32 - view.width() * scale) / 2.0;
-            let offset_y = (size as f32 - view.height() * scale) / 2.0;
-            resvg::render(
-                &tree,
-                tiny_skia::Transform::from_row(scale, 0.0, 0.0, scale, offset_x, offset_y),
-                &mut pixmap.as_mut(),
-            );
-            let mut rgba = Vec::with_capacity((size * size * 4) as usize);
-            for pixel in pixmap.pixels() {
-                let color = pixel.demultiply();
-                rgba.extend_from_slice(&[color.red(), color.green(), color.blue(), color.alpha()]);
-            }
-            return Self::from_rgba(size, size, rgba);
+            return Self::from_svg(&bytes, size, size);
         }
         let decoded = image::load_from_memory(&bytes).ok()?.to_rgba8();
         let (width, height) = decoded.dimensions();
         Self::from_rgba(width, height, decoded.into_raw())
+    }
+
+    pub fn from_svg(bytes: &[u8], width: u32, height: u32) -> Option<Self> {
+        let tree = usvg::Tree::from_data(bytes, &usvg::Options::default()).ok()?;
+        let mut pixmap = tiny_skia::Pixmap::new(width, height)?;
+        let view = tree.size();
+        let scale = (width as f32 / view.width()).min(height as f32 / view.height());
+        let offset_x = (width as f32 - view.width() * scale) / 2.0;
+        let offset_y = (height as f32 - view.height() * scale) / 2.0;
+        resvg::render(
+            &tree,
+            tiny_skia::Transform::from_row(scale, 0.0, 0.0, scale, offset_x, offset_y),
+            &mut pixmap.as_mut(),
+        );
+        let mut rgba = Vec::with_capacity((width * height * 4) as usize);
+        for pixel in pixmap.pixels() {
+            let color = pixel.demultiply();
+            rgba.extend_from_slice(&[color.red(), color.green(), color.blue(), color.alpha()]);
+        }
+        Self::from_rgba(width, height, rgba)
     }
 
     pub fn from_rgba(width: u32, height: u32, mut rgba: Vec<u8>) -> Option<Self> {

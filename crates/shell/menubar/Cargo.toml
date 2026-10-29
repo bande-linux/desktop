@@ -1,16 +1,23 @@
 [package]
 name = "unbound-menubar"
-description = "Unbound menu bar: names the active app and shows the date and time"
+description = "Unbound menu bar: system menu, app menus, status items, status notifier items and the clock"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
 
 [dependencies]
+accesskit.workspace = true
 jiff.workspace = true
 tracing.workspace = true
+unbound-audio.workspace = true
+unbound-bluetooth.workspace = true
+unbound-inbox.workspace = true
+unbound-l10n.workspace = true
 unbound-log.workspace = true
-unbound-xdg.workspace = true
+unbound-network.workspace = true
 unbound-toolkit.workspace = true
+unbound-xdg.workspace = true
+zbus.workspace = true
 
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"

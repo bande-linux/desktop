@@ -92,6 +92,26 @@ fn the_pointer_enters_the_surface_under_it_at_surface_coordinates() {
 }
 
 #[test]
+fn a_window_that_appears_under_a_still_pointer_receives_the_pointer() {
+    let mut server = server();
+    let still = (128.0, 96.0);
+    server.move_pointer_to(Point::from(still), 1);
+
+    let mut client = client_with_window(&mut server, 64);
+    client.exchange(&mut server);
+
+    let origin = server.windows()[0].location();
+    assert_eq!(
+        client.pointer_focus(),
+        Some((
+            0,
+            still.0 - f64::from(origin.x),
+            still.1 - f64::from(origin.y)
+        ))
+    );
+}
+
+#[test]
 fn keys_reach_only_the_focused_client() {
     let mut server = server();
     let mut first = client_with_window(&mut server, 128);

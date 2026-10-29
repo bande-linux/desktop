@@ -187,7 +187,7 @@ impl TestClient {
         server: &mut Headless,
         image: &ShmImage,
         memory: Memory,
-        prepare: impl FnOnce(&Self, &WlSurface),
+        before_buffer: impl FnOnce(&Self, &WlSurface),
     ) {
         let qh = self.queue.handle();
         let compositor = self.globals.compositor.as_ref().expect("wl_compositor");
@@ -195,12 +195,12 @@ impl TestClient {
         let surface = compositor.create_surface(&qh, ());
         let xdg_surface = wm_base.get_xdg_surface(&surface, &qh, ());
         let toplevel = xdg_surface.get_toplevel(&qh, ());
-        prepare(self, &surface);
         self.globals.configured = false;
         surface.commit();
         self.exchange(server);
         assert!(self.globals.configured, "initial configure");
 
+        before_buffer(self, &surface);
         self.attach(&surface, image, (0, 0, image.width, image.height), memory);
         self.exchange(server);
         self.windows.push((surface, xdg_surface, toplevel));

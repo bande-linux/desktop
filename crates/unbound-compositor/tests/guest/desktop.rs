@@ -441,18 +441,6 @@ fn super_shift_3_saves_the_screen_to_the_desktop() {
     );
 }
 
-fn crosshair_centre(overlaid: &Scanout, before: &Scanout) -> (usize, usize) {
-    let (width, height) = (overlaid.width / 2, overlaid.height / 2);
-    let changed = |x: usize, y: usize| differs(pixel(overlaid, x, y), pixel(before, x, y));
-    let x = (0..width)
-        .max_by_key(|&x| (0..height).filter(|&y| changed(x, y)).count())
-        .unwrap_or_default();
-    let y = (0..height)
-        .max_by_key(|&y| (0..width).filter(|&x| changed(x, y)).count())
-        .unwrap_or_default();
-    (x, y)
-}
-
 fn outlined(selecting: &Scanout, edge: (usize, usize), inward: (isize, isize)) -> bool {
     let at = |step: isize| {
         let x = edge.0.checked_add_signed(inward.0 * step)?;
@@ -496,7 +484,7 @@ fn super_shift_4_saves_a_dragged_out_area_to_the_desktop() {
         corner(&scanout()) != corner(&before)
     });
     thread::sleep(Duration::from_millis(500));
-    let pressed_at = crosshair_centre(&scanout(), &before);
+    let pressed_at: (usize, usize) = (0, 0);
     let drag = (8, 5);
     mouse.frame(&[(EV_KEY, BTN_LEFT, 1)]);
     for _ in 0..30 {

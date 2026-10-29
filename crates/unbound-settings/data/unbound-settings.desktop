@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=System Settings
+GenericName=Settings
+Comment=Change the appearance, dock and lock screen
+Icon=unbound-settings
+Exec=unbound-settings
+Categories=Settings;DesktopSettings;
+Keywords=preferences;appearance;dark;dock;panel;lock;sleep;

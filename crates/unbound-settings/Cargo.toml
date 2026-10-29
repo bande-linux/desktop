@@ -1,0 +1,30 @@
+[package]
+name = "unbound-settings"
+description = "Unbound System Settings: appearance, dock and lock screen panes with search"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+unbound-config.workspace = true
+unbound-toolkit.workspace = true
+zbus.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+unbound-test-bus.workspace = true
+
+[package.metadata.deb]
+maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+section = "x11"
+depends = "$auto, fonts-inter, unbound-config"
+extended-description = """\
+System Settings of the Unbound desktop: panes for appearance, the dock \
+and the lock screen, and a search field that narrows them to the \
+matching settings. Changes go through org.unbound.Config, which writes \
+config.kdl."""
+assets = [
+    ["target/release/unbound-settings", "usr/bin/", "755"],
+    ["data/unbound-settings.desktop", "usr/share/applications/", "644"],
+    ["data/unbound-settings.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+]

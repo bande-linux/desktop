@@ -1,60 +1,112 @@
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
+use std::rc::Rc;
 
-use unbound_toolkit::ui::{Event, Key as Pressed, Modifiers};
-use unbound_toolkit::{
-    Color, Item, Palette, Paragraph, Point, Rect, Scene, Shape, TextAlign, TextStyle, TextSystem,
+use accesskit::{Action, ActionData, ActionRequest, TreeId, TreeUpdate};
+use unbound_toolkit::ui::{
+    Context, Event, Key, Label, Modifiers, Slider, TextField, Ui, Widget, WidgetId,
 };
+use unbound_toolkit::{Palette, Rect, Scene, Spacing, TextSystem};
 
 use crate::L10N;
-use crate::model::{Control, Key, Pane, Value, panes, search};
+use crate::idle::Idle;
+use crate::registry::{Kind, Pane, PaneId, Setting, SettingId, Value, panes};
+use crate::search::{PaneHit, search};
+use crate::widgets::{
+    Caption, Captioned, Card, Column, Root, Row, Scroll, Segmented, SidebarRow, Text, Tone,
+};
 
-pub const SIDEBAR_WIDTH: f32 = 220.0;
-const MARGIN: f32 = 12.0;
-const SEARCH_HEIGHT: f32 = 28.0;
-const PANE_ROW: f32 = 28.0;
-const PANES_TOP: f32 = 52.0;
-const CONTENT_INSET: f32 = 24.0;
-const TITLE_SIZE: f32 = 20.0;
-const LABEL_SIZE: f32 = 13.0;
-const CONTROLS_TOP: f32 = 64.0;
-const CONTROL_ROW: f32 = 68.0;
-const SEGMENT_TOP: f32 = 24.0;
-const SEGMENT_HEIGHT: f32 = 28.0;
-const SEGMENT_PADDING: f32 = 12.0;
-const FOCUS_RING: f32 = 3.0;
+const PAGE_PADDING: f32 = Spacing::XL as f32;
+const PAGE_SPACING: f32 = Spacing::S as f32;
+const PAGE_STEP: f32 = 240.0;
+
+#[derive(Debug, Clone, PartialEq)]
+enum Intent {
+    SelectPane(PaneId),
+    StepPane(isize),
+    Query(String),
+    Set(SettingId, Value),
+}
+
+type Intents = Rc<RefCell<Vec<Intent>>>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Anchor {
+    Pane(PaneId),
+    Setting(SettingId),
+}
+
+fn intent<T>(intents: &Intents, make: impl Fn(T) -> Intent + 'static) -> impl FnMut(T) + 'static {
+    let intents = Rc::clone(intents);
+    move |argument| intents.borrow_mut().push(make(argument))
+}
+
+fn request(action: Action, target: WidgetId, data: Option<ActionData>) -> ActionRequest {
+    ActionRequest {
+        action,
+        target_tree: TreeId::ROOT,
+        target_node: target.into(),
+        data,
+    }
+}
+
+fn plain(modifiers: &Modifiers) -> bool {
+    !modifiers.logo && !modifiers.control && !modifiers.alt
+}
 
 pub struct SettingsView {
     panes: Vec<Pane>,
-    values: HashMap<Key, Value>,
+    values: HashMap<SettingId, Value>,
     query: String,
-    pane: usize,
-    focus: Option<usize>,
-    changes: Vec<(Key, Value)>,
+    hits: Vec<PaneHit>,
+    pane: PaneId,
+    ui: Ui,
+    root: WidgetId,
+    search: WidgetId,
+    anchors: Vec<(Anchor, WidgetId)>,
+    intents: Intents,
+    changes: Vec<(SettingId, Value)>,
     message: Option<String>,
-    palette: Palette,
-    text: TextSystem,
-}
-
-fn contains(rect: Rect, point: Point) -> bool {
-    point.x >= rect.x
-        && point.y >= rect.y
-        && point.x < rect.x + rect.width
-        && point.y < rect.y + rect.height
+    pressed: bool,
+    stale: bool,
+    focus_next: Option<Anchor>,
+    scroll: Rc<Cell<f32>>,
 }
 
 impl SettingsView {
     pub fn new(palette: Palette, text: TextSystem) -> Self {
-        Self {
-            panes: panes(),
+        let intents: Intents = Rc::default();
+        let queries = Rc::clone(&intents);
+        let field = TextField::new(&L10N.tr("search"), "", move |query: &str| {
+            queries.borrow_mut().push(Intent::Query(query.to_owned()));
+        });
+        let search = field.id();
+        let placeholder = || Box::new(Column::new(0.0, 0.0, Vec::new())) as Box<dyn Widget>;
+        let root = Root::new(Box::new(field), placeholder(), placeholder());
+        let root_id = root.id();
+        let mut cx = Context::new(text, palette);
+        cx.keyboard_navigation = true;
+        let panes = panes();
+        let mut view = Self {
+            pane: panes.first().map_or(PaneId::Appearance, |pane| pane.id),
+            panes,
             values: HashMap::new(),
             query: String::new(),
-            pane: 0,
-            focus: None,
+            hits: Vec::new(),
+            ui: Ui::new(Box::new(root), cx),
+            root: root_id,
+            search,
+            anchors: Vec::new(),
+            intents,
             changes: Vec::new(),
             message: None,
-            palette,
-            text,
-        }
+            pressed: false,
+            stale: true,
+            focus_next: None,
+            scroll: Rc::default(),
+        };
+        view.rebuild();
+        view
     }
 
     pub fn panes(&self) -> &[Pane] {
@@ -62,22 +114,28 @@ impl SettingsView {
     }
 
     pub fn set_palette(&mut self, palette: Palette) {
-        self.palette = palette;
+        self.ui.context().palette = palette;
     }
 
-    pub fn set_value(&mut self, key: Key, value: Value) {
-        self.values.insert(key, value);
+    pub fn set_value(&mut self, id: SettingId, value: Value) {
+        if self.values.get(&id) != Some(&value) {
+            self.values.insert(id, value);
+            self.invalidate();
+        }
     }
 
-    pub fn value(&self, key: Key) -> Option<&Value> {
-        self.values.get(&key)
+    pub fn value(&self, id: SettingId) -> Option<&Value> {
+        self.values.get(&id)
     }
 
     pub fn set_message(&mut self, message: Option<String>) {
-        self.message = message;
+        if self.message != message {
+            self.message = message;
+            self.invalidate();
+        }
     }
 
-    pub fn take_changes(&mut self) -> Vec<(Key, Value)> {
+    pub fn take_changes(&mut self) -> Vec<(SettingId, Value)> {
         std::mem::take(&mut self.changes)
     }
 
@@ -85,371 +143,355 @@ impl SettingsView {
         &self.query
     }
 
-    pub fn selected_pane(&self) -> &Pane {
-        &self.panes[self.pane]
+    pub fn selected_pane(&self) -> PaneId {
+        self.pane
     }
 
-    pub fn focused_control(&self) -> Option<&Control> {
-        self.selected_pane().controls.get(self.focus?)
-    }
-
-    pub fn visible_panes(&self) -> Vec<usize> {
+    pub fn visible_panes(&self) -> Vec<PaneId> {
         if self.query.trim().is_empty() {
-            (0..self.panes.len()).collect()
+            self.panes.iter().map(|pane| pane.id).collect()
         } else {
-            search(&self.panes, &self.query)
-                .into_iter()
-                .map(|found| found.pane)
-                .collect()
+            self.hits.iter().map(|hit| hit.pane).collect()
         }
     }
 
-    pub fn highlighted_controls(&self) -> Vec<usize> {
-        if self.query.trim().is_empty() {
-            return Vec::new();
-        }
-        search(&self.panes, &self.query)
-            .into_iter()
-            .find(|found| found.pane == self.pane)
-            .map(|found| found.controls)
+    pub fn highlighted_settings(&self) -> Vec<SettingId> {
+        self.hit(self.pane)
+            .map(|hit| hit.settings.iter().map(|setting| setting.setting).collect())
             .unwrap_or_default()
     }
 
-    fn select_pane(&mut self, pane: usize) {
-        if pane != self.pane {
-            self.pane = pane;
-            self.focus = None;
-        }
-    }
-
-    fn follow_query(&mut self) {
-        let visible = self.visible_panes();
-        if let Some(&first) = visible.first()
-            && !visible.contains(&self.pane)
-        {
-            self.select_pane(first);
-        }
-    }
-
-    fn step_pane(&mut self, forward: bool) -> bool {
-        let visible = self.visible_panes();
-        let Some(at) = visible.iter().position(|&pane| pane == self.pane) else {
-            return false;
-        };
-        let next = if forward {
-            visible.get(at + 1)
-        } else {
-            at.checked_sub(1).and_then(|before| visible.get(before))
-        };
-        next.copied().is_some_and(|pane| {
-            self.select_pane(pane);
-            true
+    pub fn focused_setting(&self) -> Option<SettingId> {
+        let focus = self.ui.focus()?;
+        self.anchors.iter().find_map(|(anchor, id)| match anchor {
+            Anchor::Setting(setting) if *id == focus => Some(*setting),
+            _ => None,
         })
     }
 
-    fn step_focus(&mut self, forward: bool) {
-        let count = self.selected_pane().controls.len();
-        self.focus = match (self.focus, forward) {
-            (None, true) => Some(0),
-            (None, false) => count.checked_sub(1),
-            (Some(at), true) => (at + 1 < count).then_some(at + 1),
-            (Some(at), false) => at.checked_sub(1),
-        };
+    pub fn search_focused(&self) -> bool {
+        self.ui.focus() == Some(self.search)
     }
 
-    fn choose(&mut self, control: usize, choice: usize) {
-        let Some(control) = self.selected_pane().controls.get(control) else {
-            return;
-        };
-        let Some(value) = control
-            .choices
-            .get(choice)
-            .map(|choice| choice.value.clone())
-        else {
-            return;
-        };
-        let key = control.key;
-        if self.values.get(&key) != Some(&value) {
-            self.values.insert(key, value.clone());
-            self.changes.push((key, value));
+    fn hit(&self, pane: PaneId) -> Option<&PaneHit> {
+        self.hits.iter().find(|hit| hit.pane == pane)
+    }
+
+    fn invalidate(&mut self) {
+        self.stale = true;
+        if !self.pressed {
+            self.rebuild();
         }
-    }
-
-    fn step_choice(&mut self, forward: bool) -> bool {
-        let Some(at) = self.focus else {
-            return false;
-        };
-        let control = &self.selected_pane().controls[at];
-        let count = control.choices.len();
-        let current = self
-            .values
-            .get(&control.key)
-            .and_then(|value| control.position(value));
-        let next = match (current, forward) {
-            (None, _) => 0,
-            (Some(index), true) => (index + 1).min(count - 1),
-            (Some(index), false) => index.saturating_sub(1),
-        };
-        self.choose(at, next);
-        true
     }
 
     pub fn handle(&mut self, event: &Event) -> bool {
         match event {
-            Event::Key { key, modifiers } => self.key(*key, *modifiers),
-            Event::PointerDown(at) => self.click(*at),
-            _ => false,
+            Event::PointerDown(_) => self.pressed = true,
+            Event::PointerUp(_) => self.pressed = false,
+            _ => {}
         }
+        let handled = match event {
+            Event::Key {
+                key: Key::Escape,
+                modifiers,
+            } if plain(modifiers) && !self.query.is_empty() => {
+                self.ui.perform(&request(
+                    Action::SetValue,
+                    self.search,
+                    Some(ActionData::Value("".into())),
+                ));
+                self.intents.borrow_mut().push(Intent::Query(String::new()));
+                true
+            }
+            Event::Key {
+                key: key @ (Key::Up | Key::Down),
+                ..
+            } if self.search_focused() => {
+                let step = if *key == Key::Up { -1 } else { 1 };
+                self.intents.borrow_mut().push(Intent::StepPane(step));
+                true
+            }
+            Event::Key {
+                key: Key::Enter, ..
+            } if self.search_focused() => {
+                self.focus_best_match();
+                true
+            }
+            Event::Key {
+                key: key @ (Key::PageUp | Key::PageDown),
+                ..
+            } => {
+                let step = if *key == Key::PageUp {
+                    -PAGE_STEP
+                } else {
+                    PAGE_STEP
+                };
+                self.scroll.set(self.scroll.get() + step);
+                true
+            }
+            _ => self.ui.handle(event),
+        };
+        let handled = handled || self.type_into_search(event);
+        self.process_intents();
+        if self.stale && !self.pressed {
+            self.rebuild();
+        }
+        handled
     }
 
-    fn key(&mut self, key: Pressed, modifiers: Modifiers) -> bool {
-        if modifiers.logo || modifiers.control || modifiers.alt {
+    fn type_into_search(&mut self, event: &Event) -> bool {
+        let Event::Key {
+            key: Key::Character(_),
+            modifiers,
+        } = event
+        else {
+            return false;
+        };
+        if !plain(modifiers) || self.search_focused() {
             return false;
         }
-        match key {
-            Pressed::Character(character) => {
-                self.query.push(character);
-                self.follow_query();
-            }
-            Pressed::Space if self.focus.is_none() => {
-                self.query.push(' ');
-            }
-            Pressed::Backspace => {
-                if self.query.pop().is_none() {
-                    return false;
-                }
-                self.follow_query();
-            }
-            Pressed::Escape if !self.query.is_empty() => {
-                self.query.clear();
-            }
-            Pressed::Up => return self.step_pane(false),
-            Pressed::Down => return self.step_pane(true),
-            Pressed::Tab => self.step_focus(!modifiers.shift),
-            Pressed::Left => return self.step_choice(false),
-            Pressed::Right => return self.step_choice(true),
-            _ => return false,
-        }
-        true
+        self.ui.perform(&request(Action::Focus, self.search, None));
+        self.ui.handle(&Event::Key {
+            key: Key::End,
+            modifiers: Modifiers::default(),
+        });
+        self.ui.handle(event)
     }
 
-    fn pane_row(index: usize) -> Rect {
-        Rect::new(
-            MARGIN,
-            PANES_TOP + index as f32 * PANE_ROW,
-            SIDEBAR_WIDTH - 2.0 * MARGIN,
-            PANE_ROW,
-        )
-    }
-
-    fn segment_rects(&mut self, control: usize) -> Vec<Rect> {
-        let y = CONTROLS_TOP + control as f32 * CONTROL_ROW + SEGMENT_TOP;
-        let mut x = SIDEBAR_WIDTH + CONTENT_INSET;
-        let labels = self.panes[self.pane].controls[control]
-            .choices
-            .iter()
-            .map(|choice| choice.label.clone())
-            .collect::<Vec<_>>();
-        labels
-            .into_iter()
-            .map(|label| {
-                let width = self.paragraph(&label, LABEL_SIZE, Color::hex(0)).width()
-                    + 2.0 * SEGMENT_PADDING;
-                let rect = Rect::new(x, y, width.round(), SEGMENT_HEIGHT);
-                x += rect.width;
-                rect
-            })
-            .collect()
-    }
-
-    fn click(&mut self, at: Point) -> bool {
-        if at.x < SIDEBAR_WIDTH {
-            let visible = self.visible_panes();
-            return visible
-                .iter()
-                .enumerate()
-                .find(|(row, _)| contains(Self::pane_row(*row), at))
-                .map(|(_, &pane)| pane)
-                .is_some_and(|pane| {
-                    self.select_pane(pane);
-                    true
-                });
-        }
-        for control in 0..self.selected_pane().controls.len() {
-            if let Some(choice) = self
-                .segment_rects(control)
-                .iter()
-                .position(|segment| contains(*segment, at))
-            {
-                self.focus = Some(control);
-                self.choose(control, choice);
-                return true;
-            }
-        }
-        false
-    }
-
-    fn paragraph(&mut self, text: &str, size: f32, color: Color) -> Paragraph {
-        self.text
-            .paragraph(text, TextStyle::new(size, color), None, TextAlign::Start)
-    }
-
-    fn centred_text(&mut self, text: &str, size: f32, color: Color, rect: Rect) -> Item {
-        let paragraph = self.paragraph(text, size, color);
-        Item::Text {
-            origin: Point::new(
-                rect.x + ((rect.width - paragraph.width()) / 2.0).round(),
-                rect.y + ((rect.height - paragraph.height()) / 2.0).round(),
-            ),
-            paragraph,
+    fn focus_best_match(&mut self) {
+        if let Some(best) = self.hit(self.pane).and_then(PaneHit::best) {
+            self.focus_next = Some(Anchor::Setting(best.setting));
+            self.invalidate();
         }
     }
 
-    fn paint_sidebar(&mut self, height: f32, items: &mut Vec<Item>) {
-        let palette = self.palette;
-        items.push(Item::Fill {
-            shape: Shape::rect(Rect::new(0.0, 0.0, SIDEBAR_WIDTH, height)),
-            paint: palette.surface_elevated.into(),
-        });
-        let field = Rect::new(MARGIN, MARGIN, SIDEBAR_WIDTH - 2.0 * MARGIN, SEARCH_HEIGHT);
-        items.push(Item::Fill {
-            shape: Shape::rounded(field, 7.0),
-            paint: palette.label_muted.with_alpha(36).into(),
-        });
-        let (shown, color) = if self.query.is_empty() {
-            (L10N.tr("search"), palette.label_muted)
-        } else {
-            (self.query.clone(), palette.label_primary)
-        };
-        let query = self.paragraph(&shown, LABEL_SIZE, color);
-        items.push(Item::Text {
-            origin: Point::new(
-                field.x + 10.0,
-                field.y + ((field.height - query.height()) / 2.0).round(),
-            ),
-            paragraph: query,
-        });
-        for (row, pane) in self.visible_panes().into_iter().enumerate() {
-            let rect = Self::pane_row(row);
-            let selected = pane == self.pane;
-            if selected {
-                items.push(Item::Fill {
-                    shape: Shape::rounded(rect, 6.0),
-                    paint: palette.accent_color.into(),
-                });
+    fn process_intents(&mut self) {
+        let intents = std::mem::take(&mut *self.intents.borrow_mut());
+        for intent in intents {
+            match intent {
+                Intent::SelectPane(pane) => self.select_pane(pane),
+                Intent::StepPane(step) => self.step_pane(step),
+                Intent::Query(query) => self.set_query(query),
+                Intent::Set(id, value) => self.change(id, value),
             }
-            let color = if selected {
-                Color::hex(0xFFFFFF)
-            } else {
-                palette.label_primary
-            };
-            let name = self.panes[pane].name.clone();
-            let name = self.paragraph(&name, LABEL_SIZE, color);
-            items.push(Item::Text {
-                origin: Point::new(
-                    rect.x + 10.0,
-                    rect.y + ((rect.height - name.height()) / 2.0).round(),
-                ),
-                paragraph: name,
-            });
         }
-        items.push(Item::Fill {
-            shape: Shape::rect(Rect::new(SIDEBAR_WIDTH - 1.0, 0.0, 1.0, height)),
-            paint: palette.separator_color.into(),
-        });
     }
 
-    fn paint_control(&mut self, index: usize, highlighted: bool, items: &mut Vec<Item>) {
-        let palette = self.palette;
-        let control = self.panes[self.pane].controls[index].clone();
-        let x = SIDEBAR_WIDTH + CONTENT_INSET;
-        let y = CONTROLS_TOP + index as f32 * CONTROL_ROW;
-        let label = self.paragraph(&control.label, LABEL_SIZE, palette.label_primary);
-        items.push(Item::Text {
-            origin: Point::new(x, y),
-            paragraph: label,
-        });
-        let segments = self.segment_rects(index);
-        let (Some(first), Some(last)) = (segments.first(), segments.last()) else {
+    fn select_pane(&mut self, pane: PaneId) {
+        if pane != self.pane {
+            self.pane = pane;
+            self.scroll.set(0.0);
+            self.stale = true;
+        }
+    }
+
+    fn step_pane(&mut self, step: isize) {
+        let visible = self.visible_panes();
+        let Some(at) = visible.iter().position(|pane| *pane == self.pane) else {
             return;
         };
-        let track = Rect::new(
-            first.x,
-            first.y,
-            last.x + last.width - first.x,
-            SEGMENT_HEIGHT,
-        );
-        items.push(Item::Fill {
-            shape: Shape::rounded(track, 7.0),
-            paint: palette.label_muted.with_alpha(36).into(),
+        if let Some(&pane) = at
+            .checked_add_signed(step)
+            .and_then(|next| visible.get(next))
+        {
+            if !self.search_focused() {
+                self.focus_next = Some(Anchor::Pane(pane));
+            }
+            self.select_pane(pane);
+        }
+    }
+
+    fn set_query(&mut self, query: String) {
+        if query == self.query {
+            return;
+        }
+        self.hits = search(&self.panes, &query);
+        self.query = query;
+        let visible = self.visible_panes();
+        if let Some(&first) = visible.first()
+            && (!visible.contains(&self.pane) || !self.hits.is_empty())
+        {
+            self.select_pane(first);
+        }
+        self.stale = true;
+    }
+
+    fn idle(&self) -> Option<Idle> {
+        let seconds = |id| match self.values.get(&id) {
+            Some(Value::Seconds(seconds)) => Some(*seconds),
+            _ => None,
+        };
+        Some(Idle {
+            dim: seconds(SettingId::DimAfter)?,
+            lock: seconds(SettingId::LockAfter)?,
+            sleep: seconds(SettingId::SleepAfter),
+        })
+    }
+
+    fn change(&mut self, id: SettingId, value: Value) {
+        if self.values.get(&id) == Some(&value) {
+            return;
+        }
+        let writes = match (id, self.idle()) {
+            (SettingId::DimAfter | SettingId::LockAfter | SettingId::SleepAfter, Some(idle)) => {
+                idle.writes(id, &value)
+            }
+            _ => vec![(id, value)],
+        };
+        for (id, value) in writes {
+            self.values.insert(id, value.clone());
+            self.changes.push((id, value));
+        }
+        self.message = None;
+        self.stale = true;
+    }
+
+    fn sidebar(&mut self) -> Box<dyn Widget> {
+        let rows = self
+            .visible_panes()
+            .into_iter()
+            .filter_map(|id| {
+                let pane = self.panes.iter().find(|pane| pane.id == id)?;
+                let selected = id == self.pane;
+                let tone = if selected {
+                    Tone::OnAccent
+                } else {
+                    Tone::Primary
+                };
+                let highlights = self.hit(id).map(|hit| hit.name.clone()).unwrap_or_default();
+                let row = SidebarRow::new(
+                    Text::new(&pane.name, tone).highlighted(highlights),
+                    selected,
+                    {
+                        let mut select = intent(&self.intents, Intent::SelectPane);
+                        move || select(id)
+                    },
+                    intent(&self.intents, Intent::StepPane),
+                );
+                self.anchors.push((Anchor::Pane(id), row.id()));
+                Some(Box::new(row) as Box<dyn Widget>)
+            })
+            .collect();
+        Box::new(Column::new(2.0, 0.0, rows))
+    }
+
+    fn control(&mut self, setting: &Setting) -> (Box<dyn Widget>, WidgetId) {
+        let id = setting.id;
+        let value = self.values.get(&id);
+        let selected = value.and_then(|value| setting.kind.position(value));
+        let choices = setting.kind.choices().to_vec();
+        let choose = {
+            let mut set = intent(&self.intents, move |value| Intent::Set(id, value));
+            move |index: usize| {
+                if let Some(choice) = choices.get(index) {
+                    set(choice.value.clone());
+                }
+            }
+        };
+        match &setting.kind {
+            Kind::Choices(choices) => {
+                let labels: Vec<String> =
+                    choices.iter().map(|choice| choice.label.clone()).collect();
+                let control = Segmented::new(&setting.label, &labels, selected, choose);
+                let id = control.id();
+                (Box::new(control), id)
+            }
+            Kind::Stops { stops, low, high } => {
+                let mut choose = choose;
+                let slider = Slider::new(
+                    &setting.label,
+                    selected.unwrap_or(0) as f64,
+                    (0.0, stops.len().saturating_sub(1) as f64),
+                    1.0,
+                    move |index| choose(index.round() as usize),
+                );
+                let id = slider.id();
+                (Box::new(Captioned::new(Box::new(slider), low, high)), id)
+            }
+        }
+    }
+
+    fn content(&mut self) -> Box<dyn Widget> {
+        let Some(pane) = self.panes.iter().find(|pane| pane.id == self.pane).cloned() else {
+            return Box::new(Column::new(0.0, 0.0, Vec::new()));
+        };
+        let hit = self.hit(pane.id).cloned();
+        let mut page: Vec<Box<dyn Widget>> = vec![Box::new(Label::heading(&pane.name))];
+        for section in &pane.sections {
+            if let Some(title) = &section.title {
+                page.push(Box::new(Caption::new(
+                    Text::new(title, Tone::Muted).caption().semibold(),
+                )));
+            }
+            let rows = section
+                .settings
+                .iter()
+                .map(|setting| {
+                    let matched = hit.as_ref().and_then(|hit| hit.setting(setting.id));
+                    let (control, focus) = self.control(setting);
+                    self.anchors.push((Anchor::Setting(setting.id), focus));
+                    let label = Text::new(&setting.label, Tone::Primary)
+                        .highlighted(matched.map(|hit| hit.label.clone()).unwrap_or_default());
+                    Box::new(Row::new(label, Some(control)).highlighted(matched.is_some()))
+                        as Box<dyn Widget>
+                })
+                .collect();
+            page.push(Box::new(Card::new(rows)));
+        }
+        if let Some(message) = &self.message {
+            page.push(Box::new(Caption::new(Text::new(message, Tone::Muted))));
+        }
+        Box::new(Scroll::new(
+            Box::new(Column::new(PAGE_SPACING, PAGE_PADDING, page)),
+            Rc::clone(&self.scroll),
+        ))
+    }
+
+    fn rebuild(&mut self) {
+        let focused = self.focus_next.take().or_else(|| {
+            let focus = self.ui.focus()?;
+            self.anchors
+                .iter()
+                .find(|(_, id)| *id == focus)
+                .map(|(anchor, _)| *anchor)
         });
-        if highlighted {
-            items.push(Item::Stroke {
-                shape: Shape::rounded(track.inset(-4.0), 10.0),
-                width: 2.0,
-                paint: palette.accent_color.into(),
-            });
+        self.anchors.clear();
+        let sidebar = self.sidebar();
+        let content = self.content();
+        if let Some(root) = self.ui.widget(self.root) {
+            let children = root.children_mut();
+            children[Root::PANES] = sidebar;
+            children[Root::CONTENT] = content;
         }
-        if self.focus == Some(index) {
-            items.push(Item::Stroke {
-                shape: Shape::rounded(track.inset(-FOCUS_RING / 2.0), 7.0 + FOCUS_RING / 2.0),
-                width: FOCUS_RING,
-                paint: palette.accent_color.with_alpha(128).into(),
-            });
+        if let Some(target) = focused.and_then(|anchor| {
+            self.anchors
+                .iter()
+                .find(|(candidate, _)| *candidate == anchor)
+                .map(|(_, id)| *id)
+        }) {
+            self.ui.perform(&request(Action::Focus, target, None));
         }
-        let chosen = self
-            .values
-            .get(&control.key)
-            .and_then(|value| control.position(value));
-        for (position, (segment, choice)) in segments.iter().zip(&control.choices).enumerate() {
-            let color = if chosen == Some(position) {
-                items.push(Item::Fill {
-                    shape: Shape::rounded(segment.inset(2.0), 5.0),
-                    paint: palette.accent_color.into(),
-                });
-                Color::hex(0xFFFFFF)
-            } else {
-                palette.label_primary
-            };
-            let text = self.centred_text(&choice.label, LABEL_SIZE, color, *segment);
-            items.push(text);
-        }
+        self.stale = false;
     }
 
     pub fn scene(&mut self, width: u32, height: u32) -> Scene {
-        let palette = self.palette;
-        let mut items = Vec::new();
-        self.paint_sidebar(height as f32, &mut items);
-        let pane_name = &self.panes[self.pane].name;
-        let title = self.text.paragraph(
-            pane_name,
-            TextStyle::new(TITLE_SIZE, palette.label_primary).weight(TextStyle::SEMIBOLD),
-            None,
-            TextAlign::Start,
-        );
-        items.push(Item::Text {
-            origin: Point::new(SIDEBAR_WIDTH + CONTENT_INSET, 20.0),
-            paragraph: title,
-        });
-        let highlighted = self.highlighted_controls();
-        for index in 0..self.panes[self.pane].controls.len() {
-            self.paint_control(index, highlighted.contains(&index), &mut items);
+        self.ui.scene(width, height)
+    }
+
+    pub fn text_input_area(&self) -> Option<Rect> {
+        self.ui.text_input_area()
+    }
+
+    pub fn accessibility(&self) -> TreeUpdate {
+        self.ui.accessibility()
+    }
+
+    pub fn perform(&mut self, request: &ActionRequest) -> bool {
+        let handled = self.ui.perform(request);
+        self.process_intents();
+        if self.stale && !self.pressed {
+            self.rebuild();
         }
-        if let Some(message) = self.message.clone() {
-            let text = self.paragraph(&message, LABEL_SIZE, palette.label_muted);
-            items.push(Item::Text {
-                origin: Point::new(
-                    SIDEBAR_WIDTH + CONTENT_INSET,
-                    height as f32 - CONTENT_INSET - text.height(),
-                ),
-                paragraph: text,
-            });
-        }
-        Scene {
-            width,
-            height,
-            background: palette.surface_background,
-            items,
-        }
+        handled
     }
 }

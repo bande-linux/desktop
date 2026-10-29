@@ -1,17 +1,10 @@
 use std::process::ExitCode;
 
-use unbound_settings::{Key, L10N, SettingsClient, SettingsView};
-use unbound_toolkit::{App, Role, Scene, TextSystem, Window, WindowEvent};
+use unbound_settings::{L10N, SettingsClient, SettingsView};
+use unbound_toolkit::{App, Rect, Role, Scene, TextSystem, Window, WindowEvent};
 
 const APP_ID: &str = "org.unbound.Settings";
-const WINDOW_SIZE: (u32, u32) = (900, 540);
-const KEYS: [Key; 5] = [
-    Key::Appearance,
-    Key::DockPosition,
-    Key::DimAfter,
-    Key::LockAfter,
-    Key::SleepAfter,
-];
+const WINDOW_SIZE: (u32, u32) = (900, 600);
 
 struct Settings {
     view: SettingsView,
@@ -19,10 +12,24 @@ struct Settings {
 }
 
 impl Settings {
-    fn refresh(&mut self, key: Key) {
-        if let Ok(value) = self.client.get(key) {
-            self.view.set_value(key, value);
+    fn refresh(&mut self) {
+        for (id, value) in self.client.read_all() {
+            self.view.set_value(id, value);
         }
+    }
+
+    fn write_changes(&mut self) {
+        let changes = self.view.take_changes();
+        if changes.is_empty() {
+            return;
+        }
+        let failed = changes
+            .iter()
+            .find_map(|(id, value)| self.client.set(*id, value).err());
+        self.view.set_message(
+            failed.map(|error| L10N.tr_args("not-changed", [("error", error.to_string().into())])),
+        );
+        self.refresh();
     }
 }
 
@@ -33,27 +40,28 @@ impl App for Settings {
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
-        let input = match event {
-            WindowEvent::Input(input) => input,
+        match event {
+            WindowEvent::Input(input) => {
+                self.view.handle(&input);
+            }
+            WindowEvent::Accessibility(request) => {
+                self.view.perform(&request);
+            }
             WindowEvent::AppearanceChanged(appearance) => {
                 self.view.set_palette(appearance.palette());
-                return;
             }
             _ => return,
-        };
-        if !self.view.handle(&input) {
-            return;
         }
-        for (key, value) in self.view.take_changes() {
-            let failed = self.client.set(key, &value).err();
-            self.view.set_message(
-                failed.map(|error| {
-                    L10N.tr_args("not-changed", [("error", error.to_string().into())])
-                }),
-            );
-            self.refresh(key);
-        }
+        self.write_changes();
         window.request_redraw();
+    }
+
+    fn text_input_area(&self) -> Option<Rect> {
+        self.view.text_input_area()
+    }
+
+    fn accessibility(&self) -> Option<accesskit::TreeUpdate> {
+        Some(self.view.accessibility())
     }
 }
 
@@ -63,9 +71,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut window = Window::open(Role::toplevel(&L10N.tr("title"), APP_ID), WINDOW_SIZE)?;
     let view = SettingsView::new(window.appearance().palette(), TextSystem::new());
     let mut settings = Settings { view, client };
-    for key in KEYS {
-        settings.refresh(key);
-    }
+    settings.refresh();
     unbound_toolkit::run(&mut window, &mut settings)?;
     Ok(())
 }

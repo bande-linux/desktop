@@ -1,14 +1,19 @@
 mod client;
-mod model;
+mod idle;
+mod registry;
+mod search;
 mod view;
+mod widgets;
 
 use std::sync::LazyLock;
 
 use unbound_l10n::Localizer;
 
-pub use client::SettingsClient;
-pub use model::{Choice, Control, Key, Match, Pane, Value, panes, search};
-pub use view::{SIDEBAR_WIDTH, SettingsView};
+pub use client::{CONFIG_SETTINGS, SettingsClient};
+pub use idle::Idle;
+pub use registry::{Choice, Kind, Pane, PaneId, Section, Setting, SettingId, Value, panes};
+pub use search::{PaneHit, SettingHit, search};
+pub use view::SettingsView;
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-settings.ftl");
 
@@ -21,9 +26,9 @@ mod tests {
         let sources = [
             include_str!("lib.rs"),
             include_str!("main.rs"),
-            include_str!("model.rs"),
-            include_str!("view.rs"),
             include_str!("client.rs"),
+            include_str!("registry.rs"),
+            include_str!("view.rs"),
         ];
         assert_eq!(
             unbound_l10n::missing_ids(super::ENGLISH, &sources),

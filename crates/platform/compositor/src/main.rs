@@ -10,8 +10,8 @@ use smithay::reexports::calloop::{EventLoop, Interest, LoopHandle, Mode, PostAct
 use smithay::utils::{Clock, Monotonic, Size};
 use smithay::wayland::socket::ListeningSocketSource;
 use unbound_compositor::{
-    CLIPBOARD_DAEMON, CONTROL_CENTER, CursorTheme, DrmOutput, FrameClock, FrameOutput,
-    FrameScheduler, GREETER, Headless, LAUNCHER, MENU_BAR, PANEL, REFRESH, Renderer, SCREENSHOT,
+    CLIPBOARD_DAEMON, CONTROL_CENTER, CursorTheme, DOCK, DrmOutput, FrameClock, FrameOutput,
+    FrameScheduler, GREETER, Headless, LAUNCHER, MENU_BAR, REFRESH, Renderer, SCREENSHOT,
     SessionRequest, SessionRole, SessionUpkeep, automatic_scale, export_session_environment,
     follow_session, notify_ready,
 };
@@ -208,7 +208,7 @@ fn start_user_session<O: 'static>(
         (CLIPBOARD_DAEMON, SessionRole::ClipboardDaemon),
         (MENU_BAR, SessionRole::Shell),
         (CONTROL_CENTER, SessionRole::Shell),
-        (PANEL, SessionRole::Shell),
+        (DOCK, SessionRole::Shell),
         (LAUNCHER, SessionRole::Shell),
         (SCREENSHOT, SessionRole::Shell),
     ] {

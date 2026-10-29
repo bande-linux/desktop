@@ -5,21 +5,21 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
-use unbound_apps::{DesktopEntry, Locale, applications, current_desktops, data_dirs, find_icon};
-use unbound_config::{Appearance, Config, PanelEdge, config_path};
-use unbound_panel::{
-    Actions, DockApp, ICON_SIZE, PanelAction, THICKNESS, clock_text, merge_apps, panel_ui,
+use unbound_config::{Appearance, Config, DockEdge, config_path};
+use unbound_dock::{
+    Actions, DockAction, DockApp, ICON_SIZE, THICKNESS, clock_text, dock_ui, merge_apps,
 };
 use unbound_toolkit::ui::Ui;
 use unbound_toolkit::{
     App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Palette, Role, Scene, Scheme,
     TextSystem, Window, WindowError, WindowEvent,
 };
+use unbound_xdg::{DesktopEntry, Locale, applications, current_desktops, data_dirs, find_icon};
 
 const PINNED: &[&str] = &["unbound-term"];
 
-struct Panel {
-    edge: PanelEdge,
+struct Dock {
+    edge: DockEdge,
     palette: Palette,
     entries: Vec<DesktopEntry>,
     icons: HashMap<String, Option<Image>>,
@@ -29,14 +29,14 @@ struct Panel {
     next_minute: Instant,
 }
 
-impl Panel {
+impl Dock {
     fn icon(&mut self, name: Option<&str>) -> Option<Image> {
         let name = name?;
         self.icons
             .entry(name.to_owned())
             .or_insert_with(|| {
                 let path = find_icon(name, ICON_SIZE, &[], &data_dirs())?;
-                unbound_apps::load_icon(&path, ICON_SIZE)
+                Image::load(&path, ICON_SIZE)
             })
             .clone()
     }
@@ -79,7 +79,7 @@ impl Panel {
             })
         });
         let now = jiff::Zoned::now();
-        self.ui = Some(panel_ui(
+        self.ui = Some(dock_ui(
             self.edge,
             apps,
             &clock_text(&now),
@@ -93,7 +93,7 @@ impl Panel {
         let actions = std::mem::take(&mut *self.actions.borrow_mut());
         for action in actions {
             match action {
-                PanelAction::Open(app_id) => self.open(window, &app_id),
+                DockAction::Open(app_id) => self.open(window, &app_id),
             }
         }
     }
@@ -101,7 +101,7 @@ impl Panel {
     fn open(&mut self, window: &mut Window, app_id: &str) {
         if self.running.iter().any(|running| running == app_id) {
             if let Err(error) = window.activate_app(app_id) {
-                eprintln!("unbound-panel: cannot activate {app_id}: {error}");
+                eprintln!("unbound-dock: cannot activate {app_id}: {error}");
             }
             return;
         }
@@ -109,8 +109,8 @@ impl Panel {
             return;
         };
         let token = window.activation_token(app_id).ok();
-        if let Err(error) = unbound_apps::launch(entry, token.as_deref()) {
-            eprintln!("unbound-panel: cannot open {}: {error}", entry.name);
+        if let Err(error) = unbound_xdg::launch(entry, token.as_deref()) {
+            eprintln!("unbound-dock: cannot open {}: {error}", entry.name);
         }
     }
 }
@@ -124,7 +124,7 @@ fn next_minute() -> Instant {
     Instant::now() + Duration::from_secs(60).saturating_sub(into_minute)
 }
 
-impl App for Panel {
+impl App for Dock {
     fn scene(&mut self, window: &mut Window) -> Scene {
         let (width, height) = window.size();
         match &mut self.ui {
@@ -187,27 +187,27 @@ fn run() -> Result<(), WindowError> {
         .and_then(|path| std::fs::read_to_string(path).ok())
         .and_then(|source| Config::parse(&source).ok())
         .unwrap_or_default();
-    let edge = config.panel_edge;
+    let edge = config.dock_edge;
     let anchor = match edge {
-        PanelEdge::Left => Edges {
+        DockEdge::Left => Edges {
             left: true,
             top: true,
             bottom: true,
             right: false,
         },
-        PanelEdge::Right => Edges {
+        DockEdge::Right => Edges {
             right: true,
             top: true,
             bottom: true,
             left: false,
         },
-        PanelEdge::Top => Edges {
+        DockEdge::Top => Edges {
             top: true,
             left: true,
             right: true,
             bottom: false,
         },
-        PanelEdge::Bottom => Edges {
+        DockEdge::Bottom => Edges {
             bottom: true,
             left: true,
             right: true,
@@ -224,12 +224,12 @@ fn run() -> Result<(), WindowError> {
             anchor,
             exclusive_zone: THICKNESS as i32,
             keyboard: KeyboardFocus::None,
-            namespace: "panel".to_owned(),
+            namespace: "dock".to_owned(),
         }),
         (THICKNESS, THICKNESS),
     )?;
     let locale = Locale::from_env();
-    let mut panel = Panel {
+    let mut dock = Dock {
         edge,
         palette: Palette::for_scheme(scheme),
         entries: applications(&data_dirs(), locale.as_ref(), &current_desktops()),
@@ -239,15 +239,15 @@ fn run() -> Result<(), WindowError> {
         running: window.running_apps(),
         next_minute: next_minute(),
     };
-    panel.rebuild();
-    unbound_toolkit::run(&mut window, &mut panel)
+    dock.rebuild();
+    unbound_toolkit::run(&mut window, &mut dock)
 }
 
 fn main() -> ExitCode {
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("unbound-panel: {error}");
+            eprintln!("unbound-dock: {error}");
             ExitCode::FAILURE
         }
     }

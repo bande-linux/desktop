@@ -1,15 +1,12 @@
 [package]
-name = "unbound-apps"
+name = "unbound-xdg"
 description = "Desktop entries, app icons and app launching for the Unbound shell"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
 
 [dependencies]
-image.workspace = true
-resvg.workspace = true
 rustix = { workspace = true, features = ["process"] }
-unbound-toolkit.workspace = true
 
 [dev-dependencies]
 image.workspace = true

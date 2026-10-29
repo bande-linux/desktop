@@ -1,6 +1,6 @@
 [package]
-name = "unbound-panel"
-description = "Unbound panel: app buttons and a clock on a screen edge"
+name = "unbound-dock"
+description = "Unbound Dock: kept and running apps on a screen edge"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
@@ -8,7 +8,7 @@ repository.workspace = true
 [dependencies]
 accesskit.workspace = true
 jiff.workspace = true
-unbound-apps.workspace = true
+unbound-xdg.workspace = true
 unbound-config.workspace = true
 unbound-toolkit.workspace = true
 
@@ -21,7 +21,7 @@ maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
 depends = "$auto, fonts-inter"
 extended-description = """\
-The panel of the Unbound desktop: the apps kept in it and the running \
+The Dock of the Unbound desktop: the apps kept in it and the running \
 apps, with a clock. unbound-compositor starts it on the screen edge \
 named in config.kdl."""
 

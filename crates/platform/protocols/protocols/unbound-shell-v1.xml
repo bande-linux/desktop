@@ -3,7 +3,7 @@
   <interface name="unbound_shell_v1" version="4">
     <description summary="requests and events between the compositor and the shell">
       Offered only on the connections of the shell clients the compositor starts
-      itself (the panel and the launcher), never on the listening socket.
+      itself (the Dock and the launcher), never on the listening socket.
     </description>
 
     <request name="destroy" type="destructor"/>

@@ -2,11 +2,12 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use unbound_screenshot::area::{AreaOutcome, AreaSelection, Region, crop};
-use unbound_screenshot::{desktop_dir, save};
+use unbound_screenshot::save;
 use unbound_toolkit::{
     App, Edges, KeyboardFocus, LayerKind, LayerOptions, Role, Scene, TextSystem, Window,
     WindowError, WindowEvent,
 };
+use unbound_xdg::{UserDir, user_dir};
 
 struct Screenshots {
     home: PathBuf,
@@ -35,7 +36,7 @@ impl Screenshots {
             None => image,
         };
         let user_dirs = std::fs::read_to_string(self.config_home.join("user-dirs.dirs")).ok();
-        let dir = desktop_dir(&self.home, user_dirs.as_deref());
+        let dir = user_dir(&self.home, user_dirs.as_deref(), UserDir::Desktop);
         let taken = jiff::Zoned::now().datetime();
         match save(image, &dir, taken) {
             Ok(path) => eprintln!("unbound-screenshot: saved {}", path.display()),

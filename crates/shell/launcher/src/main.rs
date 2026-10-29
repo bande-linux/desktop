@@ -2,14 +2,14 @@ use std::collections::HashMap;
 use std::process::ExitCode;
 
 use accesskit::TreeUpdate;
-use unbound_apps::{
-    DesktopEntry, Locale, applications, current_desktops, data_dirs, find_icon, launch, load_icon,
-};
 use unbound_config::{Appearance, Config, config_path};
 use unbound_launcher::{ICON_SIZE, Launcher, LauncherAction, LauncherApp};
 use unbound_toolkit::{
     App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Palette, Rect, Role, Scene, Scheme,
     TextSystem, Window, WindowError, WindowEvent,
+};
+use unbound_xdg::{
+    DesktopEntry, Locale, applications, current_desktops, data_dirs, find_icon, launch,
 };
 
 struct LauncherShell {
@@ -89,7 +89,7 @@ fn icons(entries: &[DesktopEntry]) -> HashMap<String, Option<Image>> {
     let mut icons = HashMap::new();
     for name in entries.iter().filter_map(|entry| entry.icon.as_deref()) {
         icons.entry(name.to_owned()).or_insert_with(|| {
-            find_icon(name, ICON_SIZE, &[], &dirs).and_then(|path| load_icon(&path, ICON_SIZE))
+            find_icon(name, ICON_SIZE, &[], &dirs).and_then(|path| Image::load(&path, ICON_SIZE))
         });
     }
     icons

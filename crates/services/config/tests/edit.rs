@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use unbound_config::{Appearance, Config, Output, PanelEdge, Setting};
+use unbound_config::{Appearance, Config, DockEdge, Output, Setting};
 
 fn apply(setting: Setting, source: &str) -> String {
     setting.apply(source).expect("edit")
@@ -10,10 +10,10 @@ fn apply(setting: Setting, source: &str) -> String {
 
 #[test]
 fn changing_a_value_keeps_every_comment_and_line_around_it() {
-    let source = "// Unbound settings\nappearance \"dark\" // at night\n\npanel {\n    edge \"left\" // near the dock\n}\n";
+    let source = "// Unbound settings\nappearance \"dark\" // at night\n\ndock {\n    edge \"left\" // near the dock\n}\n";
     assert_eq!(
-        apply(Setting::PanelEdge(PanelEdge::Top), source),
-        "// Unbound settings\nappearance \"dark\" // at night\n\npanel {\n    edge \"top\" // near the dock\n}\n"
+        apply(Setting::DockEdge(DockEdge::Top), source),
+        "// Unbound settings\nappearance \"dark\" // at night\n\ndock {\n    edge \"top\" // near the dock\n}\n"
     );
 }
 
@@ -82,7 +82,7 @@ fn a_value_that_breaks_a_rule_is_rejected() {
 #[test]
 fn an_invalid_file_is_not_edited() {
     let error = Setting::Appearance(Appearance::Dark)
-        .apply("appearance \"dark\"\npanel {\n    edge \"middle\"\n}\n")
+        .apply("appearance \"dark\"\ndock {\n    edge \"middle\"\n}\n")
         .expect_err("invalid file");
     assert_eq!((error.line, error.column), (3, 10));
 }

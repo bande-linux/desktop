@@ -18,7 +18,7 @@ depends = "$auto, dbus-session-bus | default-dbus-session-bus, init-system-helpe
 extended-description = """\
 Serves org.kde.StatusNotifierWatcher, the registry through which \
 applications such as Steam and Nextcloud publish tray icons and the \
-Unbound panel finds them. Started with the graphical session."""
+Unbound menu bar finds them. Started with the graphical session."""
 maintainer-scripts = "debian/"
 assets = [
     ["target/release/unbound-tray", "usr/bin/", "755"],

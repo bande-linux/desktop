@@ -13,9 +13,9 @@ trait Config {
     #[zbus(property)]
     fn set_appearance(&self, value: &str) -> zbus::Result<()>;
     #[zbus(property)]
-    fn panel_edge(&self) -> zbus::Result<String>;
+    fn dock_edge(&self) -> zbus::Result<String>;
     #[zbus(property)]
-    fn set_panel_edge(&self, value: &str) -> zbus::Result<()>;
+    fn set_dock_edge(&self, value: &str) -> zbus::Result<()>;
     #[zbus(property)]
     fn idle_dim_after(&self) -> zbus::Result<u64>;
     #[zbus(property)]
@@ -44,7 +44,7 @@ impl SettingsClient {
     pub fn get(&self, key: Key) -> zbus::Result<Value> {
         Ok(match key {
             Key::Appearance => Value::Keyword(self.config.appearance()?),
-            Key::DockPosition => Value::Keyword(self.config.panel_edge()?),
+            Key::DockPosition => Value::Keyword(self.config.dock_edge()?),
             Key::DimAfter => Value::Seconds(self.config.idle_dim_after()?),
             Key::LockAfter => Value::Seconds(self.config.idle_lock_after()?),
             Key::SleepAfter => Value::Seconds(self.config.idle_suspend_after()?),
@@ -54,7 +54,7 @@ impl SettingsClient {
     pub fn set(&self, key: Key, value: &Value) -> zbus::Result<()> {
         match (key, value) {
             (Key::Appearance, Value::Keyword(keyword)) => self.config.set_appearance(keyword),
-            (Key::DockPosition, Value::Keyword(keyword)) => self.config.set_panel_edge(keyword),
+            (Key::DockPosition, Value::Keyword(keyword)) => self.config.set_dock_edge(keyword),
             (Key::DimAfter, Value::Seconds(seconds)) => self.config.set_idle_dim_after(*seconds),
             (Key::LockAfter, Value::Seconds(seconds)) => self.config.set_idle_lock_after(*seconds),
             (Key::SleepAfter, Value::Seconds(seconds)) => {

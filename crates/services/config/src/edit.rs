@@ -2,12 +2,12 @@ use std::time::Duration;
 
 use kdl::{KdlDocument, KdlEntry, KdlEntryFormat, KdlNode, KdlValue};
 
-use crate::{Appearance, Config, ConfigError, Output, PanelEdge};
+use crate::{Appearance, Config, ConfigError, DockEdge, Output};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Setting {
     Appearance(Appearance),
-    PanelEdge(PanelEdge),
+    DockEdge(DockEdge),
     IdleDimAfter(Duration),
     IdleLockAfter(Duration),
     IdleSuspendAfter(Option<Duration>),
@@ -29,9 +29,9 @@ impl Setting {
                 "appearance",
                 Some(appearance.keyword().into()),
             ),
-            Self::PanelEdge(edge) => set(
+            Self::DockEdge(edge) => set(
                 &mut document,
-                Some("panel"),
+                Some("dock"),
                 "edge",
                 Some(edge.keyword().into()),
             ),
@@ -71,7 +71,7 @@ impl Appearance {
     }
 }
 
-impl PanelEdge {
+impl DockEdge {
     pub fn keyword(self) -> &'static str {
         match self {
             Self::Left => "left",

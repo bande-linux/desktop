@@ -26,7 +26,7 @@ pub enum Appearance {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PanelEdge {
+pub enum DockEdge {
     Left,
     Bottom,
     Right,
@@ -67,7 +67,7 @@ pub struct Output {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
     pub appearance: Appearance,
-    pub panel_edge: PanelEdge,
+    pub dock_edge: DockEdge,
     pub idle: Idle,
     pub outputs: BTreeMap<String, Output>,
 }
@@ -76,7 +76,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             appearance: Appearance::Automatic,
-            panel_edge: PanelEdge::Left,
+            dock_edge: DockEdge::Left,
             idle: Idle {
                 dim_after: Duration::from_secs(5 * 60),
                 lock_after: Duration::from_secs(10 * 60),
@@ -169,7 +169,7 @@ impl Parser<'_> {
                         ],
                     )?
                 }
-                "panel" => config.panel_edge = self.panel(node)?,
+                "dock" => config.dock_edge = self.dock(node)?,
                 "idle" => config.idle = self.idle(node, config.idle)?,
                 "output" => {
                     let (connector, output) = self.output(node)?;
@@ -259,23 +259,23 @@ impl Parser<'_> {
         )
     }
 
-    fn panel(&self, node: &KdlNode) -> Result<PanelEdge, ConfigError> {
+    fn dock(&self, node: &KdlNode) -> Result<DockEdge, ConfigError> {
         self.no_arguments(node)?;
-        let mut edge = Config::default().panel_edge;
+        let mut edge = Config::default().dock_edge;
         for child in self.children(node)? {
             match child.name().value() {
                 "edge" => {
                     edge = self.keyword(
                         child,
                         &[
-                            ("left", PanelEdge::Left),
-                            ("bottom", PanelEdge::Bottom),
-                            ("right", PanelEdge::Right),
-                            ("top", PanelEdge::Top),
+                            ("left", DockEdge::Left),
+                            ("bottom", DockEdge::Bottom),
+                            ("right", DockEdge::Right),
+                            ("top", DockEdge::Top),
                         ],
                     )?
                 }
-                _ => return Err(self.unknown_child("panel", child)),
+                _ => return Err(self.unknown_child("dock", child)),
             }
         }
         Ok(edge)

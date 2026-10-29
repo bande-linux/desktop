@@ -51,7 +51,6 @@ wayland-scanner = "=0.31.11"
 wayland-server = "=0.31.14"
 xkbcommon = "=0.8.0"
 wgpu = { version = "=30.0.1", default-features = false, features = ["std", "parking_lot", "vulkan", "wgsl"] }
-unbound-apps = { path = "crates/libs/apps" }
 unbound-audio = { path = "crates/libs/audio" }
 unbound-automount = { path = "crates/services/automount" }
 unbound-bench = { path = "crates/testing/bench" }
@@ -60,6 +59,7 @@ unbound-clipboard = { path = "crates/services/clipboard" }
 unbound-compositor = { path = "crates/platform/compositor" }
 unbound-config = { path = "crates/services/config" }
 unbound-controlcenter = { path = "crates/shell/controlcenter" }
+unbound-dock = { path = "crates/shell/panel" }
 unbound-files = { path = "crates/apps/files" }
 unbound-greeter = { path = "crates/shell/greeter" }
 unbound-launcher = { path = "crates/shell/launcher" }
@@ -67,7 +67,6 @@ unbound-lock = { path = "crates/shell/lock" }
 unbound-menubar = { path = "crates/shell/menubar" }
 unbound-network = { path = "crates/libs/network" }
 unbound-notify = { path = "crates/services/notify" }
-unbound-panel = { path = "crates/shell/panel" }
 unbound-polkit = { path = "crates/services/polkit" }
 unbound-power = { path = "crates/services/power" }
 unbound-protocols = { path = "crates/platform/protocols" }
@@ -81,6 +80,7 @@ unbound-test-bus = { path = "crates/testing/test-bus" }
 unbound-test-wayland = { path = "crates/testing/test-wayland" }
 unbound-toolkit = { path = "crates/toolkit/toolkit" }
 unbound-tray = { path = "crates/services/tray" }
+unbound-xdg = { path = "crates/libs/xdg" }
 xdg-desktop-portal-unbound = { path = "crates/services/portal" }
 
 [profile.dev]

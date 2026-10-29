@@ -14,23 +14,6 @@ pub fn file_stem(taken: DateTime) -> String {
         .to_string()
 }
 
-pub fn desktop_dir(home: &Path, user_dirs: Option<&str>) -> PathBuf {
-    user_dirs
-        .into_iter()
-        .flat_map(str::lines)
-        .filter_map(|line| line.trim().strip_prefix("XDG_DESKTOP_DIR="))
-        .filter_map(|value| value.strip_prefix('"')?.strip_suffix('"'))
-        .filter_map(|value| match value.strip_prefix("$HOME") {
-            Some(rest) if rest.is_empty() || rest.starts_with('/') => {
-                Some(home.join(rest.trim_start_matches('/')))
-            }
-            Some(_) => None,
-            None => value.starts_with('/').then(|| PathBuf::from(value)),
-        })
-        .next_back()
-        .unwrap_or_else(|| home.join("Desktop"))
-}
-
 pub fn free_path(dir: &Path, stem: &str) -> PathBuf {
     let candidate = |copy: u32| match copy {
         1 => dir.join(format!("{stem}.png")),
@@ -67,46 +50,6 @@ mod tests {
         let taken = jiff::civil::date(2026, 10, 29).at(9, 5, 7, 0);
 
         assert_eq!(file_stem(taken), "Screenshot 2026-10-29 at 09.05.07");
-    }
-
-    #[test]
-    fn the_desktop_folder_defaults_to_home_desktop() {
-        let home = Path::new("/home/ada");
-
-        assert_eq!(desktop_dir(home, None), home.join("Desktop"));
-        assert_eq!(desktop_dir(home, Some("# nothing\n")), home.join("Desktop"));
-    }
-
-    #[test]
-    fn the_desktop_folder_follows_xdg_user_dirs() {
-        let home = Path::new("/home/ada");
-        let user_dirs = "# written by xdg-user-dirs-update\n\
-            XDG_DOWNLOAD_DIR=\"$HOME/Downloads\"\n\
-            XDG_DESKTOP_DIR=\"$HOME/Skrivbord\"\n";
-
-        assert_eq!(desktop_dir(home, Some(user_dirs)), home.join("Skrivbord"));
-        assert_eq!(
-            desktop_dir(home, Some("XDG_DESKTOP_DIR=\"/srv/desk\"")),
-            PathBuf::from("/srv/desk")
-        );
-        assert_eq!(
-            desktop_dir(home, Some("XDG_DESKTOP_DIR=\"$HOME/\"")),
-            home.to_path_buf()
-        );
-    }
-
-    #[test]
-    fn a_relative_or_unquoted_desktop_entry_is_ignored() {
-        let home = Path::new("/home/ada");
-
-        assert_eq!(
-            desktop_dir(home, Some("XDG_DESKTOP_DIR=\"desk\"")),
-            home.join("Desktop")
-        );
-        assert_eq!(
-            desktop_dir(home, Some("XDG_DESKTOP_DIR=$HOME/desk")),
-            home.join("Desktop")
-        );
     }
 
     #[test]

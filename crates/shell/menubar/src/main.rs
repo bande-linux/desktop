@@ -2,7 +2,6 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
-use unbound_apps::{Locale, applications, current_desktops, data_dirs};
 use unbound_config::{Appearance, Config, config_path};
 use unbound_menubar::{HEIGHT, MenuBar, app_name, clock_text};
 use unbound_toolkit::ui::Event;
@@ -10,6 +9,7 @@ use unbound_toolkit::{
     App, Edges, KeyboardFocus, LayerKind, LayerOptions, Palette, Role, Scene, Scheme, TextSystem,
     Window, WindowEvent,
 };
+use unbound_xdg::{Locale, applications, current_desktops, data_dirs};
 
 const CLOCK_TICK: Duration = Duration::from_secs(1);
 

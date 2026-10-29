@@ -7,7 +7,7 @@ use std::thread;
 use std::time::Duration;
 
 use unbound_config::{
-    Appearance, Config, ConfigError, ConfigStore, Output, PanelEdge, ReloadError, Suspend,
+    Appearance, Config, ConfigError, ConfigStore, DockEdge, Output, ReloadError, Suspend,
     config_path,
 };
 
@@ -19,7 +19,7 @@ fn error_at(source: &str) -> (usize, usize) {
 #[test]
 fn an_empty_file_gives_the_plan_defaults() {
     let config = Config::parse("").expect("empty config");
-    assert_eq!(config.panel_edge, PanelEdge::Left);
+    assert_eq!(config.dock_edge, DockEdge::Left);
     assert_eq!(config.idle.dim_after, Duration::from_secs(5 * 60));
     assert_eq!(config.idle.lock_after, Duration::from_secs(10 * 60));
     assert!(config.outputs.is_empty());
@@ -30,7 +30,7 @@ fn every_setting_is_read() {
     let config = Config::parse(
         r#"
 appearance "dark"
-panel {
+dock {
     edge "bottom"
 }
 idle {
@@ -50,7 +50,7 @@ output "HDMI-A-1" {
     .expect("valid config");
 
     assert_eq!(config.appearance, Appearance::Dark);
-    assert_eq!(config.panel_edge, PanelEdge::Bottom);
+    assert_eq!(config.dock_edge, DockEdge::Bottom);
     assert_eq!(config.idle.dim_after, Duration::from_secs(90));
     assert_eq!(config.idle.lock_after, Duration::from_secs(3600));
     assert_eq!(
@@ -71,15 +71,15 @@ output "HDMI-A-1" {
 }
 
 #[test]
-fn panel_accepts_each_of_the_four_edges() {
+fn the_dock_accepts_each_of_the_four_edges() {
     for (name, edge) in [
-        ("left", PanelEdge::Left),
-        ("bottom", PanelEdge::Bottom),
-        ("right", PanelEdge::Right),
-        ("top", PanelEdge::Top),
+        ("left", DockEdge::Left),
+        ("bottom", DockEdge::Bottom),
+        ("right", DockEdge::Right),
+        ("top", DockEdge::Top),
     ] {
-        let config = Config::parse(&format!("panel {{\n    edge \"{name}\"\n}}\n"));
-        assert_eq!(config.map(|config| config.panel_edge), Ok(edge));
+        let config = Config::parse(&format!("dock {{\n    edge \"{name}\"\n}}\n"));
+        assert_eq!(config.map(|config| config.dock_edge), Ok(edge));
     }
 }
 
@@ -97,10 +97,10 @@ fn appearance_accepts_dark_light_and_automatic() {
 
 #[test]
 fn a_syntax_error_reports_its_line_and_column() {
-    assert_eq!(error_at("panel {\n    edge \"left\n}\n"), (2, 10));
+    assert_eq!(error_at("dock {\n    edge \"left\n}\n"), (2, 10));
     assert_eq!(
-        error_at("appearance \"dark\"\npanel {\n    edge \"left\"\n"),
-        (2, 7)
+        error_at("appearance \"dark\"\ndock {\n    edge \"left\"\n"),
+        (2, 6)
     );
 }
 
@@ -110,12 +110,12 @@ fn an_unknown_setting_is_reported_where_it_starts() {
         error_at("appearance \"dark\"\n  wallpaper \"x.png\"\n"),
         (2, 3)
     );
-    assert_eq!(error_at("panel {\n    autohide #true\n}\n"), (2, 5));
+    assert_eq!(error_at("dock {\n    autohide #true\n}\n"), (2, 5));
 }
 
 #[test]
 fn a_value_outside_its_choices_is_reported_at_the_value() {
-    assert_eq!(error_at("panel {\n    edge \"middle\"\n}\n"), (2, 10));
+    assert_eq!(error_at("dock {\n    edge \"middle\"\n}\n"), (2, 10));
     assert_eq!(error_at("appearance \"sepia\"\n"), (1, 12));
 }
 
@@ -170,11 +170,9 @@ fn a_setting_given_twice_is_reported_at_the_second_one() {
 #[test]
 fn a_valid_file_replaces_the_active_configuration() {
     let store = ConfigStore::default();
-    let applied = store
-        .apply("panel {\n    edge \"top\"\n}\n")
-        .expect("valid");
+    let applied = store.apply("dock {\n    edge \"top\"\n}\n").expect("valid");
     assert!(Arc::ptr_eq(&applied, &store.current()));
-    assert_eq!(store.current().panel_edge, PanelEdge::Top);
+    assert_eq!(store.current().dock_edge, DockEdge::Top);
 }
 
 #[test]
@@ -184,7 +182,7 @@ fn an_invalid_file_leaves_the_active_configuration_untouched() {
     let before = store.current();
 
     let error = store
-        .apply("appearance \"dark\"\npanel {\n    edge \"middle\"\n}\n")
+        .apply("appearance \"dark\"\ndock {\n    edge \"middle\"\n}\n")
         .expect_err("invalid");
 
     assert_eq!((error.line, error.column), (3, 10));
@@ -194,8 +192,8 @@ fn an_invalid_file_leaves_the_active_configuration_untouched() {
 
 #[test]
 fn readers_never_observe_a_partially_applied_configuration() {
-    let first = "appearance \"dark\"\npanel {\n    edge \"top\"\n}\n";
-    let second = "appearance \"light\"\npanel {\n    edge \"bottom\"\n}\n";
+    let first = "appearance \"dark\"\ndock {\n    edge \"top\"\n}\n";
+    let second = "appearance \"light\"\ndock {\n    edge \"bottom\"\n}\n";
     let store = ConfigStore::new(Config::parse(first).expect("valid"));
     let done = AtomicBool::new(false);
 
@@ -204,10 +202,10 @@ fn readers_never_observe_a_partially_applied_configuration() {
             scope.spawn(|| {
                 while !done.load(Ordering::Relaxed) {
                     let config = store.current();
-                    let pair = (config.appearance, config.panel_edge);
+                    let pair = (config.appearance, config.dock_edge);
                     assert!(
-                        pair == (Appearance::Dark, PanelEdge::Top)
-                            || pair == (Appearance::Light, PanelEdge::Bottom),
+                        pair == (Appearance::Dark, DockEdge::Top)
+                            || pair == (Appearance::Light, DockEdge::Bottom),
                         "torn configuration {pair:?}"
                     );
                 }
@@ -230,13 +228,13 @@ fn reloading_reads_the_file_and_keeps_the_old_configuration_on_failure() {
     assert!(matches!(store.reload(&path), Err(ReloadError::Read(_))));
     assert_eq!(*store.current(), Config::default());
 
-    std::fs::write(&path, "panel {\n    edge \"right\"\n}\n").expect("write");
+    std::fs::write(&path, "dock {\n    edge \"right\"\n}\n").expect("write");
     store.reload(&path).expect("valid file");
-    assert_eq!(store.current().panel_edge, PanelEdge::Right);
+    assert_eq!(store.current().dock_edge, DockEdge::Right);
 
-    std::fs::write(&path, "panel {\n    edge \"right\"\n").expect("write");
+    std::fs::write(&path, "dock {\n    edge \"right\"\n").expect("write");
     assert!(matches!(store.reload(&path), Err(ReloadError::Invalid(_))));
-    assert_eq!(store.current().panel_edge, PanelEdge::Right);
+    assert_eq!(store.current().dock_edge, DockEdge::Right);
 }
 
 #[test]

@@ -1,7 +1,10 @@
 use std::fmt;
+use std::fs;
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use resvg::{tiny_skia, usvg};
 use vello_cpu::{PixelMetadata, Pixmap};
 
 use crate::text::Paragraph;
@@ -101,6 +104,32 @@ impl fmt::Debug for Image {
 }
 
 impl Image {
+    pub fn load(path: &Path, size: u32) -> Option<Self> {
+        let bytes = fs::read(path).ok()?;
+        if path.extension().is_some_and(|extension| extension == "svg") {
+            let tree = usvg::Tree::from_data(&bytes, &usvg::Options::default()).ok()?;
+            let mut pixmap = tiny_skia::Pixmap::new(size, size)?;
+            let view = tree.size();
+            let scale = size as f32 / view.width().max(view.height());
+            let offset_x = (size as f32 - view.width() * scale) / 2.0;
+            let offset_y = (size as f32 - view.height() * scale) / 2.0;
+            resvg::render(
+                &tree,
+                tiny_skia::Transform::from_row(scale, 0.0, 0.0, scale, offset_x, offset_y),
+                &mut pixmap.as_mut(),
+            );
+            let mut rgba = Vec::with_capacity((size * size * 4) as usize);
+            for pixel in pixmap.pixels() {
+                let color = pixel.demultiply();
+                rgba.extend_from_slice(&[color.red(), color.green(), color.blue(), color.alpha()]);
+            }
+            return Self::from_rgba(size, size, rgba);
+        }
+        let decoded = image::load_from_memory(&bytes).ok()?.to_rgba8();
+        let (width, height) = decoded.dimensions();
+        Self::from_rgba(width, height, decoded.into_raw())
+    }
+
     pub fn from_rgba(width: u32, height: u32, mut rgba: Vec<u8>) -> Option<Self> {
         let (width, height) = (u16::try_from(width).ok()?, u16::try_from(height).ok()?);
         if rgba.len() != usize::from(width) * usize::from(height) * 4 || width == 0 || height == 0 {

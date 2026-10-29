@@ -9,9 +9,11 @@ repository.workspace = true
 accesskit.workspace = true
 accesskit_unix.workspace = true
 fontique.workspace = true
+image.workspace = true
 parley.workspace = true
 pollster.workspace = true
 raw-window-handle.workspace = true
+resvg.workspace = true
 rustix = { workspace = true, features = ["fs", "pipe"] }
 skrifa.workspace = true
 unbound-protocols = { workspace = true, features = ["client"] }
@@ -27,8 +29,8 @@ xkbcommon = { workspace = true, features = ["wayland"] }
 [dev-dependencies]
 accesskit.workspace = true
 ab_glyph.workspace = true
-image.workspace = true
 smithay.workspace = true
+tempfile.workspace = true
 unbound-compositor.workspace = true
 unbound-test-wayland.workspace = true
 unbound-test-bus.workspace = true

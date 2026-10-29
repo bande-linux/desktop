@@ -9,6 +9,7 @@ repository.workspace = true
 image.workspace = true
 jiff.workspace = true
 unbound-toolkit.workspace = true
+unbound-xdg.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

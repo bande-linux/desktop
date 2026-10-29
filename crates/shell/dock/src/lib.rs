@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use accesskit::{Action, ActionRequest, Node, Role};
-use unbound_config::PanelEdge;
+use unbound_config::DockEdge;
 use unbound_toolkit::ui::{Context, Event, Size, Ui, Widget, WidgetId};
 use unbound_toolkit::{
     Color, Image, Item, Paint, Palette, Paragraph, Point, Rect, Scene, Shape, Stop, TextAlign,
@@ -26,11 +26,11 @@ pub struct DockApp {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PanelAction {
+pub enum DockAction {
     Open(String),
 }
 
-pub type Actions = Rc<RefCell<Vec<PanelAction>>>;
+pub type Actions = Rc<RefCell<Vec<DockAction>>>;
 
 fn contains(frame: Rect, point: Point) -> bool {
     point.x >= frame.x
@@ -39,14 +39,14 @@ fn contains(frame: Rect, point: Point) -> bool {
         && point.y < frame.y + frame.height
 }
 
-fn vertical(edge: PanelEdge) -> bool {
-    matches!(edge, PanelEdge::Left | PanelEdge::Right)
+fn vertical(edge: DockEdge) -> bool {
+    matches!(edge, DockEdge::Left | DockEdge::Right)
 }
 
 struct Tile {
     id: WidgetId,
     app: DockApp,
-    edge: PanelEdge,
+    edge: DockEdge,
     actions: Actions,
     pressed: bool,
     initial: Option<Paragraph>,
@@ -67,7 +67,7 @@ impl Tile {
     fn open(&mut self) {
         self.actions
             .borrow_mut()
-            .push(PanelAction::Open(self.app.app_id.clone()));
+            .push(DockAction::Open(self.app.app_id.clone()));
     }
 }
 
@@ -156,16 +156,16 @@ impl Widget for Tile {
         }
         if self.app.running {
             let center = match self.edge {
-                PanelEdge::Left => Point::new(self.frame.x + 3.0, rect.y + rect.height / 2.0),
-                PanelEdge::Right => Point::new(
+                DockEdge::Left => Point::new(self.frame.x + 3.0, rect.y + rect.height / 2.0),
+                DockEdge::Right => Point::new(
                     self.frame.x + self.frame.width - 3.0,
                     rect.y + rect.height / 2.0,
                 ),
-                PanelEdge::Bottom => Point::new(
+                DockEdge::Bottom => Point::new(
                     rect.x + rect.width / 2.0,
                     self.frame.y + self.frame.height - 3.0,
                 ),
-                PanelEdge::Top => Point::new(rect.x + rect.width / 2.0, self.frame.y + 3.0),
+                DockEdge::Top => Point::new(rect.x + rect.width / 2.0, self.frame.y + 3.0),
             };
             items.push(Item::Fill {
                 shape: Shape::rounded(
@@ -266,7 +266,7 @@ impl Widget for Clock {
 
 struct Dock {
     id: WidgetId,
-    edge: PanelEdge,
+    edge: DockEdge,
     children: Vec<Box<dyn Widget>>,
     frame: Rect,
 }
@@ -327,10 +327,10 @@ impl Widget for Dock {
         });
         let frame = self.frame;
         let separator = match self.edge {
-            PanelEdge::Left => Rect::new(frame.x + frame.width - 1.0, frame.y, 1.0, frame.height),
-            PanelEdge::Right => Rect::new(frame.x, frame.y, 1.0, frame.height),
-            PanelEdge::Top => Rect::new(frame.x, frame.y + frame.height - 1.0, frame.width, 1.0),
-            PanelEdge::Bottom => Rect::new(frame.x, frame.y, frame.width, 1.0),
+            DockEdge::Left => Rect::new(frame.x + frame.width - 1.0, frame.y, 1.0, frame.height),
+            DockEdge::Right => Rect::new(frame.x, frame.y, 1.0, frame.height),
+            DockEdge::Top => Rect::new(frame.x, frame.y + frame.height - 1.0, frame.width, 1.0),
+            DockEdge::Bottom => Rect::new(frame.x, frame.y, frame.width, 1.0),
         };
         items.push(Item::Fill {
             shape: Shape::rect(separator),
@@ -343,7 +343,7 @@ impl Widget for Dock {
 
     fn access(&self, _cx: &Context) -> Node {
         let mut node = Node::new(Role::Toolbar);
-        node.set_label("Panel");
+        node.set_label("Dock");
         node
     }
 
@@ -356,8 +356,8 @@ impl Widget for Dock {
     }
 }
 
-pub fn panel_ui(
-    edge: PanelEdge,
+pub fn dock_ui(
+    edge: DockEdge,
     apps: Vec<DockApp>,
     clock: &str,
     palette: Palette,
@@ -395,7 +395,7 @@ pub fn panel_ui(
     )
 }
 
-pub fn panel_size(edge: PanelEdge, output: (u32, u32)) -> (u32, u32) {
+pub fn dock_size(edge: DockEdge, output: (u32, u32)) -> (u32, u32) {
     if vertical(edge) {
         (THICKNESS, output.1)
     } else {

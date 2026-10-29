@@ -114,14 +114,14 @@ fn start(initial: &str) -> Fixture {
 
 #[test]
 fn the_service_owns_its_bus_name_and_exposes_the_loaded_file() {
-    let fixture = start("panel {\n    edge \"right\"\n}\n");
+    let fixture = start("dock {\n    edge \"right\"\n}\n");
     let bus = DBusProxy::new(&fixture.client).expect("bus proxy");
     assert!(
         bus.name_has_owner(BUS_NAME.try_into().expect("bus name"))
             .expect("NameHasOwner")
     );
     assert_eq!(
-        String::try_from(get(&fixture.client, "PanelEdge")).expect("string"),
+        String::try_from(get(&fixture.client, "DockEdge")).expect("string"),
         "right"
     );
     assert_eq!(
@@ -132,12 +132,12 @@ fn the_service_owns_its_bus_name_and_exposes_the_loaded_file() {
 
 #[test]
 fn replacing_the_file_emits_only_the_changed_properties() {
-    let fixture = start("appearance \"dark\"\npanel {\n    edge \"left\"\n}\n");
+    let fixture = start("appearance \"dark\"\ndock {\n    edge \"left\"\n}\n");
     let changes = watch_changes(&fixture.client);
 
     replace_file(
         &fixture.path,
-        "appearance \"dark\"\npanel {\n    edge \"top\"\n}\n",
+        "appearance \"dark\"\ndock {\n    edge \"top\"\n}\n",
     );
 
     let changed = changes
@@ -145,14 +145,14 @@ fn replacing_the_file_emits_only_the_changed_properties() {
         .expect("PropertiesChanged");
     assert_eq!(
         changed.keys().map(String::as_str).collect::<Vec<_>>(),
-        ["PanelEdge"]
+        ["DockEdge"]
     );
     assert_eq!(
-        String::try_from(changed["PanelEdge"].try_clone().expect("clone")).expect("string"),
+        String::try_from(changed["DockEdge"].try_clone().expect("clone")).expect("string"),
         "top"
     );
     assert_eq!(
-        String::try_from(get(&fixture.client, "PanelEdge")).expect("string"),
+        String::try_from(get(&fixture.client, "DockEdge")).expect("string"),
         "top"
     );
 }
@@ -175,10 +175,10 @@ fn writing_the_file_in_place_is_picked_up() {
 
 #[test]
 fn an_invalid_file_changes_nothing_and_reports_where_it_is_wrong() {
-    let fixture = start("panel {\n    edge \"left\"\n}\n");
+    let fixture = start("dock {\n    edge \"left\"\n}\n");
     let changes = watch_changes(&fixture.client);
 
-    replace_file(&fixture.path, "panel {\n    edge \"middle\"\n}\n");
+    replace_file(&fixture.path, "dock {\n    edge \"middle\"\n}\n");
 
     match fixture
         .errors
@@ -190,7 +190,7 @@ fn an_invalid_file_changes_nothing_and_reports_where_it_is_wrong() {
     }
     assert!(changes.recv_timeout(QUIET_WAIT).is_err());
     assert_eq!(
-        String::try_from(get(&fixture.client, "PanelEdge")).expect("string"),
+        String::try_from(get(&fixture.client, "DockEdge")).expect("string"),
         "left"
     );
 }
@@ -205,17 +205,17 @@ fn set(connection: &Connection, property: &str, value: Value<'_>) -> zbus::fdo::
 
 #[test]
 fn setting_a_property_rewrites_the_file_and_signals_the_change_once() {
-    let fixture = start("// mine\npanel {\n    edge \"left\" // keep\n}\n");
+    let fixture = start("// mine\ndock {\n    edge \"left\" // keep\n}\n");
     let changes = watch_changes(&fixture.client);
 
-    set(&fixture.client, "PanelEdge", Value::from("bottom")).expect("Set");
+    set(&fixture.client, "DockEdge", Value::from("bottom")).expect("Set");
 
     assert_eq!(
         std::fs::read_to_string(&fixture.path).expect("read"),
-        "// mine\npanel {\n    edge \"bottom\" // keep\n}\n"
+        "// mine\ndock {\n    edge \"bottom\" // keep\n}\n"
     );
     assert_eq!(
-        String::try_from(get(&fixture.client, "PanelEdge")).expect("string"),
+        String::try_from(get(&fixture.client, "DockEdge")).expect("string"),
         "bottom"
     );
     let changed = changes
@@ -223,7 +223,7 @@ fn setting_a_property_rewrites_the_file_and_signals_the_change_once() {
         .expect("PropertiesChanged");
     assert_eq!(
         changed.keys().map(String::as_str).collect::<Vec<_>>(),
-        ["PanelEdge"]
+        ["DockEdge"]
     );
     assert!(changes.recv_timeout(QUIET_WAIT).is_err());
     assert!(fixture.errors.try_recv().is_err());
@@ -252,7 +252,7 @@ fn a_value_the_schema_rejects_leaves_the_file_alone() {
 
 #[test]
 fn an_invalid_file_is_not_overwritten_by_a_setting() {
-    let invalid = "panel {\n    edge \"middle\"\n}\n";
+    let invalid = "dock {\n    edge \"middle\"\n}\n";
     let fixture = start(invalid);
 
     let result = set(&fixture.client, "Appearance", Value::from("dark"));

@@ -13,7 +13,7 @@ use zbus::fdo::Error::{Failed, InvalidArgs};
 use zbus::object_server::SignalEmitter;
 use zbus::zvariant::{OwnedValue, Value};
 
-use crate::{Appearance, Config, ConfigStore, Output, PanelEdge, ReloadError, Setting};
+use crate::{Appearance, Config, ConfigStore, DockEdge, Output, ReloadError, Setting};
 
 pub const BUS_NAME: &str = "org.unbound.Config";
 pub const OBJECT_PATH: &str = "/org/unbound/Config";
@@ -140,8 +140,8 @@ fn publish_changes(
         if before.appearance != after.appearance {
             let _ = guard.appearance_changed(emitter).await;
         }
-        if before.panel_edge != after.panel_edge {
-            let _ = guard.panel_edge_changed(emitter).await;
+        if before.dock_edge != after.dock_edge {
+            let _ = guard.dock_edge_changed(emitter).await;
         }
         if before.idle.dim_after != after.idle.dim_after {
             let _ = guard.idle_dim_after_changed(emitter).await;
@@ -248,23 +248,23 @@ impl ConfigInterface {
     }
 
     #[zbus(property)]
-    fn panel_edge(&self) -> String {
-        self.store.current().panel_edge.keyword().to_owned()
+    fn dock_edge(&self) -> String {
+        self.store.current().dock_edge.keyword().to_owned()
     }
 
     #[zbus(property)]
-    fn set_panel_edge(&self, value: String) -> zbus::fdo::Result<()> {
+    fn set_dock_edge(&self, value: String) -> zbus::fdo::Result<()> {
         let edge = keyword(
             &[
-                PanelEdge::Left,
-                PanelEdge::Bottom,
-                PanelEdge::Right,
-                PanelEdge::Top,
+                DockEdge::Left,
+                DockEdge::Bottom,
+                DockEdge::Right,
+                DockEdge::Top,
             ],
-            PanelEdge::keyword,
+            DockEdge::keyword,
             &value,
         )?;
-        self.write(&Setting::PanelEdge(edge))
+        self.write(&Setting::DockEdge(edge))
     }
 
     #[zbus(property)]

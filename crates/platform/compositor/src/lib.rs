@@ -31,7 +31,7 @@ pub use environment::{
 pub use logind::{SessionRequest, follow_session};
 pub use render::{BACKGROUND, FrameStats, Renderer, Snapshot};
 pub use session::{
-    CLIPBOARD_DAEMON, CONTROL_CENTER, GREETER, LAUNCHER, LOCK_SCREEN, MENU_BAR, PANEL, SCREENSHOT,
+    CLIPBOARD_DAEMON, CONTROL_CENTER, DOCK, GREETER, LAUNCHER, LOCK_SCREEN, MENU_BAR, SCREENSHOT,
     SESSION_CLIENT_RESTART_THROTTLE, SessionRole, SessionUpkeep,
 };
 pub use state::{

@@ -7,7 +7,7 @@ repository.workspace = true
 
 [dependencies]
 accesskit.workspace = true
-unbound-apps.workspace = true
+unbound-xdg.workspace = true
 unbound-config.workspace = true
 unbound-toolkit.workspace = true
 

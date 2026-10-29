@@ -1,9 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use resvg::{tiny_skia, usvg};
-use unbound_toolkit::Image;
-
 pub const FALLBACK_THEME: &str = "hicolor";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -218,30 +215,4 @@ pub fn find_icon(icon: &str, size: u32, themes: &[&str], data_dirs: &[PathBuf]) 
                 .map(move |extension| dir.join("pixmaps").join(format!("{icon}.{extension}")))
         })
         .find(|path| path.is_file())
-}
-
-pub fn load_icon(path: &Path, size: u32) -> Option<Image> {
-    let bytes = fs::read(path).ok()?;
-    if path.extension().is_some_and(|extension| extension == "svg") {
-        let tree = usvg::Tree::from_data(&bytes, &usvg::Options::default()).ok()?;
-        let mut pixmap = tiny_skia::Pixmap::new(size, size)?;
-        let view = tree.size();
-        let scale = size as f32 / view.width().max(view.height());
-        let offset_x = (size as f32 - view.width() * scale) / 2.0;
-        let offset_y = (size as f32 - view.height() * scale) / 2.0;
-        resvg::render(
-            &tree,
-            tiny_skia::Transform::from_row(scale, 0.0, 0.0, scale, offset_x, offset_y),
-            &mut pixmap.as_mut(),
-        );
-        let mut rgba = Vec::with_capacity((size * size * 4) as usize);
-        for pixel in pixmap.pixels() {
-            let color = pixel.demultiply();
-            rgba.extend_from_slice(&[color.red(), color.green(), color.blue(), color.alpha()]);
-        }
-        return Image::from_rgba(size, size, rgba);
-    }
-    let decoded = image::load_from_memory(&bytes).ok()?.to_rgba8();
-    let (width, height) = decoded.dimensions();
-    Image::from_rgba(width, height, decoded.into_raw())
 }

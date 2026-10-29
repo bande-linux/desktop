@@ -119,8 +119,8 @@ fn the_launcher_opens_a_terminal_that_takes_typing() {
     let mut keyboard = VirtualDevice::keyboard_and_mouse();
     let _desktop = start_desktop();
 
-    wait_for("the panel", STARTUP, || {
-        running("unbound-panel")
+    wait_for("the Dock", STARTUP, || {
+        running("unbound-dock")
             && current_scanout().is_some_and(|scanout| pixel(&scanout, 32, 200) != BACKGROUND)
     });
     thread::sleep(Duration::from_secs(1));
@@ -211,7 +211,7 @@ fn page_pixels(scanout: &Scanout) -> usize {
 fn firefox_runs_on_wayland_and_opens_a_context_menu() {
     let mut keyboard = VirtualDevice::keyboard_and_mouse();
     let desktop = start_desktop();
-    wait_for("the panel", STARTUP, || running("unbound-panel"));
+    wait_for("the Dock", STARTUP, || running("unbound-dock"));
     fs::create_dir_all(PROFILE).expect("profile directory");
     fs::write(format!("{PROFILE}/user.js"), FIRST_RUN_OFF).expect("profile preferences");
     fs::write(PAGE, "<body style='margin:0;background:#ff00ff'></body>").expect("test page");
@@ -333,8 +333,8 @@ fn ctrl_super_q_locks_and_the_password_unlocks() {
     let mut keyboard = VirtualDevice::keyboard_and_mouse();
     let _desktop = start_desktop_with(&[("DBUS_SYSTEM_BUS_ADDRESS", bus.address())]);
     let icon = (32, 33);
-    wait_for("the panel", STARTUP, || {
-        running("unbound-panel")
+    wait_for("the Dock", STARTUP, || {
+        running("unbound-dock")
             && current_scanout().is_some_and(|scanout| pixel(&scanout, icon.0, 200) != BACKGROUND)
     });
     thread::sleep(Duration::from_secs(1));
@@ -408,7 +408,7 @@ fn super_shift_3_saves_the_screen_to_the_desktop() {
     let _desktop = start_desktop();
     let icon = (32, 33);
     wait_for("the panel and the screenshot tool", STARTUP, || {
-        running("unbound-panel")
+        running("unbound-dock")
             && running("unbound-screenshot")
             && current_scanout().is_some_and(|scanout| pixel(&scanout, icon.0, 200) != BACKGROUND)
     });
@@ -483,7 +483,7 @@ fn super_shift_4_saves_a_dragged_out_area_to_the_desktop() {
     let _desktop = start_desktop();
     let icon = (32, 33);
     wait_for("the panel and the screenshot tool", STARTUP, || {
-        running("unbound-panel")
+        running("unbound-dock")
             && running("unbound-screenshot")
             && current_scanout().is_some_and(|scanout| pixel(&scanout, icon.0, 200) != BACKGROUND)
     });
@@ -605,8 +605,8 @@ fn files_drills_into_a_folder_and_quick_looks_a_picture() {
         .expect("png");
     let mut keyboard = VirtualDevice::keyboard_and_mouse();
     let desktop = start_desktop();
-    wait_for("the panel", STARTUP, || {
-        running("unbound-panel")
+    wait_for("the Dock", STARTUP, || {
+        running("unbound-dock")
             && current_scanout().is_some_and(|scanout| pixel(&scanout, 32, 200) != BACKGROUND)
     });
     let without_files = scanout();
@@ -702,10 +702,7 @@ fn the_greeter_signs_in_through_greetd_and_hands_over() {
     });
     thread::sleep(Duration::from_secs(1));
     scanout().save("m24-greeter");
-    assert!(
-        !running("unbound-panel"),
-        "the greeter session has no panel"
-    );
+    assert!(!running("unbound-dock"), "the greeter session has no panel");
 
     keyboard.type_text("secret\n");
     let requests = greetd.join().expect("greetd");

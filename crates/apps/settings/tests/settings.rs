@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use unbound_config::{Appearance, Config, ConfigService, ConfigStore, PanelEdge};
+use unbound_config::{Appearance, Config, ConfigService, ConfigStore, DockEdge};
 use unbound_settings::{Key, SettingsClient, SettingsView, Value, panes, search};
 use unbound_test_bus::SessionBus;
 use unbound_toolkit::ui::{Event, Key as Pressed, Modifiers};
@@ -148,7 +148,7 @@ fn changes_are_written_through_org_unbound_config() {
     let written =
         Config::parse(&std::fs::read_to_string(&path).expect("config.kdl")).expect("valid config");
     assert_eq!(written.appearance, Appearance::Dark);
-    assert_eq!(written.panel_edge, PanelEdge::Bottom);
+    assert_eq!(written.dock_edge, DockEdge::Bottom);
     assert_eq!(written.idle.suspend_after(), None);
     assert_eq!(
         client.get(Key::Appearance).expect("read back"),

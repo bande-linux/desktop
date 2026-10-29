@@ -5,8 +5,8 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use accesskit::Role;
-use unbound_config::PanelEdge;
-use unbound_panel::{Actions, DockApp, ICON_SIZE, PanelAction, merge_apps, panel_size, panel_ui};
+use unbound_config::DockEdge;
+use unbound_dock::{Actions, DockAction, DockApp, ICON_SIZE, dock_size, dock_ui, merge_apps};
 use unbound_toolkit::ui::Event;
 use unbound_toolkit::{CpuRenderer, Image, Palette, Point, Scheme, TextSystem};
 
@@ -69,14 +69,14 @@ fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>) {
 }
 
 #[test]
-fn the_left_panel_matches_its_golden_in_light_and_dark() {
+fn the_left_dock_matches_its_golden_in_light_and_dark() {
     for (scheme, name) in [
-        (Scheme::Light, "panel-left-light"),
-        (Scheme::Dark, "panel-left-dark"),
+        (Scheme::Light, "dock-left-light"),
+        (Scheme::Dark, "dock-left-dark"),
     ] {
-        let size = panel_size(PanelEdge::Left, OUTPUT);
-        let mut ui = panel_ui(
-            PanelEdge::Left,
+        let size = dock_size(DockEdge::Left, OUTPUT);
+        let mut ui = dock_ui(
+            DockEdge::Left,
             apps(),
             "09:41",
             Palette::for_scheme(scheme),
@@ -90,10 +90,10 @@ fn the_left_panel_matches_its_golden_in_light_and_dark() {
 }
 
 #[test]
-fn the_bottom_panel_matches_its_golden() {
-    let size = panel_size(PanelEdge::Bottom, OUTPUT);
-    let mut ui = panel_ui(
-        PanelEdge::Bottom,
+fn the_bottom_dock_matches_its_golden() {
+    let size = dock_size(DockEdge::Bottom, OUTPUT);
+    let mut ui = dock_ui(
+        DockEdge::Bottom,
         apps(),
         "09:41",
         Palette::for_scheme(Scheme::Light),
@@ -102,15 +102,15 @@ fn the_bottom_panel_matches_its_golden() {
     );
     let scene = ui.scene(size.0, size.1);
     let frame = CpuRenderer::new().render(&scene).expect("frame");
-    check_golden("panel-bottom-light", size, frame.rgba);
+    check_golden("dock-bottom-light", size, frame.rgba);
 }
 
 #[test]
 fn clicking_an_app_asks_to_open_it_and_a_drag_off_cancels() {
     let actions: Actions = Rc::new(RefCell::new(Vec::new()));
-    let size = panel_size(PanelEdge::Left, OUTPUT);
-    let mut ui = panel_ui(
-        PanelEdge::Left,
+    let size = dock_size(DockEdge::Left, OUTPUT);
+    let mut ui = dock_ui(
+        DockEdge::Left,
         apps(),
         "09:41",
         Palette::for_scheme(Scheme::Light),
@@ -128,15 +128,15 @@ fn clicking_an_app_asks_to_open_it_and_a_drag_off_cancels() {
 
     assert_eq!(
         *actions.borrow(),
-        [PanelAction::Open("org.example.Editor".to_owned())]
+        [DockAction::Open("org.example.Editor".to_owned())]
     );
 }
 
 #[test]
 fn every_app_is_a_labelled_button_for_assistive_technology() {
-    let size = panel_size(PanelEdge::Left, OUTPUT);
-    let mut ui = panel_ui(
-        PanelEdge::Left,
+    let size = dock_size(DockEdge::Left, OUTPUT);
+    let mut ui = dock_ui(
+        DockEdge::Left,
         apps(),
         "09:41",
         Palette::for_scheme(Scheme::Light),

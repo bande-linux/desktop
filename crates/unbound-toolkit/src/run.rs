@@ -3,7 +3,7 @@ use std::os::fd::BorrowedFd;
 use std::time::Instant;
 
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
-use wayland_client::backend::WaylandError;
+use wayland_client::backend::{ReadEventsGuard, WaylandError};
 
 use crate::scene::Scene;
 use crate::window::{Window, WindowError, WindowEvent};
@@ -34,9 +34,25 @@ fn earliest(deadlines: impl IntoIterator<Item = Option<Instant>>) -> Option<Inst
     deadlines.into_iter().flatten().min()
 }
 
+fn read_events(guard: ReadEventsGuard) -> Result<(), WindowError> {
+    match guard.read() {
+        Ok(_) => Ok(()),
+        Err(WaylandError::Io(error)) if error.kind() == io::ErrorKind::WouldBlock => Ok(()),
+        Err(error) => Err(error.into()),
+    }
+}
+
 pub fn run(window: &mut Window, app: &mut impl App) -> Result<(), WindowError> {
     loop {
+        let guard = loop {
+            match window.queue.prepare_read() {
+                Some(guard) => break guard,
+                None => window.dispatch_pending()?,
+            }
+        };
+        read_events(guard)?;
         window.dispatch_pending()?;
+        window.fire_repeats(Instant::now());
         for event in window.take_events() {
             app.event(window, event);
         }
@@ -84,11 +100,7 @@ pub fn run(window: &mut Window, app: &mut impl App) -> Result<(), WindowError> {
             (wayland_ready, pastes_ready, sources_ready)
         };
         if wayland_ready {
-            match guard.read() {
-                Ok(_) => {}
-                Err(WaylandError::Io(error)) if error.kind() == io::ErrorKind::WouldBlock => {}
-                Err(error) => return Err(error.into()),
-            }
+            read_events(guard)?;
         } else {
             drop(guard);
         }
@@ -99,7 +111,6 @@ pub fn run(window: &mut Window, app: &mut impl App) -> Result<(), WindowError> {
             app.source_ready(window, index);
         }
         let now = Instant::now();
-        window.fire_repeats(now);
         if app.deadline().is_some_and(|deadline| deadline <= now) {
             app.tick(window, now);
         }

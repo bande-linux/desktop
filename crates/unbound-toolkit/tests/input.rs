@@ -21,6 +21,7 @@ const KEY_C: u32 = 46;
 const KEY_LEFTMETA: u32 = 125;
 const KEY_SPACE: u32 = 57;
 const BTN_LEFT: u32 = 0x110;
+const BUSY: Duration = Duration::from_millis(900);
 
 struct Forwarder {
     events: Sender<WindowEvent>,
@@ -58,6 +59,7 @@ impl App for Forwarder {
             b'p' => window.paste().expect("paste"),
             b'h' => window.hide().expect("hide"),
             b's' => window.show().expect("show"),
+            b'b' => thread::sleep(BUSY),
             _ => self.finished = true,
         }
     }
@@ -269,6 +271,36 @@ fn a_held_key_repeats_after_the_compositors_delay() {
         typed(&client.seen)
             .iter()
             .all(|(key, _)| *key == Key::Character('a'))
+    );
+}
+
+#[test]
+fn a_key_released_while_the_app_is_busy_does_not_repeat() {
+    let mut desktop = Desktop::new();
+    let mut client = desktop.open(Role::toplevel("busy", "test.busy"), false);
+    desktop.wait_for(
+        &mut [&mut client],
+        |events| events.contains(&WindowEvent::Focus(true)),
+        Desktop::mapped,
+    );
+
+    desktop.server.key(KEY_A, true, 0);
+    desktop.wait_for(
+        &mut [&mut client],
+        |events| !typed(events).is_empty(),
+        |_| true,
+    );
+    client.send(b'b');
+    desktop.settle(&mut [&mut client]);
+    desktop.server.key(KEY_A, false, 0);
+    let until = Instant::now() + BUSY + Duration::from_millis(600);
+    while Instant::now() < until {
+        desktop.settle(&mut [&mut client]);
+    }
+
+    assert_eq!(
+        typed(&client.seen),
+        [(Key::Character('a'), Modifiers::default())]
     );
 }
 

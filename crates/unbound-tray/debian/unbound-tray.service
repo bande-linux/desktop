@@ -10,4 +10,4 @@ ExecStart=/usr/bin/unbound-tray
 Restart=on-failure
 
 [Install]
-WantedBy=graphical-session.target
+WantedBy=unbound-session.target

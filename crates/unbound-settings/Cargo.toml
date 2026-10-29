@@ -16,7 +16,7 @@ unbound-test-bus.workspace = true
 
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
-section = "x11"
+section = "misc"
 depends = "$auto, fonts-inter, unbound-config"
 extended-description = """\
 System Settings of the Unbound desktop: panes for appearance, the dock \

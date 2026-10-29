@@ -9,7 +9,10 @@ use std::time::{Duration, Instant};
 use smithay::utils::{Point, Size};
 use unbound_compositor::{FrameClock, FrameScheduler, Headless, REFRESH, Renderer};
 use unbound_graphics::{Color, Scene};
-use unbound_toolkit_platform::{Role, Window};
+use unbound_toolkit_platform::{
+    App, MenuPlacement, Role, TITLE_BAR_HEIGHT, Window, WindowEvent, run,
+};
+use unbound_widgets::{Menu, MenuItem};
 
 const MIN_SSIM: f64 = 0.99;
 const SCALE: f64 = 2.0;
@@ -37,8 +40,32 @@ fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>) {
     );
 }
 
-#[test]
-fn the_window_frame_matches_its_golden_with_the_controls_hovered() {
+struct Still {
+    done: mpsc::Receiver<()>,
+}
+
+impl App for Still {
+    fn scene(&mut self, _window: &mut Window) -> Scene {
+        Scene {
+            width: 300,
+            height: 160,
+            background: Color::hex(0xF4F5F7),
+            items: Vec::new(),
+        }
+    }
+
+    fn event(&mut self, _window: &mut Window, _event: WindowEvent) {}
+
+    fn deadline(&self) -> Option<Instant> {
+        Some(Instant::now() + Duration::from_millis(20))
+    }
+
+    fn finished(&self) -> bool {
+        self.done.try_recv().is_ok()
+    }
+}
+
+fn shot(name: &str, prepare: fn(&mut Window), pointer: (i32, i32)) {
     let output = (
         (f64::from(OUTPUT.0) * SCALE) as i32,
         (f64::from(OUTPUT.1) * SCALE) as i32,
@@ -56,21 +83,13 @@ fn the_window_frame_matches_its_golden_with_the_controls_hovered() {
             (300, 160),
         )
         .expect("window");
-        let scene = Scene {
-            width: 300,
-            height: 160,
-            background: Color::hex(0xF4F5F7),
-            items: Vec::new(),
-        };
+        let mut still = Still { done: check_done };
         window.wait_for_gpu();
+        let scene = still.scene(&mut window);
         window.draw(&scene).expect("first frame");
+        prepare(&mut window);
         drawn.send(()).expect("report the frame");
-        while check_done.try_recv().is_err() {
-            window.dispatch().expect("dispatch");
-            window.take_events();
-            window.wait_for_frame().expect("frame callback");
-            window.draw(&scene).expect("frame");
-        }
+        run(&mut window, &mut still).expect("run loop");
     });
 
     let mut renderer = Renderer::new().expect("Vulkan renderer");
@@ -90,15 +109,14 @@ fn the_window_frame_matches_its_golden_with_the_controls_hovered() {
         );
         pump(&mut server, &mut scheduler, &mut renderer);
     }
-    let hovered = Instant::now() + Duration::from_millis(600);
-    let mut pointed = false;
-    while Instant::now() < hovered {
+    let at = server.windows()[0].location();
+    server.move_pointer_to(
+        Point::from((f64::from(at.x + pointer.0), f64::from(at.y + pointer.1))),
+        0,
+    );
+    let settled = Instant::now() + Duration::from_millis(700);
+    while Instant::now() < settled {
         pump(&mut server, &mut scheduler, &mut renderer);
-        if !pointed && server.windows().first().is_some_and(|w| w.size().is_some()) {
-            let at = server.windows()[0].location();
-            server.move_pointer_to(Point::from((f64::from(at.x + 40), f64::from(at.y + 14))), 0);
-            pointed = true;
-        }
     }
     let snapshot = renderer.snapshot(&server).expect("read back");
     checked.send(()).expect("release the client");
@@ -107,8 +125,45 @@ fn the_window_frame_matches_its_golden_with_the_controls_hovered() {
     }
     client.join().expect("client thread");
     check_golden(
-        "window-frame-hovered",
+        name,
         (snapshot.size.w as u32, snapshot.size.h as u32),
         snapshot.rgba,
+    );
+}
+
+#[test]
+fn the_window_frame_matches_its_golden_with_the_controls_hovered() {
+    shot("window-frame-hovered", |_| {}, (40, 14));
+}
+
+fn show_menu(window: &mut Window) {
+    let menu = Menu::new(vec![
+        MenuItem::new("Open", "open").shortcut("Super+O"),
+        MenuItem::new("Rename", "rename").enabled(false),
+        MenuItem::separator(),
+        MenuItem::submenu(
+            "Sort By",
+            Menu::new(vec![
+                MenuItem::new("Name", "sort-name").checked(true),
+                MenuItem::new("Date Modified", "sort-date"),
+            ]),
+        ),
+        MenuItem::new("Move to Trash", "trash").shortcut("Super+Backspace"),
+    ]);
+    window
+        .show_menu(
+            menu,
+            MenuPlacement::AtPoint(unbound_graphics::Point::new(30.0, 10.0)),
+        )
+        .expect("menu");
+}
+
+#[test]
+fn a_menu_with_an_open_submenu_matches_its_golden() {
+    let sort_by = 10 + 5 + 22 + 22 + 11 + 11;
+    shot(
+        "menu-submenu",
+        show_menu,
+        (60, TITLE_BAR_HEIGHT as i32 + sort_by),
     );
 }

@@ -42,7 +42,7 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::{
 use crate::capture::Capture;
 use crate::clipboard::Clipboard;
 use crate::cpu::CpuRenderer;
-use crate::gpu::GpuRenderer;
+use crate::gpu::{GpuRenderer, vulkan_instance};
 use crate::lock::{Locked, SessionLock};
 use crate::render::RenderError;
 use crate::scene::Scene;
@@ -648,9 +648,7 @@ fn open_gpu(display: usize, surface: usize) -> Result<GpuSurface, RenderError> {
     let missing = || RenderError::Gpu("the Wayland surface has no libwayland pointer".to_owned());
     let display = NonNull::new(display as *mut c_void).ok_or_else(missing)?;
     let window = NonNull::new(surface as *mut c_void).ok_or_else(missing)?;
-    let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-    descriptor.backends = wgpu::Backends::VULKAN;
-    let instance = wgpu::Instance::new(descriptor.with_env());
+    let instance = vulkan_instance();
     let target = wgpu::SurfaceTargetUnsafe::RawHandle {
         raw_display_handle: Some(RawDisplayHandle::Wayland(WaylandDisplayHandle::new(
             display,

@@ -100,7 +100,7 @@ struct Bound {
 fn direction_of(media_class: Option<&str>) -> Option<Direction> {
     match media_class? {
         "Audio/Sink" => Some(Direction::Output),
-        "Audio/Source" => Some(Direction::Input),
+        "Audio/Source" | "Audio/Source/Virtual" => Some(Direction::Input),
         _ => None,
     }
 }

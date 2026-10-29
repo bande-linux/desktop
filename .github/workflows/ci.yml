@@ -82,7 +82,7 @@ jobs:
         run: |
           for package in unbound-compositor unbound-notify unbound-clipboard unbound-config unbound-power \
               xdg-desktop-portal-unbound unbound-tray unbound-automount \
-              unbound-panel unbound-launcher unbound-term unbound-lock unbound-screenshot unbound-files unbound-settings; do
+              unbound-panel unbound-launcher unbound-term unbound-lock unbound-screenshot unbound-files unbound-settings unbound-greeter; do
             cargo deb --package "$package" --locked --deb-version "$DEB_VERSION"
           done
       - name: Build the benchmarks for ci/perf against the packaged release build
@@ -141,6 +141,9 @@ jobs:
           test -s "$root/usr/share/icons/hicolor/scalable/apps/unbound-files.svg"
           dpkg-deb --extract target/debian/unbound-settings_*.deb "$root"
           grep -qx 'Exec=unbound-settings' "$root/usr/share/applications/unbound-settings.desktop"
+          dpkg-deb --extract target/debian/unbound-greeter_*.deb "$root"
+          grep -qx 'command = "unbound-compositor --greeter"' "$root/usr/share/unbound-greeter/greetd-config.toml"
+          dpkg-deb --field target/debian/unbound-greeter_*.deb Depends | grep -qw greetd
           dpkg-deb --extract target/debian/unbound-lock_*.deb "$root"
           grep -qx '@include common-auth' "$root/etc/pam.d/unbound-lock"
           dpkg-deb --field target/debian/unbound-lock_*.deb Depends | grep -q libpam0g

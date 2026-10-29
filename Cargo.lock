@@ -3245,6 +3245,7 @@ dependencies = [
  "image-compare",
  "rustix 1.1.6",
  "smithay",
+ "unbound-greeter",
  "unbound-protocols",
  "unbound-render",
  "unbound-test-bus",
@@ -3273,6 +3274,17 @@ dependencies = [
  "image",
  "tempfile",
  "unbound-config",
+ "unbound-toolkit",
+]
+
+[[package]]
+name = "unbound-greeter"
+version = "0.1.0"
+dependencies = [
+ "jiff",
+ "serde",
+ "serde_json",
+ "unbound-lock",
  "unbound-toolkit",
 ]
 

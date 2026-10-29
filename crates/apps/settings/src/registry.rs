@@ -2,16 +2,36 @@ use crate::L10N;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PaneId {
+    Wifi,
+    Bluetooth,
+    Notifications,
+    Sound,
     Appearance,
     Dock,
+    Displays,
     LockScreen,
     Keyboard,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SettingId {
+    WifiPower,
+    Networks,
+    BluetoothPower,
+    PairedDevices,
+    NearbyDevices,
+    DoNotDisturb,
+    OutputVolume,
+    OutputMuted,
+    OutputDevice,
+    InputVolume,
+    InputMuted,
+    InputDevice,
     Appearance,
     DockEdge,
+    DisplayScale,
+    RefreshRate,
+    VariableRefreshRate,
     DimAfter,
     LockAfter,
     SleepAfter,
@@ -24,6 +44,17 @@ pub enum Value {
     Keyword(String),
     Seconds(u64),
     Number(u32),
+    Flag(bool),
+    Fraction(f32),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum List {
+    Networks,
+    PairedDevices,
+    NearbyDevices,
+    OutputDevices,
+    InputDevices,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -40,12 +71,17 @@ pub enum Kind {
         low: String,
         high: String,
     },
+    Switch,
+    Level,
+    RefreshRates,
+    List(List),
 }
 
 impl Kind {
     pub fn choices(&self) -> &[Choice] {
         match self {
             Self::Choices(choices) | Self::Stops { stops: choices, .. } => choices,
+            Self::Switch | Self::Level | Self::RefreshRates | Self::List(_) => &[],
         }
     }
 
@@ -179,7 +215,193 @@ pub const SLEEP_CHOICES: [u64; 4] = [1800, 3600, 10800, 0];
 const REPEAT_RATES: [u32; 9] = [2, 5, 10, 15, 20, 25, 30, 45, 60];
 const REPEAT_DELAYS: [u32; 8] = [2000, 1500, 1000, 800, 600, 450, 300, 200];
 
+fn scale_choices() -> Vec<Choice> {
+    let mut choices = keyword_choices(vec![(L10N.tr("scale-automatic"), AUTOMATIC)]);
+    choices.extend(SCALES.iter().map(|&percent| Choice {
+        label: L10N.tr_args("percent", [("value", percent.into())]),
+        value: Value::Number(percent),
+    }));
+    choices
+}
+
+pub const AUTOMATIC: &str = "automatic";
+const SCALES: [u32; 5] = [100, 125, 150, 175, 200];
+
+fn connectivity_panes() -> Vec<Pane> {
+    vec![
+        pane(
+            PaneId::Wifi,
+            L10N.tr("wifi"),
+            L10N.tr("wifi-keywords"),
+            vec![
+                section(
+                    None,
+                    vec![setting(
+                        SettingId::WifiPower,
+                        L10N.tr("wifi"),
+                        L10N.tr("wifi-power-keywords"),
+                        Kind::Switch,
+                    )],
+                ),
+                section(
+                    Some(L10N.tr("networks")),
+                    vec![setting(
+                        SettingId::Networks,
+                        L10N.tr("networks"),
+                        L10N.tr("networks-keywords"),
+                        Kind::List(List::Networks),
+                    )],
+                ),
+            ],
+        ),
+        pane(
+            PaneId::Bluetooth,
+            L10N.tr("bluetooth"),
+            L10N.tr("bluetooth-keywords"),
+            vec![
+                section(
+                    None,
+                    vec![setting(
+                        SettingId::BluetoothPower,
+                        L10N.tr("bluetooth"),
+                        L10N.tr("bluetooth-power-keywords"),
+                        Kind::Switch,
+                    )],
+                ),
+                section(
+                    Some(L10N.tr("my-devices")),
+                    vec![setting(
+                        SettingId::PairedDevices,
+                        L10N.tr("my-devices"),
+                        L10N.tr("my-devices-keywords"),
+                        Kind::List(List::PairedDevices),
+                    )],
+                ),
+                section(
+                    Some(L10N.tr("nearby-devices")),
+                    vec![setting(
+                        SettingId::NearbyDevices,
+                        L10N.tr("nearby-devices"),
+                        L10N.tr("nearby-devices-keywords"),
+                        Kind::List(List::NearbyDevices),
+                    )],
+                ),
+            ],
+        ),
+        pane(
+            PaneId::Notifications,
+            L10N.tr("notifications"),
+            L10N.tr("notifications-keywords"),
+            vec![section(
+                None,
+                vec![setting(
+                    SettingId::DoNotDisturb,
+                    L10N.tr("do-not-disturb"),
+                    L10N.tr("do-not-disturb-keywords"),
+                    Kind::Switch,
+                )],
+            )],
+        ),
+        pane(
+            PaneId::Sound,
+            L10N.tr("sound"),
+            L10N.tr("sound-keywords"),
+            vec![
+                section(
+                    Some(L10N.tr("output")),
+                    vec![
+                        setting(
+                            SettingId::OutputVolume,
+                            L10N.tr("output-volume"),
+                            L10N.tr("output-volume-keywords"),
+                            Kind::Level,
+                        ),
+                        setting(
+                            SettingId::OutputMuted,
+                            L10N.tr("mute"),
+                            L10N.tr("mute-keywords"),
+                            Kind::Switch,
+                        ),
+                    ],
+                ),
+                section(
+                    Some(L10N.tr("output-device")),
+                    vec![setting(
+                        SettingId::OutputDevice,
+                        L10N.tr("output-device"),
+                        L10N.tr("output-device-keywords"),
+                        Kind::List(List::OutputDevices),
+                    )],
+                ),
+                section(
+                    Some(L10N.tr("input")),
+                    vec![
+                        setting(
+                            SettingId::InputVolume,
+                            L10N.tr("input-volume"),
+                            L10N.tr("input-volume-keywords"),
+                            Kind::Level,
+                        ),
+                        setting(
+                            SettingId::InputMuted,
+                            L10N.tr("mute-input"),
+                            L10N.tr("mute-input-keywords"),
+                            Kind::Switch,
+                        ),
+                    ],
+                ),
+                section(
+                    Some(L10N.tr("input-device")),
+                    vec![setting(
+                        SettingId::InputDevice,
+                        L10N.tr("input-device"),
+                        L10N.tr("input-device-keywords"),
+                        Kind::List(List::InputDevices),
+                    )],
+                ),
+            ],
+        ),
+    ]
+}
+
+fn displays_pane() -> Pane {
+    pane(
+        PaneId::Displays,
+        L10N.tr("displays"),
+        L10N.tr("displays-keywords"),
+        vec![section(
+            None,
+            vec![
+                setting(
+                    SettingId::DisplayScale,
+                    L10N.tr("display-scale"),
+                    L10N.tr("display-scale-keywords"),
+                    Kind::Choices(scale_choices()),
+                ),
+                setting(
+                    SettingId::RefreshRate,
+                    L10N.tr("refresh-rate"),
+                    L10N.tr("refresh-rate-keywords"),
+                    Kind::RefreshRates,
+                ),
+                setting(
+                    SettingId::VariableRefreshRate,
+                    L10N.tr("variable-refresh-rate"),
+                    L10N.tr("variable-refresh-rate-keywords"),
+                    Kind::Switch,
+                ),
+            ],
+        )],
+    )
+}
+
 pub fn panes() -> Vec<Pane> {
+    let mut panes = connectivity_panes();
+    panes.extend(desktop_panes());
+    panes
+}
+
+fn desktop_panes() -> Vec<Pane> {
     vec![
         pane(
             PaneId::Appearance,
@@ -218,6 +440,7 @@ pub fn panes() -> Vec<Pane> {
                 )],
             )],
         ),
+        displays_pane(),
         pane(
             PaneId::LockScreen,
             L10N.tr("lock-screen"),

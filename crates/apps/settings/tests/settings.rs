@@ -6,7 +6,7 @@ use std::time::Duration;
 use accesskit::{Node, Role};
 use unbound_config::{Appearance, Config, ConfigService, ConfigStore, DockEdge, Suspend};
 use unbound_settings::{
-    Idle, PaneId, SettingId, SettingsClient, SettingsView, Value, panes, search,
+    Command, Idle, PaneId, SettingId, SettingsClient, SettingsView, Value, panes, search,
 };
 use unbound_test_bus::SessionBus;
 use unbound_toolkit::ui::{Event, Key, Modifiers};
@@ -49,6 +49,16 @@ fn node(view: &mut SettingsView, role: Role, label: &str) -> Node {
         .unwrap_or_else(|| panic!("no {role:?} labelled {label:?}"))
 }
 
+fn changes(view: &mut SettingsView) -> Vec<(SettingId, Value)> {
+    view.take_commands()
+        .into_iter()
+        .map(|command| match command {
+            Command::Set(id, value) => (id, value),
+            other => panic!("unexpected {other:?}"),
+        })
+        .collect()
+}
+
 fn click(view: &mut SettingsView, at: Point) {
     view.handle(&Event::PointerDown(at));
     view.handle(&Event::PointerUp(at));
@@ -66,8 +76,10 @@ fn search_ranks_the_best_match_first_and_marks_the_matched_letters() {
     };
 
     assert_eq!(found("dark"), [PaneId::Appearance]);
-    assert_eq!(found("password"), [PaneId::LockScreen]);
-    assert_eq!(found("bluetooth"), []);
+    assert_eq!(found("password"), [PaneId::Wifi, PaneId::LockScreen]);
+    assert_eq!(found("screen saver"), [PaneId::LockScreen]);
+    assert_eq!(found("bluetooth"), [PaneId::Bluetooth]);
+    assert_eq!(found("printer"), []);
     assert_eq!(found("lock")[0], PaneId::LockScreen);
     assert_eq!(found("rep"), [PaneId::Keyboard]);
 
@@ -170,7 +182,7 @@ fn return_in_the_search_field_focuses_the_best_match() {
 
     press(&mut view, Key::Right);
     assert_eq!(
-        view.take_changes(),
+        changes(&mut view),
         [(SettingId::KeyRepeatRate, Value::Number(30))]
     );
     assert_eq!(view.focused_setting(), Some(SettingId::KeyRepeatRate));
@@ -202,7 +214,7 @@ fn tab_reaches_a_control_and_arrows_change_it() {
     assert_eq!(view.focused_setting(), Some(SettingId::Appearance));
     press(&mut view, Key::Right);
     assert_eq!(
-        view.take_changes(),
+        changes(&mut view),
         [(SettingId::Appearance, keyword("dark"))]
     );
     assert_eq!(view.value(SettingId::Appearance), Some(&keyword("dark")));
@@ -232,7 +244,7 @@ fn clicking_a_pane_and_then_a_choice_selects_both() {
             &mut view,
             Point::new(x, (control.y0 + control.y1) as f32 / 2.0),
         );
-        chosen.extend(view.take_changes().into_iter().map(|(_, value)| value));
+        chosen.extend(changes(&mut view).into_iter().map(|(_, value)| value));
         x += 4.0;
     }
     assert_eq!(chosen, ["bottom", "right", "top"].map(keyword));
@@ -252,7 +264,7 @@ fn shortening_the_lock_time_also_shortens_dimming() {
     press(&mut view, Key::Left);
 
     assert_eq!(
-        view.take_changes(),
+        changes(&mut view),
         [
             (SettingId::LockAfter, Value::Seconds(300)),
             (SettingId::DimAfter, Value::Seconds(60)),
@@ -304,5 +316,5 @@ fn changes_are_written_through_org_unbound_config() {
         client.get(SettingId::SleepAfter).expect("sleep"),
         keyword("with-display")
     );
-    assert_eq!(client.read_all().len(), 7);
+    assert_eq!(client.read(&unbound_settings::CONFIG_SETTINGS).len(), 7);
 }

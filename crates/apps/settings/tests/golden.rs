@@ -2,7 +2,8 @@
 
 use std::path::PathBuf;
 
-use unbound_settings::{SettingId, SettingsView, Value};
+use unbound_audio::{Device, Direction, Level, Snapshot};
+use unbound_settings::{Display, Mode, SettingId, SettingsView, Update, Value};
 use unbound_toolkit::ui::{Event, Key, Modifiers};
 use unbound_toolkit::{CpuRenderer, Palette, Scheme, TextSystem};
 
@@ -59,6 +60,87 @@ fn a_search_matches_its_golden_in_light_and_dark() {
         let frame = CpuRenderer::new().render(&scene).expect("frame");
         check_golden(name, frame.rgba);
     }
+}
+
+fn open(view: &mut SettingsView, query: &str) {
+    for character in query.chars() {
+        view.handle(&Event::Key {
+            key: Key::Character(character),
+            modifiers: Modifiers::default(),
+        });
+    }
+    view.handle(&Event::Key {
+        key: Key::Escape,
+        modifiers: Modifiers::default(),
+    });
+}
+
+fn device(id: u32, name: &str, description: &str, direction: Direction, volume: f32) -> Device {
+    Device {
+        id,
+        name: name.to_owned(),
+        description: description.to_owned(),
+        direction,
+        level: Level {
+            volume,
+            muted: false,
+        },
+    }
+}
+
+#[test]
+fn the_sound_pane_matches_its_golden() {
+    let mut view = SettingsView::new(Palette::for_scheme(Scheme::Light), TextSystem::new());
+    view.apply(Update::Audio(Some(Snapshot {
+        generation: 1,
+        connected: true,
+        outputs: vec![
+            device(
+                1,
+                "speakers",
+                "MacBook Pro Speakers",
+                Direction::Output,
+                0.6,
+            ),
+            device(2, "headset", "USB Headset", Direction::Output, 0.3),
+        ],
+        inputs: vec![device(
+            3,
+            "microphone",
+            "MacBook Pro Microphone",
+            Direction::Input,
+            0.8,
+        )],
+        default_output: Some("speakers".to_owned()),
+        default_input: Some("microphone".to_owned()),
+    })));
+    open(&mut view, "sound");
+    let scene = view.scene(SIZE.0, SIZE.1);
+    let frame = CpuRenderer::new().render(&scene).expect("frame");
+    check_golden("sound-light", frame.rgba);
+}
+
+#[test]
+fn the_displays_pane_matches_its_golden_in_dark() {
+    let mut view = SettingsView::new(Palette::for_scheme(Scheme::Dark), TextSystem::new());
+    let modes: Vec<Mode> = [120, 60]
+        .into_iter()
+        .map(|hertz| Mode {
+            width: 3024,
+            height: 1964,
+            millihertz: hertz * 1000,
+        })
+        .collect();
+    view.set_displays(vec![Display {
+        connector: "eDP-1".to_owned(),
+        description: "Built-in Retina Display".to_owned(),
+        current: modes.first().copied(),
+        modes,
+    }]);
+    open(&mut view, "displays");
+    let scene = view.scene(SIZE.0, SIZE.1);
+    let frame = CpuRenderer::new().render(&scene).expect("frame");
+    check_golden("displays-dark", frame.rgba);
 }
 
 #[test]

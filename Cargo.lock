@@ -3790,11 +3790,16 @@ dependencies = [
  "image-compare",
  "tempfile",
  "tracing",
+ "unbound-audio",
+ "unbound-bluetooth",
+ "unbound-compositor",
  "unbound-config",
  "unbound-l10n",
  "unbound-log",
+ "unbound-network",
  "unbound-test-bus",
  "unbound-toolkit",
+ "wayland-client",
  "zbus",
 ]
 

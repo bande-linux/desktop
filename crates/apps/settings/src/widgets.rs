@@ -754,8 +754,18 @@ impl Row {
         }
     }
 
+    pub fn detail(mut self, detail: Text) -> Self {
+        self.detail = Some(detail);
+        self
+    }
+
     pub fn highlighted(mut self, highlighted: bool) -> Self {
         self.highlighted = highlighted;
+        self
+    }
+
+    pub fn on_activate(mut self, on_activate: impl FnMut() + 'static) -> Self {
+        self.on_activate = Some(Box::new(on_activate));
         self
     }
 
@@ -1133,5 +1143,154 @@ impl Widget for Captioned {
 
     fn children_mut(&mut self) -> &mut [Box<dyn Widget>] {
         &mut self.children
+    }
+}
+
+const BAR_WIDTH: f32 = 3.0;
+const BAR_GAP: f32 = 2.0;
+const BARS: u8 = 4;
+const SIGNAL_HEIGHT: f32 = 12.0;
+const LOCK_WIDTH: f32 = 9.0;
+
+pub struct Signal {
+    id: WidgetId,
+    strength: u8,
+    secured: bool,
+    frame: Rect,
+}
+
+impl Signal {
+    pub fn new(strength: u8, secured: bool) -> Self {
+        Self {
+            id: WidgetId::next(),
+            strength,
+            secured,
+            frame: Rect::default(),
+        }
+    }
+
+    fn bars(&self) -> u8 {
+        (self.strength.min(100) + 12) / 25
+    }
+}
+
+impl Widget for Signal {
+    fn id(&self) -> WidgetId {
+        self.id
+    }
+
+    fn measure(&mut self, _cx: &mut Context, _available: Size) -> Size {
+        let bars = f32::from(BARS) * (BAR_WIDTH + BAR_GAP);
+        Size::new(bars + LOCK_WIDTH + BAR_GAP, SIGNAL_HEIGHT)
+    }
+
+    fn place(&mut self, _cx: &mut Context, frame: Rect) {
+        self.frame = frame;
+    }
+
+    fn frame(&self) -> Rect {
+        self.frame
+    }
+
+    fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
+        let mut x = self.frame.x;
+        if self.secured {
+            let body = Rect::new(x, self.frame.y + 5.0, LOCK_WIDTH, 7.0);
+            items.push(Item::Stroke {
+                shape: Shape::rounded(Rect::new(x + 2.0, self.frame.y + 1.0, 5.0, 8.0), 2.5),
+                width: 1.5,
+                paint: cx.palette.label_muted.into(),
+            });
+            items.push(Item::Fill {
+                shape: Shape::rounded(body, 1.5),
+                paint: cx.palette.label_muted.into(),
+            });
+        }
+        x += LOCK_WIDTH + BAR_GAP;
+        for bar in 0..BARS {
+            let height = SIGNAL_HEIGHT * f32::from(bar + 1) / f32::from(BARS);
+            let color = if bar < self.bars() {
+                cx.palette.label_primary
+            } else {
+                cx.palette.separator_color
+            };
+            items.push(Item::Fill {
+                shape: Shape::rounded(
+                    Rect::new(x, self.frame.y + SIGNAL_HEIGHT - height, BAR_WIDTH, height),
+                    1.0,
+                ),
+                paint: color.into(),
+            });
+            x += BAR_WIDTH + BAR_GAP;
+        }
+    }
+
+    fn access(&self, _cx: &Context) -> Node {
+        let mut node = Node::new(Role::Meter);
+        node.set_numeric_value(f64::from(self.strength));
+        node.set_min_numeric_value(0.0);
+        node.set_max_numeric_value(100.0);
+        node
+    }
+}
+
+pub struct Check {
+    id: WidgetId,
+    frame: Rect,
+}
+
+impl Check {
+    pub fn new() -> Self {
+        Self {
+            id: WidgetId::next(),
+            frame: Rect::default(),
+        }
+    }
+}
+
+impl Widget for Check {
+    fn id(&self) -> WidgetId {
+        self.id
+    }
+
+    fn measure(&mut self, _cx: &mut Context, _available: Size) -> Size {
+        Size::new(14.0, 14.0)
+    }
+
+    fn place(&mut self, _cx: &mut Context, frame: Rect) {
+        self.frame = frame;
+    }
+
+    fn frame(&self) -> Rect {
+        self.frame
+    }
+
+    fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
+        let Rect { x, y, .. } = self.frame;
+        let stroke = |from: Point, to: Point, items: &mut Vec<Item>| {
+            let steps = 8;
+            for step in 0..=steps {
+                let t = step as f32 / steps as f32;
+                let at = Point::new(from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t);
+                items.push(Item::Fill {
+                    shape: Shape::rounded(Rect::new(at.x - 1.0, at.y - 1.0, 2.0, 2.0), 1.0),
+                    paint: cx.palette.accent_color.into(),
+                });
+            }
+        };
+        stroke(
+            Point::new(x + 2.0, y + 7.5),
+            Point::new(x + 5.5, y + 11.0),
+            items,
+        );
+        stroke(
+            Point::new(x + 5.5, y + 11.0),
+            Point::new(x + 12.0, y + 3.0),
+            items,
+        );
+    }
+
+    fn access(&self, _cx: &Context) -> Node {
+        Node::new(Role::Image)
     }
 }

@@ -1,43 +1,55 @@
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
 
 use accesskit::{Action, ActionData, ActionRequest, TreeId, TreeUpdate};
-use unbound_toolkit::ui::{
-    Context, Event, Key, Label, Modifiers, Slider, TextField, Ui, Widget, WidgetId,
-};
-use unbound_toolkit::{Palette, Rect, Scene, Spacing, TextSystem};
+use unbound_audio::{Direction, Snapshot};
+use unbound_config::Output;
+use unbound_toolkit::ui::{Context, Event, Key, Modifiers, TextField, Ui, Widget, WidgetId};
+use unbound_toolkit::{Palette, Rect, Scene, TextSystem};
 
 use crate::L10N;
-use crate::follow::Update;
+use crate::follow::{Command, Update};
 use crate::idle::Idle;
-use crate::registry::{Kind, Pane, PaneId, Setting, SettingId, Value, panes};
+use crate::registry::{AUTOMATIC, Pane, PaneId, SettingId, Value, panes};
 use crate::search::{PaneHit, search};
-use crate::widgets::{
-    Caption, Captioned, Card, Column, Root, Row, Scroll, Segmented, SidebarRow, Text, Tone,
-};
+use crate::services::{AudioCommand, BluetoothCommand, NetworkCommand};
+use crate::state::{Answer, BluetoothState, Display, Joined, Question, WifiState};
+use crate::widgets::{Column, Root};
 
-const PAGE_PADDING: f32 = Spacing::XL as f32;
-const PAGE_SPACING: f32 = Spacing::S as f32;
 const PAGE_STEP: f32 = 240.0;
 
 #[derive(Debug, Clone, PartialEq)]
-enum Intent {
+pub(crate) enum Intent {
     SelectPane(PaneId),
     StepPane(isize),
     Query(String),
     Set(SettingId, Value),
+    Display(String, SettingId, Value),
+    Default(Direction, String),
+    Join(Vec<u8>),
+    Password(String),
+    CancelJoin,
+    Connect(String),
+    Disconnect(String),
+    Pair(String),
+    Answer(Answer),
 }
 
-type Intents = Rc<RefCell<Vec<Intent>>>;
+pub(crate) type Intents = Rc<RefCell<Vec<Intent>>>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Anchor {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Anchor {
     Pane(PaneId),
-    Setting(SettingId),
+    Setting(SettingId, Option<String>),
+    Item(String),
+    Password,
 }
 
-fn intent<T>(intents: &Intents, make: impl Fn(T) -> Intent + 'static) -> impl FnMut(T) + 'static {
+pub(crate) fn intent<T>(
+    intents: &Intents,
+    make: impl Fn(T) -> Intent + 'static,
+) -> impl FnMut(T) + 'static {
     let intents = Rc::clone(intents);
     move |argument| intents.borrow_mut().push(make(argument))
 }
@@ -55,23 +67,38 @@ fn plain(modifiers: &Modifiers) -> bool {
     !modifiers.logo && !modifiers.control && !modifiers.alt
 }
 
+#[derive(Debug, Clone, Default, PartialEq)]
+pub(crate) struct Join {
+    pub asking: Option<Vec<u8>>,
+    pub joining: Option<Vec<u8>>,
+    pub error: Option<String>,
+}
+
 pub struct SettingsView {
-    panes: Vec<Pane>,
-    values: HashMap<SettingId, Value>,
-    query: String,
-    hits: Vec<PaneHit>,
-    pane: PaneId,
+    pub(crate) panes: Vec<Pane>,
+    pub(crate) values: HashMap<SettingId, Value>,
+    pub(crate) outputs: BTreeMap<String, Output>,
+    pub(crate) displays: Vec<Display>,
+    pub(crate) audio: Option<Snapshot>,
+    pub(crate) wifi: Option<WifiState>,
+    pub(crate) join: Join,
+    pub(crate) bluetooth: Option<BluetoothState>,
+    pub(crate) busy: Vec<String>,
+    pub(crate) pairing: Option<Question>,
+    pub(crate) query: String,
+    pub(crate) hits: Vec<PaneHit>,
+    pub(crate) pane: PaneId,
     ui: Ui,
     root: WidgetId,
     search: WidgetId,
-    anchors: Vec<(Anchor, WidgetId)>,
-    intents: Intents,
-    changes: Vec<(SettingId, Value)>,
-    message: Option<String>,
+    pub(crate) anchors: Vec<(Anchor, WidgetId)>,
+    pub(crate) intents: Intents,
+    commands: Vec<Command>,
+    pub(crate) message: Option<String>,
     pressed: bool,
     stale: bool,
     focus_next: Option<Anchor>,
-    scroll: Rc<Cell<f32>>,
+    pub(crate) scroll: Rc<Cell<f32>>,
 }
 
 impl SettingsView {
@@ -87,19 +114,26 @@ impl SettingsView {
         let root_id = root.id();
         let mut cx = Context::new(text, palette);
         cx.keyboard_navigation = true;
-        let panes = panes();
         let mut view = Self {
-            pane: panes.first().map_or(PaneId::Appearance, |pane| pane.id),
-            panes,
+            panes: panes(),
             values: HashMap::new(),
+            outputs: BTreeMap::new(),
+            displays: Vec::new(),
+            audio: None,
+            wifi: None,
+            join: Join::default(),
+            bluetooth: None,
+            busy: Vec::new(),
+            pairing: None,
             query: String::new(),
             hits: Vec::new(),
+            pane: PaneId::Appearance,
             ui: Ui::new(Box::new(root), cx),
             root: root_id,
             search,
             anchors: Vec::new(),
             intents,
-            changes: Vec::new(),
+            commands: Vec::new(),
             message: None,
             pressed: false,
             stale: true,
@@ -108,10 +142,6 @@ impl SettingsView {
         };
         view.rebuild();
         view
-    }
-
-    pub fn panes(&self) -> &[Pane] {
-        &self.panes
     }
 
     pub fn set_palette(&mut self, palette: Palette) {
@@ -129,10 +159,14 @@ impl SettingsView {
         self.values.get(&id)
     }
 
-    pub fn set_message(&mut self, message: Option<String>) {
-        if self.message != message {
-            self.message = message;
-            self.invalidate();
+    pub fn message(&self) -> Option<&str> {
+        self.message.as_deref()
+    }
+
+    pub fn set_displays(&mut self, displays: Vec<Display>) {
+        if self.displays != displays {
+            self.displays = displays;
+            self.availability_changed();
         }
     }
 
@@ -140,17 +174,96 @@ impl SettingsView {
         match update {
             Update::Values(values) => {
                 for (id, value) in values {
-                    self.set_value(id, value);
+                    self.values.insert(id, value);
                 }
             }
+            Update::Outputs(outputs) => self.outputs = outputs,
+            Update::Audio(snapshot) => self.apply_audio(snapshot),
+            Update::Wifi(wifi) => {
+                if let Some(wifi) = &wifi {
+                    self.values
+                        .insert(SettingId::WifiPower, Value::Flag(wifi.enabled));
+                }
+                self.wifi = wifi;
+            }
+            Update::Joined(ssid, outcome) => self.joined(ssid, outcome),
+            Update::Bluetooth(bluetooth) => {
+                if let Some(bluetooth) = &bluetooth {
+                    self.values
+                        .insert(SettingId::BluetoothPower, Value::Flag(bluetooth.powered));
+                    self.busy.retain(|address| {
+                        !bluetooth
+                            .paired
+                            .iter()
+                            .any(|device| device.address == *address)
+                    });
+                }
+                self.bluetooth = bluetooth;
+            }
+            Update::Pairing(question) => {
+                if question.is_some() {
+                    self.focus_next = Some(Anchor::Password);
+                }
+                self.pairing = question;
+            }
             Update::Failed(error) => {
-                self.set_message(Some(L10N.tr_args("not-changed", [("error", error.into())])))
+                self.busy.clear();
+                self.message = Some(L10N.tr_args("not-changed", [("error", error.into())]));
+            }
+        }
+        self.availability_changed();
+    }
+
+    fn apply_audio(&mut self, snapshot: Option<Snapshot>) {
+        if let Some(snapshot) = &snapshot {
+            for (device, volume, muted) in [
+                (
+                    snapshot.default_output(),
+                    SettingId::OutputVolume,
+                    SettingId::OutputMuted,
+                ),
+                (
+                    snapshot.default_input(),
+                    SettingId::InputVolume,
+                    SettingId::InputMuted,
+                ),
+            ] {
+                match device {
+                    Some(device) => {
+                        self.values
+                            .insert(volume, Value::Fraction(device.level.volume));
+                        self.values.insert(muted, Value::Flag(device.level.muted));
+                    }
+                    None => {
+                        self.values.remove(&volume);
+                        self.values.remove(&muted);
+                    }
+                }
+            }
+        }
+        self.audio = snapshot.filter(|snapshot| snapshot.connected);
+    }
+
+    fn joined(&mut self, ssid: Vec<u8>, outcome: Joined) {
+        if self.join.joining.as_ref() != Some(&ssid) {
+            return;
+        }
+        self.join.joining = None;
+        match outcome {
+            Joined::Joined => self.join.error = None,
+            Joined::WrongPassword => {
+                self.join.error = Some(L10N.tr("wrong-password"));
+                self.join.asking = Some(ssid);
+                self.focus_next = Some(Anchor::Password);
+            }
+            Joined::Failed(reason) => {
+                self.join.error = Some(L10N.tr_args("join-failed", [("reason", reason.into())]));
             }
         }
     }
 
-    pub fn take_changes(&mut self) -> Vec<(SettingId, Value)> {
-        std::mem::take(&mut self.changes)
+    pub fn take_commands(&mut self) -> Vec<Command> {
+        std::mem::take(&mut self.commands)
     }
 
     pub fn query(&self) -> &str {
@@ -161,9 +274,24 @@ impl SettingsView {
         self.pane
     }
 
+    pub(crate) fn available(&self, pane: PaneId) -> bool {
+        match pane {
+            PaneId::Wifi => self.wifi.is_some(),
+            PaneId::Bluetooth => self.bluetooth.is_some(),
+            PaneId::Notifications => self.values.contains_key(&SettingId::DoNotDisturb),
+            PaneId::Sound => self.audio.is_some(),
+            PaneId::Displays => !self.displays.is_empty(),
+            PaneId::Appearance | PaneId::Dock | PaneId::LockScreen | PaneId::Keyboard => true,
+        }
+    }
+
     pub fn visible_panes(&self) -> Vec<PaneId> {
         if self.query.trim().is_empty() {
-            self.panes.iter().map(|pane| pane.id).collect()
+            self.panes
+                .iter()
+                .map(|pane| pane.id)
+                .filter(|pane| self.available(*pane))
+                .collect()
         } else {
             self.hits.iter().map(|hit| hit.pane).collect()
         }
@@ -178,7 +306,15 @@ impl SettingsView {
     pub fn focused_setting(&self) -> Option<SettingId> {
         let focus = self.ui.focus()?;
         self.anchors.iter().find_map(|(anchor, id)| match anchor {
-            Anchor::Setting(setting) if *id == focus => Some(*setting),
+            Anchor::Setting(setting, _) if *id == focus => Some(*setting),
+            _ => None,
+        })
+    }
+
+    pub fn focused_item(&self) -> Option<String> {
+        let focus = self.ui.focus()?;
+        self.anchors.iter().find_map(|(anchor, id)| match anchor {
+            Anchor::Item(item) if *id == focus => Some(item.clone()),
             _ => None,
         })
     }
@@ -187,8 +323,21 @@ impl SettingsView {
         self.ui.focus() == Some(self.search)
     }
 
-    fn hit(&self, pane: PaneId) -> Option<&PaneHit> {
+    pub(crate) fn hit(&self, pane: PaneId) -> Option<&PaneHit> {
         self.hits.iter().find(|hit| hit.pane == pane)
+    }
+
+    fn availability_changed(&mut self) {
+        if !self.query.is_empty() {
+            self.hits = self.search_hits(&self.query.clone());
+        }
+        let visible = self.visible_panes();
+        if !visible.contains(&self.pane)
+            && let Some(&first) = visible.first()
+        {
+            self.select_pane(first);
+        }
+        self.invalidate();
     }
 
     fn invalidate(&mut self) {
@@ -205,6 +354,22 @@ impl SettingsView {
             _ => {}
         }
         let handled = match event {
+            Event::Key {
+                key: Key::Escape,
+                modifiers,
+            } if plain(modifiers) && self.join.asking.is_some() => {
+                self.intents.borrow_mut().push(Intent::CancelJoin);
+                true
+            }
+            Event::Key {
+                key: Key::Escape,
+                modifiers,
+            } if plain(modifiers) && self.pairing.is_some() => {
+                self.intents
+                    .borrow_mut()
+                    .push(Intent::Answer(Answer::Decline));
+                true
+            }
             Event::Key {
                 key: Key::Escape,
                 modifiers,
@@ -246,11 +411,15 @@ impl SettingsView {
             _ => self.ui.handle(event),
         };
         let handled = handled || self.type_into_search(event);
+        self.settle();
+        handled
+    }
+
+    fn settle(&mut self) {
         self.process_intents();
         if self.stale && !self.pressed {
             self.rebuild();
         }
-        handled
     }
 
     fn type_into_search(&mut self, event: &Event) -> bool {
@@ -274,7 +443,7 @@ impl SettingsView {
 
     fn focus_best_match(&mut self) {
         if let Some(best) = self.hit(self.pane).and_then(PaneHit::best) {
-            self.focus_next = Some(Anchor::Setting(best.setting));
+            self.focus_next = Some(Anchor::Setting(best.setting, None));
             self.invalidate();
         }
     }
@@ -282,21 +451,104 @@ impl SettingsView {
     fn process_intents(&mut self) {
         let intents = std::mem::take(&mut *self.intents.borrow_mut());
         for intent in intents {
+            self.stale = true;
             match intent {
                 Intent::SelectPane(pane) => self.select_pane(pane),
                 Intent::StepPane(step) => self.step_pane(step),
                 Intent::Query(query) => self.set_query(query),
                 Intent::Set(id, value) => self.change(id, value),
+                Intent::Display(connector, id, value) => self.change_display(connector, id, value),
+                Intent::Default(direction, name) => {
+                    self.commands
+                        .push(Command::Audio(AudioCommand::Default(direction, name)));
+                }
+                Intent::Join(ssid) => self.start_join(ssid, None),
+                Intent::Password(password) => {
+                    if let Some(ssid) = self.join.asking.clone() {
+                        self.start_join(ssid, Some(password));
+                    }
+                }
+                Intent::CancelJoin => self.join = Join::default(),
+                Intent::Connect(address) => self.device_command(address, BluetoothCommand::Connect),
+                Intent::Disconnect(address) => {
+                    self.device_command(address, BluetoothCommand::Disconnect)
+                }
+                Intent::Pair(address) => self.device_command(address, BluetoothCommand::Pair),
+                Intent::Answer(answer) => {
+                    self.pairing = None;
+                    self.commands.push(Command::Answer(answer));
+                }
             }
         }
     }
 
-    fn select_pane(&mut self, pane: PaneId) {
-        if pane != self.pane {
-            self.pane = pane;
-            self.scroll.set(0.0);
-            self.stale = true;
+    fn device_command(
+        &mut self,
+        address: String,
+        command: fn(unbound_bluetooth::Device) -> BluetoothCommand,
+    ) {
+        let device = self.bluetooth.as_ref().and_then(|bluetooth| {
+            bluetooth
+                .paired
+                .iter()
+                .chain(&bluetooth.nearby)
+                .find(|device| device.address == address)
+                .cloned()
+        });
+        if let Some(device) = device {
+            self.busy.push(address);
+            self.message = None;
+            self.commands.push(Command::Bluetooth(command(device)));
         }
+    }
+
+    fn start_join(&mut self, ssid: Vec<u8>, password: Option<String>) {
+        let Some(network) = self
+            .wifi
+            .as_ref()
+            .and_then(|wifi| wifi.networks.iter().find(|network| network.ssid == ssid))
+            .cloned()
+        else {
+            return;
+        };
+        if network.current {
+            return;
+        }
+        if password.is_none() && network.security.needs_password() && !network.known {
+            self.join = Join {
+                asking: Some(ssid),
+                ..Join::default()
+            };
+            self.focus_next = Some(Anchor::Password);
+            return;
+        }
+        self.join = Join {
+            joining: Some(ssid.clone()),
+            ..Join::default()
+        };
+        self.focus_next = Some(Anchor::Item(String::from_utf8_lossy(&ssid).into_owned()));
+        self.commands
+            .push(Command::Network(NetworkCommand::Join(network, password)));
+    }
+
+    fn select_pane(&mut self, pane: PaneId) {
+        if pane == self.pane {
+            return;
+        }
+        if self.pane == PaneId::Bluetooth {
+            self.commands
+                .push(Command::Bluetooth(BluetoothCommand::Discover(false)));
+        }
+        match pane {
+            PaneId::Wifi => self.commands.push(Command::Network(NetworkCommand::Scan)),
+            PaneId::Bluetooth => self
+                .commands
+                .push(Command::Bluetooth(BluetoothCommand::Discover(true))),
+            _ => {}
+        }
+        self.pane = pane;
+        self.scroll.set(0.0);
+        self.stale = true;
     }
 
     fn step_pane(&mut self, step: isize) {
@@ -315,11 +567,18 @@ impl SettingsView {
         }
     }
 
+    fn search_hits(&self, query: &str) -> Vec<PaneHit> {
+        search(&self.panes, query)
+            .into_iter()
+            .filter(|hit| self.available(hit.pane))
+            .collect()
+    }
+
     fn set_query(&mut self, query: String) {
         if query == self.query {
             return;
         }
-        self.hits = search(&self.panes, &query);
+        self.hits = self.search_hits(&query);
         self.query = query;
         let visible = self.visible_panes();
         if let Some(&first) = visible.first()
@@ -327,7 +586,6 @@ impl SettingsView {
         {
             self.select_pane(first);
         }
-        self.stale = true;
     }
 
     fn idle(&self) -> Option<Idle> {
@@ -342,6 +600,28 @@ impl SettingsView {
         })
     }
 
+    fn command(id: SettingId, value: Value) -> Command {
+        match (id, value) {
+            (SettingId::OutputVolume, Value::Fraction(volume)) => {
+                Command::Audio(AudioCommand::Volume(Direction::Output, volume))
+            }
+            (SettingId::InputVolume, Value::Fraction(volume)) => {
+                Command::Audio(AudioCommand::Volume(Direction::Input, volume))
+            }
+            (SettingId::OutputMuted, Value::Flag(muted)) => {
+                Command::Audio(AudioCommand::Mute(Direction::Output, muted))
+            }
+            (SettingId::InputMuted, Value::Flag(muted)) => {
+                Command::Audio(AudioCommand::Mute(Direction::Input, muted))
+            }
+            (SettingId::WifiPower, Value::Flag(on)) => Command::Network(NetworkCommand::Power(on)),
+            (SettingId::BluetoothPower, Value::Flag(on)) => {
+                Command::Bluetooth(BluetoothCommand::Power(on))
+            }
+            (id, value) => Command::Set(id, value),
+        }
+    }
+
     fn change(&mut self, id: SettingId, value: Value) {
         if self.values.get(&id) == Some(&value) {
             return;
@@ -354,111 +634,39 @@ impl SettingsView {
         };
         for (id, value) in writes {
             self.values.insert(id, value.clone());
-            self.changes.push((id, value));
+            self.commands.push(Self::command(id, value));
+        }
+        let unmuted = match id {
+            SettingId::OutputVolume => Some(SettingId::OutputMuted),
+            SettingId::InputVolume => Some(SettingId::InputMuted),
+            _ => None,
+        };
+        if let Some(muted) = unmuted {
+            self.values.insert(muted, Value::Flag(false));
         }
         self.message = None;
-        self.stale = true;
     }
 
-    fn sidebar(&mut self) -> Box<dyn Widget> {
-        let rows = self
-            .visible_panes()
-            .into_iter()
-            .filter_map(|id| {
-                let pane = self.panes.iter().find(|pane| pane.id == id)?;
-                let selected = id == self.pane;
-                let tone = if selected {
-                    Tone::OnAccent
-                } else {
-                    Tone::Primary
-                };
-                let highlights = self.hit(id).map(|hit| hit.name.clone()).unwrap_or_default();
-                let row = SidebarRow::new(
-                    Text::new(&pane.name, tone).highlighted(highlights),
-                    selected,
-                    {
-                        let mut select = intent(&self.intents, Intent::SelectPane);
-                        move || select(id)
-                    },
-                    intent(&self.intents, Intent::StepPane),
-                );
-                self.anchors.push((Anchor::Pane(id), row.id()));
-                Some(Box::new(row) as Box<dyn Widget>)
-            })
-            .collect();
-        Box::new(Column::new(2.0, 0.0, rows))
-    }
-
-    fn control(&mut self, setting: &Setting) -> (Box<dyn Widget>, WidgetId) {
-        let id = setting.id;
-        let value = self.values.get(&id);
-        let selected = value.and_then(|value| setting.kind.position(value));
-        let choices = setting.kind.choices().to_vec();
-        let choose = {
-            let mut set = intent(&self.intents, move |value| Intent::Set(id, value));
-            move |index: usize| {
-                if let Some(choice) = choices.get(index) {
-                    set(choice.value.clone());
-                }
+    fn change_display(&mut self, connector: String, id: SettingId, value: Value) {
+        let mut output = self.outputs.get(&connector).copied().unwrap_or_default();
+        match (id, value) {
+            (SettingId::DisplayScale, Value::Number(percent)) => {
+                output.scale = Some(f64::from(percent) / 100.0);
             }
-        };
-        match &setting.kind {
-            Kind::Choices(choices) => {
-                let labels: Vec<String> =
-                    choices.iter().map(|choice| choice.label.clone()).collect();
-                let control = Segmented::new(&setting.label, &labels, selected, choose);
-                let id = control.id();
-                (Box::new(control), id)
+            (SettingId::DisplayScale, Value::Keyword(keyword)) if keyword == AUTOMATIC => {
+                output.scale = None;
             }
-            Kind::Stops { stops, low, high } => {
-                let mut choose = choose;
-                let slider = Slider::new(
-                    &setting.label,
-                    selected.unwrap_or(0) as f64,
-                    (0.0, stops.len().saturating_sub(1) as f64),
-                    1.0,
-                    move |index| choose(index.round() as usize),
-                );
-                let id = slider.id();
-                (Box::new(Captioned::new(Box::new(slider), low, high)), id)
+            (SettingId::RefreshRate, Value::Number(hertz)) => {
+                output.refresh_rate = Some(f64::from(hertz));
             }
+            (SettingId::VariableRefreshRate, Value::Flag(on)) => {
+                output.variable_refresh_rate = on.then_some(true);
+            }
+            _ => return,
         }
-    }
-
-    fn content(&mut self) -> Box<dyn Widget> {
-        let Some(pane) = self.panes.iter().find(|pane| pane.id == self.pane).cloned() else {
-            return Box::new(Column::new(0.0, 0.0, Vec::new()));
-        };
-        let hit = self.hit(pane.id).cloned();
-        let mut page: Vec<Box<dyn Widget>> = vec![Box::new(Label::heading(&pane.name))];
-        for section in &pane.sections {
-            if let Some(title) = &section.title {
-                page.push(Box::new(Caption::new(
-                    Text::new(title, Tone::Muted).caption().semibold(),
-                )));
-            }
-            let rows = section
-                .settings
-                .iter()
-                .map(|setting| {
-                    let matched = hit.as_ref().and_then(|hit| hit.setting(setting.id));
-                    let (control, focus) = self.control(setting);
-                    self.anchors.push((Anchor::Setting(setting.id), focus));
-                    let label = Text::new(&setting.label, Tone::Primary)
-                        .highlighted(matched.map(|hit| hit.label.clone()).unwrap_or_default());
-                    Box::new(Row::new(label, Some(control)).highlighted(matched.is_some()))
-                        as Box<dyn Widget>
-                })
-                .collect();
-            page.push(Box::new(Card::new(rows)));
-        }
-        if let Some(message) = &self.message {
-            page.push(Box::new(Caption::new(Text::new(message, Tone::Muted))));
-        }
-        Box::new(Scroll::new(
-            Box::new(Column::new(PAGE_SPACING, PAGE_PADDING, page)),
-            Rc::clone(&self.scroll),
-        ))
+        self.outputs.insert(connector.clone(), output);
+        self.message = None;
+        self.commands.push(Command::Output(connector, output));
     }
 
     fn rebuild(&mut self) {
@@ -467,7 +675,7 @@ impl SettingsView {
             self.anchors
                 .iter()
                 .find(|(_, id)| *id == focus)
-                .map(|(anchor, _)| *anchor)
+                .map(|(anchor, _)| anchor.clone())
         });
         self.anchors.clear();
         let sidebar = self.sidebar();
@@ -477,12 +685,16 @@ impl SettingsView {
             children[Root::PANES] = sidebar;
             children[Root::CONTENT] = content;
         }
-        if let Some(target) = focused.and_then(|anchor| {
+        let target = focused.and_then(|anchor| {
             self.anchors
                 .iter()
-                .find(|(candidate, _)| *candidate == anchor)
+                .find(|(candidate, _)| match (candidate, &anchor) {
+                    (Anchor::Setting(a, _), Anchor::Setting(b, None)) => a == b,
+                    _ => *candidate == anchor,
+                })
                 .map(|(_, id)| *id)
-        }) {
+        });
+        if let Some(target) = target {
             self.ui.perform(&request(Action::Focus, target, None));
         }
         self.stale = false;
@@ -502,10 +714,7 @@ impl SettingsView {
 
     pub fn perform(&mut self, request: &ActionRequest) -> bool {
         let handled = self.ui.perform(request);
-        self.process_intents();
-        if self.stale && !self.pressed {
-            self.rebuild();
-        }
+        self.settle();
         handled
     }
 }

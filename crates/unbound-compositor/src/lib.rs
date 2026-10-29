@@ -24,7 +24,9 @@ pub use cursor::{
     DEFAULT_CURSOR_THEME,
 };
 pub use drm::{DrmBackendError, DrmNotifiers, DrmOutput};
-pub use environment::{DESKTOP_NAME, export_session_environment, session_environment};
+pub use environment::{
+    DESKTOP_NAME, export_session_environment, notify_ready, session_environment,
+};
 pub use logind::{SessionRequest, follow_session};
 pub use render::{BACKGROUND, FrameStats, Renderer, Snapshot};
 pub use session::{

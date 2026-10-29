@@ -1,4 +1,9 @@
 use std::collections::HashMap;
+use std::ffi::OsStr;
+use std::io;
+use std::os::linux::net::SocketAddrExt;
+use std::os::unix::ffi::OsStrExt;
+use std::os::unix::net::{SocketAddr, UnixDatagram};
 
 use zbus::blocking::Connection;
 
@@ -60,4 +65,16 @@ pub fn export_session_environment(
             .collect(),
     )?;
     SystemdManagerProxyBlocking::new(session)?.set_environment(&assignments)
+}
+
+pub fn notify_ready(notify_socket: Option<&OsStr>) -> io::Result<()> {
+    let Some(notify_socket) = notify_socket else {
+        return Ok(());
+    };
+    let address = match notify_socket.as_bytes().strip_prefix(b"@") {
+        Some(name) => SocketAddr::from_abstract_name(name)?,
+        None => SocketAddr::from_pathname(notify_socket)?,
+    };
+    UnixDatagram::unbound()?.send_to_addr(b"READY=1", &address)?;
+    Ok(())
 }

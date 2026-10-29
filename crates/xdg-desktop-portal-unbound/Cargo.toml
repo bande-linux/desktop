@@ -17,7 +17,7 @@ unbound-test-bus.workspace = true
 
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
-section = "x11"
+section = "misc"
 depends = "$auto, xdg-desktop-portal (>= 1.18), dbus-session-bus | default-dbus-session-bus"
 recommends = "unbound-config, xdg-desktop-portal-gtk"
 extended-description = """\

@@ -17,7 +17,7 @@ unbound-test-bus.workspace = true
 
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
-section = "x11"
+section = "misc"
 depends = "$auto, dbus-session-bus | default-dbus-session-bus, init-system-helpers (>= 1.66)"
 recommends = "xdg-utils"
 extended-description = """\

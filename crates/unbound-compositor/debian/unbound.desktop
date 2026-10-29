@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=Unbound
+Comment=The Unbound desktop
+Exec=unbound-session
+TryExec=unbound-session
+Type=Application
+DesktopNames=Unbound

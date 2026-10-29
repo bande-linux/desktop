@@ -1,0 +1,5 @@
+[Unit]
+Description=Unbound session services
+BindsTo=unbound-compositor.service
+After=unbound-compositor.service graphical-session.target
+PartOf=graphical-session.target

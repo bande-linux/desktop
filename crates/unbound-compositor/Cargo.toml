@@ -25,10 +25,17 @@ wayland-protocols.workspace = true
 
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
-section = "x11"
-depends = "$auto, libvulkan1, mesa-vulkan-drivers | vulkan-icd"
+section = "misc"
+depends = "$auto, libvulkan1, mesa-vulkan-drivers | vulkan-icd, systemd"
 recommends = "unbound-clipboard, unbound-panel, unbound-launcher, unbound-term, unbound-lock, unbound-screenshot, unbound-files, unbound-settings, unbound-menubar"
 extended-description = """\
 Headless Wayland compositor built on Smithay. It serves wl_compositor, \
 wl_shm, linux-dmabuf-v1 and xdg_wm_base clients and renders their windows offscreen \
 with its own Vulkan renderer, including on Mesa's lavapipe CPU driver."""
+assets = [
+    ["target/release/unbound-compositor", "usr/bin/", "755"],
+    ["debian/unbound-session", "usr/bin/", "755"],
+    ["debian/unbound-compositor.service", "usr/lib/systemd/user/", "644"],
+    ["debian/unbound-session.target", "usr/lib/systemd/user/", "644"],
+    ["debian/unbound.desktop", "usr/share/wayland-sessions/", "644"],
+]

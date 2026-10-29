@@ -1,6 +1,9 @@
+use std::ffi::OsStr;
+use std::os::linux::net::SocketAddrExt;
+use std::os::unix::net::{SocketAddr, UnixDatagram};
 use std::sync::{Arc, Mutex};
 
-use unbound_compositor::{CursorTheme, export_session_environment};
+use unbound_compositor::{CursorTheme, export_session_environment, notify_ready};
 use unbound_test_bus::SessionBus;
 
 struct Systemd {
@@ -52,4 +55,29 @@ fn the_wayland_socket_desktop_and_cursor_theme_reach_the_user_services_environme
             "XCURSOR_SIZE=32"
         ]
     );
+}
+
+fn received(socket: &UnixDatagram) -> String {
+    let mut message = [0; 64];
+    let length = socket.recv(&mut message).expect("readiness message");
+    String::from_utf8_lossy(&message[..length]).into_owned()
+}
+
+#[test]
+fn readiness_reaches_a_notify_socket_at_a_path() {
+    let path = std::env::temp_dir().join(format!("unbound-notify-{}", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+    let socket = UnixDatagram::bind(&path).expect("notify socket");
+    notify_ready(Some(path.as_os_str())).expect("notified");
+    assert_eq!(received(&socket), "READY=1");
+    std::fs::remove_file(&path).expect("remove the notify socket");
+}
+
+#[test]
+fn readiness_reaches_an_abstract_notify_socket() {
+    let name = format!("unbound-notify-abstract-{}", std::process::id());
+    let address = SocketAddr::from_abstract_name(name.as_bytes()).expect("abstract address");
+    let socket = UnixDatagram::bind_addr(&address).expect("notify socket");
+    notify_ready(Some(OsStr::new(&format!("@{name}")))).expect("notified");
+    assert_eq!(received(&socket), "READY=1");
 }

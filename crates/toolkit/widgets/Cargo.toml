@@ -9,6 +9,7 @@ repository.workspace = true
 accesskit.workspace = true
 parley.workspace = true
 unbound-graphics.workspace = true
+unbound-spring.workspace = true
 
 [lints]
 workspace = true

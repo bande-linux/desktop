@@ -35,6 +35,10 @@ pub trait App {
         true
     }
 
+    fn animating(&self) -> bool {
+        false
+    }
+
     fn text_input_area(&self) -> Option<Rect> {
         None
     }
@@ -89,6 +93,9 @@ pub fn run(window: &mut Window, app: &mut impl App) -> Result<(), WindowError> {
         if frame_drawn {
             let scene = app.scene(window);
             window.draw(&scene)?;
+            if app.animating() {
+                window.request_redraw();
+            }
         }
         window.set_text_input_area(app.text_input_area());
         if window.accessibility.wants_tree(frame_drawn)

@@ -67,14 +67,13 @@ and live on `SettingChanged`, and delivers `WindowEvent::AppearanceChanged`. App
   Text input v3 and the clipboard are supported.
   - **Window frame.** A toplevel gets its frame from the toolkit, as an `NSWindow` does: a
     28 pt title bar with the title centred in semibold and close, minimise and zoom at the
-    top left, rounded corners and a shadow drawn into a 36 pt transparent margin outside the
-    window geometry (`set_window_geometry`). The controls are grey in inactive windows and
+    top left. Rounded corners and the shadow are the compositor's, cut at the window geometry
+    (`set_window_geometry`), so every app looks alike. The controls are grey in inactive windows and
     turn coloured with their symbols while the pointer is over the group, also in inactive
     windows; they act on release inside. A drag on the bar moves the window, a double click
-    zooms. A 6 pt band outside every edge resizes, with corners reaching 14 pt along the
-    edges, and the pointer shows the direction. The input region covers the window and the
-    band only, so clicks on the shadow reach the window below. Maximised, tiled and full-screen
-    windows have no margin, and full screen hides the title bar. `Window::size` and pointer
+    zooms. A transparent 6 pt band outside every edge resizes, with corners reaching 14 pt
+    along the edges, and the pointer shows the direction. Maximised, tiled and full-screen
+    windows have no band, and full screen hides the title bar. `Window::size` and pointer
     positions are in the content's coordinates; the app draws only its content. The title bar
     and its buttons are published to screen readers above the app's tree. `UNBOUND_RENDERER=cpu` keeps a window on
   `CpuRenderer`. `crates/testing/sample` is a settings card on the toolkit that `ci/perf` starts
@@ -91,6 +90,15 @@ and live on `SettingChanged`, and delivers `WindowEvent::AppearanceChanged`. App
   line ends, Alt+Left/Right by word, Shift extending, Up/Down to the ends of a single-line field
   (as `NSTextField`), Alt+Backspace and Super+Backspace deleting a word and to the line start,
   Super+A selecting all.
+- **Animation.** `ui::Animated` holds a value that springs to its target with a preset from
+  `unbound-spring` (`Spring::QUICK`, `STANDARD`, `GENTLE`, `FADE`, ...). A new target retargets
+  from the current position and velocity, so a reversed action never jumps or queues. Values
+  are sampled at the frame's time; while any value moves, `Ui::is_animating` is true and an app
+  returns it from `App::animating`, which asks for the next frame after each one drawn. With
+  Reduce Motion (`reduced-motion` of `org.freedesktop.appearance`, in
+  `Appearance::reduce_motion`, applied by `Ui::set_appearance`) every spring but `FADE` jumps
+  to its target, so movement is gone and fades stay. Switches slide their knob and blend their
+  track; the window controls' symbols fade in.
 - **Accessibility.** Every widget produces an AccessKit node: role, label or value, bounds,
   toggled state or numeric range, and its actions. `Ui::accessibility` returns the `TreeUpdate`
   with the focus, and `Ui::perform` carries out Focus, Click, SetValue, Increment, Decrement and

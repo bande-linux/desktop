@@ -281,7 +281,7 @@ impl DesktopView {
         self.rename_when_listed = Some(path);
     }
 
-    pub fn select_when_listed(&mut self, paths: &[PathBuf]) {
+    pub fn select_paths(&mut self, paths: &[PathBuf]) {
         self.desktop.clear_selection();
         for path in paths {
             self.desktop.extend(path);

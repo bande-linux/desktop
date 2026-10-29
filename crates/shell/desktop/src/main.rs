@@ -476,7 +476,7 @@ impl Surface {
             .collect();
         self.relist();
         if !created.is_empty() {
-            self.view.select_when_listed(&created);
+            self.view.select_paths(&created);
         }
     }
 }

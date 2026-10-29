@@ -15,7 +15,7 @@ use unbound_toolkit::{
 };
 use unbound_wallpaper::{Fit, render};
 
-const SCREEN: (f32, f32) = (1280.0, 800.0);
+const SCREEN: (f32, f32) = (720.0, 480.0);
 const MIN_SSIM: f64 = 0.99;
 
 fn item(name: &str, kind: Kind) -> Item {
@@ -258,7 +258,12 @@ fn view_with_items(scheme: Scheme) -> DesktopView {
         },
         Layouts::new(),
     );
-    view.set_viewport(SCREEN, 1.0, Bounds::new(64.0, 24.0, 1216.0, 776.0), now);
+    view.set_viewport(
+        SCREEN,
+        1.0,
+        Bounds::new(64.0, 24.0, SCREEN.0 - 64.0, SCREEN.1 - 24.0),
+        now,
+    );
     let folder = Image::from_rgba(64, 64, [0x5B, 0x8D, 0xEF, 0xFF].repeat(64 * 64));
     let document = Image::from_rgba(64, 64, [0xF4, 0xF5, 0xF7, 0xFF].repeat(64 * 64));
     view.set_items(
@@ -442,7 +447,7 @@ fn dragging_moves_icons_on_the_grid_or_into_a_folder() {
     let mut view = view_with_items(Scheme::Light);
     let notes = at(&view, "Notes.txt");
     let grid = view.desktop().grid();
-    let target = grid.cell(slot(4, 3));
+    let target = grid.cell(slot(3, 2));
     let drop = Point::new(target.x + target.width / 2.0, target.y + 30.0);
     let pointer = Pointer::at(notes);
     let now = Instant::now();
@@ -453,12 +458,12 @@ fn dragging_moves_icons_on_the_grid_or_into_a_folder() {
     );
     view.handle(&Event::PointerMove(Pointer::at(drop)), now);
     view.handle(&Event::PointerUp(Pointer::at(drop)), now);
-    assert_eq!(view.desktop().slot_of(&path("Notes.txt")), Some(slot(4, 3)));
+    assert_eq!(view.desktop().slot_of(&path("Notes.txt")), Some(slot(3, 2)));
     assert_eq!(
         view.take_changed_layouts()
             .and_then(|layouts| layouts.get(&grid.key()).cloned())
             .and_then(|positions| positions.get("Notes.txt").copied()),
-        Some(slot(4, 3))
+        Some(slot(3, 2))
     );
     let notes = at(&view, "Notes.txt");
     let projects = at(&view, "Projects");

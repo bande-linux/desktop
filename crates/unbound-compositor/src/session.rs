@@ -9,6 +9,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use rustix::io::{FdFlags, fcntl_setfd};
+use rustix::process::{Pid, PidfdFlags, pidfd_open};
+use smithay::reexports::calloop::generic::Generic;
+use smithay::reexports::calloop::{Interest, Mode, PostAction};
 use smithay::reexports::wayland_server::Client;
 
 use crate::state::{ClientState, Headless};
@@ -198,6 +201,24 @@ impl Headless {
                     .map_err(io::Error::from)
             });
         }
-        command.spawn()
+        let mut child = command.spawn()?;
+        if let Err(error) = self.wake_when_exited(&child) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(error);
+        }
+        Ok(child)
+    }
+
+    fn wake_when_exited(&self, child: &Child) -> io::Result<()> {
+        let exited = pidfd_open(Pid::from_child(child), PidfdFlags::empty())?;
+        self.state
+            .blockers
+            .insert_source(
+                Generic::new(exited, Interest::READ, Mode::Level),
+                |_, _, _| Ok(PostAction::Remove),
+            )
+            .map(drop)
+            .map_err(|error| io::Error::other(error.error))
     }
 }

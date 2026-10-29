@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use smithay::utils::Size;
 use unbound_compositor::{BACKGROUND, Headless, Renderer, Vblank};
 use unbound_test_wayland::{BLUE, RED, ShmImage, TestClient, roundtrip};
@@ -287,4 +288,46 @@ fn a_lock_request_from_logind_starts_the_lock_screen() {
     server.keep_session_clients_running();
 
     assert!(server.lock_screen_pid().is_some());
+}
+
+#[test]
+fn a_lock_screen_that_exits_after_disconnecting_is_reaped_without_other_events() {
+    let script = std::env::temp_dir().join(format!("disconnect-then-exit-{}", std::process::id()));
+    std::fs::write(
+        &script,
+        "#!/bin/sh\neval \"exec $WAYLAND_SOCKET>&-\"\nsleep 0.5\n",
+    )
+    .expect("write the lock screen stand-in");
+    std::fs::set_permissions(&script, std::os::unix::fs::PermissionsExt::from_mode(0o755))
+        .expect("make it executable");
+    let mut server = server();
+    server.set_lock_screen(&script);
+    server.request_lock_screen();
+    server.keep_session_clients_running();
+    assert!(server.lock_screen_pid().is_some());
+
+    let fds = [
+        server.poll_fd().expect("display fd"),
+        server.fence_fd().expect("internal loop fd"),
+    ];
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while server.lock_screen_pid().is_some() {
+        let left = deadline.saturating_duration_since(std::time::Instant::now());
+        let mut polled = fds
+            .iter()
+            .map(|fd| PollFd::new(fd, PollFlags::IN))
+            .collect::<Vec<_>>();
+        let woken = poll(
+            &mut polled,
+            Some(&Timespec::try_from(left).expect("timeout")),
+        )
+        .expect("poll the compositor's fds");
+        assert!(
+            woken > 0,
+            "nothing woke the compositor to reap the lock screen"
+        );
+        server.dispatch().expect("dispatch");
+        server.keep_session_clients_running();
+    }
+    let _ = std::fs::remove_file(script);
 }

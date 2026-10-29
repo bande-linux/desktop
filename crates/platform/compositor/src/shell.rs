@@ -102,6 +102,24 @@ impl State {
         self.active_app = app_id;
     }
 
+    pub(crate) fn focus_client(&mut self, client: ClientId) {
+        let app_id = self
+            .windows
+            .iter()
+            .find(|window| {
+                window
+                    .toplevel
+                    .wl_surface()
+                    .client()
+                    .map(|owner| owner.id())
+                    == Some(client.clone())
+            })
+            .map(|window| toplevel_names(window.toplevel.wl_surface()).1);
+        if let Some(app_id) = app_id {
+            self.activate_app(&app_id);
+        }
+    }
+
     pub(crate) fn activate_app(&mut self, app_id: &str) {
         let (mut chosen, rest): (Vec<_>, Vec<_>) = std::mem::take(&mut self.windows)
             .into_iter()

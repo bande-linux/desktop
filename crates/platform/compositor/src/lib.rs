@@ -36,8 +36,8 @@ pub use environment::{
 pub use logind::{SessionRequest, follow_session};
 pub use render::{BACKGROUND, FrameStats, Renderer, Snapshot};
 pub use session::{
-    CLIPBOARD_DAEMON, CONTROL_CENTER, DOCK, GREETER, LAUNCHER, LOCK_SCREEN, MENU_BAR, REVIEW,
-    SCREENSHOT, SESSION_CLIENT_RESTART_THROTTLE, SessionRole, SessionUpkeep,
+    CLIPBOARD_DAEMON, CONTROL_CENTER, DOCK, GREETER, LAUNCHER, LOCK_SCREEN, MENU_BAR, MONITOR,
+    REVIEW, SCREENSHOT, SESSION_CLIENT_RESTART_THROTTLE, SessionRole, SessionUpkeep,
 };
 pub use state::{
     Headless, OutputConfig, OutputElement, REFRESH, Rect, ScanoutDevice, automatic_scale,

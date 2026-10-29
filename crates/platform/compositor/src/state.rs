@@ -93,7 +93,7 @@ use crate::scene::{
     BlurElement, Closing, Drawn, FillElement, PieceElement, ShadowElement, WindowElement,
     preview_elements, surface_blurs, tie_blurs_to_what_lies_below, window_elements,
 };
-use crate::session::{LockScreen, SessionClient, SessionRole};
+use crate::session::{ForceQuit, LockScreen, SessionClient, SessionRole};
 use crate::shell;
 use crate::tile::{Preview, SnapDrag};
 use crate::window::Window;
@@ -189,6 +189,7 @@ pub struct State {
     pub(crate) windows: Vec<Window>,
     pub(crate) popups: PopupManager,
     pub(crate) lock_screen_requested: bool,
+    pub(crate) force_quit_requested: bool,
     pub(crate) active_app: String,
     pub(crate) idle: crate::idle::Idle,
     _idle_inhibit_state: smithay::wayland::idle_inhibit::IdleInhibitManagerState,
@@ -223,6 +224,7 @@ pub struct Headless {
     latched_frame_callbacks: Vec<WlCallback>,
     pub(crate) session_clients: Vec<SessionClient>,
     pub(crate) lock_screen: LockScreen,
+    pub(crate) force_quit: ForceQuit,
     pub(crate) socket_name: Option<OsString>,
 }
 
@@ -340,6 +342,7 @@ impl Headless {
             windows: Vec::new(),
             popups: PopupManager::default(),
             lock_screen_requested: false,
+            force_quit_requested: false,
             active_app: String::new(),
             idle: crate::idle::Idle::default(),
             _idle_inhibit_state: smithay::wayland::idle_inhibit::IdleInhibitManagerState::new::<
@@ -382,6 +385,7 @@ impl Headless {
             latched_frame_callbacks: Vec::new(),
             session_clients: Vec::new(),
             lock_screen: LockScreen::new(),
+            force_quit: ForceQuit::new(),
             socket_name: None,
         })
     }

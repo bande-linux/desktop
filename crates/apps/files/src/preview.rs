@@ -1,11 +1,13 @@
 use std::fs::{self, File};
 use std::io::Read;
+use std::path::Path;
 
 use unbound_toolkit::Image;
 
-use crate::listing::{Entry, Kind, list};
+use crate::listing::{Entry, list};
 
 pub const TEXT_PREVIEW_BYTES: u64 = 64 * 1024;
+pub const IMAGE_PREVIEW_PIXELS: u32 = 2048;
 
 #[derive(Debug, Clone)]
 pub enum Preview {
@@ -15,9 +17,9 @@ pub enum Preview {
     Other { size: u64 },
 }
 
-fn text(entry: &Entry) -> Option<String> {
+fn text(path: &Path) -> Option<String> {
     let mut bytes = Vec::new();
-    File::open(&entry.path)
+    File::open(path)
         .ok()?
         .take(TEXT_PREVIEW_BYTES)
         .read_to_end(&mut bytes)
@@ -37,28 +39,33 @@ fn text(entry: &Entry) -> Option<String> {
     }
 }
 
-fn image(entry: &Entry) -> Option<Image> {
-    let decoded = image::ImageReader::open(&entry.path)
+fn image(path: &Path) -> Option<Image> {
+    let decoded = image::ImageReader::open(path)
         .ok()?
         .with_guessed_format()
         .ok()?
         .decode()
-        .ok()?
-        .into_rgba8();
-    let (width, height) = decoded.dimensions();
-    Image::from_rgba(width, height, decoded.into_raw())
+        .ok()?;
+    let decoded = if decoded.width().max(decoded.height()) > IMAGE_PREVIEW_PIXELS {
+        decoded.thumbnail(IMAGE_PREVIEW_PIXELS, IMAGE_PREVIEW_PIXELS)
+    } else {
+        decoded
+    };
+    let rgba = decoded.into_rgba8();
+    let (width, height) = rgba.dimensions();
+    Image::from_rgba(width, height, rgba.into_raw())
 }
 
 pub fn preview(entry: &Entry) -> Preview {
-    if entry.kind == Kind::Folder {
+    if entry.is_folder() {
         return Preview::Folder {
             items: list(&entry.path, false).map_or(0, |entries| entries.len()),
         };
     }
-    if let Some(image) = image(entry) {
+    if let Some(image) = image(&entry.path) {
         return Preview::Image(image);
     }
-    if let Some(text) = text(entry) {
+    if let Some(text) = text(&entry.path) {
         return Preview::Text(text);
     }
     Preview::Other {

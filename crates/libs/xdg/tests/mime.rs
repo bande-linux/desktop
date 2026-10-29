@@ -88,6 +88,11 @@ fn database() -> (TempDir, TempDir, MimeDatabase) {
     );
     write(&mime.join("aliases"), "image/x-png image/png\n");
     write(
+        &mime.join("generic-icons"),
+        "application/x-compressed-tar:package-x-generic\n",
+    );
+    write(&mime.join("icons"), "text/x-csrc:source-c\n");
+    write(
         &mime.join("image/png.xml"),
         "<?xml version=\"1.0\"?>\n<mime-type type=\"image/png\">\n  <comment>PNG image</comment>\n  <comment xml:lang=\"de\">PNG-Bild &amp; mehr</comment>\n</mime-type>\n",
     );
@@ -186,6 +191,28 @@ fn ancestry_follows_aliases_subclasses_and_text() {
     assert_eq!(database.ancestors("image/x-png"), ["image/png"]);
     assert!(database.is_a("application/x-compressed-tar", "application/gzip"));
     assert!(!database.is_a("application/gzip", "application/x-compressed-tar"));
+}
+
+#[test]
+fn icons_fall_back_from_specific_to_generic_names() {
+    let (_user, _system, database) = database();
+
+    assert_eq!(
+        database.icon_names("image/x-png"),
+        ["image-png", "image-x-generic", "application-x-generic"]
+    );
+    assert_eq!(
+        database.icon_names("application/x-compressed-tar"),
+        [
+            "application-x-compressed-tar",
+            "package-x-generic",
+            "application-x-generic"
+        ]
+    );
+    assert_eq!(
+        database.icon_names("text/x-csrc"),
+        ["source-c", "text-x-generic", "application-x-generic"]
+    );
 }
 
 #[test]

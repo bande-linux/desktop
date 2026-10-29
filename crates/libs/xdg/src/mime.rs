@@ -281,6 +281,8 @@ pub struct MimeDatabase {
     magic: Vec<MagicRule>,
     subclasses: HashMap<String, Vec<String>>,
     aliases: HashMap<String, String>,
+    icons: HashMap<String, String>,
+    generic_icons: HashMap<String, String>,
 }
 
 impl MimeDatabase {
@@ -293,6 +295,8 @@ impl MimeDatabase {
         let mut magic = Vec::new();
         let mut subclasses: HashMap<String, Vec<String>> = HashMap::new();
         let mut aliases = HashMap::new();
+        let mut icons = HashMap::new();
+        let mut generic_icons = HashMap::new();
         for dir in mime_dirs.iter().rev() {
             if let Ok(text) = fs::read_to_string(dir.join("globs2")) {
                 for line in text.lines().filter(|line| !line.starts_with('#')) {
@@ -332,6 +336,14 @@ impl MimeDatabase {
                     }
                 }
             }
+            for (file, map) in [("icons", &mut icons), ("generic-icons", &mut generic_icons)] {
+                if let Ok(text) = fs::read_to_string(dir.join(file)) {
+                    map.extend(text.lines().filter_map(|line| {
+                        let (mime, icon) = line.split_once(':')?;
+                        Some((mime.to_owned(), icon.to_owned()))
+                    }));
+                }
+            }
             if let Ok(text) = fs::read_to_string(dir.join("aliases")) {
                 for (alias, mime) in pairs(&text) {
                     aliases.insert(alias.to_owned(), mime.to_owned());
@@ -352,6 +364,8 @@ impl MimeDatabase {
             magic,
             subclasses,
             aliases,
+            icons,
+            generic_icons,
             ..Self::default()
         };
         for glob in globs {
@@ -501,6 +515,28 @@ impl MimeDatabase {
         self.ancestors(mime)
             .iter()
             .any(|ancestor| ancestor == parent)
+    }
+
+    pub fn icon_names(&self, mime: &str) -> Vec<String> {
+        let mime = self.unalias(mime);
+        let media = mime.split('/').next().unwrap_or(mime);
+        let specific = self
+            .icons
+            .get(mime)
+            .cloned()
+            .unwrap_or_else(|| mime.replace('/', "-"));
+        let generic = self
+            .generic_icons
+            .get(mime)
+            .cloned()
+            .unwrap_or_else(|| format!("{media}-x-generic"));
+        let mut names = vec![specific, generic];
+        if media == "text" {
+            names.push("text-x-generic".to_owned());
+        }
+        names.push("application-x-generic".to_owned());
+        names.dedup();
+        names
     }
 
     pub fn description(&self, mime: &str, locale: Option<&Locale>) -> Option<String> {

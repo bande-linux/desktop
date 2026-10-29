@@ -250,10 +250,16 @@ runs natively on Wayland in the guest.
   `active_app`; `unbound-menubar` names the active app and shows the date and time.
   Not done: app menus (needs a menu export protocol), status items and tray, Control
   Center; the panel still shows its own clock.
-- [ ] **Next (phase 7)**: `xdg-decoration` negotiation (no server-side frames are drawn, so
-  answer `client_side`, as AppKit draws its own title bars in-process; the test client
-  needs a toplevel created before its first buffer), then GTK `settings.ini`/cursor
-  theme propagation; phase 8 after that.
+- [ ] **M26 Decorations and theming** (`desktop/milestone-26`; CI not run) phase 7:
+  `xdg-decoration` answers `client_side` (AppKit draws its own title bars in-process);
+  named cursors come from the XCursor theme (libXcursor lookup, inheritance, nearest size,
+  hotspot) with the built-in arrow as fallback; `wp_cursor_shape_v1`; `XCURSOR_THEME` and
+  `XCURSOR_SIZE` reach session clients and D-Bus/systemd activation; the Settings portal
+  serves `org.gnome.desktop.interface` (`color-scheme`, `cursor-theme`, `cursor-size`) for
+  sandboxed GTK. Not done: unsandboxed GTK reads GSettings, not the portal (needs a dconf
+  writer for `color-scheme`, plus `gtk-application-prefer-dark-theme` for GTK 3); animated
+  cursors show their first frame; cursors are not scaled for HiDPI outputs (phase 8
+  fractional-scale work); phase 8 after that.
 - [ ] **Toolkit on Vello and Parley** (track; moved into `desktop/integration`)
   `vello_cpu` first frame into `wl_shm`, `vello_gpu` afterwards, Parley text; goldens
   re-derived from scene descriptions; panel, launcher and terminal move over; a toolkit

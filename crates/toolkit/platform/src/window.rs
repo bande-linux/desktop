@@ -54,6 +54,7 @@ use crate::appearance::AppearanceWatch;
 use crate::capture::Capture;
 use crate::chrome::{Chrome, Control, Frame, RESIZE_MARGIN, TITLE_BAR_HEIGHT, Zone};
 use crate::clipboard::Clipboard;
+use crate::effect::BackgroundEffect;
 use crate::lock::{Locked, SessionLock};
 use crate::popup::{MenuPlacement, Menus, Opening, Parent};
 use crate::scale::{Scaling, SurfaceScale};
@@ -280,6 +281,7 @@ pub(crate) struct State {
     pub(crate) capture: Capture,
     pub(crate) text_input: TextInput,
     pub(crate) scaling: Scaling,
+    pub(crate) effect: BackgroundEffect,
 }
 
 impl State {
@@ -1129,6 +1131,33 @@ impl Window {
         Ok(())
     }
 
+    pub fn set_input_region(&mut self, area: Option<Rect>) {
+        let Some(area) = area else {
+            self.surface.set_input_region(None);
+            return;
+        };
+        let Some(compositor) = &self.state.compositor else {
+            return;
+        };
+        let region = compositor.create_region(&self.queue.handle(), ());
+        region.add(
+            area.x.floor() as i32,
+            area.y.floor() as i32,
+            area.width.ceil() as i32,
+            area.height.ceil() as i32,
+        );
+        self.surface.set_input_region(Some(&region));
+        region.destroy();
+        self.needs_redraw = true;
+    }
+
+    pub fn set_exclusive_zone(&mut self, zone: i32) {
+        if let ShellSurface::Layer(layer) = &self.role {
+            layer.set_exclusive_zone(zone);
+            self.needs_redraw = true;
+        }
+    }
+
     pub fn set_layer_size(&mut self, size: (u32, u32)) -> Result<(), WindowError> {
         let ShellSurface::Layer(layer) = &self.role else {
             return Err(WindowError::Missing("a layer surface"));
@@ -1428,7 +1457,7 @@ impl Dispatch<WlRegistry, ()> for State {
                     state.wm_base = Some(registry.bind(name, version.min(5), handle, ()));
                 }
                 "zwlr_layer_shell_v1" => {
-                    state.layer_shell = Some(registry.bind(name, version.min(4), handle, ()));
+                    state.layer_shell = Some(registry.bind(name, version.min(5), handle, ()));
                 }
                 "xdg_activation_v1" => {
                     state.activation = Some(registry.bind(name, 1, handle, ()));
@@ -1439,6 +1468,9 @@ impl Dispatch<WlRegistry, ()> for State {
                 "wl_data_device_manager" => {
                     state.data_device_manager =
                         Some(registry.bind(name, version.min(3), handle, ()));
+                }
+                "ext_background_effect_manager_v1" => {
+                    state.effect.manager = Some(registry.bind(name, 1, handle, ()));
                 }
                 "wp_cursor_shape_manager_v1" => {
                     state.cursor_shape_manager = Some(registry.bind(name, 1, handle, ()));

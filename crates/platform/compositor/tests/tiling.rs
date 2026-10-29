@@ -256,3 +256,40 @@ fn neighbouring_tiles_share_the_edge_that_is_dragged() {
     );
     release(&mut server, &mut left, 20);
 }
+
+#[test]
+fn with_reduce_motion_the_preview_fades_in_where_the_window_will_go() {
+    let far_corner = |reduce: bool| {
+        let mut server = server();
+        server.set_reduce_motion(reduce);
+        let mut renderer = Renderer::new().expect("renderer");
+        let mut editor = app(&mut server, RED);
+        grab(&mut server, &mut editor);
+        server.move_pointer_to(at(0, 96), 1000);
+        server.snap_tick(Duration::from_millis(1150));
+        server.animate(Duration::from_millis(1150));
+        server.animate(Duration::from_millis(1190));
+        renderer.render(&mut server).expect("frame");
+        let snapshot = renderer.snapshot(&server).expect("read back");
+        let at = ((10 * snapshot.size.w + 100) * 4) as usize;
+        snapshot.rgba[at..at + 3].to_vec()
+    };
+
+    let moving = far_corner(false);
+    let fading = far_corner(true);
+
+    assert!(
+        moving
+            .iter()
+            .zip(BACKGROUND)
+            .all(|(shown, below)| *shown <= below),
+        "{moving:?}"
+    );
+    assert!(
+        fading
+            .iter()
+            .zip(BACKGROUND)
+            .all(|(shown, below)| *shown > below),
+        "{fading:?}"
+    );
+}

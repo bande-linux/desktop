@@ -1,4 +1,5 @@
 mod app;
+mod appearance;
 mod capture;
 mod clock;
 mod cursor;
@@ -23,9 +24,9 @@ mod state;
 mod sync;
 mod tile;
 mod watchdog;
-pub use watchdog::UNRESPONSIVE_AFTER;
 mod window;
 
+pub use appearance::follow_reduced_motion;
 pub use clock::{FrameClock, FrameOutput, FrameScheduler, Poll, SAFETY_MARGIN, Submission, Vblank};
 pub use cursor::{
     ARROW_FILL, ARROW_HEIGHT, ARROW_OUTLINE, ARROW_WIDTH, CursorTheme, DEFAULT_CURSOR_SIZE,
@@ -45,4 +46,5 @@ pub use state::{
     Headless, OutputConfig, OutputElement, REFRESH, Rect, ScanoutDevice, automatic_scale,
 };
 pub use unbound_render::{DeviceInfo, RenderError};
+pub use watchdog::UNRESPONSIVE_AFTER;
 pub use window::Window;

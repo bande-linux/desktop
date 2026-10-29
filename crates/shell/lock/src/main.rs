@@ -6,12 +6,24 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
-use unbound_lock::{LockScreen, PAM_SERVICE, User, authenticate, current_user};
-use unbound_toolkit::{App, Role, Scene, TextSystem, Window, WindowError, WindowEvent};
+use unbound_lock::{
+    BackdropSource, Inbox, LockScreen, PAM_SERVICE, User, Variant, authenticate, current_user,
+    load_backdrop,
+};
+use unbound_toolkit::{
+    App, Image, Role, Scene, Scheme, TextSystem, Window, WindowError, WindowEvent,
+};
 
 const CLOCK_TICK: Duration = Duration::from_secs(1);
 const ACCEPTED: u8 = 1;
 const REJECTED: u8 = 0;
+
+fn variant_of(scheme: Scheme) -> Variant {
+    match scheme {
+        Scheme::Light => Variant::Light,
+        Scheme::Dark => Variant::Dark,
+    }
+}
 
 struct Locker {
     screen: LockScreen,
@@ -19,6 +31,7 @@ struct Locker {
     verdicts: UnixStream,
     verdict_sender: UnixStream,
     next_clock: Instant,
+    backdrop: Option<Inbox<Image>>,
     unlocked: bool,
 }
 
@@ -45,6 +58,16 @@ impl Locker {
 impl App for Locker {
     fn scene(&mut self, window: &mut Window) -> Scene {
         let (width, height) = window.size();
+        if self.backdrop.is_none() && width > 0 && height > 0 {
+            match load_backdrop(
+                BackdropSource::Session,
+                variant_of(window.appearance().scheme),
+                (width, height),
+            ) {
+                Ok(inbox) => self.backdrop = Some(inbox),
+                Err(error) => tracing::warn!("cannot load the wallpaper: {error}"),
+            }
+        }
         self.screen.advance(Instant::now());
         self.screen.scene(width, height)
     }
@@ -68,10 +91,19 @@ impl App for Locker {
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        vec![self.verdicts.as_fd()]
+        let mut sources = vec![self.verdicts.as_fd()];
+        sources.extend(self.backdrop.as_ref().map(Inbox::fd));
+        sources
     }
 
-    fn source_ready(&mut self, window: &mut Window, _index: usize) {
+    fn source_ready(&mut self, window: &mut Window, index: usize) {
+        if index == 1 {
+            if let Some(image) = self.backdrop.as_ref().and_then(|inbox| inbox.drain().pop()) {
+                self.screen.set_backdrop(image, Instant::now());
+                window.request_redraw();
+            }
+            return;
+        }
         let mut verdict = [REJECTED];
         if self.verdicts.read_exact(&mut verdict).is_err() {
             return;
@@ -88,7 +120,12 @@ impl App for Locker {
     }
 
     fn deadline(&self) -> Option<Instant> {
-        [Some(self.next_clock), self.screen.shaking_until()]
+        let now = Instant::now();
+        let fading = self
+            .screen
+            .is_fading(now)
+            .then(|| now + Duration::from_millis(8));
+        [Some(self.next_clock), self.screen.shaking_until(), fading]
             .into_iter()
             .flatten()
             .min()
@@ -126,6 +163,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         verdicts,
         verdict_sender,
         next_clock: Instant::now() + CLOCK_TICK,
+        backdrop: None,
         unlocked: false,
     };
     unbound_toolkit::run(&mut window, &mut locker).map_err(|error: WindowError| error.into())

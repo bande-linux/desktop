@@ -1,6 +1,6 @@
 use smithay::desktop::{
     PopupKeyboardGrab, PopupKind, PopupManager, PopupPointerGrab, PopupUngrabStrategy,
-    find_popup_root_surface, get_popup_toplevel_coords,
+    WindowSurfaceType, find_popup_root_surface, get_popup_toplevel_coords, layer_map_for_output,
 };
 use smithay::input::Seat;
 use smithay::input::pointer::Focus;
@@ -9,6 +9,7 @@ use smithay::reexports::wayland_server::protocol::wl_seat::WlSeat;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Point, Rectangle, Serial};
 use smithay::wayland::compositor::get_parent;
+use smithay::wayland::shell::wlr_layer::KeyboardInteractivity;
 use smithay::wayland::shell::xdg::{PopupSurface, PositionerState};
 
 use crate::state::State;
@@ -17,6 +18,14 @@ impl State {
     pub(crate) fn toplevel_of(&self, surface: &WlSurface) -> Option<WlSurface> {
         let root = self.root_of(surface)?;
         self.window_index(&root).map(|_| root)
+    }
+
+    pub(crate) fn focusable_layer_of(&self, surface: &WlSurface) -> Option<WlSurface> {
+        let root = self.root_of(surface)?;
+        let map = layer_map_for_output(&self.output);
+        let layer = map.layer_for_surface(&root, WindowSurfaceType::TOPLEVEL)?;
+        (layer.cached_state().keyboard_interactivity == KeyboardInteractivity::OnDemand)
+            .then_some(root)
     }
 
     fn root_of(&self, surface: &WlSurface) -> Option<WlSurface> {

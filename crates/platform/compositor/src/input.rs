@@ -295,8 +295,11 @@ impl Headless {
             if state.popup_grab.is_none() {
                 match under {
                     Some((surface, _)) => {
-                        if let Some(window) = state.toplevel_of(&surface) {
-                            state.focus(Some(window));
+                        if let Some(focusable) = state
+                            .toplevel_of(&surface)
+                            .or_else(|| state.focusable_layer_of(&surface))
+                        {
+                            state.focus(Some(focusable));
                         }
                     }
                     None => state.focus(None),

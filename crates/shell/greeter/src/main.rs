@@ -7,11 +7,11 @@ use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
 use unbound_greeter::{Outcome, log_in, login_users};
-use unbound_lock::{LockScreen, User};
+use unbound_lock::{BackdropSource, Inbox, LockScreen, User, Variant, load_backdrop};
 use unbound_toolkit::ui::{Event, Key};
 use unbound_toolkit::{
-    App, Edges, KeyboardFocus, LayerKind, LayerOptions, Palette, Role, Scene, Scheme, TextSystem,
-    Window, WindowEvent,
+    App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Palette, Role, Scene, Scheme,
+    TextSystem, Window, WindowEvent,
 };
 
 const CLOCK_TICK: Duration = Duration::from_secs(1);
@@ -26,6 +26,8 @@ struct Greeter {
     verdicts: UnixStream,
     verdict_sender: UnixStream,
     next_clock: Instant,
+    backdrop: Option<Inbox<Image>>,
+    wallpaper: Option<Image>,
     started: bool,
 }
 
@@ -50,6 +52,10 @@ impl Greeter {
             (self.user + count - 1) % count
         };
         self.screen = Self::screen_for(&self.users[self.user]);
+        if let Some(wallpaper) = &self.wallpaper {
+            self.screen
+                .set_backdrop(wallpaper.clone(), Instant::now() - Duration::from_secs(1));
+        }
         true
     }
 
@@ -85,6 +91,12 @@ impl Greeter {
 impl App for Greeter {
     fn scene(&mut self, window: &mut Window) -> Scene {
         let (width, height) = window.size();
+        if self.backdrop.is_none() && width > 0 && height > 0 {
+            match load_backdrop(BackdropSource::Default, Variant::Dark, (width, height)) {
+                Ok(inbox) => self.backdrop = Some(inbox),
+                Err(error) => tracing::warn!("cannot load the wallpaper: {error}"),
+            }
+        }
         self.screen.advance(Instant::now());
         self.screen.scene(width, height)
     }
@@ -108,10 +120,20 @@ impl App for Greeter {
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        vec![self.verdicts.as_fd()]
+        let mut sources = vec![self.verdicts.as_fd()];
+        sources.extend(self.backdrop.as_ref().map(Inbox::fd));
+        sources
     }
 
-    fn source_ready(&mut self, window: &mut Window, _index: usize) {
+    fn source_ready(&mut self, window: &mut Window, index: usize) {
+        if index == 1 {
+            if let Some(image) = self.backdrop.as_ref().and_then(|inbox| inbox.drain().pop()) {
+                self.screen.set_backdrop(image.clone(), Instant::now());
+                self.wallpaper = Some(image);
+                window.request_redraw();
+            }
+            return;
+        }
         let mut verdict = [REJECTED];
         if self.verdicts.read_exact(&mut verdict).is_err() {
             return;
@@ -125,7 +147,12 @@ impl App for Greeter {
     }
 
     fn deadline(&self) -> Option<Instant> {
-        [Some(self.next_clock), self.screen.shaking_until()]
+        let now = Instant::now();
+        let fading = self
+            .screen
+            .is_fading(now)
+            .then(|| now + Duration::from_millis(8));
+        [Some(self.next_clock), self.screen.shaking_until(), fading]
             .into_iter()
             .flatten()
             .min()
@@ -170,6 +197,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         verdicts,
         verdict_sender,
         next_clock: Instant::now() + CLOCK_TICK,
+        backdrop: None,
+        wallpaper: None,
         started: false,
     };
     unbound_toolkit::run(&mut window, &mut greeter)?;

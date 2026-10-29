@@ -99,6 +99,7 @@ impl Edges {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyboardFocus {
     None,
+    OnDemand,
     Exclusive,
 }
 
@@ -438,6 +439,9 @@ impl Window {
                 layer_surface.set_exclusive_zone(options.exclusive_zone);
                 layer_surface.set_keyboard_interactivity(match options.keyboard {
                     KeyboardFocus::None => zwlr_layer_surface_v1::KeyboardInteractivity::None,
+                    KeyboardFocus::OnDemand => {
+                        zwlr_layer_surface_v1::KeyboardInteractivity::OnDemand
+                    }
                     KeyboardFocus::Exclusive => {
                         zwlr_layer_surface_v1::KeyboardInteractivity::Exclusive
                     }

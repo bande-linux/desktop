@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="3200" height="2000" viewBox="0 0 3200 2000">
+<defs>
+<linearGradient id="base" x1="0" y1="0" x2="1" y2="1"><stop offset="0.00" stop-color="#0A0D18"/><stop offset="1.00" stop-color="#0E1020"/></linearGradient>
+<radialGradient id="b0"><stop offset="0" stop-color="#2A5FD0" stop-opacity="0.7"/><stop offset="0.55" stop-color="#2A5FD0" stop-opacity="0.315"/><stop offset="1" stop-color="#2A5FD0" stop-opacity="0"/></radialGradient>
+<radialGradient id="b1"><stop offset="0" stop-color="#5B3FB8" stop-opacity="0.7"/><stop offset="0.55" stop-color="#5B3FB8" stop-opacity="0.315"/><stop offset="1" stop-color="#5B3FB8" stop-opacity="0"/></radialGradient>
+<radialGradient id="b2"><stop offset="0" stop-color="#B5577A" stop-opacity="0.7"/><stop offset="0.55" stop-color="#B5577A" stop-opacity="0.315"/><stop offset="1" stop-color="#B5577A" stop-opacity="0"/></radialGradient>
+<radialGradient id="b3"><stop offset="0" stop-color="#1F8F86" stop-opacity="0.7"/><stop offset="0.55" stop-color="#1F8F86" stop-opacity="0.315"/><stop offset="1" stop-color="#1F8F86" stop-opacity="0"/></radialGradient>
+<radialGradient id="b4"><stop offset="0" stop-color="#7A3FA0" stop-opacity="0.7"/><stop offset="0.55" stop-color="#7A3FA0" stop-opacity="0.315"/><stop offset="1" stop-color="#7A3FA0" stop-opacity="0"/></radialGradient>
+</defs>
+<rect width="3200" height="2000" fill="url(#base)"/>
+<ellipse cx="700" cy="520" rx="1300" ry="820" fill="url(#b0)"/>
+<ellipse cx="2500" cy="420" rx="1200" ry="760" fill="url(#b1)"/>
+<ellipse cx="1900" cy="1500" rx="1500" ry="820" fill="url(#b2)"/>
+<ellipse cx="420" cy="1700" rx="1100" ry="700" fill="url(#b3)"/>
+<ellipse cx="1600" cy="900" rx="900" ry="600" fill="url(#b4)"/>
+</svg>

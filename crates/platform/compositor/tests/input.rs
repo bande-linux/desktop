@@ -9,6 +9,8 @@ const KEY_TAB: u32 = 15;
 const KEY_Q: u32 = 16;
 const KEY_W: u32 = 17;
 const KEY_A: u32 = 30;
+const KEY_ESC: u32 = 1;
+const KEY_LEFTALT: u32 = 56;
 const KEY_LEFTMETA: u32 = 125;
 const BTN_LEFT: u32 = 0x110;
 
@@ -208,6 +210,23 @@ fn super_q_asks_an_app_that_takes_app_requests_to_quit_once_and_closes_nothing()
     assert!(!app.close_requested(0));
     assert!(!app.close_requested(1));
     assert_eq!(other.quit_requests(), 0);
+}
+
+#[test]
+fn super_option_escape_opens_force_quit_without_typing_escape() {
+    let mut server = server();
+    let mut client = client_with_window(&mut server, 32);
+    server.set_force_quit(std::path::Path::new("/bin/true"));
+
+    server.key(KEY_LEFTALT, true, 19);
+    chord(&mut server, KEY_ESC);
+    server.key(KEY_LEFTALT, false, 22);
+    client.exchange(&mut server);
+    let upkeep = server.keep_session_clients_running();
+
+    assert!(upkeep.failures.is_empty());
+    assert!(server.force_quit_pid().is_some());
+    assert!(!client.keys().iter().any(|(key, _)| *key == KEY_ESC));
 }
 
 #[test]

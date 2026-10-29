@@ -32,6 +32,8 @@ pub const MENU_BAR: &str = "/usr/bin/unbound-menubar";
 pub const CONTROL_CENTER: &str = "/usr/bin/unbound-controlcenter";
 pub const GREETER: &str = "/usr/bin/unbound-greeter";
 pub const REVIEW: &str = "/usr/bin/unbound-review";
+pub const MONITOR: &str = "/usr/bin/unbound-monitor";
+const FORCE_QUIT_ARGUMENT: &str = "--force-quit";
 
 pub const SESSION_CLIENT_RESTART_THROTTLE: Duration = Duration::from_secs(10);
 
@@ -46,6 +48,20 @@ pub(crate) struct LockScreen {
     executable: PathBuf,
     child: Option<Child>,
     started: Option<Instant>,
+}
+
+pub(crate) struct ForceQuit {
+    executable: PathBuf,
+    running: Option<(Child, Client)>,
+}
+
+impl ForceQuit {
+    pub(crate) fn new() -> Self {
+        Self {
+            executable: PathBuf::from(MONITOR),
+            running: None,
+        }
+    }
 }
 
 impl LockScreen {
@@ -116,6 +132,39 @@ impl Headless {
         self.state.lock_states = Some(states);
     }
 
+    pub fn set_force_quit(&mut self, executable: &Path) {
+        self.force_quit.executable = executable.to_path_buf();
+    }
+
+    pub fn force_quit_pid(&self) -> Option<u32> {
+        self.force_quit
+            .running
+            .as_ref()
+            .map(|(child, _)| child.id())
+    }
+
+    fn keep_force_quit(&mut self, upkeep: &mut SessionUpkeep) {
+        if let Some((child, _)) = self.force_quit.running.as_mut()
+            && !matches!(child.try_wait(), Ok(None))
+        {
+            self.force_quit.running = None;
+        }
+        if !std::mem::take(&mut self.state.force_quit_requested) {
+            return;
+        }
+        if let Some((_, client)) = &self.force_quit.running {
+            self.state.focus_client(client.id());
+            return;
+        }
+        let executable = self.force_quit.executable.clone();
+        let mut command = Command::new(&executable);
+        command.arg(FORCE_QUIT_ARGUMENT);
+        match self.spawn_session_command(command, SessionRole::Shell) {
+            Ok(running) => self.force_quit.running = Some(running),
+            Err(error) => upkeep.failures.push((executable, error)),
+        }
+    }
+
     pub fn lock_screen_pid(&self) -> Option<u32> {
         self.lock_screen.child.as_ref().map(Child::id)
     }
@@ -160,6 +209,7 @@ impl Headless {
     pub fn keep_session_clients_running(&mut self) -> SessionUpkeep {
         let mut upkeep = SessionUpkeep::default();
         self.keep_lock_screen(&mut upkeep);
+        self.keep_force_quit(&mut upkeep);
         for index in 0..self.session_clients.len() {
             let client = &mut self.session_clients[index];
             if let Some(child) = client.child.as_mut() {
@@ -194,11 +244,19 @@ impl Headless {
     }
 
     fn spawn_session_client(&mut self, executable: &Path, role: SessionRole) -> io::Result<Child> {
+        self.spawn_session_command(Command::new(executable), role)
+            .map(|(child, _)| child)
+    }
+
+    fn spawn_session_command(
+        &mut self,
+        mut command: Command,
+        role: SessionRole,
+    ) -> io::Result<(Child, Client)> {
         let (compositor_end, client_end) = UnixStream::pair()?;
-        self.insert_session_client(compositor_end, role)?;
+        let client = self.insert_session_client(compositor_end, role)?;
         let client_end = OwnedFd::from(client_end);
         let inherited = client_end.as_raw_fd();
-        let mut command = Command::new(executable);
         command.env("WAYLAND_SOCKET", inherited.to_string());
         command.envs(cursor_environment(self.cursor_theme()));
         match (&self.socket_name, role) {
@@ -217,7 +275,7 @@ impl Headless {
             let _ = child.wait();
             return Err(error);
         }
-        Ok(child)
+        Ok((child, client))
     }
 
     fn wake_when_exited(&self, child: &Child) -> io::Result<()> {

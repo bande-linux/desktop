@@ -28,6 +28,7 @@ enum Shortcut {
     ShowLauncher,
     MinimizeWindow,
     LockScreen,
+    ForceQuit,
     ToggleFullscreen,
     Place(Direction),
     CaptureScreen,
@@ -44,13 +45,20 @@ fn volume_key(keysym: u32) -> Option<VolumeKey> {
     }
 }
 
-fn shortcut(keysym: u32, unshifted: Option<u32>, ctrl: bool, shift: bool) -> Option<Shortcut> {
+fn shortcut(
+    keysym: u32,
+    unshifted: Option<u32>,
+    ctrl: bool,
+    alt: bool,
+    shift: bool,
+) -> Option<Shortcut> {
     match unshifted.filter(|_| shift) {
         Some(keysyms::KEY_3) => return Some(Shortcut::CaptureScreen),
         Some(keysyms::KEY_4) => return Some(Shortcut::CaptureArea),
         _ => {}
     }
     match keysym {
+        keysyms::KEY_Escape if alt => Some(Shortcut::ForceQuit),
         keysyms::KEY_f | keysyms::KEY_F if ctrl => Some(Shortcut::ToggleFullscreen),
         keysyms::KEY_Left if ctrl => Some(Shortcut::Place(Direction::Left)),
         keysyms::KEY_Right if ctrl => Some(Shortcut::Place(Direction::Right)),
@@ -123,6 +131,11 @@ impl State {
             self.lock_screen_requested = !self.is_locked();
             return;
         }
+        if shortcut == Shortcut::ForceQuit {
+            self.force_quit_requested = true;
+            self.watchdog.ping_everyone();
+            return;
+        }
         let Some(focused) = self.focused() else {
             return;
         };
@@ -168,6 +181,7 @@ impl State {
             }
             Shortcut::ShowLauncher
             | Shortcut::LockScreen
+            | Shortcut::ForceQuit
             | Shortcut::CaptureScreen
             | Shortcut::CaptureArea
             | Shortcut::Volume(..) => {}
@@ -346,6 +360,7 @@ impl Headless {
                     keysym.modified_sym().raw(),
                     unshifted,
                     modifiers.ctrl,
+                    modifiers.alt,
                     modifiers.shift,
                 )
                 .filter(|_| modifiers.logo && !state.is_locked())

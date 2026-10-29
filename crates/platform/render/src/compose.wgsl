@@ -92,8 +92,8 @@ fn fragment(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
 }
 
 @fragment
-fn solid() -> @location(0) vec4<f32> {
-    return quad.color;
+fn solid(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+    return quad.color * coverage(position.xy, quad.clip, quad.clip_radius);
 }
 
 @fragment

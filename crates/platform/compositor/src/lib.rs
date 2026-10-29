@@ -19,6 +19,7 @@ mod session;
 mod shell;
 mod state;
 mod sync;
+mod tile;
 mod window;
 
 pub use clock::{FrameClock, FrameOutput, FrameScheduler, Poll, SAFETY_MARGIN, Submission, Vblank};

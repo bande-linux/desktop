@@ -485,7 +485,7 @@ impl Frame for VulkanFrame<'_, '_> {
                 .map(|rect| physical(rect).translated(destination.x, destination.y)),
             destination,
         );
-        if color.is_opaque() {
+        if color.is_opaque() && self.clip.is_none() {
             self.fill(color, &rects);
             return Ok(());
         }
@@ -495,6 +495,7 @@ impl Frame for VulkanFrame<'_, '_> {
                 color: color.components(),
                 destination,
                 alpha: 1.0,
+                clip: self.clip.unwrap_or_default(),
                 ..Quad::default()
             },
             &rects,

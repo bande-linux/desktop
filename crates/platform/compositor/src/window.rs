@@ -13,6 +13,7 @@ use unbound_spring::Spring;
 use crate::motion::{Look, Motion};
 use crate::scene::Drawn;
 use crate::state::{Rect, State};
+use crate::tile::{TILED, Tile};
 
 pub struct Window {
     pub(crate) toplevel: ToplevelSurface,
@@ -27,6 +28,7 @@ pub struct Window {
     pub(crate) shadow: Id,
     pub(crate) motion: Option<Motion>,
     pub(crate) drawn: Option<Drawn>,
+    pub(crate) tile: Option<(Tile, Rect)>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -61,7 +63,7 @@ impl Resize {
         size
     }
 
-    fn location_for(&self, size: Size<i32, Logical>) -> Point<i32, Logical> {
+    pub(crate) fn location_for(&self, size: Size<i32, Logical>) -> Point<i32, Logical> {
         let mut location = self.initial.location;
         if self.has(LEFT) {
             location.x += self.initial.size.w - size.w;
@@ -88,6 +90,7 @@ impl Window {
             shadow: Id::new(),
             motion: None,
             drawn: None,
+            tile: None,
         }
     }
 
@@ -270,6 +273,7 @@ impl State {
     fn place(&mut self, index: usize, state: xdg_toplevel::State, target: Option<Rect>) {
         let window = &mut self.windows[index];
         if window.restore.is_none()
+            && window.tile.is_none()
             && let Some(geometry) = window.geometry()
             && !window.has_state(xdg_toplevel::State::Maximized)
             && !window.has_state(xdg_toplevel::State::Fullscreen)
@@ -287,6 +291,9 @@ impl State {
             }
             match target {
                 Some(target) => {
+                    for tiled in TILED {
+                        pending.states.unset(tiled);
+                    }
                     pending.states.set(state);
                     pending.size = Some(target.size);
                 }
@@ -296,6 +303,9 @@ impl State {
                 }
             }
         });
+        if target.is_some() {
+            window.tile = None;
+        }
         let location = target.or(window.restore).map(|rect| rect.location);
         if target.is_none() {
             window.restore = None;
@@ -448,6 +458,11 @@ impl State {
             pending.size = Some(size);
         });
         window.configure();
+        let rect = Rect {
+            location: resize.location_for(size),
+            size,
+        };
+        self.share_tiled_edge(index, rect);
     }
 
     pub(crate) fn end_resize(&mut self, surface: &WlSurface) {
@@ -485,7 +500,8 @@ impl State {
             return None;
         }
         let geometry = window.geometry()?;
-        if !window.has_state(xdg_toplevel::State::Maximized) {
+        let tiled = window.tile.is_some();
+        if !tiled && !window.has_state(xdg_toplevel::State::Maximized) {
             return Some(geometry.location);
         }
         let restored = window.restore.map_or(geometry.size, |restore| restore.size);
@@ -496,7 +512,11 @@ impl State {
             )
             .unwrap_or(0);
         let location = Point::from((x, geometry.location.y));
-        self.place(index, xdg_toplevel::State::Maximized, None);
+        if tiled {
+            self.untile(index);
+        } else {
+            self.place(index, xdg_toplevel::State::Maximized, None);
+        }
         self.windows[index].motion = None;
         self.windows[index].pending_location = None;
         self.windows[index].location = location;

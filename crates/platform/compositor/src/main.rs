@@ -257,6 +257,7 @@ where
             output,
             scheduler,
         } = &mut app;
+        let snap_due = compositor.snap_tick(now());
         let frame = scheduler
             .poll(now, compositor, output)
             .map_err(Into::into)?;
@@ -264,11 +265,13 @@ where
         let idle_wait = compositor
             .idle_tick(now())
             .map(|at| at.saturating_sub(now()));
+        let snap_wait = snap_due.map(|at| at.saturating_sub(now()));
         timeout = upkeep
             .retry_in
             .into_iter()
             .chain(frame_wait)
             .chain(idle_wait)
+            .chain(snap_wait)
             .min();
     }
 }

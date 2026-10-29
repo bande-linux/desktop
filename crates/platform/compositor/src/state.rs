@@ -87,9 +87,13 @@ use crate::clock::Vblank;
 use crate::cursor::{self, Cursor, CursorTheme};
 use crate::lock::Lock;
 use crate::motion::IconRect;
-use crate::scene::{Closing, Drawn, PieceElement, ShadowElement, WindowElement, window_elements};
+use crate::scene::{
+    Closing, Drawn, FillElement, PieceElement, ShadowElement, WindowElement, preview_elements,
+    window_elements,
+};
 use crate::session::{LockScreen, SessionClient, SessionRole};
 use crate::shell;
+use crate::tile::{Preview, SnapDrag};
 use crate::window::Window;
 use smithay::wayland::cursor_shape::CursorShapeManagerState;
 use smithay::wayland::input_method::InputMethodManagerState;
@@ -193,6 +197,8 @@ pub struct State {
     pub(crate) minimize_sequence: u64,
     pub(crate) closing: Vec<Closing>,
     pub(crate) icon_rects: Vec<IconRect>,
+    pub(crate) snap: Option<SnapDrag>,
+    pub(crate) preview: Option<Preview>,
     pub(crate) reduce_motion: bool,
     pub(crate) needs_redraw: bool,
     pub(crate) pointer_location: Point<f64, Logical>,
@@ -341,6 +347,8 @@ impl Headless {
             minimize_sequence: 0,
             closing: Vec::new(),
             icon_rects: Vec::new(),
+            snap: None,
+            preview: None,
             reduce_motion: false,
             needs_redraw: false,
             pointer_location: (
@@ -524,6 +532,11 @@ impl Headless {
                     let (shown, look) = window_elements(window, renderer, scale, active);
                     elements.extend(shown);
                     drawn.push((window.surface().clone(), look));
+                    if let Some(preview) = &self.state.preview
+                        && &preview.owner == window.surface()
+                    {
+                        elements.extend(preview_elements(preview, scale));
+                    }
                 }
                 Placed::Closing(closing) => elements.extend(closing.render_elements(scale)),
             }
@@ -1186,6 +1199,7 @@ render_elements! {
     Window=WindowElement<WaylandSurfaceRenderElement<VulkanRenderer>>,
     Shadow=ShadowElement,
     Closing=WindowElement<PieceElement>,
+    Fill=FillElement,
     Cursor=MemoryRenderBufferRenderElement<VulkanRenderer>,
 }
 

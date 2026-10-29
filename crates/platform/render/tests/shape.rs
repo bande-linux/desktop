@@ -221,3 +221,27 @@ fn a_shadow_reaches_only_its_bounds() {
         (5, 11, 60, 60)
     );
 }
+
+#[test]
+fn a_clipped_solid_fill_is_rounded_even_when_opaque() {
+    let pixels = render(|_| {
+        vec![
+            clear([0.0, 0.0, 1.0, 1.0]),
+            Box::new(|frame: &mut VulkanFrame<'_, '_>| {
+                frame.clip_to(Some(square(10.0, 10.0, 40.0, 8.0)));
+                frame
+                    .draw_solid(
+                        Rectangle::new((10, 10).into(), (40, 40).into()),
+                        &[Rectangle::from_size((40, 40).into())],
+                        Color32F::new(1.0, 0.0, 0.0, 1.0),
+                    )
+                    .expect("fill");
+                frame.clip_to(None);
+            }),
+        ]
+    });
+
+    assert_eq!(at(&pixels, 10, 10), BLUE);
+    assert_eq!(at(&pixels, 30, 10), RED);
+    assert_eq!(at(&pixels, 30, 30), RED);
+}

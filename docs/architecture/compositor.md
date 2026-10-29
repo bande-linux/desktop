@@ -71,6 +71,15 @@ when they reach the screen is Unbound's own.
   contains a window that is only still animating. An animation that has never been sampled
   is drawn at its destination. Reduce Motion (`Headless::set_reduce_motion`; not yet read
   from the portal's `reduced-motion`) keeps rectangles in place and fades with `fade`.
+- **Snapping and tiling.** Dragging a window until the pointer touches the left or right screen
+  edge previews the half, within 64 pt of a corner the quarter, and against the top of the
+  usable area zoom; the translucent rounded preview grows from the pointer (`quick`) only after
+  the pointer has rested 150 ms within 2 pt, so a fast drag past an edge never tiles. Releasing
+  over a shown preview springs the window into it. `Ctrl+Super+Left/Right` tile halves,
+  `Up/Down` on a half give its top or bottom quarter and on a quarter go back to the half,
+  `Up` zooms a free window and `Down` returns a zoomed one. Tiles get xdg-shell's tiled states
+  (for clients binding version 2) and no gaps. Dragging the edge two neighbouring tiles share
+  resizes both; dragging a tiled window away gives back its earlier size under the pointer.
 - **Springs.** `crates/libs/spring` is the closed-form solution for under-, critically and
   overdamped springs, parameterised by angular frequency $\omega$ and damping ratio $\zeta$. A
   trajectory depends only on elapsed time, never on frame rate, and retargeting keeps position

@@ -320,6 +320,7 @@ impl State {
         for closing in &mut self.closing {
             closing.motion.advance(time, refresh);
         }
+        self.animate_preview(time);
         self.closing.retain(|closing| !closing.motion.is_settled());
         if self.is_animating() {
             self.needs_redraw = true;
@@ -327,7 +328,9 @@ impl State {
     }
 
     fn is_animating(&self) -> bool {
-        !self.closing.is_empty() || self.windows.iter().any(|window| window.motion.is_some())
+        !self.closing.is_empty()
+            || self.preview.is_some()
+            || self.windows.iter().any(|window| window.motion.is_some())
     }
 }
 

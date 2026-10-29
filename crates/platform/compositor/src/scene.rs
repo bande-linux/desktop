@@ -10,6 +10,7 @@ use smithay::utils::{Buffer as BufferCoords, Physical, Point, Rectangle, Scale};
 
 use crate::motion::{Look, Motion};
 use crate::state::OutputElement;
+use crate::tile::Preview;
 use crate::window::Window;
 use unbound_render::{
     RenderError, RoundedRect, Shadow, VulkanFrame, VulkanRenderer, VulkanTexture,
@@ -362,6 +363,103 @@ impl RenderElement<VulkanRenderer> for PieceElement {
             self.alpha,
         )
     }
+}
+
+const PREVIEW_FILL: [f32; 4] = [0.16, 0.16, 0.16, 0.16];
+
+pub struct FillElement {
+    id: Id,
+    shape: RoundedRect,
+    color: [f32; 4],
+    commit: CommitCounter,
+}
+
+impl FillElement {
+    fn new(id: Id, shape: RoundedRect, color: [f32; 4]) -> Self {
+        let mut hasher = DefaultHasher::new();
+        for value in [shape.components(), color, [shape.radius, 0.0, 0.0, 0.0]].concat() {
+            value.to_bits().hash(&mut hasher);
+        }
+        Self {
+            id,
+            shape,
+            color,
+            commit: CommitCounter::from(hasher.finish() as usize),
+        }
+    }
+}
+
+impl Element for FillElement {
+    fn id(&self) -> &Id {
+        &self.id
+    }
+
+    fn current_commit(&self) -> CommitCounter {
+        self.commit
+    }
+
+    fn src(&self) -> Rectangle<f64, BufferCoords> {
+        let size = self.geometry(Scale::from(1.0)).size;
+        Rectangle::from_size((f64::from(size.w), f64::from(size.h)).into())
+    }
+
+    fn geometry(&self, _scale: Scale<f64>) -> Rectangle<i32, Physical> {
+        let left = f64::from(self.shape.x).floor();
+        let top = f64::from(self.shape.y).floor();
+        let right = f64::from(self.shape.x + self.shape.width).ceil();
+        let bottom = f64::from(self.shape.y + self.shape.height).ceil();
+        Rectangle::new(
+            (left as i32, top as i32).into(),
+            ((right - left) as i32, (bottom - top) as i32).into(),
+        )
+    }
+}
+
+impl RenderElement<VulkanRenderer> for FillElement {
+    fn draw(
+        &self,
+        frame: &mut VulkanFrame<'_, '_>,
+        _src: Rectangle<f64, BufferCoords>,
+        dst: Rectangle<i32, Physical>,
+        damage: &[Rectangle<i32, Physical>],
+        _opaque_regions: &[Rectangle<i32, Physical>],
+    ) -> Result<(), RenderError> {
+        let [red, green, blue, alpha] = self.color;
+        frame.clip_to(Some(self.shape));
+        let drawn = smithay::backend::renderer::Frame::draw_solid(
+            frame,
+            dst,
+            damage,
+            smithay::backend::renderer::Color32F::new(red, green, blue, alpha),
+        );
+        frame.clip_to(None);
+        drawn
+    }
+}
+
+pub(crate) fn preview_elements(preview: &Preview, scale: f64) -> Vec<OutputElement> {
+    let Some(look) = preview.motion.shown() else {
+        return Vec::new();
+    };
+    if look.alpha <= 0.0 {
+        return Vec::new();
+    }
+    let alpha = look.alpha as f32;
+    let shape = rounded(look.rect.to_physical(scale), CORNER_RADIUS * scale);
+    vec![
+        OutputElement::Fill(FillElement::new(
+            preview.fill.clone(),
+            shape,
+            PREVIEW_FILL.map(|channel| channel * alpha),
+        )),
+        OutputElement::Shadow(ShadowElement::new(
+            preview.shadow.clone(),
+            shape,
+            false,
+            scale,
+            alpha,
+        )),
+    ]
 }
 
 #[derive(Debug, Clone)]

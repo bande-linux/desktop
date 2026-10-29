@@ -1,0 +1,41 @@
+# Open Files from the launcher and browse folders with the keyboard.
+note "Open Files from the launcher"
+key super+space
+wait 600ms
+type "files"
+wait 600ms
+key enter
+wait-for-window "org.unbound.Files"
+wait 1200ms
+shot "files open"
+note "Arrow keys move through the columns"
+key down
+wait 400ms
+key down
+wait 400ms
+key right
+wait 800ms
+shot "into a folder"
+key down down
+wait 400ms
+key right
+wait 800ms
+shot "two folders deep"
+note "Space shows a quick look of the selection"
+key space
+wait 1200ms
+shot "quick look"
+key escape
+wait 500ms
+note "Super+Up goes to the enclosing folder"
+key super+up
+wait 800ms
+key left
+wait 800ms
+shot "back out"
+note "Scrolling a column under the pointer"
+move 900 600
+wait 300ms
+scroll down 4
+wait 800ms
+shot "scrolled"

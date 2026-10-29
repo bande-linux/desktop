@@ -1,0 +1,5 @@
+unbound-desktop (0.0.0) unstable; urgency=medium
+
+  * Versioned at build time from git by ci/deb/version.sh.
+
+ -- Mikael Hug <mikaelhug@gmail.com>  Thu, 29 Oct 2026 12:03:46 +0100

@@ -228,6 +228,70 @@ jobs:
           path: target/debian/*.deb
           if-no-files-found: error
 
+  deb-all:
+    name: ci/deb-all
+    runs-on: [self-hosted, unbound]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Install the packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential debhelper dpkg-dev lintian gnupg
+      - name: Build the repository and meta packages
+        run: |
+          version=$(ci/deb/version.sh)
+          (cd packaging/unbound-apt-source && dpkg-buildpackage -b -us -uc)
+          (cd packaging/unbound-desktop && DEB_VERSION_OVERRIDE=$version dpkg-buildpackage -b -us -uc)
+          mkdir -p debs
+          mv packaging/*.deb debs/
+          ls -l debs
+          test "$(dpkg-deb --field debs/unbound-desktop_*_all.deb Version)" = "$version"
+          dpkg-deb --field debs/unbound-desktop_*_all.deb Depends | grep -qF "unbound-compositor (= $version)"
+      - name: Lint the packages
+        run: |
+          chmod -R a+rX debs
+          sudo -u nobody lintian --fail-on error,warning debs/*.deb
+      - name: Check the repository packages
+        run: |
+          root=$(mktemp -d)
+          for channel in unbound-apt-source:trixie unbound-apt-source-testing:trixie-testing; do
+            IFS=: read -r package suite <<< "$channel"
+            dpkg-deb --extract debs/"$package"_*_all.deb "$root/$package"
+            sed "s/^Suites: .*/Suites: SUITE/" "$root/$package/etc/apt/sources.list.d/unbound.sources" > "$root/$package.sources"
+            grep -qx "Suites: $suite" "$root/$package/etc/apt/sources.list.d/unbound.sources"
+          done
+          cmp "$root/unbound-apt-source.sources" "$root/unbound-apt-source-testing.sources"
+          dpkg-deb --extract debs/unbound-archive-keyring_*_all.deb "$root/keyring"
+          gpg --batch --with-colons --show-keys "$root/keyring/usr/share/keyrings/unbound-archive-keyring.pgp" \
+            | grep -qx 'fpr:::::::::6287DE66459929AA1C01E146495A6C1982647E05:'
+      - uses: actions/upload-artifact@v7
+        with:
+          name: unbound-debs-all
+          path: debs/*.deb
+          if-no-files-found: error
+
+  deb-install:
+    name: ci/deb-install
+    needs: [deb, deb-all]
+    runs-on: [self-hosted, unbound]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: unbound-debs-*
+          path: ci/deb/install-test/debs
+          merge-multiple: true
+      - name: Install unbound-desktop into a clean Debian 13
+        run: |
+          image=unbound-install-test:${{ github.sha }}
+          docker build --quiet --tag "$image" ci/deb/install-test
+          trap 'docker rmi --force "$image" >/dev/null' EXIT
+          docker run --rm "$image"
+
   vm:
     name: ci/vm
     runs-on: [self-hosted, unbound]

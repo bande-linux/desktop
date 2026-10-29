@@ -21,3 +21,12 @@ debian/*.substvars
 .worktrees/
 .factory/cache/
 .sccache/
+
+/packaging/*/debian/*/
+!/packaging/*/debian/source/
+/packaging/*/debian/files
+/packaging/*/debian/*.substvars
+/packaging/*/debian/debhelper-build-stamp
+/packaging/*.buildinfo
+/packaging/*.changes
+/ci/deb/install-test/debs/

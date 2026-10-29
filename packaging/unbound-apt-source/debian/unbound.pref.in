@@ -1,0 +1,7 @@
+Package: *
+Pin: origin @ARCHIVE_HOST@
+Pin-Priority: -1
+
+Package: unbound-* xdg-desktop-portal-unbound
+Pin: origin @ARCHIVE_HOST@
+Pin-Priority: 500

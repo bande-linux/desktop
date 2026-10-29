@@ -1,0 +1,19 @@
+#!/usr/bin/make -f
+
+ARCHIVE_HOST := unbound-linux.github.io
+ARCHIVE_URL := https://$(ARCHIVE_HOST)/apt
+KEYRING := /usr/share/keyrings/unbound-archive-keyring.pgp
+SUBSTITUTE := sed -e 's|@ARCHIVE_URL@|$(ARCHIVE_URL)|' -e 's|@ARCHIVE_HOST@|$(ARCHIVE_HOST)|' -e 's|@KEYRING@|$(KEYRING)|'
+
+%:
+	dh $@
+
+execute_after_dh_install:
+	install -d debian/unbound-archive-keyring/etc/apt/preferences.d
+	$(SUBSTITUTE) debian/unbound.pref.in > debian/unbound-archive-keyring/etc/apt/preferences.d/unbound.pref
+	install -d debian/unbound-apt-source/etc/apt/sources.list.d
+	$(SUBSTITUTE) -e 's|@SUITE@|trixie|' debian/unbound.sources.in \
+		> debian/unbound-apt-source/etc/apt/sources.list.d/unbound.sources
+	install -d debian/unbound-apt-source-testing/etc/apt/sources.list.d
+	$(SUBSTITUTE) -e 's|@SUITE@|trixie-testing|' debian/unbound.sources.in \
+		> debian/unbound-apt-source-testing/etc/apt/sources.list.d/unbound.sources

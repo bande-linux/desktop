@@ -1,0 +1,36 @@
+Source: unbound-apt-source
+Section: misc
+Priority: optional
+Maintainer: Mikael Hug <mikaelhug@gmail.com>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.7.2
+Rules-Requires-Root: no
+
+Package: unbound-archive-keyring
+Architecture: all
+Multi-Arch: foreign
+Depends: ${misc:Depends}
+Description: OpenPGP key of the Unbound APT repository
+ The key that signs the Unbound APT repository at
+ https://unbound-linux.github.io/apt, and an APT pin that allows the
+ repository to provide only Unbound's own packages.
+
+Package: unbound-apt-source
+Architecture: all
+Depends: unbound-archive-keyring, ${misc:Depends}
+Conflicts: unbound-apt-source-testing
+Replaces: unbound-apt-source-testing
+Description: Unbound APT repository, release channel
+ Makes APT follow the release channel of the Unbound APT repository, which
+ carries tagged versions of the Unbound desktop. Install
+ unbound-apt-source-testing instead to follow every change merged to main.
+
+Package: unbound-apt-source-testing
+Architecture: all
+Depends: unbound-archive-keyring, ${misc:Depends}
+Conflicts: unbound-apt-source
+Replaces: unbound-apt-source
+Description: Unbound APT repository, testing channel
+ Makes APT follow the testing channel of the Unbound APT repository, which
+ carries a build of every change merged to main. Install unbound-apt-source
+ instead to follow tagged releases only.

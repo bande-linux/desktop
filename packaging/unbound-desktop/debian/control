@@ -1,0 +1,39 @@
+Source: unbound-desktop
+Section: metapackages
+Priority: optional
+Maintainer: Mikael Hug <mikaelhug@gmail.com>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.7.2
+Rules-Requires-Root: no
+
+Package: unbound-desktop
+Architecture: all
+Depends: unbound-compositor (= ${binary:Version}),
+         unbound-config (= ${binary:Version}),
+         unbound-power (= ${binary:Version}),
+         unbound-notify (= ${binary:Version}),
+         unbound-clipboard (= ${binary:Version}),
+         unbound-panel (= ${binary:Version}),
+         unbound-launcher (= ${binary:Version}),
+         unbound-lock (= ${binary:Version}),
+         xdg-desktop-portal-unbound (= ${binary:Version}),
+         xdg-desktop-portal,
+         dbus-user-session,
+         default-logind | logind,
+         libpam-systemd,
+         ${misc:Depends}
+Recommends: unbound-term (= ${binary:Version}),
+            unbound-screenshot (= ${binary:Version}),
+            unbound-files (= ${binary:Version}),
+            unbound-settings (= ${binary:Version}),
+            unbound-tray (= ${binary:Version}),
+            unbound-automount (= ${binary:Version}),
+            fonts-inter,
+            xdg-user-dirs,
+            upower,
+            udisks2
+Suggests: firefox-esr
+Description: Unbound desktop environment
+ The Unbound desktop: a pure Wayland desktop with its own compositor, shell,
+ session services and applications. Installing this package adds "Unbound"
+ to the sessions a display manager such as GDM, SDDM or greetd offers.

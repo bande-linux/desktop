@@ -11,8 +11,8 @@ use smithay::utils::{Clock, Monotonic, Size};
 use smithay::wayland::socket::ListeningSocketSource;
 use unbound_compositor::{
     CLIPBOARD_DAEMON, DrmOutput, FrameClock, FrameOutput, FrameScheduler, GREETER, Headless,
-    LAUNCHER, PANEL, REFRESH, Renderer, SCREENSHOT, SessionRequest, SessionRole, SessionUpkeep,
-    export_session_environment, follow_session,
+    LAUNCHER, MENU_BAR, PANEL, REFRESH, Renderer, SCREENSHOT, SessionRequest, SessionRole,
+    SessionUpkeep, export_session_environment, follow_session,
 };
 
 const HEADLESS_SIZE: (i32, i32) = (1920, 1080);
@@ -186,6 +186,7 @@ fn start_user_session<O: 'static>(
     }
     for (executable, role) in [
         (CLIPBOARD_DAEMON, SessionRole::ClipboardDaemon),
+        (MENU_BAR, SessionRole::Shell),
         (PANEL, SessionRole::Shell),
         (LAUNCHER, SessionRole::Shell),
         (SCREENSHOT, SessionRole::Shell),

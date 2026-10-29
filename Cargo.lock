@@ -3766,6 +3766,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "unbound-monitor"
+version = "0.1.0"
+dependencies = [
+ "image",
+ "image-compare",
+ "rustix 1.1.6",
+ "tempfile",
+ "tracing",
+ "unbound-l10n",
+ "unbound-log",
+ "unbound-toolkit",
+ "unbound-xdg",
+]
+
+[[package]]
 name = "unbound-network"
 version = "0.1.0"
 dependencies = [
@@ -3874,13 +3889,21 @@ dependencies = [
 name = "unbound-settings"
 version = "0.1.0"
 dependencies = [
+ "accesskit",
+ "image",
+ "image-compare",
  "tempfile",
  "tracing",
+ "unbound-audio",
+ "unbound-bluetooth",
+ "unbound-compositor",
  "unbound-config",
  "unbound-l10n",
  "unbound-log",
+ "unbound-network",
  "unbound-test-bus",
  "unbound-toolkit",
+ "wayland-client",
  "zbus",
 ]
 

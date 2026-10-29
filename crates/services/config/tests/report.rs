@@ -95,10 +95,7 @@ fn a_new_error_replaces_the_notification_and_a_fix_closes_it() {
     replace_file(&fixture.path, "dock {\n    edge \"middle\"\n}\n");
     let first = fixture.wait_for(|active| active.len() == 1)[0].id;
 
-    replace_file(
-        &fixture.path,
-        "appearance \"dark\"\nwallpaper \"sea.png\"\n",
-    );
+    replace_file(&fixture.path, "appearance \"dark\"\ntheme \"graphite\"\n");
     let replaced = fixture.wait_for(|active| {
         active
             .iter()

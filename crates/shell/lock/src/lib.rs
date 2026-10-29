@@ -1,3 +1,4 @@
+mod backdrop;
 mod pam;
 mod user;
 
@@ -9,12 +10,17 @@ use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionData, ActionRequest, Node, Role, TreeId, TreeUpdate};
 use unbound_l10n::Localizer;
-use unbound_toolkit::ui::{Context, Event, SecureField, Size, Ui, Widget, WidgetId};
+use unbound_toolkit::ui::{
+    Animated, Context, Event, SecureField, Size, Spring, Ui, Widget, WidgetId,
+};
 use unbound_toolkit::{
-    Color, Item, Palette, Paragraph, Point, Rect, Scene, Shape, TextAlign, TextStyle, TextSystem,
+    Color, Image, Item, Palette, Paragraph, Point, Rect, Scene, Shape, TextAlign, TextStyle,
+    TextSystem,
 };
 
+pub use backdrop::{BackdropSource, load_backdrop};
 pub use pam::{AuthError, authenticate};
+pub use unbound_wallpaper::{Inbox, Variant};
 pub use user::{User, current as current_user, display_name};
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-lock.ftl");
@@ -60,6 +66,8 @@ struct Model {
     checking: bool,
     shake_from: Option<Instant>,
     now: Instant,
+    backdrop: Option<Image>,
+    backdrop_shown: Animated,
 }
 
 type Shared = Rc<RefCell<Model>>;
@@ -130,6 +138,18 @@ impl Widget for LockView {
             shape: Shape::rect(self.frame),
             paint: BACKGROUND.into(),
         });
+        let model = self.model.borrow();
+        if let Some(image) = &model.backdrop {
+            let (alpha, _) = model.backdrop_shown.value_at(model.now);
+            items.push(Item::Opacity {
+                alpha,
+                items: vec![Item::Image {
+                    rect: self.frame,
+                    image: image.clone(),
+                }],
+            });
+        }
+        drop(model);
         let Some([date, time, initial, name]) = &self.paragraphs else {
             return;
         };
@@ -223,6 +243,8 @@ impl LockScreen {
             checking: false,
             shake_from: None,
             now: Instant::now(),
+            backdrop: None,
+            backdrop_shown: Animated::new(0.0),
         }));
         let submitted = model.clone();
         let field = SecureField::new(&L10N.tr("enter-password"), FIELD_FONT, move |password| {
@@ -297,6 +319,18 @@ impl LockScreen {
         let mut model = self.model.borrow_mut();
         model.checking = false;
         model.shake_from = Some(at);
+    }
+
+    pub fn set_backdrop(&mut self, image: Image, now: Instant) {
+        let mut model = self.model.borrow_mut();
+        model.backdrop = Some(image);
+        model
+            .backdrop_shown
+            .animate_at(now, false, 1.0, Spring::GENTLE);
+    }
+
+    pub fn is_fading(&self, now: Instant) -> bool {
+        self.model.borrow().backdrop_shown.value_at(now).1
     }
 
     pub fn shaking_until(&self) -> Option<Instant> {

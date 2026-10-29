@@ -3740,6 +3740,9 @@ dependencies = [
  "unbound-l10n",
  "unbound-log",
  "unbound-toolkit",
+ "unbound-wallpaper",
+ "unbound-xdg",
+ "zbus",
 ]
 
 [[package]]

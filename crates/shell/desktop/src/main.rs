@@ -225,7 +225,7 @@ impl Surface {
         if self.viewport == Some((size, scale)) || size.0 == 0 || size.1 == 0 {
             return;
         }
-        let rescaled = self.viewport.is_some_and(|(_, previous)| previous != scale);
+        let relist = self.viewport.is_none_or(|(_, previous)| previous != scale);
         self.viewport = Some((size, scale));
         self.view.set_viewport(
             (size.0 as f32, size.1 as f32),
@@ -233,7 +233,7 @@ impl Surface {
             self.area(size),
             Instant::now(),
         );
-        if rescaled {
+        if relist {
             self.icons.clear();
             self.relist();
         }
@@ -650,7 +650,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         scheme: appearance.scheme,
         viewport: None,
     };
-    surface.relist();
     unbound_toolkit::run(&mut window, &mut surface)?;
     Ok(())
 }

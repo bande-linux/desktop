@@ -531,7 +531,7 @@ impl SettingsView {
             .push(Command::Network(NetworkCommand::Join(network, password)));
     }
 
-    fn select_pane(&mut self, pane: PaneId) {
+    pub fn select_pane(&mut self, pane: PaneId) {
         if pane == self.pane {
             return;
         }

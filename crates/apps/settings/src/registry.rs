@@ -13,6 +13,34 @@ pub enum PaneId {
     Keyboard,
 }
 
+impl PaneId {
+    const KEYWORDS: [(Self, &'static str); 9] = [
+        (Self::Wifi, "wifi"),
+        (Self::Bluetooth, "bluetooth"),
+        (Self::Notifications, "notifications"),
+        (Self::Sound, "sound"),
+        (Self::Appearance, "appearance"),
+        (Self::Dock, "dock"),
+        (Self::Displays, "displays"),
+        (Self::LockScreen, "lock-screen"),
+        (Self::Keyboard, "keyboard"),
+    ];
+
+    pub fn keyword(self) -> &'static str {
+        Self::KEYWORDS
+            .iter()
+            .find(|(pane, _)| *pane == self)
+            .map_or("", |(_, keyword)| keyword)
+    }
+
+    pub fn from_keyword(keyword: &str) -> Option<Self> {
+        Self::KEYWORDS
+            .iter()
+            .find(|(_, candidate)| *candidate == keyword)
+            .map(|(pane, _)| *pane)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SettingId {
     WifiPower,

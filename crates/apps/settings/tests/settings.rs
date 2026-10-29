@@ -318,3 +318,14 @@ fn changes_are_written_through_org_unbound_config() {
     );
     assert_eq!(client.read(&unbound_settings::CONFIG_SETTINGS).len(), 7);
 }
+
+#[test]
+fn every_pane_opens_by_its_keyword() {
+    let mut view = view();
+    for pane in panes() {
+        assert_eq!(PaneId::from_keyword(pane.id.keyword()), Some(pane.id));
+        view.select_pane(pane.id);
+        assert_eq!(view.selected_pane(), pane.id);
+    }
+    assert_eq!(PaneId::from_keyword("network"), None);
+}

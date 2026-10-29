@@ -1,7 +1,7 @@
 use std::os::fd::BorrowedFd;
 use std::process::ExitCode;
 
-use unbound_settings::{Displays, Feed, L10N, Services, SettingsView, feed};
+use unbound_settings::{Displays, Feed, L10N, PaneId, Services, SettingsView, feed};
 use unbound_toolkit::{App, Rect, Role, Scene, TextSystem, Window, WindowEvent};
 
 const APP_ID: &str = "org.unbound.Settings";
@@ -82,6 +82,12 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let services = Services::start(&session, system.as_ref(), &updates);
     let mut window = Window::open(Role::toplevel(&L10N.tr("title"), APP_ID), WINDOW_SIZE)?;
     let mut view = SettingsView::new(window.appearance().palette(), TextSystem::new());
+    let requested = std::env::args().nth(1);
+    match requested.as_deref().map(PaneId::from_keyword) {
+        Some(Some(pane)) => view.select_pane(pane),
+        Some(None) => tracing::warn!("no settings pane {requested:?}"),
+        None => {}
+    }
     let displays = Displays::connect();
     if let Some(displays) = &displays {
         view.set_displays(displays.list());

@@ -12,7 +12,7 @@ use smithay::wayland::socket::ListeningSocketSource;
 use unbound_compositor::{
     CLIPBOARD_DAEMON, DrmOutput, FrameClock, FrameOutput, FrameScheduler, Headless, LAUNCHER,
     PANEL, REFRESH, Renderer, SCREENSHOT, SessionRequest, SessionRole, export_session_environment,
-    follow_session,
+    follow_session, notify_ready,
 };
 
 const HEADLESS_SIZE: (i32, i32) = (1920, 1080);
@@ -144,6 +144,9 @@ fn listen<O: 'static>(
             eprintln!("unbound-compositor: rejected client: {error}");
         }
     })?;
+    if let Err(error) = notify_ready(std::env::var_os("NOTIFY_SOCKET").as_deref()) {
+        eprintln!("unbound-compositor: cannot tell the service manager it is ready: {error}");
+    }
     for fd in [app.compositor.poll_fd()?, app.compositor.fence_fd()?] {
         handle.insert_source(
             Generic::new(fd, Interest::READ, Mode::Level),

@@ -3396,6 +3396,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "unbound-settings"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
+ "unbound-config",
+ "unbound-test-bus",
+ "unbound-toolkit",
+ "zbus",
+]
+
+[[package]]
 name = "unbound-spring"
 version = "0.1.0"
 

@@ -3079,6 +3079,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "unbound-menubar"
+version = "0.1.0"
+dependencies = [
+ "jiff",
+ "unbound-apps",
+ "unbound-config",
+ "unbound-toolkit",
+]
+
+[[package]]
 name = "unbound-notify"
 version = "0.1.0"
 dependencies = [

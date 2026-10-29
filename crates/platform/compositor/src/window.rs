@@ -6,14 +6,14 @@ use smithay::wayland::compositor::with_states;
 use smithay::wayland::foreign_toplevel_list::ForeignToplevelHandle;
 use smithay::wayland::shell::xdg::{SurfaceCachedState, ToplevelSurface};
 
-use smithay::backend::renderer::element::surface::{
-    WaylandSurfaceRenderElement, render_elements_from_surface_tree,
-};
-use smithay::backend::renderer::element::{Id, Kind};
-use unbound_render::VulkanRenderer;
+use smithay::backend::renderer::element::Id;
 
-use crate::scene::{Area, CORNER_RADIUS, Placement, ShadowElement, WindowElement, rounded};
-use crate::state::{OutputElement, Rect, State};
+use unbound_spring::Spring;
+
+use crate::motion::{Look, Motion};
+use crate::scene::Drawn;
+use crate::state::{Rect, State};
+use crate::tile::{TILED, Tile};
 
 pub struct Window {
     pub(crate) toplevel: ToplevelSurface,
@@ -25,7 +25,11 @@ pub struct Window {
     pub(crate) acked: Option<Serial>,
     pub(crate) resize: Option<Resize>,
     pub(crate) minimized: Option<u64>,
-    shadow: Id,
+    pub(crate) shadow: Id,
+    pub(crate) veil: Id,
+    pub(crate) motion: Option<Motion>,
+    pub(crate) drawn: Option<Drawn>,
+    pub(crate) tile: Option<(Tile, Rect)>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -60,7 +64,7 @@ impl Resize {
         size
     }
 
-    fn location_for(&self, size: Size<i32, Logical>) -> Point<i32, Logical> {
+    pub(crate) fn location_for(&self, size: Size<i32, Logical>) -> Point<i32, Logical> {
         let mut location = self.initial.location;
         if self.has(LEFT) {
             location.x += self.initial.size.w - size.w;
@@ -85,6 +89,10 @@ impl Window {
             resize: None,
             minimized: None,
             shadow: Id::new(),
+            veil: Id::new(),
+            motion: None,
+            drawn: None,
+            tile: None,
         }
     }
 
@@ -121,47 +129,12 @@ impl Window {
         self.toplevel.wl_surface()
     }
 
-    pub(crate) fn render_elements(
-        &self,
-        renderer: &mut VulkanRenderer,
-        scale: f64,
-        active: bool,
-    ) -> Vec<OutputElement> {
-        let origin = self
-            .surface_origin()
-            .to_f64()
-            .to_physical(scale)
-            .to_i32_round::<i32>();
-        let surfaces: Vec<WaylandSurfaceRenderElement<VulkanRenderer>> =
-            render_elements_from_surface_tree(
-                renderer,
-                self.surface(),
-                origin,
-                scale,
-                1.0,
-                Kind::Unspecified,
-            );
-        let geometry = match self.geometry() {
-            Some(geometry) if !self.has_state(xdg_toplevel::State::Fullscreen) => geometry,
-            _ => return surfaces.into_iter().map(OutputElement::Surface).collect(),
-        };
-        let area: Area = Rectangle::new(
-            geometry.location.to_f64().to_physical(scale),
-            geometry.size.to_f64().to_physical(scale),
-        );
-        let clip = rounded(area, CORNER_RADIUS * scale);
-        let placement = Placement::fixed(area);
-        surfaces
-            .into_iter()
-            .map(|surface| OutputElement::Window(WindowElement::new(surface, placement, clip)))
-            .chain([OutputElement::Shadow(ShadowElement::new(
-                self.shadow.clone(),
-                clip,
-                active,
-                scale,
-                1.0,
-            ))])
-            .collect()
+    pub(crate) fn shown_look(&self) -> Option<Look> {
+        self.motion.as_ref().and_then(Motion::shown)
+    }
+
+    pub(crate) fn rendered(&self) -> bool {
+        self.visible() || (self.size.is_some() && self.shown_look().is_some())
     }
 
     pub(crate) fn surface_origin(&self) -> Point<i32, Logical> {
@@ -256,6 +229,9 @@ impl State {
                 }
             }
         }
+        if !mapped && size.is_some() {
+            self.open_window(index);
+        }
         let surface = surface.clone();
         if size.is_some() {
             self.publish_toplevel(&surface);
@@ -299,6 +275,7 @@ impl State {
     fn place(&mut self, index: usize, state: xdg_toplevel::State, target: Option<Rect>) {
         let window = &mut self.windows[index];
         if window.restore.is_none()
+            && window.tile.is_none()
             && let Some(geometry) = window.geometry()
             && !window.has_state(xdg_toplevel::State::Maximized)
             && !window.has_state(xdg_toplevel::State::Fullscreen)
@@ -316,6 +293,9 @@ impl State {
             }
             match target {
                 Some(target) => {
+                    for tiled in TILED {
+                        pending.states.unset(tiled);
+                    }
                     pending.states.set(state);
                     pending.size = Some(target.size);
                 }
@@ -325,6 +305,9 @@ impl State {
                 }
             }
         });
+        if target.is_some() {
+            window.tile = None;
+        }
         let location = target.or(window.restore).map(|rect| rect.location);
         if target.is_none() {
             window.restore = None;
@@ -334,7 +317,15 @@ impl State {
         {
             window.pending_location = Some((serial, location));
         }
-        self.needs_redraw = true;
+        self.animate_window(
+            index,
+            if state == xdg_toplevel::State::Fullscreen {
+                Spring::GENTLE
+            } else {
+                Spring::STANDARD
+            },
+            None,
+        );
     }
 
     pub(crate) fn maximize(&mut self, surface: &WlSurface) {
@@ -415,14 +406,15 @@ impl State {
         }
         self.minimize_sequence += 1;
         self.windows[index].minimized = Some(self.minimize_sequence);
-        self.needs_redraw = true;
+        self.animate_window(index, Spring::GENTLE, None);
         self.refocus_after_losing(surface);
     }
 
     pub(crate) fn unminimize(&mut self, surface: &WlSurface) {
-        if let Some(index) = self.window_index(surface) {
-            self.windows[index].minimized = None;
-            self.needs_redraw = true;
+        if let Some(index) = self.window_index(surface)
+            && self.windows[index].minimized.take().is_some()
+        {
+            self.restore_window(index);
         }
     }
 
@@ -468,6 +460,11 @@ impl State {
             pending.size = Some(size);
         });
         window.configure();
+        let rect = Rect {
+            location: resize.location_for(size),
+            size,
+        };
+        self.share_tiled_edge(index, rect);
     }
 
     pub(crate) fn end_resize(&mut self, surface: &WlSurface) {
@@ -505,7 +502,8 @@ impl State {
             return None;
         }
         let geometry = window.geometry()?;
-        if !window.has_state(xdg_toplevel::State::Maximized) {
+        let tiled = window.tile.is_some();
+        if !tiled && !window.has_state(xdg_toplevel::State::Maximized) {
             return Some(geometry.location);
         }
         let restored = window.restore.map_or(geometry.size, |restore| restore.size);
@@ -516,7 +514,12 @@ impl State {
             )
             .unwrap_or(0);
         let location = Point::from((x, geometry.location.y));
-        self.place(index, xdg_toplevel::State::Maximized, None);
+        if tiled {
+            self.untile(index);
+        } else {
+            self.place(index, xdg_toplevel::State::Maximized, None);
+        }
+        self.windows[index].motion = None;
         self.windows[index].pending_location = None;
         self.windows[index].location = location;
         Some(location)

@@ -47,8 +47,11 @@ impl Session {
             scheduler: FrameScheduler::new(FrameClock::new(Duration::ZERO, REFRESH)),
             pixels,
         };
-        let mapped = session.run_from(Duration::ZERO);
-        (session, mapped)
+        let mut settled = session.run_from(Duration::ZERO);
+        while session.server.is_animating() {
+            settled = session.run_from(settled.time);
+        }
+        (session, settled)
     }
 
     fn deadline_of_next_vblank(&self, after: Vblank) -> (Vblank, Duration) {

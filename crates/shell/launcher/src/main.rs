@@ -2,11 +2,10 @@ use std::collections::HashMap;
 use std::process::ExitCode;
 
 use accesskit::TreeUpdate;
-use unbound_config::{Appearance, Config, config_path};
 use unbound_launcher::{ICON_SIZE, Launcher, LauncherAction, LauncherApp};
 use unbound_toolkit::{
-    App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Palette, Rect, Role, Scene, Scheme,
-    TextSystem, Window, WindowError, WindowEvent,
+    App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Rect, Role, Scene, TextSystem,
+    Window, WindowError, WindowEvent,
 };
 use unbound_xdg::{
     DesktopEntry, Locale, applications, current_desktops, data_dirs, find_icon, launch,
@@ -71,6 +70,9 @@ impl App for LauncherShell {
                 }
                 self.run_actions(window);
             }
+            WindowEvent::AppearanceChanged(appearance) => {
+                self.launcher.ui.context().palette = appearance.palette();
+            }
             _ => {}
         }
     }
@@ -96,16 +98,6 @@ fn icons(entries: &[DesktopEntry]) -> HashMap<String, Option<Image>> {
 }
 
 fn run() -> Result<(), WindowError> {
-    let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
-    let config_home = std::env::var_os("XDG_CONFIG_HOME").map(std::path::PathBuf::from);
-    let config = config_path(config_home.as_deref(), home.as_deref())
-        .and_then(|path| std::fs::read_to_string(path).ok())
-        .and_then(|source| Config::parse(&source).ok())
-        .unwrap_or_default();
-    let scheme = match config.appearance {
-        Appearance::Dark => Scheme::Dark,
-        Appearance::Light | Appearance::Automatic => Scheme::Light,
-    };
     let entries = applications(
         &data_dirs(),
         Locale::from_env().as_ref(),
@@ -138,7 +130,7 @@ fn run() -> Result<(), WindowError> {
     )?;
     window.hide()?;
     let mut shell = LauncherShell {
-        launcher: Launcher::new(apps, Palette::for_scheme(scheme), TextSystem::new()),
+        launcher: Launcher::new(apps, window.appearance().palette(), TextSystem::new()),
         entries,
     };
     unbound_toolkit::run(&mut window, &mut shell)

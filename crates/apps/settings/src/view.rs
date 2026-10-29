@@ -61,6 +61,10 @@ impl SettingsView {
         &self.panes
     }
 
+    pub fn set_palette(&mut self, palette: Palette) {
+        self.palette = palette;
+    }
+
     pub fn set_value(&mut self, key: Key, value: Value) {
         self.values.insert(key, value);
     }

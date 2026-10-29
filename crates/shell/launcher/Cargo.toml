@@ -8,11 +8,10 @@ repository.workspace = true
 [dependencies]
 accesskit.workspace = true
 tracing.workspace = true
-unbound-config.workspace = true
 unbound-l10n.workspace = true
 unbound-log.workspace = true
-unbound-toolkit.workspace = true
 unbound-xdg.workspace = true
+unbound-toolkit.workspace = true
 
 [dev-dependencies]
 image.workspace = true

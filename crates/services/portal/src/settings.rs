@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
 
-use unbound_toolkit::{Palette, Scheme};
+use unbound_graphics::{Palette, Scheme};
 use zbus::blocking::Connection;
 use zbus::object_server::SignalEmitter;
 use zbus::zvariant::{OwnedValue, Value};

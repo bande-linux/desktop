@@ -5,14 +5,14 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
-use unbound_config::{Appearance, Config, DockEdge, config_path};
+use unbound_config::{Config, DockEdge, config_path};
 use unbound_dock::{
     Actions, DockAction, DockApp, ICON_SIZE, THICKNESS, clock_text, dock_ui, merge_apps,
 };
 use unbound_toolkit::ui::Ui;
 use unbound_toolkit::{
-    App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Palette, Role, Scene, Scheme,
-    TextSystem, Window, WindowError, WindowEvent,
+    App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Palette, Role, Scene, TextSystem,
+    Window, WindowError, WindowEvent,
 };
 use unbound_xdg::{DesktopEntry, Locale, applications, current_desktops, data_dirs, find_icon};
 
@@ -161,6 +161,10 @@ impl App for Dock {
                 self.rebuild();
                 window.request_redraw();
             }
+            WindowEvent::AppearanceChanged(appearance) => {
+                self.palette = appearance.palette();
+                self.rebuild();
+            }
             _ => {}
         }
     }
@@ -214,10 +218,6 @@ fn run() -> Result<(), WindowError> {
             top: false,
         },
     };
-    let scheme = match config.appearance {
-        Appearance::Dark => Scheme::Dark,
-        Appearance::Light | Appearance::Automatic => Scheme::Light,
-    };
     let mut window = Window::open(
         Role::Layer(LayerOptions {
             layer: LayerKind::Top,
@@ -231,7 +231,7 @@ fn run() -> Result<(), WindowError> {
     let locale = Locale::from_env();
     let mut dock = Dock {
         edge,
-        palette: Palette::for_scheme(scheme),
+        palette: window.appearance().palette(),
         entries: applications(&data_dirs(), locale.as_ref(), &current_desktops()),
         icons: HashMap::new(),
         actions: Rc::new(RefCell::new(Vec::new())),

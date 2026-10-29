@@ -10,7 +10,6 @@ accesskit.workspace = true
 tracing.workspace = true
 unbound-audio.workspace = true
 unbound-bluetooth.workspace = true
-unbound-config.workspace = true
 unbound-l10n.workspace = true
 unbound-log.workspace = true
 unbound-network.workspace = true
@@ -18,7 +17,6 @@ unbound-toolkit.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]
-accesskit.workspace = true
 
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"

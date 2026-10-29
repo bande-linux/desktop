@@ -1,13 +1,11 @@
-use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
-use unbound_config::{Appearance, Config, config_path};
 use unbound_menubar::{HEIGHT, MenuBar, app_name, clock_text};
 use unbound_toolkit::ui::Event;
 use unbound_toolkit::{
-    App, Edges, KeyboardFocus, LayerKind, LayerOptions, Palette, Role, Scene, Scheme, TextSystem,
-    Window, WindowEvent,
+    App, Edges, KeyboardFocus, LayerKind, LayerOptions, Role, Scene, TextSystem, Window,
+    WindowEvent,
 };
 use unbound_xdg::{Locale, applications, current_desktops, data_dirs};
 
@@ -37,6 +35,9 @@ impl App for Bar {
                     tracing::warn!("cannot open Control Center: {error}");
                 }
             }
+            WindowEvent::AppearanceChanged(appearance) => {
+                self.bar.set_palette(appearance.palette());
+            }
             _ => {}
         }
     }
@@ -50,19 +51,6 @@ impl App for Bar {
         if self.bar.set_clock(clock_text(&jiff::Zoned::now())) {
             window.request_redraw();
         }
-    }
-}
-
-fn scheme() -> Scheme {
-    let home = std::env::var_os("HOME").map(PathBuf::from);
-    let config_home = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from);
-    let config = config_path(config_home.as_deref(), home.as_deref())
-        .and_then(|path| std::fs::read_to_string(path).ok())
-        .and_then(|source| Config::parse(&source).ok())
-        .unwrap_or_default();
-    match config.appearance {
-        Appearance::Dark => Scheme::Dark,
-        Appearance::Light | Appearance::Automatic => Scheme::Light,
     }
 }
 
@@ -92,7 +80,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     )?;
     let mut bar = Bar {
         bar: MenuBar::new(
-            Palette::for_scheme(scheme()),
+            window.appearance().palette(),
             TextSystem::new(),
             clock_text(&jiff::Zoned::now()),
         ),

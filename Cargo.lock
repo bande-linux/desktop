@@ -3564,7 +3564,6 @@ dependencies = [
  "tracing",
  "unbound-audio",
  "unbound-bluetooth",
- "unbound-config",
  "unbound-l10n",
  "unbound-log",
  "unbound-network",
@@ -3595,10 +3594,26 @@ dependencies = [
  "image",
  "tempfile",
  "tracing",
- "unbound-config",
  "unbound-l10n",
  "unbound-log",
  "unbound-toolkit",
+]
+
+[[package]]
+name = "unbound-graphics"
+version = "0.1.0"
+dependencies = [
+ "ab_glyph",
+ "fontique",
+ "image",
+ "parley",
+ "pollster",
+ "resvg",
+ "skrifa",
+ "tempfile",
+ "vello_cpu",
+ "vello_gpu",
+ "wgpu",
 ]
 
 [[package]]
@@ -3632,7 +3647,6 @@ dependencies = [
  "image",
  "image-compare",
  "tracing",
- "unbound-config",
  "unbound-l10n",
  "unbound-log",
  "unbound-toolkit",
@@ -3651,7 +3665,6 @@ dependencies = [
  "libloading",
  "rustix 1.1.6",
  "tracing",
- "unbound-config",
  "unbound-l10n",
  "unbound-log",
  "unbound-toolkit",
@@ -3672,7 +3685,6 @@ version = "0.1.0"
 dependencies = [
  "jiff",
  "tracing",
- "unbound-config",
  "unbound-log",
  "unbound-toolkit",
  "unbound-xdg",
@@ -3795,7 +3807,6 @@ dependencies = [
  "image",
  "image-compare",
  "tracing",
- "unbound-config",
  "unbound-l10n",
  "unbound-log",
  "unbound-toolkit",
@@ -3826,25 +3837,31 @@ dependencies = [
 name = "unbound-toolkit"
 version = "0.1.0"
 dependencies = [
- "ab_glyph",
  "accesskit",
- "accesskit_unix",
- "fontique",
- "image",
- "parley",
- "pollster",
- "raw-window-handle",
- "resvg",
- "rustix 1.1.6",
- "skrifa",
  "smithay",
- "tempfile",
  "unbound-compositor",
- "unbound-protocols",
+ "unbound-graphics",
  "unbound-test-bus",
  "unbound-test-wayland",
- "vello_cpu",
- "vello_gpu",
+ "unbound-toolkit-platform",
+ "unbound-widgets",
+ "zbus",
+]
+
+[[package]]
+name = "unbound-toolkit-platform"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "accesskit_unix",
+ "pollster",
+ "raw-window-handle",
+ "rustix 1.1.6",
+ "smithay",
+ "unbound-compositor",
+ "unbound-graphics",
+ "unbound-protocols",
+ "unbound-test-bus",
  "wayland-backend",
  "wayland-client",
  "wayland-protocols",
@@ -3862,6 +3879,15 @@ dependencies = [
  "unbound-log",
  "unbound-test-bus",
  "zbus",
+]
+
+[[package]]
+name = "unbound-widgets"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "parley",
+ "unbound-graphics",
 ]
 
 [[package]]
@@ -4809,9 +4835,9 @@ dependencies = [
  "tempfile",
  "tracing",
  "unbound-config",
+ "unbound-graphics",
  "unbound-log",
  "unbound-test-bus",
- "unbound-toolkit",
  "zbus",
 ]
 

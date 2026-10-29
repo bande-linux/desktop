@@ -1,0 +1,159 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+use std::collections::HashMap;
+use std::os::unix::net::UnixStream;
+use std::sync::mpsc::{self, Sender};
+use std::thread;
+use std::time::{Duration, Instant};
+
+use smithay::utils::Size;
+use unbound_compositor::{FrameClock, FrameScheduler, Headless, REFRESH, Renderer};
+use unbound_graphics::{Appearance, Color, Scene, Scheme};
+use unbound_test_bus::SessionBus;
+use unbound_toolkit_platform::{App, Role, Window, WindowEvent};
+use zbus::zvariant::{OwnedValue, Value};
+
+const OUTPUT: (i32, i32) = (320, 240);
+const TIMEOUT: Duration = Duration::from_secs(60);
+const PORTAL_PATH: &str = "/org/freedesktop/portal/desktop";
+const SETTINGS: &str = "org.freedesktop.portal.Settings";
+const APPEARANCE: &str = "org.freedesktop.appearance";
+const ACCENT: (f64, f64, f64) = (0.8, 0.2, 0.4);
+
+struct Settings;
+
+#[zbus::interface(name = "org.freedesktop.portal.Settings")]
+impl Settings {
+    fn read_all(&self, namespaces: Vec<String>) -> HashMap<String, HashMap<String, OwnedValue>> {
+        let owned = |value: Value<'_>| OwnedValue::try_from(value).expect("owned value");
+        let appearance = HashMap::from([
+            ("color-scheme".to_owned(), owned(Value::from(1u32))),
+            ("accent-color".to_owned(), owned(Value::from(ACCENT))),
+        ]);
+        HashMap::from([(APPEARANCE.to_owned(), appearance)])
+            .into_iter()
+            .filter(|(namespace, _)| namespaces.is_empty() || namespaces.contains(namespace))
+            .collect()
+    }
+}
+
+struct Follower {
+    seen: Vec<(Appearance, Appearance)>,
+    report: Sender<usize>,
+}
+
+impl App for Follower {
+    fn scene(&mut self, window: &mut Window) -> Scene {
+        let (width, height) = window.size();
+        Scene {
+            width,
+            height,
+            background: window.appearance().palette().surface_background,
+            items: Vec::new(),
+        }
+    }
+
+    fn event(&mut self, window: &mut Window, event: WindowEvent) {
+        if let WindowEvent::AppearanceChanged(appearance) = event {
+            self.seen.push((appearance, window.appearance()));
+            let _ = self.report.send(self.seen.len());
+        }
+    }
+
+    fn finished(&self) -> bool {
+        self.seen.len() == 3
+    }
+}
+
+#[test]
+fn the_window_follows_the_portal_colour_scheme_and_accent() {
+    let bus = SessionBus::start().expect("private session bus");
+    unsafe {
+        std::env::set_var("DBUS_SESSION_BUS_ADDRESS", bus.address());
+    }
+    let portal = bus.connect().expect("portal connection");
+    portal
+        .object_server()
+        .at(PORTAL_PATH, Settings)
+        .expect("serve the settings");
+    portal
+        .request_name("org.freedesktop.portal.Desktop")
+        .expect("own the portal name");
+    let change = |namespace: &str, key: &str, value: Value<'_>| {
+        portal
+            .emit_signal(
+                None::<()>,
+                PORTAL_PATH,
+                SETTINGS,
+                "SettingChanged",
+                &(namespace, key, value),
+            )
+            .expect("emit SettingChanged");
+    };
+
+    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let (client_end, server_end) = UnixStream::pair().expect("socket pair");
+    server.insert_client(server_end).expect("insert client");
+    let (report, reports) = mpsc::channel();
+    let app = thread::spawn(move || {
+        let mut window = Window::open_on(
+            client_end,
+            Role::toplevel("Appearance", "unbound-toolkit-test"),
+            (120, 80),
+        )
+        .expect("window");
+        let mut follower = Follower {
+            seen: Vec::new(),
+            report,
+        };
+        unbound_toolkit_platform::run(&mut window, &mut follower).expect("run the window");
+        follower.seen
+    });
+
+    let mut renderer = Renderer::new().expect("Vulkan renderer");
+    let mut scheduler = FrameScheduler::new(FrameClock::new(Duration::ZERO, REFRESH));
+    let start = Instant::now();
+    while !app.is_finished() {
+        assert!(start.elapsed() < TIMEOUT, "the window stopped following");
+        server.dispatch().expect("server dispatch");
+        scheduler
+            .poll(|| start.elapsed(), &mut server, &mut renderer)
+            .expect("compositor frame");
+        if let Ok(seen) = reports.try_recv() {
+            match seen {
+                1 => {
+                    change(
+                        "org.gnome.desktop.interface",
+                        "color-scheme",
+                        Value::from("prefer-light"),
+                    );
+                    change(APPEARANCE, "contrast", Value::from(1u32));
+                    change(APPEARANCE, "accent-color", Value::from((-1.0, -1.0, -1.0)));
+                }
+                2 => change(APPEARANCE, "color-scheme", Value::from(0u32)),
+                _ => {}
+            }
+        }
+        thread::sleep(Duration::from_millis(1));
+    }
+
+    let accent = Some(Color::hex(0xCC3366));
+    let dark = Appearance {
+        scheme: Scheme::Dark,
+        accent,
+    };
+    let dark_without_accent = Appearance {
+        scheme: Scheme::Dark,
+        accent: None,
+    };
+    let light = Appearance::default();
+    assert_eq!(
+        app.join().expect("app thread"),
+        [
+            (dark, dark),
+            (dark_without_accent, dark_without_accent),
+            (light, light)
+        ]
+    );
+    assert_eq!(dark.palette().accent_color, Color::hex(0xCC3366));
+}

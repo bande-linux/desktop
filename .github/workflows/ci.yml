@@ -27,6 +27,20 @@ jobs:
         run: ci/apt-install.sh pkg-config libxkbcommon-dev libgbm-dev libinput-dev libseat-dev libudev-dev libpipewire-0.3-dev libclang-dev
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Keep services off the widget crates and graphics and widgets off Wayland
+        run: |
+          forbid() {
+            if cargo tree --locked --manifest-path "$1" --edges normal --prefix none | grep -E "^($2) "; then
+              echo "$1 must not depend on the crates above"
+              exit 1
+            fi
+          }
+          for manifest in crates/services/*/Cargo.toml; do
+            forbid "$manifest" 'unbound-widgets|unbound-toolkit|unbound-toolkit-platform'
+          done
+          for manifest in crates/toolkit/graphics/Cargo.toml crates/toolkit/widgets/Cargo.toml; do
+            forbid "$manifest" 'wayland-[a-z-]+|unbound-toolkit-platform'
+          done
 
   test:
     name: ci/lavapipe-test

@@ -6,11 +6,8 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
-use unbound_config::{Appearance, Config, config_path};
 use unbound_lock::{LockScreen, PAM_SERVICE, User, authenticate, current_user};
-use unbound_toolkit::{
-    App, Palette, Role, Scene, Scheme, TextSystem, Window, WindowError, WindowEvent,
-};
+use unbound_toolkit::{App, Role, Scene, TextSystem, Window, WindowError, WindowEvent};
 
 const CLOCK_TICK: Duration = Duration::from_secs(1);
 const ACCEPTED: u8 = 1;
@@ -56,6 +53,10 @@ impl App for Locker {
         let changed = match event {
             WindowEvent::Input(input) => self.screen.handle(&input),
             WindowEvent::Accessibility(request) => self.screen.perform(&request),
+            WindowEvent::AppearanceChanged(appearance) => {
+                self.screen.set_palette(appearance.palette());
+                false
+            }
             _ => false,
         };
         if changed {
@@ -110,19 +111,6 @@ impl App for Locker {
     }
 }
 
-fn scheme() -> Scheme {
-    let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
-    let config_home = std::env::var_os("XDG_CONFIG_HOME").map(std::path::PathBuf::from);
-    let config = config_path(config_home.as_deref(), home.as_deref())
-        .and_then(|path| std::fs::read_to_string(path).ok())
-        .and_then(|source| Config::parse(&source).ok())
-        .unwrap_or_default();
-    match config.appearance {
-        Appearance::Dark => Scheme::Dark,
-        Appearance::Light | Appearance::Automatic => Scheme::Light,
-    }
-}
-
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let user = current_user()?;
     let (verdicts, verdict_sender) = UnixStream::pair()?;
@@ -131,7 +119,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         screen: LockScreen::new(
             &user,
             &jiff::Zoned::now(),
-            Palette::for_scheme(scheme()),
+            window.appearance().palette(),
             TextSystem::new(),
         ),
         user,

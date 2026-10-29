@@ -12,7 +12,6 @@ libc.workspace = true
 libloading.workspace = true
 rustix.workspace = true
 tracing.workspace = true
-unbound-config.workspace = true
 unbound-l10n.workspace = true
 unbound-log.workspace = true
 unbound-toolkit.workspace = true

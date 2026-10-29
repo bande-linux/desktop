@@ -254,6 +254,10 @@ impl LockScreen {
         }
     }
 
+    pub fn set_palette(&mut self, palette: Palette) {
+        self.ui.context().palette = palette;
+    }
+
     pub fn set_clock(&mut self, now: &jiff::Zoned) {
         let (date, time) = clock_texts(now);
         let mut model = self.model.borrow_mut();

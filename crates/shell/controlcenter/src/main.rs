@@ -1,18 +1,16 @@
-use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
 
 use unbound_audio::{Audio, Level};
 use unbound_bluetooth::Bluetooth;
-use unbound_config::{Appearance, Config, config_path};
 use unbound_controlcenter::{
     Change, Changes, HUD_DURATION, HUD_SIZE, PANEL_SIZE, Status, card, panel, volume_hud,
 };
 use unbound_network::NetworkManager;
 use unbound_toolkit::ui::Ui;
 use unbound_toolkit::{
-    App, Color, Edges, KeyboardFocus, LayerKind, LayerOptions, Palette, Role, Scene, Scheme,
-    TextSystem, VolumeKey, Window, WindowError, WindowEvent,
+    App, Color, Edges, KeyboardFocus, LayerKind, LayerOptions, Palette, Role, Scene, TextSystem,
+    VolumeKey, Window, WindowError, WindowEvent,
 };
 use zbus::blocking::{Connection, Proxy};
 
@@ -214,6 +212,12 @@ impl App for ControlCenter {
                     self.apply(change);
                 }
             }
+            WindowEvent::AppearanceChanged(appearance) => {
+                self.palette = appearance.palette();
+                if let Mode::Panel(ui) = &mut self.mode {
+                    ui.context().palette = self.palette;
+                }
+            }
             _ => {}
         }
     }
@@ -229,19 +233,6 @@ impl App for ControlCenter {
         if matches!(self.mode, Mode::Volume(until) if now >= until) {
             self.hide(window);
         }
-    }
-}
-
-fn scheme() -> Scheme {
-    let home = std::env::var_os("HOME").map(PathBuf::from);
-    let config_home = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from);
-    let config = config_path(config_home.as_deref(), home.as_deref())
-        .and_then(|path| std::fs::read_to_string(path).ok())
-        .and_then(|source| Config::parse(&source).ok())
-        .unwrap_or_default();
-    match config.appearance {
-        Appearance::Dark => Scheme::Dark,
-        Appearance::Light | Appearance::Automatic => Scheme::Light,
     }
 }
 
@@ -277,7 +268,7 @@ fn run() -> Result<(), WindowError> {
             volume: 0.0,
             muted: false,
         },
-        palette: Palette::for_scheme(scheme()),
+        palette: window.appearance().palette(),
         hud_text: TextSystem::new(),
         changes: Changes::default(),
         audio,

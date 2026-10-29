@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use zbus::blocking::Connection;
 
+use crate::CursorTheme;
+
 pub const DESKTOP_NAME: &str = "Unbound";
 
 #[zbus::proxy(
@@ -22,16 +24,30 @@ trait Bus {
     fn update_activation_environment(&self, environment: HashMap<&str, &str>) -> zbus::Result<()>;
 }
 
-pub fn session_environment(socket_name: &str) -> [(&'static str, String); 3] {
+pub fn cursor_environment(cursor: &CursorTheme) -> [(&'static str, String); 2] {
+    [
+        ("XCURSOR_THEME", cursor.name.clone()),
+        ("XCURSOR_SIZE", cursor.size.to_string()),
+    ]
+}
+
+pub fn session_environment(socket_name: &str, cursor: &CursorTheme) -> Vec<(&'static str, String)> {
     [
         ("WAYLAND_DISPLAY", socket_name.to_owned()),
         ("XDG_CURRENT_DESKTOP", DESKTOP_NAME.to_owned()),
         ("XDG_SESSION_TYPE", "wayland".to_owned()),
     ]
+    .into_iter()
+    .chain(cursor_environment(cursor))
+    .collect()
 }
 
-pub fn export_session_environment(session: &Connection, socket_name: &str) -> zbus::Result<()> {
-    let environment = session_environment(socket_name);
+pub fn export_session_environment(
+    session: &Connection,
+    socket_name: &str,
+    cursor: &CursorTheme,
+) -> zbus::Result<()> {
+    let environment = session_environment(socket_name, cursor);
     let assignments: Vec<String> = environment
         .iter()
         .map(|(name, value)| format!("{name}={value}"))

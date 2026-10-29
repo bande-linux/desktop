@@ -10,9 +10,9 @@ use smithay::reexports::calloop::{EventLoop, Interest, LoopHandle, Mode, PostAct
 use smithay::utils::{Clock, Monotonic, Size};
 use smithay::wayland::socket::ListeningSocketSource;
 use unbound_compositor::{
-    CLIPBOARD_DAEMON, DrmOutput, FrameClock, FrameOutput, FrameScheduler, GREETER, Headless,
-    LAUNCHER, MENU_BAR, PANEL, REFRESH, Renderer, SCREENSHOT, SessionRequest, SessionRole,
-    SessionUpkeep, export_session_environment, follow_session,
+    CLIPBOARD_DAEMON, CursorTheme, DrmOutput, FrameClock, FrameOutput, FrameScheduler, GREETER,
+    Headless, LAUNCHER, MENU_BAR, PANEL, REFRESH, Renderer, SCREENSHOT, SessionRequest,
+    SessionRole, SessionUpkeep, export_session_environment, follow_session,
 };
 
 const HEADLESS_SIZE: (i32, i32) = (1920, 1080);
@@ -143,9 +143,12 @@ fn listen<O: 'static>(
     let socket = ListeningSocketSource::new_auto()?;
     println!("WAYLAND_DISPLAY={}", socket.socket_name().to_string_lossy());
     app.compositor.set_socket_name(socket.socket_name());
+    app.compositor
+        .use_cursor_theme(CursorTheme::from_environment());
     let socket_name = socket.socket_name().to_string_lossy().into_owned();
-    let exported = zbus::blocking::Connection::session()
-        .and_then(|session| export_session_environment(&session, &socket_name));
+    let exported = zbus::blocking::Connection::session().and_then(|session| {
+        export_session_environment(&session, &socket_name, app.compositor.cursor_theme())
+    });
     if let Err(error) = exported {
         eprintln!("unbound-compositor: cannot export the session environment: {error}");
     }

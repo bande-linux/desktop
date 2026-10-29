@@ -14,6 +14,7 @@ use smithay::reexports::calloop::generic::Generic;
 use smithay::reexports::calloop::{Interest, Mode, PostAction};
 use smithay::reexports::wayland_server::Client;
 
+use crate::environment::cursor_environment;
 use crate::state::{ClientState, Headless};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -197,6 +198,7 @@ impl Headless {
         let inherited = client_end.as_raw_fd();
         let mut command = Command::new(executable);
         command.env("WAYLAND_SOCKET", inherited.to_string());
+        command.envs(cursor_environment(self.cursor_theme()));
         match (&self.socket_name, role) {
             (Some(name), SessionRole::Shell) => command.env("WAYLAND_DISPLAY", name),
             _ => command.env_remove("WAYLAND_DISPLAY"),

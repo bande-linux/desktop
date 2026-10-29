@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use unbound_compositor::export_session_environment;
+use unbound_compositor::{CursorTheme, export_session_environment};
 use unbound_test_bus::SessionBus;
 
 struct Systemd {
@@ -17,7 +17,7 @@ impl Systemd {
 }
 
 #[test]
-fn the_wayland_socket_and_desktop_reach_the_user_services_environment() {
+fn the_wayland_socket_desktop_and_cursor_theme_reach_the_user_services_environment() {
     let bus = SessionBus::start().expect("private session bus");
     let assignments = Arc::new(Mutex::new(Vec::new()));
     let systemd = bus.connect().expect("systemd stand-in connection");
@@ -35,14 +35,21 @@ fn the_wayland_socket_and_desktop_reach_the_user_services_environment() {
         .expect("own systemd's name");
 
     let session = bus.connect().expect("session connection");
-    export_session_environment(&session, "wayland-1").expect("exported");
+    let cursor = CursorTheme {
+        search_path: Vec::new(),
+        name: "Adwaita".to_owned(),
+        size: 32,
+    };
+    export_session_environment(&session, "wayland-1", &cursor).expect("exported");
 
     assert_eq!(
         *assignments.lock().expect("assignments"),
         [
             "WAYLAND_DISPLAY=wayland-1",
             "XDG_CURRENT_DESKTOP=Unbound",
-            "XDG_SESSION_TYPE=wayland"
+            "XDG_SESSION_TYPE=wayland",
+            "XCURSOR_THEME=Adwaita",
+            "XCURSOR_SIZE=32"
         ]
     );
 }

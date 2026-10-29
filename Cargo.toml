@@ -59,7 +59,7 @@ unbound-clipboard = { path = "crates/services/clipboard" }
 unbound-compositor = { path = "crates/platform/compositor" }
 unbound-config = { path = "crates/services/config" }
 unbound-controlcenter = { path = "crates/shell/controlcenter" }
-unbound-dock = { path = "crates/shell/panel" }
+unbound-dock = { path = "crates/shell/dock" }
 unbound-files = { path = "crates/apps/files" }
 unbound-greeter = { path = "crates/shell/greeter" }
 unbound-launcher = { path = "crates/shell/launcher" }

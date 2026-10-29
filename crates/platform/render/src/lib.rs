@@ -24,7 +24,7 @@ use smithay::backend::renderer::{
 use smithay::reexports::rustix::mm;
 use smithay::utils::{Buffer as BufferCoords, Physical, Size, Transform};
 
-pub use frame::VulkanFrame;
+pub use frame::{RoundedRect, Shadow, VulkanFrame};
 pub use rect::{Rect, disjoint};
 
 const SPIRV: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/compose.spv"));
@@ -262,9 +262,10 @@ pub struct VulkanRenderer {
     command_pool: vk::CommandPool,
     command_buffer: vk::CommandBuffer,
     fence: vk::Fence,
+    sampler: vk::Sampler,
     set_layout: vk::DescriptorSetLayout,
     pipeline_layout: vk::PipelineLayout,
-    pipelines: HashMap<(vk::Format, bool), vk::Pipeline>,
+    pipelines: HashMap<(vk::Format, Program), vk::Pipeline>,
     id: u64,
     context: ContextId<VulkanTexture>,
     debug_flags: DebugFlags,
@@ -288,6 +289,23 @@ impl fmt::Debug for VulkanRenderer {
             .field("textures", &self.textures.len())
             .field("targets", &self.targets.len())
             .finish_non_exhaustive()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum Program {
+    Texture,
+    Solid,
+    Shadow,
+}
+
+impl Program {
+    fn entry_point(self) -> &'static CStr {
+        match self {
+            Self::Texture => c"fragment",
+            Self::Solid => c"solid",
+            Self::Shadow => c"shadow",
+        }
     }
 }
 
@@ -432,6 +450,7 @@ impl VulkanRenderer {
             command_pool: vk::CommandPool::null(),
             command_buffer: vk::CommandBuffer::null(),
             fence: vk::Fence::null(),
+            sampler: vk::Sampler::null(),
             set_layout: vk::DescriptorSetLayout::null(),
             pipeline_layout: vk::PipelineLayout::null(),
             pipelines: HashMap::new(),
@@ -479,16 +498,37 @@ impl VulkanRenderer {
         .ok_or(RenderError::Vulkan(vk::Result::ERROR_UNKNOWN))?;
         self.fence = unsafe { device.create_fence(&vk::FenceCreateInfo::default(), None) }?;
 
-        let binding = vk::DescriptorSetLayoutBinding::default()
-            .binding(0)
-            .descriptor_type(vk::DescriptorType::SAMPLED_IMAGE)
-            .descriptor_count(1)
-            .stage_flags(vk::ShaderStageFlags::FRAGMENT);
+        self.sampler = unsafe {
+            device.create_sampler(
+                &vk::SamplerCreateInfo::default()
+                    .mag_filter(vk::Filter::LINEAR)
+                    .min_filter(vk::Filter::LINEAR)
+                    .mipmap_mode(vk::SamplerMipmapMode::NEAREST)
+                    .address_mode_u(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+                    .address_mode_v(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+                    .address_mode_w(vk::SamplerAddressMode::CLAMP_TO_EDGE),
+                None,
+            )
+        }?;
+        let samplers = [self.sampler];
+        let bindings = [
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(0)
+                .descriptor_type(vk::DescriptorType::SAMPLED_IMAGE)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT),
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(1)
+                .descriptor_type(vk::DescriptorType::SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+                .immutable_samplers(&samplers),
+        ];
         self.set_layout = unsafe {
             device.create_descriptor_set_layout(
                 &vk::DescriptorSetLayoutCreateInfo::default()
                     .flags(vk::DescriptorSetLayoutCreateFlags::PUSH_DESCRIPTOR_KHR)
-                    .bindings(slice::from_ref(&binding)),
+                    .bindings(&bindings),
                 None,
             )
         }?;
@@ -504,9 +544,9 @@ impl VulkanRenderer {
             )
         }?;
         for format in TARGET_FORMATS {
-            for solid in [false, true] {
-                let pipeline = self.create_pipeline(format, solid)?;
-                self.pipelines.insert((format, solid), pipeline);
+            for program in [Program::Texture, Program::Solid, Program::Shadow] {
+                let pipeline = self.create_pipeline(format, program)?;
+                self.pipelines.insert((format, program), pipeline);
             }
         }
         Ok(())
@@ -515,7 +555,7 @@ impl VulkanRenderer {
     fn create_pipeline(
         &self,
         format: vk::Format,
-        solid: bool,
+        program: Program,
     ) -> Result<vk::Pipeline, RenderError> {
         let words: Vec<u32> = SPIRV
             .as_chunks::<4>()
@@ -535,7 +575,7 @@ impl VulkanRenderer {
             vk::PipelineShaderStageCreateInfo::default()
                 .stage(vk::ShaderStageFlags::FRAGMENT)
                 .module(module)
-                .name(if solid { c"solid" } else { c"fragment" }),
+                .name(program.entry_point()),
         ];
         let vertex_input = vk::PipelineVertexInputStateCreateInfo::default();
         let assembly = vk::PipelineInputAssemblyStateCreateInfo::default()
@@ -1363,6 +1403,7 @@ impl Drop for VulkanRenderer {
                 .destroy_pipeline_layout(self.pipeline_layout, None);
             self.device
                 .destroy_descriptor_set_layout(self.set_layout, None);
+            self.device.destroy_sampler(self.sampler, None);
             self.device.destroy_fence(self.fence, None);
             self.device.destroy_command_pool(self.command_pool, None);
             self.device.destroy_device(None);

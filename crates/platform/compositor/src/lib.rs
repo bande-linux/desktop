@@ -13,6 +13,7 @@ mod logind;
 mod popup;
 mod render;
 mod scanout;
+mod scene;
 mod session;
 mod shell;
 mod state;

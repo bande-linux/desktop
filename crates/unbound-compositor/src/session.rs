@@ -27,6 +27,7 @@ pub const PANEL: &str = "/usr/bin/unbound-panel";
 pub const LAUNCHER: &str = "/usr/bin/unbound-launcher";
 pub const LOCK_SCREEN: &str = "/usr/bin/unbound-lock";
 pub const SCREENSHOT: &str = "/usr/bin/unbound-screenshot";
+pub const GREETER: &str = "/usr/bin/unbound-greeter";
 
 pub const SESSION_CLIENT_RESTART_THROTTLE: Duration = Duration::from_secs(10);
 
@@ -85,6 +86,10 @@ impl Headless {
             last_restart: None,
         });
         Ok(())
+    }
+
+    pub fn spawn_shell_client(&mut self, executable: &Path) -> io::Result<Child> {
+        self.spawn_session_client(executable, SessionRole::Shell)
     }
 
     pub fn session_client_pid(&self, executable: &Path) -> Option<u32> {

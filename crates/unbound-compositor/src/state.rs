@@ -75,7 +75,7 @@ use smithay::wayland::xdg_activation::{
     XdgActivationHandler, XdgActivationState, XdgActivationToken, XdgActivationTokenData,
 };
 use smithay::{
-    delegate_compositor, delegate_data_device, delegate_dmabuf, delegate_ext_data_control,
+    delegate_compositor, delegate_cursor_shape, delegate_data_device, delegate_dmabuf, delegate_ext_data_control,
     delegate_fractional_scale, delegate_layer_shell, delegate_output, delegate_presentation,
     delegate_primary_selection, delegate_seat, delegate_shm, delegate_viewporter,
     delegate_xdg_activation, delegate_xdg_shell,
@@ -89,6 +89,8 @@ use crate::lock::Lock;
 use crate::session::{LockScreen, SessionClient, SessionRole};
 use crate::shell;
 use crate::window::Window;
+use smithay::wayland::cursor_shape::CursorShapeManagerState;
+use smithay::wayland::tablet_manager::TabletSeatHandler;
 
 pub const REFRESH: Duration = Duration::from_nanos(1_000_000_000 / 120);
 
@@ -129,6 +131,7 @@ pub struct State {
     activation_state: XdgActivationState,
     _viewporter_state: ViewporterState,
     _fractional_scale_state: FractionalScaleManagerState,
+    _cursor_shape_state: CursorShapeManagerState,
     _decoration_state: XdgDecorationState,
     pending_activation: Option<WlSurface>,
     pub(crate) shell_resources: Vec<UnboundShellV1>,
@@ -262,6 +265,7 @@ impl Headless {
             _viewporter_state: ViewporterState::new::<State>(&handle),
             _fractional_scale_state: FractionalScaleManagerState::new::<State>(&handle),
             _decoration_state: XdgDecorationState::new::<State>(&handle),
+            _cursor_shape_state: CursorShapeManagerState::new::<State>(&handle),
             pending_activation: None,
             shell_resources: Vec::new(),
             foreign_toplevel_state: ForeignToplevelListState::new_with_filter::<State>(
@@ -1089,6 +1093,9 @@ delegate_layer_shell!(State);
 delegate_xdg_activation!(State);
 delegate_viewporter!(State);
 delegate_fractional_scale!(State);
+delegate_cursor_shape!(State);
+
+impl TabletSeatHandler for State {}
 
 impl WlrLayerShellHandler for State {
     fn shell_state(&mut self) -> &mut WlrLayerShellState {

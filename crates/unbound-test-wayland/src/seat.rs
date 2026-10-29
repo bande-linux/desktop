@@ -17,6 +17,8 @@ pub(crate) struct Input {
     scrolled: f64,
     motions: usize,
     pub(crate) seat: Option<WlSeat>,
+    pub(crate) pointer: Option<WlPointer>,
+    pub(crate) pointer_enter_serial: u32,
     pub(crate) button_serial: u32,
 }
 
@@ -78,7 +80,7 @@ impl TestClient {
 
 impl Dispatch<WlSeat, Devices> for Globals {
     fn event(
-        _: &mut Self,
+        globals: &mut Self,
         seat: &WlSeat,
         event: wl_seat::Event,
         _: &Devices,
@@ -93,7 +95,7 @@ impl Dispatch<WlSeat, Devices> for Globals {
                 seat.get_keyboard(qh, Devices);
             }
             if capabilities.contains(wl_seat::Capability::Pointer) {
-                seat.get_pointer(qh, Devices);
+                globals.input.pointer = Some(seat.get_pointer(qh, Devices));
             }
         }
     }
@@ -136,11 +138,14 @@ impl Dispatch<WlPointer, Devices> for Globals {
         let input = &mut globals.input;
         match event {
             wl_pointer::Event::Enter {
+                serial,
                 surface,
                 surface_x,
                 surface_y,
-                ..
-            } => input.pointer_focus = Some((surface, surface_x, surface_y)),
+            } => {
+                input.pointer_enter_serial = serial;
+                input.pointer_focus = Some((surface, surface_x, surface_y));
+            }
             wl_pointer::Event::Leave { .. } => input.pointer_focus = None,
             wl_pointer::Event::Motion {
                 surface_x,

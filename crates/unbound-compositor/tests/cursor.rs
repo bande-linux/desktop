@@ -3,6 +3,8 @@ use std::path::Path;
 
 use smithay::utils::{Point, Size};
 use unbound_compositor::{BACKGROUND, CursorTheme, Headless, Renderer, Snapshot};
+use unbound_test_wayland::{CursorShape, RED, ShmImage, TestClient};
+use wayland_client::protocol::wl_shm::Format;
 
 const POINTER: (i32, i32) = (100, 80);
 
@@ -184,4 +186,55 @@ fn the_image_whose_size_is_nearest_the_requested_size_is_drawn() {
 
     assert_eq!(rgb(&frame, POINTER.0, POINTER.1), large);
     assert_eq!(rgb(&frame, POINTER.0 + 30, POINTER.1 + 30), large);
+}
+
+#[test]
+fn a_window_that_asks_for_the_text_shape_gets_the_themes_text_cursor() {
+    let root = tempfile::tempdir().expect("icon directory");
+    let (arrow, beam) = ([0x20, 0xc0, 0x40], [0xc0, 0x20, 0xa0]);
+    let image = |rgb| Image {
+        nominal: 24,
+        side: 24,
+        hotspot: (12, 12),
+        rgb,
+    };
+    install(
+        root.path(),
+        "Fixture",
+        "[Icon Theme]\nName=Fixture\n",
+        &[("default", &[image(arrow)]), ("text", &[image(beam)])],
+    );
+    let mut server = Headless::new(Size::from((256, 192))).expect("headless compositor");
+    server.use_cursor_theme(CursorTheme {
+        search_path: vec![root.path().to_path_buf()],
+        name: "Fixture".to_owned(),
+        size: 24,
+    });
+    let mut client = TestClient::connect(&mut server);
+    client.use_seat(&mut server);
+    let pixels = RED.repeat(96 * 96);
+    client.show_window(
+        &mut server,
+        &ShmImage {
+            width: 96,
+            height: 96,
+            stride: 96 * 4,
+            format: Format::Xrgb8888,
+            bytes: &pixels,
+        },
+    );
+    let origin = server.windows()[0].location();
+    let pointer = (origin.x + 48, origin.y + 48);
+    server.move_pointer_to(Point::from((f64::from(pointer.0), f64::from(pointer.1))), 1);
+    client.exchange(&mut server);
+
+    client.set_cursor_shape(&mut server, CursorShape::Text);
+    let mut renderer = Renderer::new().expect("Vulkan renderer");
+    renderer
+        .render(&mut server)
+        .expect("frame with the pointer");
+    let frame = renderer.snapshot(&server).expect("read back");
+
+    assert_eq!(client.protocol_error(), None);
+    assert_eq!(rgb(&frame, pointer.0, pointer.1), beam);
 }

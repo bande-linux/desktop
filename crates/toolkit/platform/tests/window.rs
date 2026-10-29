@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use smithay::utils::Size;
 use unbound_compositor::{FrameClock, FrameScheduler, Headless, REFRESH, Renderer, SessionRole};
 use unbound_graphics::{Color, Scene};
-use unbound_toolkit_platform::{FramePath, Role, Window};
+use unbound_toolkit_platform::{FramePath, Role, TITLE_BAR_HEIGHT, Window};
 
 const OUTPUT: (i32, i32) = (320, 240);
 const WINDOW: (u32, u32) = (200, 120);
@@ -63,8 +63,11 @@ fn the_first_frame_is_drawn_on_the_cpu_and_later_frames_on_the_gpu() {
             .expect("compositor frame");
         if let Ok(color) = on_screen.try_recv() {
             let window = &server.windows()[0];
-            let size = window.size().expect("mapped window");
-            assert_eq!((size.w, size.h), (WINDOW.0 as i32, WINDOW.1 as i32));
+            let size = window.geometry().expect("mapped window").size;
+            assert_eq!(
+                (size.w, size.h),
+                (WINDOW.0 as i32, (WINDOW.1 + TITLE_BAR_HEIGHT) as i32)
+            );
             let snapshot = renderer.snapshot(&server).expect("read back");
             let location = window.location();
             let (x, y) = (location.x + size.w / 2, location.y + size.h / 2);
@@ -186,19 +189,21 @@ fn on_a_2x_output_a_window_keeps_its_size_in_points_and_fills_twice_the_pixels()
         if let Ok(scale) = on_screen.try_recv() {
             assert_eq!(scale, 2.0, "the window was told the output scale");
             let window = &server.windows()[0];
-            let size = window.size().expect("mapped window");
-            assert_eq!((size.w, size.h), (WINDOW.0 as i32, WINDOW.1 as i32));
+            let size = window.geometry().expect("mapped window").size;
+            let title = TITLE_BAR_HEIGHT as i32;
+            assert_eq!((size.w, size.h), (WINDOW.0 as i32, WINDOW.1 as i32 + title));
             let snapshot = renderer.snapshot(&server).expect("read back");
             let location = window.location();
             let at = |x: i32, y: i32| {
                 let offset = ((y * snapshot.size.w + x) * 4) as usize;
                 snapshot.rgba[offset..offset + 3].to_vec()
             };
-            let (left, top) = (location.x * 2, location.y * 2);
-            let (right, bottom) = (left + size.w * 2 - 1, top + size.h * 2 - 1);
-            assert_eq!(at(left, top), [RED.r, RED.g, RED.b]);
-            assert_eq!(at(right, bottom), [RED.r, RED.g, RED.b]);
-            assert_ne!(at(right + 2, top + 4), [RED.r, RED.g, RED.b]);
+            let (left, middle) = (location.x * 2, (location.y + title + size.h / 2) * 2);
+            let right = left + size.w * 2 - 1;
+            assert_eq!(at(left, middle), [RED.r, RED.g, RED.b]);
+            assert_eq!(at(right, middle), [RED.r, RED.g, RED.b]);
+            assert_ne!(at(right + 2, middle), [RED.r, RED.g, RED.b]);
+            assert_ne!(at(left + 40, (location.y + 2) * 2), [RED.r, RED.g, RED.b]);
             checked.send(()).expect("release the client");
             verified = true;
         }

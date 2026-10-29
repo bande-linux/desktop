@@ -19,6 +19,7 @@ pub(crate) trait Canvas {
     fn fill_path(&mut self, path: &BezPath);
     fn fill_blurred_rounded_rect(&mut self, rect: &kurbo::Rect, radius: f32, std_dev: f32);
     fn push_clip_layer(&mut self, path: &BezPath);
+    fn push_opacity_layer(&mut self, alpha: f32);
     fn pop_layer(&mut self);
     fn fill_glyphs(&mut self, run: &GlyphRun, glyphs: &[Glyph]);
 }
@@ -90,7 +91,9 @@ pub(crate) fn images(items: &[Item], found: &mut Vec<Image>) {
     for item in items {
         match item {
             Item::Image { image, .. } => found.push(image.clone()),
-            Item::Clip { items, .. } => images(items, found),
+            Item::Clip { items, .. }
+            | Item::Translate { items, .. }
+            | Item::Opacity { items, .. } => images(items, found),
             _ => {}
         }
     }
@@ -103,7 +106,22 @@ pub(crate) fn encode(
     items: &[Item],
     scale: f64,
 ) {
-    let base = Affine::scale(scale);
+    encode_at(canvas, outlines, image_ids, items, Affine::scale(scale));
+}
+
+fn snapped(base: Affine, offset: crate::scene::Point) -> Affine {
+    let [scale, _, _, _, x, y] = base.as_coeffs();
+    let device = |origin: f64, by: f32| (origin + scale * f64::from(by)).round();
+    Affine::translate((device(x, offset.x), device(y, offset.y))) * Affine::scale(scale)
+}
+
+fn encode_at(
+    canvas: &mut impl Canvas,
+    outlines: &mut GlyphOutlines,
+    image_ids: &ImageIds,
+    items: &[Item],
+    base: Affine,
+) {
     canvas.set_transform(base);
     for item in items {
         match item {
@@ -166,8 +184,37 @@ pub(crate) fn encode(
             }
             Item::Clip { shape, items } => {
                 canvas.push_clip_layer(&path(shape));
-                encode(canvas, outlines, image_ids, items, scale);
+                encode_at(canvas, outlines, image_ids, items, base);
+                canvas.set_transform(base);
                 canvas.pop_layer();
+            }
+            Item::Translate { offset, items } => {
+                encode_at(canvas, outlines, image_ids, items, snapped(base, *offset));
+                canvas.set_transform(base);
+            }
+            Item::Opacity { alpha, items } => {
+                canvas.push_opacity_layer(*alpha);
+                encode_at(canvas, outlines, image_ids, items, base);
+                canvas.set_transform(base);
+                canvas.pop_layer();
+            }
+            Item::Line {
+                from,
+                to,
+                width,
+                paint: stroke,
+            } => {
+                let line = kurbo::Line::new(
+                    (f64::from(from.x), f64::from(from.y)),
+                    (f64::from(to.x), f64::from(to.y)),
+                );
+                canvas.set_paint(paint(stroke));
+                canvas.fill_path(&flattened(&kurbo::stroke(
+                    line.path_elements(TOLERANCE),
+                    &Stroke::new(f64::from(*width)).with_caps(kurbo::Cap::Round),
+                    &StrokeOpts::default(),
+                    TOLERANCE,
+                )));
             }
             Item::Image { rect: area, image } => {
                 let Some(id) = image_ids.get(&image.id()) else {

@@ -18,7 +18,9 @@ pub use stack::{Axis, Stack};
 pub use text_field::{TEXT_FIELD_HEIGHT, TextField};
 pub use toggle::{SWITCH_SIZE, Toggle};
 
-pub use unbound_graphics::{Event, Key, Modifiers};
+pub use unbound_graphics::{
+    Cursor, Event, Key, Modifiers, Pointer, PointerButton, Scroll, ScrollPhase, ScrollSource,
+};
 use unbound_graphics::{Item, Palette, Point, Rect, Scene, Shape, TextSystem};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -112,6 +114,10 @@ pub trait Widget {
         None
     }
 
+    fn cursor(&self, _point: Point) -> Option<Cursor> {
+        None
+    }
+
     fn children(&self) -> &[Box<dyn Widget>] {
         &[]
     }
@@ -124,7 +130,9 @@ pub trait Widget {
 pub struct Ui {
     root: Box<dyn Widget>,
     cx: Context,
-    captured: Option<WidgetId>,
+    captured: Option<(WidgetId, PointerButton)>,
+    hovered: Vec<WidgetId>,
+    pointer: Option<Point>,
 }
 
 fn contains(frame: Rect, point: Point) -> bool {
@@ -154,16 +162,17 @@ fn find(widget: &dyn Widget, id: WidgetId) -> Option<&dyn Widget> {
         .find_map(|child| find(child.as_ref(), id))
 }
 
-fn hit(widget: &dyn Widget, point: Point) -> Option<WidgetId> {
+fn hit_path(widget: &dyn Widget, point: Point, path: &mut Vec<WidgetId>) -> bool {
     if !contains(widget.frame(), point) {
-        return None;
+        return false;
     }
-    widget
-        .children()
-        .iter()
-        .rev()
-        .find_map(|child| hit(child.as_ref(), point))
-        .or(Some(widget.id()))
+    path.push(widget.id());
+    for child in widget.children().iter().rev() {
+        if hit_path(child.as_ref(), point, path) {
+            break;
+        }
+    }
+    true
 }
 
 fn focus_order(widget: &dyn Widget, cx: &Context, order: &mut Vec<WidgetId>) {
@@ -206,6 +215,8 @@ impl Ui {
             root,
             cx,
             captured: None,
+            hovered: Vec::new(),
+            pointer: None,
         }
     }
 
@@ -241,26 +252,65 @@ impl Ui {
 
     pub fn handle(&mut self, event: &Event) -> bool {
         match event {
-            Event::PointerDown(point) => {
-                let Some(target) = hit(self.root.as_ref(), *point) else {
-                    return false;
+            Event::PointerDown(pointer) => {
+                let hovered = self.hover(Some(pointer));
+                let Some(&target) = self.hovered.last() else {
+                    return hovered;
                 };
-                self.captured = Some(target);
-                let accepts = self.accepts_focus(target);
-                if accepts {
+                if self.captured.is_none() {
+                    self.captured = Some((target, pointer.button));
+                }
+                if pointer.is_primary() && self.accepts_focus(target) {
                     self.cx.focus = Some(target);
                 }
-                self.deliver(target, event)
+                self.deliver(target, event) | hovered
             }
-            Event::PointerMove(point) => match self.captured {
-                Some(target) => self.deliver(target, event),
-                None => hit(self.root.as_ref(), *point)
-                    .is_some_and(|target| self.deliver(target, event)),
-            },
-            Event::PointerUp(_) => self
-                .captured
-                .take()
-                .is_some_and(|target| self.deliver(target, event)),
+            Event::PointerMove(pointer) | Event::PointerEnter(pointer) => {
+                let moved = Event::PointerMove(*pointer);
+                match self.captured {
+                    Some((target, _)) => {
+                        self.pointer = Some(pointer.position);
+                        self.deliver(target, &moved)
+                    }
+                    None => {
+                        let hovered = self.hover(Some(pointer));
+                        let delivered = self
+                            .hovered
+                            .last()
+                            .copied()
+                            .is_some_and(|target| self.deliver(target, &moved));
+                        hovered | delivered
+                    }
+                }
+            }
+            Event::PointerUp(pointer) => {
+                let Some((target, button)) = self.captured else {
+                    return false;
+                };
+                if button != pointer.button {
+                    return false;
+                }
+                self.captured = None;
+                let delivered = self.deliver(target, event);
+                delivered | self.hover(Some(pointer))
+            }
+            Event::PointerLeave => {
+                self.captured = None;
+                self.hover(None)
+            }
+            Event::Scroll(scroll) => {
+                let pointer = Pointer::at(scroll.position).with_modifiers(scroll.modifiers);
+                let hovered = self.hover(Some(&pointer));
+                let path = self.hovered.clone();
+                path.iter().rev().any(|target| self.deliver(*target, event)) | hovered
+            }
+            Event::ModifiersChanged(_) => {
+                let mut targets = self.hovered.clone();
+                targets.extend(self.cx.focus.filter(|focus| !targets.contains(focus)));
+                targets.into_iter().fold(false, |handled, target| {
+                    self.deliver(target, event) | handled
+                })
+            }
             Event::Key {
                 key: Key::Tab,
                 modifiers,
@@ -273,6 +323,51 @@ impl Ui {
                 .focus
                 .is_some_and(|target| self.deliver(target, event)),
         }
+    }
+
+    pub fn cursor(&self) -> Cursor {
+        let Some(point) = self.pointer else {
+            return Cursor::Default;
+        };
+        let path = match self.captured {
+            Some((target, _)) => vec![target],
+            None => self.hovered.clone(),
+        };
+        path.iter()
+            .rev()
+            .filter_map(|id| find(self.root.as_ref(), *id))
+            .find_map(|widget| widget.cursor(point))
+            .unwrap_or_default()
+    }
+
+    fn hover(&mut self, pointer: Option<&Pointer>) -> bool {
+        self.pointer = pointer.map(|pointer| pointer.position);
+        let mut path = Vec::new();
+        if let Some(pointer) = pointer {
+            hit_path(self.root.as_ref(), pointer.position, &mut path);
+        }
+        let left = self
+            .hovered
+            .iter()
+            .filter(|id| !path.contains(id))
+            .copied()
+            .collect::<Vec<_>>();
+        let entered = path
+            .iter()
+            .filter(|id| !self.hovered.contains(id))
+            .copied()
+            .collect::<Vec<_>>();
+        self.hovered = path;
+        let mut changed = false;
+        for id in left.into_iter().rev() {
+            changed |= self.deliver(id, &Event::PointerLeave);
+        }
+        if let Some(pointer) = pointer {
+            for id in entered {
+                changed |= self.deliver(id, &Event::PointerEnter(*pointer));
+            }
+        }
+        changed
     }
 
     pub fn text_input_area(&self) -> Option<Rect> {

@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use unbound_fs::{Action, Answer, Change, FolderWatch, RenameError, Resolution, Task, TrashItem};
-use unbound_toolkit::ui::{Event, Key, Modifiers};
+use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer, PointerButton};
 use unbound_toolkit::{Palette, Point, Rect, TextSystem};
 use unbound_xdg::{DesktopEntry, UserDir, path_from_file_uri, user_dir};
 
@@ -27,7 +27,7 @@ pub const PATH_BAR_HEIGHT: f32 = 28.0;
 pub const PROGRESS_HEIGHT: f32 = 48.0;
 pub const TOP_INSET: f32 = 6.0;
 pub const HEADER_HEIGHT: f32 = 26.0;
-const DOUBLE_CLICK: Duration = Duration::from_millis(400);
+const SLOW_CLICK_RENAME: Duration = Duration::from_millis(600);
 const TYPE_SELECT_PAUSE: Duration = Duration::from_millis(1000);
 const NOTICE_TIME: Duration = Duration::from_secs(5);
 
@@ -120,7 +120,7 @@ pub struct FilesView {
     watch: FolderWatch,
     loader: Loader,
     requests: Vec<Request>,
-    last_click: Option<(Instant, usize, usize)>,
+    pending_rename: Option<(Instant, PathBuf)>,
     pointer: Point,
     typed: (String, Option<Instant>),
     paste_moves: Option<bool>,
@@ -185,7 +185,7 @@ impl FilesView {
             watch: FolderWatch::new()?,
             loader: Loader::new()?,
             requests: Vec::new(),
-            last_click: None,
+            pending_rename: None,
             pointer: Point::default(),
             typed: (String::new(), None),
             paste_moves: None,
@@ -276,6 +276,7 @@ impl FilesView {
             self.watch.deadline(),
             self.operations.deadline(),
             self.notice.as_ref().map(|(_, shown)| *shown + NOTICE_TIME),
+            self.pending_rename.as_ref().map(|(due, _)| *due),
         ]
         .into_iter()
         .flatten()
@@ -293,6 +294,17 @@ impl FilesView {
             .is_some_and(|(_, shown)| *shown + NOTICE_TIME <= now)
         {
             self.notice = None;
+        }
+        if let Some((due, path)) = self.pending_rename.take() {
+            if due > now {
+                self.pending_rename = Some((due, path));
+            } else if self
+                .browser
+                .selected()
+                .is_some_and(|entry| entry.path == path)
+            {
+                self.start_rename();
+            }
         }
         true
     }
@@ -513,29 +525,66 @@ impl FilesView {
             .map(|(_, hit)| hit.clone())
     }
 
-    fn click(&mut self, at: Point) -> bool {
-        let Some(hit) = self.hit(at) else {
+    fn click(&mut self, pointer: &Pointer) -> bool {
+        match pointer.button {
+            PointerButton::Back => {
+                self.browser.go_back();
+                self.selection_changed();
+                return true;
+            }
+            PointerButton::Forward => {
+                self.browser.go_forward();
+                self.selection_changed();
+                return true;
+            }
+            _ => {}
+        }
+        let Some(hit) = self.hit(pointer.position) else {
             return false;
         };
         if self.sheet.is_some() && !matches!(hit, Hit::Sheet(_) | Hit::ApplyToAll) {
             return false;
         }
-        let now = Instant::now();
-        match hit {
-            Hit::Row { column, row } => {
-                let double = self
-                    .last_click
-                    .is_some_and(|(time, last_column, last_row)| {
-                        now.duration_since(time) < DOUBLE_CLICK
-                            && (last_column, last_row) == (column, row)
-                    });
-                self.last_click = Some((now, column, row));
+        if !pointer.is_primary() {
+            if let Hit::Row { column, row } = hit
+                && !self.browser.columns()[column].is_marked(row)
+            {
                 self.commit_rename();
                 self.browser.select(column, row);
                 self.selection_changed();
-                if double {
-                    self.last_click = None;
+            }
+            return true;
+        }
+        self.pending_rename = None;
+        match hit {
+            Hit::Row { column, row } => {
+                let modifiers = pointer.modifiers;
+                let path = self.browser.columns()[column].entries[row].path.clone();
+                let already = self
+                    .browser
+                    .selected()
+                    .is_some_and(|entry| entry.path == path)
+                    && self.browser.active() == column;
+                if self
+                    .rename
+                    .as_ref()
+                    .is_some_and(|rename| rename.path == path)
+                {
+                    return false;
+                }
+                self.commit_rename();
+                if modifiers.logo {
+                    self.browser.toggle(column, row);
+                } else if modifiers.shift {
+                    self.browser.extend_to(column, row);
+                } else {
+                    self.browser.select(column, row);
+                }
+                self.selection_changed();
+                if pointer.count >= 2 && !modifiers.logo && !modifiers.shift {
                     self.open();
+                } else if already && pointer.count == 1 && !modifiers.logo && !modifiers.shift {
+                    self.pending_rename = Some((Instant::now() + SLOW_CLICK_RENAME, path));
                 }
             }
             Hit::Column(column) => {
@@ -592,13 +641,17 @@ impl FilesView {
     pub fn handle(&mut self, event: &Event) -> bool {
         match event {
             Event::Key { key, modifiers } => self.key(*key, *modifiers),
-            Event::PointerDown(at) => {
-                self.pointer = *at;
-                self.click(*at)
+            Event::PointerDown(pointer) => {
+                self.pointer = pointer.position;
+                self.click(pointer)
             }
-            Event::PointerMove(at) => {
-                self.pointer = *at;
+            Event::PointerMove(pointer) | Event::PointerEnter(pointer) => {
+                self.pointer = pointer.position;
                 false
+            }
+            Event::Scroll(scroll) => {
+                self.pointer = scroll.position;
+                self.scroll(scroll.delta.y)
             }
             Event::Commit(text) => match (&mut self.sheet, &mut self.rename) {
                 (Some(Sheet::GoTo(editor)), _) => {

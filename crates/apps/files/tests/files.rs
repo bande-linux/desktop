@@ -7,12 +7,12 @@ use std::time::{Duration, Instant};
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use tempfile::TempDir;
 use unbound_files::{
-    Apps, Browser, FilesView, Kind, Location, NameEditor, Preview, Request, Row, Sheet, Sort,
-    SortBy, format_size, list, permissions, preview, rows,
+    Apps, Browser, FilesView, Kind, Location, NameEditor, Preview, ROW_HEIGHT, Request, Row,
+    SIDEBAR_WIDTH, Sheet, Sort, SortBy, format_size, list, permissions, preview, rows,
 };
 use unbound_fs::Trash;
-use unbound_toolkit::ui::{Event, Key, Modifiers};
-use unbound_toolkit::{Item, Palette, Scheme, TextSystem};
+use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer};
+use unbound_toolkit::{Item, Palette, Point, Scheme, TextSystem};
 
 fn names(folder: &Path, show_hidden: bool) -> Vec<String> {
     list(folder, show_hidden, Sort::default())
@@ -641,4 +641,55 @@ fn go_to_folder_accepts_relative_paths_and_reveals_files() {
     );
     go_to(&mut view, "missing");
     assert!(view.notice().is_some());
+}
+
+fn click_row(view: &mut FilesView, row: usize, count: u8, modifiers: Modifiers) {
+    let at = Point::new(SIDEBAR_WIDTH + 60.0, 6.0 + ROW_HEIGHT * (row as f32 + 0.5));
+    view.handle(&Event::PointerDown(
+        Pointer::at(at).with_count(count).with_modifiers(modifiers),
+    ));
+}
+
+#[test]
+fn clicks_select_extend_toggle_and_open() {
+    let place = Place::new();
+    let mut view = place.view();
+    let names = |view: &FilesView| {
+        view.browser()
+            .selection()
+            .iter()
+            .map(|entry| entry.name.clone())
+            .collect::<Vec<_>>()
+    };
+
+    click_row(&mut view, 0, 1, Modifiers::default());
+    assert_eq!(names(&view), ["Documents"]);
+    click_row(
+        &mut view,
+        2,
+        1,
+        Modifiers {
+            shift: true,
+            ..Modifiers::default()
+        },
+    );
+    assert_eq!(names(&view), ["Documents", "Empty", "notes.txt"]);
+    click_row(
+        &mut view,
+        1,
+        1,
+        Modifiers {
+            logo: true,
+            ..Modifiers::default()
+        },
+    );
+    assert_eq!(names(&view), ["Documents", "notes.txt"]);
+
+    click_row(&mut view, 0, 1, Modifiers::default());
+    view.scene(1000, 600);
+    click_row(&mut view, 0, 2, Modifiers::default());
+    assert_eq!(
+        view.browser().root(),
+        &Location::Folder(place.home().join("Documents"))
+    );
 }

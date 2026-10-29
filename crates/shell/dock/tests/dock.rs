@@ -7,7 +7,7 @@ use std::rc::Rc;
 use accesskit::Role;
 use unbound_config::DockEdge;
 use unbound_dock::{Actions, DockAction, DockApp, ICON_SIZE, dock_size, dock_ui, merge_apps};
-use unbound_toolkit::ui::Event;
+use unbound_toolkit::ui::{Event, Pointer};
 use unbound_toolkit::{CpuRenderer, Image, Palette, Point, Scheme, TextSystem};
 
 const OUTPUT: (u32, u32) = (1280, 480);
@@ -123,11 +123,11 @@ fn clicking_an_app_asks_to_open_it_and_a_drag_off_cancels() {
     ui.layout(unbound_toolkit::ui::Size::new(size.0 as f32, size.1 as f32));
     let second = Point::new(32.0, 8.0 + 52.0 + 26.0);
 
-    ui.handle(&Event::PointerDown(second));
-    ui.handle(&Event::PointerUp(second));
-    ui.handle(&Event::PointerDown(Point::new(32.0, 30.0)));
-    ui.handle(&Event::PointerMove(Point::new(200.0, 30.0)));
-    ui.handle(&Event::PointerUp(Point::new(200.0, 30.0)));
+    ui.handle(&Event::PointerDown(Pointer::at(second)));
+    ui.handle(&Event::PointerUp(Pointer::at(second)));
+    ui.handle(&Event::PointerDown(Pointer::at(Point::new(32.0, 30.0))));
+    ui.handle(&Event::PointerMove(Pointer::at(Point::new(200.0, 30.0))));
+    ui.handle(&Event::PointerUp(Pointer::at(Point::new(200.0, 30.0))));
 
     assert_eq!(
         *actions.borrow(),

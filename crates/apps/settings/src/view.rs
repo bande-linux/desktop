@@ -197,7 +197,7 @@ impl SettingsView {
     pub fn handle(&mut self, event: &Event) -> bool {
         match event {
             Event::Key { key, modifiers } => self.key(*key, *modifiers),
-            Event::PointerDown(at) => self.click(*at),
+            Event::PointerDown(pointer) if pointer.is_primary() => self.click(pointer.position),
             _ => false,
         }
     }

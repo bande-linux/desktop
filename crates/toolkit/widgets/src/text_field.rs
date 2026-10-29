@@ -1,7 +1,7 @@
 use accesskit::{Action, ActionData, ActionRequest, Node, Role};
 use parley::{PlainEditor, StyleProperty};
 
-use super::{Context, Event, Key, Modifiers, Size, Widget, WidgetId};
+use super::{Context, Cursor, Event, Key, Modifiers, Size, Widget, WidgetId};
 use unbound_graphics::{
     Color, Item, Paint, Paragraph, Point, Rect, Shape, TextAlign, TextStyle, families,
 };
@@ -239,18 +239,26 @@ impl Widget for TextField {
         let origin = self.text_origin();
         let (fonts, layouts) = cx.text.contexts();
         match event {
-            Event::PointerDown(point) => {
+            Event::PointerDown(pointer) if pointer.is_primary() => {
                 self.selecting = true;
+                let (x, y) = (pointer.position.x - origin.x, pointer.position.y - origin.y);
+                let mut driver = self.editor.driver(fonts, layouts);
+                match pointer.count {
+                    1 if pointer.modifiers.shift => driver.shift_click_extension(x, y),
+                    1 => driver.move_to_point(x, y),
+                    2 => driver.select_word_at_point(x, y),
+                    _ => driver.select_all(),
+                }
+            }
+            Event::PointerMove(pointer) if self.selecting => {
                 self.editor
                     .driver(fonts, layouts)
-                    .move_to_point(point.x - origin.x, point.y - origin.y);
+                    .extend_selection_to_point(
+                        pointer.position.x - origin.x,
+                        pointer.position.y - origin.y,
+                    );
             }
-            Event::PointerMove(point) if self.selecting => {
-                self.editor
-                    .driver(fonts, layouts)
-                    .extend_selection_to_point(point.x - origin.x, point.y - origin.y);
-            }
-            Event::PointerUp(_) => self.selecting = false,
+            Event::PointerUp(pointer) if pointer.is_primary() => self.selecting = false,
             Event::Key { key, modifiers } => return self.edit(cx, *key, *modifiers),
             Event::Commit(text) => {
                 let mut driver = self.editor.driver(fonts, layouts);
@@ -269,7 +277,7 @@ impl Widget for TextField {
                     .driver(fonts, layouts)
                     .set_compose(text, *cursor);
             }
-            Event::PointerMove(_) => return false,
+            _ => return false,
         }
         true
     }
@@ -292,6 +300,10 @@ impl Widget for TextField {
         }
         (self.on_change)(self.editor.raw_text());
         true
+    }
+
+    fn cursor(&self, _point: Point) -> Option<Cursor> {
+        Some(Cursor::Text)
     }
 
     fn accepts_focus(&self, _cx: &Context) -> bool {

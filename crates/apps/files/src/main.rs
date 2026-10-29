@@ -56,7 +56,6 @@ impl App for Files {
                 true
             }
             WindowEvent::Input(input) => self.view.handle(&input),
-            WindowEvent::Scroll { dy, .. } => self.view.scroll(dy),
             WindowEvent::Pasted(text) => self.view.pasted(&text),
             _ => false,
         };

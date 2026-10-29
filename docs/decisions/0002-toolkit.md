@@ -1,6 +1,6 @@
 # UI Toolkit: Decision Record
 
-Status: **proposed, awaiting the owner's decision** (October 2026). Scope: which widget
+Status: **accepted** (2026-10-29, Option A: extend `unbound-toolkit`). Scope: which widget
 layer Unbound's own apps and shell (panel, menu bar, launcher, Files, Settings, Terminal,
 lock screen, greeter, Control Center) are built on, and in which order it grows to AppKit
 depth. Rendering (Vello, Parley) is settled by [`0001-rendering.md`](0001-rendering.md) Decision 2 and is not

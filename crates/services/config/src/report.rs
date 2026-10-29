@@ -7,7 +7,7 @@ use unbound_notify::{BUS_NAME as NOTIFICATIONS, OBJECT_PATH as NOTIFICATIONS_PAT
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::{MatchRule, message};
 
-use crate::ReloadError;
+use crate::{L10N, ReloadError};
 
 pub const EDIT_ACTION: &str = "edit";
 
@@ -82,17 +82,23 @@ impl ErrorNotifier {
                 return;
             }
             Err(ReloadError::Invalid(error)) => (
-                format!("{file} has an error"),
-                format!(
-                    "Line {}, column {}: {}.",
-                    error.line, error.column, error.message
+                L10N.tr_args("has-error", [("file", file.as_str().into())]),
+                L10N.tr_args(
+                    "error-at",
+                    [
+                        ("line", error.line.into()),
+                        ("column", error.column.into()),
+                        ("message", error.message.as_str().into()),
+                    ],
                 ),
             ),
-            Err(ReloadError::Read(error)) => {
-                (format!("{file} cannot be read"), format!("{error}."))
-            }
+            Err(ReloadError::Read(error)) => (
+                L10N.tr_args("cannot-read", [("file", file.as_str().into())]),
+                L10N.tr_args("read-error", [("error", error.to_string().into())]),
+            ),
         };
-        let body = format!("{detail} The previous settings stay in effect.");
+        let body = L10N.tr_args("previous-settings-stay", [("detail", detail.into())]);
+        let open_in_editor = L10N.tr("open-in-editor");
         let reply = client::notify(
             &self.connection,
             &Request {
@@ -101,7 +107,7 @@ impl ErrorNotifier {
                 app_icon: "preferences-system",
                 summary: &summary,
                 body: &body,
-                actions: &[(EDIT_ACTION, "Open in Editor")],
+                actions: &[(EDIT_ACTION, &open_in_editor)],
                 urgency: Urgency::Normal,
             },
         );

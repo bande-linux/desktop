@@ -3472,6 +3472,7 @@ name = "unbound-automount"
 version = "0.1.0"
 dependencies = [
  "tracing",
+ "unbound-l10n",
  "unbound-log",
  "unbound-notify",
  "unbound-test-bus",
@@ -3548,6 +3549,7 @@ dependencies = [
  "notify",
  "tempfile",
  "tracing",
+ "unbound-l10n",
  "unbound-log",
  "unbound-notify",
  "unbound-test-bus",
@@ -3716,6 +3718,7 @@ dependencies = [
  "tracing",
  "unbound-compositor",
  "unbound-config",
+ "unbound-l10n",
  "unbound-log",
  "unbound-notify",
  "unbound-test-bus",

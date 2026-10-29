@@ -7,6 +7,8 @@ use zbus::blocking::Connection;
 use zbus::proxy::CacheProperties;
 use zbus::zvariant::OwnedObjectPath;
 
+use crate::L10N;
+
 const LOCK_POLL: Duration = Duration::from_millis(20);
 
 #[zbus::proxy(
@@ -80,7 +82,7 @@ impl SleepGuard {
                     &system,
                     "sleep",
                     "Unbound",
-                    "Lock the screen before the computer sleeps",
+                    &L10N.tr("lock-before-sleep"),
                     "delay",
                 )
             }

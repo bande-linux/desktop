@@ -1,12 +1,18 @@
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::LazyLock;
 use std::time::Duration;
 
 use unbound_audio::Level;
+use unbound_l10n::Localizer;
 use unbound_toolkit::ui::{Axis, Context, Slider, Stack, Toggle, Ui, Widget};
 use unbound_toolkit::{
     Color, Item, Palette, Point, Rect, Scene, Shape, TextAlign, TextStyle, TextSystem,
 };
+
+const ENGLISH: &str = include_str!("../locales/en-US/unbound-controlcenter.ftl");
+
+pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
 pub const HUD_SIZE: (u32, u32) = (232, 64);
 pub const PANEL_SIZE: (u32, u32) = (320, 200);
@@ -48,13 +54,18 @@ fn toggle(label: &str, on: bool, changes: &Changes, change: fn(bool) -> Change) 
 pub fn panel(status: Status, palette: Palette, text: TextSystem, changes: &Changes) -> Ui {
     let mut controls = Vec::new();
     if let Some(on) = status.wifi {
-        controls.push(toggle("Wi-Fi", on, changes, Change::Wifi));
+        controls.push(toggle(&L10N.tr("wifi"), on, changes, Change::Wifi));
     }
     if let Some(on) = status.bluetooth {
-        controls.push(toggle("Bluetooth", on, changes, Change::Bluetooth));
+        controls.push(toggle(
+            &L10N.tr("bluetooth"),
+            on,
+            changes,
+            Change::Bluetooth,
+        ));
     }
     controls.push(toggle(
-        "Do Not Disturb",
+        &L10N.tr("do-not-disturb"),
         status.do_not_disturb,
         changes,
         Change::DoNotDisturb,
@@ -62,7 +73,7 @@ pub fn panel(status: Status, palette: Palette, text: TextSystem, changes: &Chang
     if let Some(volume) = status.volume {
         let changes = Rc::clone(changes);
         controls.push(Box::new(Slider::new(
-            "Sound",
+            &L10N.tr("sound"),
             f64::from(volume),
             (0.0, 1.0),
             VOLUME_STEP,
@@ -91,12 +102,13 @@ pub fn card(palette: &Palette, size: (u32, u32)) -> Item {
 
 pub fn volume_hud(level: Level, palette: &Palette, text: &mut TextSystem) -> Scene {
     let (width, height) = HUD_SIZE;
+    let title = if level.muted {
+        L10N.tr("sound-muted")
+    } else {
+        L10N.tr("sound")
+    };
     let title = text.paragraph(
-        if level.muted {
-            "Sound (muted)"
-        } else {
-            "Sound"
-        },
+        &title,
         TextStyle::new(TITLE_SIZE, palette.label_primary).weight(TextStyle::SEMIBOLD),
         None,
         TextAlign::Start,
@@ -133,5 +145,17 @@ pub fn volume_hud(level: Level, palette: &Palette, text: &mut TextSystem) -> Sce
         height,
         background: Color::TRANSPARENT,
         items,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn every_message_id_used_in_code_is_in_the_english_file() {
+        let sources = [include_str!("lib.rs"), include_str!("main.rs")];
+        assert_eq!(
+            unbound_l10n::missing_ids(super::ENGLISH, &sources),
+            Vec::<&str>::new()
+        );
     }
 }

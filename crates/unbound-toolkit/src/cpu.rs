@@ -34,7 +34,7 @@ impl CpuRenderer {
 
     pub fn render(&mut self, scene: &Scene) -> Result<Snapshot, RenderError> {
         let mut rgba = vec![0; scene.width as usize * scene.height as usize * 4];
-        self.render_into(scene, &mut rgba)?;
+        self.render_into(scene, 1.0, &mut rgba)?;
         Ok(Snapshot {
             width: scene.width,
             height: scene.height,
@@ -42,8 +42,13 @@ impl CpuRenderer {
         })
     }
 
-    pub fn render_into(&mut self, scene: &Scene, rgba: &mut [u8]) -> Result<(), RenderError> {
-        let (width, height) = crate::render::extent(scene)?;
+    pub fn render_into(
+        &mut self,
+        scene: &Scene,
+        scale: f64,
+        rgba: &mut [u8],
+    ) -> Result<(), RenderError> {
+        let (width, height) = crate::render::extent(scene, scale)?;
         self.context.reset_and_resize(width, height);
         let mut images = Vec::new();
         draw::images(&scene.items, &mut images);
@@ -61,6 +66,7 @@ impl CpuRenderer {
             &mut self.outlines,
             &self.image_ids,
             &scene.items,
+            scale,
         );
         self.outlines.end_frame();
         self.context.flush();

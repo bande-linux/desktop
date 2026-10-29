@@ -97,7 +97,7 @@ impl GpuRenderer {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
             view_formats: &[],
         });
-        let encoder = self.draw(scene, &target)?;
+        let encoder = self.draw(scene, 1.0, &target)?;
         let rgba = self.read_back(encoder, &target)?;
         Ok(Snapshot {
             width: scene.width,
@@ -109,6 +109,7 @@ impl GpuRenderer {
     pub(crate) fn present(
         &mut self,
         scene: &Scene,
+        scale: f64,
         surface: &wgpu::Surface<'static>,
     ) -> Result<(), RenderError> {
         let frame = match surface.get_current_texture() {
@@ -116,7 +117,7 @@ impl GpuRenderer {
             | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
             other => return Err(RenderError::Gpu(format!("no surface texture: {other:?}"))),
         };
-        let encoder = self.draw(scene, &frame.texture)?;
+        let encoder = self.draw(scene, scale, &frame.texture)?;
         self.queue.submit([encoder.finish()]);
         self.queue.present(frame);
         Ok(())
@@ -125,9 +126,10 @@ impl GpuRenderer {
     fn draw(
         &mut self,
         scene: &Scene,
+        scale: f64,
         target: &wgpu::Texture,
     ) -> Result<wgpu::CommandEncoder, RenderError> {
-        let (width, height) = crate::render::extent(scene)?;
+        let (width, height) = crate::render::extent(scene, scale)?;
         self.scene.reset_and_resize(width, height);
         self.upload_images(scene);
         draw::encode(
@@ -138,6 +140,7 @@ impl GpuRenderer {
             &mut self.outlines,
             &self.image_ids,
             &scene.items,
+            scale,
         );
         self.outlines.end_frame();
 

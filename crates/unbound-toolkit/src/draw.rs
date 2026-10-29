@@ -101,7 +101,10 @@ pub(crate) fn encode(
     outlines: &mut GlyphOutlines,
     image_ids: &ImageIds,
     items: &[Item],
+    scale: f64,
 ) {
+    let base = Affine::scale(scale);
+    canvas.set_transform(base);
     for item in items {
         match item {
             Item::Fill { shape, paint: fill } => {
@@ -150,18 +153,20 @@ pub(crate) fn encode(
                         let Some(outline) = outlines.outline(&run, glyph.id) else {
                             continue;
                         };
-                        canvas.set_transform(Affine::translate((
-                            f64::from(origin.x + glyph.x),
-                            f64::from(origin.y + glyph.y),
-                        )));
+                        canvas.set_transform(
+                            base * Affine::translate((
+                                f64::from(origin.x + glyph.x),
+                                f64::from(origin.y + glyph.y),
+                            )),
+                        );
                         canvas.fill_path(&outline);
                     }
-                    canvas.set_transform(Affine::IDENTITY);
+                    canvas.set_transform(base);
                 }
             }
             Item::Clip { shape, items } => {
                 canvas.push_clip_layer(&path(shape));
-                encode(canvas, outlines, image_ids, items);
+                encode(canvas, outlines, image_ids, items, scale);
                 canvas.pop_layer();
             }
             Item::Image { rect: area, image } => {

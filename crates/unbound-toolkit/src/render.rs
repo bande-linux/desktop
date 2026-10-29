@@ -1,5 +1,6 @@
 use std::fmt;
 
+use crate::scale::pixels;
 use crate::scene::Scene;
 
 #[derive(Debug)]
@@ -33,13 +34,11 @@ pub struct Snapshot {
     pub rgba: Vec<u8>,
 }
 
-pub(crate) fn extent(scene: &Scene) -> Result<(u16, u16), RenderError> {
-    let too_large = || RenderError::TooLarge {
-        width: scene.width,
-        height: scene.height,
-    };
+pub(crate) fn extent(scene: &Scene, scale: f64) -> Result<(u16, u16), RenderError> {
+    let (width, height) = (pixels(scene.width, scale), pixels(scene.height, scale));
+    let too_large = || RenderError::TooLarge { width, height };
     Ok((
-        u16::try_from(scene.width).map_err(|_| too_large())?,
-        u16::try_from(scene.height).map_err(|_| too_large())?,
+        u16::try_from(width).map_err(|_| too_large())?,
+        u16::try_from(height).map_err(|_| too_large())?,
     ))
 }

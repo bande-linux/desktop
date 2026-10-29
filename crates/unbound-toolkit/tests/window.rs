@@ -145,3 +145,64 @@ fn a_lock_window_covers_the_output_until_it_unlocks() {
     }
     client.join().expect("client thread");
 }
+
+#[test]
+fn on_a_2x_output_a_window_keeps_its_size_in_points_and_fills_twice_the_pixels() {
+    let mut server = Headless::new(Size::from((640, 480))).expect("headless compositor");
+    server.set_output_scale(2.0);
+    let (client_end, server_end) = UnixStream::pair().expect("socket pair");
+    server.insert_client(server_end).expect("insert client");
+
+    let (drawn, on_screen) = mpsc::channel();
+    let (checked, check_done) = mpsc::channel::<()>();
+    let client = thread::spawn(move || {
+        let mut window = Window::open_on(
+            client_end,
+            Role::toplevel("toolkit test", "unbound-toolkit-test"),
+            WINDOW,
+        )
+        .expect("window");
+        let scale = window.scale();
+        window.draw(&filled(RED)).expect("frame");
+        window.wait_for_frame().expect("frame callback");
+        drawn.send(scale).expect("report frame");
+        check_done.recv().expect("compositor checked the frame");
+    });
+
+    let mut renderer = Renderer::new().expect("Vulkan renderer");
+    let mut scheduler = FrameScheduler::new(FrameClock::new(Duration::ZERO, REFRESH));
+    let start = Instant::now();
+    let mut verified = false;
+    while !client.is_finished() {
+        assert!(
+            start.elapsed() < Duration::from_secs(60),
+            "the client stalled"
+        );
+        server.dispatch().expect("server dispatch");
+        scheduler
+            .poll(|| start.elapsed(), &mut server, &mut renderer)
+            .expect("compositor frame");
+        if let Ok(scale) = on_screen.try_recv() {
+            assert_eq!(scale, 2.0, "the window was told the output scale");
+            let window = &server.windows()[0];
+            let size = window.size().expect("mapped window");
+            assert_eq!((size.w, size.h), (WINDOW.0 as i32, WINDOW.1 as i32));
+            let snapshot = renderer.snapshot(&server).expect("read back");
+            let location = window.location();
+            let at = |x: i32, y: i32| {
+                let offset = ((y * snapshot.size.w + x) * 4) as usize;
+                snapshot.rgba[offset..offset + 3].to_vec()
+            };
+            let (left, top) = (location.x * 2, location.y * 2);
+            let (right, bottom) = (left + size.w * 2 - 1, top + size.h * 2 - 1);
+            assert_eq!(at(left, top), [RED.r, RED.g, RED.b]);
+            assert_eq!(at(right, bottom), [RED.r, RED.g, RED.b]);
+            assert_ne!(at(right + 2, top + 4), [RED.r, RED.g, RED.b]);
+            checked.send(()).expect("release the client");
+            verified = true;
+        }
+        thread::sleep(Duration::from_micros(200));
+    }
+    assert!(verified, "the frame was drawn and verified");
+    client.join().expect("client thread");
+}

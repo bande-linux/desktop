@@ -8,6 +8,7 @@ mod lock;
 mod outline;
 mod render;
 mod run;
+mod scale;
 mod scene;
 mod seat;
 mod shell;

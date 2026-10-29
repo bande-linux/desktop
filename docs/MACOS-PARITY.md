@@ -14,7 +14,7 @@ preinstalled. The Dock sits on the left by default, the menu bar on top.
 
 | Feature | Status | Milestone |
 |---|---|---|
-| HiDPI and fractional scaling | none (every client at 1×) | M1 |
+| HiDPI and fractional scaling | basic (compositor and toolkit scale to output) | M1 |
 | Menus and context menus in the toolkit | none | M1 |
 | Scroll views, lists, tables, icon grids | none | M1 |
 | Window title bar with traffic lights, move and resize | none (no chrome) | M1 |

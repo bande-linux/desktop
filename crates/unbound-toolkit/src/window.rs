@@ -48,6 +48,7 @@ use crate::cpu::CpuRenderer;
 use crate::gpu::{GpuRenderer, vulkan_instance};
 use crate::lock::{Locked, SessionLock};
 use crate::render::RenderError;
+use crate::scale::{Scaling, SurfaceScale, pixels};
 use crate::scene::Scene;
 use crate::seat::Input;
 use crate::shell::Shell;
@@ -215,6 +216,7 @@ pub(crate) struct State {
     pub(crate) lock: SessionLock,
     pub(crate) capture: Capture,
     pub(crate) text_input: TextInput,
+    pub(crate) scaling: Scaling,
 }
 
 impl State {
@@ -264,6 +266,8 @@ pub struct Window {
     pub(crate) state: State,
     pub(crate) connection: Connection,
     size: (u32, u32),
+    surface_scale: Option<SurfaceScale>,
+    drawn_scale: f64,
     visible: bool,
     needs_redraw: bool,
     pub(crate) accessibility: Accessibility,
@@ -316,6 +320,10 @@ impl Window {
 
         let surface = compositor.create_surface(&handle, ());
         state.join_text_input(&surface, &handle);
+        let surface_scale = state.scaling.follow(&surface, &handle);
+        if surface_scale.is_some() {
+            queue.roundtrip(&mut state)?;
+        }
         let role = match role {
             Role::Toplevel { title, app_id } => {
                 let wm_base = state
@@ -401,6 +409,8 @@ impl Window {
             state,
             connection,
             size,
+            surface_scale,
+            drawn_scale: 1.0,
             visible: true,
             needs_redraw: true,
             accessibility: Accessibility::new()?,
@@ -437,7 +447,16 @@ impl Window {
     }
 
     pub(crate) fn wants_frame(&self) -> bool {
-        self.visible && !self.state.frame_pending && (self.needs_redraw || self.resized())
+        self.visible
+            && !self.state.frame_pending
+            && (self.needs_redraw || self.resized() || self.scale() != self.drawn_scale)
+    }
+
+    pub fn scale(&self) -> f64 {
+        match self.surface_scale {
+            Some(_) => self.state.scaling.scale(),
+            None => 1.0,
+        }
     }
 
     fn resized(&self) -> bool {
@@ -541,9 +560,14 @@ impl Window {
         self.poll_gpu();
         self.surface.frame(&self.queue.handle(), ());
         self.state.frame_pending = true;
+        let scale = self.scale();
+        self.drawn_scale = scale;
+        if let Some(surface_scale) = &self.surface_scale {
+            surface_scale.show_at(self.size);
+        }
         let path = match &mut self.gpu {
             Gpu::Ready(gpu) => {
-                gpu.present(scene)?;
+                gpu.present(scene, scale)?;
                 FramePath::Gpu
             }
             Gpu::Starting(_) | Gpu::Unavailable => {
@@ -566,10 +590,11 @@ impl Window {
     }
 
     fn draw_on_cpu(&mut self, scene: &Scene) -> Result<(), WindowError> {
-        let (width, height) = (scene.width, scene.height);
+        let scale = self.drawn_scale;
+        let (width, height) = (pixels(scene.width, scale), pixels(scene.height, scale));
         let bytes = width as usize * height as usize * 4;
         self.rgba.resize(bytes, 0);
-        self.cpu.render_into(scene, &mut self.rgba)?;
+        self.cpu.render_into(scene, scale, &mut self.rgba)?;
         for pixel in self.rgba.as_chunks_mut::<4>().0 {
             pixel.swap(0, 2);
         }
@@ -657,15 +682,15 @@ impl Drop for Window {
 }
 
 impl GpuSurface {
-    fn present(&mut self, scene: &Scene) -> Result<(), RenderError> {
-        let size = (scene.width, scene.height);
+    fn present(&mut self, scene: &Scene, scale: f64) -> Result<(), RenderError> {
+        let size = (pixels(scene.width, scale), pixels(scene.height, scale));
         if self.configured != Some(size) {
-            self.config.width = scene.width.max(1);
-            self.config.height = scene.height.max(1);
+            self.config.width = size.0;
+            self.config.height = size.1;
             self.surface.configure(self.renderer.device(), &self.config);
             self.configured = Some(size);
         }
-        self.renderer.present(scene, &self.surface)
+        self.renderer.present(scene, scale, &self.surface)
     }
 }
 
@@ -794,6 +819,12 @@ impl Dispatch<WlRegistry, ()> for State {
                 }
                 "zwp_text_input_manager_v3" => {
                     state.text_input.manager = Some(registry.bind(name, 1, handle, ()));
+                }
+                "wp_fractional_scale_manager_v1" => {
+                    state.scaling.fractional_manager = Some(registry.bind(name, 1, handle, ()));
+                }
+                "wp_viewporter" => {
+                    state.scaling.viewporter = Some(registry.bind(name, 1, handle, ()));
                 }
                 "ext_foreign_toplevel_list_v1" => {
                     let _: ExtForeignToplevelListV1 = registry.bind(name, 1, handle, ());

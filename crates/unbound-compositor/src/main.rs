@@ -10,9 +10,9 @@ use smithay::reexports::calloop::{EventLoop, Interest, LoopHandle, Mode, PostAct
 use smithay::utils::{Clock, Monotonic, Size};
 use smithay::wayland::socket::ListeningSocketSource;
 use unbound_compositor::{
-    CLIPBOARD_DAEMON, DrmOutput, FrameClock, FrameOutput, FrameScheduler, Headless, LAUNCHER,
-    PANEL, REFRESH, Renderer, SCREENSHOT, SessionRequest, SessionRole, export_session_environment,
-    follow_session,
+    CLIPBOARD_DAEMON, DrmOutput, FrameClock, FrameOutput, FrameScheduler, GREETER, Headless,
+    LAUNCHER, PANEL, REFRESH, Renderer, SCREENSHOT, SessionRequest, SessionRole, SessionUpkeep,
+    export_session_environment, follow_session,
 };
 
 const HEADLESS_SIZE: (i32, i32) = (1920, 1080);
@@ -28,10 +28,16 @@ struct App<O> {
     scheduler: FrameScheduler,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Session {
+    User,
+    Greeter,
+}
+
 fn main() -> ExitCode {
-    let result = parse_args().and_then(|backend| match backend {
-        Backend::Headless => run_headless(),
-        Backend::Drm(device) => run_drm(device.as_deref()),
+    let result = parse_args().and_then(|(backend, session)| match backend {
+        Backend::Headless => run_headless(session),
+        Backend::Drm(device) => run_drm(device.as_deref(), session),
     });
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -42,26 +48,30 @@ fn main() -> ExitCode {
     }
 }
 
-fn parse_args() -> Result<Backend, Box<dyn Error>> {
+fn parse_args() -> Result<(Backend, Session), Box<dyn Error>> {
     let mut backend = Backend::Drm(None);
+    let mut session = Session::User;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
-        backend = match arg.as_str() {
-            "--headless" => Backend::Headless,
-            "--drm-device" => Backend::Drm(Some(PathBuf::from(
-                args.next().ok_or("--drm-device needs a path")?,
-            ))),
+        match arg.as_str() {
+            "--headless" => backend = Backend::Headless,
+            "--drm-device" => {
+                backend = Backend::Drm(Some(PathBuf::from(
+                    args.next().ok_or("--drm-device needs a path")?,
+                )));
+            }
+            "--greeter" => session = Session::Greeter,
             _ => return Err(format!("unknown argument {arg}").into()),
-        };
+        }
     }
-    Ok(backend)
+    Ok((backend, session))
 }
 
 fn now() -> Duration {
     Duration::from(Clock::<Monotonic>::new().now())
 }
 
-fn run_headless() -> Result<(), Box<dyn Error>> {
+fn run_headless(session: Session) -> Result<(), Box<dyn Error>> {
     let renderer = Renderer::new()?;
     let info = renderer.device_info();
     eprintln!(
@@ -75,10 +85,10 @@ fn run_headless() -> Result<(), Box<dyn Error>> {
         output: renderer,
         scheduler: FrameScheduler::new(FrameClock::new(now(), REFRESH)),
     };
-    serve(&mut event_loop, app)
+    serve(&mut event_loop, app, session)
 }
 
-fn run_drm(device: Option<&Path>) -> Result<(), Box<dyn Error>> {
+fn run_drm(device: Option<&Path>, session: Session) -> Result<(), Box<dyn Error>> {
     let (mut output, notifiers) = DrmOutput::open(device)?;
     eprintln!(
         "unbound-compositor: driving {} at {:.2} Hz",
@@ -123,7 +133,7 @@ fn run_drm(device: Option<&Path>) -> Result<(), Box<dyn Error>> {
         output,
         scheduler: FrameScheduler::new(FrameClock::new(now(), refresh)),
     };
-    serve(&mut event_loop, app)
+    serve(&mut event_loop, app, session)
 }
 
 fn listen<O: 'static>(
@@ -156,15 +166,10 @@ fn listen<O: 'static>(
     Ok(())
 }
 
-fn serve<O>(
+fn start_user_session<O: 'static>(
     event_loop: &mut EventLoop<'static, App<O>>,
-    mut app: App<O>,
-) -> Result<(), Box<dyn Error>>
-where
-    O: FrameOutput + 'static,
-    O::Error: Into<Box<dyn Error>>,
-{
-    listen(&event_loop.handle(), &mut app)?;
+    app: &mut App<O>,
+) -> Result<(), Box<dyn Error>> {
     let (lock_states, reported) = std::sync::mpsc::channel();
     match follow_session(reported) {
         Ok(requests) => {
@@ -192,10 +197,38 @@ where
             eprintln!("unbound-compositor: cannot start {executable}: {error}");
         }
     }
+    Ok(())
+}
+
+fn serve<O>(
+    event_loop: &mut EventLoop<'static, App<O>>,
+    mut app: App<O>,
+    session: Session,
+) -> Result<(), Box<dyn Error>>
+where
+    O: FrameOutput + 'static,
+    O::Error: Into<Box<dyn Error>>,
+{
+    listen(&event_loop.handle(), &mut app)?;
+    let mut greeter = match session {
+        Session::User => {
+            start_user_session(event_loop, &mut app)?;
+            None
+        }
+        Session::Greeter => Some(app.compositor.spawn_shell_client(Path::new(GREETER))?),
+    };
     let mut timeout = None;
     loop {
         event_loop.dispatch(timeout, &mut app)?;
-        let upkeep = app.compositor.keep_session_clients_running();
+        let upkeep = match greeter.as_mut() {
+            Some(greeter) => {
+                if greeter.try_wait()?.is_some() {
+                    return Ok(());
+                }
+                SessionUpkeep::default()
+            }
+            None => app.compositor.keep_session_clients_running(),
+        };
         for (executable, error) in &upkeep.failures {
             eprintln!(
                 "unbound-compositor: cannot restart {}: {error}",

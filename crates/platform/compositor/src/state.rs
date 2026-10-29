@@ -86,6 +86,7 @@ use unbound_render::VulkanRenderer;
 use crate::clock::Vblank;
 use crate::cursor::{self, Cursor, CursorTheme};
 use crate::lock::Lock;
+use crate::scene::{ShadowElement, WindowElement};
 use crate::session::{LockScreen, SessionClient, SessionRole};
 use crate::shell;
 use crate::window::Window;
@@ -126,6 +127,12 @@ pub fn automatic_scale(size: Size<i32, Physical>, physical_size_mm: Size<i32, Ra
     } else {
         1.0
     }
+}
+
+#[derive(Clone)]
+pub(crate) enum Placed<'a> {
+    Surface(WlSurface, Point<i32, Logical>),
+    Window(&'a Window),
 }
 
 pub(crate) struct ExclusiveLayer {
@@ -475,21 +482,25 @@ impl Headless {
             Vec::new()
         };
         let scale = self.state.output_scale;
-        elements.extend(
-            self.state
-                .stack()
-                .into_iter()
-                .flat_map(|(surface, location)| {
-                    render_elements_from_surface_tree(
+        let key = self.state.key_window();
+        for placed in self.state.scene() {
+            match placed {
+                Placed::Surface(surface, location) => {
+                    elements.extend(render_elements_from_surface_tree(
                         renderer,
                         &surface,
                         location.to_f64().to_physical(scale).to_i32_round::<i32>(),
                         scale,
                         1.0,
                         ElementKind::Unspecified,
-                    )
-                }),
-        );
+                    ));
+                }
+                Placed::Window(window) => {
+                    let active = key.as_ref() == Some(window.surface());
+                    elements.extend(window.render_elements(renderer, scale, active));
+                }
+            }
+        }
         elements
     }
 
@@ -803,18 +814,34 @@ impl State {
     }
 
     pub(crate) fn stack(&self) -> Vec<(WlSurface, Point<i32, Logical>)> {
+        self.scene()
+            .into_iter()
+            .map(|placed| match placed {
+                Placed::Surface(surface, origin) => (surface, origin),
+                Placed::Window(window) => (window.surface().clone(), window.surface_origin()),
+            })
+            .collect()
+    }
+
+    pub(crate) fn scene(&self) -> Vec<Placed<'_>> {
         if self.is_locked() {
-            return self.locked_stack();
+            return self
+                .locked_stack()
+                .into_iter()
+                .map(|(surface, origin)| Placed::Surface(surface, origin))
+                .collect();
         }
-        let with_popups = |surface: WlSurface, origin, geometry_origin| {
-            let mut entries = self.popup_surfaces(&surface, geometry_origin);
-            entries.push((surface, origin));
-            entries
+        let popups = |surface: &WlSurface, geometry_origin| {
+            self.popup_surfaces(surface, geometry_origin)
+                .into_iter()
+                .map(|(surface, origin)| Placed::Surface(surface, origin))
         };
         let layers = |layer: Layer| {
             self.placed_layers(layer)
                 .into_iter()
-                .flat_map(|(surface, at)| with_popups(surface, at, at))
+                .flat_map(|(surface, at)| {
+                    popups(&surface, at).chain([Placed::Surface(surface, at)])
+                })
                 .collect::<Vec<_>>()
         };
         let visible = self
@@ -827,27 +854,27 @@ impl State {
             .first()
             .is_some_and(|window| window.has_state(xdg_toplevel::State::Fullscreen));
         let (front, rest) = visible.split_at(usize::from(fullscreen_in_front));
-        let windows = |windows: &[&Window]| {
-            windows
-                .iter()
-                .flat_map(|window| {
-                    with_popups(
-                        window.surface().clone(),
-                        window.surface_origin(),
-                        window.location,
-                    )
-                })
-                .collect::<Vec<_>>()
-        };
         [
             layers(Layer::Overlay),
-            windows(front),
+            self.window_entries(front),
             layers(Layer::Top),
-            windows(rest),
+            self.window_entries(rest),
             layers(Layer::Bottom),
             layers(Layer::Background),
         ]
         .concat()
+    }
+
+    fn window_entries<'a>(&'a self, windows: &[&'a Window]) -> Vec<Placed<'a>> {
+        windows
+            .iter()
+            .flat_map(|window| {
+                self.popup_surfaces(window.surface(), window.location)
+                    .into_iter()
+                    .map(|(surface, origin)| Placed::Surface(surface, origin))
+                    .chain([Placed::Window(window)])
+            })
+            .collect()
     }
 
     fn commit_layer(&mut self, surface: &WlSurface) -> bool {
@@ -1108,6 +1135,8 @@ impl XdgShellHandler for State {
 render_elements! {
     pub OutputElement<=VulkanRenderer>;
     Surface=WaylandSurfaceRenderElement<VulkanRenderer>,
+    Window=WindowElement<WaylandSurfaceRenderElement<VulkanRenderer>>,
+    Shadow=ShadowElement,
     Cursor=MemoryRenderBufferRenderElement<VulkanRenderer>,
 }
 

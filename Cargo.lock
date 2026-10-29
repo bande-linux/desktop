@@ -3879,13 +3879,21 @@ dependencies = [
 name = "unbound-settings"
 version = "0.1.0"
 dependencies = [
+ "accesskit",
+ "image",
+ "image-compare",
  "tempfile",
  "tracing",
+ "unbound-audio",
+ "unbound-bluetooth",
+ "unbound-compositor",
  "unbound-config",
  "unbound-l10n",
  "unbound-log",
+ "unbound-network",
  "unbound-test-bus",
  "unbound-toolkit",
+ "wayland-client",
  "zbus",
 ]
 
@@ -3961,6 +3969,7 @@ dependencies = [
  "unbound-l10n",
  "unbound-protocols",
  "unbound-test-bus",
+ "unbound-widgets",
  "wayland-backend",
  "wayland-client",
  "wayland-protocols",
@@ -3987,6 +3996,7 @@ dependencies = [
  "accesskit",
  "parley",
  "unbound-graphics",
+ "unbound-spring",
 ]
 
 [[package]]

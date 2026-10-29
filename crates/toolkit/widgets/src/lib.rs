@@ -1,27 +1,36 @@
+mod animation;
 mod button;
+mod context_menu;
 mod label;
+mod menu;
 mod secure_field;
 mod slider;
 mod stack;
 mod text_field;
 mod toggle;
 
+use std::cell::Cell;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Instant;
 
 use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
 
+pub use animation::Animated;
 pub use button::{BUTTON_HEIGHT, Button};
+pub use context_menu::ContextMenu;
 pub use label::Label;
+pub use menu::{Menu, MenuItem, MenuOutcome, MenuPanel, MenuTracker};
 pub use secure_field::SecureField;
 pub use slider::{SLIDER_HEIGHT, Slider};
 pub use stack::{Axis, Stack};
 pub use text_field::{TEXT_FIELD_HEIGHT, TextField};
 pub use toggle::{SWITCH_SIZE, Toggle};
+pub use unbound_spring::Spring;
 
+use unbound_graphics::{Appearance, Item, Palette, Point, Rect, Scene, Shape, TextSystem};
 pub use unbound_graphics::{
     Cursor, Event, Key, Modifiers, Pointer, PointerButton, Scroll, ScrollPhase, ScrollSource,
 };
-use unbound_graphics::{Item, Palette, Point, Rect, Scene, Shape, TextSystem};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct WidgetId(u64);
@@ -59,7 +68,10 @@ pub struct Context {
     pub text: TextSystem,
     pub palette: Palette,
     pub keyboard_navigation: bool,
+    pub reduce_motion: bool,
     focus: Option<WidgetId>,
+    now: Instant,
+    animating: Cell<bool>,
 }
 
 impl Context {
@@ -68,8 +80,15 @@ impl Context {
             text,
             palette,
             keyboard_navigation: false,
+            reduce_motion: false,
             focus: None,
+            now: Instant::now(),
+            animating: Cell::new(false),
         }
+    }
+
+    pub fn now(&self) -> Instant {
+        self.now
     }
 
     pub fn is_focused(&self, id: WidgetId) -> bool {
@@ -118,6 +137,14 @@ pub trait Widget {
         None
     }
 
+    fn context_menu(&mut self, _cx: &mut Context, _point: Point) -> Option<Menu> {
+        None
+    }
+
+    fn menu_action(&mut self, _cx: &mut Context, _action: &str) -> bool {
+        false
+    }
+
     fn children(&self) -> &[Box<dyn Widget>] {
         &[]
     }
@@ -130,9 +157,12 @@ pub trait Widget {
 pub struct Ui {
     root: Box<dyn Widget>,
     cx: Context,
+    clock: Box<dyn Fn() -> Instant>,
     captured: Option<(WidgetId, PointerButton)>,
     hovered: Vec<WidgetId>,
     pointer: Option<Point>,
+    menu_owner: Option<WidgetId>,
+    menu_request: Option<(Menu, Point)>,
 }
 
 fn contains(frame: Rect, point: Point) -> bool {
@@ -214,9 +244,12 @@ impl Ui {
         Self {
             root,
             cx,
+            clock: Box::new(Instant::now),
             captured: None,
             hovered: Vec::new(),
             pointer: None,
+            menu_owner: None,
+            menu_request: None,
         }
     }
 
@@ -238,7 +271,23 @@ impl Ui {
             .place(&mut self.cx, Rect::new(0.0, 0.0, size.width, size.height));
     }
 
+    pub fn set_clock(&mut self, clock: impl Fn() -> Instant + 'static) {
+        self.clock = Box::new(clock);
+        self.cx.now = (self.clock)();
+    }
+
+    pub fn set_appearance(&mut self, appearance: Appearance) {
+        self.cx.palette = appearance.palette();
+        self.cx.reduce_motion = appearance.reduce_motion;
+    }
+
+    pub fn is_animating(&self) -> bool {
+        self.cx.animating.get()
+    }
+
     pub fn scene(&mut self, width: u32, height: u32) -> Scene {
+        self.cx.now = (self.clock)();
+        self.cx.animating.set(false);
         self.layout(Size::new(width as f32, height as f32));
         let mut items = Vec::new();
         self.root.paint(&self.cx, &mut items);
@@ -251,6 +300,7 @@ impl Ui {
     }
 
     pub fn handle(&mut self, event: &Event) -> bool {
+        self.cx.now = (self.clock)();
         match event {
             Event::PointerDown(pointer) => {
                 let hovered = self.hover(Some(pointer));
@@ -263,7 +313,12 @@ impl Ui {
                 if pointer.is_primary() && self.accepts_focus(target) {
                     self.cx.focus = Some(target);
                 }
-                self.deliver(target, event) | hovered
+                let delivered = self.deliver(target, event);
+                if pointer.button == PointerButton::Secondary {
+                    self.captured = None;
+                    return self.request_menu(pointer.position) | delivered | hovered;
+                }
+                delivered | hovered
             }
             Event::PointerMove(pointer) | Event::PointerEnter(pointer) => {
                 let moved = Event::PointerMove(*pointer);
@@ -323,6 +378,36 @@ impl Ui {
                 .focus
                 .is_some_and(|target| self.deliver(target, event)),
         }
+    }
+
+    fn request_menu(&mut self, point: Point) -> bool {
+        let path = self.hovered.clone();
+        for id in path.into_iter().rev() {
+            let Some(widget) = find_mut(self.root.as_mut(), id) else {
+                continue;
+            };
+            if let Some(menu) = widget.context_menu(&mut self.cx, point) {
+                self.menu_owner = Some(id);
+                self.menu_request = Some((menu, point));
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn take_menu_request(&mut self) -> Option<(Menu, Point)> {
+        self.menu_request.take()
+    }
+
+    pub fn menu_action(&mut self, action: &str) -> bool {
+        self.cx.now = (self.clock)();
+        let Some(owner) = self.menu_owner.take() else {
+            return false;
+        };
+        let Some(widget) = find_mut(self.root.as_mut(), owner) else {
+            return false;
+        };
+        widget.menu_action(&mut self.cx, action)
     }
 
     pub fn cursor(&self) -> Cursor {
@@ -426,6 +511,7 @@ impl Ui {
     }
 
     pub fn perform(&mut self, request: &ActionRequest) -> bool {
+        self.cx.now = (self.clock)();
         let target = WidgetId(request.target_node.0);
         if request.action == Action::Focus {
             let accepts = self.accepts_focus(target);

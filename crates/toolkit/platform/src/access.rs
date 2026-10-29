@@ -108,6 +108,10 @@ impl Accessibility {
         self.adapter.update_if_active(|| tree);
     }
 
+    pub(crate) fn request_tree(&mut self) {
+        self.tree_requested = true;
+    }
+
     pub(crate) fn set_window_focused(&mut self, focused: bool) {
         self.adapter.update_window_focus_state(focused);
     }

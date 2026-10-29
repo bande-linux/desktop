@@ -10,6 +10,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
+use std::time::Instant;
 
 use accesskit::{ActionRequest, TreeUpdate};
 use raw_window_handle::{
@@ -17,10 +18,11 @@ use raw_window_handle::{
 };
 use rustix::fs::{MemfdFlags, memfd_create};
 use unbound_graphics::{
-    Appearance, CpuRenderer, Cursor, Event, GpuRenderer, Point, Pointer, PointerButton,
-    RenderError, Scene, pixels, vulkan_instance,
+    Appearance, CpuRenderer, Cursor, Event, GpuRenderer, Point, Pointer, PointerButton, Rect,
+    RenderError, Scene, TextSystem, pixels, vulkan_instance,
 };
 use unbound_protocols::client::unbound_shell_v1::VolumeKey;
+use unbound_widgets::{Menu, MenuOutcome};
 use wayland_client::backend::WaylandError;
 use wayland_client::protocol::wl_buffer::{self, WlBuffer};
 use wayland_client::protocol::wl_callback::{self, WlCallback};
@@ -53,6 +55,7 @@ use crate::capture::Capture;
 use crate::chrome::{Chrome, Control, Frame, RESIZE_MARGIN, TITLE_BAR_HEIGHT, Zone};
 use crate::clipboard::Clipboard;
 use crate::lock::{Locked, SessionLock};
+use crate::popup::{MenuPlacement, Menus, Opening, Parent};
 use crate::scale::{Scaling, SurfaceScale};
 use crate::seat::Input;
 use crate::shell::Shell;
@@ -129,6 +132,8 @@ pub enum WindowEvent {
     Focus(bool),
     CloseRequested,
     ToplevelChanged(ToplevelState),
+    MenuAction(String),
+    MenuClosed,
     Pasted(String),
     ShowLauncher,
     CaptureScreen,
@@ -251,7 +256,7 @@ impl ResizeEdge {
 pub(crate) struct State {
     pub(crate) compositor: Option<WlCompositor>,
     pub(crate) shm: Option<WlShm>,
-    wm_base: Option<XdgWmBase>,
+    pub(crate) wm_base: Option<XdgWmBase>,
     layer_shell: Option<ZwlrLayerShellV1>,
     pub(crate) activation: Option<XdgActivationV1>,
     pub(crate) seat: Option<WlSeat>,
@@ -263,6 +268,11 @@ pub(crate) struct State {
     pub(crate) toplevel: ToplevelState,
     frame_pending: bool,
     pub(crate) events: Vec<WindowEvent>,
+    pub(crate) popup_surfaces: Vec<WlSurface>,
+    pub(crate) popup_configured: Vec<bool>,
+    pub(crate) popup_input: Vec<(usize, Event)>,
+    pub(crate) popups_changed: bool,
+    pub(crate) popup_dismissed: bool,
     pub(crate) input: Input,
     pub(crate) clipboard: Clipboard,
     pub(crate) shell: Shell,
@@ -312,8 +322,7 @@ enum ShellSurface {
 pub struct Window {
     gpu: Gpu,
     cpu: CpuRenderer,
-    buffers: Vec<ShmBuffer>,
-    rgba: Vec<u8>,
+    shm_target: ShmTarget,
     role: ShellSurface,
     pub(crate) surface: WlSurface,
     pub(crate) queue: EventQueue<State>,
@@ -325,6 +334,8 @@ pub struct Window {
     visible: bool,
     needs_redraw: bool,
     chrome: Option<Chrome>,
+    menus: Option<Menus>,
+    text: Option<TextSystem>,
     shown_frame: Option<Frame>,
     pub(crate) app_cursor: Cursor,
     pub(crate) accessibility: Accessibility,
@@ -473,8 +484,7 @@ impl Window {
         Ok(Self {
             gpu,
             cpu: CpuRenderer::new(),
-            buffers: Vec::new(),
-            rgba: Vec::new(),
+            shm_target: ShmTarget::default(),
             role,
             surface,
             queue,
@@ -486,6 +496,8 @@ impl Window {
             visible: true,
             needs_redraw: true,
             chrome,
+            menus: None,
+            text: None,
             shown_frame: None,
             app_cursor: Cursor::Default,
             accessibility: Accessibility::new()?,
@@ -686,6 +698,7 @@ impl Window {
     }
 
     pub fn take_events(&mut self) -> Vec<WindowEvent> {
+        self.serve_menus(Instant::now());
         let events = std::mem::take(&mut self.state.events);
         if self.chrome.is_none() {
             return events;
@@ -695,6 +708,146 @@ impl Window {
             self.through_chrome(event, &mut passed);
         }
         passed
+    }
+
+    pub fn show_menu(&mut self, menu: Menu, placement: MenuPlacement) -> Result<(), WindowError> {
+        self.close_menu();
+        let title = self.title_height() as f32;
+        let placement = match placement {
+            MenuPlacement::AtPoint(point) => {
+                MenuPlacement::AtPoint(Point::new(point.x, point.y + title))
+            }
+            MenuPlacement::Below(rect) => {
+                MenuPlacement::Below(Rect::new(rect.x, rect.y + title, rect.width, rect.height))
+            }
+        };
+        let parent = match &self.role {
+            ShellSurface::Toplevel(xdg_surface, _) => Parent::Toplevel(xdg_surface),
+            ShellSurface::Layer(layer) => Parent::Layer(layer),
+            ShellSurface::Lock(_) => {
+                return Err(WindowError::Missing("a surface that takes popups"));
+            }
+        };
+        let handle = self.queue.handle();
+        self.state.popup_dismissed = false;
+        let opening = Opening {
+            state: &mut self.state,
+            handle: &handle,
+            text: self.text.get_or_insert_with(TextSystem::new),
+            palette: self.appearance.current().palette(),
+        };
+        let menus = Menus::open(opening, menu, parent, placement)?;
+        self.menus = Some(menus);
+        self.flush()?;
+        while !self.state.popup_configured.first().copied().unwrap_or(true)
+            && !self.state.popup_dismissed
+        {
+            self.queue.blocking_dispatch(&mut self.state)?;
+        }
+        self.draw_menus(Instant::now())
+    }
+
+    pub fn is_menu_open(&self) -> bool {
+        self.menus.is_some()
+    }
+
+    pub fn close_menu(&mut self) {
+        if let Some(menus) = self.menus.take() {
+            menus.close(&mut self.state);
+            self.state.popup_input.clear();
+            self.accessibility.request_tree();
+        }
+    }
+
+    fn draw_menus(&mut self, now: Instant) -> Result<(), WindowError> {
+        let palette = self.appearance.current().palette();
+        let scale = self.scale();
+        let handle = self.queue.handle();
+        if let Some(menus) = &mut self.menus {
+            menus.draw(&self.state, &handle, &mut self.cpu, &palette, scale, now)?;
+        }
+        self.accessibility.request_tree();
+        self.flush()
+    }
+
+    pub(crate) fn deadline(&self) -> Option<Instant> {
+        self.menus.as_ref().and_then(Menus::deadline)
+    }
+
+    pub(crate) fn tick(&mut self, now: Instant) {
+        self.serve_menus(now);
+    }
+
+    fn serve_menus(&mut self, now: Instant) {
+        if self.menus.is_none() {
+            self.state.popup_input.clear();
+            return;
+        }
+        let mut outcomes = Vec::new();
+        if std::mem::take(&mut self.state.popup_dismissed) {
+            outcomes.push((MenuOutcome::Dismiss, false));
+        }
+        let input = std::mem::take(&mut self.state.popup_input);
+        if let Some(menus) = &mut self.menus {
+            for (level, event) in &input {
+                let keyboard = matches!(event, Event::Key { .. });
+                outcomes.push((menus.handle(*level, event, now), keyboard));
+            }
+            outcomes.push((menus.tick(now), false));
+        }
+        let mut redraw = std::mem::take(&mut self.state.popups_changed)
+            || self
+                .menus
+                .as_ref()
+                .is_some_and(|menus| menus.tracker().is_flashing());
+        for (outcome, keyboard) in outcomes {
+            redraw |= self.apply_menu_outcome(outcome, keyboard);
+        }
+        if redraw && self.menus.is_some() {
+            let _ = self.draw_menus(now);
+        }
+    }
+
+    fn apply_menu_outcome(&mut self, outcome: MenuOutcome, keyboard: bool) -> bool {
+        match outcome {
+            MenuOutcome::Nothing => false,
+            MenuOutcome::Redraw => true,
+            MenuOutcome::Activate(action) => {
+                self.state.events.push(WindowEvent::MenuAction(action));
+                true
+            }
+            MenuOutcome::Dismiss => {
+                let activated = self
+                    .menus
+                    .as_ref()
+                    .is_some_and(|menus| menus.tracker().is_flashing());
+                self.close_menu();
+                if !activated {
+                    self.state.events.push(WindowEvent::MenuClosed);
+                }
+                false
+            }
+            MenuOutcome::CloseFrom(level) => {
+                if let Some(menus) = &mut self.menus {
+                    menus.close_from(&mut self.state, level);
+                }
+                true
+            }
+            MenuOutcome::OpenSubmenu { level, index } => {
+                let handle = self.queue.handle();
+                let palette = self.appearance.current().palette();
+                if let Some(menus) = &mut self.menus {
+                    let opening = Opening {
+                        state: &mut self.state,
+                        handle: &handle,
+                        text: self.text.get_or_insert_with(TextSystem::new),
+                        palette,
+                    };
+                    let _ = menus.open_submenu(opening, level, index, keyboard);
+                }
+                true
+            }
+        }
     }
 
     pub(crate) fn pointer_in_content(&self) -> bool {
@@ -714,6 +867,8 @@ impl Window {
             position: Point::new(pointer.position.x - origin.x, pointer.position.y - origin.y),
             ..pointer
         };
+        let now = Instant::now();
+        let reduce_motion = self.appearance.current().reduce_motion;
         let Some(chrome) = self.chrome.as_mut() else {
             passed.push(event);
             return;
@@ -741,7 +896,7 @@ impl Window {
                     }
                     return;
                 }
-                if chrome.hover(&frame, Some(pointer.position)) {
+                if chrome.hover(&frame, Some(pointer.position), now, reduce_motion) {
                     self.needs_redraw = true;
                 }
                 let content = zone == Zone::Content || chrome.content_buttons > 0;
@@ -820,7 +975,7 @@ impl Window {
             }
             Event::PointerLeave => {
                 chrome.content_buttons = 0;
-                if chrome.hover(&frame, None) {
+                if chrome.hover(&frame, None, now, reduce_motion) {
                     self.needs_redraw = true;
                 }
                 if std::mem::take(&mut chrome.pointer_in_content) {
@@ -845,14 +1000,43 @@ impl Window {
     }
 
     pub(crate) fn publish_accessibility(&mut self, tree: TreeUpdate) {
-        let tree = match &self.chrome {
+        let mut tree = match &self.chrome {
             Some(chrome) => chrome.wrap_tree(&self.frame(), tree),
             None => tree,
         };
+        if let Some(menus) = &self.menus
+            && let Some(root) = tree.tree.as_ref().map(|info| info.root)
+        {
+            let (nodes, roots, focus) = menus.tracker().access();
+            if let Some((_, node)) = tree.nodes.iter_mut().find(|(id, _)| *id == root) {
+                for menu in roots {
+                    node.push_child(menu);
+                }
+            }
+            tree.nodes.extend(nodes);
+            if let Some(focus) = focus {
+                tree.focus = focus;
+            }
+        }
         self.accessibility.publish(tree);
     }
 
-    pub(crate) fn perform_chrome(&mut self, request: &ActionRequest) -> bool {
+    pub(crate) fn perform_window_action(&mut self, request: &ActionRequest) -> bool {
+        let item = self
+            .menus
+            .as_ref()
+            .and_then(|menus| menus.tracker().item_for_node(request.target_node));
+        if let (Some((level, index)), Some(menus)) = (item, &mut self.menus) {
+            let outcome = menus.activate(level, index, Instant::now());
+            if self.apply_menu_outcome(outcome, true) {
+                let _ = self.draw_menus(Instant::now());
+            }
+            return true;
+        }
+        self.perform_chrome(request)
+    }
+
+    fn perform_chrome(&mut self, request: &ActionRequest) -> bool {
         let Some(control) = Control::for_node(request.target_node) else {
             return false;
         };
@@ -880,6 +1064,7 @@ impl Window {
                 &appearance.palette(),
                 appearance.scheme,
                 active,
+                Instant::now(),
             ),
             None => scene.clone(),
         }
@@ -972,11 +1157,12 @@ impl Window {
             let frame = self.frame();
             framed = self.framed(&frame, scene);
             self.frame_surface(&frame);
+
             &framed
         } else {
             scene
         };
-        self.needs_redraw = false;
+        self.needs_redraw = self.chrome.as_ref().is_some_and(|chrome| chrome.animating);
         self.surface.frame(&self.queue.handle(), ());
         self.state.frame_pending = true;
         let scale = self.scale();
@@ -1009,11 +1195,42 @@ impl Window {
     }
 
     fn draw_on_cpu(&mut self, scene: &Scene) -> Result<(), WindowError> {
-        let scale = self.drawn_scale;
+        let shm = self
+            .state
+            .shm
+            .as_ref()
+            .ok_or(WindowError::Missing("wl_shm"))?;
+        self.shm_target.present(
+            &mut self.cpu,
+            shm,
+            &self.queue.handle(),
+            &self.surface,
+            scene,
+            self.drawn_scale,
+        )
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct ShmTarget {
+    buffers: Vec<ShmBuffer>,
+    rgba: Vec<u8>,
+}
+
+impl ShmTarget {
+    pub(crate) fn present(
+        &mut self,
+        cpu: &mut CpuRenderer,
+        shm: &WlShm,
+        handle: &QueueHandle<State>,
+        surface: &WlSurface,
+        scene: &Scene,
+        scale: f64,
+    ) -> Result<(), WindowError> {
         let (width, height) = (pixels(scene.width, scale), pixels(scene.height, scale));
         let bytes = width as usize * height as usize * 4;
         self.rgba.resize(bytes, 0);
-        self.cpu.render_into(scene, scale, &mut self.rgba)?;
+        cpu.render_into(scene, scale, &mut self.rgba)?;
         for pixel in self.rgba.as_chunks_mut::<4>().0 {
             pixel.swap(0, 2);
         }
@@ -1025,68 +1242,69 @@ impl Window {
         }) {
             Some(index) => index,
             None => {
-                let buffer = self.create_buffer(width, height)?;
-                self.buffers.push(buffer);
+                self.buffers
+                    .push(create_buffer(shm, handle, width, height)?);
                 self.buffers.len() - 1
             }
         };
         let buffer = &self.buffers[index];
         buffer.file.write_all_at(&self.rgba, 0)?;
         buffer.busy.store(true, Ordering::Release);
-        self.surface.attach(Some(&buffer.buffer), 0, 0);
-        self.surface
-            .damage_buffer(0, 0, clamp_i32(width), clamp_i32(height));
-        self.surface.commit();
+        surface.attach(Some(&buffer.buffer), 0, 0);
+        surface.damage_buffer(0, 0, clamp_i32(width), clamp_i32(height));
+        surface.commit();
         Ok(())
     }
 
-    fn create_buffer(&self, width: u32, height: u32) -> Result<ShmBuffer, WindowError> {
-        let shm = self
-            .state
-            .shm
-            .as_ref()
-            .ok_or(WindowError::Missing("wl_shm"))?;
-        let stride = clamp_i32(width.saturating_mul(4));
-        let length = u64::from(width) * u64::from(height) * 4;
-        let file = File::from(
-            memfd_create("unbound-toolkit", MemfdFlags::CLOEXEC).map_err(io::Error::from)?,
-        );
-        file.set_len(length)?;
-        let handle = self.queue.handle();
-        let pool = shm.create_pool(
-            file.as_fd(),
-            clamp_i32(u32::try_from(length).unwrap_or(u32::MAX)),
-            &handle,
-            (),
-        );
-        let busy = Arc::new(AtomicBool::new(false));
-        let buffer = pool.create_buffer(
-            0,
-            clamp_i32(width),
-            clamp_i32(height),
-            stride,
-            wl_shm::Format::Argb8888,
-            &handle,
-            busy.clone(),
-        );
-        pool.destroy();
-        Ok(ShmBuffer {
-            buffer,
-            file,
-            width,
-            height,
-            busy,
-        })
+    pub(crate) fn destroy(&mut self) {
+        for buffer in self.buffers.drain(..) {
+            buffer.buffer.destroy();
+        }
     }
+}
+
+fn create_buffer(
+    shm: &WlShm,
+    handle: &QueueHandle<State>,
+    width: u32,
+    height: u32,
+) -> Result<ShmBuffer, WindowError> {
+    let stride = clamp_i32(width.saturating_mul(4));
+    let length = u64::from(width) * u64::from(height) * 4;
+    let file =
+        File::from(memfd_create("unbound-toolkit", MemfdFlags::CLOEXEC).map_err(io::Error::from)?);
+    file.set_len(length)?;
+    let pool = shm.create_pool(
+        file.as_fd(),
+        clamp_i32(u32::try_from(length).unwrap_or(u32::MAX)),
+        handle,
+        (),
+    );
+    let busy = Arc::new(AtomicBool::new(false));
+    let buffer = pool.create_buffer(
+        0,
+        clamp_i32(width),
+        clamp_i32(height),
+        stride,
+        wl_shm::Format::Argb8888,
+        handle,
+        busy.clone(),
+    );
+    pool.destroy();
+    Ok(ShmBuffer {
+        buffer,
+        file,
+        width,
+        height,
+        busy,
+    })
 }
 
 impl Drop for Window {
     fn drop(&mut self) {
         self.wait_for_gpu();
         self.gpu = Gpu::Unavailable;
-        for buffer in &self.buffers {
-            buffer.buffer.destroy();
-        }
+        self.shm_target.destroy();
         match &self.role {
             ShellSurface::Toplevel(xdg_surface, toplevel) => {
                 toplevel.destroy();

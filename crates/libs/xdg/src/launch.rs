@@ -1,11 +1,13 @@
 use std::fmt;
 use std::io;
 use std::os::unix::process::CommandExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::slice;
 use std::thread;
 
 use crate::entry::DesktopEntry;
+use crate::uri::file_uri;
 
 pub const TERMINAL: &str = "unbound-term";
 pub const ACTIVATION_TOKEN: &str = "XDG_ACTIVATION_TOKEN";
@@ -87,16 +89,60 @@ fn split(exec: &str) -> Result<Vec<(String, bool)>, ExecError> {
     Ok(arguments)
 }
 
+const SINGLE_FILE_CODES: [&str; 2] = ["%f", "%u"];
+const FILE_LIST_CODES: [&str; 2] = ["%F", "%U"];
+
+fn file_argument(code: &str, file: &Path) -> String {
+    if code.eq_ignore_ascii_case("%u") {
+        file_uri(file)
+    } else {
+        file.to_string_lossy().into_owned()
+    }
+}
+
 impl DesktopEntry {
     pub fn command(&self) -> Result<Vec<String>, ExecError> {
+        self.expand(&split(&self.exec)?, &[])
+    }
+
+    pub fn commands_for(&self, files: &[PathBuf]) -> Result<Vec<Vec<String>>, ExecError> {
+        let arguments = split(&self.exec)?;
+        let has = |codes: [&str; 2]| {
+            arguments
+                .iter()
+                .any(|(argument, quoted)| !quoted && codes.contains(&argument.as_str()))
+        };
+        if has(FILE_LIST_CODES) || files.is_empty() {
+            return Ok(vec![self.expand(&arguments, files)?]);
+        }
+        if has(SINGLE_FILE_CODES) {
+            return files
+                .iter()
+                .map(|file| self.expand(&arguments, slice::from_ref(file)))
+                .collect();
+        }
+        Ok(vec![self.expand(&arguments, &[])?])
+    }
+
+    fn expand(
+        &self,
+        arguments: &[(String, bool)],
+        files: &[PathBuf],
+    ) -> Result<Vec<String>, ExecError> {
         let mut command = Vec::new();
-        for (argument, quoted) in split(&self.exec)? {
-            if quoted {
-                command.push(argument);
+        for (argument, quoted) in arguments {
+            if *quoted {
+                command.push(argument.clone());
                 continue;
             }
             match argument.as_str() {
-                "%f" | "%F" | "%u" | "%U" | "%d" | "%D" | "%n" | "%N" | "%v" | "%m" => {}
+                code @ ("%f" | "%u") => {
+                    command.extend(files.first().map(|file| file_argument(code, file)));
+                }
+                code @ ("%F" | "%U") => {
+                    command.extend(files.iter().map(|file| file_argument(code, file)));
+                }
+                "%d" | "%D" | "%n" | "%N" | "%v" | "%m" => {}
                 "%i" => {
                     if let Some(icon) = &self.icon {
                         command.push("--icon".to_owned());
@@ -148,6 +194,22 @@ impl fmt::Display for LaunchError {
 }
 
 impl std::error::Error for LaunchError {}
+
+pub fn launch_with(
+    entry: &DesktopEntry,
+    files: &[PathBuf],
+    activation_token: Option<&str>,
+) -> Result<(), LaunchError> {
+    for command in entry.commands_for(files).map_err(LaunchError::Exec)? {
+        spawn_detached(
+            &command,
+            entry.working_directory.as_deref(),
+            activation_token,
+        )
+        .map_err(LaunchError::Spawn)?;
+    }
+    Ok(())
+}
 
 pub fn launch(entry: &DesktopEntry, activation_token: Option<&str>) -> Result<u32, LaunchError> {
     let command = entry.command().map_err(LaunchError::Exec)?;

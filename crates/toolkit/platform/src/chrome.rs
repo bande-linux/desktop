@@ -8,10 +8,9 @@ use crate::L10N;
 use crate::window::ResizeEdge;
 
 pub const TITLE_BAR_HEIGHT: u32 = 28;
-pub(crate) const SHADOW_MARGIN: u32 = 36;
-const RESIZE_BAND: f32 = 6.0;
+pub(crate) const RESIZE_MARGIN: u32 = 6;
+const RESIZE_BAND: f32 = RESIZE_MARGIN as f32;
 const CORNER_REACH: f32 = 14.0;
-const WINDOW_RADIUS: f32 = 10.0;
 const CONTROL_DIAMETER: f32 = 12.0;
 const CONTROL_PITCH: f32 = 20.0;
 const CONTROLS_INSET: f32 = 12.0;
@@ -250,18 +249,7 @@ impl Chrome {
         scheme: Scheme,
         active: bool,
     ) -> Scene {
-        let window = Rect::new(0.0, 0.0, frame.width, frame.height);
-        let radius = if frame.margin > 0.0 {
-            WINDOW_RADIUS
-        } else {
-            0.0
-        };
-        let outline = Shape::rounded(window, radius);
-        let mut items = Vec::new();
-        if frame.margin > 0.0 {
-            items.extend(shadows(outline, active));
-        }
-        let mut inside = vec![
+        let mut items = vec![
             Item::Fill {
                 shape: Shape::rect(Rect::new(
                     0.0,
@@ -277,21 +265,7 @@ impl Chrome {
             },
         ];
         if frame.title > 0.0 {
-            self.title_bar(frame, palette, scheme, active, &mut inside);
-        }
-        items.push(if radius > 0.0 {
-            Item::Clip {
-                shape: outline,
-                items: inside,
-            }
-        } else {
-            Item::Translate {
-                offset: Point::default(),
-                items: inside,
-            }
-        });
-        if frame.margin > 0.0 {
-            items.extend(border(outline, scheme));
+            self.title_bar(frame, palette, scheme, active, &mut items);
         }
         Scene {
             width: (frame.width + 2.0 * frame.margin) as u32,
@@ -440,52 +414,5 @@ fn darker(color: Color) -> Color {
         g: scale(color.g),
         b: scale(color.b),
         a: color.a,
-    }
-}
-
-fn shadows(outline: Shape, active: bool) -> [Item; 2] {
-    let black = Color::hex(0x000000);
-    let (blur, offset, alpha) = if active {
-        (20.0, 8.0, 80)
-    } else {
-        (12.0, 4.0, 46)
-    };
-    [
-        Item::Shadow {
-            shape: outline,
-            offset: Point::new(0.0, offset),
-            blur_radius: blur,
-            color: black.with_alpha(alpha),
-        },
-        Item::Shadow {
-            shape: outline,
-            offset: Point::default(),
-            blur_radius: 2.0,
-            color: black.with_alpha(28),
-        },
-    ]
-}
-
-fn border(outline: Shape, scheme: Scheme) -> Vec<Item> {
-    let outer = Item::Stroke {
-        shape: Shape::rounded(outline.rect.inset(-0.5), outline.radius + 0.5),
-        width: 1.0,
-        paint: Color::hex(0x000000)
-            .with_alpha(match scheme {
-                Scheme::Light => 30,
-                Scheme::Dark => 140,
-            })
-            .into(),
-    };
-    match scheme {
-        Scheme::Light => vec![outer],
-        Scheme::Dark => vec![
-            outer,
-            Item::Stroke {
-                shape: Shape::rounded(outline.rect.inset(0.5), outline.radius - 0.5),
-                width: 1.0,
-                paint: Color::hex(0xFFFFFF).with_alpha(26).into(),
-            },
-        ],
     }
 }

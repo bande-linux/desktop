@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use unbound_config::{
     Appearance, Config, ConfigError, ConfigStore, DockEdge, Output, ReloadError, Suspend,
-    config_path,
+    WallpaperVariant, config_path,
 };
 
 fn error_at(source: &str) -> (usize, usize) {
@@ -107,7 +107,7 @@ fn a_syntax_error_reports_its_line_and_column() {
 #[test]
 fn an_unknown_setting_is_reported_where_it_starts() {
     assert_eq!(
-        error_at("appearance \"dark\"\n  wallpaper \"x.png\"\n"),
+        error_at("appearance \"dark\"\n  theme \"graphite\"\n"),
         (2, 3)
     );
     assert_eq!(error_at("dock {\n    autohide #true\n}\n"), (2, 5));
@@ -137,6 +137,59 @@ fn refresh_rate_must_stay_within_60_to_240_hz() {
         error_at("output \"DP-1\" {\n    refresh-rate 360\n}\n"),
         (2, 18)
     );
+}
+
+#[test]
+fn key_repeat_defaults_to_25_per_second_after_600_ms() {
+    let keyboard = Config::parse("").expect("empty").keyboard;
+    assert_eq!(keyboard.repeat_rate, 25);
+    assert_eq!(keyboard.repeat_delay, Duration::from_millis(600));
+    let keyboard = Config::parse("keyboard {\n    repeat-rate 40\n    repeat-delay 250\n}\n")
+        .expect("valid")
+        .keyboard;
+    assert_eq!(keyboard.repeat_rate, 40);
+    assert_eq!(keyboard.repeat_delay, Duration::from_millis(250));
+}
+
+#[test]
+fn key_repeat_must_stay_within_usable_limits() {
+    for (setting, value) in [
+        ("repeat-rate", "0"),
+        ("repeat-rate", "61"),
+        ("repeat-rate", "2.5"),
+        ("repeat-delay", "100"),
+        ("repeat-delay", "2001"),
+        ("repeat-delay", "\"600ms\""),
+    ] {
+        let source = format!("keyboard {{\n    {setting} {value}\n}}\n");
+        assert_eq!(
+            error_at(&source),
+            (2, 6 + setting.len()),
+            "{setting} {value}"
+        );
+    }
+}
+
+#[test]
+fn wallpapers_are_absolute_or_home_relative_paths() {
+    let wallpaper = Config::parse(
+        "wallpaper {\n    light \"/usr/share/backgrounds/day.jpg\"\n    dark \"~/Pictures/night.png\"\n}\n",
+    )
+    .expect("valid")
+    .wallpaper;
+    assert_eq!(
+        wallpaper.path(WallpaperVariant::Light),
+        Some(Path::new("/usr/share/backgrounds/day.jpg"))
+    );
+    assert_eq!(
+        wallpaper.path(WallpaperVariant::Dark),
+        Some(Path::new("~/Pictures/night.png"))
+    );
+    assert_eq!(Config::parse("").expect("empty").wallpaper.light, None);
+    for path in ["night.png", "~", "", "~other/x.png"] {
+        let source = format!("wallpaper {{\n    dark \"{path}\"\n}}\n");
+        assert_eq!(error_at(&source), (2, 10), "path {path:?}");
+    }
 }
 
 #[test]

@@ -1,8 +1,9 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+use std::path::PathBuf;
 use std::time::Duration;
 
-use unbound_config::{Appearance, Config, DockEdge, Output, Setting};
+use unbound_config::{Appearance, Config, DockEdge, Output, Setting, WallpaperVariant};
 
 fn apply(setting: Setting, source: &str) -> String {
     setting.apply(source).expect("edit")
@@ -64,6 +65,29 @@ fn durations_are_written_in_the_largest_whole_unit() {
             "{seconds} s written as {edited:?}"
         );
     }
+}
+
+#[test]
+fn key_repeat_and_wallpapers_are_written_and_a_reset_wallpaper_leaves_no_trace() {
+    let edited = apply(Setting::KeyRepeatRate(40), "");
+    let edited = apply(Setting::KeyRepeatDelay(Duration::from_millis(300)), &edited);
+    assert_eq!(
+        edited,
+        "keyboard {\n    repeat-rate 40\n    repeat-delay 300\n}\n"
+    );
+    let path = PathBuf::from("/home/me/Pictures/sea shore.jpg");
+    let edited = apply(
+        Setting::Wallpaper(WallpaperVariant::Dark, Some(path.clone())),
+        "appearance \"dark\"\n",
+    );
+    assert_eq!(
+        Config::parse(&edited).expect("valid").wallpaper.dark,
+        Some(path)
+    );
+    assert_eq!(
+        apply(Setting::Wallpaper(WallpaperVariant::Dark, None), &edited),
+        "appearance \"dark\"\n"
+    );
 }
 
 #[test]

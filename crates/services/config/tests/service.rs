@@ -332,6 +332,40 @@ fn moving_the_lock_moves_a_suspend_that_follows_the_display() {
 }
 
 #[test]
+fn key_repeat_and_wallpaper_are_writable_properties() {
+    let fixture = start("");
+    assert_eq!(
+        u32::try_from(get(&fixture.client, "KeyRepeatDelay")).expect("u32"),
+        600
+    );
+    set(&fixture.client, "KeyRepeatRate", Value::from(40u32)).expect("Set");
+    set(
+        &fixture.client,
+        "WallpaperLight",
+        Value::from("/usr/share/backgrounds/day.jpg"),
+    )
+    .expect("Set");
+    assert_eq!(
+        u32::try_from(get(&fixture.client, "KeyRepeatRate")).expect("u32"),
+        40
+    );
+    assert_eq!(
+        String::try_from(get(&fixture.client, "WallpaperLight")).expect("string"),
+        "/usr/share/backgrounds/day.jpg"
+    );
+    let too_fast = set(&fixture.client, "KeyRepeatRate", Value::from(100u32));
+    assert!(
+        matches!(too_fast, Err(zbus::fdo::Error::InvalidArgs(_))),
+        "{too_fast:?}"
+    );
+    set(&fixture.client, "WallpaperLight", Value::from("")).expect("Set");
+    assert_eq!(
+        String::try_from(get(&fixture.client, "WallpaperLight")).expect("string"),
+        ""
+    );
+}
+
+#[test]
 fn suspend_after_zero_means_never() {
     let fixture = start("");
     set(&fixture.client, "IdleSuspendAfter", Value::from(0u64)).expect("Set");

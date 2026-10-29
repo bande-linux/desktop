@@ -13,7 +13,9 @@ use zbus::fdo::Error::{Failed, InvalidArgs};
 use zbus::object_server::SignalEmitter;
 use zbus::zvariant::{OwnedValue, Value};
 
-use crate::{Appearance, Config, ConfigStore, DockEdge, Output, ReloadError, Setting};
+use crate::{
+    Appearance, Config, ConfigStore, DockEdge, Output, ReloadError, Setting, WallpaperVariant,
+};
 
 pub const BUS_NAME: &str = "org.unbound.Config";
 pub const OBJECT_PATH: &str = "/org/unbound/Config";
@@ -152,6 +154,18 @@ fn publish_changes(
         if before.idle.suspend_after() != after.idle.suspend_after() {
             let _ = guard.idle_suspend_after_changed(emitter).await;
         }
+        if before.keyboard.repeat_rate != after.keyboard.repeat_rate {
+            let _ = guard.key_repeat_rate_changed(emitter).await;
+        }
+        if before.keyboard.repeat_delay != after.keyboard.repeat_delay {
+            let _ = guard.key_repeat_delay_changed(emitter).await;
+        }
+        if before.wallpaper.light != after.wallpaper.light {
+            let _ = guard.wallpaper_light_changed(emitter).await;
+        }
+        if before.wallpaper.dark != after.wallpaper.dark {
+            let _ = guard.wallpaper_dark_changed(emitter).await;
+        }
         if before.outputs != after.outputs {
             let _ = guard.outputs_changed(emitter).await;
         }
@@ -201,6 +215,20 @@ struct ConfigInterface {
 }
 
 impl ConfigInterface {
+    fn wallpaper(&self, variant: WallpaperVariant) -> String {
+        self.store
+            .current()
+            .wallpaper
+            .path(variant)
+            .map(|path| path.to_string_lossy().into_owned())
+            .unwrap_or_default()
+    }
+
+    fn set_wallpaper(&self, variant: WallpaperVariant, path: String) -> zbus::fdo::Result<()> {
+        let path = (!path.is_empty()).then(|| PathBuf::from(path));
+        self.write(&Setting::Wallpaper(variant, path))
+    }
+
     fn write(&self, setting: &Setting) -> zbus::fdo::Result<()> {
         let mut published = lock(&self.published);
         let source = match std::fs::read_to_string(&self.path) {
@@ -309,6 +337,48 @@ impl ConfigInterface {
     fn set_idle_suspend_after(&self, seconds: u64) -> zbus::fdo::Result<()> {
         let after = (seconds > 0).then(|| Duration::from_secs(seconds));
         self.write(&Setting::IdleSuspendAfter(after))
+    }
+
+    #[zbus(property)]
+    fn key_repeat_rate(&self) -> u32 {
+        self.store.current().keyboard.repeat_rate
+    }
+
+    #[zbus(property)]
+    fn set_key_repeat_rate(&self, rate: u32) -> zbus::fdo::Result<()> {
+        self.write(&Setting::KeyRepeatRate(rate))
+    }
+
+    #[zbus(property)]
+    fn key_repeat_delay(&self) -> u32 {
+        u32::try_from(self.store.current().keyboard.repeat_delay.as_millis()).unwrap_or(u32::MAX)
+    }
+
+    #[zbus(property)]
+    fn set_key_repeat_delay(&self, milliseconds: u32) -> zbus::fdo::Result<()> {
+        self.write(&Setting::KeyRepeatDelay(Duration::from_millis(
+            milliseconds.into(),
+        )))
+    }
+
+    #[zbus(property)]
+    fn wallpaper_light(&self) -> String {
+        self.wallpaper(WallpaperVariant::Light)
+    }
+
+    #[zbus(property)]
+    fn set_wallpaper_light(&self, path: String) -> zbus::fdo::Result<()> {
+        self.set_wallpaper(WallpaperVariant::Light, path)
+    }
+
+    #[zbus(property)]
+    fn wallpaper_dark(&self) -> String {
+        self.wallpaper(WallpaperVariant::Dark)
+    }
+
+    #[zbus(property)]
+    fn set_wallpaper_dark(&self, path: String) -> zbus::fdo::Result<()> {
+        self.set_wallpaper(WallpaperVariant::Dark, path)
     }
 
     #[zbus(property)]

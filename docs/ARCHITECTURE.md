@@ -600,7 +600,7 @@ All factory operations (task leasing, branch creation, test runs, CI merges, and
 
 ## 8. CI Infrastructure & Test Harness
 
-All CI runs on the organization's self-hosted runners: Docker containers on an Apple Silicon Mac mini, registered to `unbound-linux` with the labels `self-hosted, Linux, ARM64, unbound` (setup: [`unbound-linux/runners`](https://github.com/unbound-linux/runners)). Workflows select them with `runs-on: [self-hosted, unbound]`. Builds and tests run natively on arm64, the architecture Unbound targets.
+All CI runs on the organization's self-hosted runners: Docker containers on two Apple Silicon Macs, the M4 Mac mini and the laptop, four on each (setup: [`unbound-linux/runners`](https://github.com/unbound-linux/runners)). Three per Mac carry the labels `self-hosted, Linux, ARM64, unbound` and run builds and tests; workflows select them with `runs-on: [self-hosted, unbound]`. The fourth carries `unbound-kvm`, has `/dev/kvm` and runs the jobs that boot a KVM guest (`runs-on: [self-hosted, unbound-kvm]`). GitHub gives each job to any free runner with matching labels, so pushing a branch is how it is tested; with the laptop off, everything runs on the mini. Builds and tests run natively on arm64, the architecture Unbound targets.
 
 ### 8.1 Headless Wayland Graphics Testing (VKMS + Lavapipe + SSIM Visual Regression)
 - **VKMS (Virtual Kernel Mode Setting)**:

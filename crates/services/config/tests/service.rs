@@ -114,7 +114,7 @@ fn start(initial: &str) -> Fixture {
 
 #[test]
 fn the_service_owns_its_bus_name_and_exposes_the_loaded_file() {
-    let fixture = start("dock {\n    edge \"right\"\n}\n");
+    let fixture = start("dock {\n    edge \"right\"\n    apps \"org.unbound.Files\"\n}\n");
     let bus = DBusProxy::new(&fixture.client).expect("bus proxy");
     assert!(
         bus.name_has_owner(BUS_NAME.try_into().expect("bus name"))
@@ -123,6 +123,10 @@ fn the_service_owns_its_bus_name_and_exposes_the_loaded_file() {
     assert_eq!(
         String::try_from(get(&fixture.client, "DockEdge")).expect("string"),
         "right"
+    );
+    assert_eq!(
+        Vec::<String>::try_from(get(&fixture.client, "DockApps")).expect("app IDs"),
+        ["org.unbound.Files"]
     );
     assert_eq!(
         u64::try_from(get(&fixture.client, "IdleLockAfter")).expect("u64"),
@@ -332,6 +336,40 @@ fn moving_the_lock_moves_a_suspend_that_follows_the_display() {
 }
 
 #[test]
+fn key_repeat_and_wallpaper_are_writable_properties() {
+    let fixture = start("");
+    assert_eq!(
+        u32::try_from(get(&fixture.client, "KeyRepeatDelay")).expect("u32"),
+        600
+    );
+    set(&fixture.client, "KeyRepeatRate", Value::from(40u32)).expect("Set");
+    set(
+        &fixture.client,
+        "WallpaperLight",
+        Value::from("/usr/share/backgrounds/day.jpg"),
+    )
+    .expect("Set");
+    assert_eq!(
+        u32::try_from(get(&fixture.client, "KeyRepeatRate")).expect("u32"),
+        40
+    );
+    assert_eq!(
+        String::try_from(get(&fixture.client, "WallpaperLight")).expect("string"),
+        "/usr/share/backgrounds/day.jpg"
+    );
+    let too_fast = set(&fixture.client, "KeyRepeatRate", Value::from(100u32));
+    assert!(
+        matches!(too_fast, Err(zbus::fdo::Error::InvalidArgs(_))),
+        "{too_fast:?}"
+    );
+    set(&fixture.client, "WallpaperLight", Value::from("")).expect("Set");
+    assert_eq!(
+        String::try_from(get(&fixture.client, "WallpaperLight")).expect("string"),
+        ""
+    );
+}
+
+#[test]
 fn suspend_after_zero_means_never() {
     let fixture = start("");
     set(&fixture.client, "IdleSuspendAfter", Value::from(0u64)).expect("Set");
@@ -343,5 +381,33 @@ fn suspend_after_zero_means_never() {
         std::fs::read_to_string(&fixture.path)
             .expect("read")
             .contains("suspend-after \"never\"")
+    );
+}
+
+#[test]
+fn sleep_can_be_returned_to_following_the_display() {
+    let fixture = start("idle {\n    suspend-after \"3h\"\n}\n");
+    assert!(!bool::try_from(get(&fixture.client, "IdleSuspendWithDisplay")).expect("b"));
+    let changes = watch_changes(&fixture.client);
+
+    set(&fixture.client, "IdleSuspendWithDisplay", Value::from(true)).expect("Set");
+
+    let mut changed = Changes::new();
+    while changed.len() < 2 {
+        changed.extend(
+            changes
+                .recv_timeout(SIGNAL_WAIT)
+                .expect("PropertiesChanged"),
+        );
+    }
+    assert_eq!(
+        u64::try_from(changed["IdleSuspendAfter"].try_clone().expect("clone")).expect("u64"),
+        600
+    );
+    assert!(bool::try_from(get(&fixture.client, "IdleSuspendWithDisplay")).expect("b"));
+    assert!(
+        !std::fs::read_to_string(&fixture.path)
+            .expect("read")
+            .contains("suspend-after")
     );
 }

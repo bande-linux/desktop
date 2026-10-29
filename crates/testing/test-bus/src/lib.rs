@@ -1,3 +1,6 @@
+pub mod bluez;
+pub mod networkmanager;
+
 use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, Stdio};
 

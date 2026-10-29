@@ -23,6 +23,8 @@ static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", E
 
 const SCALE_RANGE: (f64, f64) = (1.0, 2.0);
 const REFRESH_RATE_RANGE: (f64, f64) = (60.0, 240.0);
+pub const KEY_REPEAT_RATE_RANGE: (u32, u32) = (1, 60);
+pub const KEY_REPEAT_DELAY_RANGE: (u32, u32) = (150, 2000);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Appearance {
@@ -70,11 +72,56 @@ pub struct Output {
     pub variable_refresh_rate: Option<bool>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Keyboard {
+    pub repeat_rate: u32,
+    pub repeat_delay: Duration,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WallpaperVariant {
+    Light,
+    Dark,
+}
+
+impl WallpaperVariant {
+    pub fn keyword(self) -> &'static str {
+        match self {
+            Self::Light => "light",
+            Self::Dark => "dark",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Wallpaper {
+    pub light: Option<PathBuf>,
+    pub dark: Option<PathBuf>,
+}
+
+impl Wallpaper {
+    pub fn path(&self, variant: WallpaperVariant) -> Option<&Path> {
+        match variant {
+            WallpaperVariant::Light => self.light.as_deref(),
+            WallpaperVariant::Dark => self.dark.as_deref(),
+        }
+    }
+}
+
+pub const DEFAULT_DOCK_APPS: [&str; 3] = [
+    "org.unbound.Files",
+    "org.unbound.Terminal",
+    "org.unbound.Settings",
+];
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
     pub appearance: Appearance,
     pub dock_edge: DockEdge,
+    pub dock_apps: Vec<String>,
     pub idle: Idle,
+    pub keyboard: Keyboard,
+    pub wallpaper: Wallpaper,
     pub outputs: BTreeMap<String, Output>,
 }
 
@@ -83,11 +130,17 @@ impl Default for Config {
         Self {
             appearance: Appearance::Automatic,
             dock_edge: DockEdge::Left,
+            dock_apps: DEFAULT_DOCK_APPS.map(str::to_owned).to_vec(),
             idle: Idle {
                 dim_after: Duration::from_secs(5 * 60),
                 lock_after: Duration::from_secs(10 * 60),
                 suspend: Suspend::WithDisplayOff,
             },
+            keyboard: Keyboard {
+                repeat_rate: 25,
+                repeat_delay: Duration::from_millis(600),
+            },
+            wallpaper: Wallpaper::default(),
             outputs: BTreeMap::new(),
         }
     }
@@ -140,6 +193,10 @@ fn locate(source: &str, offset: usize, message: String) -> ConfigError {
     }
 }
 
+pub fn is_wallpaper_path(path: &str) -> bool {
+    Path::new(path).is_absolute() || path.strip_prefix("~/").is_some_and(|rest| !rest.is_empty())
+}
+
 struct Parser<'a> {
     source: &'a str,
 }
@@ -175,8 +232,10 @@ impl Parser<'_> {
                         ],
                     )?
                 }
-                "dock" => config.dock_edge = self.dock(node)?,
+                "dock" => (config.dock_edge, config.dock_apps) = self.dock(node)?,
                 "idle" => config.idle = self.idle(node, config.idle)?,
+                "keyboard" => config.keyboard = self.keyboard(node, config.keyboard)?,
+                "wallpaper" => config.wallpaper = self.wallpaper(node)?,
                 "output" => {
                     let (connector, output) = self.output(node)?;
                     if config.outputs.insert(connector.clone(), output).is_some() {
@@ -265,9 +324,13 @@ impl Parser<'_> {
         )
     }
 
-    fn dock(&self, node: &KdlNode) -> Result<DockEdge, ConfigError> {
+    fn dock(&self, node: &KdlNode) -> Result<(DockEdge, Vec<String>), ConfigError> {
         self.no_arguments(node)?;
-        let mut edge = Config::default().dock_edge;
+        let Config {
+            dock_edge: mut edge,
+            dock_apps: mut apps,
+            ..
+        } = Config::default();
         for child in self.children(node)? {
             match child.name().value() {
                 "edge" => {
@@ -281,10 +344,32 @@ impl Parser<'_> {
                         ],
                     )?
                 }
+                "apps" => apps = self.app_ids(child)?,
                 _ => return Err(self.unknown_child("dock", child)),
             }
         }
-        Ok(edge)
+        Ok((edge, apps))
+    }
+
+    fn app_ids(&self, node: &KdlNode) -> Result<Vec<String>, ConfigError> {
+        let mut apps: Vec<String> = Vec::new();
+        for entry in node.entries() {
+            let app = entry
+                .value()
+                .as_string()
+                .filter(|app| entry.name().is_none() && !app.is_empty())
+                .ok_or_else(|| {
+                    self.at_entry(
+                        entry,
+                        "`dock apps` takes app IDs such as \"org.unbound.Files\"",
+                    )
+                })?;
+            if apps.iter().any(|known| known == app) {
+                return Err(self.at_entry(entry, format!("\"{app}\" is in the dock twice")));
+            }
+            apps.push(app.to_owned());
+        }
+        Ok(apps)
     }
 
     fn idle(&self, node: &KdlNode, mut idle: Idle) -> Result<Idle, ConfigError> {
@@ -324,6 +409,73 @@ impl Parser<'_> {
             ));
         }
         Ok(idle)
+    }
+
+    fn keyboard(&self, node: &KdlNode, mut keyboard: Keyboard) -> Result<Keyboard, ConfigError> {
+        self.no_arguments(node)?;
+        for child in self.children(node)? {
+            match child.name().value() {
+                "repeat-rate" => {
+                    keyboard.repeat_rate = self.integer_in(child, KEY_REPEAT_RATE_RANGE)?
+                }
+                "repeat-delay" => {
+                    keyboard.repeat_delay = Duration::from_millis(u64::from(
+                        self.integer_in(child, KEY_REPEAT_DELAY_RANGE)?,
+                    ))
+                }
+                _ => return Err(self.unknown_child("keyboard", child)),
+            }
+        }
+        Ok(keyboard)
+    }
+
+    fn wallpaper(&self, node: &KdlNode) -> Result<Wallpaper, ConfigError> {
+        self.no_arguments(node)?;
+        let mut wallpaper = Wallpaper::default();
+        for child in self.children(node)? {
+            match child.name().value() {
+                "light" => wallpaper.light = Some(self.image_path(child)?),
+                "dark" => wallpaper.dark = Some(self.image_path(child)?),
+                _ => return Err(self.unknown_child("wallpaper", child)),
+            }
+        }
+        Ok(wallpaper)
+    }
+
+    fn image_path(&self, node: &KdlNode) -> Result<PathBuf, ConfigError> {
+        let entry = self.argument(node)?;
+        entry
+            .value()
+            .as_string()
+            .filter(|path| is_wallpaper_path(path))
+            .map(PathBuf::from)
+            .ok_or_else(|| {
+                self.at_entry(
+                    entry,
+                    format!(
+                        "`wallpaper {}` must be an absolute path or start with \"~/\"",
+                        node.name().value()
+                    ),
+                )
+            })
+    }
+
+    fn integer_in(&self, node: &KdlNode, (min, max): (u32, u32)) -> Result<u32, ConfigError> {
+        let entry = self.argument(node)?;
+        match entry.value() {
+            KdlValue::Integer(value) => u32::try_from(*value).ok(),
+            _ => None,
+        }
+        .filter(|value| (min..=max).contains(value))
+        .ok_or_else(|| {
+            self.at_entry(
+                entry,
+                format!(
+                    "`{}` must be a whole number from {min} to {max}",
+                    node.name().value()
+                ),
+            )
+        })
     }
 
     fn duration(&self, node: &KdlNode) -> Result<Duration, ConfigError> {

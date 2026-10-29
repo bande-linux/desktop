@@ -103,7 +103,7 @@ impl TestClient {
             server,
             image,
             Memory::Udmabuf,
-            |client, surface: &WlSurface| {
+            |client, surface: &WlSurface, _| {
                 let synced = manager.get_surface(surface, &client.queue.handle(), ());
                 let split = |point: u64| ((point >> 32) as u32, point as u32);
                 let (acquire_hi, acquire_lo) = split(points.0);

@@ -198,7 +198,7 @@ impl TestClient {
     }
 
     pub fn show_window_activated(&mut self, server: &mut Headless, image: &ShmImage, token: &str) {
-        self.map_window(server, image, Memory::Shm, |client, surface| {
+        self.map_window(server, image, Memory::Shm, |client, surface, _| {
             let activation: XdgActivationV1 = client.bind("xdg_activation_v1", 1);
             activation.activate(token.to_owned(), surface);
         });
@@ -210,7 +210,7 @@ impl TestClient {
         image: &ShmImage,
         destination: (i32, i32),
     ) {
-        self.map_window(server, image, Memory::Shm, |client, surface| {
+        self.map_window(server, image, Memory::Shm, |client, surface, _| {
             let viewporter: WpViewporter = client.bind("wp_viewporter", 1);
             let viewport = viewporter.get_viewport(surface, &client.queue.handle(), ());
             viewport.set_destination(destination.0, destination.1);

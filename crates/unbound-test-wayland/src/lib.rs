@@ -1,11 +1,13 @@
 pub mod clipboard;
 pub use capture::{CaptureConstraints, CaptureOutcome};
+pub use decoration::DecorationMode;
 pub use fence::SwSyncTimeline;
 pub use idle::IdleEvent;
 pub use shell::{Anchor, KeyboardInteractivity, Layer, LayerRequest};
 pub use toplevel::{Configured, PopupRequest};
 pub use wayland_protocols::xdg::shell::client::xdg_toplevel::{ResizeEdge, State as ToplevelState};
 mod capture;
+mod decoration;
 mod fence;
 mod idle;
 mod lock;
@@ -110,6 +112,7 @@ struct Globals {
     lock: lock::SessionLock,
     capture: capture::Capture,
     idle: idle::Idle,
+    decoration_modes: Vec<decoration::DecorationMode>,
 }
 
 pub struct TestClient {
@@ -179,15 +182,15 @@ impl TestClient {
     }
 
     pub fn show_window_in(&mut self, server: &mut Headless, image: &ShmImage, memory: Memory) {
-        self.map_window(server, image, memory, |_, _| {});
+        self.map_window(server, image, memory, |_, _, _| {});
     }
 
-    fn map_window(
+    pub(crate) fn map_window(
         &mut self,
         server: &mut Headless,
         image: &ShmImage,
         memory: Memory,
-        before_buffer: impl FnOnce(&Self, &WlSurface),
+        before_buffer: impl FnOnce(&Self, &WlSurface, &XdgToplevel),
     ) {
         let qh = self.queue.handle();
         let compositor = self.globals.compositor.as_ref().expect("wl_compositor");
@@ -200,7 +203,7 @@ impl TestClient {
         self.exchange(server);
         assert!(self.globals.configured, "initial configure");
 
-        before_buffer(self, &surface);
+        before_buffer(self, &surface, &toplevel);
         self.attach(&surface, image, (0, 0, image.width, image.height), memory);
         self.exchange(server);
         self.windows.push((surface, xdg_surface, toplevel));

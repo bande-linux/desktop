@@ -193,7 +193,9 @@ control writes to it, and it can be edited by hand while the session runs.
   configuration, never a mix. `ConfigService` owns `org.unbound.Config` on the session bus and
   serves the active values as properties of interface `org.unbound.Config` at
   `/org/unbound/Config` (`Appearance`, `DockEdge`, `IdleDimAfter`, `IdleLockAfter` and
-  `IdleSuspendAfter` in seconds, 0 meaning never, `KeyRepeatRate` per second and
+  `IdleSuspendAfter` in seconds, 0 meaning never, `IdleSuspendWithDisplay` true while
+  `suspend-after` is unset and sleep follows the display (writing true removes the explicit
+  value), `KeyRepeatRate` per second and
   `KeyRepeatDelay` in milliseconds as `u`, `WallpaperLight` and `WallpaperDark` as paths, empty
   meaning unset, `Outputs` as `a{sa{sv}}`). It watches the
   directory and reloads when the file is closed after writing or renamed into place;

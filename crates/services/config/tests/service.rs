@@ -379,3 +379,31 @@ fn suspend_after_zero_means_never() {
             .contains("suspend-after \"never\"")
     );
 }
+
+#[test]
+fn sleep_can_be_returned_to_following_the_display() {
+    let fixture = start("idle {\n    suspend-after \"3h\"\n}\n");
+    assert!(!bool::try_from(get(&fixture.client, "IdleSuspendWithDisplay")).expect("b"));
+    let changes = watch_changes(&fixture.client);
+
+    set(&fixture.client, "IdleSuspendWithDisplay", Value::from(true)).expect("Set");
+
+    let mut changed = Changes::new();
+    while changed.len() < 2 {
+        changed.extend(
+            changes
+                .recv_timeout(SIGNAL_WAIT)
+                .expect("PropertiesChanged"),
+        );
+    }
+    assert_eq!(
+        u64::try_from(changed["IdleSuspendAfter"].try_clone().expect("clone")).expect("u64"),
+        600
+    );
+    assert!(bool::try_from(get(&fixture.client, "IdleSuspendWithDisplay")).expect("b"));
+    assert!(
+        !std::fs::read_to_string(&fixture.path)
+            .expect("read")
+            .contains("suspend-after")
+    );
+}

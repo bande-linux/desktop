@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use kdl::{KdlDocument, KdlEntry, KdlEntryFormat, KdlNode, KdlValue};
 
-use crate::{Appearance, Config, ConfigError, DockEdge, Output, WallpaperVariant};
+use crate::{Appearance, Config, ConfigError, DockEdge, Output, Suspend, WallpaperVariant};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Setting {
@@ -11,7 +11,7 @@ pub enum Setting {
     DockEdge(DockEdge),
     IdleDimAfter(Duration),
     IdleLockAfter(Duration),
-    IdleSuspendAfter(Option<Duration>),
+    IdleSuspend(Suspend),
     KeyRepeatRate(u32),
     KeyRepeatDelay(Duration),
     Wallpaper(WallpaperVariant, Option<PathBuf>),
@@ -51,11 +51,15 @@ impl Setting {
                 "lock-after",
                 Some(duration(*after).into()),
             ),
-            Self::IdleSuspendAfter(after) => set(
+            Self::IdleSuspend(suspend) => set(
                 &mut document,
                 Some("idle"),
                 "suspend-after",
-                Some(after.map_or_else(|| "never".to_owned(), duration).into()),
+                match suspend {
+                    Suspend::WithDisplayOff => None,
+                    Suspend::After(after) => Some(duration(*after).into()),
+                    Suspend::Never => Some("never".into()),
+                },
             ),
             Self::KeyRepeatRate(rate) => set(
                 &mut document,

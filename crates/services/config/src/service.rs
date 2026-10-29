@@ -14,7 +14,8 @@ use zbus::object_server::SignalEmitter;
 use zbus::zvariant::{OwnedValue, Value};
 
 use crate::{
-    Appearance, Config, ConfigStore, DockEdge, Output, ReloadError, Setting, WallpaperVariant,
+    Appearance, Config, ConfigStore, DockEdge, Output, ReloadError, Setting, Suspend,
+    WallpaperVariant,
 };
 
 pub const BUS_NAME: &str = "org.unbound.Config";
@@ -153,6 +154,11 @@ fn publish_changes(
         }
         if before.idle.suspend_after() != after.idle.suspend_after() {
             let _ = guard.idle_suspend_after_changed(emitter).await;
+        }
+        if (before.idle.suspend == Suspend::WithDisplayOff)
+            != (after.idle.suspend == Suspend::WithDisplayOff)
+        {
+            let _ = guard.idle_suspend_with_display_changed(emitter).await;
         }
         if before.keyboard.repeat_rate != after.keyboard.repeat_rate {
             let _ = guard.key_repeat_rate_changed(emitter).await;
@@ -334,9 +340,45 @@ impl ConfigInterface {
     }
 
     #[zbus(property)]
-    fn set_idle_suspend_after(&self, seconds: u64) -> zbus::fdo::Result<()> {
-        let after = (seconds > 0).then(|| Duration::from_secs(seconds));
-        self.write(&Setting::IdleSuspendAfter(after))
+    async fn set_idle_suspend_after(
+        &self,
+        seconds: u64,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+    ) -> zbus::fdo::Result<()> {
+        let suspend = match seconds {
+            0 => Suspend::Never,
+            seconds => Suspend::After(Duration::from_secs(seconds)),
+        };
+        let before = self.idle_suspend_with_display();
+        self.write(&Setting::IdleSuspend(suspend))?;
+        if before != self.idle_suspend_with_display() {
+            self.idle_suspend_with_display_changed(&emitter).await?;
+        }
+        Ok(())
+    }
+
+    #[zbus(property)]
+    fn idle_suspend_with_display(&self) -> bool {
+        self.store.current().idle.suspend == Suspend::WithDisplayOff
+    }
+
+    #[zbus(property)]
+    async fn set_idle_suspend_with_display(
+        &self,
+        with_display: bool,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+    ) -> zbus::fdo::Result<()> {
+        let idle = self.store.current().idle;
+        let suspend = match (with_display, idle.suspend) {
+            (true, _) => Suspend::WithDisplayOff,
+            (false, Suspend::WithDisplayOff) => Suspend::After(idle.lock_after),
+            (false, explicit) => explicit,
+        };
+        self.write(&Setting::IdleSuspend(suspend))?;
+        if idle.suspend_after() != self.store.current().idle.suspend_after() {
+            self.idle_suspend_after_changed(&emitter).await?;
+        }
+        Ok(())
     }
 
     #[zbus(property)]

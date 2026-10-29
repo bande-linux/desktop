@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use unbound_config::{Appearance, Config, DockEdge, Output, Setting, WallpaperVariant};
+use unbound_config::{Appearance, Config, DockEdge, Output, Setting, Suspend, WallpaperVariant};
 
 fn apply(setting: Setting, source: &str) -> String {
     setting.apply(source).expect("edit")
@@ -153,16 +153,23 @@ fn an_output_is_added_changed_and_removed_by_connector() {
 }
 
 #[test]
-fn suspend_after_is_written_as_a_duration_or_never() {
+fn suspend_after_is_written_as_a_duration_or_never_or_left_to_follow_the_display() {
     assert_eq!(
-        apply(Setting::IdleSuspendAfter(None), ""),
+        apply(Setting::IdleSuspend(Suspend::Never), ""),
         "idle {\n    suspend-after \"never\"\n}\n"
     );
     assert_eq!(
         apply(
-            Setting::IdleSuspendAfter(Some(Duration::from_secs(3600))),
+            Setting::IdleSuspend(Suspend::After(Duration::from_secs(3600))),
             "idle {\n    suspend-after \"never\"\n}\n"
         ),
         "idle {\n    suspend-after \"1h\"\n}\n"
+    );
+    assert_eq!(
+        apply(
+            Setting::IdleSuspend(Suspend::WithDisplayOff),
+            "idle {\n    dim-after \"1m\"\n    suspend-after \"1h\"\n}\n"
+        ),
+        "idle {\n    dim-after \"1m\"\n}\n"
     );
 }

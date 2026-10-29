@@ -6,6 +6,13 @@ before, and is done when its definition of done holds on the self-hosted runners
 (`ci/lint`, `ci/lavapipe-test`, `ci/deb`, and the jobs it adds) without real GPU or DRM
 hardware. Things noticed in passing go to the end of this file, not into a diff.
 
+The phases the estimates below count, from the former roadmap: 1 CI and runners; 2 compositor
+(DRM/KMS, explicit sync) and toolkit; 3 session infrastructure (environment, clipboard, lock
+and idle, D-Bus, notifications); 4 shell (panel, menu bar, tray, greeter, AT-SPI, input
+methods); 5 hardware and portals (portal backend, audio, network, Bluetooth, power); 6 apps
+(launcher, screenshots, Files, Settings, terminal, Activity Monitor); 7 decorations and theme
+propagation; 8 tiling, the full meta-package and frame-latency polish.
+
 ## Toward the daily driver (75%)
 
 Target: plan phases 1-6 done plus enough protocols for Firefox on Wayland. Pure Wayland:

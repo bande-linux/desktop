@@ -40,6 +40,9 @@ parley = { version = "=0.12.0", features = ["complex-scripts"] }
 pipewire = "=0.10.1"
 serde_json = "=1.0.154"
 zbus = "=5.19.0"
+tracing = "=0.1.44"
+tracing-journald = "=0.3.2"
+tracing-subscriber = { version = "=0.3.23", default-features = false, features = ["ansi", "env-filter", "fmt", "registry", "std", "tracing-log"] }
 vello_cpu = "=0.3.0"
 vello_gpu = { version = "=0.3.0", default-features = false, features = ["wgpu", "text"] }
 wayland-backend = { version = "=0.3.17", features = ["log"] }
@@ -64,6 +67,7 @@ unbound-files = { path = "crates/apps/files" }
 unbound-greeter = { path = "crates/shell/greeter" }
 unbound-launcher = { path = "crates/shell/launcher" }
 unbound-lock = { path = "crates/shell/lock" }
+unbound-log = { path = "crates/libs/log" }
 unbound-menubar = { path = "crates/shell/menubar" }
 unbound-network = { path = "crates/libs/network" }
 unbound-notify = { path = "crates/services/notify" }

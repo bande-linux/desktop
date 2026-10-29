@@ -7,6 +7,8 @@ repository.workspace = true
 
 [dependencies]
 rustix.workspace = true
+tracing.workspace = true
+unbound-log.workspace = true
 unbound-notify.workspace = true
 wayland-client.workspace = true
 wayland-protocols.workspace = true

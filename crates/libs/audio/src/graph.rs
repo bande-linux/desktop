@@ -205,10 +205,7 @@ impl Graph {
             _ => Ok(()),
         };
         if let Err(error) = result {
-            eprintln!(
-                "unbound-audio: cannot follow PipeWire object {}: {error}",
-                global.id
-            );
+            tracing::warn!("cannot follow PipeWire object {}: {error}", global.id);
         }
     }
 
@@ -512,7 +509,7 @@ fn serve(
         })
         .error(move |id, _, result, message| {
             if id == pw::core::PW_ID_CORE {
-                eprintln!("unbound-audio: PipeWire connection lost ({result}): {message}");
+                tracing::warn!("PipeWire connection lost ({result}): {message}");
                 lost_loop.quit();
             }
         })

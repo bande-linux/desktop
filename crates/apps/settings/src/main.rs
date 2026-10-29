@@ -76,10 +76,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn main() -> ExitCode {
+    unbound_log::init("unbound-settings");
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("unbound-settings: {error}");
+            tracing::error!("{error}");
             ExitCode::FAILURE
         }
     }

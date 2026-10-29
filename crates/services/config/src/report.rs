@@ -107,7 +107,7 @@ impl ErrorNotifier {
         );
         match reply {
             Ok(id) => *shown = Some(id),
-            Err(error) => eprintln!("unbound-config: cannot post the error notification: {error}"),
+            Err(error) => tracing::warn!("cannot post the error notification: {error}"),
         }
     }
 }

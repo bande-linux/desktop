@@ -193,7 +193,7 @@ pub fn logind_executor(
             Command::RestartIdleTimers => Ok(()),
         };
         if let Err(error) = result {
-            eprintln!("unbound-power: cannot carry out {command:?}: {error}");
+            tracing::warn!("cannot carry out {command:?}: {error}");
         }
     }
 }

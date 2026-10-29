@@ -12,12 +12,13 @@ fn serve() -> zbus::Result<Connection> {
 }
 
 fn main() -> ExitCode {
+    unbound_log::init("xdg-desktop-portal-unbound");
     match serve() {
         Ok(_connection) => loop {
             std::thread::park();
         },
         Err(error) => {
-            eprintln!("xdg-desktop-portal-unbound: {error}");
+            tracing::error!("{error}");
             ExitCode::FAILURE
         }
     }

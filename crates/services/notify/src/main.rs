@@ -5,6 +5,7 @@ use unbound_notify::{NotificationServer, do_not_disturb_path};
 use zbus::blocking::Connection;
 
 fn main() -> ExitCode {
+    unbound_log::init("unbound-notify");
     let state_home = std::env::var_os("XDG_STATE_HOME").map(PathBuf::from);
     let home = std::env::var_os("HOME").map(PathBuf::from);
     let remembered = do_not_disturb_path(state_home.as_deref(), home.as_deref());
@@ -17,7 +18,7 @@ fn main() -> ExitCode {
             std::thread::park();
         },
         Err(error) => {
-            eprintln!("unbound-notify: {error}");
+            tracing::error!("{error}");
             ExitCode::FAILURE
         }
     }

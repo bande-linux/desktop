@@ -9,7 +9,9 @@ publish = false
 [dependencies]
 smithay.workspace = true
 tempfile.workspace = true
+tracing.workspace = true
 unbound-compositor.workspace = true
+unbound-log.workspace = true
 unbound-sample.workspace = true
 unbound-test-wayland.workspace = true
 unbound-toolkit.workspace = true

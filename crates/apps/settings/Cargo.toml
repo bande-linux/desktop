@@ -6,7 +6,9 @@ edition.workspace = true
 repository.workspace = true
 
 [dependencies]
+tracing.workspace = true
 unbound-config.workspace = true
+unbound-log.workspace = true
 unbound-toolkit.workspace = true
 zbus.workspace = true
 

@@ -100,7 +100,7 @@ impl SleepGuard {
                     match take() {
                         Ok(fd) => *held = Some(fd),
                         Err(error) => {
-                            eprintln!("unbound-power: cannot delay sleep for locking: {error}")
+                            tracing::warn!("cannot delay sleep for locking: {error}")
                         }
                     }
                 }
@@ -117,7 +117,7 @@ fn lock_and_wait(session: &SessionProxyBlocking<'_>, lock_wait: Duration) {
         return;
     }
     if let Err(error) = session.lock() {
-        eprintln!("unbound-power: cannot lock the session before sleep: {error}");
+        tracing::warn!("cannot lock the session before sleep: {error}");
         return;
     }
     let deadline = Instant::now() + lock_wait;

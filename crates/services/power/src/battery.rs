@@ -96,7 +96,7 @@ pub fn watch(system: &Connection, notifier: Arc<BatteryNotifier>) -> zbus::Resul
         if let (Ok(level), Ok(percentage)) = (device.warning_level(), device.percentage())
             && let Err(error) = notifier.update(level, percentage)
         {
-            eprintln!("unbound-power: cannot post the battery notification: {error}");
+            tracing::warn!("cannot post the battery notification: {error}");
         }
     };
     report(&device);

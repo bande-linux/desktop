@@ -3394,6 +3394,7 @@ dependencies = [
  "pipewire",
  "serde_json",
  "tempfile",
+ "tracing",
  "unbound-test-bus",
 ]
 
@@ -3401,6 +3402,8 @@ dependencies = [
 name = "unbound-automount"
 version = "0.1.0"
 dependencies = [
+ "tracing",
+ "unbound-log",
  "unbound-notify",
  "unbound-test-bus",
  "zbus",
@@ -3412,7 +3415,9 @@ version = "0.1.0"
 dependencies = [
  "smithay",
  "tempfile",
+ "tracing",
  "unbound-compositor",
+ "unbound-log",
  "unbound-sample",
  "unbound-test-wayland",
  "unbound-toolkit",
@@ -3435,7 +3440,9 @@ dependencies = [
  "rustix 1.1.6",
  "smithay",
  "tempfile",
+ "tracing",
  "unbound-compositor",
+ "unbound-log",
  "unbound-test-wayland",
  "wayland-backend",
  "wayland-client",
@@ -3451,8 +3458,10 @@ dependencies = [
  "rustix 1.1.6",
  "smithay",
  "tempfile",
+ "tracing",
  "unbound-config",
  "unbound-greeter",
+ "unbound-log",
  "unbound-protocols",
  "unbound-render",
  "unbound-test-bus",
@@ -3469,6 +3478,8 @@ dependencies = [
  "kdl",
  "notify",
  "tempfile",
+ "tracing",
+ "unbound-log",
  "unbound-notify",
  "unbound-test-bus",
  "zbus",
@@ -3479,9 +3490,11 @@ name = "unbound-controlcenter"
 version = "0.1.0"
 dependencies = [
  "accesskit",
+ "tracing",
  "unbound-audio",
  "unbound-bluetooth",
  "unbound-config",
+ "unbound-log",
  "unbound-network",
  "unbound-toolkit",
  "zbus",
@@ -3495,7 +3508,9 @@ dependencies = [
  "image",
  "image-compare",
  "jiff",
+ "tracing",
  "unbound-config",
+ "unbound-log",
  "unbound-toolkit",
  "unbound-xdg",
 ]
@@ -3506,7 +3521,9 @@ version = "0.1.0"
 dependencies = [
  "image",
  "tempfile",
+ "tracing",
  "unbound-config",
+ "unbound-log",
  "unbound-toolkit",
 ]
 
@@ -3518,7 +3535,9 @@ dependencies = [
  "jiff",
  "serde",
  "serde_json",
+ "tracing",
  "unbound-lock",
+ "unbound-log",
  "unbound-toolkit",
 ]
 
@@ -3529,7 +3548,9 @@ dependencies = [
  "accesskit",
  "image",
  "image-compare",
+ "tracing",
  "unbound-config",
+ "unbound-log",
  "unbound-toolkit",
  "unbound-xdg",
 ]
@@ -3545,7 +3566,9 @@ dependencies = [
  "libc",
  "libloading",
  "rustix 1.1.6",
+ "tracing",
  "unbound-config",
+ "unbound-log",
  "unbound-toolkit",
 ]
 
@@ -3563,7 +3586,9 @@ name = "unbound-menubar"
 version = "0.1.0"
 dependencies = [
  "jiff",
+ "tracing",
  "unbound-config",
+ "unbound-log",
  "unbound-toolkit",
  "unbound-xdg",
 ]
@@ -3581,6 +3606,8 @@ name = "unbound-notify"
 version = "0.1.0"
 dependencies = [
  "tempfile",
+ "tracing",
+ "unbound-log",
  "unbound-test-bus",
  "zbus",
 ]
@@ -3603,8 +3630,10 @@ dependencies = [
  "rustix 1.1.6",
  "smithay",
  "tempfile",
+ "tracing",
  "unbound-compositor",
  "unbound-config",
+ "unbound-log",
  "unbound-notify",
  "unbound-test-bus",
  "wayland-client",
@@ -3635,6 +3664,8 @@ dependencies = [
 name = "unbound-sample"
 version = "0.1.0"
 dependencies = [
+ "tracing",
+ "unbound-log",
  "unbound-toolkit",
 ]
 
@@ -3645,6 +3676,8 @@ dependencies = [
  "image",
  "jiff",
  "tempfile",
+ "tracing",
+ "unbound-log",
  "unbound-toolkit",
  "unbound-xdg",
 ]
@@ -3654,7 +3687,9 @@ name = "unbound-settings"
 version = "0.1.0"
 dependencies = [
  "tempfile",
+ "tracing",
  "unbound-config",
+ "unbound-log",
  "unbound-test-bus",
  "unbound-toolkit",
  "zbus",
@@ -3671,7 +3706,9 @@ dependencies = [
  "alacritty_terminal",
  "image",
  "image-compare",
+ "tracing",
  "unbound-config",
+ "unbound-log",
  "unbound-toolkit",
 ]
 
@@ -3732,6 +3769,8 @@ dependencies = [
 name = "unbound-tray"
 version = "0.1.0"
 dependencies = [
+ "tracing",
+ "unbound-log",
  "unbound-test-bus",
  "zbus",
 ]
@@ -4661,7 +4700,9 @@ version = "0.1.0"
 dependencies = [
  "blocking",
  "tempfile",
+ "tracing",
  "unbound-config",
+ "unbound-log",
  "unbound-test-bus",
  "unbound-toolkit",
  "zbus",

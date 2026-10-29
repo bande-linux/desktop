@@ -39,7 +39,7 @@ pub fn follow_session(lock_states: Receiver<bool>) -> zbus::Result<Channel<Sessi
     thread::spawn(move || {
         for locked in lock_states {
             if let Err(error) = session.set_locked_hint(locked) {
-                eprintln!("unbound-compositor: cannot tell logind the session is locked: {error}");
+                tracing::warn!("cannot tell logind the session is locked: {error}");
             }
         }
     });

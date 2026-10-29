@@ -40,7 +40,7 @@ struct ControlCenter {
 
 fn report<E: std::fmt::Display>(what: &str, result: Result<(), E>) {
     if let Err(error) = result {
-        eprintln!("unbound-controlcenter: cannot {what}: {error}");
+        tracing::warn!("cannot {what}: {error}");
     }
 }
 
@@ -167,7 +167,7 @@ impl ControlCenter {
         match audio.press(key, fine) {
             Ok(level) => self.level = level,
             Err(error) => {
-                eprintln!("unbound-controlcenter: cannot change the volume: {error}");
+                tracing::warn!("cannot change the volume: {error}");
                 return;
             }
         }
@@ -247,13 +247,13 @@ fn scheme() -> Scheme {
 
 fn run() -> Result<(), WindowError> {
     let audio = Audio::connect()
-        .inspect_err(|error| eprintln!("unbound-controlcenter: no sound: {error}"))
+        .inspect_err(|error| tracing::warn!("no sound: {error}"))
         .ok();
     let system = Connection::system()
-        .inspect_err(|error| eprintln!("unbound-controlcenter: no system bus: {error}"))
+        .inspect_err(|error| tracing::warn!("no system bus: {error}"))
         .ok();
     let session = Connection::session()
-        .inspect_err(|error| eprintln!("unbound-controlcenter: no session bus: {error}"))
+        .inspect_err(|error| tracing::warn!("no session bus: {error}"))
         .ok();
     let mut window = Window::open(
         Role::Layer(LayerOptions {
@@ -289,10 +289,11 @@ fn run() -> Result<(), WindowError> {
 }
 
 fn main() -> ExitCode {
+    unbound_log::init("unbound-controlcenter");
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("unbound-controlcenter: {error}");
+            tracing::error!("{error}");
             ExitCode::FAILURE
         }
     }

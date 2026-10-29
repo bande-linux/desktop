@@ -20,7 +20,7 @@ struct LauncherShell {
 impl LauncherShell {
     fn close(&mut self, window: &mut Window) {
         if let Err(error) = window.hide() {
-            eprintln!("unbound-launcher: cannot hide: {error}");
+            tracing::warn!("cannot hide: {error}");
         }
         self.launcher.clear();
     }
@@ -40,7 +40,7 @@ impl LauncherShell {
         if let Some(entry) = self.entries.iter().find(|entry| entry.app_id() == app_id)
             && let Err(error) = launch(entry, token.as_deref())
         {
-            eprintln!("unbound-launcher: cannot open {}: {error}", entry.name);
+            tracing::warn!("cannot open {}: {error}", entry.name);
         }
     }
 }
@@ -56,7 +56,7 @@ impl App for LauncherShell {
             WindowEvent::ShowLauncher if window.is_visible() => self.close(window),
             WindowEvent::ShowLauncher => {
                 if let Err(error) = window.show() {
-                    eprintln!("unbound-launcher: cannot show: {error}");
+                    tracing::warn!("cannot show: {error}");
                 }
             }
             WindowEvent::Input(input) => {
@@ -145,10 +145,11 @@ fn run() -> Result<(), WindowError> {
 }
 
 fn main() -> ExitCode {
+    unbound_log::init("unbound-launcher");
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("unbound-launcher: {error}");
+            tracing::error!("{error}");
             ExitCode::FAILURE
         }
     }

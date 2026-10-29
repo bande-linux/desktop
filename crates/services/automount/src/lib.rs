@@ -183,7 +183,7 @@ impl Automounter {
                 self.system
                     .call_method(Some(UDISKS), &path, Some(FILESYSTEM), "Mount", &(options,))
             {
-                eprintln!("unbound-automount: cannot mount {path}: {error}");
+                tracing::warn!("cannot mount {path}: {error}");
             }
         }
     }
@@ -228,7 +228,7 @@ impl Automounter {
             },
         );
         if let Err(error) = posted {
-            eprintln!("unbound-automount: cannot post the notification: {error}");
+            tracing::warn!("cannot post the notification: {error}");
         }
     }
 }

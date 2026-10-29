@@ -10,7 +10,9 @@ accesskit.workspace = true
 jiff.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+tracing.workspace = true
 unbound-lock.workspace = true
+unbound-log.workspace = true
 unbound-toolkit.workspace = true
 
 [package.metadata.deb]

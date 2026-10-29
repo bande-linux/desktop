@@ -3810,6 +3810,7 @@ dependencies = [
  "unbound-l10n",
  "unbound-log",
  "unbound-toolkit",
+ "unbound-xdg",
 ]
 
 [[package]]

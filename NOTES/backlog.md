@@ -271,6 +271,20 @@ main track's. Next: the unchecked items below, then theming propagation (GTK
   frontend.
 - [x] `unbound-tray` (`org.kde.StatusNotifierWatcher`) and `unbound-automount`
   (UDisks2 mounting, "not ejected properly" warning).
+- [x] `unbound-network` (NetworkManager: Wi-Fi power, network list, joining with a
+  password, wired status) and `unbound-bluetooth` (BlueZ: power, paired and nearby
+  devices, connecting, pairing through a `KeyboardDisplay` agent), tested against
+  D-Bus fakes that follow the published APIs.
+- [x] `unbound-audio` (PipeWire: outputs, inputs, default device through WirePlumber's
+  metadata, volume and mute on the device route with `save`, the volume keys in
+  sixteenths and Option-Shift quarter steps), guest-tested against pipewire and
+  wireplumber with null devices.
+- [ ] Volume keys from the compositor (`XF86AudioRaiseVolume`, `LowerVolume`, `Mute`)
+  to the shell, the on-screen level indicator, and Control Center–style quick toggles
+  for Wi-Fi, Bluetooth and sound over the three clients; the Wi-Fi password and
+  Bluetooth passkey prompts. Menu bar and Settings integration after M23 and M25.
+- [ ] Prove per-device volume memory across a WirePlumber restart on a device with
+  routes (null devices have none; try `snd-dummy` or `snd-aloop` in the guest kernel).
 - [ ] Register `FileChooser`, `Screenshot` and `ScreenCast` once the toolkit dialogs
   and the compositor's capture (PipeWire) implement their traits.
 - [ ] Resolve `appearance "automatic"` to dark or light on a schedule; the portal

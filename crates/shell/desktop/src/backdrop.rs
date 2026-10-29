@@ -31,7 +31,7 @@ impl Luma {
         let columns = picture.width.div_ceil(LUMA_CELL).max(1);
         let rows = picture.height.div_ceil(LUMA_CELL).max(1);
         let mut sums = vec![(0u64, 0u64); (columns * rows) as usize];
-        for (index, pixel) in picture.rgba.chunks_exact(4).enumerate() {
+        for (index, pixel) in picture.rgba.as_chunks::<4>().0.iter().enumerate() {
             let index = index as u32;
             let (x, y) = (index % picture.width, index / picture.width);
             let cell = ((y / LUMA_CELL) * columns + x / LUMA_CELL) as usize;

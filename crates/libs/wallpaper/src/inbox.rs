@@ -45,8 +45,8 @@ impl<T> Outbox<T> {
         if self.sender.send(message).is_err() {
             return false;
         }
-        match (&*self.wake).write(&[1]) {
-            Ok(_) => true,
+        match (&*self.wake).write_all(&[1]) {
+            Ok(()) => true,
             Err(error) => error.kind() == io::ErrorKind::WouldBlock,
         }
     }

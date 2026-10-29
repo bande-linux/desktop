@@ -3,7 +3,7 @@
 use smithay::backend::allocator::Fourcc;
 use smithay::backend::renderer::{Bind, Color32F, Frame, ImportMem, Offscreen, Renderer};
 use smithay::utils::{Physical, Rectangle, Size, Transform};
-use unbound_render::{RoundedRect, Shadow, VulkanFrame, VulkanRenderer};
+use unbound_render::{Blur, RoundedRect, Shadow, VulkanFrame, VulkanRenderer};
 
 const SIZE: (i32, i32) = (80, 80);
 const WHITE: [u8; 4] = [255, 255, 255, 255];
@@ -244,4 +244,75 @@ fn a_clipped_solid_fill_is_rounded_even_when_opaque() {
     assert_eq!(at(&pixels, 10, 10), BLUE);
     assert_eq!(at(&pixels, 30, 10), RED);
     assert_eq!(at(&pixels, 30, 30), RED);
+}
+
+fn halves_then_blur(blur: Blur) -> Vec<[u8; 4]> {
+    render(move |_| {
+        vec![
+            clear([1.0; 4]),
+            Box::new(|frame: &mut VulkanFrame<'_, '_>| {
+                frame
+                    .clear(
+                        Color32F::new(0.0, 0.0, 0.0, 1.0),
+                        &[Rectangle::from_size((40, 80).into())],
+                    )
+                    .expect("left half");
+            }),
+            Box::new(move |frame: &mut VulkanFrame<'_, '_>| {
+                let bounds = blur.bounds();
+                frame
+                    .draw_blur(
+                        &blur,
+                        &[Rectangle::from_size((bounds.width, bounds.height).into())],
+                    )
+                    .expect("blur");
+            }),
+        ]
+    })
+}
+
+#[test]
+fn a_blurred_region_softens_an_edge_behind_it_and_leaves_the_rest_alone() {
+    let pixels = halves_then_blur(Blur {
+        region: square(20.0, 20.0, 40.0, 0.0),
+        passes: 3,
+        offset: 1.5,
+    });
+
+    let row: Vec<u8> = (20..60).map(|x| at(&pixels, x, 40)[0]).collect();
+    assert!(row.windows(2).all(|pair| pair[0] <= pair[1]), "{row:?}");
+    assert!(
+        row.iter()
+            .filter(|value| **value > 10 && **value < 245)
+            .count()
+            >= 8,
+        "{row:?}"
+    );
+    assert_eq!(at(&pixels, 10, 40), [0, 0, 0, 255]);
+    assert_eq!(at(&pixels, 70, 40), WHITE);
+    assert_eq!(at(&pixels, 39, 10), [0, 0, 0, 255]);
+    assert_eq!(at(&pixels, 40, 70), WHITE);
+}
+
+#[test]
+fn a_blur_keeps_a_uniform_background_uniform() {
+    let pixels = halves_then_blur(Blur {
+        region: square(60.0, 20.0, 15.0, 4.0),
+        passes: 2,
+        offset: 1.0,
+    });
+
+    assert!((60..75).all(|x| at(&pixels, x, 28)[0] >= 254));
+}
+
+#[test]
+fn a_blurred_region_is_clipped_to_its_rounded_shape() {
+    let pixels = halves_then_blur(Blur {
+        region: square(30.0, 20.0, 20.0, 8.0),
+        passes: 3,
+        offset: 1.5,
+    });
+
+    assert_eq!(at(&pixels, 30, 20), [0, 0, 0, 255]);
+    assert!(at(&pixels, 30, 30)[0] > 0);
 }

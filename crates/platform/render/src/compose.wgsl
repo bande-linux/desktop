@@ -102,3 +102,27 @@ fn shadow(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     let uncovered = 1.0 - coverage(position.xy, quad.clip, quad.clip_radius);
     return quad.color * (falloff * uncovered * quad.alpha);
 }
+
+fn sample_at(uv: vec2<f32>) -> vec4<f32> {
+    return textureSampleLevel(surface, filtered, uv, 0.0);
+}
+
+@fragment
+fn blur_down(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+    let uv = position.xy / quad.size;
+    let half_texel = quad.blur * 0.5 / quad.source_size;
+    let diagonal = vec2<f32>(half_texel.x, -half_texel.y);
+    return (sample_at(uv) * 4.0 + sample_at(uv - half_texel) + sample_at(uv + half_texel)
+        + sample_at(uv + diagonal) + sample_at(uv - diagonal)) / 8.0;
+}
+
+@fragment
+fn blur_up(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+    let uv = position.xy / quad.size;
+    let h = quad.blur * 0.5 / quad.size;
+    let edges = sample_at(uv + vec2<f32>(-2.0 * h.x, 0.0)) + sample_at(uv + vec2<f32>(2.0 * h.x, 0.0))
+        + sample_at(uv + vec2<f32>(0.0, -2.0 * h.y)) + sample_at(uv + vec2<f32>(0.0, 2.0 * h.y));
+    let corners = sample_at(uv + vec2<f32>(-h.x, h.y)) + sample_at(uv + vec2<f32>(h.x, h.y))
+        + sample_at(uv + vec2<f32>(h.x, -h.y)) + sample_at(uv + vec2<f32>(-h.x, -h.y));
+    return (edges + corners * 2.0) / 12.0;
+}

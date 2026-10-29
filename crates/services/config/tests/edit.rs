@@ -1,8 +1,9 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+use std::path::PathBuf;
 use std::time::Duration;
 
-use unbound_config::{Appearance, Config, DockEdge, Output, Setting};
+use unbound_config::{Appearance, Config, DockEdge, Output, Setting, Suspend, WallpaperVariant};
 
 fn apply(setting: Setting, source: &str) -> String {
     setting.apply(source).expect("edit")
@@ -64,6 +65,29 @@ fn durations_are_written_in_the_largest_whole_unit() {
             "{seconds} s written as {edited:?}"
         );
     }
+}
+
+#[test]
+fn key_repeat_and_wallpapers_are_written_and_a_reset_wallpaper_leaves_no_trace() {
+    let edited = apply(Setting::KeyRepeatRate(40), "");
+    let edited = apply(Setting::KeyRepeatDelay(Duration::from_millis(300)), &edited);
+    assert_eq!(
+        edited,
+        "keyboard {\n    repeat-rate 40\n    repeat-delay 300\n}\n"
+    );
+    let path = PathBuf::from("/home/me/Pictures/sea shore.jpg");
+    let edited = apply(
+        Setting::Wallpaper(WallpaperVariant::Dark, Some(path.clone())),
+        "appearance \"dark\"\n",
+    );
+    assert_eq!(
+        Config::parse(&edited).expect("valid").wallpaper.dark,
+        Some(path)
+    );
+    assert_eq!(
+        apply(Setting::Wallpaper(WallpaperVariant::Dark, None), &edited),
+        "appearance \"dark\"\n"
+    );
 }
 
 #[test]
@@ -129,16 +153,23 @@ fn an_output_is_added_changed_and_removed_by_connector() {
 }
 
 #[test]
-fn suspend_after_is_written_as_a_duration_or_never() {
+fn suspend_after_is_written_as_a_duration_or_never_or_left_to_follow_the_display() {
     assert_eq!(
-        apply(Setting::IdleSuspendAfter(None), ""),
+        apply(Setting::IdleSuspend(Suspend::Never), ""),
         "idle {\n    suspend-after \"never\"\n}\n"
     );
     assert_eq!(
         apply(
-            Setting::IdleSuspendAfter(Some(Duration::from_secs(3600))),
+            Setting::IdleSuspend(Suspend::After(Duration::from_secs(3600))),
             "idle {\n    suspend-after \"never\"\n}\n"
         ),
         "idle {\n    suspend-after \"1h\"\n}\n"
+    );
+    assert_eq!(
+        apply(
+            Setting::IdleSuspend(Suspend::WithDisplayOff),
+            "idle {\n    dim-after \"1m\"\n    suspend-after \"1h\"\n}\n"
+        ),
+        "idle {\n    dim-after \"1m\"\n}\n"
     );
 }

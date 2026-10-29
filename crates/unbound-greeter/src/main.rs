@@ -5,6 +5,7 @@ use std::process::ExitCode;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use accesskit::TreeUpdate;
 use unbound_greeter::{Outcome, log_in, login_users};
 use unbound_lock::{LockScreen, User};
 use unbound_toolkit::ui::{Event, Key};
@@ -89,15 +90,14 @@ impl App for Greeter {
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
-        let WindowEvent::Input(input) = event else {
-            return;
-        };
-        let changed = match input {
-            Event::Key {
+        let changed = match event {
+            WindowEvent::Input(Event::Key {
                 key: key @ (Key::Up | Key::Down),
                 ..
-            } => self.switch_user(key == Key::Down),
-            input => self.screen.handle(&input),
+            }) => self.switch_user(key == Key::Down),
+            WindowEvent::Input(input) => self.screen.handle(&input),
+            WindowEvent::Accessibility(request) => self.screen.perform(&request),
+            _ => false,
         };
         if changed {
             window.request_redraw();
@@ -141,6 +141,10 @@ impl App for Greeter {
 
     fn finished(&self) -> bool {
         self.started
+    }
+
+    fn accessibility(&self) -> Option<TreeUpdate> {
+        Some(self.screen.accessibility())
     }
 }
 

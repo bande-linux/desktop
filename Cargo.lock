@@ -3429,6 +3429,7 @@ dependencies = [
 name = "unbound-greeter"
 version = "0.1.0"
 dependencies = [
+ "accesskit",
  "jiff",
  "serde",
  "serde_json",

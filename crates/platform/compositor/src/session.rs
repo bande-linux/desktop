@@ -24,6 +24,7 @@ pub enum SessionRole {
 }
 
 pub const CLIPBOARD_DAEMON: &str = "/usr/bin/unbound-clipboard";
+pub const DESKTOP_SURFACE: &str = "/usr/bin/unbound-desktop-surface";
 pub const DOCK: &str = "/usr/bin/unbound-dock";
 pub const LAUNCHER: &str = "/usr/bin/unbound-launcher";
 pub const LOCK_SCREEN: &str = "/usr/bin/unbound-lock";

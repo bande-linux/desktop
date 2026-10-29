@@ -8,11 +8,11 @@ use std::time::{Duration, Instant};
 
 use smithay::utils::{Point, Size};
 use unbound_compositor::{FrameClock, FrameScheduler, Headless, REFRESH, Renderer};
-use unbound_graphics::{Color, Scene};
+use unbound_graphics::{Color, Palette, Scene, Scheme, TextSystem};
 use unbound_toolkit_platform::{
     App, MenuPlacement, Role, TITLE_BAR_HEIGHT, Window, WindowEvent, run,
 };
-use unbound_widgets::{Menu, MenuItem};
+use unbound_widgets::{Cell, Column, Context, Menu, MenuItem, Row, Sort, Table, Ui, Widget};
 
 const MIN_SSIM: f64 = 0.99;
 const SCALE: f64 = 2.0;
@@ -42,19 +42,32 @@ fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>) {
 
 struct Still {
     done: mpsc::Receiver<()>,
+    ui: Option<Ui>,
 }
 
 impl App for Still {
-    fn scene(&mut self, _window: &mut Window) -> Scene {
-        Scene {
-            width: 300,
-            height: 160,
-            background: Color::hex(0xF4F5F7),
-            items: Vec::new(),
+    fn scene(&mut self, window: &mut Window) -> Scene {
+        let (width, height) = window.size();
+        match &mut self.ui {
+            Some(ui) => ui.scene(width, height),
+            None => Scene {
+                width,
+                height,
+                background: Color::hex(0xF4F5F7),
+                items: Vec::new(),
+            },
         }
     }
 
-    fn event(&mut self, _window: &mut Window, _event: WindowEvent) {}
+    fn event(&mut self, window: &mut Window, event: WindowEvent) {
+        if let Some(ui) = &mut self.ui {
+            window.drive(ui, event).expect("drive the ui");
+        }
+    }
+
+    fn animating(&self) -> bool {
+        self.ui.as_ref().is_some_and(Ui::is_animating)
+    }
 
     fn deadline(&self) -> Option<Instant> {
         Some(Instant::now() + Duration::from_millis(20))
@@ -65,7 +78,7 @@ impl App for Still {
     }
 }
 
-fn shot(name: &str, prepare: fn(&mut Window), pointer: (i32, i32)) {
+fn shot(name: &str, prepare: fn(&mut Window) -> Option<Ui>, pointer: (i32, i32)) {
     let output = (
         (f64::from(OUTPUT.0) * SCALE) as i32,
         (f64::from(OUTPUT.1) * SCALE) as i32,
@@ -83,11 +96,15 @@ fn shot(name: &str, prepare: fn(&mut Window), pointer: (i32, i32)) {
             (300, 160),
         )
         .expect("window");
-        let mut still = Still { done: check_done };
+        let mut still = Still {
+            done: check_done,
+            ui: None,
+        };
         window.wait_for_gpu();
         let scene = still.scene(&mut window);
         window.draw(&scene).expect("first frame");
-        prepare(&mut window);
+        still.ui = prepare(&mut window);
+        window.request_redraw();
         drawn.send(()).expect("report the frame");
         run(&mut window, &mut still).expect("run loop");
     });
@@ -133,10 +150,10 @@ fn shot(name: &str, prepare: fn(&mut Window), pointer: (i32, i32)) {
 
 #[test]
 fn the_window_frame_matches_its_golden_with_the_controls_hovered() {
-    shot("window-frame-hovered", |_| {}, (40, 14));
+    shot("window-frame-hovered", |_| None, (40, 14));
 }
 
-fn show_menu(window: &mut Window) {
+fn show_menu(window: &mut Window) -> Option<Ui> {
     let menu = Menu::new(vec![
         MenuItem::new("Open", "open").shortcut("Super+O"),
         MenuItem::new("Rename", "rename").enabled(false),
@@ -156,6 +173,7 @@ fn show_menu(window: &mut Window) {
             MenuPlacement::AtPoint(unbound_graphics::Point::new(30.0, 10.0)),
         )
         .expect("menu");
+    None
 }
 
 #[test]
@@ -166,4 +184,67 @@ fn a_menu_with_an_open_submenu_matches_its_golden() {
         show_menu,
         (60, TITLE_BAR_HEIGHT as i32 + sort_by),
     );
+}
+
+fn processes(_window: &mut Window) -> Option<Ui> {
+    let names = [
+        ("Files", "1.2", "84.3 MB", "unbound"),
+        ("Terminal", "12.8", "211.0 MB", "unbound"),
+        (
+            "compositor with an unusually long process name",
+            "4.1",
+            "96.5 MB",
+            "unbound",
+        ),
+        ("pipewire", "0.7", "12.4 MB", "unbound"),
+        ("NetworkManager", "0.0", "18.9 MB", "root"),
+        ("systemd", "0.1", "11.1 MB", "root"),
+    ];
+    let mut table = Table::new(vec![
+        Column::new("Process", 110.0),
+        Column::new("% CPU", 60.0).numeric(),
+        Column::new("Memory", 76.0).numeric(),
+        Column::new("User", 60.0),
+    ]);
+    table.set_rows(
+        names
+            .iter()
+            .map(|(name, cpu, memory, user)| {
+                Row::new(
+                    *name,
+                    vec![
+                        Cell::new(*name),
+                        Cell::new(*cpu),
+                        Cell::new(*memory),
+                        Cell::new(*user).muted(),
+                    ],
+                )
+            })
+            .collect(),
+    );
+    table.set_sort(Some(Sort {
+        column: 1,
+        ascending: false,
+    }));
+    table.select(&[
+        "Terminal".to_owned(),
+        "compositor with an unusually long process name".to_owned(),
+    ]);
+    let id = table.id();
+    let mut ui = Ui::new(
+        Box::new(table),
+        Context::new(TextSystem::new(), Palette::for_scheme(Scheme::Light)),
+    );
+    ui.perform(&accesskit::ActionRequest {
+        action: accesskit::Action::Focus,
+        target_tree: accesskit::TreeId::ROOT,
+        target_node: id.into(),
+        data: None,
+    });
+    Some(ui)
+}
+
+#[test]
+fn a_table_with_a_sorted_column_and_a_selection_matches_its_golden() {
+    shot("table", processes, (100, TITLE_BAR_HEIGHT as i32 + 60));
 }

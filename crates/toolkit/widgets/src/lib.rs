@@ -7,10 +7,12 @@ mod scroll;
 mod secure_field;
 mod slider;
 mod stack;
+mod table;
 mod text_field;
 mod toggle;
 
-use std::cell::Cell;
+use std::any::Any;
+use std::cell;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
@@ -25,6 +27,7 @@ pub use scroll::{ScrollState, ScrollView};
 pub use secure_field::SecureField;
 pub use slider::{SLIDER_HEIGHT, Slider};
 pub use stack::{Axis, Stack};
+pub use table::{Cell, Column, HEADER_HEIGHT, ROW_HEIGHT, Row, Sort, Table};
 pub use text_field::{TEXT_FIELD_HEIGHT, TextField};
 pub use toggle::{SWITCH_SIZE, Toggle};
 pub use unbound_spring::Spring;
@@ -46,6 +49,25 @@ impl WidgetId {
     fn node(self) -> NodeId {
         NodeId(self.0)
     }
+
+    pub fn part(self, index: u64) -> NodeId {
+        NodeId((self.0 << PART_SHIFT) | (index + 1))
+    }
+
+    fn owner_of_part(node: NodeId) -> Option<(Self, u64)> {
+        let owner = node.0 >> PART_SHIFT;
+        (owner != 0).then(|| (Self(owner), (node.0 & PART_MASK) - 1))
+    }
+}
+
+const PART_SHIFT: u32 = 32;
+const PART_MASK: u64 = (1 << PART_SHIFT) - 1;
+
+#[derive(Debug, Default)]
+pub struct Parts {
+    pub children: Vec<NodeId>,
+    pub nodes: Vec<(NodeId, Node)>,
+    pub focus: Option<NodeId>,
 }
 
 impl From<WidgetId> for NodeId {
@@ -73,7 +95,7 @@ pub struct Context {
     pub reduce_motion: bool,
     focus: Option<WidgetId>,
     now: Instant,
-    animating: Cell<bool>,
+    animating: cell::Cell<bool>,
 }
 
 impl Context {
@@ -85,7 +107,7 @@ impl Context {
             reduce_motion: false,
             focus: None,
             now: Instant::now(),
-            animating: Cell::new(false),
+            animating: cell::Cell::new(false),
         }
     }
 
@@ -111,7 +133,17 @@ fn focus_ring(cx: &Context, shape: Shape, items: &mut Vec<Item>) {
     });
 }
 
-pub trait Widget {
+pub trait AsAny {
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+}
+
+impl<T: Any> AsAny for T {
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+}
+
+pub trait Widget: AsAny {
     fn id(&self) -> WidgetId;
     fn measure(&mut self, cx: &mut Context, available: Size) -> Size;
     fn place(&mut self, cx: &mut Context, frame: Rect);
@@ -144,6 +176,14 @@ pub trait Widget {
     }
 
     fn menu_action(&mut self, _cx: &mut Context, _action: &str) -> bool {
+        false
+    }
+
+    fn parts(&self, _cx: &Context) -> Parts {
+        Parts::default()
+    }
+
+    fn perform_part(&mut self, _cx: &mut Context, _part: u64, _request: &ActionRequest) -> bool {
         false
     }
 
@@ -267,14 +307,17 @@ fn collect(widget: &dyn Widget, cx: &Context, nodes: &mut Vec<(NodeId, Node)>) {
     if widget.accepts_focus(cx) {
         node.add_action(Action::Focus);
     }
+    let parts = widget.parts(cx);
     node.set_children(
         widget
             .children()
             .iter()
             .map(|child| child.id().node())
+            .chain(parts.children)
             .collect::<Vec<_>>(),
     );
     nodes.push((widget.id().node(), node));
+    nodes.extend(parts.nodes);
     for child in widget.children() {
         collect(child.as_ref(), cx, nodes);
     }
@@ -304,6 +347,12 @@ impl Ui {
 
     pub fn widget(&mut self, id: WidgetId) -> Option<&mut dyn Widget> {
         find_mut(self.root.as_mut(), id)
+    }
+
+    pub fn widget_as<T: Widget + 'static>(&mut self, id: WidgetId) -> Option<&mut T> {
+        find_mut(self.root.as_mut(), id)?
+            .as_any_mut()
+            .downcast_mut()
     }
 
     pub fn layout(&mut self, size: Size) {
@@ -588,12 +637,29 @@ impl Ui {
                 ..TreeInfo::new(self.root.id().node())
             }),
             tree_id: TreeId::ROOT,
-            focus: self.cx.focus.unwrap_or(self.root.id()).node(),
+            focus: self.focus_node(),
         }
+    }
+
+    fn focus_node(&self) -> NodeId {
+        let focus = self.cx.focus.unwrap_or(self.root.id());
+        find(self.root.as_ref(), focus)
+            .and_then(|widget| widget.parts(&self.cx).focus)
+            .unwrap_or(focus.node())
     }
 
     pub fn perform(&mut self, request: &ActionRequest) -> bool {
         self.cx.now = (self.clock)();
+        if let Some((owner, part)) = WidgetId::owner_of_part(request.target_node) {
+            if matches!(request.action, Action::Focus | Action::Click) && self.accepts_focus(owner)
+            {
+                self.cx.focus = Some(owner);
+            }
+            let Some(widget) = find_mut(self.root.as_mut(), owner) else {
+                return false;
+            };
+            return widget.perform_part(&mut self.cx, part, request);
+        }
         let target = WidgetId(request.target_node.0);
         if request.action == Action::Focus {
             let accepts = self.accepts_focus(target);

@@ -340,8 +340,6 @@ boot framebuffer, K3 USB input. Later, the Apple DCP and agx drivers unlock:
 - `ci/perf` fails on `frame_typical_p99` (16–23 ms against 8.33 ms) and once
   `frame_full_p99` while other jobs share the runners' Mac mini; the services branch
   does not touch the compositor, and milestone-8's tip passed with the runners idle.
-- Every crate's `cargo-deb` metadata says `section = "x11"`; the pure-Wayland plan's
-  meta-package now uses `misc`. Change the crates in a commit of their own.
 - `unbound-lock` keeps the password in a `String` until PAM's copy is zeroed; zeroize the
   field's buffer too.
 - The lock screen ignores logind's `Unlock` signal (`loginctl unlock-session`); decide

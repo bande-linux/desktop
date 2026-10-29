@@ -24,7 +24,19 @@ when they reach the screen is Unbound's own.
   back only for tests), the DRM output with `DrmCompositor`. Each surface keeps a texture for its
   lifetime and an import uploads only the buffer's damaged rows; the damage tracker repaints only
   damaged regions and skips what an opaque window covers. The output is laid out in points and
-  drawn in pixels at its scale. Blur, rounded corners and transforms are not built yet.
+  drawn in pixels at its scale.
+- **Window shape and depth.** Every window that is not full screen is clipped to its
+  `xdg_surface` window geometry with 12 pt rounded corners (antialiased in the fragment shader)
+  and casts a soft shadow drawn analytically (a Gaussian-blurred rounded box): the key window's
+  is larger and darker (blur 14 pt, 10 pt down, 42 %) than other windows' (7 pt, 4 pt, 22 %).
+  The shadow is cut out under the window, so translucent windows do not show it through. All
+  windows get this, including client-side decorated toolkits that draw their own shadow outside
+  the geometry: clipping replaces it with ours, so every app looks alike. Full-screen windows
+  have neither and keep direct scanout. A window's opaque region loses exactly the corner
+  pixels its shape leaves uncovered, so damage below an opaque window is still skipped, and a
+  shadow's element covers its blur reach, so moving or focusing a window damages its shadow.
+  `ci/perf` damages a 64 × 64 patch inside the top window rather than at its corner, since the
+  corner now lets what lies below show through by design.
 - **dma-buf.** `linux-dmabuf-v1` serves single-plane ARGB8888 and XRGB8888 buffers with the
   LINEAR modifier: version 3 headless, version 4 with feedback (main device and a scanout tranche
   of the primary plane's formats) on a DRM device, whose node accepted dma-bufs carry so that

@@ -265,11 +265,11 @@ fn on_a_2x_output_a_window_is_laid_out_in_points_and_drawn_in_pixels() {
     let mut renderer = Renderer::new().expect("Vulkan renderer");
     let (left, top) = (2 * (128 - 32) / 2, 2 * (96 - 32) / 2);
     assert_eq!(
-        pixel(&mut renderer, &mut server, left + 1, top + 1),
+        pixel(&mut renderer, &mut server, left + 32, top + 1),
         rgb(RED)
     );
     assert_eq!(
-        pixel(&mut renderer, &mut server, left + 62, top + 62),
+        pixel(&mut renderer, &mut server, left + 62, top + 32),
         rgb(RED)
     );
     assert_ne!(

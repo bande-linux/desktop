@@ -6,7 +6,14 @@ use smithay::wayland::compositor::with_states;
 use smithay::wayland::foreign_toplevel_list::ForeignToplevelHandle;
 use smithay::wayland::shell::xdg::{SurfaceCachedState, ToplevelSurface};
 
-use crate::state::{Rect, State};
+use smithay::backend::renderer::element::surface::{
+    WaylandSurfaceRenderElement, render_elements_from_surface_tree,
+};
+use smithay::backend::renderer::element::{Id, Kind};
+use unbound_render::VulkanRenderer;
+
+use crate::scene::{Area, CORNER_RADIUS, Placement, ShadowElement, WindowElement, rounded};
+use crate::state::{OutputElement, Rect, State};
 
 pub struct Window {
     pub(crate) toplevel: ToplevelSurface,
@@ -18,6 +25,7 @@ pub struct Window {
     pub(crate) acked: Option<Serial>,
     pub(crate) resize: Option<Resize>,
     pub(crate) minimized: Option<u64>,
+    shadow: Id,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -76,6 +84,7 @@ impl Window {
             acked: None,
             resize: None,
             minimized: None,
+            shadow: Id::new(),
         }
     }
 
@@ -110,6 +119,49 @@ impl Window {
 
     pub(crate) fn surface(&self) -> &WlSurface {
         self.toplevel.wl_surface()
+    }
+
+    pub(crate) fn render_elements(
+        &self,
+        renderer: &mut VulkanRenderer,
+        scale: f64,
+        active: bool,
+    ) -> Vec<OutputElement> {
+        let origin = self
+            .surface_origin()
+            .to_f64()
+            .to_physical(scale)
+            .to_i32_round::<i32>();
+        let surfaces: Vec<WaylandSurfaceRenderElement<VulkanRenderer>> =
+            render_elements_from_surface_tree(
+                renderer,
+                self.surface(),
+                origin,
+                scale,
+                1.0,
+                Kind::Unspecified,
+            );
+        let geometry = match self.geometry() {
+            Some(geometry) if !self.has_state(xdg_toplevel::State::Fullscreen) => geometry,
+            _ => return surfaces.into_iter().map(OutputElement::Surface).collect(),
+        };
+        let area: Area = Rectangle::new(
+            geometry.location.to_f64().to_physical(scale),
+            geometry.size.to_f64().to_physical(scale),
+        );
+        let clip = rounded(area, CORNER_RADIUS * scale);
+        let placement = Placement::fixed(area);
+        surfaces
+            .into_iter()
+            .map(|surface| OutputElement::Window(WindowElement::new(surface, placement, clip)))
+            .chain([OutputElement::Shadow(ShadowElement::new(
+                self.shadow.clone(),
+                clip,
+                active,
+                scale,
+                1.0,
+            ))])
+            .collect()
     }
 
     pub(crate) fn surface_origin(&self) -> Point<i32, Logical> {

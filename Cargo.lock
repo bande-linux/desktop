@@ -3759,6 +3759,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "unbound-review"
+version = "0.1.0"
+dependencies = [
+ "image",
+ "rustix 1.1.6",
+ "serde",
+ "serde_json",
+ "tracing",
+ "unbound-log",
+ "wayland-client",
+ "wayland-protocols",
+]
+
+[[package]]
 name = "unbound-sample"
 version = "0.1.0"
 dependencies = [

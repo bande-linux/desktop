@@ -15,6 +15,7 @@ use raw_window_handle::{
     RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle,
 };
 use rustix::fs::{MemfdFlags, memfd_create};
+use unbound_protocols::client::unbound_shell_v1::VolumeKey;
 use wayland_client::backend::WaylandError;
 use wayland_client::protocol::wl_buffer::{self, WlBuffer};
 use wayland_client::protocol::wl_callback::{self, WlCallback};
@@ -128,6 +129,8 @@ pub enum WindowEvent {
     CaptureArea,
     ActiveApp(String),
     AppsChanged,
+    VolumeKey { key: VolumeKey, fine: bool },
+    ToggleControlCenter,
 }
 
 #[derive(Debug)]
@@ -504,6 +507,23 @@ impl Window {
         Ok(())
     }
 
+    pub fn set_layer_size(&mut self, size: (u32, u32)) -> Result<(), WindowError> {
+        let ShellSurface::Layer(layer) = &self.role else {
+            return Err(WindowError::Missing("a layer surface"));
+        };
+        layer.set_size(size.0, size.1);
+        if !self.visible {
+            return Ok(());
+        }
+        self.state.configured = false;
+        self.surface.commit();
+        while !self.state.configured {
+            self.queue.blocking_dispatch(&mut self.state)?;
+        }
+        self.needs_redraw = true;
+        Ok(())
+    }
+
     pub fn draw(&mut self, scene: &Scene) -> Result<FramePath, WindowError> {
         self.wait_for_frame()?;
         self.queue.dispatch_pending(&mut self.state)?;
@@ -758,7 +778,7 @@ impl Dispatch<WlRegistry, ()> for State {
                     state.lock.output = Some(registry.bind(name, 1, handle, ()));
                 }
                 "unbound_shell_v1" => {
-                    state.shell.protocol = Some(registry.bind(name, version.min(3), handle, ()));
+                    state.shell.protocol = Some(registry.bind(name, version.min(4), handle, ()));
                 }
                 "ext_output_image_capture_source_manager_v1" => {
                     state.capture.sources = Some(registry.bind(name, 1, handle, ()));

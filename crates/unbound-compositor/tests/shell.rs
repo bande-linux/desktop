@@ -2,7 +2,7 @@ use smithay::utils::{Point, Size};
 use unbound_compositor::{Headless, Renderer};
 use unbound_test_wayland::{
     Anchor, BLUE, GREEN, KeyboardInteractivity, Layer, LayerRequest, RED, ShmImage, TestClient,
-    roundtrip,
+    VolumeKey, roundtrip,
 };
 use wayland_client::protocol::wl_shm::Format;
 
@@ -244,6 +244,9 @@ const KEY_A: u32 = 30;
 const KEY_3: u32 = 4;
 const KEY_4: u32 = 5;
 const KEY_LEFTSHIFT: u32 = 42;
+const KEY_LEFTALT: u32 = 56;
+const KEY_MUTE: u32 = 113;
+const KEY_VOLUMEUP: u32 = 115;
 
 fn launcher() -> LayerRequest {
     LayerRequest {
@@ -586,4 +589,45 @@ fn the_shell_hears_which_app_is_active() {
 
     assert_eq!(heard[..2], ["", "org.example.Editor"]);
     assert_eq!(heard.last().map(String::as_str), Some("org.example.Viewer"));
+}
+
+#[test]
+fn volume_keys_go_to_the_shell_without_super_and_option_shift_makes_them_fine() {
+    let mut server = server();
+    let mut app = TestClient::connect(&mut server);
+    app.use_seat(&mut server);
+    let pixels = red(32, 32);
+    app.show_window(&mut server, &image(&pixels, 32, 32));
+    let mut shell = TestClient::connect_as_shell(&mut server);
+    shell.join_shell(&mut server);
+
+    press(&mut server, &[KEY_MUTE]);
+    press(&mut server, &[KEY_LEFTALT, KEY_LEFTSHIFT, KEY_VOLUMEUP]);
+    roundtrip(&mut server, &mut [&mut app, &mut shell]);
+
+    assert_eq!(
+        shell.volume_keys(),
+        [(VolumeKey::Mute, false), (VolumeKey::Up, true)]
+    );
+    assert!(
+        app.keys()
+            .iter()
+            .all(|(key, _)| *key != KEY_MUTE && *key != KEY_VOLUMEUP),
+        "the app saw {:?}",
+        app.keys()
+    );
+}
+
+#[test]
+fn the_menu_bar_toggles_control_center_through_the_compositor() {
+    let mut server = server();
+    let mut menu_bar = TestClient::connect_as_shell(&mut server);
+    menu_bar.join_shell(&mut server);
+    let mut control_center = TestClient::connect_as_shell(&mut server);
+    control_center.join_shell(&mut server);
+
+    menu_bar.toggle_control_center(&mut server);
+    roundtrip(&mut server, &mut [&mut menu_bar, &mut control_center]);
+
+    assert_eq!(control_center.control_center_toggles(), 1);
 }

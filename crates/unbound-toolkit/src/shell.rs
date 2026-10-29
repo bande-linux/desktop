@@ -1,5 +1,5 @@
 use unbound_protocols::client::unbound_shell_v1::{self, UnboundShellV1};
-use wayland_client::{Connection, Dispatch, QueueHandle, event_created_child};
+use wayland_client::{Connection, Dispatch, Proxy, QueueHandle, WEnum, event_created_child};
 use wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_handle_v1::{
     self, ExtForeignToplevelHandleV1,
 };
@@ -47,6 +47,20 @@ impl Window {
         self.flush()
     }
 
+    pub fn toggle_control_center(&mut self) -> Result<(), WindowError> {
+        let protocol = self
+            .state
+            .shell
+            .protocol
+            .as_ref()
+            .filter(|protocol| {
+                protocol.version() >= unbound_shell_v1::REQ_TOGGLE_CONTROL_CENTER_SINCE
+            })
+            .ok_or(WindowError::Missing("unbound_shell_v1 version 4"))?;
+        protocol.toggle_control_center();
+        self.flush()
+    }
+
     pub fn activation_token(&mut self, app_id: &str) -> Result<String, WindowError> {
         let activation = self
             .state
@@ -88,6 +102,16 @@ impl Dispatch<UnboundShellV1, ()> for State {
             unbound_shell_v1::Event::CaptureArea => state.events.push(WindowEvent::CaptureArea),
             unbound_shell_v1::Event::ActiveApp { app_id } => {
                 state.events.push(WindowEvent::ActiveApp(app_id));
+            }
+            unbound_shell_v1::Event::VolumeKey {
+                key: WEnum::Value(key),
+                fine,
+            } => state.events.push(WindowEvent::VolumeKey {
+                key,
+                fine: fine != 0,
+            }),
+            unbound_shell_v1::Event::ToggleControlCenter => {
+                state.events.push(WindowEvent::ToggleControlCenter);
             }
             _ => {}
         }

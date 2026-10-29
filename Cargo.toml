@@ -35,11 +35,14 @@ pipewire = "=0.10.1"
 serde_json = "=1.0.154"
 zbus = "=5.19.0"
 unbound-apps = { path = "crates/unbound-apps" }
+unbound-audio = { path = "crates/unbound-audio" }
+unbound-bluetooth = { path = "crates/unbound-bluetooth" }
 unbound-config = { path = "crates/unbound-config" }
 unbound-compositor = { path = "crates/unbound-compositor" }
 unbound-protocols = { path = "crates/unbound-protocols" }
 unbound-greeter = { path = "crates/unbound-greeter" }
 unbound-lock = { path = "crates/unbound-lock" }
+unbound-network = { path = "crates/unbound-network" }
 unbound-render = { path = "crates/unbound-render" }
 unbound-sample = { path = "crates/unbound-sample" }
 unbound-test-bus = { path = "crates/unbound-test-bus" }

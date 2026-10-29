@@ -70,6 +70,22 @@ impl State {
         }
     }
 
+    pub(crate) fn volume_key(&mut self, key: unbound_shell_v1::VolumeKey, fine: bool) {
+        for shell in &self.shell_resources {
+            if shell.version() >= unbound_shell_v1::EVT_VOLUME_KEY_SINCE {
+                shell.volume_key(key, u32::from(fine));
+            }
+        }
+    }
+
+    fn toggle_control_center(&mut self) {
+        for shell in &self.shell_resources {
+            if shell.version() >= unbound_shell_v1::EVT_TOGGLE_CONTROL_CENTER_SINCE {
+                shell.toggle_control_center();
+            }
+        }
+    }
+
     pub(crate) fn announce_active_app(&mut self, key: Option<&WlSurface>) {
         let app_id = key
             .map(|surface| toplevel_names(surface).1)
@@ -186,6 +202,7 @@ impl Dispatch<UnboundShellV1, ()> for State {
     ) {
         match request {
             unbound_shell_v1::Request::ActivateApp { app_id } => state.activate_app(&app_id),
+            unbound_shell_v1::Request::ToggleControlCenter => state.toggle_control_center(),
             unbound_shell_v1::Request::Destroy => {
                 state.shell_resources.retain(|shell| shell != resource);
             }

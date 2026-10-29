@@ -1,5 +1,5 @@
 use unbound_menubar::{MenuBar, app_name, clock_text};
-use unbound_toolkit::{Item, Palette, Scheme, TextSystem};
+use unbound_toolkit::{Item, Palette, Point, Scheme, TextSystem};
 
 #[test]
 fn the_clock_reads_like_the_macos_menu_bar() {
@@ -42,4 +42,26 @@ fn the_app_name_is_drawn_at_the_left_and_the_clock_at_the_right() {
     };
     assert!(*app_x < 32.0);
     assert!(clock_x + clock_width <= 1024.0 && clock_x + clock_width > 990.0);
+}
+
+#[test]
+fn control_center_sits_left_of_the_clock_and_takes_only_its_own_clicks() {
+    let mut bar = MenuBar::new(
+        Palette::for_scheme(Scheme::Light),
+        TextSystem::new(),
+        "Thu 29 Oct 09:05".to_owned(),
+    );
+    let scene = bar.scene(1024, 24);
+    let clock_x = scene
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Text { origin, .. } => Some(origin.x),
+            _ => None,
+        })
+        .fold(f32::MIN, f32::max);
+
+    assert!(bar.control_center_hit(Point::new(clock_x - 20.0, 12.0)));
+    assert!(!bar.control_center_hit(Point::new(clock_x + 4.0, 12.0)));
+    assert!(!bar.control_center_hit(Point::new(clock_x - 60.0, 12.0)));
 }

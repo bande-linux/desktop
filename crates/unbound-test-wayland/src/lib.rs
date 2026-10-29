@@ -6,6 +6,7 @@ pub use fence::SwSyncTimeline;
 pub use idle::IdleEvent;
 pub use shell::{Anchor, KeyboardInteractivity, Layer, LayerRequest};
 pub use toplevel::{Configured, PopupRequest};
+pub use unbound_protocols::client::unbound_shell_v1::VolumeKey;
 pub use wayland_protocols::xdg::shell::client::xdg_toplevel::{ResizeEdge, State as ToplevelState};
 mod capture;
 mod cursor;

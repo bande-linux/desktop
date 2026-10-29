@@ -1,0 +1,32 @@
+[package]
+name = "unbound-controlcenter"
+description = "Unbound Control Center: Wi-Fi, Bluetooth, Do Not Disturb and sound, and the volume HUD"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+accesskit.workspace = true
+unbound-audio.workspace = true
+unbound-bluetooth.workspace = true
+unbound-config.workspace = true
+unbound-network.workspace = true
+unbound-toolkit.workspace = true
+zbus.workspace = true
+
+[dev-dependencies]
+accesskit.workspace = true
+
+[package.metadata.deb]
+maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+section = "misc"
+depends = "$auto, fonts-inter"
+recommends = "network-manager, bluez, pipewire, wireplumber"
+extended-description = """\
+Control Center of the Unbound desktop: opened from the menu bar, it \
+switches Wi-Fi, Bluetooth and Do Not Disturb and sets the volume, as \
+macOS Control Center does. It also shows the volume when the volume keys \
+are pressed. unbound-compositor starts it and keeps it running."""
+assets = [
+    ["target/release/unbound-controlcenter", "usr/bin/", "755"],
+]

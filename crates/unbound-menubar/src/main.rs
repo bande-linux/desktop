@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 use unbound_apps::{Locale, applications, current_desktops, data_dirs};
 use unbound_config::{Appearance, Config, config_path};
 use unbound_menubar::{HEIGHT, MenuBar, app_name, clock_text};
+use unbound_toolkit::ui::Event;
 use unbound_toolkit::{
     App, Edges, KeyboardFocus, LayerKind, LayerOptions, Palette, Role, Scene, Scheme, TextSystem,
     Window, WindowEvent,
@@ -25,10 +26,18 @@ impl App for Bar {
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
-        if let WindowEvent::ActiveApp(app_id) = event
-            && self.bar.set_app(app_name(&app_id, &self.names))
-        {
-            window.request_redraw();
+        match event {
+            WindowEvent::ActiveApp(app_id) => {
+                if self.bar.set_app(app_name(&app_id, &self.names)) {
+                    window.request_redraw();
+                }
+            }
+            WindowEvent::Input(Event::PointerUp(point)) if self.bar.control_center_hit(point) => {
+                if let Err(error) = window.toggle_control_center() {
+                    eprintln!("unbound-menubar: cannot open Control Center: {error}");
+                }
+            }
+            _ => {}
         }
     }
 

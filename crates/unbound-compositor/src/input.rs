@@ -11,6 +11,7 @@ use smithay::input::pointer::{AxisFrame, ButtonEvent, MotionEvent};
 use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Clock, Logical, Monotonic, Point, SERIAL_COUNTER};
+use unbound_protocols::server::unbound_shell_v1::VolumeKey;
 
 use crate::state::{Headless, State};
 
@@ -29,6 +30,16 @@ enum Shortcut {
     ToggleFullscreen,
     CaptureScreen,
     CaptureArea,
+    Volume(VolumeKey, bool),
+}
+
+fn volume_key(keysym: u32) -> Option<VolumeKey> {
+    match keysym {
+        keysyms::KEY_XF86AudioMute => Some(VolumeKey::Mute),
+        keysyms::KEY_XF86AudioLowerVolume => Some(VolumeKey::Down),
+        keysyms::KEY_XF86AudioRaiseVolume => Some(VolumeKey::Up),
+        _ => None,
+    }
 }
 
 fn shortcut(keysym: u32, unshifted: Option<u32>, ctrl: bool, shift: bool) -> Option<Shortcut> {
@@ -86,6 +97,10 @@ impl State {
     }
 
     fn run(&mut self, shortcut: Shortcut) {
+        if let Shortcut::Volume(key, fine) = shortcut {
+            self.volume_key(key, fine);
+            return;
+        }
         if shortcut == Shortcut::ShowLauncher {
             self.show_launcher();
             return;
@@ -147,7 +162,8 @@ impl State {
             Shortcut::ShowLauncher
             | Shortcut::LockScreen
             | Shortcut::CaptureScreen
-            | Shortcut::CaptureArea => {}
+            | Shortcut::CaptureArea
+            | Shortcut::Volume(..) => {}
         }
     }
 }
@@ -311,6 +327,11 @@ impl Headless {
                     } else {
                         FilterResult::Forward
                     };
+                }
+                if let Some(key) = volume_key(keysym.modified_sym().raw()) {
+                    state.held_shortcut_keys.push(evdev_code);
+                    let fine = modifiers.alt && modifiers.shift;
+                    return FilterResult::Intercept(Some(Shortcut::Volume(key, fine)));
                 }
                 let unshifted = keysym
                     .raw_latin_sym_or_raw_current_sym()

@@ -260,6 +260,21 @@ runs natively on Wayland in the guest.
   writer for `color-scheme`, plus `gtk-application-prefer-dark-theme` for GTK 3); animated
   cursors show their first frame; cursors are not scaled for HiDPI outputs (phase 8
   fractional-scale work); phase 8 after that.
+- [ ] **Control Center and volume keys** (`desktop/control-center`) phase 5: `unbound_shell_v1`
+  v4 sends `volume_key` for the mute and volume keys, without Super and on the lock screen
+  too, fine when Option and Shift are held, and relays the menu bar's
+  `toggle_control_center`. `unbound-controlcenter`, a shell client the compositor starts,
+  owns one overlay anchored top-right below the menu bar: on a volume key it steps the
+  default output through `unbound-audio` and shows a 16-segment volume HUD for 1.5 s; from
+  the menu bar's two-switches item it opens Control Center with switches for Wi-Fi
+  (NetworkManager, shown when there is a Wi-Fi device), Bluetooth (BlueZ, shown when there
+  is an adapter) and Do Not Disturb (`org.unbound.NotificationCenter`), and a sound slider
+  for the default output. Tests: volume keys reach the shell and not the app, the relay,
+  the menu bar item's place and clicks, the panel showing only available controls and
+  switching them, the HUD's segments. Not done: key repeat for held volume keys (the
+  compositor intercepts them, so nothing repeats), choosing the output and Wi-Fi network
+  from the panel, brightness keys, closing the panel on a click elsewhere or Escape, the
+  menu bar's battery and Wi-Fi items.
 - [ ] **Toolkit on Vello and Parley** (track; moved into `desktop/integration`)
   `vello_cpu` first frame into `wl_shm`, `vello_gpu` afterwards, Parley text; goldens
   re-derived from scene descriptions; panel, launcher and terminal move over; a toolkit

@@ -2,7 +2,9 @@ use unbound_compositor::SessionRole;
 use unbound_protocols::client::unbound_shell_v1::{self, UnboundShellV1};
 use wayland_client::protocol::wl_shm::Format;
 use wayland_client::protocol::wl_surface::WlSurface;
-use wayland_client::{Connection, Dispatch, QueueHandle, delegate_noop, event_created_child};
+use wayland_client::{
+    Connection, Dispatch, QueueHandle, WEnum, delegate_noop, event_created_child,
+};
 use wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_handle_v1::{
     self, ExtForeignToplevelHandleV1,
 };
@@ -41,6 +43,8 @@ pub(crate) struct Shell {
     capture_requests: usize,
     area_capture_requests: usize,
     active_apps: Vec<String>,
+    volume_keys: Vec<(unbound_shell_v1::VolumeKey, bool)>,
+    control_center_toggles: usize,
     toplevels: Vec<(ExtForeignToplevelHandleV1, String, bool)>,
 }
 
@@ -132,7 +136,7 @@ impl TestClient {
     }
 
     pub fn join_shell(&mut self, server: &mut Headless) {
-        let shell: UnboundShellV1 = self.bind("unbound_shell_v1", 3);
+        let shell: UnboundShellV1 = self.bind("unbound_shell_v1", 4);
         self.globals.shell.shell = Some(shell);
         let _: ExtForeignToplevelListV1 = self.bind("ext_foreign_toplevel_list_v1", 1);
         self.exchange(server);
@@ -152,6 +156,20 @@ impl TestClient {
 
     pub fn active_apps(&self) -> &[String] {
         &self.globals.shell.active_apps
+    }
+
+    pub fn volume_keys(&self) -> &[(unbound_shell_v1::VolumeKey, bool)] {
+        &self.globals.shell.volume_keys
+    }
+
+    pub fn control_center_toggles(&self) -> usize {
+        self.globals.shell.control_center_toggles
+    }
+
+    pub fn toggle_control_center(&mut self, server: &mut Headless) {
+        let shell = self.globals.shell.shell.as_ref().expect("joined the shell");
+        shell.toggle_control_center();
+        self.exchange(server);
     }
 
     pub fn activate_app(&mut self, server: &mut Headless, app_id: &str) {
@@ -296,6 +314,13 @@ impl Dispatch<UnboundShellV1, ()> for Globals {
             unbound_shell_v1::Event::CaptureScreen => globals.shell.capture_requests += 1,
             unbound_shell_v1::Event::CaptureArea => globals.shell.area_capture_requests += 1,
             unbound_shell_v1::Event::ActiveApp { app_id } => globals.shell.active_apps.push(app_id),
+            unbound_shell_v1::Event::VolumeKey {
+                key: WEnum::Value(key),
+                fine,
+            } => globals.shell.volume_keys.push((key, fine != 0)),
+            unbound_shell_v1::Event::ToggleControlCenter => {
+                globals.shell.control_center_toggles += 1;
+            }
             _ => {}
         }
     }

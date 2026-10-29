@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <protocol name="unbound_shell_v1">
-  <interface name="unbound_shell_v1" version="3">
+  <interface name="unbound_shell_v1" version="4">
     <description summary="requests and events between the compositor and the shell">
       Offered only on the connections of the shell clients the compositor starts
       itself (the panel and the launcher), never on the listening socket.
@@ -43,6 +43,34 @@
         when the user clicks the empty desktop.
       </description>
       <arg name="app_id" type="string"/>
+    </event>
+
+    <enum name="volume_key" since="4">
+      <entry name="mute" value="0" summary="the mute key"/>
+      <entry name="down" value="1" summary="the volume down key"/>
+      <entry name="up" value="2" summary="the volume up key"/>
+    </enum>
+
+    <event name="volume_key" since="4">
+      <description summary="the user pressed a volume key">
+        Sent for the mute, volume down and volume up keys, with or without Super
+        and also while the session is locked, as a Mac's volume keys always work.
+        Fine is 1 when Option and Shift are held, which on a Mac changes the
+        volume in quarter steps.
+      </description>
+      <arg name="key" type="uint" enum="volume_key"/>
+      <arg name="fine" type="uint"/>
+    </event>
+
+    <request name="toggle_control_center" since="4">
+      <description summary="open or close Control Center">
+        Sent by the menu bar when its Control Center item is clicked. The
+        compositor relays it to every shell client as toggle_control_center.
+      </description>
+    </request>
+
+    <event name="toggle_control_center" since="4">
+      <description summary="the user asked to open or close Control Center"/>
     </event>
   </interface>
 </protocol>

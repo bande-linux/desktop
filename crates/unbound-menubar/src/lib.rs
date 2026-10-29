@@ -5,6 +5,11 @@ use unbound_toolkit::{
 pub const HEIGHT: u32 = 24;
 const INSET: f32 = 16.0;
 const TEXT_SIZE: f32 = 13.0;
+const ITEM_WIDTH: f32 = 28.0;
+const ITEM_SPACING: f32 = 8.0;
+const SWITCH_WIDTH: f32 = 14.0;
+const SWITCH_HEIGHT: f32 = 6.0;
+const SWITCH_GAP: f32 = 3.0;
 
 pub fn clock_text(now: &jiff::Zoned) -> String {
     now.strftime("%a %-d %b %H:%M").to_string()
@@ -22,6 +27,7 @@ pub struct MenuBar {
     text: TextSystem,
     app: String,
     clock: String,
+    control_center: Rect,
 }
 
 impl MenuBar {
@@ -31,6 +37,7 @@ impl MenuBar {
             text,
             app: String::new(),
             clock,
+            control_center: Rect::default(),
         }
     }
 
@@ -48,6 +55,14 @@ impl MenuBar {
 
     pub fn app(&self) -> &str {
         &self.app
+    }
+
+    pub fn control_center_hit(&self, point: Point) -> bool {
+        let item = self.control_center;
+        point.x >= item.x
+            && point.x < item.x + item.width
+            && point.y >= item.y
+            && point.y < item.y + item.height
     }
 
     pub fn scene(&mut self, width: u32, height: u32) -> Scene {
@@ -86,6 +101,35 @@ impl MenuBar {
             origin: Point::new(clock_x, clock_y),
             paragraph: clock,
         });
+        self.control_center = Rect::new(
+            clock_x - ITEM_SPACING - ITEM_WIDTH,
+            0.0,
+            ITEM_WIDTH,
+            bar.height,
+        );
+        let glyph_x = self.control_center.x + (ITEM_WIDTH - SWITCH_WIDTH) / 2.0;
+        let glyph_top = ((bar.height - 2.0 * SWITCH_HEIGHT - SWITCH_GAP) / 2.0).round();
+        for (row, knob_at_end) in [(0.0, true), (1.0, false)] {
+            let y = glyph_top + row * (SWITCH_HEIGHT + SWITCH_GAP);
+            let track = Rect::new(glyph_x, y, SWITCH_WIDTH, SWITCH_HEIGHT);
+            items.push(Item::Stroke {
+                shape: Shape::rounded(track, SWITCH_HEIGHT / 2.0),
+                width: 1.0,
+                paint: label.into(),
+            });
+            let knob_x = if knob_at_end {
+                glyph_x + SWITCH_WIDTH - SWITCH_HEIGHT
+            } else {
+                glyph_x
+            };
+            items.push(Item::Fill {
+                shape: Shape::rounded(
+                    Rect::new(knob_x, y, SWITCH_HEIGHT, SWITCH_HEIGHT),
+                    SWITCH_HEIGHT / 2.0,
+                ),
+                paint: label.into(),
+            });
+        }
         Scene {
             width,
             height,

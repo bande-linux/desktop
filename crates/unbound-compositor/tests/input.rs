@@ -112,6 +112,28 @@ fn a_window_that_appears_under_a_still_pointer_receives_the_pointer() {
 }
 
 #[test]
+fn a_held_button_keeps_the_pointer_on_its_surface_without_extra_motion() {
+    let mut server = server();
+    let mut pressed = client_with_window(&mut server, 64);
+    let origin = server.windows()[0].location();
+    server.move_pointer_to(
+        Point::from((f64::from(origin.x) + 10.0, f64::from(origin.y) + 10.0)),
+        1,
+    );
+    server.press_button(BTN_LEFT, true, 2);
+    pressed.exchange(&mut server);
+    let motions = pressed.pointer_motions();
+
+    let mut above = client_with_window(&mut server, 96);
+    roundtrip(&mut server, &mut [&mut pressed, &mut above]);
+    roundtrip(&mut server, &mut [&mut pressed, &mut above]);
+
+    assert_eq!(pressed.pointer_motions(), motions);
+    assert_eq!(pressed.pointer_focus().map(|(index, _, _)| index), Some(0));
+    assert_eq!(above.pointer_focus(), None);
+}
+
+#[test]
 fn keys_reach_only_the_focused_client() {
     let mut server = server();
     let mut first = client_with_window(&mut server, 128);

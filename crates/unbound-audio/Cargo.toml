@@ -1,0 +1,14 @@
+[package]
+name = "unbound-audio"
+description = "Unbound PipeWire client: output and input devices, volume, mute and the volume keys"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+pipewire.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+unbound-test-bus.workspace = true

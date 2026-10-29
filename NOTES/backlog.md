@@ -302,6 +302,20 @@ main track's. Next: the unchecked items below, then theming propagation (GTK
   frontend.
 - [x] `unbound-tray` (`org.kde.StatusNotifierWatcher`) and `unbound-automount`
   (UDisks2 mounting, "not ejected properly" warning).
+- [x] `unbound-network` (NetworkManager: Wi-Fi power, network list, joining with a
+  password, wired status) and `unbound-bluetooth` (BlueZ: power, paired and nearby
+  devices, connecting, pairing through a `KeyboardDisplay` agent), tested against
+  D-Bus fakes that follow the published APIs.
+- [x] `unbound-audio` (PipeWire: outputs, inputs, default device through WirePlumber's
+  metadata, volume and mute on the device route with `save`, the volume keys in
+  sixteenths and Option-Shift quarter steps), guest-tested against pipewire and
+  wireplumber with null devices.
+- [ ] Volume keys from the compositor (`XF86AudioRaiseVolume`, `LowerVolume`, `Mute`)
+  to the shell, the on-screen level indicator, and Control Center–style quick toggles
+  for Wi-Fi, Bluetooth and sound over the three clients; the Wi-Fi password and
+  Bluetooth passkey prompts. Menu bar and Settings integration after M23 and M25.
+- [ ] Prove per-device volume memory across a WirePlumber restart on a device with
+  routes (null devices have none; try `snd-dummy` or `snd-aloop` in the guest kernel).
 - [ ] Register `FileChooser`, `Screenshot` and `ScreenCast` once the toolkit dialogs
   and the compositor's capture (PipeWire) implement their traits.
 - [ ] Resolve `appearance "automatic"` to dark or light on a schedule; the portal
@@ -357,8 +371,6 @@ boot framebuffer, K3 USB input. Later, the Apple DCP and agx drivers unlock:
 - `ci/perf` fails on `frame_typical_p99` (16–23 ms against 8.33 ms) and once
   `frame_full_p99` while other jobs share the runners' Mac mini; the services branch
   does not touch the compositor, and milestone-8's tip passed with the runners idle.
-- Every crate's `cargo-deb` metadata says `section = "x11"`; the pure-Wayland plan's
-  meta-package now uses `misc`. Change the crates in a commit of their own.
 - `unbound-lock` keeps the password in a `String` until PAM's copy is zeroed; zeroize the
   field's buffer too.
 - The lock screen ignores logind's `Unlock` signal (`loginctl unlock-session`); decide
@@ -388,3 +400,11 @@ boot framebuffer, K3 USB input. Later, the Apple DCP and agx drivers unlock:
   `config.kdl` for the appearance in their own `main`; a shared helper belongs in
   `unbound-config`.
 - unbound-polkit needs the user's sign-off before it goes to main.
+- PipeWire 1.4.2 ignores a Props change on a suspended adapter node that has no device
+  (a null sink nobody plays to): `pw-cli s <sink> Props '{ channelVolumes: [ 0.5, 0.5 ] }'`
+  leaves the volumes at 1.0, while the same change on the running sink applies.
+  `unbound-audio` sets such sinks' volume through the node, so its change is lost the
+  same way; raise it upstream.
+- A null-audio-sink given `media.class = "Audio/Source"` stalls WirePlumber 0.5.8's event
+  queue when it activates the node, after which no default node is chosen; virtual
+  sources need `Audio/Source/Virtual`.

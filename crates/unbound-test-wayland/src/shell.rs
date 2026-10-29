@@ -40,6 +40,7 @@ pub(crate) struct Shell {
     launcher_requests: usize,
     capture_requests: usize,
     area_capture_requests: usize,
+    active_apps: Vec<String>,
     toplevels: Vec<(ExtForeignToplevelHandleV1, String, bool)>,
 }
 
@@ -131,7 +132,7 @@ impl TestClient {
     }
 
     pub fn join_shell(&mut self, server: &mut Headless) {
-        let shell: UnboundShellV1 = self.bind("unbound_shell_v1", 2);
+        let shell: UnboundShellV1 = self.bind("unbound_shell_v1", 3);
         self.globals.shell.shell = Some(shell);
         let _: ExtForeignToplevelListV1 = self.bind("ext_foreign_toplevel_list_v1", 1);
         self.exchange(server);
@@ -147,6 +148,10 @@ impl TestClient {
 
     pub fn area_capture_requests(&self) -> usize {
         self.globals.shell.area_capture_requests
+    }
+
+    pub fn active_apps(&self) -> &[String] {
+        &self.globals.shell.active_apps
     }
 
     pub fn activate_app(&mut self, server: &mut Headless, app_id: &str) {
@@ -290,6 +295,7 @@ impl Dispatch<UnboundShellV1, ()> for Globals {
             unbound_shell_v1::Event::ShowLauncher => globals.shell.launcher_requests += 1,
             unbound_shell_v1::Event::CaptureScreen => globals.shell.capture_requests += 1,
             unbound_shell_v1::Event::CaptureArea => globals.shell.area_capture_requests += 1,
+            unbound_shell_v1::Event::ActiveApp { app_id } => globals.shell.active_apps.push(app_id),
             _ => {}
         }
     }

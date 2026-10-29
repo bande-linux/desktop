@@ -140,6 +140,7 @@ pub struct State {
     pub(crate) windows: Vec<Window>,
     pub(crate) popups: PopupManager,
     pub(crate) lock_screen_requested: bool,
+    pub(crate) active_app: String,
     pub(crate) idle: crate::idle::Idle,
     _idle_inhibit_state: smithay::wayland::idle_inhibit::IdleInhibitManagerState,
     pub(crate) lock_states: Option<std::sync::mpsc::Sender<bool>>,
@@ -227,7 +228,7 @@ impl Headless {
         output.change_current_state(Some(mode), None, None, Some((0, 0).into()));
         output.set_preferred(mode);
         output.create_global::<State>(&handle);
-        handle.create_global::<State, UnboundShellV1, ()>(2, ());
+        handle.create_global::<State, UnboundShellV1, ()>(3, ());
         State::create_capture_globals(&handle);
         let state = State {
             display_handle: handle.clone(),
@@ -271,6 +272,7 @@ impl Headless {
             windows: Vec::new(),
             popups: PopupManager::default(),
             lock_screen_requested: false,
+            active_app: String::new(),
             idle: crate::idle::Idle::default(),
             _idle_inhibit_state: smithay::wayland::idle_inhibit::IdleInhibitManagerState::new::<
                 State,
@@ -903,6 +905,8 @@ impl XdgShellHandler for State {
 
     fn app_id_changed(&mut self, toplevel: ToplevelSurface) {
         self.publish_toplevel(toplevel.wl_surface());
+        let key = self.key_window();
+        self.announce_active_app(key.as_ref());
     }
 
     fn ack_configure(&mut self, surface: WlSurface, configure: Configure) {

@@ -86,6 +86,9 @@ impl Dispatch<UnboundShellV1, ()> for State {
             unbound_shell_v1::Event::ShowLauncher => state.events.push(WindowEvent::ShowLauncher),
             unbound_shell_v1::Event::CaptureScreen => state.events.push(WindowEvent::CaptureScreen),
             unbound_shell_v1::Event::CaptureArea => state.events.push(WindowEvent::CaptureArea),
+            unbound_shell_v1::Event::ActiveApp { app_id } => {
+                state.events.push(WindowEvent::ActiveApp(app_id));
+            }
             _ => {}
         }
     }

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <protocol name="unbound_shell_v1">
-  <interface name="unbound_shell_v1" version="2">
+  <interface name="unbound_shell_v1" version="3">
     <description summary="requests and events between the compositor and the shell">
       Offered only on the connections of the shell clients the compositor starts
       itself (the panel and the launcher), never on the listening socket.
@@ -33,6 +33,16 @@
         Sent for Super+Shift+4, as Command-Shift-4 lets the user drag out the part
         of the screen to take a picture of on a Mac.
       </description>
+    </event>
+
+    <event name="active_app" since="3">
+      <description summary="the app of the key window changed">
+        Sent on binding and whenever the window with keyboard focus changes to
+        one of another app, with that app's app id, as the macOS menu bar names
+        the active app. An empty app id means no window has the keyboard, as
+        when the user clicks the empty desktop.
+      </description>
+      <arg name="app_id" type="string"/>
     </event>
   </interface>
 </protocol>

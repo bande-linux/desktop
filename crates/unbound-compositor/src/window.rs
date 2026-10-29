@@ -237,6 +237,7 @@ impl State {
             });
             window.configure();
         }
+        self.announce_active_app(key.as_ref());
     }
 
     pub(crate) fn key_window(&self) -> Option<WlSurface> {

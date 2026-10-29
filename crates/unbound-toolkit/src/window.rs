@@ -126,6 +126,7 @@ pub enum WindowEvent {
     ShowLauncher,
     CaptureScreen,
     CaptureArea,
+    ActiveApp(String),
     AppsChanged,
 }
 
@@ -757,7 +758,7 @@ impl Dispatch<WlRegistry, ()> for State {
                     state.lock.output = Some(registry.bind(name, 1, handle, ()));
                 }
                 "unbound_shell_v1" => {
-                    state.shell.protocol = Some(registry.bind(name, version.min(2), handle, ()));
+                    state.shell.protocol = Some(registry.bind(name, version.min(3), handle, ()));
                 }
                 "ext_output_image_capture_source_manager_v1" => {
                     state.capture.sources = Some(registry.bind(name, 1, handle, ()));

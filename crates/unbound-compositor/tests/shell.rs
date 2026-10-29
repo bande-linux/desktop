@@ -564,3 +564,26 @@ fn wheel_scrolling_reaches_the_window_under_the_pointer() {
 
     assert_eq!(app.scrolled(), 30.0);
 }
+
+#[test]
+fn the_shell_hears_which_app_is_active() {
+    let mut server = server();
+    let mut shell = TestClient::connect_as_shell(&mut server);
+    shell.join_shell(&mut server);
+    assert_eq!(shell.active_apps(), [""]);
+
+    let mut app = TestClient::connect(&mut server);
+    app.use_seat(&mut server);
+    let pixels = red(32, 32);
+    app.show_window(&mut server, &image(&pixels, 32, 32));
+    app.set_app_id(&mut server, 0, "org.example.Editor");
+    let mut other = TestClient::connect(&mut server);
+    other.use_seat(&mut server);
+    other.show_window(&mut server, &image(&pixels, 32, 32));
+    other.set_app_id(&mut server, 0, "org.example.Viewer");
+    roundtrip(&mut server, &mut [&mut app, &mut other, &mut shell]);
+    let heard = shell.active_apps().to_vec();
+
+    assert_eq!(heard[..2], ["", "org.example.Editor"]);
+    assert_eq!(heard.last().map(String::as_str), Some("org.example.Viewer"));
+}

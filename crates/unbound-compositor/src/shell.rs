@@ -70,6 +70,21 @@ impl State {
         }
     }
 
+    pub(crate) fn announce_active_app(&mut self, key: Option<&WlSurface>) {
+        let app_id = key
+            .map(|surface| toplevel_names(surface).1)
+            .unwrap_or_default();
+        if app_id == self.active_app {
+            return;
+        }
+        for shell in &self.shell_resources {
+            if shell.version() >= unbound_shell_v1::EVT_ACTIVE_APP_SINCE {
+                shell.active_app(app_id.clone());
+            }
+        }
+        self.active_app = app_id;
+    }
+
     pub(crate) fn activate_app(&mut self, app_id: &str) {
         let (mut chosen, rest): (Vec<_>, Vec<_>) = std::mem::take(&mut self.windows)
             .into_iter()
@@ -148,6 +163,9 @@ impl GlobalDispatch<UnboundShellV1, ()> for State {
         data_init: &mut DataInit<'_, Self>,
     ) {
         let shell = data_init.init(resource, ());
+        if shell.version() >= unbound_shell_v1::EVT_ACTIVE_APP_SINCE {
+            shell.active_app(state.active_app.clone());
+        }
         state.shell_resources.push(shell);
     }
 

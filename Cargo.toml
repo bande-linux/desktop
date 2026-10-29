@@ -29,7 +29,7 @@ pollster = "=1.0.1"
 raw-window-handle = "=0.6.2"
 resvg = { version = "=0.49.0", default-features = false }
 serde = { version = "=1.0.229", features = ["derive"] }
-rustix = { version = "=1.1.6", features = ["event", "process"] }
+rustix = { version = "=1.1.6", features = ["event", "param", "process"] }
 skrifa = "=0.44.0"
 smithay = { version = "=0.7.0", default-features = false, features = ["wayland_frontend"] }
 tempfile = "=3.27.0"
@@ -66,6 +66,7 @@ unbound-config = { path = "crates/services/config" }
 unbound-controlcenter = { path = "crates/shell/controlcenter" }
 unbound-dock = { path = "crates/shell/dock" }
 unbound-files = { path = "crates/apps/files" }
+unbound-fs = { path = "crates/libs/fs" }
 unbound-graphics = { path = "crates/toolkit/graphics" }
 unbound-greeter = { path = "crates/shell/greeter" }
 unbound-l10n = { path = "crates/libs/l10n" }
@@ -73,6 +74,7 @@ unbound-launcher = { path = "crates/shell/launcher" }
 unbound-lock = { path = "crates/shell/lock" }
 unbound-log = { path = "crates/libs/log" }
 unbound-menubar = { path = "crates/shell/menubar" }
+unbound-monitor = { path = "crates/apps/monitor" }
 unbound-network = { path = "crates/libs/network" }
 unbound-notify = { path = "crates/services/notify" }
 unbound-polkit = { path = "crates/services/polkit" }

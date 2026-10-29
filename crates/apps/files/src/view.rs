@@ -1,46 +1,210 @@
-use unbound_toolkit::ui::{Event, Key, Modifiers};
-use unbound_toolkit::{
-    Color, Item, Palette, Paragraph, Point, Rect, Scene, Shape, TextAlign, TextStyle, TextSystem,
-};
+use std::io;
+use std::os::fd::BorrowedFd;
+use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
+
+use unbound_fs::{Action, Answer, Change, FolderWatch, RenameError, Resolution, Task, TrashItem};
+use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer, PointerButton};
+use unbound_toolkit::{Palette, Point, Rect, TextSystem};
+use unbound_xdg::{DesktopEntry, UserDir, path_from_file_uri, user_dir};
 
 use crate::L10N;
-use crate::browser::{Browser, Column};
-use crate::listing::{Entry, Kind, format_size};
-use crate::preview::{Preview, preview};
+use crate::apps::Apps;
+use crate::browser::{Browser, Location};
+use crate::editor::NameEditor;
+use crate::icons::Icons;
+use crate::listing::{Entry, Sort, SortBy};
+use crate::loader::{Loaded, Loader};
+use crate::operations::{Finished, Operations, Purpose};
+use crate::preview::Preview;
+use crate::sidebar::Row;
 
 pub const COLUMN_WIDTH: f32 = 240.0;
 pub const ROW_HEIGHT: f32 = 24.0;
-const TOP_INSET: f32 = 6.0;
-const ROW_INSET: f32 = 6.0;
-const NAME_SIZE: f32 = 13.0;
-const CODE_SIZE: f32 = 11.0;
-const QUICK_LOOK_SHARE: f32 = 0.8;
-const QUICK_LOOK_HEADER: f32 = 36.0;
-const QUICK_LOOK_RADIUS: f32 = 12.0;
-const QUICK_LOOK_PADDING: f32 = 16.0;
+pub const SIDEBAR_WIDTH: f32 = 180.0;
+pub const INSPECTOR_WIDTH: f32 = 260.0;
+pub const PATH_BAR_HEIGHT: f32 = 28.0;
+pub const PROGRESS_HEIGHT: f32 = 48.0;
+pub const TOP_INSET: f32 = 6.0;
+pub const HEADER_HEIGHT: f32 = 26.0;
+pub const SEARCH_HEIGHT: f32 = 36.0;
+const SLOW_CLICK_RENAME: Duration = Duration::from_millis(600);
+const TYPE_SELECT_PAUSE: Duration = Duration::from_millis(1000);
+const NOTICE_TIME: Duration = Duration::from_secs(5);
 
 pub struct QuickLook {
     pub entry: Entry,
-    pub preview: Preview,
+    pub preview: Option<Preview>,
+}
+
+pub struct Info {
+    pub entries: Vec<Entry>,
+    pub mime: String,
+    pub kind: String,
+    pub apps: Vec<DesktopEntry>,
+    pub default: Option<String>,
+    pub chosen: Option<usize>,
+    pub folder_size: Option<(u64, u64)>,
+    pub preview: Option<Preview>,
+}
+
+pub struct Search {
+    pub column: usize,
+    pub editor: NameEditor,
+    pub focused: bool,
+}
+
+pub struct Rename {
+    pub path: PathBuf,
+    pub editor: NameEditor,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Sheet {
+    Conflict {
+        apply_to_all: bool,
+    },
+    EmptyTrash,
+    DeleteImmediately {
+        paths: Vec<PathBuf>,
+        items: Vec<TrashItem>,
+    },
+    GoTo(NameEditor),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SheetButton {
+    KeepBoth,
+    Replace,
+    Skip,
+    Stop,
+    Confirm,
+    Cancel,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Hit {
+    Place(usize),
+    Row { column: usize, row: usize },
+    Column(usize),
+    Segment(PathBuf),
+    CancelJob(usize),
+    Sheet(SheetButton),
+    ApplyToAll,
+    ChooseApp(usize),
+    OpenWithChosen,
+    UseForAll,
+    Header(SortBy),
+    Search,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Request {
+    Open {
+        app: Box<DesktopEntry>,
+        files: Vec<PathBuf>,
+    },
+    CopyText(String),
+    Paste,
 }
 
 pub struct FilesView {
-    browser: Browser,
-    quick_look: Option<QuickLook>,
-    palette: Palette,
-    text: TextSystem,
-    size: (f32, f32),
+    pub(crate) browser: Browser,
+    pub(crate) sidebar: Vec<Row>,
+    pub(crate) apps: Apps,
+    pub(crate) icons: Icons,
+    pub(crate) palette: Palette,
+    pub(crate) text: TextSystem,
+    pub(crate) size: (f32, f32),
+    pub(crate) quick_look: Option<QuickLook>,
+    pub(crate) inspector: bool,
+    pub(crate) info: Option<Info>,
+    pub(crate) rename: Option<Rename>,
+    pub(crate) sheet: Option<Sheet>,
+    pub(crate) notice: Option<(String, Instant)>,
+    pub(crate) hits: Vec<(Rect, Hit)>,
+    pub(crate) operations: Operations,
+    pub(crate) trash_full: bool,
+    pub(crate) hover: Option<Hit>,
+    pub(crate) search: Option<Search>,
+    watch: FolderWatch,
+    loader: Loader,
+    requests: Vec<Request>,
+    pending_rename: Option<(Instant, PathBuf)>,
+    pointer: Point,
+    typed: (String, Option<Instant>),
+    paste_moves: Option<bool>,
+}
+
+fn home() -> PathBuf {
+    std::env::var_os("HOME").map_or_else(|| PathBuf::from("/"), PathBuf::from)
+}
+
+fn user_folder(dir: UserDir) -> PathBuf {
+    let home = home();
+    let user_dirs = unbound_xdg::config_home()
+        .and_then(|config| std::fs::read_to_string(config.join("user-dirs.dirs")).ok());
+    user_dir(&home, user_dirs.as_deref(), dir)
+}
+
+fn contains(rect: Rect, point: Point) -> bool {
+    point.x >= rect.x
+        && point.y >= rect.y
+        && point.x < rect.x + rect.width
+        && point.y < rect.y + rect.height
+}
+
+fn pasted_paths(text: &str) -> Vec<PathBuf> {
+    text.lines()
+        .map(str::trim)
+        .filter_map(|line| {
+            path_from_file_uri(line)
+                .or_else(|| Path::new(line).is_absolute().then(|| PathBuf::from(line)))
+        })
+        .filter(|path| path.symlink_metadata().is_ok())
+        .collect()
 }
 
 impl FilesView {
-    pub fn new(browser: Browser, palette: Palette, text: TextSystem) -> Self {
-        Self {
+    pub fn new(
+        browser: Browser,
+        sidebar: Vec<Row>,
+        apps: Apps,
+        palette: Palette,
+        text: TextSystem,
+    ) -> io::Result<Self> {
+        let icons = Icons::new(apps.data_dirs().to_vec());
+        let operations = Operations::new(browser.trash().clone());
+        let mut view = Self {
             browser,
-            quick_look: None,
+            sidebar,
+            apps,
+            icons,
             palette,
             text,
             size: (0.0, 0.0),
-        }
+            quick_look: None,
+            inspector: false,
+            info: None,
+            rename: None,
+            sheet: None,
+            notice: None,
+            hits: Vec::new(),
+            operations,
+            trash_full: false,
+            hover: None,
+            search: None,
+            watch: FolderWatch::new()?,
+            loader: Loader::new()?,
+            requests: Vec::new(),
+            pending_rename: None,
+            pointer: Point::default(),
+            typed: (String::new(), None),
+            paste_moves: None,
+        };
+        view.watch.watch(&view.browser.watched());
+        view.trash_full = !view.browser.trash().is_empty();
+        Ok(view)
     }
 
     pub fn set_palette(&mut self, palette: Palette) {
@@ -55,306 +219,1189 @@ impl FilesView {
         self.quick_look.as_ref()
     }
 
+    pub fn info(&self) -> Option<&Info> {
+        self.info.as_ref()
+    }
+
+    pub fn rename_editor(&self) -> Option<&Rename> {
+        self.rename.as_ref()
+    }
+
+    pub fn sheet(&self) -> Option<&Sheet> {
+        self.sheet.as_ref()
+    }
+
+    pub fn notice(&self) -> Option<&str> {
+        self.notice.as_ref().map(|(text, _)| text.as_str())
+    }
+
+    pub fn operations(&self) -> &Operations {
+        &self.operations
+    }
+
+    pub fn take_requests(&mut self) -> Vec<Request> {
+        std::mem::take(&mut self.requests)
+    }
+
     pub fn title(&self) -> String {
-        let folder = self.browser.current_folder();
-        folder.file_name().map_or_else(
-            || folder.display().to_string(),
-            |name| name.to_string_lossy().into_owned(),
-        )
-    }
-
-    fn follow_selection(&mut self) {
-        if self.quick_look.is_some() {
-            self.quick_look = self.browser.selected().map(|entry| QuickLook {
-                entry: entry.clone(),
-                preview: preview(entry),
-            });
+        match self.browser.current_location() {
+            Location::Trash => L10N.tr("trash"),
+            Location::Folder(folder) => folder.file_name().map_or_else(
+                || folder.display().to_string(),
+                |name| name.to_string_lossy().into_owned(),
+            ),
         }
     }
 
-    fn toggle_quick_look(&mut self) {
-        self.quick_look = match self.quick_look.take() {
-            Some(_) => None,
-            None => self.browser.selected().map(|entry| QuickLook {
-                entry: entry.clone(),
-                preview: preview(entry),
-            }),
-        };
+    pub fn fds(&self) -> Vec<BorrowedFd<'_>> {
+        let mut fds = vec![self.watch.fd(), self.loader.fd()];
+        fds.extend(self.operations.fds());
+        fds
     }
 
-    fn first_visible_column(&self) -> usize {
-        let columns = self.browser.columns().len();
-        let last = (self.browser.active() + 1).min(columns - 1);
-        let fit = ((self.size.0 / COLUMN_WIDTH).floor() as usize).max(1);
-        (last + 1).saturating_sub(fit)
-    }
-
-    fn rows_that_fit(&self) -> usize {
-        (((self.size.1 - TOP_INSET) / ROW_HEIGHT).floor() as usize).max(1)
-    }
-
-    fn first_visible_row(&self, column: &Column) -> usize {
-        column
-            .selected
-            .map_or(0, |row| (row + 1).saturating_sub(self.rows_that_fit()))
-    }
-
-    fn click(&mut self, at: Point) -> bool {
-        let column = self.first_visible_column() + (at.x / COLUMN_WIDTH).floor() as usize;
-        let Some(shown) = self.browser.columns().get(column) else {
-            return false;
-        };
-        if at.y < TOP_INSET {
-            return false;
+    pub fn source_ready(&mut self, index: usize) -> bool {
+        match index {
+            0 => {
+                self.watch.read();
+                false
+            }
+            1 => self.loaded(),
+            job => match self.operations.poll(job - 2) {
+                Some(finished) => {
+                    self.finished(finished);
+                    true
+                }
+                None => {
+                    if self.operations.conflict().is_some() && self.sheet.is_none() {
+                        self.sheet = Some(Sheet::Conflict {
+                            apply_to_all: false,
+                        });
+                    }
+                    true
+                }
+            },
         }
-        let row = self.first_visible_row(shown) + ((at.y - TOP_INSET) / ROW_HEIGHT) as usize;
-        if row >= shown.entries.len() {
-            return false;
+    }
+
+    pub fn deadline(&self) -> Option<Instant> {
+        [
+            self.watch.deadline(),
+            self.operations.deadline(),
+            self.notice.as_ref().map(|(_, shown)| *shown + NOTICE_TIME),
+            self.pending_rename.as_ref().map(|(due, _)| *due),
+        ]
+        .into_iter()
+        .flatten()
+        .min()
+    }
+
+    pub fn tick(&mut self, now: Instant) -> bool {
+        let changed = self.watch.take_changed(now);
+        if !changed.is_empty() {
+            self.refresh(&changed);
         }
-        self.browser.select(column, row);
+        if self
+            .notice
+            .as_ref()
+            .is_some_and(|(_, shown)| *shown + NOTICE_TIME <= now)
+        {
+            self.notice = None;
+        }
+        if let Some((due, path)) = self.pending_rename.take() {
+            if due > now {
+                self.pending_rename = Some((due, path));
+            } else if self
+                .browser
+                .selected()
+                .is_some_and(|entry| entry.path == path)
+            {
+                self.start_rename();
+            }
+        }
         true
     }
 
-    pub fn handle(&mut self, event: &Event) -> bool {
-        let changed = match event {
-            Event::Key { key, modifiers } => self.key(*key, *modifiers),
-            Event::PointerDown(pointer) if pointer.is_primary() => self.click(pointer.position),
-            _ => false,
-        };
-        if changed {
-            self.follow_selection();
+    pub fn refresh(&mut self, changed: &[PathBuf]) {
+        let editing = self.rename.as_ref().map(|rename| rename.path.clone());
+        self.trash_full = !self.browser.trash().is_empty();
+        self.browser.refresh(changed);
+        if let Some(path) = editing
+            && path.symlink_metadata().is_err()
+        {
+            self.rename = None;
+        }
+        self.selection_changed();
+    }
+
+    fn show_notice(&mut self, text: String) {
+        self.notice = Some((text, Instant::now()));
+    }
+
+    fn loaded(&mut self) -> bool {
+        let mut changed = false;
+        for loaded in self.loader.take() {
+            match loaded {
+                Loaded::Preview(path, preview) => {
+                    if let Some(quick_look) = &mut self.quick_look
+                        && quick_look.entry.path == path
+                    {
+                        quick_look.preview = Some(preview.clone());
+                        changed = true;
+                    }
+                    if let Some(info) = &mut self.info
+                        && info.entries.len() == 1
+                        && info.entries[0].path == path
+                    {
+                        info.preview = Some(preview);
+                        changed = true;
+                    }
+                }
+                Loaded::FolderSize {
+                    folder,
+                    items,
+                    bytes,
+                } => {
+                    if let Some(info) = &mut self.info
+                        && info.entries.len() == 1
+                        && info.entries[0].path == folder
+                    {
+                        info.folder_size = Some((items, bytes));
+                        changed = true;
+                    }
+                }
+            }
         }
         changed
     }
 
-    fn key(&mut self, key: Key, modifiers: Modifiers) -> bool {
-        let command = modifiers.logo;
+    fn selection_changed(&mut self) {
+        if self
+            .search
+            .as_ref()
+            .is_some_and(|search| search.column >= self.browser.columns().len())
+        {
+            self.search = None;
+        }
+        self.watch.watch(&self.browser.watched());
+        self.loader.forget_pending();
+        let entry = self.browser.selected().cloned();
+        if self.quick_look.is_some() {
+            self.quick_look = entry.clone().map(|entry| QuickLook {
+                entry,
+                preview: None,
+            });
+        }
+        if self.inspector {
+            self.update_info();
+        }
+        if let Some(entry) = entry
+            && (self.quick_look.is_some() || self.inspector)
+        {
+            self.loader.preview(entry.clone());
+            if self.inspector && entry.is_folder() {
+                self.loader.folder_size(entry.path);
+            }
+        }
+        self.keep_selection_visible();
+    }
+
+    fn update_info(&mut self) {
+        let entries = self
+            .browser
+            .selection()
+            .into_iter()
+            .cloned()
+            .collect::<Vec<_>>();
+        let previous = self.info.take();
+        let same = previous
+            .as_ref()
+            .is_some_and(|info| info.entries == entries);
+        if same {
+            self.info = previous;
+            return;
+        }
+        let mime = match entries.as_slice() {
+            [entry] => self.apps.mime_for(&entry.path),
+            _ => String::new(),
+        };
+        let apps = match entries.as_slice() {
+            [entry] if !entry.is_folder() => self
+                .apps
+                .apps_for(&mime)
+                .into_iter()
+                .cloned()
+                .collect::<Vec<_>>(),
+            _ => Vec::new(),
+        };
+        let default = self.apps.default_for(&mime).map(|app| app.id.clone());
+        let chosen = default
+            .as_ref()
+            .and_then(|id| apps.iter().position(|app| app.id == *id))
+            .or((!apps.is_empty()).then_some(0));
+        self.info = Some(Info {
+            kind: if mime.is_empty() {
+                String::new()
+            } else {
+                self.apps.kind(&mime)
+            },
+            entries,
+            mime,
+            apps,
+            default,
+            chosen,
+            folder_size: None,
+            preview: None,
+        });
+    }
+
+    pub fn content_frame(&self) -> Rect {
+        let inspector = if self.inspector { INSPECTOR_WIDTH } else { 0.0 };
+        let progress = self.visible_jobs() as f32 * PROGRESS_HEIGHT;
+        let search = if self.search.is_some() {
+            SEARCH_HEIGHT
+        } else {
+            0.0
+        };
+        Rect::new(
+            SIDEBAR_WIDTH,
+            search,
+            (self.size.0 - SIDEBAR_WIDTH - inspector).max(COLUMN_WIDTH),
+            (self.size.1 - PATH_BAR_HEIGHT - progress - search).max(ROW_HEIGHT),
+        )
+    }
+
+    pub(crate) fn visible_jobs(&self) -> usize {
+        let now = Instant::now();
+        self.operations
+            .running()
+            .iter()
+            .filter(|running| running.visible(now))
+            .count()
+    }
+
+    pub(crate) fn first_visible_column(&self) -> usize {
+        let columns = self.browser.columns().len();
+        let last = (self.browser.active() + 1).min(columns - 1);
+        let fit = ((self.content_frame().width / COLUMN_WIDTH).floor() as usize).max(1);
+        (last + 1).saturating_sub(fit)
+    }
+
+    fn rows_height(&self) -> f32 {
+        self.content_frame().height - self.rows_top()
+    }
+
+    pub(crate) fn rows_top(&self) -> f32 {
+        if self.browser.single() {
+            HEADER_HEIGHT
+        } else {
+            TOP_INSET
+        }
+    }
+
+    fn keep_selection_visible(&mut self) {
+        let height = self.rows_height();
+        for column in self.browser.columns_mut() {
+            let Some(row) = column.selected else {
+                continue;
+            };
+            let top = row as f32 * ROW_HEIGHT;
+            let scroll = column.scroll;
+            if top < scroll {
+                column.scroll = top;
+            } else if top + ROW_HEIGHT > scroll + height {
+                column.scroll = top + ROW_HEIGHT - height;
+            }
+        }
+        self.clamp_scroll();
+    }
+
+    fn clamp_scroll(&mut self) {
+        let height = self.rows_height();
+        for column in self.browser.columns_mut() {
+            let content = column.entries.len() as f32 * ROW_HEIGHT;
+            column.scroll = column.scroll.clamp(0.0, (content - height).max(0.0));
+        }
+    }
+
+    pub fn scroll(&mut self, dy: f32) -> bool {
+        let content = self.content_frame();
+        if !contains(content, self.pointer) {
+            return false;
+        }
+        let column = if self.browser.single() {
+            0
+        } else {
+            self.first_visible_column() + ((self.pointer.x - content.x) / COLUMN_WIDTH) as usize
+        };
+        let Some(shown) = self.browser.columns_mut().get_mut(column) else {
+            return false;
+        };
+        shown.scroll += dy;
+        self.clamp_scroll();
+        true
+    }
+
+    fn hit(&self, at: Point) -> Option<Hit> {
+        self.hits
+            .iter()
+            .rev()
+            .find(|(rect, _)| contains(*rect, at))
+            .map(|(_, hit)| hit.clone())
+    }
+
+    fn click(&mut self, pointer: &Pointer) -> bool {
+        match pointer.button {
+            PointerButton::Back => {
+                self.browser.go_back();
+                self.selection_changed();
+                return true;
+            }
+            PointerButton::Forward => {
+                self.browser.go_forward();
+                self.selection_changed();
+                return true;
+            }
+            _ => {}
+        }
+        let Some(hit) = self.hit(pointer.position) else {
+            return false;
+        };
+        if self.sheet.is_some() && !matches!(hit, Hit::Sheet(_) | Hit::ApplyToAll) {
+            return false;
+        }
+        if !pointer.is_primary() {
+            if let Hit::Row { column, row } = hit
+                && !self.browser.columns()[column].is_marked(row)
+            {
+                self.commit_rename();
+                self.browser.select(column, row);
+                self.selection_changed();
+            }
+            return true;
+        }
+        self.pending_rename = None;
+        match hit {
+            Hit::Row { column, row } => {
+                let modifiers = pointer.modifiers;
+                let path = self.browser.columns()[column].entries[row].path.clone();
+                let already = self
+                    .browser
+                    .selected()
+                    .is_some_and(|entry| entry.path == path)
+                    && self.browser.active() == column;
+                if self
+                    .rename
+                    .as_ref()
+                    .is_some_and(|rename| rename.path == path)
+                {
+                    return false;
+                }
+                self.commit_rename();
+                if modifiers.logo {
+                    self.browser.toggle(column, row);
+                } else if modifiers.shift {
+                    self.browser.extend_to(column, row);
+                } else {
+                    self.browser.select(column, row);
+                }
+                self.selection_changed();
+                if pointer.count >= 2 && !modifiers.logo && !modifiers.shift {
+                    self.open();
+                } else if already && pointer.count == 1 && !modifiers.logo && !modifiers.shift {
+                    self.pending_rename = Some((Instant::now() + SLOW_CLICK_RENAME, path));
+                }
+            }
+            Hit::Column(column) => {
+                self.commit_rename();
+                self.browser.focus_column(column);
+                self.selection_changed();
+            }
+            Hit::Place(index) => {
+                if let Some(Row::Place(place)) = self.sidebar.get(index) {
+                    let location = place.location.clone();
+                    self.go(location);
+                }
+            }
+            Hit::Segment(path) => {
+                if path.is_dir() {
+                    self.go(Location::Folder(path));
+                } else {
+                    self.browser.reveal(&path);
+                    self.selection_changed();
+                }
+            }
+            Hit::CancelJob(index) => self.operations.cancel(index),
+            Hit::Sheet(button) => self.press(button),
+            Hit::ApplyToAll => {
+                if let Some(Sheet::Conflict { apply_to_all }) = &mut self.sheet {
+                    *apply_to_all = !*apply_to_all;
+                }
+            }
+            Hit::ChooseApp(index) => {
+                if let Some(info) = &mut self.info {
+                    info.chosen = Some(index);
+                }
+            }
+            Hit::OpenWithChosen => self.open_with_chosen(),
+            Hit::UseForAll => self.use_chosen_for_all(),
+            Hit::Search => self.open_search(),
+            Hit::Header(by) => {
+                let current = self.browser.sort();
+                self.browser.set_sort(Sort {
+                    by,
+                    descending: current.by == by && !current.descending,
+                });
+                self.selection_changed();
+            }
+        }
+        true
+    }
+
+    fn go(&mut self, location: Location) {
+        self.commit_rename();
+        self.search = None;
+        self.browser.go(location);
+        self.selection_changed();
+    }
+
+    pub fn handle(&mut self, event: &Event) -> bool {
+        match event {
+            Event::Key { key, modifiers } => self.key(*key, *modifiers),
+            Event::PointerDown(pointer) => {
+                self.pointer = pointer.position;
+                self.click(pointer)
+            }
+            Event::PointerMove(pointer) | Event::PointerEnter(pointer) => {
+                self.pointer = pointer.position;
+                let hover = self.hit(pointer.position).filter(|hit| {
+                    matches!(
+                        hit,
+                        Hit::Place(_) | Hit::Segment(_) | Hit::CancelJob(_) | Hit::Header(_)
+                    )
+                });
+                let changed = hover != self.hover;
+                self.hover = hover;
+                changed
+            }
+            Event::PointerLeave => self.hover.take().is_some(),
+            Event::Scroll(scroll) => {
+                self.pointer = scroll.position;
+                self.scroll(scroll.delta.y)
+            }
+            Event::Commit(text) => match (&mut self.sheet, &mut self.rename) {
+                (Some(Sheet::GoTo(editor)), _) => {
+                    editor.insert(text);
+                    true
+                }
+                (None, None) if self.search.as_ref().is_some_and(|search| search.focused) => {
+                    if let Some(search) = &mut self.search {
+                        search.editor.insert(text);
+                    }
+                    self.apply_search();
+                    true
+                }
+                (None, Some(rename)) => {
+                    rename.editor.insert(text);
+                    true
+                }
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+
+    fn press(&mut self, button: SheetButton) {
+        let Some(sheet) = self.sheet.take() else {
+            return;
+        };
+        match sheet {
+            Sheet::Conflict { apply_to_all } => {
+                let resolution = match button {
+                    SheetButton::KeepBoth | SheetButton::Confirm => Resolution::KeepBoth,
+                    SheetButton::Replace => Resolution::Replace,
+                    SheetButton::Skip => Resolution::Skip,
+                    SheetButton::Stop | SheetButton::Cancel => Resolution::Stop,
+                };
+                if let Some((index, _)) = self.operations.conflict() {
+                    self.operations.answer(
+                        index,
+                        Answer {
+                            resolution,
+                            apply_to_all,
+                        },
+                    );
+                }
+                if self.operations.conflict().is_some() {
+                    self.sheet = Some(Sheet::Conflict {
+                        apply_to_all: false,
+                    });
+                }
+            }
+            Sheet::GoTo(editor) if button == SheetButton::Confirm => self.go_to(editor.text()),
+            Sheet::EmptyTrash if button == SheetButton::Confirm => {
+                self.start(Task::EmptyTrash, Purpose::Erase);
+            }
+            Sheet::DeleteImmediately { paths, items } if button == SheetButton::Confirm => {
+                if !paths.is_empty() {
+                    self.start(Task::Delete { sources: paths }, Purpose::Erase);
+                }
+                if !items.is_empty() {
+                    self.start(Task::Erase { items }, Purpose::Erase);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn go_to_key(&mut self, key: Key, modifiers: Modifiers) -> bool {
         match key {
-            Key::Space if !command => {
-                self.toggle_quick_look();
-                return true;
+            Key::Enter => {
+                if let Some(Sheet::GoTo(editor)) = self.sheet.take() {
+                    self.go_to(editor.text());
+                }
+                true
             }
-            Key::Escape if self.quick_look.is_some() => {
-                self.quick_look = None;
-                return true;
+            Key::Escape => {
+                self.sheet = None;
+                true
             }
-            Key::Character('.' | '>') if command && modifiers.shift => {
-                self.browser.toggle_hidden();
+            _ => match &mut self.sheet {
+                Some(Sheet::GoTo(editor)) => editor.key(key, modifiers),
+                _ => false,
+            },
+        }
+    }
+
+    fn go_to(&mut self, typed: &str) {
+        let typed = typed.trim();
+        let expanded = match typed.strip_prefix('~') {
+            Some(rest) => home().join(rest.trim_start_matches('/')),
+            None => PathBuf::from(typed),
+        };
+        let path = if expanded.is_absolute() {
+            expanded
+        } else {
+            self.browser
+                .current_folder()
+                .unwrap_or_else(home)
+                .join(expanded)
+        };
+        if path.is_dir() {
+            self.go(Location::Folder(path));
+        } else if path.symlink_metadata().is_ok() {
+            self.commit_rename();
+            self.browser.reveal(&path);
+            self.selection_changed();
+        } else {
+            self.show_notice(
+                L10N.tr_args("error-go-to", [("path", path.display().to_string().into())]),
+            );
+        }
+    }
+
+    fn sheet_key(&mut self, key: Key, modifiers: Modifiers) -> bool {
+        if matches!(self.sheet, Some(Sheet::GoTo(_))) {
+            return self.go_to_key(key, modifiers);
+        }
+        let conflict = matches!(self.sheet, Some(Sheet::Conflict { .. }));
+        match key {
+            Key::Enter => self.press(SheetButton::Confirm),
+            Key::Escape => self.press(SheetButton::Cancel),
+            Key::Character('r' | 'R') if conflict => self.press(SheetButton::Replace),
+            Key::Character('s' | 'S') if conflict => self.press(SheetButton::Skip),
+            Key::Character('a' | 'A') | Key::Space => {
+                if let Some(Sheet::Conflict { apply_to_all }) = &mut self.sheet {
+                    *apply_to_all = !*apply_to_all;
+                }
             }
-            Key::Up if command => return self.browser.enclosing_folder(),
-            Key::Down if command => return self.browser.right(),
-            Key::Down => self.browser.down(),
-            Key::Up => self.browser.up(),
-            Key::Right => return self.browser.right(),
-            Key::Left => return self.browser.left(),
             _ => return false,
         }
         true
     }
 
-    fn label(&mut self, text: &str, style: TextStyle, width: Option<f32>) -> Paragraph {
-        self.text.paragraph(text, style, width, TextAlign::Start)
+    fn rename_key(&mut self, key: Key, modifiers: Modifiers) -> bool {
+        match key {
+            Key::Enter => {
+                self.commit_rename();
+                true
+            }
+            Key::Escape => {
+                self.rename = None;
+                true
+            }
+            Key::Tab => {
+                self.commit_rename();
+                if modifiers.shift {
+                    self.browser.up();
+                } else {
+                    self.browser.down();
+                }
+                self.selection_changed();
+                self.start_rename();
+                true
+            }
+            _ => self
+                .rename
+                .as_mut()
+                .is_some_and(|rename| rename.editor.key(key, modifiers)),
+        }
     }
 
-    fn paint_column(&mut self, index: usize, x: f32, items: &mut Vec<Item>) {
-        let column = self.browser.columns()[index].clone();
-        let active = index == self.browser.active();
-        let height = self.size.1;
-        let frame = Rect::new(x, 0.0, COLUMN_WIDTH, height);
-        let mut rows = Vec::new();
-        let first = self.first_visible_row(&column);
-        for (position, entry) in column.entries.iter().enumerate().skip(first) {
-            let y = TOP_INSET + (position - first) as f32 * ROW_HEIGHT;
-            if y > height {
-                break;
-            }
-            let row = Rect::new(x + ROW_INSET, y, COLUMN_WIDTH - 2.0 * ROW_INSET, ROW_HEIGHT);
-            let selected = column.selected == Some(position);
-            let color = match (selected, active) {
-                (true, true) => Color::hex(0xFFFFFF),
-                _ => self.palette.label_primary,
-            };
-            if selected {
-                rows.push(Item::Fill {
-                    shape: Shape::rounded(row, 5.0),
-                    paint: if active {
-                        self.palette.accent_color.into()
-                    } else {
-                        self.palette.label_muted.with_alpha(56).into()
-                    },
-                });
-            }
-            let name = self.label(&entry.name, TextStyle::new(NAME_SIZE, color), None);
-            let baseline = y + ((ROW_HEIGHT - name.height()) / 2.0).round();
-            rows.push(Item::Text {
-                origin: Point::new(row.x + 8.0, baseline),
-                paragraph: name,
+    fn type_select(&mut self, character: char) -> bool {
+        let now = Instant::now();
+        let fresh = self
+            .typed
+            .1
+            .is_none_or(|last| now.duration_since(last) > TYPE_SELECT_PAUSE);
+        if fresh {
+            self.typed.0.clear();
+        }
+        self.typed.0.extend(character.to_lowercase());
+        self.typed.1 = Some(now);
+        let typed = self.typed.0.clone();
+        let column = self.browser.active_column();
+        let found = column
+            .entries
+            .iter()
+            .position(|entry| entry.name.to_lowercase().starts_with(&typed))
+            .or_else(|| {
+                column
+                    .entries
+                    .iter()
+                    .position(|entry| entry.name.to_lowercase() >= typed)
             });
-            if entry.kind == Kind::Folder {
-                let chevron = self.label(
-                    "\u{203A}",
-                    TextStyle::new(NAME_SIZE + 3.0, color.with_alpha(180)),
-                    None,
-                );
-                let chevron_y = y + ((ROW_HEIGHT - chevron.height()) / 2.0).round();
-                rows.push(Item::Text {
-                    origin: Point::new(row.x + row.width - 8.0 - chevron.width(), chevron_y),
-                    paragraph: chevron,
+        if let Some(row) = found {
+            self.browser.select(self.browser.active(), row);
+            self.selection_changed();
+        }
+        true
+    }
+
+    fn key(&mut self, key: Key, modifiers: Modifiers) -> bool {
+        if self.sheet.is_some() {
+            return self.sheet_key(key, modifiers);
+        }
+        if self.rename.is_some() {
+            return self.rename_key(key, modifiers);
+        }
+        if self.search.as_ref().is_some_and(|search| search.focused) {
+            return self.search_key(key, modifiers);
+        }
+        let command = modifiers.logo;
+        let shift = modifiers.shift;
+        let alt = modifiers.alt;
+        match key {
+            Key::Space if !command => self.toggle_quick_look(),
+            Key::Escape if self.quick_look.is_some() => self.quick_look = None,
+            Key::Escape if self.search.is_some() => self.close_search(),
+            Key::Character('f' | 'F') if command => self.open_search(),
+            Key::Character('.' | '>') if command && shift => {
+                self.browser.toggle_hidden();
+                self.selection_changed();
+            }
+            Key::Up if command => {
+                self.browser.enclosing_folder();
+                self.selection_changed();
+            }
+            Key::Down if command => self.open(),
+            Key::Character('o' | 'O') if command && !shift => self.open(),
+            Key::Enter if !command => self.open(),
+            Key::Function(2) => self.start_rename(),
+            Key::Down if shift => {
+                self.browser.extend(true);
+                self.selection_changed();
+            }
+            Key::Up if shift => {
+                self.browser.extend(false);
+                self.selection_changed();
+            }
+            Key::Down => {
+                self.browser.down();
+                self.selection_changed();
+            }
+            Key::Up => {
+                self.browser.up();
+                self.selection_changed();
+            }
+            Key::Right => {
+                if !self.browser.right() {
+                    return false;
+                }
+                self.selection_changed();
+            }
+            Key::Left => {
+                if !self.browser.left() {
+                    return false;
+                }
+                self.selection_changed();
+            }
+            Key::Character('[') if command => {
+                self.browser.go_back();
+                self.selection_changed();
+            }
+            Key::Character(']') if command => {
+                self.browser.go_forward();
+                self.selection_changed();
+            }
+            Key::Backspace if command && shift => {
+                if !self.browser.trash().is_empty() {
+                    self.sheet = Some(Sheet::EmptyTrash);
+                }
+            }
+            Key::Backspace if command && alt => self.confirm_delete(),
+            Key::Backspace if command => self.trash_or_put_back(),
+            Key::Character('z' | 'Z') if command && shift => self.redo(),
+            Key::Character('z' | 'Z') if command => self.undo(),
+            Key::Character('n' | 'N') if command && shift => self.new_folder(),
+            Key::Character('g' | 'G') if command && shift => {
+                let current = self
+                    .browser
+                    .current_folder()
+                    .map(|folder| folder.display().to_string())
+                    .unwrap_or_default();
+                self.sheet = Some(Sheet::GoTo(NameEditor::new(&current, true)));
+            }
+            Key::Character('d' | 'D') if command && shift => {
+                self.go(Location::Folder(user_folder(UserDir::Desktop)));
+            }
+            Key::Character('d' | 'D') if command => self.duplicate(),
+            Key::Character('h' | 'H') if command && shift => {
+                self.go(Location::Folder(home()));
+            }
+            Key::Character('o' | 'O') if command && shift => {
+                self.go(Location::Folder(user_folder(UserDir::Documents)));
+            }
+            Key::Character('l' | 'L') if command && alt => {
+                self.go(Location::Folder(user_folder(UserDir::Downloads)));
+            }
+            Key::Character('2') if command => {
+                self.commit_rename();
+                self.browser.set_single(true);
+                self.selection_changed();
+            }
+            Key::Character('3') if command => {
+                self.browser.set_single(false);
+                self.selection_changed();
+            }
+            Key::Character('i' | 'I') if command => {
+                self.inspector = !self.inspector;
+                self.selection_changed();
+            }
+            Key::Character('a' | 'A') if command => {
+                self.browser.select_all();
+                self.selection_changed();
+            }
+            Key::Character('c' | 'C') if command => self.copy_selection(),
+            Key::Character('v' | 'V') if command => {
+                self.paste_moves = Some(alt);
+                self.requests.push(Request::Paste);
+            }
+            Key::Character(character) if !command && !modifiers.control => {
+                return self.type_select(character);
+            }
+            _ => return false,
+        }
+        true
+    }
+
+    pub fn search(&self) -> Option<&Search> {
+        self.search.as_ref()
+    }
+
+    fn open_search(&mut self) {
+        self.commit_rename();
+        match &mut self.search {
+            Some(search) => search.focused = true,
+            None => {
+                self.search = Some(Search {
+                    column: self.browser.active(),
+                    editor: NameEditor::new("", false),
+                    focused: true,
                 });
             }
         }
-        items.push(Item::Clip {
-            shape: Shape::rect(frame),
-            items: rows,
-        });
-        items.push(Item::Fill {
-            shape: Shape::rect(Rect::new(x + COLUMN_WIDTH - 1.0, 0.0, 1.0, height)),
-            paint: self.palette.separator_color.into(),
-        });
     }
 
-    pub fn quick_look_frame(&self) -> Rect {
-        let (width, height) = self.size;
-        let (panel_width, panel_height) = (
-            (width * QUICK_LOOK_SHARE).round(),
-            (height * QUICK_LOOK_SHARE).round(),
-        );
-        Rect::new(
-            ((width - panel_width) / 2.0).round(),
-            ((height - panel_height) / 2.0).round(),
-            panel_width,
-            panel_height,
-        )
+    fn close_search(&mut self) {
+        if let Some(search) = self.search.take() {
+            self.browser.set_filter(search.column, "");
+            self.selection_changed();
+        }
     }
 
-    fn paint_quick_look(&mut self, items: &mut Vec<Item>) {
-        let Some(QuickLook { entry, preview }) = self.quick_look.take() else {
+    fn apply_search(&mut self) {
+        if let Some(search) = &self.search {
+            let (column, text) = (search.column, search.editor.text().to_owned());
+            self.browser.set_filter(column, &text);
+            self.selection_changed();
+        }
+    }
+
+    fn search_key(&mut self, key: Key, modifiers: Modifiers) -> bool {
+        match key {
+            Key::Escape => self.close_search(),
+            Key::Enter | Key::Tab => {
+                if let Some(search) = &mut self.search {
+                    search.focused = false;
+                }
+                if key == Key::Enter && self.browser.selected().is_some() {
+                    self.open();
+                }
+            }
+            Key::Up | Key::Down => {
+                let column = self.search.as_ref().map_or(0, |search| search.column);
+                if self.browser.active() == column {
+                    if key == Key::Up {
+                        self.browser.up();
+                    } else {
+                        self.browser.down();
+                    }
+                    self.selection_changed();
+                }
+            }
+            _ => {
+                let edited = self
+                    .search
+                    .as_mut()
+                    .is_some_and(|search| search.editor.key(key, modifiers));
+                if !edited {
+                    return false;
+                }
+                self.apply_search();
+            }
+        }
+        true
+    }
+
+    fn toggle_quick_look(&mut self) {
+        self.quick_look = match self.quick_look.take() {
+            Some(_) => None,
+            None => self.browser.selected().cloned().map(|entry| QuickLook {
+                entry,
+                preview: None,
+            }),
+        };
+        if let Some(quick_look) = &self.quick_look {
+            self.loader.preview(quick_look.entry.clone());
+        }
+    }
+
+    fn start(&mut self, task: Task, purpose: Purpose) {
+        if let Err(error) = self.operations.start(task, purpose) {
+            self.show_notice(
+                L10N.tr_args("error-operation", [("error", error.to_string().into())]),
+            );
+        }
+    }
+
+    fn open(&mut self) {
+        let selection = self
+            .browser
+            .selection()
+            .into_iter()
+            .cloned()
+            .collect::<Vec<_>>();
+        if let [entry] = selection.as_slice()
+            && entry.is_folder()
+        {
+            self.go(Location::Folder(entry.path.clone()));
+            return;
+        }
+        let mut launches: Vec<(DesktopEntry, Vec<PathBuf>)> = Vec::new();
+        for entry in selection.iter().filter(|entry| !entry.is_folder()) {
+            let mime = self.apps.mime_for(&entry.path);
+            if let Some(launcher) = self.apps.launcher(&entry.path, &mime) {
+                launches.push((launcher, Vec::new()));
+                continue;
+            }
+            match self.apps.default_for(&mime).cloned() {
+                Some(app) => match launches.iter_mut().find(|(known, _)| known.id == app.id) {
+                    Some((_, files)) => files.push(entry.path.clone()),
+                    None => launches.push((app, vec![entry.path.clone()])),
+                },
+                None => {
+                    let kind = self.apps.kind(&mime);
+                    self.show_notice(L10N.tr_args(
+                        "error-no-app",
+                        [("name", entry.name.clone().into()), ("kind", kind.into())],
+                    ));
+                }
+            }
+        }
+        self.requests
+            .extend(launches.into_iter().map(|(app, files)| Request::Open {
+                app: Box::new(app),
+                files,
+            }));
+    }
+
+    fn open_with_chosen(&mut self) {
+        let Some(info) = &self.info else {
             return;
         };
-        let panel = self.quick_look_frame();
-        let shape = Shape::rounded(panel, QUICK_LOOK_RADIUS);
-        items.push(Item::Shadow {
-            shape,
-            offset: Point::new(0.0, 8.0),
-            blur_radius: 24.0,
-            color: Color::hex(0x000000).with_alpha(90),
+        let Some(app) = info.chosen.and_then(|index| info.apps.get(index)) else {
+            return;
+        };
+        self.requests.push(Request::Open {
+            app: Box::new(app.clone()),
+            files: info
+                .entries
+                .iter()
+                .map(|entry| entry.path.clone())
+                .collect(),
         });
-        items.push(Item::Fill {
-            shape,
-            paint: self.palette.surface_elevated.into(),
+    }
+
+    fn use_chosen_for_all(&mut self) {
+        let Some(info) = &self.info else {
+            return;
+        };
+        let Some(app) = info.chosen.and_then(|index| info.apps.get(index)).cloned() else {
+            return;
+        };
+        let mime = info.mime.clone();
+        match self.apps.set_default(&mime, &app) {
+            Ok(()) => {
+                if let Some(info) = &mut self.info {
+                    info.default = Some(app.id.clone());
+                }
+            }
+            Err(error) => self.show_notice(
+                L10N.tr_args("error-default-app", [("error", error.to_string().into())]),
+            ),
+        }
+    }
+
+    pub fn start_rename(&mut self) {
+        if self.browser.in_trash() && self.browser.active() == 0 {
+            return;
+        }
+        let Some(entry) = self.browser.selected() else {
+            return;
+        };
+        self.rename = Some(Rename {
+            path: entry.path.clone(),
+            editor: NameEditor::new(&entry.name, entry.is_folder()),
         });
-        let title = self.text.paragraph(
-            &entry.name,
-            TextStyle::new(NAME_SIZE, self.palette.label_primary).weight(TextStyle::SEMIBOLD),
-            Some(panel.width - 2.0 * QUICK_LOOK_PADDING),
-            TextAlign::Center,
-        );
-        let title_y = panel.y + ((QUICK_LOOK_HEADER - title.height()) / 2.0).round();
-        let mut content = Vec::new();
-        content.push(Item::Text {
-            origin: Point::new(panel.x + QUICK_LOOK_PADDING, title_y),
-            paragraph: title,
-        });
-        let area = Rect::new(
-            panel.x + QUICK_LOOK_PADDING,
-            panel.y + QUICK_LOOK_HEADER,
-            panel.width - 2.0 * QUICK_LOOK_PADDING,
-            panel.height - QUICK_LOOK_HEADER - QUICK_LOOK_PADDING,
-        );
-        match &preview {
-            Preview::Image(image) => {
-                let (width, height) = (image.width() as f32, image.height() as f32);
-                let scale = (area.width / width).min(area.height / height).min(1.0);
-                let (shown_width, shown_height) =
-                    ((width * scale).round(), (height * scale).round());
-                content.push(Item::Image {
-                    rect: Rect::new(
-                        area.x + ((area.width - shown_width) / 2.0).round(),
-                        area.y + ((area.height - shown_height) / 2.0).round(),
-                        shown_width,
-                        shown_height,
+    }
+
+    fn commit_rename(&mut self) {
+        let Some(rename) = self.rename.take() else {
+            return;
+        };
+        match unbound_fs::rename(&rename.path, rename.editor.text()) {
+            Ok(Some(change)) => {
+                if let Change::Moved { to, .. } = &change {
+                    self.reveal_after_change(std::slice::from_ref(to));
+                }
+                self.operations.record(Action::Rename, change);
+            }
+            Ok(None) => {}
+            Err(error) => {
+                let message = match error {
+                    RenameError::Empty => L10N.tr("rename-empty"),
+                    RenameError::ContainsSlash => L10N.tr("rename-slash"),
+                    RenameError::Reserved => L10N.tr("rename-reserved"),
+                    RenameError::Exists => L10N.tr_args(
+                        "rename-exists",
+                        [("name", rename.editor.text().to_owned().into())],
                     ),
-                    image: image.clone(),
-                });
-            }
-            Preview::Text(text) => {
-                let lines = (area.height / CODE_SIZE).ceil() as usize + 1;
-                let shown = text.lines().take(lines).collect::<Vec<_>>().join("\n");
-                let paragraph = self.label(
-                    &shown,
-                    TextStyle::new(CODE_SIZE, self.palette.label_primary).monospace(),
-                    None,
-                );
-                content.push(Item::Clip {
-                    shape: Shape::rect(area),
-                    items: vec![Item::Text {
-                        origin: Point::new(area.x, area.y),
-                        paragraph,
-                    }],
-                });
-            }
-            Preview::Folder { items: count } => {
-                let summary = L10N.tr_args("item-count", [("count", (*count).into())]);
-                self.centred_summary(area, &L10N.tr("folder"), &summary, &mut content);
-            }
-            Preview::Other { size } => {
-                self.centred_summary(
-                    area,
-                    &L10N.tr("document"),
-                    &format_size(*size),
-                    &mut content,
-                );
+                    RenameError::Io(error) => {
+                        L10N.tr_args("error-operation", [("error", error.to_string().into())])
+                    }
+                };
+                self.show_notice(message);
             }
         }
-        items.push(Item::Clip {
-            shape,
-            items: content,
-        });
-        self.quick_look = Some(QuickLook { entry, preview });
     }
 
-    fn centred_summary(&mut self, area: Rect, kind: &str, detail: &str, items: &mut Vec<Item>) {
-        let kind = self.text.paragraph(
-            kind,
-            TextStyle::new(NAME_SIZE + 4.0, self.palette.label_primary).weight(TextStyle::MEDIUM),
-            Some(area.width),
-            TextAlign::Center,
-        );
-        let detail = self.text.paragraph(
-            detail,
-            TextStyle::new(NAME_SIZE, self.palette.label_muted),
-            Some(area.width),
-            TextAlign::Center,
-        );
-        let top = area.y + ((area.height - kind.height() - detail.height() - 4.0) / 2.0).round();
-        let below = top + kind.height() + 4.0;
-        items.push(Item::Text {
-            origin: Point::new(area.x, top),
-            paragraph: kind,
-        });
-        items.push(Item::Text {
-            origin: Point::new(area.x, below),
-            paragraph: detail,
-        });
+    fn reveal_after_change(&mut self, paths: &[PathBuf]) {
+        let folders = paths
+            .iter()
+            .filter_map(|path| path.parent().map(Path::to_path_buf))
+            .collect::<Vec<_>>();
+        self.browser.refresh(&folders);
+        self.browser.reveal_all(paths);
+        self.selection_changed();
     }
 
-    pub fn scene(&mut self, width: u32, height: u32) -> Scene {
-        self.size = (width as f32, height as f32);
-        let mut items = Vec::new();
-        let first = self.first_visible_column();
-        for index in first..self.browser.columns().len() {
-            let x = (index - first) as f32 * COLUMN_WIDTH;
-            if x >= self.size.0 {
-                break;
+    fn new_folder(&mut self) {
+        let Some(folder) = self.browser.active_folder().map(Path::to_path_buf) else {
+            return;
+        };
+        let folder = self.browser.current_folder().unwrap_or(folder);
+        match unbound_fs::new_folder(&folder) {
+            Ok(change) => {
+                if let Change::Created(path) = &change {
+                    self.reveal_after_change(std::slice::from_ref(path));
+                }
+                self.operations.record(Action::NewFolder, change);
+                self.start_rename();
             }
-            self.paint_column(index, x, &mut items);
+            Err(error) => self.show_notice(
+                L10N.tr_args("error-operation", [("error", error.to_string().into())]),
+            ),
         }
-        self.paint_quick_look(&mut items);
-        Scene {
-            width,
-            height,
-            background: self.palette.surface_background,
-            items,
+    }
+
+    fn duplicate(&mut self) {
+        let sources = self.browser.selected_paths();
+        if !sources.is_empty() && !self.browser.in_trash() {
+            self.start(Task::Duplicate { sources }, Purpose::Do(Action::Duplicate));
         }
+    }
+
+    fn trash_or_put_back(&mut self) {
+        let selection = self.browser.selection();
+        let items = selection
+            .iter()
+            .filter_map(|entry| entry.trashed.clone())
+            .collect::<Vec<_>>();
+        if !items.is_empty() {
+            self.start(Task::Restore { items }, Purpose::Do(Action::PutBack));
+            return;
+        }
+        let sources = self.browser.selected_paths();
+        if sources.is_empty() || self.browser.trash().contains(&sources[0]) {
+            return;
+        }
+        self.start(Task::Trash { sources }, Purpose::Do(Action::Trash));
+    }
+
+    fn confirm_delete(&mut self) {
+        let selection = self.browser.selection();
+        let items = selection
+            .iter()
+            .filter_map(|entry| entry.trashed.clone())
+            .collect::<Vec<_>>();
+        let paths = selection
+            .iter()
+            .filter(|entry| entry.trashed.is_none())
+            .map(|entry| entry.path.clone())
+            .collect::<Vec<_>>();
+        if !items.is_empty() || !paths.is_empty() {
+            self.sheet = Some(Sheet::DeleteImmediately { paths, items });
+        }
+    }
+
+    fn undo(&mut self) {
+        if let Err(error) = self.operations.undo() {
+            self.show_notice(
+                L10N.tr_args("error-operation", [("error", error.to_string().into())]),
+            );
+        }
+    }
+
+    fn redo(&mut self) {
+        if let Err(error) = self.operations.redo() {
+            self.show_notice(
+                L10N.tr_args("error-operation", [("error", error.to_string().into())]),
+            );
+        }
+    }
+
+    fn copy_selection(&mut self) {
+        let paths = self.browser.selected_paths();
+        if !paths.is_empty() {
+            let text = paths
+                .iter()
+                .map(|path| path.to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+                .join("\n");
+            self.requests.push(Request::CopyText(text));
+        }
+    }
+
+    pub fn pasted(&mut self, text: &str) -> bool {
+        let moves = self.paste_moves.take().unwrap_or(false);
+        let sources = pasted_paths(text);
+        let Some(destination) = self
+            .browser
+            .current_folder()
+            .filter(|_| !self.browser.in_trash())
+        else {
+            return false;
+        };
+        if sources.is_empty() {
+            return false;
+        }
+        let task = if moves {
+            Task::Move {
+                sources,
+                destination,
+            }
+        } else {
+            Task::Copy {
+                sources,
+                destination,
+            }
+        };
+        let action = if moves { Action::Move } else { Action::Copy };
+        self.start(task, Purpose::Do(action));
+        true
+    }
+
+    fn finished(&mut self, finished: Finished) {
+        let outcome = finished.outcome;
+        if let Some(failure) = outcome.failures.first() {
+            let name = failure
+                .path
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            self.show_notice(L10N.tr_args(
+                "error-item",
+                [
+                    ("name", name.into()),
+                    ("error", failure.error.to_string().into()),
+                    ("others", (outcome.failures.len() - 1).into()),
+                ],
+            ));
+        }
+        if matches!(self.sheet, Some(Sheet::Conflict { .. }))
+            && self.operations.conflict().is_none()
+        {
+            self.sheet = None;
+        }
+        let shown = outcome
+            .changes
+            .iter()
+            .filter_map(|change| match change {
+                Change::Created(path) | Change::Moved { to: path, .. } => Some(path.clone()),
+                Change::Trashed(_) => None,
+            })
+            .collect::<Vec<_>>();
+        let touched = outcome
+            .changes
+            .iter()
+            .flat_map(|change| match change {
+                Change::Created(path) => vec![path.clone()],
+                Change::Moved { from, to } => vec![from.clone(), to.clone()],
+                Change::Trashed(item) => vec![item.original.clone()],
+            })
+            .filter_map(|path| path.parent().map(Path::to_path_buf))
+            .chain([self.browser.trash().home().root().join("info")])
+            .collect::<Vec<_>>();
+        self.browser.refresh(&touched);
+        self.trash_full = !self.browser.trash().is_empty();
+        let reveal = matches!(
+            finished.purpose,
+            Purpose::Do(Action::Copy | Action::Move | Action::Duplicate | Action::PutBack)
+                | Purpose::Undo(_)
+                | Purpose::Redo(_)
+        );
+        let in_view = shown
+            .first()
+            .and_then(|path| path.parent())
+            .is_some_and(|parent| {
+                self.browser
+                    .columns()
+                    .iter()
+                    .any(|column| column.folder() == Some(parent))
+            });
+        if reveal && in_view && !shown.is_empty() {
+            self.browser.reveal_all(&shown);
+        }
+        self.selection_changed();
     }
 }

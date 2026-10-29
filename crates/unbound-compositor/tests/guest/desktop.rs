@@ -305,6 +305,15 @@ fn differs(shown: [u8; 3], expected: [u8; 3]) -> bool {
         .any(|(shown, expected)| shown.abs_diff(expected) > ROUNDING)
 }
 
+fn lock_screen_drawn(scanout: &Scanout) -> bool {
+    let lower_half = &scanout.rgb[scanout.width * scanout.height / 2..];
+    lower_half
+        .iter()
+        .filter(|&&shown| differs(shown, lower_half[0]))
+        .count()
+        > CARET_PIXELS
+}
+
 fn field_differs_from(scanout: &Scanout, reference: &Scanout) -> usize {
     let lower_half = scanout.width * scanout.height / 2;
     scanout.rgb[lower_half..]
@@ -332,7 +341,10 @@ fn ctrl_super_q_locks_and_the_password_unlocks() {
     wait_for("the session to lock", STARTUP, || {
         locked_hint.get() == Some(true) && running("unbound-lock")
     });
-    thread::sleep(Duration::from_secs(2));
+    wait_for("the lock screen to draw", STARTUP, || {
+        current_scanout().is_some_and(|scanout| lock_screen_drawn(&scanout))
+    });
+    thread::sleep(Duration::from_secs(1));
     let locked = scanout();
     locked.save("m17-lock-screen");
 

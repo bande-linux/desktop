@@ -14,6 +14,7 @@ use smithay::utils::{Clock, Logical, Monotonic, Point, SERIAL_COUNTER};
 use unbound_protocols::server::unbound_shell_v1::VolumeKey;
 
 use crate::state::{Headless, State};
+use crate::tile::Direction;
 
 const EVDEV_OFFSET: u32 = 8;
 
@@ -27,7 +28,9 @@ enum Shortcut {
     ShowLauncher,
     MinimizeWindow,
     LockScreen,
+    ForceQuit,
     ToggleFullscreen,
+    Place(Direction),
     CaptureScreen,
     CaptureArea,
     Volume(VolumeKey, bool),
@@ -42,14 +45,25 @@ fn volume_key(keysym: u32) -> Option<VolumeKey> {
     }
 }
 
-fn shortcut(keysym: u32, unshifted: Option<u32>, ctrl: bool, shift: bool) -> Option<Shortcut> {
+fn shortcut(
+    keysym: u32,
+    unshifted: Option<u32>,
+    ctrl: bool,
+    alt: bool,
+    shift: bool,
+) -> Option<Shortcut> {
     match unshifted.filter(|_| shift) {
         Some(keysyms::KEY_3) => return Some(Shortcut::CaptureScreen),
         Some(keysyms::KEY_4) => return Some(Shortcut::CaptureArea),
         _ => {}
     }
     match keysym {
+        keysyms::KEY_Escape if alt => Some(Shortcut::ForceQuit),
         keysyms::KEY_f | keysyms::KEY_F if ctrl => Some(Shortcut::ToggleFullscreen),
+        keysyms::KEY_Left if ctrl => Some(Shortcut::Place(Direction::Left)),
+        keysyms::KEY_Right if ctrl => Some(Shortcut::Place(Direction::Right)),
+        keysyms::KEY_Up if ctrl => Some(Shortcut::Place(Direction::Up)),
+        keysyms::KEY_Down if ctrl => Some(Shortcut::Place(Direction::Down)),
         keysyms::KEY_q | keysyms::KEY_Q if ctrl => Some(Shortcut::LockScreen),
         keysyms::KEY_m | keysyms::KEY_M => Some(Shortcut::MinimizeWindow),
         keysyms::KEY_w | keysyms::KEY_W => Some(Shortcut::CloseWindow),
@@ -117,6 +131,11 @@ impl State {
             self.lock_screen_requested = !self.is_locked();
             return;
         }
+        if shortcut == Shortcut::ForceQuit {
+            self.force_quit_requested = true;
+            self.watchdog.ping_everyone();
+            return;
+        }
         let Some(focused) = self.focused() else {
             return;
         };
@@ -131,11 +150,7 @@ impl State {
                     window.toplevel.send_close();
                 }
             }
-            Shortcut::QuitApp => self
-                .windows
-                .iter()
-                .filter(|window| window.toplevel.wl_surface().client() == owner)
-                .for_each(|window| window.toplevel.send_close()),
+            Shortcut::QuitApp => self.quit_app(owner),
             Shortcut::NextApp => {
                 let next = self
                     .windows
@@ -154,6 +169,11 @@ impl State {
                     self.minimize(&window);
                 }
             }
+            Shortcut::Place(direction) => {
+                if let Some(window) = self.toplevel_of(&focused) {
+                    self.place_with_key(&window, direction);
+                }
+            }
             Shortcut::ToggleFullscreen => {
                 if let Some(window) = self.toplevel_of(&focused) {
                     self.toggle_fullscreen(&window);
@@ -161,6 +181,7 @@ impl State {
             }
             Shortcut::ShowLauncher
             | Shortcut::LockScreen
+            | Shortcut::ForceQuit
             | Shortcut::CaptureScreen
             | Shortcut::CaptureArea
             | Shortcut::Volume(..) => {}
@@ -339,6 +360,7 @@ impl Headless {
                     keysym.modified_sym().raw(),
                     unshifted,
                     modifiers.ctrl,
+                    modifiers.alt,
                     modifiers.shift,
                 )
                 .filter(|_| modifiers.logo && !state.is_locked())

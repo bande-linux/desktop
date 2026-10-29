@@ -3571,6 +3571,7 @@ dependencies = [
  "unbound-log",
  "unbound-protocols",
  "unbound-render",
+ "unbound-spring",
  "unbound-test-bus",
  "unbound-test-wayland",
  "wayland-client",

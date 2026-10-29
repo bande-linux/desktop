@@ -11,6 +11,7 @@ pub use wayland_protocols::xdg::shell::client::xdg_toplevel::{ResizeEdge, State 
 mod capture;
 mod cursor;
 mod decoration;
+mod effect;
 mod fence;
 mod idle;
 mod ime;
@@ -119,6 +120,8 @@ struct Globals {
     decoration_modes: Vec<decoration::DecorationMode>,
     text_input: ime::TextInput,
     input_method: ime::InputMethod,
+    hung: bool,
+    unanswered_pings: Vec<(XdgWmBase, u32)>,
 }
 
 pub struct TestClient {
@@ -129,6 +132,18 @@ pub struct TestClient {
 }
 
 impl TestClient {
+    pub fn hang(&mut self) {
+        self.globals.hung = true;
+    }
+
+    pub fn recover(&mut self, server: &mut Headless) {
+        self.globals.hung = false;
+        for (wm_base, serial) in self.globals.unanswered_pings.drain(..) {
+            wm_base.pong(serial);
+        }
+        self.exchange(server);
+    }
+
     pub fn connect(server: &mut Headless) -> Self {
         let (client_end, server_end) = UnixStream::pair().expect("socket pair");
         server.insert_client(server_end).expect("insert client");
@@ -422,7 +437,7 @@ impl Dispatch<WlRegistry, ()> for Globals {
 
 impl Dispatch<XdgWmBase, ()> for Globals {
     fn event(
-        _: &mut Self,
+        globals: &mut Self,
         wm_base: &XdgWmBase,
         event: xdg_wm_base::Event,
         _: &(),
@@ -430,7 +445,11 @@ impl Dispatch<XdgWmBase, ()> for Globals {
         _: &QueueHandle<Self>,
     ) {
         if let xdg_wm_base::Event::Ping { serial } = event {
-            wm_base.pong(serial);
+            if globals.hung {
+                globals.unanswered_pings.push((wm_base.clone(), serial));
+            } else {
+                wm_base.pong(serial);
+            }
         }
     }
 }

@@ -112,7 +112,10 @@ impl PointerGrab<State> for WindowGrab {
         handle.motion(data, None, event);
         let delta = self.delta(event.location);
         match self.operation {
-            Operation::Move { origin } => data.move_window_to(&self.surface, origin + delta),
+            Operation::Move { origin } => {
+                data.move_window_to(&self.surface, origin + delta);
+                data.track_snap(&self.surface, event.location, event.time);
+            }
             Operation::Resize => data.resize_to(&self.surface, delta),
         }
     }
@@ -229,8 +232,9 @@ impl PointerGrab<State> for WindowGrab {
     }
 
     fn unset(&mut self, data: &mut State) {
-        if let Operation::Resize = self.operation {
-            data.end_resize(&self.surface);
+        match self.operation {
+            Operation::Resize => data.end_resize(&self.surface),
+            Operation::Move { .. } => data.finish_move(&self.surface),
         }
     }
 }

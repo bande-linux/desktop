@@ -5,6 +5,7 @@ sidebar-locations = Locations
 empty-folder = Empty folder
 no-selection = No selection
 column-name = Name
+search-placeholder = Filter this folder
 column-modified = Date Modified
 column-size = Size
 column-kind = Kind

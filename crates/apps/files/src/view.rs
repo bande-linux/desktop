@@ -27,6 +27,7 @@ pub const PATH_BAR_HEIGHT: f32 = 28.0;
 pub const PROGRESS_HEIGHT: f32 = 48.0;
 pub const TOP_INSET: f32 = 6.0;
 pub const HEADER_HEIGHT: f32 = 26.0;
+pub const SEARCH_HEIGHT: f32 = 36.0;
 const SLOW_CLICK_RENAME: Duration = Duration::from_millis(600);
 const TYPE_SELECT_PAUSE: Duration = Duration::from_millis(1000);
 const NOTICE_TIME: Duration = Duration::from_secs(5);
@@ -45,6 +46,12 @@ pub struct Info {
     pub chosen: Option<usize>,
     pub folder_size: Option<(u64, u64)>,
     pub preview: Option<Preview>,
+}
+
+pub struct Search {
+    pub column: usize,
+    pub editor: NameEditor,
+    pub focused: bool,
 }
 
 pub struct Rename {
@@ -88,6 +95,7 @@ pub enum Hit {
     OpenWithChosen,
     UseForAll,
     Header(SortBy),
+    Search,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -117,6 +125,8 @@ pub struct FilesView {
     pub(crate) hits: Vec<(Rect, Hit)>,
     pub(crate) operations: Operations,
     pub(crate) trash_full: bool,
+    pub(crate) hover: Option<Hit>,
+    pub(crate) search: Option<Search>,
     watch: FolderWatch,
     loader: Loader,
     requests: Vec<Request>,
@@ -182,6 +192,8 @@ impl FilesView {
             hits: Vec::new(),
             operations,
             trash_full: false,
+            hover: None,
+            search: None,
             watch: FolderWatch::new()?,
             loader: Loader::new()?,
             requests: Vec::new(),
@@ -363,6 +375,13 @@ impl FilesView {
     }
 
     fn selection_changed(&mut self) {
+        if self
+            .search
+            .as_ref()
+            .is_some_and(|search| search.column >= self.browser.columns().len())
+        {
+            self.search = None;
+        }
         self.watch.watch(&self.browser.watched());
         self.loader.forget_pending();
         let entry = self.browser.selected().cloned();
@@ -438,11 +457,16 @@ impl FilesView {
     pub fn content_frame(&self) -> Rect {
         let inspector = if self.inspector { INSPECTOR_WIDTH } else { 0.0 };
         let progress = self.visible_jobs() as f32 * PROGRESS_HEIGHT;
+        let search = if self.search.is_some() {
+            SEARCH_HEIGHT
+        } else {
+            0.0
+        };
         Rect::new(
             SIDEBAR_WIDTH,
-            0.0,
+            search,
             (self.size.0 - SIDEBAR_WIDTH - inspector).max(COLUMN_WIDTH),
-            (self.size.1 - PATH_BAR_HEIGHT - progress).max(ROW_HEIGHT),
+            (self.size.1 - PATH_BAR_HEIGHT - progress - search).max(ROW_HEIGHT),
         )
     }
 
@@ -620,6 +644,7 @@ impl FilesView {
             }
             Hit::OpenWithChosen => self.open_with_chosen(),
             Hit::UseForAll => self.use_chosen_for_all(),
+            Hit::Search => self.open_search(),
             Hit::Header(by) => {
                 let current = self.browser.sort();
                 self.browser.set_sort(Sort {
@@ -634,6 +659,7 @@ impl FilesView {
 
     fn go(&mut self, location: Location) {
         self.commit_rename();
+        self.search = None;
         self.browser.go(location);
         self.selection_changed();
     }
@@ -647,8 +673,17 @@ impl FilesView {
             }
             Event::PointerMove(pointer) | Event::PointerEnter(pointer) => {
                 self.pointer = pointer.position;
-                false
+                let hover = self.hit(pointer.position).filter(|hit| {
+                    matches!(
+                        hit,
+                        Hit::Place(_) | Hit::Segment(_) | Hit::CancelJob(_) | Hit::Header(_)
+                    )
+                });
+                let changed = hover != self.hover;
+                self.hover = hover;
+                changed
             }
+            Event::PointerLeave => self.hover.take().is_some(),
             Event::Scroll(scroll) => {
                 self.pointer = scroll.position;
                 self.scroll(scroll.delta.y)
@@ -656,6 +691,13 @@ impl FilesView {
             Event::Commit(text) => match (&mut self.sheet, &mut self.rename) {
                 (Some(Sheet::GoTo(editor)), _) => {
                     editor.insert(text);
+                    true
+                }
+                (None, None) if self.search.as_ref().is_some_and(|search| search.focused) => {
+                    if let Some(search) = &mut self.search {
+                        search.editor.insert(text);
+                    }
+                    self.apply_search();
                     true
                 }
                 (None, Some(rename)) => {
@@ -842,12 +884,17 @@ impl FilesView {
         if self.rename.is_some() {
             return self.rename_key(key, modifiers);
         }
+        if self.search.as_ref().is_some_and(|search| search.focused) {
+            return self.search_key(key, modifiers);
+        }
         let command = modifiers.logo;
         let shift = modifiers.shift;
         let alt = modifiers.alt;
         match key {
             Key::Space if !command => self.toggle_quick_look(),
             Key::Escape if self.quick_look.is_some() => self.quick_look = None,
+            Key::Escape if self.search.is_some() => self.close_search(),
+            Key::Character('f' | 'F') if command => self.open_search(),
             Key::Character('.' | '>') if command && shift => {
                 self.browser.toggle_hidden();
                 self.selection_changed();
@@ -953,6 +1000,75 @@ impl FilesView {
                 return self.type_select(character);
             }
             _ => return false,
+        }
+        true
+    }
+
+    pub fn search(&self) -> Option<&Search> {
+        self.search.as_ref()
+    }
+
+    fn open_search(&mut self) {
+        self.commit_rename();
+        match &mut self.search {
+            Some(search) => search.focused = true,
+            None => {
+                self.search = Some(Search {
+                    column: self.browser.active(),
+                    editor: NameEditor::new("", false),
+                    focused: true,
+                });
+            }
+        }
+    }
+
+    fn close_search(&mut self) {
+        if let Some(search) = self.search.take() {
+            self.browser.set_filter(search.column, "");
+            self.selection_changed();
+        }
+    }
+
+    fn apply_search(&mut self) {
+        if let Some(search) = &self.search {
+            let (column, text) = (search.column, search.editor.text().to_owned());
+            self.browser.set_filter(column, &text);
+            self.selection_changed();
+        }
+    }
+
+    fn search_key(&mut self, key: Key, modifiers: Modifiers) -> bool {
+        match key {
+            Key::Escape => self.close_search(),
+            Key::Enter | Key::Tab => {
+                if let Some(search) = &mut self.search {
+                    search.focused = false;
+                }
+                if key == Key::Enter && self.browser.selected().is_some() {
+                    self.open();
+                }
+            }
+            Key::Up | Key::Down => {
+                let column = self.search.as_ref().map_or(0, |search| search.column);
+                if self.browser.active() == column {
+                    if key == Key::Up {
+                        self.browser.up();
+                    } else {
+                        self.browser.down();
+                    }
+                    self.selection_changed();
+                }
+            }
+            _ => {
+                let edited = self
+                    .search
+                    .as_mut()
+                    .is_some_and(|search| search.editor.key(key, modifiers));
+                if !edited {
+                    return false;
+                }
+                self.apply_search();
+            }
         }
         true
     }

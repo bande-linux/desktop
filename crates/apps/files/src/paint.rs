@@ -15,7 +15,7 @@ use crate::preview::Preview;
 use crate::sidebar::Row;
 use crate::view::{
     COLUMN_WIDTH, FilesView, HEADER_HEIGHT, Hit, INSPECTOR_WIDTH, PATH_BAR_HEIGHT, PROGRESS_HEIGHT,
-    ROW_HEIGHT, SIDEBAR_WIDTH, Sheet, SheetButton,
+    ROW_HEIGHT, SEARCH_HEIGHT, SIDEBAR_WIDTH, Sheet, SheetButton,
 };
 
 const ROW_INSET: f32 = 6.0;
@@ -117,6 +117,7 @@ impl FilesView {
         let mut items = Vec::new();
         self.paint_sidebar(&mut items);
         self.paint_columns(&mut items);
+        self.paint_search(&mut items);
         self.paint_path_bar(&mut items);
         self.paint_progress(&mut items);
         if self.inspector {
@@ -164,6 +165,8 @@ impl FilesView {
                     let rect = Rect::new(8.0, y, SIDEBAR_WIDTH - 16.0, SIDEBAR_ROW);
                     if place.location == root {
                         items.push(self.fill(rect, 6.0, self.palette.label_muted.with_alpha(40)));
+                    } else if self.hover == Some(Hit::Place(index)) {
+                        items.push(self.fill(rect, 6.0, self.palette.label_muted.with_alpha(18)));
                     }
                     let icon = match (&place.location, trash_full) {
                         (Location::Trash, true) => "user-trash-full",
@@ -309,6 +312,49 @@ impl FilesView {
             0.0,
             self.palette.separator_color,
         ));
+    }
+
+    fn paint_search(&mut self, items: &mut Vec<Item>) {
+        let Some(search) = &self.search else {
+            return;
+        };
+        let editor = search.editor.clone();
+        let focused = search.focused;
+        let content = self.content_frame();
+        let bar = Rect::new(content.x, 0.0, content.width, SEARCH_HEIGHT);
+        items.push(self.fill(bar, 0.0, self.palette.surface_background));
+        items.push(self.fill(
+            Rect::new(bar.x, bar.height - 1.0, bar.width, 1.0),
+            0.0,
+            self.palette.separator_color,
+        ));
+        let field = Rect::new(bar.x + 10.0, 6.0, (bar.width - 20.0).min(360.0), 24.0);
+        self.hits.push((field, Hit::Search));
+        if focused {
+            self.paint_editor(&editor, field, items);
+        } else {
+            items.push(self.fill(field, 6.0, self.palette.label_muted.with_alpha(30)));
+            let primary = self.palette.label_primary;
+            items.push(self.line(
+                editor.text(),
+                NAME_SIZE,
+                primary,
+                field.x + 8.0,
+                field.y,
+                field.height,
+            ));
+        }
+        if editor.text().is_empty() {
+            let muted = self.palette.label_muted;
+            items.push(self.line(
+                &L10N.tr("search-placeholder"),
+                NAME_SIZE,
+                muted,
+                field.x + 8.0,
+                field.y,
+                field.height,
+            ));
+        }
     }
 
     fn paint_list(&mut self, content: Rect, items: &mut Vec<Item>) {
@@ -651,10 +697,15 @@ impl FilesView {
                 paragraph,
             });
             if let Some(path) = path {
-                self.hits.push((
-                    Rect::new(x, bar.y, width + 22.0, PATH_BAR_HEIGHT),
-                    Hit::Segment(path),
-                ));
+                let area = Rect::new(x - 4.0, bar.y + 3.0, width + 28.0, PATH_BAR_HEIGHT - 6.0);
+                let hit = Hit::Segment(path);
+                if self.hover.as_ref() == Some(&hit) {
+                    row.insert(
+                        0,
+                        self.fill(area, 5.0, self.palette.label_muted.with_alpha(30)),
+                    );
+                }
+                self.hits.push((area, hit));
             }
             x += width + 24.0;
             if index + 1 < count {
@@ -781,7 +832,16 @@ impl FilesView {
                 self.palette.accent_color,
             ));
             let cancel = Rect::new(area.x + area.width - 34.0, y + 17.0, 22.0, 22.0);
-            items.push(self.fill(cancel, 11.0, self.palette.label_muted.with_alpha(50)));
+            let hovered = self.hover == Some(Hit::CancelJob(index));
+            items.push(
+                self.fill(
+                    cancel,
+                    11.0,
+                    self.palette
+                        .label_muted
+                        .with_alpha(if hovered { 90 } else { 50 }),
+                ),
+            );
             items.push(self.line(
                 "\u{00D7}",
                 NAME_SIZE + 2.0,

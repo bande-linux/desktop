@@ -693,3 +693,33 @@ fn clicks_select_extend_toggle_and_open() {
         &Location::Folder(place.home().join("Documents"))
     );
 }
+
+#[test]
+fn filtering_narrows_the_folder_and_escape_restores_it() {
+    let place = Place::new();
+    let mut view = place.view();
+    let shown = |view: &FilesView| {
+        view.browser().columns()[0]
+            .entries
+            .iter()
+            .map(|entry| entry.name.clone())
+            .collect::<Vec<_>>()
+    };
+
+    view.handle(&command(Key::Character('f'), false));
+    view.handle(&press(Key::Character('N')));
+    view.handle(&press(Key::Character('o')));
+
+    assert_eq!(shown(&view), ["notes.txt"]);
+    assert_eq!(
+        view.browser().selected().map(|entry| entry.name.as_str()),
+        Some("notes.txt")
+    );
+    view.handle(&press(Key::Escape));
+    assert!(view.search().is_none());
+    assert_eq!(shown(&view), ["Documents", "Empty", "notes.txt"]);
+    assert_eq!(
+        view.browser().selected().map(|entry| entry.name.as_str()),
+        Some("notes.txt")
+    );
+}

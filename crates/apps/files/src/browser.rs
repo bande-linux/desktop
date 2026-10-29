@@ -18,6 +18,7 @@ pub struct Column {
     pub marked: Vec<usize>,
     pub anchor: Option<usize>,
     pub scroll: f32,
+    pub filter: String,
 }
 
 impl Column {
@@ -29,6 +30,7 @@ impl Column {
             marked: Vec::new(),
             anchor: None,
             scroll: 0.0,
+            filter: String::new(),
         }
     }
 
@@ -325,6 +327,22 @@ impl Browser {
         self.open_child(self.active);
     }
 
+    pub fn set_filter(&mut self, column: usize, filter: &str) {
+        let Some(shown) = self.columns.get_mut(column) else {
+            return;
+        };
+        if shown.filter == filter {
+            return;
+        }
+        shown.filter = filter.to_owned();
+        shown.scroll = 0.0;
+        self.reload_column(column);
+        let shown = &mut self.columns[column];
+        if shown.selected.is_none() && !shown.entries.is_empty() && !filter.is_empty() {
+            self.select(column, 0);
+        }
+    }
+
     pub fn focus_column(&mut self, column: usize) {
         if column >= self.columns.len() {
             return;
@@ -448,7 +466,11 @@ impl Browser {
             .and_then(|row| column.entries.get(row))
             .map(|entry| entry.path.clone());
         let previous_row = column.selected;
-        let entries = read(&column.location, self.show_hidden, &self.trash, self.sort);
+        let mut entries = read(&column.location, self.show_hidden, &self.trash, self.sort);
+        let filter = column.filter.to_lowercase();
+        if !filter.is_empty() {
+            entries.retain(|entry| entry.name.to_lowercase().contains(&filter));
+        }
         let find = |path: &PathBuf| entries.iter().position(|entry| entry.path == *path);
         let marked = marked_paths.iter().filter_map(find).collect::<Vec<_>>();
         let selected = selected_path

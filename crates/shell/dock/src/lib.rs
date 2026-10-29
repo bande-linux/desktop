@@ -181,7 +181,7 @@ struct Label {
     opacity: Animated,
     along: Animated,
     hidden_at: Option<Instant>,
-    text: Option<(String, Paragraph)>,
+    text: Option<(String, Color, Paragraph)>,
 }
 
 pub struct DockState {
@@ -883,19 +883,17 @@ impl DockState {
         }
         if let Some(key) = self.label.key.clone() {
             let name = self.name(&key);
-            if self
-                .label
-                .text
-                .as_ref()
-                .is_none_or(|(known, _)| known != &name)
-            {
+            if self.label.text.as_ref().is_none_or(|(known, color, _)| {
+                known != &name || *color != cx.palette.label_primary
+            }) {
+                let color = cx.palette.label_primary;
                 let paragraph = cx.text.paragraph(
                     &name,
-                    TextStyle::new(LABEL_TEXT, cx.palette.label_primary).weight(TextStyle::MEDIUM),
+                    TextStyle::new(LABEL_TEXT, color).weight(TextStyle::MEDIUM),
                     None,
                     TextAlign::Start,
                 );
-                self.label.text = Some((name, paragraph));
+                self.label.text = Some((name, color, paragraph));
             }
         }
     }
@@ -1146,7 +1144,7 @@ impl DockState {
         if opacity <= 0.0 {
             return;
         }
-        let Some((_, text)) = &self.label.text else {
+        let Some((_, _, text)) = &self.label.text else {
             return;
         };
         let along = self.label.along.value(cx);

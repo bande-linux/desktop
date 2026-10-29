@@ -296,6 +296,16 @@ runs natively on Wayland in the guest.
   among them; the compositor package suggests `fcitx5`. Not done: surrounding text and content type; while an input
   method grabs the keyboard, an xdg popup's keyboard grab is refused (Smithay's popup grab
   check), so menus opened from a focused text field close at once.
+- [ ] **AT-SPI** (`desktop/at-spi`) phase 4: every toolkit `Window` owns an
+  `accesskit_unix` adapter; its handler threads wake the run loop through a socket pair,
+  screen-reader actions reach apps as `WindowEvent::Accessibility`, and `App::accessibility`
+  returns the tree, published after each frame while an assistive technology listens. The
+  panel, launcher and lock screen publish their `Ui` trees and perform actions (the greeter
+  follows once M24 is on `main`).
+  A test plays the AT-SPI status service and registry on a private bus, finds the toolkit
+  window's button by name and role over AT-SPI and presses it with `DoAction`. Not done:
+  Settings, Files and the terminal draw scenes without a widget tree, so they publish
+  nothing yet; the terminal needs a text role with its visible lines.
 - [ ] **Toolkit on Vello and Parley** (track; moved into `desktop/integration`)
   `vello_cpu` first frame into `wl_shm`, `vello_gpu` afterwards, Parley text; goldens
   re-derived from scene descriptions; panel, launcher and terminal move over; a toolkit

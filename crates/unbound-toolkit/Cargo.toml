@@ -7,6 +7,7 @@ repository.workspace = true
 
 [dependencies]
 accesskit.workspace = true
+accesskit_unix.workspace = true
 fontique.workspace = true
 parley.workspace = true
 pollster.workspace = true
@@ -30,3 +31,5 @@ image.workspace = true
 smithay.workspace = true
 unbound-compositor.workspace = true
 unbound-test-wayland.workspace = true
+unbound-test-bus.workspace = true
+zbus.workspace = true

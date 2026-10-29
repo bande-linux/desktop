@@ -1,3 +1,4 @@
+mod access;
 mod capture;
 mod clipboard;
 mod cpu;

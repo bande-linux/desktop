@@ -4,6 +4,7 @@ use std::process::ExitCode;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
+use accesskit::TreeUpdate;
 use unbound_apps::{DesktopEntry, Locale, applications, current_desktops, data_dirs, find_icon};
 use unbound_config::{Appearance, Config, PanelEdge, config_path};
 use unbound_panel::{
@@ -88,6 +89,15 @@ impl Panel {
         ));
     }
 
+    fn run_actions(&mut self, window: &mut Window) {
+        let actions = std::mem::take(&mut *self.actions.borrow_mut());
+        for action in actions {
+            match action {
+                PanelAction::Open(app_id) => self.open(window, &app_id),
+            }
+        }
+    }
+
     fn open(&mut self, window: &mut Window, app_id: &str) {
         if self.running.iter().any(|running| running == app_id) {
             if let Err(error) = window.activate_app(app_id) {
@@ -136,12 +146,15 @@ impl App for Panel {
                 {
                     window.request_redraw();
                 }
-                let actions = std::mem::take(&mut *self.actions.borrow_mut());
-                for action in actions {
-                    match action {
-                        PanelAction::Open(app_id) => self.open(window, &app_id),
-                    }
+                self.run_actions(window);
+            }
+            WindowEvent::Accessibility(request) => {
+                if let Some(ui) = &mut self.ui
+                    && ui.perform(&request)
+                {
+                    window.request_redraw();
                 }
+                self.run_actions(window);
             }
             WindowEvent::AppsChanged => {
                 self.running = window.running_apps();
@@ -154,6 +167,10 @@ impl App for Panel {
 
     fn deadline(&self) -> Option<Instant> {
         Some(self.next_minute)
+    }
+
+    fn accessibility(&self) -> Option<TreeUpdate> {
+        self.ui.as_ref().map(Ui::accessibility)
     }
 
     fn tick(&mut self, window: &mut Window, _now: Instant) {

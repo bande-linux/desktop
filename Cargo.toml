@@ -10,6 +10,7 @@ repository = "https://github.com/unbound-linux/desktop"
 [workspace.dependencies]
 alacritty_terminal = { version = "=0.26.0", default-features = false }
 accesskit = "=0.25.2"
+accesskit_unix = "=0.24.1"
 ab_glyph = "=0.2.32"
 ash = "=0.38.0"
 blocking = "=1.7.0"

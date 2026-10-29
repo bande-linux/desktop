@@ -11,6 +11,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
 
+use accesskit::ActionRequest;
 use raw_window_handle::{
     RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle,
 };
@@ -40,6 +41,7 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::{
     self, ZwlrLayerSurfaceV1,
 };
 
+use crate::access::Accessibility;
 use crate::capture::Capture;
 use crate::clipboard::Clipboard;
 use crate::cpu::CpuRenderer;
@@ -132,6 +134,7 @@ pub enum WindowEvent {
     AppsChanged,
     VolumeKey { key: VolumeKey, fine: bool },
     ToggleControlCenter,
+    Accessibility(ActionRequest),
 }
 
 #[derive(Debug)]
@@ -263,6 +266,7 @@ pub struct Window {
     size: (u32, u32),
     visible: bool,
     needs_redraw: bool,
+    pub(crate) accessibility: Accessibility,
 }
 
 fn anchor_of(edges: Edges) -> zwlr_layer_surface_v1::Anchor {
@@ -399,6 +403,7 @@ impl Window {
             size,
             visible: true,
             needs_redraw: true,
+            accessibility: Accessibility::new()?,
         })
     }
 

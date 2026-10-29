@@ -5,6 +5,7 @@ use std::process::ExitCode;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use accesskit::TreeUpdate;
 use unbound_config::{Appearance, Config, config_path};
 use unbound_lock::{LockScreen, PAM_SERVICE, User, authenticate, current_user};
 use unbound_toolkit::{
@@ -52,9 +53,12 @@ impl App for Locker {
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
-        if let WindowEvent::Input(input) = event
-            && self.screen.handle(&input)
-        {
+        let changed = match event {
+            WindowEvent::Input(input) => self.screen.handle(&input),
+            WindowEvent::Accessibility(request) => self.screen.perform(&request),
+            _ => false,
+        };
+        if changed {
             window.request_redraw();
             if let Some(password) = self.screen.take_password() {
                 self.check(password);
@@ -99,6 +103,10 @@ impl App for Locker {
 
     fn finished(&self) -> bool {
         self.unlocked
+    }
+
+    fn accessibility(&self) -> Option<TreeUpdate> {
+        Some(self.screen.accessibility())
     }
 }
 

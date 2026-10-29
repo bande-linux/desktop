@@ -1,0 +1,43 @@
+[package]
+name = "unbound-desktop-surface"
+description = "Unbound desktop surface: the wallpaper and the files on the desktop"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+accesskit.workspace = true
+tracing.workspace = true
+unbound-config.workspace = true
+unbound-dock.workspace = true
+unbound-files.workspace = true
+unbound-fs.workspace = true
+unbound-l10n.workspace = true
+unbound-log.workspace = true
+unbound-menubar.workspace = true
+unbound-toolkit.workspace = true
+unbound-wallpaper.workspace = true
+unbound-xdg.workspace = true
+
+[dev-dependencies]
+image.workspace = true
+image-compare.workspace = true
+
+[package.metadata.deb]
+maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+section = "misc"
+depends = "$auto, fonts-inter"
+recommends = "xdg-user-dirs, adwaita-icon-theme"
+assets = [
+    ["target/release/unbound-desktop-surface", "usr/bin/", "755"],
+    ["../../../data/wallpapers/*.svg", "usr/share/unbound/wallpapers/", "644"],
+]
+extended-description = """\
+The desktop of the Unbound session: the wallpaper, in its light and dark \
+variants, and the files in the Desktop folder and the plugged-in drives \
+as icons that open, rename, move and go to the Trash. unbound-compositor \
+starts it behind every window. It also installs the Unbound wallpapers \
+that the lock screen and the login window show."""
+
+[lints]
+workspace = true

@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 
-use unbound_spring::{Animation, Spring, State};
+use std::time::Instant;
+
+use unbound_toolkit::ui::{Animated, Spring};
 use unbound_toolkit::{Color, Image, Item, Rect};
 use unbound_wallpaper::{Fit, Picture};
 
@@ -8,7 +10,6 @@ use crate::model::Bounds;
 
 const LUMA_CELL: u32 = 16;
 const LIGHT_LUMA: u32 = 150;
-const FADE_FREQUENCY: f64 = 14.0;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Key {
@@ -82,24 +83,11 @@ pub struct Layer {
     pub luma: Luma,
 }
 
+#[derive(Default)]
 pub struct Backdrop {
     current: Option<Layer>,
     previous: Option<Layer>,
-    fade: Animation,
-}
-
-fn fade_spring() -> Spring {
-    Spring::new(FADE_FREQUENCY, 1.0).unwrap_or_else(|_| Spring::default())
-}
-
-impl Default for Backdrop {
-    fn default() -> Self {
-        Self {
-            current: None,
-            previous: None,
-            fade: Animation::new(fade_spring(), State::default(), 1.0),
-        }
-    }
+    fade: Animated,
 }
 
 impl Backdrop {
@@ -107,35 +95,21 @@ impl Backdrop {
         self.current.as_ref().map(|layer| &layer.key)
     }
 
-    pub fn show(&mut self, layer: Layer, animated: bool) {
+    pub fn show(&mut self, layer: Layer, now: Instant) {
         if self.key() == Some(&layer.key) {
             return;
         }
         self.previous = self.current.replace(layer);
-        let start = if animated && self.previous.is_some() || self.previous.is_none() && animated {
-            0.0
-        } else {
-            1.0
-        };
-        self.fade = Animation::new(
-            fade_spring(),
-            State {
-                position: start,
-                velocity: 0.0,
-            },
-            1.0,
-        );
+        self.fade.jump_to(0.0);
+        self.fade.animate_at(now, false, 1.0, Spring::GENTLE);
     }
 
-    pub fn advance(&mut self, seconds: f64) {
-        self.fade.advance(seconds);
-        if self.is_settled() {
+    pub fn is_fading(&mut self, now: Instant) -> bool {
+        let (_, fading) = self.fade.value_at(now);
+        if !fading {
             self.previous = None;
         }
-    }
-
-    pub fn is_settled(&self) -> bool {
-        self.fade.is_settled(0.002, 0.01)
+        fading
     }
 
     pub fn is_light(&self, area: Bounds, scale: f32) -> Option<bool> {
@@ -144,7 +118,7 @@ impl Backdrop {
             .map(|layer| layer.luma.is_light(area, scale))
     }
 
-    pub fn paint(&self, rect: Rect, items: &mut Vec<Item>) {
+    pub fn paint(&self, rect: Rect, now: Instant, items: &mut Vec<Item>) {
         if let Some(previous) = &self.previous {
             items.push(Item::Image {
                 rect,
@@ -152,7 +126,7 @@ impl Backdrop {
             });
         }
         if let Some(current) = &self.current {
-            let alpha = self.fade.state().position.clamp(0.0, 1.0) as f32;
+            let (alpha, _) = self.fade.value_at(now);
             let image = Item::Image {
                 rect,
                 image: current.image.clone(),
@@ -161,7 +135,7 @@ impl Backdrop {
                 image
             } else {
                 Item::Opacity {
-                    alpha,
+                    alpha: alpha.clamp(0.0, 1.0),
                     items: vec![image],
                 }
             });

@@ -55,6 +55,15 @@ impl Bounds {
         }
     }
 
+    pub fn inset(self, amount: f32) -> Self {
+        Self::new(
+            self.x + amount,
+            self.y + amount,
+            (self.width - 2.0 * amount).max(0.0),
+            (self.height - 2.0 * amount).max(0.0),
+        )
+    }
+
     pub fn contains(self, x: f32, y: f32) -> bool {
         x >= self.x && y >= self.y && x < self.x + self.width && y < self.y + self.height
     }
@@ -85,7 +94,8 @@ pub struct Grid {
 
 impl Grid {
     pub fn new(area: Bounds) -> Self {
-        let fit = |length: f32, cell: f32| ((length - 2.0 * GRID_PADDING) / cell).floor().max(1.0) as u32;
+        let fit =
+            |length: f32, cell: f32| ((length - 2.0 * GRID_PADDING) / cell).floor().max(1.0) as u32;
         Self {
             area,
             columns: fit(area.width, CELL_WIDTH),
@@ -99,9 +109,7 @@ impl Grid {
 
     pub fn cell(&self, slot: Slot) -> Bounds {
         Bounds::new(
-            self.area.x + self.area.width
-                - GRID_PADDING
-                - (slot.column as f32 + 1.0) * CELL_WIDTH,
+            self.area.x + self.area.width - GRID_PADDING - (slot.column as f32 + 1.0) * CELL_WIDTH,
             self.area.y + GRID_PADDING + slot.row as f32 * CELL_HEIGHT,
             CELL_WIDTH,
             CELL_HEIGHT,
@@ -257,7 +265,11 @@ impl Desktop {
         for item in &items {
             let slot = previous
                 .get(&item.path)
-                .or_else(|| remembered.get(&item.name).filter(|_| item.kind != Kind::Volume))
+                .or_else(|| {
+                    remembered
+                        .get(&item.name)
+                        .filter(|_| item.kind != Kind::Volume)
+                })
                 .copied()
                 .filter(|slot| self.grid.contains(*slot) && !taken.contains(slot));
             if let Some(slot) = slot {
@@ -278,7 +290,11 @@ impl Desktop {
             .collect();
         let paths: BTreeSet<&PathBuf> = self.items.iter().map(|item| &item.path).collect();
         self.selected.retain(|path| paths.contains(path));
-        if self.cursor.as_ref().is_some_and(|cursor| !paths.contains(cursor)) {
+        if self
+            .cursor
+            .as_ref()
+            .is_some_and(|cursor| !paths.contains(cursor))
+        {
             self.cursor = None;
         }
         if self.sort != SortBy::None {

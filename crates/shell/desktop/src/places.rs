@@ -127,9 +127,9 @@ pub fn format_layouts(layouts: &Layouts) -> String {
     let mut lines: Vec<String> = layouts
         .iter()
         .flat_map(|(grid, positions)| {
-            positions.iter().map(move |(name, slot)| {
-                format!("{grid}\t{}\t{}\t{name}", slot.column, slot.row)
-            })
+            positions
+                .iter()
+                .map(move |(name, slot)| format!("{grid}\t{}\t{}\t{name}", slot.column, slot.row))
         })
         .collect();
     lines.sort();

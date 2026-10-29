@@ -11,12 +11,12 @@ hardware. Things noticed in passing go to the end of this file, not into a diff.
 Target: plan phases 1-6 done plus enough protocols for Firefox on Wayland. Pure Wayland:
 XWayland is deferred, to revisit only if a needed app has no Wayland path (macOS
 precedent: XQuartz is a separate, optional install). Progress is tracked per milestone
-below. Estimate at the head of `desktop/milestone-18`: about 67% of the way to the target,
+below. Estimate at the head of `desktop/milestone-19`: about 68% of the way to the target,
 counting the six phases and Firefox equally: phase 1 done; phase 2 about 90% (explicit sync
 left); phase 3 about 85% (backlight dimming, Do Not Disturb persistence);
 phase 4 about 35% (panel and launcher, no menu bar, greeter, AT-SPI or input methods);
 phase 5 about 40% (portal and power without their UIs, no audio, network or Bluetooth);
-phase 6 about 40% (launcher, terminal and full-screen screenshots; no files or settings); Firefox
+phase 6 about 45% (launcher, terminal, full-screen and area screenshots; no files or settings); Firefox
 runs natively on Wayland in the guest.
 
 ## Done
@@ -205,6 +205,14 @@ runs natively on Wayland in the guest.
   `m18-screen-before-capture`. Not done: the floating thumbnail, Super+Shift+4 region and
   window selection, Super+Shift+5, the shutter sound, dma-buf capture targets, toplevel
   sources, and the portal's `Screenshot` backed by this capture.
+- [x] **M19 Area screenshots** (`desktop/milestone-19`)
+  Super+Shift+4 (Command-Shift-4) sends `capture_area`; `unbound-screenshot` shows a
+  full-screen overlay with a crosshair, the dragged-out selection and its size, then on
+  release hides it, captures the screen and saves the area like a full-screen shot.
+  Escape cancels, as on a Mac; a click without a drag takes no picture. Guest screendumps
+  `m19-area-selection`, `m19-area-screenshot`, `m19-after-area-capture`. Not done: Space
+  for window selection (needs toplevel capture sources), the floating thumbnail, a
+  crosshair cursor shape in place of the drawn one.
 - [ ] **Explicit sync: `linux-drm-syncobj-v1` (P0)**
   Acquire points through `DrmSyncPointBlocker`, release points from frame completion.
   *Done when* guest tests show a commit is not presented before its acquire point

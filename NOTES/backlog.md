@@ -235,8 +235,9 @@ runs natively on Wayland in the guest.
   and which enables and disables text input as focus moves; secure fields report none, so
   passwords never reach an input method. Tests: committed text reaches the focused client,
   keys go to the input method while it grabs the keyboard, both candidate placements, and a
-  toolkit text field receiving composed Japanese. Not done: starting Fcitx5 with the
-  session; surrounding text and content type; while an input
+  toolkit text field receiving composed Japanese. The session target wants
+  `xdg-desktop-autostart.target`, so XDG autostart entries run (as Login Items do), Fcitx5's
+  among them; the compositor package suggests `fcitx5`. Not done: surrounding text and content type; while an input
   method grabs the keyboard, an xdg popup's keyboard grab is refused (Smithay's popup grab
   check), so menus opened from a focused text field close at once.
 - [ ] **Toolkit on Vello and Parley** (track; moved into `desktop/integration`)

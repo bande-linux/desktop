@@ -26,6 +26,7 @@ maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
 depends = "$auto, libvulkan1, mesa-vulkan-drivers | vulkan-icd, systemd"
 recommends = "unbound-clipboard, unbound-panel, unbound-launcher, unbound-term, unbound-lock, unbound-screenshot, unbound-files, unbound-settings"
+suggests = "fcitx5"
 extended-description = """\
 Headless Wayland compositor built on Smithay. It serves wl_compositor, \
 wl_shm, linux-dmabuf-v1 and xdg_wm_base clients and renders their windows offscreen \

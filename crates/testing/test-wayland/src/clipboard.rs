@@ -9,7 +9,9 @@ use wayland_client::protocol::wl_data_source::{self, WlDataSource};
 use wayland_client::protocol::wl_keyboard::{self, WlKeyboard};
 use wayland_client::protocol::wl_seat::WlSeat;
 use wayland_client::protocol::wl_surface::WlSurface;
-use wayland_client::{Connection, Dispatch, Proxy, QueueHandle, delegate_noop, event_created_child};
+use wayland_client::{
+    Connection, Dispatch, Proxy, QueueHandle, WEnum, delegate_noop, event_created_child,
+};
 use wayland_protocols::ext::data_control::v1::client::ext_data_control_device_v1::{
     self, ExtDataControlDeviceV1,
 };
@@ -52,6 +54,16 @@ pub(super) struct Clipboard {
     primary_sources: Vec<ZwpPrimarySelectionSourceV1>,
     control_sources: Vec<ExtDataControlSourceV1>,
     cancelled_sources: usize,
+}
+
+impl Clipboard {
+    pub(crate) fn data_device(&self) -> &WlDataDevice {
+        self.data_device.as_ref().expect("data device")
+    }
+
+    pub(crate) fn keep_source(&mut self, source: WlDataSource) {
+        self.sources.push(source);
+    }
 }
 
 fn mimes<P: Proxy>(offer: &P) -> Vec<String> {
@@ -230,8 +242,11 @@ impl Dispatch<WlDataDevice, ()> for Globals {
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
-        if let wl_data_device::Event::Selection { id } = event {
-            globals.clipboard.selection = id;
+        match event {
+            wl_data_device::Event::Selection { id } => globals.clipboard.selection = id,
+            wl_data_device::Event::Enter { serial, id, .. } => globals.drag_entered(serial, id),
+            wl_data_device::Event::Drop => globals.drag_dropped(),
+            _ => {}
         }
     }
 
@@ -242,15 +257,21 @@ impl Dispatch<WlDataDevice, ()> for Globals {
 
 impl Dispatch<WlDataOffer, Mimes> for Globals {
     fn event(
-        _: &mut Self,
+        globals: &mut Self,
         _: &WlDataOffer,
         event: wl_data_offer::Event,
         mimes: &Mimes,
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
-        if let wl_data_offer::Event::Offer { mime_type } = event {
-            mimes.lock().expect("mimes").push(mime_type);
+        match event {
+            wl_data_offer::Event::Offer { mime_type } => {
+                mimes.lock().expect("mimes").push(mime_type);
+            }
+            wl_data_offer::Event::Action {
+                dnd_action: WEnum::Value(action),
+            } => globals.dnd.chosen.push(action),
+            _ => {}
         }
     }
 }

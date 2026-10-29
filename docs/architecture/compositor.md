@@ -81,6 +81,14 @@ when they reach the screen is Unbound's own.
   `Up` zooms a free window and `Down` returns a zoomed one. Tiles get xdg-shell's tiled states
   (for clients binding version 2) and no gaps. Dragging the edge two neighbouring tiles share
   resizes both; dragging a tiled window away gives back its earlier size under the pointer.
+- **Drag and drop.** The compositor draws the drag icon a client passes to `start_drag` at the
+  pointer, offset by the icon's attach offset, below the pointer. Holding Option (Alt) makes a
+  drop a copy and Super a move, when source and destination offer it; otherwise the
+  destination's preferred action wins. The choice is made when the destination sets its
+  actions, so toolkits should set them again on motion for modifier changes to apply mid-drag.
+  A drop nobody accepts slides the icon back to where the drag began with `standard` (with
+  Reduce Motion it fades where it was dropped), from the last drawn frame of the icon, so it
+  survives the client destroying the icon.
 - **Gestures.** The compositor claims four-finger pinches (thumb and three fingers) and
   forwards every other swipe, pinch and hold through `zwp_pointer_gestures_v1`. A spread pushes
   every window aside to a 24 pt sliver at the nearer side edge, tracking the fingers 1:1 (a

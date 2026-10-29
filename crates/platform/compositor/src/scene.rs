@@ -610,6 +610,76 @@ pub(crate) struct Drawn {
     active: bool,
 }
 
+pub(crate) fn pieces_of(
+    surfaces: &[WaylandSurfaceRenderElement<VulkanRenderer>],
+    scale: f64,
+) -> Vec<Piece> {
+    surfaces
+        .iter()
+        .filter_map(|surface| match surface.texture() {
+            WaylandSurfaceTexture::Texture(texture) => Some(Piece {
+                id: surface.id().clone(),
+                texture: texture.clone(),
+                src: surface.src(),
+                geometry: surface.geometry(Scale::from(scale)),
+            }),
+            WaylandSurfaceTexture::SolidColor(_) => None,
+        })
+        .collect()
+}
+
+pub(crate) fn area_of(pieces: &[Piece]) -> Option<Area> {
+    pieces
+        .iter()
+        .map(|piece| piece.geometry)
+        .reduce(|union, geometry| union.merge(geometry))
+        .map(|union| union.to_f64())
+}
+
+pub(crate) struct SlideBack {
+    pieces: Vec<Piece>,
+    area: Area,
+    pub(crate) motion: Motion,
+}
+
+impl SlideBack {
+    pub(crate) fn new(mut pieces: Vec<Piece>, area: Area, motion: Motion) -> Self {
+        for piece in &mut pieces {
+            piece.id = Id::new();
+        }
+        Self {
+            pieces,
+            area,
+            motion,
+        }
+    }
+
+    pub(crate) fn render_elements(&self, scale: f64) -> Vec<OutputElement> {
+        let Some(look) = self.motion.shown() else {
+            return Vec::new();
+        };
+        if look.alpha <= 0.0 {
+            return Vec::new();
+        }
+        let shown = look.rect.to_physical(scale);
+        let placement = Placement {
+            from: self.area,
+            to: shown,
+        };
+        let alpha = look.alpha as f32;
+        self.pieces
+            .iter()
+            .map(|piece| {
+                OutputElement::Closing(WindowElement::new(
+                    PieceElement::new(piece.clone(), alpha),
+                    placement,
+                    rounded(shown, 0.0),
+                ))
+            })
+            .collect()
+    }
+}
+
 pub(crate) struct Closing {
     drawn: Drawn,
     shadow: Id,
@@ -723,18 +793,7 @@ pub(crate) fn window_elements(
         from: area,
         to: shown,
     };
-    let pieces = surfaces
-        .iter()
-        .filter_map(|surface| match surface.texture() {
-            WaylandSurfaceTexture::Texture(texture) => Some(Piece {
-                id: surface.id().clone(),
-                texture: texture.clone(),
-                src: surface.src(),
-                geometry: surface.geometry(Scale::from(scale)),
-            }),
-            WaylandSurfaceTexture::SolidColor(_) => None,
-        })
-        .collect();
+    let pieces = pieces_of(&surfaces, scale);
     let shadow = (!fullscreen).then(|| {
         OutputElement::Shadow(ShadowElement::new(
             window.shadow.clone(),

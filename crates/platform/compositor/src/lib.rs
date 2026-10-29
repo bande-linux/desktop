@@ -5,6 +5,7 @@ mod clock;
 mod cursor;
 mod decoration;
 mod dock;
+mod drag;
 mod drm;
 mod effect;
 mod environment;

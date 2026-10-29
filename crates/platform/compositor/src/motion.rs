@@ -325,6 +325,7 @@ impl State {
         }
         self.animate_preview(time);
         self.animate_desktop(time);
+        self.animate_slide_back(time);
         self.closing.retain(|closing| !closing.motion.is_settled());
         if self.is_animating() {
             self.needs_redraw = true;
@@ -335,6 +336,7 @@ impl State {
         !self.closing.is_empty()
             || self.preview.is_some()
             || self.desktop.is_animating()
+            || self.slide_back.is_some()
             || self.windows.iter().any(|window| window.motion.is_some())
     }
 }

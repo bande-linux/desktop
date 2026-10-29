@@ -12,6 +12,7 @@ pub use wayland_protocols::xdg::shell::client::xdg_toplevel::{ResizeEdge, State 
 mod capture;
 mod cursor;
 mod decoration;
+mod dnd;
 mod effect;
 mod fence;
 mod gesture;
@@ -123,6 +124,7 @@ struct Globals {
     text_input: ime::TextInput,
     input_method: ime::InputMethod,
     gestures: Vec<gesture::ClientGesture>,
+    dnd: dnd::Dnd,
     hung: bool,
     unanswered_pings: Vec<(XdgWmBase, u32)>,
 }

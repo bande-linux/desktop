@@ -52,10 +52,7 @@ use smithay::wayland::presentation::{
     PresentationFeedbackCachedState, PresentationFeedbackCallback, PresentationState, Refresh,
 };
 use smithay::wayland::selection::SelectionHandler;
-use smithay::wayland::selection::data_device::{
-    ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler,
-    set_data_device_focus,
-};
+use smithay::wayland::selection::data_device::{DataDeviceState, set_data_device_focus};
 use smithay::wayland::selection::ext_data_control::{DataControlHandler, DataControlState};
 use smithay::wayland::selection::primary_selection::{
     PrimarySelectionHandler, PrimarySelectionState, set_primary_focus,
@@ -144,7 +141,11 @@ pub(crate) enum Placed<'a> {
     Closing(&'a Closing),
 }
 
-type Composed = (Vec<OutputElement>, Vec<(WlSurface, Option<Drawn>)>);
+type Composed = (
+    Vec<OutputElement>,
+    Vec<(WlSurface, Option<Drawn>)>,
+    Option<(Vec<crate::scene::Piece>, crate::scene::Area)>,
+);
 
 pub(crate) struct ExclusiveLayer {
     pub(crate) surface: WlSurface,
@@ -185,7 +186,7 @@ pub struct State {
     exclusive_candidates: Vec<(WlSurface, Layer)>,
     seat_state: SeatState<State>,
     pub(crate) seat: Seat<State>,
-    data_device_state: DataDeviceState,
+    pub(crate) data_device_state: DataDeviceState,
     primary_selection_state: PrimarySelectionState,
     data_control_state: DataControlState,
     pub(crate) windows: Vec<Window>,
@@ -193,6 +194,8 @@ pub struct State {
     pub(crate) lock_screen_requested: bool,
     pub(crate) force_quit_requested: bool,
     pub(crate) refused_tokens: Vec<XdgActivationToken>,
+    pub(crate) drag: Option<crate::drag::Drag>,
+    pub(crate) slide_back: Option<crate::scene::SlideBack>,
     pub(crate) watchdog: crate::watchdog::Watchdog,
     pub(crate) desktop: crate::gesture::ShowDesktop,
     pub(crate) gesture_route: Option<crate::gesture::Route>,
@@ -351,6 +354,8 @@ impl Headless {
             lock_screen_requested: false,
             force_quit_requested: false,
             refused_tokens: Vec::new(),
+            drag: None,
+            slide_back: None,
             watchdog: crate::watchdog::Watchdog::default(),
             desktop: crate::gesture::ShowDesktop::default(),
             gesture_route: None,
@@ -507,7 +512,8 @@ impl Headless {
     }
 
     pub fn render_elements(&mut self, renderer: &mut VulkanRenderer) -> Vec<OutputElement> {
-        let (elements, drawn) = self.compose(renderer, true);
+        let (elements, drawn, icon) = self.compose(renderer, true);
+        self.state.remember_drag_icon(icon);
         for window in &mut self.state.windows {
             window.drawn = None;
         }
@@ -529,10 +535,13 @@ impl Headless {
 
     fn compose(&self, renderer: &mut VulkanRenderer, with_cursor: bool) -> Composed {
         let mut drawn = Vec::new();
-        let mut elements: Vec<OutputElement> = if with_cursor {
-            self.cursor_elements(renderer)
+        let (mut elements, icon): (Vec<OutputElement>, _) = if with_cursor {
+            let (dragged, icon) = self.state.drag_icon_elements(renderer);
+            let mut elements = self.cursor_elements(renderer);
+            elements.extend(dragged);
+            (elements, icon)
         } else {
-            Vec::new()
+            (Vec::new(), None)
         };
         let scale = self.state.output_scale;
         let key = self.state.key_window();
@@ -578,7 +587,7 @@ impl Headless {
             }
         }
         tie_blurs_to_what_lies_below(&mut elements, scale);
-        (elements, drawn)
+        (elements, drawn, icon)
     }
 
     pub fn popup_count(&self) -> usize {
@@ -1086,6 +1095,9 @@ impl CompositorHandler for State {
     fn commit(&mut self, surface: &WlSurface) {
         on_commit_buffer_handler::<Self>(surface);
         crate::effect::commit_blur(surface);
+        if self.commit_drag_icon(surface) {
+            return;
+        }
         self.needs_redraw = true;
         if self.commit_lock_surface(surface)
             || self.commit_popup(surface)
@@ -1291,16 +1303,6 @@ impl SeatHandler for State {
 impl SelectionHandler for State {
     type SelectionUserData = ();
 }
-
-impl DataDeviceHandler for State {
-    fn data_device_state(&self) -> &DataDeviceState {
-        &self.data_device_state
-    }
-}
-
-impl ClientDndGrabHandler for State {}
-
-impl ServerDndGrabHandler for State {}
 
 impl PrimarySelectionHandler for State {
     fn primary_selection_state(&self) -> &PrimarySelectionState {

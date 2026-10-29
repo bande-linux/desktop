@@ -118,3 +118,35 @@ fn a_fullscreen_opaque_dmabuf_window_is_scanned_out_directly() {
     assert!(session.output.scanned_out_directly());
     assert_matches(&scanout, |x, y| rgb(quadrant_color(x, y, width, height)));
 }
+
+#[test]
+#[ignore = "needs the ci/vm guest"]
+fn an_opaque_dmabuf_window_on_an_overlay_plane_shows_its_pixels() {
+    let mut session = Session::open();
+    let (width, height) = session.output_size();
+    let (window_width, window_height) = (64, 64);
+    let pixels = RED.repeat(window_width * window_height);
+    session.client.show_window_in(
+        &mut session.shared.server,
+        &ShmImage {
+            width: window_width as i32,
+            height: window_height as i32,
+            stride: (window_width * 4) as i32,
+            format: Format::Xrgb8888,
+            bytes: &pixels,
+        },
+        Memory::Udmabuf,
+    );
+
+    let scanout = session.present();
+    scanout.save("overlay-window");
+
+    assert_eq!(session.card.overlay_planes_in_use(), 1);
+    let left = (width - window_width) / 2;
+    let top = (height - window_height) / 2;
+    assert_matches(&scanout, |x, y| {
+        let inside =
+            (left..left + window_width).contains(&x) && (top..top + window_height).contains(&y);
+        if inside { rgb(RED) } else { BACKGROUND }
+    });
+}

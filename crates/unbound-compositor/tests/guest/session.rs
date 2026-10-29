@@ -16,7 +16,7 @@ pub struct Shared {
 }
 
 pub struct Session {
-    card: Card,
+    pub card: Card,
     pub output: DrmOutput,
     pub shared: Shared,
     pub client: TestClient,

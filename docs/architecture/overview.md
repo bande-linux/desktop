@@ -172,18 +172,32 @@ control writes to it, and it can be edited by hand while the session runs.
       lock-after "10m"          // not shorter than dim-after
       suspend-after "10m"       // not shorter than lock-after, or "never"
   }
+  keyboard {
+      repeat-rate 25            // 1 to 60 characters per second
+      repeat-delay 600          // 150 to 2000 milliseconds before repeating starts
+  }
+  wallpaper {                   // absolute path or "~/..."; unset means the built-in picture
+      light "/usr/share/backgrounds/unbound/day.jpg"
+      dark "~/Pictures/night.jpg"
+  }
   output "eDP-1" {              // once per connector
       scale 1.5                 // 1.0 to 2.0 (100%-200%)
       refresh-rate 120          // 60 to 240 Hz
       variable-refresh-rate #true
   }
   ```
-  The values shown for `appearance`, `panel` and `idle` are the defaults. A valid file is parsed
+  The values shown for `appearance`, `dock`, `idle` and `keyboard` are the defaults. The
+  wallpaper used is the one matching the current appearance; the desktop expands a leading `~/`.
+  A section left empty by a Settings write is removed from the file. A valid file is parsed
   into a shadow `Config` and swapped in as one `Arc`, so readers see either the old or the new
   configuration, never a mix. `ConfigService` owns `org.unbound.Config` on the session bus and
   serves the active values as properties of interface `org.unbound.Config` at
   `/org/unbound/Config` (`Appearance`, `DockEdge`, `IdleDimAfter`, `IdleLockAfter` and
-  `IdleSuspendAfter` in seconds, 0 meaning never, `Outputs` as `a{sa{sv}}`). It watches the
+  `IdleSuspendAfter` in seconds, 0 meaning never, `IdleSuspendWithDisplay` true while
+  `suspend-after` is unset and sleep follows the display (writing true removes the explicit
+  value), `KeyRepeatRate` per second and
+  `KeyRepeatDelay` in milliseconds as `u`, `WallpaperLight` and `WallpaperDark` as paths, empty
+  meaning unset, `Outputs` as `a{sa{sv}}`). It watches the
   directory and reloads when the file is closed after writing or renamed into place;
   `PropertiesChanged` lists only the properties that changed. The `unbound-config` daemon runs
   the service for the session and posts an invalid file as a notification through

@@ -42,7 +42,7 @@ impl Locale {
             .and_then(|value| Self::parse(&value))
     }
 
-    fn keys(&self) -> Vec<String> {
+    pub(crate) fn keys(&self) -> Vec<String> {
         let mut keys = Vec::new();
         if let (Some(country), Some(modifier)) = (&self.country, &self.modifier) {
             keys.push(format!("{}_{country}@{modifier}", self.lang));
@@ -70,6 +70,8 @@ pub struct DesktopEntry {
     pub working_directory: Option<PathBuf>,
     pub terminal: bool,
     pub keywords: Vec<String>,
+    pub mime_types: Vec<String>,
+    pub no_display: bool,
 }
 
 struct Group {
@@ -206,11 +208,18 @@ impl DesktopEntry {
         locale: Option<&Locale>,
         desktops: &[String],
     ) -> Option<Self> {
+        Self::parse_handler(id, path, text, locale, desktops).filter(|entry| !entry.no_display)
+    }
+
+    pub fn parse_handler(
+        id: &str,
+        path: &Path,
+        text: &str,
+        locale: Option<&Locale>,
+        desktops: &[String],
+    ) -> Option<Self> {
         let group = desktop_entry_group(text)?;
-        if group.raw("Type") != Some("Application")
-            || group.boolean("Hidden")
-            || group.boolean("NoDisplay")
-        {
+        if group.raw("Type") != Some("Application") || group.boolean("Hidden") {
             return None;
         }
         let only = group.list("OnlyShowIn");
@@ -240,6 +249,8 @@ impl DesktopEntry {
             working_directory: group.string("Path").map(PathBuf::from),
             terminal: group.boolean("Terminal"),
             keywords: group.localized_list("Keywords", locale),
+            mime_types: group.list("MimeType"),
+            no_display: group.boolean("NoDisplay"),
         })
     }
 
@@ -308,6 +319,16 @@ pub fn applications(
     locale: Option<&Locale>,
     desktops: &[String],
 ) -> Vec<DesktopEntry> {
+    let mut entries = handlers(data_dirs, locale, desktops);
+    entries.retain(|entry| !entry.no_display);
+    entries
+}
+
+pub fn handlers(
+    data_dirs: &[PathBuf],
+    locale: Option<&Locale>,
+    desktops: &[String],
+) -> Vec<DesktopEntry> {
     let mut seen = Vec::<String>::new();
     let mut entries = Vec::new();
     for data_dir in data_dirs {
@@ -322,7 +343,7 @@ pub fn applications(
             let Ok(text) = fs::read_to_string(&path) else {
                 continue;
             };
-            if let Some(entry) = DesktopEntry::parse(&id, &path, &text, locale, desktops) {
+            if let Some(entry) = DesktopEntry::parse_handler(&id, &path, &text, locale, desktops) {
                 entries.push(entry);
             }
         }

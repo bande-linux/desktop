@@ -357,3 +357,11 @@ boot framebuffer, K3 USB input. Later, the Apple DCP and agx drivers unlock:
   full-screen guest test pass. Suspects: a third hidden exclusive overlay layer and the
   compositor's single `exclusive_layer` slot, or guest CPU load from a third toolkit
   process; the next step is a headless test with two hidden exclusive shell layers.
+- PipeWire 1.4.2 ignores a Props change on a suspended adapter node that has no device
+  (a null sink nobody plays to): `pw-cli s <sink> Props '{ channelVolumes: [ 0.5, 0.5 ] }'`
+  leaves the volumes at 1.0, while the same change on the running sink applies.
+  `unbound-audio` sets such sinks' volume through the node, so its change is lost the
+  same way; raise it upstream.
+- A null-audio-sink given `media.class = "Audio/Source"` stalls WirePlumber 0.5.8's event
+  queue when it activates the node, after which no default node is chosen; virtual
+  sources need `Audio/Source/Virtual`.

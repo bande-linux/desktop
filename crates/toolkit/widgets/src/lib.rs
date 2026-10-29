@@ -3,6 +3,7 @@ mod button;
 mod context_menu;
 mod label;
 mod menu;
+mod scroll;
 mod secure_field;
 mod slider;
 mod stack;
@@ -20,6 +21,7 @@ pub use button::{BUTTON_HEIGHT, Button};
 pub use context_menu::ContextMenu;
 pub use label::Label;
 pub use menu::{Menu, MenuItem, MenuOutcome, MenuPanel, MenuTracker};
+pub use scroll::{ScrollState, ScrollView};
 pub use secure_field::SecureField;
 pub use slider::{SLIDER_HEIGHT, Slider};
 pub use stack::{Axis, Stack};
@@ -145,6 +147,14 @@ pub trait Widget {
         false
     }
 
+    fn hit_children(&self, _point: Point) -> bool {
+        true
+    }
+
+    fn reveal(&mut self, _cx: &mut Context, _rect: Rect) -> bool {
+        false
+    }
+
     fn children(&self) -> &[Box<dyn Widget>] {
         &[]
     }
@@ -197,6 +207,9 @@ fn hit_path(widget: &dyn Widget, point: Point, path: &mut Vec<WidgetId>) -> bool
         return false;
     }
     path.push(widget.id());
+    if !widget.hit_children(point) {
+        return true;
+    }
     for child in widget.children().iter().rev() {
         if hit_path(child.as_ref(), point, path) {
             break;
@@ -538,6 +551,25 @@ impl Ui {
             (Some(index), false) => (index + order.len() - 1) % order.len(),
         };
         self.cx.focus = Some(order[next]);
+        self.reveal_focus();
+    }
+
+    fn reveal_focus(&mut self) {
+        let Some(focus) = self.cx.focus else {
+            return;
+        };
+        let mut path = Vec::new();
+        if !path_to(self.root.as_ref(), focus, &mut path) {
+            return;
+        }
+        let Some(rect) = find(self.root.as_ref(), focus).map(|widget| widget.frame()) else {
+            return;
+        };
+        for id in path.into_iter().rev().skip(1) {
+            if let Some(widget) = find_mut(self.root.as_mut(), id) {
+                widget.reveal(&mut self.cx, rect);
+            }
+        }
     }
 
     pub fn accessibility(&self) -> TreeUpdate {

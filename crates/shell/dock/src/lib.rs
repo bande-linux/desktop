@@ -24,6 +24,8 @@ pub mod bus;
 pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
 pub const ICON_SIZE: f32 = 48.0;
+const MIN_ICON_SIZE: f32 = 24.0;
+const MAX_ICON_SIZE: f32 = 96.0;
 const CELL_PADDING: f32 = 5.0;
 const CROSS_PADDING: f32 = 8.0;
 const END_PADDING: f32 = 6.0;
@@ -299,6 +301,18 @@ impl DockState {
 
     pub fn icon_size(&self) -> f32 {
         self.icon_size
+    }
+
+    pub fn set_icon_size(&mut self, size: f32) -> bool {
+        let size = size.clamp(MIN_ICON_SIZE, MAX_ICON_SIZE).round();
+        if size == self.icon_size {
+            return false;
+        }
+        self.icon_size = size;
+        for slot in &mut self.slots {
+            slot.initial = None;
+        }
+        true
     }
 
     pub fn set_appearance(&mut self, appearance: Appearance) {

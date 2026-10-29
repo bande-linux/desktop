@@ -19,6 +19,7 @@ const CONFIG_INTERFACE: &str = "org.unbound.Config";
 pub enum BusEvent {
     DockApps(Vec<String>),
     AutoHide(bool),
+    IconSize(u32),
     Launcher(String, LauncherUpdate),
 }
 
@@ -113,6 +114,11 @@ fn follow_dock_apps(session: Connection, outbox: Outbox) {
                 .build()?
                 .receive_properties_changed()?;
             let publish = || {
+                if let Ok(size) = config.get_property::<u32>("DockIconSize")
+                    && !outbox.send(BusEvent::IconSize(size))
+                {
+                    return Ok(false);
+                }
                 if let Ok(auto_hide) = config.get_property::<bool>("DockAutoHide")
                     && !outbox.send(BusEvent::AutoHide(auto_hide))
                 {

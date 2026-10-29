@@ -447,3 +447,18 @@ fn the_blur_behind_the_dock_stays_inside_its_rounded_corners() {
     let covered: f32 = rects.iter().map(|rect| rect.width * rect.height).sum();
     assert!(covered > 0.95 * panel.width * panel.height);
 }
+
+#[test]
+fn the_icon_size_setting_resizes_the_dock_within_sensible_bounds() {
+    let mut harness = Harness::new(DockEdge::Left, Scheme::Light);
+    assert!(harness.state.borrow_mut().set_icon_size(64.0));
+    assert!(!harness.state.borrow_mut().set_icon_size(64.0));
+    harness.size = surface_size(DockEdge::Left, 64.0, OUTPUT);
+    harness.frame();
+    assert_eq!(harness.rect("org.unbound.Terminal").width, 64.0);
+    assert_eq!(harness.state.borrow().panel().width, 80.0);
+    assert_eq!(harness.state.borrow().exclusive_zone(), 92);
+
+    harness.state.borrow_mut().set_icon_size(400.0);
+    assert_eq!(harness.state.borrow().icon_size(), 96.0);
+}

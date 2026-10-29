@@ -343,12 +343,29 @@ impl Dock {
         }
     }
 
+    fn resize(&mut self, window: &mut Window, size: f32) {
+        if !self.state.borrow_mut().set_icon_size(size) {
+            return;
+        }
+        let (edge, icon_size) = {
+            let state = self.state.borrow();
+            (state.edge(), state.icon_size())
+        };
+        self.icons.clear();
+        self.load_trash_icons();
+        self.sync();
+        if let Err(error) = window.set_layer_size(surface_size(edge, icon_size, (0, 0))) {
+            tracing::warn!("cannot resize the Dock: {error}");
+        }
+    }
+
     fn receive(&mut self, window: &mut Window) {
         let mut drained = [0; 64];
         let _ = self.wake.read(&mut drained);
         let now = Instant::now();
         for event in self.bus.try_iter().collect::<Vec<_>>() {
             match event {
+                BusEvent::IconSize(size) => self.resize(window, size as f32),
                 BusEvent::AutoHide(auto_hide) => {
                     self.state.borrow_mut().set_auto_hide(auto_hide, now);
                 }

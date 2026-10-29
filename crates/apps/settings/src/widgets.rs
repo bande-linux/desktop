@@ -483,7 +483,7 @@ impl Widget for SidebarRow {
 
     fn handle(&mut self, _cx: &mut Context, event: &Event) -> bool {
         match event {
-            Event::PointerDown(_) => (self.on_select)(),
+            Event::PointerDown(pointer) if pointer.is_primary() => (self.on_select)(),
             Event::Key { key: Key::Up, .. } => (self.on_step)(-1),
             Event::Key { key: Key::Down, .. } => (self.on_step)(1),
             event if is_activation(event) => (self.on_select)(),
@@ -877,9 +877,9 @@ impl Widget for Row {
             return false;
         }
         match event {
-            Event::PointerDown(_) => self.pressed = true,
-            Event::PointerUp(point) => {
-                let activate = self.pressed && contains(self.frame, *point);
+            Event::PointerDown(pointer) if pointer.is_primary() => self.pressed = true,
+            Event::PointerUp(pointer) if pointer.is_primary() => {
+                let activate = self.pressed && contains(self.frame, pointer.position);
                 self.pressed = false;
                 if activate {
                     self.activate();
@@ -1033,9 +1033,9 @@ impl Widget for Segmented {
 
     fn handle(&mut self, _cx: &mut Context, event: &Event) -> bool {
         match event {
-            Event::PointerDown(point) => {
-                if let Some(index) =
-                    (0..self.choices.len()).find(|index| contains(self.segment(*index), *point))
+            Event::PointerDown(pointer) if pointer.is_primary() => {
+                if let Some(index) = (0..self.choices.len())
+                    .find(|index| contains(self.segment(*index), pointer.position))
                 {
                     self.select(index);
                 }

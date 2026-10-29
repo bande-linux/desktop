@@ -149,12 +149,14 @@ impl Widget for Slider {
 
     fn handle(&mut self, _cx: &mut Context, event: &Event) -> bool {
         match event {
-            Event::PointerDown(point) => {
+            Event::PointerDown(pointer) if pointer.is_primary() => {
                 self.dragging = true;
-                self.set(self.value_at(*point));
+                self.set(self.value_at(pointer.position));
             }
-            Event::PointerMove(point) if self.dragging => self.set(self.value_at(*point)),
-            Event::PointerUp(_) => self.dragging = false,
+            Event::PointerMove(pointer) if self.dragging => {
+                self.set(self.value_at(pointer.position));
+            }
+            Event::PointerUp(pointer) if pointer.is_primary() => self.dragging = false,
             Event::Key {
                 key: Key::Right | Key::Up,
                 ..

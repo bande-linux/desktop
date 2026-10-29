@@ -1,0 +1,30 @@
+# Open System Settings from the launcher and switch to dark mode, then back to Auto.
+note "Open System Settings from the launcher"
+key super+space
+wait 600ms
+type "settings"
+wait 600ms
+key enter
+wait-for-window "org.unbound.Settings"
+wait 1200ms
+shot "settings open"
+note "Search for dark mode: the matching setting is highlighted"
+type "dark"
+wait 1s
+shot "search for dark"
+note "Tab to the appearance choice and start from Light"
+key tab
+wait 600ms
+key left left
+wait 2s
+shot "light mode"
+note "Right arrow picks Dark"
+key right
+wait 2s
+shot "dark mode"
+note "Everything open should follow: the menu bar, the dock and the window"
+wait 1500ms
+note "Back to Auto, the default"
+key right
+wait 2s
+shot "auto again"

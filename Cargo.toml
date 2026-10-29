@@ -79,6 +79,7 @@ unbound-polkit = { path = "crates/services/polkit" }
 unbound-power = { path = "crates/services/power" }
 unbound-protocols = { path = "crates/platform/protocols" }
 unbound-render = { path = "crates/platform/render" }
+unbound-review = { path = "crates/testing/review" }
 unbound-sample = { path = "crates/testing/sample" }
 unbound-screenshot = { path = "crates/shell/screenshot" }
 unbound-settings = { path = "crates/apps/settings" }

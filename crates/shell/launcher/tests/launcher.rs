@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use unbound_launcher::{Launcher, LauncherAction, LauncherApp, search};
-use unbound_toolkit::ui::{Event, Key, Modifiers};
+use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer};
 use unbound_toolkit::{CpuRenderer, Palette, Point, Scheme, TextSystem};
 
 const SCREEN: (u32, u32) = (1024, 640);
@@ -117,7 +117,7 @@ fn escape_and_a_click_beside_the_card_close_the_launcher() {
     );
     launcher.scene(SCREEN.0, SCREEN.1);
     key(&mut launcher, Key::Escape);
-    launcher.handle(&Event::PointerDown(Point::new(10.0, 10.0)));
+    launcher.handle(&Event::PointerDown(Pointer::at(Point::new(10.0, 10.0))));
 
     assert_eq!(
         launcher.take_actions(),

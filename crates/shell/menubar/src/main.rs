@@ -30,7 +30,9 @@ impl App for Bar {
                     window.request_redraw();
                 }
             }
-            WindowEvent::Input(Event::PointerUp(point)) if self.bar.control_center_hit(point) => {
+            WindowEvent::Input(Event::PointerUp(pointer))
+                if pointer.is_primary() && self.bar.control_center_hit(pointer.position) =>
+            {
                 if let Err(error) = window.toggle_control_center() {
                     tracing::warn!("cannot open Control Center: {error}");
                 }

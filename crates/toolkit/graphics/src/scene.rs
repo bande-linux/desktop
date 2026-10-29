@@ -195,6 +195,20 @@ pub enum Item {
         shape: Shape,
         items: Vec<Item>,
     },
+    Translate {
+        offset: Point,
+        items: Vec<Item>,
+    },
+    Opacity {
+        alpha: f32,
+        items: Vec<Item>,
+    },
+    Line {
+        from: Point,
+        to: Point,
+        width: f32,
+        paint: Paint,
+    },
     Image {
         rect: Rect,
         image: Image,

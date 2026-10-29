@@ -9,7 +9,7 @@ use unbound_settings::{
     Command, Idle, PaneId, SettingId, SettingsClient, SettingsView, Value, panes, search,
 };
 use unbound_test_bus::SessionBus;
-use unbound_toolkit::ui::{Event, Key, Modifiers};
+use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer};
 use unbound_toolkit::{Palette, Point, Scheme, TextSystem};
 
 const SIZE: (u32, u32) = (900, 600);
@@ -60,8 +60,8 @@ fn changes(view: &mut SettingsView) -> Vec<(SettingId, Value)> {
 }
 
 fn click(view: &mut SettingsView, at: Point) {
-    view.handle(&Event::PointerDown(at));
-    view.handle(&Event::PointerUp(at));
+    view.handle(&Event::PointerDown(Pointer::at(at)));
+    view.handle(&Event::PointerUp(Pointer::at(at)));
     view.scene(SIZE.0, SIZE.1);
 }
 

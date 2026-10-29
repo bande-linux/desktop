@@ -3759,6 +3759,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "unbound-review"
+version = "0.1.0"
+dependencies = [
+ "image",
+ "rustix 1.1.6",
+ "serde",
+ "serde_json",
+ "tracing",
+ "unbound-log",
+ "wayland-client",
+ "wayland-protocols",
+]
+
+[[package]]
 name = "unbound-sample"
 version = "0.1.0"
 dependencies = [
@@ -3811,6 +3825,7 @@ version = "0.1.0"
 name = "unbound-term"
 version = "0.1.0"
 dependencies = [
+ "accesskit",
  "alacritty_terminal",
  "image",
  "image-compare",
@@ -3818,6 +3833,7 @@ dependencies = [
  "unbound-l10n",
  "unbound-log",
  "unbound-toolkit",
+ "unbound-xdg",
 ]
 
 [[package]]
@@ -3862,12 +3878,15 @@ version = "0.1.0"
 dependencies = [
  "accesskit",
  "accesskit_unix",
+ "image",
+ "image-compare",
  "pollster",
  "raw-window-handle",
  "rustix 1.1.6",
  "smithay",
  "unbound-compositor",
  "unbound-graphics",
+ "unbound-l10n",
  "unbound-protocols",
  "unbound-test-bus",
  "wayland-backend",

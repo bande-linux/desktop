@@ -619,6 +619,10 @@ fn files_drills_into_a_folder_and_quick_looks_a_picture() {
     wait_for("the files window", STARTUP, || {
         centre(&scanout()) != centre(&without_files)
     });
+    let menu_bar = |scanout: &Scanout| scanout.rgb[..scanout.width * 24].to_vec();
+    wait_for("the menu bar to name Files", STARTUP, || {
+        running("unbound-menubar") && menu_bar(&scanout()) != menu_bar(&without_files)
+    });
     thread::sleep(Duration::from_secs(1));
 
     let shown = scanout();

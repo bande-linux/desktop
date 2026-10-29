@@ -117,7 +117,7 @@ impl Window {
         (self.location.x - offset.x, self.location.y - offset.y).into()
     }
 
-    fn local_geometry(&self) -> Rectangle<i32, Logical> {
+    pub(crate) fn local_geometry(&self) -> Rectangle<i32, Logical> {
         let surface = self.toplevel.wl_surface();
         with_states(surface, |states| {
             states

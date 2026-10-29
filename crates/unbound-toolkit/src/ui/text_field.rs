@@ -252,6 +252,23 @@ impl Widget for TextField {
             }
             Event::PointerUp(_) => self.selecting = false,
             Event::Key { key, modifiers } => return self.edit(cx, *key, *modifiers),
+            Event::Commit(text) => {
+                let mut driver = self.editor.driver(fonts, layouts);
+                driver.clear_compose();
+                driver.insert_or_replace_selection(text);
+                (self.on_change)(self.editor.raw_text());
+            }
+            Event::Preedit { text, .. } if text.is_empty() => {
+                if !self.editor.is_composing() {
+                    return false;
+                }
+                self.editor.driver(fonts, layouts).clear_compose();
+            }
+            Event::Preedit { text, cursor } => {
+                self.editor
+                    .driver(fonts, layouts)
+                    .set_compose(text, *cursor);
+            }
             Event::PointerMove(_) => return false,
         }
         true
@@ -279,5 +296,16 @@ impl Widget for TextField {
 
     fn accepts_focus(&self, _cx: &Context) -> bool {
         true
+    }
+
+    fn text_input_area(&self) -> Option<Rect> {
+        let origin = self.text_origin();
+        let area = self.editor.ime_cursor_area();
+        Some(Rect::new(
+            origin.x + area.x0 as f32,
+            origin.y + area.y0 as f32,
+            (area.x1 - area.x0) as f32,
+            (area.y1 - area.y0) as f32,
+        ))
     }
 }

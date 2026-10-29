@@ -8,6 +8,7 @@ pub use wayland_protocols::xdg::shell::client::xdg_toplevel::{ResizeEdge, State 
 mod capture;
 mod fence;
 mod idle;
+mod ime;
 mod lock;
 mod seat;
 mod shell;
@@ -110,6 +111,8 @@ struct Globals {
     lock: lock::SessionLock,
     capture: capture::Capture,
     idle: idle::Idle,
+    text_input: ime::TextInput,
+    input_method: ime::InputMethod,
 }
 
 pub struct TestClient {

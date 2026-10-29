@@ -5,7 +5,7 @@ use std::time::Instant;
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use wayland_client::backend::{ReadEventsGuard, WaylandError};
 
-use crate::scene::Scene;
+use crate::scene::{Rect, Scene};
 use crate::window::{Window, WindowError, WindowEvent};
 
 pub trait App {
@@ -27,6 +27,10 @@ pub trait App {
 
     fn finished(&self) -> bool {
         false
+    }
+
+    fn text_input_area(&self) -> Option<Rect> {
+        None
     }
 }
 
@@ -63,6 +67,7 @@ pub fn run(window: &mut Window, app: &mut impl App) -> Result<(), WindowError> {
             let scene = app.scene(window);
             window.draw(&scene)?;
         }
+        window.set_text_input_area(app.text_input_area());
         window.flush()?;
         let Some(guard) = window.queue.prepare_read() else {
             continue;

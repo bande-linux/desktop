@@ -223,6 +223,22 @@ runs natively on Wayland in the guest.
   guest's 6.12 kernel offers DRM syncobjs (virtio-gpu gains them in a later series), so the guest
   cannot test the protocol; the implicit-fence half can be tested now with `sw_sync`
   fences imported into a udmabuf (`DMA_BUF_IOCTL_IMPORT_SYNC_FILE`).
+- [ ] **Input methods** (`desktop/input-method`) phase 4: the compositor offers
+  `zwp_text_input_v3`, `zwp_input_method_v2` and `zwp_virtual_keyboard_v1` (what Fcitx5 and
+  IBus use) through Smithay, which moves text-input focus with keyboard focus. Candidate
+  windows are popups of the focused surface, placed below the text being composed and
+  flipped above it when the screen ends below, kept on screen horizontally (as macOS places
+  its candidate window). The toolkit binds text-input v3 on its seat: preedit and commit
+  strings become `Event::Preedit` and `Event::Commit`, applied on `done`; a text field
+  shows the preedit underlined through Parley's compose support and reports its
+  composition area, which the run loop sends as the cursor rectangle (`App::text_input_area`)
+  and which enables and disables text input as focus moves; secure fields report none, so
+  passwords never reach an input method. Tests: committed text reaches the focused client,
+  keys go to the input method while it grabs the keyboard, both candidate placements, and a
+  toolkit text field receiving composed Japanese. Not done: starting Fcitx5 with the
+  session; surrounding text and content type; while an input
+  method grabs the keyboard, an xdg popup's keyboard grab is refused (Smithay's popup grab
+  check), so menus opened from a focused text field close at once.
 - [ ] **Toolkit on Vello and Parley** (track; moved into `desktop/integration`)
   `vello_cpu` first frame into `wl_shm`, `vello_gpu` afterwards, Parley text; goldens
   re-derived from scene descriptions; panel, launcher and terminal move over; a toolkit

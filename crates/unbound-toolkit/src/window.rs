@@ -48,6 +48,7 @@ use crate::render::RenderError;
 use crate::scene::Scene;
 use crate::seat::Input;
 use crate::shell::Shell;
+use crate::text_input::TextInput;
 use crate::ui;
 
 pub const RENDERER_VARIABLE: &str = "UNBOUND_RENDERER";
@@ -206,6 +207,7 @@ pub(crate) struct State {
     pub(crate) shell: Shell,
     pub(crate) lock: SessionLock,
     pub(crate) capture: Capture,
+    pub(crate) text_input: TextInput,
 }
 
 impl State {
@@ -305,6 +307,7 @@ impl Window {
         state.join_data_device(&handle);
 
         let surface = compositor.create_surface(&handle, ());
+        state.join_text_input(&surface, &handle);
         let role = match role {
             Role::Toplevel { title, app_id } => {
                 let wm_base = state
@@ -764,6 +767,9 @@ impl Dispatch<WlRegistry, ()> for State {
                 }
                 "ext_image_copy_capture_manager_v1" => {
                     state.capture.manager = Some(registry.bind(name, 1, handle, ()));
+                }
+                "zwp_text_input_manager_v3" => {
+                    state.text_input.manager = Some(registry.bind(name, 1, handle, ()));
                 }
                 "ext_foreign_toplevel_list_v1" => {
                     let _: ExtForeignToplevelListV1 = registry.bind(name, 1, handle, ());

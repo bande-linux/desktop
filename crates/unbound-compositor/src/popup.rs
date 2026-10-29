@@ -32,7 +32,7 @@ impl State {
         }
     }
 
-    fn geometry_origin(&self, root: &WlSurface) -> Option<Point<i32, Physical>> {
+    pub(crate) fn geometry_origin(&self, root: &WlSurface) -> Option<Point<i32, Physical>> {
         if let Some(index) = self.window_index(root) {
             return Some(self.windows[index].location);
         }
@@ -104,13 +104,19 @@ impl State {
 
     pub(crate) fn commit_popup(&mut self, surface: &WlSurface) -> bool {
         self.popups.commit(surface);
-        let Some(PopupKind::Xdg(popup)) = self.popups.find_popup(surface) else {
-            return false;
-        };
-        if !popup.is_initial_configure_sent() {
-            let _ = popup.send_configure();
+        match self.popups.find_popup(surface) {
+            Some(PopupKind::Xdg(popup)) => {
+                if !popup.is_initial_configure_sent() {
+                    let _ = popup.send_configure();
+                }
+                true
+            }
+            Some(PopupKind::InputMethod(candidates)) => {
+                self.place_candidates(&candidates);
+                true
+            }
+            None => false,
         }
-        true
     }
 
     pub(crate) fn grab_popup(&mut self, popup: PopupSurface, seat: &WlSeat, serial: Serial) {

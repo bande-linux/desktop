@@ -88,7 +88,15 @@ pub enum Event {
     PointerDown(Point),
     PointerMove(Point),
     PointerUp(Point),
-    Key { key: Key, modifiers: Modifiers },
+    Key {
+        key: Key,
+        modifiers: Modifiers,
+    },
+    Commit(String),
+    Preedit {
+        text: String,
+        cursor: Option<(usize, usize)>,
+    },
 }
 
 pub struct Context {
@@ -144,6 +152,10 @@ pub trait Widget {
 
     fn accepts_focus(&self, _cx: &Context) -> bool {
         false
+    }
+
+    fn text_input_area(&self) -> Option<Rect> {
+        None
     }
 
     fn children(&self) -> &[Box<dyn Widget>] {
@@ -302,11 +314,15 @@ impl Ui {
                 self.move_focus(!modifiers.shift);
                 true
             }
-            Event::Key { .. } => self
+            Event::Key { .. } | Event::Commit(_) | Event::Preedit { .. } => self
                 .cx
                 .focus
                 .is_some_and(|target| self.deliver(target, event)),
         }
+    }
+
+    pub fn text_input_area(&self) -> Option<Rect> {
+        find(self.root.as_ref(), self.cx.focus?)?.text_input_area()
     }
 
     fn accepts_focus(&self, target: WidgetId) -> bool {

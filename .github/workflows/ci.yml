@@ -71,7 +71,7 @@ jobs:
       - run: |
           for package in unbound-compositor unbound-notify unbound-clipboard unbound-config unbound-power \
               xdg-desktop-portal-unbound unbound-tray unbound-automount \
-              unbound-panel unbound-launcher unbound-term unbound-lock unbound-screenshot unbound-files unbound-settings unbound-greeter; do
+              unbound-panel unbound-launcher unbound-term unbound-lock unbound-screenshot unbound-files unbound-settings unbound-greeter unbound-menubar; do
             cargo deb --package "$package" --locked
           done
       - name: Inspect the packages
@@ -98,7 +98,7 @@ jobs:
             | grep -qw 'unbound-clipboard'
       - name: Check the shell's packages
         run: |
-          for package in unbound-panel unbound-launcher unbound-term unbound-lock unbound-screenshot unbound-files unbound-settings; do
+          for package in unbound-panel unbound-launcher unbound-term unbound-lock unbound-screenshot unbound-files unbound-settings unbound-menubar; do
             dpkg-deb --field target/debian/unbound-compositor_*.deb Recommends | grep -q "$package"
             dpkg-deb --contents target/debian/"$package"_*.deb | grep -q " ./usr/bin/$package\$"
           done

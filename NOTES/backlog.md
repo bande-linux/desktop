@@ -1,10 +1,17 @@
 # Backlog
 
-Ordered milestones derived from `docs/ARCHITECTURE.md` (phases and protocol matrix) and
-`docs/RENDERING.md`. Each milestone lives on `desktop/milestone-N`, stacked on the one
+Ordered milestones derived from the former phase roadmap, the protocol matrix in
+`docs/architecture/compositor.md` and `docs/decisions/0001-rendering.md`. Each milestone lives on `desktop/milestone-N`, stacked on the one
 before, and is done when its definition of done holds on the self-hosted runners
 (`ci/lint`, `ci/lavapipe-test`, `ci/deb`, and the jobs it adds) without real GPU or DRM
 hardware. Things noticed in passing go to the end of this file, not into a diff.
+
+The phases the estimates below count, from the former roadmap: 1 CI and runners; 2 compositor
+(DRM/KMS, explicit sync) and toolkit; 3 session infrastructure (environment, clipboard, lock
+and idle, D-Bus, notifications); 4 shell (panel, menu bar, tray, greeter, AT-SPI, input
+methods); 5 hardware and portals (portal backend, audio, network, Bluetooth, power); 6 apps
+(launcher, screenshots, Files, Settings, terminal, Activity Monitor); 7 decorations and theme
+propagation; 8 tiling, the full meta-package and frame-latency polish.
 
 ## Toward the daily driver (75%)
 
@@ -35,7 +42,7 @@ runs natively on Wayland in the guest.
 ## Next
 
 - [x] **M5 Rendering decision and performance harness** (`desktop/milestone-5`)
-  `docs/RENDERING.md`; `crates/unbound-bench` measuring the compositor's typical and
+  `docs/decisions/0001-rendering.md`; `crates/unbound-bench` measuring the compositor's typical and
   full-repaint frame times at 1920×1080, start time to listening socket and idle RSS;
   `ci/perf` runs it on every push, uploads `perf.json` and writes a summary table.
   *Done when* `ci/perf` is green and reports every metric.
@@ -47,7 +54,7 @@ runs natively on Wayland in the guest.
   damage-limited repaint of the output, readback only on request; the compositor drops
   `wgpu`. *Done when* the golden test passes on lavapipe, tests show that repainted
   pixels equal the damaged area and uploaded bytes equal the damaged rows, and `ci/perf`
-  enforces the lavapipe budgets of `docs/RENDERING.md`.
+  enforces the lavapipe budgets of `docs/decisions/0001-rendering.md`.
   Result on the runners: typical frame p50 0.28 ms / p99 0.51 ms (was 11.4 / 39.1),
   full repaint p50 4.6 ms / p99 11.4 ms, start p50 30 ms (was 2214), idle RSS 89 MiB.
   Opaque windows also hide what lies below them from shading.
@@ -66,7 +73,7 @@ runs natively on Wayland in the guest.
   refresh interval and sequence, and `ci/perf` reports commit-to-present frames.
   Scheduling tests run on a virtual clock. On the runners' real clock: commit-to-present
   p50 11.4 ms / p99 16.3 ms, 4 of 120 frames after their promised vblank, reported
-  only (see `docs/RENDERING.md`).
+  only (see `docs/decisions/0001-rendering.md`).
 - [x] **M9 KVM test rig (`ci/vm`)** (`desktop/milestone-9`)
   Guest kernel built with `CONFIG_DRM_VKMS` and virtio-gpu, Debian 13 arm64 root image,
   QEMU with `-machine virt,its=off`; the job boots the guest and runs test binaries in

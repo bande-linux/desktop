@@ -108,10 +108,17 @@ impl Wallpaper {
     }
 }
 
+pub const DEFAULT_DOCK_APPS: [&str; 3] = [
+    "org.unbound.Files",
+    "org.unbound.Terminal",
+    "org.unbound.Settings",
+];
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
     pub appearance: Appearance,
     pub dock_edge: DockEdge,
+    pub dock_apps: Vec<String>,
     pub idle: Idle,
     pub keyboard: Keyboard,
     pub wallpaper: Wallpaper,
@@ -123,6 +130,7 @@ impl Default for Config {
         Self {
             appearance: Appearance::Automatic,
             dock_edge: DockEdge::Left,
+            dock_apps: DEFAULT_DOCK_APPS.map(str::to_owned).to_vec(),
             idle: Idle {
                 dim_after: Duration::from_secs(5 * 60),
                 lock_after: Duration::from_secs(10 * 60),
@@ -224,7 +232,7 @@ impl Parser<'_> {
                         ],
                     )?
                 }
-                "dock" => config.dock_edge = self.dock(node)?,
+                "dock" => (config.dock_edge, config.dock_apps) = self.dock(node)?,
                 "idle" => config.idle = self.idle(node, config.idle)?,
                 "keyboard" => config.keyboard = self.keyboard(node, config.keyboard)?,
                 "wallpaper" => config.wallpaper = self.wallpaper(node)?,
@@ -316,9 +324,13 @@ impl Parser<'_> {
         )
     }
 
-    fn dock(&self, node: &KdlNode) -> Result<DockEdge, ConfigError> {
+    fn dock(&self, node: &KdlNode) -> Result<(DockEdge, Vec<String>), ConfigError> {
         self.no_arguments(node)?;
-        let mut edge = Config::default().dock_edge;
+        let Config {
+            dock_edge: mut edge,
+            dock_apps: mut apps,
+            ..
+        } = Config::default();
         for child in self.children(node)? {
             match child.name().value() {
                 "edge" => {
@@ -332,10 +344,32 @@ impl Parser<'_> {
                         ],
                     )?
                 }
+                "apps" => apps = self.app_ids(child)?,
                 _ => return Err(self.unknown_child("dock", child)),
             }
         }
-        Ok(edge)
+        Ok((edge, apps))
+    }
+
+    fn app_ids(&self, node: &KdlNode) -> Result<Vec<String>, ConfigError> {
+        let mut apps: Vec<String> = Vec::new();
+        for entry in node.entries() {
+            let app = entry
+                .value()
+                .as_string()
+                .filter(|app| entry.name().is_none() && !app.is_empty())
+                .ok_or_else(|| {
+                    self.at_entry(
+                        entry,
+                        "`dock apps` takes app IDs such as \"org.unbound.Files\"",
+                    )
+                })?;
+            if apps.iter().any(|known| known == app) {
+                return Err(self.at_entry(entry, format!("\"{app}\" is in the dock twice")));
+            }
+            apps.push(app.to_owned());
+        }
+        Ok(apps)
     }
 
     fn idle(&self, node: &KdlNode, mut idle: Idle) -> Result<Idle, ConfigError> {

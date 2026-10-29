@@ -146,6 +146,9 @@ fn publish_changes(
         if before.dock_edge != after.dock_edge {
             let _ = guard.dock_edge_changed(emitter).await;
         }
+        if before.dock_apps != after.dock_apps {
+            let _ = guard.dock_apps_changed(emitter).await;
+        }
         if before.idle.dim_after != after.idle.dim_after {
             let _ = guard.idle_dim_after_changed(emitter).await;
         }
@@ -279,6 +282,11 @@ impl ConfigInterface {
             &value,
         )?;
         self.write(&Setting::Appearance(appearance))
+    }
+
+    #[zbus(property)]
+    fn dock_apps(&self) -> Vec<String> {
+        self.store.current().dock_apps.clone()
     }
 
     #[zbus(property)]

@@ -114,7 +114,7 @@ fn start(initial: &str) -> Fixture {
 
 #[test]
 fn the_service_owns_its_bus_name_and_exposes_the_loaded_file() {
-    let fixture = start("dock {\n    edge \"right\"\n}\n");
+    let fixture = start("dock {\n    edge \"right\"\n    apps \"org.unbound.Files\"\n}\n");
     let bus = DBusProxy::new(&fixture.client).expect("bus proxy");
     assert!(
         bus.name_has_owner(BUS_NAME.try_into().expect("bus name"))
@@ -123,6 +123,10 @@ fn the_service_owns_its_bus_name_and_exposes_the_loaded_file() {
     assert_eq!(
         String::try_from(get(&fixture.client, "DockEdge")).expect("string"),
         "right"
+    );
+    assert_eq!(
+        Vec::<String>::try_from(get(&fixture.client, "DockApps")).expect("app IDs"),
+        ["org.unbound.Files"]
     );
     assert_eq!(
         u64::try_from(get(&fixture.client, "IdleLockAfter")).expect("u64"),

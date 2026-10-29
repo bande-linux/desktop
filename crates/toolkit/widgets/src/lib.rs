@@ -1,3 +1,4 @@
+mod animation;
 mod button;
 mod label;
 mod secure_field;
@@ -6,10 +7,13 @@ mod stack;
 mod text_field;
 mod toggle;
 
+use std::cell::Cell;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Instant;
 
 use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
 
+pub use animation::Animated;
 pub use button::{BUTTON_HEIGHT, Button};
 pub use label::Label;
 pub use secure_field::SecureField;
@@ -17,11 +21,12 @@ pub use slider::{SLIDER_HEIGHT, Slider};
 pub use stack::{Axis, Stack};
 pub use text_field::{TEXT_FIELD_HEIGHT, TextField};
 pub use toggle::{SWITCH_SIZE, Toggle};
+pub use unbound_spring::Spring;
 
+use unbound_graphics::{Appearance, Item, Palette, Point, Rect, Scene, Shape, TextSystem};
 pub use unbound_graphics::{
     Cursor, Event, Key, Modifiers, Pointer, PointerButton, Scroll, ScrollPhase, ScrollSource,
 };
-use unbound_graphics::{Item, Palette, Point, Rect, Scene, Shape, TextSystem};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct WidgetId(u64);
@@ -59,7 +64,10 @@ pub struct Context {
     pub text: TextSystem,
     pub palette: Palette,
     pub keyboard_navigation: bool,
+    pub reduce_motion: bool,
     focus: Option<WidgetId>,
+    now: Instant,
+    animating: Cell<bool>,
 }
 
 impl Context {
@@ -68,8 +76,15 @@ impl Context {
             text,
             palette,
             keyboard_navigation: false,
+            reduce_motion: false,
             focus: None,
+            now: Instant::now(),
+            animating: Cell::new(false),
         }
+    }
+
+    pub fn now(&self) -> Instant {
+        self.now
     }
 
     pub fn is_focused(&self, id: WidgetId) -> bool {
@@ -130,6 +145,7 @@ pub trait Widget {
 pub struct Ui {
     root: Box<dyn Widget>,
     cx: Context,
+    clock: Box<dyn Fn() -> Instant>,
     captured: Option<(WidgetId, PointerButton)>,
     hovered: Vec<WidgetId>,
     pointer: Option<Point>,
@@ -214,6 +230,7 @@ impl Ui {
         Self {
             root,
             cx,
+            clock: Box::new(Instant::now),
             captured: None,
             hovered: Vec::new(),
             pointer: None,
@@ -238,7 +255,23 @@ impl Ui {
             .place(&mut self.cx, Rect::new(0.0, 0.0, size.width, size.height));
     }
 
+    pub fn set_clock(&mut self, clock: impl Fn() -> Instant + 'static) {
+        self.clock = Box::new(clock);
+        self.cx.now = (self.clock)();
+    }
+
+    pub fn set_appearance(&mut self, appearance: Appearance) {
+        self.cx.palette = appearance.palette();
+        self.cx.reduce_motion = appearance.reduce_motion;
+    }
+
+    pub fn is_animating(&self) -> bool {
+        self.cx.animating.get()
+    }
+
     pub fn scene(&mut self, width: u32, height: u32) -> Scene {
+        self.cx.now = (self.clock)();
+        self.cx.animating.set(false);
         self.layout(Size::new(width as f32, height as f32));
         let mut items = Vec::new();
         self.root.paint(&self.cx, &mut items);
@@ -251,6 +284,7 @@ impl Ui {
     }
 
     pub fn handle(&mut self, event: &Event) -> bool {
+        self.cx.now = (self.clock)();
         match event {
             Event::PointerDown(pointer) => {
                 let hovered = self.hover(Some(pointer));
@@ -426,6 +460,7 @@ impl Ui {
     }
 
     pub fn perform(&mut self, request: &ActionRequest) -> bool {
+        self.cx.now = (self.clock)();
         let target = WidgetId(request.target_node.0);
         if request.action == Action::Focus {
             let accepts = self.accepts_focus(target);

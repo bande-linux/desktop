@@ -10,6 +10,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
+use std::time::Instant;
 
 use accesskit::{ActionRequest, TreeUpdate};
 use raw_window_handle::{
@@ -50,7 +51,7 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::{
 use crate::access::Accessibility;
 use crate::appearance::AppearanceWatch;
 use crate::capture::Capture;
-use crate::chrome::{Chrome, Control, Frame, SHADOW_MARGIN, TITLE_BAR_HEIGHT, Zone};
+use crate::chrome::{Chrome, Control, Frame, RESIZE_MARGIN, TITLE_BAR_HEIGHT, Zone};
 use crate::clipboard::Clipboard;
 use crate::lock::{Locked, SessionLock};
 use crate::scale::{Scaling, SurfaceScale};
@@ -516,7 +517,7 @@ impl Window {
         }
     }
 
-    fn shadow_margin(&self) -> u32 {
+    fn resize_margin(&self) -> u32 {
         let toplevel = self.state.toplevel;
         let floating = !(toplevel.maximized || toplevel.fullscreen || toplevel.tiled);
         let transparent = match &self.gpu {
@@ -524,7 +525,7 @@ impl Window {
             Gpu::Starting(_) | Gpu::Unavailable => true,
         };
         if self.chrome.is_some() && floating && transparent {
-            SHADOW_MARGIN
+            RESIZE_MARGIN
         } else {
             0
         }
@@ -533,7 +534,7 @@ impl Window {
     fn frame(&self) -> Frame {
         let (width, height) = self.geometry();
         Frame {
-            margin: self.shadow_margin() as f32,
+            margin: self.resize_margin() as f32,
             title: self.title_height() as f32,
             width: width as f32,
             height: height as f32,
@@ -714,6 +715,8 @@ impl Window {
             position: Point::new(pointer.position.x - origin.x, pointer.position.y - origin.y),
             ..pointer
         };
+        let now = Instant::now();
+        let reduce_motion = self.appearance.current().reduce_motion;
         let Some(chrome) = self.chrome.as_mut() else {
             passed.push(event);
             return;
@@ -741,7 +744,7 @@ impl Window {
                     }
                     return;
                 }
-                if chrome.hover(&frame, Some(pointer.position)) {
+                if chrome.hover(&frame, Some(pointer.position), now, reduce_motion) {
                     self.needs_redraw = true;
                 }
                 let content = zone == Zone::Content || chrome.content_buttons > 0;
@@ -820,7 +823,7 @@ impl Window {
             }
             Event::PointerLeave => {
                 chrome.content_buttons = 0;
-                if chrome.hover(&frame, None) {
+                if chrome.hover(&frame, None, now, reduce_motion) {
                     self.needs_redraw = true;
                 }
                 if std::mem::take(&mut chrome.pointer_in_content) {
@@ -880,6 +883,7 @@ impl Window {
                 &appearance.palette(),
                 appearance.scheme,
                 active,
+                Instant::now(),
             ),
             None => scene.clone(),
         }
@@ -972,11 +976,12 @@ impl Window {
             let frame = self.frame();
             framed = self.framed(&frame, scene);
             self.frame_surface(&frame);
+
             &framed
         } else {
             scene
         };
-        self.needs_redraw = false;
+        self.needs_redraw = self.chrome.as_ref().is_some_and(|chrome| chrome.animating);
         self.surface.frame(&self.queue.handle(), ());
         self.state.frame_pending = true;
         let scale = self.scale();

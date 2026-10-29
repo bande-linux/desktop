@@ -1,3 +1,4 @@
+use std::f64::consts::TAU;
 use std::fmt;
 
 const CRITICAL_BAND: f64 = 1e-6;
@@ -42,6 +43,26 @@ impl fmt::Display for SpringError {
 impl std::error::Error for SpringError {}
 
 impl Spring {
+    pub const INTERACTIVE: Self = Self::preset(0.15, 0.86);
+    pub const QUICK: Self = Self::preset(0.25, 1.0);
+    pub const STANDARD: Self = Self::preset(0.35, 1.0);
+    pub const GENTLE: Self = Self::preset(0.5, 1.0);
+    pub const MOMENTUM: Self = Self::preset(0.4, 0.85);
+    pub const BOUNCY: Self = Self::preset(0.5, 0.7);
+    pub const SHAKE: Self = Self::preset(0.12, 0.2);
+    pub const FADE: Self = Self::preset(0.2, 1.0);
+
+    const fn preset(duration: f64, damping_ratio: f64) -> Self {
+        Self {
+            angular_frequency: TAU / duration,
+            damping_ratio,
+        }
+    }
+
+    pub fn from_duration_bounce(duration: f64, bounce: f64) -> Result<Self, SpringError> {
+        Self::new(TAU / duration, 1.0 - bounce)
+    }
+
     pub fn new(angular_frequency: f64, damping_ratio: f64) -> Result<Self, SpringError> {
         if !(angular_frequency.is_finite() && angular_frequency > 0.0) {
             return Err(SpringError::AngularFrequency(angular_frequency));
@@ -139,9 +160,52 @@ impl Animation {
         self.elapsed = 0.0;
     }
 
+    pub fn retarget_with_velocity(&mut self, target: f64, velocity: f64) {
+        self.start = State {
+            position: self.state().position,
+            velocity,
+        };
+        self.target = target;
+        self.elapsed = 0.0;
+    }
+
     pub fn is_settled(&self, position_tolerance: f64, velocity_tolerance: f64) -> bool {
         let state = self.state();
         (state.position - self.target).abs() <= position_tolerance
             && state.velocity.abs() <= velocity_tolerance
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Decay {
+    rate_per_millisecond: f64,
+}
+
+impl Decay {
+    pub const NORMAL: Self = Self {
+        rate_per_millisecond: 0.998,
+    };
+    pub const FAST: Self = Self {
+        rate_per_millisecond: 0.99,
+    };
+
+    pub fn state_at(&self, start: State, seconds: f64) -> State {
+        let per_second = self.rate_per_millisecond.ln() * 1000.0;
+        let remaining = (per_second * seconds).exp();
+        State {
+            position: start.position + start.velocity * (remaining - 1.0) / per_second,
+            velocity: start.velocity * remaining,
+        }
+    }
+
+    pub fn project(&self, start: State) -> f64 {
+        start.position - start.velocity / (self.rate_per_millisecond.ln() * 1000.0)
+    }
+}
+
+pub const RUBBER_BAND_CONSTANT: f64 = 0.55;
+
+pub fn rubber_band(overshoot: f64, dimension: f64) -> f64 {
+    let stretched = RUBBER_BAND_CONSTANT * overshoot.abs();
+    (dimension * stretched / (dimension + stretched)).copysign(overshoot)
 }

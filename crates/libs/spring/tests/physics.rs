@@ -2,7 +2,9 @@
 
 use std::f64::consts::PI;
 
-use unbound_spring::{Animation, Spring, SpringError, State};
+use unbound_spring::{
+    Animation, Decay, RUBBER_BAND_CONSTANT, Spring, SpringError, State, rubber_band,
+};
 
 const OMEGA: f64 = 12.0;
 const TARGET: f64 = 3.0;
@@ -191,4 +193,101 @@ fn non_physical_parameters_are_rejected() {
         Spring::new(1.0, f64::INFINITY),
         Err(SpringError::DampingRatio(_))
     ));
+}
+
+#[test]
+fn presets_settle_to_a_thousandth_of_the_distance_in_their_named_times() {
+    let settled_after = |spring: Spring, seconds: f64| {
+        let mut animation = Animation::new(spring, released(0.0, 0.0), 1000.0);
+        animation.advance(seconds);
+        animation.is_settled(1.0, 50.0)
+    };
+    for (spring, settles) in [
+        (Spring::QUICK, 0.37),
+        (Spring::STANDARD, 0.51),
+        (Spring::GENTLE, 0.73),
+        (Spring::FADE, 0.29),
+    ] {
+        assert!(settled_after(spring, settles * 1.05), "{spring:?}");
+        assert!(!settled_after(spring, settles * 0.8), "{spring:?}");
+    }
+}
+
+#[test]
+fn duration_and_bounce_map_to_frequency_and_damping() {
+    let spring = Spring::from_duration_bounce(0.4, 0.15).expect("valid spring");
+
+    assert!(close(spring.angular_frequency(), 2.0 * PI / 0.4, 1e-12));
+    assert!(close(spring.damping_ratio(), 0.85, 1e-12));
+    assert_eq!(spring, Spring::MOMENTUM);
+    assert!(Spring::from_duration_bounce(0.3, 1.5).is_err());
+}
+
+#[test]
+fn momentum_overshoots_slightly_and_critical_presets_never() {
+    let peak = |spring: Spring| {
+        let mut animation = Animation::new(spring, released(0.0, 0.0), 1.0);
+        (0..2000)
+            .map(|_| animation.advance(0.001).position)
+            .fold(f64::MIN, f64::max)
+    };
+
+    assert!((peak(Spring::MOMENTUM) - 1.006).abs() < 0.002);
+    assert!((peak(Spring::BOUNCY) - 1.046).abs() < 0.005);
+    assert!(peak(Spring::STANDARD) <= 1.0);
+}
+
+#[test]
+fn an_injected_velocity_carries_into_the_new_target() {
+    let mut animation = Animation::new(Spring::STANDARD, released(0.0, 0.0), 100.0);
+    animation.advance(0.05);
+
+    animation.retarget_with_velocity(-100.0, 800.0);
+    let before = animation.state();
+    let after = animation.advance(0.001);
+
+    assert!(close(before.velocity, 800.0, 1e-12));
+    assert!(after.position > before.position);
+    animation.advance(2.0);
+    assert!(animation.is_settled(0.01, 0.01));
+}
+
+#[test]
+fn decay_loses_its_rate_of_speed_every_millisecond_and_stops_at_its_projection() {
+    let start = released(10.0, 2000.0);
+    for decay in [Decay::NORMAL, Decay::FAST] {
+        let after = decay.state_at(start, 0.001);
+        let rate = after.velocity / start.velocity;
+        assert!(rate > 0.98 && rate < 1.0);
+        let settled = decay.state_at(start, 20.0);
+        assert!(close(settled.position, decay.project(start), 1e-9));
+    }
+    assert!(close(
+        Decay::NORMAL.state_at(start, 0.001).velocity,
+        2000.0 * 0.998,
+        1e-9
+    ));
+    assert!(Decay::NORMAL.project(start) > Decay::FAST.project(start));
+}
+
+#[test]
+fn rubber_band_resists_more_the_further_it_is_pulled() {
+    let dimension = 400.0;
+    assert!(close(
+        rubber_band(1.0, dimension),
+        RUBBER_BAND_CONSTANT,
+        1e-2
+    ));
+    assert!(close(
+        rubber_band(-50.0, dimension),
+        -rubber_band(50.0, dimension),
+        1e-12
+    ));
+    let pulls: Vec<f64> = [0.0, 100.0, 200.0, 400.0, 10_000.0]
+        .iter()
+        .map(|pull| rubber_band(*pull, dimension))
+        .collect();
+    assert!(pulls.windows(2).all(|pair| pair[0] < pair[1]));
+    assert!(pulls[4] < dimension);
+    assert!(pulls[2] - pulls[1] < pulls[1] - pulls[0]);
 }

@@ -1,6 +1,6 @@
 [package]
 name = "unbound-xdg"
-description = "Desktop entries, app icons and app launching for the Unbound shell"
+description = "Desktop entries, app icons, MIME types, default apps and app launching for Unbound"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true

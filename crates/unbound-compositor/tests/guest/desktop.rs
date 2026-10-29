@@ -441,6 +441,31 @@ fn super_shift_3_saves_the_screen_to_the_desktop() {
     );
 }
 
+fn crosshair_centre(overlaid: &Scanout, before: &Scanout) -> (usize, usize) {
+    let (width, height) = (overlaid.width / 2, overlaid.height / 2);
+    let changed = |x: usize, y: usize| differs(pixel(overlaid, x, y), pixel(before, x, y));
+    let x = (0..width)
+        .max_by_key(|&x| (0..height).filter(|&y| changed(x, y)).count())
+        .unwrap_or_default();
+    let y = (0..height)
+        .max_by_key(|&y| (0..width).filter(|&x| changed(x, y)).count())
+        .unwrap_or_default();
+    (x, y)
+}
+
+fn outlined(selecting: &Scanout, edge: (usize, usize), inward: (isize, isize)) -> bool {
+    let at = |step: isize| {
+        let x = edge.0.checked_add_signed(inward.0 * step)?;
+        let y = edge.1.checked_add_signed(inward.1 * step)?;
+        Some(pixel(selecting, x, y))
+    };
+    let (inside, outside) = (at(4), at(-4));
+    (-1..=1).filter_map(at).any(|line| {
+        inside.is_some_and(|inside| differs(line, inside))
+            && outside.is_none_or(|outside| differs(line, outside))
+    })
+}
+
 #[test]
 #[ignore = "needs the ci/vm guest"]
 fn super_shift_4_saves_a_dragged_out_area_to_the_desktop() {
@@ -459,8 +484,8 @@ fn super_shift_4_saves_a_dragged_out_area_to_the_desktop() {
     }
     thread::sleep(Duration::from_secs(1));
     let corner = |scanout: &Scanout| {
-        (0..16)
-            .flat_map(|y| (0..16).map(move |x| (x, y)))
+        (0..32)
+            .flat_map(|y| (0..32).map(move |x| (x, y)))
             .map(|(x, y)| pixel(scanout, x, y))
             .collect::<Vec<_>>()
     };
@@ -470,15 +495,17 @@ fn super_shift_4_saves_a_dragged_out_area_to_the_desktop() {
     wait_for("the crosshair of the area overlay", STARTUP, || {
         corner(&scanout()) != corner(&before)
     });
+    thread::sleep(Duration::from_millis(500));
+    let pressed_at = crosshair_centre(&scanout(), &before);
+    let drag = (8, 5);
     mouse.frame(&[(EV_KEY, BTN_LEFT, 1)]);
     for _ in 0..30 {
-        mouse.frame(&[(EV_REL, REL_X, 8), (EV_REL, REL_Y, 5)]);
+        mouse.frame(&[(EV_REL, REL_X, drag.0), (EV_REL, REL_Y, drag.1)]);
         thread::sleep(Duration::from_millis(10));
     }
     thread::sleep(Duration::from_secs(1));
     let selecting = scanout();
     selecting.save("m19-area-selection");
-    let screen_under_selection = pixel(&selecting, 2, 2);
     mouse.frame(&[(EV_KEY, BTN_LEFT, 0)]);
     wait_for("a saved area screenshot", STARTUP, || {
         saved_screenshots(desktop_folder).len() == 1
@@ -491,26 +518,65 @@ fn super_shift_4_saves_a_dragged_out_area_to_the_desktop() {
         .expect("the screenshot is a PNG")
         .to_rgb8();
     let (width, height) = (saved.width() as usize, saved.height() as usize);
-    assert!(width > 20 && width < screen.width, "width {width}");
-    assert!(height > 20 && height < screen.height, "height {height}");
     let shot = Scanout {
         width,
         height,
         rgb: saved.pixels().map(|pixel| pixel.0).collect(),
     };
     shot.save("m19-area-screenshot");
-    assert_ne!(
-        screen_under_selection,
-        pixel(&screen, 2, 2),
-        "the selection is drawn over the screen while dragging"
+    assert!(width > 20 && width < screen.width, "width {width}");
+    assert!(height > 20 && height < screen.height, "height {height}");
+    assert!(
+        (width as isize * drag.1 as isize - height as isize * drag.0 as isize).abs()
+            <= 2 * drag.0 as isize,
+        "{width} x {height} is not the shape of a {drag:?} drag"
     );
-    let differing = (0..height)
-        .flat_map(|y| (0..width).map(move |x| (x, y)))
-        .filter(|&(x, y)| shot.rgb[y * width + x] != pixel(&screen, x, y))
-        .count();
+
     let cursor = (unbound_compositor::ARROW_WIDTH * unbound_compositor::ARROW_HEIGHT) as usize;
+    let differing_at = |(left, top): (usize, usize)| {
+        (0..height)
+            .flat_map(|y| (0..width).map(move |x| (x, y)))
+            .filter(|&(x, y)| shot.rgb[y * width + x] != pixel(&screen, left + x, top + y))
+            .count()
+    };
+    let origin = (pressed_at.0.saturating_sub(1)..=pressed_at.0 + 1)
+        .flat_map(|x| (pressed_at.1.saturating_sub(1)..=pressed_at.1 + 1).map(move |y| (x, y)))
+        .min_by_key(|&origin| differing_at(origin))
+        .unwrap_or(pressed_at);
+    let differing = differing_at(origin);
     assert!(
         differing <= cursor,
-        "{differing} pixels differ from the screen"
+        "{differing} pixels differ from the screen at {origin:?}, where the drag began at {pressed_at:?}"
+    );
+
+    let (left, top) = origin;
+    let (right, bottom) = (left + width, top + height);
+    let (middle_x, middle_y) = (left + width / 2, top + height / 2);
+    for (edge, inward, name) in [
+        ((middle_x, top), (0, 1), "top"),
+        ((middle_x, bottom), (0, -1), "bottom"),
+        ((left, middle_y), (1, 0), "left"),
+        ((right, middle_y), (-1, 0), "right"),
+    ] {
+        assert!(
+            outlined(&selecting, edge, inward),
+            "no outline on the {name} edge of the selection at {edge:?}"
+        );
+    }
+    let centre = (middle_x, middle_y);
+    assert!(
+        differs(
+            pixel(&selecting, centre.0, centre.1),
+            pixel(&before, centre.0, centre.1)
+        ),
+        "the inside of the selection is drawn over the screen"
+    );
+    let beside = (right + 40, middle_y);
+    assert!(
+        !differs(
+            pixel(&selecting, beside.0, beside.1),
+            pixel(&before, beside.0, beside.1)
+        ),
+        "the screen outside the selection is left as it was"
     );
 }

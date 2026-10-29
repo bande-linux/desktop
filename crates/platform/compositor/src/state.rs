@@ -86,7 +86,8 @@ use unbound_render::VulkanRenderer;
 use crate::clock::Vblank;
 use crate::cursor::{self, Cursor, CursorTheme};
 use crate::lock::Lock;
-use crate::scene::{ShadowElement, WindowElement};
+use crate::motion::IconRect;
+use crate::scene::{Closing, Drawn, PieceElement, ShadowElement, WindowElement, window_elements};
 use crate::session::{LockScreen, SessionClient, SessionRole};
 use crate::shell;
 use crate::window::Window;
@@ -133,7 +134,10 @@ pub fn automatic_scale(size: Size<i32, Physical>, physical_size_mm: Size<i32, Ra
 pub(crate) enum Placed<'a> {
     Surface(WlSurface, Point<i32, Logical>),
     Window(&'a Window),
+    Closing(&'a Closing),
 }
+
+type Composed = (Vec<OutputElement>, Vec<(WlSurface, Option<Drawn>)>);
 
 pub(crate) struct ExclusiveLayer {
     pub(crate) surface: WlSurface,
@@ -146,7 +150,7 @@ pub struct State {
     pub(crate) blockers: smithay::reexports::calloop::LoopHandle<'static, State>,
     pub(crate) output_size: Size<i32, Physical>,
     pub(crate) output_scale: f64,
-    refresh: Duration,
+    pub(crate) refresh: Duration,
     scanout_node: Option<DrmNode>,
     compositor_state: CompositorState,
     xdg_shell_state: XdgShellState,
@@ -187,6 +191,9 @@ pub struct State {
     pub(crate) popup_grab: Option<PopupGrab<State>>,
     pub(crate) swallowed_button: Option<u32>,
     pub(crate) minimize_sequence: u64,
+    pub(crate) closing: Vec<Closing>,
+    pub(crate) icon_rects: Vec<IconRect>,
+    pub(crate) reduce_motion: bool,
     pub(crate) needs_redraw: bool,
     pub(crate) pointer_location: Point<f64, Logical>,
     pub(crate) cursor_shown: bool,
@@ -269,7 +276,7 @@ impl Headless {
         output.change_current_state(Some(mode), None, None, Some((0, 0).into()));
         output.set_preferred(mode);
         output.create_global::<State>(&handle);
-        handle.create_global::<State, UnboundShellV1, ()>(4, ());
+        handle.create_global::<State, UnboundShellV1, ()>(5, ());
         State::create_capture_globals(&handle);
         let state = State {
             display_handle: handle.clone(),
@@ -332,6 +339,9 @@ impl Headless {
             popup_grab: None,
             swallowed_button: None,
             minimize_sequence: 0,
+            closing: Vec::new(),
+            icon_rects: Vec::new(),
+            reduce_motion: false,
             needs_redraw: false,
             pointer_location: (
                 f64::from(output_size.w) / 2.0,
@@ -467,8 +477,17 @@ impl Headless {
         &self.state.windows
     }
 
-    pub fn render_elements(&self, renderer: &mut VulkanRenderer) -> Vec<OutputElement> {
-        self.scene_elements(renderer, true)
+    pub fn render_elements(&mut self, renderer: &mut VulkanRenderer) -> Vec<OutputElement> {
+        let (elements, drawn) = self.compose(renderer, true);
+        for window in &mut self.state.windows {
+            window.drawn = None;
+        }
+        for (surface, drawn) in drawn {
+            if let Some(index) = self.state.window_index(&surface) {
+                self.state.windows[index].drawn = drawn;
+            }
+        }
+        elements
     }
 
     pub(crate) fn scene_elements(
@@ -476,6 +495,11 @@ impl Headless {
         renderer: &mut VulkanRenderer,
         with_cursor: bool,
     ) -> Vec<OutputElement> {
+        self.compose(renderer, with_cursor).0
+    }
+
+    fn compose(&self, renderer: &mut VulkanRenderer, with_cursor: bool) -> Composed {
+        let mut drawn = Vec::new();
         let mut elements: Vec<OutputElement> = if with_cursor {
             self.cursor_elements(renderer)
         } else {
@@ -483,7 +507,7 @@ impl Headless {
         };
         let scale = self.state.output_scale;
         let key = self.state.key_window();
-        for placed in self.state.scene() {
+        for placed in self.state.scene(true) {
             match placed {
                 Placed::Surface(surface, location) => {
                     elements.extend(render_elements_from_surface_tree(
@@ -497,11 +521,14 @@ impl Headless {
                 }
                 Placed::Window(window) => {
                     let active = key.as_ref() == Some(window.surface());
-                    elements.extend(window.render_elements(renderer, scale, active));
+                    let (shown, look) = window_elements(window, renderer, scale, active);
+                    elements.extend(shown);
+                    drawn.push((window.surface().clone(), look));
                 }
+                Placed::Closing(closing) => elements.extend(closing.render_elements(scale)),
             }
         }
-        elements
+        (elements, drawn)
     }
 
     pub fn popup_count(&self) -> usize {
@@ -814,16 +841,17 @@ impl State {
     }
 
     pub(crate) fn stack(&self) -> Vec<(WlSurface, Point<i32, Logical>)> {
-        self.scene()
+        self.scene(false)
             .into_iter()
-            .map(|placed| match placed {
-                Placed::Surface(surface, origin) => (surface, origin),
-                Placed::Window(window) => (window.surface().clone(), window.surface_origin()),
+            .filter_map(|placed| match placed {
+                Placed::Surface(surface, origin) => Some((surface, origin)),
+                Placed::Window(window) => Some((window.surface().clone(), window.surface_origin())),
+                Placed::Closing(_) => None,
             })
             .collect()
     }
 
-    pub(crate) fn scene(&self) -> Vec<Placed<'_>> {
+    pub(crate) fn scene(&self, rendered: bool) -> Vec<Placed<'_>> {
         if self.is_locked() {
             return self
                 .locked_stack()
@@ -848,17 +876,31 @@ impl State {
             .windows
             .iter()
             .rev()
-            .filter(|window| window.visible())
+            .filter(|window| {
+                if rendered {
+                    window.rendered()
+                } else {
+                    window.visible()
+                }
+            })
             .collect::<Vec<_>>();
         let fullscreen_in_front = visible
             .first()
             .is_some_and(|window| window.has_state(xdg_toplevel::State::Fullscreen));
         let (front, rest) = visible.split_at(usize::from(fullscreen_in_front));
+        let (leaving, rest): (Vec<&Window>, Vec<&Window>) =
+            rest.iter().partition(|window| window.is_minimized());
         [
             layers(Layer::Overlay),
+            self.window_entries(&leaving),
             self.window_entries(front),
             layers(Layer::Top),
-            self.window_entries(rest),
+            self.closing
+                .iter()
+                .filter(|_| rendered)
+                .map(Placed::Closing)
+                .collect(),
+            self.window_entries(&rest),
             layers(Layer::Bottom),
             layers(Layer::Background),
         ]
@@ -1002,7 +1044,12 @@ impl State {
                 self.focus(Some(surface.clone()));
             }
             (false, true) => self.place_behind_frontmost(surface),
-            (true, false) => self.refocus_after_losing(surface),
+            (true, false) => {
+                if let Some(index) = self.window_index(surface) {
+                    self.close_window(index);
+                }
+                self.refocus_after_losing(surface);
+            }
             _ => {}
         }
     }
@@ -1052,6 +1099,7 @@ impl XdgShellHandler for State {
     fn toplevel_destroyed(&mut self, toplevel: ToplevelSurface) {
         self.withdraw_toplevel(toplevel.wl_surface());
         if let Some(index) = self.window_index(toplevel.wl_surface()) {
+            self.close_window(index);
             self.windows.remove(index);
         }
         self.needs_redraw = true;
@@ -1137,6 +1185,7 @@ render_elements! {
     Surface=WaylandSurfaceRenderElement<VulkanRenderer>,
     Window=WindowElement<WaylandSurfaceRenderElement<VulkanRenderer>>,
     Shadow=ShadowElement,
+    Closing=WindowElement<PieceElement>,
     Cursor=MemoryRenderBufferRenderElement<VulkanRenderer>,
 }
 

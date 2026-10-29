@@ -1,9 +1,19 @@
 use std::hash::{DefaultHasher, Hash, Hasher};
 
+use smithay::backend::renderer::element::surface::{
+    WaylandSurfaceRenderElement, WaylandSurfaceTexture, render_elements_from_surface_tree,
+};
 use smithay::backend::renderer::element::{Element, Id, Kind, RenderElement};
 use smithay::backend::renderer::utils::{CommitCounter, DamageSet, OpaqueRegions};
+use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::utils::{Buffer as BufferCoords, Physical, Point, Rectangle, Scale};
-use unbound_render::{RenderError, RoundedRect, Shadow, VulkanFrame, VulkanRenderer};
+
+use crate::motion::{Look, Motion};
+use crate::state::OutputElement;
+use crate::window::Window;
+use unbound_render::{
+    RenderError, RoundedRect, Shadow, VulkanFrame, VulkanRenderer, VulkanTexture,
+};
 
 pub(crate) const CORNER_RADIUS: f64 = 12.0;
 
@@ -34,13 +44,6 @@ pub(crate) struct Placement {
 }
 
 impl Placement {
-    pub(crate) fn fixed(area: Area) -> Self {
-        Self {
-            from: area,
-            to: area,
-        }
-    }
-
     fn is_fixed(&self) -> bool {
         self.from == self.to
     }
@@ -296,4 +299,218 @@ impl RenderElement<VulkanRenderer> for ShadowElement {
     ) -> Result<(), RenderError> {
         frame.draw_shadow(&self.shadow, damage)
     }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct Piece {
+    pub(crate) id: Id,
+    pub(crate) texture: VulkanTexture,
+    pub(crate) src: Rectangle<f64, BufferCoords>,
+    pub(crate) geometry: Rectangle<i32, Physical>,
+}
+
+pub struct PieceElement {
+    piece: Piece,
+    alpha: f32,
+}
+
+impl PieceElement {
+    pub(crate) fn new(piece: Piece, alpha: f32) -> Self {
+        Self { piece, alpha }
+    }
+}
+
+impl Element for PieceElement {
+    fn id(&self) -> &Id {
+        &self.piece.id
+    }
+
+    fn current_commit(&self) -> CommitCounter {
+        CommitCounter::default()
+    }
+
+    fn src(&self) -> Rectangle<f64, BufferCoords> {
+        self.piece.src
+    }
+
+    fn geometry(&self, _scale: Scale<f64>) -> Rectangle<i32, Physical> {
+        self.piece.geometry
+    }
+
+    fn alpha(&self) -> f32 {
+        self.alpha
+    }
+}
+
+impl RenderElement<VulkanRenderer> for PieceElement {
+    fn draw(
+        &self,
+        frame: &mut VulkanFrame<'_, '_>,
+        src: Rectangle<f64, BufferCoords>,
+        dst: Rectangle<i32, Physical>,
+        damage: &[Rectangle<i32, Physical>],
+        opaque_regions: &[Rectangle<i32, Physical>],
+    ) -> Result<(), RenderError> {
+        smithay::backend::renderer::Frame::render_texture_from_to(
+            frame,
+            &self.piece.texture,
+            src,
+            dst,
+            damage,
+            opaque_regions,
+            smithay::utils::Transform::Normal,
+            self.alpha,
+        )
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct Drawn {
+    pieces: Vec<Piece>,
+    area: Area,
+    pub(crate) look: Look,
+    active: bool,
+}
+
+pub(crate) struct Closing {
+    drawn: Drawn,
+    shadow: Id,
+    pub(crate) motion: Motion,
+}
+
+impl Closing {
+    pub(crate) fn new(mut drawn: Drawn, motion: Motion) -> Self {
+        for piece in &mut drawn.pieces {
+            piece.id = Id::new();
+        }
+        Self {
+            drawn,
+            shadow: Id::new(),
+            motion,
+        }
+    }
+
+    pub(crate) fn render_elements(&self, scale: f64) -> Vec<OutputElement> {
+        let Some(look) = self.motion.shown() else {
+            return Vec::new();
+        };
+        if look.alpha <= 0.0 {
+            return Vec::new();
+        }
+        let shown = look.rect.to_physical(scale);
+        let clip = rounded(shown, shaped_radius(self.drawn.area, shown, scale));
+        let placement = Placement {
+            from: self.drawn.area,
+            to: shown,
+        };
+        let alpha = look.alpha as f32;
+        self.drawn
+            .pieces
+            .iter()
+            .map(|piece| {
+                OutputElement::Closing(WindowElement::new(
+                    PieceElement::new(piece.clone(), alpha),
+                    placement,
+                    clip,
+                ))
+            })
+            .chain([OutputElement::Shadow(ShadowElement::new(
+                self.shadow.clone(),
+                clip,
+                self.drawn.active,
+                scale,
+                alpha,
+            ))])
+            .collect()
+    }
+}
+
+fn shaped_radius(area: Area, shown: Area, scale: f64) -> f64 {
+    let shrink = (shown.size.w / area.size.w.max(1.0))
+        .min(shown.size.h / area.size.h.max(1.0))
+        .min(1.0);
+    CORNER_RADIUS * scale * shrink
+}
+
+pub(crate) fn window_elements(
+    window: &Window,
+    renderer: &mut VulkanRenderer,
+    scale: f64,
+    active: bool,
+) -> (Vec<OutputElement>, Option<Drawn>) {
+    let look = window.shown_look();
+    let alpha = look.map_or(1.0, |look| look.alpha) as f32;
+    if alpha <= 0.0 {
+        return (Vec::new(), None);
+    }
+    let origin = window
+        .surface_origin()
+        .to_f64()
+        .to_physical(scale)
+        .to_i32_round::<i32>();
+    let surfaces: Vec<WaylandSurfaceRenderElement<VulkanRenderer>> =
+        render_elements_from_surface_tree(
+            renderer,
+            window.surface(),
+            origin,
+            scale,
+            alpha,
+            Kind::Unspecified,
+        );
+    let fullscreen = window.has_state(xdg_toplevel::State::Fullscreen);
+    let Some(geometry) = window.geometry().filter(|_| !fullscreen || look.is_some()) else {
+        return (
+            surfaces.into_iter().map(OutputElement::Surface).collect(),
+            None,
+        );
+    };
+    let real = Rectangle::new(geometry.location.to_f64(), geometry.size.to_f64());
+    let area = real.to_physical(scale);
+    let look = look.unwrap_or(Look::shown(real));
+    let shown = look.rect.to_physical(scale);
+    let radius = if fullscreen {
+        0.0
+    } else {
+        shaped_radius(area, shown, scale)
+    };
+    let clip = rounded(shown, radius);
+    let placement = Placement {
+        from: area,
+        to: shown,
+    };
+    let pieces = surfaces
+        .iter()
+        .filter_map(|surface| match surface.texture() {
+            WaylandSurfaceTexture::Texture(texture) => Some(Piece {
+                id: surface.id().clone(),
+                texture: texture.clone(),
+                src: surface.src(),
+                geometry: surface.geometry(Scale::from(scale)),
+            }),
+            WaylandSurfaceTexture::SolidColor(_) => None,
+        })
+        .collect();
+    let shadow = (!fullscreen).then(|| {
+        OutputElement::Shadow(ShadowElement::new(
+            window.shadow.clone(),
+            clip,
+            active,
+            scale,
+            alpha,
+        ))
+    });
+    let elements = surfaces
+        .into_iter()
+        .map(|surface| OutputElement::Window(WindowElement::new(surface, placement, clip)))
+        .chain(shadow)
+        .collect();
+    (
+        elements,
+        Some(Drawn {
+            pieces,
+            area,
+            look,
+            active,
+        }),
+    )
 }

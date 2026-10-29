@@ -137,7 +137,7 @@ impl TestClient {
     }
 
     pub fn join_shell(&mut self, server: &mut Headless) {
-        let shell: UnboundShellV1 = self.bind("unbound_shell_v1", 4);
+        let shell: UnboundShellV1 = self.bind("unbound_shell_v1", 5);
         self.globals.shell.shell = Some(shell);
         let _: ExtForeignToplevelListV1 = self.bind("ext_foreign_toplevel_list_v1", 1);
         self.exchange(server);
@@ -170,6 +170,19 @@ impl TestClient {
     pub fn toggle_control_center(&mut self, server: &mut Headless) {
         let shell = self.globals.shell.shell.as_ref().expect("joined the shell");
         shell.toggle_control_center();
+        self.exchange(server);
+    }
+
+    pub fn set_icon_rect(
+        &mut self,
+        server: &mut Headless,
+        app_id: &str,
+        layer: usize,
+        rect: (i32, i32, i32, i32),
+    ) {
+        let shell = self.globals.shell.shell.as_ref().expect("joined the shell");
+        let surface = &self.globals.shell.layers[layer].0;
+        shell.set_icon_rect(app_id.to_owned(), surface, rect.0, rect.1, rect.2, rect.3);
         self.exchange(server);
     }
 

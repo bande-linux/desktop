@@ -153,6 +153,7 @@ impl FrameScheduler {
                 Phase::Waiting(vblank) => {
                     compositor.take_redraw();
                     self.wanted = false;
+                    compositor.animate(vblank.time);
                     compositor.latch();
                     let deadline = self.clock.deadline(vblank);
                     let submission = output.submit(compositor)?;
@@ -179,6 +180,7 @@ impl FrameScheduler {
                 Phase::Rendered(vblank) => {
                     compositor.present(vblank)?;
                     presented = Some(vblank);
+                    self.wanted |= compositor.take_redraw();
                     self.phase = Phase::Idle;
                 }
             }

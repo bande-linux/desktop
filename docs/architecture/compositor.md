@@ -58,6 +58,19 @@ when they reach the screen is Unbound's own.
   are taken when the frame is latched and sent at its vblank (on DRM, at the page-flip event
   with its time and sequence); a superseded commit's feedback is discarded, and a render that
   overruns its vblank is presented at the next one.
+- **Window motion.** Every window state change is animated by springs on x, y, width, height
+  and opacity, sampled at the frame's vblank (`Headless::animate`, called by the scheduler
+  before it latches a frame). Opening grows from 95 % and fades in (`standard`); closing keeps
+  the last frame's textures and shrinks to 92 % while fading out (`quick`); minimising scales
+  into the app's Dock icon, reported with `unbound_shell_v1.set_icon_rect`, or toward the
+  Dock's centre (the bottom edge without a Dock), drawn above the Dock (`gentle`); restoring
+  plays it back. Zoom and full screen (`standard`, `gentle`) start at the request and stretch
+  the current buffer until the app commits its new size. Each operation only sets a new
+  destination, so a second action mid-flight turns back from the current position and
+  velocity. Input, focus and configure go to the destination at once; the input stack never
+  contains a window that is only still animating. An animation that has never been sampled
+  is drawn at its destination. Reduce Motion (`Headless::set_reduce_motion`; not yet read
+  from the portal's `reduced-motion`) keeps rectangles in place and fades with `fade`.
 - **Springs.** `crates/libs/spring` is the closed-form solution for under-, critically and
   overdamped springs, parameterised by angular frequency $\omega$ and damping ratio $\zeta$. A
   trajectory depends only on elapsed time, never on frame rate, and retargeting keeps position
@@ -97,4 +110,4 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `zwp_pointer_constraints_v1` / `relative_pointer` | Pointer lock for games | P1 | not implemented |
 | `zwp_pointer_gestures_v1` | Trackpad gestures | P1 | not implemented |
 | `zwp_keyboard_shortcuts_inhibit_v1` | Keyboard passthrough for VMs and remote desktop | P2 | not implemented |
-| `unbound_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Control Center | P0 | implemented, shell clients only |
+| `unbound_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Control Center, Dock icon rectangles | P0 | implemented, shell clients only |

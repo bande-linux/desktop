@@ -10,6 +10,7 @@ mod ime;
 mod input;
 mod lock;
 mod logind;
+mod motion;
 mod popup;
 mod render;
 mod scanout;

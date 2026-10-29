@@ -93,7 +93,8 @@ Targets on hardware (Apple Silicon, 120 Hz ProMotion panel, refresh interval 8.3
 | Memory | compositor ≤ 64 MB RSS with 8 windows; toolkit app ≤ 30 MB RSS |
 
 CI cannot measure photons or a real GPU, so `ci/perf` measures on lavapipe with
-`unbound-bench` on every push and splits metrics into two kinds:
+`unbound-bench` on every push to `main` (and on a branch commit whose message contains
+`[perf]`) and splits metrics into two kinds:
 
 - **Exact metrics**, independent of machine load, compared exactly: pixels repainted per
   frame equal the damaged area; bytes uploaded per frame equal the damaged rows; frames

@@ -3600,6 +3600,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "unbound-fs"
+version = "0.1.0"
+dependencies = [
+ "jiff",
+ "rustix 1.1.6",
+ "tempfile",
+ "unbound-l10n",
+ "unbound-xdg",
+]
+
+[[package]]
 name = "unbound-graphics"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,18 @@
+[package]
+name = "unbound-fs"
+description = "Trash, file operations with undo, and folder watching for Unbound"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+jiff.workspace = true
+rustix = { workspace = true, features = ["fs", "process"] }
+unbound-l10n.workspace = true
+unbound-xdg.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

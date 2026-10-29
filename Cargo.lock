@@ -3865,6 +3865,7 @@ dependencies = [
  "unbound-l10n",
  "unbound-protocols",
  "unbound-test-bus",
+ "unbound-widgets",
  "wayland-backend",
  "wayland-client",
  "wayland-protocols",
@@ -3891,6 +3892,7 @@ dependencies = [
  "accesskit",
  "parley",
  "unbound-graphics",
+ "unbound-spring",
 ]
 
 [[package]]

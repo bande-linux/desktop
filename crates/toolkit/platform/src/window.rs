@@ -10,6 +10,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
+use std::time::Instant;
 
 use accesskit::{ActionRequest, TreeUpdate};
 use raw_window_handle::{
@@ -714,6 +715,8 @@ impl Window {
             position: Point::new(pointer.position.x - origin.x, pointer.position.y - origin.y),
             ..pointer
         };
+        let now = Instant::now();
+        let reduce_motion = self.appearance.current().reduce_motion;
         let Some(chrome) = self.chrome.as_mut() else {
             passed.push(event);
             return;
@@ -741,7 +744,7 @@ impl Window {
                     }
                     return;
                 }
-                if chrome.hover(&frame, Some(pointer.position)) {
+                if chrome.hover(&frame, Some(pointer.position), now, reduce_motion) {
                     self.needs_redraw = true;
                 }
                 let content = zone == Zone::Content || chrome.content_buttons > 0;
@@ -820,7 +823,7 @@ impl Window {
             }
             Event::PointerLeave => {
                 chrome.content_buttons = 0;
-                if chrome.hover(&frame, None) {
+                if chrome.hover(&frame, None, now, reduce_motion) {
                     self.needs_redraw = true;
                 }
                 if std::mem::take(&mut chrome.pointer_in_content) {
@@ -880,6 +883,7 @@ impl Window {
                 &appearance.palette(),
                 appearance.scheme,
                 active,
+                Instant::now(),
             ),
             None => scene.clone(),
         }
@@ -972,11 +976,12 @@ impl Window {
             let frame = self.frame();
             framed = self.framed(&frame, scene);
             self.frame_surface(&frame);
+
             &framed
         } else {
             scene
         };
-        self.needs_redraw = false;
+        self.needs_redraw = self.chrome.as_ref().is_some_and(|chrome| chrome.animating);
         self.surface.frame(&self.queue.handle(), ());
         self.state.frame_pending = true;
         let scale = self.scale();

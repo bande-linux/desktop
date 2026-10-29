@@ -3,10 +3,12 @@ use std::io::{BufRead, BufReader};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use unbound_compositor::BACKGROUND;
+use unbound_test_bus::SessionBus;
 
 use crate::card::{Scanout, card_with_driver};
 use crate::uinput::{
@@ -71,6 +73,10 @@ fn running(name: &str) -> bool {
 }
 
 fn start_desktop() -> Desktop {
+    start_desktop_with(&[])
+}
+
+fn start_desktop_with(environment: &[(&str, &str)]) -> Desktop {
     fs::create_dir_all(RUNTIME_DIR).expect("runtime directory");
     fs::set_permissions(RUNTIME_DIR, fs::Permissions::from_mode(0o700)).expect("permissions");
     let mut child = Command::new(COMPOSITOR)
@@ -78,6 +84,7 @@ fn start_desktop() -> Desktop {
         .env("XDG_CURRENT_DESKTOP", "Unbound")
         .env("HOME", "/root")
         .env("SHELL", "/bin/bash")
+        .envs(environment.iter().copied())
         .stdout(Stdio::piped())
         .spawn()
         .expect("start unbound-compositor");
@@ -246,44 +253,106 @@ fn firefox_runs_on_wayland_and_opens_a_context_menu() {
 
 const GUEST_PASSWORD: &str = "unbound-test";
 
+#[derive(Clone, Default)]
+struct LockedHint(Arc<Mutex<Option<bool>>>);
+
+impl LockedHint {
+    fn get(&self) -> Option<bool> {
+        *self.0.lock().expect("locked hint")
+    }
+}
+
+struct FakeSession {
+    hint: LockedHint,
+}
+
+#[zbus::interface(name = "org.freedesktop.login1.Session")]
+impl FakeSession {
+    fn set_locked_hint(&self, locked: bool) {
+        *self.hint.0.lock().expect("locked hint") = Some(locked);
+    }
+}
+
+fn fake_logind(bus: &SessionBus) -> (zbus::blocking::Connection, LockedHint) {
+    let hint = LockedHint::default();
+    let logind = bus.connect().expect("logind stand-in connection");
+    logind
+        .object_server()
+        .at(
+            "/org/freedesktop/login1/session/auto",
+            FakeSession { hint: hint.clone() },
+        )
+        .expect("serve the session");
+    logind
+        .request_name("org.freedesktop.login1")
+        .expect("own logind's name");
+    (logind, hint)
+}
+
+const ROUNDING: u8 = 2;
+const CARET_PIXELS: usize = 2 * 32;
+
+fn differs(shown: [u8; 3], expected: [u8; 3]) -> bool {
+    shown
+        .iter()
+        .zip(expected)
+        .any(|(shown, expected)| shown.abs_diff(expected) > ROUNDING)
+}
+
+fn field_differs_from(scanout: &Scanout, reference: &Scanout) -> usize {
+    let lower_half = scanout.width * scanout.height / 2;
+    scanout.rgb[lower_half..]
+        .iter()
+        .zip(&reference.rgb[lower_half..])
+        .filter(|&(&shown, &expected)| differs(shown, expected))
+        .count()
+}
+
 #[test]
 #[ignore = "needs the ci/vm guest"]
 fn ctrl_super_q_locks_and_the_password_unlocks() {
+    let bus = SessionBus::start().expect("private bus standing in for the system bus");
+    let (_logind, locked_hint) = fake_logind(&bus);
     let mut keyboard = VirtualDevice::keyboard_and_mouse();
-    let _desktop = start_desktop();
+    let _desktop = start_desktop_with(&[("DBUS_SYSTEM_BUS_ADDRESS", bus.address())]);
     let icon = (32, 33);
     wait_for("the panel", STARTUP, || {
         running("unbound-panel")
             && current_scanout().is_some_and(|scanout| pixel(&scanout, icon.0, 200) != BACKGROUND)
     });
     thread::sleep(Duration::from_secs(1));
-    let unlocked = scanout();
 
     keyboard.chord(&[KEY_LEFTCTRL, KEY_LEFTMETA], KEY_Q);
-    wait_for("the lock screen", STARTUP, || {
-        running("unbound-lock") && pixel(&scanout(), icon.0, 200) == BACKGROUND
+    wait_for("the session to lock", STARTUP, || {
+        locked_hint.get() == Some(true) && running("unbound-lock")
     });
     thread::sleep(Duration::from_secs(2));
     let locked = scanout();
     locked.save("m17-lock-screen");
 
-    let below_clock =
-        |scanout: &Scanout| scanout.rgb[scanout.width * scanout.height / 2..].to_vec();
     keyboard.type_text("wrong password");
     wait_for("the typed password", STARTUP, || {
-        below_clock(&scanout()) != below_clock(&locked)
+        field_differs_from(&scanout(), &locked) > CARET_PIXELS
     });
     keyboard.tap(KEY_ENTER);
-    wait_for("the cleared field after the rejection", STARTUP, || {
-        below_clock(&scanout()) == below_clock(&locked)
+    wait_for("the empty field after the rejection", STARTUP, || {
+        field_differs_from(&scanout(), &locked) <= CARET_PIXELS
     });
     scanout().save("m17-lock-rejected");
-    assert!(running("unbound-lock"));
+    assert_eq!(
+        locked_hint.get(),
+        Some(true),
+        "a wrong password leaves the session locked"
+    );
+    assert!(
+        running("unbound-lock"),
+        "a wrong password leaves the lock screen up"
+    );
 
     keyboard.type_text(GUEST_PASSWORD);
     keyboard.type_text("\n");
-    wait_for("the desktop to come back", STARTUP, || {
-        pixel(&scanout(), icon.0, 200) == pixel(&unlocked, icon.0, 200)
+    wait_for("the session to unlock", STARTUP, || {
+        locked_hint.get() == Some(false)
     });
     wait_for("the lock screen to exit", STARTUP, || {
         !running("unbound-lock")

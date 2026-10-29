@@ -1,3 +1,4 @@
+mod app;
 mod capture;
 mod clock;
 mod cursor;
@@ -10,13 +11,16 @@ mod ime;
 mod input;
 mod lock;
 mod logind;
+mod motion;
 mod popup;
 mod render;
 mod scanout;
+mod scene;
 mod session;
 mod shell;
 mod state;
 mod sync;
+mod tile;
 mod window;
 
 pub use clock::{FrameClock, FrameOutput, FrameScheduler, Poll, SAFETY_MARGIN, Submission, Vblank};
@@ -31,8 +35,8 @@ pub use environment::{
 pub use logind::{SessionRequest, follow_session};
 pub use render::{BACKGROUND, FrameStats, Renderer, Snapshot};
 pub use session::{
-    CLIPBOARD_DAEMON, CONTROL_CENTER, DOCK, GREETER, LAUNCHER, LOCK_SCREEN, MENU_BAR, SCREENSHOT,
-    SESSION_CLIENT_RESTART_THROTTLE, SessionRole, SessionUpkeep,
+    CLIPBOARD_DAEMON, CONTROL_CENTER, DOCK, GREETER, LAUNCHER, LOCK_SCREEN, MENU_BAR, REVIEW,
+    SCREENSHOT, SESSION_CLIENT_RESTART_THROTTLE, SessionRole, SessionUpkeep,
 };
 pub use state::{
     Headless, OutputConfig, OutputElement, REFRESH, Rect, ScanoutDevice, automatic_scale,

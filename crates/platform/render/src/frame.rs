@@ -9,17 +9,65 @@ use smithay::utils::{Buffer as BufferCoords, Physical, Rectangle, Transform};
 use smithay::reexports::rustix::ioctl;
 
 use crate::{
-    ATTACHMENT, BYTES_PER_PIXEL, COLOR_LAYERS, Export, Rect, RenderError, TRANSFER_SOURCE,
+    ATTACHMENT, BYTES_PER_PIXEL, COLOR_LAYERS, Export, Program, Rect, RenderError, TRANSFER_SOURCE,
     VulkanFramebuffer, VulkanRenderer, VulkanTexture, barrier, disjoint,
 };
 
-pub(crate) const QUAD_BYTES: u32 = 64;
+mod blur;
 
+pub use blur::Blur;
+pub(crate) use blur::BlurChain;
+
+pub(crate) const QUAD_BYTES: u32 = 112;
+
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+pub struct RoundedRect {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub radius: f32,
+}
+
+impl RoundedRect {
+    pub fn components(self) -> [f32; 4] {
+        [self.x, self.y, self.width, self.height]
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Shadow {
+    pub caster: RoundedRect,
+    pub window: RoundedRect,
+    pub blur: f32,
+    pub color: [f32; 4],
+}
+
+impl Shadow {
+    pub fn bounds(&self) -> Rect {
+        let reach = 3.0 * self.blur;
+        let left = (self.caster.x - reach).floor();
+        let top = (self.caster.y - reach).floor();
+        let right = (self.caster.x + self.caster.width + reach).ceil();
+        let bottom = (self.caster.y + self.caster.height + reach).ceil();
+        Rect::new(
+            left as i32,
+            top as i32,
+            (right - left) as i32,
+            (bottom - top) as i32,
+        )
+    }
+}
+
+#[derive(Default)]
 struct Quad {
     color: [f32; 4],
     destination: Rect,
     source: Rectangle<f64, BufferCoords>,
     alpha: f32,
+    blur: f32,
+    clip: RoundedRect,
+    caster: RoundedRect,
 }
 
 pub struct VulkanFrame<'frame, 'buffer> {
@@ -27,8 +75,10 @@ pub struct VulkanFrame<'frame, 'buffer> {
     target: u64,
     format: vk::Format,
     image: vk::Image,
+    target_view: vk::ImageView,
     bounds: Rect,
-    bound: Option<bool>,
+    bound: Option<Program>,
+    clip: Option<RoundedRect>,
     drawn: Vec<Rect>,
     finished: bool,
     _framebuffer: PhantomData<&'frame mut VulkanFramebuffer<'buffer>>,
@@ -91,43 +141,21 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
                 vk::AccessFlags2::COLOR_ATTACHMENT_READ | vk::AccessFlags2::COLOR_ATTACHMENT_WRITE,
             ),
         );
-        let attachment = vk::RenderingAttachmentInfo::default()
-            .image_view(view)
-            .image_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-            .load_op(vk::AttachmentLoadOp::LOAD)
-            .store_op(vk::AttachmentStoreOp::STORE);
-        unsafe {
-            device.cmd_begin_rendering(
-                commands,
-                &vk::RenderingInfo::default()
-                    .render_area(scissor(bounds))
-                    .layer_count(1)
-                    .color_attachments(slice::from_ref(&attachment)),
-            );
-            device.cmd_set_viewport(
-                commands,
-                0,
-                &[vk::Viewport {
-                    x: 0.0,
-                    y: 0.0,
-                    width: bounds.width as f32,
-                    height: bounds.height as f32,
-                    min_depth: 0.0,
-                    max_depth: 1.0,
-                }],
-            );
-        }
-        Ok(Self {
+        let frame = Self {
             renderer,
             target: framebuffer.id,
             format,
             image,
+            target_view: view,
             bounds,
             bound: None,
+            clip: None,
             drawn: Vec::new(),
             finished: false,
             _framebuffer: PhantomData,
-        })
+        };
+        frame.begin_rendering(view, bounds, vk::AttachmentLoadOp::LOAD);
+        Ok(frame)
     }
 
     fn clip(&self, rects: impl IntoIterator<Item = Rect>, within: Rect) -> Vec<Rect> {
@@ -168,14 +196,49 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         self.drawn.push(rect);
     }
 
-    fn bind(&mut self, solid: bool) -> Result<(), RenderError> {
-        if self.bound == Some(solid) {
+    pub fn clip_to(&mut self, clip: Option<RoundedRect>) {
+        self.clip = clip;
+    }
+
+    pub fn draw_shadow(
+        &mut self,
+        shadow: &Shadow,
+        damage: &[Rectangle<i32, Physical>],
+    ) -> Result<(), RenderError> {
+        let destination = shadow.bounds();
+        let rects = self.clip(
+            damage
+                .iter()
+                .map(|rect| physical(rect).translated(destination.x, destination.y)),
+            destination,
+        );
+        if rects.is_empty() {
+            return Ok(());
+        }
+        self.bind(Program::Shadow)?;
+        self.draw(
+            &Quad {
+                color: shadow.color,
+                destination,
+                alpha: 1.0,
+                blur: shadow.blur,
+                clip: shadow.window,
+                caster: shadow.caster,
+                ..Quad::default()
+            },
+            &rects,
+        );
+        Ok(())
+    }
+
+    fn bind(&mut self, program: Program) -> Result<(), RenderError> {
+        if self.bound == Some(program) {
             return Ok(());
         }
         let pipeline = *self
             .renderer
             .pipelines
-            .get(&(self.format, solid))
+            .get(&(self.format, program))
             .ok_or(RenderError::UnsupportedFormat)?;
         unsafe {
             self.renderer.device.cmd_bind_pipeline(
@@ -184,11 +247,37 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
                 pipeline,
             );
         }
-        self.bound = Some(solid);
+        self.bound = Some(program);
         Ok(())
     }
 
     fn draw(&mut self, quad: &Quad, rects: &[Rect]) {
+        self.draw_quad(quad, rects);
+        for &rect in rects {
+            self.painted(rect);
+        }
+    }
+
+    fn push_texture(&mut self, view: vk::ImageView) {
+        let image_info = vk::DescriptorImageInfo::default()
+            .image_view(view)
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
+        let write = vk::WriteDescriptorSet::default()
+            .dst_binding(0)
+            .descriptor_type(vk::DescriptorType::SAMPLED_IMAGE)
+            .image_info(slice::from_ref(&image_info));
+        unsafe {
+            self.renderer.push_descriptor.cmd_push_descriptor_set(
+                self.renderer.command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.renderer.pipeline_layout,
+                0,
+                slice::from_ref(&write),
+            );
+        }
+    }
+
+    fn draw_quad(&mut self, quad: &Quad, rects: &[Rect]) {
         let constants: Vec<u8> = quad
             .color
             .iter()
@@ -205,8 +294,11 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
                 quad.source.size.w as f32,
                 quad.source.size.h as f32,
                 quad.alpha,
-                0.0,
+                quad.blur,
             ])
+            .chain(quad.clip.components())
+            .chain(quad.caster.components())
+            .chain([quad.clip.radius, quad.caster.radius, 0.0, 0.0])
             .flat_map(f32::to_ne_bytes)
             .collect();
         let device = &self.renderer.device;
@@ -225,9 +317,6 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
                 device.cmd_set_scissor(commands, 0, slice::from_ref(&scissor(rect)));
                 device.cmd_draw(commands, 4, 1, 0, 0);
             }
-        }
-        for &rect in rects {
-            self.painted(rect);
         }
     }
 
@@ -263,6 +352,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
                 .end_command_buffer(self.renderer.command_buffer)
         }?;
         self.renderer.submit_and_wait()?;
+        self.renderer.retire_unused_blur_chains();
         let written = self.write_back(&readbacks);
         self.renderer.recycle_staging();
         if let Some(target) = self.renderer.targets.get_mut(&self.target) {
@@ -402,17 +492,18 @@ impl Frame for VulkanFrame<'_, '_> {
                 .map(|rect| physical(rect).translated(destination.x, destination.y)),
             destination,
         );
-        if color.is_opaque() {
+        if color.is_opaque() && self.clip.is_none() {
             self.fill(color, &rects);
             return Ok(());
         }
-        self.bind(true)?;
+        self.bind(Program::Solid)?;
         self.draw(
             &Quad {
                 color: color.components(),
                 destination,
-                source: Rectangle::default(),
                 alpha: 1.0,
+                clip: self.clip.unwrap_or_default(),
+                ..Quad::default()
             },
             &rects,
         );
@@ -454,29 +545,15 @@ impl Frame for VulkanFrame<'_, '_> {
         if rects.is_empty() {
             return Ok(());
         }
-        self.bind(false)?;
-        let image_info = vk::DescriptorImageInfo::default()
-            .image_view(view)
-            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
-        let write = vk::WriteDescriptorSet::default()
-            .dst_binding(0)
-            .descriptor_type(vk::DescriptorType::SAMPLED_IMAGE)
-            .image_info(slice::from_ref(&image_info));
-        unsafe {
-            self.renderer.push_descriptor.cmd_push_descriptor_set(
-                self.renderer.command_buffer,
-                vk::PipelineBindPoint::GRAPHICS,
-                self.renderer.pipeline_layout,
-                0,
-                slice::from_ref(&write),
-            );
-        }
+        self.bind(Program::Texture)?;
+        self.push_texture(view);
         self.draw(
             &Quad {
-                color: [0.0; 4],
                 destination,
                 source: src,
                 alpha,
+                clip: self.clip.unwrap_or_default(),
+                ..Quad::default()
             },
             &rects,
         );

@@ -24,7 +24,19 @@ when they reach the screen is Unbound's own.
   back only for tests), the DRM output with `DrmCompositor`. Each surface keeps a texture for its
   lifetime and an import uploads only the buffer's damaged rows; the damage tracker repaints only
   damaged regions and skips what an opaque window covers. The output is laid out in points and
-  drawn in pixels at its scale. Blur, rounded corners and transforms are not built yet.
+  drawn in pixels at its scale.
+- **Window shape and depth.** Every window that is not full screen is clipped to its
+  `xdg_surface` window geometry with 12 pt rounded corners (antialiased in the fragment shader)
+  and casts a soft shadow drawn analytically (a Gaussian-blurred rounded box): the key window's
+  is larger and darker (blur 14 pt, 10 pt down, 42 %) than other windows' (7 pt, 4 pt, 22 %).
+  The shadow is cut out under the window, so translucent windows do not show it through. All
+  windows get this, including client-side decorated toolkits that draw their own shadow outside
+  the geometry: clipping replaces it with ours, so every app looks alike. Full-screen windows
+  have neither and keep direct scanout. A window's opaque region loses exactly the corner
+  pixels its shape leaves uncovered, so damage below an opaque window is still skipped, and a
+  shadow's element covers its blur reach, so moving or focusing a window damages its shadow.
+  `ci/perf` damages a 64 × 64 patch inside the top window rather than at its corner, since the
+  corner now lets what lies below show through by design.
 - **dma-buf.** `linux-dmabuf-v1` serves single-plane ARGB8888 and XRGB8888 buffers with the
   LINEAR modifier: version 3 headless, version 4 with feedback (main device and a scanout tranche
   of the primary plane's formats) on a DRM device, whose node accepted dma-bufs carry so that
@@ -46,6 +58,28 @@ when they reach the screen is Unbound's own.
   are taken when the frame is latched and sent at its vblank (on DRM, at the page-flip event
   with its time and sequence); a superseded commit's feedback is discarded, and a render that
   overruns its vblank is presented at the next one.
+- **Window motion.** Every window state change is animated by springs on x, y, width, height
+  and opacity, sampled at the frame's vblank (`Headless::animate`, called by the scheduler
+  before it latches a frame). Opening grows from 95 % and fades in (`standard`); closing keeps
+  the last frame's textures and shrinks to 92 % while fading out (`quick`); minimising scales
+  into the app's Dock icon, reported with `unbound_shell_v1.set_icon_rect`, or toward the
+  Dock's centre (the bottom edge without a Dock), drawn above the Dock (`gentle`); restoring
+  plays it back. Zoom and full screen (`standard`, `gentle`) start at the request and stretch
+  the current buffer until the app commits its new size. Each operation only sets a new
+  destination, so a second action mid-flight turns back from the current position and
+  velocity. Input, focus and configure go to the destination at once; the input stack never
+  contains a window that is only still animating. An animation that has never been sampled
+  is drawn at its destination. Reduce Motion (`Headless::set_reduce_motion`; not yet read
+  from the portal's `reduced-motion`) keeps rectangles in place and fades with `fade`.
+- **Snapping and tiling.** Dragging a window until the pointer touches the left or right screen
+  edge previews the half, within 64 pt of a corner the quarter, and against the top of the
+  usable area zoom; the translucent rounded preview grows from the pointer (`quick`) only after
+  the pointer has rested 150 ms within 2 pt, so a fast drag past an edge never tiles. Releasing
+  over a shown preview springs the window into it. `Ctrl+Super+Left/Right` tile halves,
+  `Up/Down` on a half give its top or bottom quarter and on a quarter go back to the half,
+  `Up` zooms a free window and `Down` returns a zoomed one. Tiles get xdg-shell's tiled states
+  (for clients binding version 2) and no gaps. Dragging the edge two neighbouring tiles share
+  resizes both; dragging a tiled window away gives back its earlier size under the pointer.
 - **Springs.** `crates/libs/spring` is the closed-form solution for under-, critically and
   overdamped springs, parameterised by angular frequency $\omega$ and damping ratio $\zeta$. A
   trajectory depends only on elapsed time, never on frame rate, and retargeting keeps position
@@ -85,4 +119,5 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `zwp_pointer_constraints_v1` / `relative_pointer` | Pointer lock for games | P1 | not implemented |
 | `zwp_pointer_gestures_v1` | Trackpad gestures | P1 | not implemented |
 | `zwp_keyboard_shortcuts_inhibit_v1` | Keyboard passthrough for VMs and remote desktop | P2 | not implemented |
-| `unbound_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Control Center | P0 | implemented, shell clients only |
+| `unbound_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Control Center, Dock icon rectangles | P0 | implemented, shell clients only |
+| `unbound_app_v1` (own, in `unbound-shell-v1.xml`) | App-level requests: `quit_requested` on Super+Q instead of closing every window | P0 | implemented, every client |

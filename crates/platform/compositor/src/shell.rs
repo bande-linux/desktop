@@ -3,6 +3,7 @@ use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{
     Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource,
 };
+use smithay::utils::Rectangle;
 use smithay::wayland::compositor::with_states;
 use smithay::wayland::foreign_toplevel_list::{
     ForeignToplevelListHandler, ForeignToplevelListState,
@@ -108,22 +109,31 @@ impl State {
                 window.size.is_some() && toplevel_names(window.toplevel.wl_surface()).1 == app_id
             });
         self.windows = rest;
-        if chosen.iter().all(|window| window.is_minimized())
-            && let Some(latest) = chosen.iter_mut().max_by_key(|window| window.minimized)
+        let restored = chosen
+            .iter()
+            .all(|window| window.is_minimized())
+            .then(|| chosen.iter().max_by_key(|window| window.minimized))
+            .flatten()
+            .map(|latest| latest.toplevel.wl_surface().clone());
+        if let Some(index) = restored
+            .as_ref()
+            .and_then(|surface| chosen.iter().position(|window| window.surface() == surface))
         {
-            latest.minimized = None;
-            let latest = chosen.iter().position(|window| !window.is_minimized());
-            if let Some(index) = latest {
-                let window = chosen.remove(index);
-                chosen.push(window);
-            }
+            let window = chosen.remove(index);
+            chosen.push(window);
         }
-        let frontmost = chosen
+        self.windows.append(&mut chosen);
+        if let Some(restored) = &restored {
+            self.unminimize(restored);
+        }
+        let frontmost = self
+            .windows
             .iter()
             .rev()
-            .find(|window| window.visible())
+            .find(|window| {
+                window.visible() && toplevel_names(window.toplevel.wl_surface()).1 == app_id
+            })
             .map(|window| window.toplevel.wl_surface().clone());
-        self.windows.append(&mut chosen);
         if let Some(frontmost) = frontmost {
             self.needs_redraw = true;
             if self.exclusive_layer.is_none() {
@@ -203,6 +213,18 @@ impl Dispatch<UnboundShellV1, ()> for State {
         match request {
             unbound_shell_v1::Request::ActivateApp { app_id } => state.activate_app(&app_id),
             unbound_shell_v1::Request::ToggleControlCenter => state.toggle_control_center(),
+            unbound_shell_v1::Request::SetIconRect {
+                app_id,
+                surface,
+                x,
+                y,
+                width,
+                height,
+            } => state.set_icon_rect(
+                app_id,
+                surface,
+                Rectangle::new((x, y).into(), (width, height).into()),
+            ),
             unbound_shell_v1::Request::Destroy => {
                 state.shell_resources.retain(|shell| shell != resource);
             }

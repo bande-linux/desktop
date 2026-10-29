@@ -113,7 +113,7 @@ impl Headless {
         let size = self.output_size();
         let elements = self.scene_elements(renderer, paint_cursors);
         let mut target = renderer.create_buffer(Fourcc::Argb8888, Size::from((size.w, size.h)))?;
-        let mut damage = OutputDamageTracker::new(size, 1.0, Transform::Normal);
+        let mut damage = OutputDamageTracker::new(size, self.output_scale(), Transform::Normal);
         {
             let mut framebuffer = smithay::backend::renderer::Bind::bind(renderer, &mut target)?;
             damage

@@ -1,6 +1,6 @@
 use std::error::Error;
 use std::path::{Path, PathBuf};
-use std::process::ExitCode;
+use std::process::{Child, ExitCode};
 use std::time::Duration;
 
 use smithay::backend::drm::DrmEvent;
@@ -11,7 +11,7 @@ use smithay::utils::{Clock, Monotonic, Size};
 use smithay::wayland::socket::ListeningSocketSource;
 use unbound_compositor::{
     CLIPBOARD_DAEMON, CONTROL_CENTER, CursorTheme, DOCK, DrmOutput, FrameClock, FrameOutput,
-    FrameScheduler, GREETER, Headless, LAUNCHER, MENU_BAR, REFRESH, Renderer, SCREENSHOT,
+    FrameScheduler, GREETER, Headless, LAUNCHER, MENU_BAR, REFRESH, REVIEW, Renderer, SCREENSHOT,
     SessionRequest, SessionRole, SessionUpkeep, automatic_scale, export_session_environment,
     follow_session, notify_ready,
 };
@@ -187,7 +187,7 @@ fn listen<O: 'static>(
 fn start_user_session<O: 'static>(
     event_loop: &mut EventLoop<'static, App<O>>,
     app: &mut App<O>,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<Option<Child>, Box<dyn Error>> {
     let (lock_states, reported) = std::sync::mpsc::channel();
     match follow_session(reported) {
         Ok(requests) => {
@@ -217,7 +217,16 @@ fn start_user_session<O: 'static>(
             tracing::warn!("cannot start {executable}: {error}");
         }
     }
-    Ok(())
+    if std::env::var_os("UNBOUND_REVIEW_JOB").is_none() {
+        return Ok(None);
+    }
+    match app.compositor.spawn_shell_client(Path::new(REVIEW)) {
+        Ok(review) => Ok(Some(review)),
+        Err(error) => {
+            tracing::warn!("cannot start {REVIEW}: {error}");
+            Ok(None)
+        }
+    }
 }
 
 fn serve<O>(
@@ -230,16 +239,21 @@ where
     O::Error: Into<Box<dyn Error>>,
 {
     listen(&event_loop.handle(), &mut app)?;
-    let mut greeter = match session {
-        Session::User => {
-            start_user_session(event_loop, &mut app)?;
-            None
-        }
-        Session::Greeter => Some(app.compositor.spawn_shell_client(Path::new(GREETER))?),
+    let (mut greeter, mut review) = match session {
+        Session::User => (None, start_user_session(event_loop, &mut app)?),
+        Session::Greeter => (
+            Some(app.compositor.spawn_shell_client(Path::new(GREETER))?),
+            None,
+        ),
     };
     let mut timeout = None;
     loop {
         event_loop.dispatch(timeout, &mut app)?;
+        if let Some(child) = review.as_mut()
+            && child.try_wait()?.is_some()
+        {
+            review = None;
+        }
         let upkeep = match greeter.as_mut() {
             Some(greeter) => {
                 if greeter.try_wait()?.is_some() {
@@ -257,6 +271,7 @@ where
             output,
             scheduler,
         } = &mut app;
+        let snap_due = compositor.snap_tick(now());
         let frame = scheduler
             .poll(now, compositor, output)
             .map_err(Into::into)?;
@@ -264,11 +279,13 @@ where
         let idle_wait = compositor
             .idle_tick(now())
             .map(|at| at.saturating_sub(now()));
+        let snap_wait = snap_due.map(|at| at.saturating_sub(now()));
         timeout = upkeep
             .retry_in
             .into_iter()
             .chain(frame_wait)
             .chain(idle_wait)
+            .chain(snap_wait)
             .min();
     }
 }

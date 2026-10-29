@@ -63,7 +63,7 @@ fn run() -> Result<bool, Box<dyn Error>> {
     let info = Renderer::new()?.device_info().clone();
     tracing::info!("rendering on {} ({})", info.name, info.driver);
 
-    let (typical, typical_work) = frame_times(Repaint::OneWindowCorner)?;
+    let (typical, typical_work) = frame_times(Repaint::OneWindowPatch)?;
     let (full, _) = frame_times(Repaint::EveryWindow)?;
     let damaged_pixels = (TYPICAL_DAMAGE * TYPICAL_DAMAGE) as f64;
     let (latencies, late) = presentation_latency()?;
@@ -187,7 +187,7 @@ fn options() -> Result<Options, Box<dyn Error>> {
 
 #[derive(Clone, Copy)]
 enum Repaint {
-    OneWindowCorner,
+    OneWindowPatch,
     EveryWindow,
 }
 
@@ -220,10 +220,15 @@ fn frame_times(repaint: Repaint) -> Result<(Vec<Duration>, FrameStats), Box<dyn 
     for frame in 0..FRAMES {
         let bytes = &frames[(frame + 1) % 2];
         match repaint {
-            Repaint::OneWindowCorner => client.commit_buffer(
+            Repaint::OneWindowPatch => client.commit_buffer(
                 WINDOWS - 1,
                 &image(bytes),
-                (0, 0, TYPICAL_DAMAGE, TYPICAL_DAMAGE),
+                (
+                    TYPICAL_DAMAGE,
+                    TYPICAL_DAMAGE,
+                    TYPICAL_DAMAGE,
+                    TYPICAL_DAMAGE,
+                ),
             ),
             Repaint::EveryWindow => (0..WINDOWS).for_each(|window| {
                 client.commit_buffer(

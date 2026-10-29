@@ -11,12 +11,14 @@ hardware. Things noticed in passing go to the end of this file, not into a diff.
 Target: plan phases 1-6 done plus enough protocols for Firefox on Wayland. Pure Wayland:
 XWayland is deferred, to revisit only if a needed app has no Wayland path (macOS
 precedent: XQuartz is a separate, optional install). Progress is tracked per milestone
-below. Estimate at the head of `desktop/milestone-19`: about 68% of the way to the target,
-counting the six phases and Firefox equally: phase 1 done; phase 2 about 90% (explicit sync
-left); phase 3 about 85% (backlight dimming, Do Not Disturb persistence);
-phase 4 about 35% (panel and launcher, no menu bar, greeter, AT-SPI or input methods);
-phase 5 about 40% (portal and power without their UIs, no audio, network or Bluetooth);
-phase 6 about 45% (launcher, terminal, full-screen and area screenshots; no files or settings); Firefox
+below. Estimate at the head of `desktop/milestone-25`: about 78% of the way to the target,
+counting the six phases and Firefox equally, but ci/vm is not green from M18 on (see the
+explicit sync item and the last note), so the daily-driver bar is not met yet: phase 1
+done; phase 2 about 95% (explicit sync built, its guest tests fail); phase 3 about 85%
+(backlight dimming, Do Not Disturb persistence); phase 4 about 60% (panel, launcher, menu
+bar without app menus, greeter without a user picker; no AT-SPI or input methods); phase 5
+about 40% (portal and power without their UIs, no audio, network or Bluetooth); phase 6
+about 70% (launcher, terminal, screenshots, Files, System Settings; no monitor); Firefox
 runs natively on Wayland in the guest.
 
 ## Done
@@ -223,6 +225,35 @@ runs natively on Wayland in the guest.
   guest's 6.12 kernel offers DRM syncobjs (virtio-gpu gains them in a later series), so the guest
   cannot test the protocol; the implicit-fence half can be tested now with `sw_sync`
   fences imported into a udmabuf (`DMA_BUF_IOCTL_IMPORT_SYNC_FILE`).
+- [ ] **M22 Files** (`desktop/milestone-22`; CI not run) `unbound-files`: Miller columns
+  as the Finder's column view (Up/Down select, a selected folder opens in the next column,
+  Right enters, Left returns with the folder still selected, Super+Up encloses,
+  Super+Shift+. shows hidden files), names in Finder order, Quick Look on Space for
+  pictures (PNG), text, folders and other files with Finder-style sizes, following the
+  selection. Guest screendumps `m22-files-columns`, `m22-files-quick-look`. Not done:
+  opening files with their default app, JPEG and other image formats, video, PDF,
+  Markdown rendering and syntax highlighting in Quick Look, the inspector, batch rename,
+  path bar, undo, Trash, watching folders for changes, drag and drop, AccessKit nodes.
+- [ ] **M23 System Settings** (`desktop/milestone-23`; CI not run) `unbound-settings`:
+  Appearance, Desktop & Dock and Lock Screen panes over `org.unbound.Config`, a search
+  field that narrows the sidebar and outlines matching controls, keyboard and pointer.
+  Not done: Displays, Sound, Network, Gestures & Shortcuts, following changes made
+  elsewhere (PropertiesChanged), AccessKit nodes.
+- [ ] **M24 Greeter** (`desktop/milestone-24`; CI not run) `unbound-greeter` speaks greetd's
+  IPC (create, answer the secret prompt, acknowledge info, start, cancel after a refusal)
+  inside `unbound-compositor --greeter`, which runs only the greeter and exits with it;
+  the package ships a greetd config. Guest screendump `m24-greeter`. Not done: a user
+  picker (Up/Down switches for now), a second secret prompt (one-time codes are
+  refused), power and accessibility menus, wallpaper, `unbound-session` (greetd starts
+  `unbound-compositor` directly), installing the greetd config.
+- [ ] **M25 Menu bar** (`desktop/milestone-25`; CI not run) `unbound_shell_v1` v3
+  `active_app`; `unbound-menubar` names the active app and shows the date and time.
+  Not done: app menus (needs a menu export protocol), status items and tray, Control
+  Center; the panel still shows its own clock.
+- [ ] **Next (phase 7)**: `xdg-decoration` negotiation (no server-side frames are drawn, so
+  answer `client_side`, as AppKit draws its own title bars in-process; the test client
+  needs a toplevel created before its first buffer), then GTK `settings.ini`/cursor
+  theme propagation; phase 8 after that.
 - [ ] **Toolkit on Vello and Parley** (track; moved into `desktop/integration`)
   `vello_cpu` first frame into `wl_shm`, `vello_gpu` afterwards, Parley text; goldens
   re-derived from scene descriptions; panel, launcher and terminal move over; a toolkit
@@ -343,3 +374,17 @@ boot framebuffer, K3 USB input. Later, the Apple DCP and agx drivers unlock:
   full-screen guest test pass. Suspects: a third hidden exclusive overlay layer and the
   compositor's single `exclusive_layer` slot, or guest CPU load from a third toolkit
   process; the next step is a headless test with two hidden exclusive shell layers.
+- Run 40804490664 (milestone-21 head 045eba7): the reworked lock test and the
+  M18 test pass; three guest tests fail. `sync::a_dmabuf_window_waits_for_the_write_fence`
+  maps the window only after the fence (correct) but draws it black
+  (`m20-implicit-fence-signalled`, in `/Volumes/Unbound/hil/hw2/desktop/m21/`), so a
+  udmabuf is composed without its pixels; untested whether an unfenced udmabuf does the
+  same. `sync::a_synced_commit` gets protocol error 3 on
+  `wp_linux_drm_syncobj_surface_v1`, and card0 (vkms) reports no syncobj eventfd.
+  The area test timed out with no overlay at all after Super+Shift+4 (the intermittent
+  M19 failure above, now with the pointer pushed to the corner). Each needs a headless
+  reproducer before another guest run.
+- `unbound-settings`, `unbound-files`, `unbound-launcher` and `unbound-lock` each read
+  `config.kdl` for the appearance in their own `main`; a shared helper belongs in
+  `unbound-config`.
+- unbound-polkit needs the user's sign-off before it goes to main.

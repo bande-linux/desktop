@@ -18,6 +18,7 @@ const CONFIG_INTERFACE: &str = "org.unbound.Config";
 #[derive(Debug, Clone, PartialEq)]
 pub enum BusEvent {
     DockApps(Vec<String>),
+    AutoHide(bool),
     Launcher(String, LauncherUpdate),
 }
 
@@ -112,6 +113,11 @@ fn follow_dock_apps(session: Connection, outbox: Outbox) {
                 .build()?
                 .receive_properties_changed()?;
             let publish = || {
+                if let Ok(auto_hide) = config.get_property::<bool>("DockAutoHide")
+                    && !outbox.send(BusEvent::AutoHide(auto_hide))
+                {
+                    return Ok(false);
+                }
                 config
                     .get_property::<Vec<String>>("DockApps")
                     .map(|apps| outbox.send(BusEvent::DockApps(apps)))

@@ -70,6 +70,7 @@ struct Dock {
     icon_scale: f64,
     reported: HashMap<String, Rect>,
     input: Option<Rect>,
+    zone: i32,
     menu: Option<MenuTarget>,
     autostart: Option<PathBuf>,
     bus: Receiver<BusEvent>,
@@ -229,12 +230,16 @@ impl Dock {
             }
         };
         match window.show_menu(Menu::new(items), MenuPlacement::AtPoint(at)) {
-            Ok(()) => self.menu = Some(target),
+            Ok(()) => {
+                self.menu = Some(target);
+                self.state.borrow_mut().set_menu_open(true, Instant::now());
+            }
             Err(error) => tracing::warn!("cannot show the Dock menu: {error}"),
         }
     }
 
     fn menu_action(&mut self, window: &mut Window, action: &str) {
+        self.state.borrow_mut().set_menu_open(false, Instant::now());
         let Some(target) = self.menu.take() else {
             return;
         };
@@ -281,10 +286,15 @@ impl Dock {
 
     fn report(&mut self, window: &mut Window) {
         let state = self.state.borrow();
-        let panel = state.panel();
-        if self.input != Some(panel) {
-            self.input = Some(panel);
-            window.set_input_region(Some(panel));
+        let region = state.input_region();
+        if self.input != Some(region) {
+            self.input = Some(region);
+            window.set_input_region(Some(region));
+        }
+        let zone = state.exclusive_zone();
+        if self.zone != zone {
+            self.zone = zone;
+            window.set_exclusive_zone(zone);
         }
         let rects = state.icon_rects();
         drop(state);
@@ -326,6 +336,9 @@ impl Dock {
         let now = Instant::now();
         for event in self.bus.try_iter().collect::<Vec<_>>() {
             match event {
+                BusEvent::AutoHide(auto_hide) => {
+                    self.state.borrow_mut().set_auto_hide(auto_hide, now);
+                }
                 BusEvent::DockApps(apps) => {
                     self.kept = apps;
                     self.sync();
@@ -372,7 +385,11 @@ impl App for Dock {
                 self.menu_action(window, &action);
                 window.request_redraw();
             }
-            WindowEvent::MenuClosed => self.menu = None,
+            WindowEvent::MenuClosed => {
+                self.menu = None;
+                self.state.borrow_mut().set_menu_open(false, Instant::now());
+                window.request_redraw();
+            }
             WindowEvent::ActiveApp(app_id) => {
                 self.state.borrow_mut().activated(&app_id);
                 window.request_redraw();
@@ -487,6 +504,7 @@ fn run() -> Result<(), WindowError> {
         icon_scale: window.scale(),
         reported: HashMap::new(),
         input: None,
+        zone: exclusive_zone(icon_size).round() as i32,
         menu: None,
         autostart: autostart_dir(config_home.as_deref(), home.as_deref()),
         bus,

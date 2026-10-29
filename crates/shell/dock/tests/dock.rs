@@ -392,3 +392,32 @@ fn open_at_login_copies_the_desktop_entry_into_autostart_and_removes_it_again() 
     assert!(!dir.join(id).exists());
     set_open_at_login(&dir, id, &entry, false).expect("already off");
 }
+
+#[test]
+fn an_auto_hidden_dock_slides_in_on_an_edge_push_and_out_after_the_pointer_leaves() {
+    let mut harness = Harness::new(DockEdge::Left, Scheme::Light);
+    let now = harness.clock.get();
+    harness.state.borrow_mut().set_auto_hide(true, now);
+    harness.advance(Duration::from_secs(1));
+    let strip = harness.state.borrow().input_region();
+    assert_eq!((strip.x, strip.width), (0.0, 2.0));
+    assert_eq!(harness.state.borrow().exclusive_zone(), 0);
+    assert!(harness.state.borrow().panel().x + harness.state.borrow().panel().width < 0.0);
+
+    let edge = Point::new(0.0, strip.y + strip.height / 2.0);
+    harness.ui.handle(&Event::PointerMove(Pointer::at(edge)));
+    harness.advance(Duration::from_millis(60));
+    assert!(!harness.state.borrow().is_shown());
+    harness.advance(Duration::from_millis(100));
+    harness.advance(Duration::from_secs(1));
+    assert!(harness.state.borrow().is_shown());
+    assert_eq!(harness.state.borrow().panel().x, 6.0);
+    let shown = harness.state.borrow().input_region();
+    assert_eq!((shown.x, shown.width), (0.0, 6.0 + 64.0));
+
+    harness.ui.handle(&Event::PointerLeave);
+    harness.advance(Duration::from_millis(300));
+    assert!(harness.state.borrow().is_shown());
+    harness.advance(Duration::from_millis(200));
+    assert!(!harness.state.borrow().is_shown());
+}

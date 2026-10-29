@@ -45,6 +45,10 @@ const BADGE_TEXT: f32 = 11.0;
 const PROGRESS_HEIGHT: f32 = 4.0;
 const HOLD_FOR_MENU: Duration = Duration::from_millis(500);
 const MENU_GAP: f32 = 6.0;
+const REVEAL_DWELL: Duration = Duration::from_millis(120);
+const HIDE_DELAY: Duration = Duration::from_millis(450);
+const EDGE_STRIP: f32 = 2.0;
+const HIDDEN_SHADOW: f32 = 24.0;
 
 #[derive(Debug, Clone)]
 pub struct DockApp {
@@ -196,6 +200,12 @@ pub struct DockState {
     surface: Size,
     panel: Rect,
     populated: bool,
+    auto_hide: bool,
+    reveal: Animated,
+    reveal_at: Option<Instant>,
+    hide_at: Option<Instant>,
+    pointer_inside: bool,
+    menu_open: bool,
 }
 
 pub type Shared = Rc<RefCell<DockState>>;
@@ -267,6 +277,12 @@ impl DockState {
             surface: Size::default(),
             panel: Rect::default(),
             populated: false,
+            auto_hide: false,
+            reveal: Animated::new(1.0),
+            reveal_at: None,
+            hide_at: None,
+            pointer_inside: false,
+            menu_open: false,
         };
         state.slots.push(Slot::new(Key::RunningSeparator, 0.0));
         state.slots.push(Slot::new(Key::TrashSeparator, 1.0));
@@ -473,10 +489,22 @@ impl DockState {
             .map(|since| *since + LAUNCH_TIMEOUT)
             .min();
         let hold = self.hold.as_ref().map(|(_, since)| *since + HOLD_FOR_MENU);
-        [label, launch, hold].into_iter().flatten().min()
+        [label, launch, hold, self.reveal_at, self.hide_at]
+            .into_iter()
+            .flatten()
+            .min()
     }
 
     pub fn tick(&mut self, now: Instant) {
+        if self.reveal_at.is_some_and(|at| now >= at) {
+            self.reveal_at = None;
+            self.slide(true, now);
+        }
+        if self.hide_at.is_some_and(|at| now >= at) {
+            self.hide_at = None;
+            self.hide_label(now);
+            self.slide(false, now);
+        }
         if let Some((key, since)) = self.hold.clone()
             && now >= since + HOLD_FOR_MENU
         {
@@ -522,6 +550,76 @@ impl DockState {
 
     pub fn panel(&self) -> Rect {
         self.panel
+    }
+
+    pub fn set_auto_hide(&mut self, auto_hide: bool, now: Instant) {
+        self.auto_hide = auto_hide;
+        self.reveal_at = None;
+        self.hide_at = None;
+        let shown = !auto_hide || self.pointer_inside || self.menu_open;
+        self.slide(shown, now);
+    }
+
+    pub fn set_menu_open(&mut self, open: bool, now: Instant) {
+        self.menu_open = open;
+        if !open && self.auto_hide && !self.pointer_inside {
+            self.hide_at = Some(now + HIDE_DELAY);
+        }
+    }
+
+    pub fn is_shown(&self) -> bool {
+        self.reveal.target() > 0.0
+    }
+
+    pub fn exclusive_zone(&self) -> i32 {
+        if self.auto_hide {
+            0
+        } else {
+            exclusive_zone(self.icon_size).round() as i32
+        }
+    }
+
+    pub fn input_region(&self) -> Rect {
+        let panel = self.panel;
+        let size = self.surface;
+        let depth = if self.is_shown() {
+            SCREEN_GAP + panel.width.min(panel.height)
+        } else {
+            EDGE_STRIP
+        };
+        let along = if vertical(self.edge) {
+            (panel.y, panel.height)
+        } else {
+            (panel.x, panel.width)
+        };
+        match self.edge {
+            DockEdge::Left => Rect::new(0.0, along.0, depth, along.1),
+            DockEdge::Right => Rect::new(size.width - depth, along.0, depth, along.1),
+            DockEdge::Top => Rect::new(along.0, 0.0, along.1, depth),
+            DockEdge::Bottom => Rect::new(along.0, size.height - depth, along.1, depth),
+        }
+    }
+
+    fn slide(&mut self, shown: bool, now: Instant) {
+        let target = if shown { 1.0 } else { 0.0 };
+        self.reveal
+            .animate_at(now, self.reduce_motion, target, Spring::STANDARD);
+    }
+
+    fn pointer_entered(&mut self, now: Instant) {
+        self.pointer_inside = true;
+        self.hide_at = None;
+        if self.auto_hide && !self.is_shown() && self.reveal_at.is_none() {
+            self.reveal_at = Some(now + REVEAL_DWELL);
+        }
+    }
+
+    fn pointer_left(&mut self, now: Instant) {
+        self.pointer_inside = false;
+        self.reveal_at = None;
+        if self.auto_hide && !self.menu_open && self.is_shown() {
+            self.hide_at = Some(now + HIDE_DELAY);
+        }
     }
 
     pub fn icon_rects(&self) -> Vec<(String, Rect)> {
@@ -592,10 +690,11 @@ impl DockState {
         let total = 2.0 * END_PADDING + lengths.iter().sum::<f32>();
         let start = ((along_length - total) / 2.0).max(SCREEN_GAP);
         let edge = self.edge;
+        let hidden = (1.0 - self.reveal.value_at(now).0) * (SCREEN_GAP + thick + HIDDEN_SHADOW);
         let cross = match edge {
-            DockEdge::Left | DockEdge::Top => SCREEN_GAP,
-            DockEdge::Right => size.width - SCREEN_GAP - thick,
-            DockEdge::Bottom => size.height - SCREEN_GAP - thick,
+            DockEdge::Left | DockEdge::Top => SCREEN_GAP - hidden,
+            DockEdge::Right => size.width - SCREEN_GAP - thick + hidden,
+            DockEdge::Bottom => size.height - SCREEN_GAP - thick + hidden,
         };
         let place = |along: f32, length: f32| {
             if vertical(edge) {
@@ -613,6 +712,15 @@ impl DockState {
         }
         self.slots
             .retain(|slot| !(slot.leaving && !slot.presence.value_at(now).1));
+    }
+
+    fn reach(&self, cell: Rect) -> Rect {
+        match self.edge {
+            DockEdge::Left => Rect::new(0.0, cell.y, cell.x + cell.width, cell.height),
+            DockEdge::Right => Rect::new(cell.x, cell.y, self.surface.width - cell.x, cell.height),
+            DockEdge::Top => Rect::new(cell.x, 0.0, cell.width, cell.y + cell.height),
+            DockEdge::Bottom => Rect::new(cell.x, cell.y, cell.width, self.surface.height - cell.y),
+        }
     }
 
     fn hover_enter(&mut self, key: Key, now: Instant) {
@@ -1314,7 +1422,7 @@ impl Widget for Dock {
                     id: slot.id,
                     key: slot.key.clone(),
                     state: self.state.clone(),
-                    frame: slot.cell,
+                    frame: state.reach(slot.cell),
                 }) as Box<dyn Widget>
             })
             .collect();
@@ -1325,7 +1433,19 @@ impl Widget for Dock {
     }
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
-        self.state.borrow().paint(cx, items);
+        let state = self.state.borrow();
+        state.reveal.value(cx);
+        state.paint(cx, items);
+    }
+
+    fn handle(&mut self, cx: &mut Context, event: &Event) -> bool {
+        let now = cx.now();
+        match event {
+            Event::PointerEnter(_) => self.state.borrow_mut().pointer_entered(now),
+            Event::PointerLeave => self.state.borrow_mut().pointer_left(now),
+            _ => return false,
+        }
+        true
     }
 
     fn access(&self, _cx: &Context) -> Node {

@@ -64,7 +64,19 @@ and live on `SettingChanged`, and delivers `WindowEvent::AppearanceChanged`. App
   creates the Vulkan device and a surface on the window; once it is ready, frames are drawn by
   `GpuRenderer` straight into the surface (mailbox when offered). Frames are paced by
   `wl_surface.frame`. Windows follow the output's fractional scale through `wp_viewporter`.
-  Text input v3 and the clipboard are supported. `UNBOUND_RENDERER=cpu` keeps a window on
+  Text input v3 and the clipboard are supported.
+  - **Window frame.** A toplevel gets its frame from the toolkit, as an `NSWindow` does: a
+    28 pt title bar with the title centred in semibold and close, minimise and zoom at the
+    top left, rounded corners and a shadow drawn into a 36 pt transparent margin outside the
+    window geometry (`set_window_geometry`). The controls are grey in inactive windows and
+    turn coloured with their symbols while the pointer is over the group, also in inactive
+    windows; they act on release inside. A drag on the bar moves the window, a double click
+    zooms. A 6 pt band outside every edge resizes, with corners reaching 14 pt along the
+    edges, and the pointer shows the direction. The input region covers the window and the
+    band only, so clicks on the shadow reach the window below. Maximised, tiled and full-screen
+    windows have no margin, and full screen hides the title bar. `Window::size` and pointer
+    positions are in the content's coordinates; the app draws only its content. The title bar
+    and its buttons are published to screen readers above the app's tree. `UNBOUND_RENDERER=cpu` keeps a window on
   `CpuRenderer`. `crates/testing/sample` is a settings card on the toolkit that `ci/perf` starts
   to measure.
 - **Widgets.** `ui` holds the widget tree: `Stack` (rows and columns with spacing and padding; a

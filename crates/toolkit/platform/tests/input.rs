@@ -15,7 +15,7 @@ use unbound_graphics::{
     Color, Event, Key, Modifiers, Pointer, PointerButton, Scene, ScrollPhase, ScrollSource,
 };
 use unbound_toolkit_platform::{
-    App, Edges, KeyboardFocus, LayerKind, LayerOptions, Role, Window, WindowEvent,
+    App, Edges, KeyboardFocus, LayerKind, LayerOptions, Role, TITLE_BAR_HEIGHT, Window, WindowEvent,
 };
 
 const OUTPUT: (i32, i32) = (320, 240);
@@ -209,6 +209,10 @@ impl Desktop {
         self.server.press_button(button, false, 0);
     }
 
+    fn point_into_content(&mut self, x: i32, y: i32) {
+        self.point_into_window(x, y + TITLE_BAR_HEIGHT as i32);
+    }
+
     fn point_into_window(&mut self, x: i32, y: i32) {
         let origin = self.server.windows()[0].location();
         self.server.move_pointer_to(
@@ -364,7 +368,7 @@ fn pointed_window(desktop: &mut Desktop, name: &str) -> Client {
         |events| events.contains(&WindowEvent::Focus(true)),
         Desktop::mapped,
     );
-    desktop.point_into_window(30, 20);
+    desktop.point_into_content(30, 20);
     client
 }
 
@@ -403,7 +407,7 @@ fn quick_clicks_in_one_place_count_up_and_a_moved_click_starts_over() {
     for _ in 0..3 {
         desktop.click(BTN_LEFT);
     }
-    desktop.point_into_window(60, 40);
+    desktop.point_into_content(60, 40);
     desktop.click(BTN_LEFT);
     desktop.wait_for(&mut [&mut client], |events| releases(events) == 4, |_| true);
 
@@ -638,4 +642,95 @@ fn a_launcher_overlay_takes_the_keyboard_while_shown_and_returns_it_when_hidden(
         },
         |_| true,
     );
+}
+
+fn finish(desktop: &mut Desktop, client: &Client) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while client
+        .thread
+        .as_ref()
+        .is_some_and(|thread| !thread.is_finished())
+    {
+        desktop.pump();
+        assert!(Instant::now() < deadline, "the window stayed open");
+    }
+}
+
+#[test]
+fn the_close_button_asks_the_app_and_closes_the_window() {
+    let mut desktop = Desktop::new();
+    let mut client = pointed_window(&mut desktop, "close button");
+    desktop.point_into_window(18, 14);
+    desktop.click(BTN_LEFT);
+    finish(&mut desktop, &client);
+    client.seen.extend(client.events.try_iter());
+    assert!(client.seen.contains(&WindowEvent::CloseRequested));
+    assert!(presses(&client.seen).is_empty(), "the app saw no click");
+}
+
+#[test]
+fn a_double_click_on_the_title_bar_zooms_the_window() {
+    let mut desktop = Desktop::new();
+    let mut client = pointed_window(&mut desktop, "zoom");
+    desktop.point_into_window(100, 14);
+    desktop.click(BTN_LEFT);
+    desktop.click(BTN_LEFT);
+    desktop.wait_for(
+        &mut [&mut client],
+        |events| {
+            events.iter().any(
+                |event| matches!(event, WindowEvent::ToplevelChanged(state) if state.maximized),
+            )
+        },
+        |_| true,
+    );
+    assert!(presses(&client.seen).is_empty());
+}
+
+#[test]
+fn dragging_the_title_bar_moves_the_window_and_the_app_sees_the_pointer_leave() {
+    let mut desktop = Desktop::new();
+    let mut client = pointed_window(&mut desktop, "move");
+    let before = desktop.server.windows()[0].location();
+    desktop.point_into_window(100, 14);
+    desktop.server.press_button(BTN_LEFT, true, 0);
+    desktop.settle(&mut [&mut client]);
+    desktop.server.move_pointer_to(
+        Point::from((f64::from(before.x + 130), f64::from(before.y + 44))),
+        0,
+    );
+    desktop.server.press_button(BTN_LEFT, false, 0);
+    desktop.wait_for(
+        &mut [&mut client],
+        |events| events.contains(&WindowEvent::Input(Event::PointerLeave)),
+        |desktop| desktop.server.windows()[0].location() != before,
+    );
+    let after = desktop.server.windows()[0].location();
+    assert_eq!((after.x - before.x, after.y - before.y), (30, 30));
+}
+
+#[test]
+fn dragging_just_outside_the_right_edge_resizes_the_window() {
+    let mut desktop = Desktop::new();
+    let mut client = pointed_window(&mut desktop, "resize");
+    let origin = desktop.server.windows()[0].location();
+    let edge = origin.x + WINDOW.0 as i32;
+    desktop.server.move_pointer_to(
+        Point::from((f64::from(edge + 3), f64::from(origin.y + 60))),
+        0,
+    );
+    desktop.server.press_button(BTN_LEFT, true, 0);
+    desktop.settle(&mut [&mut client]);
+    desktop.server.move_pointer_to(
+        Point::from((f64::from(edge + 43), f64::from(origin.y + 60))),
+        0,
+    );
+    let wider = |desktop: &Desktop| {
+        desktop.server.windows()[0]
+            .geometry()
+            .is_some_and(|geometry| geometry.size.w == WINDOW.0 as i32 + 40)
+    };
+    desktop.settle(&mut [&mut client]);
+    desktop.server.press_button(BTN_LEFT, false, 0);
+    desktop.wait_for(&mut [&mut client], |_| true, wider);
 }

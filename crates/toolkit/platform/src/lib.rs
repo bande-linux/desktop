@@ -1,6 +1,7 @@
 mod access;
 mod appearance;
 mod capture;
+mod chrome;
 mod clipboard;
 mod lock;
 mod run;
@@ -10,7 +11,16 @@ mod shell;
 mod text_input;
 mod window;
 
+use std::sync::LazyLock;
+
+use unbound_l10n::Localizer;
+
+const ENGLISH: &str = include_str!("../locales/en-US/unbound-toolkit-platform.ftl");
+
+static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+
 pub use capture::ScreenImage;
+pub use chrome::TITLE_BAR_HEIGHT;
 pub use run::{App, run};
 pub use unbound_protocols::client::unbound_shell_v1::VolumeKey;
 pub use window::{

@@ -11,13 +11,14 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
 
-use accesskit::ActionRequest;
+use accesskit::{ActionRequest, TreeUpdate};
 use raw_window_handle::{
     RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle,
 };
 use rustix::fs::{MemfdFlags, memfd_create};
 use unbound_graphics::{
-    Appearance, CpuRenderer, Event, GpuRenderer, RenderError, Scene, pixels, vulkan_instance,
+    Appearance, CpuRenderer, Cursor, Event, GpuRenderer, Point, Pointer, PointerButton,
+    RenderError, Scene, pixels, vulkan_instance,
 };
 use unbound_protocols::client::unbound_shell_v1::VolumeKey;
 use wayland_client::backend::WaylandError;
@@ -25,6 +26,7 @@ use wayland_client::protocol::wl_buffer::{self, WlBuffer};
 use wayland_client::protocol::wl_callback::{self, WlCallback};
 use wayland_client::protocol::wl_compositor::WlCompositor;
 use wayland_client::protocol::wl_data_device_manager::WlDataDeviceManager;
+use wayland_client::protocol::wl_region::WlRegion;
 use wayland_client::protocol::wl_registry::{self, WlRegistry};
 use wayland_client::protocol::wl_seat::WlSeat;
 use wayland_client::protocol::wl_shm::{self, WlShm};
@@ -48,6 +50,7 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::{
 use crate::access::Accessibility;
 use crate::appearance::AppearanceWatch;
 use crate::capture::Capture;
+use crate::chrome::{Chrome, Control, Frame, SHADOW_MARGIN, TITLE_BAR_HEIGHT, Zone};
 use crate::clipboard::Clipboard;
 use crate::lock::{Locked, SessionLock};
 use crate::scale::{Scaling, SurfaceScale};
@@ -217,6 +220,19 @@ pub enum ResizeEdge {
 }
 
 impl ResizeEdge {
+    fn cursor(self) -> Cursor {
+        match self {
+            Self::Top => Cursor::ResizeTop,
+            Self::Bottom => Cursor::ResizeBottom,
+            Self::Left => Cursor::ResizeLeft,
+            Self::Right => Cursor::ResizeRight,
+            Self::TopLeft => Cursor::ResizeTopLeft,
+            Self::TopRight => Cursor::ResizeTopRight,
+            Self::BottomLeft => Cursor::ResizeBottomLeft,
+            Self::BottomRight => Cursor::ResizeBottomRight,
+        }
+    }
+
     fn protocol(self) -> xdg_toplevel::ResizeEdge {
         match self {
             Self::Top => xdg_toplevel::ResizeEdge::Top,
@@ -233,7 +249,7 @@ impl ResizeEdge {
 
 #[derive(Default)]
 pub(crate) struct State {
-    compositor: Option<WlCompositor>,
+    pub(crate) compositor: Option<WlCompositor>,
     pub(crate) shm: Option<WlShm>,
     wm_base: Option<XdgWmBase>,
     layer_shell: Option<ZwlrLayerShellV1>,
@@ -278,6 +294,7 @@ struct GpuSurface {
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
     configured: Option<(u32, u32)>,
+    transparent: bool,
 }
 
 enum Gpu {
@@ -307,6 +324,9 @@ pub struct Window {
     drawn_scale: f64,
     visible: bool,
     needs_redraw: bool,
+    chrome: Option<Chrome>,
+    shown_frame: Option<Frame>,
+    pub(crate) app_cursor: Cursor,
     pub(crate) accessibility: Accessibility,
     pub(crate) appearance: AppearanceWatch,
 }
@@ -363,6 +383,7 @@ impl Window {
         if surface_scale.is_some() {
             queue.roundtrip(&mut state)?;
         }
+        let mut chrome = None;
         let role = match role {
             Role::Toplevel { title, app_id } => {
                 let wm_base = state
@@ -371,8 +392,9 @@ impl Window {
                     .ok_or(WindowError::Missing("xdg_wm_base"))?;
                 let xdg_surface = wm_base.get_xdg_surface(&surface, &handle, ());
                 let toplevel = xdg_surface.get_toplevel(&handle, ());
-                toplevel.set_title(title);
+                toplevel.set_title(title.clone());
                 toplevel.set_app_id(app_id);
+                chrome = Some(Chrome::new(title));
                 ShellSurface::Toplevel(xdg_surface, toplevel)
             }
             Role::Layer(options) => {
@@ -436,7 +458,14 @@ impl Window {
             Gpu::Starting(receiver)
         };
 
-        let size = state.suggested_size.unwrap_or(size);
+        let title = if chrome.is_some() {
+            TITLE_BAR_HEIGHT
+        } else {
+            0
+        };
+        let size = state
+            .suggested_size
+            .unwrap_or((size.0, size.1.saturating_add(title)));
         appearance.wait_for_first_reading();
         state
             .events
@@ -456,6 +485,9 @@ impl Window {
             drawn_scale: 1.0,
             visible: true,
             needs_redraw: true,
+            chrome,
+            shown_frame: None,
+            app_cursor: Cursor::Default,
             accessibility: Accessibility::new()?,
             appearance,
         })
@@ -469,12 +501,52 @@ impl Window {
     }
 
     pub fn size(&self) -> (u32, u32) {
+        let (width, height) = self.geometry();
+        (width, height.saturating_sub(self.title_height()))
+    }
+
+    fn geometry(&self) -> (u32, u32) {
         self.state.suggested_size.unwrap_or(self.size)
+    }
+
+    fn title_height(&self) -> u32 {
+        match &self.chrome {
+            Some(_) if !self.state.toplevel.fullscreen => TITLE_BAR_HEIGHT,
+            _ => 0,
+        }
+    }
+
+    fn shadow_margin(&self) -> u32 {
+        let toplevel = self.state.toplevel;
+        let floating = !(toplevel.maximized || toplevel.fullscreen || toplevel.tiled);
+        let transparent = match &self.gpu {
+            Gpu::Ready(gpu) => gpu.transparent,
+            Gpu::Starting(_) | Gpu::Unavailable => true,
+        };
+        if self.chrome.is_some() && floating && transparent {
+            SHADOW_MARGIN
+        } else {
+            0
+        }
+    }
+
+    fn frame(&self) -> Frame {
+        let (width, height) = self.geometry();
+        Frame {
+            margin: self.shadow_margin() as f32,
+            title: self.title_height() as f32,
+            width: width as f32,
+            height: height as f32,
+        }
     }
 
     pub fn set_title(&mut self, title: &str) {
         if let ShellSurface::Toplevel(_, toplevel) = &self.role {
             toplevel.set_title(title.to_owned());
+        }
+        if let Some(chrome) = &mut self.chrome {
+            chrome.title = title.to_owned();
+            self.needs_redraw = true;
         }
     }
 
@@ -614,7 +686,237 @@ impl Window {
     }
 
     pub fn take_events(&mut self) -> Vec<WindowEvent> {
-        std::mem::take(&mut self.state.events)
+        let events = std::mem::take(&mut self.state.events);
+        if self.chrome.is_none() {
+            return events;
+        }
+        let mut passed = Vec::with_capacity(events.len());
+        for event in events {
+            self.through_chrome(event, &mut passed);
+        }
+        passed
+    }
+
+    pub(crate) fn pointer_in_content(&self) -> bool {
+        self.chrome
+            .as_ref()
+            .is_none_or(|chrome| chrome.pointer_in_content)
+    }
+
+    fn show_cursor(&mut self, cursor: Cursor) {
+        self.state.input.set_cursor(cursor);
+    }
+
+    fn through_chrome(&mut self, event: WindowEvent, passed: &mut Vec<WindowEvent>) {
+        let frame = self.frame();
+        let origin = frame.content_origin();
+        let into_content = |pointer: Pointer| Pointer {
+            position: Point::new(pointer.position.x - origin.x, pointer.position.y - origin.y),
+            ..pointer
+        };
+        let Some(chrome) = self.chrome.as_mut() else {
+            passed.push(event);
+            return;
+        };
+        let input = match event {
+            WindowEvent::Input(input) => input,
+            WindowEvent::ToplevelChanged(_) => {
+                self.needs_redraw = true;
+                passed.push(event);
+                return;
+            }
+            other => {
+                passed.push(other);
+                return;
+            }
+        };
+        match input {
+            Event::PointerEnter(pointer) | Event::PointerMove(pointer) => {
+                let zone = frame.zone_at(pointer.position);
+                if let Some(control) = chrome.pressed {
+                    let inside = zone == Zone::Control(control);
+                    if inside != chrome.pressed_inside {
+                        chrome.pressed_inside = inside;
+                        self.needs_redraw = true;
+                    }
+                    return;
+                }
+                if chrome.hover(&frame, Some(pointer.position)) {
+                    self.needs_redraw = true;
+                }
+                let content = zone == Zone::Content || chrome.content_buttons > 0;
+                if content {
+                    let entering = !chrome.pointer_in_content;
+                    chrome.pointer_in_content = true;
+                    let pointer = into_content(pointer);
+                    passed.push(WindowEvent::Input(if entering {
+                        Event::PointerEnter(pointer)
+                    } else {
+                        Event::PointerMove(pointer)
+                    }));
+                } else if chrome.pointer_in_content {
+                    chrome.pointer_in_content = false;
+                    passed.push(WindowEvent::Input(Event::PointerLeave));
+                }
+                let cursor = match zone {
+                    _ if content => self.app_cursor,
+                    Zone::Resize(edge) => edge.cursor(),
+                    _ => Cursor::Default,
+                };
+                self.show_cursor(cursor);
+            }
+            Event::PointerDown(pointer) => {
+                let zone = frame.zone_at(pointer.position);
+                if zone == Zone::Content || chrome.content_buttons > 0 {
+                    chrome.content_buttons += 1;
+                    passed.push(WindowEvent::Input(Event::PointerDown(into_content(
+                        pointer,
+                    ))));
+                    return;
+                }
+                if pointer.button != PointerButton::Primary {
+                    return;
+                }
+                let result = match zone {
+                    Zone::Control(control) => {
+                        chrome.pressed = Some(control);
+                        chrome.pressed_inside = true;
+                        self.needs_redraw = true;
+                        Ok(())
+                    }
+                    Zone::TitleBar if pointer.count % 2 == 0 => self.toggle_zoom(),
+                    Zone::TitleBar => self.start_move(),
+                    Zone::Resize(edge) => self.start_resize(edge),
+                    Zone::Content | Zone::Outside => Ok(()),
+                };
+                if result.is_err() {
+                    self.needs_redraw = true;
+                }
+            }
+            Event::PointerUp(pointer) => {
+                if chrome.content_buttons > 0 {
+                    chrome.content_buttons -= 1;
+                    passed.push(WindowEvent::Input(Event::PointerUp(into_content(pointer))));
+                    return;
+                }
+                let Some(control) = chrome.pressed.take() else {
+                    return;
+                };
+                self.needs_redraw = true;
+                if frame.zone_at(pointer.position) != Zone::Control(control) {
+                    return;
+                }
+                let result = match control {
+                    Control::Close => {
+                        passed.push(WindowEvent::CloseRequested);
+                        Ok(())
+                    }
+                    Control::Minimize => self.minimize(),
+                    Control::Zoom => self.toggle_zoom(),
+                };
+                if result.is_err() {
+                    self.needs_redraw = true;
+                }
+            }
+            Event::PointerLeave => {
+                chrome.content_buttons = 0;
+                if chrome.hover(&frame, None) {
+                    self.needs_redraw = true;
+                }
+                if std::mem::take(&mut chrome.pointer_in_content) {
+                    passed.push(WindowEvent::Input(Event::PointerLeave));
+                }
+            }
+            Event::Scroll(scroll) => {
+                if frame.zone_at(scroll.position) == Zone::Content {
+                    passed.push(WindowEvent::Input(Event::Scroll(
+                        unbound_graphics::Scroll {
+                            position: Point::new(
+                                scroll.position.x - origin.x,
+                                scroll.position.y - origin.y,
+                            ),
+                            ..scroll
+                        },
+                    )));
+                }
+            }
+            other => passed.push(WindowEvent::Input(other)),
+        }
+    }
+
+    pub(crate) fn publish_accessibility(&mut self, tree: TreeUpdate) {
+        let tree = match &self.chrome {
+            Some(chrome) => chrome.wrap_tree(&self.frame(), tree),
+            None => tree,
+        };
+        self.accessibility.publish(tree);
+    }
+
+    pub(crate) fn perform_chrome(&mut self, request: &ActionRequest) -> bool {
+        let Some(control) = Control::for_node(request.target_node) else {
+            return false;
+        };
+        if self.chrome.is_none() || request.action != accesskit::Action::Click {
+            return false;
+        }
+        let result = match control {
+            Control::Close => {
+                self.request_close();
+                Ok(())
+            }
+            Control::Minimize => self.minimize(),
+            Control::Zoom => self.toggle_zoom(),
+        };
+        result.is_ok()
+    }
+
+    fn framed(&mut self, frame: &Frame, scene: &Scene) -> Scene {
+        let appearance = self.appearance.current();
+        let active = self.state.toplevel.activated;
+        match &mut self.chrome {
+            Some(chrome) => chrome.frame_scene(
+                frame,
+                scene,
+                &appearance.palette(),
+                appearance.scheme,
+                active,
+            ),
+            None => scene.clone(),
+        }
+    }
+
+    fn frame_surface(&mut self, frame: &Frame) {
+        if self.shown_frame.as_ref() == Some(frame) {
+            return;
+        }
+        self.shown_frame = Some(*frame);
+        let ShellSurface::Toplevel(xdg_surface, _) = &self.role else {
+            return;
+        };
+        let whole = |value: f32| value.round() as i32;
+        xdg_surface.set_window_geometry(
+            whole(frame.margin),
+            whole(frame.margin),
+            whole(frame.width),
+            whole(frame.height),
+        );
+        if frame.margin == 0.0 {
+            self.surface.set_input_region(None);
+            return;
+        }
+        let Some(compositor) = &self.state.compositor else {
+            return;
+        };
+        let region = compositor.create_region(&self.queue.handle(), ());
+        let area = frame.input_area();
+        region.add(
+            whole(area.x),
+            whole(area.y),
+            whole(area.width),
+            whole(area.height),
+        );
+        self.surface.set_input_region(Some(&region));
+        region.destroy();
     }
 
     pub fn hide(&mut self) -> Result<(), WindowError> {
@@ -662,16 +964,25 @@ impl Window {
     pub fn draw(&mut self, scene: &Scene) -> Result<FramePath, WindowError> {
         self.wait_for_frame()?;
         self.queue.dispatch_pending(&mut self.state)?;
-        self.state.suggested_size = None;
-        self.size = (scene.width, scene.height);
-        self.needs_redraw = false;
         self.poll_gpu();
+        self.state.suggested_size = None;
+        self.size = (scene.width, scene.height + self.title_height());
+        let framed;
+        let scene = if self.chrome.is_some() {
+            let frame = self.frame();
+            framed = self.framed(&frame, scene);
+            self.frame_surface(&frame);
+            &framed
+        } else {
+            scene
+        };
+        self.needs_redraw = false;
         self.surface.frame(&self.queue.handle(), ());
         self.state.frame_pending = true;
         let scale = self.scale();
         self.drawn_scale = scale;
         if let Some(surface_scale) = &self.surface_scale {
-            surface_scale.show_at(self.size);
+            surface_scale.show_at((scene.width, scene.height));
         }
         let path = match &mut self.gpu {
             Gpu::Ready(gpu) => {
@@ -867,6 +1178,7 @@ fn open_gpu(display: usize, surface: usize) -> Result<GpuSurface, RenderError> {
         view_formats: Vec::new(),
     };
     Ok(GpuSurface {
+        transparent: alpha_mode == wgpu::CompositeAlphaMode::PreMultiplied,
         renderer: GpuRenderer::with_device(adapter, device, queue, format),
         surface,
         config,
@@ -1087,6 +1399,7 @@ impl Dispatch<WlBuffer, Arc<AtomicBool>> for State {
 delegate_noop!(State: ignore WlCompositor);
 delegate_noop!(State: ignore WlShm);
 delegate_noop!(State: ignore WlShmPool);
+delegate_noop!(State: ignore WlRegion);
 delegate_noop!(State: ignore WlSurface);
 delegate_noop!(State: ignore ZwlrLayerShellV1);
 delegate_noop!(State: ignore XdgActivationV1);

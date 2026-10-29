@@ -197,6 +197,11 @@ impl Input {
         self.shown_cursor = Some(self.cursor);
     }
 
+    pub(crate) fn set_cursor(&mut self, cursor: Cursor) {
+        self.cursor = cursor;
+        self.show_cursor();
+    }
+
     fn pointer(&self, position: Point) -> Pointer {
         Pointer::at(position).with_modifiers(self.modifiers)
     }
@@ -212,8 +217,10 @@ impl Window {
     }
 
     pub fn set_cursor(&mut self, cursor: Cursor) {
-        self.state.input.cursor = cursor;
-        self.state.input.show_cursor();
+        self.app_cursor = cursor;
+        if self.pointer_in_content() {
+            self.state.input.set_cursor(cursor);
+        }
     }
 
     pub(crate) fn fire_repeats(&mut self, now: Instant) {

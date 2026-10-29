@@ -1,50 +1,76 @@
-# Unbound Desktop Environment (`unbound-desktop`)
+# Unbound
 
-> Next-Generation, High-Performance Linux Desktop Environment built in **Rust** for **Debian** & Wayland.
+Unbound is a Linux desktop environment written in Rust for Debian 13 on arm64, with Apple
+Silicon as its primary hardware. It is its own desktop, with its own compositor, shell, session
+services and apps, and it holds itself to the polish of macOS: every surface should feel as
+smooth, consistent and finished. It is pure Wayland, with no X11 or XWayland anywhere. The
+compositor, renderer, toolkit, shell, apps and services all live in this one Cargo workspace.
 
-[![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](#license)
-[![Debian](https://img.shields.io/badge/Debian-13%20(Trixie)-red.svg)](https://www.debian.org)
-[![Wayland](https://img.shields.io/badge/Wayland-Pure%20Native-orange.svg)](https://wayland.freedesktop.org)
-[![Rust](https://img.shields.io/badge/Rust-2024%20Edition-black.svg)](https://www.rust-lang.org)
+## Status
 
----
+Unbound is early and not yet a daily driver.
 
-## ⚡ Overview
+- **Far along**: the compositor (Smithay with its own Vulkan renderer on `ash`, DRM/KMS output,
+  frame pacing, fractional scaling, clipboard, session lock, idle, input methods, screen
+  capture) and the session plumbing (configuration in `config.kdl` over D-Bus, notifications,
+  power and idle, clipboard persistence, tray registry, automount, the portal backend's
+  settings, the polkit agent protocol), packaged as `.deb` files and tested on every push.
+- **Early**: the UI toolkit (Vello drawing and Parley text are mature; widgets, menus, scroll
+  views and lists are just starting) and therefore the shell clients and apps built on it:
+  Dock, menu bar, launcher, Control Center, lock screen, greeter, Files, Settings and Terminal
+  all exist in a basic form.
 
-**Unbound** is an ultra-modern, production-grade Linux Desktop Environment engineered from scratch in pure **Rust**, targeting **Debian** as its primary operating system.
+[`docs/parity.md`](docs/parity.md) tracks each feature against macOS, and
+[`NOTES/backlog.md`](NOTES/backlog.md) lists the milestones.
 
-It marries the organizational depth and workflow polish of **macOS** (Miller columns, exhaustive settings taxonomy, instant file previews, unkillable force-quit watchdog) with the desktop layout ergonomics of modern Linux (modular, repositionable panels—defaulting to an ergonomic left vertical taskbar, with seamless support for bottom, right, or top layouts).
+## Workspace
 
-### Core Highlights
-* **Layered Graphics Engine**: Built on **Smithay** for kernel DRM/KMS atomic modesetting, libinput, and session management, paired with a custom **`wgpu` / Vulkan** render pipeline and Apple-grade spring physics layout engine.
-* **Pure Wayland**: No X11 code, X libraries, X server or XWayland bridge anywhere in the desktop; every app runs as a native Wayland client.
-* **Full Session Infrastructure**: Native XDG Desktop Portals (`xdg-desktop-portal-unbound` with PipeWire screen casting), clipboard management (`wl_data_device`, `zwp_primary_selection`, persistent `ext-data-control-v1`), screen lock (`ext-session-lock-v1` with crash resilience), idle management, polkit agent, and CJK input methods.
-* **Robust Display Management**: Privileged PAM session handling via **`greetd`**, paired with an unprivileged, modern GPU-accelerated client (**`unbound-greeter`**).
-* **Autonomous Software Factory**: Driven by a zero-human-in-the-loop autonomous SDLC engine (`unbound-factory`) backed by self-hosted arm64 CI runners (headless Wayland via Lavapipe + ephemeral Debian 13 arm64 VM boot tests).
+Every crate is in `crates/`. [Decision 0003](docs/decisions/0003-repository-layout.md) groups
+them into role directories; the grouping below is that target.
 
----
+| Role | Crates |
+| :--- | :--- |
+| Platform | `unbound-compositor` (the Wayland compositor), `unbound-render` (its Vulkan renderer), `unbound-protocols` (private Wayland protocols for the shell) |
+| Toolkit | `unbound-toolkit` (tokens, Vello drawing, Parley text, Wayland windows, widgets, AccessKit) |
+| Shell | `unbound-panel` (the Dock), `unbound-menubar`, `unbound-launcher`, `unbound-controlcenter`, `unbound-screenshot`, `unbound-lock`, `unbound-greeter` |
+| Apps | `unbound-files`, `unbound-settings`, `unbound-term` |
+| Services | `unbound-config`, `unbound-notify`, `unbound-power`, `unbound-clipboard`, `unbound-tray`, `unbound-automount`, `xdg-desktop-portal-unbound`, `unbound-polkit` |
+| Libraries | `unbound-spring` (damped springs), `unbound-apps` (desktop entries, icons, launching), `unbound-audio` (PipeWire), `unbound-network` (NetworkManager), `unbound-bluetooth` (BlueZ) |
+| Testing | `unbound-test-bus` (private D-Bus session buses), `unbound-test-wayland` (Wayland test clients), `unbound-bench` (performance measurements), `unbound-sample` (toolkit sample for `ci/perf`) |
 
-## 🏛️ Architecture & Component Repositories
+Other directories: `packaging/` holds the meta-package and the APT source packages, `ci/` the
+scripts CI runs (guest VM, install test, hardware-in-the-loop), and `docs/` the documentation.
 
-The Unbound ecosystem is maintained under the **[`unbound-linux`](https://github.com/unbound-linux)** organization:
+## Building and testing
 
-| Repository | Description | Status |
-| :--- | :--- | :---: |
-| **[`unbound-linux/desktop`](https://github.com/unbound-linux/desktop)** | Umbrella workspace root, meta-package, systemd units, session targets | Active |
-| **[`unbound-linux/compositor`](https://github.com/unbound-linux/compositor)** | Smithay + wgpu Wayland compositor with explicit sync and spring physics | Planning |
-| **[`unbound-linux/shell`](https://github.com/unbound-linux/shell)** | Modular, repositionable panel framework, top menu bar, and watchdog | Planning |
-| **[`unbound-linux/greeter`](https://github.com/unbound-linux/greeter)** | Modern, unprivileged login greeter for greetd | Planning |
-| **[`unbound-linux/portal`](https://github.com/unbound-linux/portal)** | xdg-desktop-portal backend (PipeWire screencast, screenshot, file picker) | Planning |
-| **[`unbound-linux/toolkit`](https://github.com/unbound-linux/toolkit)** | Shared Rust UI widget library (wgpu, semantic colors, text navigation, AccessKit) | Planning |
-| **[`unbound-linux/apps`](https://github.com/unbound-linux/apps)** | Productivity applications (launcher, Miller columns file manager, settings, terminal) | Planning |
-| **[`unbound-linux/factory`](https://github.com/unbound-linux/factory)** | Autonomous SDLC orchestrator CLI daemon and worker loop | Planning |
-| **[`unbound-linux/runners`](https://github.com/unbound-linux/runners)** | Self-hosted arm64 CI runners (Docker on Apple Silicon) | Active |
+The toolchain is pinned in `rust-toolchain.toml` and installed by `rustup`. On Debian 13 or
+Ubuntu 24.04, install the system libraries the workspace links against, and the Vulkan driver,
+fonts and D-Bus daemon the tests use:
 
-For complete technical specifications, see **[Master Architecture & Execution Plan](docs/ARCHITECTURE.md)**.
+```bash
+sudo apt install pkg-config libxkbcommon-dev libgbm-dev libinput-dev libseat-dev libudev-dev \
+    libpipewire-0.3-dev libclang-dev libvulkan1 mesa-vulkan-drivers dbus-daemon \
+    fonts-dejavu-core fonts-inter fonts-noto-cjk libfontconfig1 libwayland-client0 procps
+```
 
----
+Then, from the repository root:
 
-## 🚀 Installation on Debian 13
+```bash
+cargo build --workspace
+cargo test --workspace
+cargo fmt --all --check
+cargo clippy --workspace --all-targets -- -D warnings
+```
+
+Tests need no GPU and no display: rendering runs on lavapipe, the compositor tests run it
+headless, and D-Bus tests start their own session buses. `cargo run -p unbound-compositor --
+--headless` starts the compositor without a display.
+
+CI runs these checks and more (Debian packages, an install test into a clean Debian 13, a KVM
+guest on vkms, polkit and portal integration, performance budgets) on self-hosted arm64 runners
+on every push; see [`docs/architecture/ci.md`](docs/architecture/ci.md).
+
+## Installing on Debian 13
 
 Unbound installs from its APT repository at <https://unbound-linux.github.io/apt> on Debian 13
 (trixie), arm64. You need a display manager that lists Wayland sessions, such as GDM, SDDM, or a
@@ -80,32 +106,18 @@ your channel only.
 - **Signing key:** the repository is signed with the key
   `6287 DE66 4599 29AA 1C01  E146 495A 6C19 8264 7E05`.
 
----
+## Documentation
 
-## 🛠️ Development & Documentation
+[`docs/README.md`](docs/README.md) is the index and gives a reading order. The main entry points:
 
-* **[Master Architecture Plan](docs/ARCHITECTURE.md)**: Exhaustive technical design document covering the compositor, desktop session infrastructure, 30-protocol Wayland matrix, D-Bus interfaces, and 8-phase roadmap.
-* **Workspace**: this repository is the Cargo workspace root. Its crates:
-  * [`crates/unbound-compositor`](crates/unbound-compositor): a headless Smithay compositor (`wl_compositor`, `wl_shm`, `linux-dmabuf-v1`, `xdg_wm_base`, `wl_output`, `wp_presentation`, clipboard, primary selection and `ext-data-control-v1`) that renders with `unbound-render`, packaged as `unbound-compositor` for arm64. DRM/KMS output is not implemented yet.
-  * [`crates/unbound-render`](crates/unbound-render): the compositor's Vulkan renderer on `ash`, with persistent textures, damage-limited uploads and repaints, and occlusion of what opaque windows hide.
-  * [`crates/unbound-toolkit`](crates/unbound-toolkit): semantic colour and spacing tokens, and offscreen fills and text on `wgpu`.
-  * [`crates/unbound-config`](crates/unbound-config): parsing, validation and atomic application of `config.kdl`, watched on disk and published as `org.unbound.Config` on D-Bus by the `unbound-config` session daemon, which also writes settings back to the file and reports an invalid file as a notification.
-  * [`crates/unbound-spring`](crates/unbound-spring): the damped spring model for animations.
-  * [`crates/unbound-notify`](crates/unbound-notify): an `org.freedesktop.Notifications` daemon (specification 1.2), started by D-Bus activation; no UI yet.
-  * [`crates/unbound-power`](crates/unbound-power): a session service that locks before sleep through logind, posts battery alerts from UPower and serves `org.freedesktop.ScreenSaver` idle inhibition; also the idle state machine.
-  * [`crates/unbound-polkit`](crates/unbound-polkit): the polkit authentication agent protocol, tested against polkitd; its dialog awaits the toolkit.
-  * [`crates/xdg-desktop-portal-unbound`](crates/xdg-desktop-portal-unbound): the xdg-desktop-portal backend; `Settings` is live, `FileChooser`, `Screenshot` and `ScreenCast` wait for their UI and capture implementations.
-  * [`crates/unbound-tray`](crates/unbound-tray): the `org.kde.StatusNotifierWatcher` registry for tray icons.
-  * [`crates/unbound-automount`](crates/unbound-automount): mounts removable drives through UDisks2 and warns about drives pulled without ejecting.
-  * [`crates/unbound-clipboard`](crates/unbound-clipboard): a clipboard daemon that keeps the clipboard and primary selection after the copying client quits; the compositor starts it and offers it `ext-data-control-v1` on that connection only.
-  * [`crates/unbound-bench`](crates/unbound-bench): frame time, start time and memory measurements that `ci/perf` runs on every push.
-  * [`crates/unbound-test-bus`](crates/unbound-test-bus): private session buses for D-Bus tests.
-  * [`crates/unbound-test-wayland`](crates/unbound-test-wayland): Wayland test clients for the compositor and clipboard tests.
+- [`docs/architecture/overview.md`](docs/architecture/overview.md): components, process model,
+  IPC, keyboard model and configuration.
+- [`docs/design/DESIGN.md`](docs/design/DESIGN.md): the design principles.
+- [`docs/decisions/`](docs/decisions/): decision records for rendering, the toolkit and the
+  repository layout.
+- [`docs/parity.md`](docs/parity.md): feature parity with macOS.
 
----
+## License
 
-## 📄 License
-
-Dual-licensed under either of:
-* Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-* MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+Dual-licensed under the Apache License, Version 2.0, or the MIT license, at your option (as
+declared in `packaging/unbound-desktop/debian/copyright`).

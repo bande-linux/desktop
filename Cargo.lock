@@ -3785,6 +3785,9 @@ dependencies = [
 name = "unbound-settings"
 version = "0.1.0"
 dependencies = [
+ "accesskit",
+ "image",
+ "image-compare",
  "tempfile",
  "tracing",
  "unbound-config",

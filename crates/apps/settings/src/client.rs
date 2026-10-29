@@ -59,7 +59,9 @@ pub struct SettingsClient {
 impl SettingsClient {
     pub fn connect(connection: &Connection) -> zbus::Result<Self> {
         Ok(Self {
-            config: ConfigProxyBlocking::new(connection)?,
+            config: ConfigProxyBlocking::builder(connection)
+                .cache_properties(zbus::proxy::CacheProperties::No)
+                .build()?,
         })
     }
 

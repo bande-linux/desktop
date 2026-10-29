@@ -1,6 +1,8 @@
 mod animation;
 mod button;
+mod context_menu;
 mod label;
+mod menu;
 mod secure_field;
 mod slider;
 mod stack;
@@ -15,7 +17,9 @@ use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId, TreeInfo, Tre
 
 pub use animation::Animated;
 pub use button::{BUTTON_HEIGHT, Button};
+pub use context_menu::ContextMenu;
 pub use label::Label;
+pub use menu::{Menu, MenuItem, MenuOutcome, MenuPanel, MenuTracker};
 pub use secure_field::SecureField;
 pub use slider::{SLIDER_HEIGHT, Slider};
 pub use stack::{Axis, Stack};
@@ -133,6 +137,14 @@ pub trait Widget {
         None
     }
 
+    fn context_menu(&mut self, _cx: &mut Context, _point: Point) -> Option<Menu> {
+        None
+    }
+
+    fn menu_action(&mut self, _cx: &mut Context, _action: &str) -> bool {
+        false
+    }
+
     fn children(&self) -> &[Box<dyn Widget>] {
         &[]
     }
@@ -149,6 +161,8 @@ pub struct Ui {
     captured: Option<(WidgetId, PointerButton)>,
     hovered: Vec<WidgetId>,
     pointer: Option<Point>,
+    menu_owner: Option<WidgetId>,
+    menu_request: Option<(Menu, Point)>,
 }
 
 fn contains(frame: Rect, point: Point) -> bool {
@@ -234,6 +248,8 @@ impl Ui {
             captured: None,
             hovered: Vec::new(),
             pointer: None,
+            menu_owner: None,
+            menu_request: None,
         }
     }
 
@@ -297,7 +313,12 @@ impl Ui {
                 if pointer.is_primary() && self.accepts_focus(target) {
                     self.cx.focus = Some(target);
                 }
-                self.deliver(target, event) | hovered
+                let delivered = self.deliver(target, event);
+                if pointer.button == PointerButton::Secondary {
+                    self.captured = None;
+                    return self.request_menu(pointer.position) | delivered | hovered;
+                }
+                delivered | hovered
             }
             Event::PointerMove(pointer) | Event::PointerEnter(pointer) => {
                 let moved = Event::PointerMove(*pointer);
@@ -357,6 +378,36 @@ impl Ui {
                 .focus
                 .is_some_and(|target| self.deliver(target, event)),
         }
+    }
+
+    fn request_menu(&mut self, point: Point) -> bool {
+        let path = self.hovered.clone();
+        for id in path.into_iter().rev() {
+            let Some(widget) = find_mut(self.root.as_mut(), id) else {
+                continue;
+            };
+            if let Some(menu) = widget.context_menu(&mut self.cx, point) {
+                self.menu_owner = Some(id);
+                self.menu_request = Some((menu, point));
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn take_menu_request(&mut self) -> Option<(Menu, Point)> {
+        self.menu_request.take()
+    }
+
+    pub fn menu_action(&mut self, action: &str) -> bool {
+        self.cx.now = (self.clock)();
+        let Some(owner) = self.menu_owner.take() else {
+            return false;
+        };
+        let Some(widget) = find_mut(self.root.as_mut(), owner) else {
+            return false;
+        };
+        widget.menu_action(&mut self.cx, action)
     }
 
     pub fn cursor(&self) -> Cursor {

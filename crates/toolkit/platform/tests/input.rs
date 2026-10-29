@@ -15,8 +15,10 @@ use unbound_graphics::{
     Color, Event, Key, Modifiers, Pointer, PointerButton, Scene, ScrollPhase, ScrollSource,
 };
 use unbound_toolkit_platform::{
-    App, Edges, KeyboardFocus, LayerKind, LayerOptions, Role, TITLE_BAR_HEIGHT, Window, WindowEvent,
+    App, Edges, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement, Role, TITLE_BAR_HEIGHT,
+    Window, WindowEvent,
 };
+use unbound_widgets::{Menu, MenuItem};
 
 const OUTPUT: (i32, i32) = (320, 240);
 const WINDOW: (u32, u32) = (120, 80);
@@ -26,10 +28,31 @@ const KEY_LEFTCTRL: u32 = 29;
 const KEY_C: u32 = 46;
 const KEY_LEFTMETA: u32 = 125;
 const KEY_SPACE: u32 = 57;
+const KEY_ESC: u32 = 1;
+const KEY_DOWN: u32 = 108;
+const KEY_RIGHT: u32 = 106;
+const KEY_ENTER: u32 = 28;
+const KEY_D: u32 = 32;
 const BTN_LEFT: u32 = 0x110;
 const BTN_RIGHT: u32 = 0x111;
 const BTN_SIDE: u32 = 0x113;
 const BUSY: Duration = Duration::from_millis(900);
+
+fn sample_menu() -> Menu {
+    Menu::new(vec![
+        MenuItem::new("Open", "open").shortcut("Super+O"),
+        MenuItem::new("Rename", "rename").enabled(false),
+        MenuItem::separator(),
+        MenuItem::submenu(
+            "Sort By",
+            Menu::new(vec![
+                MenuItem::new("Name", "sort-name").checked(true),
+                MenuItem::new("Date", "sort-date"),
+            ]),
+        ),
+        MenuItem::new("Delete", "delete"),
+    ])
+}
 
 struct Forwarder {
     events: Sender<WindowEvent>,
@@ -49,7 +72,14 @@ impl App for Forwarder {
         }
     }
 
-    fn event(&mut self, _window: &mut Window, event: WindowEvent) {
+    fn event(&mut self, window: &mut Window, event: WindowEvent) {
+        if let WindowEvent::Input(Event::PointerDown(pointer)) = &event
+            && pointer.button == PointerButton::Secondary
+        {
+            window
+                .show_menu(sample_menu(), MenuPlacement::AtPoint(pointer.position))
+                .expect("menu");
+        }
         let _ = self.events.send(event);
     }
 
@@ -733,4 +763,149 @@ fn dragging_just_outside_the_right_edge_resizes_the_window() {
     desktop.settle(&mut [&mut client]);
     desktop.server.press_button(BTN_LEFT, false, 0);
     desktop.wait_for(&mut [&mut client], |_| true, wider);
+}
+
+fn menu_events(events: &[WindowEvent]) -> Vec<WindowEvent> {
+    events
+        .iter()
+        .filter(|event| matches!(event, WindowEvent::MenuAction(_) | WindowEvent::MenuClosed))
+        .cloned()
+        .collect()
+}
+
+fn open_menu(desktop: &mut Desktop, client: &mut Client) {
+    desktop.server.press_button(BTN_RIGHT, true, 0);
+    desktop.wait_for(
+        &mut [client],
+        |_| true,
+        |desktop| desktop.server.popup_count() == 1,
+    );
+}
+
+#[test]
+fn a_menu_opens_at_the_pointer_and_a_click_on_an_item_chooses_it() {
+    let mut desktop = Desktop::new();
+    let mut client = pointed_window(&mut desktop, "menu click");
+    open_menu(&mut desktop, &mut client);
+    desktop.server.press_button(BTN_RIGHT, false, 0);
+    desktop.settle(&mut [&mut client]);
+    assert_eq!(
+        desktop.server.popup_count(),
+        1,
+        "a click without a drag keeps it open"
+    );
+    desktop.point_into_content(30 + 40, 20 + 16);
+    desktop.click(BTN_LEFT);
+    desktop.wait_for(
+        &mut [&mut client],
+        |events| !menu_events(events).is_empty(),
+        |_| true,
+    );
+    assert_eq!(
+        menu_events(&client.seen),
+        [WindowEvent::MenuAction("open".to_owned())]
+    );
+    desktop.wait_for(
+        &mut [&mut client],
+        |_| true,
+        |desktop| desktop.server.popup_count() == 0,
+    );
+}
+
+#[test]
+fn releasing_a_held_secondary_button_over_an_item_chooses_it() {
+    let mut desktop = Desktop::new();
+    let mut client = pointed_window(&mut desktop, "menu drag");
+    open_menu(&mut desktop, &mut client);
+    desktop.settle(&mut [&mut client]);
+    desktop.point_into_content(30 + 40, 20 + 5 + 22 + 22 + 11 + 22 + 11);
+    desktop.server.press_button(BTN_RIGHT, false, 0);
+    desktop.wait_for(
+        &mut [&mut client],
+        |events| !menu_events(events).is_empty(),
+        |_| true,
+    );
+    assert_eq!(
+        menu_events(&client.seen),
+        [WindowEvent::MenuAction("delete".to_owned())]
+    );
+}
+
+#[test]
+fn the_keyboard_walks_into_a_submenu_and_escape_closes_level_by_level() {
+    let mut desktop = Desktop::new();
+    let mut client = pointed_window(&mut desktop, "menu keys");
+    open_menu(&mut desktop, &mut client);
+    desktop.server.press_button(BTN_RIGHT, false, 0);
+    desktop.settle(&mut [&mut client]);
+    desktop.type_keys(&[KEY_DOWN]);
+    desktop.type_keys(&[KEY_DOWN]);
+    desktop.type_keys(&[KEY_RIGHT]);
+    desktop.wait_for(
+        &mut [&mut client],
+        |_| true,
+        |desktop| desktop.server.popup_count() == 2,
+    );
+    desktop.type_keys(&[KEY_ESC]);
+    desktop.wait_for(
+        &mut [&mut client],
+        |_| true,
+        |desktop| desktop.server.popup_count() == 1,
+    );
+    desktop.type_keys(&[KEY_D]);
+    desktop.type_keys(&[KEY_ENTER]);
+    desktop.wait_for(
+        &mut [&mut client],
+        |events| !menu_events(events).is_empty(),
+        |_| true,
+    );
+    assert_eq!(
+        menu_events(&client.seen),
+        [WindowEvent::MenuAction("delete".to_owned())]
+    );
+}
+
+#[test]
+fn escape_or_a_click_outside_closes_a_menu_without_a_choice() {
+    let mut desktop = Desktop::new();
+    let mut client = pointed_window(&mut desktop, "menu escape");
+    open_menu(&mut desktop, &mut client);
+    desktop.server.press_button(BTN_RIGHT, false, 0);
+    desktop.settle(&mut [&mut client]);
+    desktop.type_keys(&[KEY_ESC]);
+    desktop.wait_for(
+        &mut [&mut client],
+        |events| menu_events(events) == [WindowEvent::MenuClosed],
+        |desktop| desktop.server.popup_count() == 0,
+    );
+
+    open_menu(&mut desktop, &mut client);
+    desktop.server.press_button(BTN_RIGHT, false, 0);
+    desktop.settle(&mut [&mut client]);
+    desktop.server.move_pointer_to(Point::from((2.0, 2.0)), 0);
+    desktop.click(BTN_LEFT);
+    desktop.wait_for(
+        &mut [&mut client],
+        |events| menu_events(events).len() == 2,
+        |desktop| desktop.server.popup_count() == 0,
+    );
+    assert_eq!(
+        menu_events(&client.seen),
+        [WindowEvent::MenuClosed, WindowEvent::MenuClosed]
+    );
+}
+
+#[test]
+fn resting_on_a_submenu_item_opens_its_submenu() {
+    let mut desktop = Desktop::new();
+    let mut client = pointed_window(&mut desktop, "menu hover");
+    open_menu(&mut desktop, &mut client);
+    desktop.server.press_button(BTN_RIGHT, false, 0);
+    desktop.settle(&mut [&mut client]);
+    desktop.point_into_content(30 + 40, 20 + 5 + 22 + 22 + 11 + 11);
+    desktop.wait_for(
+        &mut [&mut client],
+        |_| true,
+        |desktop| desktop.server.popup_count() == 2,
+    );
 }

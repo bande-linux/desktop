@@ -23,7 +23,7 @@ const NOTIFICATION_CENTER: &str = "org.unbound.NotificationCenter";
 enum Mode {
     Hidden,
     Volume(Instant),
-    Panel(Ui),
+    Panel(Box<Ui>),
 }
 
 struct ControlCenter {
@@ -156,7 +156,7 @@ impl ControlCenter {
             TextSystem::new(),
             &self.changes,
         );
-        self.mode = Mode::Panel(ui);
+        self.mode = Mode::Panel(Box::new(ui));
         self.show(window, PANEL_SIZE);
     }
 

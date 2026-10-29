@@ -192,6 +192,7 @@ pub struct State {
     pub(crate) popups: PopupManager,
     pub(crate) lock_screen_requested: bool,
     pub(crate) force_quit_requested: bool,
+    pub(crate) refused_tokens: Vec<XdgActivationToken>,
     pub(crate) watchdog: crate::watchdog::Watchdog,
     pub(crate) desktop: crate::gesture::ShowDesktop,
     pub(crate) gesture_route: Option<crate::gesture::Route>,
@@ -292,7 +293,7 @@ impl Headless {
         output.change_current_state(Some(mode), None, None, Some((0, 0).into()));
         output.set_preferred(mode);
         output.create_global::<State>(&handle);
-        handle.create_global::<State, UnboundShellV1, ()>(6, ());
+        handle.create_global::<State, UnboundShellV1, ()>(7, ());
         handle.create_global::<State, UnboundAppV1, ()>(1, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
         State::create_capture_globals(&handle);
@@ -349,6 +350,7 @@ impl Headless {
             popups: PopupManager::default(),
             lock_screen_requested: false,
             force_quit_requested: false,
+            refused_tokens: Vec::new(),
             watchdog: crate::watchdog::Watchdog::default(),
             desktop: crate::gesture::ShowDesktop::default(),
             gesture_route: None,
@@ -745,7 +747,10 @@ impl State {
         if self.redirect_focus_while_locked(&surface) {
             return;
         }
-        if surface.is_some() {
+        if surface
+            .as_ref()
+            .is_some_and(|surface| self.window_index(surface).is_some())
+        {
             self.hide_desktop();
         }
         if let Some(exclusive) = &mut self.exclusive_layer
@@ -1367,26 +1372,39 @@ impl XdgActivationHandler for State {
         &mut self.activation_state
     }
 
-    fn token_created(&mut self, _token: XdgActivationToken, data: XdgActivationTokenData) -> bool {
-        if data
+    fn token_created(&mut self, token: XdgActivationToken, data: XdgActivationTokenData) -> bool {
+        let from_shell = data
             .client_id
             .as_ref()
-            .is_some_and(|id| shell::is_shell_client(&self.display_handle, id))
-        {
-            return true;
+            .is_some_and(|id| shell::is_shell_client(&self.display_handle, id));
+        let valid = from_shell
+            || match self.focused() {
+                None => true,
+                Some(focused) => focused.client().map(|client| client.id()) == data.client_id,
+            };
+        if !valid {
+            self.refused_tokens.push(token);
         }
-        match self.focused() {
-            None => true,
-            Some(focused) => focused.client().map(|client| client.id()) == data.client_id,
-        }
+        true
     }
 
     fn request_activation(
         &mut self,
-        _token: XdgActivationToken,
+        token: XdgActivationToken,
         _token_data: XdgActivationTokenData,
         surface: WlSurface,
     ) {
+        let app_id = shell::toplevel_names(&surface).1;
+        if let Some(index) = self
+            .refused_tokens
+            .iter()
+            .position(|refused| refused == &token)
+        {
+            self.refused_tokens.remove(index);
+            self.request_attention(app_id);
+            return;
+        }
+        self.show_app(&app_id);
         self.unminimize(&surface);
         let mapped = self
             .windows

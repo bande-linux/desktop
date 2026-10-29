@@ -4,6 +4,7 @@ mod capture;
 mod clock;
 mod cursor;
 mod decoration;
+mod dock;
 mod drm;
 mod effect;
 mod environment;

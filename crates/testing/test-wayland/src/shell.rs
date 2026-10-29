@@ -39,7 +39,7 @@ pub(crate) struct Shell {
     token: Option<String>,
     preferred_scale: Option<u32>,
     fractional_scale: Option<WpFractionalScaleV1>,
-    layers: Vec<(WlSurface, ZwlrLayerSurfaceV1)>,
+    pub(crate) layers: Vec<(WlSurface, ZwlrLayerSurfaceV1)>,
     shell: Option<UnboundShellV1>,
     launcher_requests: usize,
     capture_requests: usize,
@@ -48,6 +48,10 @@ pub(crate) struct Shell {
     volume_keys: Vec<(unbound_shell_v1::VolumeKey, bool)>,
     control_center_toggles: usize,
     responding: Vec<(i32, String, bool)>,
+    minimized: Vec<(String, bool)>,
+    attention: Vec<String>,
+    shell_focus: Vec<String>,
+    identifiers: Vec<(ExtForeignToplevelHandleV1, String)>,
     quit_requests: usize,
     toplevels: Vec<(ExtForeignToplevelHandleV1, String, bool)>,
 }
@@ -63,18 +67,21 @@ pub struct LayerRequest {
 
 impl TestClient {
     pub fn show_layer(&mut self, server: &mut Headless, request: &LayerRequest) -> (u32, u32) {
+        self.show_named_layer(server, request, "unbound-test")
+    }
+
+    pub fn show_named_layer(
+        &mut self,
+        server: &mut Headless,
+        request: &LayerRequest,
+        namespace: &str,
+    ) -> (u32, u32) {
         let qh = self.queue.handle();
         let shell: ZwlrLayerShellV1 = self.bind("zwlr_layer_shell_v1", 4);
         let compositor = self.globals.compositor.as_ref().expect("wl_compositor");
         let surface = compositor.create_surface(&qh, ());
-        let layer_surface = shell.get_layer_surface(
-            &surface,
-            None,
-            request.layer,
-            "unbound-test".into(),
-            &qh,
-            (),
-        );
+        let layer_surface =
+            shell.get_layer_surface(&surface, None, request.layer, namespace.to_owned(), &qh, ());
         layer_surface.set_size(request.size.0, request.size.1);
         layer_surface.set_anchor(request.anchor);
         layer_surface.set_exclusive_zone(request.exclusive_zone);
@@ -140,7 +147,7 @@ impl TestClient {
     }
 
     pub fn join_shell(&mut self, server: &mut Headless) {
-        let shell: UnboundShellV1 = self.bind("unbound_shell_v1", 6);
+        let shell: UnboundShellV1 = self.bind("unbound_shell_v1", 7);
         self.globals.shell.shell = Some(shell);
         let _: ExtForeignToplevelListV1 = self.bind("ext_foreign_toplevel_list_v1", 1);
         self.exchange(server);
@@ -202,10 +209,66 @@ impl TestClient {
         self.globals.shell.quit_requests
     }
 
-    pub fn activate_app(&mut self, server: &mut Headless, app_id: &str) {
-        let shell = self.globals.shell.shell.as_ref().expect("joined the shell");
-        shell.activate_app(app_id.to_owned());
+    fn shell_request(&mut self, server: &mut Headless, request: impl FnOnce(&UnboundShellV1)) {
+        request(self.globals.shell.shell.as_ref().expect("joined the shell"));
         self.exchange(server);
+    }
+
+    pub fn hide_app(&mut self, server: &mut Headless, app_id: &str) {
+        self.shell_request(server, |shell| shell.hide_app(app_id.to_owned()));
+    }
+
+    pub fn quit_app(&mut self, server: &mut Headless, app_id: &str) {
+        self.shell_request(server, |shell| shell.quit_app(app_id.to_owned()));
+    }
+
+    pub fn force_quit_app(&mut self, server: &mut Headless, app_id: &str) {
+        self.shell_request(server, |shell| shell.force_quit_app(app_id.to_owned()));
+    }
+
+    pub fn activate_window(&mut self, server: &mut Headless, identifier: &str) {
+        self.shell_request(server, |shell| shell.activate_window(identifier.to_owned()));
+    }
+
+    pub fn set_corner_radius(&mut self, server: &mut Headless, layer: usize, radius: u32) {
+        let surface = self.globals.shell.layers[layer].0.clone();
+        self.shell_request(server, |shell| shell.set_corner_radius(&surface, radius));
+    }
+
+    pub fn window_identifiers(&self, app_id: &str) -> Vec<String> {
+        let shell = &self.globals.shell;
+        shell
+            .toplevels
+            .iter()
+            .filter(|(_, known, closed)| known == app_id && !closed)
+            .filter_map(|(handle, _, _)| {
+                shell
+                    .identifiers
+                    .iter()
+                    .find(|(known, _)| known == handle)
+                    .map(|(_, identifier)| identifier.clone())
+            })
+            .collect()
+    }
+
+    pub fn layer_has_keyboard(&self, index: usize) -> bool {
+        self.globals.input.keyboard_surface() == Some(&self.globals.shell.layers[index].0)
+    }
+
+    pub fn minimized_windows(&self) -> &[(String, bool)] {
+        &self.globals.shell.minimized
+    }
+
+    pub fn attention_requests(&self) -> &[String] {
+        &self.globals.shell.attention
+    }
+
+    pub fn shell_focus_requests(&self) -> &[String] {
+        &self.globals.shell.shell_focus
+    }
+
+    pub fn activate_app(&mut self, server: &mut Headless, app_id: &str) {
+        self.shell_request(server, |shell| shell.activate_app(app_id.to_owned()));
     }
 
     pub fn running_app_ids(&self) -> Vec<String> {
@@ -358,6 +421,16 @@ impl Dispatch<UnboundShellV1, ()> for Globals {
             unbound_shell_v1::Event::ToggleControlCenter => {
                 globals.shell.control_center_toggles += 1;
             }
+            unbound_shell_v1::Event::WindowMinimized {
+                identifier,
+                minimized,
+            } => globals.shell.minimized.push((identifier, minimized != 0)),
+            unbound_shell_v1::Event::AttentionRequested { app_id } => {
+                globals.shell.attention.push(app_id);
+            }
+            unbound_shell_v1::Event::FocusShell { namespace } => {
+                globals.shell.shell_focus.push(namespace);
+            }
             unbound_shell_v1::Event::AppResponding {
                 pid,
                 app_id,
@@ -417,6 +490,12 @@ impl Dispatch<ExtForeignToplevelHandleV1, ()> for Globals {
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
+        if let ext_foreign_toplevel_handle_v1::Event::Identifier { identifier } = &event {
+            globals
+                .shell
+                .identifiers
+                .push((handle.clone(), identifier.clone()));
+        }
         let Some(entry) = globals
             .shell
             .toplevels

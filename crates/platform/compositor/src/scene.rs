@@ -11,7 +11,7 @@ use smithay::utils::{Buffer as BufferCoords, Physical, Point, Rectangle, Scale};
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::Logical;
 
-use crate::effect::blur_rects;
+use crate::effect::{blur_rects, corner_radius};
 use crate::motion::{Look, Motion};
 use crate::state::OutputElement;
 use crate::state::mapped_size;
@@ -461,13 +461,14 @@ pub(crate) fn surface_blurs(
         return Vec::new();
     };
     let bounds = Rectangle::new(location, size);
+    let radius = corner_radius(surface);
     blur_rects(surface)
         .into_iter()
         .filter_map(|(id, rect)| {
             let rect = Rectangle::new(location + rect.loc, rect.size).intersection(bounds)?;
             Some(OutputElement::Blur(BlurElement::new(
                 id,
-                rounded(rect.to_f64().to_physical(scale), 0.0),
+                rounded(rect.to_f64().to_physical(scale), radius * scale),
                 scale,
                 1.0,
             )))

@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use std::fs::{File, OpenOptions};
 use std::io;
 use std::os::fd::{AsFd, BorrowedFd};

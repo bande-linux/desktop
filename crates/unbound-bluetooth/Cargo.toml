@@ -11,3 +11,6 @@ zbus.workspace = true
 
 [dev-dependencies]
 unbound-test-bus.workspace = true
+
+[lints]
+workspace = true

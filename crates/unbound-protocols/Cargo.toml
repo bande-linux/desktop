@@ -14,3 +14,6 @@ wayland-backend.workspace = true
 wayland-client = { workspace = true, optional = true }
 wayland-scanner.workspace = true
 wayland-server = { workspace = true, optional = true }
+
+[lints]
+workspace = true

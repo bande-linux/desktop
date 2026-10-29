@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;

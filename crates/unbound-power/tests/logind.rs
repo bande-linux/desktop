@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use std::io::{PipeReader, Read};
 use std::os::fd::OwnedFd;
 use std::sync::atomic::{AtomicBool, Ordering};

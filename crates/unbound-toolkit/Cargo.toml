@@ -33,3 +33,6 @@ unbound-compositor.workspace = true
 unbound-test-wayland.workspace = true
 unbound-test-bus.workspace = true
 zbus.workspace = true
+
+[lints]
+workspace = true

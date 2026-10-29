@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use std::io::Read;
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::net::UnixStream;

@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use unbound_toolkit::{Color, GlyphRun, Paragraph, TextAlign, TextStyle, TextSystem};
 
 const INTER: &str = "/usr/share/fonts/opentype/inter";

@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use smithay::utils::{Point, Size};
 use unbound_compositor::{ARROW_FILL, ARROW_OUTLINE, BACKGROUND, Headless, Renderer};
 use unbound_test_wayland::{RED, ShmImage, TestClient, roundtrip};

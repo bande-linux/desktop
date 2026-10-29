@@ -35,3 +35,6 @@ assets = [
     ["debian/unbound-power.service", "usr/lib/systemd/user/", "644"],
     ["debian/org.unbound.Power.service", "usr/share/dbus-1/services/", "644"],
 ]
+
+[lints]
+workspace = true

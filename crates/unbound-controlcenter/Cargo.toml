@@ -30,3 +30,6 @@ are pressed. unbound-compositor starts it and keeps it running."""
 assets = [
     ["target/release/unbound-controlcenter", "usr/bin/", "755"],
 ]
+
+[lints]
+workspace = true

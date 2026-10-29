@@ -26,3 +26,6 @@ assets = [
     ["target/release/unbound-greeter", "usr/bin/", "755"],
     ["data/config.toml", "usr/share/unbound-greeter/greetd-config.toml", "644"],
 ]
+
+[lints]
+workspace = true

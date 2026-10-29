@@ -32,3 +32,6 @@ assets = [
     ["debian/unbound-config.service", "usr/lib/systemd/user/", "644"],
     ["debian/org.unbound.Config.service", "usr/share/dbus-1/services/", "644"],
 ]
+
+[lints]
+workspace = true

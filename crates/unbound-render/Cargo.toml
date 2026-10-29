@@ -11,3 +11,6 @@ smithay.workspace = true
 
 [build-dependencies]
 naga.workspace = true
+
+[lints]
+workspace = true

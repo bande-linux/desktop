@@ -25,3 +25,6 @@ Takes over each new clipboard and primary selection through \
 ext-data-control-v1 and serves it after the copying application has \
 quit. unbound-compositor starts it on a socket pair and offers \
 ext-data-control on that connection only."""
+
+[lints]
+workspace = true

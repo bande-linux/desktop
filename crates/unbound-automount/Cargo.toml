@@ -25,3 +25,6 @@ assets = [
     ["target/release/unbound-automount", "usr/bin/", "755"],
     ["debian/unbound-automount.service", "usr/lib/systemd/user/", "644"],
 ]
+
+[lints]
+workspace = true

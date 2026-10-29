@@ -41,3 +41,6 @@ assets = [
     ["debian/unbound-session.target", "usr/lib/systemd/user/", "644"],
     ["debian/unbound.desktop", "usr/share/wayland-sessions/", "644"],
 ]
+
+[lints]
+workspace = true

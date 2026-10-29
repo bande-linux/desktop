@@ -30,3 +30,6 @@ extended-description = """\
 The lock screen of the Unbound desktop. Control-Super-Q, or the session \
 going idle or to sleep, starts it; it covers every output through \
 ext-session-lock-v1 and unlocks once PAM accepts the user's password."""
+
+[lints]
+workspace = true

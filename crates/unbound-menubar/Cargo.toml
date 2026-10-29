@@ -20,3 +20,6 @@ The menu bar of the Unbound desktop: a bar along the top of the screen \
 that names the active app in bold and shows the date and time at its \
 right end, as the macOS menu bar does. unbound-compositor starts it and \
 keeps it running."""
+
+[lints]
+workspace = true

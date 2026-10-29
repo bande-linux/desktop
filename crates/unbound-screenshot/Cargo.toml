@@ -21,3 +21,6 @@ extended-description = """\
 The screenshot tool of the Unbound desktop. Super+Shift+3 saves a picture \
 of the whole screen, and Super+Shift+4 one of an area dragged out with the \
 pointer, to the desktop folder as a PNG named after the moment it was taken. unbound-compositor starts it and keeps it running."""
+
+[lints]
+workspace = true

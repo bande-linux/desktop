@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 

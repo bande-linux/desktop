@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use unbound_compositor::BACKGROUND;
 use unbound_test_wayland::{BLUE, GREEN, HALF_WHITE, Memory, RED, ShmImage, quadrants};
 use wayland_client::protocol::wl_shm::Format;

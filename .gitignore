@@ -30,3 +30,6 @@ debian/*.substvars
 /packaging/*.buildinfo
 /packaging/*.changes
 /ci/deb/install-test/debs/
+
+# Agent worktrees
+.claude/

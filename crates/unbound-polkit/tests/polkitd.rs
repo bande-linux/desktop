@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use std::process::{Child, Command};
 use std::sync::Arc;
 use std::sync::Mutex;

@@ -24,3 +24,6 @@ extended-description = """\
 The panel of the Unbound desktop: the apps kept in it and the running \
 apps, with a clock. unbound-compositor starts it on the screen edge \
 named in config.kdl."""
+
+[lints]
+workspace = true

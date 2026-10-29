@@ -7,6 +7,11 @@ version = "0.1.0"
 edition = "2024"
 repository = "https://github.com/unbound-linux/desktop"
 
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+
 [workspace.dependencies]
 alacritty_terminal = { version = "=0.26.0", default-features = false }
 accesskit = "=0.25.2"

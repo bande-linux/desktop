@@ -31,3 +31,6 @@ assets = [
     ["debian/unbound.portal", "usr/share/xdg-desktop-portal/portals/", "644"],
     ["debian/unbound-portals.conf", "usr/share/xdg-desktop-portal/", "644"],
 ]
+
+[lints]
+workspace = true

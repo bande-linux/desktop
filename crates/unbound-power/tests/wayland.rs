@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use std::os::unix::net::UnixStream;
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver};

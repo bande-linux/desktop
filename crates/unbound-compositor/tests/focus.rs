@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use smithay::utils::Size;
 use unbound_compositor::Headless;
 use unbound_test_wayland::{ShmImage, TestClient, quadrants, roundtrip};

@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use std::f64::consts::PI;
 
 use unbound_spring::{Animation, Spring, SpringError, State};

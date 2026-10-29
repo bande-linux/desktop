@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use std::time::Duration;
 
 use unbound_config::{Appearance, Config, Output, PanelEdge, Setting};

@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use smithay::utils::{Point, Size};
 use unbound_compositor::{Headless, Rect, Renderer};
 use unbound_test_wayland::{

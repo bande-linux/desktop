@@ -24,3 +24,6 @@ The launcher of the Unbound desktop: Super+Space opens a search field \
 over the screen that finds installed apps by name, description and \
 keywords and opens the chosen one. unbound-compositor starts it and \
 keeps it running so that it appears at once."""
+
+[lints]
+workspace = true

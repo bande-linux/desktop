@@ -25,3 +25,6 @@ assets = [
     ["debian/unbound-tray.service", "usr/lib/systemd/user/", "644"],
     ["debian/org.unbound.Tray.service", "usr/share/dbus-1/services/", "644"],
 ]
+
+[lints]
+workspace = true

@@ -8,4 +8,4 @@ ExecStart=/usr/bin/unbound-automount
 Restart=on-failure
 
 [Install]
-WantedBy=graphical-session.target
+WantedBy=unbound-session.target

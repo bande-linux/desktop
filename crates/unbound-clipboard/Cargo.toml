@@ -19,7 +19,7 @@ unbound-test-wayland.workspace = true
 
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
-section = "x11"
+section = "misc"
 extended-description = """\
 Takes over each new clipboard and primary selection through \
 ext-data-control-v1 and serves it after the copying application has \

@@ -22,7 +22,7 @@ use unbound_graphics::{
     RenderError, Scene, TextSystem, pixels, vulkan_instance,
 };
 use unbound_protocols::client::unbound_shell_v1::VolumeKey;
-use unbound_widgets::{Menu, MenuOutcome};
+use unbound_widgets::{Menu, MenuOutcome, Ui};
 use wayland_client::backend::WaylandError;
 use wayland_client::protocol::wl_buffer::{self, WlBuffer};
 use wayland_client::protocol::wl_callback::{self, WlCallback};
@@ -745,6 +745,44 @@ impl Window {
             self.queue.blocking_dispatch(&mut self.state)?;
         }
         self.draw_menus(Instant::now())
+    }
+
+    pub fn drive(
+        &mut self,
+        ui: &mut Ui,
+        event: WindowEvent,
+    ) -> Result<Option<WindowEvent>, WindowError> {
+        let (changed, unhandled) = match event {
+            WindowEvent::Input(input) => {
+                let changed = ui.handle(&input);
+                if let Some((menu, at)) = ui.take_menu_request() {
+                    self.show_menu(menu, MenuPlacement::AtPoint(at))?;
+                }
+                self.set_cursor(ui.cursor());
+                (changed, None)
+            }
+            WindowEvent::Accessibility(request) => match ui.perform(&request) {
+                true => (true, None),
+                false => (false, Some(WindowEvent::Accessibility(request))),
+            },
+            WindowEvent::MenuAction(action) => match ui.menu_action(&action) {
+                true => (true, None),
+                false => (false, Some(WindowEvent::MenuAction(action))),
+            },
+            WindowEvent::MenuClosed => match ui.menu_closed() {
+                true => (false, None),
+                false => (false, Some(WindowEvent::MenuClosed)),
+            },
+            WindowEvent::AppearanceChanged(appearance) => {
+                ui.set_appearance(appearance);
+                (true, Some(WindowEvent::AppearanceChanged(appearance)))
+            }
+            event => (false, Some(event)),
+        };
+        if changed || ui.is_animating() {
+            self.request_redraw();
+        }
+        Ok(unhandled)
     }
 
     pub fn is_menu_open(&self) -> bool {

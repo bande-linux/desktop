@@ -205,6 +205,34 @@ fn hit_path(widget: &dyn Widget, point: Point, path: &mut Vec<WidgetId>) -> bool
     true
 }
 
+fn path_to(widget: &dyn Widget, id: WidgetId, path: &mut Vec<WidgetId>) -> bool {
+    path.push(widget.id());
+    if widget.id() == id
+        || widget
+            .children()
+            .iter()
+            .any(|child| path_to(child.as_ref(), id, path))
+    {
+        return true;
+    }
+    path.pop();
+    false
+}
+
+fn opens_menu(key: Key, modifiers: Modifiers) -> bool {
+    match key {
+        Key::Menu => true,
+        Key::Function(10) => {
+            modifiers
+                == Modifiers {
+                    shift: true,
+                    ..Modifiers::default()
+                }
+        }
+        _ => false,
+    }
+}
+
 fn focus_order(widget: &dyn Widget, cx: &Context, order: &mut Vec<WidgetId>) {
     if widget.accepts_focus(cx) {
         order.push(widget.id());
@@ -373,6 +401,9 @@ impl Ui {
                 self.move_focus(!modifiers.shift);
                 true
             }
+            Event::Key { key, modifiers } if opens_menu(*key, *modifiers) => {
+                self.request_keyboard_menu()
+            }
             Event::Key { .. } | Event::Commit(_) | Event::Preedit { .. } => self
                 .cx
                 .focus
@@ -380,8 +411,23 @@ impl Ui {
         }
     }
 
+    fn request_keyboard_menu(&mut self) -> bool {
+        let mut path = Vec::new();
+        let target = self.cx.focus.unwrap_or_else(|| self.root.id());
+        if !path_to(self.root.as_ref(), target, &mut path) {
+            path = vec![self.root.id()];
+        }
+        let frame = find(self.root.as_ref(), target)
+            .map_or_else(|| self.root.frame(), |widget| widget.frame());
+        let point = Point::new(frame.x, frame.y + frame.height);
+        self.request_menu_along(path, point)
+    }
+
     fn request_menu(&mut self, point: Point) -> bool {
-        let path = self.hovered.clone();
+        self.request_menu_along(self.hovered.clone(), point)
+    }
+
+    fn request_menu_along(&mut self, path: Vec<WidgetId>, point: Point) -> bool {
         for id in path.into_iter().rev() {
             let Some(widget) = find_mut(self.root.as_mut(), id) else {
                 continue;
@@ -397,6 +443,10 @@ impl Ui {
 
     pub fn take_menu_request(&mut self) -> Option<(Menu, Point)> {
         self.menu_request.take()
+    }
+
+    pub fn menu_closed(&mut self) -> bool {
+        self.menu_owner.take().is_some()
     }
 
     pub fn menu_action(&mut self, action: &str) -> bool {

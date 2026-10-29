@@ -25,6 +25,7 @@ pub enum Key {
     PageUp,
     PageDown,
     Insert,
+    Menu,
     Function(u8),
     Character(char),
 }

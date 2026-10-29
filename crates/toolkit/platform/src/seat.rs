@@ -80,6 +80,7 @@ pub(crate) struct Input {
     pointer_at: Point,
     held: Vec<(u32, PointerButton)>,
     pointer_popup: Option<usize>,
+    pub(crate) keyboard_initiated: bool,
     keyboard_popup: Option<usize>,
     clicks: Clicks,
     scroll: ScrollFrame,
@@ -108,6 +109,7 @@ pub(crate) fn key_for(keysym: Keysym) -> Option<Key> {
         keysyms::KEY_Page_Up | keysyms::KEY_KP_Page_Up => Key::PageUp,
         keysyms::KEY_Page_Down | keysyms::KEY_KP_Page_Down => Key::PageDown,
         keysyms::KEY_Insert | keysyms::KEY_KP_Insert => Key::Insert,
+        keysyms::KEY_Menu => Key::Menu,
         raw @ keysyms::KEY_F1..=keysyms::KEY_F12 => {
             Key::Function(u8::try_from(raw - keysyms::KEY_F1 + 1).ok()?)
         }
@@ -290,6 +292,7 @@ impl State {
         if button == PointerButton::Primary && input.modifiers.control {
             button = PointerButton::Secondary;
         }
+        input.keyboard_initiated = false;
         input.held.retain(|(held, _)| *held != code);
         input.held.push((code, button));
         let count = input.clicks.press(button, position, now);
@@ -533,6 +536,7 @@ impl Dispatch<WlKeyboard, ()> for State {
                 input.serial = Some(serial);
                 let keycode = Keycode::new(key + EVDEV_OFFSET);
                 if key_state == wl_keyboard::KeyState::Pressed {
+                    input.keyboard_initiated = true;
                     let repeats = input
                         .keymap
                         .as_ref()

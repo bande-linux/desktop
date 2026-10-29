@@ -275,6 +275,30 @@ fn a_secondary_click_asks_the_widget_under_the_pointer_for_its_menu_and_routes_t
 }
 
 #[test]
+fn shift_f10_opens_the_menu_of_the_focused_control_below_it() {
+    let field = TextField::new("Name", "", |_| {});
+    let field_id = field.id();
+    let area = ContextMenu::new(
+        field,
+        || Menu::new(vec![MenuItem::new("Paste", "paste")]),
+        |_| {},
+    );
+    let mut ui = Ui::new(Box::new(area), context());
+    ui.layout(Size::new(200.0, TEXT_FIELD_HEIGHT));
+    ui.handle(&key(Key::Function(10), NONE));
+    assert!(
+        ui.take_menu_request().is_none(),
+        "F10 alone is not a menu key"
+    );
+    ui.handle(&key(Key::Tab, NONE));
+    assert_eq!(ui.focus(), Some(field_id));
+    ui.handle(&key(Key::Function(10), SHIFT));
+    let frame = ui.widget(field_id).expect("field").frame();
+    let (_, at) = ui.take_menu_request().expect("a menu");
+    assert_eq!(at, Point::new(frame.x, frame.y + frame.height));
+}
+
+#[test]
 fn buttons_click_on_release_inside_like_macos() {
     let clicks = Rc::new(Cell::new(0));
     let counter = clicks.clone();

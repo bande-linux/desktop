@@ -367,6 +367,13 @@ pub enum MenuOutcome {
     Dismiss,
 }
 
+fn entered(mut panel: MenuPanel, from_keyboard: bool) -> MenuPanel {
+    if from_keyboard {
+        panel.highlighted = panel.step(None, true);
+    }
+    panel
+}
+
 pub struct MenuTracker {
     panels: Vec<MenuPanel>,
     typed: String,
@@ -377,9 +384,9 @@ pub struct MenuTracker {
 }
 
 impl MenuTracker {
-    pub fn new(root: MenuPanel) -> Self {
+    pub fn new(root: MenuPanel, from_keyboard: bool) -> Self {
         Self {
-            panels: vec![root],
+            panels: vec![entered(root, from_keyboard)],
             typed: String::new(),
             typed_at: None,
             submenu_due: None,
@@ -549,11 +556,7 @@ impl MenuTracker {
     }
 
     pub fn opened_submenu(&mut self, panel: MenuPanel, from_keyboard: bool) {
-        let mut panel = panel;
-        if from_keyboard {
-            panel.highlighted = panel.step(None, true);
-        }
-        self.panels.push(panel);
+        self.panels.push(entered(panel, from_keyboard));
     }
 
     pub fn deadline(&self) -> Option<Instant> {

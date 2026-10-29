@@ -1,18 +1,23 @@
 [package]
 name = "unbound-files"
-description = "Unbound Files: browses folders in Miller columns with Quick Look"
+description = "Unbound Files: the file manager of the Unbound desktop"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
 
 [dependencies]
-image.workspace = true
+image = { workspace = true, features = ["gif", "jpeg", "webp"] }
+jiff.workspace = true
+rustix = { workspace = true, features = ["fs"] }
 tracing.workspace = true
+unbound-fs.workspace = true
 unbound-l10n.workspace = true
 unbound-log.workspace = true
 unbound-toolkit.workspace = true
+unbound-xdg.workspace = true
 
 [dev-dependencies]
+rustix = { workspace = true, features = ["process"] }
 tempfile.workspace = true
 
 [package.metadata.deb]

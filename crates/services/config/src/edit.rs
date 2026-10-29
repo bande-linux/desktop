@@ -1,8 +1,9 @@
+use std::path::PathBuf;
 use std::time::Duration;
 
 use kdl::{KdlDocument, KdlEntry, KdlEntryFormat, KdlNode, KdlValue};
 
-use crate::{Appearance, Config, ConfigError, DockEdge, Output};
+use crate::{Appearance, Config, ConfigError, DockEdge, Output, Suspend, WallpaperVariant};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Setting {
@@ -10,7 +11,10 @@ pub enum Setting {
     DockEdge(DockEdge),
     IdleDimAfter(Duration),
     IdleLockAfter(Duration),
-    IdleSuspendAfter(Option<Duration>),
+    IdleSuspend(Suspend),
+    KeyRepeatRate(u32),
+    KeyRepeatDelay(Duration),
+    Wallpaper(WallpaperVariant, Option<PathBuf>),
     Output(String, Output),
 }
 
@@ -47,11 +51,36 @@ impl Setting {
                 "lock-after",
                 Some(duration(*after).into()),
             ),
-            Self::IdleSuspendAfter(after) => set(
+            Self::IdleSuspend(suspend) => set(
                 &mut document,
                 Some("idle"),
                 "suspend-after",
-                Some(after.map_or_else(|| "never".to_owned(), duration).into()),
+                match suspend {
+                    Suspend::WithDisplayOff => None,
+                    Suspend::After(after) => Some(duration(*after).into()),
+                    Suspend::Never => Some("never".into()),
+                },
+            ),
+            Self::KeyRepeatRate(rate) => set(
+                &mut document,
+                Some("keyboard"),
+                "repeat-rate",
+                Some(KdlValue::Integer((*rate).into())),
+            ),
+            Self::KeyRepeatDelay(delay) => set(
+                &mut document,
+                Some("keyboard"),
+                "repeat-delay",
+                Some(KdlValue::Integer(
+                    delay.as_millis().try_into().unwrap_or(i128::MAX),
+                )),
+            ),
+            Self::Wallpaper(variant, path) => set(
+                &mut document,
+                Some("wallpaper"),
+                variant.keyword(),
+                path.as_ref()
+                    .map(|path| path.to_string_lossy().into_owned().into()),
             ),
             Self::Output(connector, output) => set_output(&mut document, connector, output),
         }
@@ -151,11 +180,17 @@ fn set(document: &mut KdlDocument, section: Option<&str>, name: &str, value: Opt
         return;
     };
     match document
-        .nodes_mut()
-        .iter_mut()
-        .find(|node| node.name().value() == section)
+        .nodes()
+        .iter()
+        .position(|node| node.name().value() == section)
     {
-        Some(node) => set_child(node.ensure_children(), name, value, CHILD_INDENT),
+        Some(position) => {
+            let children = document.nodes_mut()[position].ensure_children();
+            set_child(children, name, value, CHILD_INDENT);
+            if children.nodes().is_empty() {
+                remove(document, position);
+            }
+        }
         None => {
             if let Some(value) = value {
                 let value = repr(&value);

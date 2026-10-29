@@ -1,20 +1,28 @@
 [package]
 name = "unbound-settings"
-description = "Unbound System Settings: appearance, dock and lock screen panes with search"
+description = "Unbound System Settings: panes for the desktop and its devices with ranked search"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
 
 [dependencies]
+accesskit.workspace = true
 tracing.workspace = true
+unbound-audio.workspace = true
+unbound-bluetooth.workspace = true
 unbound-config.workspace = true
 unbound-l10n.workspace = true
 unbound-log.workspace = true
+unbound-network.workspace = true
 unbound-toolkit.workspace = true
+wayland-client.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]
+image.workspace = true
+image-compare.workspace = true
 tempfile.workspace = true
+unbound-compositor.workspace = true
 unbound-test-bus.workspace = true
 
 [package.metadata.deb]
@@ -22,10 +30,12 @@ maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
 depends = "$auto, fonts-inter, unbound-config"
 extended-description = """\
-System Settings of the Unbound desktop: panes for appearance, the dock \
-and the lock screen, and a search field that narrows them to the \
-matching settings. Changes go through org.unbound.Config, which writes \
-config.kdl."""
+System Settings of the Unbound desktop: Wi-Fi, Bluetooth, notifications, \
+sound, appearance, the dock, displays, the lock screen and the keyboard, \
+with a search field that ranks the matching settings and marks them. \
+Every pane follows changes made elsewhere while it is open. Desktop \
+settings go through org.unbound.Config, which writes config.kdl."""
+recommends = "network-manager, bluez, pipewire, wireplumber, unbound-notify"
 assets = [
     ["target/release/unbound-settings", "usr/bin/", "755"],
     ["data/org.unbound.Settings.desktop", "usr/share/applications/", "644"],

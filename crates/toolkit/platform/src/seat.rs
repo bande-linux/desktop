@@ -6,6 +6,7 @@ use unbound_graphics::{
 use wayland_client::protocol::wl_keyboard::{self, KeymapFormat, WlKeyboard};
 use wayland_client::protocol::wl_pointer::{self, WlPointer};
 use wayland_client::protocol::wl_seat::{self, Capability, WlSeat};
+use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Connection, Dispatch, QueueHandle, WEnum, delegate_noop};
 use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_device_v1::{
     Shape, WpCursorShapeDeviceV1,
@@ -78,6 +79,8 @@ pub(crate) struct Input {
     modifiers: Modifiers,
     pointer_at: Point,
     held: Vec<(u32, PointerButton)>,
+    pointer_popup: Option<usize>,
+    keyboard_popup: Option<usize>,
     clicks: Clicks,
     scroll: ScrollFrame,
     scroll_source: ScrollSource,
@@ -197,6 +200,11 @@ impl Input {
         self.shown_cursor = Some(self.cursor);
     }
 
+    pub(crate) fn forget_popups(&mut self) {
+        self.pointer_popup = None;
+        self.keyboard_popup = None;
+    }
+
     pub(crate) fn set_cursor(&mut self, cursor: Cursor) {
         self.cursor = cursor;
         self.show_cursor();
@@ -234,14 +242,30 @@ impl Window {
         repeat.next = now + interval;
         let keycode = repeat.keycode;
         if let Some(event) = input.key_event(keycode) {
-            self.state.events.push(event);
+            self.state.key_event(event);
         }
     }
 }
 
 impl State {
     fn pointer_event(&mut self, event: Event) {
-        self.events.push(WindowEvent::Input(event));
+        match self.input.pointer_popup {
+            Some(level) => self.popup_input.push((level, event)),
+            None => self.events.push(WindowEvent::Input(event)),
+        }
+    }
+
+    fn key_event(&mut self, event: WindowEvent) {
+        match (self.input.keyboard_popup, event) {
+            (Some(level), WindowEvent::Input(input)) => self.popup_input.push((level, input)),
+            (_, event) => self.events.push(event),
+        }
+    }
+
+    fn popup_level(&self, surface: &WlSurface) -> Option<usize> {
+        self.popup_surfaces
+            .iter()
+            .position(|popup| popup == surface)
     }
 
     fn press(&mut self, serial: u32, code: u32, pressed: bool, now: Instant) {
@@ -266,6 +290,7 @@ impl State {
         if button == PointerButton::Primary && input.modifiers.control {
             button = PointerButton::Secondary;
         }
+        input.held.retain(|(held, _)| *held != code);
         input.held.push((code, button));
         let count = input.clicks.press(button, position, now);
         let pointer = input
@@ -350,10 +375,13 @@ impl Dispatch<WlPointer, ()> for State {
         match event {
             wl_pointer::Event::Enter {
                 serial,
+                surface,
                 surface_x,
                 surface_y,
-                ..
             } => {
+                let popup = state.popup_level(&surface);
+                let input = &mut state.input;
+                input.pointer_popup = popup;
                 let at = Point::new(surface_x as f32, surface_y as f32);
                 input.pointer_at = at;
                 input.enter_serial = Some(serial);
@@ -374,8 +402,8 @@ impl Dispatch<WlPointer, ()> for State {
             }
             wl_pointer::Event::Leave { .. } => {
                 input.enter_serial = None;
-                input.held.clear();
                 state.pointer_event(Event::PointerLeave);
+                state.input.pointer_popup = None;
             }
             wl_pointer::Event::Button {
                 serial,
@@ -447,13 +475,23 @@ impl Dispatch<WlKeyboard, ()> for State {
                     });
                 }
             }
-            wl_keyboard::Event::Enter { serial, .. } => {
+            wl_keyboard::Event::Enter {
+                serial, surface, ..
+            } => {
+                let popup = state.popup_level(&surface);
+                let input = &mut state.input;
                 input.serial = Some(serial);
-                state.events.push(WindowEvent::Focus(true));
+                input.keyboard_popup = popup;
+                if popup.is_none() {
+                    state.events.push(WindowEvent::Focus(true));
+                }
             }
-            wl_keyboard::Event::Leave { .. } => {
+            wl_keyboard::Event::Leave { surface, .. } => {
                 input.repeat = None;
-                state.events.push(WindowEvent::Focus(false));
+                let menu_open = !state.popup_surfaces.is_empty();
+                if state.popup_level(&surface).is_none() && !menu_open {
+                    state.events.push(WindowEvent::Focus(false));
+                }
             }
             wl_keyboard::Event::Modifiers {
                 mods_depressed,
@@ -504,7 +542,7 @@ impl Dispatch<WlKeyboard, ()> for State {
                         next: Instant::now() + input.repeat_delay,
                     });
                     if let Some(event) = input.key_event(keycode) {
-                        state.events.push(event);
+                        state.key_event(event);
                     }
                 } else if input
                     .repeat

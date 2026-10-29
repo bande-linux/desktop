@@ -4,10 +4,12 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use unbound_files::{Entry, preview};
-use unbound_launcher::{Action, AppInfo, Catalog, Hit, Kind, Launcher, Loaded, Target};
+use unbound_launcher::{
+    Action, AppInfo, Catalog, Hit, Kind, Launcher, Loaded, PaneInfo, SettingInfo, Target,
+};
 use unbound_search::{FileHit, FileResults, PREFIX, Usage, WORD, usage_path};
-use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer};
-use unbound_toolkit::{Color, CpuRenderer, Image, Palette, Point, Scheme, TextSystem};
+use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer, PointerButton};
+use unbound_toolkit::{Appearance, Color, CpuRenderer, Image, Point, Scheme, TextSystem};
 
 const SCREEN: (u32, u32) = (1024, 720);
 const MIN_SSIM: f64 = 0.99;
@@ -68,13 +70,44 @@ fn apps() -> Vec<AppInfo> {
     ]
 }
 
+fn appearance(scheme: Scheme) -> Appearance {
+    Appearance {
+        scheme,
+        ..Appearance::default()
+    }
+}
+
+fn panes() -> Vec<PaneInfo> {
+    vec![
+        PaneInfo {
+            keyword: "appearance".to_owned(),
+            name: "Appearance".to_owned(),
+            keywords: vec!["theme".to_owned()],
+            settings: vec![SettingInfo {
+                label: "Appearance".to_owned(),
+                keywords: vec!["dark".to_owned(), "light".to_owned()],
+            }],
+        },
+        PaneInfo {
+            keyword: "lock-screen".to_owned(),
+            name: "Lock Screen".to_owned(),
+            keywords: vec!["password".to_owned()],
+            settings: vec![SettingInfo {
+                label: "Turn display off after".to_owned(),
+                keywords: vec!["sleep".to_owned()],
+            }],
+        },
+    ]
+}
+
 fn launcher_with(usage: Usage, scheme: Scheme) -> Launcher {
     Launcher::new(
         apps(),
+        panes(),
         Box::new(Plain),
         PathBuf::from(HOME),
         usage,
-        Palette::for_scheme(scheme),
+        appearance(scheme),
         TextSystem::new(),
     )
 }
@@ -267,6 +300,57 @@ fn opening_a_result_is_remembered() {
 }
 
 #[test]
+fn settings_panes_are_found_by_name_keyword_and_setting() {
+    let mut launcher = launcher();
+    typed(&mut launcher, "dark");
+    let hit = launcher.selection().unwrap();
+    assert_eq!(hit.kind, Kind::Setting);
+    assert_eq!(hit.title, "Appearance");
+    key(&mut launcher, Key::Enter);
+    assert_eq!(
+        launcher.take_actions(),
+        [Action::Open(Target::Settings("appearance".to_owned()))]
+    );
+
+    launcher.clear();
+    typed(&mut launcher, "turn display");
+    let hit = launcher.selection().unwrap();
+    assert_eq!(hit.title, "Lock Screen");
+    assert_eq!(hit.detail.as_deref(), Some("Turn display off after"));
+
+    launcher.clear();
+    typed(&mut launcher, "lock");
+    assert_eq!(launcher.selection().unwrap().title, "Lock Screen");
+}
+
+#[test]
+fn a_right_click_on_a_file_offers_open_show_in_files_and_copy_path() {
+    let mut launcher = launcher();
+    typed(&mut launcher, "budget");
+    files(&mut launcher, &[("budget.ods", false, PREFIX)]);
+    launcher.scene(SCREEN.0, SCREEN.1, Instant::now());
+    let card_x = (SCREEN.0 as f32 - unbound_launcher::CARD_WIDTH) / 2.0;
+    let card_y = (SCREEN.1 as f32 * 0.22).round();
+    let row = Point::new(card_x + 60.0, card_y + 61.0 + 8.0 + 26.0 + 16.0);
+    launcher.handle(&Event::PointerDown(
+        Pointer::at(row).with_button(PointerButton::Secondary),
+    ));
+    let (menu, _) = launcher.ui.take_menu_request().expect("a context menu");
+    let actions: Vec<&str> = menu
+        .items
+        .iter()
+        .filter(|item| !item.separator)
+        .map(|item| item.action.as_str())
+        .collect();
+    assert_eq!(actions, ["open", "reveal", "copy"]);
+    launcher.ui.menu_action("reveal");
+    assert_eq!(
+        launcher.take_actions(),
+        [Action::Reveal(PathBuf::from("/home/someone/budget.ods"))]
+    );
+}
+
+#[test]
 fn arrows_choose_a_result_and_return_opens_it() {
     let mut launcher = launcher();
     typed(&mut launcher, "te");
@@ -376,6 +460,33 @@ fn a_click_beside_the_card_closes_and_a_click_on_a_result_opens_it() {
 }
 
 #[test]
+fn reduce_motion_fades_the_card_in_without_moving_it() {
+    let mut launcher = Launcher::new(
+        apps(),
+        panes(),
+        Box::new(Plain),
+        PathBuf::from(HOME),
+        Usage::default(),
+        Appearance {
+            reduce_motion: true,
+            ..Appearance::default()
+        },
+        TextSystem::new(),
+    );
+    let shown = Instant::now();
+    launcher.appear(shown);
+    let scene = launcher.scene(SCREEN.0, SCREEN.1, shown + Duration::from_millis(30));
+    let [unbound_toolkit::Item::Opacity { items, .. }] = scene.items.as_slice() else {
+        panic!("the card fades in");
+    };
+    assert!(
+        !items
+            .iter()
+            .any(|item| matches!(item, unbound_toolkit::Item::Translate { .. }))
+    );
+}
+
+#[test]
 fn the_card_appears_with_a_quick_fade_and_settles() {
     let mut launcher = launcher();
     let shown = Instant::now();
@@ -418,10 +529,11 @@ fn every_keystroke_updates_the_results_within_a_frame() {
     }
     let mut launcher = Launcher::new(
         apps,
+        panes(),
         Box::new(Plain),
         PathBuf::from(HOME),
         Usage::default(),
-        Palette::for_scheme(Scheme::Light),
+        appearance(Scheme::Light),
         TextSystem::new(),
     );
     launcher.scene(SCREEN.0, SCREEN.1, Instant::now());

@@ -3704,6 +3704,7 @@ dependencies = [
  "unbound-l10n",
  "unbound-log",
  "unbound-search",
+ "unbound-settings",
  "unbound-spring",
  "unbound-toolkit",
  "unbound-xdg",

@@ -11,19 +11,22 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use accesskit::TreeUpdate;
 use unbound_files::{Apps, Entry, preview};
-use unbound_launcher::{Action, AppInfo, Catalog, Hit, ICON_SIZE, Kind, Launcher, Loaded, Target};
+use unbound_launcher::{
+    Action, AppInfo, Catalog, Hit, ICON_SIZE, Kind, Launcher, Loaded, PaneInfo, SettingInfo, Target,
+};
 use unbound_search::{FileIndex, Usage, usage_path};
 use unbound_toolkit::{
-    App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Rect, Role, Scene, TextSystem,
-    Window, WindowError, WindowEvent,
+    App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement, Rect, Role, Scene,
+    TextSystem, Window, WindowError, WindowEvent,
 };
 use unbound_xdg::{
-    DIRECTORY, DesktopEntry, Locale, applications, config_dirs, current_desktops, data_dirs,
-    find_icon, launch, launch_with,
+    DIRECTORY, DesktopEntry, LaunchError, Locale, applications, config_dirs, current_desktops,
+    data_dirs, find_icon, launch, launch_with, spawn_detached,
 };
 
 const ICON_THEMES: [&str; 1] = ["Adwaita"];
 const FALLBACK_DOCUMENT: &str = "application-x-generic";
+const SETTINGS_APP: &str = "org.unbound.Settings";
 
 struct Library {
     apps: Rc<RefCell<Apps>>,
@@ -51,6 +54,7 @@ impl Catalog for Library {
     fn icon(&mut self, hit: &Hit) -> Option<Image> {
         match (&hit.target, hit.kind) {
             (Target::App(app_id), _) => self.app_icons.get(app_id).cloned().flatten(),
+            (Target::Settings(_), _) => self.app_icons.get(SETTINGS_APP).cloned().flatten(),
             (Target::Path(_), Kind::Folder) => {
                 let names = self.apps.borrow().icon_names(DIRECTORY);
                 self.named_icon(&names)
@@ -146,6 +150,11 @@ impl LauncherShell {
     }
 
     fn sync(&mut self, window: &mut Window) {
+        if let Some((menu, point)) = self.launcher.ui.take_menu_request()
+            && let Err(error) = window.show_menu(menu, MenuPlacement::AtPoint(point))
+        {
+            tracing::warn!("cannot show the menu: {error}");
+        }
         if let (Some(index), Some((generation, query))) = (&self.index, self.launcher.file_query())
         {
             index.query(generation, &query);
@@ -183,6 +192,18 @@ impl LauncherShell {
                     launch_with(&entry, std::slice::from_ref(path), token.as_deref())
                 })
             }
+            Target::Settings(keyword) => self
+                .entries
+                .iter()
+                .find(|entry| entry.app_id() == SETTINGS_APP)
+                .map(|entry| {
+                    let token = window.activation_token(SETTINGS_APP).ok();
+                    let mut command = entry.command().map_err(LaunchError::Exec)?;
+                    command.push(keyword.clone());
+                    spawn_detached(&command, None, token.as_deref())
+                        .map(|_| ())
+                        .map_err(LaunchError::Spawn)
+                }),
             Target::Value(_) => None,
         };
         match opened {
@@ -242,7 +263,11 @@ impl App for LauncherShell {
                 self.sync(window);
             }
             WindowEvent::AppearanceChanged(appearance) => {
-                self.launcher.ui.context().palette = appearance.palette();
+                self.launcher.set_appearance(appearance);
+            }
+            WindowEvent::MenuAction(action) => {
+                self.launcher.ui.menu_action(&action);
+                self.sync(window);
             }
             _ => {}
         }
@@ -304,6 +329,24 @@ fn app_icons(entries: &[DesktopEntry], data_dirs: &[PathBuf]) -> HashMap<String,
         .collect()
 }
 
+fn settings_panes() -> Vec<PaneInfo> {
+    unbound_settings::panes()
+        .into_iter()
+        .map(|pane| PaneInfo {
+            keyword: pane.id.keyword().to_owned(),
+            settings: pane
+                .settings()
+                .map(|setting| SettingInfo {
+                    label: setting.label.clone(),
+                    keywords: setting.keywords.clone(),
+                })
+                .collect(),
+            name: pane.name,
+            keywords: pane.keywords,
+        })
+        .collect()
+}
+
 fn run() -> Result<(), WindowError> {
     let dirs = data_dirs();
     let entries = applications(&dirs, Locale::from_env().as_ref(), &current_desktops());
@@ -348,10 +391,11 @@ fn run() -> Result<(), WindowError> {
     window.hide()?;
     let launcher = Launcher::new(
         apps,
+        settings_panes(),
         Box::new(library),
         home,
         usage,
-        window.appearance().palette(),
+        window.appearance(),
         TextSystem::new(),
     );
     if let Some(index) = &index {

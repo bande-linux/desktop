@@ -5,7 +5,7 @@ use std::sync::LazyLock;
 
 use unbound_l10n::Localizer;
 
-pub use model::{Action, AppInfo, Heading, Hit, Kind, Target};
+pub use model::{Action, AppInfo, Heading, Hit, Kind, PaneInfo, SettingInfo, Target};
 pub use view::{CARD_WIDTH, Catalog, ICON_SIZE, Launcher, Loaded};
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-launcher.ftl");

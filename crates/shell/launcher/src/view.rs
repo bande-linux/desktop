@@ -1,6 +1,5 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::f64::consts::TAU;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -10,14 +9,19 @@ use accesskit::{Action, ActionRequest, Node, Role};
 use unbound_files::{Entry, Preview, format_date, format_size};
 use unbound_search::{FileResults, Usage};
 use unbound_spring::{Animation, Spring, State as SpringState};
-use unbound_toolkit::ui::{Context, Event, Key, Size, TextField, Ui, Widget, WidgetId};
+use unbound_toolkit::Appearance;
+use unbound_toolkit::ui::{
+    Context, Event, Key, Menu, MenuItem, Size, TextField, Ui, Widget, WidgetId,
+};
 use unbound_toolkit::{
     Color, Image, Item, Palette, Paragraph, Point, Rect, Scene, Shape, TextAlign, TextStyle,
     TextSystem,
 };
 
 use crate::L10N;
-use crate::model::{Action as LauncherAction, AppInfo, Heading, Hit, Kind, Model, Target};
+use crate::model::{
+    Action as LauncherAction, AppInfo, Heading, Hit, Kind, Model, PaneInfo, Target,
+};
 
 pub const CARD_WIDTH: f32 = 720.0;
 pub const ICON_SIZE: u32 = 64;
@@ -46,7 +50,6 @@ const INFO_LABEL_WIDTH: f32 = 72.0;
 const INFO_LINE: f32 = 18.0;
 const TOP_FRACTION: f32 = 0.22;
 const APPEAR_RISE: f32 = 8.0;
-const APPEAR_DURATION: f64 = 0.25;
 const SETTLED: f64 = 0.002;
 const SELECTED_LABEL: Color = Color::hex(0xFFFFFF);
 
@@ -274,7 +277,7 @@ impl Widget for Row {
                 }
                 changed
             }
-            Event::PointerDown(pointer) if pointer.is_primary() => {
+            Event::PointerDown(_) => {
                 state.model.select(self.position);
                 true
             }
@@ -302,7 +305,47 @@ impl Widget for Row {
         state.model.activate();
         true
     }
+
+    fn context_menu(&mut self, _cx: &mut Context, _point: Point) -> Option<Menu> {
+        let state = self.state.borrow();
+        let hit = state.model.hits.get(self.position)?;
+        let mut items = Vec::new();
+        match &hit.target {
+            Target::Value(_) => {
+                items.push(MenuItem::new(&L10N.tr("menu-copy"), COPY).shortcut("Super+C"));
+            }
+            Target::Path(_) => {
+                items.push(MenuItem::new(&L10N.tr("menu-open"), OPEN).shortcut("Return"));
+                items.push(
+                    MenuItem::new(&L10N.tr("menu-show-in-files"), REVEAL).shortcut("Super+Return"),
+                );
+                items.push(MenuItem::separator());
+                items.push(MenuItem::new(&L10N.tr("menu-copy-path"), COPY).shortcut("Super+C"));
+            }
+            Target::App(_) | Target::Settings(_) => {
+                items.push(MenuItem::new(&L10N.tr("menu-open"), OPEN).shortcut("Return"));
+            }
+        }
+        Some(Menu::new(items))
+    }
+
+    fn menu_action(&mut self, _cx: &mut Context, action: &str) -> bool {
+        let mut state = self.state.borrow_mut();
+        state.model.select(self.position);
+        match action {
+            OPEN => state.model.activate(),
+            REVEAL => state.model.reveal(),
+            COPY if !state.model.copy() => return false,
+            COPY => {}
+            _ => return false,
+        }
+        true
+    }
 }
+
+const OPEN: &str = "open";
+const REVEAL: &str = "reveal";
+const COPY: &str = "copy";
 
 #[derive(Clone, Copy, PartialEq)]
 struct PreviewKey {
@@ -458,6 +501,7 @@ impl PreviewPane {
             y += title.height() + 2.0;
             let subtitle = match &hit.target {
                 Target::Path(path) => Some(state.catalog.kind(path, hit.kind == Kind::Folder)),
+                Target::Settings(_) => hit.detail.clone().or_else(|| Some(L10N.tr("settings"))),
                 _ => hit.detail.clone(),
             };
             if let Some(subtitle) = subtitle.filter(|subtitle| *subtitle != hit.title) {
@@ -497,6 +541,7 @@ impl PreviewPane {
             match hit.kind {
                 Kind::Calculation => L10N.tr("hint-calculation"),
                 Kind::Application => L10N.tr("hint-application"),
+                Kind::Setting => L10N.tr("hint-setting"),
                 Kind::Folder | Kind::Document => L10N.tr("hint-file"),
             }
         };
@@ -572,6 +617,7 @@ fn heading_text(heading: Heading) -> String {
     L10N.tr(match heading {
         Heading::TopHit => "top-hit",
         Heading::Applications => "applications",
+        Heading::Settings => "settings",
         Heading::Folders => "folders",
         Heading::Documents => "documents",
     })
@@ -869,19 +915,21 @@ pub struct Launcher {
     pub ui: Ui,
     field: WidgetId,
     appear: Option<(Instant, Animation)>,
+    reduce_motion: bool,
 }
 
 impl Launcher {
     pub fn new(
         apps: Vec<AppInfo>,
+        panes: Vec<PaneInfo>,
         catalog: Box<dyn Catalog>,
         home: PathBuf,
         usage: Usage,
-        palette: Palette,
+        appearance: Appearance,
         text: TextSystem,
     ) -> Self {
         let state: Shared = Rc::new(RefCell::new(State {
-            model: Model::new(apps, home, usage, 0),
+            model: Model::new(apps, panes, home, usage, 0),
             catalog,
             preview: None,
             requested: None,
@@ -916,7 +964,8 @@ impl Launcher {
             children: vec![Box::new(card)],
             frame: Rect::default(),
         };
-        let mut ui = Ui::new(Box::new(backdrop), Context::new(text, palette));
+        let mut ui = Ui::new(Box::new(backdrop), Context::new(text, appearance.palette()));
+        ui.set_appearance(appearance);
         ui.perform(&ActionRequest {
             action: Action::Focus,
             target_tree: accesskit::TreeId::ROOT,
@@ -928,7 +977,13 @@ impl Launcher {
             ui,
             field: field_id,
             appear: None,
+            reduce_motion: appearance.reduce_motion,
         }
+    }
+
+    pub fn set_appearance(&mut self, appearance: Appearance) {
+        self.ui.set_appearance(appearance);
+        self.reduce_motion = appearance.reduce_motion;
     }
 
     pub fn query(&self) -> String {
@@ -1008,13 +1063,16 @@ impl Launcher {
     }
 
     pub fn appear(&mut self, now: Instant) {
-        self.appear = Spring::new(TAU / APPEAR_DURATION, 1.0).ok().map(|spring| {
-            let start = SpringState {
-                position: 0.0,
-                velocity: 0.0,
-            };
-            (now, Animation::new(spring, start, 1.0))
-        });
+        let spring = if self.reduce_motion {
+            Spring::FADE
+        } else {
+            Spring::QUICK
+        };
+        let start = SpringState {
+            position: 0.0,
+            velocity: 0.0,
+        };
+        self.appear = Some((now, Animation::new(spring, start, 1.0)));
     }
 
     fn progress(&self, now: Instant) -> f32 {
@@ -1090,10 +1148,14 @@ impl Launcher {
             let items = std::mem::take(&mut scene.items);
             scene.items = vec![Item::Opacity {
                 alpha: progress,
-                items: vec![Item::Translate {
-                    offset: Point::new(0.0, (APPEAR_RISE * (1.0 - progress)).round()),
-                    items,
-                }],
+                items: if self.reduce_motion {
+                    items
+                } else {
+                    vec![Item::Translate {
+                        offset: Point::new(0.0, (APPEAR_RISE * (1.0 - progress)).round()),
+                        items,
+                    }]
+                },
             }];
         } else {
             self.appear = None;

@@ -4,10 +4,13 @@ use std::path::{Path, PathBuf};
 use unbound_search::{FileHit, FileResults, Query, Usage, calculate, fold};
 
 pub const MAX_APPS: usize = 4;
+pub const MAX_SETTINGS: usize = 3;
 pub const MAX_FOLDERS: usize = 3;
 pub const MAX_DOCUMENTS: usize = 5;
 const DESCRIBED_PENALTY: u32 = 150;
 const COMMENT_PENALTY: u32 = 300;
+const SETTING_LABEL_PENALTY: u32 = 100;
+const SETTING_KEYWORD_PENALTY: u32 = 200;
 const CALCULATION_SCORE: u32 = u32::MAX;
 const APPLICATION_BONUS: u32 = 25;
 
@@ -61,10 +64,85 @@ impl IndexedApp {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct SettingInfo {
+    pub label: String,
+    pub keywords: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PaneInfo {
+    pub keyword: String,
+    pub name: String,
+    pub keywords: Vec<String>,
+    pub settings: Vec<SettingInfo>,
+}
+
+struct IndexedPane {
+    info: PaneInfo,
+    name: String,
+    keywords: Vec<String>,
+    settings: Vec<(String, Vec<String>)>,
+}
+
+fn folded_all(texts: &[String]) -> Vec<String> {
+    texts.iter().map(|text| fold(text)).collect()
+}
+
+fn word_match(query: &Query, texts: &[String]) -> Option<u32> {
+    texts
+        .iter()
+        .filter_map(|text| query.score(text))
+        .filter(|score| *score >= unbound_search::WORDS)
+        .max()
+}
+
+impl IndexedPane {
+    fn new(info: PaneInfo) -> Self {
+        Self {
+            name: fold(&info.name),
+            keywords: folded_all(&info.keywords),
+            settings: info
+                .settings
+                .iter()
+                .map(|setting| (fold(&setting.label), folded_all(&setting.keywords)))
+                .collect(),
+            info,
+        }
+    }
+
+    fn score(&self, query: &Query) -> Option<(u32, Option<String>)> {
+        let named = query.score(&self.name).map(|score| (score, None));
+        let described =
+            word_match(query, &self.keywords).map(|score| (score - DESCRIBED_PENALTY, None));
+        let settings = self
+            .settings
+            .iter()
+            .zip(&self.info.settings)
+            .filter_map(|((label, keywords), setting)| {
+                let labelled = query
+                    .score(label)
+                    .filter(|score| *score >= unbound_search::WORDS)
+                    .map(|score| score - SETTING_LABEL_PENALTY);
+                let keyworded =
+                    word_match(query, keywords).map(|score| score - SETTING_KEYWORD_PENALTY);
+                labelled
+                    .max(keyworded)
+                    .map(|score| (score, Some(setting.label.clone())))
+            })
+            .max_by_key(|(score, _)| *score);
+        [named, described, settings]
+            .into_iter()
+            .flatten()
+            .max_by_key(|(score, _)| *score)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
     Calculation,
     Application,
+    Setting,
     Folder,
     Document,
 }
@@ -72,6 +150,7 @@ pub enum Kind {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Target {
     App(String),
+    Settings(String),
     Path(PathBuf),
     Value(String),
 }
@@ -80,6 +159,7 @@ impl Target {
     pub fn usage_key(&self) -> Option<String> {
         match self {
             Self::App(app_id) => Some(format!("app:{app_id}")),
+            Self::Settings(keyword) => Some(format!("settings:{keyword}")),
             Self::Path(path) => path.to_str().map(|path| format!("file:{path}")),
             Self::Value(_) => None,
         }
@@ -99,6 +179,7 @@ pub struct Hit {
 pub enum Heading {
     TopHit,
     Applications,
+    Settings,
     Folders,
     Documents,
 }
@@ -113,6 +194,7 @@ pub enum Action {
 
 pub struct Model {
     apps: Vec<IndexedApp>,
+    panes: Vec<IndexedPane>,
     home: PathBuf,
     usage: Usage,
     now: u64,
@@ -137,9 +219,16 @@ fn display_path(path: &Path, home: &Path) -> String {
 }
 
 impl Model {
-    pub fn new(apps: Vec<AppInfo>, home: PathBuf, usage: Usage, now: u64) -> Self {
+    pub fn new(
+        apps: Vec<AppInfo>,
+        panes: Vec<PaneInfo>,
+        home: PathBuf,
+        usage: Usage,
+        now: u64,
+    ) -> Self {
         Self {
             apps: apps.into_iter().map(IndexedApp::new).collect(),
+            panes: panes.into_iter().map(IndexedPane::new).collect(),
             home,
             usage,
             now,
@@ -267,6 +356,25 @@ impl Model {
                 .then_with(|| a.title.cmp(&b.title))
         };
         apps.sort_by(by_score);
+        let mut settings: Vec<Hit> = self
+            .panes
+            .iter()
+            .filter_map(|pane| {
+                let (score, setting) = pane.score(&query)?;
+                let target = Target::Settings(pane.info.keyword.clone());
+                let boost = target
+                    .usage_key()
+                    .map_or(0, |key| self.usage.boost(&key, self.now));
+                Some(Hit {
+                    kind: Kind::Setting,
+                    title: pane.info.name.clone(),
+                    detail: setting,
+                    target,
+                    score: score + boost,
+                })
+            })
+            .collect();
+        settings.sort_by(by_score);
         let files: Vec<Hit> = self
             .files
             .iter()
@@ -279,7 +387,7 @@ impl Model {
 
         let top = match calculation {
             Some(calculation) => Some(calculation),
-            None => [&mut apps, &mut folders, &mut documents]
+            None => [&mut apps, &mut settings, &mut folders, &mut documents]
                 .into_iter()
                 .filter(|group| !group.is_empty())
                 .min_by(|a, b| by_score(&a[0], &b[0]))
@@ -291,6 +399,7 @@ impl Model {
         }
         for (heading, group, limit) in [
             (Heading::Applications, apps, MAX_APPS),
+            (Heading::Settings, settings, MAX_SETTINGS),
             (Heading::Folders, folders, MAX_FOLDERS),
             (Heading::Documents, documents, MAX_DOCUMENTS),
         ] {
@@ -365,11 +474,10 @@ impl Model {
         let text = match self.selection().map(|hit| &hit.target) {
             Some(Target::Value(value)) => value.clone(),
             Some(Target::Path(path)) => path.display().to_string(),
-            Some(Target::App(_)) | None => return false,
+            Some(Target::App(_) | Target::Settings(_)) | None => return false,
         };
         self.actions.push(Action::Copy(text));
         self.copied = true;
-        self.revision += 1;
         true
     }
 }

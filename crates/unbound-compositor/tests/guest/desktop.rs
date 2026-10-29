@@ -267,8 +267,16 @@ fn ctrl_super_q_locks_and_the_password_unlocks() {
     let locked = scanout();
     locked.save("m17-lock-screen");
 
-    keyboard.type_text("wrong password\n");
-    thread::sleep(Duration::from_secs(4));
+    let below_clock =
+        |scanout: &Scanout| scanout.rgb[scanout.width * scanout.height / 2..].to_vec();
+    keyboard.type_text("wrong password");
+    wait_for("the typed password", STARTUP, || {
+        below_clock(&scanout()) != below_clock(&locked)
+    });
+    keyboard.tap(KEY_ENTER);
+    wait_for("the cleared field after the rejection", STARTUP, || {
+        below_clock(&scanout()) == below_clock(&locked)
+    });
     scanout().save("m17-lock-rejected");
     assert!(running("unbound-lock"));
 
@@ -381,9 +389,18 @@ fn super_shift_4_saves_a_dragged_out_area_to_the_desktop() {
         mouse.frame(&[(EV_REL, REL_X, -200), (EV_REL, REL_Y, -200)]);
     }
     thread::sleep(Duration::from_secs(1));
+    let corner = |scanout: &Scanout| {
+        (0..16)
+            .flat_map(|y| (0..16).map(move |x| (x, y)))
+            .map(|(x, y)| pixel(scanout, x, y))
+            .collect::<Vec<_>>()
+    };
+    let before = scanout();
 
     mouse.chord(&[KEY_LEFTMETA, KEY_LEFTSHIFT], KEY_4);
-    thread::sleep(Duration::from_secs(1));
+    wait_for("the crosshair of the area overlay", STARTUP, || {
+        corner(&scanout()) != corner(&before)
+    });
     mouse.frame(&[(EV_KEY, BTN_LEFT, 1)]);
     for _ in 0..30 {
         mouse.frame(&[(EV_REL, REL_X, 8), (EV_REL, REL_Y, 5)]);

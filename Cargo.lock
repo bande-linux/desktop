@@ -3429,6 +3429,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "unbound-graphics"
+version = "0.1.0"
+dependencies = [
+ "ab_glyph",
+ "fontique",
+ "image",
+ "parley",
+ "pollster",
+ "resvg",
+ "skrifa",
+ "tempfile",
+ "vello_cpu",
+ "vello_gpu",
+ "wgpu",
+]
+
+[[package]]
 name = "unbound-greeter"
 version = "0.1.0"
 dependencies = [
@@ -3609,32 +3626,36 @@ dependencies = [
 name = "unbound-toolkit"
 version = "0.1.0"
 dependencies = [
- "ab_glyph",
  "accesskit",
- "accesskit_unix",
- "fontique",
- "image",
- "parley",
- "pollster",
- "raw-window-handle",
- "resvg",
- "rustix 1.1.6",
- "skrifa",
  "smithay",
- "tempfile",
  "unbound-compositor",
- "unbound-protocols",
+ "unbound-graphics",
  "unbound-test-bus",
  "unbound-test-wayland",
- "vello_cpu",
- "vello_gpu",
+ "unbound-toolkit-platform",
+ "unbound-widgets",
+ "zbus",
+]
+
+[[package]]
+name = "unbound-toolkit-platform"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "accesskit_unix",
+ "pollster",
+ "raw-window-handle",
+ "rustix 1.1.6",
+ "smithay",
+ "unbound-compositor",
+ "unbound-graphics",
+ "unbound-protocols",
  "wayland-backend",
  "wayland-client",
  "wayland-protocols",
  "wayland-protocols-wlr",
  "wgpu",
  "xkbcommon",
- "zbus",
 ]
 
 [[package]]
@@ -3643,6 +3664,15 @@ version = "0.1.0"
 dependencies = [
  "unbound-test-bus",
  "zbus",
+]
+
+[[package]]
+name = "unbound-widgets"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "parley",
+ "unbound-graphics",
 ]
 
 [[package]]
@@ -4565,8 +4595,8 @@ dependencies = [
  "blocking",
  "tempfile",
  "unbound-config",
+ "unbound-graphics",
  "unbound-test-bus",
- "unbound-toolkit",
  "zbus",
 ]
 

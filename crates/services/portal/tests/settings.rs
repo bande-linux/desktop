@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use common::Portal;
 use unbound_config::{ConfigService, ConfigStore};
-use unbound_toolkit::{Palette, Scheme};
+use unbound_graphics::{Palette, Scheme};
 use xdg_desktop_portal_unbound::settings::{CursorSettings, Settings};
 use zbus::blocking::MessageIterator;
 use zbus::zvariant::OwnedValue;

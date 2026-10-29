@@ -59,8 +59,9 @@ unbound-clipboard = { path = "crates/services/clipboard" }
 unbound-compositor = { path = "crates/platform/compositor" }
 unbound-config = { path = "crates/services/config" }
 unbound-controlcenter = { path = "crates/shell/controlcenter" }
-unbound-dock = { path = "crates/shell/panel" }
+unbound-dock = { path = "crates/shell/dock" }
 unbound-files = { path = "crates/apps/files" }
+unbound-graphics = { path = "crates/toolkit/graphics" }
 unbound-greeter = { path = "crates/shell/greeter" }
 unbound-launcher = { path = "crates/shell/launcher" }
 unbound-lock = { path = "crates/shell/lock" }
@@ -79,7 +80,9 @@ unbound-term = { path = "crates/apps/terminal" }
 unbound-test-bus = { path = "crates/testing/test-bus" }
 unbound-test-wayland = { path = "crates/testing/test-wayland" }
 unbound-toolkit = { path = "crates/toolkit/toolkit" }
+unbound-toolkit-platform = { path = "crates/toolkit/platform" }
 unbound-tray = { path = "crates/services/tray" }
+unbound-widgets = { path = "crates/toolkit/widgets" }
 unbound-xdg = { path = "crates/libs/xdg" }
 xdg-desktop-portal-unbound = { path = "crates/services/portal" }
 

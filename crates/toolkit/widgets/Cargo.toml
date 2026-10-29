@@ -1,0 +1,14 @@
+[package]
+name = "unbound-widgets"
+description = "Unbound widgets: the UI tree, widgets, focus and accessibility nodes"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+accesskit.workspace = true
+parley.workspace = true
+unbound-graphics.workspace = true
+
+[lints]
+workspace = true

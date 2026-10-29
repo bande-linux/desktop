@@ -1,0 +1,28 @@
+[package]
+name = "unbound-toolkit-platform"
+description = "Unbound toolkit platform: Wayland windows, input, clipboard, run loop and accessibility"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+accesskit.workspace = true
+accesskit_unix.workspace = true
+pollster.workspace = true
+raw-window-handle.workspace = true
+rustix = { workspace = true, features = ["fs", "pipe"] }
+unbound-graphics.workspace = true
+unbound-protocols = { workspace = true, features = ["client"] }
+wayland-backend = { workspace = true, features = ["client_system", "dlopen"] }
+wayland-client.workspace = true
+wayland-protocols.workspace = true
+wayland-protocols-wlr.workspace = true
+wgpu.workspace = true
+xkbcommon = { workspace = true, features = ["wayland"] }
+
+[dev-dependencies]
+smithay.workspace = true
+unbound-compositor.workspace = true
+
+[lints]
+workspace = true

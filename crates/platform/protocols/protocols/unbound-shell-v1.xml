@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <protocol name="unbound_shell_v1">
-  <interface name="unbound_shell_v1" version="5">
+  <interface name="unbound_shell_v1" version="6">
     <description summary="requests and events between the compositor and the shell">
       Offered only on the connections of the shell clients the compositor starts
       itself (the Dock and the launcher), never on the listening socket.
@@ -89,6 +89,21 @@
       <arg name="width" type="int"/>
       <arg name="height" type="int"/>
     </request>
+
+    <event name="app_responding" since="6">
+      <description summary="an app stopped or started answering">
+        The compositor pings an app through xdg_wm_base whenever the user
+        interacts with one of its windows, and every app with a window when
+        Force Quit is opened. Sent with responding 0 when an app has not
+        answered for 3 seconds, and with responding 1 when it answers again or
+        exits. Also sent on binding for every app that is not responding, so
+        Force Quit can mark it. Pid is the process on the other end of the
+        app's connection, app id the app id of its windows.
+      </description>
+      <arg name="pid" type="int"/>
+      <arg name="app_id" type="string"/>
+      <arg name="responding" type="uint"/>
+    </event>
   </interface>
 
   <interface name="unbound_app_v1" version="1">

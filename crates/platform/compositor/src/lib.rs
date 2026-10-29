@@ -22,6 +22,8 @@ mod shell;
 mod state;
 mod sync;
 mod tile;
+mod watchdog;
+pub use watchdog::UNRESPONSIVE_AFTER;
 mod window;
 
 pub use clock::{FrameClock, FrameOutput, FrameScheduler, Poll, SAFETY_MARGIN, Submission, Vblank};

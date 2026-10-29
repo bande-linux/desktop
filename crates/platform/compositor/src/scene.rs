@@ -374,6 +374,7 @@ impl RenderElement<VulkanRenderer> for PieceElement {
 }
 
 const PREVIEW_FILL: [f32; 4] = [0.16, 0.16, 0.16, 0.16];
+const HUNG_VEIL: [f32; 4] = [0.12, 0.12, 0.12, 0.24];
 const BLUR_PASSES: u32 = 3;
 const BLUR_OFFSET: f64 = 1.5;
 
@@ -673,6 +674,7 @@ pub(crate) fn window_elements(
     renderer: &mut VulkanRenderer,
     scale: f64,
     active: bool,
+    hung: bool,
 ) -> (Vec<OutputElement>, Option<Drawn>) {
     let look = window.shown_look();
     let alpha = look.map_or(1.0, |look| look.alpha) as f32;
@@ -750,9 +752,20 @@ pub(crate) fn window_elements(
                 alpha,
             )))
         });
-    let elements = surfaces
+    let veil = hung.then(|| {
+        OutputElement::Fill(FillElement::new(
+            window.veil.clone(),
+            clip,
+            HUNG_VEIL.map(|channel| channel * alpha),
+        ))
+    });
+    let elements = veil
         .into_iter()
-        .map(|surface| OutputElement::Window(WindowElement::new(surface, placement, clip)))
+        .chain(
+            surfaces
+                .into_iter()
+                .map(|surface| OutputElement::Window(WindowElement::new(surface, placement, clip))),
+        )
         .chain(shadow)
         .chain(blurs)
         .collect();

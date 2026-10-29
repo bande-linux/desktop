@@ -61,7 +61,7 @@ use smithay::wayland::selection::primary_selection::{
     PrimarySelectionHandler, PrimarySelectionState, set_primary_focus,
 };
 use smithay::wayland::shell::xdg::{
-    Configure, PopupSurface, PositionerState, ToplevelSurface, XdgShellHandler, XdgShellState,
+    Configure, PopupSurface, PositionerState, ShellClient, ToplevelSurface, XdgShellHandler, XdgShellState,
 };
 use smithay::wayland::foreign_toplevel_list::ForeignToplevelListState;
 use smithay::wayland::shell::wlr_layer::{
@@ -190,6 +190,7 @@ pub struct State {
     pub(crate) popups: PopupManager,
     pub(crate) lock_screen_requested: bool,
     pub(crate) force_quit_requested: bool,
+    pub(crate) watchdog: crate::watchdog::Watchdog,
     pub(crate) active_app: String,
     pub(crate) idle: crate::idle::Idle,
     _idle_inhibit_state: smithay::wayland::idle_inhibit::IdleInhibitManagerState,
@@ -287,7 +288,7 @@ impl Headless {
         output.change_current_state(Some(mode), None, None, Some((0, 0).into()));
         output.set_preferred(mode);
         output.create_global::<State>(&handle);
-        handle.create_global::<State, UnboundShellV1, ()>(5, ());
+        handle.create_global::<State, UnboundShellV1, ()>(6, ());
         handle.create_global::<State, UnboundAppV1, ()>(1, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
         State::create_capture_globals(&handle);
@@ -343,6 +344,7 @@ impl Headless {
             popups: PopupManager::default(),
             lock_screen_requested: false,
             force_quit_requested: false,
+            watchdog: crate::watchdog::Watchdog::default(),
             active_app: String::new(),
             idle: crate::idle::Idle::default(),
             _idle_inhibit_state: smithay::wayland::idle_inhibit::IdleInhibitManagerState::new::<
@@ -540,7 +542,11 @@ impl Headless {
                 }
                 Placed::Window(window) => {
                     let active = key.as_ref() == Some(window.surface());
-                    let (shown, look) = window_elements(window, renderer, scale, active);
+                    let hung = window
+                        .surface()
+                        .client()
+                        .is_some_and(|owner| self.state.watchdog.is_unresponsive(&owner.id()));
+                    let (shown, look) = window_elements(window, renderer, scale, active, hung);
                     elements.extend(shown);
                     drawn.push((window.surface().clone(), look));
                     if let Some(preview) = &self.state.preview
@@ -583,7 +589,19 @@ impl Headless {
         }
         let scale = state.output_scale;
         let at: Point<i32, Physical> = state.pointer_location.to_physical(scale).to_i32_round();
-        match &state.cursor_status {
+        let busy = CursorImageStatus::Named(CursorIcon::Wait);
+        let over_hung_app = state
+            .seat
+            .get_pointer()
+            .and_then(|pointer| pointer.current_focus())
+            .and_then(|surface| surface.client())
+            .is_some_and(|owner| state.watchdog.is_unresponsive(&owner.id()));
+        let status = if over_hung_app {
+            &busy
+        } else {
+            &state.cursor_status
+        };
+        match status {
             CursorImageStatus::Hidden => Vec::new(),
             CursorImageStatus::Surface(surface) => {
                 let hotspot = with_states(surface, |states| {
@@ -683,7 +701,7 @@ fn shm_size(buffer: &WlBuffer) -> Option<Size<i32, Physical>> {
 }
 
 impl State {
-    fn load_named_cursor(&mut self, icon: CursorIcon) {
+    pub(crate) fn load_named_cursor(&mut self, icon: CursorIcon) {
         let theme = &self.cursor_theme;
         let scale = self.output_scale;
         self.named_cursors
@@ -1116,6 +1134,10 @@ impl ShmHandler for State {
 impl XdgShellHandler for State {
     fn xdg_shell_state(&mut self) -> &mut XdgShellState {
         &mut self.xdg_shell_state
+    }
+
+    fn client_pong(&mut self, client: ShellClient) {
+        self.pong(&client);
     }
 
     fn new_toplevel(&mut self, toplevel: ToplevelSurface) {

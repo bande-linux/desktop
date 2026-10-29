@@ -47,6 +47,7 @@ pub(crate) struct Shell {
     active_apps: Vec<String>,
     volume_keys: Vec<(unbound_shell_v1::VolumeKey, bool)>,
     control_center_toggles: usize,
+    responding: Vec<(i32, String, bool)>,
     quit_requests: usize,
     toplevels: Vec<(ExtForeignToplevelHandleV1, String, bool)>,
 }
@@ -139,7 +140,7 @@ impl TestClient {
     }
 
     pub fn join_shell(&mut self, server: &mut Headless) {
-        let shell: UnboundShellV1 = self.bind("unbound_shell_v1", 5);
+        let shell: UnboundShellV1 = self.bind("unbound_shell_v1", 6);
         self.globals.shell.shell = Some(shell);
         let _: ExtForeignToplevelListV1 = self.bind("ext_foreign_toplevel_list_v1", 1);
         self.exchange(server);
@@ -155,6 +156,10 @@ impl TestClient {
 
     pub fn area_capture_requests(&self) -> usize {
         self.globals.shell.area_capture_requests
+    }
+
+    pub fn app_responding(&self) -> &[(i32, String, bool)] {
+        &self.globals.shell.responding
     }
 
     pub fn active_apps(&self) -> &[String] {
@@ -353,6 +358,14 @@ impl Dispatch<UnboundShellV1, ()> for Globals {
             unbound_shell_v1::Event::ToggleControlCenter => {
                 globals.shell.control_center_toggles += 1;
             }
+            unbound_shell_v1::Event::AppResponding {
+                pid,
+                app_id,
+                responding,
+            } => globals
+                .shell
+                .responding
+                .push((pid, app_id, responding != 0)),
             _ => {}
         }
     }

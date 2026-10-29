@@ -133,6 +133,7 @@ impl State {
         }
         if shortcut == Shortcut::ForceQuit {
             self.force_quit_requested = true;
+            self.watchdog.ping_everyone();
             return;
         }
         let Some(focused) = self.focused() else {

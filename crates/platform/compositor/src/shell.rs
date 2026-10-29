@@ -210,6 +210,7 @@ impl GlobalDispatch<UnboundShellV1, ()> for State {
         if shell.version() >= unbound_shell_v1::EVT_ACTIVE_APP_SINCE {
             shell.active_app(state.active_app.clone());
         }
+        state.announce_unresponsive(&shell);
         state.shell_resources.push(shell);
     }
 

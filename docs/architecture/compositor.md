@@ -80,6 +80,12 @@ when they reach the screen is Unbound's own.
   `Up` zooms a free window and `Down` returns a zoomed one. Tiles get xdg-shell's tiled states
   (for clients binding version 2) and no gaps. Dragging the edge two neighbouring tiles share
   resizes both; dragging a tiled window away gives back its earlier size under the pointer.
+- **Not responding.** Whenever the user interacts with a window, and for every app when Force
+  Quit opens, the compositor pings the app through `xdg_wm_base.ping` (at most once a second).
+  An app that has not answered after 3 s is not responding: its windows are veiled in a soft
+  grey (24 %), the pointer over them is the theme's `wait` cursor, and shell clients get
+  `unbound_shell_v1.app_responding(pid, app_id, 0)` so Force Quit can mark it. The answer, or
+  the app's exit, lifts the veil and sends `responding 1`.
 - **Springs.** `crates/libs/spring` is the closed-form solution for under-, critically and
   overdamped springs, parameterised by angular frequency $\omega$ and damping ratio $\zeta$. A
   trajectory depends only on elapsed time, never on frame rate, and retargeting keeps position
@@ -119,6 +125,6 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `zwp_pointer_constraints_v1` / `relative_pointer` | Pointer lock for games | P1 | not implemented |
 | `zwp_pointer_gestures_v1` | Trackpad gestures | P1 | not implemented |
 | `zwp_keyboard_shortcuts_inhibit_v1` | Keyboard passthrough for VMs and remote desktop | P2 | not implemented |
-| `unbound_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Control Center, Dock icon rectangles | P0 | implemented, shell clients only |
+| `unbound_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Control Center, Dock icon rectangles, apps that stopped responding | P0 | implemented, shell clients only |
 | `unbound_app_v1` (own, in `unbound-shell-v1.xml`) | App-level requests: `quit_requested` on Super+Q instead of closing every window | P0 | implemented, every client |
 | `ext-background-effect-v1` | Blur behind translucent menus, sidebars, Dock and menu bar | P1 | implemented: dual-filter Kawase blur (3 passes) clipped to the window's rounded shape, below the window's own shadow, redrawn when anything beneath it changes |

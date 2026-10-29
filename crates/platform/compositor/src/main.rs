@@ -280,12 +280,16 @@ where
             .idle_tick(now())
             .map(|at| at.saturating_sub(now()));
         let snap_wait = snap_due.map(|at| at.saturating_sub(now()));
+        let watchdog_wait = compositor
+            .watchdog_tick(now())
+            .map(|at| at.saturating_sub(now()));
         timeout = upkeep
             .retry_in
             .into_iter()
             .chain(frame_wait)
             .chain(idle_wait)
             .chain(snap_wait)
+            .chain(watchdog_wait)
             .min();
     }
 }

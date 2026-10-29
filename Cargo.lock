@@ -3032,6 +3032,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "unbound-network"
+version = "0.1.0"
+dependencies = [
+ "unbound-test-bus",
+ "zbus",
+]
+
+[[package]]
 name = "unbound-notify"
 version = "0.1.0"
 dependencies = [

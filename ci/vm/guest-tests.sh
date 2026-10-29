@@ -36,7 +36,7 @@ set -u
 export RUST_BACKTRACE=1 UNBOUND_SCREENDUMPS=/share/screendumps
 echo "Guest kernel $(uname -r)"
 ls -l /dev/dri
-cp -r /share/usr /share/etc /
+cp -rs /share/usr /share/etc /
 /usr/lib/systemd/systemd-udevd --daemon
 udevadm trigger --action=add
 udevadm settle

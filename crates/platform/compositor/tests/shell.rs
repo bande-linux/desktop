@@ -528,7 +528,7 @@ fn the_shell_sees_running_apps_and_brings_one_forward() {
     let mut terminal = TestClient::connect(&mut server);
     terminal.use_seat(&mut server);
     terminal.show_window(&mut server, &image(&pixels, 32, 32));
-    terminal.set_app_id(&mut server, 0, "unbound-term");
+    terminal.set_app_id(&mut server, 0, "org.unbound.Terminal");
     let token = terminal.activation_token(&mut server);
     terminal.activate(&mut server, 0, &token);
     roundtrip(&mut server, &mut [&mut shell, &mut editor, &mut terminal]);
@@ -536,7 +536,7 @@ fn the_shell_sees_running_apps_and_brings_one_forward() {
 
     let mut running = shell.running_app_ids();
     running.sort();
-    assert_eq!(running, ["org.example.Editor", "unbound-term"]);
+    assert_eq!(running, ["org.example.Editor", "org.unbound.Terminal"]);
 
     shell.activate_app(&mut server, "org.example.Editor");
     roundtrip(&mut server, &mut [&mut shell, &mut editor, &mut terminal]);
@@ -545,7 +545,7 @@ fn the_shell_sees_running_apps_and_brings_one_forward() {
 
     editor.close_window(&mut server, 0);
     roundtrip(&mut server, &mut [&mut shell, &mut editor, &mut terminal]);
-    assert_eq!(shell.running_app_ids(), ["unbound-term"]);
+    assert_eq!(shell.running_app_ids(), ["org.unbound.Terminal"]);
 }
 
 #[test]

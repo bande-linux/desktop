@@ -16,7 +16,7 @@ use unbound_toolkit::{
 };
 use unbound_xdg::{DesktopEntry, Locale, applications, current_desktops, data_dirs, find_icon};
 
-const PINNED: &[&str] = &["unbound-term"];
+const PINNED: &[&str] = &["org.unbound.Terminal"];
 
 struct Dock {
     edge: DockEdge,

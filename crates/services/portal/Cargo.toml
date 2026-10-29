@@ -26,10 +26,10 @@ the colour scheme and accent colour follow the appearance in config.kdl. \
 Interfaces Unbound cannot show yet fall back to the GTK backend."""
 assets = [
     ["target/release/xdg-desktop-portal-unbound", "usr/libexec/", "755"],
-    ["debian/xdg-desktop-portal-unbound.service", "usr/lib/systemd/user/", "644"],
-    ["debian/org.freedesktop.impl.portal.desktop.unbound.service", "usr/share/dbus-1/services/", "644"],
-    ["debian/unbound.portal", "usr/share/xdg-desktop-portal/portals/", "644"],
-    ["debian/unbound-portals.conf", "usr/share/xdg-desktop-portal/", "644"],
+    ["data/xdg-desktop-portal-unbound.service", "usr/lib/systemd/user/", "644"],
+    ["data/org.freedesktop.impl.portal.desktop.unbound.service", "usr/share/dbus-1/services/", "644"],
+    ["data/unbound.portal", "usr/share/xdg-desktop-portal/portals/", "644"],
+    ["data/unbound-portals.conf", "usr/share/xdg-desktop-portal/", "644"],
 ]
 
 [lints]

@@ -25,14 +25,17 @@ fn blue_icon() -> Image {
 
 fn apps() -> Vec<DockApp> {
     let pinned = [DockApp {
-        app_id: "unbound-term".to_owned(),
+        app_id: "org.unbound.Terminal".to_owned(),
         name: "Terminal".to_owned(),
         icon: Some(blue_icon()),
         running: false,
     }];
     merge_apps(
         &pinned,
-        &["unbound-term".to_owned(), "org.example.Editor".to_owned()],
+        &[
+            "org.unbound.Terminal".to_owned(),
+            "org.example.Editor".to_owned(),
+        ],
         |app_id| DockApp {
             app_id: app_id.to_owned(),
             name: "Editor".to_owned(),

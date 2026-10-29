@@ -5,7 +5,7 @@ use unbound_settings::{Key, SettingsClient, SettingsView, Value};
 use unbound_toolkit::{App, Palette, Role, Scene, Scheme, TextSystem, Window, WindowEvent};
 
 const TITLE: &str = "System Settings";
-const APP_ID: &str = "unbound-settings";
+const APP_ID: &str = "org.unbound.Settings";
 const WINDOW_SIZE: (u32, u32) = (900, 540);
 const KEYS: [Key; 5] = [
     Key::Appearance,

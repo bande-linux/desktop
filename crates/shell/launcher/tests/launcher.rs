@@ -32,7 +32,7 @@ fn apps() -> Vec<LauncherApp> {
             &["math"],
         ),
         app(
-            "unbound-term",
+            "org.unbound.Terminal",
             "Terminal",
             Some("Terminal Emulator"),
             &["shell", "prompt"],

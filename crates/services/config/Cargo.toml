@@ -29,8 +29,8 @@ activation."""
 maintainer-scripts = "debian/"
 assets = [
     ["target/release/unbound-config", "usr/bin/", "755"],
-    ["debian/unbound-config.service", "usr/lib/systemd/user/", "644"],
-    ["debian/org.unbound.Config.service", "usr/share/dbus-1/services/", "644"],
+    ["data/unbound-config.service", "usr/lib/systemd/user/", "644"],
+    ["data/org.unbound.Config.service", "usr/share/dbus-1/services/", "644"],
 ]
 
 [lints]

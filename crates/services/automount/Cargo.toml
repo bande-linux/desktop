@@ -23,7 +23,7 @@ graphical session."""
 maintainer-scripts = "debian/"
 assets = [
     ["target/release/unbound-automount", "usr/bin/", "755"],
-    ["debian/unbound-automount.service", "usr/lib/systemd/user/", "644"],
+    ["data/unbound-automount.service", "usr/lib/systemd/user/", "644"],
 ]
 
 [lints]

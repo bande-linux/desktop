@@ -9,8 +9,8 @@ fn the_clock_reads_like_the_macos_menu_bar() {
 
 #[test]
 fn the_active_app_is_named_by_its_desktop_entry() {
-    let names = vec![("unbound-term".to_owned(), "Terminal".to_owned())];
-    assert_eq!(app_name("unbound-term", &names), "Terminal");
+    let names = vec![("org.unbound.Terminal".to_owned(), "Terminal".to_owned())];
+    assert_eq!(app_name("org.unbound.Terminal", &names), "Terminal");
     assert_eq!(
         app_name("org.example.Unknown", &names),
         "org.example.Unknown"

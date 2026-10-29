@@ -22,8 +22,8 @@ Unbound menu bar finds them. Started with the graphical session."""
 maintainer-scripts = "debian/"
 assets = [
     ["target/release/unbound-tray", "usr/bin/", "755"],
-    ["debian/unbound-tray.service", "usr/lib/systemd/user/", "644"],
-    ["debian/org.unbound.Tray.service", "usr/share/dbus-1/services/", "644"],
+    ["data/unbound-tray.service", "usr/lib/systemd/user/", "644"],
+    ["data/org.unbound.Tray.service", "usr/share/dbus-1/services/", "644"],
 ]
 
 [lints]

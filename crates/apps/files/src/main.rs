@@ -5,7 +5,7 @@ use unbound_config::{Appearance, Config, config_path};
 use unbound_files::{Browser, FilesView};
 use unbound_toolkit::{App, Palette, Role, Scene, Scheme, TextSystem, Window, WindowEvent};
 
-const APP_ID: &str = "unbound-files";
+const APP_ID: &str = "org.unbound.Files";
 const WINDOW_SIZE: (u32, u32) = (920, 560);
 
 struct Files {

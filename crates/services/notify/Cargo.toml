@@ -23,7 +23,7 @@ bus. The bus starts it on the first notification through D-Bus \
 activation."""
 assets = [
     ["target/release/unbound-notify", "usr/bin/", "755"],
-    ["debian/org.unbound.Notify.service", "usr/share/dbus-1/services/", "644"],
+    ["data/org.unbound.Notify.service", "usr/share/dbus-1/services/", "644"],
 ]
 
 [lints]

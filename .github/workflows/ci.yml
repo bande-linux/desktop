@@ -133,14 +133,14 @@ jobs:
           done
           root=$(mktemp -d)
           dpkg-deb --extract target/debian/unbound-term_*.deb "$root"
-          grep -qx 'Exec=unbound-term' "$root/usr/share/applications/unbound-term.desktop"
-          grep -qx 'Icon=unbound-term' "$root/usr/share/applications/unbound-term.desktop"
-          test -s "$root/usr/share/icons/hicolor/scalable/apps/unbound-term.svg"
+          grep -qx 'Exec=unbound-term' "$root/usr/share/applications/org.unbound.Terminal.desktop"
+          grep -qx 'Icon=org.unbound.Terminal' "$root/usr/share/applications/org.unbound.Terminal.desktop"
+          test -s "$root/usr/share/icons/hicolor/scalable/apps/org.unbound.Terminal.svg"
           dpkg-deb --extract target/debian/unbound-files_*.deb "$root"
-          grep -qx 'Exec=unbound-files' "$root/usr/share/applications/unbound-files.desktop"
-          test -s "$root/usr/share/icons/hicolor/scalable/apps/unbound-files.svg"
+          grep -qx 'Exec=unbound-files' "$root/usr/share/applications/org.unbound.Files.desktop"
+          test -s "$root/usr/share/icons/hicolor/scalable/apps/org.unbound.Files.svg"
           dpkg-deb --extract target/debian/unbound-settings_*.deb "$root"
-          grep -qx 'Exec=unbound-settings' "$root/usr/share/applications/unbound-settings.desktop"
+          grep -qx 'Exec=unbound-settings' "$root/usr/share/applications/org.unbound.Settings.desktop"
           dpkg-deb --extract target/debian/unbound-greeter_*.deb "$root"
           grep -qx 'command = "unbound-compositor --greeter"' "$root/usr/share/unbound-greeter/greetd-config.toml"
           dpkg-deb --field target/debian/unbound-greeter_*.deb Depends | grep -qw greetd
@@ -385,7 +385,7 @@ jobs:
           name: perf-binaries
           path: target/release
       - run: chmod +x target/release/unbound-*
-      - name: Measure against the budgets in docs/RENDERING.md
+      - name: Measure against the budgets in docs/decisions/0001-rendering.md
         shell: bash
         run: |
           target/release/unbound-bench \
@@ -397,7 +397,7 @@ jobs:
           name: perf
           path: perf.json
           if-no-files-found: ignore
-      - name: Measure the toolkit sample against the budgets in docs/RENDERING.md
+      - name: Measure the toolkit sample against the budgets in docs/decisions/0001-rendering.md
         shell: bash
         run: |
           target/release/unbound-toolkit-bench \

@@ -18,6 +18,7 @@ const OUTPUT: (i32, i32) = (320, 240);
 const REGISTRY: &str = "org.a11y.atspi.Registry";
 const ROOT_PATH: &str = "/org/a11y/atspi/accessible/root";
 const TIMEOUT: Duration = Duration::from_secs(60);
+const ATSPI_ROLE_BUTTON: u32 = 43;
 
 type ObjectRef = (String, OwnedObjectPath);
 
@@ -179,9 +180,9 @@ fn a_screen_reader_finds_a_button_over_atspi_and_presses_it() {
             assert!(started.elapsed() < TIMEOUT, "no Greet button over AT-SPI");
             thread::sleep(Duration::from_millis(50));
         };
-        let role: String = accessible(&atspi, &button, "org.a11y.atspi.Accessible")
-            .call("GetRoleName", &())
-            .expect("role name");
+        let role: u32 = accessible(&atspi, &button, "org.a11y.atspi.Accessible")
+            .call("GetRole", &())
+            .expect("role");
         let pressed: bool = accessible(&atspi, &button, "org.a11y.atspi.Action")
             .call("DoAction", &(0i32))
             .expect("press the button");
@@ -201,7 +202,7 @@ fn a_screen_reader_finds_a_button_over_atspi_and_presses_it() {
     }
 
     let (role, pressed) = screen_reader.join().expect("screen reader thread");
-    assert_eq!(role, "push button");
+    assert_eq!(role, ATSPI_ROLE_BUTTON);
     assert!(pressed, "AT-SPI reports the press as performed");
     assert!(
         app.join().expect("app thread"),

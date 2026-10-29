@@ -143,7 +143,7 @@ jobs:
             grep -qx "Name=$name" "$service"
             grep -qx "SystemdService=$package.service" "$service"
             grep -qx "BusName=$name" "$unit"
-            grep -qx 'WantedBy=graphical-session.target' "$unit"
+            grep -qx 'WantedBy=unbound-session.target' "$unit"
             test -x "$root$(sed -n 's/^Exec=//p' "$service")"
             test -x "$root$(sed -n 's/^ExecStart=//p' "$unit")"
             dpkg-deb --ctrl-tarfile "$deb" | tar -t | grep -qx './postinst'
@@ -154,9 +154,33 @@ jobs:
           root=$(mktemp -d)
           dpkg-deb --extract "$deb" "$root"
           unit="$root/usr/lib/systemd/user/unbound-automount.service"
-          grep -qx 'WantedBy=graphical-session.target' "$unit"
+          grep -qx 'WantedBy=unbound-session.target' "$unit"
           test -x "$root$(sed -n 's/^ExecStart=//p' "$unit")"
           dpkg-deb --field "$deb" Depends | grep -q 'udisks2'
+      - name: Check the login session
+        run: |
+          sudo apt-get install -y --no-install-recommends systemd dbus-user-session
+          root=$(mktemp -d)
+          for deb in target/debian/unbound-{compositor,config,power,tray,automount}_*.deb; do
+            dpkg-deb --extract "$deb" "$root"
+          done
+          session="$root/usr/share/wayland-sessions/unbound.desktop"
+          grep -qx 'Type=Application' "$session"
+          grep -qx 'Name=Unbound' "$session"
+          grep -qx 'Exec=unbound-session' "$session"
+          grep -qx 'DesktopNames=Unbound' "$session"
+          test -x "$root/usr/bin/unbound-session"
+          sh -n "$root/usr/bin/unbound-session"
+          units=$(mktemp -d)
+          cp "$root"/usr/lib/systemd/user/* "$units/"
+          sed -i "s|^ExecStart=/|ExecStart=$root/|" "$units"/*
+          grep -qx 'Type=notify' "$units/unbound-compositor.service"
+          grep -qx 'BindsTo=graphical-session.target' "$units/unbound-compositor.service"
+          ! grep -l 'WantedBy=graphical-session.target' "$units"/*
+          export XDG_RUNTIME_DIR=$(mktemp -d)
+          findings=$(cd "$units" && SYSTEMD_LOG_LEVEL=warning systemd-analyze --user verify ./* 2>&1) || true
+          echo "$findings"
+          test -z "$findings"
       - name: Check the portal backend's registration
         run: |
           root=$(mktemp -d)

@@ -1,3 +1,5 @@
+const _SHELL_PROTOCOL_SOURCE: &str = include_str!("../protocols/unbound-shell-v1.xml");
+
 #[cfg(feature = "client")]
 pub mod client {
     use wayland_client;

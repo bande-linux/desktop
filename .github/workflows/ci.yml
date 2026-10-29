@@ -345,7 +345,7 @@ jobs:
       - name: Authenticate through the agent against polkitd on Debian 13
         run: |
           image=unbound-polkit-test:${{ github.sha }}
-          docker build --quiet --tag "$image" crates/unbound-polkit/tests/polkitd
+          docker build --quiet --tag "$image" crates/services/polkit/tests/polkitd
           container=$(docker create "$image")
           trap 'docker rm --force "$container" >/dev/null; docker rmi "$image" >/dev/null' EXIT
           docker cp "$(cat polkitd-test-path)" "$container:/polkitd-test"
@@ -364,7 +364,7 @@ jobs:
           path: portal-test
       - name: Read the colour scheme through xdg-desktop-portal on Debian 13
         run: |
-          cp crates/xdg-desktop-portal-unbound/tests/frontend/* portal-test/
+          cp crates/services/portal/tests/frontend/* portal-test/
           image=unbound-portal-test:${{ github.sha }}
           docker build --quiet --tag "$image" portal-test
           trap 'docker rmi --force "$image" >/dev/null' EXIT

@@ -7,7 +7,7 @@ repository.workspace = true
 
 [dependencies]
 rustix.workspace = true
-unbound-notify = { path = "../unbound-notify" }
+unbound-notify.workspace = true
 wayland-client.workspace = true
 wayland-protocols.workspace = true
 zbus.workspace = true
@@ -16,7 +16,7 @@ zbus.workspace = true
 tempfile.workspace = true
 smithay.workspace = true
 unbound-compositor.workspace = true
-unbound-config = { path = "../unbound-config" }
+unbound-config.workspace = true
 unbound-test-bus.workspace = true
 
 [package.metadata.deb]

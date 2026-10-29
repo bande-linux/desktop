@@ -29,9 +29,9 @@ for app in unbound-compositor unbound-clipboard unbound-panel unbound-launcher u
     cp "$(grep "/$app\$" "$share/apps")" "$share/usr/bin/"
 done
 mkdir -p "$share/etc/pam.d"
-cp crates/unbound-lock/data/unbound-lock.pam "$share/etc/pam.d/unbound-lock"
-cp crates/unbound-term/data/unbound-term.desktop "$share/usr/share/applications/"
-cp crates/unbound-term/data/unbound-term.svg "$share/usr/share/icons/hicolor/scalable/apps/"
+cp crates/shell/lock/data/unbound-lock.pam "$share/etc/pam.d/unbound-lock"
+cp crates/apps/terminal/data/unbound-term.desktop "$share/usr/share/applications/"
+cp crates/apps/terminal/data/unbound-term.svg "$share/usr/share/icons/hicolor/scalable/apps/"
 
 mkdir "$share/bin"
 while read -r executable; do

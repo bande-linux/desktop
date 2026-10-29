@@ -12,7 +12,7 @@ zbus.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
-unbound-config = { path = "../unbound-config" }
+unbound-config.workspace = true
 unbound-test-bus.workspace = true
 
 [package.metadata.deb]

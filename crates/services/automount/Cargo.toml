@@ -6,7 +6,7 @@ edition.workspace = true
 repository.workspace = true
 
 [dependencies]
-unbound-notify = { path = "../unbound-notify" }
+unbound-notify.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]

@@ -80,6 +80,7 @@ use smithay::{
     delegate_primary_selection, delegate_seat, delegate_shm, delegate_viewporter,
     delegate_xdg_activation, delegate_xdg_shell,
 };
+use unbound_protocols::server::unbound_app_v1::UnboundAppV1;
 use unbound_protocols::server::unbound_shell_v1::UnboundShellV1;
 use unbound_render::VulkanRenderer;
 
@@ -175,6 +176,7 @@ pub struct State {
     _virtual_keyboard_state: VirtualKeyboardManagerState,
     pending_activation: Option<WlSurface>,
     pub(crate) shell_resources: Vec<UnboundShellV1>,
+    pub(crate) app_resources: Vec<UnboundAppV1>,
     pub(crate) foreign_toplevel_state: ForeignToplevelListState,
     pub(crate) exclusive_layer: Option<ExclusiveLayer>,
     exclusive_candidates: Vec<(WlSurface, Layer)>,
@@ -283,6 +285,7 @@ impl Headless {
         output.set_preferred(mode);
         output.create_global::<State>(&handle);
         handle.create_global::<State, UnboundShellV1, ()>(5, ());
+        handle.create_global::<State, UnboundAppV1, ()>(1, ());
         State::create_capture_globals(&handle);
         let state = State {
             display_handle: handle.clone(),
@@ -320,6 +323,7 @@ impl Headless {
             }),
             pending_activation: None,
             shell_resources: Vec::new(),
+            app_resources: Vec::new(),
             foreign_toplevel_state: ForeignToplevelListState::new_with_filter::<State>(
                 &handle,
                 shell::is_shell,

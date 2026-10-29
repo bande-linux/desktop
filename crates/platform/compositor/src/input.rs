@@ -137,11 +137,7 @@ impl State {
                     window.toplevel.send_close();
                 }
             }
-            Shortcut::QuitApp => self
-                .windows
-                .iter()
-                .filter(|window| window.toplevel.wl_surface().client() == owner)
-                .for_each(|window| window.toplevel.send_close()),
+            Shortcut::QuitApp => self.quit_app(owner),
             Shortcut::NextApp => {
                 let next = self
                     .windows

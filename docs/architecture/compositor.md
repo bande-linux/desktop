@@ -120,3 +120,4 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `zwp_pointer_gestures_v1` | Trackpad gestures | P1 | not implemented |
 | `zwp_keyboard_shortcuts_inhibit_v1` | Keyboard passthrough for VMs and remote desktop | P2 | not implemented |
 | `unbound_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Control Center, Dock icon rectangles | P0 | implemented, shell clients only |
+| `unbound_app_v1` (own, in `unbound-shell-v1.xml`) | App-level requests: `quit_requested` on Super+Q instead of closing every window | P0 | implemented, every client |

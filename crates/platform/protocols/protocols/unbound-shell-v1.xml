@@ -90,4 +90,24 @@
       <arg name="height" type="int"/>
     </request>
   </interface>
+
+  <interface name="unbound_app_v1" version="1">
+    <description summary="requests from the desktop to a whole app">
+      Offered to every client. A client that binds it takes over app-level
+      requests that the compositor would otherwise express per window: while
+      it is bound, the compositor sends quit_requested instead of closing each
+      of the client's toplevels.
+    </description>
+
+    <request name="destroy" type="destructor"/>
+
+    <event name="quit_requested">
+      <description summary="the user asked to quit the app">
+        Sent for Super+Q, as Command-Q quits an app on a Mac. The app should
+        quit: close all its windows and exit, asking the user once first if
+        something would be lost, as a terminal with running programs does. If
+        the user cancels, the app keeps running and nothing is closed.
+      </description>
+    </event>
+  </interface>
 </protocol>

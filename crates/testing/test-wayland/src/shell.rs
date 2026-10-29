@@ -1,4 +1,5 @@
 use unbound_compositor::SessionRole;
+use unbound_protocols::client::unbound_app_v1::{self, UnboundAppV1};
 use unbound_protocols::client::unbound_shell_v1::{self, UnboundShellV1};
 use wayland_client::protocol::wl_shm::Format;
 use wayland_client::protocol::wl_surface::WlSurface;
@@ -46,6 +47,7 @@ pub(crate) struct Shell {
     active_apps: Vec<String>,
     volume_keys: Vec<(unbound_shell_v1::VolumeKey, bool)>,
     control_center_toggles: usize,
+    quit_requests: usize,
     toplevels: Vec<(ExtForeignToplevelHandleV1, String, bool)>,
 }
 
@@ -184,6 +186,15 @@ impl TestClient {
         let surface = &self.globals.shell.layers[layer].0;
         shell.set_icon_rect(app_id.to_owned(), surface, rect.0, rect.1, rect.2, rect.3);
         self.exchange(server);
+    }
+
+    pub fn take_app_requests(&mut self, server: &mut Headless) {
+        let _: UnboundAppV1 = self.bind("unbound_app_v1", 1);
+        self.exchange(server);
+    }
+
+    pub fn quit_requests(&self) -> usize {
+        self.globals.shell.quit_requests
     }
 
     pub fn activate_app(&mut self, server: &mut Headless, app_id: &str) {
@@ -343,6 +354,21 @@ impl Dispatch<UnboundShellV1, ()> for Globals {
                 globals.shell.control_center_toggles += 1;
             }
             _ => {}
+        }
+    }
+}
+
+impl Dispatch<UnboundAppV1, ()> for Globals {
+    fn event(
+        globals: &mut Self,
+        _: &UnboundAppV1,
+        event: unbound_app_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        if let unbound_app_v1::Event::QuitRequested = event {
+            globals.shell.quit_requests += 1;
         }
     }
 }

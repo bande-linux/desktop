@@ -1,3 +1,4 @@
+mod app;
 mod capture;
 mod clock;
 mod cursor;

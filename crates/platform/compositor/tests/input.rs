@@ -191,6 +191,26 @@ fn super_q_asks_every_window_of_the_focused_app_to_close() {
 }
 
 #[test]
+fn super_q_asks_an_app_that_takes_app_requests_to_quit_once_and_closes_nothing() {
+    let mut server = server();
+    let mut other = client_with_window(&mut server, 128);
+    other.take_app_requests(&mut server);
+    let mut app = client_with_window(&mut server, 32);
+    app.take_app_requests(&mut server);
+    let pixels = solid(16);
+    app.show_window(&mut server, &image(&pixels, 16));
+    roundtrip(&mut server, &mut [&mut other, &mut app]);
+
+    chord(&mut server, KEY_Q);
+    roundtrip(&mut server, &mut [&mut other, &mut app]);
+
+    assert_eq!(app.quit_requests(), 1);
+    assert!(!app.close_requested(0));
+    assert!(!app.close_requested(1));
+    assert_eq!(other.quit_requests(), 0);
+}
+
+#[test]
 fn super_tab_activates_the_most_recent_other_app() {
     let mut server = server();
     let mut first = client_with_window(&mut server, 128);

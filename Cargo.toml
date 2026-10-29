@@ -12,6 +12,7 @@ alacritty_terminal = { version = "=0.26.0", default-features = false }
 accesskit = "=0.25.2"
 ab_glyph = "=0.2.32"
 ash = "=0.38.0"
+blocking = "=1.7.0"
 image = { version = "=0.25.10", default-features = false, features = ["png"] }
 jiff = "=0.2.38"
 libc = "=0.2.191"

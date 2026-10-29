@@ -2962,6 +2962,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "unbound-bluetooth"
+version = "0.1.0"
+dependencies = [
+ "blocking",
+ "unbound-test-bus",
+ "zbus",
+]
+
+[[package]]
 name = "unbound-clipboard"
 version = "0.1.0"
 dependencies = [

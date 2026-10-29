@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use smithay::utils::Size;
@@ -254,10 +254,15 @@ fn the_lock_screen_is_started_again_when_the_locker_dies_while_locked() {
     assert!(server.lock_screen_pid().is_none());
 
     drop(lock);
-    roundtrip(&mut server, &mut [&mut editor]);
-    server.keep_session_clients_running();
-
-    assert!(server.lock_screen_pid().is_some());
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while server.lock_screen_pid().is_none() {
+        assert!(
+            Instant::now() < deadline,
+            "the compositor never started a lock screen after the locker died"
+        );
+        roundtrip(&mut server, &mut [&mut editor]);
+        server.keep_session_clients_running();
+    }
 }
 
 #[test]
@@ -310,7 +315,7 @@ fn a_lock_screen_that_exits_after_disconnecting_is_reaped_without_other_events()
         server.poll_fd().expect("display fd"),
         server.fence_fd().expect("internal loop fd"),
     ];
-    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + Duration::from_secs(5);
     while server.lock_screen_pid().is_some() {
         let left = deadline.saturating_duration_since(std::time::Instant::now());
         let mut polled = fds

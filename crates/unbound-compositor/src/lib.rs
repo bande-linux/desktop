@@ -19,7 +19,10 @@ mod sync;
 mod window;
 
 pub use clock::{FrameClock, FrameOutput, FrameScheduler, Poll, SAFETY_MARGIN, Submission, Vblank};
-pub use cursor::{ARROW_FILL, ARROW_HEIGHT, ARROW_OUTLINE, ARROW_WIDTH};
+pub use cursor::{
+    ARROW_FILL, ARROW_HEIGHT, ARROW_OUTLINE, ARROW_WIDTH, CursorTheme, DEFAULT_CURSOR_SIZE,
+    DEFAULT_CURSOR_THEME,
+};
 pub use drm::{DrmBackendError, DrmNotifiers, DrmOutput};
 pub use environment::{DESKTOP_NAME, export_session_environment, session_environment};
 pub use logind::{SessionRequest, follow_session};

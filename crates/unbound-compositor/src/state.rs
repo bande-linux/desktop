@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::ffi::OsString;
 use std::io;
 use std::os::fd::OwnedFd;
@@ -14,13 +15,13 @@ use smithay::backend::renderer::element::surface::{
 };
 use smithay::backend::renderer::utils::{on_commit_buffer_handler, with_renderer_surface_state};
 use smithay::backend::renderer::element::memory::{
-    MemoryRenderBuffer, MemoryRenderBufferRenderElement,
+    MemoryRenderBufferRenderElement,
 };
 use smithay::desktop::{
     LayerSurface as MappedLayer, PopupGrab, PopupManager, WindowSurfaceType, layer_map_for_output,
 };
 use smithay::input::keyboard::XkbConfig;
-use smithay::input::pointer::{CursorImageAttributes, CursorImageStatus};
+use smithay::input::pointer::{CursorIcon, CursorImageAttributes, CursorImageStatus};
 use smithay::render_elements;
 use smithay::output::{Mode, Output, PhysicalProperties, Subpixel};
 use smithay::input::{Seat, SeatHandler, SeatState};
@@ -83,7 +84,7 @@ use unbound_protocols::server::unbound_shell_v1::UnboundShellV1;
 use unbound_render::VulkanRenderer;
 
 use crate::clock::Vblank;
-use crate::cursor;
+use crate::cursor::{self, Cursor, CursorTheme};
 use crate::lock::Lock;
 use crate::session::{LockScreen, SessionClient, SessionRole};
 use crate::shell;
@@ -155,7 +156,9 @@ pub struct State {
     pub(crate) pointer_location: Point<f64, Logical>,
     pub(crate) cursor_shown: bool,
     cursor_status: CursorImageStatus,
-    cursor_arrow: MemoryRenderBuffer,
+    cursor_theme: CursorTheme,
+    cursor_arrow: Cursor,
+    named_cursors: HashMap<CursorIcon, Option<Cursor>>,
     pub(crate) held_shortcut_keys: Vec<u32>,
     pub(crate) input_devices: usize,
     pub(crate) pending_captures: Vec<crate::capture::PendingCapture>,
@@ -294,7 +297,12 @@ impl Headless {
                 .into(),
             cursor_shown: false,
             cursor_status: CursorImageStatus::default_named(),
-            cursor_arrow: cursor::arrow(),
+            cursor_theme: CursorTheme::builtin(),
+            cursor_arrow: Cursor {
+                buffer: cursor::arrow(),
+                hotspot: Point::default(),
+            },
+            named_cursors: HashMap::new(),
             held_shortcut_keys: Vec::new(),
             input_devices: 0,
             pending_captures: Vec::new(),
@@ -444,6 +452,14 @@ impl Headless {
             .count()
     }
 
+    pub fn use_cursor_theme(&mut self, theme: CursorTheme) {
+        self.state.use_cursor_theme(theme);
+    }
+
+    pub fn cursor_theme(&self) -> &CursorTheme {
+        &self.state.cursor_theme
+    }
+
     pub fn usable_area(&self) -> Rect {
         self.state.usable_area()
     }
@@ -474,18 +490,28 @@ impl Headless {
                     ElementKind::Cursor,
                 )
             }
-            CursorImageStatus::Named(_) => MemoryRenderBufferRenderElement::from_buffer(
-                renderer,
-                (f64::from(at.x), f64::from(at.y)),
-                &state.cursor_arrow,
-                None,
-                None,
-                None,
-                ElementKind::Cursor,
-            )
-            .map(OutputElement::Cursor)
-            .into_iter()
-            .collect(),
+            CursorImageStatus::Named(icon) => {
+                let cursor = state
+                    .named_cursors
+                    .get(icon)
+                    .and_then(Option::as_ref)
+                    .unwrap_or(&state.cursor_arrow);
+                MemoryRenderBufferRenderElement::from_buffer(
+                    renderer,
+                    (
+                        f64::from(at.x - cursor.hotspot.x),
+                        f64::from(at.y - cursor.hotspot.y),
+                    ),
+                    &cursor.buffer,
+                    None,
+                    None,
+                    None,
+                    ElementKind::Cursor,
+                )
+                .map(OutputElement::Cursor)
+                .into_iter()
+                .collect()
+            }
         }
     }
 
@@ -533,6 +559,22 @@ fn shm_size(buffer: &WlBuffer) -> Option<Size<i32, Physical>> {
 }
 
 impl State {
+    fn load_named_cursor(&mut self, icon: CursorIcon) {
+        let theme = &self.cursor_theme;
+        self.named_cursors
+            .entry(icon)
+            .or_insert_with(|| theme.load(icon));
+    }
+
+    pub(crate) fn use_cursor_theme(&mut self, theme: CursorTheme) {
+        self.cursor_theme = theme;
+        self.named_cursors.clear();
+        if let CursorImageStatus::Named(icon) = self.cursor_status {
+            self.load_named_cursor(icon);
+        }
+        self.needs_redraw = true;
+    }
+
     pub(crate) fn focused(&self) -> Option<WlSurface> {
         self.seat
             .get_keyboard()
@@ -993,6 +1035,9 @@ impl SeatHandler for State {
     }
 
     fn cursor_image(&mut self, _seat: &Seat<Self>, image: CursorImageStatus) {
+        if let CursorImageStatus::Named(icon) = image {
+            self.load_named_cursor(icon);
+        }
         self.cursor_status = image;
         self.needs_redraw = true;
     }

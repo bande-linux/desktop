@@ -3008,6 +3008,7 @@ dependencies = [
  "image-compare",
  "rustix 1.1.6",
  "smithay",
+ "tempfile",
  "unbound-greeter",
  "unbound-protocols",
  "unbound-render",

@@ -30,6 +30,8 @@ naga = { version = "=30.0.1", features = ["wgsl-in", "spv-out"] }
 notify = "=8.2.0"
 fontique = { version = "=0.12.0", features = ["fontconfig-dlopen"] }
 parley = { version = "=0.12.0", features = ["complex-scripts"] }
+pipewire = "=0.10.1"
+serde_json = "=1.0.154"
 zbus = "=5.19.0"
 unbound-apps = { path = "crates/unbound-apps" }
 unbound-config = { path = "crates/unbound-config" }

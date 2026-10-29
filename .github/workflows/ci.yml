@@ -21,7 +21,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends pkg-config libxkbcommon-dev libgbm-dev libinput-dev libseat-dev libudev-dev
+          sudo apt-get install -y --no-install-recommends pkg-config libxkbcommon-dev libgbm-dev libinput-dev libseat-dev libudev-dev libpipewire-0.3-dev libclang-dev
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
@@ -36,7 +36,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            pkg-config libxkbcommon-dev libgbm-dev libinput-dev libseat-dev libudev-dev libvulkan1 mesa-vulkan-drivers fonts-dejavu-core dbus-daemon
+            pkg-config libxkbcommon-dev libgbm-dev libinput-dev libseat-dev libudev-dev libpipewire-0.3-dev libclang-dev libvulkan1 mesa-vulkan-drivers fonts-dejavu-core dbus-daemon
       - name: Install the toolkit's fonts, fontconfig and libwayland-client
         run: |
           sudo apt-get install -y --no-install-recommends fonts-inter fonts-noto-cjk libfontconfig1 libwayland-client0
@@ -199,7 +199,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            pkg-config libxkbcommon-dev libgbm-dev libinput-dev libseat-dev libudev-dev jq e2fsprogs qemu-system-arm
+            pkg-config libxkbcommon-dev libgbm-dev libinput-dev libseat-dev libudev-dev libpipewire-0.3-dev libclang-dev jq e2fsprogs qemu-system-arm
       - name: Build or reuse the guest kernel and root image
         run: ci/vm/images.sh vm
       - name: Run the guest tests in a KVM guest with vkms and virtio-gpu

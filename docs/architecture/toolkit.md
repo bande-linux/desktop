@@ -83,9 +83,17 @@ and live on `SettingChanged`, and delivers `WindowEvent::AppearanceChanged`. App
   toggled state or numeric range, and its actions. `Ui::accessibility` returns the `TreeUpdate`
   with the focus, and `Ui::perform` carries out Focus, Click, SetValue, Increment, Decrement and
   ReplaceSelectedText requests. The tree is published on AT-SPI through `accesskit_unix`.
-- **Input.** Pointer input is limited today: only the left button, no click count or modifiers
-  on pointer events, no hover per widget and no popups. The order in which this grows is in
-  [decision 0002](../decisions/0002-toolkit.md).
+- **Input.** `wl_seat` up to version 9. Pointer events carry the button (primary, secondary,
+  middle, back, forward), the click count (a press within 500 ms and 4 pt of the previous press
+  of the same button counts up) and the modifiers; Ctrl+primary is a secondary click. Scrolling
+  arrives as `Event::Scroll` with its source (wheel, finger, continuous) and phase (a finger
+  scroll begins, changes and ends at `axis_stop`, so momentum can start from its end).
+  Modifier-only changes arrive as `Event::ModifiersChanged`. `Ui` sends `PointerEnter` and
+  `PointerLeave` to every widget on the hit path, bubbles scrolling from the innermost widget
+  outwards, and reports the hovered widget's cursor, which `Window::set_cursor` shows through
+  `wp_cursor_shape_v1`. A close request (close button, Super+W) asks `App::should_close`, so an
+  app can keep its window open, ask first or close a tab instead; `Window::close` closes it.
+  Text fields select a word on double click and everything on triple click.
 
 Since `wayland-backend` is built with `client_system`, every Wayland client in a workspace
 build, `unbound-test-wayland` included, goes through libwayland.

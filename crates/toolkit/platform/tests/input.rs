@@ -7,9 +7,13 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use smithay::backend::input::{Axis, AxisSource};
+use smithay::input::pointer::AxisFrame;
 use smithay::utils::{Point, Size};
 use unbound_compositor::{FrameClock, FrameScheduler, Headless, REFRESH, Renderer, SessionRole};
-use unbound_graphics::{Color, Event, Key, Modifiers, Scene};
+use unbound_graphics::{
+    Color, Event, Key, Modifiers, Pointer, PointerButton, Scene, ScrollPhase, ScrollSource,
+};
 use unbound_toolkit_platform::{
     App, Edges, KeyboardFocus, LayerKind, LayerOptions, Role, Window, WindowEvent,
 };
@@ -23,12 +27,15 @@ const KEY_C: u32 = 46;
 const KEY_LEFTMETA: u32 = 125;
 const KEY_SPACE: u32 = 57;
 const BTN_LEFT: u32 = 0x110;
+const BTN_RIGHT: u32 = 0x111;
+const BTN_SIDE: u32 = 0x113;
 const BUSY: Duration = Duration::from_millis(900);
 
 struct Forwarder {
     events: Sender<WindowEvent>,
     commands: UnixStream,
     finished: bool,
+    refuse_close: bool,
 }
 
 impl App for Forwarder {
@@ -62,12 +69,25 @@ impl App for Forwarder {
             b'h' => window.hide().expect("hide"),
             b's' => window.show().expect("show"),
             b'b' => thread::sleep(BUSY),
+            b'r' => {
+                self.refuse_close = true;
+                window.request_close();
+            }
+            b'q' => {
+                self.refuse_close = false;
+                window.request_close();
+            }
             _ => self.finished = true,
         }
     }
 
     fn finished(&self) -> bool {
         self.finished
+    }
+
+    fn should_close(&mut self, _window: &mut Window) -> bool {
+        let _ = self.events.send(WindowEvent::CloseRequested);
+        !self.refuse_close
     }
 }
 
@@ -126,6 +146,7 @@ impl Desktop {
                 events,
                 commands: app_commands,
                 finished: false,
+                refuse_close: false,
             };
             unbound_toolkit_platform::run(&mut window, &mut app).expect("run loop");
         });
@@ -181,6 +202,19 @@ impl Desktop {
                 client.seen.extend(client.events.try_iter());
             }
         }
+    }
+
+    fn click(&mut self, button: u32) {
+        self.server.press_button(button, true, 0);
+        self.server.press_button(button, false, 0);
+    }
+
+    fn point_into_window(&mut self, x: i32, y: i32) {
+        let origin = self.server.windows()[0].location();
+        self.server.move_pointer_to(
+            Point::from((f64::from(origin.x + x), f64::from(origin.y + y))),
+            0,
+        );
     }
 
     fn mapped(&self) -> bool {
@@ -306,38 +340,191 @@ fn a_key_released_while_the_app_is_busy_does_not_repeat() {
     );
 }
 
-#[test]
-fn clicks_arrive_at_surface_coordinates() {
-    let mut desktop = Desktop::new();
-    let mut client = desktop.open(Role::toplevel("pointer", "test.pointer"), false);
-    desktop.wait_for(&mut [&mut client], |_| true, Desktop::mapped);
-    let origin = desktop.server.windows()[0].location();
+fn presses(events: &[WindowEvent]) -> Vec<Pointer> {
+    events
+        .iter()
+        .filter_map(|event| match event {
+            WindowEvent::Input(Event::PointerDown(pointer)) => Some(*pointer),
+            _ => None,
+        })
+        .collect()
+}
 
-    desktop.server.move_pointer_to(
-        Point::from((f64::from(origin.x + 30), f64::from(origin.y + 20))),
-        0,
+fn releases(events: &[WindowEvent]) -> usize {
+    events
+        .iter()
+        .filter(|event| matches!(event, WindowEvent::Input(Event::PointerUp(_))))
+        .count()
+}
+
+fn pointed_window(desktop: &mut Desktop, name: &str) -> Client {
+    let mut client = desktop.open(Role::toplevel(name, "test.pointer"), false);
+    desktop.wait_for(
+        &mut [&mut client],
+        |events| events.contains(&WindowEvent::Focus(true)),
+        Desktop::mapped,
     );
-    desktop.server.press_button(BTN_LEFT, true, 0);
-    desktop.server.press_button(BTN_LEFT, false, 0);
+    desktop.point_into_window(30, 20);
+    client
+}
+
+#[test]
+fn clicks_arrive_at_surface_coordinates_with_their_button() {
+    let mut desktop = Desktop::new();
+    let mut client = pointed_window(&mut desktop, "buttons");
+    desktop.click(BTN_LEFT);
+    desktop.click(BTN_RIGHT);
+    desktop.click(BTN_SIDE);
+    desktop.wait_for(&mut [&mut client], |events| releases(events) == 3, |_| true);
+
+    let pressed = presses(&client.seen);
+    assert!(
+        pressed
+            .iter()
+            .all(|pointer| (pointer.position.x, pointer.position.y) == (30.0, 20.0))
+    );
+    assert_eq!(
+        pressed
+            .iter()
+            .map(|pointer| pointer.button)
+            .collect::<Vec<_>>(),
+        [
+            PointerButton::Primary,
+            PointerButton::Secondary,
+            PointerButton::Back
+        ]
+    );
+}
+
+#[test]
+fn quick_clicks_in_one_place_count_up_and_a_moved_click_starts_over() {
+    let mut desktop = Desktop::new();
+    let mut client = pointed_window(&mut desktop, "counts");
+    for _ in 0..3 {
+        desktop.click(BTN_LEFT);
+    }
+    desktop.point_into_window(60, 40);
+    desktop.click(BTN_LEFT);
+    desktop.wait_for(&mut [&mut client], |events| releases(events) == 4, |_| true);
+
+    let counts = presses(&client.seen)
+        .iter()
+        .map(|pointer| pointer.count)
+        .collect::<Vec<_>>();
+    assert_eq!(counts, [1, 2, 3, 1]);
+}
+
+#[test]
+fn control_click_is_a_secondary_click_and_modifier_changes_arrive_alone() {
+    let mut desktop = Desktop::new();
+    let mut client = pointed_window(&mut desktop, "control");
+    desktop.server.key(KEY_LEFTCTRL, true, 0);
+    desktop.click(BTN_LEFT);
+    desktop.server.key(KEY_LEFTCTRL, false, 0);
     desktop.wait_for(
         &mut [&mut client],
         |events| {
             events
                 .iter()
-                .any(|event| matches!(event, WindowEvent::Input(Event::PointerUp(_))))
+                .filter(|event| matches!(event, WindowEvent::Input(Event::ModifiersChanged(_))))
+                .count()
+                == 2
         },
         |_| true,
     );
 
-    let clicks = client
-        .seen
-        .iter()
-        .filter_map(|event| match event {
-            WindowEvent::Input(Event::PointerDown(at) | Event::PointerUp(at)) => Some((at.x, at.y)),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-    assert_eq!(clicks, [(30.0, 20.0), (30.0, 20.0)]);
+    let pressed = presses(&client.seen);
+    assert_eq!(pressed.len(), 1);
+    assert_eq!(pressed[0].button, PointerButton::Secondary);
+    assert!(pressed[0].modifiers.control);
+    assert!(
+        client
+            .seen
+            .contains(&WindowEvent::Input(Event::ModifiersChanged(Modifiers {
+                control: true,
+                ..Modifiers::default()
+            })))
+    );
+}
+
+#[test]
+fn finger_scrolling_begins_changes_and_ends_with_the_lift() {
+    let mut desktop = Desktop::new();
+    let mut client = pointed_window(&mut desktop, "scroll");
+    for delta in [4.0, 6.0] {
+        desktop.server.scroll(
+            AxisFrame::new(0)
+                .source(AxisSource::Finger)
+                .value(Axis::Vertical, delta),
+        );
+    }
+    desktop.server.scroll(
+        AxisFrame::new(0)
+            .source(AxisSource::Finger)
+            .stop(Axis::Vertical),
+    );
+    desktop.server.scroll(
+        AxisFrame::new(0)
+            .source(AxisSource::Wheel)
+            .value(Axis::Vertical, 15.0),
+    );
+    let scrolls = |events: &[WindowEvent]| {
+        events
+            .iter()
+            .filter_map(|event| match event {
+                WindowEvent::Input(Event::Scroll(scroll)) => {
+                    Some((scroll.source, scroll.phase, scroll.delta.y))
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    desktop.wait_for(
+        &mut [&mut client],
+        |events| scrolls(events).len() == 4,
+        |_| true,
+    );
+
+    assert_eq!(
+        scrolls(&client.seen),
+        [
+            (ScrollSource::Finger, ScrollPhase::Began, 4.0),
+            (ScrollSource::Finger, ScrollPhase::Changed, 6.0),
+            (ScrollSource::Finger, ScrollPhase::Ended, 0.0),
+            (ScrollSource::Wheel, ScrollPhase::Changed, 15.0),
+        ]
+    );
+}
+
+#[test]
+fn an_app_can_refuse_to_close_and_close_later() {
+    let mut desktop = Desktop::new();
+    let mut client = desktop.open(Role::toplevel("close", "test.close"), false);
+    desktop.wait_for(&mut [&mut client], |_| true, Desktop::mapped);
+    client.send(b'r');
+    desktop.wait_for(
+        &mut [&mut client],
+        |events| events.contains(&WindowEvent::CloseRequested),
+        |_| true,
+    );
+    desktop.settle(&mut [&mut client]);
+    assert!(
+        client
+            .thread
+            .as_ref()
+            .is_some_and(|thread| !thread.is_finished())
+    );
+
+    client.send(b'q');
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while client
+        .thread
+        .as_ref()
+        .is_some_and(|thread| !thread.is_finished())
+    {
+        desktop.pump();
+        assert!(Instant::now() < deadline, "the window stayed open");
+    }
 }
 
 #[test]

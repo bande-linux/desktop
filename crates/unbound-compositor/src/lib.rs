@@ -1,6 +1,7 @@
 mod capture;
 mod clock;
 mod cursor;
+mod decoration;
 mod drm;
 mod environment;
 mod grab;

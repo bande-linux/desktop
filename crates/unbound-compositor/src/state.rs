@@ -68,6 +68,7 @@ use smithay::wayland::shell::wlr_layer::{
 };
 use smithay::wayland::shm::{ShmHandler, ShmState, with_buffer_contents};
 use smithay::wayland::session_lock::SessionLockManagerState;
+use smithay::wayland::shell::xdg::decoration::XdgDecorationState;
 use smithay::wayland::viewporter::ViewporterState;
 use smithay::wayland::xdg_activation::{
     XdgActivationHandler, XdgActivationState, XdgActivationToken, XdgActivationTokenData,
@@ -127,6 +128,7 @@ pub struct State {
     activation_state: XdgActivationState,
     _viewporter_state: ViewporterState,
     _fractional_scale_state: FractionalScaleManagerState,
+    _decoration_state: XdgDecorationState,
     pending_activation: Option<WlSurface>,
     pub(crate) shell_resources: Vec<UnboundShellV1>,
     pub(crate) foreign_toplevel_state: ForeignToplevelListState,
@@ -256,6 +258,7 @@ impl Headless {
             activation_state: XdgActivationState::new::<State>(&handle),
             _viewporter_state: ViewporterState::new::<State>(&handle),
             _fractional_scale_state: FractionalScaleManagerState::new::<State>(&handle),
+            _decoration_state: XdgDecorationState::new::<State>(&handle),
             pending_activation: None,
             shell_resources: Vec::new(),
             foreign_toplevel_state: ForeignToplevelListState::new_with_filter::<State>(

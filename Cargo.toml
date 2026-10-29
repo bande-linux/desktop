@@ -66,6 +66,7 @@ unbound-config = { path = "crates/services/config" }
 unbound-controlcenter = { path = "crates/shell/controlcenter" }
 unbound-dock = { path = "crates/shell/dock" }
 unbound-files = { path = "crates/apps/files" }
+unbound-fs = { path = "crates/libs/fs" }
 unbound-graphics = { path = "crates/toolkit/graphics" }
 unbound-greeter = { path = "crates/shell/greeter" }
 unbound-l10n = { path = "crates/libs/l10n" }

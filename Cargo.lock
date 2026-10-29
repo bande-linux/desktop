@@ -3014,6 +3014,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "unbound-files"
+version = "0.1.0"
+dependencies = [
+ "image",
+ "tempfile",
+ "unbound-config",
+ "unbound-toolkit",
+]
+
+[[package]]
 name = "unbound-launcher"
 version = "0.1.0"
 dependencies = [

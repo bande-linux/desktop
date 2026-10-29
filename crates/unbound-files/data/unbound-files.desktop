@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Files
+GenericName=File Manager
+Comment=Browse your folders and files
+Icon=unbound-files
+Exec=unbound-files
+Categories=System;FileTools;FileManager;
+Keywords=folder;finder;browse;directory;

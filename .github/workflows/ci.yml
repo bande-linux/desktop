@@ -5,6 +5,10 @@ on:
     branches: ['**']
   pull_request:
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 env:
   CARGO_INCREMENTAL: '0'
   CARGO_TERM_COLOR: always
@@ -40,6 +44,8 @@ jobs:
       - name: Install the toolkit's fonts, fontconfig and libwayland-client
         run: |
           sudo apt-get install -y --no-install-recommends fonts-inter fonts-noto-cjk libfontconfig1 libwayland-client0
+      - name: Install kill for the clipboard daemon's restart test
+        run: sudo apt-get install -y --no-install-recommends procps
       - run: cargo test --workspace --locked -- --show-output
       - uses: actions/upload-artifact@v7
         if: failure()

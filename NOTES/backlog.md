@@ -367,3 +367,14 @@ boot framebuffer, K3 USB input. Later, the Apple DCP and agx drivers unlock:
 - A null-audio-sink given `media.class = "Audio/Source"` stalls WirePlumber 0.5.8's event
   queue when it activates the node, after which no default node is chosen; virtual
   sources need `Audio/Source/Virtual`.
+
+## Resume here (desktop agent 1)
+
+- Branch `desktop/ci-debian` (procps for `kill` in ci/lavapipe-test) and `ci/shared-vm-cache`
+  were pushed on top of main bb05be5. Their CI runs were in flight when work paused: check
+  them and merge each into main when it is fully green, then delete `ci/shared-vm-cache` and
+  its worktree `desktop-wt/vm-cache`.
+- Next in the chain: `desktop/milestone-24`. Its local merge of main (f814e1e, before bb05be5)
+  passed all 16 desktop guest tests on the laptop; the 2 audio failures there are fixed
+  by 3fc122a. Merge main into it again, push, merge on green, then M25 and M26.
+- Then phase 7: dconf writer, animated and HiDPI cursors.

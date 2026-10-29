@@ -28,11 +28,16 @@ pub struct GpuRenderer {
     image_ids: ImageIds,
 }
 
+pub(crate) fn vulkan_instance() -> wgpu::Instance {
+    let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
+    descriptor.backends = wgpu::Backends::VULKAN;
+    descriptor.flags = wgpu::InstanceFlags::empty();
+    wgpu::Instance::new(descriptor.with_env())
+}
+
 impl GpuRenderer {
     pub fn new() -> Result<Self, RenderError> {
-        let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-        descriptor.backends = wgpu::Backends::VULKAN;
-        let instance = wgpu::Instance::new(descriptor.with_env());
+        let instance = vulkan_instance();
         let adapter =
             pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
                 .map_err(RenderError::Adapter)?;

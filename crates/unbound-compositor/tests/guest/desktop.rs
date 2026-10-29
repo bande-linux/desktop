@@ -604,11 +604,13 @@ fn files_drills_into_a_folder_and_quick_looks_a_picture() {
     });
     thread::sleep(Duration::from_secs(1));
 
-    let shown = scanout();
-    keyboard.tap(KEY_DOWN);
-    wait_for("the selected folder's column", STARTUP, || {
-        scanout().rgb != shown.rgb
-    });
+    for selected in ["notes.txt", "Pictures"] {
+        let shown = scanout();
+        keyboard.tap(KEY_DOWN);
+        wait_for(&format!("{selected} selected"), STARTUP, || {
+            scanout().rgb != shown.rgb
+        });
+    }
     keyboard.tap(KEY_RIGHT);
     thread::sleep(Duration::from_secs(1));
     scanout().save("m22-files-columns");

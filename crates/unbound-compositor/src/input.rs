@@ -62,7 +62,11 @@ impl State {
     }
 
     pub(crate) fn refocus_pointer(&mut self) {
-        let Some(pointer) = self.seat.get_pointer() else {
+        let Some(pointer) = self
+            .seat
+            .get_pointer()
+            .filter(|pointer| !pointer.is_grabbed())
+        else {
             return;
         };
         let under = self.surface_under(self.pointer_location);

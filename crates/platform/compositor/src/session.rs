@@ -31,6 +31,7 @@ pub const SCREENSHOT: &str = "/usr/bin/unbound-screenshot";
 pub const MENU_BAR: &str = "/usr/bin/unbound-menubar";
 pub const CONTROL_CENTER: &str = "/usr/bin/unbound-controlcenter";
 pub const GREETER: &str = "/usr/bin/unbound-greeter";
+pub const REVIEW: &str = "/usr/bin/unbound-review";
 
 pub const SESSION_CLIENT_RESTART_THROTTLE: Duration = Duration::from_secs(10);
 

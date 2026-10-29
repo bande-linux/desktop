@@ -10,6 +10,7 @@ use zbus::zvariant::{OwnedValue, Value};
 use crate::OBJECT_PATH;
 
 pub const APPEARANCE: &str = "org.freedesktop.appearance";
+pub const GNOME_INTERFACE: &str = "org.gnome.desktop.interface";
 pub const VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -38,17 +39,61 @@ impl ColorScheme {
         (channel(accent.r), channel(accent.g), channel(accent.b))
     }
 
-    fn values(self) -> Vec<(&'static str, OwnedValue)> {
-        let owned = |value: Value<'_>| OwnedValue::try_from(value).ok();
-        [
-            ("color-scheme", owned(Value::from(self as u32))),
-            ("accent-color", owned(Value::from(self.accent_color()))),
-            ("contrast", owned(Value::from(0u32))),
-        ]
-        .into_iter()
-        .filter_map(|(key, value)| Some((key, value?)))
-        .collect()
+    fn gnome_color_scheme(self) -> &'static str {
+        match self {
+            Self::PreferDark => "prefer-dark",
+            Self::PreferLight => "prefer-light",
+            Self::NoPreference => "default",
+        }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CursorSettings {
+    pub theme: String,
+    pub size: i32,
+}
+
+impl CursorSettings {
+    pub fn from_environment() -> Self {
+        let var = |name: &str| std::env::var(name).ok().filter(|value| !value.is_empty());
+        Self {
+            theme: var("XCURSOR_THEME").unwrap_or_else(|| "default".to_owned()),
+            size: var("XCURSOR_SIZE")
+                .and_then(|size| size.parse().ok())
+                .filter(|size| *size > 0)
+                .unwrap_or(24),
+        }
+    }
+}
+
+type Namespaces = Vec<(&'static str, Vec<(&'static str, OwnedValue)>)>;
+
+fn namespaces(scheme: ColorScheme, cursor: &CursorSettings) -> Namespaces {
+    let owned = |values: Vec<(&'static str, Value<'_>)>| {
+        values
+            .into_iter()
+            .filter_map(|(key, value)| Some((key, OwnedValue::try_from(value).ok()?)))
+            .collect()
+    };
+    vec![
+        (
+            APPEARANCE,
+            owned(vec![
+                ("color-scheme", Value::from(scheme as u32)),
+                ("accent-color", Value::from(scheme.accent_color())),
+                ("contrast", Value::from(0u32)),
+            ]),
+        ),
+        (
+            GNOME_INTERFACE,
+            owned(vec![
+                ("color-scheme", Value::from(scheme.gnome_color_scheme())),
+                ("cursor-theme", Value::from(cursor.theme.as_str())),
+                ("cursor-size", Value::from(cursor.size)),
+            ]),
+        ),
+    ]
 }
 
 fn matches(namespace: &str, filters: &[String]) -> bool {
@@ -71,10 +116,11 @@ trait Config {
 
 pub struct Settings {
     scheme: Arc<Mutex<ColorScheme>>,
+    cursor: CursorSettings,
 }
 
 impl Settings {
-    pub fn serve(connection: &Connection) -> zbus::Result<()> {
+    pub fn serve(connection: &Connection, cursor: CursorSettings) -> zbus::Result<()> {
         let config = ConfigProxyBlocking::new(connection)?;
         let changes = config.receive_appearance_changed();
         let scheme = Arc::new(Mutex::new(ColorScheme::from_appearance(
@@ -84,6 +130,7 @@ impl Settings {
             OBJECT_PATH,
             Settings {
                 scheme: Arc::clone(&scheme),
+                cursor: cursor.clone(),
             },
         )?;
         let connection = connection.clone();
@@ -100,15 +147,24 @@ impl Settings {
                 let Ok(emitter) = SignalEmitter::new(connection.inner(), OBJECT_PATH) else {
                     continue;
                 };
-                let before: HashMap<_, _> = old.values().into_iter().collect();
-                for (key, value) in new.values() {
-                    if before.get(key) != Some(&value) {
-                        let _ = zbus::block_on(Settings::setting_changed(
-                            &emitter,
-                            APPEARANCE,
-                            key,
-                            Value::from(value),
-                        ));
+                let before: HashMap<_, _> = namespaces(old, &cursor)
+                    .into_iter()
+                    .flat_map(|(namespace, values)| {
+                        values
+                            .into_iter()
+                            .map(move |(key, value)| ((namespace, key), value))
+                    })
+                    .collect();
+                for (namespace, values) in namespaces(new, &cursor) {
+                    for (key, value) in values {
+                        if before.get(&(namespace, key)) != Some(&value) {
+                            let _ = zbus::block_on(Settings::setting_changed(
+                                &emitter,
+                                namespace,
+                                key,
+                                Value::from(value),
+                            ));
+                        }
                     }
                 }
             }
@@ -116,8 +172,9 @@ impl Settings {
         Ok(())
     }
 
-    fn current(&self) -> ColorScheme {
-        *self.scheme.lock().unwrap_or_else(PoisonError::into_inner)
+    fn current(&self) -> Namespaces {
+        let scheme = *self.scheme.lock().unwrap_or_else(PoisonError::into_inner);
+        namespaces(scheme, &self.cursor)
     }
 }
 
@@ -131,30 +188,28 @@ pub enum PortalError {
 
 #[zbus::interface(name = "org.freedesktop.impl.portal.Settings")]
 impl Settings {
-    fn read_all(&self, namespaces: Vec<String>) -> HashMap<String, HashMap<String, OwnedValue>> {
-        if !matches(APPEARANCE, &namespaces) {
-            return HashMap::new();
-        }
-        let values = self
-            .current()
-            .values()
+    fn read_all(&self, filters: Vec<String>) -> HashMap<String, HashMap<String, OwnedValue>> {
+        self.current()
             .into_iter()
-            .map(|(key, value)| (key.to_owned(), value))
-            .collect();
-        HashMap::from([(APPEARANCE.to_owned(), values)])
+            .filter(|(namespace, _)| matches(namespace, &filters))
+            .map(|(namespace, values)| {
+                let values = values
+                    .into_iter()
+                    .map(|(key, value)| (key.to_owned(), value))
+                    .collect();
+                (namespace.to_owned(), values)
+            })
+            .collect()
     }
 
     fn read(&self, namespace: String, key: String) -> Result<OwnedValue, PortalError> {
-        let not_found = || PortalError::NotFound(format!("{namespace} {key} is not set"));
-        if namespace != APPEARANCE {
-            return Err(not_found());
-        }
         self.current()
-            .values()
             .into_iter()
+            .filter(|(name, _)| *name == namespace)
+            .flat_map(|(_, values)| values)
             .find(|(name, _)| *name == key)
             .map(|(_, value)| value)
-            .ok_or_else(not_found)
+            .ok_or_else(|| PortalError::NotFound(format!("{namespace} {key} is not set")))
     }
 
     #[zbus(property, name = "version")]

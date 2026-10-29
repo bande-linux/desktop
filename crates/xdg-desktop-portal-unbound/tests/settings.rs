@@ -9,13 +9,14 @@ use std::time::Duration;
 use common::Portal;
 use unbound_config::{ConfigService, ConfigStore};
 use unbound_toolkit::{Palette, Scheme};
-use xdg_desktop_portal_unbound::settings::Settings;
+use xdg_desktop_portal_unbound::settings::{CursorSettings, Settings};
 use zbus::blocking::MessageIterator;
 use zbus::zvariant::OwnedValue;
 use zbus::{MatchRule, message};
 
 const INTERFACE: &str = "org.freedesktop.impl.portal.Settings";
 const APPEARANCE: &str = "org.freedesktop.appearance";
+const GNOME_INTERFACE: &str = "org.gnome.desktop.interface";
 const WAIT: Duration = Duration::from_secs(5);
 
 type All = HashMap<String, HashMap<String, OwnedValue>>;
@@ -37,7 +38,14 @@ fn start(config: &str) -> Fixture {
             ConfigService::start(connection, &path, Arc::new(ConfigStore::default()), |_| {})
                 .expect("config service"),
         );
-        Settings::serve(connection).expect("settings");
+        Settings::serve(
+            connection,
+            CursorSettings {
+                theme: "Adwaita".to_owned(),
+                size: 32,
+            },
+        )
+        .expect("settings");
     });
     Fixture {
         portal,
@@ -121,7 +129,7 @@ fn namespaces_filter_with_a_trailing_glob() {
             .read_all(&["org.freedesktop.*"])
             .contains_key(APPEARANCE)
     );
-    assert!(fixture.read_all(&["org.gnome.*"]).is_empty());
+    assert!(fixture.read_all(&["org.kde.*"]).is_empty());
     assert!(
         fixture
             .read_all(&["org.freedesktop.appearance"])
@@ -161,8 +169,9 @@ fn switching_to_dark_signals_the_color_scheme_and_accent() {
     let mut seen = HashMap::new();
     while seen.len() < 2 {
         let (namespace, key, value) = changes.recv_timeout(WAIT).expect("SettingChanged");
-        assert_eq!(namespace, APPEARANCE);
-        seen.insert(key, value);
+        if namespace == APPEARANCE {
+            seen.insert(key, value);
+        }
     }
     assert_eq!(u32::try_from(&seen["color-scheme"]).expect("u"), 1);
     assert_eq!(
@@ -190,4 +199,39 @@ fn the_interface_is_version_2() {
         .deserialize()
         .expect("v");
     assert_eq!(u32::try_from(&version).expect("u"), 2);
+}
+
+#[test]
+fn gtk_reads_the_color_scheme_and_cursor_from_the_gnome_interface_namespace() {
+    let fixture = start("appearance \"dark\"\n");
+    let all = fixture.read_all(&["org.gnome.desktop.interface"]);
+    let interface = &all[GNOME_INTERFACE];
+
+    assert_eq!(
+        String::try_from(interface["color-scheme"].try_clone().expect("clone")).expect("s"),
+        "prefer-dark"
+    );
+    assert_eq!(
+        String::try_from(interface["cursor-theme"].try_clone().expect("clone")).expect("s"),
+        "Adwaita"
+    );
+    assert_eq!(i32::try_from(&interface["cursor-size"]).expect("i"), 32);
+}
+
+#[test]
+fn switching_to_light_signals_the_gnome_color_scheme() {
+    let fixture = start("appearance \"dark\"\n");
+    let changes = fixture.changes();
+    let staging = fixture.path.with_extension("tmp");
+    std::fs::write(&staging, "appearance \"light\"\n").expect("write");
+    std::fs::rename(&staging, &fixture.path).expect("rename");
+
+    let value = loop {
+        let (namespace, key, value) = changes.recv_timeout(WAIT).expect("SettingChanged");
+        if namespace == GNOME_INTERFACE && key == "color-scheme" {
+            break value;
+        }
+        assert_ne!(namespace, GNOME_INTERFACE, "only color-scheme changes");
+    };
+    assert_eq!(String::try_from(value).expect("s"), "prefer-light");
 }

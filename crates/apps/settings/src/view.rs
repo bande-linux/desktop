@@ -9,6 +9,7 @@ use unbound_toolkit::ui::{
 use unbound_toolkit::{Palette, Rect, Scene, Spacing, TextSystem};
 
 use crate::L10N;
+use crate::follow::Update;
 use crate::idle::Idle;
 use crate::registry::{Kind, Pane, PaneId, Setting, SettingId, Value, panes};
 use crate::search::{PaneHit, search};
@@ -132,6 +133,19 @@ impl SettingsView {
         if self.message != message {
             self.message = message;
             self.invalidate();
+        }
+    }
+
+    pub fn apply(&mut self, update: Update) {
+        match update {
+            Update::Values(values) => {
+                for (id, value) in values {
+                    self.set_value(id, value);
+                }
+            }
+            Update::Failed(error) => {
+                self.set_message(Some(L10N.tr_args("not-changed", [("error", error.into())])))
+            }
         }
     }
 

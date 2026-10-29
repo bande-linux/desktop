@@ -1,4 +1,5 @@
 mod client;
+mod follow;
 mod idle;
 mod registry;
 mod search;
@@ -10,6 +11,7 @@ use std::sync::LazyLock;
 use unbound_l10n::Localizer;
 
 pub use client::{CONFIG_SETTINGS, SettingsClient};
+pub use follow::{Command, Feed, Update, Updates, feed, follow_config, worker};
 pub use idle::Idle;
 pub use registry::{Choice, Kind, Pane, PaneId, Section, Setting, SettingId, Value, panes};
 pub use search::{PaneHit, SettingHit, search};
@@ -27,6 +29,7 @@ mod tests {
             include_str!("lib.rs"),
             include_str!("main.rs"),
             include_str!("client.rs"),
+            include_str!("follow.rs"),
             include_str!("registry.rs"),
             include_str!("view.rs"),
         ];

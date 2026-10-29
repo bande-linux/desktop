@@ -1,6 +1,8 @@
+use std::os::fd::BorrowedFd;
 use std::process::ExitCode;
+use std::sync::mpsc::Sender;
 
-use unbound_settings::{L10N, SettingsClient, SettingsView};
+use unbound_settings::{Command, Feed, L10N, SettingsView, feed, follow_config, worker};
 use unbound_toolkit::{App, Rect, Role, Scene, TextSystem, Window, WindowEvent};
 
 const APP_ID: &str = "org.unbound.Settings";
@@ -8,29 +10,8 @@ const WINDOW_SIZE: (u32, u32) = (900, 600);
 
 struct Settings {
     view: SettingsView,
-    client: SettingsClient,
-}
-
-impl Settings {
-    fn refresh(&mut self) {
-        for (id, value) in self.client.read_all() {
-            self.view.set_value(id, value);
-        }
-    }
-
-    fn write_changes(&mut self) {
-        let changes = self.view.take_changes();
-        if changes.is_empty() {
-            return;
-        }
-        let failed = changes
-            .iter()
-            .find_map(|(id, value)| self.client.set(*id, value).err());
-        self.view.set_message(
-            failed.map(|error| L10N.tr_args("not-changed", [("error", error.to_string().into())])),
-        );
-        self.refresh();
-    }
+    feed: Feed,
+    commands: Sender<Command>,
 }
 
 impl App for Settings {
@@ -52,7 +33,22 @@ impl App for Settings {
             }
             _ => return,
         }
-        self.write_changes();
+        for (id, value) in self.view.take_changes() {
+            if self.commands.send(Command::Set(id, value)).is_err() {
+                tracing::warn!("the settings worker has stopped");
+            }
+        }
+        window.request_redraw();
+    }
+
+    fn sources(&self) -> Vec<BorrowedFd<'_>> {
+        vec![self.feed.fd()]
+    }
+
+    fn source_ready(&mut self, window: &mut Window, _index: usize) {
+        for update in self.feed.drain() {
+            self.view.apply(update);
+        }
         window.request_redraw();
     }
 
@@ -66,12 +62,17 @@ impl App for Settings {
 }
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let connection = zbus::blocking::Connection::session()?;
-    let client = SettingsClient::connect(&connection)?;
+    let session = zbus::blocking::Connection::session()?;
+    let (feed, updates) = feed()?;
+    follow_config(&session, updates.clone());
+    let commands = worker(&session, updates);
     let mut window = Window::open(Role::toplevel(&L10N.tr("title"), APP_ID), WINDOW_SIZE)?;
     let view = SettingsView::new(window.appearance().palette(), TextSystem::new());
-    let mut settings = Settings { view, client };
-    settings.refresh();
+    let mut settings = Settings {
+        view,
+        feed,
+        commands,
+    };
     unbound_toolkit::run(&mut window, &mut settings)?;
     Ok(())
 }

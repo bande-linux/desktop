@@ -12,8 +12,9 @@ use unbound_test_bus::SessionBus;
 
 use crate::card::{Scanout, card_with_driver};
 use crate::uinput::{
-    BTN_LEFT, EV_KEY, EV_REL, KEY_3, KEY_4, KEY_ENTER, KEY_ESC, KEY_F, KEY_F10, KEY_LEFTCTRL,
-    KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_M, KEY_Q, KEY_SPACE, REL_X, REL_Y, VirtualDevice,
+    BTN_LEFT, EV_KEY, EV_REL, KEY_3, KEY_4, KEY_DOWN, KEY_ENTER, KEY_ESC, KEY_F, KEY_F10,
+    KEY_LEFTCTRL, KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_M, KEY_Q, KEY_RIGHT, KEY_SPACE, REL_X, REL_Y,
+    VirtualDevice,
 };
 
 const COMPOSITOR: &str = "/usr/bin/unbound-compositor";
@@ -579,4 +580,66 @@ fn super_shift_4_saves_a_dragged_out_area_to_the_desktop() {
         ),
         "the screen outside the selection is left as it was"
     );
+}
+
+const FILES: &str = "/usr/bin/unbound-files";
+
+#[test]
+#[ignore = "needs the ci/vm guest"]
+fn files_drills_into_a_folder_and_quick_looks_a_picture() {
+    let home = Path::new("/root/m22");
+    let _ = fs::remove_dir_all(home);
+    fs::create_dir_all(home.join("Pictures")).expect("folders");
+    fs::write(home.join("notes.txt"), "notes\n").expect("file");
+    let magenta = [0xFF, 0x00, 0xFF];
+    let (picture_width, picture_height) = (200, 150);
+    image::RgbImage::from_pixel(picture_width, picture_height, image::Rgb(magenta))
+        .save(home.join("Pictures/photo.png"))
+        .expect("png");
+    let mut keyboard = VirtualDevice::keyboard_and_mouse();
+    let desktop = start_desktop();
+    wait_for("the panel", STARTUP, || {
+        running("unbound-panel")
+            && current_scanout().is_some_and(|scanout| pixel(&scanout, 32, 200) != BACKGROUND)
+    });
+    let without_files = scanout();
+    let mut files = Command::new(FILES)
+        .arg(home)
+        .env("WAYLAND_DISPLAY", &desktop.display)
+        .env("XDG_RUNTIME_DIR", RUNTIME_DIR)
+        .env("HOME", "/root")
+        .spawn()
+        .expect("start unbound-files");
+    let centre = |scanout: &Scanout| pixel(scanout, scanout.width / 2, scanout.height / 2);
+    wait_for("the files window", STARTUP, || {
+        centre(&scanout()) != centre(&without_files)
+    });
+    thread::sleep(Duration::from_secs(1));
+
+    let shown = scanout();
+    keyboard.tap(KEY_DOWN);
+    wait_for("the selected folder's column", STARTUP, || {
+        scanout().rgb != shown.rgb
+    });
+    keyboard.tap(KEY_RIGHT);
+    thread::sleep(Duration::from_secs(1));
+    scanout().save("m22-files-columns");
+    let magenta_pixels =
+        |scanout: &Scanout| scanout.rgb.iter().filter(|&&rgb| rgb == magenta).count();
+    assert_eq!(magenta_pixels(&scanout()), 0);
+
+    keyboard.tap(KEY_SPACE);
+    let picture = (picture_width * picture_height) as usize;
+    wait_for("the picture in Quick Look", STARTUP, || {
+        magenta_pixels(&scanout()) >= picture * 9 / 10
+    });
+    thread::sleep(Duration::from_millis(500));
+    scanout().save("m22-files-quick-look");
+
+    keyboard.tap(KEY_ESC);
+    wait_for("Quick Look to close", STARTUP, || {
+        magenta_pixels(&scanout()) == 0
+    });
+    let _ = files.kill();
+    let _ = files.wait();
 }

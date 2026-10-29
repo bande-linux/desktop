@@ -18,6 +18,7 @@ unbound-menubar.workspace = true
 unbound-toolkit.workspace = true
 unbound-wallpaper.workspace = true
 unbound-xdg.workspace = true
+zbus.workspace = true
 
 [dev-dependencies]
 image.workspace = true

@@ -8,22 +8,25 @@ use std::time::Instant;
 use accesskit::TreeUpdate;
 use unbound_config::{Config, DockEdge, config_path};
 use unbound_desktop_surface::{
-    Bounds, DesktopView, Item, Kind, Layer, Layouts, Luma, Request, WallpaperKey, layouts_path,
-    list, media_roots, mounted_volumes, parse_layouts, save_layouts,
+    Bounds, DesktopView, Item, Kind, Layer, Layouts, Luma, MenuApp, Request, Selection,
+    WallpaperKey, command, desktop_menu, eject, items_menu, layouts_path, list, media_roots,
+    mounted_volumes, parse_layouts, save_layouts,
 };
 use unbound_files::{Apps, Operations, Purpose};
 use unbound_fs::{Action, Answer, Change, FolderWatch, Resolution, Task, Trash};
 use unbound_toolkit::{
-    App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Role, Scene, Scheme, Window,
-    WindowEvent,
+    App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement, Point, Role, Scene,
+    Scheme, Window, WindowEvent,
 };
-use unbound_wallpaper::{Choice, Inbox, Outbox, Picture, Variant, follow, inbox, render};
+use unbound_wallpaper::{Choice, Inbox, Outbox, Picture, Variant, choose, follow, inbox, render};
 use unbound_xdg::{
-    DIRECTORY, DesktopEntry, UserDir, config_dirs, config_home, data_dirs, find_icon, launch,
-    launch_with, user_dir,
+    DIRECTORY, DesktopEntry, OCTET_STREAM, UserDir, config_dirs, config_home, data_dirs, find_icon,
+    launch, launch_with, user_dir,
 };
 
 const ICON_THEMES: [&str; 1] = ["Adwaita"];
+const SETTINGS_APP: &str = "org.unbound.Settings";
+const WALLPAPER_PANE: &str = "appearance";
 
 type Loaded = (WallpaperKey, Option<(Picture, Luma)>);
 
@@ -277,6 +280,82 @@ impl Surface {
         }
     }
 
+    fn common_mime(&self, paths: &[PathBuf]) -> String {
+        let mimes: Vec<String> = paths
+            .iter()
+            .map(
+                |path| match self.view.desktop().item(path).map(|item| item.kind) {
+                    Some(Kind::Folder | Kind::Volume) => DIRECTORY.to_owned(),
+                    _ => self.apps.mime_for(path),
+                },
+            )
+            .collect();
+        match mimes.split_first() {
+            Some((first, rest)) if rest.iter().all(|mime| mime == first) => first.clone(),
+            _ => OCTET_STREAM.to_owned(),
+        }
+    }
+
+    fn context_menu(&mut self, window: &mut Window, at: Point, on_items: bool) {
+        let menu = if on_items {
+            let selected = self.view.desktop().selected();
+            let mime = self.common_mime(&selected);
+            let selection = Selection {
+                count: selected.len(),
+                kinds: selected
+                    .iter()
+                    .filter_map(|path| self.view.desktop().item(path).map(|item| item.kind))
+                    .collect(),
+                picture: mime.starts_with("image/"),
+                apps: self
+                    .apps
+                    .apps_for(&mime)
+                    .into_iter()
+                    .map(|entry| MenuApp {
+                        id: entry.id.clone(),
+                        name: entry.name.clone(),
+                    })
+                    .collect(),
+            };
+            items_menu(&selection)
+        } else {
+            desktop_menu(self.view.desktop().sort())
+        };
+        if let Err(error) = window.show_menu(menu, MenuPlacement::AtPoint(at)) {
+            tracing::warn!("cannot show the menu: {error}");
+        }
+    }
+
+    fn change_wallpaper(&mut self, window: &mut Window) {
+        let settings = unbound_xdg::applications(
+            &self.data_dirs,
+            unbound_xdg::Locale::from_env().as_ref(),
+            &unbound_xdg::current_desktops(),
+        )
+        .into_iter()
+        .find(|entry| entry.app_id() == SETTINGS_APP);
+        let Some(settings) = settings else {
+            tracing::warn!("Settings is not installed");
+            return;
+        };
+        let token = window.activation_token(SETTINGS_APP).ok();
+        let launched = settings
+            .command()
+            .map_err(|error| error.to_string())
+            .and_then(|mut command| {
+                command.push(WALLPAPER_PANE.to_owned());
+                unbound_xdg::spawn_detached(
+                    &command,
+                    settings.working_directory.as_deref(),
+                    token.as_deref(),
+                )
+                .map_err(|error| error.to_string())
+            });
+        if let Err(error) = launched {
+            tracing::warn!("cannot open Settings: {error}");
+        }
+    }
+
     fn start(&mut self, task: Task, action: Action) {
         if let Err(error) = self.operations.start(task, Purpose::Do(action)) {
             tracing::warn!("cannot start the file operation: {error}");
@@ -331,6 +410,28 @@ impl Surface {
                     let folder = self.desktop_dir.clone();
                     self.show_in_files(window, folder);
                 }
+                Request::ContextMenu { at, on_items } => self.context_menu(window, at, on_items),
+                Request::OpenWith { app, paths } => {
+                    let app = self
+                        .apps
+                        .apps_for(&self.common_mime(&paths))
+                        .into_iter()
+                        .find(|entry| entry.id == app)
+                        .cloned();
+                    if let Some(app) = app {
+                        self.launch_with(window, &app, &paths);
+                    }
+                }
+                Request::Copy(paths) => {
+                    let text: Vec<String> = paths
+                        .iter()
+                        .map(|path| path.to_string_lossy().into_owned())
+                        .collect();
+                    window.copy(&text.join("\n"));
+                }
+                Request::Eject(paths) => eject(paths),
+                Request::SetWallpaper(path) => choose(path),
+                Request::ChangeWallpaper => self.change_wallpaper(window),
                 Request::Undo => {
                     if let Err(error) = self.operations.undo() {
                         tracing::warn!("cannot undo: {error}");
@@ -397,6 +498,12 @@ impl App for Surface {
             WindowEvent::Accessibility(request) => {
                 if self.view.perform(&request) {
                     window.request_redraw();
+                }
+                self.run_requests(window);
+            }
+            WindowEvent::MenuAction(action) => {
+                if let Some(command) = command(&action) {
+                    self.view.run_command(command, Instant::now());
                 }
                 self.run_requests(window);
             }

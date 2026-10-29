@@ -3626,6 +3626,7 @@ dependencies = [
  "unbound-toolkit",
  "unbound-wallpaper",
  "unbound-xdg",
+ "zbus",
 ]
 
 [[package]]

@@ -12,6 +12,7 @@ use unbound_toolkit::{
 
 use crate::L10N;
 use crate::backdrop::{Backdrop, Layer, placeholder};
+use crate::menus::Command;
 use crate::model::{
     Bounds, Desktop, Direction, Grid, Item, Kind, LABEL_WIDTH, Positions, SortBy, icon_bounds,
     label_bounds,
@@ -32,7 +33,7 @@ const UNFOCUSED_SELECTION: Color = Color::hex(0x8A9099);
 const ROOT_NODE: NodeId = NodeId(1);
 const FIRST_ITEM_NODE: u64 = 2;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Request {
     Open(Vec<PathBuf>),
     Trash(Vec<PathBuf>),
@@ -51,6 +52,18 @@ pub enum Request {
     OpenDesktopFolder,
     Undo,
     Redo,
+    ContextMenu {
+        at: Point,
+        on_items: bool,
+    },
+    OpenWith {
+        app: String,
+        paths: Vec<PathBuf>,
+    },
+    Copy(Vec<PathBuf>),
+    Eject(Vec<PathBuf>),
+    SetWallpaper(PathBuf),
+    ChangeWallpaper,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -447,6 +460,11 @@ impl DesktopView {
                 Some(_) => {}
                 None => self.desktop.clear_selection(),
             }
+            self.gesture = Gesture::Idle;
+            self.requests.push(Request::ContextMenu {
+                at,
+                on_items: hit.is_some(),
+            });
             return true;
         }
         if !pointer.is_primary() {
@@ -645,6 +663,7 @@ impl DesktopView {
             Key::Backspace | Key::Delete if command && !selected.is_empty() => {
                 self.requests.push(Request::Trash(selected));
             }
+            Key::Function(10) if modifiers.shift => self.menu_from_keyboard(),
             Key::Escape => {
                 self.gesture = Gesture::Idle;
                 self.desktop.clear_selection();
@@ -654,6 +673,7 @@ impl DesktopView {
                 'n' if modifiers.shift => self.requests.push(Request::NewFolder),
                 'd' if modifiers.shift => self.requests.push(Request::OpenDesktopFolder),
                 'd' if !selected.is_empty() => self.requests.push(Request::Duplicate(selected)),
+                'c' if !selected.is_empty() => self.requests.push(Request::Copy(selected)),
                 'i' => {
                     if let Some(path) = selected.first() {
                         self.requests.push(Request::ShowInFiles(path.clone()));
@@ -669,6 +689,66 @@ impl DesktopView {
             _ => return false,
         }
         true
+    }
+
+    fn menu_from_keyboard(&mut self) {
+        let at = self
+            .desktop
+            .cursor()
+            .filter(|cursor| self.desktop.is_selected(cursor))
+            .and_then(|cursor| self.desktop.slot_of(cursor))
+            .map(|slot| {
+                let label = label_bounds(self.desktop.grid().cell(slot));
+                Point::new(label.x + label.width / 2.0, label.y)
+            });
+        let on_items = at.is_some() && !self.desktop.selected().is_empty();
+        let area = self.desktop.grid().area;
+        let at = at.unwrap_or(Point::new(
+            area.x + area.width / 2.0,
+            area.y + area.height / 2.0,
+        ));
+        self.requests.push(Request::ContextMenu { at, on_items });
+    }
+
+    pub fn run_command(&mut self, command: Command, now: Instant) {
+        let selected = self.desktop.selected();
+        let request = match command {
+            Command::Sort(by) => {
+                self.arrange(by, now);
+                return;
+            }
+            Command::CleanUp => {
+                self.clean_up(now);
+                return;
+            }
+            Command::Rename => {
+                if let [path] = selected.as_slice() {
+                    self.start_rename(path);
+                }
+                return;
+            }
+            Command::NewFolder => Request::NewFolder,
+            Command::DesktopInfo | Command::ShowDesktopFolder => Request::OpenDesktopFolder,
+            Command::ChangeWallpaper => Request::ChangeWallpaper,
+            Command::Open => Request::Open(selected),
+            Command::OpenWith(app) => Request::OpenWith {
+                app,
+                paths: selected,
+            },
+            Command::Info => match selected.first() {
+                Some(path) => Request::ShowInFiles(path.clone()),
+                None => return,
+            },
+            Command::Duplicate => Request::Duplicate(selected),
+            Command::Copy => Request::Copy(selected),
+            Command::Trash => Request::Trash(selected),
+            Command::Eject => Request::Eject(selected),
+            Command::SetWallpaper => match selected.first() {
+                Some(path) => Request::SetWallpaper(path.clone()),
+                None => return,
+            },
+        };
+        self.requests.push(request);
     }
 
     fn label(&mut self, item: &Item, bounds: Bounds, selected: bool) -> Label {

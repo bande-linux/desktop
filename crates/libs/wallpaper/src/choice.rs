@@ -84,7 +84,11 @@ trait Config {
     #[zbus(property)]
     fn wallpaper_light(&self) -> zbus::Result<String>;
     #[zbus(property)]
+    fn set_wallpaper_light(&self, path: &str) -> zbus::Result<()>;
+    #[zbus(property)]
     fn wallpaper_dark(&self) -> zbus::Result<String>;
+    #[zbus(property)]
+    fn set_wallpaper_dark(&self, path: &str) -> zbus::Result<()>;
     #[zbus(property)]
     fn wallpaper_fit(&self) -> zbus::Result<String>;
 }
@@ -156,5 +160,26 @@ pub fn follow(choices: Outbox<Choice>) {
         .spawn(work)
     {
         tracing::warn!("cannot start following the wallpaper: {error}");
+    }
+}
+
+pub fn choose(path: PathBuf) {
+    let work = move || {
+        let choose = || -> zbus::Result<()> {
+            let session = Connection::session()?;
+            let config = proxy(&session)?;
+            let path = path.to_string_lossy();
+            config.set_wallpaper_light(&path)?;
+            config.set_wallpaper_dark(&path)
+        };
+        if let Err(error) = choose() {
+            tracing::warn!("cannot set the wallpaper: {error}");
+        }
+    };
+    if let Err(error) = thread::Builder::new()
+        .name("wallpaper choice".to_owned())
+        .spawn(work)
+    {
+        tracing::warn!("cannot start setting the wallpaper: {error}");
     }
 }

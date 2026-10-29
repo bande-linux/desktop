@@ -5,11 +5,11 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use unbound_desktop_surface::{
-    Bounds, Desktop, DesktopView, Direction, Grid, Item, Kind, Layer, Layouts, Luma, Positions,
-    Request, Slot, SortBy, WallpaperKey, fitted_label, format_layouts, mounted_volumes,
-    parse_layouts,
+    Bounds, Desktop, DesktopView, Direction, Grid, Item, Kind, Layer, Layouts, Luma, MenuApp,
+    Positions, Request, Selection, Slot, SortBy, WallpaperKey, command, desktop_menu, fitted_label,
+    format_layouts, items_menu, mounted_volumes, parse_layouts,
 };
-use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer, PointerButton};
+use unbound_toolkit::ui::{Event, Key, Menu, Modifiers, Pointer, PointerButton};
 use unbound_toolkit::{
     Appearance, Color, CpuRenderer, Image, Point, Scheme, TextAlign, TextStyle, TextSystem,
 };
@@ -483,4 +483,110 @@ fn dragging_moves_icons_on_the_grid_or_into_a_folder() {
     let secondary = Pointer::at(projects).with_button(PointerButton::Secondary);
     view.handle(&Event::PointerDown(secondary), now);
     assert_eq!(view.desktop().selected(), vec![path("Projects")]);
+    assert_eq!(
+        view.take_requests(),
+        vec![Request::ContextMenu {
+            at: projects,
+            on_items: true,
+        }]
+    );
+}
+
+fn titles(menu: &Menu) -> Vec<String> {
+    menu.items
+        .iter()
+        .filter(|item| !item.separator)
+        .map(|item| item.title.clone())
+        .collect()
+}
+
+#[test]
+fn the_menus_offer_what_fits_the_selection_and_their_actions_reach_the_desktop() {
+    let menu = desktop_menu(SortBy::Name);
+    assert_eq!(
+        titles(&menu),
+        [
+            "New Folder",
+            "Get Info",
+            "Change Wallpaper…",
+            "Sort By",
+            "Clean Up",
+            "Show Desktop Folder in Files"
+        ]
+    );
+    let sorts = menu
+        .items
+        .iter()
+        .find_map(|item| item.submenu.clone())
+        .unwrap();
+    let checked: Vec<&str> = sorts
+        .items
+        .iter()
+        .filter(|item| item.checked)
+        .map(|item| item.title.as_str())
+        .collect();
+    assert_eq!(checked, ["Name"]);
+    assert!(
+        !menu
+            .items
+            .iter()
+            .any(|item| item.title == "Clean Up" && item.enabled)
+    );
+
+    let files = items_menu(&Selection {
+        count: 3,
+        kinds: vec![Kind::File, Kind::Folder, Kind::File],
+        picture: false,
+        apps: vec![MenuApp {
+            id: "org.example.Editor.desktop".to_owned(),
+            name: "Editor".to_owned(),
+        }],
+    });
+    assert!(titles(&files).contains(&"Move 3 Items to Trash".to_owned()));
+    assert!(
+        !files
+            .items
+            .iter()
+            .any(|item| item.title == "Rename" && item.enabled)
+    );
+    let volume = items_menu(&Selection {
+        count: 1,
+        kinds: vec![Kind::Volume],
+        picture: false,
+        apps: Vec::new(),
+    });
+    assert!(titles(&volume).contains(&"Eject".to_owned()));
+    assert!(!titles(&volume).iter().any(|title| title.contains("Trash")));
+    let picture = items_menu(&Selection {
+        count: 1,
+        kinds: vec![Kind::File],
+        picture: true,
+        apps: Vec::new(),
+    });
+    assert!(titles(&picture).contains(&"Set as Wallpaper".to_owned()));
+
+    let mut view = view_with_items(Scheme::Light);
+    let now = Instant::now();
+    view.run_command(command("sort:size").unwrap(), now);
+    assert_eq!(view.desktop().sort(), SortBy::Size);
+    let notes = at(&view, "Notes.txt");
+    click(&mut view, notes, 1, Modifiers::default());
+    let open_with = files
+        .items
+        .iter()
+        .find_map(|item| item.submenu.clone())
+        .unwrap();
+    view.run_command(command(&open_with.items[0].action).unwrap(), now);
+    view.run_command(command("trash").unwrap(), now);
+    assert_eq!(
+        view.take_requests(),
+        vec![
+            Request::OpenWith {
+                app: "org.example.Editor.desktop".to_owned(),
+                paths: vec![path("Notes.txt")],
+            },
+            Request::Trash(vec![path("Notes.txt")]),
+        ]
+    );
+    assert_eq!(command("unknown"), None);
 }

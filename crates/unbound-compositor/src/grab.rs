@@ -10,13 +10,13 @@ use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel::Res
 use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_seat::WlSeat;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
-use smithay::utils::{Logical, Physical, Point, Serial};
+use smithay::utils::{Logical, Point, Serial};
 
 use crate::state::State;
 
 #[derive(Debug, Clone, Copy)]
 enum Operation {
-    Move { origin: Point<i32, Physical> },
+    Move { origin: Point<i32, Logical> },
     Resize,
 }
 
@@ -26,12 +26,12 @@ pub(crate) struct WindowGrab {
     operation: Operation,
 }
 
-fn whole(point: Point<f64, Logical>) -> Point<i32, Physical> {
+fn whole(point: Point<f64, Logical>) -> Point<i32, Logical> {
     (point.x.round() as i32, point.y.round() as i32).into()
 }
 
 impl WindowGrab {
-    fn delta(&self, location: Point<f64, Logical>) -> Point<i32, Physical> {
+    fn delta(&self, location: Point<f64, Logical>) -> Point<i32, Logical> {
         let delta = location - self.start.location;
         whole(delta)
     }

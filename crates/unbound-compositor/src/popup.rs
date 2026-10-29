@@ -7,7 +7,7 @@ use smithay::input::pointer::Focus;
 use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_seat::WlSeat;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
-use smithay::utils::{Logical, Physical, Point, Rectangle, Serial};
+use smithay::utils::{Logical, Point, Rectangle, Serial};
 use smithay::wayland::compositor::get_parent;
 use smithay::wayland::shell::xdg::{PopupSurface, PositionerState};
 
@@ -32,7 +32,7 @@ impl State {
         }
     }
 
-    pub(crate) fn geometry_origin(&self, root: &WlSurface) -> Option<Point<i32, Physical>> {
+    pub(crate) fn geometry_origin(&self, root: &WlSurface) -> Option<Point<i32, Logical>> {
         if let Some(index) = self.window_index(root) {
             return Some(self.windows[index].location);
         }
@@ -42,8 +42,8 @@ impl State {
     pub(crate) fn popup_surfaces(
         &self,
         root: &WlSurface,
-        geometry_origin: Point<i32, Physical>,
-    ) -> Vec<(WlSurface, Point<i32, Physical>)> {
+        geometry_origin: Point<i32, Logical>,
+    ) -> Vec<(WlSurface, Point<i32, Logical>)> {
         PopupManager::popups_for_surface(root)
             .map(|(popup, offset)| {
                 let own = popup.geometry().loc;

@@ -21,7 +21,7 @@ use smithay::reexports::drm::control::{
 };
 use smithay::reexports::rustix::fs::OFlags;
 use smithay::reexports::wayland_protocols::wp::linux_dmabuf::zv1::server::zwp_linux_dmabuf_feedback_v1::TrancheFlags;
-use smithay::utils::{Clock, DeviceFd, Monotonic, Physical, Size, Transform};
+use smithay::utils::{Clock, DeviceFd, Monotonic, Physical, Raw, Size, Transform};
 use smithay::wayland::dmabuf::{DmabufFeedback, DmabufFeedbackBuilder};
 use unbound_render::VulkanRenderer;
 
@@ -45,6 +45,7 @@ pub struct DrmOutput {
     renderer: VulkanRenderer,
     connector: String,
     size: Size<i32, Physical>,
+    physical_size_mm: Size<i32, Raw>,
     refresh: Duration,
     node: DrmNode,
     feedback: DmabufFeedback,
@@ -215,6 +216,17 @@ impl DrmOutput {
             renderer,
             connector,
             size,
+            physical_size_mm: chosen
+                .connector
+                .size()
+                .map(|(width, height)| {
+                    (
+                        i32::try_from(width).unwrap_or(0),
+                        i32::try_from(height).unwrap_or(0),
+                    )
+                })
+                .unwrap_or((0, 0))
+                .into(),
             refresh: refresh_of(&chosen.mode),
             node,
             feedback,
@@ -236,6 +248,7 @@ impl DrmOutput {
             name: self.connector.clone(),
             model: self.renderer.device_info().name.clone(),
             size: self.size,
+            physical_size_mm: self.physical_size_mm,
             refresh: self.refresh,
             scanout: Some(ScanoutDevice {
                 node: self.node,
@@ -303,6 +316,12 @@ impl FrameOutput for DrmOutput {
     type Error = DrmBackendError;
 
     fn submit(&mut self, compositor: &mut Headless) -> Result<Submission, DrmBackendError> {
+        self.compositor
+            .set_output_mode_source(OutputModeSource::Static {
+                size: self.size,
+                scale: compositor.output_scale().into(),
+                transform: Transform::Normal,
+            });
         let elements = compositor.render_elements(&mut self.renderer);
         let frame = self.compositor.render_frame(
             &mut self.renderer,

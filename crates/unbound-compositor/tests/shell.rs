@@ -1,5 +1,5 @@
 use smithay::utils::{Point, Size};
-use unbound_compositor::{Headless, Renderer};
+use unbound_compositor::{Headless, Renderer, automatic_scale};
 use unbound_test_wayland::{
     Anchor, BLUE, GREEN, KeyboardInteractivity, Layer, LayerRequest, RED, ShmImage, TestClient,
     VolumeKey, roundtrip,
@@ -229,13 +229,62 @@ fn a_viewport_destination_sets_the_window_size() {
 }
 
 #[test]
-fn surfaces_are_told_to_render_at_scale_one() {
+fn surfaces_are_told_the_output_scale_and_told_again_when_it_changes() {
     let mut server = server();
     let mut app = TestClient::connect(&mut server);
     let pixels = red(32, 32);
     app.show_window(&mut server, &image(&pixels, 32, 32));
-
     assert_eq!(app.preferred_scale(&mut server, 0), Some(120));
+
+    server.set_output_scale(2.0);
+    app.exchange(&mut server);
+
+    assert_eq!(app.preferred_scale(&mut server, 0), Some(240));
+}
+
+#[test]
+fn on_a_2x_output_a_window_is_laid_out_in_points_and_drawn_in_pixels() {
+    let mut server = server();
+    server.set_output_scale(2.0);
+    assert_eq!(server.logical_output_size(), Size::from((128, 96)));
+    let mut app = TestClient::connect(&mut server);
+    let pixels = red(64, 64);
+    app.show_window_scaled(&mut server, &image(&pixels, 64, 64), (32, 32));
+
+    let [window] = server.windows() else {
+        panic!("one window");
+    };
+    assert_eq!(window.size(), Some(Size::from((32, 32))));
+    assert_eq!(
+        window.location(),
+        Point::from(((128 - 32) / 2, (96 - 32) / 2))
+    );
+
+    let mut renderer = Renderer::new().expect("Vulkan renderer");
+    let (left, top) = (2 * (128 - 32) / 2, 2 * (96 - 32) / 2);
+    assert_eq!(
+        pixel(&mut renderer, &mut server, left + 1, top + 1),
+        rgb(RED)
+    );
+    assert_eq!(
+        pixel(&mut renderer, &mut server, left + 62, top + 62),
+        rgb(RED)
+    );
+    assert_ne!(
+        pixel(&mut renderer, &mut server, left + 65, top + 30),
+        rgb(RED)
+    );
+}
+
+#[test]
+fn a_scale_follows_the_displays_pixel_density() {
+    let mm = |w, h| Size::from((w, h));
+    let px = |w, h| Size::from((w, h));
+    assert_eq!(automatic_scale(px(1920, 1080), mm(527, 296)), 1.0);
+    assert_eq!(automatic_scale(px(3024, 1964), mm(302, 196)), 2.25);
+    assert_eq!(automatic_scale(px(5120, 2880), mm(597, 336)), 2.0);
+    assert_eq!(automatic_scale(px(2904, 1818), mm(0, 0)), 2.0);
+    assert_eq!(automatic_scale(px(1920, 1080), mm(0, 0)), 1.0);
 }
 
 const KEY_SPACE: u32 = 57;

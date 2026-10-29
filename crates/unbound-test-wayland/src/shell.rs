@@ -37,6 +37,7 @@ pub(crate) struct Shell {
     layer_size: Option<(u32, u32)>,
     token: Option<String>,
     preferred_scale: Option<u32>,
+    fractional_scale: Option<WpFractionalScaleV1>,
     layers: Vec<(WlSurface, ZwlrLayerSurfaceV1)>,
     shell: Option<UnboundShellV1>,
     launcher_requests: usize,
@@ -236,8 +237,15 @@ impl TestClient {
     }
 
     pub fn preferred_scale(&mut self, server: &mut Headless, index: usize) -> Option<u32> {
-        let manager: WpFractionalScaleManagerV1 = self.bind("wp_fractional_scale_manager_v1", 1);
-        manager.get_fractional_scale(&self.windows[index].0, &self.queue.handle(), ());
+        if self.globals.shell.fractional_scale.is_none() {
+            let manager: WpFractionalScaleManagerV1 =
+                self.bind("wp_fractional_scale_manager_v1", 1);
+            self.globals.shell.fractional_scale = Some(manager.get_fractional_scale(
+                &self.windows[index].0,
+                &self.queue.handle(),
+                (),
+            ));
+        }
         self.exchange(server);
         self.globals.shell.preferred_scale
     }

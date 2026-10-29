@@ -23,7 +23,7 @@ use smithay::desktop::{
 use smithay::input::keyboard::XkbConfig;
 use smithay::input::pointer::{CursorIcon, CursorImageAttributes, CursorImageStatus};
 use smithay::render_elements;
-use smithay::output::{Mode, Output, PhysicalProperties, Subpixel};
+use smithay::output::{Mode, Output, PhysicalProperties, Scale as OutputScale, Subpixel};
 use smithay::input::{Seat, SeatHandler, SeatState};
 use smithay::reexports::wayland_protocols::wp::presentation_time::server::wp_presentation_feedback::Kind;
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
@@ -35,7 +35,7 @@ use smithay::reexports::wayland_server::protocol::wl_seat::WlSeat;
 use smithay::reexports::wayland_server::protocol::wl_shm::Format;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{Client, Display, DisplayHandle, Resource};
-use smithay::utils::{Logical, Physical, Point, SERIAL_COUNTER, Serial, Size};
+use smithay::utils::{Logical, Physical, Point, Raw, SERIAL_COUNTER, Serial, Size};
 use smithay::wayland::buffer::BufferHandler;
 use smithay::wayland::compositor::{
     CompositorClientState, CompositorHandler, CompositorState, SurfaceAttributes,
@@ -106,8 +106,26 @@ pub struct OutputConfig {
     pub name: String,
     pub model: String,
     pub size: Size<i32, Physical>,
+    pub physical_size_mm: Size<i32, Raw>,
     pub refresh: Duration,
     pub scanout: Option<ScanoutDevice>,
+}
+
+const REFERENCE_PIXELS_PER_INCH: f64 = 110.0;
+const SCALE_STEP: f64 = 0.25;
+const HIGH_DENSITY_HEIGHT: i32 = 1600;
+
+pub fn automatic_scale(size: Size<i32, Physical>, physical_size_mm: Size<i32, Raw>) -> f64 {
+    if physical_size_mm.w > 0 && physical_size_mm.h > 0 {
+        let pixels_per_inch = f64::from(size.w) / (f64::from(physical_size_mm.w) / 25.4);
+        let scale = (pixels_per_inch / REFERENCE_PIXELS_PER_INCH / SCALE_STEP).round() * SCALE_STEP;
+        return scale.clamp(1.0, 3.0);
+    }
+    if size.h >= HIGH_DENSITY_HEIGHT {
+        2.0
+    } else {
+        1.0
+    }
 }
 
 pub(crate) struct ExclusiveLayer {
@@ -120,6 +138,7 @@ pub struct State {
     pub(crate) syncobj_state: Option<smithay::wayland::drm_syncobj::DrmSyncobjState>,
     pub(crate) blockers: smithay::reexports::calloop::LoopHandle<'static, State>,
     pub(crate) output_size: Size<i32, Physical>,
+    pub(crate) output_scale: f64,
     refresh: Duration,
     scanout_node: Option<DrmNode>,
     compositor_state: CompositorState,
@@ -190,6 +209,7 @@ impl Headless {
             name: "HEADLESS-1".to_owned(),
             model: "Headless".to_owned(),
             size: output_size,
+            physical_size_mm: (0, 0).into(),
             refresh: REFRESH,
             scanout: None,
         })
@@ -228,7 +248,7 @@ impl Headless {
         let output = Output::new(
             config.name,
             PhysicalProperties {
-                size: (0, 0).into(),
+                size: config.physical_size_mm,
                 subpixel: Subpixel::Unknown,
                 make: "Unbound".to_owned(),
                 model: config.model,
@@ -249,6 +269,7 @@ impl Headless {
             syncobj_state: None,
             blockers: fences.handle(),
             output_size,
+            output_scale: 1.0,
             refresh: config.refresh,
             scanout_node: config.scanout.as_ref().map(|scanout| scanout.node),
             compositor_state: CompositorState::new::<State>(&handle),
@@ -423,6 +444,18 @@ impl Headless {
         self.state.output_size
     }
 
+    pub fn output_scale(&self) -> f64 {
+        self.state.output_scale
+    }
+
+    pub fn logical_output_size(&self) -> Size<i32, Logical> {
+        self.state.logical_output_size()
+    }
+
+    pub fn set_output_scale(&mut self, scale: f64) {
+        self.state.set_output_scale(scale);
+    }
+
     pub fn windows(&self) -> &[Window] {
         &self.state.windows
     }
@@ -441,6 +474,7 @@ impl Headless {
         } else {
             Vec::new()
         };
+        let scale = self.state.output_scale;
         elements.extend(
             self.state
                 .stack()
@@ -449,8 +483,8 @@ impl Headless {
                     render_elements_from_surface_tree(
                         renderer,
                         &surface,
-                        location,
-                        1.0,
+                        location.to_f64().to_physical(scale).to_i32_round::<i32>(),
+                        scale,
                         1.0,
                         ElementKind::Unspecified,
                     )
@@ -484,8 +518,8 @@ impl Headless {
         if !state.cursor_shown {
             return Vec::new();
         }
-        let at = state.pointer_location;
-        let at: Point<i32, Physical> = (at.x.round() as i32, at.y.round() as i32).into();
+        let scale = state.output_scale;
+        let at: Point<i32, Physical> = state.pointer_location.to_physical(scale).to_i32_round();
         match &state.cursor_status {
             CursorImageStatus::Hidden => Vec::new(),
             CursorImageStatus::Surface(surface) => {
@@ -496,11 +530,12 @@ impl Headless {
                         .and_then(|attributes| attributes.lock().ok().map(|a| a.hotspot))
                         .unwrap_or_default()
                 });
+                let hotspot = hotspot.to_f64().to_physical(scale).to_i32_round::<i32>();
                 render_elements_from_surface_tree(
                     renderer,
                     surface,
                     (at.x - hotspot.x, at.y - hotspot.y),
-                    1.0,
+                    scale,
                     1.0,
                     ElementKind::Cursor,
                 )
@@ -550,14 +585,25 @@ const MONOTONIC: u32 = 1;
 
 const DMABUF_FOURCCS: [Fourcc; 2] = [Fourcc::Argb8888, Fourcc::Xrgb8888];
 
-pub(crate) fn mapped_size(surface: &WlSurface) -> Option<Size<i32, Physical>> {
+pub(crate) fn mapped_size(surface: &WlSurface) -> Option<Size<i32, Logical>> {
     with_renderer_surface_state(surface, |state| {
         let buffer = state.buffer()?;
         buffer_size(buffer)?;
-        let size = state.surface_size()?;
-        Some(Size::from((size.w, size.h)))
+        state.surface_size()
     })
     .flatten()
+}
+
+fn send_preferred_scale(surface: &WlSurface, scale: f64) {
+    with_surface_tree_downward(
+        surface,
+        (),
+        |_, _, ()| TraversalAction::DoChildren(()),
+        |_, states, ()| {
+            with_fractional_scale(states, |fractional| fractional.set_preferred_scale(scale));
+        },
+        |_, _, ()| true,
+    );
 }
 
 fn buffer_size(buffer: &WlBuffer) -> Option<Size<i32, Physical>> {
@@ -576,9 +622,10 @@ fn shm_size(buffer: &WlBuffer) -> Option<Size<i32, Physical>> {
 impl State {
     fn load_named_cursor(&mut self, icon: CursorIcon) {
         let theme = &self.cursor_theme;
+        let scale = self.output_scale;
         self.named_cursors
             .entry(icon)
-            .or_insert_with(|| theme.load(icon));
+            .or_insert_with(|| theme.load(icon, scale));
     }
 
     pub(crate) fn use_cursor_theme(&mut self, theme: CursorTheme) {
@@ -689,11 +736,11 @@ impl State {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Rect {
-    pub location: Point<i32, Physical>,
-    pub size: Size<i32, Physical>,
+    pub location: Point<i32, Logical>,
+    pub size: Size<i32, Logical>,
 }
 
-pub(crate) fn centered(area: Rect, window: Size<i32, Physical>) -> Point<i32, Physical> {
+pub(crate) fn centered(area: Rect, window: Size<i32, Logical>) -> Point<i32, Logical> {
     (
         area.location.x + (area.size.w - window.w) / 2,
         area.location.y + (area.size.h - window.h) / 2,
@@ -710,7 +757,31 @@ impl State {
         }
     }
 
-    pub(crate) fn placed_layers(&self, layer: Layer) -> Vec<(WlSurface, Point<i32, Physical>)> {
+    pub(crate) fn logical_output_size(&self) -> Size<i32, Logical> {
+        self.output_size
+            .to_f64()
+            .to_logical(self.output_scale)
+            .to_i32_round()
+    }
+
+    pub(crate) fn set_output_scale(&mut self, scale: f64) {
+        self.output_scale = scale;
+        self.output
+            .change_current_state(None, None, Some(OutputScale::Fractional(scale)), None);
+        let center = self.logical_output_size().to_f64();
+        self.pointer_location = (center.w / 2.0, center.h / 2.0).into();
+        self.named_cursors.clear();
+        if let CursorImageStatus::Named(icon) = self.cursor_status {
+            self.load_named_cursor(icon);
+        }
+        layer_map_for_output(&self.output).arrange();
+        for (surface, _) in self.stack() {
+            send_preferred_scale(&surface, scale);
+        }
+        self.needs_redraw = true;
+    }
+
+    pub(crate) fn placed_layers(&self, layer: Layer) -> Vec<(WlSurface, Point<i32, Logical>)> {
         let map = layer_map_for_output(&self.output);
         map.layers_on(layer)
             .rev()
@@ -724,14 +795,14 @@ impl State {
             .collect()
     }
 
-    pub(crate) fn layer_origin(&self, surface: &WlSurface) -> Option<Point<i32, Physical>> {
+    pub(crate) fn layer_origin(&self, surface: &WlSurface) -> Option<Point<i32, Logical>> {
         let map = layer_map_for_output(&self.output);
         let layer = map.layer_for_surface(surface, WindowSurfaceType::TOPLEVEL)?;
         let geometry = map.layer_geometry(layer)?;
         Some((geometry.loc.x, geometry.loc.y).into())
     }
 
-    pub(crate) fn stack(&self) -> Vec<(WlSurface, Point<i32, Physical>)> {
+    pub(crate) fn stack(&self) -> Vec<(WlSurface, Point<i32, Logical>)> {
         if self.is_locked() {
             return self.locked_stack();
         }
@@ -1183,8 +1254,6 @@ impl XdgActivationHandler for State {
 
 impl FractionalScaleHandler for State {
     fn new_fractional_scale(&mut self, surface: WlSurface) {
-        with_states(&surface, |states| {
-            with_fractional_scale(states, |scale| scale.set_preferred_scale(1.0));
-        });
+        send_preferred_scale(&surface, self.output_scale);
     }
 }

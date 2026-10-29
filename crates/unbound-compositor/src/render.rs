@@ -31,6 +31,7 @@ pub struct Snapshot {
 
 struct Output {
     size: Size<i32, Physical>,
+    scale: f64,
     target: OffscreenTarget,
     damage: OutputDamageTracker,
 }
@@ -61,8 +62,9 @@ impl Renderer {
 
     pub fn render(&mut self, compositor: &mut Headless) -> Result<FrameStats, RenderError> {
         let size = compositor.output_size();
+        let scale = compositor.output_scale();
         let output = match self.output.take() {
-            Some(output) if output.size == size => Some(output),
+            Some(output) if output.size == size && output.scale == scale => Some(output),
             _ => None,
         };
         let age = usize::from(output.is_some());
@@ -70,10 +72,11 @@ impl Renderer {
             Some(output) => output,
             None => Output {
                 size,
+                scale,
                 target: self
                     .vulkan
                     .create_buffer(Fourcc::Abgr8888, Size::from((size.w, size.h)))?,
-                damage: OutputDamageTracker::new(size, 1.0, Transform::Normal),
+                damage: OutputDamageTracker::new(size, scale, Transform::Normal),
             },
         };
         let elements = compositor.render_elements(&mut self.vulkan);

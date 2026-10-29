@@ -102,12 +102,13 @@ impl CursorTheme {
         }
     }
 
-    pub(crate) fn load(&self, icon: CursorIcon) -> Option<Cursor> {
+    pub(crate) fn load(&self, icon: CursorIcon, scale: f64) -> Option<Cursor> {
+        let pixel_size = (f64::from(self.size) * scale).round() as u32;
         std::iter::once(icon.name())
             .chain(icon.alt_names().iter().copied())
             .find_map(|name| self.find(name))
             .and_then(|file| fs::read(file).ok())
-            .and_then(|bytes| best_image(parse_xcursor(&bytes), self.size))
+            .and_then(|bytes| best_image(parse_xcursor(&bytes), pixel_size))
             .map(|image| Cursor {
                 buffer: MemoryRenderBuffer::from_slice(
                     &image.pixels,

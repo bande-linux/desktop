@@ -34,6 +34,8 @@ pub use session::{
     CLIPBOARD_DAEMON, CONTROL_CENTER, GREETER, LAUNCHER, LOCK_SCREEN, MENU_BAR, PANEL, SCREENSHOT,
     SESSION_CLIENT_RESTART_THROTTLE, SessionRole, SessionUpkeep,
 };
-pub use state::{Headless, OutputConfig, OutputElement, REFRESH, Rect, ScanoutDevice};
+pub use state::{
+    Headless, OutputConfig, OutputElement, REFRESH, Rect, ScanoutDevice, automatic_scale,
+};
 pub use unbound_render::{DeviceInfo, RenderError};
 pub use window::Window;

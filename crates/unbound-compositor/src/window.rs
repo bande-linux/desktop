@@ -1,7 +1,7 @@
 use smithay::desktop::utils::bbox_from_surface_tree;
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
-use smithay::utils::{Logical, Physical, Point, Rectangle, Serial, Size};
+use smithay::utils::{Logical, Point, Rectangle, Serial, Size};
 use smithay::wayland::compositor::with_states;
 use smithay::wayland::foreign_toplevel_list::ForeignToplevelHandle;
 use smithay::wayland::shell::xdg::{SurfaceCachedState, ToplevelSurface};
@@ -10,11 +10,11 @@ use crate::state::{Rect, State};
 
 pub struct Window {
     pub(crate) toplevel: ToplevelSurface,
-    pub(crate) location: Point<i32, Physical>,
-    pub(crate) size: Option<Size<i32, Physical>>,
+    pub(crate) location: Point<i32, Logical>,
+    pub(crate) size: Option<Size<i32, Logical>>,
     pub(crate) foreign: Option<ForeignToplevelHandle>,
     pub(crate) restore: Option<Rect>,
-    pub(crate) pending_location: Option<(Serial, Point<i32, Physical>)>,
+    pub(crate) pending_location: Option<(Serial, Point<i32, Logical>)>,
     pub(crate) acked: Option<Serial>,
     pub(crate) resize: Option<Resize>,
     pub(crate) minimized: Option<u64>,
@@ -37,7 +37,7 @@ impl Resize {
         u32::from(self.edges) & edge != 0
     }
 
-    pub(crate) fn size_for(&self, delta: Point<i32, Physical>) -> Size<i32, Physical> {
+    pub(crate) fn size_for(&self, delta: Point<i32, Logical>) -> Size<i32, Logical> {
         let mut size = self.initial.size;
         if self.has(LEFT) {
             size.w -= delta.x;
@@ -52,7 +52,7 @@ impl Resize {
         size
     }
 
-    fn location_for(&self, size: Size<i32, Physical>) -> Point<i32, Physical> {
+    fn location_for(&self, size: Size<i32, Logical>) -> Point<i32, Logical> {
         let mut location = self.initial.location;
         if self.has(LEFT) {
             location.x += self.initial.size.w - size.w;
@@ -79,11 +79,11 @@ impl Window {
         }
     }
 
-    pub fn location(&self) -> Point<i32, Physical> {
+    pub fn location(&self) -> Point<i32, Logical> {
         self.location
     }
 
-    pub fn size(&self) -> Option<Size<i32, Physical>> {
+    pub fn size(&self) -> Option<Size<i32, Logical>> {
         self.size
     }
 
@@ -112,7 +112,7 @@ impl Window {
         self.toplevel.wl_surface()
     }
 
-    pub(crate) fn surface_origin(&self) -> Point<i32, Physical> {
+    pub(crate) fn surface_origin(&self) -> Point<i32, Logical> {
         let offset = self.local_geometry().loc;
         (self.location.x - offset.x, self.location.y - offset.y).into()
     }
@@ -129,7 +129,7 @@ impl Window {
         .unwrap_or_else(|| bbox_from_surface_tree(surface, (0, 0)))
     }
 
-    pub(crate) fn size_limits(&self) -> (Size<i32, Physical>, Size<i32, Physical>) {
+    pub(crate) fn size_limits(&self) -> (Size<i32, Logical>, Size<i32, Logical>) {
         with_states(self.toplevel.wl_surface(), |states| {
             let mut cached = states.cached_state.get::<SurfaceCachedState>();
             let current = cached.current();
@@ -140,7 +140,7 @@ impl Window {
         })
     }
 
-    pub(crate) fn clamp_size(&self, size: Size<i32, Physical>) -> Size<i32, Physical> {
+    pub(crate) fn clamp_size(&self, size: Size<i32, Logical>) -> Size<i32, Logical> {
         let (min, max) = self.size_limits();
         let clamp = |value: i32, min: i32, max: i32| {
             let value = value.max(min).max(1);
@@ -155,10 +155,6 @@ impl Window {
             .then(|| self.toplevel.send_pending_configure())
             .flatten()
     }
-}
-
-fn logical(size: Size<i32, Physical>) -> Size<i32, Logical> {
-    (size.w, size.h).into()
 }
 
 impl State {
@@ -177,7 +173,7 @@ impl State {
         let window = &mut self.windows[index];
         if !window.toplevel.is_initial_configure_sent() {
             window.toplevel.with_pending_state(|state| {
-                state.bounds = Some(logical(area.size));
+                state.bounds = Some(area.size);
             });
             window.toplevel.send_configure();
             return;
@@ -220,7 +216,7 @@ impl State {
     pub(crate) fn output_rect(&self) -> Rect {
         Rect {
             location: Point::default(),
-            size: self.output_size,
+            size: self.logical_output_size(),
         }
     }
 
@@ -269,11 +265,11 @@ impl State {
             match target {
                 Some(target) => {
                     pending.states.set(state);
-                    pending.size = Some(logical(target.size));
+                    pending.size = Some(target.size);
                 }
                 None => {
                     pending.states.unset(state);
-                    pending.size = window.restore.map(|restore| logical(restore.size));
+                    pending.size = window.restore.map(|restore| restore.size);
                 }
             }
         });
@@ -407,7 +403,7 @@ impl State {
         true
     }
 
-    pub(crate) fn resize_to(&mut self, surface: &WlSurface, delta: Point<i32, Physical>) {
+    pub(crate) fn resize_to(&mut self, surface: &WlSurface, delta: Point<i32, Logical>) {
         let Some(index) = self.window_index(surface) else {
             return;
         };
@@ -417,7 +413,7 @@ impl State {
         };
         let size = window.clamp_size(resize.size_for(delta));
         window.toplevel.with_pending_state(|pending| {
-            pending.size = Some(logical(size));
+            pending.size = Some(size);
         });
         window.configure();
     }
@@ -436,7 +432,7 @@ impl State {
         window.configure();
     }
 
-    pub(crate) fn move_window_to(&mut self, surface: &WlSurface, location: Point<i32, Physical>) {
+    pub(crate) fn move_window_to(&mut self, surface: &WlSurface, location: Point<i32, Logical>) {
         let top = self.usable_area().location.y;
         if let Some(index) = self.window_index(surface) {
             let window = &mut self.windows[index];
@@ -449,8 +445,8 @@ impl State {
     pub(crate) fn begin_move(
         &mut self,
         surface: &WlSurface,
-        pointer: Point<i32, Physical>,
-    ) -> Option<Point<i32, Physical>> {
+        pointer: Point<i32, Logical>,
+    ) -> Option<Point<i32, Logical>> {
         let index = self.window_index(surface)?;
         let window = &self.windows[index];
         if window.has_state(xdg_toplevel::State::Fullscreen) {

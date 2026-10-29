@@ -2,7 +2,7 @@ use smithay::reexports::wayland_server::backend::ClientId;
 use smithay::reexports::wayland_server::protocol::wl_output::WlOutput;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{DisplayHandle, Resource};
-use smithay::utils::{Physical, Point, SERIAL_COUNTER};
+use smithay::utils::{Logical, Point, SERIAL_COUNTER};
 use smithay::wayland::session_lock::{
     LockSurface, SessionLockHandler, SessionLockManagerState, SessionLocker,
 };
@@ -48,7 +48,7 @@ impl State {
             .map(LockSurface::wl_surface)
     }
 
-    pub(crate) fn locked_stack(&self) -> Vec<(WlSurface, Point<i32, Physical>)> {
+    pub(crate) fn locked_stack(&self) -> Vec<(WlSurface, Point<i32, Logical>)> {
         self.lock_surface()
             .filter(|surface| mapped_size(surface).is_some())
             .map(|surface| (surface.clone(), Point::default()))
@@ -182,7 +182,7 @@ impl SessionLockHandler for State {
         if client.is_none() || client != lock.owner {
             return;
         }
-        let size = self.output_size;
+        let size = self.logical_output_size();
         surface.with_pending_state(|state| {
             state.size = Some((size.w.unsigned_abs(), size.h.unsigned_abs()).into());
         });

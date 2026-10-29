@@ -186,8 +186,7 @@ impl Headless {
                 self.move_pointer_to(location, event.time_msec());
             }
             InputEvent::PointerMotionAbsolute { event } => {
-                let size = self.output_size();
-                let location = event.position_transformed((size.w, size.h).into());
+                let location = event.position_transformed(self.logical_output_size());
                 self.move_pointer_to(location, event.time_msec());
             }
             InputEvent::PointerButton { event } => {
@@ -233,7 +232,7 @@ impl Headless {
 
     pub fn move_pointer_to(&mut self, location: Point<f64, Logical>, time: u32) {
         self.state.note_activity();
-        let size = self.output_size();
+        let size = self.logical_output_size();
         let location: Point<f64, Logical> = (
             location.x.clamp(0.0, f64::from(size.w - 1)),
             location.y.clamp(0.0, f64::from(size.h - 1)),

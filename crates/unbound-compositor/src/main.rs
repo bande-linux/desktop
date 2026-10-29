@@ -12,9 +12,10 @@ use smithay::wayland::socket::ListeningSocketSource;
 use unbound_compositor::{
     CLIPBOARD_DAEMON, CONTROL_CENTER, CursorTheme, DrmOutput, FrameClock, FrameOutput,
     FrameScheduler, GREETER, Headless, LAUNCHER, MENU_BAR, PANEL, REFRESH, Renderer, SCREENSHOT,
-    SessionRequest, SessionRole, SessionUpkeep, export_session_environment, follow_session,
-    notify_ready,
+    SessionRequest, SessionRole, SessionUpkeep, automatic_scale, export_session_environment,
+    follow_session, notify_ready,
 };
+use unbound_config::{Config, config_path};
 
 const HEADLESS_SIZE: (i32, i32) = (1920, 1080);
 
@@ -89,6 +90,14 @@ fn run_headless(session: Session) -> Result<(), Box<dyn Error>> {
     serve(&mut event_loop, app, session)
 }
 
+fn configured_scale(connector: &str) -> Option<f64> {
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let config_home = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from);
+    let source =
+        std::fs::read_to_string(config_path(config_home.as_deref(), home.as_deref())?).ok()?;
+    Config::parse(&source).ok()?.outputs.get(connector)?.scale
+}
+
 fn run_drm(device: Option<&Path>, session: Session) -> Result<(), Box<dyn Error>> {
     let (mut output, notifiers) = DrmOutput::open(device)?;
     eprintln!(
@@ -96,7 +105,11 @@ fn run_drm(device: Option<&Path>, session: Session) -> Result<(), Box<dyn Error>
         output.path().display(),
         1.0 / output.refresh().as_secs_f64()
     );
-    let mut compositor = Headless::with_output(output.output_config())?;
+    let config = output.output_config();
+    let scale = configured_scale(&config.name)
+        .unwrap_or_else(|| automatic_scale(config.size, config.physical_size_mm));
+    let mut compositor = Headless::with_output(config)?;
+    compositor.set_output_scale(scale);
     if !compositor.enable_explicit_sync(output.device_fd()) {
         eprintln!(
             "unbound-compositor: {} has no syncobj eventfd; explicit sync is off",

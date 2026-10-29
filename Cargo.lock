@@ -3609,6 +3609,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "unbound-desktop-surface"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "image",
+ "image-compare",
+ "tracing",
+ "unbound-config",
+ "unbound-dock",
+ "unbound-files",
+ "unbound-fs",
+ "unbound-l10n",
+ "unbound-log",
+ "unbound-menubar",
+ "unbound-toolkit",
+ "unbound-wallpaper",
+ "unbound-xdg",
+]
+
+[[package]]
 name = "unbound-dock"
 version = "0.1.0"
 dependencies = [
@@ -3950,6 +3970,17 @@ dependencies = [
  "tracing",
  "unbound-log",
  "unbound-test-bus",
+ "zbus",
+]
+
+[[package]]
+name = "unbound-wallpaper"
+version = "0.1.0"
+dependencies = [
+ "image",
+ "resvg",
+ "tempfile",
+ "tracing",
  "zbus",
 ]
 

@@ -52,7 +52,7 @@ jobs:
   deb:
     name: ci/deb
     runs-on: [self-hosted, unbound]
-    timeout-minutes: 30
+    timeout-minutes: 60
     env:
       CARGO_DEB_VERSION: 3.8.0
     steps:

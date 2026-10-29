@@ -1,3 +1,5 @@
+use crate::L10N;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Key {
     Appearance,
@@ -15,15 +17,15 @@ pub enum Value {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Choice {
-    pub label: &'static str,
+    pub label: String,
     pub value: Value,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Control {
     pub key: Key,
-    pub label: &'static str,
-    pub keywords: &'static [&'static str],
+    pub label: String,
+    pub keywords: String,
     pub choices: Vec<Choice>,
 }
 
@@ -35,10 +37,10 @@ impl Control {
     }
 
     fn haystack(&self, pane: &str) -> String {
-        let mut haystack = format!("{pane} {} {}", self.label, self.keywords.join(" "));
+        let mut haystack = format!("{pane} {} {}", self.label, self.keywords);
         for choice in &self.choices {
             haystack.push(' ');
-            haystack.push_str(choice.label);
+            haystack.push_str(&choice.label);
         }
         haystack.to_lowercase()
     }
@@ -46,97 +48,90 @@ impl Control {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pane {
-    pub name: &'static str,
+    pub name: String,
     pub controls: Vec<Control>,
 }
 
-fn keyword_choices(choices: &[(&'static str, &str)]) -> Vec<Choice> {
+fn keyword_choices(choices: Vec<(String, &str)>) -> Vec<Choice> {
     choices
-        .iter()
+        .into_iter()
         .map(|(label, keyword)| Choice {
             label,
-            value: Value::Keyword((*keyword).to_owned()),
+            value: Value::Keyword(keyword.to_owned()),
         })
         .collect()
 }
 
-fn minutes(choices: &[(&'static str, u64)]) -> Vec<Choice> {
+fn durations(choices: &[u64]) -> Vec<Choice> {
     choices
         .iter()
-        .map(|(label, seconds)| Choice {
-            label,
-            value: Value::Seconds(*seconds),
+        .map(|&seconds| Choice {
+            label: duration_label(seconds),
+            value: Value::Seconds(seconds),
         })
         .collect()
+}
+
+fn duration_label(seconds: u64) -> String {
+    match seconds {
+        0 => L10N.tr("never"),
+        1..60 => L10N.tr_args("seconds", [("count", seconds.into())]),
+        _ if seconds.is_multiple_of(3600) => {
+            L10N.tr_args("hours", [("count", (seconds / 3600).into())])
+        }
+        _ => L10N.tr_args("minutes", [("count", (seconds / 60).into())]),
+    }
 }
 
 pub fn panes() -> Vec<Pane> {
     vec![
         Pane {
-            name: "Appearance",
+            name: L10N.tr("appearance"),
             controls: vec![Control {
                 key: Key::Appearance,
-                label: "Appearance",
-                keywords: &["theme", "dark mode", "light mode", "colour", "color"],
-                choices: keyword_choices(&[
-                    ("Light", "light"),
-                    ("Dark", "dark"),
-                    ("Auto", "automatic"),
+                label: L10N.tr("appearance"),
+                keywords: L10N.tr("appearance-keywords"),
+                choices: keyword_choices(vec![
+                    (L10N.tr("appearance-light"), "light"),
+                    (L10N.tr("appearance-dark"), "dark"),
+                    (L10N.tr("appearance-automatic"), "automatic"),
                 ]),
             }],
         },
         Pane {
-            name: "Desktop & Dock",
+            name: L10N.tr("desktop-and-dock"),
             controls: vec![Control {
                 key: Key::DockPosition,
-                label: "Position on screen",
-                keywords: &["dock", "panel", "taskbar", "edge"],
-                choices: keyword_choices(&[
-                    ("Left", "left"),
-                    ("Bottom", "bottom"),
-                    ("Right", "right"),
-                    ("Top", "top"),
+                label: L10N.tr("dock-position"),
+                keywords: L10N.tr("dock-position-keywords"),
+                choices: keyword_choices(vec![
+                    (L10N.tr("edge-left"), "left"),
+                    (L10N.tr("edge-bottom"), "bottom"),
+                    (L10N.tr("edge-right"), "right"),
+                    (L10N.tr("edge-top"), "top"),
                 ]),
             }],
         },
         Pane {
-            name: "Lock Screen",
+            name: L10N.tr("lock-screen"),
             controls: vec![
                 Control {
                     key: Key::DimAfter,
-                    label: "Dim the display when inactive",
-                    keywords: &["idle", "brightness", "screen"],
-                    choices: minutes(&[
-                        ("30 seconds", 30),
-                        ("1 minute", 60),
-                        ("2 minutes", 120),
-                        ("5 minutes", 300),
-                        ("10 minutes", 600),
-                    ]),
+                    label: L10N.tr("dim-after"),
+                    keywords: L10N.tr("dim-after-keywords"),
+                    choices: durations(&[30, 60, 120, 300, 600]),
                 },
                 Control {
                     key: Key::LockAfter,
-                    label: "Turn display off and lock when inactive",
-                    keywords: &["idle", "password", "screen saver", "security"],
-                    choices: minutes(&[
-                        ("1 minute", 60),
-                        ("5 minutes", 300),
-                        ("10 minutes", 600),
-                        ("20 minutes", 1200),
-                        ("1 hour", 3600),
-                    ]),
+                    label: L10N.tr("lock-after"),
+                    keywords: L10N.tr("lock-after-keywords"),
+                    choices: durations(&[60, 300, 600, 1200, 3600]),
                 },
                 Control {
                     key: Key::SleepAfter,
-                    label: "Sleep when inactive",
-                    keywords: &["idle", "suspend", "energy", "battery", "power"],
-                    choices: minutes(&[
-                        ("10 minutes", 600),
-                        ("30 minutes", 1800),
-                        ("1 hour", 3600),
-                        ("3 hours", 10800),
-                        ("Never", 0),
-                    ]),
+                    label: L10N.tr("sleep-after"),
+                    keywords: L10N.tr("sleep-after-keywords"),
+                    choices: durations(&[600, 1800, 3600, 10800, 0]),
                 },
             ],
         },
@@ -163,7 +158,7 @@ pub fn search(panes: &[Pane], query: &str) -> Vec<Match> {
                 .iter()
                 .enumerate()
                 .filter(|(_, control)| {
-                    let haystack = control.haystack(pane.name);
+                    let haystack = control.haystack(&pane.name);
                     words.iter().all(|word| haystack.contains(word.as_str()))
                 })
                 .map(|(index, _)| index)

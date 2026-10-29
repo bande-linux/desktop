@@ -3,6 +3,7 @@ use unbound_toolkit::{
     Color, Item, Palette, Paragraph, Point, Rect, Scene, Shape, TextAlign, TextStyle, TextSystem,
 };
 
+use crate::L10N;
 use crate::browser::{Browser, Column};
 use crate::listing::{Entry, Kind, format_size};
 use crate::preview::{Preview, preview};
@@ -289,14 +290,16 @@ impl FilesView {
                 });
             }
             Preview::Folder { items: count } => {
-                let summary = match count {
-                    1 => "1 item".to_owned(),
-                    count => format!("{count} items"),
-                };
-                self.centred_summary(area, "Folder", &summary, &mut content);
+                let summary = L10N.tr_args("item-count", [("count", (*count).into())]);
+                self.centred_summary(area, &L10N.tr("folder"), &summary, &mut content);
             }
             Preview::Other { size } => {
-                self.centred_summary(area, "Document", &format_size(*size), &mut content);
+                self.centred_summary(
+                    area,
+                    &L10N.tr("document"),
+                    &format_size(*size),
+                    &mut content,
+                );
             }
         }
         items.push(Item::Clip {

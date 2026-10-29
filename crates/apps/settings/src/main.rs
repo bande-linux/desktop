@@ -1,10 +1,9 @@
 use std::process::ExitCode;
 
 use unbound_config::Appearance;
-use unbound_settings::{Key, SettingsClient, SettingsView, Value};
+use unbound_settings::{Key, L10N, SettingsClient, SettingsView, Value};
 use unbound_toolkit::{App, Palette, Role, Scene, Scheme, TextSystem, Window, WindowEvent};
 
-const TITLE: &str = "System Settings";
 const APP_ID: &str = "org.unbound.Settings";
 const WINDOW_SIZE: (u32, u32) = (900, 540);
 const KEYS: [Key; 5] = [
@@ -43,8 +42,11 @@ impl App for Settings {
         }
         for (key, value) in self.view.take_changes() {
             let failed = self.client.set(key, &value).err();
-            self.view
-                .set_message(failed.map(|error| format!("Not changed: {error}")));
+            self.view.set_message(
+                failed.map(|error| {
+                    L10N.tr_args("not-changed", [("error", error.to_string().into())])
+                }),
+            );
             self.refresh(key);
         }
         window.request_redraw();
@@ -70,7 +72,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     for key in KEYS {
         settings.refresh(key);
     }
-    let mut window = Window::open(Role::toplevel(TITLE, APP_ID), WINDOW_SIZE)?;
+    let mut window = Window::open(Role::toplevel(&L10N.tr("title"), APP_ID), WINDOW_SIZE)?;
     unbound_toolkit::run(&mut window, &mut settings)?;
     Ok(())
 }

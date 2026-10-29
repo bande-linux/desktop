@@ -6,7 +6,7 @@ use std::f32::consts::TAU;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use accesskit::{Action, ActionData, ActionRequest, Node, Role, TreeId};
+use accesskit::{Action, ActionData, ActionRequest, Node, Role, TreeId, TreeUpdate};
 use unbound_toolkit::ui::{Context, Event, SecureField, Size, Ui, Widget, WidgetId};
 use unbound_toolkit::{
     Color, Item, Palette, Paragraph, Point, Rect, Scene, Shape, TextAlign, TextStyle, TextSystem,
@@ -257,6 +257,17 @@ impl LockScreen {
             return false;
         }
         self.ui.handle(event)
+    }
+
+    pub fn perform(&mut self, request: &ActionRequest) -> bool {
+        if self.model.borrow().checking {
+            return false;
+        }
+        self.ui.perform(request)
+    }
+
+    pub fn accessibility(&self) -> TreeUpdate {
+        self.ui.accessibility()
     }
 
     pub fn take_password(&mut self) -> Option<String> {

@@ -2,6 +2,8 @@ use std::io;
 use std::os::fd::BorrowedFd;
 use std::time::Instant;
 
+use accesskit::TreeUpdate;
+
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use wayland_client::backend::{ReadEventsGuard, WaylandError};
 
@@ -27,6 +29,10 @@ pub trait App {
 
     fn finished(&self) -> bool {
         false
+    }
+
+    fn accessibility(&self) -> Option<TreeUpdate> {
+        None
     }
 }
 
@@ -54,14 +60,23 @@ pub fn run(window: &mut Window, app: &mut impl App) -> Result<(), WindowError> {
         window.dispatch_pending()?;
         window.fire_repeats(Instant::now());
         for event in window.take_events() {
+            if let WindowEvent::Focus(focused) = event {
+                window.accessibility.set_window_focused(focused);
+            }
             app.event(window, event);
         }
         if window.is_closed() || app.finished() {
             return Ok(());
         }
-        if window.wants_frame() {
+        let frame_drawn = window.wants_frame();
+        if frame_drawn {
             let scene = app.scene(window);
             window.draw(&scene)?;
+        }
+        if window.accessibility.wants_tree(frame_drawn)
+            && let Some(tree) = app.accessibility()
+        {
+            window.accessibility.publish(tree);
         }
         window.flush()?;
         let Some(guard) = window.queue.prepare_read() else {
@@ -69,12 +84,14 @@ pub fn run(window: &mut Window, app: &mut impl App) -> Result<(), WindowError> {
         };
 
         let deadline = earliest([window.state.input.repeat_deadline(), app.deadline()]);
-        let (wayland_ready, pastes_ready, sources_ready) = {
+        let (wayland_ready, accessibility_ready, pastes_ready, sources_ready) = {
             let connection = guard.connection_fd();
+            let accessibility = window.accessibility.fd();
             let pastes = window.paste_fds();
             let sources = app.sources();
-            let mut fds = Vec::with_capacity(1 + pastes.len() + sources.len());
+            let mut fds = Vec::with_capacity(2 + pastes.len() + sources.len());
             fds.push(PollFd::new(&connection, PollFlags::IN));
+            fds.push(PollFd::new(&accessibility, PollFlags::IN));
             for fd in pastes.iter().chain(&sources) {
                 fds.push(PollFd::new(fd, PollFlags::IN));
             }
@@ -91,18 +108,29 @@ pub fn run(window: &mut Window, app: &mut impl App) -> Result<(), WindowError> {
             }
             let ready = |fd: &PollFd| !fd.revents().is_empty();
             let wayland_ready = ready(&fds[0]);
+            let accessibility_ready = ready(&fds[1]);
             let pastes_ready = (0..pastes.len())
-                .filter(|index| ready(&fds[1 + index]))
+                .filter(|index| ready(&fds[2 + index]))
                 .collect::<Vec<_>>();
             let sources_ready = (0..sources.len())
-                .filter(|index| ready(&fds[1 + pastes.len() + index]))
+                .filter(|index| ready(&fds[2 + pastes.len() + index]))
                 .collect::<Vec<_>>();
-            (wayland_ready, pastes_ready, sources_ready)
+            (
+                wayland_ready,
+                accessibility_ready,
+                pastes_ready,
+                sources_ready,
+            )
         };
         if wayland_ready {
             read_events(guard)?;
         } else {
             drop(guard);
+        }
+        if accessibility_ready {
+            for request in window.accessibility.take_requests() {
+                app.event(window, WindowEvent::Accessibility(request));
+            }
         }
         for index in pastes_ready.into_iter().rev() {
             window.read_paste(index);

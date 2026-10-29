@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::process::ExitCode;
 
+use accesskit::TreeUpdate;
 use unbound_apps::{
     DesktopEntry, Locale, applications, current_desktops, data_dirs, find_icon, launch, load_icon,
 };
@@ -22,6 +23,15 @@ impl LauncherShell {
             eprintln!("unbound-launcher: cannot hide: {error}");
         }
         self.launcher.clear();
+    }
+
+    fn run_actions(&mut self, window: &mut Window) {
+        for action in self.launcher.take_actions() {
+            match action {
+                LauncherAction::Open(app_id) => self.open(window, &app_id),
+                LauncherAction::Close => self.close(window),
+            }
+        }
     }
 
     fn open(&mut self, window: &mut Window, app_id: &str) {
@@ -53,15 +63,20 @@ impl App for LauncherShell {
                 if self.launcher.handle(&input) {
                     window.request_redraw();
                 }
-                for action in self.launcher.take_actions() {
-                    match action {
-                        LauncherAction::Open(app_id) => self.open(window, &app_id),
-                        LauncherAction::Close => self.close(window),
-                    }
+                self.run_actions(window);
+            }
+            WindowEvent::Accessibility(request) => {
+                if self.launcher.ui.perform(&request) {
+                    window.request_redraw();
                 }
+                self.run_actions(window);
             }
             _ => {}
         }
+    }
+
+    fn accessibility(&self) -> Option<TreeUpdate> {
+        Some(self.launcher.ui.accessibility())
     }
 }
 

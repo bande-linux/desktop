@@ -10,7 +10,7 @@ use smithay::input::keyboard::{FilterResult, Keycode, keysyms};
 use smithay::input::pointer::{AxisFrame, ButtonEvent, MotionEvent};
 use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
-use smithay::utils::{Logical, Point, SERIAL_COUNTER};
+use smithay::utils::{Clock, Logical, Monotonic, Point, SERIAL_COUNTER};
 
 use crate::state::{Headless, State};
 
@@ -59,6 +59,26 @@ impl State {
             under_from_surface_tree(&surface, location, origin, WindowSurfaceType::ALL)
                 .map(|(surface, at)| (surface, at.to_f64()))
         })
+    }
+
+    pub(crate) fn refocus_pointer(&mut self) {
+        let Some(pointer) = self.seat.get_pointer() else {
+            return;
+        };
+        let under = self.surface_under(self.pointer_location);
+        if pointer.current_focus() == under.as_ref().map(|(surface, _)| surface.clone()) {
+            return;
+        }
+        pointer.motion(
+            self,
+            under,
+            &MotionEvent {
+                location: self.pointer_location,
+                serial: SERIAL_COUNTER.next_serial(),
+                time: Clock::<Monotonic>::new().now().as_millis(),
+            },
+        );
+        pointer.frame(self);
     }
 
     fn run(&mut self, shortcut: Shortcut) {

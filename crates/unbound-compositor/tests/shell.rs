@@ -367,6 +367,71 @@ fn an_exclusive_overlay_takes_the_keyboard_and_returns_it_when_hidden() {
     );
 }
 
+fn exclusive(layer: Layer) -> LayerRequest {
+    LayerRequest {
+        layer,
+        ..launcher()
+    }
+}
+
+fn typed_a(server: &mut Headless, clients: &mut [&mut TestClient]) {
+    press(server, &[KEY_A]);
+    roundtrip(server, clients);
+}
+
+#[test]
+fn the_keyboard_returns_to_an_exclusive_overlay_when_one_above_it_is_hidden() {
+    let mut server = server();
+    let mut app = TestClient::connect(&mut server);
+    app.use_seat(&mut server);
+    let pixels = red(32, 32);
+    app.show_window(&mut server, &image(&pixels, 32, 32));
+    let mut lower = TestClient::connect_as_shell(&mut server);
+    lower.use_seat(&mut server);
+    let mut upper = TestClient::connect_as_shell(&mut server);
+    upper.use_seat(&mut server);
+    lower.show_layer(&mut server, &exclusive(Layer::Overlay));
+    upper.show_layer(&mut server, &exclusive(Layer::Overlay));
+
+    upper.hide_layer(&mut server, 0);
+    typed_a(&mut server, &mut [&mut app, &mut lower, &mut upper]);
+
+    assert!(app.keys().is_empty());
+    assert!(upper.keys().is_empty());
+    assert_eq!(lower.keys(), [(KEY_A, true), (KEY_A, false)]);
+
+    lower.hide_layer(&mut server, 0);
+    roundtrip(&mut server, &mut [&mut app, &mut lower, &mut upper]);
+    assert!(app.keyboard_focus_on(0));
+}
+
+#[test]
+fn an_exclusive_overlay_keeps_the_keyboard_from_an_exclusive_top_layer() {
+    let mut server = server();
+    let mut app = TestClient::connect(&mut server);
+    app.use_seat(&mut server);
+    let pixels = red(32, 32);
+    app.show_window(&mut server, &image(&pixels, 32, 32));
+    let mut overlay = TestClient::connect_as_shell(&mut server);
+    overlay.use_seat(&mut server);
+    let mut top = TestClient::connect_as_shell(&mut server);
+    top.use_seat(&mut server);
+    overlay.show_layer(&mut server, &exclusive(Layer::Overlay));
+
+    top.show_layer(&mut server, &exclusive(Layer::Top));
+    top.request_layer_frame(&mut server, 0);
+    typed_a(&mut server, &mut [&mut app, &mut overlay, &mut top]);
+
+    assert!(top.keys().is_empty());
+    assert_eq!(overlay.keys(), [(KEY_A, true), (KEY_A, false)]);
+
+    overlay.close_layer(&mut server, 0);
+    typed_a(&mut server, &mut [&mut app, &mut overlay, &mut top]);
+
+    assert_eq!(top.keys(), [(KEY_A, true), (KEY_A, false)]);
+    assert!(app.keys().is_empty());
+}
+
 #[test]
 fn a_click_on_a_window_under_an_exclusive_overlay_does_not_take_the_keyboard() {
     let mut server = server();

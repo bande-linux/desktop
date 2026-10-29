@@ -129,6 +129,7 @@ pub struct State {
     pub(crate) shell_resources: Vec<UnboundShellV1>,
     pub(crate) foreign_toplevel_state: ForeignToplevelListState,
     pub(crate) exclusive_layer: Option<ExclusiveLayer>,
+    exclusive_candidates: Vec<(WlSurface, Layer)>,
     seat_state: SeatState<State>,
     pub(crate) seat: Seat<State>,
     data_device_state: DataDeviceState,
@@ -255,6 +256,7 @@ impl Headless {
                 shell::is_shell,
             ),
             exclusive_layer: None,
+            exclusive_candidates: Vec::new(),
             seat_state,
             seat,
             data_device_state: DataDeviceState::new::<State>(&handle),
@@ -717,9 +719,10 @@ impl State {
         map.arrange();
         let mapped =
             with_renderer_surface_state(surface, |state| state.buffer().is_some()).unwrap_or(false);
-        let exclusive = mapped
+        let exclusive = (mapped
             && matches!(layer.layer(), Layer::Top | Layer::Overlay)
-            && layer.cached_state().keyboard_interactivity == KeyboardInteractivity::Exclusive;
+            && layer.cached_state().keyboard_interactivity == KeyboardInteractivity::Exclusive)
+            .then(|| layer.layer());
         drop(map);
         self.follow_exclusive_layer(surface, exclusive);
         let configured = with_states(surface, |states| {
@@ -734,28 +737,44 @@ impl State {
         true
     }
 
-    fn follow_exclusive_layer(&mut self, surface: &WlSurface, exclusive: bool) {
-        let current = self
-            .exclusive_layer
-            .as_ref()
-            .is_some_and(|layer| &layer.surface == surface);
-        if exclusive && !current {
-            let previous = match self.exclusive_layer.take() {
-                Some(layer) => layer.previous,
-                None => self.focused(),
-            };
-            self.focus(Some(surface.clone()));
-            self.exclusive_layer = Some(ExclusiveLayer {
-                surface: surface.clone(),
-                previous,
-            });
-            self.sync_activated();
-        } else if !exclusive && current {
-            self.release_exclusive_layer();
+    fn follow_exclusive_layer(&mut self, surface: &WlSurface, exclusive: Option<Layer>) {
+        let known = self
+            .exclusive_candidates
+            .iter()
+            .position(|(candidate, _)| candidate == surface);
+        match (exclusive, known) {
+            (Some(layer), Some(index)) => self.exclusive_candidates[index].1 = layer,
+            (Some(layer), None) => self.exclusive_candidates.push((surface.clone(), layer)),
+            (None, Some(index)) => {
+                self.exclusive_candidates.remove(index);
+            }
+            (None, None) => return,
         }
+        let holder = self
+            .exclusive_candidates
+            .iter()
+            .max_by_key(|(_, layer)| *layer == Layer::Overlay)
+            .map(|(candidate, _)| candidate.clone());
+        if holder.as_ref() == self.exclusive_layer.as_ref().map(|layer| &layer.surface) {
+            return;
+        }
+        let Some(holder) = holder else {
+            self.release_exclusive_layer();
+            return;
+        };
+        let previous = match self.exclusive_layer.take() {
+            Some(layer) => layer.previous,
+            None => self.focused(),
+        };
+        self.focus(Some(holder.clone()));
+        self.exclusive_layer = Some(ExclusiveLayer {
+            surface: holder,
+            previous,
+        });
+        self.sync_activated();
     }
 
-    pub(crate) fn release_exclusive_layer(&mut self) {
+    fn release_exclusive_layer(&mut self) {
         let Some(layer) = self.exclusive_layer.take() else {
             return;
         };
@@ -1037,13 +1056,7 @@ impl WlrLayerShellHandler for State {
         }
         drop(map);
         self.needs_redraw = true;
-        if self
-            .exclusive_layer
-            .as_ref()
-            .is_some_and(|layer| &layer.surface == surface.wl_surface())
-        {
-            self.release_exclusive_layer();
-        }
+        self.follow_exclusive_layer(surface.wl_surface(), None);
     }
 }
 

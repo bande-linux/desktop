@@ -325,11 +325,21 @@ impl State {
             target.location.to_f64(),
             target.size.to_f64(),
         ));
-        let from = Look::hidden(Rectangle::new(at, (1.0, 1.0).into()));
-        let motion = match self.preview.take() {
-            Some(preview) if preview.owner == owner => preview.motion,
-            _ => Motion::new(Spring::QUICK, from, target),
+        let (from, spring) = if self.reduce_motion {
+            (Look::hidden(target.rect), Spring::FADE)
+        } else {
+            (
+                Look::hidden(Rectangle::new(at, (1.0, 1.0).into())),
+                Spring::QUICK,
+            )
         };
+        let mut motion = match self.preview.take() {
+            Some(preview) if preview.owner == owner => preview.motion,
+            _ => Motion::new(spring, from, target),
+        };
+        if self.reduce_motion {
+            motion.place(target.rect);
+        }
         self.preview = Some(Preview {
             owner,
             motion,

@@ -17,3 +17,4 @@
 - Trunk-based: `main` is always green. Each milestone is a short branch from `main`.
 - Merge a branch into `main` only when its CI is fully green: fast-forward if possible, otherwise a merge commit. Never force-push, never merge red.
 - Then merge `main` into the next branch and push only that branch; never push several stacked branches at once.
+- Commit messages: one brief line saying what the commit does. No body, no trailers (no `Co-Authored-By`, no session links), nothing special.

@@ -73,13 +73,7 @@ impl Fixture {
     }
 
     fn center_properties(&self) -> PropertiesProxy<'static> {
-        PropertiesProxy::builder(&self.connection)
-            .destination(unbound_notify::BUS_NAME)
-            .expect("destination")
-            .path(unbound_notify::OBJECT_PATH)
-            .expect("path")
-            .build()
-            .expect("properties proxy")
+        center_properties_on(&self.connection)
     }
 }
 
@@ -137,4 +131,53 @@ fn do_not_disturb_is_a_writable_property() {
     let presentation = fixture.next();
     assert!(presentation.banners.is_empty());
     assert_eq!(presentation.center.len(), 1);
+}
+
+fn center_properties_on(connection: &Connection) -> PropertiesProxy<'static> {
+    PropertiesProxy::builder(connection)
+        .destination(unbound_notify::BUS_NAME)
+        .expect("destination")
+        .path(unbound_notify::OBJECT_PATH)
+        .expect("path")
+        .build()
+        .expect("properties proxy")
+}
+
+#[test]
+fn do_not_disturb_is_remembered_across_restarts() {
+    let state = tempfile::tempdir().expect("state directory");
+    let file = state.path().join("unbound").join("do-not-disturb");
+    let interface = InterfaceName::from_static_str_unchecked(CENTER);
+
+    let first_session = SessionBus::start().expect("dbus-daemon");
+    let _first = NotificationServer::start_remembering(
+        &first_session.connect().expect("server connection"),
+        file.clone(),
+    )
+    .expect("notification server");
+    let first_client = first_session.connect().expect("client connection");
+    center_properties_on(&first_client)
+        .set(interface.clone(), "DoNotDisturb", Value::from(true))
+        .expect("Set");
+
+    let second_session = SessionBus::start().expect("dbus-daemon");
+    let _second = NotificationServer::start_remembering(
+        &second_session.connect().expect("server connection"),
+        file.clone(),
+    )
+    .expect("restarted notification server");
+    let second_client = second_session.connect().expect("client connection");
+    let properties = center_properties_on(&second_client);
+    assert_eq!(
+        properties
+            .get(interface.clone(), "DoNotDisturb")
+            .expect("Get"),
+        OwnedValue::from(true),
+        "Do Not Disturb is still on after the restart"
+    );
+
+    properties
+        .set(interface, "DoNotDisturb", Value::from(false))
+        .expect("Set");
+    assert!(!file.exists(), "turning it off forgets it");
 }

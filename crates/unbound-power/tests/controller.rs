@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use unbound_config::{ConfigService, ConfigStore};
+use unbound_power::backlight::Backlight;
 use unbound_power::controller::{self, IdleController};
 use unbound_power::logind::{self, ManagerProxyBlocking};
 use unbound_test_bus::SessionBus;
@@ -18,6 +19,7 @@ const SESSION_PATH: &str = "/org/freedesktop/login1/session/_31";
 enum Call {
     Lock,
     Suspend,
+    Brightness(String, String, u32),
 }
 
 type Calls = Arc<Mutex<Sender<Call>>>;
@@ -59,6 +61,10 @@ impl FakeSession {
         record(&self.calls, Call::Lock);
     }
 
+    fn set_brightness(&self, subsystem: String, name: String, brightness: u32) {
+        record(&self.calls, Call::Brightness(subsystem, name, brightness));
+    }
+
     #[zbus(property)]
     fn locked_hint(&self) -> bool {
         false
@@ -76,6 +82,10 @@ struct Fixture {
 }
 
 fn start(config: &str, can_suspend: &str) -> Fixture {
+    start_with_backlight(config, can_suspend, None)
+}
+
+fn start_with_backlight(config: &str, can_suspend: &str, backlight: Option<Backlight>) -> Fixture {
     let bus = SessionBus::start().expect("dbus-daemon");
     let (sender, calls) = mpsc::channel();
     let shared: Calls = Arc::new(Mutex::new(sender));
@@ -115,6 +125,7 @@ fn start(config: &str, can_suspend: &str) -> Fixture {
         controller::logind_executor(
             ManagerProxyBlocking::new(&power).expect("manager proxy"),
             logind::own_session(&power).expect("session proxy"),
+            backlight,
         ),
     ));
     controller::follow_config(&power, &idle).expect("follow config");
@@ -184,5 +195,37 @@ fn a_config_change_reaches_the_idle_policy() {
     }
     fixture.idle.idle_for(10 * MINUTE);
     assert_eq!(fixture.next(), Call::Lock);
+    fixture.quiet();
+}
+
+fn fake_backlight(class: &std::path::Path, name: &str, kind: &str, brightness: u32) {
+    let device = class.join(name);
+    std::fs::create_dir_all(&device).expect("device directory");
+    std::fs::write(device.join("type"), format!("{kind}\n")).expect("type");
+    std::fs::write(device.join("brightness"), format!("{brightness}\n")).expect("brightness");
+}
+
+#[test]
+fn the_firmware_backlight_is_preferred_over_raw_and_platform_ones() {
+    let class = tempfile::tempdir().expect("backlight class");
+    fake_backlight(class.path(), "acpi_video0", "raw", 10);
+    fake_backlight(class.path(), "nvidia_0", "platform", 10);
+    fake_backlight(class.path(), "apple-panel-bl", "firmware", 10);
+
+    let backlight = Backlight::find(class.path()).expect("a backlight");
+    assert_eq!(backlight.name, "apple-panel-bl");
+}
+
+#[test]
+fn the_display_dims_before_it_locks_and_activity_restores_its_brightness() {
+    let class = tempfile::tempdir().expect("backlight class");
+    fake_backlight(class.path(), "apple-panel-bl", "firmware", 800);
+    let fixture = start_with_backlight("", "yes", Backlight::find(class.path()));
+    let brightness = |level| Call::Brightness("backlight".into(), "apple-panel-bl".into(), level);
+
+    fixture.idle.idle_for(5 * MINUTE);
+    assert_eq!(fixture.next(), brightness(200));
+    fixture.idle.resumed();
+    assert_eq!(fixture.next(), brightness(800));
     fixture.quiet();
 }

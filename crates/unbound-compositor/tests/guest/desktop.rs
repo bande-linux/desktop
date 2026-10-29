@@ -59,10 +59,13 @@ fn wait_for(what: &str, timeout: Duration, mut done: impl FnMut() -> bool) {
     }
 }
 
+const TASK_COMM_LENGTH: usize = 15;
+
 fn running(name: &str) -> bool {
+    let comm = &name[..name.len().min(TASK_COMM_LENGTH)];
     fs::read_dir("/proc").is_ok_and(|entries| {
         entries.filter_map(Result::ok).any(|entry| {
-            fs::read_to_string(entry.path().join("comm")).is_ok_and(|comm| comm.trim() == name)
+            fs::read_to_string(entry.path().join("comm")).is_ok_and(|read| read.trim() == comm)
         })
     })
 }

@@ -190,8 +190,12 @@ runs natively on Wayland in the guest.
   `m17-lock-screen`, `m17-lock-rejected`, `m17-unlocked`. `unbound-power` watches
   `ext-idle-notify` (one notification per policy threshold) to dim, lock and sleep, and
   the compositor exports `WAYLAND_DISPLAY`, `XDG_CURRENT_DESKTOP` and `XDG_SESSION_TYPE`
-  to systemd user units and D-Bus activation. Not done: dimming has no backlight to act
-  on yet; the lock screen shows no wallpaper and no battery or network state.
+  to systemd user units and D-Bus activation. Dimming sets the preferred backlight (`firmware`, then
+  `platform`, then `raw`, as systemd and GNOME choose) to a quarter of its level through
+  logind's `Session.SetBrightness` and restores it on activity; Do Not Disturb is kept in
+  `$XDG_STATE_HOME/unbound/do-not-disturb` across restarts, as a macOS Focus is. Not
+  done: the lock screen shows no wallpaper and no battery or network state; desktops
+  without a backlight (external displays) do not dim, as DDC/CI is not used.
 - [ ] **M18 Full-screen screenshots** (`desktop/milestone-18`; ci/vm not green yet)
   `ext-image-capture-source-v1` (output sources) and `ext-image-copy-capture-v1` into
   `wl_shm` buffers, offered to shell clients only (on a Mac capture needs the Screen
@@ -342,7 +346,7 @@ main track's. Next: the unchecked items below, then theming propagation (GTK
 - [ ] Resolve `appearance "automatic"` to dark or light on a schedule; the portal
   reports no preference until then.
 - [ ] Drive the idle machine from `ext-idle-notify-v1` once the compositor offers it
-  (M17), dim through the backlight, and count logind `idle` block inhibitors of
+  (M17) and count logind `idle` block inhibitors of
   other programs (`BlockInhibited`) as inhibition.
 - [x] `idle suspend-after`, by default when the display turns off as on a desktop
   Mac, carried out by `unbound-power` through logind.

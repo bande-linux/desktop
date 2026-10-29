@@ -7,6 +7,7 @@ use std::os::unix::net::UnixStream;
 
 use zbus::blocking::Connection;
 
+use crate::backlight::{Backlight, dimmed};
 use crate::idle::{Command, IdleMachine, Policy};
 use crate::logind::{ManagerProxyBlocking, SessionProxyBlocking};
 
@@ -156,8 +157,14 @@ pub fn follow_lock(system: &Connection, controller: &Arc<IdleController>) -> zbu
 pub fn logind_executor(
     manager: ManagerProxyBlocking<'static>,
     session: SessionProxyBlocking<'static>,
+    backlight: Option<Backlight>,
 ) -> impl Fn(Command) + Send + Sync + 'static {
+    let undimmed = Mutex::new(None);
     move |command| {
+        let set_backlight = |level: u32| match &backlight {
+            Some(backlight) => session.set_brightness("backlight", &backlight.name, level),
+            None => Ok(()),
+        };
         let result = match command {
             Command::Lock => session.lock(),
             Command::Suspend => match manager.can_suspend() {
@@ -165,7 +172,25 @@ pub fn logind_executor(
                 Ok(_) => Ok(()),
                 Err(error) => Err(error),
             },
-            Command::Dim | Command::Undim | Command::RestartIdleTimers => Ok(()),
+            Command::Dim => match backlight.as_ref().map(Backlight::brightness) {
+                Some(Ok(level)) => match dimmed(level) {
+                    Some(dim) => {
+                        *undimmed.lock().unwrap_or_else(PoisonError::into_inner) = Some(level);
+                        set_backlight(dim)
+                    }
+                    None => Ok(()),
+                },
+                Some(Err(error)) => Err(zbus::Error::InputOutput(error.into())),
+                None => Ok(()),
+            },
+            Command::Undim => {
+                let level = undimmed
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .take();
+                level.map_or(Ok(()), set_backlight)
+            }
+            Command::RestartIdleTimers => Ok(()),
         };
         if let Err(error) = result {
             eprintln!("unbound-power: cannot carry out {command:?}: {error}");

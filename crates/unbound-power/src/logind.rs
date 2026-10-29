@@ -40,6 +40,8 @@ pub trait Manager {
 pub trait Session {
     fn lock(&self) -> zbus::Result<()>;
 
+    fn set_brightness(&self, subsystem: &str, name: &str, brightness: u32) -> zbus::Result<()>;
+
     #[zbus(property)]
     fn locked_hint(&self) -> zbus::Result<bool>;
 }

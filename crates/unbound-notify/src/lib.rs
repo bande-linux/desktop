@@ -2,6 +2,9 @@ mod center;
 pub mod client;
 
 use std::collections::HashMap;
+use std::fs;
+use std::io;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::thread;
 use std::time::Instant;
@@ -41,6 +44,28 @@ impl State {
 struct Shared {
     state: Mutex<State>,
     deadline_changed: Condvar,
+    do_not_disturb_file: Option<PathBuf>,
+}
+
+pub fn do_not_disturb_path(xdg_state_home: Option<&Path>, home: Option<&Path>) -> Option<PathBuf> {
+    let base = match xdg_state_home.filter(|path| path.is_absolute()) {
+        Some(state_home) => state_home.to_path_buf(),
+        None => home?.join(".local").join("state"),
+    };
+    Some(base.join("unbound").join("do-not-disturb"))
+}
+
+fn remember_do_not_disturb(file: &Path, enabled: bool) -> io::Result<()> {
+    if !enabled {
+        return match fs::remove_file(file) {
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+            removed => removed,
+        };
+    }
+    if let Some(directory) = file.parent() {
+        fs::create_dir_all(directory)?;
+    }
+    fs::write(file, b"")
 }
 
 impl Shared {
@@ -55,6 +80,18 @@ impl Shared {
         self.deadline_changed.notify_all();
         result
     }
+
+    fn set_do_not_disturb(&self, enabled: bool) {
+        self.update(|center| center.set_do_not_disturb(enabled));
+        if let Some(file) = &self.do_not_disturb_file
+            && let Err(error) = remember_do_not_disturb(file, enabled)
+        {
+            eprintln!(
+                "unbound-notify: cannot remember Do Not Disturb in {}: {error}",
+                file.display()
+            );
+        }
+    }
 }
 
 pub struct NotificationServer {
@@ -64,21 +101,39 @@ pub struct NotificationServer {
 
 impl NotificationServer {
     pub fn start(connection: &Connection) -> zbus::Result<Self> {
-        Self::start_presenting(connection, |_| {})
+        Self::launch(connection, Box::new(|_| {}), None)
+    }
+
+    pub fn start_remembering(
+        connection: &Connection,
+        do_not_disturb_file: PathBuf,
+    ) -> zbus::Result<Self> {
+        Self::launch(connection, Box::new(|_| {}), Some(do_not_disturb_file))
     }
 
     pub fn start_presenting(
         connection: &Connection,
         presenter: impl FnMut(&Presentation) + Send + 'static,
     ) -> zbus::Result<Self> {
+        Self::launch(connection, Box::new(presenter), None)
+    }
+
+    fn launch(
+        connection: &Connection,
+        presenter: Presenter,
+        do_not_disturb_file: Option<PathBuf>,
+    ) -> zbus::Result<Self> {
+        let mut center = Center::default();
+        center.set_do_not_disturb(do_not_disturb_file.as_deref().is_some_and(Path::exists));
         let shared = Arc::new(Shared {
             state: Mutex::new(State {
-                center: Center::default(),
+                center,
                 presented: Presentation::default(),
-                presenter: Box::new(presenter),
+                presenter,
                 stopped: false,
             }),
             deadline_changed: Condvar::new(),
+            do_not_disturb_file,
         });
         connection.object_server().at(
             OBJECT_PATH,
@@ -135,8 +190,7 @@ impl NotificationServer {
     }
 
     pub fn set_do_not_disturb(&self, enabled: bool) -> zbus::Result<()> {
-        self.shared
-            .update(|center| center.set_do_not_disturb(enabled));
+        self.shared.set_do_not_disturb(enabled);
         let interface = self
             .connection
             .object_server()
@@ -311,7 +365,6 @@ impl NotificationCenter {
 
     #[zbus(property)]
     fn set_do_not_disturb(&mut self, enabled: bool) {
-        self.shared
-            .update(|center| center.set_do_not_disturb(enabled));
+        self.shared.set_do_not_disturb(enabled);
     }
 }

@@ -3351,6 +3351,7 @@ dependencies = [
 name = "unbound-notify"
 version = "0.1.0"
 dependencies = [
+ "tempfile",
  "unbound-test-bus",
  "zbus",
 ]

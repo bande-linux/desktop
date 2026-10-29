@@ -1,11 +1,17 @@
+use std::path::PathBuf;
 use std::process::ExitCode;
 
-use unbound_notify::NotificationServer;
+use unbound_notify::{NotificationServer, do_not_disturb_path};
 use zbus::blocking::Connection;
 
 fn main() -> ExitCode {
-    let server =
-        Connection::session().and_then(|connection| NotificationServer::start(&connection));
+    let state_home = std::env::var_os("XDG_STATE_HOME").map(PathBuf::from);
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let remembered = do_not_disturb_path(state_home.as_deref(), home.as_deref());
+    let server = Connection::session().and_then(|connection| match remembered {
+        Some(file) => NotificationServer::start_remembering(&connection, file),
+        None => NotificationServer::start(&connection),
+    });
     match server {
         Ok(_server) => loop {
             std::thread::park();

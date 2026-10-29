@@ -1,6 +1,9 @@
 use std::time::{Duration, Instant};
 
-use unbound_notify::{BANNER_DURATION, Center, Invoked, Notification, Stack, Timeout, Urgency};
+use unbound_notify::{
+    BANNER_DURATION, BANNER_LINGER, Center, HiddenBanner, Invoked, Notification, Stack, Timeout,
+    Urgency,
+};
 
 const MOMENT: Duration = Duration::from_millis(1);
 
@@ -330,4 +333,88 @@ fn the_next_deadline_is_the_earliest_banner_end_or_expiry() {
     center.post(from("Timer", "Tea"), Timeout::After(soon), start);
 
     assert_eq!(center.next_deadline(), Some(start + soon));
+}
+
+#[test]
+fn a_hovered_banner_stays_until_the_pointer_leaves_and_then_lingers() {
+    let start = Instant::now();
+    let mut center = Center::default();
+    center.post(from("Mail", "New message"), Timeout::ServerDefault, start);
+
+    center.hold_banners(true, start + Duration::from_secs(1));
+    assert_eq!(center.next_deadline(), None);
+    let long_after = start + BANNER_DURATION * 4;
+    assert!(center.advance(long_after).is_empty());
+    assert_eq!(center.presentation().banners.len(), 1);
+
+    center.hold_banners(false, long_after);
+    assert_eq!(center.next_deadline(), Some(long_after + BANNER_LINGER));
+    center.advance(long_after + BANNER_LINGER);
+    assert!(center.presentation().banners.is_empty());
+    assert_eq!(center.presentation().center.len(), 1);
+}
+
+#[test]
+fn a_hovered_transient_banner_is_not_expired_under_the_pointer() {
+    let start = Instant::now();
+    let mut center = Center::default();
+    let volume = Notification {
+        transient: true,
+        ..from("Sound", "Volume 40%")
+    };
+    let id = center.post(volume, Timeout::ServerDefault, start);
+
+    center.hold_banners(true, start);
+    assert!(center.advance(start + BANNER_DURATION * 2).is_empty());
+    center.hold_banners(false, start + BANNER_DURATION * 2);
+    assert_eq!(
+        center.advance(start + BANNER_DURATION * 2 + BANNER_LINGER),
+        [id]
+    );
+}
+
+#[test]
+fn swiping_a_banner_away_keeps_the_notification_in_the_center_unless_it_is_transient() {
+    let start = Instant::now();
+    let mut center = Center::default();
+    let alarm = Notification {
+        urgency: Urgency::Critical,
+        ..from("Power", "Battery low")
+    };
+    let alarm = center.post(alarm, Timeout::ServerDefault, start);
+    let volume = Notification {
+        transient: true,
+        ..from("Sound", "Volume 40%")
+    };
+    let volume = center.post(volume, Timeout::ServerDefault, start);
+
+    assert_eq!(
+        center.hide_banner(alarm),
+        Some(HiddenBanner { closed: false })
+    );
+    assert_eq!(center.hide_banner(alarm), None);
+    assert_eq!(
+        center.hide_banner(volume),
+        Some(HiddenBanner { closed: true })
+    );
+    let presentation = center.presentation();
+    assert!(presentation.banners.is_empty());
+    assert_eq!(
+        summaries(&presentation.center),
+        [group("Power", &["Battery low"])]
+    );
+    assert!(center.get(volume).is_none());
+}
+
+#[test]
+fn clear_all_empties_the_center() {
+    let start = Instant::now();
+    let mut center = Center::default();
+    let mail = center.post(from("Mail", "a"), Timeout::ServerDefault, start);
+    let chat = center.post(from("Chat", "b"), Timeout::ServerDefault, start);
+
+    let mut cleared = center.clear_all();
+    cleared.sort_unstable();
+    assert_eq!(cleared, [mail, chat]);
+    assert!(center.presentation().center.is_empty());
 }

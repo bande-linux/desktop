@@ -68,6 +68,7 @@ unbound-dock = { path = "crates/shell/dock" }
 unbound-files = { path = "crates/apps/files" }
 unbound-graphics = { path = "crates/toolkit/graphics" }
 unbound-greeter = { path = "crates/shell/greeter" }
+unbound-inbox = { path = "crates/libs/inbox" }
 unbound-l10n = { path = "crates/libs/l10n" }
 unbound-launcher = { path = "crates/shell/launcher" }
 unbound-lock = { path = "crates/shell/lock" }

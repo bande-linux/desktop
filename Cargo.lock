@@ -3631,6 +3631,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "unbound-inbox"
+version = "0.1.0"
+dependencies = [
+ "rustix 1.1.6",
+]
+
+[[package]]
 name = "unbound-l10n"
 version = "0.1.0"
 dependencies = [

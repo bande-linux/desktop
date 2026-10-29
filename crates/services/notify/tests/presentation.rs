@@ -2,8 +2,10 @@
 
 use std::collections::HashMap;
 use std::sync::mpsc::{self, Receiver};
+use std::thread;
 use std::time::Duration;
 
+use unbound_notify::client::NotificationCenter;
 use unbound_notify::{NotificationServer, Presentation, Urgency};
 use unbound_test_bus::SessionBus;
 use zbus::blocking::Connection;
@@ -39,26 +41,34 @@ struct Fixture {
     _server: NotificationServer,
     connection: Connection,
     client: NotificationsProxyBlocking<'static>,
+    center: NotificationCenter<'static>,
     presented: Receiver<Presentation>,
 }
 
 fn start() -> Fixture {
     let bus = SessionBus::start().expect("dbus-daemon");
-    let (sender, presented) = mpsc::channel();
-    let server = NotificationServer::start_presenting(
-        &bus.connect().expect("server connection"),
-        move |presentation| {
-            let _ = sender.send(presentation.clone());
-        },
-    )
-    .expect("notification server");
+    let server = NotificationServer::start(&bus.connect().expect("server connection"))
+        .expect("notification server");
     let connection = bus.connect().expect("client connection");
     let client = NotificationsProxyBlocking::new(&connection).expect("proxy");
+    let center = NotificationCenter::new(&connection).expect("center proxy");
+    let changes = center
+        .receive_presentation_changed()
+        .expect("subscribe to the presentation");
+    let (sender, presented) = mpsc::channel();
+    thread::spawn(move || {
+        for change in changes {
+            if let Ok(arguments) = change.args() {
+                let _ = sender.send(Presentation::from_wire(arguments.presentation));
+            }
+        }
+    });
     Fixture {
         _bus: bus,
         _server: server,
         connection,
         client,
+        center,
         presented,
     }
 }
@@ -133,6 +143,41 @@ fn do_not_disturb_is_a_writable_property() {
     let presentation = fixture.next();
     assert!(presentation.banners.is_empty());
     assert_eq!(presentation.center.len(), 1);
+}
+
+#[test]
+fn the_screen_can_fetch_what_to_show_and_swipe_a_banner_into_the_center() {
+    let fixture = start();
+    let id = fixture.notify("New message", HashMap::new());
+    fixture.next();
+
+    let shown = Presentation::from_wire(fixture.center.get_presentation().expect("fetch"));
+    assert_eq!(shown.banners[0].notifications[0].id, id);
+
+    fixture.center.hide_banner(id).expect("HideBanner");
+    let presentation = fixture.next();
+    assert!(presentation.banners.is_empty());
+    assert_eq!(presentation.center[0].notifications[0].id, id);
+
+    fixture.center.clear_all().expect("ClearAll");
+    assert!(fixture.next().center.is_empty());
+}
+
+#[test]
+fn clicking_a_notification_without_a_default_action_removes_it() {
+    let fixture = start();
+    let id = fixture.notify("Download finished", HashMap::new());
+    fixture.next();
+
+    assert!(
+        !fixture
+            .center
+            .activate(id, "default", "token")
+            .expect("Activate")
+    );
+    let presentation = fixture.next();
+    assert!(presentation.banners.is_empty());
+    assert!(presentation.center.is_empty());
 }
 
 fn center_properties_on(connection: &Connection) -> PropertiesProxy<'static> {

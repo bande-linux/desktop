@@ -9,21 +9,27 @@ use std::time::Instant;
 
 use accesskit::TreeUpdate;
 use unbound_config::{Config, DockEdge, config_path};
+use unbound_dock::autostart::{autostart_dir, opens_at_login, set_open_at_login};
 use unbound_dock::bus::{self, BusEvent};
 use unbound_dock::{
-    DockAction, DockApp, DockState, ICON_SIZE, Shared, dock_ui, exclusive_zone, scene, surface_size,
+    DockAction, DockApp, DockState, ICON_SIZE, L10N, MenuTarget, Shared, dock_ui, exclusive_zone,
+    scene, surface_size,
 };
 use unbound_fs::{FolderWatch, Trash};
-use unbound_toolkit::ui::Ui;
+use unbound_toolkit::ui::{Menu, MenuItem, Ui};
 use unbound_toolkit::{
-    App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Rect, Role, Scene, TextSystem,
-    Window, WindowError, WindowEvent,
+    App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement, Point, Rect, Role,
+    Scene, TextSystem, Window, WindowError, WindowEvent,
 };
 use unbound_xdg::{DesktopEntry, Locale, applications, current_desktops, data_dirs, find_icon};
 
 const FILES: &str = "org.unbound.Files";
 const TRASH_URI: &str = "trash:///";
 const ICON_THEMES: &[&str] = &["Adwaita"];
+const MENU_OPEN: &str = "open";
+const MENU_KEEP: &str = "keep";
+const MENU_LOGIN: &str = "login";
+const MENU_SHOW: &str = "show";
 
 struct TrashWatch {
     trash: Trash,
@@ -64,6 +70,8 @@ struct Dock {
     icon_scale: f64,
     reported: HashMap<String, Rect>,
     input: Option<Rect>,
+    menu: Option<MenuTarget>,
+    autostart: Option<PathBuf>,
     bus: Receiver<BusEvent>,
     wake: UnixStream,
     trash: Option<TrashWatch>,
@@ -149,7 +157,9 @@ impl Dock {
         for action in actions {
             match action {
                 DockAction::Open(app_id) => self.open(window, &app_id),
-                DockAction::OpenTrash => self.open_trash(window),
+                DockAction::OpenTrash => self.open_in_files(window, TRASH_URI),
+                DockAction::ShowInFiles(app_id) => self.show_in_files(window, &app_id),
+                DockAction::Menu { target, at } => self.show_menu(window, target, at),
             }
         }
         window.request_redraw();
@@ -175,13 +185,82 @@ impl Dock {
         }
     }
 
-    fn open_trash(&mut self, window: &mut Window) {
+    fn show_in_files(&mut self, window: &mut Window, app_id: &str) {
+        let Some(folder) = self
+            .entry(app_id)
+            .and_then(|entry| entry.path.parent())
+            .map(|folder| folder.to_string_lossy().into_owned())
+        else {
+            return;
+        };
+        self.open_in_files(window, &folder);
+    }
+
+    fn opens_at_login(&self, app_id: &str) -> bool {
+        match (&self.autostart, self.entry(app_id)) {
+            (Some(dir), Some(entry)) => opens_at_login(dir, &entry.id),
+            _ => false,
+        }
+    }
+
+    fn show_menu(&mut self, window: &mut Window, target: MenuTarget, at: Point) {
+        let items = match &target {
+            MenuTarget::Trash => vec![MenuItem::new(&L10N.tr("menu-open"), MENU_OPEN)],
+            MenuTarget::App(app_id) => {
+                let installed = self.entry(app_id).is_some();
+                let running = self.running.iter().any(|running| running == app_id);
+                let mut items = Vec::new();
+                if !running {
+                    items.push(MenuItem::new(&L10N.tr("menu-open"), MENU_OPEN).enabled(installed));
+                    items.push(MenuItem::separator());
+                }
+                items.push(
+                    MenuItem::new(&L10N.tr("menu-keep"), MENU_KEEP)
+                        .checked(self.kept.contains(app_id))
+                        .enabled(false),
+                );
+                items.push(
+                    MenuItem::new(&L10N.tr("menu-login"), MENU_LOGIN)
+                        .checked(self.opens_at_login(app_id))
+                        .enabled(installed && self.autostart.is_some()),
+                );
+                items.push(MenuItem::new(&L10N.tr("menu-show"), MENU_SHOW).enabled(installed));
+                items
+            }
+        };
+        match window.show_menu(Menu::new(items), MenuPlacement::AtPoint(at)) {
+            Ok(()) => self.menu = Some(target),
+            Err(error) => tracing::warn!("cannot show the Dock menu: {error}"),
+        }
+    }
+
+    fn menu_action(&mut self, window: &mut Window, action: &str) {
+        let Some(target) = self.menu.take() else {
+            return;
+        };
+        match (target, action) {
+            (MenuTarget::Trash, MENU_OPEN) => self.open_in_files(window, TRASH_URI),
+            (MenuTarget::App(app_id), MENU_OPEN) => self.open(window, &app_id),
+            (MenuTarget::App(app_id), MENU_SHOW) => self.show_in_files(window, &app_id),
+            (MenuTarget::App(app_id), MENU_LOGIN) => {
+                let open = !self.opens_at_login(&app_id);
+                if let (Some(dir), Some(entry)) = (&self.autostart, self.entry(&app_id))
+                    && let Err(error) = set_open_at_login(dir, &entry.id, &entry.path, open)
+                {
+                    tracing::warn!("cannot change whether {app_id} opens at login: {error}");
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn open_in_files(&mut self, window: &mut Window, location: &str) {
         let Some(entry) = self.entry(FILES).cloned() else {
-            tracing::warn!("cannot open the Trash: Files is not installed");
+            tracing::warn!("cannot open {location}: Files is not installed");
             return;
         };
         let command = entry.command().map(|mut command| {
-            command.push(TRASH_URI.to_owned());
+            command.push(location.to_owned());
             command
         });
         let token = window.activation_token(FILES).ok();
@@ -196,7 +275,7 @@ impl Dock {
                 .map_err(|error| error.to_string())
             });
         if let Err(error) = started {
-            tracing::warn!("cannot open the Trash: {error}");
+            tracing::warn!("cannot open {location}: {error}");
         }
     }
 
@@ -289,6 +368,11 @@ impl App for Dock {
                 self.sync();
                 window.request_redraw();
             }
+            WindowEvent::MenuAction(action) => {
+                self.menu_action(window, &action);
+                window.request_redraw();
+            }
+            WindowEvent::MenuClosed => self.menu = None,
             WindowEvent::ActiveApp(app_id) => {
                 self.state.borrow_mut().activated(&app_id);
                 window.request_redraw();
@@ -357,17 +441,20 @@ fn anchor(edge: DockEdge) -> Edges {
     }
 }
 
-fn read_config() -> Config {
-    let home = std::env::var_os("HOME").map(PathBuf::from);
-    let config_home = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from);
-    config_path(config_home.as_deref(), home.as_deref())
-        .and_then(|path| std::fs::read_to_string(path).ok())
-        .and_then(|source| Config::parse(&source).ok())
-        .unwrap_or_default()
+fn read_config(config_home: Option<&PathBuf>, home: Option<&PathBuf>) -> Config {
+    config_path(
+        config_home.map(PathBuf::as_path),
+        home.map(PathBuf::as_path),
+    )
+    .and_then(|path| std::fs::read_to_string(path).ok())
+    .and_then(|source| Config::parse(&source).ok())
+    .unwrap_or_default()
 }
 
 fn run() -> Result<(), WindowError> {
-    let config = read_config();
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let config_home = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from);
+    let config = read_config(config_home.as_ref(), home.as_ref());
     let edge = config.dock_edge;
     let icon_size = ICON_SIZE;
     let mut window = Window::open(
@@ -400,6 +487,8 @@ fn run() -> Result<(), WindowError> {
         icon_scale: window.scale(),
         reported: HashMap::new(),
         input: None,
+        menu: None,
+        autostart: autostart_dir(config_home.as_deref(), home.as_deref()),
         bus,
         wake,
         trash: TrashWatch::start(),

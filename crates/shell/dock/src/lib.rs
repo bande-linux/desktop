@@ -8,7 +8,9 @@ use std::time::{Duration, Instant};
 use accesskit::{Action, ActionRequest, Node, Role};
 use unbound_config::DockEdge;
 use unbound_l10n::Localizer;
-use unbound_toolkit::ui::{Animated, Context, Event, Size, Spring, Ui, Widget, WidgetId};
+use unbound_toolkit::ui::{
+    Animated, Context, Event, PointerButton, Size, Spring, Ui, Widget, WidgetId,
+};
 use unbound_toolkit::{
     Appearance, Color, Image, Item, Paint, Palette, Paragraph, Point, Rect, Scene, Scheme, Shape,
     Stop, TextAlign, TextStyle, TextSystem,
@@ -16,6 +18,7 @@ use unbound_toolkit::{
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-dock.ftl");
 
+pub mod autostart;
 pub mod bus;
 
 pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
@@ -40,6 +43,8 @@ const ATTENTION_PERIOD: f32 = 0.6;
 const BADGE_HEIGHT: f32 = 18.0;
 const BADGE_TEXT: f32 = 11.0;
 const PROGRESS_HEIGHT: f32 = 4.0;
+const HOLD_FOR_MENU: Duration = Duration::from_millis(500);
+const MENU_GAP: f32 = 6.0;
 
 #[derive(Debug, Clone)]
 pub struct DockApp {
@@ -88,9 +93,17 @@ impl LauncherEntry {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MenuTarget {
+    App(String),
+    Trash,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum DockAction {
     Open(String),
     OpenTrash,
+    ShowInFiles(String),
+    Menu { target: MenuTarget, at: Point },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -179,6 +192,7 @@ pub struct DockState {
     launcher: HashMap<String, LauncherEntry>,
     label: Label,
     actions: Vec<DockAction>,
+    hold: Option<(Key, Instant)>,
     surface: Size,
     panel: Rect,
     populated: bool,
@@ -249,6 +263,7 @@ impl DockState {
                 text: None,
             },
             actions: Vec::new(),
+            hold: None,
             surface: Size::default(),
             panel: Rect::default(),
             populated: false,
@@ -457,10 +472,23 @@ impl DockState {
             .values()
             .map(|since| *since + LAUNCH_TIMEOUT)
             .min();
-        [label, launch].into_iter().flatten().min()
+        let hold = self.hold.as_ref().map(|(_, since)| *since + HOLD_FOR_MENU);
+        [label, launch, hold].into_iter().flatten().min()
     }
 
     pub fn tick(&mut self, now: Instant) {
+        if let Some((key, since)) = self.hold.clone()
+            && now >= since + HOLD_FOR_MENU
+        {
+            self.hold = None;
+            let reduce_motion = self.reduce_motion;
+            if let Some(slot) = self.slot_mut(&key) {
+                slot.pressed = false;
+                slot.press
+                    .animate_at(now, reduce_motion, 1.0, Spring::QUICK);
+            }
+            self.open_menu(&key);
+        }
         if let Some((key, since)) = self.label.pending.clone()
             && now >= since + LABEL_DELAY
         {
@@ -658,6 +686,38 @@ impl DockState {
                 .and_then(|slot| slot.app.as_ref())
                 .map_or_else(|| app_id.clone(), |app| app.name.clone()),
             _ => L10N.tr("trash"),
+        }
+    }
+
+    fn menu_point(&self, key: &Key) -> Option<Point> {
+        let slot = self.slots.iter().find(|slot| &slot.key == key)?;
+        let icon = self.icon_rect(slot.cell);
+        let panel = self.panel;
+        Some(match self.edge {
+            DockEdge::Left => Point::new(panel.x + panel.width + MENU_GAP, icon.y),
+            DockEdge::Right => Point::new(panel.x - MENU_GAP, icon.y),
+            DockEdge::Top => Point::new(icon.x, panel.y + panel.height + MENU_GAP),
+            DockEdge::Bottom => Point::new(icon.x, panel.y - MENU_GAP),
+        })
+    }
+
+    fn open_menu(&mut self, key: &Key) {
+        let target = match key {
+            Key::App(app_id) => MenuTarget::App(app_id.clone()),
+            Key::Trash => MenuTarget::Trash,
+            Key::RunningSeparator | Key::TrashSeparator => return,
+        };
+        let Some(at) = self.menu_point(key) else {
+            return;
+        };
+        self.label.pending = None;
+        self.label.opacity.jump_to(0.0);
+        self.actions.push(DockAction::Menu { target, at });
+    }
+
+    fn show_in_files(&mut self, key: &Key) {
+        if let Key::App(app_id) = key {
+            self.actions.push(DockAction::ShowInFiles(app_id.clone()));
         }
     }
 
@@ -1161,6 +1221,7 @@ impl Widget for Tile {
             node.set_description(details.join(", "));
         }
         node.add_action(Action::Click);
+        node.add_action(Action::ShowContextMenu);
         node
     }
 
@@ -1174,20 +1235,38 @@ impl Widget for Tile {
                 if self.pressed() {
                     self.press(cx, false, false);
                 }
-                self.state.borrow_mut().hover_leave(&self.key, now);
+                let mut state = self.state.borrow_mut();
+                state.hold = None;
+                state.hover_leave(&self.key, now);
+            }
+            Event::PointerDown(pointer)
+                if pointer.button == PointerButton::Secondary
+                    || (pointer.is_primary() && pointer.modifiers.control) =>
+            {
+                self.state.borrow_mut().open_menu(&self.key);
             }
             Event::PointerDown(pointer) if pointer.is_primary() => {
                 self.press(cx, true, true);
-                self.state.borrow_mut().hide_label(now);
+                let mut state = self.state.borrow_mut();
+                state.hide_label(now);
+                state.hold = Some((self.key.clone(), now));
             }
             Event::PointerMove(pointer) if self.pressed() => {
-                self.press(cx, true, contains(self.frame, pointer.position));
+                let inside = contains(self.frame, pointer.position);
+                if !inside {
+                    self.state.borrow_mut().hold = None;
+                }
+                self.press(cx, true, inside);
             }
             Event::PointerUp(pointer) if pointer.is_primary() => {
                 let inside = self.pressed() && contains(self.frame, pointer.position);
                 self.press(cx, false, false);
-                if inside {
-                    self.state.borrow_mut().activate(&self.key);
+                let mut state = self.state.borrow_mut();
+                state.hold = None;
+                if inside && pointer.modifiers.logo {
+                    state.show_in_files(&self.key);
+                } else if inside {
+                    state.activate(&self.key);
                 }
             }
             _ => return false,
@@ -1196,10 +1275,11 @@ impl Widget for Tile {
     }
 
     fn perform(&mut self, _cx: &mut Context, request: &ActionRequest) -> bool {
-        if request.action != Action::Click {
-            return false;
+        match request.action {
+            Action::Click => self.state.borrow_mut().activate(&self.key),
+            Action::ShowContextMenu => self.state.borrow_mut().open_menu(&self.key),
+            _ => return false,
         }
-        self.state.borrow_mut().activate(&self.key);
         true
     }
 }

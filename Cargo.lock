@@ -3616,6 +3616,7 @@ dependencies = [
  "accesskit",
  "image",
  "image-compare",
+ "tempfile",
  "tracing",
  "unbound-config",
  "unbound-fs",

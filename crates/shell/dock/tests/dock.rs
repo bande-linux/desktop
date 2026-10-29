@@ -8,11 +8,13 @@ use std::time::{Duration, Instant};
 
 use accesskit::Role;
 use unbound_config::DockEdge;
+use unbound_dock::autostart::{autostart_dir, opens_at_login, set_open_at_login};
 use unbound_dock::bus::{app_id_from_uri, launcher_update};
 use unbound_dock::{
-    DockAction, DockApp, DockState, ICON_SIZE, LauncherUpdate, Shared, dock_ui, scene, surface_size,
+    DockAction, DockApp, DockState, ICON_SIZE, LauncherUpdate, MenuTarget, Shared, dock_ui, scene,
+    surface_size,
 };
-use unbound_toolkit::ui::{Event, Pointer, Ui};
+use unbound_toolkit::ui::{Event, Pointer, PointerButton, Ui};
 use unbound_toolkit::{Appearance, CpuRenderer, Image, Palette, Point, Rect, Scheme, TextSystem};
 use zbus::zvariant::{OwnedValue, Value};
 
@@ -344,4 +346,49 @@ fn badges_follow_launcher_entry_updates_as_kde_reads_them() {
     );
     harness.state.borrow_mut().activated("org.example.Editor");
     assert_eq!(harness.buttons()[1].1, "running, 25 % done");
+}
+
+#[test]
+fn right_click_or_holding_an_icon_opens_its_menu_beside_the_dock_without_opening_the_app() {
+    let mut harness = Harness::new(DockEdge::Left, Scheme::Light);
+    let editor = harness.center("org.example.Editor");
+    let panel = harness.state.borrow().panel();
+    let icon = harness.rect("org.example.Editor");
+
+    harness.ui.handle(&Event::PointerDown(
+        Pointer::at(editor).with_button(PointerButton::Secondary),
+    ));
+    harness.ui.handle(&Event::PointerUp(
+        Pointer::at(editor).with_button(PointerButton::Secondary),
+    ));
+    harness.ui.handle(&Event::PointerDown(Pointer::at(editor)));
+    harness.advance(Duration::from_millis(600));
+    harness.ui.handle(&Event::PointerUp(Pointer::at(editor)));
+
+    let menu = DockAction::Menu {
+        target: MenuTarget::App("org.example.Editor".to_owned()),
+        at: Point::new(panel.x + panel.width + 6.0, icon.y),
+    };
+    assert_eq!(
+        harness.state.borrow_mut().take_actions(),
+        [menu.clone(), menu]
+    );
+}
+
+#[test]
+fn open_at_login_copies_the_desktop_entry_into_autostart_and_removes_it_again() {
+    let home = tempfile::tempdir().expect("home");
+    let dir = autostart_dir(None, Some(home.path())).expect("autostart folder");
+    let entry = home.path().join("org.example.Editor.desktop");
+    std::fs::write(&entry, "[Desktop Entry]\nName=Editor\nExec=editor\n").expect("entry");
+    let id = "org.example.Editor.desktop";
+
+    assert!(!opens_at_login(&dir, id));
+    set_open_at_login(&dir, id, &entry, true).expect("open at login");
+    assert!(opens_at_login(&dir, id));
+    std::fs::write(dir.join(id), "[Desktop Entry]\nHidden=true\n").expect("hidden");
+    assert!(!opens_at_login(&dir, id));
+    set_open_at_login(&dir, id, &entry, false).expect("stop opening at login");
+    assert!(!dir.join(id).exists());
+    set_open_at_login(&dir, id, &entry, false).expect("already off");
 }

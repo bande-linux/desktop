@@ -19,6 +19,7 @@ zbus.workspace = true
 [dev-dependencies]
 image.workspace = true
 image-compare.workspace = true
+tempfile.workspace = true
 
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"

@@ -4,6 +4,10 @@ use unbound_graphics::{
     TextSystem,
 };
 
+use std::time::Instant;
+
+use unbound_widgets::{Animated, Spring};
+
 use crate::L10N;
 use crate::window::ResizeEdge;
 
@@ -168,7 +172,9 @@ pub(crate) struct Chrome {
     pub(crate) title: String,
     text: Option<TextSystem>,
     title_paragraph: Option<(String, Color, Paragraph)>,
-    pub(crate) hovered_group: bool,
+    hovered_group: bool,
+    glyphs: Animated,
+    pub(crate) animating: bool,
     pub(crate) pressed: Option<Control>,
     pub(crate) pressed_inside: bool,
     pub(crate) pointer_in_content: bool,
@@ -211,7 +217,13 @@ impl Chrome {
         tree
     }
 
-    pub(crate) fn hover(&mut self, frame: &Frame, point: Option<Point>) -> bool {
+    pub(crate) fn hover(
+        &mut self,
+        frame: &Frame,
+        point: Option<Point>,
+        now: Instant,
+        reduce_motion: bool,
+    ) -> bool {
         let group = point.is_some_and(|point| {
             contains(
                 controls_group(frame.title),
@@ -220,6 +232,9 @@ impl Chrome {
         });
         let changed = group != self.hovered_group;
         self.hovered_group = group;
+        let shown = if group { 1.0 } else { 0.0 };
+        self.glyphs
+            .animate_at(now, reduce_motion, shown, Spring::FADE);
         changed
     }
 
@@ -248,6 +263,7 @@ impl Chrome {
         palette: &Palette,
         scheme: Scheme,
         active: bool,
+        now: Instant,
     ) -> Scene {
         let mut items = vec![
             Item::Fill {
@@ -265,7 +281,7 @@ impl Chrome {
             },
         ];
         if frame.title > 0.0 {
-            self.title_bar(frame, palette, scheme, active, &mut items);
+            self.title_bar(frame, palette, scheme, active, now, &mut items);
         }
         Scene {
             width: (frame.width + 2.0 * frame.margin) as u32,
@@ -284,6 +300,7 @@ impl Chrome {
         palette: &Palette,
         scheme: Scheme,
         active: bool,
+        now: Instant,
         items: &mut Vec<Item>,
     ) {
         let bar = Rect::new(0.0, 0.0, frame.width, frame.title);
@@ -315,9 +332,11 @@ impl Chrome {
                 paragraph,
             }],
         });
-        let lit = active || self.hovered_group;
+        let (shown, moving) = self.glyphs.value_at(now);
+        self.animating = moving;
+        let lit = if active { 1.0 } else { shown };
         for control in CONTROLS {
-            self.control(control, frame.title, scheme, lit, items);
+            self.control(control, frame.title, scheme, lit, shown, items);
         }
     }
 
@@ -326,7 +345,8 @@ impl Chrome {
         control: Control,
         title: f32,
         scheme: Scheme,
-        lit: bool,
+        lit: f32,
+        shown: f32,
         items: &mut Vec<Item>,
     ) {
         let centre = control_centre(control, title);
@@ -337,7 +357,9 @@ impl Chrome {
             CONTROL_DIAMETER,
             CONTROL_DIAMETER,
         );
-        let (fill, edge, glyph) = control_colors(control, scheme, lit);
+        let (dim_fill, dim_edge) = unlit_colors(scheme);
+        let (lit_fill, lit_edge, glyph) = control_colors(control);
+        let (fill, edge) = (dim_fill.mix(lit_fill, lit), dim_edge.mix(lit_edge, lit));
         let pressed = self.pressed == Some(control) && self.pressed_inside;
         let fill = if pressed { darker(fill) } else { fill };
         items.push(Item::Fill {
@@ -349,14 +371,14 @@ impl Chrome {
             width: 0.5,
             paint: edge.into(),
         });
-        if !(lit && self.hovered_group) {
+        if shown <= 0.0 {
             return;
         }
         let line = |from: (f32, f32), to: (f32, f32)| Item::Line {
             from: Point::new(centre.x + from.0, centre.y + from.1),
             to: Point::new(centre.x + to.0, centre.y + to.1),
             width: 1.1,
-            paint: glyph.with_alpha(200).into(),
+            paint: glyph.with_alpha((200.0 * shown).round() as u8).into(),
         };
         let arm = 2.75;
         match control {
@@ -373,21 +395,14 @@ impl Chrome {
     }
 }
 
-fn control_colors(control: Control, scheme: Scheme, lit: bool) -> (Color, Color, Color) {
-    if !lit {
-        return match scheme {
-            Scheme::Light => (
-                Color::hex(0xD9DADD),
-                Color::hex(0xC3C5CA),
-                Color::TRANSPARENT,
-            ),
-            Scheme::Dark => (
-                Color::hex(0x4A4D54),
-                Color::hex(0x5A5E66),
-                Color::TRANSPARENT,
-            ),
-        };
+fn unlit_colors(scheme: Scheme) -> (Color, Color) {
+    match scheme {
+        Scheme::Light => (Color::hex(0xD9DADD), Color::hex(0xC3C5CA)),
+        Scheme::Dark => (Color::hex(0x4A4D54), Color::hex(0x5A5E66)),
     }
+}
+
+fn control_colors(control: Control) -> (Color, Color, Color) {
     match control {
         Control::Close => (
             Color::hex(0xFF5F57),

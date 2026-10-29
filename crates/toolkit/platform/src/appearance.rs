@@ -15,6 +15,7 @@ const PORTAL_PATH: &str = "/org/freedesktop/portal/desktop";
 const SETTINGS: &str = "org.freedesktop.portal.Settings";
 const NAMESPACE: &str = "org.freedesktop.appearance";
 const PREFER_DARK: u32 = 1;
+const REDUCE: u32 = 1;
 const FIRST_READING: Duration = Duration::from_millis(500);
 
 pub(crate) struct AppearanceWatch {
@@ -99,6 +100,7 @@ fn apply(appearance: &mut Appearance, key: &str, value: OwnedValue) -> bool {
             };
         }
         "accent-color" => appearance.accent = accent(value),
+        "reduced-motion" => appearance.reduce_motion = u32::try_from(&value) == Ok(REDUCE),
         _ => {}
     }
     *appearance != before

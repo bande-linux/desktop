@@ -41,17 +41,19 @@ fn solid(color: [u8; 4], side: i32) -> ShmImage<'static> {
 fn a_linear_dmabuf_with_row_padding_is_drawn_without_it() {
     let mut server = server();
     let mut client = TestClient::connect(&mut server);
-    let stride = 2 * 4 + 8;
-    let mut padded = vec![0xffu8; stride * 2];
-    for (row, colors) in [[RED, GREEN], [BLUE, RED]].iter().enumerate() {
-        for (column, color) in colors.iter().enumerate() {
+    let side = 16usize;
+    let stride = side * 4 + 8;
+    let mut padded = vec![0xffu8; stride * side];
+    let colors = [[RED, GREEN], [BLUE, RED]];
+    for row in 0..side {
+        for column in 0..side {
             let at = row * stride + column * 4;
-            padded[at..at + 4].copy_from_slice(color);
+            padded[at..at + 4].copy_from_slice(&colors[row * 2 / side][column * 2 / side]);
         }
     }
     let image = ShmImage {
-        width: 2,
-        height: 2,
+        width: 16,
+        height: 16,
         stride: stride as i32,
         format: Format::Xrgb8888,
         bytes: &padded,
@@ -62,7 +64,7 @@ fn a_linear_dmabuf_with_row_padding_is_drawn_without_it() {
     let (_, snapshot) = render(&mut renderer, &mut server);
 
     let origin = server.windows()[0].location();
-    let drawn: Vec<[u8; 4]> = [(0, 0), (1, 0), (0, 1), (1, 1)]
+    let drawn: Vec<[u8; 4]> = [(7, 7), (8, 7), (7, 8), (8, 8)]
         .iter()
         .map(|(x, y)| pixel(&snapshot, origin.x + x, origin.y + y))
         .collect();

@@ -1,12 +1,18 @@
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::LazyLock;
 
 use accesskit::{Action, ActionRequest, Node, Role};
+use unbound_l10n::Localizer;
 use unbound_toolkit::ui::{Context, Event, Key, Size, TextField, Ui, Widget, WidgetId};
 use unbound_toolkit::{
     Color, Image, Item, Palette, Paragraph, Point, Rect, Scene, Shape, TextAlign, TextStyle,
     TextSystem,
 };
+
+const ENGLISH: &str = include_str!("../locales/en-US/unbound-launcher.ftl");
+
+pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
 pub const CARD_WIDTH: f32 = 680.0;
 pub const ICON_SIZE: u32 = 32;
@@ -369,7 +375,7 @@ impl Widget for Card {
 
     fn access(&self, _cx: &Context) -> Node {
         let mut node = Node::new(Role::Dialog);
-        node.set_label("Launcher");
+        node.set_label(L10N.tr("launcher"));
         node
     }
 
@@ -454,7 +460,7 @@ impl Launcher {
     pub fn new(apps: Vec<LauncherApp>, palette: Palette, text: TextSystem) -> Self {
         let model: Shared = Rc::new(RefCell::new(Model::new(apps)));
         let changed = model.clone();
-        let field = TextField::new("Search", "", move |query| {
+        let field = TextField::new(&L10N.tr("search"), "", move |query| {
             changed.borrow_mut().set_query(query);
         })
         .borderless(FIELD_SIZE);
@@ -532,5 +538,17 @@ impl Launcher {
         let mut scene = self.ui.scene(width, height);
         scene.background = Color::TRANSPARENT;
         scene
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn every_message_id_used_in_code_is_in_the_english_file() {
+        let sources = [include_str!("lib.rs"), include_str!("main.rs")];
+        assert_eq!(
+            unbound_l10n::missing_ids(super::ENGLISH, &sources),
+            Vec::<&str>::new()
+        );
     }
 }

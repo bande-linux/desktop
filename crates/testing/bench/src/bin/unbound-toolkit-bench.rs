@@ -50,11 +50,12 @@ struct Start {
 }
 
 fn main() -> ExitCode {
+    unbound_log::init("unbound-toolkit-bench");
     match run() {
         Ok(true) => ExitCode::SUCCESS,
         Ok(false) => ExitCode::FAILURE,
         Err(error) => {
-            eprintln!("unbound-toolkit-bench: {error}");
+            tracing::error!("{error}");
             ExitCode::FAILURE
         }
     }

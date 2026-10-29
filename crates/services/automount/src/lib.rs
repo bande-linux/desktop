@@ -1,13 +1,19 @@
 use std::collections::HashMap;
+use std::sync::LazyLock;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 
+use unbound_l10n::Localizer;
 use unbound_notify::Urgency;
 use unbound_notify::client::{self, Request};
 use zbus::blocking::fdo::ObjectManagerProxy;
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::zvariant::{OwnedObjectPath, OwnedValue};
 use zbus::{MatchRule, message};
+
+const ENGLISH: &str = include_str!("../locales/en-US/unbound-automount.ftl");
+
+pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
 pub const UDISKS: &str = "org.freedesktop.UDisks2";
 pub const UDISKS_PATH: &str = "/org/freedesktop/UDisks2";
@@ -47,7 +53,7 @@ impl Volume {
         .into_iter()
         .flatten()
         .find(|label| !label.is_empty())
-        .unwrap_or_else(|| "Untitled".to_owned());
+        .unwrap_or_else(|| L10N.tr("untitled"));
         Some(Self {
             label,
             automount: flag("HintAuto") && !flag("HintIgnore") && !flag("HintSystem"),
@@ -183,7 +189,7 @@ impl Automounter {
                 self.system
                     .call_method(Some(UDISKS), &path, Some(FILESYSTEM), "Mount", &(options,))
             {
-                eprintln!("unbound-automount: cannot mount {path}: {error}");
+                tracing::warn!("cannot mount {path}: {error}");
             }
         }
     }
@@ -211,24 +217,38 @@ impl Automounter {
         if !volume.mounted {
             return;
         }
-        let body = format!(
-            "Eject \u{201c}{}\u{201d} before disconnecting it, or files on it may be damaged.",
-            volume.label
+        let body = L10N.tr_args(
+            "not-ejected-body",
+            [("label", volume.label.as_str().into())],
         );
+        let app_name = L10N.tr("app-name");
+        let summary = L10N.tr("not-ejected");
         let posted = client::notify(
             &self.session,
             &Request {
-                app_name: "Disks",
+                app_name: &app_name,
                 replaces_id: 0,
                 app_icon: "drive-removable-media",
-                summary: "Disk Not Ejected Properly",
+                summary: &summary,
                 body: &body,
                 actions: &[],
                 urgency: Urgency::Normal,
             },
         );
         if let Err(error) = posted {
-            eprintln!("unbound-automount: cannot post the notification: {error}");
+            tracing::warn!("cannot post the notification: {error}");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn every_message_id_used_in_code_is_in_the_english_file() {
+        let sources = [include_str!("lib.rs"), include_str!("main.rs")];
+        assert_eq!(
+            unbound_l10n::missing_ids(super::ENGLISH, &sources),
+            Vec::<&str>::new()
+        );
     }
 }

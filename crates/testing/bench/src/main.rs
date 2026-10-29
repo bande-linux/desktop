@@ -47,11 +47,12 @@ struct Options {
 }
 
 fn main() -> ExitCode {
+    unbound_log::init("unbound-bench");
     match run() {
         Ok(true) => ExitCode::SUCCESS,
         Ok(false) => ExitCode::FAILURE,
         Err(error) => {
-            eprintln!("unbound-bench: {error}");
+            tracing::error!("{error}");
             ExitCode::FAILURE
         }
     }
@@ -60,10 +61,7 @@ fn main() -> ExitCode {
 fn run() -> Result<bool, Box<dyn Error>> {
     let options = options()?;
     let info = Renderer::new()?.device_info().clone();
-    eprintln!(
-        "unbound-bench: rendering on {} ({})",
-        info.name, info.driver
-    );
+    tracing::info!("rendering on {} ({})", info.name, info.driver);
 
     let (typical, typical_work) = frame_times(Repaint::OneWindowCorner)?;
     let (full, _) = frame_times(Repaint::EveryWindow)?;

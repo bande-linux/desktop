@@ -1,13 +1,19 @@
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::LazyLock;
 
 use accesskit::{Action, ActionRequest, Node, Role};
 use unbound_config::DockEdge;
+use unbound_l10n::Localizer;
 use unbound_toolkit::ui::{Context, Event, Size, Ui, Widget, WidgetId};
 use unbound_toolkit::{
     Color, Image, Item, Paint, Palette, Paragraph, Point, Rect, Scene, Shape, Stop, TextAlign,
     TextStyle, TextSystem,
 };
+
+const ENGLISH: &str = include_str!("../locales/en-US/unbound-dock.ftl");
+
+pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
 pub const THICKNESS: u32 = 64;
 pub const ICON_SIZE: u32 = 48;
@@ -343,7 +349,7 @@ impl Widget for Dock {
 
     fn access(&self, _cx: &Context) -> Node {
         let mut node = Node::new(Role::Toolbar);
-        node.set_label("Dock");
+        node.set_label(L10N.tr("dock"));
         node
     }
 
@@ -433,4 +439,16 @@ pub fn merge_apps(
         }
     }
     apps
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn every_message_id_used_in_code_is_in_the_english_file() {
+        let sources = [include_str!("lib.rs"), include_str!("main.rs")];
+        assert_eq!(
+            unbound_l10n::missing_ids(super::ENGLISH, &sources),
+            Vec::<&str>::new()
+        );
+    }
 }

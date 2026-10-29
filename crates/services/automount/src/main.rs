@@ -4,6 +4,7 @@ use unbound_automount::Automounter;
 use zbus::blocking::Connection;
 
 fn main() -> ExitCode {
+    unbound_log::init("unbound-automount");
     let started = Connection::system().and_then(|system| {
         let session = Connection::session()?;
         Automounter::start(&system, &session)
@@ -13,7 +14,7 @@ fn main() -> ExitCode {
             std::thread::park();
         },
         Err(error) => {
-            eprintln!("unbound-automount: {error}");
+            tracing::error!("{error}");
             ExitCode::FAILURE
         }
     }

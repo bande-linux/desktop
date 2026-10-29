@@ -37,6 +37,7 @@ enum Session {
 }
 
 fn main() -> ExitCode {
+    unbound_log::init("unbound-compositor");
     let result = parse_args().and_then(|(backend, session)| match backend {
         Backend::Headless => run_headless(session),
         Backend::Drm(device) => run_drm(device.as_deref(), session),
@@ -44,7 +45,7 @@ fn main() -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("unbound-compositor: {error}");
+            tracing::error!("{error}");
             ExitCode::FAILURE
         }
     }
@@ -76,10 +77,7 @@ fn now() -> Duration {
 fn run_headless(session: Session) -> Result<(), Box<dyn Error>> {
     let renderer = Renderer::new()?;
     let info = renderer.device_info();
-    eprintln!(
-        "unbound-compositor: rendering on {} ({})",
-        info.name, info.driver
-    );
+    tracing::info!("rendering on {} ({})", info.name, info.driver);
     let compositor = Headless::new(Size::from(HEADLESS_SIZE))?;
     let mut event_loop: EventLoop<App<Renderer>> = EventLoop::try_new()?;
     let app = App {
@@ -100,8 +98,8 @@ fn configured_scale(connector: &str) -> Option<f64> {
 
 fn run_drm(device: Option<&Path>, session: Session) -> Result<(), Box<dyn Error>> {
     let (mut output, notifiers) = DrmOutput::open(device)?;
-    eprintln!(
-        "unbound-compositor: driving {} at {:.2} Hz",
+    tracing::info!(
+        "driving {} at {:.2} Hz",
         output.path().display(),
         1.0 / output.refresh().as_secs_f64()
     );
@@ -111,8 +109,8 @@ fn run_drm(device: Option<&Path>, session: Session) -> Result<(), Box<dyn Error>
     let mut compositor = Headless::with_output(config)?;
     compositor.set_output_scale(scale);
     if !compositor.enable_explicit_sync(output.device_fd()) {
-        eprintln!(
-            "unbound-compositor: {} has no syncobj eventfd; explicit sync is off",
+        tracing::warn!(
+            "{} has no syncobj eventfd; explicit sync is off",
             output.path().display()
         );
     }
@@ -120,7 +118,7 @@ fn run_drm(device: Option<&Path>, session: Session) -> Result<(), Box<dyn Error>
     let handle = event_loop.handle();
     handle.insert_source(notifiers.session, |event, _, app| {
         if let Err(error) = app.output.session_changed(event) {
-            eprintln!("unbound-compositor: cannot follow the session: {error}");
+            tracing::warn!("cannot follow the session: {error}");
         }
     })?;
     handle.insert_source(notifiers.device, |event, metadata, app| match event {
@@ -130,15 +128,15 @@ fn run_drm(device: Option<&Path>, session: Session) -> Result<(), Box<dyn Error>
                 .flipped(*metadata)
                 .and_then(|vblank| Ok(app.scheduler.flipped(vblank, &mut app.compositor)?));
             if let Err(error) = flipped {
-                eprintln!("unbound-compositor: cannot complete the page flip: {error}");
+                tracing::warn!("cannot complete the page flip: {error}");
             }
         }
-        DrmEvent::Error(error) => eprintln!("unbound-compositor: DRM error: {error}"),
+        DrmEvent::Error(error) => tracing::warn!("DRM error: {error}"),
     })?;
     let input = output.input_backend()?;
     handle.insert_source(input, |event, _, app| {
         if let Err(error) = app.compositor.handle_input(event) {
-            eprintln!("unbound-compositor: cannot deliver input: {error}");
+            tracing::warn!("cannot deliver input: {error}");
         }
     })?;
     let refresh = output.refresh();
@@ -164,15 +162,15 @@ fn listen<O: 'static>(
         export_session_environment(&session, &socket_name, app.compositor.cursor_theme())
     });
     if let Err(error) = exported {
-        eprintln!("unbound-compositor: cannot export the session environment: {error}");
+        tracing::warn!("cannot export the session environment: {error}");
     }
     handle.insert_source(socket, |stream, _, app| {
         if let Err(error) = app.compositor.insert_client(stream) {
-            eprintln!("unbound-compositor: rejected client: {error}");
+            tracing::warn!("rejected client: {error}");
         }
     })?;
     if let Err(error) = notify_ready(std::env::var_os("NOTIFY_SOCKET").as_deref()) {
-        eprintln!("unbound-compositor: cannot tell the service manager it is ready: {error}");
+        tracing::warn!("cannot tell the service manager it is ready: {error}");
     }
     for fd in [app.compositor.poll_fd()?, app.compositor.fence_fd()?] {
         handle.insert_source(
@@ -202,7 +200,7 @@ fn start_user_session<O: 'static>(
                     }
                 })?;
         }
-        Err(error) => eprintln!("unbound-compositor: cannot follow the logind session: {error}"),
+        Err(error) => tracing::warn!("cannot follow the logind session: {error}"),
     }
     for (executable, role) in [
         (CLIPBOARD_DAEMON, SessionRole::ClipboardDaemon),
@@ -216,7 +214,7 @@ fn start_user_session<O: 'static>(
             .compositor
             .start_session_client(Path::new(executable), role)
         {
-            eprintln!("unbound-compositor: cannot start {executable}: {error}");
+            tracing::warn!("cannot start {executable}: {error}");
         }
     }
     Ok(())
@@ -252,10 +250,7 @@ where
             None => app.compositor.keep_session_clients_running(),
         };
         for (executable, error) in &upkeep.failures {
-            eprintln!(
-                "unbound-compositor: cannot restart {}: {error}",
-                executable.display()
-            );
+            tracing::warn!("cannot restart {}: {error}", executable.display());
         }
         let App {
             compositor,

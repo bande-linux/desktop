@@ -65,10 +65,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn main() -> ExitCode {
+    unbound_log::init("unbound-files");
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("unbound-files: {error}");
+            tracing::error!("{error}");
             ExitCode::FAILURE
         }
     }

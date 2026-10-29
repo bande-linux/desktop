@@ -101,7 +101,7 @@ impl Dock {
     fn open(&mut self, window: &mut Window, app_id: &str) {
         if self.running.iter().any(|running| running == app_id) {
             if let Err(error) = window.activate_app(app_id) {
-                eprintln!("unbound-dock: cannot activate {app_id}: {error}");
+                tracing::warn!("cannot activate {app_id}: {error}");
             }
             return;
         }
@@ -110,7 +110,7 @@ impl Dock {
         };
         let token = window.activation_token(app_id).ok();
         if let Err(error) = unbound_xdg::launch(entry, token.as_deref()) {
-            eprintln!("unbound-dock: cannot open {}: {error}", entry.name);
+            tracing::warn!("cannot open {}: {error}", entry.name);
         }
     }
 }
@@ -244,10 +244,11 @@ fn run() -> Result<(), WindowError> {
 }
 
 fn main() -> ExitCode {
+    unbound_log::init("unbound-dock");
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("unbound-dock: {error}");
+            tracing::error!("{error}");
             ExitCode::FAILURE
         }
     }

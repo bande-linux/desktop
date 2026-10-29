@@ -69,11 +69,11 @@ impl Greeter {
             let verdict = match outcome {
                 Ok(Outcome::Started) => STARTED,
                 Ok(Outcome::Rejected(reason)) => {
-                    eprintln!("unbound-greeter: {login} not signed in: {reason}");
+                    tracing::info!("{login} not signed in: {reason}");
                     REJECTED
                 }
                 Err(error) => {
-                    eprintln!("unbound-greeter: greetd: {error}");
+                    tracing::warn!("greetd: {error}");
                     REJECTED
                 }
             };
@@ -177,10 +177,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn main() -> ExitCode {
+    unbound_log::init("unbound-greeter");
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("unbound-greeter: {error}");
+            tracing::error!("{error}");
             ExitCode::FAILURE
         }
     }

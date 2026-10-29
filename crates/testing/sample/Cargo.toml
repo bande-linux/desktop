@@ -7,4 +7,6 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+tracing.workspace = true
+unbound-log.workspace = true
 unbound-toolkit.workspace = true

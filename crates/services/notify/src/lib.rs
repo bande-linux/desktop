@@ -86,8 +86,8 @@ impl Shared {
         if let Some(file) = &self.do_not_disturb_file
             && let Err(error) = remember_do_not_disturb(file, enabled)
         {
-            eprintln!(
-                "unbound-notify: cannot remember Do Not Disturb in {}: {error}",
+            tracing::warn!(
+                "cannot remember Do Not Disturb in {}: {error}",
                 file.display()
             );
         }

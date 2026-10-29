@@ -21,7 +21,7 @@ impl Screenshots {
         let image = match window.capture_screen() {
             Ok(image) => image,
             Err(error) => {
-                eprintln!("unbound-screenshot: cannot capture the screen: {error}");
+                tracing::warn!("cannot capture the screen: {error}");
                 return;
             }
         };
@@ -29,7 +29,7 @@ impl Screenshots {
             Some(region) => match crop(&image, region) {
                 Some(cropped) => cropped,
                 None => {
-                    eprintln!("unbound-screenshot: the chosen area is not on the screen");
+                    tracing::warn!("the chosen area is not on the screen");
                     return;
                 }
             },
@@ -39,18 +39,15 @@ impl Screenshots {
         let dir = user_dir(&self.home, user_dirs.as_deref(), UserDir::Desktop);
         let taken = jiff::Zoned::now().datetime();
         match save(image, &dir, taken) {
-            Ok(path) => eprintln!("unbound-screenshot: saved {}", path.display()),
-            Err(error) => eprintln!(
-                "unbound-screenshot: cannot save to {}: {error}",
-                dir.display()
-            ),
+            Ok(path) => tracing::info!("saved {}", path.display()),
+            Err(error) => tracing::warn!("cannot save to {}: {error}", dir.display()),
         }
     }
 
     fn end_selection(&mut self, window: &mut Window) {
         self.selection = None;
         if let Err(error) = window.hide() {
-            eprintln!("unbound-screenshot: cannot hide the selection: {error}");
+            tracing::warn!("cannot hide the selection: {error}");
         }
     }
 }
@@ -70,7 +67,7 @@ impl App for Screenshots {
             WindowEvent::CaptureArea if self.selection.is_none() => {
                 self.selection = Some(AreaSelection::default());
                 if let Err(error) = window.show() {
-                    eprintln!("unbound-screenshot: cannot show the selection: {error}");
+                    tracing::warn!("cannot show the selection: {error}");
                 }
             }
             WindowEvent::Input(input) => {
@@ -119,10 +116,11 @@ fn run() -> Result<(), WindowError> {
 }
 
 fn main() -> ExitCode {
+    unbound_log::init("unbound-screenshot");
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("unbound-screenshot: {error}");
+            tracing::error!("{error}");
             ExitCode::FAILURE
         }
     }

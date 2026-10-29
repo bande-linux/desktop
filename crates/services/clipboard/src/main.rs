@@ -75,11 +75,12 @@ impl Daemon {
 }
 
 fn main() -> ExitCode {
+    unbound_log::init("unbound-clipboard");
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) if compositor_gone(error.as_ref()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("unbound-clipboard: {error}");
+            tracing::error!("{error}");
             ExitCode::FAILURE
         }
     }

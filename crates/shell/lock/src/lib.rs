@@ -4,9 +4,11 @@ mod user;
 use std::cell::RefCell;
 use std::f32::consts::TAU;
 use std::rc::Rc;
+use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionData, ActionRequest, Node, Role, TreeId, TreeUpdate};
+use unbound_l10n::Localizer;
 use unbound_toolkit::ui::{Context, Event, SecureField, Size, Ui, Widget, WidgetId};
 use unbound_toolkit::{
     Color, Item, Palette, Paragraph, Point, Rect, Scene, Shape, TextAlign, TextStyle, TextSystem,
@@ -14,6 +16,10 @@ use unbound_toolkit::{
 
 pub use pam::{AuthError, authenticate};
 pub use user::{User, current as current_user, display_name};
+
+const ENGLISH: &str = include_str!("../locales/en-US/unbound-lock.ftl");
+
+pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
 pub const PAM_SERVICE: &str = "unbound-lock";
 pub const SHAKE_DURATION: Duration = Duration::from_millis(480);
@@ -161,7 +167,10 @@ impl Widget for LockView {
 
     fn access(&self, _cx: &Context) -> Node {
         let mut node = Node::new(Role::Window);
-        node.set_label(format!("Locked. {}", self.model.borrow().name));
+        node.set_label(L10N.tr_args(
+            "locked",
+            [("name", self.model.borrow().name.as_str().into())],
+        ));
         node
     }
 
@@ -216,7 +225,7 @@ impl LockScreen {
             now: Instant::now(),
         }));
         let submitted = model.clone();
-        let field = SecureField::new("Enter Password", FIELD_FONT, move |password| {
+        let field = SecureField::new(&L10N.tr("enter-password"), FIELD_FONT, move |password| {
             let mut model = submitted.borrow_mut();
             if !model.checking && !password.is_empty() {
                 model.checking = true;
@@ -308,5 +317,17 @@ impl LockScreen {
 
     pub fn scene(&mut self, width: u32, height: u32) -> Scene {
         self.ui.scene(width, height)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn every_message_id_used_in_code_is_in_the_english_file() {
+        let sources = [include_str!("lib.rs"), include_str!("main.rs")];
+        assert_eq!(
+            unbound_l10n::missing_ids(super::ENGLISH, &sources),
+            Vec::<&str>::new()
+        );
     }
 }

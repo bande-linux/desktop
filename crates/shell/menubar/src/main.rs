@@ -34,7 +34,7 @@ impl App for Bar {
             }
             WindowEvent::Input(Event::PointerUp(point)) if self.bar.control_center_hit(point) => {
                 if let Err(error) = window.toggle_control_center() {
-                    eprintln!("unbound-menubar: cannot open Control Center: {error}");
+                    tracing::warn!("cannot open Control Center: {error}");
                 }
             }
             _ => {}
@@ -104,10 +104,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn main() -> ExitCode {
+    unbound_log::init("unbound-menubar");
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("unbound-menubar: {error}");
+            tracing::error!("{error}");
             ExitCode::FAILURE
         }
     }

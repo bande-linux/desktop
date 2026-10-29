@@ -3,15 +3,25 @@ pub mod area;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 
 use image::{ImageFormat, RgbaImage};
 use jiff::civil::DateTime;
+use unbound_l10n::Localizer;
 use unbound_toolkit::ScreenImage;
 
+const ENGLISH: &str = include_str!("../locales/en-US/unbound-screenshot.ftl");
+
+pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+
 pub fn file_stem(taken: DateTime) -> String {
-    taken
-        .strftime("Screenshot %Y-%m-%d at %H.%M.%S")
-        .to_string()
+    L10N.tr_args(
+        "file-name",
+        [
+            ("date", taken.strftime("%Y-%m-%d").to_string().into()),
+            ("time", taken.strftime("%H.%M.%S").to_string().into()),
+        ],
+    )
 }
 
 pub fn free_path(dir: &Path, stem: &str) -> PathBuf {
@@ -44,6 +54,19 @@ pub fn save(image: ScreenImage, dir: &Path, taken: DateTime) -> io::Result<PathB
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_message_id_used_in_code_is_in_the_english_file() {
+        let sources = [
+            include_str!("lib.rs"),
+            include_str!("main.rs"),
+            include_str!("area.rs"),
+        ];
+        assert_eq!(
+            unbound_l10n::missing_ids(ENGLISH, &sources),
+            Vec::<&str>::new()
+        );
+    }
 
     #[test]
     fn the_name_is_the_moment_it_was_taken_as_on_a_mac() {

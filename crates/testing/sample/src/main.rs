@@ -24,10 +24,11 @@ fn run() -> Result<(), WindowError> {
 }
 
 fn main() -> ExitCode {
+    unbound_log::init("unbound-sample");
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("unbound-sample: {error}");
+            tracing::error!("{error}");
             ExitCode::FAILURE
         }
     }

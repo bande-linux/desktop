@@ -5,6 +5,7 @@ use unbound_toolkit::{
     Color, Item, Palette, Paragraph, Point, Rect, Scene, Shape, TextAlign, TextStyle, TextSystem,
 };
 
+use crate::L10N;
 use crate::model::{Control, Key, Pane, Value, panes, search};
 
 pub const SIDEBAR_WIDTH: f32 = 220.0;
@@ -243,12 +244,12 @@ impl SettingsView {
         let labels = self.panes[self.pane].controls[control]
             .choices
             .iter()
-            .map(|choice| choice.label)
+            .map(|choice| choice.label.clone())
             .collect::<Vec<_>>();
         labels
             .into_iter()
             .map(|label| {
-                let width = self.paragraph(label, LABEL_SIZE, Color::hex(0)).width()
+                let width = self.paragraph(&label, LABEL_SIZE, Color::hex(0)).width()
                     + 2.0 * SEGMENT_PADDING;
                 let rect = Rect::new(x, y, width.round(), SEGMENT_HEIGHT);
                 x += rect.width;
@@ -312,7 +313,7 @@ impl SettingsView {
             paint: palette.label_muted.with_alpha(36).into(),
         });
         let (shown, color) = if self.query.is_empty() {
-            ("Search".to_owned(), palette.label_muted)
+            (L10N.tr("search"), palette.label_muted)
         } else {
             (self.query.clone(), palette.label_primary)
         };
@@ -338,7 +339,8 @@ impl SettingsView {
             } else {
                 palette.label_primary
             };
-            let name = self.paragraph(self.panes[pane].name, LABEL_SIZE, color);
+            let name = self.panes[pane].name.clone();
+            let name = self.paragraph(&name, LABEL_SIZE, color);
             items.push(Item::Text {
                 origin: Point::new(
                     rect.x + 10.0,
@@ -358,7 +360,7 @@ impl SettingsView {
         let control = self.panes[self.pane].controls[index].clone();
         let x = SIDEBAR_WIDTH + CONTENT_INSET;
         let y = CONTROLS_TOP + index as f32 * CONTROL_ROW;
-        let label = self.paragraph(control.label, LABEL_SIZE, palette.label_primary);
+        let label = self.paragraph(&control.label, LABEL_SIZE, palette.label_primary);
         items.push(Item::Text {
             origin: Point::new(x, y),
             paragraph: label,
@@ -405,7 +407,7 @@ impl SettingsView {
             } else {
                 palette.label_primary
             };
-            let text = self.centred_text(choice.label, LABEL_SIZE, color, *segment);
+            let text = self.centred_text(&choice.label, LABEL_SIZE, color, *segment);
             items.push(text);
         }
     }
@@ -414,7 +416,7 @@ impl SettingsView {
         let palette = self.palette;
         let mut items = Vec::new();
         self.paint_sidebar(height as f32, &mut items);
-        let pane_name = self.panes[self.pane].name;
+        let pane_name = &self.panes[self.pane].name;
         let title = self.text.paragraph(
             pane_name,
             TextStyle::new(TITLE_SIZE, palette.label_primary).weight(TextStyle::SEMIBOLD),

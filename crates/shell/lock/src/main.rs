@@ -36,7 +36,7 @@ impl Locker {
             let verdict = match authenticate(PAM_SERVICE, &login, &password) {
                 Ok(()) => ACCEPTED,
                 Err(error) => {
-                    eprintln!("unbound-lock: {error}");
+                    tracing::warn!("{error}");
                     REJECTED
                 }
             };
@@ -78,7 +78,7 @@ impl App for Locker {
         if verdict[0] == ACCEPTED {
             match window.unlock() {
                 Ok(()) => self.unlocked = true,
-                Err(error) => eprintln!("unbound-lock: cannot unlock: {error}"),
+                Err(error) => tracing::warn!("cannot unlock: {error}"),
             }
         } else {
             self.screen.reject(Instant::now());
@@ -144,10 +144,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn main() -> ExitCode {
+    unbound_log::init("unbound-lock");
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("unbound-lock: {error}");
+            tracing::error!("{error}");
             ExitCode::FAILURE
         }
     }

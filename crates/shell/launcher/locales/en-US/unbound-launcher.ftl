@@ -1,0 +1,2 @@
+launcher = Launcher
+search = Search

@@ -24,7 +24,7 @@ fn serve() -> Result<Services, Box<dyn Error>> {
     let logind = system.clone();
     let inhibitions = InhibitionService::start(&session, move |application, reason| {
         logind::inhibit(&logind, "idle", application, reason, "block")
-            .inspect_err(|error| eprintln!("unbound-power: cannot inhibit idle: {error}"))
+            .inspect_err(|error| tracing::warn!("cannot inhibit idle: {error}"))
             .ok()
     })?;
     let idle = Arc::new(IdleController::new(
@@ -40,21 +40,22 @@ fn serve() -> Result<Services, Box<dyn Error>> {
     match wayland_client::Connection::connect_to_env() {
         Ok(connection) => {
             if let Err(error) = unbound_power::wayland::watch_idle(connection, Arc::clone(&idle)) {
-                eprintln!("unbound-power: cannot watch for idle: {error}");
+                tracing::warn!("cannot watch for idle: {error}");
             }
         }
-        Err(error) => eprintln!("unbound-power: cannot watch for idle without Wayland: {error}"),
+        Err(error) => tracing::warn!("cannot watch for idle without Wayland: {error}"),
     }
     Ok((guard, inhibitions, idle))
 }
 
 fn main() -> ExitCode {
+    unbound_log::init("unbound-power");
     match serve() {
         Ok(_services) => loop {
             std::thread::park();
         },
         Err(error) => {
-            eprintln!("unbound-power: {error}");
+            tracing::error!("{error}");
             ExitCode::FAILURE
         }
     }

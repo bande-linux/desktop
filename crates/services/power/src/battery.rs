@@ -5,6 +5,8 @@ use unbound_notify::Urgency;
 use unbound_notify::client::{self, Request};
 use zbus::blocking::Connection;
 
+use crate::L10N;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Alert {
     Low,
@@ -59,26 +61,27 @@ impl BatteryNotifier {
             }
             return Ok(());
         };
-        let remaining = format!("{}% of the battery remains.", percentage.round());
+        let percentage = [("percentage", percentage.round().into())];
         let (summary, body, urgency) = match alert {
             Alert::Low => (
-                "Low Battery",
-                format!("{remaining} Connect to power soon."),
+                L10N.tr("low-battery"),
+                L10N.tr_args("low-battery-body", percentage),
                 Urgency::Normal,
             ),
             Alert::Critical => (
-                "Battery Critically Low",
-                format!("{remaining} Connect to power now, or the computer will sleep."),
+                L10N.tr("critical-battery"),
+                L10N.tr_args("critical-battery-body", percentage),
                 Urgency::Critical,
             ),
         };
+        let app_name = L10N.tr("app-name");
         let id = client::notify(
             &self.session,
             &Request {
-                app_name: "Power",
+                app_name: &app_name,
                 replaces_id: shown.map_or(0, |(_, id)| id),
                 app_icon: "battery-caution",
-                summary,
+                summary: &summary,
                 body: &body,
                 actions: &[],
                 urgency,
@@ -96,7 +99,7 @@ pub fn watch(system: &Connection, notifier: Arc<BatteryNotifier>) -> zbus::Resul
         if let (Ok(level), Ok(percentage)) = (device.warning_level(), device.percentage())
             && let Err(error) = notifier.update(level, percentage)
         {
-            eprintln!("unbound-power: cannot post the battery notification: {error}");
+            tracing::warn!("cannot post the battery notification: {error}");
         }
     };
     report(&device);

@@ -23,10 +23,10 @@ fn type_text(view: &mut SettingsView, text: &str) {
     }
 }
 
-fn pane_names(view: &SettingsView) -> Vec<&'static str> {
+fn pane_names(view: &SettingsView) -> Vec<String> {
     view.visible_panes()
         .into_iter()
-        .map(|pane| view.panes()[pane].name)
+        .map(|pane| view.panes()[pane].name.clone())
         .collect()
 }
 
@@ -36,7 +36,7 @@ fn search_finds_settings_by_label_keyword_and_choice() {
     let found = |query: &str| {
         search(&panes, query)
             .into_iter()
-            .map(|found| panes[found.pane].name)
+            .map(|found| panes[found.pane].name.clone())
             .collect::<Vec<_>>()
     };
 

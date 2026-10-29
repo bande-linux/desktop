@@ -12,7 +12,7 @@ fn open_in_editor(path: &Path) {
         Ok(mut editor) => {
             thread::spawn(move || editor.wait());
         }
-        Err(error) => eprintln!("unbound-config: cannot run xdg-open: {error}"),
+        Err(error) => tracing::warn!("cannot run xdg-open: {error}"),
     }
 }
 
@@ -29,9 +29,10 @@ fn serve(path: &Path) -> Result<ConfigService, Box<dyn Error>> {
 }
 
 fn main() -> ExitCode {
+    unbound_log::init("unbound-config");
     let config_home = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from);
     let Some(path) = config_path(config_home.as_deref(), std::env::home_dir().as_deref()) else {
-        eprintln!("unbound-config: neither XDG_CONFIG_HOME nor HOME is set");
+        tracing::error!("neither XDG_CONFIG_HOME nor HOME is set");
         return ExitCode::FAILURE;
     };
     match serve(&path) {
@@ -39,7 +40,7 @@ fn main() -> ExitCode {
             thread::park();
         },
         Err(error) => {
-            eprintln!("unbound-config: {error}");
+            tracing::error!("{error}");
             ExitCode::FAILURE
         }
     }

@@ -78,9 +78,14 @@ fn start_desktop() -> Desktop {
 }
 
 fn start_desktop_with(environment: &[(&str, &str)]) -> Desktop {
+    start_desktop_with_arguments(&[], environment)
+}
+
+fn start_desktop_with_arguments(arguments: &[&str], environment: &[(&str, &str)]) -> Desktop {
     fs::create_dir_all(RUNTIME_DIR).expect("runtime directory");
     fs::set_permissions(RUNTIME_DIR, fs::Permissions::from_mode(0o700)).expect("permissions");
     let mut child = Command::new(COMPOSITOR)
+        .args(arguments)
         .env("XDG_RUNTIME_DIR", RUNTIME_DIR)
         .env("XDG_CURRENT_DESKTOP", "Unbound")
         .env("HOME", "/root")
@@ -644,4 +649,78 @@ fn files_drills_into_a_folder_and_quick_looks_a_picture() {
     });
     let _ = files.kill();
     let _ = files.wait();
+}
+
+const GREETER_USER: &str = "ada:x:1000:1000:Ada Lovelace,,,:/root:/bin/bash";
+
+#[test]
+#[ignore = "needs the ci/vm guest"]
+fn the_greeter_signs_in_through_greetd_and_hands_over() {
+    use std::os::unix::net::UnixListener;
+    use unbound_greeter::{AuthMessageType, Request, Response, read_message, write_message};
+
+    let passwd = fs::read_to_string("/etc/passwd").expect("passwd");
+    if !passwd.contains(GREETER_USER) {
+        fs::write("/etc/passwd", format!("{passwd}{GREETER_USER}\n")).expect("add a user");
+    }
+    let socket = Path::new(RUNTIME_DIR).join("greetd.sock");
+    fs::create_dir_all(RUNTIME_DIR).expect("runtime directory");
+    let _ = fs::remove_file(&socket);
+    let listener = UnixListener::bind(&socket).expect("greetd socket");
+    let greetd = thread::spawn(move || {
+        let (mut greeter, _) = listener.accept().expect("the greeter connects");
+        let mut requests = Vec::new();
+        let replies = [
+            Response::AuthMessage {
+                auth_message_type: AuthMessageType::Secret,
+                auth_message: "Password: ".to_owned(),
+            },
+            Response::Success,
+            Response::Success,
+        ];
+        for reply in replies {
+            requests.push(read_message::<Request>(&mut greeter).expect("request"));
+            write_message(&mut greeter, &reply).expect("reply");
+        }
+        requests
+    });
+
+    let mut keyboard = VirtualDevice::keyboard_and_mouse();
+    let mut desktop = start_desktop_with_arguments(
+        &["--greeter"],
+        &[("GREETD_SOCK", socket.to_str().expect("socket path"))],
+    );
+    wait_for("the greeter", STARTUP, || running("unbound-greeter"));
+    thread::sleep(Duration::from_secs(2));
+    scanout().save("m24-greeter");
+    assert!(
+        !running("unbound-panel"),
+        "the greeter session has no panel"
+    );
+
+    keyboard.type_text("secret\n");
+    let requests = greetd.join().expect("greetd");
+    assert_eq!(
+        requests,
+        [
+            Request::CreateSession {
+                username: "ada".to_owned()
+            },
+            Request::PostAuthMessageResponse {
+                response: Some("secret".to_owned())
+            },
+            Request::StartSession {
+                cmd: vec!["unbound-compositor".to_owned()],
+                env: Vec::new()
+            },
+        ]
+    );
+    wait_for("the compositor to hand over", STARTUP, || {
+        desktop
+            .compositor
+            .try_wait()
+            .ok()
+            .flatten()
+            .is_some_and(|status| status.success())
+    });
 }

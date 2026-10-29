@@ -72,16 +72,15 @@ impl Snapshot {
             .nodes
             .iter()
             .filter_map(|(id, node)| {
+                let (channels, muted) = state.levels(node);
                 Some(Device {
                     id: *id,
                     name: node.name.clone(),
                     description: node.description.clone(),
                     direction: node.direction?,
                     level: Level {
-                        volume: level::from_channel(
-                            node.channels.iter().copied().fold(0.0, f32::max),
-                        ),
-                        muted: node.muted,
+                        volume: level::from_channel(channels.iter().copied().fold(0.0, f32::max)),
+                        muted,
                     },
                 })
             })

@@ -58,8 +58,20 @@ pub(crate) struct State {
     pub generation: u64,
     pub connected: bool,
     pub nodes: HashMap<u32, NodeState>,
+    routes: HashMap<(u32, i32), (Vec<f32>, bool)>,
     pub default_output: Option<String>,
     pub default_input: Option<String>,
+}
+
+impl State {
+    pub(crate) fn levels<'a>(&'a self, node: &'a NodeState) -> (&'a [f32], bool) {
+        node.device
+            .and_then(|device| self.routes.get(&device))
+            .map_or(
+                (node.channels.as_slice(), node.muted),
+                |(channels, muted)| (channels.as_slice(), *muted),
+            )
+    }
 }
 
 #[derive(Default)]
@@ -125,6 +137,17 @@ fn levels(object: &Object) -> Option<(Vec<f32>, Option<bool>)> {
         }
     }
     channels.map(|channels| (channels, muted))
+}
+
+fn route_levels(object: &Object) -> Option<(Vec<f32>, Option<bool>)> {
+    object
+        .properties
+        .iter()
+        .find(|property| property.key == sys::SPA_PARAM_ROUTE_props)
+        .and_then(|property| match &property.value {
+            Value::Object(props) => levels(props),
+            _ => None,
+        })
 }
 
 fn route(object: &Object) -> Option<(i32, i32)> {
@@ -250,9 +273,11 @@ impl Graph {
     }
 
     fn add_device(&self, global: &GlobalObject<&DictRef>) -> Result<(), pw::Error> {
+        let id = global.id;
         let proxy: Device = self.registry.bind(global)?;
         let routes = Rc::new(RefCell::new(Vec::new()));
         let seen = Rc::clone(&routes);
+        let shared = Arc::clone(&self.shared);
         let listener = proxy
             .add_listener_local()
             .param(move |_, kind, index, _, pod| {
@@ -263,8 +288,21 @@ impl Graph {
                 if index == 0 {
                     routes.clear();
                 }
-                if let Some(route) = pod.and_then(object).as_ref().and_then(route) {
-                    routes.push(route);
+                let Some(object) = pod.and_then(object) else {
+                    return;
+                };
+                let Some(route) = route(&object) else {
+                    return;
+                };
+                routes.push(route);
+                if let Some((channels, muted)) = route_levels(&object) {
+                    let key = (id, route.1);
+                    shared.update(|state| {
+                        let muted = muted
+                            .or_else(|| state.routes.get(&key).map(|(_, muted)| *muted))
+                            .unwrap_or(false);
+                        state.routes.insert(key, (channels, muted));
+                    });
                 }
             })
             .register();
@@ -306,7 +344,10 @@ impl Graph {
 
     fn remove(&self, id: u32) {
         let mut bound = self.bound.borrow_mut();
-        bound.devices.remove(&id);
+        if bound.devices.remove(&id).is_some() {
+            self.shared
+                .update(|state| state.routes.retain(|(device, _), _| *device != id));
+        }
         if bound
             .metadata
             .as_ref()
@@ -338,16 +379,16 @@ impl Graph {
     }
 
     fn set_level(&self, id: u32, volume: Option<f32>, muted: Option<bool>) -> Result<(), Error> {
-        let node = self
-            .shared
-            .lock()
-            .nodes
-            .get(&id)
-            .cloned()
-            .ok_or(Error::NoSuchDevice)?;
+        let (node, current, current_muted) = {
+            let state = self.shared.lock();
+            let node = state.nodes.get(&id).cloned().ok_or(Error::NoSuchDevice)?;
+            let (channels, muted) = state.levels(&node);
+            let current = channels.to_vec();
+            (node, current, muted)
+        };
         let channels = match volume {
-            Some(volume) => level::scaled(&node.channels, volume),
-            None => node.channels.clone(),
+            Some(volume) => level::scaled(&current, volume),
+            None => current,
         };
         let props = Object {
             type_: sys::SPA_TYPE_OBJECT_Props,
@@ -357,7 +398,10 @@ impl Graph {
                     sys::SPA_PROP_channelVolumes,
                     Value::ValueArray(ValueArray::Float(channels)),
                 ),
-                Property::new(sys::SPA_PROP_mute, Value::Bool(muted.unwrap_or(node.muted))),
+                Property::new(
+                    sys::SPA_PROP_mute,
+                    Value::Bool(muted.unwrap_or(current_muted)),
+                ),
             ],
         };
         let bound = self.bound.borrow();
@@ -505,4 +549,36 @@ fn serve(
 
     main_loop.run();
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sink(device: Option<(u32, i32)>, channels: Vec<f32>) -> NodeState {
+        NodeState {
+            name: "sink".to_owned(),
+            channels,
+            device,
+            ..NodeState::default()
+        }
+    }
+
+    #[test]
+    fn a_device_sink_takes_its_level_from_the_active_route_not_its_props() {
+        let mut state = State::default();
+        state.routes.insert((43, 1), (vec![0.064, 0.064], true));
+        let speaker = sink(Some((43, 1)), vec![1.0, 1.0]);
+
+        assert_eq!(state.levels(&speaker), (&[0.064, 0.064][..], true));
+    }
+
+    #[test]
+    fn a_virtual_sink_keeps_the_level_of_its_props() {
+        let mut state = State::default();
+        state.routes.insert((43, 1), (vec![0.064, 0.064], true));
+        let virtual_sink = sink(None, vec![0.5, 0.5]);
+
+        assert_eq!(state.levels(&virtual_sink), (&[0.5, 0.5][..], false));
+    }
 }

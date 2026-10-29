@@ -32,10 +32,10 @@ them into role directories; the grouping below is that target.
 | :--- | :--- |
 | Platform | `unbound-compositor` (the Wayland compositor), `unbound-render` (its Vulkan renderer), `unbound-protocols` (private Wayland protocols for the shell) |
 | Toolkit | `unbound-toolkit` (tokens, Vello drawing, Parley text, Wayland windows, widgets, AccessKit) |
-| Shell | `unbound-panel` (the Dock), `unbound-menubar`, `unbound-launcher`, `unbound-controlcenter`, `unbound-screenshot`, `unbound-lock`, `unbound-greeter` |
+| Shell | `unbound-dock` (the Dock), `unbound-menubar`, `unbound-launcher`, `unbound-controlcenter`, `unbound-screenshot`, `unbound-lock`, `unbound-greeter` |
 | Apps | `unbound-files`, `unbound-settings`, `unbound-term` |
 | Services | `unbound-config`, `unbound-notify`, `unbound-power`, `unbound-clipboard`, `unbound-tray`, `unbound-automount`, `xdg-desktop-portal-unbound`, `unbound-polkit` |
-| Libraries | `unbound-spring` (damped springs), `unbound-apps` (desktop entries, icons, launching), `unbound-audio` (PipeWire), `unbound-network` (NetworkManager), `unbound-bluetooth` (BlueZ) |
+| Libraries | `unbound-spring` (damped springs), `unbound-xdg` (desktop entries, icons, launching), `unbound-audio` (PipeWire), `unbound-network` (NetworkManager), `unbound-bluetooth` (BlueZ) |
 | Testing | `unbound-test-bus` (private D-Bus session buses), `unbound-test-wayland` (Wayland test clients), `unbound-bench` (performance measurements), `unbound-sample` (toolkit sample for `ci/perf`) |
 
 Other directories: `packaging/` holds the meta-package and the APT source packages, `ci/` the

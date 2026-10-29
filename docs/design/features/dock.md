@@ -2,7 +2,7 @@
 Status: proposal, awaiting the owner's review.
 
 ## Purpose
-The Dock (`unbound-panel`) is where apps are started, found again and quit. It shows the apps a
+The Dock (`unbound-dock`) is where apps are started, found again and quit. It shows the apps a
 person keeps, the apps that are running, and the Trash, and every icon answers a left click, a
 right click, a drag and a dropped file. It does one job well: it is not a window list, a clock,
 a system tray or a launcher grid, all of which have their own homes (menu bar, launcher,

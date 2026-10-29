@@ -8,7 +8,7 @@ when they reach the screen is Unbound's own.
 
 - **Kernel and protocol abstraction**: `smithay` handles DRM/KMS atomic modesetting, libinput
   devices, dma-buf import and export, and dispatch of the standard Wayland protocols.
-- **Renderer**: Unbound's own Vulkan renderer on `ash` (`crates/unbound-render`). The choice over
+- **Renderer**: Unbound's own Vulkan renderer on `ash` (`crates/platform/render`). The choice over
   `wgpu` and Smithay's GLES renderer, and the performance targets, are recorded in
   [`../decisions/0001-rendering.md`](../decisions/0001-rendering.md). Planned on top of it:
   dual-pass Kawase blur, rounded-corner clipping and transforms.
@@ -17,7 +17,7 @@ when they reach the screen is Unbound's own.
 
 ## Implemented
 
-- **Renderer.** `crates/unbound-render` is one Vulkan 1.3 device with push descriptors and
+- **Renderer.** `crates/platform/render` is one Vulkan 1.3 device with push descriptors and
   dynamic rendering, implementing Smithay's `Renderer`, `Frame`, `ImportMemWl`, `ImportDmaWl`,
   `Offscreen` and `Bind<Dmabuf>`. Both outputs compose the same Wayland surface elements through
   Smithay: the headless output with `OutputDamageTracker` into a persistent offscreen image (read
@@ -46,7 +46,7 @@ when they reach the screen is Unbound's own.
   are taken when the frame is latched and sent at its vblank (on DRM, at the page-flip event
   with its time and sequence); a superseded commit's feedback is discarded, and a render that
   overruns its vblank is presented at the next one.
-- **Springs.** `crates/unbound-spring` is the closed-form solution for under-, critically and
+- **Springs.** `crates/libs/spring` is the closed-form solution for under-, critically and
   overdamped springs, parameterised by angular frequency $\omega$ and damping ratio $\zeta$. A
   trajectory depends only on elapsed time, never on frame rate, and retargeting keeps position
   and velocity continuous.
@@ -57,7 +57,7 @@ when they reach the screen is Unbound's own.
 ## Wayland protocol matrix
 
 Priority: **P0** is needed for a daily-driver desktop, **P1** for full parity, **P2** later.
-Status is what `crates/unbound-compositor` serves on `main`.
+Status is what `crates/platform/compositor` serves on `main`.
 
 | Protocol | Purpose | Priority | Status |
 | :--- | :--- | :---: | :--- |

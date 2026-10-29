@@ -45,7 +45,7 @@ status-check contexts:
   `cargo clippy --workspace --all-targets --locked -- -D warnings`.
 - `ci/lavapipe-test`: `cargo test --workspace`, including the compositor and toolkit render
   tests on lavapipe. D-Bus tests start a private `dbus-daemon` session bus each
-  (`crates/unbound-test-bus`). The toolkit's render tests use Inter (`fonts-inter`) and Noto
+  (`crates/testing/test-bus`). The toolkit's render tests use Inter (`fonts-inter`) and Noto
   Sans CJK (`fonts-noto-cjk`) through fontconfig; their expected images are computed in the test
   from the scene (exact area coverage of shapes and of glyph outlines read with `ab_glyph`,
   Gaussian shadows by numeric integration), so they depend neither on Vello nor on the font

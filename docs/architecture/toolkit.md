@@ -3,8 +3,29 @@
 Every Unbound shell client and app draws with one shared toolkit, `unbound-toolkit`, so that
 look, shortcuts and accessibility are the same everywhere. It draws with Vello and lays out text
 with Parley ([`../decisions/0001-rendering.md`](../decisions/0001-rendering.md), Decision 2).
-How it grows to AppKit depth is proposed in
+How it grows to AppKit depth is decided in
 [`../decisions/0002-toolkit.md`](../decisions/0002-toolkit.md).
+
+## Crates
+
+- `unbound-graphics` (`crates/toolkit/graphics`): scene, Vello CPU and GPU renderers, Parley
+  text, design tokens, and the input event types. No Wayland.
+- `unbound-widgets` (`crates/toolkit/widgets`): the widget tree and widgets, on graphics only,
+  so widget tests need no compositor.
+- `unbound-toolkit-platform` (`crates/toolkit/platform`): Wayland windows and roles, seat input,
+  clipboard, text input, capture, the run loop, accessibility publication and appearance.
+- `unbound-toolkit` (`crates/toolkit/toolkit`): the facade apps depend on; `ui` is
+  `unbound-widgets`.
+
+CI fails when a service depends on the widgets, platform or facade, or when graphics or widgets
+depend on Wayland.
+
+## Appearance
+
+Every window follows the system appearance itself: the platform reads `color-scheme` and
+`accent-color` of `org.freedesktop.appearance` from the XDG Settings portal, at window creation
+and live on `SettingChanged`, and delivers `WindowEvent::AppearanceChanged`. Apps never read
+`config.kdl` for it.
 
 ## Goals
 
@@ -16,7 +37,7 @@ How it grows to AppKit depth is proposed in
 - **Standard controls**: scroll views with spring physics, text fields, sliders, switches and
   tab views with the same keyboard and pointer behaviour in every app.
 
-## Implemented (`crates/unbound-toolkit`)
+## Implemented (`crates/toolkit/toolkit`)
 
 - **Tokens.** The six colour roles for light and dark schemes, each label meeting WCAG AA
   contrast (4.5:1) and the accent 3:1 on both surfaces; a spacing scale of 2, 4, 8, 12, 16, 24
@@ -44,7 +65,7 @@ How it grows to AppKit depth is proposed in
   `GpuRenderer` straight into the surface (mailbox when offered). Frames are paced by
   `wl_surface.frame`. Windows follow the output's fractional scale through `wp_viewporter`.
   Text input v3 and the clipboard are supported. `UNBOUND_RENDERER=cpu` keeps a window on
-  `CpuRenderer`. `crates/unbound-sample` is a settings card on the toolkit that `ci/perf` starts
+  `CpuRenderer`. `crates/testing/sample` is a settings card on the toolkit that `ci/perf` starts
   to measure.
 - **Widgets.** `ui` holds the widget tree: `Stack` (rows and columns with spacing and padding; a
   column stretches its children across, a row centres them), `Label`, `Button`, `Toggle`,

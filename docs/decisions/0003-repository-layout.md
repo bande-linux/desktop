@@ -36,7 +36,7 @@ data/        shared assets (wallpapers, icons, sounds)
   `platform` holds the Wayland window, seat, clipboard, text input, layer and xdg shell
   surfaces, and the accessibility adapter. `widgets` holds the UI tree, the widgets and
   animation.
-- **`shell/`**: one crate per shell client. `dock` is today's `unbound-panel`; `desktop` and
+- **`shell/`**: one crate per shell client. `dock` was `unbound-dock`; `desktop` and
   `notifications` are new.
 - **`apps/`**: one crate per app.
 - **`services/`**: one crate per session service; `portal` is `xdg-desktop-portal-unbound`.
@@ -63,7 +63,7 @@ Rules:
 7. **No panics.** `[workspace.lints]` denies `unwrap`, `expect` and `panic` outside tests.
 8. **Logging.** Through `tracing`, to the journal, set up by `libs/log`.
 9. **Localization.** Every user-visible string goes through Fluent (`libs/l10n`), with
-   `locales/en/*.ftl` in each crate.
+   `locales/en-US/*.ftl` in each crate.
 10. **Appearance.** Dark mode and the accent colour are followed by the toolkit itself, from the
     portal's `org.freedesktop.appearance` settings, not by each app.
 

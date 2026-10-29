@@ -10,7 +10,7 @@ something is its own binary package, built with `cargo deb` from the crate's
 
 - **Per crate** (`cargo deb`, arm64): `unbound-compositor`, the session services
   (`unbound-config`, `unbound-notify`, `unbound-power`, `unbound-clipboard`, `unbound-tray`,
-  `unbound-automount`, `xdg-desktop-portal-unbound`), the shell clients (`unbound-panel`,
+  `unbound-automount`, `xdg-desktop-portal-unbound`), the shell clients (`unbound-dock`,
   `unbound-menubar`, `unbound-launcher`, `unbound-controlcenter`, `unbound-screenshot`,
   `unbound-lock`, `unbound-greeter`) and the apps (`unbound-term`, `unbound-files`,
   `unbound-settings`). Package names stay `unbound-*` whatever directory the crate lives in

@@ -82,7 +82,7 @@ graph TB
     SETTINGS & MENUBAR & CC <-->|D-Bus| CONFIG
 ```
 
-The Dock is the crate `unbound-panel` today; [decision 0003](../decisions/0003-repository-layout.md)
+The Dock is the crate `unbound-dock` today; [decision 0003](../decisions/0003-repository-layout.md)
 renames its directory.
 
 ## Process model
@@ -104,7 +104,7 @@ thinks of it as part of the system:
   (configuration, notifications, power, clipboard, tray, automount, portal, polkit). They are
   started by systemd user units or D-Bus activation ([session](session.md)).
 
-Shared code that is not UI lives in libraries (`unbound-spring`, `unbound-apps`,
+Shared code that is not UI lives in libraries (`unbound-spring`, `unbound-xdg`,
 `unbound-audio`, `unbound-network`, `unbound-bluetooth`, `unbound-protocols`), and the shell
 and apps draw with `unbound-toolkit`.
 
@@ -113,7 +113,7 @@ and apps draw with `unbound-toolkit`.
 - **Wayland** carries everything about surfaces, buffers, input, focus, clipboard and drag and
   drop. Buffers travel as `wl_shm` or `linux-dmabuf-v1` file descriptors; there is no separate
   data-plane socket. Desktop-specific requests between the compositor and the shell go through
-  `unbound_shell_v1` (`crates/unbound-protocols`).
+  `unbound_shell_v1` (`crates/platform/protocols`).
 - **D-Bus via `zbus`** carries policy, state and desktop integration: the `org.freedesktop.*`
   standards and the `org.unbound.*` interfaces Unbound owns. Every interface can be inspected
   with `busctl`. The matrix is in [session.md](session.md#d-bus-integration).
@@ -157,14 +157,14 @@ control writes to it, and it can be edited by hand while the session runs.
   session. A changed file is parsed into a shadow copy; if it is valid it is swapped in
   atomically and subscribers are told through `org.unbound.Config`; if it is not, the active
   configuration stays as it was and the user is told the line, column and message.
-- **Implemented schema (`crates/unbound-config`)**: KDL 2.0 syntax. The file is
+- **Implemented schema (`crates/services/config`)**: KDL 2.0 syntax. The file is
   `$XDG_CONFIG_HOME/unbound/config.kdl`, or `~/.config/unbound/config.kdl` when
   `XDG_CONFIG_HOME` is unset or relative. Every setting is optional; unknown settings,
   duplicates and out-of-range values are rejected with the line and column of the offending
   node or value.
   ```kdl
   appearance "automatic"        // "dark" | "light" | "automatic"
-  panel {
+  dock {
       edge "left"               // "left" | "bottom" | "right" | "top"
   }
   idle {
@@ -182,7 +182,7 @@ control writes to it, and it can be edited by hand while the session runs.
   into a shadow `Config` and swapped in as one `Arc`, so readers see either the old or the new
   configuration, never a mix. `ConfigService` owns `org.unbound.Config` on the session bus and
   serves the active values as properties of interface `org.unbound.Config` at
-  `/org/unbound/Config` (`Appearance`, `PanelEdge`, `IdleDimAfter`, `IdleLockAfter` and
+  `/org/unbound/Config` (`Appearance`, `DockEdge`, `IdleDimAfter`, `IdleLockAfter` and
   `IdleSuspendAfter` in seconds, 0 meaning never, `Outputs` as `a{sa{sv}}`). It watches the
   directory and reloads when the file is closed after writing or renamed into place;
   `PropertiesChanged` lists only the properties that changed. The `unbound-config` daemon runs

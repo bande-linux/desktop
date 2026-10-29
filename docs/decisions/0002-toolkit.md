@@ -18,7 +18,7 @@ selection; popovers, sheets, alerts, segmented controls, pop-up buttons, search 
 sidebars, toolbars, split views, tab views, title bars; drag and drop; tooltips;
 AccessKit on AT-SPI; IME; fractional scale.
 
-What `crates/unbound-toolkit` has today (about 8,300 lines with tests):
+What `crates/toolkit/toolkit` has today (about 8,300 lines with tests):
 - **Kept regardless of the decision:** `Window` on libwayland with `xdg_toplevel`,
   `zwlr_layer_surface_v1` and session lock; first frame on `vello_cpu` into `wl_shm`,
   then `vello_gpu`; fractional scale and viewporter; text-input v3; clipboard; AccessKit
@@ -127,7 +127,7 @@ means an own look fights the toolkit, and our Vello/Parley/AccessKit work is dis
 
 ## Consequences
 
-Order of work; each step lands with tests in `crates/unbound-toolkit/tests` and keeps the
+Order of work; each step lands with tests in `crates/toolkit/toolkit/tests` and keeps the
 exact perf metrics green.
 
 1. **Input model.** Replace `ui::Event` pointer variants with a pointer event shaped

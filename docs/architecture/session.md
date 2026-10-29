@@ -44,11 +44,11 @@ graph LR
 - Idle pipeline: `ext-idle-notify-v1` dims the display, then locks, then suspends through
   logind, at the times set in [`config.kdl`](overview.md#configuration).
 - Video inhibition: `idle-inhibit-v1` lets media players and browsers hold off idle.
-- Implemented in `crates/unbound-lock`: date, time, the user's initial and name and a secure
+- Implemented in `crates/shell/lock`: date, time, the user's initial and name and a secure
   field; PAM (`/etc/pam.d/unbound-lock`) runs off the UI thread, and a rejected password clears
   and shakes the field. `Ctrl+Super+Q` and logind's `Lock` signal start it; the compositor sets
   logind's `LockedHint`.
-- Implemented in `crates/unbound-power` (`unbound-power`, a session service): before the
+- Implemented in `crates/services/power` (`unbound-power`, a session service): before the
   computer sleeps, the session is locked through logind (`Session.Lock`) while a `delay` sleep
   inhibitor holds the suspend back until the lock screen sets `LockedHint`, or 3 seconds pass
   (below logind's default `InhibitDelayMaxSec` of 5); the inhibitor is taken again on wake.
@@ -79,7 +79,7 @@ graph LR
   toolkit apps.
 - `org.freedesktop.impl.portal.FileChooser`: the Files column browser as the Open and Save
   dialog.
-- Implemented in `crates/xdg-desktop-portal-unbound`: `Settings` (version 2) publishes
+- Implemented in `crates/services/portal`: `Settings` (version 2) publishes
   `org.freedesktop.appearance` from `org.unbound.Config`, with `color-scheme` 1 for dark, 2 for
   light and 0 for automatic until the automatic schedule exists, `accent-color` from the
   toolkit's accent token of that scheme, and `contrast` 0, signalling changes. `FileChooser`
@@ -99,7 +99,7 @@ graph LR
 ### Audio
 
 - PipeWire and WirePlumber, with per-device volume memory (headphone volume is restored when
-  they are plugged in) and media keys with an on-screen level. `crates/unbound-audio` is the
+  they are plugged in) and media keys with an on-screen level. `crates/libs/audio` is the
   client library; the compositor forwards volume keys to the shell over `unbound_shell_v1`.
 
 ### Accessibility
@@ -122,7 +122,7 @@ graph LR
 
 ### Polkit authentication agent (`unbound-polkit`)
 
-- Implemented in `crates/unbound-polkit` as a library: an
+- Implemented in `crates/services/polkit` as a library: an
   `org.freedesktop.PolicyKit1.AuthenticationAgent` object that registers with polkitd for a
   logind session or a process, runs `/usr/lib/polkit-1/polkit-agent-helper-1` for the chosen
   user (the cookie on standard input, PAM prompts and results as escaped lines, as polkit 126's
@@ -138,17 +138,17 @@ graph LR
 
 - **System tray**: `org.kde.StatusNotifierWatcher` and `org.kde.StatusNotifierItem` for
   third-party background apps (Steam, Nextcloud, Slack).
-  - Implemented in `crates/unbound-tray` (`unbound-tray`, a session service):
+  - Implemented in `crates/services/tray` (`unbound-tray`, a session service):
     `org.kde.StatusNotifierWatcher` at `/StatusNotifierWatcher`. An item registered by bus name
     is listed as `<name>/StatusNotifierItem`, one registered by object path (libappindicator,
     Ayatana) as `<caller><path>`, as KDE's watcher does; items and hosts are dropped when their
     connection leaves the bus. The menu bar's tray host is not built yet.
 - **Network and Bluetooth**: NetworkManager (`org.freedesktop.NetworkManager`) and BlueZ
   (`org.bluez`) for Wi-Fi selection and Bluetooth pairing in Control Center and Settings, through
-  `crates/unbound-network` and `crates/unbound-bluetooth`.
+  `crates/libs/network` and `crates/libs/bluetooth`.
 - **Removable media**: `org.freedesktop.UDisks2` mounts USB drives and posts notifications
   with an eject action.
-  - Implemented in `crates/unbound-automount` (`unbound-automount`, a session service): every
+  - Implemented in `crates/services/automount` (`unbound-automount`, a session service): every
     filesystem UDisks2 hints for automounting (`HintAuto`, not `HintIgnore` or `HintSystem`) is
     mounted when it appears, including drives present at login, as macOS mounts external
     volumes; a drive removed while still mounted posts "Disk Not Ejected Properly", as macOS
@@ -200,7 +200,7 @@ Unbound uses `greetd` for the privileged part of login and keeps its own UI unpr
 3. **Handover**: after authentication, `greetd` opens the PAM session through `pam_systemd.so`
    and starts the user's session, which runs `unbound-compositor`.
 
-Implemented in `crates/unbound-greeter`: greetd's IPC (create a session, answer the secret
+Implemented in `crates/shell/greeter`: greetd's IPC (create a session, answer the secret
 prompt, acknowledge information, start, cancel after a refusal) inside
 `unbound-compositor --greeter`, which runs only the greeter and exits with it; the package
 ships a greetd configuration. Not done: a user picker (Up/Down switches users for now), a second

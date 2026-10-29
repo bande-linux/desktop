@@ -42,7 +42,7 @@ runs natively on Wayland in the guest.
 ## Next
 
 - [x] **M5 Rendering decision and performance harness** (`desktop/milestone-5`)
-  `docs/decisions/0001-rendering.md`; `crates/unbound-bench` measuring the compositor's typical and
+  `docs/decisions/0001-rendering.md`; `crates/testing/bench` measuring the compositor's typical and
   full-repaint frame times at 1920×1080, start time to listening socket and idle RSS;
   `ci/perf` runs it on every push, uploads `perf.json` and writes a summary table.
   *Done when* `ci/perf` is green and reports every metric.

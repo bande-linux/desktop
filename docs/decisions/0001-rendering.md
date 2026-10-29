@@ -119,7 +119,7 @@ CI cannot measure photons or a real GPU, so `ci/perf` measures on lavapipe with
   LLVM JIT included). Each run writes `perf.json` as an artifact and a table to the job
   summary so trends are visible per commit. The exact metrics also count pixels shaded,
   which an opaque window above a damaged area keeps to that area.
-- **Toolkit sample** (`crates/unbound-sample`, measured by `unbound-toolkit-bench` in the
+- **Toolkit sample** (`crates/testing/sample`, measured by `unbound-toolkit-bench` in the
   same job): exec to first committed frame, median of five starts against the 100 ms target
   (reported); resident memory when the first frame is mapped and after the GPU path is up,
   against the 30 MB target (reported, since lavapipe's LLVM alone adds about 100 MiB); the

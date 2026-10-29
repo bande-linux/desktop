@@ -4,6 +4,7 @@ on:
   push:
     branches: ['**']
   pull_request:
+  workflow_dispatch:
 
 env:
   CARGO_INCREMENTAL: '0'
@@ -398,3 +399,32 @@ jobs:
           name: perf-toolkit
           path: perf-toolkit.json
           if-no-files-found: ignore
+
+  publish:
+    name: ci/publish
+    needs: [lint, test, deb, deb-all, deb-install, vm, polkit, portal, perf]
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && github.ref_type == 'tag')
+    runs-on: [self-hosted, unbound]
+    timeout-minutes: 10
+    steps:
+      - name: Token for the apt repository
+        id: token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.APT_TRIGGER_CLIENT_ID }}
+          private-key: ${{ secrets.APT_TRIGGER_KEY }}
+          owner: unbound-linux
+          repositories: apt
+          permission-actions: write
+      - name: Start the publish in unbound-linux/apt
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          RUN_ID: ${{ github.run_id }}
+          TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: |
+          jq -n --arg run "$RUN_ID" --arg tag "$TAG" '{ref: "main", inputs: {run_id: $run, tag: $tag}}' |
+            curl -fsS -X POST -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' \
+              https://api.github.com/repos/unbound-linux/apt/actions/workflows/publish.yml/dispatches --data @-
+          echo "Started publishing run $RUN_ID${TAG:+ as $TAG}"

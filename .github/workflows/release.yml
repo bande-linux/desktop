@@ -1,0 +1,56 @@
+name: release
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+
+permissions: {}
+
+jobs:
+  release:
+    name: release/promote
+    runs-on: [self-hosted, unbound]
+    timeout-minutes: 10
+    permissions:
+      actions: write
+    steps:
+      - name: Find the green main build of the tagged commit
+        id: build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          api() { curl -fsS -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' "$@"; }
+          run=$(api "https://api.github.com/repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$SHA&branch=main&event=push&status=success&per_page=1" |
+            jq -r '.workflow_runs[0].id // empty')
+          if [ -n "$run" ] && api "https://api.github.com/repos/$REPO/actions/runs/$run/artifacts?per_page=100" |
+              jq -e '[.artifacts[] | select((.name | startswith("unbound-debs-")) and (.expired | not))] | length >= 2' > /dev/null; then
+            echo "Promoting main run $run"
+            echo "run=$run" >> "$GITHUB_OUTPUT"
+          else
+            echo "No green main build with its packages for $SHA; rebuilding on the tag"
+            jq -n --arg ref "$GITHUB_REF_NAME" '{ref: $ref}' |
+              api -X POST "https://api.github.com/repos/$REPO/actions/workflows/ci.yml/dispatches" --data @-
+          fi
+      - name: Token for the apt repository
+        if: steps.build.outputs.run != ''
+        id: token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.APT_TRIGGER_CLIENT_ID }}
+          private-key: ${{ secrets.APT_TRIGGER_KEY }}
+          owner: unbound-linux
+          repositories: apt
+          permission-actions: write
+      - name: Start the release publish in unbound-linux/apt
+        if: steps.build.outputs.run != ''
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          RUN_ID: ${{ steps.build.outputs.run }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          jq -n --arg run "$RUN_ID" --arg tag "$TAG" '{ref: "main", inputs: {run_id: $run, tag: $tag}}' |
+            curl -fsS -X POST -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' \
+              https://api.github.com/repos/unbound-linux/apt/actions/workflows/publish.yml/dispatches --data @-
+          echo "Started publishing $TAG from main run $RUN_ID; approve it in unbound-linux/apt"

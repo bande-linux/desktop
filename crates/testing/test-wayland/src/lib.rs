@@ -11,6 +11,7 @@ pub use wayland_protocols::xdg::shell::client::xdg_toplevel::{ResizeEdge, State 
 mod capture;
 mod cursor;
 mod decoration;
+mod effect;
 mod fence;
 mod idle;
 mod ime;

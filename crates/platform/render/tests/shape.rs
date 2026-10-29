@@ -277,6 +277,7 @@ fn a_blurred_region_softens_an_edge_behind_it_and_leaves_the_rest_alone() {
         region: square(20.0, 20.0, 40.0, 0.0),
         passes: 3,
         offset: 1.5,
+        alpha: 1.0,
     });
 
     let row: Vec<u8> = (20..60).map(|x| at(&pixels, x, 40)[0]).collect();
@@ -300,6 +301,7 @@ fn a_blur_keeps_a_uniform_background_uniform() {
         region: square(60.0, 20.0, 15.0, 4.0),
         passes: 2,
         offset: 1.0,
+        alpha: 1.0,
     });
 
     assert!((60..75).all(|x| at(&pixels, x, 28)[0] >= 254));
@@ -311,6 +313,7 @@ fn a_blurred_region_is_clipped_to_its_rounded_shape() {
         region: square(30.0, 20.0, 20.0, 8.0),
         passes: 3,
         offset: 1.5,
+        alpha: 1.0,
     });
 
     assert_eq!(at(&pixels, 30, 20), [0, 0, 0, 255]);

@@ -15,6 +15,7 @@ pub struct Blur {
     pub region: RoundedRect,
     pub passes: u32,
     pub offset: f32,
+    pub alpha: f32,
 }
 
 pub(crate) struct BlurChain {
@@ -56,10 +57,11 @@ impl Blur {
     }
 
     pub fn bounds(&self) -> Rect {
-        let left = self.region.x.floor() as i32;
-        let top = self.region.y.floor() as i32;
-        let right = (self.region.x + self.region.width).ceil() as i32;
-        let bottom = (self.region.y + self.region.height).ceil() as i32;
+        let reach = self.reach();
+        let left = self.region.x.floor() as i32 - reach;
+        let top = self.region.y.floor() as i32 - reach;
+        let right = (self.region.x + self.region.width).ceil() as i32 + reach;
+        let bottom = (self.region.y + self.region.height).ceil() as i32 + reach;
         Rect::new(left, top, right - left, bottom - top)
     }
 }
@@ -77,14 +79,7 @@ impl VulkanFrame<'_, '_> {
                 .map(|rect| physical(rect).translated(destination.x, destination.y)),
             destination,
         );
-        let reach = blur.reach();
-        let Some(source) = Rect::new(
-            destination.x - reach,
-            destination.y - reach,
-            destination.width + 2 * reach,
-            destination.height + 2 * reach,
-        )
-        .intersection(&self.bounds) else {
+        let Some(source) = destination.intersection(&self.bounds) else {
             return Ok(());
         };
         if rects.is_empty() {
@@ -114,7 +109,7 @@ impl VulkanFrame<'_, '_> {
                 source: Rectangle::from_size(
                     (f64::from(source.width), f64::from(source.height)).into(),
                 ),
-                alpha: 1.0,
+                alpha: blur.alpha,
                 clip: blur.region,
                 ..Quad::default()
             },

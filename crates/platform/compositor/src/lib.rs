@@ -4,6 +4,7 @@ mod clock;
 mod cursor;
 mod decoration;
 mod drm;
+mod effect;
 mod environment;
 mod grab;
 mod idle;

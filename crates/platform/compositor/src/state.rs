@@ -80,6 +80,7 @@ use smithay::{
     delegate_primary_selection, delegate_seat, delegate_shm, delegate_viewporter,
     delegate_xdg_activation, delegate_xdg_shell,
 };
+use smithay::reexports::wayland_protocols::ext::background_effect::v1::server::ext_background_effect_manager_v1::ExtBackgroundEffectManagerV1;
 use unbound_protocols::server::unbound_app_v1::UnboundAppV1;
 use unbound_protocols::server::unbound_shell_v1::UnboundShellV1;
 use unbound_render::VulkanRenderer;
@@ -89,8 +90,8 @@ use crate::cursor::{self, Cursor, CursorTheme};
 use crate::lock::Lock;
 use crate::motion::IconRect;
 use crate::scene::{
-    Closing, Drawn, FillElement, PieceElement, ShadowElement, WindowElement, preview_elements,
-    window_elements,
+    BlurElement, Closing, Drawn, FillElement, PieceElement, ShadowElement, WindowElement,
+    preview_elements, surface_blurs, tie_blurs_to_what_lies_below, window_elements,
 };
 use crate::session::{LockScreen, SessionClient, SessionRole};
 use crate::shell;
@@ -286,6 +287,7 @@ impl Headless {
         output.create_global::<State>(&handle);
         handle.create_global::<State, UnboundShellV1, ()>(5, ());
         handle.create_global::<State, UnboundAppV1, ()>(1, ());
+        handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
         State::create_capture_globals(&handle);
         let state = State {
             display_handle: handle.clone(),
@@ -530,6 +532,7 @@ impl Headless {
                         1.0,
                         ElementKind::Unspecified,
                     ));
+                    elements.extend(surface_blurs(&surface, location, scale));
                 }
                 Placed::Window(window) => {
                     let active = key.as_ref() == Some(window.surface());
@@ -545,6 +548,7 @@ impl Headless {
                 Placed::Closing(closing) => elements.extend(closing.render_elements(scale)),
             }
         }
+        tie_blurs_to_what_lies_below(&mut elements, scale);
         (elements, drawn)
     }
 
@@ -1034,6 +1038,7 @@ impl CompositorHandler for State {
 
     fn commit(&mut self, surface: &WlSurface) {
         on_commit_buffer_handler::<Self>(surface);
+        crate::effect::commit_blur(surface);
         self.needs_redraw = true;
         if self.commit_lock_surface(surface)
             || self.commit_popup(surface)
@@ -1204,6 +1209,7 @@ render_elements! {
     Shadow=ShadowElement,
     Closing=WindowElement<PieceElement>,
     Fill=FillElement,
+    Blur=BlurElement,
     Cursor=MemoryRenderBufferRenderElement<VulkanRenderer>,
 }
 

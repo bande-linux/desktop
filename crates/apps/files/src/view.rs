@@ -13,7 +13,7 @@ use crate::apps::Apps;
 use crate::browser::{Browser, Location};
 use crate::editor::NameEditor;
 use crate::icons::Icons;
-use crate::listing::Entry;
+use crate::listing::{Entry, Sort, SortBy};
 use crate::loader::{Loaded, Loader};
 use crate::operations::{Finished, Operations, Purpose};
 use crate::preview::Preview;
@@ -26,6 +26,7 @@ pub const INSPECTOR_WIDTH: f32 = 260.0;
 pub const PATH_BAR_HEIGHT: f32 = 28.0;
 pub const PROGRESS_HEIGHT: f32 = 48.0;
 pub const TOP_INSET: f32 = 6.0;
+pub const HEADER_HEIGHT: f32 = 26.0;
 const DOUBLE_CLICK: Duration = Duration::from_millis(400);
 const TYPE_SELECT_PAUSE: Duration = Duration::from_millis(1000);
 const NOTICE_TIME: Duration = Duration::from_secs(5);
@@ -61,6 +62,7 @@ pub enum Sheet {
         paths: Vec<PathBuf>,
         items: Vec<TrashItem>,
     },
+    GoTo(NameEditor),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -85,6 +87,7 @@ pub enum Hit {
     ChooseApp(usize),
     OpenWithChosen,
     UseForAll,
+    Header(SortBy),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -113,6 +116,7 @@ pub struct FilesView {
     pub(crate) notice: Option<(String, Instant)>,
     pub(crate) hits: Vec<(Rect, Hit)>,
     pub(crate) operations: Operations,
+    pub(crate) trash_full: bool,
     watch: FolderWatch,
     loader: Loader,
     requests: Vec<Request>,
@@ -177,6 +181,7 @@ impl FilesView {
             notice: None,
             hits: Vec::new(),
             operations,
+            trash_full: false,
             watch: FolderWatch::new()?,
             loader: Loader::new()?,
             requests: Vec::new(),
@@ -186,6 +191,7 @@ impl FilesView {
             paste_moves: None,
         };
         view.watch.watch(&view.browser.watched());
+        view.trash_full = !view.browser.trash().is_empty();
         Ok(view)
     }
 
@@ -293,6 +299,7 @@ impl FilesView {
 
     pub fn refresh(&mut self, changed: &[PathBuf]) {
         let editing = self.rename.as_ref().map(|rename| rename.path.clone());
+        self.trash_full = !self.browser.trash().is_empty();
         self.browser.refresh(changed);
         if let Some(path) = editing
             && path.symlink_metadata().is_err()
@@ -444,7 +451,15 @@ impl FilesView {
     }
 
     fn rows_height(&self) -> f32 {
-        self.content_frame().height - TOP_INSET
+        self.content_frame().height - self.rows_top()
+    }
+
+    pub(crate) fn rows_top(&self) -> f32 {
+        if self.browser.single() {
+            HEADER_HEIGHT
+        } else {
+            TOP_INSET
+        }
     }
 
     fn keep_selection_visible(&mut self) {
@@ -477,8 +492,11 @@ impl FilesView {
         if !contains(content, self.pointer) {
             return false;
         }
-        let column =
-            self.first_visible_column() + ((self.pointer.x - content.x) / COLUMN_WIDTH) as usize;
+        let column = if self.browser.single() {
+            0
+        } else {
+            self.first_visible_column() + ((self.pointer.x - content.x) / COLUMN_WIDTH) as usize
+        };
         let Some(shown) = self.browser.columns_mut().get_mut(column) else {
             return false;
         };
@@ -553,6 +571,14 @@ impl FilesView {
             }
             Hit::OpenWithChosen => self.open_with_chosen(),
             Hit::UseForAll => self.use_chosen_for_all(),
+            Hit::Header(by) => {
+                let current = self.browser.sort();
+                self.browser.set_sort(Sort {
+                    by,
+                    descending: current.by == by && !current.descending,
+                });
+                self.selection_changed();
+            }
         }
         true
     }
@@ -574,12 +600,16 @@ impl FilesView {
                 self.pointer = *at;
                 false
             }
-            Event::Commit(text) => match &mut self.rename {
-                Some(rename) => {
+            Event::Commit(text) => match (&mut self.sheet, &mut self.rename) {
+                (Some(Sheet::GoTo(editor)), _) => {
+                    editor.insert(text);
+                    true
+                }
+                (None, Some(rename)) => {
                     rename.editor.insert(text);
                     true
                 }
-                None => false,
+                _ => false,
             },
             _ => false,
         }
@@ -612,6 +642,7 @@ impl FilesView {
                     });
                 }
             }
+            Sheet::GoTo(editor) if button == SheetButton::Confirm => self.go_to(editor.text()),
             Sheet::EmptyTrash if button == SheetButton::Confirm => {
                 self.start(Task::EmptyTrash, Purpose::Erase);
             }
@@ -627,7 +658,56 @@ impl FilesView {
         }
     }
 
-    fn sheet_key(&mut self, key: Key) -> bool {
+    fn go_to_key(&mut self, key: Key, modifiers: Modifiers) -> bool {
+        match key {
+            Key::Enter => {
+                if let Some(Sheet::GoTo(editor)) = self.sheet.take() {
+                    self.go_to(editor.text());
+                }
+                true
+            }
+            Key::Escape => {
+                self.sheet = None;
+                true
+            }
+            _ => match &mut self.sheet {
+                Some(Sheet::GoTo(editor)) => editor.key(key, modifiers),
+                _ => false,
+            },
+        }
+    }
+
+    fn go_to(&mut self, typed: &str) {
+        let typed = typed.trim();
+        let expanded = match typed.strip_prefix('~') {
+            Some(rest) => home().join(rest.trim_start_matches('/')),
+            None => PathBuf::from(typed),
+        };
+        let path = if expanded.is_absolute() {
+            expanded
+        } else {
+            self.browser
+                .current_folder()
+                .unwrap_or_else(home)
+                .join(expanded)
+        };
+        if path.is_dir() {
+            self.go(Location::Folder(path));
+        } else if path.symlink_metadata().is_ok() {
+            self.commit_rename();
+            self.browser.reveal(&path);
+            self.selection_changed();
+        } else {
+            self.show_notice(
+                L10N.tr_args("error-go-to", [("path", path.display().to_string().into())]),
+            );
+        }
+    }
+
+    fn sheet_key(&mut self, key: Key, modifiers: Modifiers) -> bool {
+        if matches!(self.sheet, Some(Sheet::GoTo(_))) {
+            return self.go_to_key(key, modifiers);
+        }
         let conflict = matches!(self.sheet, Some(Sheet::Conflict { .. }));
         match key {
             Key::Enter => self.press(SheetButton::Confirm),
@@ -704,7 +784,7 @@ impl FilesView {
 
     fn key(&mut self, key: Key, modifiers: Modifiers) -> bool {
         if self.sheet.is_some() {
-            return self.sheet_key(key);
+            return self.sheet_key(key, modifiers);
         }
         if self.rename.is_some() {
             return self.rename_key(key, modifiers);
@@ -773,6 +853,14 @@ impl FilesView {
             Key::Character('z' | 'Z') if command && shift => self.redo(),
             Key::Character('z' | 'Z') if command => self.undo(),
             Key::Character('n' | 'N') if command && shift => self.new_folder(),
+            Key::Character('g' | 'G') if command && shift => {
+                let current = self
+                    .browser
+                    .current_folder()
+                    .map(|folder| folder.display().to_string())
+                    .unwrap_or_default();
+                self.sheet = Some(Sheet::GoTo(NameEditor::new(&current, true)));
+            }
             Key::Character('d' | 'D') if command && shift => {
                 self.go(Location::Folder(user_folder(UserDir::Desktop)));
             }
@@ -785,6 +873,15 @@ impl FilesView {
             }
             Key::Character('l' | 'L') if command && alt => {
                 self.go(Location::Folder(user_folder(UserDir::Downloads)));
+            }
+            Key::Character('2') if command => {
+                self.commit_rename();
+                self.browser.set_single(true);
+                self.selection_changed();
+            }
+            Key::Character('3') if command => {
+                self.browser.set_single(false);
+                self.selection_changed();
             }
             Key::Character('i' | 'I') if command => {
                 self.inspector = !self.inspector;
@@ -848,18 +945,18 @@ impl FilesView {
                 launches.push((launcher, Vec::new()));
                 continue;
             }
-            match self.apps.default_for(&mime) {
+            match self.apps.default_for(&mime).cloned() {
                 Some(app) => match launches.iter_mut().find(|(known, _)| known.id == app.id) {
                     Some((_, files)) => files.push(entry.path.clone()),
-                    None => launches.push((app.clone(), vec![entry.path.clone()])),
+                    None => launches.push((app, vec![entry.path.clone()])),
                 },
-                None => self.show_notice(L10N.tr_args(
-                    "error-no-app",
-                    [
-                        ("name", entry.name.clone().into()),
-                        ("kind", self.apps.kind(&mime).into()),
-                    ],
-                )),
+                None => {
+                    let kind = self.apps.kind(&mime);
+                    self.show_notice(L10N.tr_args(
+                        "error-no-app",
+                        [("name", entry.name.clone().into()), ("kind", kind.into())],
+                    ));
+                }
             }
         }
         self.requests
@@ -1117,6 +1214,7 @@ impl FilesView {
             .chain([self.browser.trash().home().root().join("info")])
             .collect::<Vec<_>>();
         self.browser.refresh(&touched);
+        self.trash_full = !self.browser.trash().is_empty();
         let reveal = matches!(
             finished.purpose,
             Purpose::Do(Action::Copy | Action::Move | Action::Duplicate | Action::PutBack)

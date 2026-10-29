@@ -4,6 +4,10 @@ sidebar-favourites = Favourites
 sidebar-locations = Locations
 empty-folder = Empty folder
 no-selection = No selection
+column-name = Name
+column-modified = Date Modified
+column-size = Size
+column-kind = Kind
 item-count = { $count ->
     [one] { $count } item
    *[other] { $count } items
@@ -78,4 +82,7 @@ error-item = “{ $name }” couldn’t be handled: { $error }{ $others ->
    *[other] {" "}({ $others } more)
 }
 error-no-app = There is no app to open “{ $name }” ({ $kind }).
+go-to-title = Go to the folder:
+go = Go
+error-go-to = “{ $path }” can’t be found.
 error-default-app = The default app couldn’t be changed: { $error }

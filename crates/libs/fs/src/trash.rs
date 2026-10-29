@@ -359,7 +359,9 @@ impl Trash {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.items().is_empty()
+        self.dirs().iter().all(|dir| {
+            fs::read_dir(dir.info_dir()).map_or(true, |mut entries| entries.next().is_none())
+        })
     }
 
     pub fn empty(&self) -> io::Result<()> {

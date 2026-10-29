@@ -8,13 +8,14 @@ use unbound_toolkit::{
 
 use crate::L10N;
 use crate::browser::Location;
-use crate::listing::{Entry, format_size};
+use crate::editor::NameEditor;
+use crate::listing::{Entry, SortBy, format_size};
 use crate::operations::Purpose;
 use crate::preview::Preview;
 use crate::sidebar::Row;
 use crate::view::{
-    COLUMN_WIDTH, FilesView, Hit, INSPECTOR_WIDTH, PATH_BAR_HEIGHT, PROGRESS_HEIGHT, ROW_HEIGHT,
-    SIDEBAR_WIDTH, Sheet, SheetButton, TOP_INSET,
+    COLUMN_WIDTH, FilesView, HEADER_HEIGHT, Hit, INSPECTOR_WIDTH, PATH_BAR_HEIGHT, PROGRESS_HEIGHT,
+    ROW_HEIGHT, SIDEBAR_WIDTH, Sheet, SheetButton,
 };
 
 const ROW_INSET: f32 = 6.0;
@@ -145,7 +146,7 @@ impl FilesView {
             self.palette.separator_color,
         ));
         let root = self.browser.root().clone();
-        let trash_full = !self.browser.trash().is_empty();
+        let trash_full = self.trash_full;
         let mut y = 10.0;
         for (index, row) in self.sidebar.clone().iter().enumerate() {
             match row {
@@ -196,6 +197,10 @@ impl FilesView {
 
     fn paint_columns(&mut self, items: &mut Vec<Item>) {
         let content = self.content_frame();
+        if self.browser.single() {
+            self.paint_list(content, items);
+            return;
+        }
         let first = self.first_visible_column();
         for index in first..self.browser.columns().len() {
             let x = content.x + (index - first) as f32 * COLUMN_WIDTH;
@@ -213,9 +218,12 @@ impl FilesView {
         self.hits.push((frame, Hit::Column(index)));
         let mut rows = Vec::new();
         let first = (column.scroll / ROW_HEIGHT).floor() as usize;
-        let renaming = self.rename.as_ref().map(|rename| rename.path.clone());
+        let renaming = self
+            .rename
+            .as_ref()
+            .map(|rename| (rename.path.clone(), rename.editor.clone()));
         for (position, entry) in column.entries.iter().enumerate().skip(first) {
-            let y = content.y + TOP_INSET + position as f32 * ROW_HEIGHT - column.scroll;
+            let y = content.y + self.rows_top() + position as f32 * ROW_HEIGHT - column.scroll;
             if y > content.y + content.height {
                 break;
             }
@@ -251,8 +259,9 @@ impl FilesView {
                 });
             }
             let name_x = row.x + 28.0;
-            if renaming.as_deref() == Some(entry.path.as_path()) {
+            if let Some((_, editor)) = renaming.as_ref().filter(|(path, _)| *path == entry.path) {
                 self.paint_editor(
+                    editor,
                     Rect::new(
                         name_x - 3.0,
                         y + 2.0,
@@ -302,13 +311,198 @@ impl FilesView {
         ));
     }
 
-    fn paint_editor(&mut self, field: Rect, items: &mut Vec<Item>) {
-        let Some(rename) = &self.rename else {
-            return;
-        };
-        let text = rename.editor.text().to_owned();
-        let selection = rename.editor.selection();
-        let cursor = rename.editor.cursor();
+    fn paint_list(&mut self, content: Rect, items: &mut Vec<Item>) {
+        let column = self.browser.columns()[0].clone();
+        let sort = self.browser.sort();
+        let wide = content.width >= 640.0;
+        let size_width = 90.0;
+        let date_width = 160.0;
+        let kind_width = if wide { 170.0 } else { 0.0 };
+        let name_width = content.width - size_width - date_width - kind_width - 2.0 * ROW_INSET;
+        let name_x = content.x + ROW_INSET;
+        let date_x = name_x + name_width;
+        let size_x = date_x + date_width;
+        let kind_x = size_x + size_width;
+        let header = Rect::new(content.x, content.y, content.width, HEADER_HEIGHT);
+        items.push(self.fill(header, 0.0, self.palette.surface_background));
+        items.push(self.fill(
+            Rect::new(header.x, header.y + header.height - 1.0, header.width, 1.0),
+            0.0,
+            self.palette.separator_color,
+        ));
+        let muted = self.palette.label_muted;
+        let mut headings = vec![
+            (
+                L10N.tr("column-name"),
+                Some(SortBy::Name),
+                name_x,
+                name_width,
+            ),
+            (
+                L10N.tr("column-modified"),
+                Some(SortBy::Modified),
+                date_x,
+                date_width,
+            ),
+            (
+                L10N.tr("column-size"),
+                Some(SortBy::Size),
+                size_x,
+                size_width,
+            ),
+        ];
+        if wide {
+            headings.push((L10N.tr("column-kind"), None, kind_x, kind_width));
+        }
+        for (title, by, x, width) in headings {
+            let active = by == Some(sort.by);
+            let title = match (active, sort.descending) {
+                (true, false) => format!("{title}  \u{2191}"),
+                (true, true) => format!("{title}  \u{2193}"),
+                _ => title,
+            };
+            let weight = if active {
+                TextStyle::SEMIBOLD
+            } else {
+                TextStyle::REGULAR
+            };
+            let paragraph = self.paragraph(&title, SMALL_SIZE, muted, weight);
+            items.push(Item::Text {
+                origin: Point::new(
+                    x + 8.0,
+                    header.y + ((HEADER_HEIGHT - paragraph.height()) / 2.0).round(),
+                ),
+                paragraph,
+            });
+            if let Some(by) = by {
+                self.hits.push((
+                    Rect::new(x, header.y, width, HEADER_HEIGHT),
+                    Hit::Header(by),
+                ));
+            }
+        }
+        let body = Rect::new(
+            content.x,
+            content.y + HEADER_HEIGHT,
+            content.width,
+            content.height - HEADER_HEIGHT,
+        );
+        self.hits.push((body, Hit::Column(0)));
+        let renaming = self
+            .rename
+            .as_ref()
+            .map(|rename| (rename.path.clone(), rename.editor.clone()));
+        let first = (column.scroll / ROW_HEIGHT).floor() as usize;
+        let mut rows = Vec::new();
+        for (position, entry) in column.entries.iter().enumerate().skip(first) {
+            let y = body.y + position as f32 * ROW_HEIGHT - column.scroll;
+            if y > body.y + body.height {
+                break;
+            }
+            let row = Rect::new(
+                content.x + ROW_INSET,
+                y,
+                content.width - 2.0 * ROW_INSET,
+                ROW_HEIGHT,
+            );
+            self.hits.push((
+                row,
+                Hit::Row {
+                    column: 0,
+                    row: position,
+                },
+            ));
+            let marked = column.is_marked(position);
+            if marked {
+                rows.push(self.fill(row, 5.0, self.palette.accent_color));
+            } else if position % 2 == 1 {
+                rows.push(self.fill(row, 5.0, self.palette.label_muted.with_alpha(14)));
+            }
+            let (primary, secondary) = if marked {
+                (Color::hex(0xFFFFFF), Color::hex(0xFFFFFF).with_alpha(220))
+            } else {
+                (self.palette.label_primary, self.palette.label_muted)
+            };
+            if let Some(image) = self.entry_icon(entry, ICON_PIXELS) {
+                rows.push(Item::Image {
+                    rect: Rect::new(name_x + 6.0, y + 4.0, ICON_SIZE, ICON_SIZE),
+                    image,
+                });
+            }
+            let text_x = name_x + 28.0;
+            if let Some((_, editor)) = renaming.as_ref().filter(|(path, _)| *path == entry.path) {
+                self.paint_editor(
+                    editor,
+                    Rect::new(text_x - 3.0, y + 2.0, name_width - 36.0, ROW_HEIGHT - 4.0),
+                    &mut rows,
+                );
+            } else {
+                let name = self.line(&entry.name, NAME_SIZE, primary, text_x, y, ROW_HEIGHT);
+                rows.push(Item::Clip {
+                    shape: Shape::rect(Rect::new(text_x, y, name_width - 36.0, ROW_HEIGHT)),
+                    items: vec![name],
+                });
+            }
+            let date = entry.modified.map(format_date).unwrap_or_default();
+            rows.push(self.line(
+                &date,
+                SMALL_SIZE + 1.0,
+                secondary,
+                date_x + 8.0,
+                y,
+                ROW_HEIGHT,
+            ));
+            let size = if entry.is_folder() {
+                "\u{2014}".to_owned()
+            } else {
+                format_size(entry.size)
+            };
+            rows.push(self.line(
+                &size,
+                SMALL_SIZE + 1.0,
+                secondary,
+                size_x + 8.0,
+                y,
+                ROW_HEIGHT,
+            ));
+            if wide {
+                let kind = self.apps.kind_for_name(&entry.name, entry.is_folder());
+                let kind = self.line(
+                    &kind,
+                    SMALL_SIZE + 1.0,
+                    secondary,
+                    kind_x + 8.0,
+                    y,
+                    ROW_HEIGHT,
+                );
+                rows.push(Item::Clip {
+                    shape: Shape::rect(Rect::new(kind_x, y, kind_width - 8.0, ROW_HEIGHT)),
+                    items: vec![kind],
+                });
+            }
+        }
+        if column.entries.is_empty() {
+            let empty = self.text.paragraph(
+                &L10N.tr("empty-folder"),
+                TextStyle::new(NAME_SIZE, muted),
+                Some(body.width),
+                TextAlign::Center,
+            );
+            rows.push(Item::Text {
+                origin: Point::new(body.x, body.y + 40.0),
+                paragraph: empty,
+            });
+        }
+        items.push(Item::Clip {
+            shape: Shape::rect(body),
+            items: rows,
+        });
+    }
+
+    fn paint_editor(&mut self, editor: &NameEditor, field: Rect, items: &mut Vec<Item>) {
+        let text = editor.text().to_owned();
+        let selection = editor.selection();
+        let cursor = editor.cursor();
         let primary = self.palette.label_primary;
         items.push(self.fill(field, 4.0, self.palette.surface_elevated));
         items.push(Item::Stroke {
@@ -426,6 +620,15 @@ impl FilesView {
                 };
                 segments.push((name, Some(walked.clone()), icon));
             }
+        }
+        let available = status_x - bar.x - 18.0;
+        let mut widths = segments
+            .iter()
+            .map(|(name, _, _)| self.label(name, SMALL_SIZE + 1.0, muted).width() + 38.0)
+            .collect::<Vec<_>>();
+        while widths.len() > 1 && widths.iter().sum::<f32>() > available {
+            widths.remove(0);
+            segments.remove(0);
         }
         let mut x = bar.x + 10.0;
         let mut row = Vec::new();
@@ -1015,6 +1218,53 @@ impl FilesView {
         });
     }
 
+    fn paint_go_to(&mut self, editor: &NameEditor, items: &mut Vec<Item>) {
+        let width = SHEET_WIDTH.min(self.size.0 - 40.0);
+        let height = PADDING + 20.0 + 8.0 + BUTTON_HEIGHT + 16.0 + BUTTON_HEIGHT + PADDING;
+        let panel = Rect::new(
+            ((self.size.0 - width) / 2.0).round(),
+            ((self.size.1 - height) / 3.0).round(),
+            width,
+            height,
+        );
+        let shape = self.panel(panel, items);
+        let mut content = Vec::new();
+        let primary = self.palette.label_primary;
+        let title = self.paragraph(
+            &L10N.tr("go-to-title"),
+            NAME_SIZE + 1.0,
+            primary,
+            TextStyle::SEMIBOLD,
+        );
+        content.push(Item::Text {
+            origin: Point::new(panel.x + PADDING, panel.y + PADDING),
+            paragraph: title,
+        });
+        let field = Rect::new(
+            panel.x + PADDING,
+            panel.y + PADDING + 28.0,
+            panel.width - 2.0 * PADDING,
+            BUTTON_HEIGHT,
+        );
+        self.paint_editor(editor, field, &mut content);
+        let y = field.y + field.height + 16.0;
+        let mut x = panel.x + panel.width - PADDING;
+        for (button, title, default) in [
+            (SheetButton::Confirm, L10N.tr("go"), true),
+            (SheetButton::Cancel, L10N.tr("cancel"), false),
+        ] {
+            let paragraph_width = self.label(&title, NAME_SIZE, primary).width();
+            x -= (paragraph_width + 28.0).ceil();
+            let rect = self.button(&title, Point::new(x, y), default, &mut content);
+            self.hits.push((rect, Hit::Sheet(button)));
+            x -= 8.0;
+        }
+        items.push(Item::Clip {
+            shape,
+            items: content,
+        });
+    }
+
     fn paint_sheet(&mut self, items: &mut Vec<Item>) {
         let Some(sheet) = self.sheet.clone() else {
             return;
@@ -1025,6 +1275,10 @@ impl FilesView {
             Color::hex(0x000000).with_alpha(60),
         ));
         let (title, detail, buttons, apply_to_all) = match &sheet {
+            Sheet::GoTo(editor) => {
+                self.paint_go_to(editor, items);
+                return;
+            }
             Sheet::Conflict { apply_to_all } => {
                 let Some((_, running)) = self.operations.conflict() else {
                     return;

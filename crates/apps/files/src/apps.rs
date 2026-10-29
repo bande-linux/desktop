@@ -1,10 +1,11 @@
+use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
 use unbound_xdg::{
-    DesktopEntry, Locale, MimeApps, MimeDatabase, current_desktops, handlers, mimeapps_paths,
-    set_default_app,
+    DIRECTORY, DesktopEntry, Locale, MimeApps, MimeDatabase, OCTET_STREAM, current_desktops,
+    handlers, mimeapps_paths, set_default_app,
 };
 
 const DESKTOP_ENTRY: &str = "application/x-desktop";
@@ -16,6 +17,7 @@ pub struct Apps {
     locale: Option<Locale>,
     lists: Vec<PathBuf>,
     data_dirs: Vec<PathBuf>,
+    kinds: HashMap<String, String>,
 }
 
 impl Apps {
@@ -30,6 +32,7 @@ impl Apps {
             locale,
             lists,
             data_dirs,
+            kinds: HashMap::new(),
         }
     }
 
@@ -48,10 +51,25 @@ impl Apps {
             .unwrap_or_else(|| vec!["application-x-generic".to_owned()])
     }
 
-    pub fn kind(&self, mime: &str) -> String {
-        self.mime
+    pub fn kind(&mut self, mime: &str) -> String {
+        if let Some(kind) = self.kinds.get(mime) {
+            return kind.clone();
+        }
+        let kind = self
+            .mime
             .description(mime, self.locale.as_ref())
-            .unwrap_or_else(|| mime.to_owned())
+            .unwrap_or_else(|| mime.to_owned());
+        self.kinds.insert(mime.to_owned(), kind.clone());
+        kind
+    }
+
+    pub fn kind_for_name(&mut self, name: &str, is_folder: bool) -> String {
+        let mime = if is_folder {
+            DIRECTORY.to_owned()
+        } else {
+            self.mime.for_name(name).unwrap_or(OCTET_STREAM).to_owned()
+        };
+        self.kind(&mime)
     }
 
     pub fn default_for(&self, mime: &str) -> Option<&DesktopEntry> {

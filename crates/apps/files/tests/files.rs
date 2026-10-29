@@ -7,15 +7,15 @@ use std::time::{Duration, Instant};
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use tempfile::TempDir;
 use unbound_files::{
-    Apps, Browser, FilesView, Kind, Location, NameEditor, Preview, Request, Row, Sheet,
-    format_size, list, permissions, preview, rows,
+    Apps, Browser, FilesView, Kind, Location, NameEditor, Preview, Request, Row, Sheet, Sort,
+    SortBy, format_size, list, permissions, preview, rows,
 };
 use unbound_fs::Trash;
 use unbound_toolkit::ui::{Event, Key, Modifiers};
 use unbound_toolkit::{Item, Palette, Scheme, TextSystem};
 
 fn names(folder: &Path, show_hidden: bool) -> Vec<String> {
-    list(folder, show_hidden)
+    list(folder, show_hidden, Sort::default())
         .expect("listing")
         .into_iter()
         .map(|entry| entry.name)
@@ -363,7 +363,7 @@ fn quick_look_previews_images_text_folders_and_other_files() {
         .save(home.join("picture.png"))
         .expect("png");
     fs::write(home.join("data.bin"), [0u8, 1, 2, 3, 4]).expect("binary");
-    let entries = list(&home, false).expect("listing");
+    let entries = list(&home, false, Sort::default()).expect("listing");
     let entry = |name: &str| {
         entries
             .iter()
@@ -570,4 +570,75 @@ fn a_name_conflict_asks_and_keeps_both() {
         view.browser().selected().map(|entry| entry.name.as_str()),
         Some("a 2.txt")
     );
+}
+
+#[test]
+fn the_list_view_shows_one_folder_sorted_by_the_chosen_column() {
+    let place = Place::new();
+    fs::write(place.home().join("big.txt"), vec![b'x'; 5000]).expect("file");
+    let mut view = place.view();
+    view.handle(&press(Key::Down));
+    view.handle(&press(Key::Right));
+    view.handle(&press(Key::Down));
+
+    view.handle(&command(Key::Character('2'), false));
+
+    let browser = view.browser();
+    assert!(browser.single());
+    assert_eq!(browser.columns().len(), 1);
+    assert_eq!(
+        browser.root(),
+        &Location::Folder(place.home().join("Documents"))
+    );
+    assert_eq!(selected_name(browser).as_deref(), Some("a.txt"));
+
+    let mut browser = place.browser();
+    let files = |browser: &Browser| {
+        browser.columns()[0]
+            .entries
+            .iter()
+            .filter(|entry| !entry.is_folder())
+            .map(|entry| entry.name.clone())
+            .collect::<Vec<_>>()
+    };
+    browser.set_sort(Sort {
+        by: SortBy::Size,
+        descending: false,
+    });
+    assert_eq!(files(&browser), ["big.txt", "notes.txt"]);
+    browser.set_sort(Sort {
+        by: SortBy::Size,
+        descending: true,
+    });
+    assert_eq!(files(&browser), ["notes.txt", "big.txt"]);
+    assert!(browser.columns()[0].entries[0].is_folder());
+}
+
+#[test]
+fn go_to_folder_accepts_relative_paths_and_reveals_files() {
+    let place = Place::new();
+    let mut view = place.view();
+    let go_to = |view: &mut FilesView, typed: &str| {
+        view.handle(&command(Key::Character('G'), true));
+        assert!(matches!(view.sheet(), Some(Sheet::GoTo(_))));
+        view.handle(&Event::Commit(typed.to_owned()));
+        view.handle(&press(Key::Enter));
+        assert!(view.sheet().is_none());
+    };
+
+    go_to(&mut view, "Documents/Reports");
+    assert_eq!(
+        view.browser().root(),
+        &Location::Folder(place.home().join("Documents/Reports"))
+    );
+    go_to(
+        &mut view,
+        &place.home().join("notes.txt").display().to_string(),
+    );
+    assert_eq!(
+        view.browser().selected().map(|entry| entry.name.as_str()),
+        Some("notes.txt")
+    );
+    go_to(&mut view, "missing");
+    assert!(view.notice().is_some());
 }

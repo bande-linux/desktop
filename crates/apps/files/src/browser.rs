@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use unbound_fs::Trash;
 
-use crate::listing::{Entry, list, list_trash};
+use crate::listing::{Entry, Sort, list, list_trash};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Location {
@@ -75,18 +75,20 @@ pub struct Browser {
     trash: Trash,
     back: Vec<Location>,
     forward: Vec<Location>,
+    sort: Sort,
+    single: bool,
 }
 
-fn read(location: &Location, show_hidden: bool, trash: &Trash) -> Vec<Entry> {
+fn read(location: &Location, show_hidden: bool, trash: &Trash, sort: Sort) -> Vec<Entry> {
     match location {
-        Location::Folder(folder) => list(folder, show_hidden).unwrap_or_default(),
-        Location::Trash => list_trash(trash),
+        Location::Folder(folder) => list(folder, show_hidden, sort).unwrap_or_default(),
+        Location::Trash => list_trash(trash, sort),
     }
 }
 
 impl Browser {
     pub fn open(location: Location, trash: Trash) -> Self {
-        let entries = read(&location, false, &trash);
+        let entries = read(&location, false, &trash, Sort::default());
         Self {
             columns: vec![Column::new(location, entries)],
             active: 0,
@@ -94,6 +96,8 @@ impl Browser {
             trash,
             back: Vec::new(),
             forward: Vec::new(),
+            sort: Sort::default(),
+            single: false,
         }
     }
 
@@ -175,7 +179,7 @@ impl Browser {
     }
 
     fn show(&mut self, location: Location) {
-        let entries = read(&location, self.show_hidden, &self.trash);
+        let entries = read(&location, self.show_hidden, &self.trash, self.sort);
         self.columns = vec![Column::new(location, entries)];
         self.active = 0;
     }
@@ -202,8 +206,43 @@ impl Browser {
         true
     }
 
+    pub fn sort(&self) -> Sort {
+        self.sort
+    }
+
+    pub fn set_sort(&mut self, sort: Sort) {
+        self.sort = sort;
+        self.reload();
+    }
+
+    pub fn single(&self) -> bool {
+        self.single
+    }
+
+    pub fn set_single(&mut self, single: bool) {
+        self.single = single;
+        if single {
+            if let Some(folder) = self.active_folder().map(Path::to_path_buf) {
+                let selection = self.selected_paths();
+                if self.columns[0].folder() != Some(folder.as_path()) {
+                    self.go(Location::Folder(folder));
+                }
+                if !selection.is_empty() {
+                    self.reveal_all(&selection);
+                }
+            }
+            self.columns.truncate(1);
+            self.active = 0;
+        } else {
+            self.open_child(self.active);
+        }
+    }
+
     fn open_child(&mut self, column: usize) {
         self.columns.truncate(column + 1);
+        if self.single {
+            return;
+        }
         let child = match self.columns[column].marked.as_slice() {
             [_] => self.columns[column]
                 .selected_entry()
@@ -213,7 +252,7 @@ impl Browser {
         };
         if let Some(folder) = child {
             let location = Location::Folder(folder);
-            let entries = read(&location, self.show_hidden, &self.trash);
+            let entries = read(&location, self.show_hidden, &self.trash, self.sort);
             self.columns.push(Column::new(location, entries));
         }
     }
@@ -357,8 +396,13 @@ impl Browser {
         let Some(parent) = root.parent() else {
             return false;
         };
+        if self.single {
+            self.go(Location::Folder(parent.to_path_buf()));
+            self.reveal(&root);
+            return true;
+        }
         let location = Location::Folder(parent.to_path_buf());
-        let entries = read(&location, self.show_hidden, &self.trash);
+        let entries = read(&location, self.show_hidden, &self.trash, self.sort);
         let mut columns = vec![Column::new(location, entries)];
         columns.append(&mut self.columns);
         self.columns = columns;
@@ -404,7 +448,7 @@ impl Browser {
             .and_then(|row| column.entries.get(row))
             .map(|entry| entry.path.clone());
         let previous_row = column.selected;
-        let entries = read(&column.location, self.show_hidden, &self.trash);
+        let entries = read(&column.location, self.show_hidden, &self.trash, self.sort);
         let find = |path: &PathBuf| entries.iter().position(|entry| entry.path == *path);
         let marked = marked_paths.iter().filter_map(find).collect::<Vec<_>>();
         let selected = selected_path

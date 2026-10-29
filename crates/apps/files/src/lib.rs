@@ -17,7 +17,9 @@ use unbound_l10n::Localizer;
 pub use apps::Apps;
 pub use browser::{Browser, Column, Location};
 pub use editor::NameEditor;
-pub use listing::{Entry, Kind, finder_order, format_size, is_hidden, list, list_trash};
+pub use listing::{
+    Entry, Kind, Sort, SortBy, finder_order, format_size, is_hidden, list, list_trash,
+};
 pub use operations::{Operations, Purpose};
 pub use paint::{format_date, permissions};
 pub use preview::{Preview, TEXT_PREVIEW_BYTES, preview};

@@ -4,7 +4,7 @@ use std::path::Path;
 
 use unbound_toolkit::Image;
 
-use crate::listing::{Entry, list};
+use crate::listing::{Entry, is_hidden};
 
 pub const TEXT_PREVIEW_BYTES: u64 = 64 * 1024;
 pub const IMAGE_PREVIEW_PIXELS: u32 = 2048;
@@ -59,7 +59,12 @@ fn image(path: &Path) -> Option<Image> {
 pub fn preview(entry: &Entry) -> Preview {
     if entry.is_folder() {
         return Preview::Folder {
-            items: list(&entry.path, false).map_or(0, |entries| entries.len()),
+            items: fs::read_dir(&entry.path).map_or(0, |entries| {
+                entries
+                    .filter_map(Result::ok)
+                    .filter(|entry| !is_hidden(&entry.file_name().to_string_lossy()))
+                    .count()
+            }),
         };
     }
     if let Some(image) = image(&entry.path) {

@@ -55,26 +55,48 @@ pub fn is_hidden(name: &str) -> bool {
     name.starts_with('.')
 }
 
-pub fn sort(entries: &mut [Entry]) {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SortBy {
+    #[default]
+    Name,
+    Modified,
+    Size,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Sort {
+    pub by: SortBy,
+    pub descending: bool,
+}
+
+pub fn sort(entries: &mut [Entry], sort: Sort) {
     entries.sort_by(|a, b| {
-        b.is_folder()
-            .cmp(&a.is_folder())
-            .then_with(|| finder_order(&a.name, &b.name))
+        let order = match sort.by {
+            SortBy::Name => finder_order(&a.name, &b.name),
+            SortBy::Modified => b.modified.cmp(&a.modified),
+            SortBy::Size => b.size.cmp(&a.size),
+        }
+        .then_with(|| finder_order(&a.name, &b.name));
+        b.is_folder().cmp(&a.is_folder()).then(if sort.descending {
+            order.reverse()
+        } else {
+            order
+        })
     });
 }
 
-pub fn list(folder: &Path, show_hidden: bool) -> io::Result<Vec<Entry>> {
+pub fn list(folder: &Path, show_hidden: bool, order: Sort) -> io::Result<Vec<Entry>> {
     let mut entries = fs::read_dir(folder)?
         .filter_map(Result::ok)
         .map(|entry| entry.file_name().to_string_lossy().into_owned())
         .filter(|name| show_hidden || !is_hidden(name))
         .map(|name| Entry::read(folder.join(&name), name))
         .collect::<Vec<_>>();
-    sort(&mut entries);
+    sort(&mut entries, order);
     Ok(entries)
 }
 
-pub fn list_trash(trash: &Trash) -> Vec<Entry> {
+pub fn list_trash(trash: &Trash, order: Sort) -> Vec<Entry> {
     let mut entries = trash
         .items()
         .into_iter()
@@ -84,7 +106,7 @@ pub fn list_trash(trash: &Trash) -> Vec<Entry> {
             entry
         })
         .collect::<Vec<_>>();
-    sort(&mut entries);
+    sort(&mut entries, order);
     entries
 }
 

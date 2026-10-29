@@ -190,7 +190,7 @@ runs natively on Wayland in the guest.
   the compositor exports `WAYLAND_DISPLAY`, `XDG_CURRENT_DESKTOP` and `XDG_SESSION_TYPE`
   to systemd user units and D-Bus activation. Not done: dimming has no backlight to act
   on yet; the lock screen shows no wallpaper and no battery or network state.
-- [x] **M18 Full-screen screenshots** (`desktop/milestone-18`)
+- [ ] **M18 Full-screen screenshots** (`desktop/milestone-18`; ci/vm not green yet)
   `ext-image-capture-source-v1` (output sources) and `ext-image-copy-capture-v1` into
   `wl_shm` buffers, offered to shell clients only (on a Mac capture needs the Screen
   Recording permission; here the shell is the only trusted capturer and apps will go
@@ -205,7 +205,7 @@ runs natively on Wayland in the guest.
   `m18-screen-before-capture`. Not done: the floating thumbnail, Super+Shift+4 region and
   window selection, Super+Shift+5, the shutter sound, dma-buf capture targets, toplevel
   sources, and the portal's `Screenshot` backed by this capture.
-- [x] **M19 Area screenshots** (`desktop/milestone-19`)
+- [ ] **M19 Area screenshots** (`desktop/milestone-19`; ci/vm not green yet)
   Super+Shift+4 (Command-Shift-4) sends `capture_area`; `unbound-screenshot` shows a
   full-screen overlay with a crosshair, the dragged-out selection and its size, then on
   release hides it, captures the screen and saves the area like a full-screen shot.
@@ -335,3 +335,11 @@ boot framebuffer, K3 USB input. Later, the Apple DCP and agx drivers unlock:
 - `ci/lavapipe-test` and `ci/vm` sometimes lose the linker to the OOM killer (`ld terminated
   with signal 9`) when two runs share the runners' Mac mini; a rerun passes. Limiting link
   jobs or giving the runners more memory would end it.
+- Since `unbound-screenshot` joined the session (M18), ci/vm fails intermittently in the
+  typing tests: run 40791212426 the lock test (desktop not back), 40793405279 the launcher
+  test (typed command not run), 40793466947 the lock test (`unbound-lock` still running
+  after a good password) and the M19 area test (no overlay in `m19-area-selection`,
+  no file seen although the tool logged a save). The headless tests and the M18
+  full-screen guest test pass. Suspects: a third hidden exclusive overlay layer and the
+  compositor's single `exclusive_layer` slot, or guest CPU load from a third toolkit
+  process; the next step is a headless test with two hidden exclusive shell layers.

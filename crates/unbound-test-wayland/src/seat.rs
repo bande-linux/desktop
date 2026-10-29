@@ -15,6 +15,7 @@ pub(crate) struct Input {
     buttons: Vec<(u32, bool)>,
     closed: Vec<XdgToplevel>,
     scrolled: f64,
+    motions: usize,
     pub(crate) seat: Option<WlSeat>,
     pub(crate) button_serial: u32,
 }
@@ -56,6 +57,10 @@ impl TestClient {
 
     pub fn keys(&self) -> &[(u32, bool)] {
         &self.globals.input.keys
+    }
+
+    pub fn pointer_motions(&self) -> usize {
+        self.globals.input.motions
     }
 
     pub fn scrolled(&self) -> f64 {
@@ -142,6 +147,7 @@ impl Dispatch<WlPointer, Devices> for Globals {
                 surface_y,
                 ..
             } => {
+                input.motions += 1;
                 if let Some(focus) = input.pointer_focus.as_mut() {
                     focus.1 = surface_x;
                     focus.2 = surface_y;

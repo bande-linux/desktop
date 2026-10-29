@@ -62,6 +62,12 @@ fn the_first_frame_is_drawn_on_the_cpu_and_later_frames_on_the_gpu() {
             .poll(|| start.elapsed(), &mut server, &mut renderer)
             .expect("compositor frame");
         if let Ok(color) = on_screen.try_recv() {
+            while server.is_animating() {
+                server.dispatch().expect("server dispatch");
+                scheduler
+                    .poll(|| start.elapsed(), &mut server, &mut renderer)
+                    .expect("compositor frame");
+            }
             let window = &server.windows()[0];
             let size = window.geometry().expect("mapped window").size;
             assert_eq!(
@@ -188,6 +194,12 @@ fn on_a_2x_output_a_window_keeps_its_size_in_points_and_fills_twice_the_pixels()
             .expect("compositor frame");
         if let Ok(scale) = on_screen.try_recv() {
             assert_eq!(scale, 2.0, "the window was told the output scale");
+            while server.is_animating() {
+                server.dispatch().expect("server dispatch");
+                scheduler
+                    .poll(|| start.elapsed(), &mut server, &mut renderer)
+                    .expect("compositor frame");
+            }
             let window = &server.windows()[0];
             let size = window.geometry().expect("mapped window").size;
             let title = TITLE_BAR_HEIGHT as i32;

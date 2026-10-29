@@ -49,6 +49,7 @@ const REVEAL_DWELL: Duration = Duration::from_millis(120);
 const HIDE_DELAY: Duration = Duration::from_millis(450);
 const EDGE_STRIP: f32 = 2.0;
 const HIDDEN_SHADOW: f32 = 24.0;
+const BLUR_BANDS: usize = 5;
 
 #[derive(Debug, Clone)]
 pub struct DockApp {
@@ -200,6 +201,7 @@ pub struct DockState {
     surface: Size,
     panel: Rect,
     populated: bool,
+    blurred: bool,
     auto_hide: bool,
     reveal: Animated,
     reveal_at: Option<Instant>,
@@ -277,6 +279,7 @@ impl DockState {
             surface: Size::default(),
             panel: Rect::default(),
             populated: false,
+            blurred: false,
             auto_hide: false,
             reveal: Animated::new(1.0),
             reveal_at: None,
@@ -940,9 +943,49 @@ impl DockState {
         self.paint_label(cx, items);
     }
 
+    fn panel_radius(&self) -> f32 {
+        (thickness(self.icon_size) * 0.3).round()
+    }
+
+    pub fn set_blurred(&mut self, blurred: bool) {
+        self.blurred = blurred;
+    }
+
+    pub fn blur_rects(&self) -> Vec<Rect> {
+        let panel = self.panel;
+        let radius = self
+            .panel_radius()
+            .min(panel.width / 2.0)
+            .min(panel.height / 2.0);
+        if panel.width <= 0.0 || panel.height <= 0.0 {
+            return Vec::new();
+        }
+        let band = radius / BLUR_BANDS as f32;
+        let mut rects = vec![Rect::new(
+            panel.x,
+            panel.y + radius,
+            panel.width,
+            panel.height - 2.0 * radius,
+        )];
+        for index in 0..BLUR_BANDS {
+            let from_edge = index as f32 * band;
+            let rise = radius - from_edge;
+            let inset = (radius - (radius * radius - rise * rise).max(0.0).sqrt()).ceil();
+            let width = panel.width - 2.0 * inset;
+            rects.push(Rect::new(panel.x + inset, panel.y + from_edge, width, band));
+            rects.push(Rect::new(
+                panel.x + inset,
+                panel.y + panel.height - from_edge - band,
+                width,
+                band,
+            ));
+        }
+        rects
+    }
+
     fn paint_panel(&self, items: &mut Vec<Item>) {
         let dark = self.scheme == Scheme::Dark;
-        let radius = (thickness(self.icon_size) * 0.3).round();
+        let radius = self.panel_radius();
         let shape = Shape::rounded(self.panel, radius);
         items.push(Item::Shadow {
             shape,
@@ -950,16 +993,23 @@ impl DockState {
             blur_radius: 16.0,
             color: Color::hex(0x000000).with_alpha(if dark { 110 } else { 46 }),
         });
-        let (fill, stroke) = if dark {
-            (
+        let (fill, stroke) = match (dark, self.blurred) {
+            (true, true) => (
+                Color::hex(0x2A2D33).with_alpha(178),
+                Color::hex(0xFFFFFF).with_alpha(30),
+            ),
+            (true, false) => (
                 Color::hex(0x2A2D33).with_alpha(232),
                 Color::hex(0xFFFFFF).with_alpha(26),
-            )
-        } else {
-            (
+            ),
+            (false, true) => (
+                Color::hex(0xF7F8FA).with_alpha(170),
+                Color::hex(0x000000).with_alpha(26),
+            ),
+            (false, false) => (
                 Color::hex(0xF7F8FA).with_alpha(236),
                 Color::hex(0x000000).with_alpha(22),
-            )
+            ),
         };
         items.push(Item::Fill {
             shape,

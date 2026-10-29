@@ -54,6 +54,7 @@ use crate::appearance::AppearanceWatch;
 use crate::capture::Capture;
 use crate::chrome::{Chrome, Control, Frame, RESIZE_MARGIN, TITLE_BAR_HEIGHT, Zone};
 use crate::clipboard::Clipboard;
+use crate::effect::BackgroundEffect;
 use crate::lock::{Locked, SessionLock};
 use crate::popup::{MenuPlacement, Menus, Opening, Parent};
 use crate::scale::{Scaling, SurfaceScale};
@@ -280,6 +281,7 @@ pub(crate) struct State {
     pub(crate) capture: Capture,
     pub(crate) text_input: TextInput,
     pub(crate) scaling: Scaling,
+    pub(crate) effect: BackgroundEffect,
 }
 
 impl State {
@@ -1466,6 +1468,9 @@ impl Dispatch<WlRegistry, ()> for State {
                 "wl_data_device_manager" => {
                     state.data_device_manager =
                         Some(registry.bind(name, version.min(3), handle, ()));
+                }
+                "ext_background_effect_manager_v1" => {
+                    state.effect.manager = Some(registry.bind(name, 1, handle, ()));
                 }
                 "wp_cursor_shape_manager_v1" => {
                     state.cursor_shape_manager = Some(registry.bind(name, 1, handle, ()));

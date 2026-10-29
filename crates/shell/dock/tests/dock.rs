@@ -421,3 +421,29 @@ fn an_auto_hidden_dock_slides_in_on_an_edge_push_and_out_after_the_pointer_leave
     harness.advance(Duration::from_millis(200));
     assert!(!harness.state.borrow().is_shown());
 }
+
+#[test]
+fn the_blur_behind_the_dock_stays_inside_its_rounded_corners() {
+    let harness = Harness::new(DockEdge::Bottom, Scheme::Light);
+    let state = harness.state.borrow();
+    let panel = state.panel();
+    let radius = ((ICON_SIZE + 16.0) * 0.3).round();
+    let inside = |x: f32, y: f32| {
+        let cx = x.clamp(panel.x + radius, panel.x + panel.width - radius);
+        let cy = y.clamp(panel.y + radius, panel.y + panel.height - radius);
+        (x - cx).powi(2) + (y - cy).powi(2) <= radius * radius + 0.01
+    };
+    let rects = state.blur_rects();
+    for rect in &rects {
+        for (x, y) in [
+            (rect.x, rect.y),
+            (rect.x + rect.width, rect.y),
+            (rect.x, rect.y + rect.height),
+            (rect.x + rect.width, rect.y + rect.height),
+        ] {
+            assert!(inside(x, y), "{rect:?} leaves the panel {panel:?}");
+        }
+    }
+    let covered: f32 = rects.iter().map(|rect| rect.width * rect.height).sum();
+    assert!(covered > 0.95 * panel.width * panel.height);
+}

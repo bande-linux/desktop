@@ -3,6 +3,7 @@ mod appearance;
 mod capture;
 mod chrome;
 mod clipboard;
+mod effect;
 mod lock;
 mod popup;
 mod run;

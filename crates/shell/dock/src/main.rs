@@ -71,6 +71,7 @@ struct Dock {
     reported: HashMap<String, Rect>,
     input: Option<Rect>,
     zone: i32,
+    blur: Option<Vec<Rect>>,
     menu: Option<MenuTarget>,
     autostart: Option<PathBuf>,
     bus: Receiver<BusEvent>,
@@ -285,6 +286,18 @@ impl Dock {
     }
 
     fn report(&mut self, window: &mut Window) {
+        let blur = self.state.borrow().blur_rects();
+        if self.blur.as_ref().is_some_and(|known| *known != blur) {
+            let blurred = match window.set_background_blur(&blur) {
+                Ok(()) => true,
+                Err(error) => {
+                    tracing::info!("the Dock is not blurred: {error}");
+                    false
+                }
+            };
+            self.blur = blurred.then_some(blur);
+            self.state.borrow_mut().set_blurred(blurred);
+        }
         let state = self.state.borrow();
         let region = state.input_region();
         if self.input != Some(region) {
@@ -505,6 +518,7 @@ fn run() -> Result<(), WindowError> {
         reported: HashMap::new(),
         input: None,
         zone: exclusive_zone(icon_size).round() as i32,
+        blur: Some(Vec::new()),
         menu: None,
         autostart: autostart_dir(config_home.as_deref(), home.as_deref()),
         bus,

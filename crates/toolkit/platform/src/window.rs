@@ -18,7 +18,7 @@ use raw_window_handle::{
 };
 use rustix::fs::{MemfdFlags, memfd_create};
 use unbound_graphics::{
-    Appearance, CpuRenderer, Cursor, Event, GpuRenderer, Point, Pointer, PointerButton,
+    Appearance, CpuRenderer, Cursor, Event, GpuRenderer, Point, Pointer, PointerButton, Rect,
     RenderError, Scene, pixels, vulkan_instance,
 };
 use unbound_protocols::client::unbound_shell_v1::VolumeKey;
@@ -948,6 +948,33 @@ impl Window {
         Ok(())
     }
 
+    pub fn set_input_region(&mut self, area: Option<Rect>) {
+        let Some(area) = area else {
+            self.surface.set_input_region(None);
+            return;
+        };
+        let Some(compositor) = &self.state.compositor else {
+            return;
+        };
+        let region = compositor.create_region(&self.queue.handle(), ());
+        region.add(
+            area.x.floor() as i32,
+            area.y.floor() as i32,
+            area.width.ceil() as i32,
+            area.height.ceil() as i32,
+        );
+        self.surface.set_input_region(Some(&region));
+        region.destroy();
+        self.needs_redraw = true;
+    }
+
+    pub fn set_exclusive_zone(&mut self, zone: i32) {
+        if let ShellSurface::Layer(layer) = &self.role {
+            layer.set_exclusive_zone(zone);
+            self.needs_redraw = true;
+        }
+    }
+
     pub fn set_layer_size(&mut self, size: (u32, u32)) -> Result<(), WindowError> {
         let ShellSurface::Layer(layer) = &self.role else {
             return Err(WindowError::Missing("a layer surface"));
@@ -1215,7 +1242,7 @@ impl Dispatch<WlRegistry, ()> for State {
                     state.wm_base = Some(registry.bind(name, version.min(5), handle, ()));
                 }
                 "zwlr_layer_shell_v1" => {
-                    state.layer_shell = Some(registry.bind(name, version.min(4), handle, ()));
+                    state.layer_shell = Some(registry.bind(name, version.min(5), handle, ()));
                 }
                 "xdg_activation_v1" => {
                     state.activation = Some(registry.bind(name, 1, handle, ()));

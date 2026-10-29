@@ -1,58 +1,147 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use std::cell::RefCell;
+use std::cell::Cell;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 use accesskit::Role;
 use unbound_config::DockEdge;
-use unbound_dock::{Actions, DockAction, DockApp, ICON_SIZE, dock_size, dock_ui, merge_apps};
-use unbound_toolkit::ui::{Event, Pointer};
-use unbound_toolkit::{CpuRenderer, Image, Palette, Point, Scheme, TextSystem};
+use unbound_dock::bus::{app_id_from_uri, launcher_update};
+use unbound_dock::{
+    DockAction, DockApp, DockState, ICON_SIZE, LauncherUpdate, Shared, dock_ui, scene, surface_size,
+};
+use unbound_toolkit::ui::{Event, Pointer, Ui};
+use unbound_toolkit::{Appearance, CpuRenderer, Image, Palette, Point, Rect, Scheme, TextSystem};
+use zbus::zvariant::{OwnedValue, Value};
 
 const OUTPUT: (u32, u32) = (1280, 480);
 const MIN_SSIM: f64 = 0.99;
+const WALLPAPER: u8 = 0x80;
 
 fn blue_icon() -> Image {
-    let pixels = (0..ICON_SIZE * ICON_SIZE)
+    let size = ICON_SIZE as u32;
+    let pixels = (0..size * size)
         .flat_map(|index| {
-            let y = index / ICON_SIZE;
+            let y = index / size;
             [0x20, (0x60 + y * 2) as u8, 0xE0, 0xFF]
         })
         .collect();
-    Image::from_rgba(ICON_SIZE, ICON_SIZE, pixels).expect("icon")
+    Image::from_rgba(size, size, pixels).expect("icon")
+}
+
+fn app(app_id: &str, name: &str, kept: bool, running: bool) -> DockApp {
+    DockApp {
+        app_id: app_id.to_owned(),
+        name: name.to_owned(),
+        icon: (app_id == "org.unbound.Terminal").then(blue_icon),
+        kept,
+        running,
+    }
 }
 
 fn apps() -> Vec<DockApp> {
-    let pinned = [DockApp {
-        app_id: "org.unbound.Terminal".to_owned(),
-        name: "Terminal".to_owned(),
-        icon: Some(blue_icon()),
-        running: false,
-    }];
-    merge_apps(
-        &pinned,
-        &[
-            "org.unbound.Terminal".to_owned(),
-            "org.example.Editor".to_owned(),
-        ],
-        |app_id| DockApp {
-            app_id: app_id.to_owned(),
-            name: "Editor".to_owned(),
-            icon: None,
-            running: false,
-        },
-    )
+    vec![
+        app("org.unbound.Terminal", "Terminal", true, true),
+        app("org.example.Editor", "Editor", false, true),
+    ]
 }
 
-fn golden(name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("tests/golden/{name}.png"))
+struct Harness {
+    state: Shared,
+    ui: Ui,
+    clock: Rc<Cell<Instant>>,
+    size: (u32, u32),
+}
+
+impl Harness {
+    fn new(edge: DockEdge, scheme: Scheme) -> Self {
+        let state = DockState::new(edge, ICON_SIZE);
+        let appearance = Appearance {
+            scheme,
+            accent: None,
+            reduce_motion: false,
+        };
+        state.borrow_mut().set_appearance(appearance);
+        let clock = Rc::new(Cell::new(Instant::now()));
+        state.borrow_mut().set_apps(apps(), clock.get());
+        let mut ui = dock_ui(
+            state.clone(),
+            Palette::for_scheme(scheme),
+            TextSystem::new(),
+        );
+        let time = clock.clone();
+        ui.set_clock(move || time.get());
+        let mut harness = Self {
+            state,
+            ui,
+            clock,
+            size: surface_size(edge, ICON_SIZE, OUTPUT),
+        };
+        harness.frame();
+        harness
+    }
+
+    fn frame(&mut self) -> Vec<u8> {
+        let scene = scene(&mut self.ui, self.size);
+        CpuRenderer::new().render(&scene).expect("frame").rgba
+    }
+
+    fn advance(&mut self, by: Duration) {
+        self.clock.set(self.clock.get() + by);
+        self.state.borrow_mut().tick(self.clock.get());
+        self.frame();
+    }
+
+    fn rect(&self, app_id: &str) -> Rect {
+        self.state
+            .borrow()
+            .icon_rects()
+            .into_iter()
+            .find(|(known, _)| known == app_id)
+            .map(|(_, rect)| rect)
+            .unwrap_or_else(|| panic!("no icon for {app_id}"))
+    }
+
+    fn center(&self, app_id: &str) -> Point {
+        let rect = self.rect(app_id);
+        Point::new(rect.x + rect.width / 2.0, rect.y + rect.height / 2.0)
+    }
+
+    fn click(&mut self, point: Point) {
+        self.ui.handle(&Event::PointerDown(Pointer::at(point)));
+        self.ui.handle(&Event::PointerUp(Pointer::at(point)));
+    }
+
+    fn buttons(&self) -> Vec<(String, String)> {
+        self.ui
+            .accessibility()
+            .nodes
+            .iter()
+            .filter(|(_, node)| node.role() == Role::Button)
+            .map(|(_, node)| {
+                (
+                    node.label().unwrap_or_default().to_owned(),
+                    node.description().unwrap_or_default().to_owned(),
+                )
+            })
+            .collect()
+    }
 }
 
 fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>) {
-    let actual = image::RgbaImage::from_raw(size.0, size.1, rgba).expect("frame");
-    let actual = image::DynamicImage::ImageRgba8(actual).to_rgb8();
-    let path = golden(name);
+    let over_wallpaper = rgba
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .flat_map(|pixel| {
+            let behind = u16::from(255 - pixel[3]) * u16::from(WALLPAPER) / 255;
+            [0, 1, 2].map(|channel| (u16::from(pixel[channel]) + behind).min(255) as u8)
+        })
+        .collect();
+    let actual = image::RgbImage::from_raw(size.0, size.1, over_wallpaper).expect("frame");
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("tests/golden/{name}.png"));
     if std::env::var_os("UNBOUND_UPDATE_GOLDENS").is_some() {
         std::fs::create_dir_all(path.parent().expect("golden directory")).expect("directory");
         actual.save(&path).expect("write golden");
@@ -72,93 +161,187 @@ fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>) {
 }
 
 #[test]
-fn the_left_dock_matches_its_golden_in_light_and_dark() {
-    for (scheme, name) in [
-        (Scheme::Light, "dock-left-light"),
-        (Scheme::Dark, "dock-left-dark"),
+fn the_dock_matches_its_goldens_on_each_edge_in_light_and_dark() {
+    for (edge, scheme, name) in [
+        (DockEdge::Left, Scheme::Light, "dock-left-light"),
+        (DockEdge::Left, Scheme::Dark, "dock-left-dark"),
+        (DockEdge::Bottom, Scheme::Light, "dock-bottom-light"),
     ] {
-        let size = dock_size(DockEdge::Left, OUTPUT);
-        let mut ui = dock_ui(
-            DockEdge::Left,
-            apps(),
-            "09:41",
-            Palette::for_scheme(scheme),
-            TextSystem::new(),
-            Rc::new(RefCell::new(Vec::new())),
+        let mut harness = Harness::new(edge, scheme);
+        harness.state.borrow_mut().update_launcher(
+            "org.unbound.Terminal",
+            LauncherUpdate {
+                count: Some(3),
+                count_visible: Some(true),
+                progress: Some(0.4),
+                progress_visible: Some(true),
+                urgent: None,
+            },
+            harness.clock.get(),
         );
-        let scene = ui.scene(size.0, size.1);
-        let frame = CpuRenderer::new().render(&scene).expect("frame");
-        check_golden(name, size, frame.rgba);
+        harness.advance(Duration::from_secs(2));
+        let frame = harness.frame();
+        check_golden(name, harness.size, frame);
     }
 }
 
 #[test]
-fn the_bottom_dock_matches_its_golden() {
-    let size = dock_size(DockEdge::Bottom, OUTPUT);
-    let mut ui = dock_ui(
-        DockEdge::Bottom,
-        apps(),
-        "09:41",
-        Palette::for_scheme(Scheme::Light),
-        TextSystem::new(),
-        Rc::new(RefCell::new(Vec::new())),
-    );
-    let scene = ui.scene(size.0, size.1);
-    let frame = CpuRenderer::new().render(&scene).expect("frame");
-    check_golden("dock-bottom-light", size, frame.rgba);
-}
+fn a_click_opens_the_app_or_the_trash_and_a_drag_off_cancels() {
+    let mut harness = Harness::new(DockEdge::Left, Scheme::Light);
+    let editor = harness.center("org.example.Editor");
+    let terminal = harness.center("org.unbound.Terminal");
+    let trash = {
+        let rects = harness.state.borrow().panel();
+        Point::new(rects.x + rects.width / 2.0, rects.y + rects.height - 30.0)
+    };
 
-#[test]
-fn clicking_an_app_asks_to_open_it_and_a_drag_off_cancels() {
-    let actions: Actions = Rc::new(RefCell::new(Vec::new()));
-    let size = dock_size(DockEdge::Left, OUTPUT);
-    let mut ui = dock_ui(
-        DockEdge::Left,
-        apps(),
-        "09:41",
-        Palette::for_scheme(Scheme::Light),
-        TextSystem::new(),
-        actions.clone(),
-    );
-    ui.layout(unbound_toolkit::ui::Size::new(size.0 as f32, size.1 as f32));
-    let second = Point::new(32.0, 8.0 + 52.0 + 26.0);
-
-    ui.handle(&Event::PointerDown(Pointer::at(second)));
-    ui.handle(&Event::PointerUp(Pointer::at(second)));
-    ui.handle(&Event::PointerDown(Pointer::at(Point::new(32.0, 30.0))));
-    ui.handle(&Event::PointerMove(Pointer::at(Point::new(200.0, 30.0))));
-    ui.handle(&Event::PointerUp(Pointer::at(Point::new(200.0, 30.0))));
+    harness.click(editor);
+    harness
+        .ui
+        .handle(&Event::PointerDown(Pointer::at(terminal)));
+    harness
+        .ui
+        .handle(&Event::PointerMove(Pointer::at(Point::new(
+            200.0, terminal.y,
+        ))));
+    harness.ui.handle(&Event::PointerUp(Pointer::at(Point::new(
+        200.0, terminal.y,
+    ))));
+    harness.click(trash);
 
     assert_eq!(
-        *actions.borrow(),
-        [DockAction::Open("org.example.Editor".to_owned())]
+        harness.state.borrow_mut().take_actions(),
+        [
+            DockAction::Open("org.example.Editor".to_owned()),
+            DockAction::OpenTrash
+        ]
     );
 }
 
 #[test]
-fn every_app_is_a_labelled_button_for_assistive_technology() {
-    let size = dock_size(DockEdge::Left, OUTPUT);
-    let mut ui = dock_ui(
-        DockEdge::Left,
-        apps(),
-        "09:41",
-        Palette::for_scheme(Scheme::Light),
-        TextSystem::new(),
-        Rc::new(RefCell::new(Vec::new())),
+fn every_icon_is_a_labelled_button_that_tells_its_state() {
+    let harness = Harness::new(DockEdge::Left, Scheme::Light);
+    harness.state.borrow_mut().update_launcher(
+        "org.example.Editor",
+        launcher_update(&HashMap::from([
+            ("count".to_owned(), OwnedValue::from(120_i64)),
+            ("count-visible".to_owned(), OwnedValue::from(true)),
+        ])),
+        harness.clock.get(),
     );
-    ui.layout(unbound_toolkit::ui::Size::new(size.0 as f32, size.1 as f32));
+    harness.state.borrow_mut().set_trash_full(true);
 
-    let tree = ui.accessibility();
-    let buttons = tree
-        .nodes
-        .iter()
-        .filter(|(_, node)| node.role() == Role::Button)
-        .map(|(_, node)| node.label().unwrap_or_default().to_owned())
-        .collect::<Vec<_>>();
-    assert_eq!(buttons, ["Terminal", "Editor"]);
-    assert!(
-        tree.nodes
-            .iter()
-            .any(|(_, node)| node.role() == Role::Label && node.value() == Some("09:41"))
+    assert_eq!(
+        harness.buttons(),
+        [
+            ("Terminal".to_owned(), "running".to_owned()),
+            ("Editor".to_owned(), "running, 120 new".to_owned()),
+            ("Trash".to_owned(), "contains items".to_owned()),
+        ]
     );
+}
+
+#[test]
+fn a_launching_app_pulses_until_its_window_maps_or_ten_seconds_pass() {
+    let mut harness = Harness::new(DockEdge::Left, Scheme::Light);
+    let mut stopped = apps();
+    stopped[0].running = false;
+    let now = harness.clock.get();
+    harness.state.borrow_mut().set_apps(stopped.clone(), now);
+    harness
+        .state
+        .borrow_mut()
+        .launching("org.unbound.Terminal", now);
+    assert!(harness.state.borrow().pulsing(now));
+    assert_eq!(harness.buttons()[0].1, "opening");
+
+    harness.state.borrow_mut().set_apps(apps(), now);
+    assert!(!harness.state.borrow().pulsing(now));
+
+    harness
+        .state
+        .borrow_mut()
+        .launching("org.unbound.Terminal", now);
+    harness.state.borrow_mut().set_apps(stopped, now);
+    harness.advance(Duration::from_secs(11));
+    assert!(!harness.state.borrow().pulsing(harness.clock.get()));
+    assert_eq!(harness.buttons()[0].1, "");
+}
+
+#[test]
+fn neighbours_slide_into_the_gap_a_quitting_app_leaves() {
+    let mut harness = Harness::new(DockEdge::Left, Scheme::Light);
+    let before = harness.rect("org.unbound.Terminal");
+    let mut quit = apps();
+    quit.truncate(1);
+    harness
+        .state
+        .borrow_mut()
+        .set_apps(quit, harness.clock.get());
+    harness.advance(Duration::from_millis(60));
+    let moving = harness.rect("org.unbound.Terminal");
+    harness.advance(Duration::from_secs(2));
+    let after = harness.rect("org.unbound.Terminal");
+
+    assert!(moving.y > before.y && moving.y < after.y);
+    assert!(after.y > before.y);
+    assert_eq!(harness.state.borrow().icon_rects().len(), 1);
+    assert_eq!(after.x, 6.0 + 8.0);
+}
+
+#[test]
+fn badges_follow_launcher_entry_updates_as_kde_reads_them() {
+    assert_eq!(
+        app_id_from_uri("application://org.mozilla.firefox.desktop").as_deref(),
+        Some("org.mozilla.firefox")
+    );
+    let harness = Harness::new(DockEdge::Left, Scheme::Light);
+    let now = harness.clock.get();
+    let update = |pairs: &[(&str, Value<'static>)]| {
+        launcher_update(
+            &pairs
+                .iter()
+                .map(|(key, value)| {
+                    (
+                        (*key).to_owned(),
+                        OwnedValue::try_from(value.clone()).expect("value"),
+                    )
+                })
+                .collect(),
+        )
+    };
+    let mut state = harness.state.borrow_mut();
+    state.update_launcher(
+        "org.example.Editor",
+        update(&[
+            ("count", Value::from(4_i64)),
+            ("count-visible", Value::from(true)),
+        ]),
+        now,
+    );
+    state.update_launcher(
+        "org.example.Editor",
+        update(&[
+            ("progress", Value::from(0.25)),
+            ("progress-visible", Value::from(true)),
+        ]),
+        now,
+    );
+    drop(state);
+    assert_eq!(harness.buttons()[1].1, "running, 4 new, 25 % done");
+
+    harness.state.borrow_mut().update_launcher(
+        "org.example.Editor",
+        update(&[
+            ("count-visible", Value::from(false)),
+            ("urgent", Value::from(true)),
+        ]),
+        now,
+    );
+    assert_eq!(
+        harness.buttons()[1].1,
+        "running, 25 % done, needs attention"
+    );
+    harness.state.borrow_mut().activated("org.example.Editor");
+    assert_eq!(harness.buttons()[1].1, "running, 25 % done");
 }

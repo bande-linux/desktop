@@ -10,6 +10,8 @@ use wayland_protocols::xdg::activation::v1::client::xdg_activation_token_v1::{
     self, XdgActivationTokenV1,
 };
 
+use unbound_graphics::Rect;
+
 use crate::window::{State, Window, WindowError, WindowEvent};
 
 struct Toplevel {
@@ -59,6 +61,25 @@ impl Window {
             .ok_or(WindowError::Missing("unbound_shell_v1 version 4"))?;
         protocol.toggle_control_center();
         self.flush()
+    }
+
+    pub fn set_icon_rect(&mut self, app_id: &str, rect: Rect) -> Result<(), WindowError> {
+        let protocol = self
+            .state
+            .shell
+            .protocol
+            .as_ref()
+            .filter(|protocol| protocol.version() >= unbound_shell_v1::REQ_SET_ICON_RECT_SINCE)
+            .ok_or(WindowError::Missing("unbound_shell_v1 version 5"))?;
+        protocol.set_icon_rect(
+            app_id.to_owned(),
+            &self.surface,
+            rect.x.round() as i32,
+            rect.y.round() as i32,
+            rect.width.round() as i32,
+            rect.height.round() as i32,
+        );
+        Ok(())
     }
 
     pub fn activation_token(&mut self, app_id: &str) -> Result<String, WindowError> {

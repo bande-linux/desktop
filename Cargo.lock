@@ -3616,13 +3616,14 @@ dependencies = [
  "accesskit",
  "image",
  "image-compare",
- "jiff",
  "tracing",
  "unbound-config",
+ "unbound-fs",
  "unbound-l10n",
  "unbound-log",
  "unbound-toolkit",
  "unbound-xdg",
+ "zbus",
 ]
 
 [[package]]

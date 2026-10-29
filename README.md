@@ -44,21 +44,41 @@ For complete technical specifications, see **[Master Architecture & Execution Pl
 
 ---
 
-## 🚀 Installation on Minimal Debian Server (Target)
+## 🚀 Installation on Debian 13
 
-Unbound is designed to install onto a bare-minimum Debian 13 (Trixie) server installation and boot directly into a hardware-accelerated session upon reboot:
+Unbound installs from its APT repository at <https://unbound-linux.github.io/apt> on Debian 13
+(trixie), arm64. You need a display manager that lists Wayland sessions, such as GDM, SDDM, or a
+greetd front-end.
 
-```bash
-# Add Unbound repository
-curl -fsSL https://repo.unbound-linux.org/pubkey.gpg | sudo gpg --dearmor -o /etc/apt/keyrings/unbound-linux.gpg
-echo "deb [signed-by=/etc/apt/keyrings/unbound-linux.gpg] https://repo.unbound-linux.org/debian trixie main" | sudo tee /etc/apt/sources.list.d/unbound-linux.list
+1. Choose a channel:
+   - **Release** carries tagged versions only.
+   - **Testing** carries a build of every change merged to `main`.
 
-# Install full desktop suite
-sudo apt-get update && sudo apt-get install -y unbound-desktop
+   Download the archive keyring and the channel's package from the latest release, then install
+   both. For the release channel:
 
-# Reboot directly into Unbound
-sudo reboot
-```
+   ```bash
+   cd /tmp
+   wget https://github.com/unbound-linux/apt/releases/latest/download/unbound-archive-keyring.deb \
+        https://github.com/unbound-linux/apt/releases/latest/download/unbound-apt-source.deb
+   sudo apt install ./unbound-archive-keyring.deb ./unbound-apt-source.deb
+   ```
+
+   For testing, use `unbound-apt-source-testing.deb` in both places.
+2. Install the desktop:
+
+   ```bash
+   sudo apt update
+   sudo apt install unbound-desktop
+   ```
+
+Log out and choose **Unbound** at the login screen. Updates arrive with `sudo apt upgrade` from
+your channel only.
+
+- **Switch channels:** run `sudo apt install unbound-apt-source-testing` or
+  `sudo apt install unbound-apt-source`.
+- **Signing key:** the repository is signed with the key
+  `6287 DE66 4599 29AA 1C01  E146 495A 6C19 8264 7E05`.
 
 ---
 

@@ -1,0 +1,54 @@
+#!/bin/bash
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+
+apt-get update -qq
+apt-get install -y -qq --no-install-recommends apt-utils > /dev/null
+(cd /debs && apt-ftparchive packages . > Packages)
+echo 'deb [trusted=yes] file:/debs ./' > /etc/apt/sources.list.d/local.list
+apt-get update -qq
+
+echo "== unbound-desktop resolves and installs from the packages alone"
+apt-get install -y -q unbound-desktop < /dev/null
+version=$(dpkg-query -W -f '${Version}' unbound-desktop)
+for package in $(dpkg-query -W -f '${Package}\n' 'unbound-*' xdg-desktop-portal-unbound | grep -v -e apt-source -e archive-keyring); do
+    installed=$(dpkg-query -W -f '${db:Status-Status} ${Version}' "$package" 2>/dev/null || true)
+    [ "$installed" = "installed $version" ] || [ -z "${installed%%not-installed*}" ] ||
+        { echo "$package is $installed, unbound-desktop is $version"; exit 1; }
+done
+
+echo "== no X server, XWayland or X session came along"
+x11=$(dpkg-query -W -f '${db:Status-Status} ${Package}\n' | awk '$1 == "installed" { print $2 }' |
+    grep -E '^(xserver-|xwayland$|xorg$|x11-session-utils$|xinit$)' || true)
+[ -z "$x11" ] || { echo "installed: $x11"; exit 1; }
+
+echo "== every packaged program is in place"
+for program in $(dpkg -L $(dpkg-query -W -f '${Package}\n' 'unbound-*' xdg-desktop-portal-unbound) 2>/dev/null |
+    grep -E '^/usr/(bin|libexec)/.'); do
+    test -x "$program" || { echo "$program is not executable"; exit 1; }
+done
+test -e /usr/share/wayland-sessions/unbound.desktop
+
+echo "== the installed compositor serves Wayland clients"
+export XDG_RUNTIME_DIR=$(mktemp -d)
+status=0
+timeout 10 unbound-compositor --headless > /tmp/compositor.out 2>&1 || status=$?
+cat /tmp/compositor.out
+[ "$status" = 124 ]
+grep -q '^WAYLAND_DISPLAY=wayland-' /tmp/compositor.out
+
+echo "== the channel packages switch the repository without prompts"
+rm /etc/apt/sources.list.d/local.list
+apt-get install -y -q /debs/unbound-archive-keyring_*_all.deb /debs/unbound-apt-source_*_all.deb < /dev/null > /dev/null
+grep -qx 'Suites: trixie' /etc/apt/sources.list.d/unbound.sources
+apt-get install -y -q /debs/unbound-apt-source-testing_*_all.deb < /dev/null > /dev/null
+grep -qx 'Suites: trixie-testing' /etc/apt/sources.list.d/unbound.sources
+[ "$(dpkg-query -W -f '${db:Status-Status}' unbound-apt-source)" = config-files ]
+dpkg --purge unbound-apt-source > /dev/null
+grep -qx 'Suites: trixie-testing' /etc/apt/sources.list.d/unbound.sources
+apt-get install -y -q /debs/unbound-apt-source_*_all.deb < /dev/null > /dev/null
+grep -qx 'Suites: trixie' /etc/apt/sources.list.d/unbound.sources
+grep -qx 'Signed-By: /usr/share/keyrings/unbound-archive-keyring.pgp' /etc/apt/sources.list.d/unbound.sources
+test -s /usr/share/keyrings/unbound-archive-keyring.pgp
+grep -qx 'Pin: origin unbound-linux.github.io' /etc/apt/preferences.d/unbound.pref
+echo "install test passed"

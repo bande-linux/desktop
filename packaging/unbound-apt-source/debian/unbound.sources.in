@@ -1,0 +1,5 @@
+Types: deb
+URIs: @ARCHIVE_URL@
+Suites: @SUITE@
+Components: main
+Signed-By: @KEYRING@

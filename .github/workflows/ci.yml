@@ -4,6 +4,7 @@ on:
   push:
     branches: ['**']
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -52,7 +53,7 @@ jobs:
   deb:
     name: ci/deb
     runs-on: [self-hosted, unbound]
-    timeout-minutes: 30
+    timeout-minutes: 60
     env:
       CARGO_DEB_VERSION: 3.8.0
     steps:
@@ -246,6 +247,68 @@ jobs:
           path: target/debian/*.deb
           if-no-files-found: error
 
+  deb-all:
+    name: ci/deb-all
+    runs-on: [self-hosted, unbound]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Install the packaging tools
+        run: ci/apt-install.sh build-essential debhelper dpkg-dev lintian gnupg
+      - name: Build the repository and meta packages
+        run: |
+          version=$(ci/deb/version.sh)
+          (cd packaging/unbound-apt-source && dpkg-buildpackage -b -us -uc)
+          (cd packaging/unbound-desktop && DEB_VERSION_OVERRIDE=$version dpkg-buildpackage -b -us -uc)
+          mkdir -p debs
+          mv packaging/*.deb debs/
+          ls -l debs
+          test "$(dpkg-deb --field debs/unbound-desktop_*_all.deb Version)" = "$version"
+          dpkg-deb --field debs/unbound-desktop_*_all.deb Depends | grep -qF "unbound-compositor (= $version)"
+      - name: Lint the packages
+        run: |
+          chmod -R a+rX debs
+          sudo -u nobody lintian --fail-on error,warning debs/*.deb
+      - name: Check the repository packages
+        run: |
+          root=$(mktemp -d)
+          for channel in unbound-apt-source:trixie unbound-apt-source-testing:trixie-testing; do
+            IFS=: read -r package suite <<< "$channel"
+            dpkg-deb --extract debs/"$package"_*_all.deb "$root/$package"
+            sed "s/^Suites: .*/Suites: SUITE/" "$root/$package/etc/apt/sources.list.d/unbound.sources" > "$root/$package.sources"
+            grep -qx "Suites: $suite" "$root/$package/etc/apt/sources.list.d/unbound.sources"
+          done
+          cmp "$root/unbound-apt-source.sources" "$root/unbound-apt-source-testing.sources"
+          dpkg-deb --extract debs/unbound-archive-keyring_*_all.deb "$root/keyring"
+          gpg --batch --with-colons --show-keys "$root/keyring/usr/share/keyrings/unbound-archive-keyring.pgp" \
+            | grep -qx 'fpr:::::::::6287DE66459929AA1C01E146495A6C1982647E05:'
+      - uses: actions/upload-artifact@v7
+        with:
+          name: unbound-debs-all
+          path: debs/*.deb
+          if-no-files-found: error
+
+  deb-install:
+    name: ci/deb-install
+    needs: [deb, deb-all]
+    runs-on: [self-hosted, unbound]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: unbound-debs-*
+          path: ci/deb/install-test/debs
+          merge-multiple: true
+      - name: Install unbound-desktop into a clean Debian 13
+        run: |
+          image=unbound-install-test:${{ github.sha }}
+          docker build --quiet --tag "$image" ci/deb/install-test
+          trap 'docker rmi --force "$image" >/dev/null' EXIT
+          docker run --rm "$image"
+
   vm:
     name: ci/vm
     runs-on: [self-hosted, unbound-kvm]
@@ -346,3 +409,32 @@ jobs:
           name: perf-toolkit
           path: perf-toolkit.json
           if-no-files-found: ignore
+
+  publish:
+    name: ci/publish
+    needs: [lint, test, deb, deb-all, deb-install, vm, polkit, portal, perf]
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && github.ref_type == 'tag')
+    runs-on: [self-hosted, unbound]
+    timeout-minutes: 10
+    steps:
+      - name: Token for the apt repository
+        id: token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.APT_TRIGGER_CLIENT_ID }}
+          private-key: ${{ secrets.APT_TRIGGER_KEY }}
+          owner: unbound-linux
+          repositories: apt
+          permission-actions: write
+      - name: Start the publish in unbound-linux/apt
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          RUN_ID: ${{ github.run_id }}
+          TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: |
+          jq -n --arg run "$RUN_ID" --arg tag "$TAG" '{ref: "main", inputs: {run_id: $run, tag: $tag}}' |
+            curl -fsS -X POST -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' \
+              https://api.github.com/repos/unbound-linux/apt/actions/workflows/publish.yml/dispatches --data @-
+          echo "Started publishing run $RUN_ID${TAG:+ as $TAG}"

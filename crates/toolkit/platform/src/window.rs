@@ -35,6 +35,7 @@ use wayland_client::{
     delegate_noop,
 };
 use wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_list_v1::ExtForeignToplevelListV1;
+use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_manager_v1::WpCursorShapeManagerV1;
 use wayland_protocols::xdg::activation::v1::client::xdg_activation_v1::XdgActivationV1;
 use wayland_protocols::xdg::shell::client::xdg_surface::{self, XdgSurface};
 use wayland_protocols::xdg::shell::client::xdg_toplevel::{self, XdgToplevel};
@@ -122,10 +123,9 @@ impl Role {
 #[derive(Debug, Clone, PartialEq)]
 pub enum WindowEvent {
     Input(Event),
-    PointerLeft,
-    Scroll { dx: f32, dy: f32 },
     Focus(bool),
     CloseRequested,
+    ToplevelChanged(ToplevelState),
     Pasted(String),
     ShowLauncher,
     CaptureScreen,
@@ -196,6 +196,41 @@ impl From<RenderError> for WindowError {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ToplevelState {
+    pub maximized: bool,
+    pub fullscreen: bool,
+    pub activated: bool,
+    pub tiled: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResizeEdge {
+    Top,
+    Bottom,
+    Left,
+    Right,
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
+}
+
+impl ResizeEdge {
+    fn protocol(self) -> xdg_toplevel::ResizeEdge {
+        match self {
+            Self::Top => xdg_toplevel::ResizeEdge::Top,
+            Self::Bottom => xdg_toplevel::ResizeEdge::Bottom,
+            Self::Left => xdg_toplevel::ResizeEdge::Left,
+            Self::Right => xdg_toplevel::ResizeEdge::Right,
+            Self::TopLeft => xdg_toplevel::ResizeEdge::TopLeft,
+            Self::TopRight => xdg_toplevel::ResizeEdge::TopRight,
+            Self::BottomLeft => xdg_toplevel::ResizeEdge::BottomLeft,
+            Self::BottomRight => xdg_toplevel::ResizeEdge::BottomRight,
+        }
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct State {
     compositor: Option<WlCompositor>,
@@ -205,9 +240,11 @@ pub(crate) struct State {
     pub(crate) activation: Option<XdgActivationV1>,
     pub(crate) seat: Option<WlSeat>,
     pub(crate) data_device_manager: Option<WlDataDeviceManager>,
+    pub(crate) cursor_shape_manager: Option<WpCursorShapeManagerV1>,
     configured: bool,
     suggested_size: Option<(u32, u32)>,
     closed: bool,
+    pub(crate) toplevel: ToplevelState,
     frame_pending: bool,
     pub(crate) events: Vec<WindowEvent>,
     pub(crate) input: Input,
@@ -447,6 +484,66 @@ impl Window {
 
     pub fn is_closed(&self) -> bool {
         self.state.closed
+    }
+
+    pub fn close(&mut self) {
+        self.state.closed = true;
+    }
+
+    pub fn request_close(&mut self) {
+        self.state.events.push(WindowEvent::CloseRequested);
+    }
+
+    pub fn toplevel_state(&self) -> ToplevelState {
+        self.state.toplevel
+    }
+
+    fn toplevel(&self) -> Result<&XdgToplevel, WindowError> {
+        match &self.role {
+            ShellSurface::Toplevel(_, toplevel) => Ok(toplevel),
+            _ => Err(WindowError::Missing("a toplevel surface")),
+        }
+    }
+
+    fn grab(&self) -> Result<(&WlSeat, u32), WindowError> {
+        let seat = self
+            .state
+            .seat
+            .as_ref()
+            .ok_or(WindowError::Missing("wl_seat"))?;
+        let serial = self
+            .state
+            .input
+            .serial
+            .ok_or(WindowError::Missing("an input serial"))?;
+        Ok((seat, serial))
+    }
+
+    pub fn start_move(&mut self) -> Result<(), WindowError> {
+        let (seat, serial) = self.grab()?;
+        self.toplevel()?._move(seat, serial);
+        self.flush()
+    }
+
+    pub fn start_resize(&mut self, edge: ResizeEdge) -> Result<(), WindowError> {
+        let (seat, serial) = self.grab()?;
+        self.toplevel()?.resize(seat, serial, edge.protocol());
+        self.flush()
+    }
+
+    pub fn minimize(&mut self) -> Result<(), WindowError> {
+        self.toplevel()?.set_minimized();
+        self.flush()
+    }
+
+    pub fn toggle_zoom(&mut self) -> Result<(), WindowError> {
+        let toplevel = self.toplevel()?;
+        if self.state.toplevel.maximized {
+            toplevel.unset_maximized();
+        } else {
+            toplevel.set_maximized();
+        }
+        self.flush()
     }
 
     pub fn is_visible(&self) -> bool {
@@ -807,11 +904,14 @@ impl Dispatch<WlRegistry, ()> for State {
                     state.activation = Some(registry.bind(name, 1, handle, ()));
                 }
                 "wl_seat" if state.seat.is_none() => {
-                    state.seat = Some(registry.bind(name, version.min(7), handle, ()));
+                    state.seat = Some(registry.bind(name, version.min(9), handle, ()));
                 }
                 "wl_data_device_manager" => {
                     state.data_device_manager =
                         Some(registry.bind(name, version.min(3), handle, ()));
+                }
+                "wp_cursor_shape_manager_v1" => {
+                    state.cursor_shape_manager = Some(registry.bind(name, 1, handle, ()));
                 }
                 "ext_session_lock_manager_v1" => {
                     state.lock.manager = Some(registry.bind(name, 1, handle, ()));
@@ -887,13 +987,44 @@ impl Dispatch<XdgToplevel, ()> for State {
         _: &QueueHandle<Self>,
     ) {
         match event {
-            xdg_toplevel::Event::Configure { width, height, .. } if width > 0 && height > 0 => {
-                state.suggested_size = Some((width.unsigned_abs(), height.unsigned_abs()));
+            xdg_toplevel::Event::Configure {
+                width,
+                height,
+                states,
+            } => {
+                if width > 0 && height > 0 {
+                    state.suggested_size = Some((width.unsigned_abs(), height.unsigned_abs()));
+                }
+                let states = states
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .filter_map(|bytes| {
+                        xdg_toplevel::State::try_from(u32::from_ne_bytes(*bytes)).ok()
+                    })
+                    .collect::<Vec<_>>();
+                let previous = state.toplevel;
+                state.toplevel = ToplevelState {
+                    maximized: states.contains(&xdg_toplevel::State::Maximized),
+                    fullscreen: states.contains(&xdg_toplevel::State::Fullscreen),
+                    activated: states.contains(&xdg_toplevel::State::Activated),
+                    tiled: states.iter().any(|state| {
+                        matches!(
+                            state,
+                            xdg_toplevel::State::TiledLeft
+                                | xdg_toplevel::State::TiledRight
+                                | xdg_toplevel::State::TiledTop
+                                | xdg_toplevel::State::TiledBottom
+                        )
+                    }),
+                };
+                if state.toplevel != previous {
+                    state
+                        .events
+                        .push(WindowEvent::ToplevelChanged(state.toplevel));
+                }
             }
-            xdg_toplevel::Event::Close => {
-                state.closed = true;
-                state.events.push(WindowEvent::CloseRequested);
-            }
+            xdg_toplevel::Event::Close => state.events.push(WindowEvent::CloseRequested),
             _ => {}
         }
     }
@@ -917,10 +1048,7 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for State {
                 layer_surface.ack_configure(serial);
                 state.configure(width, height);
             }
-            zwlr_layer_surface_v1::Event::Closed => {
-                state.closed = true;
-                state.events.push(WindowEvent::CloseRequested);
-            }
+            zwlr_layer_surface_v1::Event::Closed => state.closed = true,
             _ => {}
         }
     }

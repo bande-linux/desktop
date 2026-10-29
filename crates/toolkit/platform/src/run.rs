@@ -31,6 +31,10 @@ pub trait App {
         false
     }
 
+    fn should_close(&mut self, _window: &mut Window) -> bool {
+        true
+    }
+
     fn text_input_area(&self) -> Option<Rect> {
         None
     }
@@ -66,8 +70,15 @@ pub fn run(window: &mut Window, app: &mut impl App) -> Result<(), WindowError> {
         window.dispatch_pending()?;
         window.fire_repeats(Instant::now());
         for event in window.take_events() {
-            if let WindowEvent::Focus(focused) = event {
-                window.accessibility.set_window_focused(focused);
+            match event {
+                WindowEvent::CloseRequested => {
+                    if app.should_close(window) {
+                        window.close();
+                    }
+                    continue;
+                }
+                WindowEvent::Focus(focused) => window.accessibility.set_window_focused(focused),
+                _ => {}
             }
             app.event(window, event);
         }

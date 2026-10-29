@@ -43,17 +43,17 @@ impl AreaSelection {
             Event::Key {
                 key: Key::Escape, ..
             } => AreaOutcome::Cancelled,
-            Event::PointerDown(at) => {
-                self.anchor = Some(*at);
-                self.pointer = Some(*at);
+            Event::PointerDown(pointer) if pointer.is_primary() => {
+                self.anchor = Some(pointer.position);
+                self.pointer = Some(pointer.position);
                 AreaOutcome::Selecting
             }
-            Event::PointerMove(at) => {
-                self.pointer = Some(*at);
+            Event::PointerMove(pointer) => {
+                self.pointer = Some(pointer.position);
                 AreaOutcome::Selecting
             }
-            Event::PointerUp(at) if self.anchor.is_some() => {
-                self.pointer = Some(*at);
+            Event::PointerUp(pointer) if self.anchor.is_some() => {
+                self.pointer = Some(pointer.position);
                 match self.region() {
                     Some(region) if region.width > 0 && region.height > 0 => {
                         AreaOutcome::Chosen(region)
@@ -173,13 +173,13 @@ pub fn crop(image: &ScreenImage, region: Region) -> Option<ScreenImage> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use unbound_toolkit::ui::Modifiers;
+    use unbound_toolkit::ui::{Modifiers, Pointer};
 
     fn drag(from: (f32, f32), to: (f32, f32)) -> (AreaSelection, AreaOutcome) {
         let mut selection = AreaSelection::default();
-        selection.handle(&Event::PointerDown(Point::new(from.0, from.1)));
-        selection.handle(&Event::PointerMove(Point::new(to.0, to.1)));
-        let outcome = selection.handle(&Event::PointerUp(Point::new(to.0, to.1)));
+        selection.handle(&Event::PointerDown(Pointer::at(Point::new(from.0, from.1))));
+        selection.handle(&Event::PointerMove(Pointer::at(Point::new(to.0, to.1))));
+        let outcome = selection.handle(&Event::PointerUp(Pointer::at(Point::new(to.0, to.1))));
         (selection, outcome)
     }
 
@@ -223,8 +223,8 @@ mod tests {
     #[test]
     fn escape_cancels_as_on_a_mac() {
         let mut selection = AreaSelection::default();
-        selection.handle(&Event::PointerDown(Point::new(5.0, 5.0)));
-        selection.handle(&Event::PointerMove(Point::new(50.0, 50.0)));
+        selection.handle(&Event::PointerDown(Pointer::at(Point::new(5.0, 5.0))));
+        selection.handle(&Event::PointerMove(Pointer::at(Point::new(50.0, 50.0))));
 
         let outcome = selection.handle(&Event::Key {
             key: Key::Escape,
@@ -238,7 +238,7 @@ mod tests {
     fn a_release_without_a_press_keeps_selecting() {
         let mut selection = AreaSelection::default();
 
-        let outcome = selection.handle(&Event::PointerUp(Point::new(5.0, 5.0)));
+        let outcome = selection.handle(&Event::PointerUp(Pointer::at(Point::new(5.0, 5.0))));
 
         assert_eq!(outcome, AreaOutcome::Selecting);
     }

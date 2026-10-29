@@ -93,12 +93,12 @@ impl Widget for Button {
 
     fn handle(&mut self, _cx: &mut Context, event: &Event) -> bool {
         match event {
-            Event::PointerDown(_) => self.pressed = true,
-            Event::PointerMove(point) if self.pressed => {
-                self.pressed = contains(self.frame, *point);
+            Event::PointerDown(pointer) if pointer.is_primary() => self.pressed = true,
+            Event::PointerMove(pointer) if self.pressed => {
+                self.pressed = contains(self.frame, pointer.position);
             }
-            Event::PointerUp(point) => {
-                let activate = self.pressed && contains(self.frame, *point);
+            Event::PointerUp(pointer) if pointer.is_primary() => {
+                let activate = self.pressed && contains(self.frame, pointer.position);
                 self.pressed = false;
                 if activate {
                     (self.on_click)();

@@ -10,7 +10,9 @@ mod tokens;
 
 pub use cpu::CpuRenderer;
 pub use gpu::{GpuRenderer, vulkan_instance};
-pub use input::{Event, Key, Modifiers};
+pub use input::{
+    Cursor, Event, Key, Modifiers, Pointer, PointerButton, Scroll, ScrollPhase, ScrollSource,
+};
 pub use render::{RenderError, Snapshot, pixels};
 pub use scene::{Image, Item, Paint, Point, Rect, Scene, Shape, Stop};
 pub use text::{

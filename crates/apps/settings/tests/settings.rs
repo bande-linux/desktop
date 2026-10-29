@@ -3,7 +3,7 @@ use std::sync::Arc;
 use unbound_config::{Appearance, Config, ConfigService, ConfigStore, DockEdge};
 use unbound_settings::{Key, SettingsClient, SettingsView, Value, panes, search};
 use unbound_test_bus::SessionBus;
-use unbound_toolkit::ui::{Event, Key as Pressed, Modifiers};
+use unbound_toolkit::ui::{Event, Key as Pressed, Modifiers, Pointer};
 use unbound_toolkit::{Palette, Point, Scheme, TextSystem};
 
 fn view() -> SettingsView {
@@ -105,7 +105,9 @@ fn clicking_a_choice_selects_it() {
 
     let mut changed = Vec::new();
     for x in (260..700).step_by(4) {
-        view.handle(&Event::PointerDown(Point::new(x as f32, 105.0)));
+        view.handle(&Event::PointerDown(Pointer::at(Point::new(
+            x as f32, 105.0,
+        ))));
         changed.extend(view.take_changes());
     }
 

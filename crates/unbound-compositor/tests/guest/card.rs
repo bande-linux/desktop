@@ -117,6 +117,8 @@ impl Card {
     }
 
     pub fn current_scanout(&self) -> Option<Scanout> {
+        self.set_client_capability(ClientCapability::Atomic, true)
+            .expect("atomic plane properties");
         let resources = self.resource_handles().expect("KMS resources");
         let crtc = resources.crtcs()[0];
         let primary = self.get_crtc(crtc).expect("CRTC state").framebuffer()?;

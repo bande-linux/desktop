@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-version=6.12.114
-sha256=7a8589912bd7a8adb07fed074283652cf482a35facef8954554654f0154b4af3
+version=7.2.11
+sha256=fd0fc479f983a8c05313f13e9c36330fe6651cf725396748c40d5cd93fa1e6a4
 
 here=$(dirname "$(realpath "$0")")
 out=$(realpath -m "${1:?usage: kernel.sh <output-dir>}")
@@ -10,7 +10,7 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
 curl -fsSL -o "$work/linux.tar.xz" \
-    "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-$version.tar.xz"
+    "https://cdn.kernel.org/pub/linux/kernel/v${version%%.*}.x/linux-$version.tar.xz"
 echo "$sha256  $work/linux.tar.xz" | sha256sum --check --quiet
 tar -xJf "$work/linux.tar.xz" -C "$work"
 cd "$work/linux-$version"

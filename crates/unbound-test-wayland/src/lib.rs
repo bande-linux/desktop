@@ -1,10 +1,12 @@
 pub mod clipboard;
 pub use capture::{CaptureConstraints, CaptureOutcome};
+pub use fence::SwSyncTimeline;
 pub use idle::IdleEvent;
 pub use shell::{Anchor, KeyboardInteractivity, Layer, LayerRequest};
 pub use toplevel::{Configured, PopupRequest};
 pub use wayland_protocols::xdg::shell::client::xdg_toplevel::{ResizeEdge, State as ToplevelState};
 mod capture;
+mod fence;
 mod idle;
 mod lock;
 mod seat;
@@ -13,7 +15,7 @@ mod toplevel;
 mod udmabuf;
 
 use std::io::Write;
-use std::os::fd::{AsFd, OwnedFd};
+use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 use std::os::unix::net::UnixStream;
 use std::time::{Duration, Instant};
 
@@ -55,11 +57,12 @@ pub struct Presented {
     pub vsync: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Memory {
+#[derive(Debug, Clone, Copy)]
+pub enum Memory<'a> {
     Shm,
     Dmabuf,
     Udmabuf,
+    UdmabufWrittenUntil(BorrowedFd<'a>),
 }
 
 pub fn quadrants(width: usize, height: usize, stride: usize) -> Vec<u8> {
@@ -234,6 +237,11 @@ impl TestClient {
                 image,
                 LINEAR,
             ),
+            Memory::UdmabufWrittenUntil(fence) => {
+                let dmabuf = udmabuf::create(image.bytes).expect("udmabuf from a sealed memfd");
+                fence::add_write_fence(&dmabuf, fence).expect("a write fence on the udmabuf");
+                self.wrap_dmabuf(&dmabuf, image, LINEAR)
+            }
         };
         let (x, y, width, height) = damage;
         surface.attach(Some(&buffer), 0, 0);

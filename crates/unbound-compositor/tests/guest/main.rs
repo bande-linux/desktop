@@ -4,4 +4,5 @@ mod devices;
 mod input;
 mod scanout;
 mod session;
+mod sync;
 mod uinput;

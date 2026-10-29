@@ -26,8 +26,11 @@ pub struct Session {
 
 impl Session {
     pub fn open() -> Self {
-        let driver = std::env::var("UNBOUND_TEST_DRIVER").unwrap_or_else(|_| "vkms".to_owned());
-        let path = card_path(&driver);
+        Self::on(&std::env::var("UNBOUND_TEST_DRIVER").unwrap_or_else(|_| "vkms".to_owned()))
+    }
+
+    pub fn on(driver: &str) -> Self {
+        let path = card_path(driver);
         let (output, DrmNotifiers { session, device }) =
             DrmOutput::open(Some(&path)).expect("the compositor takes the card through libseat");
         let mut server = Headless::with_output(output.output_config()).expect("compositor state");
@@ -70,6 +73,10 @@ impl Session {
                 .expect("dispatch events");
             self.client.exchange(&mut self.shared.server);
         }
+    }
+
+    pub fn scanout(&self) -> Scanout {
+        self.card.scanout()
     }
 
     pub fn present(&mut self) -> Scanout {

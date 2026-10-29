@@ -320,6 +320,7 @@ impl Headless {
         self.clear_signalled_fences()?;
         self.display.dispatch_clients(&mut self.state)?;
         self.state.popups.cleanup();
+        self.state.refocus_pointer();
         self.display.flush_clients()
     }
 

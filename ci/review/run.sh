@@ -12,12 +12,14 @@ packages=(
 screenshot=/usr/bin/unbound-screenshot
 runtime="${XDG_RUNTIME_DIR:?needs a user session}/unbound-review"
 build=1
+take_over=0
 fps=30
 scenarios=()
 
 while [ $# -gt 0 ]; do
     case $1 in
         --no-build) build=0 ;;
+        --take-over) take_over=1 ;;
         --fps) fps=${2:?--fps needs a number}; shift ;;
         -*) echo "run.sh: unknown option $1" >&2; exit 2 ;;
         *)
@@ -34,7 +36,7 @@ while [ $# -gt 0 ]; do
     shift
 done
 if [ ${#scenarios[@]} -eq 0 ]; then
-    echo "usage: ci/review/run.sh [--no-build] [--fps N] <scenario>..." >&2
+    echo "usage: ci/review/run.sh [--no-build] [--take-over] [--fps N] <scenario>..." >&2
     echo "Builds and installs this checkout's packages, then records each scenario on a fresh" >&2
     echo "session into review-out/<scenario>-<time>/index.html. REVIEW_CARGO picks the cargo command." >&2
     echo "scenarios: $(cd "$repo/ci/review/scenarios" && ls -- *.scenario | sed 's/\.scenario$//' | xargs)" >&2
@@ -63,6 +65,11 @@ stop_session() {
         systemctl --user stop unbound-compositor.service
     fi
     if pgrep -u "$(id -u)" -x unbound-composi >/dev/null; then
+        if [ "$take_over" != 1 ]; then
+            echo "run.sh: an Unbound compositor runs outside the session service (the console session);" >&2
+            echo "run.sh: pass --take-over to stop it for the recording" >&2
+            exit 1
+        fi
         echo "Stopping the Unbound compositor started outside the session service"
         pkill -TERM -u "$(id -u)" -x unbound-composi
     fi
@@ -90,7 +97,7 @@ wait_for() {
 
 record() {
     local scenario=$1
-    local name out started
+    local name out cursor
     name=$(basename "$scenario" .scenario)
     out="$repo/review-out/$name-$(date +%Y%m%d-%H%M%S)"
     mkdir -p "$out" "$runtime"
@@ -109,7 +116,7 @@ record() {
     sudo chown "$(id -u)" /dev/uinput
     sudo mount --bind "$repo/ci/review/shell-client" "$screenshot"
 
-    started=$(date '+%Y-%m-%d %H:%M:%S')
+    cursor=$(journalctl --user -n 0 --show-cursor --no-pager | sed -n 's/^-- cursor: //p')
     systemctl --user set-environment LIBSEAT_BACKEND=seatd
     setsid -f unbound-session > "$out/session.log" 2>&1 < /dev/null
     wait_for 60 "the session to start unbound-review" bash -c "[ ! -e '$runtime/job' ]"
@@ -117,8 +124,8 @@ record() {
 
     wait_for 1800 "the scenario to finish" test -e "$out/exit-status"
     sudo chown root:root /dev/uinput
-    journalctl --user --since "$started" --no-pager -o cat -t unbound-review > "$out/review.log" || true
-    journalctl --user --since "$started" --no-pager -o short-monotonic > "$out/journal.log" || true
+    journalctl --user --after-cursor "$cursor" --no-pager -o cat -t unbound-review > "$out/review.log" || true
+    journalctl --user --after-cursor "$cursor" --no-pager -o short-monotonic > "$out/journal.log" || true
     if [ "$(cat "$out/exit-status")" != 0 ]; then
         echo "run.sh: $name did not finish cleanly; see $out/review.log" >&2
         tail -n 5 "$out/review.log" >&2 || true
@@ -126,6 +133,12 @@ record() {
     fi
     echo "Review: $out/index.html"
 }
+
+exec 8> /tmp/unbound-live-session.lock
+if ! flock -n 8; then
+    echo "Waiting for the live session lock (/tmp/unbound-live-session.lock)"
+    flock 8
+fi
 
 failed=0
 for scenario in "${scenarios[@]}"; do

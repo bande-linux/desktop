@@ -321,6 +321,7 @@ impl State {
             closing.motion.advance(time, refresh);
         }
         self.animate_preview(time);
+        self.animate_desktop(time);
         self.closing.retain(|closing| !closing.motion.is_settled());
         if self.is_animating() {
             self.needs_redraw = true;
@@ -330,6 +331,7 @@ impl State {
     fn is_animating(&self) -> bool {
         !self.closing.is_empty()
             || self.preview.is_some()
+            || self.desktop.is_animating()
             || self.windows.iter().any(|window| window.motion.is_some())
     }
 }

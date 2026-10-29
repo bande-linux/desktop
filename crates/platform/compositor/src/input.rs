@@ -1,7 +1,8 @@
 use std::io;
 
 use smithay::backend::input::{
-    AbsolutePositionEvent, Axis, ButtonState, Event, InputBackend, InputEvent, KeyState,
+    AbsolutePositionEvent, Axis, ButtonState, Event, GestureBeginEvent, GestureEndEvent,
+    GesturePinchUpdateEvent, GestureSwipeUpdateEvent, InputBackend, InputEvent, KeyState,
     KeyboardKeyEvent, PointerAxisEvent, PointerButtonEvent, PointerMotionEvent,
 };
 use smithay::desktop::WindowSurfaceType;
@@ -13,6 +14,7 @@ use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Clock, Logical, Monotonic, Point, SERIAL_COUNTER};
 use unbound_protocols::server::unbound_shell_v1::VolumeKey;
 
+use crate::gesture::Gesture;
 use crate::state::{Headless, State};
 use crate::tile::Direction;
 
@@ -228,6 +230,56 @@ impl Headless {
                 }
                 self.scroll(frame);
             }
+            InputEvent::GestureSwipeBegin { event } => self.gesture(
+                Gesture::SwipeBegin {
+                    fingers: event.fingers(),
+                },
+                event.time_msec(),
+            ),
+            InputEvent::GestureSwipeUpdate { event } => self.gesture(
+                Gesture::SwipeUpdate {
+                    delta: event.delta(),
+                },
+                event.time_msec(),
+            ),
+            InputEvent::GestureSwipeEnd { event } => self.gesture(
+                Gesture::SwipeEnd {
+                    cancelled: event.cancelled(),
+                },
+                event.time_msec(),
+            ),
+            InputEvent::GesturePinchBegin { event } => self.gesture(
+                Gesture::PinchBegin {
+                    fingers: event.fingers(),
+                },
+                event.time_msec(),
+            ),
+            InputEvent::GesturePinchUpdate { event } => self.gesture(
+                Gesture::PinchUpdate {
+                    delta: event.delta(),
+                    scale: event.scale(),
+                    rotation: event.rotation(),
+                },
+                event.time_msec(),
+            ),
+            InputEvent::GesturePinchEnd { event } => self.gesture(
+                Gesture::PinchEnd {
+                    cancelled: event.cancelled(),
+                },
+                event.time_msec(),
+            ),
+            InputEvent::GestureHoldBegin { event } => self.gesture(
+                Gesture::HoldBegin {
+                    fingers: event.fingers(),
+                },
+                event.time_msec(),
+            ),
+            InputEvent::GestureHoldEnd { event } => self.gesture(
+                Gesture::HoldEnd {
+                    cancelled: event.cancelled(),
+                },
+                event.time_msec(),
+            ),
             _ => return Ok(()),
         }
         self.flush()

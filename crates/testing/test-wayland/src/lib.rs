@@ -3,6 +3,7 @@ pub use capture::{CaptureConstraints, CaptureOutcome};
 pub use cursor::CursorShape;
 pub use decoration::DecorationMode;
 pub use fence::SwSyncTimeline;
+pub use gesture::ClientGesture;
 pub use idle::IdleEvent;
 pub use shell::{Anchor, KeyboardInteractivity, Layer, LayerRequest};
 pub use toplevel::{Configured, PopupRequest};
@@ -13,6 +14,7 @@ mod cursor;
 mod decoration;
 mod effect;
 mod fence;
+mod gesture;
 mod idle;
 mod ime;
 mod lock;
@@ -120,6 +122,7 @@ struct Globals {
     decoration_modes: Vec<decoration::DecorationMode>,
     text_input: ime::TextInput,
     input_method: ime::InputMethod,
+    gestures: Vec<gesture::ClientGesture>,
     hung: bool,
     unanswered_pings: Vec<(XdgWmBase, u32)>,
 }

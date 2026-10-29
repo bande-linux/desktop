@@ -35,7 +35,7 @@ use smithay::reexports::wayland_server::protocol::wl_seat::WlSeat;
 use smithay::reexports::wayland_server::protocol::wl_shm::Format;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{Client, Display, DisplayHandle, Resource};
-use smithay::utils::{Logical, Physical, Point, Raw, SERIAL_COUNTER, Serial, Size};
+use smithay::utils::{Logical, Physical, Point, Raw, Rectangle, SERIAL_COUNTER, Serial, Size};
 use smithay::wayland::buffer::BufferHandler;
 use smithay::wayland::compositor::{
     CompositorClientState, CompositorHandler, CompositorState, SurfaceAttributes,
@@ -99,6 +99,7 @@ use crate::tile::{Preview, SnapDrag};
 use crate::window::Window;
 use smithay::wayland::cursor_shape::CursorShapeManagerState;
 use smithay::wayland::input_method::InputMethodManagerState;
+use smithay::wayland::pointer_gestures::PointerGesturesState;
 use smithay::wayland::tablet_manager::TabletSeatHandler;
 use smithay::wayland::text_input::TextInputManagerState;
 use smithay::wayland::virtual_keyboard::VirtualKeyboardManagerState;
@@ -171,6 +172,7 @@ pub struct State {
     _viewporter_state: ViewporterState,
     _fractional_scale_state: FractionalScaleManagerState,
     _cursor_shape_state: CursorShapeManagerState,
+    _pointer_gestures_state: PointerGesturesState,
     _decoration_state: XdgDecorationState,
     _text_input_state: TextInputManagerState,
     _input_method_state: InputMethodManagerState,
@@ -191,6 +193,8 @@ pub struct State {
     pub(crate) lock_screen_requested: bool,
     pub(crate) force_quit_requested: bool,
     pub(crate) watchdog: crate::watchdog::Watchdog,
+    pub(crate) desktop: crate::gesture::ShowDesktop,
+    pub(crate) gesture_route: Option<crate::gesture::Route>,
     pub(crate) active_app: String,
     pub(crate) idle: crate::idle::Idle,
     _idle_inhibit_state: smithay::wayland::idle_inhibit::IdleInhibitManagerState,
@@ -321,6 +325,7 @@ impl Headless {
             _fractional_scale_state: FractionalScaleManagerState::new::<State>(&handle),
             _decoration_state: XdgDecorationState::new::<State>(&handle),
             _cursor_shape_state: CursorShapeManagerState::new::<State>(&handle),
+            _pointer_gestures_state: PointerGesturesState::new::<State>(&handle),
             _text_input_state: TextInputManagerState::new::<State>(&handle),
             _input_method_state: InputMethodManagerState::new::<State, _>(&handle, |_| true),
             _virtual_keyboard_state: VirtualKeyboardManagerState::new::<State, _>(&handle, |_| {
@@ -345,6 +350,8 @@ impl Headless {
             lock_screen_requested: false,
             force_quit_requested: false,
             watchdog: crate::watchdog::Watchdog::default(),
+            desktop: crate::gesture::ShowDesktop::default(),
+            gesture_route: None,
             active_app: String::new(),
             idle: crate::idle::Idle::default(),
             _idle_inhibit_state: smithay::wayland::idle_inhibit::IdleInhibitManagerState::new::<
@@ -546,7 +553,17 @@ impl Headless {
                         .surface()
                         .client()
                         .is_some_and(|owner| self.state.watchdog.is_unresponsive(&owner.id()));
-                    let (shown, look) = window_elements(window, renderer, scale, active, hung);
+                    let shift = window
+                        .geometry()
+                        .map(|rect| {
+                            self.state.desktop_shift(Rectangle::new(
+                                rect.location.to_f64(),
+                                rect.size.to_f64(),
+                            ))
+                        })
+                        .unwrap_or_default();
+                    let (shown, look) =
+                        window_elements(window, renderer, scale, active, hung, shift);
                     elements.extend(shown);
                     drawn.push((window.surface().clone(), look));
                     if let Some(preview) = &self.state.preview
@@ -727,6 +744,9 @@ impl State {
     pub(crate) fn focus(&mut self, surface: Option<WlSurface>) {
         if self.redirect_focus_while_locked(&surface) {
             return;
+        }
+        if surface.is_some() {
+            self.hide_desktop();
         }
         if let Some(exclusive) = &mut self.exclusive_layer
             && surface.as_ref() != Some(&exclusive.surface)
@@ -923,7 +943,7 @@ impl State {
                 if rendered {
                     window.rendered()
                 } else {
-                    window.visible()
+                    window.visible() && !self.desktop.hides_windows()
                 }
             })
             .collect::<Vec<_>>();

@@ -695,7 +695,10 @@ fn the_greeter_signs_in_through_greetd_and_hands_over() {
         &[("GREETD_SOCK", socket.to_str().expect("socket path"))],
     );
     wait_for("the greeter", STARTUP, || running("unbound-greeter"));
-    thread::sleep(Duration::from_secs(2));
+    wait_for("the greeter to draw", STARTUP, || {
+        current_scanout().is_some()
+    });
+    thread::sleep(Duration::from_secs(1));
     scanout().save("m24-greeter");
     assert!(
         !running("unbound-panel"),

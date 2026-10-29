@@ -204,7 +204,7 @@ impl Surface {
     fn area(&self, size: (u32, u32)) -> Bounds {
         let (width, height) = (size.0 as f32, size.1 as f32);
         let top = unbound_menubar::HEIGHT as f32;
-        let dock = unbound_dock::THICKNESS as f32;
+        let dock = unbound_dock::exclusive_zone(unbound_dock::ICON_SIZE);
         let (left, right, bottom, top) = match self.dock_edge {
             DockEdge::Left => (dock, 0.0, 0.0, top),
             DockEdge::Right => (0.0, dock, 0.0, top),

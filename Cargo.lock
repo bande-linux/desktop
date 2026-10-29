@@ -3796,6 +3796,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "unbound-search"
+version = "0.1.0"
+dependencies = [
+ "notify",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
 name = "unbound-settings"
 version = "0.1.0"
 dependencies = [

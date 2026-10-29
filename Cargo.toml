@@ -82,6 +82,7 @@ unbound-render = { path = "crates/platform/render" }
 unbound-review = { path = "crates/testing/review" }
 unbound-sample = { path = "crates/testing/sample" }
 unbound-screenshot = { path = "crates/shell/screenshot" }
+unbound-search = { path = "crates/libs/search" }
 unbound-settings = { path = "crates/apps/settings" }
 unbound-spring = { path = "crates/libs/spring" }
 unbound-term = { path = "crates/apps/terminal" }

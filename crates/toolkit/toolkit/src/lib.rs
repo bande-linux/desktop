@@ -6,6 +6,7 @@ pub use unbound_graphics::{
 };
 pub use unbound_toolkit_platform::{
     ACTIVATION_TOKEN_VARIABLE, App, Edges, FramePath, KeyboardFocus, LayerKind, LayerOptions,
-    RENDERER_VARIABLE, Role, ScreenImage, VolumeKey, Window, WindowError, WindowEvent, run,
+    RENDERER_VARIABLE, ResizeEdge, Role, ScreenImage, TITLE_BAR_HEIGHT, ToplevelState, VolumeKey,
+    Window, WindowError, WindowEvent, run,
 };
 pub use unbound_widgets as ui;

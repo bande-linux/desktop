@@ -1,6 +1,6 @@
 use std::process::ExitCode;
 
-use unbound_toolkit::{Palette, Role, Scheme, TextSystem, Window, WindowError};
+use unbound_toolkit::{Palette, Role, Scheme, TextSystem, Window, WindowError, WindowEvent};
 
 fn run() -> Result<(), WindowError> {
     let mut window = Window::open(
@@ -15,6 +15,9 @@ fn run() -> Result<(), WindowError> {
     window.draw(&unbound_sample::scene(&mut text, &palette, drawn))?;
     while !window.is_closed() {
         window.dispatch()?;
+        if window.take_events().contains(&WindowEvent::CloseRequested) {
+            window.close();
+        }
         if window.size() != drawn {
             drawn = window.size();
             window.draw(&unbound_sample::scene(&mut text, &palette, drawn))?;

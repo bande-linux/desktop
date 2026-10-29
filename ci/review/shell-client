@@ -1,0 +1,12 @@
+#!/bin/sh
+set -u
+dir="$XDG_RUNTIME_DIR/unbound-review"
+if [ -f "$dir/job" ]; then
+    . "$dir/job"
+    rm -f "$dir/job"
+    status=0
+    "$REVIEW_BIN" "$SCENARIO" --out "$OUT" --fps "$FPS" || status=$?
+    echo "$status" > "$OUT/exit-status"
+    exit 0
+fi
+exec "$dir/unbound-screenshot" "$@"

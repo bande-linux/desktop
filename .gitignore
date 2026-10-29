@@ -33,3 +33,6 @@ debian/*.substvars
 
 # Agent worktrees
 .claude/
+
+# Review recordings
+/review-out/

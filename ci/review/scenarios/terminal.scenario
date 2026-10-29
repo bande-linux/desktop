@@ -1,0 +1,19 @@
+# Open Terminal from the launcher and type a command.
+note "A fresh session: the desktop as it appears after login"
+shot "desktop after login"
+wait 1s
+note "Super+Space opens the launcher"
+key super+space
+wait 800ms
+shot "launcher open"
+type "terminal"
+wait 800ms
+shot "launcher searching for terminal"
+key enter
+wait-for-window "org.unbound.Terminal"
+wait 1500ms
+shot "terminal open"
+note "Typing a command into the new terminal"
+type "echo hello from unbound && ls /usr/share\n"
+wait 1500ms
+shot "terminal after the command"

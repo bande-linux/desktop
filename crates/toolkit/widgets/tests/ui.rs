@@ -6,8 +6,9 @@ use std::rc::Rc;
 use accesskit::{Action, ActionData, ActionRequest, Node, NodeId, Role, Toggled, TreeId};
 use unbound_graphics::{Palette, Point, Rect, Scheme, TextSystem};
 use unbound_widgets::{
-    Axis, BUTTON_HEIGHT, Button, Context, Event, Key, Label, Modifiers, SWITCH_SIZE, SecureField,
-    Size, Slider, Stack, TEXT_FIELD_HEIGHT, TextField, Toggle, Ui, Widget, WidgetId,
+    Axis, BUTTON_HEIGHT, Button, Context, Cursor, Event, Key, Label, Modifiers, Pointer,
+    PointerButton, SWITCH_SIZE, Scroll, SecureField, Size, Slider, Stack, TEXT_FIELD_HEIGHT,
+    TextField, Toggle, Ui, Widget, WidgetId,
 };
 
 const NONE: Modifiers = Modifiers {
@@ -250,13 +251,13 @@ fn buttons_click_on_release_inside_like_macos() {
     let mut ui = Ui::new(Box::new(button), context());
     ui.layout(Size::new(120.0, BUTTON_HEIGHT));
     let frame = ui.widget(id).expect("button").frame();
-    ui.handle(&Event::PointerDown(centre(frame)));
+    ui.handle(&Event::PointerDown(Pointer::at(centre(frame))));
     assert_eq!(clicks.get(), 0, "nothing happens on press");
-    ui.handle(&Event::PointerUp(centre(frame)));
+    ui.handle(&Event::PointerUp(Pointer::at(centre(frame))));
     assert_eq!(clicks.get(), 1);
-    ui.handle(&Event::PointerDown(centre(frame)));
-    ui.handle(&Event::PointerMove(Point::new(500.0, 500.0)));
-    ui.handle(&Event::PointerUp(Point::new(500.0, 500.0)));
+    ui.handle(&Event::PointerDown(Pointer::at(centre(frame))));
+    ui.handle(&Event::PointerMove(Pointer::at(Point::new(500.0, 500.0))));
+    ui.handle(&Event::PointerUp(Pointer::at(Point::new(500.0, 500.0))));
     assert_eq!(clicks.get(), 1, "releasing outside cancels");
 }
 
@@ -266,8 +267,8 @@ fn switches_flip_on_click_and_report_their_state() {
     let toggle = ids[2];
     assert_eq!(node(&ui, toggle).toggled(), Some(Toggled::False));
     let frame = ui.widget(toggle).expect("toggle").frame();
-    ui.handle(&Event::PointerDown(centre(frame)));
-    ui.handle(&Event::PointerUp(centre(frame)));
+    ui.handle(&Event::PointerDown(Pointer::at(centre(frame))));
+    ui.handle(&Event::PointerUp(Pointer::at(centre(frame))));
     assert_eq!(node(&ui, toggle).toggled(), Some(Toggled::True));
     ui.perform(&ActionRequest {
         action: Action::Click,
@@ -303,8 +304,14 @@ fn sliders_step_with_arrows_and_accessibility_actions() {
     ));
     assert_eq!(node(&ui, slider).numeric_value(), Some(1.0));
     let frame = ui.widget(slider).expect("slider").frame();
-    ui.handle(&Event::PointerDown(Point::new(frame.x, centre(frame).y)));
-    ui.handle(&Event::PointerUp(Point::new(frame.x, centre(frame).y)));
+    ui.handle(&Event::PointerDown(Pointer::at(Point::new(
+        frame.x,
+        centre(frame).y,
+    ))));
+    ui.handle(&Event::PointerUp(Pointer::at(Point::new(
+        frame.x,
+        centre(frame).y,
+    ))));
     assert_eq!(node(&ui, slider).numeric_value(), Some(0.0));
 }
 
@@ -445,4 +452,157 @@ fn a_secure_field_is_a_password_input_that_never_exposes_its_value() {
     let node = secret.field.access(&secret.cx);
     assert_eq!(node.role(), Role::PasswordInput);
     assert_eq!(node.value(), None);
+}
+
+struct Probe {
+    id: WidgetId,
+    frame: Rect,
+    log: Rc<RefCell<Vec<String>>>,
+    takes_scroll: bool,
+}
+
+impl Probe {
+    fn boxed(log: &Rc<RefCell<Vec<String>>>, takes_scroll: bool) -> (WidgetId, Box<dyn Widget>) {
+        let id = WidgetId::next();
+        let probe = Self {
+            id,
+            frame: Rect::default(),
+            log: log.clone(),
+            takes_scroll,
+        };
+        (id, Box::new(probe))
+    }
+}
+
+impl Widget for Probe {
+    fn id(&self) -> WidgetId {
+        self.id
+    }
+
+    fn measure(&mut self, _cx: &mut Context, _available: Size) -> Size {
+        Size::new(100.0, 40.0)
+    }
+
+    fn place(&mut self, _cx: &mut Context, frame: Rect) {
+        self.frame = frame;
+    }
+
+    fn frame(&self) -> Rect {
+        self.frame
+    }
+
+    fn paint(&self, _cx: &Context, _items: &mut Vec<unbound_graphics::Item>) {}
+
+    fn access(&self, _cx: &Context) -> Node {
+        Node::new(Role::GenericContainer)
+    }
+
+    fn handle(&mut self, _cx: &mut Context, event: &Event) -> bool {
+        let name = match event {
+            Event::PointerEnter(_) => "enter",
+            Event::PointerLeave => "leave",
+            Event::Scroll(_) if self.takes_scroll => "scroll",
+            _ => return false,
+        };
+        self.log.borrow_mut().push(format!("{name} {:?}", self.id));
+        true
+    }
+}
+
+#[test]
+fn widgets_hear_the_pointer_enter_and_leave_as_it_moves_between_them() {
+    let log = Rc::new(RefCell::new(Vec::new()));
+    let (top, first) = Probe::boxed(&log, false);
+    let (bottom, second) = Probe::boxed(&log, false);
+    let mut ui = Ui::new(
+        Box::new(Stack::new(Axis::Vertical, 0.0, 0.0, vec![first, second])),
+        context(),
+    );
+    ui.layout(AREA);
+    ui.handle(&Event::PointerMove(Pointer::at(Point::new(10.0, 10.0))));
+    ui.handle(&Event::PointerMove(Pointer::at(Point::new(20.0, 12.0))));
+    ui.handle(&Event::PointerMove(Pointer::at(Point::new(10.0, 50.0))));
+    ui.handle(&Event::PointerLeave);
+    assert_eq!(
+        *log.borrow(),
+        [
+            format!("enter {top:?}"),
+            format!("leave {top:?}"),
+            format!("enter {bottom:?}"),
+            format!("leave {bottom:?}"),
+        ]
+    );
+}
+
+#[test]
+fn scrolling_goes_to_the_innermost_widget_under_the_pointer_that_takes_it() {
+    let log = Rc::new(RefCell::new(Vec::new()));
+    let (_, passive) = Probe::boxed(&log, false);
+    let (taker, scrolling) = Probe::boxed(&log, true);
+    let mut ui = Ui::new(
+        Box::new(Stack::new(
+            Axis::Vertical,
+            0.0,
+            0.0,
+            vec![scrolling, passive],
+        )),
+        context(),
+    );
+    ui.layout(AREA);
+    let scroll = Event::Scroll(Scroll {
+        position: Point::new(10.0, 10.0),
+        delta: Point::new(0.0, 10.0),
+        ..Scroll::default()
+    });
+    assert!(ui.handle(&scroll));
+    log.borrow_mut().retain(|entry| entry.starts_with("scroll"));
+    assert_eq!(*log.borrow(), [format!("scroll {taker:?}")]);
+}
+
+#[test]
+fn a_secondary_click_does_not_press_a_button() {
+    let clicks = Rc::new(Cell::new(0));
+    let counter = clicks.clone();
+    let button = Button::new("Apply", move || counter.set(counter.get() + 1));
+    let id = button.id();
+    let mut ui = Ui::new(Box::new(button), context());
+    ui.layout(Size::new(120.0, BUTTON_HEIGHT));
+    let at = centre(ui.widget(id).expect("button").frame());
+    let secondary = Pointer::at(at).with_button(PointerButton::Secondary);
+    ui.handle(&Event::PointerDown(secondary));
+    ui.handle(&Event::PointerUp(secondary));
+    assert_eq!(clicks.get(), 0);
+}
+
+#[test]
+fn the_pointer_shows_an_i_beam_over_text_fields_only() {
+    let (mut ui, ids) = form(false);
+    let field = ui.widget(ids[0]).expect("field").frame();
+    let button = ui.widget(ids[1]).expect("button").frame();
+    ui.handle(&Event::PointerMove(Pointer::at(centre(field))));
+    assert_eq!(ui.cursor(), Cursor::Text);
+    ui.handle(&Event::PointerMove(Pointer::at(centre(button))));
+    assert_eq!(ui.cursor(), Cursor::Default);
+}
+
+#[test]
+fn a_double_click_selects_a_word_and_a_triple_click_everything() {
+    let mut field = Field::with("hello brave world");
+    let frame = field.field.frame();
+    let at = Point::new(frame.x + 50.0, centre(frame).y);
+    for count in 1..=2 {
+        let pointer = Pointer::at(at).with_count(count);
+        field
+            .field
+            .handle(&mut field.cx, &Event::PointerDown(pointer));
+        field
+            .field
+            .handle(&mut field.cx, &Event::PointerUp(pointer));
+    }
+    assert_eq!(field.selected(), "brave");
+    let pointer = Pointer::at(at).with_count(3);
+    field
+        .field
+        .handle(&mut field.cx, &Event::PointerDown(pointer));
+    assert_eq!(field.selected(), "hello brave world");
 }

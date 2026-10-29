@@ -1,0 +1,15 @@
+# Right-click the empty desktop. A desktop menu does not exist yet: the recording shows the gap.
+note "Right-clicking the empty desktop"
+move 1460 900
+wait 500ms
+click right
+wait 1500ms
+shot "after right-click on the desktop"
+note "Expected: a desktop menu (New Folder, Change Wallpaper, Settings). Nothing appears yet."
+wait 2s
+note "A left click and a drag on the desktop"
+click left 900 600
+wait 800ms
+drag 700 500 to 1500 1100
+wait 1s
+shot "after a drag on the desktop"

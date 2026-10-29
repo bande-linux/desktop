@@ -262,6 +262,9 @@ impl Reference {
                     }
                 }
                 Item::Clip { shape, items } => self.items(items, Some(*shape)),
+                Item::Translate { .. } | Item::Opacity { .. } | Item::Line { .. } => {
+                    panic!("the reference scenes do not use layers or lines")
+                }
                 Item::Image { rect, image } => {
                     assert!(
                         rect.width as u32 == image.width()

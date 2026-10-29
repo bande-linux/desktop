@@ -24,6 +24,10 @@ impl SessionBus {
         Ok(Self { daemon, address })
     }
 
+    pub fn address(&self) -> &str {
+        &self.address
+    }
+
     pub fn connect(&self) -> zbus::Result<zbus::blocking::Connection> {
         zbus::blocking::connection::Builder::address(self.address.as_str())?.build()
     }

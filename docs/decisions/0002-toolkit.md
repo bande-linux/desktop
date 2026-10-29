@@ -3,7 +3,7 @@
 Status: **proposed, awaiting the owner's decision** (October 2026). Scope: which widget
 layer Unbound's own apps and shell (panel, menu bar, launcher, Files, Settings, Terminal,
 lock screen, greeter, Control Center) are built on, and in which order it grows to AppKit
-depth. Rendering (Vello, Parley) is settled by `docs/RENDERING.md` Decision 2 and is not
+depth. Rendering (Vello, Parley) is settled by [`0001-rendering.md`](0001-rendering.md) Decision 2 and is not
 reopened here.
 
 ## Context
@@ -159,8 +159,8 @@ exact perf metrics green.
    toolbar, split view, tab view, sheets, alerts, title bar finished; then drag and drop
    on `wl_data_device`.
 8. **Port the apps.** Files and Settings move from hand-painted `Scene`s to widgets as
-   steps 5–6 land; the shell clients follow with step 4. `docs/ARCHITECTURE.md` 1.6 and
-   `docs/MACOS-PARITY.md` are updated as each step lands.
+   steps 5–6 land; the shell clients follow with step 4. [`docs/architecture/toolkit.md`](../architecture/toolkit.md) and
+   [`docs/parity.md`](../parity.md) are updated as each step lands.
 
 ## Risks and how to contain them
 

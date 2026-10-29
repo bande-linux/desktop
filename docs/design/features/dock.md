@@ -9,7 +9,7 @@ a system tray or a launcher grid, all of which have their own homes (menu bar, l
 Exposé).
 
 Modifier names below follow the decided mapping: Super acts as Command. Alt is assumed to stand
-in for Option (not yet recorded in `docs/ARCHITECTURE.md`).
+in for Option (not yet recorded in `docs/architecture/overview.md`).
 
 ## Reference survey
 

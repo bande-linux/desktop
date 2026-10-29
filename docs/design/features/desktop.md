@@ -9,7 +9,7 @@ Desktop folder, and it is the place where screenshots and drops land. In Unbound
 calm, mostly empty place. Files on it behave exactly as they do in Files, and everything
 on it can be reached with a right click or from the keyboard.
 
-Current state (`docs/MACOS-PARITY.md`, `NOTES/backlog.md`): the background is a flat colour.
+Current state (`docs/parity.md`, `NOTES/backlog.md`): the background is a flat colour.
 There are no desktop icons and no desktop right-click menu. The lock screen and greeter
 have no wallpaper. Screenshots already save to the XDG Desktop folder (M18), so the
 desktop surface is needed before users can see them without opening Files.
@@ -68,7 +68,7 @@ new slots.
 extends the selection. Dragging on empty desktop draws a rubber band that selects
 everything it touches, live. `Super+A` selects all. Arrow keys move the selection, and
 typing the start of a name selects it. Clicking empty desktop clears the selection and
-leaves no window focused (ARCHITECTURE 1.7).
+leaves no window focused (`docs/architecture/behaviour.md`).
 Inputs: left click, `Super`/`Shift` + click, left drag on empty space, keyboard.
 Motion: the rubber band is drawn every frame. Selection highlights fade in over about
 80 ms.
@@ -137,7 +137,7 @@ light/dark pair.
 
 **Drop content from apps** — text or an image dragged from an app onto the desktop becomes
 a file (a `.txt`, or an image in the dragged format). The screenshot thumbnail already
-works this way (ARCHITECTURE 6.6).
+works this way (`docs/design/catalogue.md` §6).
 
 **Spring-loaded folders** — holding a drag over a folder icon opens it in Files so the drop
 can go deeper (macOS Finder behaviour, unverified).
@@ -147,7 +147,7 @@ differ, mostly for eyesight.
 
 ### Never (left out)
 
-- **Trash on the desktop** — Trash lives in the panel, one place only (MACOS-PARITY).
+- **Trash on the desktop** — Trash lives in the panel, one place only (`docs/parity.md`).
 - **Drag a volume to Trash to eject** — the gesture means delete everywhere else. Eject is
   in the right-click menu and the Files sidebar.
 - **Home, Computer and Network icons** — the panel and Files already reach these, so the

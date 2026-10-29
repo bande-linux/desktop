@@ -9,7 +9,7 @@ gestures to move, resize, arrange, hide and find it again. Each gesture is anima
 be interrupted. The basics need no explanation and no setting. Power features (tiling,
 workspaces, the overview) are one modifier, one right-click or one shortcut away.
 
-Current state (`docs/MACOS-PARITY.md`, `NOTES/backlog.md` M15, M26): the compositor has xdg
+Current state (`docs/parity.md`, `NOTES/backlog.md` M15, M26): the compositor has xdg
 move and resize grabs, zoom into the area outside exclusive zones, full screen
 (`Ctrl+Super+F`), minimize, `Super+W`, `Super+Q` and `Super+Tab` without an overlay. None of
 these is animated. Title bars are client-side (`xdg-decoration` answers `client_side`, as
@@ -120,7 +120,7 @@ Inputs: `Ctrl+Super+F` (exists); Alt+click zoom; layout menu; Escape does not le
 screen, because apps such as video players use it themselves.
 Motion: the frame springs to the display bounds while the menu bar and panel slide out.
 
-**Focus and raising** — as already decided in ARCHITECTURE 1.7: click to focus and raise,
+**Focus and raising** — as already decided in `docs/architecture/behaviour.md`: click to focus and raise,
 no focus stealing, and close or hide focuses the app's next window. To this Unbound adds a
 dimmed inactive state. Inactive windows have grey controls and a lighter shadow, so the key
 window reads as nearest [10].
@@ -144,7 +144,7 @@ windows with no overlay [1].
 
 **Animations everywhere** — open (scale from 0.95 and fade, about 200 ms), close (the
 reverse, about 150 ms, after the client has unmapped, using the last buffer), minimize,
-zoom, tile, full screen and switcher. All use one spring model, which ARCHITECTURE 6.7
+zoom, tile, full screen and switcher. All use one spring model, which `docs/design/catalogue.md` §7
 already specifies for gestures. Each animation retargets from its current value when
 interrupted, so a second `Super+M` mid-flight reverses smoothly [12]. Reduce Motion in
 Settings replaces movement with short crossfades [12].
@@ -154,7 +154,7 @@ Settings replaces movement with short crossfades [12].
 **Overview** — all windows of the current workspace scaled into a grid without overlap,
 with a workspace strip at the top. It is Mission Control and Exposé in one view. It does
 not search, because the launcher already searches; there is one way to search.
-Inputs: three-finger swipe up (tracks 1:1, ARCHITECTURE 6.7); the keyboard Mission Control
+Inputs: three-finger swipe up (tracks 1:1, `docs/design/catalogue.md` §7); the keyboard Mission Control
 key (`F3`, unverified on PC layouts); `Alt+Super+Up` (open question 3); dragging a window
 to the top edge and holding it there (macOS option [9], off by default). Hovering over a
 window shows its title. Click picks a window. Drag moves a window to a workspace or display.
@@ -229,9 +229,9 @@ offer this, unverified).
    Recommendation: in place for now, because it needs no workspaces and introduces no new
    concept. Revisit when workspaces land, since the swipe between a full-screen app and
    the desktop is a real laptop strength.
-3. **Shortcut family.** ARCHITECTURE 6.8 proposes `Super+Left/Right` for tiling and 6.7
+3. **Shortcut family.** `docs/design/catalogue.md` §8 proposes `Super+Left/Right` for tiling and §7
    proposes `Super+Ctrl+Left/Right` for workspaces. `Super+Left/Right` is line start and end
-   in text (1.5) and `Super+Up` is "enclosing folder" in Files (M22). Recommendation:
+   in text (the keyboard model in `docs/architecture/overview.md`) and `Super+Up` is "enclosing folder" in Files (M22). Recommendation:
    `Ctrl+Super+Arrows` places the focused window (as `Ctrl+Super+F` already does full
    screen), and `Alt+Super+Arrows` moves between views (overview, app windows,
    workspaces). Amend 6.7 and 6.8 to match.

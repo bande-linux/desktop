@@ -8,7 +8,7 @@ calm as the Finder and be faster to drive from the keyboard, with one obvious wa
 thing and the rest behind the context menu, a modifier or the inspector.
 
 Modifier names follow the decided mapping: Super acts as Command. Alt is assumed to stand in for
-Option (not yet recorded in `docs/ARCHITECTURE.md`). Ctrl is free in Files.
+Option (not yet recorded in `docs/architecture/overview.md`). Ctrl is free in Files.
 
 ## Reference survey
 
@@ -177,7 +177,7 @@ the desktop icons of M2. Moves to Now if the owner wants it (see open questions)
 
 **Recents** — A sidebar item listing recently used files from `recently-used.xbel`.
 
-**Batch rename** — On a multiple selection: replace text, add text, number (ARCHITECTURE 6.1).
+**Batch rename** — On a multiple selection: replace text, add text, number (`docs/design/catalogue.md` §1).
 
 **Compress and extract** — Compress to `.zip` beside the selection; opening an archive extracts
 it beside itself.
@@ -186,7 +186,7 @@ it beside itself.
 
 **Saved searches** — Save a search to the sidebar as a live folder [9][10].
 
-**Inspector extras** — EXIF, audio metadata, SHA-256 on request (ARCHITECTURE 6.1).
+**Inspector extras** — EXIF, audio metadata, SHA-256 on request (`docs/design/catalogue.md` §1).
 
 **Remove from Trash after 30 days** — Off by default, one checkbox [5].
 

@@ -4,6 +4,9 @@ use std::io;
 use std::iter::Peekable;
 use std::path::{Path, PathBuf};
 use std::str::Chars;
+use std::time::SystemTime;
+
+use unbound_fs::{Trash, TrashItem};
 
 use crate::L10N;
 
@@ -18,31 +21,93 @@ pub struct Entry {
     pub name: String,
     pub path: PathBuf,
     pub kind: Kind,
+    pub size: u64,
+    pub modified: Option<SystemTime>,
+    pub link: bool,
+    pub trashed: Option<TrashItem>,
+}
+
+impl Entry {
+    pub fn read(path: PathBuf, name: String) -> Self {
+        let link = fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.is_symlink());
+        let metadata = fs::metadata(&path).ok();
+        Self {
+            name,
+            kind: if metadata.as_ref().is_some_and(fs::Metadata::is_dir) {
+                Kind::Folder
+            } else {
+                Kind::File
+            },
+            size: metadata.as_ref().map_or(0, fs::Metadata::len),
+            modified: metadata.and_then(|metadata| metadata.modified().ok()),
+            link,
+            path,
+            trashed: None,
+        }
+    }
+
+    pub fn is_folder(&self) -> bool {
+        self.kind == Kind::Folder
+    }
 }
 
 pub fn is_hidden(name: &str) -> bool {
     name.starts_with('.')
 }
 
-pub fn list(folder: &Path, show_hidden: bool) -> io::Result<Vec<Entry>> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SortBy {
+    #[default]
+    Name,
+    Modified,
+    Size,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Sort {
+    pub by: SortBy,
+    pub descending: bool,
+}
+
+pub fn sort(entries: &mut [Entry], sort: Sort) {
+    entries.sort_by(|a, b| {
+        let order = match sort.by {
+            SortBy::Name => finder_order(&a.name, &b.name),
+            SortBy::Modified => b.modified.cmp(&a.modified),
+            SortBy::Size => b.size.cmp(&a.size),
+        }
+        .then_with(|| finder_order(&a.name, &b.name));
+        b.is_folder().cmp(&a.is_folder()).then(if sort.descending {
+            order.reverse()
+        } else {
+            order
+        })
+    });
+}
+
+pub fn list(folder: &Path, show_hidden: bool, order: Sort) -> io::Result<Vec<Entry>> {
     let mut entries = fs::read_dir(folder)?
         .filter_map(Result::ok)
-        .map(|entry| {
-            let path = entry.path();
-            Entry {
-                name: entry.file_name().to_string_lossy().into_owned(),
-                kind: if path.is_dir() {
-                    Kind::Folder
-                } else {
-                    Kind::File
-                },
-                path,
-            }
-        })
-        .filter(|entry| show_hidden || !is_hidden(&entry.name))
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .filter(|name| show_hidden || !is_hidden(name))
+        .map(|name| Entry::read(folder.join(&name), name))
         .collect::<Vec<_>>();
-    entries.sort_by(|a, b| finder_order(&a.name, &b.name));
+    sort(&mut entries, order);
     Ok(entries)
+}
+
+pub fn list_trash(trash: &Trash, order: Sort) -> Vec<Entry> {
+    let mut entries = trash
+        .items()
+        .into_iter()
+        .map(|item| {
+            let mut entry = Entry::read(item.path(), item.name());
+            entry.trashed = Some(item);
+            entry
+        })
+        .collect::<Vec<_>>();
+    sort(&mut entries, order);
+    entries
 }
 
 fn digits(chars: &mut Peekable<Chars<'_>>) -> String {

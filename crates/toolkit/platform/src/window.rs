@@ -50,7 +50,7 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::{
 use crate::access::Accessibility;
 use crate::appearance::AppearanceWatch;
 use crate::capture::Capture;
-use crate::chrome::{Chrome, Control, Frame, SHADOW_MARGIN, TITLE_BAR_HEIGHT, Zone};
+use crate::chrome::{Chrome, Control, Frame, RESIZE_MARGIN, TITLE_BAR_HEIGHT, Zone};
 use crate::clipboard::Clipboard;
 use crate::lock::{Locked, SessionLock};
 use crate::scale::{Scaling, SurfaceScale};
@@ -516,7 +516,7 @@ impl Window {
         }
     }
 
-    fn shadow_margin(&self) -> u32 {
+    fn resize_margin(&self) -> u32 {
         let toplevel = self.state.toplevel;
         let floating = !(toplevel.maximized || toplevel.fullscreen || toplevel.tiled);
         let transparent = match &self.gpu {
@@ -524,7 +524,7 @@ impl Window {
             Gpu::Starting(_) | Gpu::Unavailable => true,
         };
         if self.chrome.is_some() && floating && transparent {
-            SHADOW_MARGIN
+            RESIZE_MARGIN
         } else {
             0
         }
@@ -533,7 +533,7 @@ impl Window {
     fn frame(&self) -> Frame {
         let (width, height) = self.geometry();
         Frame {
-            margin: self.shadow_margin() as f32,
+            margin: self.resize_margin() as f32,
             title: self.title_height() as f32,
             width: width as f32,
             height: height as f32,

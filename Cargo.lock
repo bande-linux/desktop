@@ -3803,6 +3803,7 @@ version = "0.1.0"
 name = "unbound-term"
 version = "0.1.0"
 dependencies = [
+ "accesskit",
  "alacritty_terminal",
  "image",
  "image-compare",

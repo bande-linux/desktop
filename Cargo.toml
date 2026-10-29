@@ -75,6 +75,7 @@ unbound-lock = { path = "crates/shell/lock" }
 unbound-log = { path = "crates/libs/log" }
 unbound-menubar = { path = "crates/shell/menubar" }
 unbound-network = { path = "crates/libs/network" }
+unbound-notifications = { path = "crates/shell/notifications" }
 unbound-notify = { path = "crates/services/notify" }
 unbound-polkit = { path = "crates/services/polkit" }
 unbound-power = { path = "crates/services/power" }

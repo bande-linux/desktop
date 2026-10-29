@@ -1,0 +1,14 @@
+[package]
+name = "unbound-l10n"
+description = "Fluent localisation for Unbound programs"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+fluent-bundle.workspace = true
+tracing.workspace = true
+unic-langid.workspace = true
+
+[lints]
+workspace = true

@@ -14,6 +14,7 @@ mod scanout;
 mod session;
 mod shell;
 mod state;
+mod sync;
 mod window;
 
 pub use clock::{FrameClock, FrameOutput, FrameScheduler, Poll, SAFETY_MARGIN, Submission, Vblank};

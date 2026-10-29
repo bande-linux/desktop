@@ -110,6 +110,8 @@ pub(crate) struct ExclusiveLayer {
 
 pub struct State {
     pub(crate) display_handle: DisplayHandle,
+    pub(crate) syncobj_state: Option<smithay::wayland::drm_syncobj::DrmSyncobjState>,
+    pub(crate) blockers: smithay::reexports::calloop::LoopHandle<'static, State>,
     pub(crate) output_size: Size<i32, Physical>,
     refresh: Duration,
     scanout_node: Option<DrmNode>,
@@ -158,6 +160,7 @@ pub struct State {
 
 pub struct Headless {
     display: Display<State>,
+    pub(crate) fences: smithay::reexports::calloop::EventLoop<'static, State>,
     pub(crate) state: State,
     latched_feedback: Vec<PresentationFeedbackCallback>,
     latched_frame_callbacks: Vec<WlCallback>,
@@ -180,6 +183,7 @@ impl Headless {
     pub fn with_output(config: OutputConfig) -> io::Result<Self> {
         let output_size = config.size;
         let display = Display::new().map_err(io::Error::other)?;
+        let fences = smithay::reexports::calloop::EventLoop::try_new().map_err(io::Error::other)?;
         let handle = display.handle();
         let mut seat_state = SeatState::new();
         let mut seat = seat_state.new_wl_seat(&handle, "seat0");
@@ -227,6 +231,8 @@ impl Headless {
         State::create_capture_globals(&handle);
         let state = State {
             display_handle: handle.clone(),
+            syncobj_state: None,
+            blockers: fences.handle(),
             output_size,
             refresh: config.refresh,
             scanout_node: config.scanout.as_ref().map(|scanout| scanout.node),
@@ -290,6 +296,7 @@ impl Headless {
         };
         Ok(Self {
             display,
+            fences,
             state,
             latched_feedback: Vec::new(),
             latched_frame_callbacks: Vec::new(),
@@ -310,6 +317,7 @@ impl Headless {
     }
 
     pub fn dispatch(&mut self) -> io::Result<()> {
+        self.clear_signalled_fences()?;
         self.display.dispatch_clients(&mut self.state)?;
         self.state.popups.cleanup();
         self.display.flush_clients()
@@ -791,6 +799,10 @@ impl State {
 impl CompositorHandler for State {
     fn compositor_state(&mut self) -> &mut CompositorState {
         &mut self.compositor_state
+    }
+
+    fn new_surface(&mut self, surface: &WlSurface) {
+        crate::sync::wait_for_fences(surface);
     }
 
     fn client_compositor_state<'a>(&self, client: &'a Client) -> &'a CompositorClientState {

@@ -223,6 +223,10 @@ impl DrmOutput {
         })
     }
 
+    pub fn device_fd(&self) -> DrmDeviceFd {
+        self.device.device_fd().clone()
+    }
+
     pub fn path(&self) -> &Path {
         &self.path
     }

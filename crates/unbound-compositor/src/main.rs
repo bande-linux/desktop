@@ -85,7 +85,13 @@ fn run_drm(device: Option<&Path>) -> Result<(), Box<dyn Error>> {
         output.path().display(),
         1.0 / output.refresh().as_secs_f64()
     );
-    let compositor = Headless::with_output(output.output_config())?;
+    let mut compositor = Headless::with_output(output.output_config())?;
+    if !compositor.enable_explicit_sync(output.device_fd()) {
+        eprintln!(
+            "unbound-compositor: {} has no syncobj eventfd; explicit sync is off",
+            output.path().display()
+        );
+    }
     let mut event_loop: EventLoop<App<DrmOutput>> = EventLoop::try_new()?;
     let handle = event_loop.handle();
     handle.insert_source(notifiers.session, |event, _, app| {
@@ -138,13 +144,15 @@ fn listen<O: 'static>(
             eprintln!("unbound-compositor: rejected client: {error}");
         }
     })?;
-    handle.insert_source(
-        Generic::new(app.compositor.poll_fd()?, Interest::READ, Mode::Level),
-        |_, _, app| {
-            app.compositor.dispatch()?;
-            Ok(PostAction::Continue)
-        },
-    )?;
+    for fd in [app.compositor.poll_fd()?, app.compositor.fence_fd()?] {
+        handle.insert_source(
+            Generic::new(fd, Interest::READ, Mode::Level),
+            |_, _, app| {
+                app.compositor.dispatch()?;
+                Ok(PostAction::Continue)
+            },
+        )?;
+    }
     Ok(())
 }
 

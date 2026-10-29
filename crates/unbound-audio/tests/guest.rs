@@ -17,9 +17,22 @@ context.objects = [
         node.description = "AirPods" media.class = "Audio/Sink" audio.position = [ FL FR ]
         priority.session = 1000 object.linger = true } }
     { factory = adapter args = { factory.name = support.null-audio-sink node.name = "microphone"
-        node.description = "MacBook Pro Microphone" media.class = "Audio/Source" audio.position = [ MONO ]
-        object.linger = true } }
+        node.description = "MacBook Pro Microphone" media.class = "Audio/Source/Virtual" audio.position = [ MONO ]
+        priority.session = 3000 object.linger = true } }
 ]
+"#;
+
+const NO_HARDWARE: &str = r#"
+wireplumber.profiles = {
+    main = {
+        monitor.alsa = disabled
+        monitor.alsa-midi = disabled
+        monitor.bluez = disabled
+        monitor.bluez-midi = disabled
+        monitor.libcamera = disabled
+        monitor.v4l2 = disabled
+    }
+}
 "#;
 
 struct Session {
@@ -41,6 +54,13 @@ impl Session {
             DEVICES,
         )
         .expect("devices");
+        std::fs::create_dir_all(config.join("wireplumber/wireplumber.conf.d"))
+            .expect("wireplumber config dir");
+        std::fs::write(
+            config.join("wireplumber/wireplumber.conf.d/no-hardware.conf"),
+            NO_HARDWARE,
+        )
+        .expect("no hardware");
         unsafe {
             std::env::set_var("XDG_RUNTIME_DIR", &runtime);
             std::env::set_var("XDG_CONFIG_HOME", &config);

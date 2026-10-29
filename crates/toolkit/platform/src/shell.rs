@@ -113,6 +113,15 @@ impl Dispatch<UnboundShellV1, ()> for State {
             unbound_shell_v1::Event::ToggleControlCenter => {
                 state.events.push(WindowEvent::ToggleControlCenter);
             }
+            unbound_shell_v1::Event::AppResponding {
+                pid,
+                app_id,
+                responding,
+            } => state.events.push(WindowEvent::AppResponding {
+                pid,
+                app_id,
+                responding: responding != 0,
+            }),
             _ => {}
         }
     }

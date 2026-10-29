@@ -140,8 +140,16 @@ pub enum WindowEvent {
     CaptureArea,
     ActiveApp(String),
     AppsChanged,
-    VolumeKey { key: VolumeKey, fine: bool },
+    VolumeKey {
+        key: VolumeKey,
+        fine: bool,
+    },
     ToggleControlCenter,
+    AppResponding {
+        pid: i32,
+        app_id: String,
+        responding: bool,
+    },
     Accessibility(ActionRequest),
     AppearanceChanged(Appearance),
 }
@@ -1488,7 +1496,7 @@ impl Dispatch<WlRegistry, ()> for State {
                     state.lock.output = Some(registry.bind(name, 1, handle, ()));
                 }
                 "unbound_shell_v1" => {
-                    state.shell.protocol = Some(registry.bind(name, version.min(4), handle, ()));
+                    state.shell.protocol = Some(registry.bind(name, version.min(6), handle, ()));
                 }
                 "ext_output_image_capture_source_manager_v1" => {
                     state.capture.sources = Some(registry.bind(name, 1, handle, ()));

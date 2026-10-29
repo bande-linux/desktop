@@ -17,4 +17,4 @@ pub use text::{
     DISPLAY_FONT_FAMILY, DISPLAY_SIZE, FONT_FAMILY, GlyphRun, MONOSPACE_FONT_FAMILY, Paragraph,
     PositionedGlyph, TextAlign, TextStyle, TextSystem, Typeface, families,
 };
-pub use tokens::{Color, Palette, Scheme, Spacing};
+pub use tokens::{Appearance, Color, Palette, Scheme, Spacing};

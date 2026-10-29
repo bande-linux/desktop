@@ -1,4 +1,5 @@
 mod access;
+mod appearance;
 mod capture;
 mod clipboard;
 mod lock;

@@ -3650,12 +3650,14 @@ dependencies = [
  "unbound-compositor",
  "unbound-graphics",
  "unbound-protocols",
+ "unbound-test-bus",
  "wayland-backend",
  "wayland-client",
  "wayland-protocols",
  "wayland-protocols-wlr",
  "wgpu",
  "xkbcommon",
+ "zbus",
 ]
 
 [[package]]

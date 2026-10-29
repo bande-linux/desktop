@@ -30,10 +30,27 @@ impl Default for Color {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Scheme {
+    #[default]
     Light,
     Dark,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Appearance {
+    pub scheme: Scheme,
+    pub accent: Option<Color>,
+}
+
+impl Appearance {
+    pub fn palette(self) -> Palette {
+        let palette = Palette::for_scheme(self.scheme);
+        Palette {
+            accent_color: self.accent.unwrap_or(palette.accent_color),
+            ..palette
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

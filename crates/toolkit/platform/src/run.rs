@@ -40,6 +40,8 @@ pub trait App {
     }
 }
 
+const BUILT_IN_SOURCES: usize = 3;
+
 fn earliest(deadlines: impl IntoIterator<Item = Option<Instant>>) -> Option<Instant> {
     deadlines.into_iter().flatten().min()
 }
@@ -89,14 +91,16 @@ pub fn run(window: &mut Window, app: &mut impl App) -> Result<(), WindowError> {
         };
 
         let deadline = earliest([window.state.input.repeat_deadline(), app.deadline()]);
-        let (wayland_ready, accessibility_ready, pastes_ready, sources_ready) = {
+        let (wayland_ready, accessibility_ready, appearance_ready, pastes_ready, sources_ready) = {
             let connection = guard.connection_fd();
             let accessibility = window.accessibility.fd();
+            let appearance = window.appearance.fd();
             let pastes = window.paste_fds();
             let sources = app.sources();
-            let mut fds = Vec::with_capacity(2 + pastes.len() + sources.len());
+            let mut fds = Vec::with_capacity(BUILT_IN_SOURCES + pastes.len() + sources.len());
             fds.push(PollFd::new(&connection, PollFlags::IN));
             fds.push(PollFd::new(&accessibility, PollFlags::IN));
+            fds.push(PollFd::new(&appearance, PollFlags::IN));
             for fd in pastes.iter().chain(&sources) {
                 fds.push(PollFd::new(fd, PollFlags::IN));
             }
@@ -114,15 +118,17 @@ pub fn run(window: &mut Window, app: &mut impl App) -> Result<(), WindowError> {
             let ready = |fd: &PollFd| !fd.revents().is_empty();
             let wayland_ready = ready(&fds[0]);
             let accessibility_ready = ready(&fds[1]);
+            let appearance_ready = ready(&fds[2]);
             let pastes_ready = (0..pastes.len())
-                .filter(|index| ready(&fds[2 + index]))
+                .filter(|index| ready(&fds[BUILT_IN_SOURCES + index]))
                 .collect::<Vec<_>>();
             let sources_ready = (0..sources.len())
-                .filter(|index| ready(&fds[2 + pastes.len() + index]))
+                .filter(|index| ready(&fds[BUILT_IN_SOURCES + pastes.len() + index]))
                 .collect::<Vec<_>>();
             (
                 wayland_ready,
                 accessibility_ready,
+                appearance_ready,
                 pastes_ready,
                 sources_ready,
             )
@@ -136,6 +142,10 @@ pub fn run(window: &mut Window, app: &mut impl App) -> Result<(), WindowError> {
             for request in window.accessibility.take_requests() {
                 app.event(window, WindowEvent::Accessibility(request));
             }
+        }
+        if appearance_ready && let Some(appearance) = window.appearance.take_change() {
+            window.request_redraw();
+            app.event(window, WindowEvent::AppearanceChanged(appearance));
         }
         for index in pastes_ready.into_iter().rev() {
             window.read_paste(index);

@@ -17,7 +17,7 @@ use raw_window_handle::{
 };
 use rustix::fs::{MemfdFlags, memfd_create};
 use unbound_graphics::{
-    CpuRenderer, Event, GpuRenderer, RenderError, Scene, pixels, vulkan_instance,
+    Appearance, CpuRenderer, Event, GpuRenderer, RenderError, Scene, pixels, vulkan_instance,
 };
 use unbound_protocols::client::unbound_shell_v1::VolumeKey;
 use wayland_client::backend::WaylandError;
@@ -45,6 +45,7 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::{
 };
 
 use crate::access::Accessibility;
+use crate::appearance::AppearanceWatch;
 use crate::capture::Capture;
 use crate::clipboard::Clipboard;
 use crate::lock::{Locked, SessionLock};
@@ -134,6 +135,7 @@ pub enum WindowEvent {
     VolumeKey { key: VolumeKey, fine: bool },
     ToggleControlCenter,
     Accessibility(ActionRequest),
+    AppearanceChanged(Appearance),
 }
 
 #[derive(Debug)]
@@ -269,6 +271,7 @@ pub struct Window {
     visible: bool,
     needs_redraw: bool,
     pub(crate) accessibility: Accessibility,
+    pub(crate) appearance: AppearanceWatch,
 }
 
 fn anchor_of(edges: Edges) -> zwlr_layer_surface_v1::Anchor {
@@ -304,6 +307,7 @@ impl Window {
     }
 
     fn on(connection: Connection, role: Role, size: (u32, u32)) -> Result<Self, WindowError> {
+        let mut appearance = AppearanceWatch::start()?;
         let mut queue = connection.new_event_queue();
         let handle = queue.handle();
         connection.display().get_registry(&handle, ());
@@ -396,6 +400,10 @@ impl Window {
         };
 
         let size = state.suggested_size.unwrap_or(size);
+        appearance.wait_for_first_reading();
+        state
+            .events
+            .push(WindowEvent::AppearanceChanged(appearance.current()));
         Ok(Self {
             gpu,
             cpu: CpuRenderer::new(),
@@ -412,6 +420,7 @@ impl Window {
             visible: true,
             needs_redraw: true,
             accessibility: Accessibility::new()?,
+            appearance,
         })
     }
 
@@ -430,6 +439,10 @@ impl Window {
         if let ShellSurface::Toplevel(_, toplevel) = &self.role {
             toplevel.set_title(title.to_owned());
         }
+    }
+
+    pub fn appearance(&self) -> Appearance {
+        self.appearance.current()
     }
 
     pub fn is_closed(&self) -> bool {

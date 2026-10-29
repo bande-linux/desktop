@@ -3803,6 +3803,7 @@ version = "0.1.0"
 name = "unbound-term"
 version = "0.1.0"
 dependencies = [
+ "accesskit",
  "alacritty_terminal",
  "image",
  "image-compare",
@@ -3810,6 +3811,7 @@ dependencies = [
  "unbound-l10n",
  "unbound-log",
  "unbound-toolkit",
+ "unbound-xdg",
 ]
 
 [[package]]

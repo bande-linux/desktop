@@ -56,6 +56,8 @@ jobs:
       CARGO_DEB_VERSION: 3.8.0
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - run: rustup toolchain install
       - name: Install build and smoke-test dependencies
         run: |
@@ -68,11 +70,20 @@ jobs:
           test -x "$root/bin/cargo-deb" \
             || cargo install cargo-deb --version "$CARGO_DEB_VERSION" --locked --root "$root"
           echo "$root/bin" >> "$GITHUB_PATH"
-      - run: |
+      - name: Derive the package version from git
+        run: |
+          ci/deb/version-test.sh
+          version=$(ci/deb/version.sh)
+          echo "Package version $version"
+          echo "DEB_VERSION=$version" >> "$GITHUB_ENV"
+      - name: Build the packages
+        env:
+          RUSTFLAGS: --remap-path-prefix=${{ github.workspace }}=/build --remap-path-prefix=/root/.cargo=/cargo --remap-path-prefix=/root/.rustup=/rustup
+        run: |
           for package in unbound-compositor unbound-notify unbound-clipboard unbound-config unbound-power \
               xdg-desktop-portal-unbound unbound-tray unbound-automount \
               unbound-panel unbound-launcher unbound-term unbound-lock unbound-screenshot unbound-files unbound-settings; do
-            cargo deb --package "$package" --locked
+            cargo deb --package "$package" --locked --deb-version "$DEB_VERSION"
           done
       - name: Inspect the packages
         run: |
@@ -80,6 +91,9 @@ jobs:
             dpkg-deb --info "$deb"
             dpkg-deb --contents "$deb"
             test "$(dpkg-deb --field "$deb" Architecture)" = arm64
+            test "$(dpkg-deb --field "$deb" Version)" = "$DEB_VERSION"
+            test "$(dpkg-deb --field "$deb" Section)" = misc
+            ! dpkg-deb --fsys-tarfile "$deb" | tar -xO | grep -aq -e "$GITHUB_WORKSPACE" -e /root/.cargo
           done
           dpkg-deb --field target/debian/unbound-compositor_*.deb Depends \
             | grep -F 'mesa-vulkan-drivers | vulkan-icd'
@@ -186,7 +200,7 @@ jobs:
           grep -q '^WAYLAND_DISPLAY=wayland-' "$root/stdout"
       - uses: actions/upload-artifact@v7
         with:
-          name: unbound-debs
+          name: unbound-debs-arm64
           path: target/debian/*.deb
           if-no-files-found: error
 
@@ -244,7 +258,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v7
         with:
-          name: unbound-debs
+          name: unbound-debs-arm64
           path: portal-test
       - name: Read the colour scheme through xdg-desktop-portal on Debian 13
         run: |

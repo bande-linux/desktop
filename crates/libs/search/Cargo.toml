@@ -6,8 +6,8 @@ edition.workspace = true
 repository.workspace = true
 
 [dependencies]
-notify.workspace = true
 tracing.workspace = true
+unbound-watch.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
 use std::thread;
 
-use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+use unbound_watch::{Changes, FolderWatch};
 
 use crate::matcher::{Query, fold};
 
@@ -51,10 +51,8 @@ impl FileIndex {
         wake.set_nonblocking(true)?;
         signal.set_nonblocking(true)?;
         let changes = commands.clone();
-        let watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
-            if let Ok(event) = event {
-                let _ = changes.send(Command::Changed(event.paths));
-            }
+        let watcher = FolderWatch::spawn(Changes::Any, move |paths| {
+            let _ = changes.send(Command::Changed(paths));
         })
         .inspect_err(|error| tracing::warn!("cannot watch the home folder: {error}"))
         .ok();
@@ -110,7 +108,7 @@ struct Entry {
 struct Worker {
     root: PathBuf,
     entries: BTreeMap<PathBuf, Entry>,
-    watcher: Option<RecommendedWatcher>,
+    watcher: Option<FolderWatch>,
     boosts: HashMap<PathBuf, u32>,
     commands: Receiver<Command>,
     results: Sender<FileResults>,
@@ -246,8 +244,8 @@ impl Worker {
     }
 
     fn watch(&mut self, folder: &Path) {
-        if let Some(watcher) = &mut self.watcher
-            && let Err(error) = watcher.watch(folder, RecursiveMode::NonRecursive)
+        if let Some(watcher) = &self.watcher
+            && let Err(error) = watcher.watch(folder)
         {
             tracing::warn!("cannot watch {}: {error}", folder.display());
             self.watcher = None;

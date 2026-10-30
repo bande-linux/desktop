@@ -299,15 +299,26 @@ impl FilesView {
     }
 
     fn paint_column(&mut self, index: usize, x: f32, content: Rect, items: &mut Vec<Item>) {
-        let column = self.browser.columns()[index].clone();
         let active = index == self.browser.active();
         let frame = Rect::new(x, content.y, COLUMN_WIDTH, content.height);
         self.hits.push((frame, Hit::Column(index)));
         let mut rows = Vec::new();
         let scroll = self.column_offset(index);
         let first = (scroll.max(0.0) / ROW_HEIGHT).floor() as usize;
+        let fitting = (content.height / ROW_HEIGHT).ceil() as usize + 2;
+        let column = &self.browser.columns()[index];
+        let empty = column.entries.is_empty();
+        let shown = column
+            .entries
+            .iter()
+            .enumerate()
+            .skip(first)
+            .take(fitting)
+            .map(|(position, entry)| (position, entry.clone(), column.is_marked(position)))
+            .collect::<Vec<_>>();
         let renaming = self.rename.as_ref().map(|rename| rename.path.clone());
-        for (position, entry) in column.entries.iter().enumerate().skip(first) {
+        for (position, entry, marked) in &shown {
+            let (position, marked) = (*position, *marked);
             let y = content.y + self.rows_top() + position as f32 * ROW_HEIGHT - scroll;
             if y > content.y + content.height {
                 break;
@@ -320,7 +331,6 @@ impl FilesView {
                     row: position,
                 },
             ));
-            let marked = column.is_marked(position);
             let color = if marked && active {
                 self.palette.on_accent
             } else {
@@ -371,7 +381,7 @@ impl FilesView {
                 });
             }
         }
-        if column.entries.is_empty() {
+        if empty {
             let muted = self.palette.ink2;
             let empty = self.text().paragraph(
                 &L10N.tr("empty-folder"),

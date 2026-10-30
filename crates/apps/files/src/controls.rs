@@ -1,11 +1,12 @@
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::time::Instant;
+use std::time::{Instant, SystemTime};
 
 use accesskit::{Action, ActionRequest, TreeId};
-use unbound_fs::{Sort, SortBy, format_date, format_size};
+use unbound_fs::{Entry, Sort, SortBy, format_date, format_list_date, format_size};
 use unbound_toolkit::ui::{
     Alert, Cell, Column, Event, FreeLayout, HEADER_HEIGHT, Key, Modifiers, Pointer, PointerButton,
     Row, SLIDER_HEIGHT, Size, Slider, Sort as TableSort, Table, TextField, Toggle, Widget,
@@ -14,13 +15,20 @@ use unbound_toolkit::ui::{
 use unbound_toolkit::{Image, Point, Rect};
 
 use crate::L10N;
-use crate::browser::Location;
+use crate::browser::{Location, RowEdit};
 use crate::prompt::{Kind, Prompt};
 use crate::view::{
     COLUMN_WIDTH, FilesView, PATH_BAR_HEIGHT, ROW_HEIGHT, Rename, Request, SLOW_CLICK_RENAME,
     Sheet, contains,
 };
 use crate::views::{ICON_SIZES, ViewMode};
+
+#[derive(Default)]
+pub(crate) struct Formats {
+    types: HashMap<String, (Option<Image>, String)>,
+    sizes: HashMap<u64, String>,
+    dates: HashMap<u64, String>,
+}
 
 const NAME_SIZE: f32 = 13.0;
 const TABLE_SORTS: [Option<SortBy>; 4] = [
@@ -45,7 +53,7 @@ pub(crate) const SLIDER_WIDTH: f32 = 96.0;
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Signal {
     Choice(String),
-    Selection(Vec<String>),
+    Selection,
     Activate,
     Sort(TableSort),
     Search(String),
@@ -93,7 +101,7 @@ pub(crate) fn table(signals: &Signals) -> Table {
         sender(signals),
     );
     Table::new(table_columns(false))
-        .on_selection(move |keys| selection(Signal::Selection(keys.to_vec())))
+        .on_selection(move |_| selection(Signal::Selection))
         .on_activate(move |_| activate(Signal::Activate))
         .on_sort(move |order| sort(Signal::Sort(order)))
         .on_drag(move |_, at| drag(Signal::Drag(at)))
@@ -143,11 +151,15 @@ pub(crate) fn key_of(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
 
-fn type_key(name: &str, folder: bool) -> String {
-    match (folder, name.split_once('.')) {
-        (true, _) => String::new(),
-        (false, Some((_, suffix))) => suffix.to_lowercase(),
-        (false, None) => name.to_lowercase(),
+fn type_key(name: &str, folder: bool) -> Cow<'_, str> {
+    let key = match (folder, name.split_once('.')) {
+        (true, _) => "",
+        (false, Some((_, suffix))) => suffix,
+        (false, None) => name,
+    };
+    match key.chars().any(char::is_uppercase) {
+        true => Cow::Owned(key.to_lowercase()),
+        false => Cow::Borrowed(key),
     }
 }
 
@@ -454,7 +466,7 @@ impl FilesView {
             for signal in signals {
                 match signal {
                     Signal::Choice(action) => self.choose(&action),
-                    Signal::Selection(keys) => self.table_selected(&keys),
+                    Signal::Selection => self.table_selected(),
                     Signal::Activate => self.open(),
                     Signal::Sort(order) => self.table_sorted(order),
                     Signal::Search(text) => self.search_changed(&text),
@@ -482,14 +494,14 @@ impl FilesView {
         }
     }
 
-    fn table_selected(&mut self, keys: &[String]) {
+    fn table_selected(&mut self) {
         if self.mode != ViewMode::List {
             return;
         }
-        let rows = keys
-            .iter()
-            .filter_map(|key| self.table_keys.get(key).copied())
-            .collect();
+        let rows = self
+            .shown_table()
+            .map(Table::selected_rows)
+            .unwrap_or_default();
         self.browser.mark(0, rows);
         self.table_revealed = self.browser.active_column().selected;
         self.selection_changed();
@@ -515,52 +527,110 @@ impl FilesView {
         self.ui.widget_ref::<Table>(self.table)
     }
 
-    fn table_contents(&mut self) -> (Vec<Row>, HashMap<String, usize>) {
+    fn table_row(&mut self, entry: &Entry, scope: Option<&Path>, formats: &mut Formats) -> Row {
+        let folder = entry.is_folder();
+        let type_key = type_key(&entry.name, folder);
+        let (icon, kind) = match formats.types.get(type_key.as_ref()) {
+            Some(known) => known.clone(),
+            None => {
+                let known = (
+                    self.entry_icon(entry, 32),
+                    self.apps.kind_for_name(&entry.name, folder),
+                );
+                formats.types.insert(type_key.into_owned(), known.clone());
+                known
+            }
+        };
+        let size = match folder {
+            true => "\u{2014}".to_owned(),
+            false => formats
+                .sizes
+                .entry(entry.size)
+                .or_insert_with(|| format_size(entry.size))
+                .clone(),
+        };
+        let modified = entry
+            .modified
+            .map(|time| {
+                let minute = time
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .map_or(0, |since| since.as_secs() / 60);
+                formats
+                    .dates
+                    .entry(minute)
+                    .or_insert_with(|| format_list_date(time))
+                    .clone()
+            })
+            .unwrap_or_default();
+        let mut cells = vec![
+            Cell::new(entry.name.clone()).icon(icon),
+            Cell::new(modified).muted(),
+            Cell::new(size).muted(),
+            Cell::new(kind).muted(),
+        ];
+        if let Some(scope) = scope {
+            let folder = entry
+                .path
+                .parent()
+                .map(|folder| shown_folder(folder, scope))
+                .unwrap_or_default();
+            cells.insert(1, Cell::new(folder).muted());
+        }
+        Row::new(key_of(&entry.path), cells)
+    }
+
+    fn table_rows(&mut self, rows: impl IntoIterator<Item = usize>) -> Vec<(usize, Row)> {
         let scope = match self.browser.root() {
             Location::Search(scope) => Some(scope.clone()),
             _ => None,
         };
         let entries = std::mem::take(&mut self.browser.columns_mut()[0].entries);
-        let mut types: HashMap<String, (Option<Image>, String)> = HashMap::new();
-        let mut keys = HashMap::with_capacity(entries.len());
-        let mut rows = Vec::with_capacity(entries.len());
-        for (index, entry) in entries.iter().enumerate() {
-            let folder = entry.is_folder();
-            let (icon, kind) = match types.get(&type_key(&entry.name, folder)) {
-                Some(known) => known.clone(),
-                None => {
-                    let known = (
-                        self.entry_icon(entry, 32),
-                        self.apps.kind_for_name(&entry.name, folder),
-                    );
-                    types.insert(type_key(&entry.name, folder), known.clone());
-                    known
-                }
-            };
-            let key = key_of(&entry.path);
-            keys.insert(key.clone(), index);
-            let size = match folder {
-                true => "\u{2014}".to_owned(),
-                false => format_size(entry.size),
-            };
-            let mut cells = vec![
-                Cell::new(entry.name.clone()).icon(icon),
-                Cell::new(entry.modified.map(format_date).unwrap_or_default()).muted(),
-                Cell::new(size).muted(),
-                Cell::new(kind).muted(),
-            ];
-            if let Some(scope) = &scope {
-                let folder = entry
-                    .path
-                    .parent()
-                    .map(|folder| shown_folder(folder, scope))
-                    .unwrap_or_default();
-                cells.insert(1, Cell::new(folder).muted());
-            }
-            rows.push(Row::new(key, cells));
-        }
+        let mut formats = std::mem::take(&mut self.table_formats);
+        let built = rows
+            .into_iter()
+            .filter_map(|row| {
+                let entry = entries.get(row)?;
+                Some((row, self.table_row(entry, scope.as_deref(), &mut formats)))
+            })
+            .collect();
+        self.table_formats = formats;
         self.browser.columns_mut()[0].entries = entries;
-        (rows, keys)
+        built
+    }
+
+    fn update_table_rows(&mut self) {
+        let column = &self.browser.columns()[0];
+        let (revision, edits) = (column.revision, column.edits.len());
+        let patchable = matches!(self.table_synced, Some((shown, applied)) if shown == revision && applied <= edits);
+        if !patchable {
+            self.table_formats = Formats::default();
+            let count = self.browser.columns()[0].entries.len();
+            let rows = self.table_rows(0..count);
+            if let Some(table) = self.table() {
+                table.set_rows(rows.into_iter().map(|(_, row)| row).collect());
+            }
+            self.table_revealed = None;
+        } else if let Some((_, applied)) = self.table_synced {
+            let pending = self.browser.columns()[0].edits[applied..].to_vec();
+            for edit in pending {
+                match edit {
+                    RowEdit::Remove(row) => {
+                        if let Some(table) = self.table() {
+                            table.remove_row(row);
+                        }
+                    }
+                    RowEdit::Insert(row) => {
+                        let built = self.table_rows([row]);
+                        if let Some(((_, built), table)) =
+                            built.into_iter().next().zip(self.table())
+                        {
+                            table.insert_row(row, built);
+                        }
+                    }
+                }
+            }
+        }
+        self.table_synced = Some((revision, edits));
     }
 
     pub(crate) fn sync_table(&mut self) {
@@ -571,30 +641,16 @@ impl FilesView {
         let found = self.browser.searching();
         if found != self.table_found {
             self.table_found = found;
-            self.table_revision = None;
+            self.table_synced = None;
             if let Some(table) = self.table() {
                 table.set_columns(table_columns(found));
             }
         }
-        let revision = self.browser.columns()[0].revision;
-        if self.table_revision != Some(revision) {
-            let (rows, keys) = self.table_contents();
-            self.table_keys = keys;
-            if let Some(table) = self.table() {
-                table.set_rows(rows);
-            }
-            self.table_revision = Some(revision);
-            self.table_revealed = None;
-        }
+        self.update_table_rows();
         let sort = self.browser.sort();
         let column = &self.browser.columns()[0];
-        let wanted = column
-            .marked
-            .iter()
-            .filter_map(|row| column.entries.get(*row))
-            .map(|entry| key_of(&entry.path))
-            .collect::<Vec<_>>();
         let cursor = column.selected;
+        let wanted = column.marked.clone();
         let shown = table_sorts(found)
             .iter()
             .position(|by| *by == Some(sort.by))
@@ -605,8 +661,8 @@ impl FilesView {
             });
         if let Some(table) = self.table() {
             table.set_sort(shown);
-            if table.selection() != wanted {
-                table.select(&wanted);
+            if table.selected_rows() != wanted {
+                table.select_rows(&wanted);
             }
         }
         if cursor != self.table_revealed {

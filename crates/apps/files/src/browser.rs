@@ -1,8 +1,13 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use unbound_fs::{Entry, Sort, Trash, list, list_trash, sort};
+use unbound_fs::{
+    Entry, FolderChanges, Listing, Sort, Trash, compare, is_hidden, list_trash, merge, sort,
+};
+
+use crate::lister::{FIRST_CHUNK, Lister, Ticket};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Location {
@@ -20,7 +25,18 @@ pub struct Column {
     pub marked: Vec<usize>,
     pub anchor: Option<usize>,
     pub revision: u64,
+    pub edits: Vec<RowEdit>,
+    listing: Option<Ticket>,
+    awaited: Vec<PathBuf>,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RowEdit {
+    Insert(usize),
+    Remove(usize),
+}
+
+const MAX_EDITS: usize = 512;
 
 fn next_revision() -> u64 {
     static NEXT: AtomicU64 = AtomicU64::new(1);
@@ -28,15 +44,156 @@ fn next_revision() -> u64 {
 }
 
 impl Column {
-    fn new(location: Location, entries: Vec<Entry>) -> Self {
+    fn new(location: Location, (entries, listing): (Vec<Entry>, Option<Ticket>)) -> Self {
         Self {
             revision: next_revision(),
+            edits: Vec::new(),
             location,
             entries,
             selected: None,
             marked: Vec::new(),
             anchor: None,
+            listing,
+            awaited: Vec::new(),
         }
+    }
+
+    pub fn is_listing(&self) -> bool {
+        self.listing.is_some()
+    }
+
+    fn replaced(&mut self) {
+        self.revision = next_revision();
+        self.edits.clear();
+    }
+
+    fn remove_row(&mut self, row: usize) {
+        self.entries.remove(row);
+        self.edits.push(RowEdit::Remove(row));
+        let shift = |at: usize| match at.cmp(&row) {
+            std::cmp::Ordering::Less => Some(at),
+            std::cmp::Ordering::Equal => None,
+            std::cmp::Ordering::Greater => Some(at - 1),
+        };
+        self.marked = self.marked.iter().filter_map(|at| shift(*at)).collect();
+        self.selected = self.selected.and_then(shift);
+        self.anchor = self.anchor.and_then(shift);
+    }
+
+    fn insert_row(&mut self, entry: Entry, sort: Sort) -> usize {
+        let row = self
+            .entries
+            .partition_point(|shown| compare(shown, &entry, sort) == std::cmp::Ordering::Less);
+        self.entries.insert(row, entry);
+        self.edits.push(RowEdit::Insert(row));
+        let shift = |at: usize| if at >= row { at + 1 } else { at };
+        for at in &mut self.marked {
+            *at = shift(*at);
+        }
+        self.selected = self.selected.map(shift);
+        self.anchor = self.anchor.map(shift);
+        row
+    }
+
+    fn patch(&mut self, path: &Path, sort: Sort, show_hidden: bool) {
+        if self.edits.len() >= MAX_EDITS {
+            self.replaced();
+        }
+        let Some(name) = path
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+        else {
+            return;
+        };
+        let old = self.entries.iter().position(|entry| entry.name == name);
+        let fresh = ((show_hidden || !is_hidden(&name)) && path.symlink_metadata().is_ok())
+            .then(|| Entry::read(path.to_path_buf(), name));
+        if let (Some(row), Some(entry)) = (old, &fresh)
+            && self.entries[row] == *entry
+        {
+            return;
+        }
+        if old.is_none() && fresh.is_none() {
+            return;
+        }
+        let was = old.map(|row| {
+            (
+                self.is_marked(row),
+                self.selected == Some(row),
+                self.anchor == Some(row),
+            )
+        });
+        if let Some(row) = old {
+            self.remove_row(row);
+        }
+        if let Some(entry) = fresh {
+            let row = self.insert_row(entry, sort);
+            if let Some((marked, selected, anchor)) = was {
+                if marked && let Err(at) = self.marked.binary_search(&row) {
+                    self.marked.insert(at, row);
+                }
+                if selected {
+                    self.selected = Some(row);
+                }
+                if anchor {
+                    self.anchor = Some(row);
+                }
+            }
+        }
+    }
+
+    fn resort(&mut self, sort: Sort) {
+        let mut order = (0..self.entries.len()).collect::<Vec<_>>();
+        order.sort_by(|a, b| compare(&self.entries[*a], &self.entries[*b], sort));
+        let mut moved = vec![0; order.len()];
+        for (row, was) in order.iter().enumerate() {
+            moved[*was] = row;
+        }
+        let mut entries = std::mem::take(&mut self.entries)
+            .into_iter()
+            .map(Some)
+            .collect::<Vec<_>>();
+        self.entries = order
+            .iter()
+            .filter_map(|was| entries.get_mut(*was).and_then(Option::take))
+            .collect();
+        let to = |row: usize| moved.get(row).copied();
+        self.marked = self.marked.iter().filter_map(|row| to(*row)).collect();
+        self.marked.sort_unstable();
+        self.selected = self.selected.and_then(to);
+        self.anchor = self.anchor.and_then(to);
+        self.replaced();
+    }
+
+    fn merge(&mut self, chunk: Vec<Entry>, sort: Sort) -> bool {
+        let moved = merge(&mut self.entries, chunk, sort);
+        let to = |row: usize| moved.get(row).copied();
+        self.marked = self.marked.iter().filter_map(|row| to(*row)).collect();
+        self.selected = self.selected.and_then(to);
+        self.anchor = self.anchor.and_then(to);
+        self.replaced();
+        if self.awaited.is_empty() {
+            return false;
+        }
+        let awaited = self.awaited.iter().collect::<HashSet<_>>();
+        let arrived = self
+            .entries
+            .iter()
+            .enumerate()
+            .filter(|(_, entry)| awaited.contains(&entry.path))
+            .map(|(row, entry)| (row, entry.path.clone()))
+            .collect::<Vec<_>>();
+        if arrived.is_empty() {
+            return false;
+        }
+        self.awaited
+            .retain(|path| arrived.iter().all(|(_, found)| found != path));
+        self.marked.extend(arrived.iter().map(|(row, _)| *row));
+        self.marked.sort_unstable();
+        self.marked.dedup();
+        self.selected = arrived.last().map(|(row, _)| *row);
+        self.anchor = self.selected;
+        true
     }
 
     pub fn folder(&self) -> Option<&Path> {
@@ -51,7 +208,7 @@ impl Column {
     }
 
     pub fn is_marked(&self, row: usize) -> bool {
-        self.marked.contains(&row)
+        self.marked.binary_search(&row).is_ok()
     }
 
     pub fn selection(&self) -> Vec<&Entry> {
@@ -86,6 +243,7 @@ pub struct Browser {
     single: bool,
     found: Vec<PathBuf>,
     recents: Vec<PathBuf>,
+    lister: Option<Lister>,
 }
 
 fn entries(paths: &[PathBuf]) -> Vec<Entry> {
@@ -112,24 +270,80 @@ impl Browser {
             single: false,
             found: Vec::new(),
             recents: Vec::new(),
+            lister: Lister::new()
+                .inspect_err(|error| {
+                    tracing::warn!("cannot list folders in the background: {error}")
+                })
+                .ok(),
         };
         browser.show(location);
         browser
     }
 
-    fn read(&self, location: &Location) -> Vec<Entry> {
+    fn read(&mut self, location: &Location) -> (Vec<Entry>, Option<Ticket>) {
         match location {
-            Location::Folder(folder) => {
-                list(folder, self.show_hidden, self.sort).unwrap_or_default()
-            }
-            Location::Trash => list_trash(&self.trash, self.sort),
-            Location::Recents => entries(&self.recents),
+            Location::Folder(folder) => self.read_folder(folder),
+            Location::Trash => (list_trash(&self.trash, self.sort), None),
+            Location::Recents => (entries(&self.recents), None),
             Location::Search(_) => {
                 let mut found = entries(&self.found);
                 sort(&mut found, self.sort);
-                found
+                (found, None)
             }
         }
+    }
+
+    fn read_folder(&mut self, folder: &Path) -> (Vec<Entry>, Option<Ticket>) {
+        let Ok(mut listing) = Listing::open(folder, self.show_hidden) else {
+            return (Vec::new(), None);
+        };
+        let first = match self.lister {
+            Some(_) => FIRST_CHUNK,
+            None => usize::MAX,
+        };
+        let mut entries = listing.next_chunk(first);
+        sort(&mut entries, self.sort);
+        let ticket = match &mut self.lister {
+            Some(lister) if !listing.is_done() => Some(lister.finish(listing, self.sort)),
+            _ => None,
+        };
+        (entries, ticket)
+    }
+
+    pub fn listing_fd(&self) -> Option<BorrowedFd<'_>> {
+        self.lister.as_ref().map(Lister::fd)
+    }
+
+    pub fn take_listed(&mut self) -> (bool, bool) {
+        let Some(lister) = &self.lister else {
+            return (false, false);
+        };
+        let mut changed = false;
+        let mut selected = false;
+        for listed in lister.take() {
+            let Some(index) = self
+                .columns
+                .iter()
+                .position(|column| column.listing.as_deref() == Some(&listed.id))
+            else {
+                continue;
+            };
+            let column = &mut self.columns[index];
+            changed = true;
+            if column.merge(listed.entries, self.sort) {
+                selected = true;
+                if self.active <= index {
+                    self.active = index;
+                    self.open_child(index);
+                }
+            }
+            if listed.done {
+                let column = &mut self.columns[index];
+                column.listing = None;
+                column.awaited.clear();
+            }
+        }
+        (changed, selected)
     }
 
     pub fn can_go_back(&self) -> bool {
@@ -271,7 +485,17 @@ impl Browser {
 
     pub fn set_sort(&mut self, sort: Sort) {
         self.sort = sort;
-        self.reload();
+        for column in &mut self.columns {
+            if column.location != Location::Recents && !column.is_listing() {
+                column.resort(sort);
+            }
+        }
+        self.reload_where(|location| *location == Location::Recents);
+        for index in 0..self.columns.len() {
+            if self.columns.get(index).is_some_and(Column::is_listing) {
+                self.reload_column(index);
+            }
+        }
     }
 
     pub fn single(&self) -> bool {
@@ -339,14 +563,13 @@ impl Browser {
         if column != self.active {
             shown.clear();
         }
-        match shown.marked.iter().position(|marked| *marked == row) {
-            Some(index) => {
+        match shown.marked.binary_search(&row) {
+            Ok(index) => {
                 shown.marked.remove(index);
                 shown.selected = shown.marked.last().copied();
             }
-            None => {
-                shown.marked.push(row);
-                shown.marked.sort_unstable();
+            Err(index) => {
+                shown.marked.insert(index, row);
                 shown.selected = Some(row);
             }
         }
@@ -386,9 +609,9 @@ impl Browser {
         let added = rows
             .iter()
             .rev()
-            .find(|row| !shown.marked.contains(row))
+            .find(|row| shown.marked.binary_search(row).is_err())
             .copied();
-        let kept = shown.selected.filter(|row| rows.contains(row));
+        let kept = shown.selected.filter(|row| rows.binary_search(row).is_ok());
         shown.selected = added.or(kept).or_else(|| rows.last().copied());
         shown.anchor = shown.selected;
         shown.marked = rows;
@@ -531,7 +754,8 @@ impl Browser {
             .and_then(|row| column.entries.get(row))
             .map(|entry| entry.path.clone());
         let previous_row = column.selected;
-        let entries = self.read(&column.location);
+        let location = column.location.clone();
+        let (entries, listing) = self.read(&location);
         let rows = entries
             .iter()
             .enumerate()
@@ -545,7 +769,14 @@ impl Browser {
             .and_then(find)
             .or_else(|| marked.last().copied());
         let anchor = anchor_path.as_ref().and_then(find).or(selected);
-        let lost_selection = previous_row.is_some() && selected.is_none();
+        let awaited = match listing {
+            Some(_) => marked_paths
+                .into_iter()
+                .filter(|path| !rows.contains_key(path))
+                .collect(),
+            None => Vec::new(),
+        };
+        let lost_selection = previous_row.is_some() && selected.is_none() && awaited.is_empty();
         let child_was = self
             .columns
             .get(index + 1)
@@ -553,11 +784,23 @@ impl Browser {
         let column = &mut self.columns[index];
         if column.entries != entries {
             column.entries = entries;
-            column.revision = next_revision();
+            column.replaced();
         }
+        column.listing = listing;
+        column.awaited = awaited;
         column.marked = marked;
         column.selected = selected;
         column.anchor = anchor;
+        self.follow_selection(index, previous_row, lost_selection, child_was);
+    }
+
+    fn follow_selection(
+        &mut self,
+        index: usize,
+        previous_row: Option<usize>,
+        lost_selection: bool,
+        child_was: Option<Location>,
+    ) {
         if lost_selection {
             self.columns.truncate(index + 1);
             if self.active > index {
@@ -585,6 +828,64 @@ impl Browser {
             self.active = self.active.min(index);
             self.open_child(index);
         }
+    }
+
+    fn patch_column(&mut self, index: usize, paths: &[&PathBuf]) {
+        let previous_row = self.columns[index].selected;
+        let child_was = self
+            .columns
+            .get(index + 1)
+            .map(|child| child.location.clone());
+        let (sort, show_hidden) = (self.sort, self.show_hidden);
+        let column = &mut self.columns[index];
+        for path in paths {
+            column.patch(path, sort, show_hidden);
+        }
+        let lost_selection = previous_row.is_some() && column.selected.is_none();
+        self.follow_selection(index, previous_row, lost_selection, child_was);
+    }
+
+    pub fn apply(&mut self, changes: &FolderChanges) {
+        let mut whole = changes.folders.clone();
+        let info_dirs = self.trash_info_dirs();
+        whole.extend(
+            changes
+                .entries
+                .iter()
+                .filter_map(|path| path.parent())
+                .filter(|folder| info_dirs.iter().any(|dir| dir == folder))
+                .map(Path::to_path_buf),
+        );
+        whole.extend(
+            self.columns
+                .iter()
+                .filter(|column| column.is_listing())
+                .filter_map(|column| column.folder())
+                .filter(|folder| {
+                    changes
+                        .entries
+                        .iter()
+                        .any(|path| path.parent() == Some(*folder))
+                })
+                .map(Path::to_path_buf),
+        );
+        let mut index = 0;
+        while index < self.columns.len() {
+            if let Some(folder) = self.columns[index].folder()
+                && !whole.iter().any(|stale| stale == folder)
+            {
+                let paths = changes
+                    .entries
+                    .iter()
+                    .filter(|path| path.parent() == Some(folder))
+                    .collect::<Vec<_>>();
+                if !paths.is_empty() {
+                    self.patch_column(index, &paths);
+                }
+            }
+            index += 1;
+        }
+        self.refresh(&whole);
     }
 
     fn reload_where(&mut self, stale: impl Fn(&Location) -> bool) {
@@ -655,7 +956,18 @@ impl Browser {
             .iter()
             .filter_map(|path| positions.get(path).copied())
             .collect::<Vec<_>>();
+        if column.listing.is_some() {
+            column.awaited = paths
+                .iter()
+                .filter(|path| !positions.contains_key(path))
+                .cloned()
+                .collect();
+        }
         let Some(last) = rows.last().copied() else {
+            if !column.awaited.is_empty() {
+                column.clear();
+                self.active = index;
+            }
             return;
         };
         column.marked = rows;

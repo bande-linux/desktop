@@ -4,6 +4,7 @@ mod controls;
 mod drag;
 mod grid;
 mod icons;
+mod lister;
 mod loader;
 mod menus;
 mod paint;
@@ -20,7 +21,7 @@ use std::sync::LazyLock;
 
 use unbound_l10n::Localizer;
 
-pub use browser::{Browser, Column, Location};
+pub use browser::{Browser, Column, Location, RowEdit};
 pub use paint::permissions;
 pub use search::SEARCH_HEIGHT;
 pub use sidebar::{

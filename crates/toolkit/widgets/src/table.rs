@@ -163,6 +163,7 @@ pub struct Sort {
     pub ascending: bool,
 }
 
+#[derive(Default)]
 struct Remembered {
     selected: Vec<String>,
     cursor: Option<String>,
@@ -343,6 +344,74 @@ impl Table {
         self.reshow(kept);
     }
 
+    pub fn insert_row(&mut self, index: usize, row: Row) {
+        let kept = self.outline.then(|| self.remembered());
+        let mut lines = Vec::new();
+        flatten(vec![row], 0, &mut lines);
+        let index = index.min(self.lines.len());
+        let added = lines.len();
+        self.outline |= lines.iter().any(|line| line.branch);
+        self.named_icons |= lines
+            .iter()
+            .any(|line| line.cells.first().is_some_and(|cell| cell.icon.is_some()));
+        self.lines.splice(index..index, lines);
+        match kept {
+            Some(kept) => self.reshow(kept),
+            None if self.outline => self.reshow(Remembered::default()),
+            None => {
+                self.shown.extend(self.shown.len()..self.lines.len());
+                self.selected
+                    .splice(index..index, std::iter::repeat_n(false, added));
+                let shift = |at: usize| if at >= index { at + added } else { at };
+                self.cursor = self.cursor.map(shift);
+                self.anchor = self.anchor.map(shift);
+            }
+        }
+    }
+
+    pub fn remove_row(&mut self, index: usize) {
+        let Some(line) = self.lines.get(index) else {
+            return;
+        };
+        let removed = 1 + line.descendants;
+        if self.outline {
+            let kept = self.remembered();
+            self.lines.drain(index..index + removed);
+            self.reshow(kept);
+            return;
+        }
+        self.lines.remove(index);
+        self.shown.truncate(self.lines.len());
+        self.selected.remove(index);
+        let shift = |at: usize| match at.cmp(&index) {
+            std::cmp::Ordering::Less => Some(at),
+            std::cmp::Ordering::Equal => None,
+            std::cmp::Ordering::Greater => Some(at - 1),
+        };
+        self.cursor = self.cursor.and_then(shift);
+        self.anchor = self.anchor.and_then(shift);
+    }
+
+    pub fn select_rows(&mut self, rows: &[usize]) {
+        self.selected = vec![false; self.shown.len()];
+        for row in rows {
+            if let Some(selected) = self.selected.get_mut(*row) {
+                *selected = true;
+            }
+        }
+        self.cursor = rows.first().copied().filter(|row| *row < self.shown.len());
+        self.anchor = self.cursor;
+    }
+
+    pub fn selected_rows(&self) -> Vec<usize> {
+        self.selected
+            .iter()
+            .enumerate()
+            .filter(|(_, selected)| **selected)
+            .map(|(index, _)| index)
+            .collect()
+    }
+
     fn key_at(&self, index: usize) -> Option<&str> {
         self.line(index).map(|line| line.key.as_str())
     }
@@ -395,6 +464,12 @@ impl Table {
             };
         }
         self.shown = shown;
+        if kept.selected.is_empty() && kept.cursor.is_none() && kept.anchor.is_none() {
+            self.cursor = None;
+            self.anchor = None;
+            self.selected = vec![false; self.shown.len()];
+            return;
+        }
         let positions = self
             .shown
             .iter()

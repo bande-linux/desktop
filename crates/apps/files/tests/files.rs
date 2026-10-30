@@ -12,7 +12,7 @@ use unbound_files::{
     SIDEBAR_WIDTH, Sheet, SidebarEdit, TAB_BAR_HEIGHT, TOOLBAR_HEIGHT, ViewMemory, ViewMode,
     hidden_places, permissions, rows, with_bookmarks, with_volumes, without_bookmark,
 };
-use unbound_fs::{Sort, SortBy, Trash, list};
+use unbound_fs::{FolderChanges, Sort, SortBy, Trash, list};
 use unbound_thumbnails::{Cache, Thumbnailers, Thumbnails};
 use unbound_toolkit::ui::{
     Event, HEADER_HEIGHT as LIST_HEADER, Key, Menu, Modifiers, Pointer, PointerButton,
@@ -1811,4 +1811,248 @@ fn hiding_the_status_bar_is_remembered_for_the_next_window() {
     let mut third = place.view();
     third.set_status_bar_file(file);
     assert_eq!(third.content_frame().height, with_bar);
+}
+
+const BIG: usize = 20_000;
+
+fn big_folder(place: &Place) -> PathBuf {
+    let folder = place.home().join("Big");
+    fs::create_dir(&folder).expect("big folder");
+    for index in 0..BIG {
+        fs::File::create(folder.join(format!("File {index:05}"))).expect("file");
+    }
+    folder
+}
+
+fn pump(browser: &mut Browser) -> bool {
+    let fd = browser.listing_fd().expect("a lister");
+    let timeout = Timespec {
+        tv_sec: 0,
+        tv_nsec: 200_000_000,
+    };
+    let ready = poll(&mut [PollFd::new(&fd, PollFlags::IN)], Some(&timeout)).expect("poll") > 0;
+    ready && browser.take_listed().0
+}
+
+fn listed(browser: &mut Browser) {
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while browser.columns().iter().any(|column| column.is_listing()) {
+        assert!(Instant::now() < deadline, "the listing did not finish");
+        pump(browser);
+    }
+}
+
+#[test]
+fn a_big_folder_shows_its_first_items_at_once_and_fills_in_sorted() {
+    let place = Place::new();
+    let folder = big_folder(&place);
+    let mut browser = place.browser();
+
+    browser.go(Location::Folder(folder.clone()));
+    let first = browser.columns()[0].entries.len();
+    assert!(first > 0 && first < BIG, "{first} items at once");
+    assert!(browser.columns()[0].is_listing());
+
+    listed(&mut browser);
+    let shown = browser.columns()[0]
+        .entries
+        .iter()
+        .map(|entry| entry.name.clone())
+        .collect::<Vec<_>>();
+    assert_eq!(shown, names(&folder, false));
+}
+
+#[test]
+fn going_back_while_a_big_folder_lists_drops_its_late_items() {
+    let place = Place::new();
+    let folder = big_folder(&place);
+    let mut browser = place.browser();
+    browser.go(Location::Folder(folder));
+
+    assert!(browser.go_back());
+    while pump(&mut browser) {}
+
+    assert_eq!(browser.root(), &Location::Folder(place.home()));
+    let shown = browser.columns()[0]
+        .entries
+        .iter()
+        .map(|entry| entry.name.clone())
+        .collect::<Vec<_>>();
+    assert_eq!(shown, names(&place.home(), false));
+    assert_eq!(selected_name(&browser).as_deref(), Some("Big"));
+}
+
+#[test]
+fn a_file_revealed_in_a_big_folder_is_selected_once_it_arrives() {
+    let place = Place::new();
+    let folder = big_folder(&place);
+    let mut browser = place.browser();
+    let last = folder.join(format!("File {:05}", BIG - 1));
+
+    browser.reveal(&last);
+    listed(&mut browser);
+
+    assert_eq!(browser.selected().map(|entry| &entry.path), Some(&last));
+    assert_eq!(browser.columns()[0].marked.len(), 1);
+    assert_eq!(browser.columns()[0].selected, Some(BIG - 1));
+}
+
+#[test]
+fn go_to_folder_on_a_file_in_a_big_folder_selects_it() {
+    let place = Place::new();
+    let folder = big_folder(&place);
+    let mut view = place.view();
+    let wanted = folder.join("File 12345");
+
+    view.handle(&command(Key::Character('G'), true));
+    view.handle(&Event::Commit(wanted.display().to_string()));
+    view.handle(&press(Key::Enter));
+    run_until(&mut view, |view| {
+        view.browser().selected().map(|entry| &entry.path) == Some(&wanted)
+    });
+
+    run_until(&mut view, |view| !view.browser().columns()[0].is_listing());
+    assert_eq!(
+        view.browser().selected().map(|entry| &entry.path),
+        Some(&wanted)
+    );
+    assert_eq!(view.browser().selection().len(), 1);
+}
+
+fn shown_names(browser: &Browser) -> Vec<String> {
+    browser.columns()[0]
+        .entries
+        .iter()
+        .map(|entry| entry.name.clone())
+        .collect()
+}
+
+#[test]
+fn changes_in_a_big_folder_move_only_their_rows_and_keep_the_selection() {
+    let place = Place::new();
+    let folder = big_folder(&place);
+    let mut browser = place.browser();
+    browser.go(Location::Folder(folder.clone()));
+    listed(&mut browser);
+    browser.select(0, 100);
+    let change = |browser: &mut Browser, paths: &[&str]| {
+        browser.apply(&FolderChanges {
+            folders: Vec::new(),
+            entries: paths.iter().map(|name| folder.join(name)).collect(),
+        });
+    };
+
+    fs::File::create(folder.join("File 00050a")).expect("file");
+    fs::File::create(folder.join("Unreported")).expect("file");
+    change(&mut browser, &["File 00050a"]);
+    assert_eq!(shown_names(&browser)[51], "File 00050a");
+    assert_eq!(browser.columns()[0].entries.len(), BIG + 1);
+    assert_eq!(selected_name(&browser).as_deref(), Some("File 00100"));
+    assert_eq!(browser.columns()[0].selected, Some(101));
+
+    fs::remove_file(folder.join("File 00010")).expect("remove");
+    change(&mut browser, &["File 00010"]);
+    assert_eq!(browser.columns()[0].selected, Some(100));
+
+    fs::rename(folder.join("File 00200"), folder.join("Aardvark")).expect("rename");
+    change(&mut browser, &["File 00200", "Aardvark"]);
+    let names = shown_names(&browser);
+    assert_eq!(names[0], "Aardvark");
+    assert!(!names.contains(&"File 00200".to_owned()));
+    assert!(!names.contains(&"Unreported".to_owned()));
+    assert_eq!(selected_name(&browser).as_deref(), Some("File 00100"));
+    assert_eq!(browser.columns()[0].marked, [101]);
+}
+
+#[test]
+fn a_change_to_the_folder_itself_reads_it_again() {
+    let place = Place::new();
+    let mut browser = place.browser();
+    fs::write(place.home().join("unreported.txt"), "x").expect("file");
+
+    browser.apply(&FolderChanges {
+        folders: vec![place.home()],
+        entries: Vec::new(),
+    });
+
+    assert!(shown_names(&browser).contains(&"unreported.txt".to_owned()));
+}
+
+#[test]
+fn a_file_written_into_a_shown_big_folder_appears_in_place() {
+    let place = Place::new();
+    let folder = big_folder(&place);
+    let mut view = place.view();
+    view.handle(&command(Key::Character('2'), false));
+    view.handle(&command(Key::Character('G'), true));
+    view.handle(&Event::Commit(folder.display().to_string()));
+    view.handle(&press(Key::Enter));
+    run_until(&mut view, |view| !view.browser().columns()[0].is_listing());
+    view.handle(&command(Key::Character('a'), false));
+    assert_eq!(view.browser().selection().len(), BIG);
+
+    fs::write(folder.join("File 00000a"), "new").expect("file");
+    run_until(&mut view, |view| {
+        view.browser().columns()[0].entries.len() == BIG + 1
+    });
+
+    assert_eq!(view.browser().columns()[0].entries[1].name, "File 00000a");
+    assert_eq!(view.browser().selection().len(), BIG);
+    assert!(!view.browser().columns()[0].is_marked(1));
+}
+
+#[test]
+fn select_all_then_shift_click_in_a_big_folder_keeps_the_right_marks() {
+    let place = Place::new();
+    let folder = big_folder(&place);
+    let mut browser = place.browser();
+    browser.go(Location::Folder(folder));
+    listed(&mut browser);
+
+    browser.select_all();
+    assert_eq!(browser.columns()[0].marked.len(), BIG);
+    browser.extend_to(0, 5);
+
+    assert_eq!(browser.columns()[0].marked, (0..=5).collect::<Vec<_>>());
+    assert!(browser.columns()[0].is_marked(5));
+    assert!(!browser.columns()[0].is_marked(6));
+}
+
+#[test]
+fn sorting_a_big_folder_by_size_after_select_all_keeps_every_mark() {
+    let place = Place::new();
+    let folder = big_folder(&place);
+    fs::write(folder.join("File 00007"), "the largest file").expect("file");
+    let mut browser = place.browser();
+    browser.go(Location::Folder(folder.clone()));
+    listed(&mut browser);
+    browser.select_all();
+
+    browser.set_sort(Sort {
+        by: SortBy::Size,
+        descending: false,
+    });
+
+    let column = &browser.columns()[0];
+    assert_eq!(column.marked.len(), BIG);
+    assert_eq!(column.entries[0].name, "File 00007");
+    assert!(!column.is_listing());
+}
+
+#[test]
+fn select_all_in_the_list_view_of_a_big_folder_marks_every_row_once() {
+    let place = Place::new();
+    let folder = big_folder(&place);
+    let mut view = place.view();
+    view.handle(&command(Key::Character('2'), false));
+    view.handle(&command(Key::Character('G'), true));
+    view.handle(&Event::Commit(folder.display().to_string()));
+    view.handle(&press(Key::Enter));
+    run_until(&mut view, |view| !view.browser().columns()[0].is_listing());
+
+    view.handle(&command(Key::Character('a'), false));
+    assert_eq!(view.browser().selection().len(), BIG);
+
+    view.handle(&press(Key::Up));
+    assert_eq!(view.browser().selection().len(), 1);
 }

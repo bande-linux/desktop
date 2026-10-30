@@ -7,8 +7,8 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use unbound_fs::{
-    Action, Answer, Change, Entry, Finished, FolderWatch, Operations, Purpose, RenameError,
-    Resolution, Task, TrashItem, archive_path, can_extract,
+    Action, Answer, Change, Entry, Finished, FolderChanges, FolderWatch, Operations, Purpose,
+    RenameError, Resolution, Task, TrashItem, archive_path, can_extract,
 };
 use unbound_preview::Preview;
 use unbound_search::{Usage, recent_files};
@@ -23,7 +23,7 @@ use unbound_xdg::{Apps, DesktopEntry, UserDir, path_from_file_uri, user_dir};
 
 use crate::L10N;
 use crate::browser::{Browser, Location};
-use crate::controls::{Press, Signals};
+use crate::controls::{Formats, Press, Signals};
 use crate::grid::Band;
 use crate::icons::Icons;
 use crate::loader::{Loaded, Loader};
@@ -52,6 +52,7 @@ const TRASH_SOUND: &str = "trash-empty";
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Source {
     Watch,
+    Listing,
     Loader,
     Thumbnails,
     Index,
@@ -148,8 +149,8 @@ pub struct FilesView {
     pub(crate) host: WidgetId,
     pub(crate) table: WidgetId,
     pub(crate) signals: Signals,
-    pub(crate) table_revision: Option<u64>,
-    pub(crate) table_keys: HashMap<String, usize>,
+    pub(crate) table_synced: Option<(u64, usize)>,
+    pub(crate) table_formats: Formats,
     pub(crate) table_revealed: Option<usize>,
     pub(crate) table_found: bool,
     pub(crate) press: Option<Press>,
@@ -258,8 +259,8 @@ impl FilesView {
             host: host_id,
             table: table_id,
             signals,
-            table_revision: None,
-            table_keys: HashMap::new(),
+            table_synced: None,
+            table_formats: Formats::default(),
             table_revealed: None,
             table_found: false,
             press: None,
@@ -539,10 +540,9 @@ impl FilesView {
     }
 
     fn sources(&self) -> Vec<(Source, BorrowedFd<'_>)> {
-        let mut sources = vec![
-            (Source::Watch, self.watch.fd()),
-            (Source::Loader, self.loader.fd()),
-        ];
+        let mut sources = vec![(Source::Watch, self.watch.fd())];
+        sources.extend(self.browser.listing_fd().map(|fd| (Source::Listing, fd)));
+        sources.push((Source::Loader, self.loader.fd()));
         sources.extend(self.thumbs.fd().map(|fd| (Source::Thumbnails, fd)));
         sources.extend(self.search_index_fd().map(|fd| (Source::Index, fd)));
         sources.extend(
@@ -568,6 +568,7 @@ impl FilesView {
                 self.watch.read();
                 false
             }
+            Source::Listing => self.listed(),
             Source::Loader => self.loaded(),
             Source::Thumbnails => self.thumbs.take(),
             Source::Index => self.search_results(),
@@ -600,9 +601,9 @@ impl FilesView {
     }
 
     pub fn tick(&mut self, now: Instant) -> bool {
-        let changed = self.watch.take_changed(now);
-        if !changed.is_empty() {
-            self.refresh(&changed);
+        let changes = self.watch.take_changed(now);
+        if !changes.is_empty() {
+            self.apply_changes(&changes);
         }
         if self
             .notice
@@ -627,15 +628,27 @@ impl FilesView {
     }
 
     pub fn refresh(&mut self, changed: &[PathBuf]) {
-        if changed
+        self.apply_changes(&FolderChanges {
+            folders: changed.to_vec(),
+            entries: Vec::new(),
+        });
+    }
+
+    fn apply_changes(&mut self, changes: &FolderChanges) {
+        let folders = changes
+            .folders
             .iter()
+            .map(PathBuf::as_path)
+            .chain(changes.entries.iter().filter_map(|path| path.parent()));
+        if folders
+            .into_iter()
             .any(|path| self.media.iter().any(|root| root.starts_with(path)))
         {
             self.refresh_volumes();
         }
         let editing = self.rename.as_ref().map(|rename| rename.path.clone());
         self.trash_full = !self.browser.trash().is_empty();
-        self.browser.refresh(changed);
+        self.browser.apply(changes);
         if let Some(path) = editing
             && path.symlink_metadata().is_err()
         {
@@ -646,6 +659,15 @@ impl FilesView {
 
     fn show_notice(&mut self, text: String) {
         self.notice = Some((text, Instant::now()));
+    }
+
+    fn listed(&mut self) -> bool {
+        match self.browser.take_listed() {
+            (_, true) => self.selection_changed(),
+            (true, false) => self.sync_table(),
+            (false, false) => return false,
+        }
+        true
     }
 
     fn loaded(&mut self) -> bool {

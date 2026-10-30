@@ -70,29 +70,93 @@ pub struct Sort {
     pub descending: bool,
 }
 
-pub fn sort(entries: &mut [Entry], sort: Sort) {
-    entries.sort_by(|a, b| {
-        let order = match sort.by {
-            SortBy::Name => finder_order(&a.name, &b.name),
-            SortBy::Modified => b.modified.cmp(&a.modified),
-            SortBy::Size => b.size.cmp(&a.size),
-        }
-        .then_with(|| finder_order(&a.name, &b.name));
-        b.is_folder().cmp(&a.is_folder()).then(if sort.descending {
-            order.reverse()
-        } else {
-            order
+pub fn compare(a: &Entry, b: &Entry, sort: Sort) -> Ordering {
+    let order = match sort.by {
+        SortBy::Name => finder_order(&a.name, &b.name),
+        SortBy::Modified => b.modified.cmp(&a.modified),
+        SortBy::Size => b.size.cmp(&a.size),
+    }
+    .then_with(|| finder_order(&a.name, &b.name));
+    b.is_folder().cmp(&a.is_folder()).then(if sort.descending {
+        order.reverse()
+    } else {
+        order
+    })
+}
+
+pub fn sort(entries: &mut [Entry], order: Sort) {
+    entries.sort_by(|a, b| compare(a, b, order));
+}
+
+pub fn merge(entries: &mut Vec<Entry>, chunk: Vec<Entry>, order: Sort) -> Vec<usize> {
+    let shown = std::mem::take(entries);
+    let mut moved = Vec::with_capacity(shown.len());
+    let mut merged = Vec::with_capacity(shown.len() + chunk.len());
+    let mut shown = shown.into_iter().peekable();
+    let mut chunk = chunk.into_iter().peekable();
+    loop {
+        let take_shown = match (shown.peek(), chunk.peek()) {
+            (Some(old), Some(new)) => compare(old, new, order) != Ordering::Greater,
+            (Some(_), None) => true,
+            (None, Some(_)) => false,
+            (None, None) => break,
+        };
+        let next = match take_shown {
+            true => {
+                moved.push(merged.len());
+                shown.next()
+            }
+            false => chunk.next(),
+        };
+        merged.extend(next);
+    }
+    *entries = merged;
+    moved
+}
+
+#[derive(Debug)]
+pub struct Listing {
+    folder: PathBuf,
+    names: fs::ReadDir,
+    show_hidden: bool,
+    done: bool,
+}
+
+impl Listing {
+    pub fn open(folder: &Path, show_hidden: bool) -> io::Result<Self> {
+        Ok(Self {
+            folder: folder.to_path_buf(),
+            names: fs::read_dir(folder)?,
+            show_hidden,
+            done: false,
         })
-    });
+    }
+
+    pub fn is_done(&self) -> bool {
+        self.done
+    }
+
+    pub fn next_chunk(&mut self, count: usize) -> Vec<Entry> {
+        let mut entries = Vec::new();
+        while entries.len() < count {
+            let Some(found) = self.names.next() else {
+                self.done = true;
+                break;
+            };
+            let Ok(found) = found else {
+                continue;
+            };
+            let name = found.file_name().to_string_lossy().into_owned();
+            if self.show_hidden || !is_hidden(&name) {
+                entries.push(Entry::read(self.folder.join(&name), name));
+            }
+        }
+        entries
+    }
 }
 
 pub fn list(folder: &Path, show_hidden: bool, order: Sort) -> io::Result<Vec<Entry>> {
-    let mut entries = fs::read_dir(folder)?
-        .filter_map(Result::ok)
-        .map(|entry| entry.file_name().to_string_lossy().into_owned())
-        .filter(|name| show_hidden || !is_hidden(name))
-        .map(|name| Entry::read(folder.join(&name), name))
-        .collect::<Vec<_>>();
+    let mut entries = Listing::open(folder, show_hidden)?.next_chunk(usize::MAX);
     sort(&mut entries, order);
     Ok(entries)
 }
@@ -179,6 +243,35 @@ pub fn format_size(bytes: u64) -> String {
         0 => L10N.tr_args("size-megabytes", args),
         1 => L10N.tr_args("size-gigabytes", args),
         _ => L10N.tr_args("size-terabytes", args),
+    }
+}
+
+pub fn format_list_date(time: SystemTime) -> String {
+    list_date(time, SystemTime::now(), &jiff::tz::TimeZone::system())
+}
+
+pub fn list_date(time: SystemTime, now: SystemTime, zone: &jiff::tz::TimeZone) -> String {
+    let (Ok(time), Ok(now)) = (
+        jiff::Timestamp::try_from(time),
+        jiff::Timestamp::try_from(now),
+    ) else {
+        return String::new();
+    };
+    let (time, now) = (time.to_zoned(zone.clone()), now.to_zoned(zone.clone()));
+    let clock = time.strftime("%H:%M").to_string();
+    let day = time.date();
+    if day == now.date() {
+        L10N.tr_args("date-today", [("time", clock.into())])
+    } else if now
+        .date()
+        .yesterday()
+        .is_ok_and(|yesterday| yesterday == day)
+    {
+        L10N.tr_args("date-yesterday", [("time", clock.into())])
+    } else if day.year() == now.date().year() {
+        time.strftime("%-d %b, %H:%M").to_string()
+    } else {
+        time.strftime("%-d %b %Y, %H:%M").to_string()
     }
 }
 

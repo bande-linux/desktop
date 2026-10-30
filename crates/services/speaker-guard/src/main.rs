@@ -22,6 +22,7 @@ const WAIT_MS: u32 = 250;
 const RUNTIME_SAVE_SECONDS: f64 = 1.0;
 const PERSISTENT_SAVE_SECONDS: f64 = 60.0;
 const LOCK_TIMEOUT_SECONDS: f64 = 0.25;
+const EINTR: i32 = 4;
 const EPIPE: i32 = 32;
 const ESTRPIPE: i32 = 86;
 
@@ -113,6 +114,7 @@ impl Guard {
                         .for_each(SenseMonitor::stream_paused);
                     continue;
                 }
+                Err(error) if error.errno() == Some(EINTR) => continue,
                 Ok(Some(0)) => continue,
                 other => other.map_err(|e| e.to_string())?,
             };

@@ -668,6 +668,37 @@ fn the_shell_hears_which_app_is_active() {
 }
 
 #[test]
+fn an_app_stays_active_after_closing_its_last_window_until_it_quits() {
+    let mut server = server();
+    let mut shell = TestClient::connect_as_shell(&mut server);
+    shell.join_shell(&mut server);
+    let pixels = red(32, 32);
+    let mut other = TestClient::connect(&mut server);
+    other.use_seat(&mut server);
+    other.show_window(&mut server, &image(&pixels, 32, 32));
+    other.set_app_id(&mut server, 0, "org.example.Viewer");
+    let mut app = TestClient::connect(&mut server);
+    app.use_seat(&mut server);
+    app.show_window(&mut server, &image(&pixels, 32, 32));
+    app.set_app_id(&mut server, 0, "org.example.Editor");
+    roundtrip(&mut server, &mut [&mut app, &mut other, &mut shell]);
+
+    app.close_window(&mut server, 0);
+    roundtrip(&mut server, &mut [&mut app, &mut other, &mut shell]);
+    assert_eq!(
+        shell.active_apps().last().map(String::as_str),
+        Some("org.example.Editor")
+    );
+    drop(app);
+    roundtrip(&mut server, &mut [&mut other, &mut shell]);
+
+    assert_eq!(
+        shell.active_apps().last().map(String::as_str),
+        Some("org.example.Viewer")
+    );
+}
+
+#[test]
 fn volume_keys_go_to_the_shell_without_super_and_option_shift_makes_them_fine() {
     let mut server = server();
     let mut app = TestClient::connect(&mut server);

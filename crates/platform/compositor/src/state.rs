@@ -181,7 +181,7 @@ pub struct State {
     _input_method_state: InputMethodManagerState,
     _virtual_keyboard_state: VirtualKeyboardManagerState,
     pending_activation: Option<WlSurface>,
-    windowless_app: Option<Client>,
+    pub(crate) windowless_app: Option<(Client, String)>,
     pub(crate) shell_resources: Vec<UnboundShellV1>,
     pub(crate) app_resources: Vec<UnboundAppV1>,
     pub(crate) foreign_toplevel_state: ForeignToplevelListState,
@@ -832,14 +832,17 @@ impl State {
             None => self.frontmost(None),
         };
         let windowless = next.is_none();
+        let app_id = shell::toplevel_names(lost).1;
         self.focus(next);
         if windowless {
-            self.windowless_app = owner;
+            self.windowless_app = owner.map(|owner| (owner, app_id));
+            let key = self.key_window();
+            self.announce_active_app(key.as_ref());
         }
     }
 
     fn activate_next_app_if_the_windowless_one_quit(&mut self) {
-        let quit = self.windowless_app.as_ref().is_some_and(|app| {
+        let quit = self.windowless_app.as_ref().is_some_and(|(app, _)| {
             app.get_data::<ClientState>()
                 .is_some_and(|state| state.departed.load(Ordering::Relaxed))
         });

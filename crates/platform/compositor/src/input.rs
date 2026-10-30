@@ -185,6 +185,11 @@ impl State {
             return;
         }
         let Some(focused) = self.focused() else {
+            if shortcut == Shortcut::QuitApp
+                && let Some((app, _)) = self.windowless_app.clone()
+            {
+                self.quit_app(Some(app));
+            }
             return;
         };
         let owner = focused.client();

@@ -1,0 +1,85 @@
+use icu_calendar::Gregorian;
+use icu_datetime::fieldsets::{E, MD, MDE, YMD};
+use icu_datetime::input::{Date, DateTime, Time};
+use icu_datetime::{DateTimeFormatterPreferences, FixedCalendarDateTimeFormatter};
+use icu_locale_core::{Locale, locale};
+use jiff::Zoned;
+
+const LOCALE_VARIABLES: [&str; 3] = ["LC_ALL", "LC_TIME", "LANG"];
+const FALLBACK: Locale = locale!("en-US");
+
+pub fn posix_locale(value: &str) -> Locale {
+    let language = value
+        .split(['.', '@'])
+        .next()
+        .unwrap_or_default()
+        .replace('_', "-");
+    if language.is_empty() || language == "C" || language == "POSIX" {
+        return FALLBACK;
+    }
+    language.parse().unwrap_or(FALLBACK)
+}
+
+#[derive(Debug, Clone)]
+pub struct DateFormats {
+    preferences: DateTimeFormatterPreferences,
+}
+
+fn date_of(at: &Zoned) -> Option<Date<Gregorian>> {
+    Date::try_new_gregorian(i32::from(at.year()), at.month() as u8, at.day() as u8).ok()
+}
+
+fn time_of(at: &Zoned) -> Option<Time> {
+    Time::try_new(at.hour() as u8, at.minute() as u8, 0, 0).ok()
+}
+
+impl DateFormats {
+    pub fn for_locale(locale: &Locale) -> Self {
+        Self {
+            preferences: locale.into(),
+        }
+    }
+
+    pub fn from_env() -> Self {
+        let value = LOCALE_VARIABLES
+            .iter()
+            .filter_map(|name| std::env::var(name).ok())
+            .find(|value| !value.is_empty())
+            .unwrap_or_default();
+        Self::for_locale(&posix_locale(&value))
+    }
+
+    pub fn clock(&self, at: &Zoned) -> String {
+        FixedCalendarDateTimeFormatter::<Gregorian, _>::try_new(
+            self.preferences,
+            MDE::medium().with_time_hm(),
+        )
+        .ok()
+        .zip(date_of(at).zip(time_of(at)))
+        .map(|(formatter, (date, time))| formatter.format(&DateTime { date, time }).to_string())
+        .unwrap_or_else(|| at.strftime("%a %-d %b %H:%M").to_string())
+    }
+
+    pub fn weekday(&self, at: &Zoned) -> String {
+        FixedCalendarDateTimeFormatter::<Gregorian, _>::try_new(self.preferences, E::long())
+            .ok()
+            .zip(date_of(at))
+            .map(|(formatter, date)| formatter.format(&date).to_string())
+            .unwrap_or_else(|| at.strftime("%A").to_string())
+    }
+
+    pub fn date(&self, at: &Zoned, with_year: bool) -> String {
+        let formatted = if with_year {
+            FixedCalendarDateTimeFormatter::<Gregorian, _>::try_new(self.preferences, YMD::medium())
+                .ok()
+                .zip(date_of(at))
+                .map(|(formatter, date)| formatter.format(&date).to_string())
+        } else {
+            FixedCalendarDateTimeFormatter::<Gregorian, _>::try_new(self.preferences, MD::medium())
+                .ok()
+                .zip(date_of(at))
+                .map(|(formatter, date)| formatter.format(&date).to_string())
+        };
+        formatted.unwrap_or_else(|| at.strftime("%-d %b %Y").to_string())
+    }
+}

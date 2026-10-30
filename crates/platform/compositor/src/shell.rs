@@ -79,6 +79,14 @@ impl State {
         }
     }
 
+    pub(crate) fn brightness_key(&mut self, key: unbound_shell_v1::BrightnessKey, fine: bool) {
+        for shell in &self.shell_resources {
+            if shell.version() >= unbound_shell_v1::EVT_BRIGHTNESS_KEY_SINCE {
+                shell.brightness_key(key, u32::from(fine));
+            }
+        }
+    }
+
     fn toggle_control_center(&mut self) {
         for shell in &self.shell_resources {
             if shell.version() >= unbound_shell_v1::EVT_TOGGLE_CONTROL_CENTER_SINCE {
@@ -247,6 +255,10 @@ impl Dispatch<UnboundShellV1, ()> for State {
                 Rectangle::new((x, y).into(), (width, height).into()),
             ),
             unbound_shell_v1::Request::HideApp { app_id } => state.hide_app(&app_id),
+            unbound_shell_v1::Request::ShowApp { app_id } => {
+                state.show_app(&app_id);
+                state.needs_redraw = true;
+            }
             unbound_shell_v1::Request::QuitApp { app_id } => state.quit_app_named(&app_id),
             unbound_shell_v1::Request::ForceQuitApp { app_id } => state.force_quit_app(&app_id),
             unbound_shell_v1::Request::ActivateWindow { identifier } => {

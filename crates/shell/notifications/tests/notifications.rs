@@ -2,7 +2,9 @@
 
 use std::time::{Duration, Instant};
 
-use unbound_notifications::{BANNER_WIDTH, CENTER_WIDTH, Request, Screen, Sender};
+use jiff::Zoned;
+use unbound_datetime::{DateFormats, posix_locale};
+use unbound_notifications::{BANNER_WIDTH, CENTER_WIDTH, Request, Screen, Sender, age_label};
 use unbound_notify::{Notification, Presentation, Stack};
 use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer};
 use unbound_toolkit::{Palette, Point, Rect, Scheme, TextSystem};
@@ -281,4 +283,26 @@ fn the_keyboard_walks_the_center_expands_a_stack_and_clears_it() {
             Request::ClearAll
         ]
     );
+}
+
+#[test]
+fn a_notification_tells_its_age_then_the_day_then_the_date() {
+    let dates = DateFormats::for_locale(&posix_locale("en_US.UTF-8"));
+    let now: Zoned = "2026-10-30T14:05:00[Europe/Stockholm]"
+        .parse()
+        .expect("now");
+    let age = |arrived: &str| {
+        let arrived: Zoned = format!("{arrived}[Europe/Stockholm]")
+            .parse()
+            .expect("arrival");
+        age_label(&arrived, &now, &dates)
+    };
+
+    assert_eq!(age("2026-10-30T14:04:30"), "now");
+    assert_eq!(age("2026-10-30T13:50:00"), "15 min ago");
+    assert_eq!(age("2026-10-30T09:00:00"), "5 hours ago");
+    assert_eq!(age("2026-10-29T23:30:00"), "Yesterday");
+    assert_eq!(age("2026-10-27T08:00:00"), "Tuesday");
+    assert_eq!(age("2026-10-12T08:00:00"), "Oct 12");
+    assert_eq!(age("2025-12-24T08:00:00"), "Dec 24, 2025");
 }

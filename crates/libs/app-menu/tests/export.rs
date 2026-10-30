@@ -3,7 +3,9 @@
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use unbound_app_menu::{AppMenu, Entry, MENU_PATH};
+use unbound_app_menu::{
+    AppMenu, Entry, MENU_PATH, SHELL_ACTION_PROPERTY, ShellAction, app_submenu,
+};
 use unbound_test_bus::SessionBus;
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::DBusProxy;
@@ -154,4 +156,40 @@ fn the_process_that_claims_last_owns_the_app_menu() {
     }
     assert_eq!(owner(), second_name);
     drop(second);
+}
+
+#[test]
+fn the_standard_app_menu_leaves_about_and_hiding_to_the_menu_bar() {
+    let bus = SessionBus::start().expect("bus");
+    let _menu = AppMenu::export_on(
+        bus.connect().expect("app"),
+        APP,
+        vec![app_submenu("Example", Vec::new())],
+    )
+    .expect("export");
+    let client = bus.connect().expect("client");
+
+    let (_, (_, _, items)) = get_layout(&client, 1);
+    let shell_actions: Vec<(String, Option<ShellAction>)> = items
+        .iter()
+        .map(|item| {
+            let (_, properties, _): Layout = item.try_clone().unwrap().try_into().expect("node");
+            let action = match property(&properties, SHELL_ACTION_PROPERTY) {
+                Some(Value::Str(keyword)) => ShellAction::parse(keyword),
+                _ => None,
+            };
+            (label(item).1, action)
+        })
+        .filter(|(label, _)| !label.is_empty())
+        .collect();
+    assert_eq!(
+        shell_actions,
+        [
+            ("About Example".to_owned(), Some(ShellAction::About)),
+            ("Hide Example".to_owned(), Some(ShellAction::Hide)),
+            ("Hide Others".to_owned(), Some(ShellAction::HideOthers)),
+            ("Show All".to_owned(), Some(ShellAction::ShowAll)),
+            ("Quit Example".to_owned(), None),
+        ]
+    );
 }

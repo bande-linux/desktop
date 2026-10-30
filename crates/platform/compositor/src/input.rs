@@ -12,10 +12,11 @@ use smithay::input::pointer::{AxisFrame, ButtonEvent, MotionEvent};
 use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Clock, Logical, Monotonic, Point, SERIAL_COUNTER};
-use unbound_protocols::server::unbound_shell_v1::VolumeKey;
+use unbound_protocols::server::unbound_shell_v1::{BrightnessKey, VolumeKey};
 
 use crate::gesture::Gesture;
 use crate::motion::DOCK_NAMESPACE;
+use crate::shell::toplevel_names;
 use crate::state::{Headless, State};
 use crate::tile::Direction;
 
@@ -39,6 +40,9 @@ enum Shortcut {
     CaptureScreen,
     CaptureArea,
     Volume(VolumeKey, bool),
+    Brightness(BrightnessKey, bool),
+    HideApp,
+    HideOthers,
 }
 
 fn volume_key(keysym: u32) -> Option<VolumeKey> {
@@ -46,6 +50,16 @@ fn volume_key(keysym: u32) -> Option<VolumeKey> {
         keysyms::KEY_XF86AudioMute => Some(VolumeKey::Mute),
         keysyms::KEY_XF86AudioLowerVolume => Some(VolumeKey::Down),
         keysyms::KEY_XF86AudioRaiseVolume => Some(VolumeKey::Up),
+        _ => None,
+    }
+}
+
+fn brightness_key(keysym: u32) -> Option<BrightnessKey> {
+    match keysym {
+        keysyms::KEY_XF86MonBrightnessDown => Some(BrightnessKey::DisplayDown),
+        keysyms::KEY_XF86MonBrightnessUp => Some(BrightnessKey::DisplayUp),
+        keysyms::KEY_XF86KbdBrightnessDown => Some(BrightnessKey::KeyboardDown),
+        keysyms::KEY_XF86KbdBrightnessUp => Some(BrightnessKey::KeyboardUp),
         _ => None,
     }
 }
@@ -60,6 +74,11 @@ fn shortcut(
     match unshifted.filter(|_| shift) {
         Some(keysyms::KEY_3) => return Some(Shortcut::CaptureScreen),
         Some(keysyms::KEY_4) => return Some(Shortcut::CaptureArea),
+        _ => {}
+    }
+    match unshifted {
+        Some(keysyms::KEY_h) if alt => return Some(Shortcut::HideOthers),
+        Some(keysyms::KEY_h) if !ctrl => return Some(Shortcut::HideApp),
         _ => {}
     }
     match keysym {
@@ -94,14 +113,29 @@ impl State {
     }
 
     pub(crate) fn refocus_pointer(&mut self) {
-        let Some(pointer) = self
-            .seat
-            .get_pointer()
-            .filter(|pointer| !pointer.is_grabbed())
-        else {
+        let Some(pointer) = self.seat.get_pointer() else {
             return;
         };
-        let under = self.surface_under(self.pointer_location);
+        let time = Clock::<Monotonic>::new().now().as_millis();
+        if self
+            .popup_grab
+            .as_ref()
+            .is_some_and(|grab| grab.has_ended())
+        {
+            self.popup_grab = None;
+            pointer.unset_grab(self, SERIAL_COUNTER.next_serial(), time);
+        }
+        let mut under = self.surface_under(self.pointer_location);
+        if pointer.is_grabbed() {
+            let Some(popup) = self
+                .popup_grab
+                .as_ref()
+                .and_then(|grab| grab.current_grab())
+            else {
+                return;
+            };
+            under = under.filter(|(surface, _)| surface.client() == popup.client());
+        }
         if pointer.current_focus() == under.as_ref().map(|(surface, _)| surface.clone()) {
             return;
         }
@@ -111,7 +145,7 @@ impl State {
             &MotionEvent {
                 location: self.pointer_location,
                 serial: SERIAL_COUNTER.next_serial(),
-                time: Clock::<Monotonic>::new().now().as_millis(),
+                time,
             },
         );
         pointer.frame(self);
@@ -120,6 +154,10 @@ impl State {
     fn run(&mut self, shortcut: Shortcut) {
         if let Shortcut::Volume(key, fine) = shortcut {
             self.volume_key(key, fine);
+            return;
+        }
+        if let Shortcut::Brightness(key, fine) = shortcut {
+            self.brightness_key(key, fine);
             return;
         }
         if shortcut == Shortcut::ShowLauncher {
@@ -162,6 +200,19 @@ impl State {
                 }
             }
             Shortcut::QuitApp => self.quit_app(owner),
+            Shortcut::HideApp => self.hide_app(&toplevel_names(&focused).1),
+            Shortcut::HideOthers => {
+                let keep = toplevel_names(&focused).1;
+                let others: Vec<String> = self
+                    .windows
+                    .iter()
+                    .map(|window| toplevel_names(window.surface()).1)
+                    .filter(|app_id| *app_id != keep)
+                    .collect();
+                for app_id in others {
+                    self.hide_app(&app_id);
+                }
+            }
             Shortcut::NextApp => {
                 let next = self
                     .windows
@@ -196,7 +247,8 @@ impl State {
             | Shortcut::FocusShell(_)
             | Shortcut::CaptureScreen
             | Shortcut::CaptureArea
-            | Shortcut::Volume(..) => {}
+            | Shortcut::Volume(..)
+            | Shortcut::Brightness(..) => {}
         }
     }
 }
@@ -417,6 +469,11 @@ impl Headless {
                     state.held_shortcut_keys.push(evdev_code);
                     let fine = modifiers.alt && modifiers.shift;
                     return FilterResult::Intercept(Some(Shortcut::Volume(key, fine)));
+                }
+                if let Some(key) = brightness_key(keysym.modified_sym().raw()) {
+                    state.held_shortcut_keys.push(evdev_code);
+                    let fine = modifiers.alt && modifiers.shift;
+                    return FilterResult::Intercept(Some(Shortcut::Brightness(key, fine)));
                 }
                 let unshifted = keysym
                     .raw_latin_sym_or_raw_current_sym()

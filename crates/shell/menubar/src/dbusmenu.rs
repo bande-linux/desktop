@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 
+use unbound_app_menu::{SHELL_ACTION_PROPERTY, ShellAction, VERSION_PROPERTY};
 use unbound_toolkit::ui::{Menu, MenuItem};
 use zbus::zvariant::{OwnedValue, Value};
 
 use crate::menus::Command;
 
-pub const APP_MENU_PATH: &str = "/org/unbound/MenuBar";
+pub use unbound_app_menu::MENU_PATH as APP_MENU_PATH;
 
 pub type Layout = (i32, HashMap<String, OwnedValue>, Vec<OwnedValue>);
 
@@ -35,6 +36,9 @@ pub struct Node {
     pub visible: bool,
     pub separator: bool,
     pub checked: bool,
+    pub shortcut: Option<String>,
+    pub shell_action: Option<ShellAction>,
+    pub version: Option<String>,
     pub children: Vec<Node>,
 }
 
@@ -89,6 +93,20 @@ fn node_of_value(value: &Value<'_>) -> Option<Node> {
     }
 }
 
+fn shortcut(properties: &HashMap<String, OwnedValue>) -> Option<String> {
+    let Value::Array(chords) = plain(properties.get("shortcut")?) else {
+        return None;
+    };
+    let Value::Array(keys) = plain(chords.first()?) else {
+        return None;
+    };
+    let keys: Vec<&str> = keys
+        .iter()
+        .filter_map(|key| <&str>::try_from(plain(key)).ok())
+        .collect();
+    (!keys.is_empty()).then(|| keys.join("+"))
+}
+
 fn node(id: i32, properties: &HashMap<String, OwnedValue>, children: Vec<Node>) -> Node {
     let toggled = property::<&str>(properties, "toggle-type").is_some_and(|kind| !kind.is_empty());
     Node {
@@ -98,7 +116,24 @@ fn node(id: i32, properties: &HashMap<String, OwnedValue>, children: Vec<Node>) 
         visible: property(properties, "visible").unwrap_or(true),
         separator: property::<&str>(properties, "type") == Some("separator"),
         checked: toggled && property::<i32>(properties, "toggle-state") == Some(1),
+        shortcut: shortcut(properties),
+        shell_action: property::<&str>(properties, SHELL_ACTION_PROPERTY)
+            .and_then(ShellAction::parse),
+        version: property::<&str>(properties, VERSION_PROPERTY).map(str::to_owned),
         children,
+    }
+}
+
+fn command(node: &Node, item: &str) -> Command {
+    match node.shell_action {
+        Some(ShellAction::About) => Command::AboutApp(node.version.clone().unwrap_or_default()),
+        Some(ShellAction::Hide) => Command::HideApp,
+        Some(ShellAction::HideOthers) => Command::HideOthers,
+        Some(ShellAction::ShowAll) => Command::ShowAll,
+        None => Command::Item {
+            item: item.to_owned(),
+            id: node.id,
+        },
     }
 }
 
@@ -123,14 +158,13 @@ pub fn menu(node: &Node, item: &str) -> Menu {
                     return MenuItem::separator();
                 }
                 if child.children.is_empty() {
-                    let action = Command::Item {
-                        item: item.to_owned(),
-                        id: child.id,
-                    }
-                    .action();
-                    MenuItem::new(&child.label, &action)
+                    let entry = MenuItem::new(&child.label, &command(child, item).action())
                         .enabled(child.enabled)
-                        .checked(child.checked)
+                        .checked(child.checked);
+                    match &child.shortcut {
+                        Some(shortcut) => entry.shortcut(shortcut),
+                        None => entry,
+                    }
                 } else {
                     MenuItem::submenu(&child.label, menu(child, item)).enabled(child.enabled)
                 }

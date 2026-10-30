@@ -5,3 +5,4 @@ sound = Sound
 sound-muted = Sound (muted)
 display = Display
 choose-network = Choose a Network…
+keyboard-brightness = Keyboard Brightness

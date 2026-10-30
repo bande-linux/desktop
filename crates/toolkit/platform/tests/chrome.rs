@@ -127,10 +127,16 @@ fn shot(name: &str, prepare: fn(&mut Window) -> Option<Ui>, pointer: (i32, i32))
         pump(&mut server, &mut scheduler, &mut renderer);
     }
     let at = server.windows()[0].location();
-    server.move_pointer_to(
-        Point::from((f64::from(at.x + pointer.0), f64::from(at.y + pointer.1))),
-        0,
-    );
+    for step in [1, 0] {
+        server.move_pointer_to(
+            Point::from((
+                f64::from(at.x + pointer.0 - step),
+                f64::from(at.y + pointer.1 - step),
+            )),
+            0,
+        );
+        pump(&mut server, &mut scheduler, &mut renderer);
+    }
     let settled = Instant::now() + Duration::from_millis(700);
     while Instant::now() < settled {
         pump(&mut server, &mut scheduler, &mut renderer);

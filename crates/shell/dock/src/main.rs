@@ -43,6 +43,7 @@ const MENU_HIDE: &str = "hide";
 const MENU_QUIT: &str = "quit";
 const MENU_FORCE_QUIT: &str = "force-quit";
 const MENU_WINDOW: &str = "window:";
+const MENU_ACTION: &str = "action:";
 
 struct TrashWatch {
     trash: Trash,
@@ -208,6 +209,23 @@ impl Dock {
         match unbound_xdg::launch(&entry, token.as_deref()) {
             Ok(_) => self.state.borrow_mut().launching(app_id, Instant::now()),
             Err(error) => tracing::warn!("cannot open {}: {error}", entry.name),
+        }
+    }
+
+    fn run_action(&mut self, window: &mut Window, app_id: &str, id: &str) {
+        let Some(entry) = self.entry(app_id).cloned() else {
+            return;
+        };
+        let Some(action) = entry.actions.iter().find(|action| action.id == id) else {
+            return;
+        };
+        let token = window.activation_token(app_id).ok();
+        match unbound_xdg::launch_action(&entry, action, token.as_deref()) {
+            Ok(_) if !self.running.iter().any(|running| running == app_id) => {
+                self.state.borrow_mut().launching(app_id, Instant::now());
+            }
+            Ok(_) => {}
+            Err(error) => tracing::warn!("cannot {} in {}: {error}", action.name, entry.name),
         }
     }
 
@@ -440,6 +458,19 @@ impl Dock {
                     items.push(MenuItem::new(&L10N.tr("menu-open"), MENU_OPEN).enabled(installed));
                     items.push(MenuItem::separator());
                 }
+                let actions = self
+                    .entry(app_id)
+                    .map(|entry| entry.actions.as_slice())
+                    .unwrap_or_default();
+                for action in actions {
+                    items.push(MenuItem::new(
+                        &action.name,
+                        &format!("{MENU_ACTION}{}", action.id),
+                    ));
+                }
+                if !actions.is_empty() {
+                    items.push(MenuItem::separator());
+                }
                 items.push(
                     MenuItem::new(&L10N.tr("menu-keep"), MENU_KEEP)
                         .checked(self.kept.contains(app_id)),
@@ -516,6 +547,9 @@ impl Dock {
                 if let Err(error) = window.force_quit_app(&app_id) {
                     tracing::warn!("cannot force {app_id} to quit: {error}");
                 }
+            }
+            (MenuTarget::App(app_id), action) if action.starts_with(MENU_ACTION) => {
+                self.run_action(window, &app_id, &action[MENU_ACTION.len()..]);
             }
             (MenuTarget::App(_), action) if action.starts_with(MENU_WINDOW) => {
                 let identifier = &action[MENU_WINDOW.len()..];

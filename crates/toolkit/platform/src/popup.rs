@@ -3,9 +3,12 @@ use std::time::{Duration, Instant};
 use unbound_graphics::{
     Color, CpuRenderer, Event, Item, Palette, Point, Rect, Scene, Shape, TextSystem,
 };
+use unbound_protocols::client::unbound_shell_v1;
 use unbound_widgets::{Menu, MenuOutcome, MenuPanel, MenuTracker};
+use wayland_client::Proxy;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Connection, Dispatch, QueueHandle, delegate_noop};
+use wayland_protocols::ext::background_effect::v1::client::ext_background_effect_surface_v1::ExtBackgroundEffectSurfaceV1;
 use wayland_protocols::wp::viewporter::client::wp_viewport::WpViewport;
 use wayland_protocols::xdg::shell::client::xdg_popup::{self, XdgPopup};
 use wayland_protocols::xdg::shell::client::xdg_positioner::{
@@ -17,6 +20,10 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::ZwlrL
 use crate::window::{ShmTarget, State, WindowError};
 
 const MARGIN: f32 = 24.0;
+const RADIUS: f32 = 8.0;
+const BLUR_BANDS: usize = 4;
+const TRANSLUCENT_ALPHA: u8 = 200;
+const OPAQUE_ALPHA: u8 = 250;
 const FRAME_INTERVAL: Duration = Duration::from_millis(16);
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -45,6 +52,7 @@ struct Popup {
     xdg_surface: XdgSurface,
     popup: XdgPopup,
     viewport: Option<WpViewport>,
+    blur: Option<ExtBackgroundEffectSurfaceV1>,
     target: ShmTarget,
     shown: Option<Look>,
 }
@@ -61,6 +69,9 @@ struct Look {
 
 impl Popup {
     fn destroy(mut self) {
+        if let Some(blur) = &self.blur {
+            blur.destroy();
+        }
         self.popup.destroy();
         self.xdg_surface.destroy();
         if let Some(viewport) = &self.viewport {
@@ -135,9 +146,10 @@ impl Menus {
     pub(crate) fn handle(&mut self, level: usize, event: &Event, now: Instant) -> MenuOutcome {
         let local = |point: Point| Point::new(point.x - MARGIN, point.y - MARGIN);
         match event {
-            Event::PointerEnter(pointer) | Event::PointerMove(pointer) => self
-                .tracker
-                .pointer_move(level, local(pointer.position), now),
+            Event::PointerMove(pointer) => {
+                self.tracker
+                    .pointer_move(level, local(pointer.position), now)
+            }
             Event::PointerLeave => self
                 .tracker
                 .pointer_move(level, Point::new(-1.0, -1.0), now),
@@ -243,16 +255,32 @@ impl Menus {
             if popup.shown == Some(look) {
                 continue;
             }
+            if opacity < 1.0
+                && popup.shown.is_some_and(|shown| shown.opacity >= 1.0)
+                && let Some(blur) = &popup.blur
+            {
+                blur.set_blur_region(None);
+            }
             popup.shown = Some(look);
             let size = panel.size();
-            let shape = Shape::rounded(Rect::new(0.0, 0.0, size.width, size.height), 8.0);
+            let shape = Shape::rounded(Rect::new(0.0, 0.0, size.width, size.height), RADIUS);
+            let material = Palette {
+                surface_elevated: palette
+                    .surface_elevated
+                    .with_alpha(if popup.blur.is_some() {
+                        TRANSLUCENT_ALPHA
+                    } else {
+                        OPAQUE_ALPHA
+                    }),
+                ..*palette
+            };
             let mut items = vec![Item::Shadow {
                 shape,
                 offset: Point::new(0.0, 6.0),
                 blur_radius: 16.0,
                 color: Color::hex(0x000000).with_alpha(64),
             }];
-            items.extend(panel.paint(palette, show_highlight));
+            items.extend(panel.paint(&material, show_highlight));
             let scene = Scene {
                 width: (size.width + 2.0 * MARGIN) as u32,
                 height: (size.height + 2.0 * MARGIN) as u32,
@@ -338,6 +366,34 @@ fn create(
         .viewporter
         .as_ref()
         .map(|viewporter| viewporter.get_viewport(&surface, handle, ()));
+    let blur = state.effect.manager.as_ref().map(|manager| {
+        let blur = manager.get_background_effect(&surface, handle, ());
+        let outline = Rect::new(MARGIN, MARGIN, size.0, size.1);
+        let rounded = state
+            .shell
+            .protocol
+            .as_ref()
+            .filter(|shell| shell.version() >= unbound_shell_v1::REQ_SET_CORNER_RADIUS_SINCE)
+            .map(|shell| shell.set_corner_radius(&surface, RADIUS as u32))
+            .is_some();
+        let rects = if rounded {
+            vec![outline]
+        } else {
+            Shape::rounded(outline, RADIUS).bands(BLUR_BANDS)
+        };
+        let region = compositor.create_region(handle, ());
+        for rect in rects {
+            region.add(
+                whole(rect.x),
+                whole(rect.y),
+                whole(rect.width),
+                whole(rect.height),
+            );
+        }
+        blur.set_blur_region(Some(&region));
+        region.destroy();
+        blur
+    });
     state.popup_surfaces.truncate(level);
     state.popup_surfaces.push(surface.clone());
     state.popup_configured.truncate(level);
@@ -348,6 +404,7 @@ fn create(
         xdg_surface,
         popup,
         viewport,
+        blur,
         target: ShmTarget::default(),
         shown: None,
     })

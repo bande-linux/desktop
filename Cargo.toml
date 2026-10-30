@@ -20,6 +20,9 @@ ab_glyph = "=0.2.32"
 ash = "=0.38.0"
 blocking = "=1.7.0"
 image = { version = "=0.25.10", default-features = false, features = ["jpeg", "png"] }
+icu_calendar = "=2.4.0"
+icu_datetime = "=2.4.0"
+icu_locale_core = "=2.4.0"
 jiff = "=0.2.38"
 libc = "=0.2.191"
 libloading = "=0.8.9"
@@ -64,6 +67,7 @@ unbound-bluetooth = { path = "crates/libs/bluetooth" }
 unbound-clipboard = { path = "crates/services/clipboard" }
 unbound-compositor = { path = "crates/platform/compositor" }
 unbound-config = { path = "crates/services/config" }
+unbound-datetime = { path = "crates/libs/datetime" }
 unbound-controlcenter = { path = "crates/shell/controlcenter" }
 unbound-dock = { path = "crates/shell/dock" }
 unbound-files = { path = "crates/apps/files" }

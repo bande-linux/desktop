@@ -71,6 +71,12 @@ impl Window {
         self.flush()
     }
 
+    pub fn show_app(&mut self, app_id: &str) -> Result<(), WindowError> {
+        self.shell_since(unbound_shell_v1::REQ_SHOW_APP_SINCE)?
+            .show_app(app_id.to_owned());
+        self.flush()
+    }
+
     pub fn quit_app(&mut self, app_id: &str) -> Result<(), WindowError> {
         self.shell_since(unbound_shell_v1::REQ_QUIT_APP_SINCE)?
             .quit_app(app_id.to_owned());
@@ -231,6 +237,13 @@ impl Dispatch<UnboundShellV1, ()> for State {
                 key: WEnum::Value(key),
                 fine,
             } => state.events.push(WindowEvent::VolumeKey {
+                key,
+                fine: fine != 0,
+            }),
+            unbound_shell_v1::Event::BrightnessKey {
+                key: WEnum::Value(key),
+                fine,
+            } => state.events.push(WindowEvent::BrightnessKey {
                 key,
                 fine: fine != 0,
             }),

@@ -1,9 +1,11 @@
 use std::cell::RefCell;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::LazyLock;
 use std::time::Duration;
 
-use unbound_audio::Level;
+use unbound_audio::{Level, VolumeKey};
 use unbound_l10n::Localizer;
 use unbound_toolkit::ui::{
     Axis, BUTTON_HEIGHT, Button, Context, Label, Menu, MenuItem, SLIDER_HEIGHT, SWITCH_SIZE,
@@ -156,15 +158,84 @@ pub fn chooser_menu(choices: &[(String, String, bool)]) -> Menu {
     )
 }
 
-fn filled_segments(level: f32) -> usize {
-    (level.clamp(0.0, 1.0) * SEGMENTS as f32).round() as usize
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Hud {
+    Volume(Level),
+    Display(f32),
+    Keyboard(f32),
 }
 
-pub fn volume_segments(level: Level) -> usize {
-    if level.muted {
-        return 0;
+impl Hud {
+    fn title(self) -> String {
+        match self {
+            Self::Volume(Level { muted: true, .. }) => L10N.tr("sound-muted"),
+            Self::Volume(_) => L10N.tr("sound"),
+            Self::Display(_) => L10N.tr("display"),
+            Self::Keyboard(_) => L10N.tr("keyboard-brightness"),
+        }
     }
-    filled_segments(level.volume)
+
+    fn level(self) -> f32 {
+        match self {
+            Self::Volume(Level { muted: true, .. }) => 0.0,
+            Self::Volume(level) => level.volume,
+            Self::Display(level) | Self::Keyboard(level) => level,
+        }
+    }
+
+    pub fn segment_fills(self) -> [f32; SEGMENTS] {
+        let filled = self.level().clamp(0.0, 1.0) * SEGMENTS as f32;
+        std::array::from_fn(|index| (filled - index as f32).clamp(0.0, 1.0))
+    }
+}
+
+pub const SYSFS_LEDS: &str = "/sys/class/leds";
+const KEYBOARD_LIGHT: &str = "kbd_backlight";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KeyboardLight {
+    pub name: String,
+    directory: PathBuf,
+}
+
+fn read_number(path: &Path) -> Option<u32> {
+    fs::read_to_string(path).ok()?.trim().parse().ok()
+}
+
+impl KeyboardLight {
+    pub fn find(leds: &Path) -> Option<Self> {
+        let mut names: Vec<String> = fs::read_dir(leds)
+            .ok()?
+            .filter_map(Result::ok)
+            .filter_map(|entry| entry.file_name().into_string().ok())
+            .filter(|name| name.contains(KEYBOARD_LIGHT))
+            .collect();
+        names.sort();
+        let name = names.into_iter().next()?;
+        Some(Self {
+            directory: leds.join(&name),
+            name,
+        })
+    }
+
+    pub fn maximum(&self) -> Option<u32> {
+        read_number(&self.directory.join("max_brightness")).filter(|maximum| *maximum > 0)
+    }
+
+    pub fn level(&self) -> Option<f32> {
+        let maximum = self.maximum()?;
+        Some(read_number(&self.directory.join("brightness"))? as f32 / maximum as f32)
+    }
+}
+
+pub fn stepped(level: f32, up: bool, fine: bool) -> f32 {
+    let key = if up { VolumeKey::Up } else { VolumeKey::Down };
+    Level {
+        volume: level,
+        muted: false,
+    }
+    .press(key, fine)
+    .volume
 }
 
 pub fn blur_rects(rect: Rect) -> Vec<Rect> {
@@ -199,15 +270,10 @@ pub fn card(palette: &Palette, rect: Rect, items: &mut Vec<Item>) {
     });
 }
 
-pub fn volume_hud(level: Level, palette: &Palette, text: &mut TextSystem) -> Vec<Item> {
+pub fn hud(hud: Hud, palette: &Palette, text: &mut TextSystem) -> Vec<Item> {
     let (width, height) = HUD_SIZE;
-    let title = if level.muted {
-        L10N.tr("sound-muted")
-    } else {
-        L10N.tr("sound")
-    };
     let title = text.paragraph(
-        &title,
+        &hud.title(),
         TextStyle::new(TITLE_SIZE, palette.label_primary).weight(TextStyle::SEMIBOLD),
         None,
         TextAlign::Start,
@@ -215,29 +281,34 @@ pub fn volume_hud(level: Level, palette: &Palette, text: &mut TextSystem) -> Vec
     let row = width - 2.0 * PADDING;
     let segment = (row - SEGMENT_GAP * (SEGMENTS - 1) as f32) / SEGMENTS as f32;
     let top = height - PADDING - SEGMENT_HEIGHT;
-    let filled = volume_segments(level);
     let mut items = Vec::new();
     card(palette, Rect::new(0.0, 0.0, width, height), &mut items);
     items.push(Item::Text {
         origin: Point::new(PADDING, PADDING - 4.0),
         paragraph: title,
     });
-    items.extend((0..SEGMENTS).map(|index| Item::Fill {
-        shape: Shape::rounded(
-            Rect::new(
-                PADDING + index as f32 * (segment + SEGMENT_GAP),
-                top,
-                segment,
-                SEGMENT_HEIGHT,
-            ),
-            SEGMENT_HEIGHT / 2.0,
-        ),
-        paint: if index < filled {
-            palette.label_primary.into()
-        } else {
-            palette.separator_color.into()
-        },
-    }));
+    for (index, fill) in hud.segment_fills().into_iter().enumerate() {
+        let rect = Rect::new(
+            PADDING + index as f32 * (segment + SEGMENT_GAP),
+            top,
+            segment,
+            SEGMENT_HEIGHT,
+        );
+        let shape = Shape::rounded(rect, SEGMENT_HEIGHT / 2.0);
+        items.push(Item::Fill {
+            shape,
+            paint: palette.separator_color.into(),
+        });
+        if fill > 0.0 {
+            items.push(Item::Clip {
+                shape: Shape::rect(Rect::new(rect.x, rect.y, rect.width * fill, rect.height)),
+                items: vec![Item::Fill {
+                    shape,
+                    paint: palette.label_primary.into(),
+                }],
+            });
+        }
+    }
     items
 }
 

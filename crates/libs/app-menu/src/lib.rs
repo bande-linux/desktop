@@ -10,6 +10,8 @@ use zbus::fdo::RequestNameFlags;
 use zbus::zvariant::{OwnedValue, Structure, Value};
 
 pub const MENU_PATH: &str = "/org/unbound/MenuBar";
+pub const SHELL_ACTION_PROPERTY: &str = "x-unbound-shell-action";
+pub const VERSION_PROPERTY: &str = "x-unbound-version";
 const INTERFACE: &str = "com.canonical.dbusmenu";
 const ROOT: i32 = 0;
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-app-menu.ftl");
@@ -49,16 +51,58 @@ impl Standard {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShellAction {
+    About,
+    Hide,
+    HideOthers,
+    ShowAll,
+}
+
+const SHELL_ACTIONS: [(ShellAction, &str); 4] = [
+    (ShellAction::About, "about"),
+    (ShellAction::Hide, "hide"),
+    (ShellAction::HideOthers, "hide-others"),
+    (ShellAction::ShowAll, "show-all"),
+];
+
+impl ShellAction {
+    pub fn keyword(self) -> &'static str {
+        SHELL_ACTIONS
+            .iter()
+            .find(|(action, _)| *action == self)
+            .map_or("", |(_, keyword)| keyword)
+    }
+
+    pub fn parse(keyword: &str) -> Option<Self> {
+        SHELL_ACTIONS
+            .iter()
+            .find(|(_, known)| *known == keyword)
+            .map(|(action, _)| *action)
+    }
+}
+
 pub fn app_submenu(app: &str, items: Vec<Entry>) -> Entry {
-    let mut entries = items;
-    if !entries.is_empty() {
+    let mut entries = vec![
+        Entry::item(&L10N.tr_args("about-app", [("app", app.into())]), "")
+            .shell_action(ShellAction::About),
+        Entry::separator(),
+    ];
+    if !items.is_empty() {
+        entries.extend(items);
         entries.push(Entry::separator());
     }
     entries.extend([
         Entry::item(
             &L10N.tr_args("hide-app", [("app", app.into())]),
             Standard::Hide.action(),
-        ),
+        )
+        .shortcut("Super+H")
+        .shell_action(ShellAction::Hide),
+        Entry::item(&L10N.tr("hide-others"), "")
+            .shortcut("Alt+Super+H")
+            .shell_action(ShellAction::HideOthers),
+        Entry::item(&L10N.tr("show-all"), "").shell_action(ShellAction::ShowAll),
         Entry::separator(),
         Entry::item(
             &L10N.tr_args("quit-app", [("app", app.into())]),
@@ -90,6 +134,7 @@ pub struct Entry {
     label: String,
     action: String,
     shortcut: Option<String>,
+    shell_action: Option<ShellAction>,
     enabled: bool,
     separator: bool,
     children: Vec<Entry>,
@@ -101,6 +146,7 @@ impl Entry {
             label: label.to_owned(),
             action: action.to_owned(),
             shortcut: None,
+            shell_action: None,
             enabled: true,
             separator: false,
             children: Vec::new(),
@@ -124,6 +170,13 @@ impl Entry {
     pub fn shortcut(self, shortcut: &str) -> Self {
         Self {
             shortcut: Some(shortcut.to_owned()),
+            ..self
+        }
+    }
+
+    pub fn shell_action(self, shell_action: ShellAction) -> Self {
+        Self {
+            shell_action: Some(shell_action),
             ..self
         }
     }
@@ -155,6 +208,18 @@ impl Entry {
         if let Some(shortcut) = &self.shortcut {
             let keys = shortcut.split('+').map(str::to_owned).collect::<Vec<_>>();
             properties.insert("shortcut".to_owned(), Value::from(vec![keys]));
+        }
+        if let Some(action) = self.shell_action {
+            properties.insert(
+                SHELL_ACTION_PROPERTY.to_owned(),
+                Value::from(action.keyword()),
+            );
+            if action == ShellAction::About {
+                properties.insert(
+                    VERSION_PROPERTY.to_owned(),
+                    Value::from(env!("CARGO_PKG_VERSION")),
+                );
+            }
         }
         properties
     }

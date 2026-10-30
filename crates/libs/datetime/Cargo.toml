@@ -1,0 +1,15 @@
+[package]
+name = "unbound-datetime"
+description = "Dates and times written the way the user's LC_TIME locale writes them"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+icu_calendar.workspace = true
+icu_datetime.workspace = true
+icu_locale_core.workspace = true
+jiff.workspace = true
+
+[lints]
+workspace = true

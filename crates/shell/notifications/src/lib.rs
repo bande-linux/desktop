@@ -4,6 +4,8 @@ use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 use std::time::Instant;
 
+use jiff::Zoned;
+use unbound_datetime::DateFormats;
 use unbound_l10n::Localizer;
 use unbound_notify::{Notification, Presentation, Stack};
 use unbound_spring::rubber_band;
@@ -110,6 +112,7 @@ pub struct Screen {
     senders: Senders,
     presentation: Presentation,
     first_seen: HashMap<u32, Instant>,
+    dates: DateFormats,
     banners: Vec<Banner>,
     open: bool,
     center_x: Animated,
@@ -139,6 +142,7 @@ impl Screen {
             senders,
             presentation: Presentation::default(),
             first_seen: HashMap::new(),
+            dates: DateFormats::from_env(),
             banners: Vec::new(),
             open: false,
             center_x: Animated::new(hidden_offset(CENTER_WIDTH)),
@@ -245,6 +249,8 @@ impl Screen {
             .get(&notification.id)
             .map(|seen| now.saturating_duration_since(*seen))
             .unwrap_or_default();
+        let wall = Zoned::now();
+        let age = age_label(&wall.saturating_sub(age), &wall, &self.dates);
         let (width, lines) = if wide {
             (CENTER_WIDTH - 2.0 * CENTER_PADDING, CENTER_BODY_LINES)
         } else {
@@ -255,7 +261,7 @@ impl Screen {
             &stack.group,
             count,
             sender,
-            age,
+            &age,
             width,
             lines,
             &self.palette,

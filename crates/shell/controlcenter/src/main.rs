@@ -6,8 +6,8 @@ use accesskit::TreeUpdate;
 use unbound_audio::{Audio, Level};
 use unbound_bluetooth::Bluetooth;
 use unbound_controlcenter::{
-    Change, Changes, EDGE, HUD_DURATION, HUD_SIZE, PANEL_WIDTH, Status, blur_rects, card,
-    chooser_menu, material, panel, scene, volume_hud,
+    Change, Changes, EDGE, HUD_DURATION, HUD_SIZE, Hud, KeyboardLight, PANEL_WIDTH, SYSFS_LEDS,
+    Status, blur_rects, card, chooser_menu, hud, material, panel, scene, stepped,
 };
 use unbound_network::NetworkManager;
 use unbound_notify::client::NotificationCenter;
@@ -15,8 +15,8 @@ use unbound_power::backlight::{Backlight, SYSFS_BACKLIGHT};
 use unbound_power::logind::own_session;
 use unbound_toolkit::ui::{Animated, Event, Key, Pointer, Scroll, Spring, Ui};
 use unbound_toolkit::{
-    App, Edges, Item, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement, Palette, Point, Rect,
-    Role, Scene, TextSystem, VolumeKey, Window, WindowError, WindowEvent,
+    App, BrightnessKey, Edges, Item, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement,
+    Palette, Point, Rect, Role, Scene, TextSystem, VolumeKey, Window, WindowError, WindowEvent,
 };
 use unbound_xdg::spawn_detached;
 use zbus::blocking::Connection;
@@ -27,7 +27,7 @@ const SLIDE: f32 = 8.0;
 
 enum Mode {
     Hidden,
-    Volume(Instant),
+    Hud(Hud, Instant),
     Panel { ui: Box<Ui>, height: f32 },
 }
 
@@ -36,7 +36,6 @@ struct ControlCenter {
     shown: Animated,
     surface_shown: bool,
     reduce_motion: bool,
-    level: Level,
     palette: Palette,
     hud_text: TextSystem,
     changes: Changes,
@@ -47,6 +46,7 @@ struct ControlCenter {
     system: Option<Connection>,
     session: Option<Connection>,
     backlight: Option<Backlight>,
+    keyboard_light: Option<KeyboardLight>,
     blur: Option<Vec<Rect>>,
 }
 
@@ -269,7 +269,6 @@ impl ControlCenter {
                         muted: false,
                     };
                     report("set the volume", audio.set_level(output, level));
-                    self.level = level;
                 }
             }
             Change::Brightness(level) => {
@@ -363,19 +362,57 @@ impl ControlCenter {
             return;
         };
         match audio.press(key, fine) {
-            Ok(level) => self.level = level,
-            Err(error) => {
-                tracing::warn!("cannot change the volume: {error}");
-                return;
-            }
+            Ok(level) => self.show_hud(window, Hud::Volume(level)),
+            Err(error) => tracing::warn!("cannot change the volume: {error}"),
         }
+    }
+
+    fn set_keyboard_light(&self, level: f32) {
+        if let (Some(system), Some(light)) = (&self.system, &self.keyboard_light)
+            && let Some(maximum) = light.maximum()
+        {
+            let value = ((level * maximum as f32).round() as u32).min(maximum);
+            report(
+                "set the keyboard brightness",
+                own_session(system)
+                    .and_then(|session| session.set_brightness("leds", &light.name, value)),
+            );
+        }
+    }
+
+    fn brightness_key(&mut self, window: &mut Window, key: BrightnessKey, fine: bool) {
+        let up = matches!(key, BrightnessKey::DisplayUp | BrightnessKey::KeyboardUp);
+        let hud = match key {
+            BrightnessKey::DisplayDown | BrightnessKey::DisplayUp => {
+                let Some(level) = self.brightness() else {
+                    return;
+                };
+                let level = stepped(level, up, fine);
+                self.apply(window, Change::Brightness(level));
+                Hud::Display(level)
+            }
+            BrightnessKey::KeyboardDown | BrightnessKey::KeyboardUp => {
+                let Some(level) = self.keyboard_light.as_ref().and_then(KeyboardLight::level)
+                else {
+                    return;
+                };
+                let level = stepped(level, up, fine);
+                self.set_keyboard_light(level);
+                Hud::Keyboard(level)
+            }
+            _ => return,
+        };
+        self.show_hud(window, hud);
+    }
+
+    fn show_hud(&mut self, window: &mut Window, hud: Hud) {
         if let Mode::Panel { .. } = self.mode {
             self.rebuild();
             window.request_redraw();
             return;
         }
         let fresh = matches!(self.mode, Mode::Hidden);
-        self.mode = Mode::Volume(Instant::now() + HUD_DURATION);
+        self.mode = Mode::Hud(hud, Instant::now() + HUD_DURATION);
         if fresh {
             self.shown.jump_to(0.0);
         }
@@ -446,12 +483,12 @@ impl App for ControlCenter {
                     items: content.items,
                 });
             }
-            Mode::Volume(_) => {
+            Mode::Hud(shown_hud, _) => {
                 let origin = Point::new(width as f32 - EDGE - HUD_SIZE.0, EDGE);
                 shapes.push(Rect::new(origin.x, origin.y, HUD_SIZE.0, HUD_SIZE.1));
                 items.push(Item::Translate {
                     offset: origin,
-                    items: volume_hud(self.level, &palette, &mut self.hud_text),
+                    items: hud(*shown_hud, &palette, &mut self.hud_text),
                 });
             }
             Mode::Hidden => {}
@@ -488,6 +525,7 @@ impl App for ControlCenter {
         match event {
             WindowEvent::ToggleControlCenter => self.toggle_panel(window),
             WindowEvent::VolumeKey { key, fine } => self.volume_key(window, key, fine),
+            WindowEvent::BrightnessKey { key, fine } => self.brightness_key(window, key, fine),
             WindowEvent::Input(input) => self.input(window, &input),
             WindowEvent::Accessibility(request) => {
                 if let Mode::Panel { ui, .. } = &mut self.mode
@@ -528,7 +566,7 @@ impl App for ControlCenter {
 
     fn deadline(&self) -> Option<Instant> {
         match self.mode {
-            Mode::Volume(until) => Some(until),
+            Mode::Hud(_, until) => Some(until),
             Mode::Hidden if self.surface_shown && !self.shown.value_at(Instant::now()).1 => {
                 Some(Instant::now())
             }
@@ -538,7 +576,7 @@ impl App for ControlCenter {
 
     fn tick(&mut self, window: &mut Window, now: Instant) {
         match self.mode {
-            Mode::Volume(until) if now >= until => self.dismiss(window),
+            Mode::Hud(_, until) if now >= until => self.dismiss(window),
             Mode::Hidden if self.surface_shown && !self.shown.value_at(now).1 => {
                 self.surface_shown = false;
                 report("hide", window.hide());
@@ -583,10 +621,6 @@ fn run() -> Result<(), WindowError> {
         shown: Animated::new(0.0),
         surface_shown: false,
         reduce_motion: appearance.reduce_motion,
-        level: Level {
-            volume: 0.0,
-            muted: false,
-        },
         palette: appearance.palette(),
         hud_text: TextSystem::new(),
         changes: Changes::default(),
@@ -595,6 +629,7 @@ fn run() -> Result<(), WindowError> {
         network: system.as_ref().map(NetworkManager::new),
         bluetooth: system.as_ref().map(Bluetooth::new),
         backlight: Backlight::find(Path::new(SYSFS_BACKLIGHT)),
+        keyboard_light: KeyboardLight::find(Path::new(SYSFS_LEDS)),
         blur: Some(vec![Rect::default()]),
         system,
         session,

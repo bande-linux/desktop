@@ -395,6 +395,27 @@ fn a_click_outside_a_grabbing_popup_dismisses_it_and_is_not_delivered() {
     assert_eq!(server.popup_count(), 0);
 }
 
+#[test]
+fn a_grabbing_popup_that_opens_under_a_still_pointer_has_it_at_once() {
+    let mut server = server();
+    let mut editor = app(&mut server, RED);
+    let (x, y) = (CENTERED.0 + 11, CENTERED.1 + 11);
+    click(&mut server, x - 6, y - 6);
+    roundtrip(&mut server, &mut [&mut editor]);
+    server.move_pointer_to(at(x + 5, y + 5), 1);
+    server.press_button(BTN_LEFT, true, 2);
+    roundtrip(&mut server, &mut [&mut editor]);
+
+    let request = PopupRequest {
+        grab: true,
+        ..menu(0, (10, 10, 1, 1), (30, 20))
+    };
+    let popup = editor.open_popup(&mut server, &request);
+    roundtrip(&mut server, &mut [&mut editor]);
+
+    assert!(editor.pointer_on_popup(popup));
+}
+
 const KEY_LEFTCTRL: u32 = 29;
 const KEY_F: u32 = 33;
 const KEY_M: u32 = 50;

@@ -9,7 +9,7 @@ use unbound_menubar::menus::{Command, battery_menu, bluetooth_menu, sound_menu, 
 use unbound_menubar::session::{Ending, facts};
 use unbound_menubar::status::{Battery, Bluetooth, Gadget, Output, Power, Sound};
 use unbound_menubar::tray::{TrayIcon, pixmap_rgba, split};
-use unbound_menubar::{MenuBar, Slot, app_name, clock_text};
+use unbound_menubar::{MenuBar, Slot, app_name};
 use unbound_toolkit::ui::{Menu, MenuItem};
 use unbound_toolkit::{Item, Palette, Point, Scheme, TextSystem};
 use zbus::zvariant::{OwnedValue, Structure, Value};
@@ -37,12 +37,6 @@ fn action_of<'a>(menu: &'a Menu, title: &str) -> &'a str {
         .find(|item| item.title == title)
         .unwrap_or_else(|| panic!("no {title} in {menu:?}"))
         .action
-}
-
-#[test]
-fn the_clock_reads_like_the_macos_menu_bar() {
-    let now: jiff::Zoned = "2026-10-29T09:05:00+02:00[+02:00]".parse().expect("time");
-    assert_eq!(clock_text(&now), "Thu 29 Oct 09:05");
 }
 
 #[test]
@@ -152,6 +146,10 @@ fn every_command_survives_its_trip_through_a_menu_action() {
             item: ":1.42/MenuBar".to_owned(),
             id: 7,
         },
+        Command::AboutApp("1.2.3".to_owned()),
+        Command::HideApp,
+        Command::HideOthers,
+        Command::ShowAll,
     ] {
         assert_eq!(Command::parse(&command.action()), Some(command));
     }
@@ -363,6 +361,70 @@ fn a_dbusmenu_layout_becomes_a_menu_without_mnemonics_or_hidden_items() {
     );
     let more = converted.items[3].submenu.as_ref().expect("a submenu");
     assert_eq!(more.items[0].title, "Quit");
+}
+
+#[test]
+fn an_app_menu_shows_shortcuts_and_leaves_about_and_hiding_to_the_menu_bar() {
+    let entries = [
+        layout_node(
+            1,
+            &[
+                ("label", Value::from("About Files")),
+                ("x-unbound-shell-action", Value::from("about")),
+                ("x-unbound-version", Value::from("0.4.0")),
+            ],
+            Vec::new(),
+        ),
+        layout_node(
+            2,
+            &[
+                ("label", Value::from("Hide Files")),
+                ("shortcut", Value::from(vec![vec!["Super", "H"]])),
+                ("x-unbound-shell-action", Value::from("hide")),
+            ],
+            Vec::new(),
+        ),
+        layout_node(
+            3,
+            &[
+                ("label", Value::from("New Folder")),
+                ("shortcut", Value::from(vec![vec!["Shift", "Super", "N"]])),
+            ],
+            Vec::new(),
+        ),
+    ];
+    let root = (
+        0,
+        HashMap::new(),
+        entries
+            .into_iter()
+            .map(|entry| OwnedValue::try_from(Value::Value(Box::new(entry))).expect("owned"))
+            .collect(),
+    );
+    let converted = menu(&tree(root), ":1.9/org/unbound/MenuBar");
+
+    let actions: Vec<_> = converted
+        .items
+        .iter()
+        .map(|item| Command::parse(&item.action))
+        .collect();
+    assert_eq!(
+        actions,
+        [
+            Some(Command::AboutApp("0.4.0".to_owned())),
+            Some(Command::HideApp),
+            Some(Command::Item {
+                item: ":1.9/org/unbound/MenuBar".to_owned(),
+                id: 3
+            }),
+        ]
+    );
+    assert_eq!(converted.items[0].shortcut, None);
+    assert_eq!(converted.items[1].shortcut.as_deref(), Some("Super+H"));
+    assert_eq!(
+        converted.items[2].shortcut.as_deref(),
+        Some("Shift+Super+N")
+    );
 }
 
 #[test]

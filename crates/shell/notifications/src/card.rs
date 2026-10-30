@@ -1,5 +1,5 @@
-use std::time::Duration;
-
+use jiff::Zoned;
+use unbound_datetime::DateFormats;
 use unbound_notify::Notification;
 use unbound_toolkit::{
     Color, Image, Item, Palette, Paragraph, Point, Rect, Shape, TextAlign, TextStyle, TextSystem,
@@ -51,12 +51,19 @@ pub struct Card {
     actions: Vec<(String, Paragraph, Rect)>,
 }
 
-pub fn age_label(age: Duration) -> String {
-    let minutes = age.as_secs() / 60;
-    match minutes {
-        0 => L10N.tr("age-now"),
-        1..60 => L10N.tr_args("age-minutes", [("count", minutes.into())]),
-        _ => L10N.tr_args("age-hours", [("count", (minutes / 60).into())]),
+pub fn age_label(arrived: &Zoned, now: &Zoned, dates: &DateFormats) -> String {
+    let minutes = now.duration_since(arrived).as_secs().max(0) / 60;
+    let days = arrived
+        .date()
+        .until(now.date())
+        .map_or(0, |span| span.get_days());
+    match (minutes, days) {
+        (0, _) => L10N.tr("age-now"),
+        (1..60, _) => L10N.tr_args("age-minutes", [("count", minutes.into())]),
+        (_, ..=0) => L10N.tr_args("age-hours", [("count", (minutes / 60).into())]),
+        (_, 1) => L10N.tr("age-yesterday"),
+        (_, 2..7) => dates.weekday(arrived),
+        _ => dates.date(arrived, arrived.year() != now.year()),
     }
 }
 
@@ -103,7 +110,7 @@ impl Card {
         group: &str,
         count: usize,
         sender: Sender,
-        age: Duration,
+        age: &str,
         width: f32,
         body_lines: usize,
         palette: &Palette,
@@ -112,7 +119,7 @@ impl Card {
         let column = PADDING + ICON + ICON_GAP;
         let text_width = width - column - PADDING;
         let age = text.paragraph(
-            &age_label(age),
+            age,
             TextStyle::new(SMALL_SIZE, palette.label_muted),
             None,
             TextAlign::Start,

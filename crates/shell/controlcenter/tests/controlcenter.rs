@@ -1,11 +1,13 @@
-#![allow(clippy::expect_used)]
+#![allow(clippy::expect_used, clippy::float_cmp)]
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
 use accesskit::{Action, ActionRequest, Node, NodeId, Role, Toggled, TreeId};
 use unbound_audio::Level;
-use unbound_controlcenter::{Change, Changes, SEGMENTS, Status, panel, volume_segments};
+use unbound_controlcenter::{
+    Change, Changes, Hud, KeyboardLight, SEGMENTS, Status, panel, stepped,
+};
 use unbound_toolkit::ui::Ui;
 use unbound_toolkit::{Palette, Scheme, TextSystem};
 
@@ -104,12 +106,52 @@ fn switching_a_control_or_choosing_a_network_asks_for_that_change() {
     );
 }
 
+fn filled(hud: Hud) -> f32 {
+    hud.segment_fills().iter().sum()
+}
+
 #[test]
-fn the_volume_display_fills_a_segment_per_step_and_none_when_muted() {
-    let at = |volume, muted| volume_segments(Level { volume, muted });
-    assert_eq!(at(1.0, false), SEGMENTS);
-    assert_eq!(at(0.5, false), SEGMENTS / 2);
-    assert_eq!(at(1.0 / SEGMENTS as f32, false), 1);
-    assert_eq!(at(0.0, false), 0);
-    assert_eq!(at(0.75, true), 0);
+fn the_level_display_fills_a_segment_per_step_and_none_when_muted() {
+    let volume = |volume, muted| filled(Hud::Volume(Level { volume, muted }));
+    assert_eq!(volume(1.0, false), SEGMENTS as f32);
+    assert_eq!(volume(0.5, false), SEGMENTS as f32 / 2.0);
+    assert_eq!(volume(1.0 / SEGMENTS as f32, false), 1.0);
+    assert_eq!(volume(0.0, false), 0.0);
+    assert_eq!(volume(0.75, true), 0.0);
+    assert_eq!(filled(Hud::Display(0.25)), 4.0);
+    assert_eq!(filled(Hud::Keyboard(1.0)), SEGMENTS as f32);
+}
+
+#[test]
+fn a_quarter_step_fills_a_quarter_of_a_segment() {
+    let level = stepped(0.5, true, true);
+    assert_eq!(level, 33.0 / 64.0);
+    let fills = Hud::Display(level).segment_fills();
+    assert_eq!(fills[7], 1.0);
+    assert_eq!(fills[8], 0.25);
+    assert_eq!(fills[9], 0.0);
+}
+
+#[test]
+fn brightness_keys_move_one_of_sixteen_steps_and_stop_at_the_ends() {
+    assert_eq!(stepped(0.5, true, false), 9.0 / 16.0);
+    assert_eq!(stepped(0.3, false, false), 4.0 / 16.0);
+    assert_eq!(stepped(1.0, true, false), 1.0);
+    assert_eq!(stepped(0.0, false, false), 0.0);
+}
+
+#[test]
+fn the_keyboard_backlight_is_found_among_the_leds() {
+    let leds = tempfile::tempdir().expect("temporary directory");
+    for (name, brightness) in [("input3::capslock", "1"), ("kbd_backlight", "128")] {
+        let directory = leds.path().join(name);
+        std::fs::create_dir_all(&directory).expect("directory");
+        std::fs::write(directory.join("brightness"), brightness).expect("brightness");
+        std::fs::write(directory.join("max_brightness"), "255\n").expect("maximum");
+    }
+
+    let light = KeyboardLight::find(leds.path()).expect("a keyboard backlight");
+    assert_eq!(light.name, "kbd_backlight");
+    assert_eq!(light.level(), Some(128.0 / 255.0));
+    assert_eq!(KeyboardLight::find(&leds.path().join("missing")), None);
 }

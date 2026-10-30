@@ -101,6 +101,10 @@ graph LR
 - PipeWire and WirePlumber, with per-device volume memory (headphone volume is restored when
   they are plugged in) and media keys with an on-screen level. `crates/libs/audio` is the
   client library; the compositor forwards volume keys to the shell over `unbound_shell_v1`.
+- The display and keyboard brightness keys go the same way (`brightness_key`, also while
+  locked): Control Center moves the display backlight or the `kbd_backlight` LED one of 16
+  steps (a quarter step with Option and Shift) through logind's `Session.SetBrightness` and
+  shows the level in the same HUD as the volume, a quarter step filling a quarter segment.
 
 ### Accessibility
 
@@ -152,7 +156,13 @@ graph LR
     when the name has an owner, so it never starts an app by D-Bus activation. Toolkit apps
     export their menus through `crates/libs/app-menu` (`unbound-app-menu`), which also builds
     the standard app and Window menus; the window that gains focus claims the name, so the menu
-    bar talks to the process the user is working in.
+    bar talks to the process the user is working in. The menu bar reads the menu again on
+    `LayoutUpdated` and shows each item's `shortcut` right-aligned with key symbols (⌃ ⌥ ⇧ ⌘,
+    Super being ⌘ as the Command key of the Apple keyboards Unbound runs on). Items of the
+    standard app menu carry `x-unbound-shell-action`, which the menu bar performs itself
+    through `unbound_shell_v1`, since an app cannot hide itself: About (a small window with the
+    app's icon and name from its desktop entry and the version in `x-unbound-version`), Hide
+    (`Super+H`), Hide Others (`Alt+Super+H`) and Show All (`show_app` for every running app).
 - **Network and Bluetooth**: NetworkManager (`org.freedesktop.NetworkManager`) and BlueZ
   (`org.bluez`) for Wi-Fi selection and Bluetooth pairing in Control Center and Settings, through
   `crates/libs/network` and `crates/libs/bluetooth`.
@@ -215,7 +225,9 @@ prompt, acknowledge information, start, cancel after a refusal) inside
 `unbound-compositor --greeter`, which runs only the greeter and exits with it; the package
 ships a greetd configuration. The login window shows the wallpaper of the person it offers,
 starting with whoever signed in last (remembered in the greeter user's
-`$XDG_STATE_HOME/unbound-greeter/last-user`): `unbound-config` hands the dark picture to
+`$XDG_STATE_HOME/unbound-greeter/last-user`, on Debian under `/var/lib/greetd`, the home that
+greetd's package creates owned by `_greetd`, so no state directory of our own is
+needed): `unbound-config` hands the dark picture to
 AccountsService (`SetBackgroundFile`, which a user may do for their own account without a
 password) whenever the wallpaper changes, and the greeter reads `BackgroundFile` from it, as the
 macOS login window shows the user's desktop picture. Pictures inside a home folder that the

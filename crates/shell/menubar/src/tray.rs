@@ -17,6 +17,7 @@ use crate::dbusmenu::{APP_MENU_PATH, DBusMenu, menu, tree};
 const ITEM_INTERFACE: &str = "org.kde.StatusNotifierItem";
 const WATCHER_INTERFACE: &str = "org.kde.StatusNotifierWatcher";
 const WATCHER: &str = "org.kde.StatusNotifierWatcher";
+const MENU_INTERFACE: &str = "com.canonical.dbusmenu";
 const ICON_PIXELS: i32 = 32;
 const NOTIFICATION_SCREEN: &str = "org.unbound.NotificationScreen";
 const NOTIFICATION_SCREEN_PATH: &str = "/org/unbound/NotificationScreen";
@@ -196,6 +197,16 @@ pub fn host(connection: &Connection, outbox: &Outbox<Update>) -> zbus::Result<()
                 .is_ok_and(|(owner_of, _, new)| owner_of == WATCHER && !new.is_empty());
         if watcher_returned {
             register(connection, &name);
+        }
+        let app_menu_changed = interface.as_deref() == Some(MENU_INTERFACE)
+            && header
+                .path()
+                .is_some_and(|path| path.as_str() == APP_MENU_PATH)
+            && header
+                .member()
+                .is_some_and(|member| member == "LayoutUpdated");
+        if app_menu_changed && !outbox.send(Update::AppMenuChanged) {
+            return Ok(());
         }
         let relevant = watcher_returned
             || matches!(

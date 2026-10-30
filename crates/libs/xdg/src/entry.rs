@@ -72,6 +72,15 @@ pub struct DesktopEntry {
     pub keywords: Vec<String>,
     pub mime_types: Vec<String>,
     pub no_display: bool,
+    pub actions: Vec<DesktopAction>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DesktopAction {
+    pub id: String,
+    pub name: String,
+    pub icon: Option<String>,
+    pub exec: String,
 }
 
 struct Group {
@@ -160,10 +169,9 @@ fn split_list(value: &str) -> Vec<String> {
     items
 }
 
-fn desktop_entry_group(text: &str) -> Option<Group> {
-    let mut values = HashMap::new();
-    let mut in_group = false;
-    let mut seen = false;
+fn groups(text: &str) -> HashMap<String, Group> {
+    let mut groups: HashMap<String, Group> = HashMap::new();
+    let mut current: Option<String> = None;
     for line in text.lines() {
         let line = line.trim_end();
         if line.is_empty() || line.starts_with('#') {
@@ -173,17 +181,42 @@ fn desktop_entry_group(text: &str) -> Option<Group> {
             .strip_prefix('[')
             .and_then(|line| line.strip_suffix(']'))
         {
-            in_group = name == "Desktop Entry";
-            seen |= in_group;
+            groups.entry(name.to_owned()).or_insert_with(|| Group {
+                values: HashMap::new(),
+            });
+            current = Some(name.to_owned());
             continue;
         }
-        if in_group && let Some((key, value)) = line.split_once('=') {
-            values
+        if let Some(group) = current.as_ref().and_then(|name| groups.get_mut(name))
+            && let Some((key, value)) = line.split_once('=')
+        {
+            group
+                .values
                 .entry(key.trim().to_owned())
                 .or_insert_with(|| value.trim_start().to_owned());
         }
     }
-    seen.then_some(Group { values })
+    groups
+}
+
+fn actions(
+    entry: &Group,
+    groups: &HashMap<String, Group>,
+    locale: Option<&Locale>,
+) -> Vec<DesktopAction> {
+    entry
+        .list("Actions")
+        .into_iter()
+        .filter_map(|id| {
+            let group = groups.get(&format!("Desktop Action {id}"))?;
+            Some(DesktopAction {
+                name: group.localized("Name", locale)?,
+                exec: group.string("Exec").filter(|exec| !exec.is_empty())?,
+                icon: group.string("Icon").filter(|icon| !icon.is_empty()),
+                id,
+            })
+        })
+        .collect()
 }
 
 pub(crate) fn find_executable(program: &str) -> Option<PathBuf> {
@@ -218,7 +251,8 @@ impl DesktopEntry {
         locale: Option<&Locale>,
         desktops: &[String],
     ) -> Option<Self> {
-        let group = desktop_entry_group(text)?;
+        let groups = groups(text);
+        let group = groups.get("Desktop Entry")?;
         if group.raw("Type") != Some("Application") || group.boolean("Hidden") {
             return None;
         }
@@ -251,6 +285,7 @@ impl DesktopEntry {
             keywords: group.localized_list("Keywords", locale),
             mime_types: group.list("MimeType"),
             no_display: group.boolean("NoDisplay"),
+            actions: actions(group, &groups, locale),
         })
     }
 

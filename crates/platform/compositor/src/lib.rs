@@ -19,6 +19,7 @@ mod element;
 
 mod effect;
 mod environment;
+mod family;
 mod frame;
 mod gesture;
 mod grab;

@@ -210,6 +210,7 @@ impl State {
         let Some(index) = self.window_index(surface) else {
             return;
         };
+        let index = self.root_index(index);
         if self.on_full_screen_space(&self.windows[index]) {
             return;
         }

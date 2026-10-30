@@ -1,3 +1,4 @@
+pub mod clock;
 pub mod dbusmenu;
 pub mod devices;
 pub mod session;
@@ -28,6 +29,7 @@ pub enum Update {
     AppMenu { app: String, root: Option<Node> },
     AppMenuChanged,
     ClockFormat(String),
+    Minute,
     BatteryPercentage(bool),
     Unread(bool),
     BarLayout { menu_bar: String, edge: String },

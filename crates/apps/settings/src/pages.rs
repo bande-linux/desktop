@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use unbound_audio::Direction;
 use unbound_config::{ACCENTS, MAX_INPUT_SOURCES};
-use unbound_keyboard::shortcuts_in;
+use unbound_keyboard::{Action, shortcuts_in};
 use unbound_toolkit::ui::{
     Axis, Button, LevelIndicator, PopUpButton, SearchField, SecureField, SegmentedControl,
     Shortcut, Slider, Stack, TextField, Toggle, Widget, WidgetId,
@@ -780,6 +780,9 @@ impl SettingsView {
         for area in unbound_keyboard::Area::ALL {
             page.push(boxed(Caption::new(Text::label(&area.title()))));
             let rows = shortcuts_in(area)
+                .filter(|shortcut| {
+                    shortcut.action != Action::ToggleScreenReader || self.offers_screen_reader()
+                })
                 .map(|shortcut| {
                     boxed(Row::new(
                         Text::new(&shortcut.action.label(), Tone::Primary),

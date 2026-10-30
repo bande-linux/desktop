@@ -72,6 +72,7 @@ pub struct FrameRegions {
 pub struct Header {
     pub title_x: f32,
     pub items: Vec<Rect>,
+    pub tabs: Vec<Rect>,
 }
 
 impl Header {
@@ -79,6 +80,7 @@ impl Header {
         let end = self
             .items
             .iter()
+            .chain(&self.tabs)
             .map(|item| item.x)
             .filter(|x| *x > self.title_x)
             .fold(width, f32::min);
@@ -230,6 +232,7 @@ pub(crate) struct Chrome {
     pub(crate) pressed_inside: bool,
     pub(crate) pointer_in_content: bool,
     pub(crate) content_buttons: usize,
+    pub(crate) tab_press: Option<Point>,
 }
 
 impl Chrome {
@@ -246,12 +249,25 @@ impl Chrome {
         match &self.header {
             Some(header)
                 if zone == Zone::TitleBar
-                    && header.items.iter().any(|item| contains(*item, local)) =>
+                    && header
+                        .items
+                        .iter()
+                        .chain(&header.tabs)
+                        .any(|item| contains(*item, local)) =>
             {
                 Zone::Content
             }
             _ => zone,
         }
+    }
+
+    pub(crate) fn tab_at(&self, frame: &Frame, point: Point) -> bool {
+        let local = Point::new(point.x - frame.margin, point.y - frame.margin);
+        frame.zone_at(point) == Zone::TitleBar
+            && self
+                .header
+                .as_ref()
+                .is_some_and(|header| header.tabs.iter().any(|tab| contains(*tab, local)))
     }
 
     pub(crate) fn wrap_tree(&self, frame: &Frame, mut tree: TreeUpdate) -> TreeUpdate {

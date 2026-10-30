@@ -355,6 +355,7 @@ impl State {
     }
 
     fn animate(&mut self, tick: Tick) {
+        self.keep_families_together();
         let reduce = self.reduce_motion;
         for index in 0..self.windows.len() {
             if self.windows[index].motion.is_none() {

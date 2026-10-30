@@ -47,8 +47,7 @@ Recommends: unbound-term (= ${binary:Version}),
             xdg-user-dirs,
             upower,
             udisks2,
-            at-spi2-core,
-            orca
+            at-spi2-core
 Suggests: gnome-clocks
 Description: Unbound desktop environment
  The Unbound desktop: a pure Wayland desktop with its own compositor, shell,

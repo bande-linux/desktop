@@ -421,3 +421,36 @@ fn tab_reaches_every_accessibility_control_and_space_switches_it() {
         [(SettingId::StickyKeys, Value::Flag(true))]
     );
 }
+
+fn labelled(view: &mut SettingsView, label: &str) -> bool {
+    view.scene(SIZE.0, SIZE.1);
+    view.accessibility()
+        .nodes
+        .iter()
+        .any(|(_, node)| node.label().is_some_and(|text| text == label))
+}
+
+#[test]
+fn without_a_screen_reader_installed_its_switch_and_shortcut_are_not_offered() {
+    let mut view = view();
+    view.set_value(SettingId::ScreenReader, Value::Flag(false));
+    view.set_value(SettingId::Zoom, Value::Flag(false));
+    view.select_pane(PaneId::Accessibility);
+    assert!(labelled(&mut view, "Screen reader"));
+    view.select_pane(PaneId::Keyboard);
+    assert!(labelled(&mut view, "Turn the screen reader on or off"));
+
+    view.hide_screen_reader();
+
+    assert!(labelled(&mut view, "Turn zoom on or off"));
+    assert!(!labelled(&mut view, "Turn the screen reader on or off"));
+    view.select_pane(PaneId::Accessibility);
+    assert!(labelled(&mut view, "Zoom"));
+    assert!(!labelled(&mut view, "Screen reader"));
+    type_text(&mut view, "screen reader");
+    assert!(
+        !view
+            .highlighted_settings()
+            .contains(&SettingId::ScreenReader)
+    );
+}

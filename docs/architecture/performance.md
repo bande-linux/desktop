@@ -42,6 +42,12 @@ checked by `ci/perf`; this page tracks memory, CPU per interaction and size.
   Other developers' builds share the VM's ten cores, so wall-clock frame times move with the
   load average the tool prints; compare runs taken back to back, and the CPU columns, which
   move less.
+- **Idle wake-ups:** sum the `voluntary_ctxt_switches` and `nonvoluntary_ctxt_switches` of every
+  thread in `/proc/<pid>/task/*/status` twice, some seconds apart, and divide the difference by
+  the interval; the per-thread `comm` names show which thread wakes. Run the services inside the
+  test bus and the bar and Control Center under `unbound-footprint --settle <seconds>` (its
+  headless compositor), with `XDG_RUNTIME_DIR` pointing at a private directory that links
+  `pipewire-0` so that PipeWire is real but no client reaches the live session's display.
 - **Binary sizes:** `cargo build --profile dist -p <package>`; packages are built with this
   profile.
 - **Crate counts:** `cargo tree -e normal -p <package> --prefix none | sort -u | wc -l`.
@@ -49,6 +55,56 @@ checked by `ci/perf`; this page tracks memory, CPU per interaction and size.
 All numbers below are from the development VM: 10 cores, lavapipe (Mesa 25.0.7, Vulkan on the
 CPU), so GPU memory shows up as process memory. On Apple Silicon GPU memory is also system
 memory, so the device-memory savings carry over.
+
+## 2026-10-30: idle wake-ups to zero
+
+An idle desktop should not wake the CPU. Wake-ups per second of each process while nothing
+happens, before (`main` at `0752344`) and after (`desktop/idle-zero`), measured as described
+above over 10 s before and 30 s after, debug builds, the bar on the real system bus
+(NetworkManager, UPower and BlueZ running) and PipeWire:
+
+| Process | before | after | What woke it |
+| :--- | ---: | ---: | :--- |
+| unbound-bar | 23.7 (live session: 20.0) | 0 | status polling, the clock, the `blocking` pool |
+| unbound-controlcenter | 2.0 | 0.1 | the `blocking` pool; the 0.1 left is three one-off wake-ups of its main thread, not periodic |
+| unbound-sound | 2.0 | 0 | the `blocking` pool |
+| unbound-notify | 2.0 | 0 | the `blocking` pool |
+| unbound-config | 2.0 | 0 | the `blocking` pool |
+| unbound-power | 2.0 (live session) | 0 | the `blocking` pool |
+| unbound-tray | 2.0 | 0 | the `blocking` pool |
+| unbound-clipboard | 2.0 (live session) | — | the `blocking` pool |
+
+The clipboard daemon needs the privileged data-control global, which only the real compositor
+grants, so it was measured in the live session only (read-only, from `/proc`); its one waker was
+the `blocking` pool, which it shares with every other process, so it drops to 0 with them. The
+compositor (2.1 in the live session, all from the same pool) likewise.
+
+- **The `blocking` thread pool.** zbus connects its Unix sockets through `blocking::unblock`, so
+  every process that talks D-Bus has a `blocking-1` thread. In `blocking` 1.7.0 an idle pool
+  thread exits only when the pool is over its thread limit (500) — never — and otherwise wakes
+  every 500 ms forever (upstream smol-rs/blocking#81 and #83, open). 1.6.2 lets an idle thread
+  exit after 500 ms, as documented. The workspace pins `blocking = "=1.6.2"` until a fixed
+  release; the Portal and the polkit agent now take it from the workspace instead of their own
+  `=1.7.0` pins. Nothing else in zbus or `async-io` wakes an idle process: zbus's executor and
+  the `async-io` reactor block in `epoll` without a timeout.
+- **Battery, Wi-Fi and Bluetooth by signal.** The bar re-read UPower, NetworkManager and BlueZ
+  every 3 s (dozens of D-Bus calls each time, which also woke zbus's reader and the `async-io`
+  thread). `unbound_status::devices::follow_devices` now subscribes to every signal of the three
+  services and to their owner changes, and re-reads only the service that spoke, coalescing
+  bursts (a scan that changes twenty access points is one read). Changes show at once instead of
+  up to 3 s late; a service that starts or restarts is picked up from its `NameOwnerChanged`.
+- **Sound by PipeWire's events.** The bar polled the audio snapshot every 200 ms. The PipeWire
+  thread already updates a shared state from registry, node and route events and signals a
+  condition variable; `Audio::changed_since` blocks on it, and the bar's sound controls run on
+  their own thread. Waiting for a command's reply blocks on its channel instead of checking the
+  connection every 250 ms; a lost connection drops the pending replies, which ends the wait.
+- **The clock by the minute.** The bar checked its clock every second. A `timerfd` on
+  `CLOCK_REALTIME`, armed for the next whole minute with `TFD_TIMER_CANCEL_ON_SET`, now wakes it
+  once a minute, at the minute, and at once when the clock is set or the machine resumes, so the
+  time is right after suspend even though the bar's own timers do not run during it.
+- **Status notifier items by narrow match rules.** The tray host subscribed to every signal on
+  the session bus; it now asks the bus only for status-item and watcher signals, the watcher's
+  owner changes and the app-menu `LayoutUpdated`, so other apps' signals no longer wake the bar.
 
 ## 2026-10-30: software rendering (lavapipe at 1.5×)
 

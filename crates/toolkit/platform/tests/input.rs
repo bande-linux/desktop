@@ -11,12 +11,12 @@ use smithay::backend::input::{Axis, AxisSource};
 use smithay::input::pointer::AxisFrame;
 use smithay::utils::Point;
 use unbound_graphics::{
-    Color, Event, Key, Modifiers, Palette, Pointer, PointerButton, Scene, Scheme, ScrollPhase,
-    ScrollSource, TextSystem,
+    Color, Event, Key, Modifiers, Palette, Pointer, PointerButton, Rect, Scene, Scheme,
+    ScrollPhase, ScrollSource, TextSystem,
 };
 use unbound_toolkit_platform::{
-    App, Edges, HEADER_HEIGHT, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement, Role,
-    SHEET_INSET, Transfer, Window, WindowEvent,
+    App, Edges, FrameRegions, HEADER_HEIGHT, Header, KeyboardFocus, LayerKind, LayerOptions,
+    MenuPlacement, Role, SHEET_INSET, Transfer, Window, WindowEvent,
 };
 use unbound_widgets::{Context, ContextMenu, Label, Menu, MenuItem, Ui};
 
@@ -137,6 +137,15 @@ impl App for Forwarder {
             b's' => window.show().expect("show"),
             b'b' => thread::sleep(BUSY),
             b'u' => self.ui = Some(menu_ui(self.events.clone())),
+            b'H' => {
+                window.set_frame_regions(FrameRegions::default());
+                window.set_header(Header {
+                    title_x: 120.0,
+                    items: vec![Rect::new(100.0, 10.0, 16.0, 28.0)],
+                    tabs: vec![Rect::new(80.0, 10.0, 18.0, 28.0)],
+                });
+                window.request_redraw();
+            }
             b'r' => {
                 self.refuse_close = true;
                 window.request_close();
@@ -749,6 +758,55 @@ fn dragging_the_title_bar_moves_the_window_and_the_app_sees_the_pointer_leave() 
     );
     let after = desktop.server.windows()[0].location();
     assert_eq!((after.x - before.x, after.y - before.y), (30, 30));
+}
+
+#[test]
+fn a_drag_from_a_header_tab_or_empty_header_space_moves_the_window_but_header_buttons_stay_the_apps()
+ {
+    let mut desktop = Desktop::new();
+    let mut client = pointed_window(&mut desktop, "header");
+    client.send(b'H');
+    desktop.settle(&mut [&mut client]);
+    let origin = desktop.server.windows()[0].location();
+
+    desktop.point_into_window(108, 24);
+    desktop.server.press_button(BTN_LEFT, true, 0);
+    desktop.settle(&mut [&mut client]);
+    desktop.point_into_window(108, 60);
+    desktop.server.press_button(BTN_LEFT, false, 0);
+    desktop.wait_for(&mut [&mut client], |events| releases(events) == 1, |_| true);
+    assert_eq!(desktop.server.windows()[0].location(), origin);
+
+    for (start, by) in [((88, 24), (30_i32, 30_i32)), ((90, 4), (-20, 10))] {
+        let before = desktop.server.windows()[0].location();
+        desktop.point_into_window(start.0, start.1);
+        desktop.server.press_button(BTN_LEFT, true, 0);
+        desktop.settle(&mut [&mut client]);
+        for step in [by.0.signum() * 8, by.0] {
+            desktop.server.move_pointer_to(
+                Point::from((
+                    f64::from(before.x + start.0 + step),
+                    f64::from(before.y + start.1 + by.1 * step / by.0),
+                )),
+                0,
+            );
+            desktop.settle(&mut [&mut client]);
+        }
+        desktop.server.press_button(BTN_LEFT, false, 0);
+        desktop.wait_for(
+            &mut [&mut client],
+            |_| true,
+            |desktop| desktop.server.windows()[0].location() != before,
+        );
+        let after = desktop.server.windows()[0].location();
+        assert_eq!((after.x - before.x, after.y - before.y), by);
+    }
+    assert_eq!(presses(&client.seen).len(), 2);
+    assert!(
+        client
+            .seen
+            .contains(&WindowEvent::Input(Event::PointerLeave))
+    );
 }
 
 #[test]

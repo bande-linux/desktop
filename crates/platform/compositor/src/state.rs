@@ -187,6 +187,7 @@ pub struct State {
     pub(crate) desktop: crate::gesture::ShowDesktop,
     pub(crate) overview: crate::overview::Overview,
     pub(crate) switcher: crate::switcher::Switcher,
+    pub(crate) recall: crate::recall::Recall,
     pub(crate) gesture_route: Option<crate::gesture::Route>,
     pub(crate) active_app: String,
     pub(crate) idle: crate::idle::Idle,
@@ -348,6 +349,7 @@ impl Headless {
             desktop: crate::gesture::ShowDesktop::default(),
             overview: crate::overview::Overview::default(),
             switcher: crate::switcher::Switcher::default(),
+            recall: crate::recall::Recall::default(),
             gesture_route: None,
             active_app: String::new(),
             idle: crate::idle::Idle::default(),
@@ -1358,6 +1360,11 @@ impl XdgShellHandler for State {
 
     fn toplevel_destroyed(&mut self, toplevel: ToplevelSurface) {
         self.withdraw_toplevel(toplevel.wl_surface());
+        if let Some(index) = self.window_index(toplevel.wl_surface())
+            && self.windows[index].size.is_some()
+        {
+            self.remember_frame(index);
+        }
         let workspace = self.window_index(toplevel.wl_surface()).map(|index| {
             self.close_window(index);
             self.windows.remove(index).workspace
@@ -1375,6 +1382,7 @@ impl XdgShellHandler for State {
     }
 
     fn app_id_changed(&mut self, toplevel: ToplevelSurface) {
+        self.recall_late(toplevel.wl_surface());
         self.publish_toplevel(toplevel.wl_surface());
         let key = self.key_window();
         self.announce_active_app(key.as_ref());

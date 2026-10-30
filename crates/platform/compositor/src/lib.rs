@@ -32,6 +32,7 @@ mod motion;
 mod overview;
 mod pointing;
 mod popup;
+mod recall;
 mod render;
 mod scanout;
 mod scene;

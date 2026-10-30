@@ -179,6 +179,15 @@ impl FilesView {
         let palette = self.palette;
         let root = self.browser.root().clone();
         let trash_full = self.trash_full;
+        self.hits.push((
+            Rect::new(
+                0.0,
+                TOOLBAR_HEIGHT,
+                SIDEBAR_WIDTH,
+                self.size.1 - TOOLBAR_HEIGHT,
+            ),
+            Hit::Sidebar,
+        ));
         let mut y = TOOLBAR_HEIGHT + 4.0;
         for (index, row) in self.sidebar.clone().iter().enumerate() {
             match row {

@@ -28,7 +28,7 @@ use crate::grid::Band;
 use crate::icons::Icons;
 use crate::loader::{Loaded, Loader};
 use crate::search::{Index, SEARCH_HEIGHT, Searching};
-use crate::sidebar::{Place, PlaceKind, Row, with_volumes};
+use crate::sidebar::{Place, PlaceKind, Row, SidebarEdit, with_volumes};
 use crate::tabs::{Tab, location_title};
 use crate::thumbs::Thumbs;
 use crate::toolbar::{TOOLBAR_HEIGHT, Toolbar};
@@ -99,6 +99,7 @@ pub enum Hit {
     Row { column: usize, row: usize },
     Column(usize),
     Inspector,
+    Sidebar,
     Segment(PathBuf),
     CancelJob(usize),
     ChooseApp(usize),
@@ -130,11 +131,7 @@ pub enum Request {
         menu: Menu,
         at: Point,
     },
-    RemoveBookmark(PathBuf),
-    AddBookmarks {
-        folders: Vec<PathBuf>,
-        before: Option<PathBuf>,
-    },
+    EditSidebar(SidebarEdit),
     Eject(PathBuf),
     NewWindow(Location),
     OpenTerminal(PathBuf),
@@ -158,7 +155,7 @@ pub struct FilesView {
     pub(crate) table_found: bool,
     pub(crate) press: Option<Press>,
     pub(crate) drag_sources: Vec<PathBuf>,
-    pub(crate) reordering: Option<PathBuf>,
+    pub(crate) reordering: Option<Location>,
     pub(crate) status_bar: bool,
     status_bar_file: Option<PathBuf>,
     templates: Option<PathBuf>,
@@ -184,8 +181,9 @@ pub struct FilesView {
     pub(crate) sheet_inset: f32,
     recents: Option<(PathBuf, PathBuf)>,
     pub(crate) menu_place: Option<usize>,
+    pub(crate) hidden_places: Vec<Location>,
     media: Vec<PathBuf>,
-    favourites: Vec<Row>,
+    pub(crate) favourites: Vec<Row>,
     watch: FolderWatch,
     loader: Loader,
     pub(crate) thumbs: Thumbs,
@@ -293,6 +291,7 @@ impl FilesView {
             sheet_inset: SHEET_INSET as f32,
             recents: None,
             menu_place: None,
+            hidden_places: Vec::new(),
             media: Vec::new(),
             favourites: Vec::new(),
             watch: FolderWatch::new()?,
@@ -324,8 +323,14 @@ impl FilesView {
         Ok(view)
     }
 
+    pub fn set_hidden_places(&mut self, hidden: Vec<Location>) {
+        self.hidden_places = hidden;
+        let favourites = std::mem::take(&mut self.favourites);
+        self.set_sidebar(favourites);
+    }
+
     pub fn set_sidebar(&mut self, sidebar: Vec<Row>) {
-        self.sidebar = with_volumes(&sidebar, &self.volumes());
+        self.sidebar = self.with_volumes(&sidebar, &self.volumes());
         self.favourites = sidebar;
         self.menu_place = None;
     }
@@ -334,6 +339,19 @@ impl FilesView {
         self.media = roots;
         self.refresh_volumes();
         self.watch.watch(&self.watched());
+    }
+
+    fn with_volumes(&self, sidebar: &[Row], volumes: &[PathBuf]) -> Vec<Row> {
+        let shown = volumes
+            .iter()
+            .filter(|volume| {
+                !self
+                    .hidden_places
+                    .contains(&Location::Folder((*volume).clone()))
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        with_volumes(sidebar, &shown)
     }
 
     fn volumes(&self) -> Vec<PathBuf> {
@@ -357,7 +375,7 @@ impl FilesView {
         if volumes == previous {
             return;
         }
-        self.sidebar = with_volumes(&self.favourites, &volumes);
+        self.sidebar = self.with_volumes(&self.favourites, &volumes);
         self.menu_place = None;
         let gone = previous.iter().any(|volume| {
             !volumes.contains(volume)
@@ -1047,7 +1065,7 @@ impl FilesView {
             }
             Hit::OpenWithChosen => self.open_with_chosen(),
             Hit::UseForAll => self.use_chosen_for_all(),
-            Hit::Inspector => return false,
+            Hit::Inspector | Hit::Sidebar => return false,
             Hit::Tab(index) => self.select_tab(index),
             Hit::CloseTab(index) => {
                 self.close_tab(index);

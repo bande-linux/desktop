@@ -33,13 +33,14 @@ pub enum Command {
     OpenPlace,
     OpenPlaceInNewTab,
     RemoveFromSidebar,
+    RestoreSidebar,
     Eject,
 }
 
 const OPEN_WITH: &str = "open-with:";
 const NEW_DOCUMENT: &str = "new-document:";
 
-const ACTIONS: [(&str, Command); 28] = [
+const ACTIONS: [(&str, Command); 29] = [
     ("open", Command::Open),
     ("open-in-new-tab", Command::OpenInNewTab),
     ("open-in-terminal", Command::OpenInTerminal),
@@ -67,6 +68,7 @@ const ACTIONS: [(&str, Command); 28] = [
     ("empty-trash", Command::EmptyTrash),
     ("open-place", Command::OpenPlace),
     ("remove-from-sidebar", Command::RemoveFromSidebar),
+    ("restore-sidebar", Command::RestoreSidebar),
     ("eject", Command::Eject),
 ];
 
@@ -270,7 +272,7 @@ pub fn folder_menu(folder: Folder) -> Menu {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Place {
-    Folder { removable: bool },
+    Folder,
     Volume,
     Trash { empty: bool },
 }
@@ -281,14 +283,7 @@ pub fn place_menu(place: Place) -> Menu {
         item("menu-open-in-new-tab", &Command::OpenPlaceInNewTab),
     ];
     match place {
-        Place::Folder { removable: true } => {
-            items.push(MenuItem::separator());
-            items.push(item(
-                "menu-remove-from-sidebar",
-                &Command::RemoveFromSidebar,
-            ));
-        }
-        Place::Folder { removable: false } => {}
+        Place::Folder => {}
         Place::Volume => {
             items.push(MenuItem::separator());
             items.push(item("menu-eject", &Command::Eject).shortcut("Super+E"));
@@ -298,5 +293,14 @@ pub fn place_menu(place: Place) -> Menu {
             items.push(item("menu-empty-trash", &Command::EmptyTrash).enabled(!empty));
         }
     }
+    items.push(MenuItem::separator());
+    items.push(item(
+        "menu-remove-from-sidebar",
+        &Command::RemoveFromSidebar,
+    ));
     Menu::new(items)
+}
+
+pub fn sidebar_menu() -> Menu {
+    Menu::new(vec![item("menu-restore-sidebar", &Command::RestoreSidebar)])
 }

@@ -55,6 +55,10 @@ pub fn views_file(state_home: Option<&Path>, home: &Path) -> PathBuf {
     state_file(state_home, home, "files-views")
 }
 
+pub fn sidebar_file(state_home: Option<&Path>, home: &Path) -> PathBuf {
+    state_file(state_home, home, "files-sidebar")
+}
+
 pub fn status_bar_file(state_home: Option<&Path>, home: &Path) -> PathBuf {
     state_file(state_home, home, "files-status-bar")
 }

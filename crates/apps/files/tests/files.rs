@@ -8,9 +8,9 @@ use std::time::{Duration, Instant};
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use tempfile::TempDir;
 use unbound_files::{
-    Browser, FilesView, Location, PATH_BAR_HEIGHT, ROW_HEIGHT, Request, Row, SIDEBAR_WIDTH, Sheet,
-    TAB_BAR_HEIGHT, TOOLBAR_HEIGHT, ViewMemory, ViewMode, permissions, rows, with_bookmarks,
-    with_volumes, without_bookmark,
+    BookmarkEdit, Browser, FilesView, Location, PATH_BAR_HEIGHT, ROW_HEIGHT, Request, Row,
+    SIDEBAR_WIDTH, Sheet, SidebarEdit, TAB_BAR_HEIGHT, TOOLBAR_HEIGHT, ViewMemory, ViewMode,
+    hidden_places, permissions, rows, with_bookmarks, with_volumes, without_bookmark,
 };
 use unbound_fs::{Sort, SortBy, Trash, list};
 use unbound_thumbnails::{Cache, Thumbnailers, Thumbnails};
@@ -306,7 +306,7 @@ fn the_sidebar_lists_existing_user_folders_bookmarks_and_the_trash() {
         home.display()
     );
 
-    let rows = rows(&home, Some(user_dirs), Some(&bookmarks));
+    let rows = rows(&home, Some(user_dirs), Some(&bookmarks), None);
 
     let places = rows
         .iter()
@@ -326,6 +326,41 @@ fn the_sidebar_lists_existing_user_folders_bookmarks_and_the_trash() {
             ("Share", Location::Folder(PathBuf::from("/srv/My Share"))),
             ("Trash", Location::Trash),
         ]
+    );
+}
+
+fn place_names(rows: &[Row]) -> Vec<String> {
+    rows.iter()
+        .filter_map(|row| match row {
+            Row::Place(place) => Some(place.name.clone()),
+            Row::Heading(_) => None,
+        })
+        .collect()
+}
+
+#[test]
+fn a_sidebar_layout_orders_and_hides_any_place_and_keeps_new_bookmarks() {
+    let place = Place::new();
+    let home = place.home();
+    let reports = home.join("Documents/Reports");
+    let empty = home.join("Empty");
+    let bookmarks = format!("file://{}\nfile://{}\n", reports.display(), empty.display());
+    let layout = format!(
+        "file://{}\nfile://{}\nrecents\n-file://{}\n-trash\nfile:///gone\n",
+        reports.display(),
+        home.join("Documents").display(),
+        home.display()
+    );
+
+    let rows = rows(&home, None, Some(&bookmarks), Some(&layout));
+
+    assert_eq!(
+        place_names(&rows),
+        ["Reports", "Documents", "Recents", "Empty"]
+    );
+    assert_eq!(
+        hidden_places(Some(&layout)),
+        [Location::Folder(home.clone()), Location::Trash]
     );
 }
 
@@ -946,12 +981,13 @@ fn the_space_beside_the_columns_and_the_info_pane_have_menus() {
 }
 
 #[test]
-fn a_bookmark_is_removed_from_the_sidebar_but_not_from_the_disk() {
+fn any_place_is_removed_from_the_sidebar_and_comes_back_with_the_defaults() {
     let place = Place::new();
-    let reports = place.home().join("Documents/Reports");
+    let home = place.home();
+    let reports = home.join("Documents/Reports");
     let bookmarks = format!("file://{}\nfile:///srv/share Share\n", reports.display());
     let mut view = place.view();
-    view.set_sidebar(rows(&place.home(), None, Some(&bookmarks)));
+    view.set_sidebar(rows(&home, None, Some(&bookmarks), None));
     view.scene(1000, 600);
 
     let menu = right_click(&mut view, Point::new(40.0, 84.0 + 30.0 * 3.5));
@@ -960,21 +996,51 @@ fn a_bookmark_is_removed_from_the_sidebar_but_not_from_the_disk() {
         ["Open", "Open in New Tab", "Remove from Sidebar"]
     );
     assert!(view.menu_action("remove-from-sidebar"));
+    let shown = [
+        "recents".to_owned(),
+        file_uri(&home),
+        file_uri(&home.join("Documents")),
+        "file:///srv/share".to_owned(),
+    ];
     assert_eq!(
         view.take_requests(),
-        [Request::RemoveBookmark(reports.clone())]
-    );
-    assert_eq!(
-        without_bookmark(&bookmarks, &reports),
-        "file:///srv/share Share\n"
+        [Request::EditSidebar(SidebarEdit {
+            layout: Some(shown.map(|line| format!("{line}\n")).concat()),
+            bookmarks: Some(BookmarkEdit::Remove(reports.clone())),
+        })]
     );
     assert!(reports.is_dir());
+
+    right_click(&mut view, Point::new(40.0, 84.0 + 30.0 * 2.5));
+    assert!(view.menu_action("remove-from-sidebar"));
+    let requests: [Request; 1] = view.take_requests().try_into().expect("one edit");
+    let [Request::EditSidebar(edit)] = requests else {
+        panic!("not a sidebar edit");
+    };
+    let layout = edit.layout.expect("a layout");
+    assert_eq!(edit.bookmarks, None);
+    let remaining = rows(&home, None, Some(&bookmarks), Some(&layout));
+    assert_eq!(
+        place_names(&remaining),
+        ["Recents", "home", "Reports", "Share", "Trash"]
+    );
+
+    let menu = right_click(&mut view, Point::new(40.0, 500.0));
+    assert_eq!(titles(&menu), ["Restore Default Sidebar"]);
+    assert!(view.menu_action("restore-sidebar"));
+    assert_eq!(
+        view.take_requests(),
+        [Request::EditSidebar(SidebarEdit {
+            layout: None,
+            bookmarks: None,
+        })]
+    );
 }
 
 #[test]
 fn mounted_volumes_are_listed_under_locations_before_the_trash() {
     let home = PathBuf::from("/home/ada");
-    let favourites = rows(&home, None, None);
+    let favourites = rows(&home, None, None, None);
     let stick = PathBuf::from("/run/media/ada/Stick");
 
     let shown = with_volumes(&favourites, std::slice::from_ref(&stick));
@@ -1293,7 +1359,7 @@ impl Place {
         }
         let mut view = FilesView::new(
             self.browser(),
-            rows(&self.home(), None, None),
+            rows(&self.home(), None, None, None),
             apps,
             Palette::for_scheme(scheme),
             TextSystem::new(),
@@ -1684,56 +1750,68 @@ fn bookmarks_are_added_before_a_favourite_or_moved_keeping_their_label() {
         with_bookmarks(text, &[PathBuf::from("/srv/a")], None),
         "file:///srv/b\nsftp://host/x\nfile:///srv/a A\n"
     );
+    assert_eq!(
+        without_bookmark(text, Path::new("/srv/a")),
+        "file:///srv/b\nsftp://host/x\n"
+    );
 }
 
 #[test]
-fn folders_dropped_between_favourites_and_dragged_bookmarks_join_the_sidebar() {
+fn folders_dropped_between_favourites_and_dragged_places_join_the_sidebar() {
     let place = Place::new();
-    let reports = place.home().join("Documents/Reports");
-    let empty = place.home().join("Empty");
-    let bookmarks = format!("file://{}\nfile://{}\n", reports.display(), empty.display());
+    let home = place.home();
+    let reports = home.join("Documents/Reports");
+    let empty = home.join("Empty");
+    let bookmarks = format!("file://{}\n", reports.display());
     let mut view = place.view();
-    view.set_sidebar(rows(&place.home(), None, Some(&bookmarks)));
+    view.set_sidebar(rows(&home, None, Some(&bookmarks), None));
     view.scene(1000, 600);
     let row_top = |row: f32| 84.0 + 30.0 * row;
+    let lines = |lines: &[String]| lines.iter().map(|line| format!("{line}\n")).collect();
 
-    let uris = [file_uri(&place.home().join("Documents"))];
-    let between_home_and_documents = Point::new(60.0, row_top(2.0));
+    let uris = [file_uri(&empty)];
+    let before_documents = Point::new(60.0, row_top(2.0));
     assert_eq!(
-        view.drag_entered(between_home_and_documents, &uris),
+        view.drag_entered(before_documents, &uris),
         Some(DragAction::Copy)
     );
-    assert!(view.dropped(between_home_and_documents, &uris, Some(DragAction::Copy)));
+    assert!(view.dropped(before_documents, &uris, Some(DragAction::Copy)));
     assert_eq!(
         view.take_requests(),
-        [Request::AddBookmarks {
-            folders: vec![place.home().join("Documents")],
-            before: Some(reports.clone()),
-        }]
+        [Request::EditSidebar(SidebarEdit {
+            layout: Some(lines(&[
+                "recents".to_owned(),
+                file_uri(&home),
+                file_uri(&empty),
+                file_uri(&home.join("Documents")),
+                file_uri(&reports),
+            ])),
+            bookmarks: Some(BookmarkEdit::Add(vec![empty.clone()])),
+        })]
     );
-    let notes = [file_uri(&place.home().join("notes.txt"))];
-    view.drag_entered(between_home_and_documents, &notes);
-    assert!(view.dropped(between_home_and_documents, &notes, Some(DragAction::Move)));
+    let notes = [file_uri(&home.join("notes.txt"))];
+    view.drag_entered(before_documents, &notes);
+    assert!(view.dropped(before_documents, &notes, Some(DragAction::Move)));
     run_until(&mut view, idle);
-    assert!(place.home().join("Documents/notes.txt").exists());
+    assert!(home.join("Documents/notes.txt").exists());
     view.take_requests();
 
-    let on_reports = Point::new(60.0, row_top(3.5));
-    view.handle(&Event::PointerDown(Pointer::at(on_reports)));
-    view.handle(&Event::PointerMove(Pointer::at(Point::new(
-        60.0,
-        row_top(5.0) + 4.0,
-    ))));
-    view.handle(&Event::PointerUp(Pointer::at(Point::new(
-        60.0,
-        row_top(5.0) + 4.0,
-    ))));
+    let on_recents = Point::new(60.0, row_top(0.5));
+    let below_the_last = Point::new(60.0, row_top(4.0) + 4.0);
+    view.handle(&Event::PointerDown(Pointer::at(on_recents)));
+    view.handle(&Event::PointerMove(Pointer::at(below_the_last)));
+    view.handle(&Event::PointerUp(Pointer::at(below_the_last)));
     assert_eq!(
         view.take_requests(),
-        [Request::AddBookmarks {
-            folders: vec![reports],
-            before: None,
-        }]
+        [Request::EditSidebar(SidebarEdit {
+            layout: Some(lines(&[
+                file_uri(&home),
+                file_uri(&home.join("Documents")),
+                file_uri(&reports),
+                "recents".to_owned(),
+            ])),
+            bookmarks: None,
+        })]
     );
 }
 

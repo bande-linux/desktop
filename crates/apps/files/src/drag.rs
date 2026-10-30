@@ -10,12 +10,14 @@ use unbound_xdg::path_from_file_uri;
 
 use crate::browser::Location;
 use crate::controls::Press;
-use crate::sidebar::{Place, PlaceKind, Row};
+use crate::sidebar::{PlaceKind, Row, favourites};
+use crate::toolbar::TOOLBAR_HEIGHT;
 use crate::view::{FilesView, Hit, Request, SIDEBAR_WIDTH, contains, home};
 use crate::views::ViewMode;
 
 const DRAG_THRESHOLD: f32 = 4.0;
 const GAP_REACH: f32 = 6.0;
+const EMPTY_FAVOURITES_Y: f32 = 40.0;
 const SPRING_DELAY: Duration = Duration::from_millis(900);
 const ICON: f32 = 40.0;
 const ICON_PIXELS: u32 = 64;
@@ -29,7 +31,7 @@ const COLUMN_ICON_CENTRE: f32 = 6.0 + 6.0 + 8.0;
 pub(crate) enum Target {
     Folder(PathBuf),
     Trash,
-    Favourite(Option<PathBuf>),
+    Favourite(Option<Location>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -112,12 +114,12 @@ impl FilesView {
     }
 
     pub(crate) fn reorder_moved(&mut self, index: usize, from: Point, pointer: &Pointer) -> bool {
-        let path = match self.sidebar.get(index) {
-            Some(Row::Place(Place {
-                kind: PlaceKind::Bookmark,
-                location: Location::Folder(path),
-                ..
-            })) => path.clone(),
+        let location = match self.sidebar.get(index) {
+            Some(Row::Place(place))
+                if index <= favourites(&self.sidebar).len() && place.kind != PlaceKind::Volume =>
+            {
+                place.location.clone()
+            }
             _ => return false,
         };
         if distance(from, pointer.position) < DRAG_THRESHOLD && self.drop.is_none() {
@@ -131,24 +133,20 @@ impl FilesView {
                 spring: None,
                 action: Some(DragAction::Copy),
             });
-        self.reordering = Some(path);
+        self.reordering = Some(location);
         true
     }
 
     pub(crate) fn reorder_finished(&mut self) -> bool {
-        let Some(path) = self.reordering.take() else {
+        let Some(location) = self.reordering.take() else {
             return false;
         };
         if let Some(Hover {
             target: Target::Favourite(before),
             ..
         }) = self.drop.take()
-            && before.as_ref() != Some(&path)
         {
-            self.requests.push(Request::AddBookmarks {
-                folders: vec![path],
-                before,
-            });
+            self.place_in_sidebar(vec![location], before);
         }
         true
     }
@@ -247,23 +245,20 @@ impl FilesView {
                 _ => None,
             })
             .collect::<Vec<_>>();
-        let bookmark_from = |index: usize| {
-            self.sidebar[index..].iter().find_map(|row| match row {
-                Row::Place(Place {
-                    kind: PlaceKind::Bookmark,
-                    location: Location::Folder(path),
-                    ..
-                }) => Some(path.clone()),
-                _ => None,
-            })
+        let location_at = |index: usize| match self.sidebar.get(index) {
+            Some(Row::Place(place)) => Some(place.location.clone()),
+            _ => None,
         };
         let line = |rect: Rect, y: f32| Rect::new(rect.x, y - 1.0, rect.width, 2.0);
+        if rows.is_empty() {
+            let first = TOOLBAR_HEIGHT + EMPTY_FAVOURITES_Y;
+            let area = Rect::new(8.0, first, SIDEBAR_WIDTH - 16.0, 2.0);
+            return (at.y >= first - 2.0 * GAP_REACH && at.y <= first + 2.0 * GAP_REACH)
+                .then_some((Target::Favourite(None), area));
+        }
         for (position, (rect, index)) in rows.iter().enumerate() {
-            if (at.y - rect.y).abs() <= GAP_REACH && position > 0 {
-                return Some((
-                    Target::Favourite(bookmark_from(*index)),
-                    line(*rect, rect.y),
-                ));
+            if (at.y - rect.y).abs() <= GAP_REACH {
+                return Some((Target::Favourite(location_at(*index)), line(*rect, rect.y)));
             }
             let bottom = rect.y + rect.height;
             if position + 1 == rows.len()
@@ -455,10 +450,7 @@ impl FilesView {
                 return true;
             }
             Target::Favourite(before) => {
-                self.requests.push(Request::AddBookmarks {
-                    folders: sources,
-                    before,
-                });
+                self.place_in_sidebar(sources.into_iter().map(Location::Folder).collect(), before);
                 return true;
             }
             Target::Folder(folder) => folder,

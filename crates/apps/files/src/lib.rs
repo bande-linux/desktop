@@ -23,14 +23,17 @@ use unbound_l10n::Localizer;
 pub use browser::{Browser, Column, Location};
 pub use paint::permissions;
 pub use search::SEARCH_HEIGHT;
-pub use sidebar::{Place, PlaceKind, Row, rows, with_bookmarks, with_volumes, without_bookmark};
+pub use sidebar::{
+    BookmarkEdit, Place, PlaceKind, Row, SidebarEdit, favourites, hidden_places, layout_text, rows,
+    with_bookmarks, with_volumes, without_bookmark,
+};
 pub use tabs::TAB_BAR_HEIGHT;
 pub use toolbar::TOOLBAR_HEIGHT;
 pub use view::{
     COLUMN_WIDTH, FilesView, Hit, Info, PATH_BAR_HEIGHT, QuickLook, ROW_HEIGHT, Rename, Request,
     SIDEBAR_WIDTH, Sheet,
 };
-pub use views::{FolderView, ViewMemory, ViewMode, status_bar_file, views_file};
+pub use views::{FolderView, ViewMemory, ViewMode, sidebar_file, status_bar_file, views_file};
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-files.ftl");
 

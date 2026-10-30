@@ -107,6 +107,13 @@ impl TextField {
         self.editor.text()
     }
 
+    pub fn set_placeholder(&mut self, placeholder: &str) {
+        if self.placeholder != placeholder {
+            self.placeholder = placeholder.to_owned();
+            self.placeholder_paragraph = None;
+        }
+    }
+
     pub fn selection(&self) -> Range<usize> {
         self.editor.selection()
     }

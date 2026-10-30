@@ -101,6 +101,23 @@ impl Window {
         self.flush()
     }
 
+    pub fn insert_text(&mut self, text: &str) -> Result<(), WindowError> {
+        self.shell_since(unbound_shell_v1::REQ_INSERT_TEXT_SINCE)?
+            .insert_text(text.to_owned());
+        self.flush()
+    }
+
+    pub fn show_emoji_picker(&mut self) -> Result<(), WindowError> {
+        self.state
+            .shell
+            .app
+            .as_ref()
+            .filter(|app| app.version() >= unbound_app_v1::REQ_SHOW_EMOJI_PICKER_SINCE)
+            .ok_or(WindowError::Missing("a newer unbound_app_v1"))?
+            .show_emoji_picker();
+        self.flush()
+    }
+
     pub fn set_corner_radius(&mut self, radius: u32) -> Result<(), WindowError> {
         self.shell_since(unbound_shell_v1::REQ_SET_CORNER_RADIUS_SINCE)?
             .set_corner_radius(&self.surface, radius);
@@ -234,6 +251,13 @@ impl Dispatch<UnboundShellV1, ()> for State {
     ) {
         match event {
             unbound_shell_v1::Event::ShowLauncher => state.events.push(WindowEvent::ShowLauncher),
+            unbound_shell_v1::Event::OpenLauncher {
+                mode: WEnum::Value(mode),
+                text_field,
+            } => state.events.push(WindowEvent::OpenLauncher {
+                mode,
+                text_field: text_field != 0,
+            }),
             unbound_shell_v1::Event::CaptureScreen => state.events.push(WindowEvent::CaptureScreen),
             unbound_shell_v1::Event::CaptureArea => state.events.push(WindowEvent::CaptureArea),
             unbound_shell_v1::Event::ActiveApp { app_id } => {

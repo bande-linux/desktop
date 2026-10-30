@@ -134,6 +134,7 @@ pub struct Context {
     animating: cell::Cell<bool>,
     clipboard: Option<ClipboardRequest>,
     input_method_reset: bool,
+    emoji_picker: bool,
     menu: Option<(Menu, Point)>,
 }
 
@@ -155,12 +156,17 @@ impl Context {
             animating: cell::Cell::new(false),
             clipboard: None,
             input_method_reset: false,
+            emoji_picker: false,
             menu: None,
         }
     }
 
     pub fn copy(&mut self, text: &str) {
         self.clipboard = Some(ClipboardRequest::Copy(text.to_owned()));
+    }
+
+    pub fn show_emoji_picker(&mut self) {
+        self.emoji_picker = true;
     }
 
     pub fn show_menu(&mut self, menu: Menu, at: Point) {
@@ -782,6 +788,10 @@ impl Ui {
         }
         self.handle(&Event::Commit(text.to_owned()));
         true
+    }
+
+    pub fn take_emoji_picker_request(&mut self) -> bool {
+        std::mem::take(&mut self.cx.emoji_picker)
     }
 
     pub fn take_input_method_reset(&mut self) -> bool {

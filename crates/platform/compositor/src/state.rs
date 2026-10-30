@@ -167,6 +167,7 @@ pub struct State {
     pending_activation: Option<WlSurface>,
     pub(crate) windowless_app: Option<(Client, String)>,
     pub(crate) shell_resources: Vec<UnboundShellV1>,
+    pub(crate) pending_insert: Option<crate::shell::PendingInsert>,
     pub(crate) app_resources: Vec<UnboundAppV1>,
     pub(crate) foreign_toplevel_state: ForeignToplevelListState,
     pub(crate) exclusive_layer: Option<ExclusiveLayer>,
@@ -279,8 +280,8 @@ impl Headless {
         };
         let center = settings.logical_size().to_f64().downscale(2.0);
         let screen = Screen::new(&handle, config, settings);
-        handle.create_global::<State, UnboundShellV1, ()>(11, ());
-        handle.create_global::<State, UnboundAppV1, ()>(3, ());
+        handle.create_global::<State, UnboundShellV1, ()>(12, ());
+        handle.create_global::<State, UnboundAppV1, ()>(4, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
         handle.create_global::<State, smithay::reexports::wayland_protocols_wlr::output_management::v1::server::zwlr_output_manager_v1::ZwlrOutputManagerV1, ()>(crate::management::MANAGER_VERSION, ());
         State::create_capture_globals(&handle);
@@ -324,6 +325,7 @@ impl Headless {
             pending_activation: None,
             windowless_app: None,
             shell_resources: Vec::new(),
+            pending_insert: None,
             app_resources: Vec::new(),
             foreign_toplevel_state: ForeignToplevelListState::new_with_filter::<State>(
                 &handle,
@@ -408,6 +410,7 @@ impl Headless {
     pub fn dispatch(&mut self) -> io::Result<()> {
         self.clear_signalled_fences()?;
         self.display.dispatch_clients(&mut self.state)?;
+        self.state.deliver_pending_insert();
         self.state.activate_next_app_if_the_windowless_one_quit();
         self.state.popups.cleanup();
         self.state.refocus_pointer();

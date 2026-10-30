@@ -12,14 +12,15 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use accesskit::TreeUpdate;
 use unbound_fs::Entry;
 use unbound_launcher::{
-    Action, AppInfo, Catalog, Hit, ICON_SIZE, Kind, Launcher, Loaded, PaneInfo, SettingInfo, Target,
+    Action, AppInfo, Catalog, Hit, ICON_SIZE, Kind, Launcher, Loaded, Mode, PaneInfo, SettingInfo,
+    Target,
 };
 use unbound_preview::{Preview, preview};
 use unbound_search::{FileIndex, Usage, recently_used_path, usage_path};
 use unbound_thumbnails::{Cache, ThumbnailSize, Thumbnailers, thumbnail};
 use unbound_toolkit::{
-    App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement, Rect, Role, Scene,
-    TextSystem, Window, WindowError, WindowEvent,
+    App, Edges, Image, KeyboardFocus, LauncherMode, LayerKind, LayerOptions, MenuPlacement, Rect,
+    Role, Scene, TextSystem, Window, WindowError, WindowEvent,
 };
 use unbound_xdg::{
     Apps, DIRECTORY, DesktopEntry, ICON_THEMES, LaunchError, Locale, MimeDatabase, applications,
@@ -69,7 +70,7 @@ impl Catalog for Library {
                 names.push(FALLBACK_DOCUMENT.to_owned());
                 self.named_icon(&names)
             }
-            (Target::Value(_), _) => None,
+            (Target::Value(_) | Target::Emoji(_), _) => None,
         }
     }
 
@@ -151,6 +152,23 @@ struct LauncherShell {
     previewer: Option<Previewer>,
     apps: Rc<RefCell<Apps>>,
     recently_used: PathBuf,
+    skin_tone: PathBuf,
+}
+
+fn load_skin_tone(path: &Path) -> Option<usize> {
+    std::fs::read_to_string(path)
+        .ok()?
+        .trim()
+        .parse::<usize>()
+        .ok()?
+        .checked_sub(1)
+}
+
+fn save_skin_tone(path: &Path, tone: Option<usize>) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(path, tone.map_or(0, |tone| tone + 1).to_string())
 }
 
 fn unix_now() -> u64 {
@@ -165,6 +183,26 @@ impl LauncherShell {
             tracing::warn!("cannot hide: {error}");
         }
         self.launcher.clear();
+    }
+
+    fn toggle(&mut self, window: &mut Window, mode: Mode, inserts: bool) {
+        if window.is_visible() && self.launcher.mode() == mode {
+            self.close(window);
+            return;
+        }
+        self.launcher.set_now(unix_now());
+        if mode == Mode::Search {
+            let xbel = std::fs::read_to_string(&self.recently_used).ok();
+            self.launcher.set_recently_used(xbel.as_deref());
+        }
+        self.launcher.open(mode, inserts);
+        if !window.is_visible() {
+            self.launcher.appear(Instant::now());
+        }
+        if let Err(error) = window.show() {
+            tracing::warn!("cannot show: {error}");
+        }
+        window.request_redraw();
     }
 
     fn sync(&mut self, window: &mut Window) {
@@ -185,6 +223,16 @@ impl LauncherShell {
                 Action::Open(target) => self.open(window, &target),
                 Action::Reveal(path) => self.reveal(window, &path),
                 Action::Copy(text) => window.copy(&text),
+                Action::Insert(text) => {
+                    if let Err(error) = window.insert_text(&text) {
+                        tracing::warn!("cannot insert {text}: {error}");
+                    }
+                }
+                Action::SkinTone(tone) => {
+                    if let Err(error) = save_skin_tone(&self.skin_tone, tone) {
+                        tracing::warn!("cannot remember the skin tone: {error}");
+                    }
+                }
                 Action::Close => self.close(window),
             }
         }
@@ -222,7 +270,7 @@ impl LauncherShell {
                         .map(|_| ())
                         .map_err(LaunchError::Spawn)
                 }),
-            Target::Value(_) => None,
+            Target::Value(_) | Target::Emoji(_) => None,
         };
         match opened {
             Some(Ok(())) => {
@@ -264,16 +312,11 @@ impl App for LauncherShell {
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
         match event {
-            WindowEvent::ShowLauncher if window.is_visible() => self.close(window),
-            WindowEvent::ShowLauncher => {
-                self.launcher.set_now(unix_now());
-                let xbel = std::fs::read_to_string(&self.recently_used).ok();
-                self.launcher.set_recently_used(xbel.as_deref());
-                self.launcher.appear(Instant::now());
-                if let Err(error) = window.show() {
-                    tracing::warn!("cannot show: {error}");
-                }
-            }
+            WindowEvent::ShowLauncher => self.toggle(window, Mode::Search, false),
+            WindowEvent::OpenLauncher {
+                mode: LauncherMode::Emoji,
+                text_field,
+            } => self.toggle(window, Mode::Emoji, text_field),
             WindowEvent::Input(input) => {
                 self.launcher.handle(&input);
                 self.sync(window);
@@ -388,9 +431,13 @@ fn run() -> Result<(), WindowError> {
             .as_deref(),
         &home,
     );
-    let usage = usage_path(state_home.as_deref(), Some(&home))
-        .map(Usage::load)
-        .unwrap_or_default();
+    let usage_file = usage_path(state_home.as_deref(), Some(&home));
+    let skin_tone = usage_file
+        .as_deref()
+        .and_then(Path::parent)
+        .unwrap_or(&home)
+        .join("launcher-skin-tone");
+    let usage = usage_file.map(Usage::load).unwrap_or_default();
     let apps_by_type = Rc::new(RefCell::new(Apps::load(dirs.clone(), &config_dirs())));
     let library = Library {
         apps: apps_by_type.clone(),
@@ -415,7 +462,7 @@ fn run() -> Result<(), WindowError> {
         (0, 0),
     )?;
     window.hide()?;
-    let launcher = Launcher::new(
+    let mut launcher = Launcher::new(
         apps,
         settings_panes(),
         Box::new(library),
@@ -427,6 +474,7 @@ fn run() -> Result<(), WindowError> {
     if let Some(index) = &index {
         index.set_boosts(launcher.file_boosts());
     }
+    launcher.set_skin_tone(load_skin_tone(&skin_tone));
     let mut shell = LauncherShell {
         launcher,
         entries,
@@ -434,6 +482,7 @@ fn run() -> Result<(), WindowError> {
         previewer,
         apps: apps_by_type,
         recently_used,
+        skin_tone,
     };
     unbound_toolkit::run(&mut window, &mut shell)
 }

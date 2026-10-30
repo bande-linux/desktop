@@ -4,5 +4,6 @@ cut = Cut
 copy = Copy
 paste = Paste
 select-all = Select All
+emoji-and-symbols = Emoji & Symbols…
 clear-search = Clear
 show-choices = Show Choices

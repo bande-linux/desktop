@@ -19,11 +19,16 @@ use unbound_toolkit::{
 };
 
 use crate::L10N;
-use crate::model::{Action as LauncherAction, AppInfo, Heading, Hit, Model, PaneInfo, Target};
+use crate::emoji::EMOJI;
+use crate::model::{
+    Action as LauncherAction, AppInfo, Heading, Hit, Mode, Model, PaneInfo, Target,
+};
 use crate::preview::{PREVIEW_TITLE_SIZE, PreviewPane};
 use crate::rows::{
-    CELL_HEIGHT, Choice, Form, ROW_HEIGHT, apply_menu_action, centered, contains, hit_menu,
+    CELL_HEIGHT, Choice, Form, GLYPH_HEIGHT, ROW_HEIGHT, apply_menu_action, centered, contains,
+    fitted, hit_menu,
 };
+use crate::tones::{TONES_WIDTH, Tones};
 
 pub const CARD_WIDTH: f32 = 720.0;
 pub const ICON_SIZE: u32 = 64;
@@ -40,6 +45,8 @@ const RESULTS_MIN_HEIGHT: f32 = 320.0;
 const RESULTS_MAX_HEIGHT: f32 = 460.0;
 const BOTTOM_MARGIN: f32 = 24.0;
 const NO_RESULTS_HEIGHT: f32 = 96.0;
+const FOOTER_HEIGHT: f32 = 40.0;
+const FOOTER_SIZE: f32 = 12.0;
 const TOP_FRACTION: f32 = 0.22;
 const APPEAR_RISE: f32 = 8.0;
 const SETTLED: f64 = 0.002;
@@ -73,6 +80,7 @@ struct Card {
     revision: Option<u64>,
     children: Vec<Box<dyn Widget>>,
     labels: Vec<Item>,
+    footer: Vec<Item>,
     empty: bool,
     scroll: ScrollState,
     followed: Option<usize>,
@@ -90,12 +98,33 @@ fn heading_text(heading: Heading) -> String {
         Heading::RecentApps => "recent-apps",
         Heading::RecentDocuments => "recent-documents",
         Heading::AllApps => "all-apps",
+        Heading::FrequentlyUsed => "frequently-used",
+        Heading::EmojiGroup(group) => match EMOJI.groups.get(group).copied() {
+            Some("smileys-emotion") => "emoji-smileys-emotion",
+            Some("people-body") => "emoji-people-body",
+            Some("animals-nature") => "emoji-animals-nature",
+            Some("food-drink") => "emoji-food-drink",
+            Some("travel-places") => "emoji-travel-places",
+            Some("activities") => "emoji-activities",
+            Some("objects") => "emoji-objects",
+            Some("symbols") => "emoji-symbols",
+            Some("flags") => "emoji-flags",
+            _ => "emoji-characters",
+        },
+    })
+}
+
+fn placeholder(mode: Mode) -> String {
+    L10N.tr(match mode {
+        Mode::Search => "search",
+        Mode::Emoji => "search-emoji",
     })
 }
 
 const FIELD: usize = 0;
 const PREVIEW: usize = 1;
-const FIRST_ROW: usize = 2;
+const TONES: usize = 2;
+const FIRST_ROW: usize = 3;
 
 struct Slot {
     heading: Option<Heading>,
@@ -112,10 +141,10 @@ impl Card {
         self.scroll = ScrollState::default();
         self.followed = None;
         state.hovered = None;
-        let form = if state.model.columns > 0 {
-            Form::Cell
-        } else {
-            Form::Row
+        let form = match (state.model.mode, state.model.columns) {
+            (Mode::Emoji, _) => Form::Glyph,
+            (_, 0) => Form::Row,
+            _ => Form::Cell,
         };
         let hits = state.model.hits.clone();
         let icons: Vec<Option<Image>> = hits.iter().map(|hit| state.catalog.icon(hit)).collect();
@@ -141,10 +170,56 @@ impl Card {
         self.state.borrow().model.columns > 0
     }
 
+    fn has_footer(&self) -> bool {
+        self.state.borrow().model.mode == Mode::Emoji
+    }
+
+    fn footer_items(&self, cx: &mut Context, footer: Rect) -> Vec<Item> {
+        let state = self.state.borrow();
+        let muted = TextStyle::new(FOOTER_SIZE, cx.palette.label_muted);
+        let hint = cx.text.paragraph(
+            &L10N.tr(if state.model.inserts {
+                "hint-emoji-insert"
+            } else {
+                "hint-emoji-copy"
+            }),
+            muted,
+            None,
+            TextAlign::Start,
+        );
+        let hint_x = footer.x + footer.width - 20.0 - TONES_WIDTH - 16.0 - hint.width();
+        let middle = |paragraph: &unbound_toolkit::Paragraph| {
+            (footer.y + (footer.height - paragraph.height()) / 2.0).round()
+        };
+        let mut items = Vec::new();
+        if let Some(hit) = state.model.selection() {
+            let name = fitted(
+                cx,
+                &hit.title,
+                TextStyle::new(FOOTER_SIZE, cx.palette.label_primary).weight(TextStyle::MEDIUM),
+                hint_x - footer.x - 40.0,
+            );
+            items.push(Item::Text {
+                origin: Point::new(footer.x + 20.0, middle(&name)),
+                paragraph: name,
+            });
+        }
+        items.push(Item::Text {
+            origin: Point::new(hint_x.round(), middle(&hint)),
+            paragraph: hint,
+        });
+        items
+    }
+
     fn slots(&self, width: f32) -> (Vec<Slot>, f32) {
         let state = self.state.borrow();
         let model = &state.model;
         let columns = model.columns;
+        let cell_height = if model.mode == Mode::Emoji {
+            GLYPH_HEIGHT
+        } else {
+            CELL_HEIGHT
+        };
         let mut slots = Vec::with_capacity(model.hits.len());
         let mut headings = model.headings.iter().peekable();
         let mut y = PADDING;
@@ -171,14 +246,14 @@ impl Card {
             }
             if heading.is_some() {
                 if position > 0 {
-                    y += CELL_HEIGHT;
+                    y += cell_height;
                 }
                 y += HEADING_HEIGHT;
                 section_start = position;
             }
             let offset = position - section_start;
             if offset > 0 && offset % columns == 0 {
-                y += CELL_HEIGHT;
+                y += cell_height;
             }
             slots.push(Slot {
                 heading,
@@ -186,7 +261,7 @@ impl Card {
                     GRID_PADDING + (offset % columns) as f32 * cell_width,
                     y,
                     cell_width,
-                    CELL_HEIGHT,
+                    cell_height,
                 ),
             });
         }
@@ -253,9 +328,15 @@ impl Widget for Card {
         self.max_height = (available.height * (1.0 - TOP_FRACTION) - FIELD_ROW - BOTTOM_MARGIN)
             .clamp(NO_RESULTS_HEIGHT, RESULTS_MAX_HEIGHT);
         self.children[FIELD].measure(cx, Size::new(CARD_WIDTH, FIELD_ROW));
+        let footer = if self.has_footer() {
+            FOOTER_HEIGHT
+        } else {
+            0.0
+        };
+        self.max_height -= footer;
         let results = if self.shows_results() {
             let (_, content) = self.slots(CARD_WIDTH);
-            self.list_height(content) + 1.0
+            self.list_height(content) + 1.0 + footer
         } else {
             0.0
         };
@@ -284,9 +365,32 @@ impl Widget for Card {
         if !self.shows_results() {
             self.state.borrow_mut().viewport = Rect::default();
             self.children[PREVIEW].place(cx, Rect::default());
+            self.children[TONES].place(cx, Rect::default());
             return;
         }
-        let height = frame.y + frame.height - top;
+        let footer = if self.has_footer() {
+            Rect::new(
+                frame.x,
+                frame.y + frame.height - FOOTER_HEIGHT,
+                frame.width,
+                FOOTER_HEIGHT,
+            )
+        } else {
+            Rect::default()
+        };
+        let tones = if self.has_footer() {
+            let size = self.children[TONES].measure(cx, Size::new(frame.width, FOOTER_HEIGHT));
+            Rect::new(
+                footer.x + footer.width - 20.0 - size.width,
+                footer.y + ((footer.height - size.height) / 2.0).round(),
+                size.width,
+                size.height,
+            )
+        } else {
+            Rect::default()
+        };
+        self.children[TONES].place(cx, tones);
+        let height = frame.y + frame.height - top - footer.height;
         let grid = self.is_grid();
         self.empty = self.state.borrow().model.hits.is_empty();
         if self.empty {
@@ -362,6 +466,11 @@ impl Widget for Card {
             )
         };
         self.children[PREVIEW].place(cx, preview);
+        self.footer = if footer.height > 0.0 {
+            self.footer_items(cx, footer)
+        } else {
+            Vec::new()
+        };
     }
 
     fn frame(&self) -> Rect {
@@ -435,6 +544,18 @@ impl Widget for Card {
             items: list,
         });
         self.scroll.paint_scrollbar(cx, viewport, items);
+        if !self.footer.is_empty() {
+            items.push(Item::Fill {
+                shape: Shape::rect(Rect::new(
+                    self.frame.x,
+                    viewport.y + viewport.height,
+                    self.frame.width,
+                    1.0,
+                )),
+                paint: cx.palette.separator_color.into(),
+            });
+            items.extend(self.footer.iter().cloned());
+        }
     }
 
     fn access(&self, cx: &Context) -> Node {
@@ -587,8 +708,13 @@ impl Launcher {
             id: WidgetId::next(),
             state: state.clone(),
             revision: None,
-            children: vec![Box::new(field), Box::new(preview)],
+            children: vec![
+                Box::new(field),
+                Box::new(preview),
+                Box::new(Tones::new(state.clone())),
+            ],
             labels: Vec::new(),
+            footer: Vec::new(),
             empty: false,
             scroll: ScrollState::default(),
             followed: None,
@@ -681,7 +807,7 @@ impl Launcher {
                     true
                 }
                 _ if opens_menu(*key, *modifiers) => {
-                    let Some(menu) = model.selection().map(hit_menu) else {
+                    let Some(menu) = model.selection().map(|hit| hit_menu(hit, model)) else {
                         return false;
                     };
                     let frame = selected_frame;
@@ -782,12 +908,33 @@ impl Launcher {
         std::mem::take(&mut self.state.borrow_mut().model.actions)
     }
 
+    pub fn open(&mut self, mode: Mode, inserts: bool) {
+        self.clear();
+        self.state.borrow_mut().model.set_mode(mode, inserts);
+        if let Some(field) = self.ui.widget_as::<TextField>(self.field) {
+            field.set_placeholder(&placeholder(mode));
+        }
+    }
+
+    pub fn mode(&self) -> Mode {
+        self.state.borrow().model.mode
+    }
+
+    pub fn set_skin_tone(&mut self, tone: Option<usize>) {
+        let mut state = self.state.borrow_mut();
+        state.model.set_skin_tone(tone);
+        state.model.actions.clear();
+    }
+
     pub fn file_query(&mut self) -> Option<(u64, String)> {
         let mut state = self.state.borrow_mut();
         if state.sent_generation == state.model.generation {
             return None;
         }
         state.sent_generation = state.model.generation;
+        if state.model.mode != Mode::Search {
+            return None;
+        }
         Some((state.model.generation, state.model.query.clone()))
     }
 

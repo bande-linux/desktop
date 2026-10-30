@@ -5,11 +5,14 @@ use unbound_toolkit::{
 };
 
 use crate::L10N;
+use crate::emoji::EMOJI;
 use crate::model::{Hit, Kind, Model, Target};
 use crate::view::Shared;
 
 pub const ROW_HEIGHT: f32 = 32.0;
 pub const CELL_HEIGHT: f32 = 96.0;
+pub const GLYPH_HEIGHT: f32 = 52.0;
+const GLYPH_SIZE: f32 = 30.0;
 const ROW_RADIUS: f32 = 7.0;
 const ROW_ICON: f32 = 22.0;
 const TITLE_SIZE: f32 = 14.0;
@@ -22,6 +25,7 @@ pub const SELECTED_LABEL: Color = Color::hex(0xFFFFFF);
 pub const OPEN: &str = "open";
 pub const REVEAL: &str = "reveal";
 pub const COPY: &str = "copy";
+const TONE_PREFIX: &str = "tone-";
 
 pub fn contains(frame: Rect, point: Point) -> bool {
     point.x >= frame.x
@@ -156,8 +160,44 @@ pub fn icon_items(
     }
 }
 
-pub fn hit_menu(hit: &Hit) -> Menu {
+pub fn tone_name(tone: Option<usize>) -> String {
+    L10N.tr(match tone {
+        None => "tone-default",
+        Some(0) => "tone-light",
+        Some(1) => "tone-medium-light",
+        Some(2) => "tone-medium",
+        Some(3) => "tone-medium-dark",
+        Some(_) => "tone-dark",
+    })
+}
+
+pub const SKIN_TONES: [Option<usize>; 6] = [None, Some(0), Some(1), Some(2), Some(3), Some(4)];
+
+pub fn hit_menu(hit: &Hit, model: &Model) -> Menu {
     let items = match &hit.target {
+        Target::Emoji(character) => {
+            let (label, shortcut) = if model.inserts {
+                ("menu-insert", "Return")
+            } else {
+                ("menu-copy", "Return")
+            };
+            let mut items = vec![MenuItem::new(&L10N.tr(label), OPEN).shortcut(shortcut)];
+            if EMOJI.has_tones(character) {
+                items.push(MenuItem::separator());
+                for (index, tone) in SKIN_TONES.iter().enumerate() {
+                    let title = format!(
+                        "{}  {}",
+                        EMOJI.with_tone(character, *tone),
+                        tone_name(*tone)
+                    );
+                    items.push(
+                        MenuItem::new(&title, &format!("{TONE_PREFIX}{index}"))
+                            .checked(model.skin_tone == *tone),
+                    );
+                }
+            }
+            items
+        }
         Target::Value(_) => {
             vec![MenuItem::new(&L10N.tr("menu-copy"), COPY).shortcut("Super+C")]
         }
@@ -179,7 +219,16 @@ pub fn apply_menu_action(model: &mut Model, action: &str) -> bool {
         OPEN => model.activate(),
         REVEAL => model.reveal(),
         COPY => return model.copy(),
-        _ => return false,
+        _ => {
+            let Some(tone) = action
+                .strip_prefix(TONE_PREFIX)
+                .and_then(|index| index.parse::<usize>().ok())
+                .and_then(|index| SKIN_TONES.get(index))
+            else {
+                return false;
+            };
+            model.set_skin_tone(*tone);
+        }
     }
     true
 }
@@ -188,6 +237,7 @@ pub fn apply_menu_action(model: &mut Model, action: &str) -> bool {
 pub enum Form {
     Row,
     Cell,
+    Glyph,
 }
 
 pub struct Choice {
@@ -197,7 +247,7 @@ pub struct Choice {
     shape: Form,
     icon: Option<Image>,
     items: Vec<Item>,
-    painted: Option<(bool, bool, Palette, Rect)>,
+    painted: Option<(bool, bool, Option<usize>, Palette, Rect)>,
     rect: Rect,
     visible: Rect,
 }
@@ -217,15 +267,15 @@ impl Choice {
         }
     }
 
-    fn compose(&mut self, cx: &mut Context, hit: &Hit, selected: bool, hovered: bool) {
+    fn compose(&mut self, cx: &mut Context, hit: &Hit, glyph: &str, selected: bool, hovered: bool) {
         self.items.clear();
         let radius = match self.shape {
             Form::Row => ROW_RADIUS,
-            Form::Cell => CELL_RADIUS,
+            Form::Cell | Form::Glyph => CELL_RADIUS,
         };
         let background = match self.shape {
             Form::Row => self.rect,
-            Form::Cell => self.rect.inset(2.0),
+            Form::Cell | Form::Glyph => self.rect.inset(2.0),
         };
         if selected {
             self.items.push(Item::Fill {
@@ -246,6 +296,16 @@ impl Choice {
         match self.shape {
             Form::Row => self.compose_row(cx, hit, selected, color),
             Form::Cell => self.compose_cell(cx, hit, selected, color),
+            Form::Glyph => {
+                let glyph = cx.text.paragraph(
+                    glyph,
+                    TextStyle::new(GLYPH_SIZE, color),
+                    None,
+                    TextAlign::Start,
+                );
+                let y = self.rect.y + (self.rect.height - glyph.height()) / 2.0;
+                self.items.push(centered(&glyph, self.rect, y));
+            }
         }
     }
 
@@ -308,6 +368,7 @@ impl Widget for Choice {
         let height = match self.shape {
             Form::Row => ROW_HEIGHT,
             Form::Cell => CELL_HEIGHT,
+            Form::Glyph => GLYPH_HEIGHT,
         };
         Size::new(available.width, height)
     }
@@ -326,7 +387,13 @@ impl Widget for Choice {
             return;
         }
         let hovered = state.hovered == Some(self.position);
-        let key = (selected, hovered, cx.palette, self.rect);
+        let key = (
+            selected,
+            hovered,
+            state.model.skin_tone,
+            cx.palette,
+            self.rect,
+        );
         if self.painted == Some(key) {
             return;
         }
@@ -335,8 +402,12 @@ impl Widget for Choice {
             self.items.clear();
             return;
         };
+        let glyph = match &hit.target {
+            Target::Emoji(character) => state.model.emoji_text(character),
+            _ => String::new(),
+        };
         drop(state);
-        self.compose(cx, &hit, selected, hovered);
+        self.compose(cx, &hit, &glyph, selected, hovered);
     }
 
     fn frame(&self) -> Rect {
@@ -407,7 +478,11 @@ impl Widget for Choice {
 
     fn context_menu(&mut self, _cx: &mut Context, _point: Point) -> Option<Menu> {
         let state = self.state.borrow();
-        state.model.hits.get(self.position).map(hit_menu)
+        state
+            .model
+            .hits
+            .get(self.position)
+            .map(|hit| hit_menu(hit, &state.model))
     }
 
     fn menu_action(&mut self, _cx: &mut Context, action: &str) -> bool {

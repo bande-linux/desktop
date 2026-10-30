@@ -240,6 +240,7 @@ fn the_context_menu_offers_editing_commands_that_reflect_what_is_possible() {
             ("copy".to_owned(), false),
             ("paste".to_owned(), true),
             ("select-all".to_owned(), true),
+            ("emoji-and-symbols".to_owned(), true),
         ]
     );
     assert!(editing.ui.menu_action("select-all"));
@@ -258,6 +259,11 @@ fn the_context_menu_offers_editing_commands_that_reflect_what_is_possible() {
         Some(ClipboardRequest::Copy("Invoice".to_owned()))
     );
     assert_eq!(editing.text(), "");
+    editing.send(Event::PointerDown(secondary));
+    editing.ui.take_menu_request().expect("a text menu");
+    assert!(!editing.ui.take_emoji_picker_request());
+    assert!(editing.ui.menu_action("emoji-and-symbols"));
+    assert!(editing.ui.take_emoji_picker_request());
     editing.send(Event::PointerDown(secondary));
     editing.ui.take_menu_request().expect("a text menu");
     assert!(editing.ui.menu_action("undo"));

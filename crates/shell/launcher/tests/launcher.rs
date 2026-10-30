@@ -5,7 +5,8 @@ use std::time::{Duration, Instant};
 
 use unbound_fs::Entry;
 use unbound_launcher::{
-    Action, AppInfo, Catalog, Heading, Hit, Kind, Launcher, Loaded, PaneInfo, SettingInfo, Target,
+    Action, AppInfo, Catalog, Heading, Hit, Kind, Launcher, Loaded, Mode, PaneInfo, SettingInfo,
+    Target,
 };
 use unbound_preview::preview;
 use unbound_search::{EXACT, FileHit, FileResults, PREFIX, Usage, WORD, usage_path};
@@ -652,6 +653,11 @@ fn the_launcher_matches_its_goldens() {
         typed(&mut launcher, "zzzq");
         files(&mut launcher, &[]);
         render(&mut launcher, &format!("launcher-none-{suffix}"));
+
+        launcher.open(Mode::Emoji, true);
+        typed(&mut launcher, "arrow");
+        key(&mut launcher, Key::Right);
+        render(&mut launcher, &format!("launcher-emoji-{suffix}"));
     }
 }
 
@@ -831,4 +837,86 @@ fn result_names_mark_the_characters_that_matched() {
     launcher.clear();
     typed(&mut launcher, "edit");
     assert_eq!(launcher.selection().unwrap().matched, [5, 6, 7, 8]);
+}
+
+fn emoji_targets(launcher: &Launcher) -> Vec<Target> {
+    launcher.hits().into_iter().map(|hit| hit.target).collect()
+}
+
+#[test]
+fn emoji_are_found_by_name_and_keyword_and_return_inserts_or_copies() {
+    let mut launcher = launcher();
+    launcher.open(Mode::Emoji, true);
+    assert_eq!(launcher.headings()[0], Heading::EmojiGroup(0));
+    assert!(launcher.take_actions().is_empty());
+    typed(&mut launcher, "grinning face");
+    assert_eq!(emoji_targets(&launcher)[0], Target::Emoji("😀".to_owned()));
+    assert_eq!(launcher.selection().unwrap().title, "Grinning face");
+    launcher.clear();
+    typed(&mut launcher, "lol");
+    assert!(emoji_targets(&launcher).contains(&Target::Emoji("😂".to_owned())));
+    launcher.clear();
+    typed(&mut launcher, "grinning face");
+    key(&mut launcher, Key::Enter);
+    assert_eq!(
+        launcher.take_actions(),
+        [Action::Close, Action::Insert("😀".to_owned())]
+    );
+
+    launcher.open(Mode::Emoji, false);
+    typed(&mut launcher, "grinning face");
+    key(&mut launcher, Key::Enter);
+    assert_eq!(
+        launcher.take_actions(),
+        [Action::Copy("😀".to_owned()), Action::Close]
+    );
+    launcher.open(Mode::Search, false);
+    typed(&mut launcher, "te");
+    assert!(launcher.file_query().is_some());
+    assert_eq!(titles(&launcher), ["Terminal", "Text Editor"]);
+}
+
+#[test]
+fn chosen_emoji_come_first_next_time() {
+    let folder = tempfile::tempdir().unwrap();
+    let path = usage_path(Some(folder.path()), None).unwrap();
+    let mut launcher = launcher_with(Usage::load(path), Scheme::Light);
+    launcher.set_now(NOW);
+    launcher.open(Mode::Emoji, false);
+    typed(&mut launcher, "red heart");
+    key(&mut launcher, Key::Enter);
+    launcher.open(Mode::Emoji, false);
+    assert_eq!(
+        launcher.headings()[..2],
+        [Heading::FrequentlyUsed, Heading::EmojiGroup(0)]
+    );
+    assert_eq!(
+        emoji_targets(&launcher)[0],
+        Target::Emoji("❤\u{FE0F}".to_owned())
+    );
+}
+
+#[test]
+fn a_skin_tone_chosen_from_the_menu_is_remembered_and_used() {
+    let mut launcher = launcher();
+    launcher.open(Mode::Emoji, true);
+    typed(&mut launcher, "waving hand");
+    launcher.scene(SCREEN.0, SCREEN.1, Instant::now());
+    key(&mut launcher, Key::Menu);
+    let (menu, _) = launcher.take_menu_request().expect("a menu");
+    let tones: Vec<&str> = menu
+        .items
+        .iter()
+        .filter(|item| item.action.starts_with("tone-"))
+        .map(|item| item.title.as_str())
+        .collect();
+    assert_eq!(tones.len(), 6);
+    assert!(tones[3].starts_with("👋\u{1F3FD}"));
+    assert!(launcher.menu_action("tone-3"));
+    assert_eq!(launcher.take_actions(), [Action::SkinTone(Some(2))]);
+    key(&mut launcher, Key::Enter);
+    assert_eq!(
+        launcher.take_actions(),
+        [Action::Close, Action::Insert("👋\u{1F3FD}".to_owned())]
+    );
 }

@@ -226,6 +226,7 @@ impl PreviewPane {
                 Kind::Calculation => L10N.tr("hint-calculation"),
                 Kind::Application => L10N.tr("hint-application"),
                 Kind::Setting => L10N.tr("hint-setting"),
+                Kind::Emoji => L10N.tr("hint-emoji-copy"),
                 Kind::Folder | Kind::Document => L10N.tr("hint-file"),
             }
         };

@@ -27,7 +27,7 @@ tempfile.workspace = true
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
-depends = "$auto, fonts-inter"
+depends = "$auto, fonts-inter, fonts-noto-color-emoji"
 extended-description = """\
 The launcher of the Unbound desktop: Super+Space opens a search field \
 over the screen that finds apps, folders and documents in the home \

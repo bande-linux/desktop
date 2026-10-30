@@ -3,8 +3,8 @@
 use smithay::utils::{Point, Size};
 use unbound_compositor::{Headless, Renderer, automatic_scale};
 use unbound_test_wayland::{
-    Anchor, BLUE, BrightnessKey, GREEN, KeyboardInteractivity, Layer, LayerRequest, MediaKey, RED,
-    ShmImage, TestClient, VolumeKey, roundtrip,
+    Anchor, BLUE, BrightnessKey, GREEN, KeyboardInteractivity, LauncherMode, Layer, LayerRequest,
+    MediaKey, RED, ShmImage, TestClient, VolumeKey, roundtrip,
 };
 use wayland_client::protocol::wl_shm::Format;
 
@@ -315,6 +315,8 @@ fn a_scale_follows_the_displays_pixel_density() {
 const KEY_SPACE: u32 = 57;
 const KEY_LEFTMETA: u32 = 125;
 const KEY_A: u32 = 30;
+const KEY_V: u32 = 47;
+const KEY_LEFTCTRL: u32 = 29;
 const KEY_3: u32 = 4;
 const KEY_4: u32 = 5;
 const KEY_LEFTSHIFT: u32 = 42;
@@ -803,4 +805,61 @@ fn the_menu_bar_toggles_control_center_through_the_compositor() {
     roundtrip(&mut server, &mut [&mut menu_bar, &mut control_center]);
 
     assert_eq!(control_center.control_center_toggles(), 1);
+}
+
+#[test]
+fn ctrl_super_space_and_super_shift_v_open_the_launcher_modes_and_say_whether_a_field_is_typed_in()
+{
+    let mut server = server();
+    let mut input_method = TestClient::connect(&mut server);
+    input_method.use_seat(&mut server);
+    input_method.become_input_method(&mut server);
+    let mut app = TestClient::connect(&mut server);
+    app.use_seat(&mut server);
+    let pixels = red(32, 32);
+    app.show_window(&mut server, &image(&pixels, 32, 32));
+    let mut shell = TestClient::connect_as_shell(&mut server);
+    shell.join_shell(&mut server);
+
+    press(&mut server, &[KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_V]);
+    roundtrip(&mut server, &mut [&mut app, &mut shell]);
+    app.enable_text_input(&mut server, (4, 4, 1, 12));
+    press(&mut server, &[KEY_LEFTCTRL, KEY_LEFTMETA, KEY_SPACE]);
+    roundtrip(&mut server, &mut [&mut app, &mut shell]);
+
+    assert_eq!(
+        shell.launcher_modes(),
+        [
+            (LauncherMode::Clipboard, false),
+            (LauncherMode::Emoji, true)
+        ]
+    );
+    assert_eq!(shell.launcher_requests(), 0);
+    assert!(
+        app.keys()
+            .iter()
+            .all(|(key, _)| *key != KEY_SPACE && *key != KEY_V),
+        "the app saw {:?}",
+        app.keys()
+    );
+}
+
+#[test]
+fn text_the_shell_inserts_is_typed_into_the_field_of_the_app() {
+    let mut server = server();
+    let mut input_method = TestClient::connect(&mut server);
+    input_method.use_seat(&mut server);
+    input_method.become_input_method(&mut server);
+    let mut app = TestClient::connect(&mut server);
+    app.use_seat(&mut server);
+    let pixels = red(32, 32);
+    app.show_window(&mut server, &image(&pixels, 32, 32));
+    app.enable_text_input(&mut server, (4, 4, 1, 12));
+    let mut shell = TestClient::connect_as_shell(&mut server);
+    shell.join_shell(&mut server);
+
+    shell.insert_text(&mut server, "\u{1F600}");
+    roundtrip(&mut server, &mut [&mut app, &mut shell]);
+
+    assert_eq!(app.committed_text(), ["\u{1F600}"]);
 }

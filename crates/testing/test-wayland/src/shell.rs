@@ -42,6 +42,7 @@ pub(crate) struct Shell {
     pub(crate) layers: Vec<(WlSurface, ZwlrLayerSurfaceV1)>,
     shell: Option<UnboundShellV1>,
     launcher_requests: usize,
+    launcher_modes: Vec<(unbound_shell_v1::LauncherMode, bool)>,
     capture_requests: usize,
     area_capture_requests: usize,
     active_apps: Vec<String>,
@@ -152,7 +153,7 @@ impl TestClient {
     }
 
     pub fn join_shell(&mut self, server: &mut Headless) {
-        let shell: UnboundShellV1 = self.bind("unbound_shell_v1", 11);
+        let shell: UnboundShellV1 = self.bind("unbound_shell_v1", 12);
         self.globals.shell.shell = Some(shell);
         let _: ExtForeignToplevelListV1 = self.bind("ext_foreign_toplevel_list_v1", 1);
         self.exchange(server);
@@ -160,6 +161,17 @@ impl TestClient {
 
     pub fn launcher_requests(&self) -> usize {
         self.globals.shell.launcher_requests
+    }
+
+    pub fn launcher_modes(&self) -> &[(unbound_shell_v1::LauncherMode, bool)] {
+        &self.globals.shell.launcher_modes
+    }
+
+    pub fn insert_text(&mut self, server: &mut Headless, text: &str) {
+        if let Some(shell) = &self.globals.shell.shell {
+            shell.insert_text(text.to_owned());
+        }
+        self.exchange(server);
     }
 
     pub fn screen_capture_requests(&self) -> usize {
@@ -473,6 +485,10 @@ impl Dispatch<UnboundShellV1, ()> for Globals {
     ) {
         match event {
             unbound_shell_v1::Event::ShowLauncher => globals.shell.launcher_requests += 1,
+            unbound_shell_v1::Event::OpenLauncher {
+                mode: WEnum::Value(mode),
+                text_field,
+            } => globals.shell.launcher_modes.push((mode, text_field != 0)),
             unbound_shell_v1::Event::CaptureScreen => globals.shell.capture_requests += 1,
             unbound_shell_v1::Event::CaptureArea => globals.shell.area_capture_requests += 1,
             unbound_shell_v1::Event::ActiveApp { app_id } => globals.shell.active_apps.push(app_id),

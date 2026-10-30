@@ -3,7 +3,13 @@ use std::path::{Path, PathBuf};
 
 use unbound_search::{FileHit, FileResults, Query, Usage, calculate, fold, recent_files};
 
+use crate::emoji::EMOJI;
+
 pub const GRID_COLUMNS: usize = 8;
+pub const EMOJI_COLUMNS: usize = 12;
+const FREQUENT_EMOJI_ROWS: usize = 2;
+const MAX_EMOJI: usize = 240;
+const EMOJI_KEY: &str = "emoji:";
 pub const MAX_APPS: usize = 4;
 pub const MAX_SETTINGS: usize = 3;
 pub const MAX_FOLDERS: usize = 3;
@@ -141,7 +147,14 @@ impl IndexedPane {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mode {
+    Search,
+    Emoji,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
+    Emoji,
     Calculation,
     Application,
     Setting,
@@ -155,6 +168,7 @@ pub enum Target {
     Settings(String),
     Path(PathBuf),
     Value(String),
+    Emoji(String),
 }
 
 impl Target {
@@ -163,6 +177,7 @@ impl Target {
             Self::App(app_id) => Some(format!("app:{app_id}")),
             Self::Settings(keyword) => Some(format!("settings:{keyword}")),
             Self::Path(path) => path.to_str().map(|path| format!("file:{path}")),
+            Self::Emoji(character) => Some(format!("{EMOJI_KEY}{character}")),
             Self::Value(_) => None,
         }
     }
@@ -188,6 +203,8 @@ pub enum Heading {
     RecentApps,
     RecentDocuments,
     AllApps,
+    FrequentlyUsed,
+    EmojiGroup(usize),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -195,6 +212,8 @@ pub enum Action {
     Open(Target),
     Reveal(PathBuf),
     Copy(String),
+    Insert(String),
+    SkinTone(Option<usize>),
     Close,
 }
 
@@ -212,6 +231,9 @@ pub struct Model {
     pub hits: Vec<Hit>,
     pub headings: Vec<(usize, Heading)>,
     pub columns: usize,
+    pub mode: Mode,
+    pub inserts: bool,
+    pub skin_tone: Option<usize>,
     pub selected: usize,
     pub copied: bool,
     pub actions: Vec<Action>,
@@ -248,6 +270,9 @@ impl Model {
             hits: Vec::new(),
             headings: Vec::new(),
             columns: 0,
+            mode: Mode::Search,
+            inserts: false,
+            skin_tone: None,
             selected: 0,
             copied: false,
             actions: Vec::new(),
@@ -279,6 +304,26 @@ impl Model {
 
     pub fn set_now(&mut self, now: u64) {
         self.now = now;
+    }
+
+    pub fn set_mode(&mut self, mode: Mode, inserts: bool) {
+        self.inserts = inserts;
+        if mode != self.mode {
+            self.mode = mode;
+            self.generation += 1;
+            self.rebuild(None);
+        }
+    }
+
+    pub fn set_skin_tone(&mut self, tone: Option<usize>) {
+        if tone != self.skin_tone {
+            self.skin_tone = tone;
+            self.actions.push(Action::SkinTone(tone));
+        }
+    }
+
+    pub fn emoji_text(&self, character: &str) -> String {
+        EMOJI.with_tone(character, self.skin_tone)
     }
 
     pub fn set_query(&mut self, query: &str) {
@@ -340,6 +385,13 @@ impl Model {
         self.copied = false;
         self.hits.clear();
         self.headings.clear();
+        if self.mode == Mode::Emoji {
+            self.rebuild_emoji();
+            self.selected = keep
+                .and_then(|target| self.hits.iter().position(|hit| hit.target == target))
+                .unwrap_or(0);
+            return;
+        }
         let Some(query) = Query::new(&self.query) else {
             self.files.clear();
             self.browse();
@@ -505,6 +557,66 @@ impl Model {
         self.selected = 0;
     }
 
+    fn emoji_hit(character: &str, name: &str, matched: Vec<usize>) -> Hit {
+        let mut characters = name.chars();
+        let title = characters
+            .next()
+            .map(|first| first.to_uppercase().chain(characters).collect())
+            .unwrap_or_default();
+        Hit {
+            kind: Kind::Emoji,
+            title,
+            detail: None,
+            target: Target::Emoji(character.to_owned()),
+            matched,
+            score: 0,
+        }
+    }
+
+    fn rebuild_emoji(&mut self) {
+        self.columns = EMOJI_COLUMNS;
+        self.files_complete = true;
+        if let Some(query) = Query::new(&self.query) {
+            self.hits = EMOJI
+                .search(&query)
+                .into_iter()
+                .take(MAX_EMOJI)
+                .map(|(emoji, _, matched)| Self::emoji_hit(emoji.character, emoji.name, matched))
+                .collect();
+            return;
+        }
+        let mut used: Vec<(u32, u64, String)> = self
+            .usage
+            .last_used(EMOJI_KEY)
+            .map(|(character, last)| {
+                let character = character.to_string_lossy().into_owned();
+                let key = format!("{EMOJI_KEY}{character}");
+                (self.usage.boost(&key, self.now), last, character)
+            })
+            .collect();
+        used.sort_by(|a, b| b.0.cmp(&a.0).then(b.1.cmp(&a.1)));
+        let frequent: Vec<Hit> = used
+            .iter()
+            .filter_map(|(_, _, character)| EMOJI.find(character))
+            .take(FREQUENT_EMOJI_ROWS * EMOJI_COLUMNS)
+            .map(|emoji| Self::emoji_hit(emoji.character, emoji.name, Vec::new()))
+            .collect();
+        if !frequent.is_empty() {
+            self.headings.push((0, Heading::FrequentlyUsed));
+            self.hits.extend(frequent);
+        }
+        for emoji in &EMOJI.emoji {
+            if self.headings.last().map(|(_, heading)| *heading)
+                != Some(Heading::EmojiGroup(emoji.group))
+            {
+                self.headings
+                    .push((self.hits.len(), Heading::EmojiGroup(emoji.group)));
+            }
+            self.hits
+                .push(Self::emoji_hit(emoji.character, emoji.name, Vec::new()));
+        }
+    }
+
     fn sections(&self) -> Vec<(usize, usize)> {
         let mut starts: Vec<usize> = self.headings.iter().map(|(start, _)| *start).collect();
         if starts.first() != Some(&0) {
@@ -599,14 +711,25 @@ impl Model {
         let Some(hit) = self.selection() else {
             return;
         };
-        let action = match &hit.target {
-            Target::Value(value) => Action::Copy(value.clone()),
-            target => Action::Open(target.clone()),
-        };
-        let closes = matches!(action, Action::Copy(_));
-        self.actions.push(action);
-        if closes {
-            self.actions.push(Action::Close);
+        match hit.target.clone() {
+            Target::Value(value) => {
+                self.actions.push(Action::Copy(value));
+                self.actions.push(Action::Close);
+            }
+            Target::Emoji(character) => {
+                let text = self.emoji_text(&character);
+                if let Err(error) = self.record_use(&Target::Emoji(character)) {
+                    tracing::warn!("cannot remember the emoji: {error}");
+                }
+                if self.inserts {
+                    self.actions.push(Action::Close);
+                    self.actions.push(Action::Insert(text));
+                } else {
+                    self.actions.push(Action::Copy(text));
+                    self.actions.push(Action::Close);
+                }
+            }
+            target => self.actions.push(Action::Open(target)),
         }
     }
 
@@ -624,6 +747,7 @@ impl Model {
         let text = match self.selection().map(|hit| &hit.target) {
             Some(Target::Value(value)) => value.clone(),
             Some(Target::Path(path)) => path.display().to_string(),
+            Some(Target::Emoji(character)) => self.emoji_text(character),
             Some(Target::App(_) | Target::Settings(_)) | None => return false,
         };
         self.actions.push(Action::Copy(text));

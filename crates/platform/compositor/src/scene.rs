@@ -11,7 +11,7 @@ use smithay::utils::{Buffer as BufferCoords, Physical, Point, Rectangle, Scale};
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::Logical;
 
-use crate::effect::blur_rects;
+use crate::effect::{blur_rects, corner_radius};
 use crate::motion::{Look, Motion};
 use crate::state::OutputElement;
 use crate::state::mapped_size;
@@ -461,13 +461,14 @@ pub(crate) fn surface_blurs(
         return Vec::new();
     };
     let bounds = Rectangle::new(location, size);
+    let radius = corner_radius(surface);
     blur_rects(surface)
         .into_iter()
         .filter_map(|(id, rect)| {
             let rect = Rectangle::new(location + rect.loc, rect.size).intersection(bounds)?;
             Some(OutputElement::Blur(BlurElement::new(
                 id,
-                rounded(rect.to_f64().to_physical(scale), 0.0),
+                rounded(rect.to_f64().to_physical(scale), radius * scale),
                 scale,
                 1.0,
             )))
@@ -609,6 +610,76 @@ pub(crate) struct Drawn {
     active: bool,
 }
 
+pub(crate) fn pieces_of(
+    surfaces: &[WaylandSurfaceRenderElement<VulkanRenderer>],
+    scale: f64,
+) -> Vec<Piece> {
+    surfaces
+        .iter()
+        .filter_map(|surface| match surface.texture() {
+            WaylandSurfaceTexture::Texture(texture) => Some(Piece {
+                id: surface.id().clone(),
+                texture: texture.clone(),
+                src: surface.src(),
+                geometry: surface.geometry(Scale::from(scale)),
+            }),
+            WaylandSurfaceTexture::SolidColor(_) => None,
+        })
+        .collect()
+}
+
+pub(crate) fn area_of(pieces: &[Piece]) -> Option<Area> {
+    pieces
+        .iter()
+        .map(|piece| piece.geometry)
+        .reduce(|union, geometry| union.merge(geometry))
+        .map(|union| union.to_f64())
+}
+
+pub(crate) struct SlideBack {
+    pieces: Vec<Piece>,
+    area: Area,
+    pub(crate) motion: Motion,
+}
+
+impl SlideBack {
+    pub(crate) fn new(mut pieces: Vec<Piece>, area: Area, motion: Motion) -> Self {
+        for piece in &mut pieces {
+            piece.id = Id::new();
+        }
+        Self {
+            pieces,
+            area,
+            motion,
+        }
+    }
+
+    pub(crate) fn render_elements(&self, scale: f64) -> Vec<OutputElement> {
+        let Some(look) = self.motion.shown() else {
+            return Vec::new();
+        };
+        if look.alpha <= 0.0 {
+            return Vec::new();
+        }
+        let shown = look.rect.to_physical(scale);
+        let placement = Placement {
+            from: self.area,
+            to: shown,
+        };
+        let alpha = look.alpha as f32;
+        self.pieces
+            .iter()
+            .map(|piece| {
+                OutputElement::Closing(WindowElement::new(
+                    PieceElement::new(piece.clone(), alpha),
+                    placement,
+                    rounded(shown, 0.0),
+                ))
+            })
+            .collect()
+    }
+}
+
 pub(crate) struct Closing {
     drawn: Drawn,
     shadow: Id,
@@ -675,6 +746,7 @@ pub(crate) fn window_elements(
     scale: f64,
     active: bool,
     hung: bool,
+    shift: Point<f64, Logical>,
 ) -> (Vec<OutputElement>, Option<Drawn>) {
     let look = window.shown_look();
     let alpha = look.map_or(1.0, |look| look.alpha) as f32;
@@ -696,7 +768,11 @@ pub(crate) fn window_elements(
             Kind::Unspecified,
         );
     let fullscreen = window.has_state(xdg_toplevel::State::Fullscreen);
-    let Some(geometry) = window.geometry().filter(|_| !fullscreen || look.is_some()) else {
+    let shifted = shift != Point::default();
+    let Some(geometry) = window
+        .geometry()
+        .filter(|_| !fullscreen || look.is_some() || shifted)
+    else {
         return (
             surfaces.into_iter().map(OutputElement::Surface).collect(),
             None,
@@ -704,7 +780,8 @@ pub(crate) fn window_elements(
     };
     let real = Rectangle::new(geometry.location.to_f64(), geometry.size.to_f64());
     let area = real.to_physical(scale);
-    let look = look.unwrap_or(Look::shown(real));
+    let mut look = look.unwrap_or(Look::shown(real));
+    look.rect.loc += shift;
     let shown = look.rect.to_physical(scale);
     let radius = if fullscreen {
         0.0
@@ -716,18 +793,7 @@ pub(crate) fn window_elements(
         from: area,
         to: shown,
     };
-    let pieces = surfaces
-        .iter()
-        .filter_map(|surface| match surface.texture() {
-            WaylandSurfaceTexture::Texture(texture) => Some(Piece {
-                id: surface.id().clone(),
-                texture: texture.clone(),
-                src: surface.src(),
-                geometry: surface.geometry(Scale::from(scale)),
-            }),
-            WaylandSurfaceTexture::SolidColor(_) => None,
-        })
-        .collect();
+    let pieces = pieces_of(&surfaces, scale);
     let shadow = (!fullscreen).then(|| {
         OutputElement::Shadow(ShadowElement::new(
             window.shadow.clone(),

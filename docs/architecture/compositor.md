@@ -81,6 +81,24 @@ when they reach the screen is Unbound's own.
   `Up` zooms a free window and `Down` returns a zoomed one. Tiles get xdg-shell's tiled states
   (for clients binding version 2) and no gaps. Dragging the edge two neighbouring tiles share
   resizes both; dragging a tiled window away gives back its earlier size under the pointer.
+- **Drag and drop.** The compositor draws the drag icon a client passes to `start_drag` at the
+  pointer, offset by the icon's attach offset, below the pointer. Holding Option (Alt) makes a
+  drop a copy and Super a move, when source and destination offer it; otherwise the
+  destination's preferred action wins. The choice is made when the destination sets its
+  actions, so toolkits should set them again on motion for modifier changes to apply mid-drag.
+  A drop nobody accepts slides the icon back to where the drag began with `standard` (with
+  Reduce Motion it fades where it was dropped), from the last drawn frame of the icon, so it
+  survives the client destroying the icon.
+- **Gestures.** The compositor claims four-finger pinches (thumb and three fingers) and
+  forwards every other swipe, pinch and hold through `zwp_pointer_gestures_v1`. A spread pushes
+  every window aside to a 24 pt sliver at the nearer side edge, tracking the fingers 1:1 (a
+  scale change of 0.6 is the whole way, with the 0.55 rubber band beyond); on release the
+  progress projects with `Decay::NORMAL` from a least-squares velocity over the last 100 ms,
+  rounds to shown or hidden and settles with `momentum` above 2 pages/s, `standard` below and
+  `fade` with Reduce Motion. While the desktop shows, windows take no input and the keyboard
+  leaves the app; pinching back or activating any window brings them back and returns the
+  keyboard. A four-finger pinch from the normal state opens the launcher. Three-finger swipes
+  stay with apps until workspaces and the overview exist.
 - **Not responding.** Whenever the user interacts with a window, and for every app when Force
   Quit opens, the compositor pings the app through `xdg_wm_base.ping` (at most once a second).
   An app that has not answered after 3 s is not responding: its windows are veiled in a soft
@@ -124,8 +142,8 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `ext-image-capture-source-v1` / `ext-image-copy-capture-v1` | Screen capture for screenshots and the portal | P1 | implemented (output sources) |
 | `wp_cursor_shape_v1` | Cursor shapes from the theme | P1 | implemented |
 | `zwp_pointer_constraints_v1` / `relative_pointer` | Pointer lock for games | P1 | not implemented |
-| `zwp_pointer_gestures_v1` | Trackpad gestures | P1 | not implemented |
+| `zwp_pointer_gestures_v1` | Trackpad gestures | P1 | implemented, v3: swipes, pinches and holds the compositor does not claim go to the client under the pointer |
 | `zwp_keyboard_shortcuts_inhibit_v1` | Keyboard passthrough for VMs and remote desktop | P2 | not implemented |
-| `unbound_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Control Center, Dock icon rectangles, apps that stopped responding | P0 | implemented, shell clients only |
-| `unbound_app_v1` (own, in `unbound-shell-v1.xml`) | App-level requests: `quit_requested` on Super+Q instead of closing every window | P0 | implemented, every client |
+| `unbound_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Control Center, Dock icon rectangles, apps that stopped responding; for the Dock (v7): hide, quit and force quit an app, activate one window by its foreign-toplevel identifier, minimised windows, attention requests, rounded blur for shell surfaces, Super+F3 and Super+F2 keyboard focus for the Dock and menu bar | P0 | implemented, shell clients only |
+| `unbound_app_v1` (own, in `unbound-shell-v1.xml`) | App-level requests: `quit_requested` on Super+Q instead of closing every window; v2 `place_window` (halves, quarters, restore) for the window menu | P0 | implemented, every client |
 | `ext-background-effect-v1` | Blur behind translucent menus, sidebars, Dock and menu bar | P1 | implemented: dual-filter Kawase blur (3 passes) clipped to the window's rounded shape, below the window's own shadow, redrawn when anything beneath it changes |

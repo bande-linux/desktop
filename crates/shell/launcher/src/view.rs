@@ -6,7 +6,8 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use accesskit::{Action, ActionRequest, Node, Role};
-use unbound_files::{Entry, Preview, format_date, format_size};
+use unbound_fs::{Entry, format_date, format_size};
+use unbound_preview::Preview;
 use unbound_search::{FileResults, Usage};
 use unbound_spring::{Animation, Spring, State as SpringState};
 use unbound_toolkit::Appearance;
@@ -60,7 +61,7 @@ pub trait Catalog {
 
 pub struct Loaded {
     pub entry: Entry,
-    pub content: Preview,
+    pub content: Preview<Image>,
 }
 
 struct State {

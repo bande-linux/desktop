@@ -12,13 +12,14 @@ use smithay::input::pointer::AxisFrame;
 use smithay::utils::{Point, Size};
 use unbound_compositor::{FrameClock, FrameScheduler, Headless, REFRESH, Renderer, SessionRole};
 use unbound_graphics::{
-    Color, Event, Key, Modifiers, Pointer, PointerButton, Scene, ScrollPhase, ScrollSource,
+    Color, Event, Key, Modifiers, Palette, Pointer, PointerButton, Scene, Scheme, ScrollPhase,
+    ScrollSource, TextSystem,
 };
 use unbound_toolkit_platform::{
     App, Edges, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement, Role, TITLE_BAR_HEIGHT,
     Window, WindowEvent,
 };
-use unbound_widgets::{Menu, MenuItem};
+use unbound_widgets::{Context, ContextMenu, Label, Menu, MenuItem, Ui};
 
 const OUTPUT: (i32, i32) = (320, 240);
 const WINDOW: (u32, u32) = (120, 80);
@@ -33,6 +34,7 @@ const KEY_DOWN: u32 = 108;
 const KEY_RIGHT: u32 = 106;
 const KEY_ENTER: u32 = 28;
 const KEY_D: u32 = 32;
+const KEY_COMPOSE: u32 = 127;
 const BTN_LEFT: u32 = 0x110;
 const BTN_RIGHT: u32 = 0x111;
 const BTN_SIDE: u32 = 0x113;
@@ -59,6 +61,19 @@ struct Forwarder {
     commands: UnixStream,
     finished: bool,
     refuse_close: bool,
+    ui: Option<Ui>,
+}
+
+fn menu_ui(events: Sender<WindowEvent>) -> Ui {
+    let area = ContextMenu::new(Label::new("Report.pdf"), sample_menu, move |action| {
+        let _ = events.send(WindowEvent::MenuAction(format!("ui:{action}")));
+    });
+    let mut ui = Ui::new(
+        Box::new(area),
+        Context::new(TextSystem::new(), Palette::for_scheme(Scheme::Light)),
+    );
+    ui.layout(unbound_widgets::Size::new(WINDOW.0 as f32, WINDOW.1 as f32));
+    ui
 }
 
 impl App for Forwarder {
@@ -73,6 +88,13 @@ impl App for Forwarder {
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
+        let event = match &mut self.ui {
+            Some(ui) => match window.drive(ui, event).expect("drive the ui") {
+                Some(event) => event,
+                None => return,
+            },
+            None => event,
+        };
         if let WindowEvent::Input(Event::PointerDown(pointer)) = &event
             && pointer.button == PointerButton::Secondary
         {
@@ -99,6 +121,7 @@ impl App for Forwarder {
             b'h' => window.hide().expect("hide"),
             b's' => window.show().expect("show"),
             b'b' => thread::sleep(BUSY),
+            b'u' => self.ui = Some(menu_ui(self.events.clone())),
             b'r' => {
                 self.refuse_close = true;
                 window.request_close();
@@ -177,6 +200,7 @@ impl Desktop {
                 commands: app_commands,
                 finished: false,
                 refuse_close: false,
+                ui: None,
             };
             unbound_toolkit_platform::run(&mut window, &mut app).expect("run loop");
         });
@@ -220,7 +244,15 @@ impl Desktop {
             if events_done && until_desktop(self) {
                 return;
             }
-            assert!(Instant::now() < deadline, "timed out");
+            assert!(
+                Instant::now() < deadline,
+                "timed out with {} popups after {:?}",
+                self.server.popup_count(),
+                clients
+                    .iter()
+                    .map(|client| &client.seen)
+                    .collect::<Vec<_>>()
+            );
         }
     }
 
@@ -907,6 +939,30 @@ fn resting_on_a_submenu_item_opens_its_submenu() {
         &mut [&mut client],
         |_| true,
         |desktop| desktop.server.popup_count() == 2,
+    );
+}
+
+#[test]
+fn the_menu_key_opens_the_focused_widgets_menu_with_its_first_item_ready() {
+    let mut desktop = Desktop::new();
+    let mut client = pointed_window(&mut desktop, "menu key");
+    client.send(b'u');
+    desktop.settle(&mut [&mut client]);
+    desktop.type_keys(&[KEY_COMPOSE]);
+    desktop.wait_for(
+        &mut [&mut client],
+        |_| true,
+        |desktop| desktop.server.popup_count() == 1,
+    );
+    desktop.type_keys(&[KEY_ENTER]);
+    desktop.wait_for(
+        &mut [&mut client],
+        |events| !menu_events(events).is_empty(),
+        |_| true,
+    );
+    assert_eq!(
+        menu_events(&client.seen),
+        [WindowEvent::MenuAction("ui:open".to_owned())]
     );
 }
 

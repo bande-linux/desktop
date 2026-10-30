@@ -121,6 +121,7 @@ impl State {
     }
 
     pub(crate) fn activate_app(&mut self, app_id: &str) {
+        self.show_app(app_id);
         let (mut chosen, rest): (Vec<_>, Vec<_>) = std::mem::take(&mut self.windows)
             .into_iter()
             .partition(|window| {
@@ -211,6 +212,7 @@ impl GlobalDispatch<UnboundShellV1, ()> for State {
             shell.active_app(state.active_app.clone());
         }
         state.announce_unresponsive(&shell);
+        state.announce_minimized_windows(&shell);
         state.shell_resources.push(shell);
     }
 
@@ -244,6 +246,16 @@ impl Dispatch<UnboundShellV1, ()> for State {
                 surface,
                 Rectangle::new((x, y).into(), (width, height).into()),
             ),
+            unbound_shell_v1::Request::HideApp { app_id } => state.hide_app(&app_id),
+            unbound_shell_v1::Request::QuitApp { app_id } => state.quit_app_named(&app_id),
+            unbound_shell_v1::Request::ForceQuitApp { app_id } => state.force_quit_app(&app_id),
+            unbound_shell_v1::Request::ActivateWindow { identifier } => {
+                state.activate_window(&identifier);
+            }
+            unbound_shell_v1::Request::SetCornerRadius { surface, radius } => {
+                crate::effect::set_corner_radius(&surface, radius);
+                state.needs_redraw = true;
+            }
             unbound_shell_v1::Request::Destroy => {
                 state.shell_resources.retain(|shell| shell != resource);
             }

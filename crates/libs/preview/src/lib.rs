@@ -2,16 +2,14 @@ use std::fs::{self, File};
 use std::io::Read;
 use std::path::Path;
 
-use unbound_toolkit::Image;
-
-use crate::listing::{Entry, is_hidden};
+use unbound_fs::{Entry, is_hidden};
 
 pub const TEXT_PREVIEW_BYTES: u64 = 64 * 1024;
 pub const IMAGE_PREVIEW_PIXELS: u32 = 2048;
 
 #[derive(Debug, Clone)]
-pub enum Preview {
-    Image(Image),
+pub enum Preview<I> {
+    Image(I),
     Text(String),
     Folder { items: usize },
     Other { size: u64 },
@@ -39,7 +37,7 @@ fn text(path: &Path) -> Option<String> {
     }
 }
 
-fn image(path: &Path) -> Option<Image> {
+fn image<I>(path: &Path, picture: impl FnOnce(u32, u32, Vec<u8>) -> Option<I>) -> Option<I> {
     let decoded = image::ImageReader::open(path)
         .ok()?
         .with_guessed_format()
@@ -53,10 +51,13 @@ fn image(path: &Path) -> Option<Image> {
     };
     let rgba = decoded.into_rgba8();
     let (width, height) = rgba.dimensions();
-    Image::from_rgba(width, height, rgba.into_raw())
+    picture(width, height, rgba.into_raw())
 }
 
-pub fn preview(entry: &Entry) -> Preview {
+pub fn preview<I>(
+    entry: &Entry,
+    picture: impl FnOnce(u32, u32, Vec<u8>) -> Option<I>,
+) -> Preview<I> {
     if entry.is_folder() {
         return Preview::Folder {
             items: fs::read_dir(&entry.path).map_or(0, |entries| {
@@ -67,7 +68,7 @@ pub fn preview(entry: &Entry) -> Preview {
             }),
         };
     }
-    if let Some(image) = image(&entry.path) {
+    if let Some(image) = image(&entry.path, picture) {
         return Preview::Image(image);
     }
     if let Some(text) = text(&entry.path) {

@@ -8,8 +8,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
-use crate::listing::Entry;
-use crate::preview::{Preview, preview};
+use unbound_fs::Entry;
+use unbound_preview::{Preview, preview};
+use unbound_toolkit::Image;
 
 #[derive(Debug)]
 enum Request {
@@ -19,7 +20,7 @@ enum Request {
 
 #[derive(Debug)]
 pub enum Loaded {
-    Preview(PathBuf, Preview),
+    Preview(PathBuf, Preview<Image>),
     FolderSize {
         folder: PathBuf,
         items: u64,
@@ -79,9 +80,10 @@ impl Loader {
                         continue;
                     }
                     let loaded = match request {
-                        Request::Preview(entry) => {
-                            Some(Loaded::Preview(entry.path.clone(), preview(&entry)))
-                        }
+                        Request::Preview(entry) => Some(Loaded::Preview(
+                            entry.path.clone(),
+                            preview(&entry, Image::from_rgba),
+                        )),
                         Request::FolderSize(folder) => {
                             tree_size(&folder, &current).map(|(items, bytes)| Loaded::FolderSize {
                                 folder,

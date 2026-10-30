@@ -8,9 +8,10 @@ repository.workspace = true
 [dependencies]
 accesskit.workspace = true
 tracing.workspace = true
-unbound-files.workspace = true
+unbound-fs.workspace = true
 unbound-l10n.workspace = true
 unbound-log.workspace = true
+unbound-preview.workspace = true
 unbound-search.workspace = true
 unbound-settings-panes.workspace = true
 unbound-spring.workspace = true

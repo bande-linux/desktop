@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use smithay::utils::{Logical, Point, Size};
 use unbound_compositor::{BACKGROUND, Headless, Rect, Renderer};
-use unbound_test_wayland::{BLUE, RED, ResizeEdge, ShmImage, TestClient, roundtrip};
+use unbound_test_wayland::{BLUE, Placement, RED, ResizeEdge, ShmImage, TestClient, roundtrip};
 use wayland_client::protocol::wl_shm::Format;
 
 const OUTPUT: (i32, i32) = (256, 192);
@@ -292,4 +292,19 @@ fn with_reduce_motion_the_preview_fades_in_where_the_window_will_go() {
             .all(|(shown, below)| *shown > below),
         "{fading:?}"
     );
+}
+
+#[test]
+fn the_window_menu_can_tile_a_window_into_a_quarter_and_restore_it() {
+    let mut server = server();
+    let mut editor = app(&mut server, RED);
+    let before = settle(&mut server, &mut editor, RED);
+
+    editor.place_window(&mut server, 0, Placement::BottomRight);
+    let quarter = settle(&mut server, &mut editor, RED);
+    editor.place_window(&mut server, 0, Placement::Restore);
+    let restored = settle(&mut server, &mut editor, RED);
+
+    assert_eq!(quarter, rect(128, 96, 128, 96));
+    assert_eq!(restored, before);
 }

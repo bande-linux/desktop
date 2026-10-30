@@ -6,12 +6,13 @@ edition.workspace = true
 repository.workspace = true
 
 [features]
-client = ["dep:wayland-client"]
-server = ["dep:wayland-server"]
+client = ["dep:wayland-client", "dep:wayland-protocols", "wayland-protocols/client"]
+server = ["dep:wayland-server", "dep:wayland-protocols", "wayland-protocols/server"]
 
 [dependencies]
 wayland-backend.workspace = true
 wayland-client = { workspace = true, optional = true }
+wayland-protocols = { workspace = true, optional = true }
 wayland-scanner.workspace = true
 wayland-server = { workspace = true, optional = true }
 

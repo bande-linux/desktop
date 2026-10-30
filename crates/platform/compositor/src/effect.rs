@@ -25,6 +25,7 @@ struct BlurRegion {
     pending: Option<Rects>,
     current: Rects,
     ids: Vec<Id>,
+    radius: u32,
 }
 
 fn with_region<T>(surface: &WlSurface, f: impl FnOnce(&mut BlurRegion) -> T) -> T {
@@ -52,6 +53,14 @@ fn rects_of(region: &WlRegion) -> Rects {
             RectangleKind::Add => rects.into_iter().chain([rect]).collect(),
             RectangleKind::Subtract => Rectangle::subtract_rects_many(rects, [rect]),
         })
+}
+
+pub(crate) fn set_corner_radius(surface: &WlSurface, radius: u32) {
+    with_region(surface, |region| region.radius = radius);
+}
+
+pub(crate) fn corner_radius(surface: &WlSurface) -> f64 {
+    with_region(surface, |region| f64::from(region.radius))
 }
 
 pub(crate) fn commit_blur(surface: &WlSurface) {

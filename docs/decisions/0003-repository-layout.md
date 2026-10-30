@@ -25,7 +25,7 @@ crates/
              desktop, notifications
   apps/      files, settings, terminal, monitor
   services/  config, notify, power, clipboard, tray, automount, portal, polkit
-  libs/      spring, xdg, fs, audio, network, bluetooth, l10n, log
+  libs/      spring, xdg, fs, preview, audio, network, bluetooth, l10n, log
   testing/   test-bus, test-wayland, bench, sample
 data/        shared assets (wallpapers, icons, sounds)
 ```
@@ -41,8 +41,11 @@ data/        shared assets (wallpapers, icons, sounds)
 - **`apps/`**: one crate per app.
 - **`services/`**: one crate per session service; `portal` is `xdg-desktop-portal-unbound`.
 - **`libs/`**: shared logic without UI. `xdg` holds desktop entries, icons, MIME types,
-  `mimeapps.list` and user directories; `fs` holds the trash, file operations, undo and
-  watching.
+  `mimeapps.list`, user directories and `Apps`, the one answer to "which apps open this path";
+  `fs` holds folder listings and their sort order, size and date formatting, the trash, file
+  operations with their running queue and undo, and watching; `preview` reads the Quick Look
+  content of a file and hands decoded pixels to a constructor the caller passes, so it needs no
+  toolkit type.
 - **`testing/`**: `test-bus` (with the shared D-Bus fakes of system services), `test-wayland`,
   the benchmarks and the toolkit sample.
 

@@ -92,7 +92,7 @@ impl Menus {
         let panel = MenuPanel::new(menu, opening.text, &opening.palette);
         let size = panel.size();
         let mut menus = Self {
-            tracker: MenuTracker::new(panel),
+            tracker: MenuTracker::new(panel, opening.state.input.keyboard_initiated),
             popups: Vec::new(),
         };
         let placement = match placement {

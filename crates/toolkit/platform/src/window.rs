@@ -22,7 +22,7 @@ use unbound_graphics::{
     RenderError, Scene, TextSystem, pixels, vulkan_instance,
 };
 use unbound_protocols::client::unbound_shell_v1::VolumeKey;
-use unbound_widgets::{Menu, MenuOutcome};
+use unbound_widgets::{ClipboardRequest, Menu, MenuOutcome, Ui};
 use wayland_client::backend::WaylandError;
 use wayland_client::protocol::wl_buffer::{self, WlBuffer};
 use wayland_client::protocol::wl_callback::{self, WlCallback};
@@ -142,8 +142,16 @@ pub enum WindowEvent {
     CaptureArea,
     ActiveApp(String),
     AppsChanged,
-    VolumeKey { key: VolumeKey, fine: bool },
+    VolumeKey {
+        key: VolumeKey,
+        fine: bool,
+    },
     ToggleControlCenter,
+    AppResponding {
+        pid: i32,
+        app_id: String,
+        responding: bool,
+    },
     Accessibility(ActionRequest),
     AppearanceChanged(Appearance),
 }
@@ -527,7 +535,7 @@ impl Window {
         self.state.suggested_size.unwrap_or(self.size)
     }
 
-    fn title_height(&self) -> u32 {
+    pub(crate) fn title_height(&self) -> u32 {
         match &self.chrome {
             Some(_) if !self.state.toplevel.fullscreen => TITLE_BAR_HEIGHT,
             _ => 0,
@@ -751,6 +759,53 @@ impl Window {
             self.queue.blocking_dispatch(&mut self.state)?;
         }
         self.draw_menus(Instant::now())
+    }
+
+    pub fn drive(
+        &mut self,
+        ui: &mut Ui,
+        event: WindowEvent,
+    ) -> Result<Option<WindowEvent>, WindowError> {
+        let (changed, unhandled) = match event {
+            WindowEvent::Input(input) => {
+                let changed = ui.handle(&input);
+                if let Some((menu, at)) = ui.take_menu_request() {
+                    self.show_menu(menu, MenuPlacement::AtPoint(at))?;
+                }
+                match ui.take_clipboard_request() {
+                    Some(ClipboardRequest::Copy(text)) => self.copy(&text),
+                    Some(ClipboardRequest::Paste) => self.paste()?,
+                    None => {}
+                }
+                self.set_cursor(ui.cursor());
+                (changed, None)
+            }
+            WindowEvent::Accessibility(request) => match ui.perform(&request) {
+                true => (true, None),
+                false => (false, Some(WindowEvent::Accessibility(request))),
+            },
+            WindowEvent::MenuAction(action) => match ui.menu_action(&action) {
+                true => (true, None),
+                false => (false, Some(WindowEvent::MenuAction(action))),
+            },
+            WindowEvent::Pasted(text) => match ui.pasted(&text) {
+                true => (true, None),
+                false => (false, Some(WindowEvent::Pasted(text))),
+            },
+            WindowEvent::MenuClosed => match ui.menu_closed() {
+                true => (false, None),
+                false => (false, Some(WindowEvent::MenuClosed)),
+            },
+            WindowEvent::AppearanceChanged(appearance) => {
+                ui.set_appearance(appearance);
+                (true, Some(WindowEvent::AppearanceChanged(appearance)))
+            }
+            event => (false, Some(event)),
+        };
+        if changed || ui.is_animating() {
+            self.request_redraw();
+        }
+        Ok(unhandled)
     }
 
     pub fn is_menu_open(&self) -> bool {
@@ -1176,14 +1231,15 @@ impl Window {
             return;
         };
         let wayland_region = compositor.create_region(&self.queue.handle(), ());
+        let title = self.title_height() as f32;
         for rect in rects {
             let left = rect.x.floor() as i32;
-            let top = rect.y.floor() as i32;
+            let top = (rect.y + title).floor() as i32;
             wayland_region.add(
                 left,
                 top,
                 (rect.x + rect.width).ceil() as i32 - left,
-                (rect.y + rect.height).ceil() as i32 - top,
+                (rect.y + title + rect.height).ceil() as i32 - top,
             );
         }
         self.surface.set_input_region(Some(&wayland_region));
@@ -1507,7 +1563,7 @@ impl Dispatch<WlRegistry, ()> for State {
                     state.lock.output = Some(registry.bind(name, 1, handle, ()));
                 }
                 "unbound_shell_v1" => {
-                    state.shell.protocol = Some(registry.bind(name, version.min(4), handle, ()));
+                    state.shell.protocol = Some(registry.bind(name, version.min(6), handle, ()));
                 }
                 "ext_output_image_capture_source_manager_v1" => {
                     state.capture.sources = Some(registry.bind(name, 1, handle, ()));

@@ -3,13 +3,18 @@ mod button;
 mod context_menu;
 mod label;
 mod menu;
+mod name_editor;
+mod scroll;
 mod secure_field;
+mod sheet;
 mod slider;
 mod stack;
+mod table;
 mod text_field;
 mod toggle;
 
-use std::cell::Cell;
+use std::any::Any;
+use std::cell;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
@@ -20,9 +25,14 @@ pub use button::{BUTTON_HEIGHT, Button};
 pub use context_menu::ContextMenu;
 pub use label::Label;
 pub use menu::{Menu, MenuItem, MenuOutcome, MenuPanel, MenuTracker};
+pub use name_editor::NameEditor;
+pub use scroll::{ScrollState, ScrollView};
 pub use secure_field::SecureField;
+pub use sheet::Alert;
+use sheet::Sheet;
 pub use slider::{SLIDER_HEIGHT, Slider};
 pub use stack::{Axis, Stack};
+pub use table::{Cell, Column, HEADER_HEIGHT, ROW_HEIGHT, Row, Sort, Table};
 pub use text_field::{TEXT_FIELD_HEIGHT, TextField};
 pub use toggle::{SWITCH_SIZE, Toggle};
 pub use unbound_spring::Spring;
@@ -44,6 +54,25 @@ impl WidgetId {
     fn node(self) -> NodeId {
         NodeId(self.0)
     }
+
+    pub fn part(self, index: u64) -> NodeId {
+        NodeId((self.0 << PART_SHIFT) | (index + 1))
+    }
+
+    fn owner_of_part(node: NodeId) -> Option<(Self, u64)> {
+        let owner = node.0 >> PART_SHIFT;
+        (owner != 0).then(|| (Self(owner), (node.0 & PART_MASK) - 1))
+    }
+}
+
+const PART_SHIFT: u32 = 32;
+const PART_MASK: u64 = (1 << PART_SHIFT) - 1;
+
+#[derive(Debug, Default)]
+pub struct Parts {
+    pub children: Vec<NodeId>,
+    pub nodes: Vec<(NodeId, Node)>,
+    pub focus: Option<NodeId>,
 }
 
 impl From<WidgetId> for NodeId {
@@ -71,7 +100,14 @@ pub struct Context {
     pub reduce_motion: bool,
     focus: Option<WidgetId>,
     now: Instant,
-    animating: Cell<bool>,
+    animating: cell::Cell<bool>,
+    clipboard: Option<ClipboardRequest>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ClipboardRequest {
+    Copy(String),
+    Paste,
 }
 
 impl Context {
@@ -83,8 +119,13 @@ impl Context {
             reduce_motion: false,
             focus: None,
             now: Instant::now(),
-            animating: Cell::new(false),
+            animating: cell::Cell::new(false),
+            clipboard: None,
         }
+    }
+
+    pub fn copy(&mut self, text: &str) {
+        self.clipboard = Some(ClipboardRequest::Copy(text.to_owned()));
     }
 
     pub fn now(&self) -> Instant {
@@ -109,7 +150,17 @@ fn focus_ring(cx: &Context, shape: Shape, items: &mut Vec<Item>) {
     });
 }
 
-pub trait Widget {
+pub trait AsAny {
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+}
+
+impl<T: Any> AsAny for T {
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+}
+
+pub trait Widget: AsAny {
     fn id(&self) -> WidgetId;
     fn measure(&mut self, cx: &mut Context, available: Size) -> Size;
     fn place(&mut self, cx: &mut Context, frame: Rect);
@@ -145,6 +196,30 @@ pub trait Widget {
         false
     }
 
+    fn parts(&self, _cx: &Context) -> Parts {
+        Parts::default()
+    }
+
+    fn perform_part(&mut self, _cx: &mut Context, _part: u64, _request: &ActionRequest) -> bool {
+        false
+    }
+
+    fn key_equivalent(&self) -> Option<Key> {
+        None
+    }
+
+    fn dismissed(&self) -> bool {
+        false
+    }
+
+    fn hit_children(&self, _point: Point) -> bool {
+        true
+    }
+
+    fn reveal(&mut self, _cx: &mut Context, _rect: Rect) -> bool {
+        false
+    }
+
     fn children(&self) -> &[Box<dyn Widget>] {
         &[]
     }
@@ -163,6 +238,8 @@ pub struct Ui {
     pointer: Option<Point>,
     menu_owner: Option<WidgetId>,
     menu_request: Option<(Menu, Point)>,
+    awaiting_paste: bool,
+    sheet: Option<Sheet>,
 }
 
 fn contains(frame: Rect, point: Point) -> bool {
@@ -197,12 +274,64 @@ fn hit_path(widget: &dyn Widget, point: Point, path: &mut Vec<WidgetId>) -> bool
         return false;
     }
     path.push(widget.id());
+    if !widget.hit_children(point) {
+        return true;
+    }
     for child in widget.children().iter().rev() {
         if hit_path(child.as_ref(), point, path) {
             break;
         }
     }
     true
+}
+
+fn equivalent(widget: &dyn Widget, key: Key) -> Option<WidgetId> {
+    if widget.key_equivalent() == Some(key) {
+        return Some(widget.id());
+    }
+    widget
+        .children()
+        .iter()
+        .find_map(|child| equivalent(child.as_ref(), key))
+}
+
+fn lookup_in<'a>(
+    root: &'a mut Box<dyn Widget>,
+    sheet: &'a mut Option<Sheet>,
+    id: WidgetId,
+) -> Option<&'a mut dyn Widget> {
+    if find(root.as_ref(), id).is_some() {
+        return find_mut(root.as_mut(), id);
+    }
+    find_mut(sheet.as_mut()?.widget.as_mut(), id)
+}
+
+fn path_to(widget: &dyn Widget, id: WidgetId, path: &mut Vec<WidgetId>) -> bool {
+    path.push(widget.id());
+    if widget.id() == id
+        || widget
+            .children()
+            .iter()
+            .any(|child| path_to(child.as_ref(), id, path))
+    {
+        return true;
+    }
+    path.pop();
+    false
+}
+
+fn opens_menu(key: Key, modifiers: Modifiers) -> bool {
+    match key {
+        Key::Menu => true,
+        Key::Function(10) => {
+            modifiers
+                == Modifiers {
+                    shift: true,
+                    ..Modifiers::default()
+                }
+        }
+        _ => false,
+    }
 }
 
 fn focus_order(widget: &dyn Widget, cx: &Context, order: &mut Vec<WidgetId>) {
@@ -226,14 +355,17 @@ fn collect(widget: &dyn Widget, cx: &Context, nodes: &mut Vec<(NodeId, Node)>) {
     if widget.accepts_focus(cx) {
         node.add_action(Action::Focus);
     }
+    let parts = widget.parts(cx);
     node.set_children(
         widget
             .children()
             .iter()
             .map(|child| child.id().node())
+            .chain(parts.children)
             .collect::<Vec<_>>(),
     );
     nodes.push((widget.id().node(), node));
+    nodes.extend(parts.nodes);
     for child in widget.children() {
         collect(child.as_ref(), cx, nodes);
     }
@@ -250,6 +382,8 @@ impl Ui {
             pointer: None,
             menu_owner: None,
             menu_request: None,
+            awaiting_paste: false,
+            sheet: None,
         }
     }
 
@@ -262,13 +396,91 @@ impl Ui {
     }
 
     pub fn widget(&mut self, id: WidgetId) -> Option<&mut dyn Widget> {
-        find_mut(self.root.as_mut(), id)
+        self.lookup_mut(id)
+    }
+
+    pub fn widget_as<T: Widget + 'static>(&mut self, id: WidgetId) -> Option<&mut T> {
+        self.lookup_mut(id)?.as_any_mut().downcast_mut()
+    }
+
+    fn lookup(&self, id: WidgetId) -> Option<&dyn Widget> {
+        find(self.root.as_ref(), id).or_else(|| {
+            self.sheet
+                .as_ref()
+                .and_then(|sheet| find(sheet.widget.as_ref(), id))
+        })
+    }
+
+    fn lookup_mut(&mut self, id: WidgetId) -> Option<&mut dyn Widget> {
+        lookup_in(&mut self.root, &mut self.sheet, id)
+    }
+
+    fn active(&self) -> &dyn Widget {
+        match &self.sheet {
+            Some(sheet) if !sheet.closing => sheet.widget.as_ref(),
+            _ => self.root.as_ref(),
+        }
+    }
+
+    pub fn present_sheet(&mut self, sheet: impl Widget + 'static) {
+        self.cx.now = (self.clock)();
+        self.captured = None;
+        let previous_focus = self.cx.focus.take();
+        let mut shown = Animated::new(0.0);
+        shown.animate_to(&self.cx, 1.0, Spring::QUICK);
+        self.sheet = Some(Sheet {
+            widget: Box::new(sheet),
+            shown,
+            closing: false,
+            previous_focus,
+        });
+        let mut order = Vec::new();
+        focus_order(self.active(), &self.cx, &mut order);
+        let primary = equivalent(self.active(), Key::Enter);
+        self.cx.focus = order
+            .into_iter()
+            .find(|id| {
+                self.lookup(*id)
+                    .is_some_and(|widget| widget.key_equivalent().is_none())
+            })
+            .or(primary.filter(|id| self.accepts_focus(*id)));
+    }
+
+    pub fn has_sheet(&self) -> bool {
+        self.sheet.as_ref().is_some_and(|sheet| !sheet.closing)
+    }
+
+    fn dismiss_finished_sheet(&mut self) {
+        let Some(sheet) = &mut self.sheet else {
+            return;
+        };
+        if sheet.closing || !sheet.widget.dismissed() {
+            return;
+        }
+        sheet.closing = true;
+        sheet.shown.animate_to(&self.cx, 0.0, Spring::QUICK);
+        self.cx.focus = sheet.previous_focus;
+        self.hovered.clear();
+        self.captured = None;
     }
 
     pub fn layout(&mut self, size: Size) {
         self.root.measure(&mut self.cx, size);
         self.root
             .place(&mut self.cx, Rect::new(0.0, 0.0, size.width, size.height));
+        if let Some(sheet) = &mut self.sheet {
+            let measured = sheet.widget.measure(&mut self.cx, size);
+            let shown = sheet.shown.value(&self.cx);
+            sheet.widget.place(
+                &mut self.cx,
+                Rect::new(
+                    ((size.width - measured.width) / 2.0).round(),
+                    -measured.height * (1.0 - shown),
+                    measured.width,
+                    measured.height,
+                ),
+            );
+        }
     }
 
     pub fn set_clock(&mut self, clock: impl Fn() -> Instant + 'static) {
@@ -291,6 +503,19 @@ impl Ui {
         self.layout(Size::new(width as f32, height as f32));
         let mut items = Vec::new();
         self.root.paint(&self.cx, &mut items);
+        if let Some(sheet) = &self.sheet {
+            let shown = sheet.shown.value(&self.cx);
+            if sheet.closing && shown <= 0.001 {
+                self.sheet = None;
+            } else {
+                sheet.paint(
+                    &self.cx,
+                    shown,
+                    Size::new(width as f32, height as f32),
+                    &mut items,
+                );
+            }
+        }
         Scene {
             width,
             height,
@@ -373,17 +598,54 @@ impl Ui {
                 self.move_focus(!modifiers.shift);
                 true
             }
-            Event::Key { .. } | Event::Commit(_) | Event::Preedit { .. } => self
+            Event::Key { key, modifiers } if opens_menu(*key, *modifiers) => {
+                self.request_keyboard_menu()
+            }
+            Event::Key { key, modifiers } => {
+                let delivered = self
+                    .cx
+                    .focus
+                    .is_some_and(|target| self.deliver(target, event));
+                delivered || (*modifiers == Modifiers::default() && self.press_equivalent(*key))
+            }
+            Event::Commit(_) | Event::Preedit { .. } => self
                 .cx
                 .focus
                 .is_some_and(|target| self.deliver(target, event)),
         }
     }
 
+    fn press_equivalent(&mut self, key: Key) -> bool {
+        let Some(target) = equivalent(self.active(), key) else {
+            return false;
+        };
+        self.perform(&ActionRequest {
+            action: Action::Click,
+            target_tree: TreeId::ROOT,
+            target_node: target.node(),
+            data: None,
+        })
+    }
+
+    fn request_keyboard_menu(&mut self) -> bool {
+        let mut path = Vec::new();
+        let active = self.active();
+        let target = self.cx.focus.unwrap_or_else(|| active.id());
+        if !path_to(active, target, &mut path) {
+            path = vec![active.id()];
+        }
+        let frame = find(active, target).map_or_else(|| active.frame(), |widget| widget.frame());
+        let point = Point::new(frame.x, frame.y + frame.height);
+        self.request_menu_along(path, point)
+    }
+
     fn request_menu(&mut self, point: Point) -> bool {
-        let path = self.hovered.clone();
+        self.request_menu_along(self.hovered.clone(), point)
+    }
+
+    fn request_menu_along(&mut self, path: Vec<WidgetId>, point: Point) -> bool {
         for id in path.into_iter().rev() {
-            let Some(widget) = find_mut(self.root.as_mut(), id) else {
+            let Some(widget) = lookup_in(&mut self.root, &mut self.sheet, id) else {
                 continue;
             };
             if let Some(menu) = widget.context_menu(&mut self.cx, point) {
@@ -395,8 +657,28 @@ impl Ui {
         false
     }
 
+    pub fn take_clipboard_request(&mut self) -> Option<ClipboardRequest> {
+        let request = self.cx.clipboard.take();
+        if request == Some(ClipboardRequest::Paste) {
+            self.awaiting_paste = true;
+        }
+        request
+    }
+
+    pub fn pasted(&mut self, text: &str) -> bool {
+        if !std::mem::take(&mut self.awaiting_paste) {
+            return false;
+        }
+        self.handle(&Event::Commit(text.to_owned()));
+        true
+    }
+
     pub fn take_menu_request(&mut self) -> Option<(Menu, Point)> {
         self.menu_request.take()
+    }
+
+    pub fn menu_closed(&mut self) -> bool {
+        self.menu_owner.take().is_some()
     }
 
     pub fn menu_action(&mut self, action: &str) -> bool {
@@ -404,7 +686,7 @@ impl Ui {
         let Some(owner) = self.menu_owner.take() else {
             return false;
         };
-        let Some(widget) = find_mut(self.root.as_mut(), owner) else {
+        let Some(widget) = lookup_in(&mut self.root, &mut self.sheet, owner) else {
             return false;
         };
         widget.menu_action(&mut self.cx, action)
@@ -420,7 +702,7 @@ impl Ui {
         };
         path.iter()
             .rev()
-            .filter_map(|id| find(self.root.as_ref(), *id))
+            .filter_map(|id| self.lookup(*id))
             .find_map(|widget| widget.cursor(point))
             .unwrap_or_default()
     }
@@ -429,7 +711,7 @@ impl Ui {
         self.pointer = pointer.map(|pointer| pointer.position);
         let mut path = Vec::new();
         if let Some(pointer) = pointer {
-            hit_path(self.root.as_ref(), pointer.position, &mut path);
+            hit_path(self.active(), pointer.position, &mut path);
         }
         let left = self
             .hovered
@@ -456,23 +738,26 @@ impl Ui {
     }
 
     pub fn text_input_area(&self) -> Option<Rect> {
-        find(self.root.as_ref(), self.cx.focus?)?.text_input_area()
+        self.lookup(self.cx.focus?)?.text_input_area()
     }
 
     fn accepts_focus(&self, target: WidgetId) -> bool {
-        find(self.root.as_ref(), target).is_some_and(|widget| widget.accepts_focus(&self.cx))
+        self.lookup(target)
+            .is_some_and(|widget| widget.accepts_focus(&self.cx))
     }
 
     fn deliver(&mut self, target: WidgetId, event: &Event) -> bool {
-        let Some(widget) = find_mut(self.root.as_mut(), target) else {
+        let Some(widget) = lookup_in(&mut self.root, &mut self.sheet, target) else {
             return false;
         };
-        widget.handle(&mut self.cx, event)
+        let handled = widget.handle(&mut self.cx, event);
+        self.dismiss_finished_sheet();
+        handled
     }
 
     fn move_focus(&mut self, forward: bool) {
         let mut order = Vec::new();
-        focus_order(self.root.as_ref(), &self.cx, &mut order);
+        focus_order(self.active(), &self.cx, &mut order);
         if order.is_empty() {
             self.cx.focus = None;
             return;
@@ -488,6 +773,25 @@ impl Ui {
             (Some(index), false) => (index + order.len() - 1) % order.len(),
         };
         self.cx.focus = Some(order[next]);
+        self.reveal_focus();
+    }
+
+    fn reveal_focus(&mut self) {
+        let Some(focus) = self.cx.focus else {
+            return;
+        };
+        let mut path = Vec::new();
+        if !path_to(self.active(), focus, &mut path) {
+            return;
+        }
+        let Some(rect) = self.lookup(focus).map(|widget| widget.frame()) else {
+            return;
+        };
+        for id in path.into_iter().rev().skip(1) {
+            if let Some(widget) = lookup_in(&mut self.root, &mut self.sheet, id) {
+                widget.reveal(&mut self.cx, rect);
+            }
+        }
     }
 
     pub fn accessibility(&self) -> TreeUpdate {
@@ -498,6 +802,12 @@ impl Ui {
         {
             root.set_role(Role::Window);
         }
+        if let Some(sheet) = self.sheet.as_ref().filter(|sheet| !sheet.closing) {
+            if let Some((_, root)) = nodes.first_mut() {
+                root.push_child(sheet.widget.id().node());
+            }
+            collect(sheet.widget.as_ref(), &self.cx, &mut nodes);
+        }
         TreeUpdate {
             nodes,
             tree: Some(TreeInfo {
@@ -506,13 +816,36 @@ impl Ui {
                 ..TreeInfo::new(self.root.id().node())
             }),
             tree_id: TreeId::ROOT,
-            focus: self.cx.focus.unwrap_or(self.root.id()).node(),
+            focus: self.focus_node(),
         }
+    }
+
+    fn focus_node(&self) -> NodeId {
+        let focus = self.cx.focus.unwrap_or(self.root.id());
+        self.lookup(focus)
+            .and_then(|widget| widget.parts(&self.cx).focus)
+            .unwrap_or(focus.node())
     }
 
     pub fn perform(&mut self, request: &ActionRequest) -> bool {
         self.cx.now = (self.clock)();
+        if let Some((owner, part)) = WidgetId::owner_of_part(request.target_node) {
+            if find(self.active(), owner).is_none() {
+                return false;
+            }
+            if matches!(request.action, Action::Focus | Action::Click) && self.accepts_focus(owner)
+            {
+                self.cx.focus = Some(owner);
+            }
+            let Some(widget) = lookup_in(&mut self.root, &mut self.sheet, owner) else {
+                return false;
+            };
+            return widget.perform_part(&mut self.cx, part, request);
+        }
         let target = WidgetId(request.target_node.0);
+        if find(self.active(), target).is_none() {
+            return false;
+        }
         if request.action == Action::Focus {
             let accepts = self.accepts_focus(target);
             if accepts {
@@ -520,9 +853,11 @@ impl Ui {
             }
             return accepts;
         }
-        let Some(widget) = find_mut(self.root.as_mut(), target) else {
+        let Some(widget) = lookup_in(&mut self.root, &mut self.sheet, target) else {
             return false;
         };
-        widget.perform(&mut self.cx, request)
+        let performed = widget.perform(&mut self.cx, request);
+        self.dismiss_finished_sheet();
+        performed
     }
 }

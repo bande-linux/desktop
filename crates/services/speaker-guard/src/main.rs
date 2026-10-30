@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use card::{Card, SensePcm};
 use model::Model;
@@ -84,7 +84,10 @@ impl Guard {
         let mut buffer = vec![0i16; self.model.period_frames * self.channels];
         let mut runtime_saved = Instant::now();
         let mut persistent_saved = Instant::now();
-        self.cool_below_hard_limit(stop);
+        let wait = Duration::from_millis(u64::from(WAIT_MS));
+        if !cooled_below_hard_limit(&mut self.protections, stop, wait, std::thread::sleep) {
+            return Ok(());
+        }
         let mut last = Instant::now();
         self.card.heartbeat().map_err(|e| e.to_string())?;
         let gains: Vec<f64> = self.protections.iter().map(|p| p.gain_db).collect();
@@ -170,30 +173,38 @@ impl Guard {
         Ok(())
     }
 
-    fn cool_below_hard_limit(&mut self, stop: &AtomicBool) {
-        let wait = std::time::Duration::from_millis(u64::from(WAIT_MS));
-        while !stop.load(Ordering::Relaxed)
-            && self
-                .protections
-                .iter()
-                .any(|p| p.thermal.exceeds_hard_limit(p.temperatures))
-        {
-            std::thread::sleep(wait);
-            for protection in &mut self.protections {
-                protection.temperatures =
-                    protection
-                        .thermal
-                        .advance(protection.temperatures, 0.0, wait.as_secs_f64());
-            }
-        }
-    }
-
     fn save(&self) {
         let snapshot = self.snapshot();
         for path in [RUNTIME_STATE, PERSISTENT_STATE] {
             if let Err(error) = state::write(Path::new(path), &snapshot) {
                 tracing::warn!("cannot save the speaker temperatures to {path}: {error}");
             }
+        }
+    }
+}
+
+fn cooled_below_hard_limit(
+    protections: &mut [Protection],
+    stop: &AtomicBool,
+    wait: Duration,
+    mut sleep: impl FnMut(Duration),
+) -> bool {
+    loop {
+        if stop.load(Ordering::Relaxed) {
+            return false;
+        }
+        if !protections
+            .iter()
+            .any(|p| p.thermal.exceeds_hard_limit(p.temperatures))
+        {
+            return true;
+        }
+        sleep(wait);
+        for protection in protections.iter_mut() {
+            protection.temperatures =
+                protection
+                    .thermal
+                    .advance(protection.temperatures, 0.0, wait.as_secs_f64());
         }
     }
 }
@@ -271,5 +282,63 @@ fn main() -> ExitCode {
             tracing::error!("{error}");
             ExitCode::FAILURE
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use thermal::{LimiterParams, Temperatures, ThermalParams};
+
+    fn hot() -> Protection {
+        Protection {
+            thermal: ThermalParams {
+                ambient: 46.0,
+                coil_resistance: 40.0,
+                coil_time_constant: 3.7,
+                magnet_resistance: 60.0,
+                magnet_time_constant: 250.0,
+                limit: 140.0,
+                headroom: 40.0,
+            },
+            limiter: LimiterParams {
+                attack: 1.0,
+                release: 20.0,
+                max_reduction_db: 20.0,
+            },
+            temperatures: Temperatures {
+                coil: 200.0,
+                magnet: 120.0,
+            },
+            gain_db: 0.0,
+        }
+    }
+
+    #[test]
+    fn a_hot_speaker_is_cooled_below_its_hard_limit_before_unlocking() {
+        let mut protections = vec![hot()];
+        let stop = AtomicBool::new(false);
+        let mut slept = 0;
+        let cooled =
+            cooled_below_hard_limit(&mut protections, &stop, Duration::from_millis(250), |_| {
+                slept += 1
+            });
+        assert!(cooled);
+        assert!(slept > 0);
+        let p = &protections[0];
+        assert!(!p.thermal.exceeds_hard_limit(p.temperatures));
+    }
+
+    #[test]
+    fn a_stop_while_cooling_never_reports_the_speaker_cool() {
+        let mut protections = vec![hot()];
+        let stop = AtomicBool::new(false);
+        let cooled =
+            cooled_below_hard_limit(&mut protections, &stop, Duration::from_millis(250), |_| {
+                stop.store(true, Ordering::Relaxed)
+            });
+        assert!(!cooled);
+        let p = &protections[0];
+        assert!(p.thermal.exceeds_hard_limit(p.temperatures));
     }
 }

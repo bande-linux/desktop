@@ -4042,7 +4042,9 @@ dependencies = [
  "unbound-l10n",
  "unbound-lock",
  "unbound-log",
+ "unbound-status",
  "unbound-toolkit",
+ "zbus",
 ]
 
 [[package]]
@@ -4099,6 +4101,7 @@ dependencies = [
  "libloading",
  "rustix 1.1.6",
  "tracing",
+ "unbound-bar",
  "unbound-datetime",
  "unbound-golden",
  "unbound-inbox",
@@ -4106,6 +4109,7 @@ dependencies = [
  "unbound-l10n",
  "unbound-log",
  "unbound-spring",
+ "unbound-status",
  "unbound-toolkit",
  "unbound-wallpaper",
  "unbound-xdg",

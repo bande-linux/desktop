@@ -8,11 +8,17 @@ use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionData, ActionRequest, Node, Role, TreeId, TreeUpdate};
+use unbound_bar::symbols::{
+    Symbol, Symbols, battery_items, natural_size, place_symbol, snap, wifi_symbol,
+};
 pub use unbound_datetime::DateFormats;
 use unbound_l10n::Localizer;
 use unbound_spring::State;
+pub use unbound_status::devices::PowerAction;
+use unbound_status::session::Ending;
+use unbound_status::status::{Battery, Wifi};
 use unbound_toolkit::ui::{
-    Animated, Context, Event, Key, SecureField, Size, Spring, Ui, Widget, WidgetId,
+    Animated, Button, Context, Event, Key, SecureField, Size, Spring, Ui, Widget, WidgetId,
 };
 use unbound_toolkit::{
     Appearance, Image, Item, Palette, Paragraph, Point, Rect, Scene, Scheme, Shape, TextAlign,
@@ -42,6 +48,29 @@ const GAP: f32 = 12.0;
 const MESSAGE_WIDTH: f32 = 360.0;
 const PEER: f32 = 6.0;
 const PEER_GAP: f32 = 6.0;
+const STATUS_TOP: f32 = 12.0;
+const STATUS_HEIGHT: f32 = 24.0;
+const STATUS_MARGIN: f32 = 16.0;
+const STATUS_GAP: f32 = 10.0;
+const BATTERY_SLOT: f32 = 27.0;
+const PERCENT_GAP: f32 = 4.0;
+const POWER_BOTTOM: f32 = 48.0;
+const POWER_GAP: f32 = 12.0;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PowerPress {
+    Ask(PowerAction),
+    Cancel,
+    Confirm,
+}
+
+fn ending_of(action: PowerAction) -> Option<Ending> {
+    match action {
+        PowerAction::Sleep => None,
+        PowerAction::Restart => Some(Ending::Restart),
+        PowerAction::ShutDown => Some(Ending::ShutDown),
+    }
+}
 
 pub fn night(appearance: Appearance) -> Palette {
     Appearance {
@@ -82,6 +111,13 @@ struct Model {
     now: Instant,
     backdrop: Option<Image>,
     backdrop_shown: Animated,
+    battery: Option<Battery>,
+    wifi: Option<Symbol>,
+    symbols: Symbols,
+    scale: f64,
+    powers: Vec<PowerAction>,
+    asking: Option<PowerAction>,
+    power_press: Option<PowerPress>,
 }
 
 type Shared = Rc<RefCell<Model>>;
@@ -93,6 +129,8 @@ struct LockView {
     paragraphs: Option<[Paragraph; 4]>,
     input_source: Option<Paragraph>,
     message: Option<Paragraph>,
+    percent: Option<Paragraph>,
+    row: Vec<Size>,
     frame: Rect,
 }
 
@@ -139,6 +177,17 @@ impl Widget for LockView {
             let hint = L10N.tr_args("input-source", [("name", name.as_str().into())]);
             paragraph(&hint, TextStyle::role(TextRole::Callout, palette.ink2), cx)
         });
+        self.percent = model.battery.map(|battery| {
+            let percent = L10N.tr_args(
+                "battery-percent",
+                [("percent", battery.percent.round().into())],
+            );
+            paragraph(
+                &percent,
+                TextStyle::role(TextRole::Callout, palette.ink),
+                cx,
+            )
+        });
         self.message = model.message.as_ref().map(|message| {
             cx.text.paragraph(
                 message,
@@ -148,9 +197,11 @@ impl Widget for LockView {
             )
         });
         drop(model);
+        let mut sizes: Vec<Size> = Vec::new();
         for child in &mut self.children {
-            child.measure(cx, Size::new(FIELD_WIDTH, available.height));
+            sizes.push(child.measure(cx, Size::new(FIELD_WIDTH, available.height)));
         }
+        self.row = sizes.split_off(1.min(sizes.len()));
         available
     }
 
@@ -163,11 +214,26 @@ impl Widget for LockView {
         drop(model);
         let name_bottom = self.peers_top() + self.peers_height();
         let x = frame.x + ((frame.width - FIELD_WIDTH) / 2.0).round() + shake.round();
-        for child in &mut self.children {
+        let first = self.children.len().min(1);
+        let (field, row) = self.children.split_at_mut(first);
+        for child in field {
             child.place(
                 cx,
                 Rect::new(x, name_bottom + GAP, FIELD_WIDTH, frame.height),
             );
+        }
+        let width = self
+            .row
+            .iter()
+            .map(|size| size.width + POWER_GAP)
+            .sum::<f32>()
+            - POWER_GAP;
+        let height = self.row.iter().map(|size| size.height).fold(0.0, f32::max);
+        let mut left = frame.x + ((frame.width - width) / 2.0).round();
+        let top = frame.y + frame.height - POWER_BOTTOM - height;
+        for (child, size) in row.iter_mut().zip(&self.row) {
+            child.place(cx, Rect::new(left, top, size.width, size.height));
+            left += size.width + POWER_GAP;
         }
     }
 
@@ -199,6 +265,7 @@ impl Widget for LockView {
             });
         }
         drop(model);
+        self.paint_status(cx, items);
         let Some([date, time, initial, name]) = &self.paragraphs else {
             return;
         };
@@ -292,11 +359,23 @@ impl Widget for LockView {
                 [("index", (current + 1).into()), ("count", count.into())],
             )
         });
-        let label = [Some(locked), position, model.message.clone(), input_source]
-            .into_iter()
-            .flatten()
-            .collect::<Vec<_>>()
-            .join(" ");
+        let battery = model.battery.map(|battery| {
+            L10N.tr_args(
+                "battery-level",
+                [("percent", battery.percent.round().into())],
+            )
+        });
+        let label = [
+            Some(locked),
+            position,
+            model.message.clone(),
+            input_source,
+            battery,
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .join(" ");
         node.set_label(label);
         node
     }
@@ -311,6 +390,43 @@ impl Widget for LockView {
 }
 
 impl LockView {
+    fn paint_status(&self, cx: &Context, items: &mut Vec<Item>) {
+        let mut model = self.model.borrow_mut();
+        let model = &mut *model;
+        let scale = model.scale;
+        let top = self.frame.y + STATUS_TOP;
+        let mut right = self.frame.x + self.frame.width - STATUS_MARGIN;
+        if let Some(battery) = model.battery {
+            let icon = Rect::new(right - BATTERY_SLOT, top, BATTERY_SLOT, STATUS_HEIGHT);
+            battery_items(&mut model.symbols, &cx.palette, battery, icon, scale, items);
+            right = icon.x;
+            if let Some(percent) = &self.percent {
+                let x = right - PERCENT_GAP - percent.width();
+                items.push(Item::Text {
+                    origin: Point::new(
+                        snap(x, scale),
+                        snap(top + (STATUS_HEIGHT - percent.height()) / 2.0, scale),
+                    ),
+                    paragraph: percent.clone(),
+                });
+                right = x;
+            }
+            right -= STATUS_GAP;
+        }
+        if let Some(symbol) = model.wifi {
+            let (width, _) = natural_size(symbol);
+            let rect = Rect::new(right - width, top, width, STATUS_HEIGHT);
+            place_symbol(
+                &mut model.symbols,
+                symbol,
+                cx.palette.ink,
+                rect,
+                scale,
+                items,
+            );
+        }
+    }
+
     fn avatar(&self) -> Rect {
         Rect::new(
             self.frame.x + ((self.frame.width - AVATAR) / 2.0).round(),
@@ -339,6 +455,7 @@ impl LockView {
 pub struct LockScreen {
     model: Shared,
     ui: Ui,
+    view: WidgetId,
     field: WidgetId,
     formats: DateFormats,
 }
@@ -371,6 +488,13 @@ impl LockScreen {
             now: Instant::now(),
             backdrop: None,
             backdrop_shown: Animated::new(0.0),
+            battery: None,
+            wifi: None,
+            symbols: Symbols::default(),
+            scale: 1.0,
+            powers: Vec::new(),
+            asking: None,
+            power_press: None,
         }));
         let submitted = model.clone();
         let field = SecureField::new(&L10N.tr("enter-password"), FIELD_FONT, move |password| {
@@ -381,13 +505,16 @@ impl LockScreen {
             }
         });
         let field_id = field.id();
+        let view_id = WidgetId::next();
         let view = LockView {
-            id: WidgetId::next(),
+            id: view_id,
             model: model.clone(),
             children: vec![Box::new(field)],
             paragraphs: None,
             input_source: None,
             message: None,
+            percent: None,
+            row: Vec::new(),
             frame: Rect::default(),
         };
         let mut ui = Ui::new(Box::new(view), Context::new(text, night(appearance)));
@@ -400,8 +527,85 @@ impl LockScreen {
         Self {
             model,
             ui,
+            view: view_id,
             field: field_id,
             formats,
+        }
+    }
+
+    pub fn offer_power(&mut self, powers: &[PowerAction]) {
+        self.model.borrow_mut().powers = powers.to_vec();
+        self.ui.context().keyboard_navigation = true;
+        self.show_power_row();
+    }
+
+    fn power_button(&self, title: &str, press: PowerPress) -> Button {
+        let model = self.model.clone();
+        Button::new(title, move || model.borrow_mut().power_press = Some(press))
+    }
+
+    fn show_power_row(&mut self) {
+        let (powers, asking) = {
+            let model = self.model.borrow();
+            (model.powers.clone(), model.asking)
+        };
+        let row: Vec<Button> = match asking.and_then(ending_of) {
+            Some(ending) => vec![
+                self.power_button(&L10N.tr("cancel"), PowerPress::Cancel)
+                    .cancel(),
+                self.power_button(&ending.button(), PowerPress::Confirm)
+                    .primary(),
+            ],
+            None => powers
+                .into_iter()
+                .map(|power| {
+                    let title = ending_of(power).map_or_else(|| L10N.tr("sleep"), Ending::button);
+                    self.power_button(&title, PowerPress::Ask(power))
+                })
+                .collect(),
+        };
+        let focus = asking.and_then(|_| row.last().map(Widget::id));
+        if let Some(view) = self.ui.widget_as::<LockView>(self.view) {
+            view.children.truncate(1);
+            view.children.extend(
+                row.into_iter()
+                    .map(|button| Box::new(button) as Box<dyn Widget>),
+            );
+        }
+        let target = focus.unwrap_or(self.field);
+        self.ui.perform(&ActionRequest {
+            action: Action::Focus,
+            target_tree: TreeId::ROOT,
+            target_node: target.into(),
+            data: None,
+        });
+    }
+
+    fn ask_power(&mut self, asking: Option<PowerAction>) {
+        let mut model = self.model.borrow_mut();
+        model.asking = asking;
+        model.message = asking.and_then(ending_of).map(Ending::question);
+        drop(model);
+        self.show_power_row();
+    }
+
+    pub fn take_power(&mut self) -> Option<PowerAction> {
+        let press = self.model.borrow_mut().power_press.take()?;
+        match press {
+            PowerPress::Ask(PowerAction::Sleep) => Some(PowerAction::Sleep),
+            PowerPress::Ask(power) => {
+                self.ask_power(Some(power));
+                None
+            }
+            PowerPress::Cancel => {
+                self.ask_power(None);
+                None
+            }
+            PowerPress::Confirm => {
+                let power = self.model.borrow().asking;
+                self.ask_power(None);
+                power
+            }
         }
     }
 
@@ -421,6 +625,19 @@ impl LockScreen {
         let changed = cx.caps_lock != on;
         cx.caps_lock = on;
         changed
+    }
+
+    pub fn set_devices(&mut self, battery: Option<Battery>, wifi: Option<&Wifi>) -> bool {
+        let mut model = self.model.borrow_mut();
+        let wifi = wifi.map(|wifi| wifi_symbol(Some(wifi)));
+        let changed = model.battery != battery || model.wifi != wifi;
+        model.battery = battery;
+        model.wifi = wifi;
+        changed
+    }
+
+    pub fn set_scale(&mut self, scale: f64) {
+        self.model.borrow_mut().scale = scale;
     }
 
     pub fn set_position(&mut self, index: usize, count: usize) {
@@ -466,6 +683,10 @@ impl LockScreen {
             key: Key::Escape, ..
         } = event
         {
+            if self.model.borrow().asking.is_some() {
+                self.ask_power(None);
+                return true;
+            }
             self.clear_field();
             self.model.borrow_mut().message = None;
             return true;

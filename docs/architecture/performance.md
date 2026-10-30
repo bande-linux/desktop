@@ -98,7 +98,9 @@ scrolling 1.58 → 0.20 Mpx.
   sheet colour at 72 %, which does not depend on what lies beneath it, so a change under it
   repaints only the change (`with_reduced_effects_a_blur_region_is_a_flat_scrim…`). The bar is
   opaque since its Datum restyle, so this benchmark does not show it; it applies to the
-  notifications and Control Center, which still blur. Shadows stay: with opaque regions only
+  launcher, the notifications and Control Center, which still blur. The overview's own
+  full-screen blur, merged after these measurements, is left out on a CPU renderer and its
+  scrim stays, so a 5.3 Mpx blur does not run on every frame of its animation. Shadows stay: with opaque regions only
   their rim outside the window is shaded, which is not where the time goes.
 - **Cursor.** Moving the pointer re-renders nothing: the cursor element is `Kind::Cursor` in a
   memory buffer, which Smithay's `DrmCompositor` puts on the cursor plane that virtio-gpu

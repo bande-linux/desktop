@@ -85,6 +85,7 @@ impl FilesView {
 
     fn show_tab(&mut self) {
         self.refresh_size_slider();
+        self.refresh_view_control();
         self.selection_changed();
         self.focus_content();
     }

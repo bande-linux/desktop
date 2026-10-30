@@ -1348,6 +1348,7 @@ impl FilesView {
         self.shown_root = Some(self.browser.root().clone());
         self.remember_view();
         self.refresh_size_slider();
+        self.refresh_view_control();
         self.selection_changed();
         self.focus_content();
     }

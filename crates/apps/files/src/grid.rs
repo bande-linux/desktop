@@ -18,6 +18,7 @@ const LABEL_INSET: f32 = 4.0;
 const ELLIPSIS: char = '\u{2026}';
 const KEPT_TAIL: usize = 7;
 const LABELS_KEPT: usize = 4000;
+const SELECTION_RADIUS: f32 = 6.0;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct Grid {
@@ -349,21 +350,13 @@ impl FilesView {
             let label = offset(grid.label_area(index), origin);
             if marked {
                 shown.push(Item::Fill {
-                    shape: Shape::rounded(icon.inset(-ICON_PAD + 1.0), 8.0),
+                    shape: Shape::rounded(icon.inset(-ICON_PAD + 1.0), SELECTION_RADIUS),
                     paint: self.palette.label_muted.with_alpha(40).into(),
                 });
             }
             let (picture, thumbnail) = self.grid_picture(entry, size);
             if let Some(image) = picture {
                 let fitted = crate::paint::fitted(icon, &image);
-                if thumbnail {
-                    shown.push(Item::Shadow {
-                        shape: Shape::rect(fitted),
-                        offset: Point::new(0.0, 1.0),
-                        blur_radius: 3.0,
-                        color: Color::hex(0x000000).with_alpha(50),
-                    });
-                }
                 shown.push(Item::Image {
                     rect: fitted,
                     image,
@@ -397,7 +390,7 @@ impl FilesView {
             let text_area = Rect::new(text_x - 4.0, label.y - 1.0, width + 8.0, height + 2.0);
             if marked {
                 shown.push(Item::Fill {
-                    shape: Shape::rounded(text_area, 4.0),
+                    shape: Shape::rounded(text_area, SELECTION_RADIUS),
                     paint: self.palette.accent_color.into(),
                 });
             }

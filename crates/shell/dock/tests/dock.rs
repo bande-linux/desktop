@@ -646,3 +646,39 @@ fn super_f3_lets_the_keyboard_walk_the_dock_open_apps_and_menus_and_give_the_key
     assert!(!state.is_navigating());
     assert!(!state.navigate(Key::Down, plain, now));
 }
+
+#[test]
+fn files_dragged_over_an_icon_find_their_target_and_grow_it() {
+    let mut harness = Harness::new(DockEdge::Left, Scheme::Light);
+    let editor = harness.center("org.example.Editor");
+    let panel = harness.state.borrow().panel();
+    let trash = Point::new(panel.x + panel.width / 2.0, panel.y + panel.height - 30.0);
+    let state = harness.state.borrow();
+    assert_eq!(
+        state.drop_target(Point::new(1.0, editor.y)),
+        Some(MenuTarget::App("org.example.Editor".to_owned()))
+    );
+    assert_eq!(state.drop_target(trash), Some(MenuTarget::Trash));
+    assert_eq!(state.drop_target(Point::new(200.0, editor.y)), None);
+    drop(state);
+
+    let before = harness.rect("org.example.Editor");
+    let now = harness.clock.get();
+    harness
+        .state
+        .borrow_mut()
+        .hover_drop(Some(&MenuTarget::App("org.example.Editor".to_owned())), now);
+    harness.advance(Duration::from_secs(1));
+    let frame = harness.frame();
+    harness
+        .state
+        .borrow_mut()
+        .hover_drop(None, harness.clock.get());
+    harness.advance(Duration::from_secs(1));
+    assert_ne!(
+        frame,
+        harness.frame(),
+        "the hovered icon grows, then settles"
+    );
+    assert_eq!(harness.rect("org.example.Editor"), before);
+}

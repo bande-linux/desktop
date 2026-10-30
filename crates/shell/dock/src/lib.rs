@@ -53,6 +53,8 @@ const EDGE_STRIP: f32 = 2.0;
 const HIDDEN_SHADOW: f32 = 24.0;
 const BLUR_BANDS: usize = 5;
 const DRAG_THRESHOLD: f32 = 4.0;
+const DROP_SCALE: f32 = 1.12;
+
 const REMOVE_TEXT: f32 = 12.0;
 
 #[derive(Debug, Clone)]
@@ -706,6 +708,43 @@ impl DockState {
         self.reveal_at = None;
         if self.auto_hide && !self.menu_open && self.selected.is_none() && self.is_shown() {
             self.hide_at = Some(now + HIDE_DELAY);
+        }
+    }
+
+    pub fn drop_target(&self, point: Point) -> Option<MenuTarget> {
+        self.slots
+            .iter()
+            .filter(|slot| !slot.leaving)
+            .find(|slot| contains(self.reach(slot.cell), point))
+            .and_then(|slot| match &slot.key {
+                Key::App(app_id) => Some(MenuTarget::App(app_id.clone())),
+                Key::Trash => Some(MenuTarget::Trash),
+                Key::RunningSeparator | Key::TrashSeparator => None,
+            })
+    }
+
+    pub fn drag_inside(&mut self, inside: bool, now: Instant) {
+        match (inside, self.pointer_inside) {
+            (true, false) => self.pointer_entered(now),
+            (false, true) => self.pointer_left(now),
+            _ => {}
+        }
+    }
+
+    pub fn hover_drop(&mut self, target: Option<&MenuTarget>, now: Instant) {
+        let reduce_motion = self.reduce_motion;
+        for slot in &mut self.slots {
+            let hovered = match (&slot.key, target) {
+                (Key::App(app_id), Some(MenuTarget::App(target))) => app_id == target,
+                (Key::Trash, Some(MenuTarget::Trash)) => true,
+                _ => false,
+            };
+            if slot.pressed {
+                continue;
+            }
+            let scale = if hovered { DROP_SCALE } else { 1.0 };
+            slot.press
+                .animate_at(now, reduce_motion, scale, Spring::QUICK);
         }
     }
 

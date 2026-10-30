@@ -19,10 +19,12 @@ use unbound_dock::{
 use unbound_fs::{FolderWatch, Trash};
 use unbound_toolkit::ui::{Event, Menu, MenuItem, Ui};
 use unbound_toolkit::{
-    App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement, Point, Rect, Role,
-    Scene, TextSystem, Window, WindowError, WindowEvent,
+    App, DragAction, DragEvent, Edges, Image, KeyboardFocus, LayerKind, LayerOptions,
+    MenuPlacement, Point, Rect, Role, Scene, TextSystem, Window, WindowError, WindowEvent,
 };
-use unbound_xdg::{DesktopEntry, Locale, applications, current_desktops, data_dirs, find_icon};
+use unbound_xdg::{
+    DesktopEntry, Locale, applications, current_desktops, data_dirs, find_icon, path_from_file_uri,
+};
 
 const FILES: &str = "org.unbound.Files";
 const TRASH_URI: &str = "trash:///";
@@ -220,6 +222,98 @@ impl Dock {
         self.open_in_files(window, &folder);
     }
 
+    fn drop_action(&self, target: &MenuTarget) -> Option<DragAction> {
+        match target {
+            MenuTarget::Trash => self.trash.is_some().then_some(DragAction::Move),
+            MenuTarget::App(app_id) => self
+                .entry(app_id)
+                .filter(|entry| !entry.mime_types.is_empty())
+                .map(|_| DragAction::Copy),
+        }
+    }
+
+    fn drag(&mut self, window: &mut Window, drag: DragEvent) {
+        let now = Instant::now();
+        match drag {
+            DragEvent::Entered {
+                position,
+                uris: true,
+                ..
+            }
+            | DragEvent::Moved(position) => {
+                let target = self.state.borrow().drop_target(position);
+                let action = target.as_ref().and_then(|target| self.drop_action(target));
+                window.accept_drag(action);
+                let hovered = action.and(target);
+                let mut state = self.state.borrow_mut();
+                state.drag_inside(true, now);
+                state.hover_drop(hovered.as_ref(), now);
+            }
+            DragEvent::Entered { .. } => window.accept_drag(None),
+            DragEvent::Left | DragEvent::Finished(_) => {
+                let mut state = self.state.borrow_mut();
+                state.hover_drop(None, now);
+                state.drag_inside(false, now);
+            }
+            DragEvent::Dropped {
+                position, transfer, ..
+            } => {
+                let mut state = self.state.borrow_mut();
+                state.hover_drop(None, now);
+                state.drag_inside(false, now);
+                drop(state);
+                let files: Vec<PathBuf> = transfer
+                    .uris
+                    .iter()
+                    .filter_map(|uri| path_from_file_uri(uri))
+                    .collect();
+                let target = self.state.borrow().drop_target(position);
+                match target {
+                    Some(MenuTarget::Trash) => self.move_to_trash(files),
+                    Some(MenuTarget::App(app_id)) => self.open_with(window, &app_id, &files),
+                    None => {}
+                }
+            }
+        }
+    }
+
+    fn move_to_trash(&self, files: Vec<PathBuf>) {
+        let Some(trash) = &self.trash else {
+            return;
+        };
+        let trash = trash.trash.clone();
+        let moved = thread::Builder::new()
+            .name("move-to-trash".to_owned())
+            .spawn(move || {
+                for file in files {
+                    if let Err(error) = trash.put(&file) {
+                        tracing::warn!("cannot move {} to the Trash: {error}", file.display());
+                    }
+                }
+            });
+        if let Err(error) = moved {
+            tracing::warn!("cannot start moving to the Trash: {error}");
+        }
+    }
+
+    fn open_with(&mut self, window: &mut Window, app_id: &str, files: &[PathBuf]) {
+        let Some(entry) = self.entry(app_id).cloned() else {
+            return;
+        };
+        if files.is_empty() {
+            return;
+        }
+        let token = window.activation_token(app_id).ok();
+        match unbound_xdg::launch_with(&entry, files, token.as_deref()) {
+            Ok(()) => {
+                if !self.running.iter().any(|running| running == app_id) {
+                    self.state.borrow_mut().launching(app_id, Instant::now());
+                }
+            }
+            Err(error) => tracing::warn!("cannot open the files with {}: {error}", entry.name),
+        }
+    }
+
     fn release_keyboard(&mut self, window: &mut Window) {
         self.release_at = None;
         self.state.borrow_mut().end_navigation(Instant::now());
@@ -358,10 +452,11 @@ impl Dock {
                 if running {
                     items.push(MenuItem::separator());
                     items.push(MenuItem::new(&L10N.tr("menu-hide"), MENU_HIDE));
+                    let force_quit = MenuItem::new(&L10N.tr("menu-force-quit"), MENU_FORCE_QUIT);
                     items.push(if self.unresponsive.contains(app_id) {
-                        MenuItem::new(&L10N.tr("menu-force-quit"), MENU_FORCE_QUIT)
+                        force_quit
                     } else {
-                        MenuItem::new(&L10N.tr("menu-quit"), MENU_QUIT)
+                        MenuItem::new(&L10N.tr("menu-quit"), MENU_QUIT).alternate(force_quit)
                     });
                 }
                 items
@@ -676,6 +771,10 @@ impl App for Dock {
                 if !responding {
                     self.unresponsive.push(app_id);
                 }
+            }
+            WindowEvent::Drag(drag) => {
+                self.drag(window, drag);
+                window.request_redraw();
             }
             WindowEvent::AttentionRequested(app_id) => {
                 self.state

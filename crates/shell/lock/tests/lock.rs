@@ -199,7 +199,7 @@ fn a_rejected_password_is_cleared_and_the_field_shakes_back_into_place() {
     assert!(moved);
     screen.advance(rejected + SHAKE_DURATION);
     assert_eq!(screen.field_frame(OUTPUT.0, OUTPUT.1), resting);
-    assert_eq!(screen.shaking_until(), None);
+    assert!(!screen.is_animating(), "the shake is over");
 
     type_text(&mut screen, "right");
     press_return(&mut screen);

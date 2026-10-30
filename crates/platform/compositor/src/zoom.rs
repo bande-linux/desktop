@@ -52,7 +52,7 @@ impl Zoom {
     }
 
     pub(crate) fn is_animating(&self) -> bool {
-        !self.level.is_settled(SETTLED, SETTLED)
+        !self.level.is_at_rest(SETTLED)
     }
 
     fn go_to(&mut self, level: f64, reduce_motion: bool) {

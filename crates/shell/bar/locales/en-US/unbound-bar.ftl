@@ -83,6 +83,7 @@ app-hide-others = Hide Others
 app-show-all = Show All
 app-quit = Quit { $app }
 search-menus = Search menus
+type-to-search = Type to search
 no-menu-results = No Results
 app-menus = Menus of { $app }
 search = Search

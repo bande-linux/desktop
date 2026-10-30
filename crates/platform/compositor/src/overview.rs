@@ -16,7 +16,7 @@ use unbound_spring::{Animation, Spring, State as Phase};
 
 use crate::gesture::Tracker;
 use crate::label::{Label, Labels, TITLE};
-use crate::motion::{Look, Motion};
+use crate::motion::{Look, Motion, Tick};
 use crate::scene::{
     BlurElement, CORNER_RADIUS, FillElement, Piece, fresh, pieces_of, premultiplied, rounded,
     scaled_pieces,
@@ -43,8 +43,6 @@ const TITLE_ROOM: f64 = 24.0;
 const RING: f64 = 4.0;
 const DIMMED: f64 = 0.25;
 const MOMENTUM_SPEED: f64 = 2.0;
-const SETTLED_PROGRESS: f64 = 1e-3;
-const SETTLED_SPEED: f64 = 1e-2;
 const ADD_FILL: f32 = 0.6;
 const TARGET_FILL: f32 = 0.45;
 const BACKDROP_IDS: usize = 2;
@@ -536,7 +534,12 @@ impl State {
         Palette::for_scheme(self.decorations.scheme)
     }
 
-    pub(crate) fn overview_backdrop(&self, screen: usize, scale: f64) -> Vec<OutputElement> {
+    pub(crate) fn overview_backdrop(
+        &self,
+        screen: usize,
+        scale: f64,
+        reduced_effects: bool,
+    ) -> Vec<OutputElement> {
         let alpha = self.overview.progress as f32;
         if alpha <= 0.0 {
             return Vec::new();
@@ -552,12 +555,16 @@ impl State {
         let output = self.screen_rect(screen);
         let output = Rectangle::new(output.location.to_f64(), output.size.to_f64());
         let area = rounded(output.to_physical(scale), 0.0);
+        let scrim = OutputElement::Fill(FillElement::new(
+            scrim,
+            area,
+            premultiplied(self.palette().scrim, alpha),
+        ));
+        if reduced_effects {
+            return vec![scrim];
+        }
         vec![
-            OutputElement::Fill(FillElement::new(
-                scrim,
-                area,
-                premultiplied(self.palette().scrim, alpha),
-            )),
+            scrim,
             OutputElement::Blur(BlurElement::new(blur, area, scale, alpha)),
         ]
     }
@@ -821,22 +828,19 @@ impl State {
         self.focus(Some(surface));
     }
 
-    pub(crate) fn animate_overview(&mut self, time: Duration) {
-        let refresh = self.main_screen().refresh();
+    pub(crate) fn animate_overview(&mut self, tick: Tick) {
+        let precision = self.progress_precision();
         if let Some((_, motion)) = &mut self.overview.returning {
-            motion.advance(time, refresh);
+            motion.advance(tick);
             if motion.is_settled() {
                 self.overview.returning = None;
             }
         }
         if let Some(settle) = self.overview.settle.as_mut() {
-            let step = self
-                .overview
-                .last
-                .map_or(refresh, |last| time.saturating_sub(last));
-            self.overview.last = Some(time);
-            self.overview.progress = settle.advance(step.as_secs_f64()).position;
-            if settle.is_settled(SETTLED_PROGRESS, SETTLED_SPEED) {
+            let step = tick.step_since(self.overview.last);
+            self.overview.last = Some(tick.time);
+            self.overview.progress = settle.advance(step).position;
+            if settle.is_at_rest(precision) {
                 self.overview.progress = self.overview.target;
                 self.overview.settle = None;
                 self.overview.last = None;

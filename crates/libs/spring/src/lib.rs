@@ -2,6 +2,7 @@ use std::f64::consts::TAU;
 use std::fmt;
 
 const CRITICAL_BAND: f64 = 1e-6;
+const REST_HORIZON: f64 = 0.02;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct State {
@@ -44,13 +45,13 @@ impl std::error::Error for SpringError {}
 
 impl Spring {
     pub const INTERACTIVE: Self = Self::preset(0.15, 0.86);
-    pub const QUICK: Self = Self::preset(0.25, 1.0);
-    pub const STANDARD: Self = Self::preset(0.35, 1.0);
-    pub const GENTLE: Self = Self::preset(0.5, 1.0);
-    pub const MOMENTUM: Self = Self::preset(0.4, 0.85);
-    pub const BOUNCY: Self = Self::preset(0.5, 0.7);
+    pub const QUICK: Self = Self::preset(0.18, 1.0);
+    pub const STANDARD: Self = Self::preset(0.25, 1.0);
+    pub const GENTLE: Self = Self::preset(0.35, 1.0);
+    pub const MOMENTUM: Self = Self::preset(0.3, 0.85);
+    pub const BOUNCY: Self = Self::preset(0.4, 0.7);
     pub const SHAKE: Self = Self::preset(0.12, 0.2);
-    pub const FADE: Self = Self::preset(0.2, 1.0);
+    pub const FADE: Self = Self::preset(0.12, 1.0);
 
     const fn preset(duration: f64, damping_ratio: f64) -> Self {
         Self {
@@ -169,10 +170,10 @@ impl Animation {
         self.elapsed = 0.0;
     }
 
-    pub fn is_settled(&self, position_tolerance: f64, velocity_tolerance: f64) -> bool {
+    pub fn is_at_rest(&self, precision: f64) -> bool {
         let state = self.state();
-        (state.position - self.target).abs() <= position_tolerance
-            && state.velocity.abs() <= velocity_tolerance
+        (state.position - self.target).abs() <= precision
+            && state.velocity.abs() * REST_HORIZON <= precision
     }
 }
 

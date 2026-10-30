@@ -7,7 +7,7 @@ use smithay::utils::{Logical, Point, Rectangle};
 use unbound_protocols::server::unbound_app_v1;
 use unbound_spring::Spring;
 
-use crate::motion::{Look, Motion};
+use crate::motion::{Look, Motion, Tick};
 use crate::scene::Casting;
 use crate::state::{Headless, Rect, State};
 
@@ -436,12 +436,12 @@ impl State {
         }
     }
 
-    pub(crate) fn animate_preview(&mut self, time: Duration) {
+    pub(crate) fn animate_preview(&mut self, tick: Tick) {
         let Some(preview) = &mut self.preview else {
             return;
         };
         preview.motion.retarget(preview.target);
-        preview.motion.advance(time, self.screens[0].refresh());
+        preview.motion.advance(tick);
 
         if preview.target.alpha == 0.0 && preview.motion.is_settled() {
             self.preview = None;

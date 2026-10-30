@@ -529,20 +529,35 @@ impl RenderElement<VulkanRenderer> for BlurElement {
     }
 }
 
+const SCRIM_OPACITY: f32 = 0.72;
+
+pub(crate) fn scrim(renderer: &VulkanRenderer, scheme: Scheme) -> Option<[f32; 4]> {
+    renderer.reduced_effects().then(|| {
+        let sheet = Palette::for_scheme(scheme).sheet;
+        let channel = |value: u8| f32::from(value) / 255.0 * SCRIM_OPACITY;
+        [
+            channel(sheet.r),
+            channel(sheet.g),
+            channel(sheet.b),
+            SCRIM_OPACITY,
+        ]
+    })
+}
+
 fn behind(
     id: Id,
-    shape: RoundedRect,
+    region: RoundedRect,
     scale: f64,
     alpha: f32,
     backdrop: Option<[f32; 4]>,
 ) -> OutputElement {
     match backdrop {
-        Some(color) => OutputElement::Fill(FillElement::new(
+        Some(color) => OutputElement::Fill(FillElement::backdrop(
             id,
-            shape,
+            region,
             color.map(|channel| channel * alpha),
         )),
-        None => OutputElement::Blur(BlurElement::new(id, shape, scale, alpha)),
+        None => OutputElement::Blur(BlurElement::new(id, region, scale, alpha)),
     }
 }
 
@@ -603,9 +618,21 @@ pub struct FillElement {
     shape: RoundedRect,
     color: [f32; 4],
     commit: CommitCounter,
+    backdrop: bool,
 }
 
 impl FillElement {
+    fn backdrop(id: Id, shape: RoundedRect, color: [f32; 4]) -> Self {
+        Self {
+            backdrop: true,
+            ..Self::new(id, shape, color)
+        }
+    }
+
+    pub(crate) fn is_backdrop(&self) -> bool {
+        self.backdrop
+    }
+
     pub(crate) fn new(id: Id, shape: RoundedRect, color: [f32; 4]) -> Self {
         let mut hasher = DefaultHasher::new();
         for value in [shape.components(), color, [shape.radius, 0.0, 0.0, 0.0]].concat() {
@@ -616,6 +643,7 @@ impl FillElement {
             shape,
             color,
             commit: CommitCounter::from(hasher.finish() as usize),
+            backdrop: false,
         }
     }
 }
@@ -927,6 +955,7 @@ pub(crate) fn window_elements(
         .into_iter()
         .flatten();
     let origin = window.surface_origin().to_f64();
+    let backdrop = backdrop.or_else(|| scrim(renderer, shading.scheme));
     let blurs = blur_rects(window.surface())
         .into_iter()
         .filter_map(|(id, rect)| {

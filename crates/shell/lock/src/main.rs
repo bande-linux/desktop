@@ -12,6 +12,7 @@ use unbound_lock::{
     BackdropSource, Inbox, LockScreen, PAM_SERVICE, User, Variant, authenticate, current_user,
     load_backdrop,
 };
+use unbound_toolkit::ui::frame_time;
 use unbound_toolkit::{
     App, Image, Role, Scene, Scheme, TextSystem, Window, WindowError, WindowEvent,
 };
@@ -41,7 +42,7 @@ struct Locker {
 impl Locker {
     fn check(&mut self, password: String) {
         let Ok(mut sender) = self.verdict_sender.try_clone() else {
-            self.screen.reject(Instant::now());
+            self.screen.reject(frame_time().on_screen());
             return;
         };
         let login = self.user.login.clone();
@@ -71,7 +72,7 @@ impl App for Locker {
                 Err(error) => tracing::warn!("cannot load the wallpaper: {error}"),
             }
         }
-        self.screen.advance(Instant::now());
+        self.screen.advance(frame_time().presentation);
         self.screen.scene(width, height)
     }
 
@@ -110,7 +111,7 @@ impl App for Locker {
     fn source_ready(&mut self, window: &mut Window, index: usize) {
         if index == 1 {
             if let Some(image) = self.backdrop.as_ref().and_then(|inbox| inbox.drain().pop()) {
-                self.screen.set_backdrop(image, Instant::now());
+                self.screen.set_backdrop(image, frame_time().on_screen());
                 window.request_redraw();
             }
             return;
@@ -125,21 +126,17 @@ impl App for Locker {
                 Err(error) => tracing::warn!("cannot unlock: {error}"),
             }
         } else {
-            self.screen.reject(Instant::now());
+            self.screen.reject(frame_time().on_screen());
             window.request_redraw();
         }
     }
 
     fn deadline(&self) -> Option<Instant> {
-        let now = Instant::now();
-        let fading = self
-            .screen
-            .is_fading(now)
-            .then(|| now + Duration::from_millis(8));
-        [Some(self.next_clock), self.screen.shaking_until(), fading]
-            .into_iter()
-            .flatten()
-            .min()
+        Some(self.next_clock)
+    }
+
+    fn animating(&self) -> bool {
+        self.screen.is_animating()
     }
 
     fn tick(&mut self, window: &mut Window, now: Instant) {

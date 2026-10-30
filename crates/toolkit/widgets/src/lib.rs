@@ -1,6 +1,7 @@
 mod animation;
 mod button;
 mod checkbox;
+mod clock;
 mod combo_box;
 mod context_menu;
 mod control;
@@ -38,6 +39,7 @@ use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId, TreeInfo, Tre
 pub use animation::Animated;
 pub use button::{BUTTON_HEIGHT, Button};
 pub use checkbox::{CHECKBOX_SIZE, CheckState, Checkbox};
+pub use clock::{FrameTime, frame_time, request_wake, set_frame_time, take_wake};
 pub use combo_box::ComboBox;
 pub use context_menu::ContextMenu;
 pub use disclosure::{DISCLOSURE_HEIGHT, Disclosure};
@@ -144,7 +146,9 @@ pub struct Context {
     pub caps_lock: bool,
     focus: Option<WidgetId>,
     now: Instant,
+    start: Instant,
     animating: cell::Cell<bool>,
+    wake: cell::Cell<Option<Instant>>,
     clipboard: Option<ClipboardRequest>,
     input_method_reset: bool,
     emoji_picker: bool,
@@ -168,7 +172,9 @@ impl Context {
             caps_lock: false,
             focus: None,
             now: Instant::now(),
+            start: Instant::now(),
             animating: cell::Cell::new(false),
+            wake: cell::Cell::new(None),
             clipboard: None,
             input_method_reset: false,
             emoji_picker: false,
@@ -195,6 +201,15 @@ impl Context {
 
     pub fn now(&self) -> Instant {
         self.now
+    }
+
+    pub fn animation_start(&self) -> Instant {
+        self.start
+    }
+
+    pub fn wake_at(&self, at: Instant) {
+        let wake = self.wake.get().map_or(at, |wake| wake.min(at));
+        self.wake.set(Some(wake));
     }
 
     pub fn is_focused(&self, id: WidgetId) -> bool {
@@ -309,7 +324,7 @@ pub trait Widget: AsAny {
 pub struct Ui {
     root: Box<dyn Widget>,
     cx: Context,
-    clock: Box<dyn Fn() -> Instant>,
+    clock: Box<dyn Fn() -> FrameTime>,
     captured: Option<(WidgetId, PointerButton)>,
     hovered: Vec<WidgetId>,
     pointer: Option<Point>,
@@ -462,7 +477,7 @@ impl Ui {
         Self {
             root,
             cx,
-            clock: Box::new(Instant::now),
+            clock: Box::new(clock::frame_time),
             captured: None,
             hovered: Vec::new(),
             pointer: None,
@@ -508,7 +523,7 @@ impl Ui {
         id: WidgetId,
         update: impl FnOnce(&mut T, &Context),
     ) -> bool {
-        self.cx.now = (self.clock)();
+        self.sync_event_clock();
         let widget = lookup_in(&mut self.root, &mut self.sheet, id)
             .and_then(|widget| widget.as_any_mut().downcast_mut::<T>());
         match widget {
@@ -552,7 +567,7 @@ impl Ui {
     }
 
     fn present(&mut self, widget: Box<dyn Widget>, floating: bool) {
-        self.cx.now = (self.clock)();
+        self.sync_event_clock();
         self.captured = None;
         let previous_focus = self.cx.focus.take();
         let mut shown = Animated::new(0.0);
@@ -624,8 +639,14 @@ impl Ui {
     }
 
     pub fn set_clock(&mut self, clock: impl Fn() -> Instant + 'static) {
-        self.clock = Box::new(clock);
-        self.cx.now = (self.clock)();
+        self.clock = Box::new(move || FrameTime::immediate(clock()));
+        self.sync_event_clock();
+    }
+
+    fn sync_event_clock(&mut self) {
+        let on_screen = (self.clock)().on_screen();
+        self.cx.now = on_screen;
+        self.cx.start = on_screen;
     }
 
     pub fn set_appearance(&mut self, appearance: Appearance) {
@@ -649,8 +670,11 @@ impl Ui {
     }
 
     pub fn paint_layers(&mut self, width: u32, height: u32) -> (Vec<Item>, Vec<Item>) {
-        self.cx.now = (self.clock)();
+        let time = (self.clock)();
+        self.cx.now = time.presentation;
+        self.cx.start = time.on_screen();
         self.cx.animating.set(false);
+        self.cx.wake.set(None);
         self.layout(Size::new(width as f32, height as f32));
         let mut items = Vec::new();
         self.root.paint(&self.cx, &mut items);
@@ -687,11 +711,14 @@ impl Ui {
         {
             self.cx.animating.set(true);
         }
+        if let Some(wake) = self.deadline() {
+            request_wake(wake);
+        }
         (items, above)
     }
 
     pub fn handle(&mut self, event: &Event) -> bool {
-        self.cx.now = (self.clock)();
+        self.sync_event_clock();
         match event {
             Event::PointerDown(pointer) => {
                 let hovered = self.hover(Some(pointer));
@@ -947,7 +974,7 @@ impl Ui {
     }
 
     pub fn menu_action(&mut self, action: &str) -> bool {
-        self.cx.now = (self.clock)();
+        self.sync_event_clock();
         let Some(owner) = self.menu_owner.take() else {
             return false;
         };
@@ -1033,7 +1060,12 @@ impl Ui {
     }
 
     pub fn deadline(&self) -> Option<Instant> {
-        self.tooltips.deadline((self.clock)())
+        let now = (self.clock)().presentation;
+        self.tooltips
+            .deadline(now)
+            .into_iter()
+            .chain(self.cx.wake.get())
+            .min()
     }
 
     fn show_focus_tooltip(&mut self) {
@@ -1153,7 +1185,7 @@ impl Ui {
     }
 
     pub fn perform(&mut self, request: &ActionRequest) -> bool {
-        self.cx.now = (self.clock)();
+        self.sync_event_clock();
         if let Some((owner, part)) = WidgetId::owner_of_part(request.target_node) {
             if find(self.active(), owner).is_none() {
                 return false;

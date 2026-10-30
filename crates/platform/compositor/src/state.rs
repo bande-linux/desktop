@@ -87,7 +87,7 @@ use crate::lock::Lock;
 use crate::motion::IconRect;
 use crate::scene::{
     BlurElement, Closing, Drawn, FillElement, PieceElement, Shading, ShadowElement, WindowElement,
-    preview_elements, surface_blurs, tie_blurs_to_what_lies_below, window_elements,
+    preview_elements, scrim, surface_blurs, tie_blurs_to_what_lies_below, window_elements,
 };
 use crate::screen::{OutputConfig, OutputSettings, Screen};
 use crate::session::{ForceQuit, LockScreen, SessionClient, SessionRole};
@@ -170,6 +170,7 @@ pub struct State {
     _virtual_keyboard_state: VirtualKeyboardManagerState,
     pending_activation: Option<WlSurface>,
     pub(crate) windowless_app: Option<(Client, String)>,
+    pub(crate) key_behind_layer: Option<WlSurface>,
     pub(crate) shell_resources: Vec<UnboundShellV1>,
     pub(crate) capture_resources:
         Vec<unbound_protocols::server::unbound_capture_v1::UnboundCaptureV1>,
@@ -218,7 +219,6 @@ pub struct State {
     pub(crate) keys: crate::access_keys::AccessKeys,
     pub(crate) keyboard_monitor: crate::keyboard_monitor::KeyboardMonitor,
     pub(crate) needs_redraw: bool,
-    pub(crate) animated_at: Option<Duration>,
     pub(crate) pointer_location: Point<f64, Logical>,
     pub(crate) cursor_shown: bool,
     pub(crate) cursor_status: CursorImageStatus,
@@ -342,6 +342,7 @@ impl Headless {
             }),
             pending_activation: None,
             windowless_app: None,
+            key_behind_layer: None,
             shell_resources: Vec::new(),
             capture_resources: Vec::new(),
             pending_insert: None,
@@ -394,7 +395,6 @@ impl Headless {
             keys: crate::access_keys::AccessKeys::default(),
             keyboard_monitor: crate::keyboard_monitor::KeyboardMonitor::default(),
             needs_redraw: false,
-            animated_at: None,
             pointer_location: (center.w, center.h).into(),
             cursor_shown: false,
             cursor_status: CursorImageStatus::default_named(),
@@ -705,7 +705,9 @@ impl Headless {
                         &surface,
                         location,
                         scale,
-                        self.state.backdrop(),
+                        self.state
+                            .backdrop()
+                            .or_else(|| scrim(renderer, self.state.decorations.scheme)),
                     ));
                 }
                 Placed::Window(window) => {
@@ -748,7 +750,11 @@ impl Headless {
                     elements.extend(self.state.overview_elements(renderer, screen, scale));
                 }
                 Placed::Backdrop(screen) => {
-                    elements.extend(self.state.overview_backdrop(screen, scale));
+                    elements.extend(self.state.overview_backdrop(
+                        screen,
+                        scale,
+                        renderer.reduced_effects(),
+                    ));
                 }
             }
         }
@@ -946,7 +952,13 @@ impl State {
         if self.popup_grab.is_some() && surface != self.menu_root() {
             self.close_menus();
         }
-        self.windowless_app = None;
+        let onto_layer = surface
+            .as_ref()
+            .is_some_and(|surface| self.toplevel_of(surface).is_none());
+        self.key_behind_layer = self.key_window().filter(|_| onto_layer);
+        if !onto_layer {
+            self.windowless_app = None;
+        }
         self.typed_at = None;
         if let Some(surface) = &surface
             && self.window_index(surface).is_some()

@@ -26,7 +26,7 @@ use unbound_graphics::{
 use unbound_protocols::client::unbound_shell_v1::{
     BrightnessKey, Edge as DisplayEdge, LauncherMode, MediaKey, Panel, VolumeKey,
 };
-use unbound_widgets::{ClipboardRequest, Menu, MenuItem, MenuOutcome, Ui};
+use unbound_widgets::{ClipboardRequest, FrameTime, Menu, MenuItem, MenuOutcome, Ui};
 use wayland_client::backend::WaylandError;
 use wayland_client::protocol::wl_buffer::{self, WlBuffer};
 use wayland_client::protocol::wl_callback::{self, WlCallback};
@@ -66,6 +66,7 @@ use crate::clipboard::{DragAction, DragEvent, DragIcon, Transfer};
 use crate::effect::BackgroundEffect;
 use crate::lock::{Locked, SessionLock};
 use crate::popup::{MenuPlacement, Menus, Opening, Parent};
+use crate::presentation::Presentation;
 use crate::scale::{Scaling, SurfaceScale};
 use crate::seat::Input;
 use crate::shell::Shell;
@@ -327,6 +328,7 @@ pub(crate) struct State {
     pub(crate) own_surface: Option<WlSurface>,
     pub(crate) popup_surfaces: Vec<WlSurface>,
     pub(crate) popup_configured: Vec<bool>,
+    pub(crate) popup_frames: Vec<bool>,
     pub(crate) popup_input: Vec<(usize, Event)>,
     pub(crate) popups_changed: bool,
     pub(crate) popup_dismissed: bool,
@@ -338,6 +340,7 @@ pub(crate) struct State {
     pub(crate) text_input: TextInput,
     pub(crate) scaling: Scaling,
     pub(crate) effect: BackgroundEffect,
+    pub(crate) presentation: Presentation,
 }
 
 impl State {
@@ -404,6 +407,8 @@ pub struct Window {
     pub(crate) closed_by_button: bool,
     text: Option<TextSystem>,
     shown_frame: Option<Frame>,
+    planned: Option<FrameTime>,
+    shown_opaque: Option<Rect>,
     pub(crate) app_cursor: Cursor,
     pub(crate) accessibility: Accessibility,
     pub(crate) appearance: Rc<RefCell<AppearanceWatch>>,
@@ -568,15 +573,11 @@ impl Window {
             Some(_) => state.scaling.scale(),
             None => 1.0,
         };
-        let gpu = if std::env::var_os(RENDERER_VARIABLE).is_some_and(|value| value == "cpu") {
-            Gpu::Unavailable
-        } else {
-            start_gpu(
-                &connection,
-                &surface,
-                (pixels(size.0, scale), pixels(size.1, scale)),
-            )
-        };
+        let gpu = start_gpu(
+            &connection,
+            &surface,
+            (pixels(size.0, scale), pixels(size.1, scale)),
+        );
         if fresh {
             appearance.borrow_mut().wait_for_first_reading();
         }
@@ -606,6 +607,8 @@ impl Window {
             closed_by_button: false,
             text: None,
             shown_frame: None,
+            planned: None,
+            shown_opaque: None,
             app_cursor: Cursor::Default,
             accessibility: Accessibility::new()?,
             appearance,
@@ -897,6 +900,18 @@ impl Window {
         self.needs_redraw = true;
     }
 
+    pub fn frame_time(&self) -> FrameTime {
+        self.state
+            .presentation
+            .frame_time(Instant::now(), self.state.frame_pending)
+    }
+
+    pub(crate) fn plan_frame(&mut self) -> FrameTime {
+        let frame = self.frame_time();
+        self.planned = Some(frame);
+        frame
+    }
+
     pub(crate) fn wants_frame(&self) -> bool {
         self.visible
             && !self.state.frame_pending
@@ -963,7 +978,7 @@ impl Window {
     pub fn take_events(&mut self) -> Vec<WindowEvent> {
         self.take_arrival();
         self.take_drop();
-        self.serve_menus(Instant::now());
+        self.serve_menus(self.frame_time());
         let events = std::mem::take(&mut self.state.events);
         if self.chrome.is_none() {
             return events;
@@ -1012,7 +1027,7 @@ impl Window {
         {
             self.queue.blocking_dispatch(&mut self.state)?;
         }
-        self.draw_menus(Instant::now())
+        self.draw_menus(self.frame_time().presentation)
     }
 
     pub fn drive(
@@ -1102,7 +1117,14 @@ impl Window {
         let scale = self.scale();
         let handle = self.queue.handle();
         if let Some(menus) = &mut self.menus {
-            menus.draw(&self.state, &handle, &mut self.cpu, appearance, scale, now)?;
+            menus.draw(
+                &mut self.state,
+                &handle,
+                &mut self.cpu,
+                appearance,
+                scale,
+                now,
+            )?;
         }
         self.accessibility.request_tree();
         self.flush()
@@ -1169,6 +1191,12 @@ impl Window {
         self.cpu = CpuRenderer::new();
     }
 
+    pub(crate) fn wake_ui_at(&mut self, wake: Option<Instant>) {
+        if wake.is_some() {
+            self.ui_deadline = self.ui_deadline.into_iter().chain(wake).min();
+        }
+    }
+
     pub(crate) fn tick(&mut self, now: Instant) {
         if self
             .release_deadline()
@@ -1176,7 +1204,7 @@ impl Window {
         {
             self.release_rendering();
         }
-        self.serve_menus(now);
+        self.serve_menus(self.frame_time());
         self.abandon_unfinished_drag(now);
         if self.ui_deadline.is_some_and(|deadline| deadline <= now) {
             self.ui_deadline = None;
@@ -1184,7 +1212,8 @@ impl Window {
         }
     }
 
-    fn serve_menus(&mut self, now: Instant) {
+    fn serve_menus(&mut self, frame: FrameTime) {
+        let now = frame.on_screen();
         if self.menus.is_none() {
             self.state.popup_input.clear();
             return;
@@ -1199,7 +1228,7 @@ impl Window {
                 let keyboard = matches!(event, Event::Key { .. });
                 outcomes.push((menus.handle(*level, event, now), keyboard));
             }
-            outcomes.push((menus.tick(now), false));
+            outcomes.push((menus.tick(Instant::now().max(now)), false));
         }
         let mut redraw = std::mem::take(&mut self.state.popups_changed)
             || self
@@ -1210,7 +1239,7 @@ impl Window {
             redraw |= self.apply_menu_outcome(outcome, keyboard);
         }
         if redraw && self.menus.is_some() {
-            let _ = self.draw_menus(now);
+            let _ = self.draw_menus(frame.presentation);
         }
     }
 
@@ -1254,7 +1283,9 @@ impl Window {
                         text: self.text.get_or_insert_with(TextSystem::new),
                         palette,
                     };
-                    menus.search(opening, menu);
+                    if let Err(error) = menus.search(opening, menu) {
+                        tracing::warn!(%error, "cannot resize the searched menu");
+                    }
                 }
                 true
             }
@@ -1292,7 +1323,7 @@ impl Window {
             position: Point::new(pointer.position.x - origin.x, pointer.position.y - origin.y),
             ..pointer
         };
-        let now = Instant::now();
+        let now = self.frame_time().on_screen();
         let reduce_motion = self.appearance.borrow().current().reduce_motion;
         let Some(chrome) = self.chrome.as_mut() else {
             passed.push(event);
@@ -1494,10 +1525,11 @@ impl Window {
             .menus
             .as_ref()
             .and_then(|menus| menus.tracker().item_for_node(request.target_node));
+        let frame = self.frame_time();
         if let (Some((level, index)), Some(menus)) = (item, &mut self.menus) {
-            let outcome = menus.activate(level, index, Instant::now());
+            let outcome = menus.activate(level, index, frame.on_screen());
             if self.apply_menu_outcome(outcome, true) {
-                let _ = self.draw_menus(Instant::now());
+                let _ = self.draw_menus(frame.presentation);
             }
             return true;
         }
@@ -1522,7 +1554,7 @@ impl Window {
         result.is_ok()
     }
 
-    fn framed(&mut self, frame: &Frame, scene: &Scene) -> Scene {
+    fn framed(&mut self, frame: &Frame, scene: &Scene, presentation: Instant) -> Scene {
         let appearance = self.appearance.borrow().current();
         let toplevel = self.state.toplevel;
         let look = Look {
@@ -1536,10 +1568,35 @@ impl Window {
                 &appearance.palette(),
                 appearance.scheme,
                 look,
-                Instant::now(),
+                presentation,
             ),
             None => scene.clone(),
         }
+    }
+
+    fn declare_opaque(&mut self, opaque: Option<Rect>) {
+        if self.shown_opaque == opaque {
+            return;
+        }
+        let Some(compositor) = &self.state.compositor else {
+            return;
+        };
+        self.shown_opaque = opaque;
+        let Some(area) = opaque else {
+            self.surface.set_opaque_region(None);
+            return;
+        };
+        let region = compositor.create_region(&self.queue.handle(), ());
+        let left = area.x.ceil();
+        let top = area.y.ceil();
+        region.add(
+            left as i32,
+            top as i32,
+            ((area.x + area.width).floor() - left) as i32,
+            ((area.y + area.height).floor() - top) as i32,
+        );
+        self.surface.set_opaque_region(Some(&region));
+        region.destroy();
     }
 
     fn frame_surface(&mut self, frame: &Frame) {
@@ -1690,21 +1747,34 @@ impl Window {
         self.wait_for_frame()?;
         self.queue.dispatch_pending(&mut self.state)?;
         self.poll_gpu();
+        let frame_time = match self.planned.take() {
+            Some(planned) => planned,
+            None => self.frame_time(),
+        };
         self.state.suggested_size = None;
         let (extra_width, extra_height) = self.frame().chrome_size();
         self.size = (scene.width + extra_width, scene.height + extra_height);
         let framed;
-        let scene = if self.chrome.is_some() {
+        let (scene, opaque) = if self.chrome.is_some() {
             let frame = self.frame();
-            framed = self.framed(&frame, scene);
+            framed = self.framed(&frame, scene, frame_time.presentation);
             self.frame_surface(&frame);
-
-            &framed
+            let chassis = self.appearance.borrow().current().palette().chassis;
+            let opaque =
+                (chassis.a == u8::MAX && scene.background.a == u8::MAX).then(|| frame.window());
+            (&framed, opaque)
         } else {
-            scene
+            let opaque = (scene.background.a == u8::MAX)
+                .then(|| Rect::new(0.0, 0.0, scene.width as f32, scene.height as f32));
+            (scene, opaque)
         };
+        self.declare_opaque(opaque);
         self.needs_redraw = self.chrome.as_ref().is_some_and(|chrome| chrome.animating);
-        self.surface.frame(&self.queue.handle(), ());
+        let handle = self.queue.handle();
+        self.surface.frame(&handle, ());
+        self.state
+            .presentation
+            .committing(&self.surface, &handle, frame_time);
         self.state.frame_pending = true;
         let scale = self.scale();
         self.drawn_scale = scale;
@@ -1776,6 +1846,7 @@ pub(crate) struct ShmTarget {
     buffers: Vec<ShmBuffer>,
     bgra: Vec<u8>,
     scratch: Vec<u8>,
+    size: (u32, u32),
 }
 
 fn copy_swizzled(source: &[u8], target: &mut [u8]) {
@@ -1801,6 +1872,17 @@ impl ShmTarget {
         scale: f64,
         damage: Option<&[Region]>,
     ) -> Result<(), WindowError> {
+        let damage = self.render(cpu, scene, scale, damage)?;
+        self.commit(shm, handle, surface, damage, false)
+    }
+
+    pub(crate) fn render<'a>(
+        &mut self,
+        cpu: &mut CpuRenderer,
+        scene: &Scene,
+        scale: f64,
+        damage: Option<&'a [Region]>,
+    ) -> Result<Option<&'a [Region]>, WindowError> {
         let (width, height) = (pixels(scene.width, scale), pixels(scene.height, scale));
         let bytes = width as usize * height as usize * 4;
         let damage = damage.filter(|_| self.bgra.len() == bytes);
@@ -1814,6 +1896,36 @@ impl ShmTarget {
                 }
             }
         }
+        self.size = (width, height);
+        Ok(damage)
+    }
+
+    pub(crate) fn present_faded(
+        &mut self,
+        shm: &WlShm,
+        handle: &QueueHandle<State>,
+        surface: &WlSurface,
+        alpha: f32,
+    ) -> Result<(), WindowError> {
+        let factor = (alpha.clamp(0.0, 1.0) * 256.0) as u32;
+        self.scratch.clear();
+        self.scratch.extend(
+            self.bgra
+                .iter()
+                .map(|channel| ((u32::from(*channel) * factor) >> 8) as u8),
+        );
+        self.commit(shm, handle, surface, None, true)
+    }
+
+    fn commit(
+        &mut self,
+        shm: &WlShm,
+        handle: &QueueHandle<State>,
+        surface: &WlSurface,
+        damage: Option<&[Region]>,
+        faded: bool,
+    ) -> Result<(), WindowError> {
+        let (width, height) = self.size;
         self.buffers.retain(|buffer| {
             buffer.width == width && buffer.height == height || buffer.busy.load(Ordering::Acquire)
         });
@@ -1839,8 +1951,12 @@ impl ShmTarget {
             }
         };
         let buffer = &mut self.buffers[index];
+        let pixels = match faded {
+            true => &self.scratch,
+            false => &self.bgra,
+        };
         match buffer.stale.replace(Vec::new()) {
-            None => buffer.file.write_all_at(&self.bgra, 0)?,
+            None => buffer.file.write_all_at(pixels, 0)?,
             Some(stale) => {
                 let stride = width as usize * 4;
                 for region in stale {
@@ -1849,7 +1965,7 @@ impl ShmTarget {
                         let end = start + region.width as usize * 4;
                         buffer
                             .file
-                            .write_all_at(&self.bgra[start..end], start as u64)?;
+                            .write_all_at(&pixels[start..end], start as u64)?;
                     }
                 }
             }
@@ -1986,17 +2102,48 @@ fn clamp_i32(value: u32) -> i32 {
     i32::try_from(value).unwrap_or(i32::MAX)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RendererChoice {
+    Automatic,
+    Gpu,
+    Cpu,
+}
+
+fn renderer_choice() -> RendererChoice {
+    match std::env::var(RENDERER_VARIABLE).as_deref() {
+        Ok("gpu") => RendererChoice::Gpu,
+        Ok("cpu") => RendererChoice::Cpu,
+        _ => RendererChoice::Automatic,
+    }
+}
+
 fn start_gpu(connection: &Connection, surface: &WlSurface, atlas: (u32, u32)) -> Gpu {
+    let choice = renderer_choice();
+    if choice == RendererChoice::Cpu
+        || choice == RendererChoice::Automatic && GpuDevice::known_software_only()
+    {
+        return Gpu::Unavailable;
+    }
+    let allow_software = choice == RendererChoice::Gpu;
     let display = connection.backend().display_ptr() as usize;
     let wl_surface = surface.id().as_ptr() as usize;
     let (sender, receiver) = mpsc::channel();
     thread::spawn(move || {
-        let _ = sender.send(open_gpu(display, wl_surface, atlas));
+        let opened = open_gpu(display, wl_surface, atlas, allow_software);
+        if let Err(error @ RenderError::Software(_)) = &opened {
+            tracing::info!("drawing on the CPU: {error}");
+        }
+        let _ = sender.send(opened);
     });
     Gpu::Starting(receiver)
 }
 
-fn open_gpu(display: usize, surface: usize, atlas: (u32, u32)) -> Result<GpuSurface, RenderError> {
+fn open_gpu(
+    display: usize,
+    surface: usize,
+    atlas: (u32, u32),
+    allow_software: bool,
+) -> Result<GpuSurface, RenderError> {
     let missing = || RenderError::Gpu("the Wayland surface has no libwayland pointer".to_owned());
     let display = NonNull::new(display as *mut c_void).ok_or_else(missing)?;
     let window = NonNull::new(surface as *mut c_void).ok_or_else(missing)?;
@@ -2006,7 +2153,7 @@ fn open_gpu(display: usize, surface: usize, atlas: (u32, u32)) -> Result<GpuSurf
         ))),
         raw_window_handle: RawWindowHandle::Wayland(WaylandWindowHandle::new(window)),
     };
-    let (gpu, surface) = unsafe { GpuDevice::shared_for(target) }?;
+    let (gpu, surface) = unsafe { GpuDevice::shared_for(target, allow_software) }?;
     let capabilities = surface.get_capabilities(gpu.adapter());
     let format = capabilities
         .formats
@@ -2132,6 +2279,9 @@ impl Dispatch<WlRegistry, ()> for State {
                 }
                 "wp_fractional_scale_manager_v1" => {
                     state.scaling.fractional_manager = Some(registry.bind(name, 1, handle, ()));
+                }
+                "wp_presentation" => {
+                    state.presentation.manager = Some(registry.bind(name, 1, handle, ()));
                 }
                 "wp_viewporter" => {
                     state.scaling.viewporter = Some(registry.bind(name, 1, handle, ()));

@@ -21,6 +21,27 @@ checked by `ci/perf`; this page tracks memory, CPU per interaction and size.
 
   `--settle <seconds>` waits longer before measuring (40 s shows a hidden window after it has
   released its renderer).
+- **Session frame times:** `unbound-session-bench` runs the compositor in-process on a
+  headless 2928×1818 output at 1.5×, starts the desktop surface, the bar, the launcher, Files
+  (on a folder of 400 files) and the terminal from its own directory, and replays typical
+  actions one refresh apart: the pointer moving over Files, dragging Files by its title bar,
+  typing 60 characters into the terminal, scrolling the file list, opening and closing the
+  launcher and the overview twice. For each it prints the compositor's frame time (p50, p99),
+  its CPU time per frame (including lavapipe's threads), the clients' CPU time per frame, the
+  cores kept busy and the pixels repainted per frame. Arguments filter the actions by name;
+  `--frames` lists every frame, `--full-effects` keeps blur on a CPU renderer, `--snapshots
+  <dir>` writes the screen after each action as PPM. Run it inside the test bus:
+
+  ```sh
+  cargo build --release -p unbound-bench -p unbound-desktop-surface -p unbound-bar \
+      -p unbound-launcher -p unbound-files -p unbound-term
+  dbus-run-session --config-file=crates/testing/test-bus/data/session.conf -- \
+      env -u WAYLAND_DISPLAY target/release/unbound-session-bench
+  ```
+
+  Other developers' builds share the VM's ten cores, so wall-clock frame times move with the
+  load average the tool prints; compare runs taken back to back, and the CPU columns, which
+  move less.
 - **Binary sizes:** `cargo build --profile dist -p <package>`; packages are built with this
   profile.
 - **Crate counts:** `cargo tree -e normal -p <package> --prefix none | sort -u | wc -l`.
@@ -28,6 +49,84 @@ checked by `ci/perf`; this page tracks memory, CPU per interaction and size.
 All numbers below are from the development VM: 10 cores, lavapipe (Mesa 25.0.7, Vulkan on the
 CPU), so GPU memory shows up as process memory. On Apple Silicon GPU memory is also system
 memory, so the device-memory savings carry over.
+
+## 2026-10-30: software rendering (lavapipe at 1.5×)
+
+The development VM's GPU is virtio-gpu without 3D, so the compositor and every toolkit client
+rendered through lavapipe on the CPU, at 1.5× on a 2928×1818 output (5.3 Mpx a frame). Real
+hardware renders on its GPU; VMs and machines without a usable GPU must still feel smooth.
+Measured with `unbound-session-bench`, two rounds each, back to back, load average 6.5 to 8.2
+on ten cores (`main` at `c2aa894` with the idle fix below, then this branch):
+
+| Action | Frame p50 before | after | Frame p99 before | after | Compositor CPU per frame before | after | Clients CPU per frame before | after |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Pointer over a window | 0.8 ms | 0.7–1.0 ms | 5–85 ms | 2–7 ms | 4–8 ms | 4–5 ms | 0–2 ms | 0.2–0.5 ms |
+| Dragging a window | 22–25 ms | 5.5–5.8 ms | 36–41 ms | 19–33 ms | 119–140 ms | 30–37 ms | 0.1 ms | 0 ms |
+| Typing in the terminal | 13–18 ms | 0.7–0.8 ms | 52–74 ms | 17–31 ms | 72–79 ms | 5–6 ms | 38–51 ms | 1.2–1.4 ms |
+| Scrolling a list | 24–31 ms | 1.8–1.9 ms | 54–74 ms | 9–13 ms | 131–158 ms | 9–10 ms | 56–81 ms | 5 ms |
+| Opening the launcher | 33–34 ms | 1–4 ms | 74–118 ms | 142–225 ms | 145–177 ms | 101–130 ms | 54–77 ms | 18–30 ms |
+| Opening the overview | 33–50 ms | 12.4–12.5 ms | 62–118 ms | 30–42 ms | 180–235 ms | 64–67 ms | 3–11 ms | 0.2–0.3 ms |
+
+While dragging, the session kept 3.2–3.5 cores busy before and 0.9–1.2 after; while
+scrolling, 3.2–3.4 before and 0.6 after. Pixels repainted per frame: typing 0.57 → 0.05 Mpx,
+scrolling 1.58 → 0.20 Mpx.
+
+- **Idle clients no longer spin.** Every toolkit client polled its appearance and
+  accessibility wake-up sockets; when the thread writing to one ended (no settings portal or
+  no accessibility bus, as on the test bus, or a portal that crashed) the socket hung up and
+  `poll` returned at once forever: each client used a full core while idle. The windows now
+  keep the writing ends open. The "before" column above already includes this fix, since
+  without it the measurement is meaningless (five idle clients used 4.3 cores).
+- **Opaque regions.** No toolkit window declared an opaque region, so beneath every window
+  the compositor drew the wallpaper, three shadow layers (their shader evaluates a Gaussian
+  integral per pixel) and any window below: five layers for each pixel of a moving window. A
+  window whose background and frame are opaque now declares its window rectangle (the
+  compositor already removes the rounded corners), and a surface without a frame its whole
+  area when its background is opaque. Dragging: 119–140 → 31–39 ms of compositor CPU per
+  frame on its own. `a_change_under_an_opaque_window_shades_only_the_window_on_top` checks it
+  (5 layers shaded before, 1 after).
+- **Clients draw on the CPU when the only Vulkan device is a CPU.** A window whose adapter is
+  `DeviceType::Cpu` or named llvmpipe or lavapipe stays on `vello_cpu` and presents `wl_shm`
+  buffers with only the changed regions damaged, instead of rendering through lavapipe and
+  presenting the whole surface through Vulkan's WSI. The probe runs once per process, on the
+  thread that used to start the GPU; later windows skip it. `UNBOUND_RENDERER=gpu` or `=cpu`
+  overrides the choice (the toolkit's GPU tests and `unbound-toolkit-bench` set `gpu`). This is
+  what took typing and scrolling below 2 ms. Clients on the CPU path start no lavapipe
+  threads either.
+- **Reduced effects on a CPU renderer.** `unbound-render` reports a CPU device
+  (`DeviceInfo::software`) and then reduces effects: a blur region becomes a flat scrim of the
+  sheet colour at 72 %, which does not depend on what lies beneath it, so a change under it
+  repaints only the change (`with_reduced_effects_a_blur_region_is_a_flat_scrim…`). The bar is
+  opaque since its Datum restyle, so this benchmark does not show it; it applies to the
+  launcher, the notifications and Control Center, which still blur. The overview's own
+  full-screen blur, merged after these measurements, is left out on a CPU renderer and its
+  scrim stays, so a 5.3 Mpx blur does not run on every frame of its animation. Shadows stay: with opaque regions only
+  their rim outside the window is shaded, which is not where the time goes.
+- **Cursor.** Moving the pointer re-renders nothing: the cursor element is `Kind::Cursor` in a
+  memory buffer, which Smithay's `DrmCompositor` puts on the cursor plane that virtio-gpu
+  offers (64×64; the cursor is 36 px at 1.5×), and on the primary plane damage covers only
+  the two cursor rectangles. "Pointer over a window" above is the hover feedback of Files.
+- **Threads.** lavapipe starts one rasterizer thread per core. Capping `LP_NUM_THREADS` for the
+  compositor saved CPU but made frames slower (three rounds, dragging p50: 2 threads 12–16 ms,
+  4 threads 7–16 ms, 6 threads 5–9 ms, default 5–6 ms; overview p50: 22–40, 12–35, 10–11,
+  9–17 ms), so it is left at its default. Clients on the CPU path have no lavapipe threads.
+- **A pure CPU compositor (pixman) was not built.** After the changes above, dragging a
+  1578×1011 px window repaints 1.6 Mpx a frame for about 33 ms of CPU spread over lavapipe's
+  threads (5.5 ms of wall time). A pixman path could compose plain textures for less CPU on
+  one core, but it would need a second implementation of every element the compositor draws
+  (rounded clips, shadows, scrims, the scaled and faded windows of the overview, minimise and
+  workspace animations) and Smithay's pixman renderer cannot draw them. Not worth it now.
+
+What remains VM-bound:
+
+- **Opening the launcher**: the launcher is a full-screen translucent surface, so its first
+  frame uploads 21 MB and shades 12 Mpx (28–59 ms for that one frame; the frames after it
+  take 1 ms). Closing it repaints the screen once (13 ms). A launcher surface the size of its
+  panel, with any dimming drawn by the compositor, would remove both; that is the launcher's
+  change to make.
+- **The overview** moves every window every frame (3 Mpx a frame): 12 ms p50, 30–42 ms p99.
+- **Dragging** repaints the window at its old and new place each frame (1.6 Mpx): 5–6 ms p50
+  when cores are free, more when other builds hold them.
 
 ## 2026-10-30: atlas, shared device, release when hidden, damage
 

@@ -1,10 +1,12 @@
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use unbound_graphics::{
     Appearance, Color, CpuRenderer, Elevation, Event, Item, Palette, Point, Rect, Scene, Shape,
     TextSystem,
 };
 use unbound_widgets::{MENU_RADIUS, Menu, MenuOutcome, MenuPanel, MenuTracker};
+use wayland_client::protocol::wl_callback::{self, WlCallback};
+use wayland_client::protocol::wl_compositor::WlCompositor;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Connection, Dispatch, QueueHandle, delegate_noop};
 use wayland_protocols::wp::viewporter::client::wp_viewport::WpViewport;
@@ -19,7 +21,6 @@ use crate::window::{ShmTarget, State, WindowError};
 
 const MARGIN: f32 = 24.0;
 const SUBMENU_OFFSET: (i32, i32) = (-2, -4);
-const FRAME_INTERVAL: Duration = Duration::from_millis(16);
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum MenuPlacement {
@@ -124,11 +125,7 @@ impl Menus {
     }
 
     pub(crate) fn deadline(&self) -> Option<Instant> {
-        let frame = self
-            .tracker
-            .is_flashing()
-            .then(|| Instant::now() + FRAME_INTERVAL);
-        self.tracker.deadline().into_iter().chain(frame).min()
+        self.tracker.deadline()
     }
 
     pub(crate) fn tracker(&self) -> &MenuTracker {
@@ -200,10 +197,26 @@ impl Menus {
         Ok(())
     }
 
-    pub(crate) fn search(&mut self, opening: Opening<'_>, menu: Menu) {
+    pub(crate) fn search(&mut self, opening: Opening<'_>, menu: Menu) -> Result<(), WindowError> {
         self.close_from(opening.state, 1);
         let panel = MenuPanel::new(menu, opening.text, &opening.palette);
         self.tracker.searched(panel);
+        let size = self.tracker.panels()[0].size();
+        let compositor = opening
+            .state
+            .compositor
+            .as_ref()
+            .ok_or(WindowError::Missing("wl_compositor"))?;
+        if let Some(popup) = self.popups.first() {
+            set_shape(
+                compositor,
+                opening.handle,
+                &popup.surface,
+                &popup.xdg_surface,
+                (size.width, size.height),
+            );
+        }
+        Ok(())
     }
 
     pub(crate) fn close_from(&mut self, state: &mut State, level: usize) {
@@ -225,7 +238,7 @@ impl Menus {
 
     pub(crate) fn draw(
         &mut self,
-        state: &State,
+        state: &mut State,
         handle: &QueueHandle<State>,
         cpu: &mut CpuRenderer,
         appearance: Appearance,
@@ -233,14 +246,16 @@ impl Menus {
         now: Instant,
     ) -> Result<(), WindowError> {
         let palette = appearance.palette();
-        let shm = state.shm.as_ref().ok_or(WindowError::Missing("wl_shm"))?;
+        let shm = state.shm.clone().ok_or(WindowError::Missing("wl_shm"))?;
         for (level, (popup, panel)) in self
             .popups
             .iter_mut()
             .zip(self.tracker.panels())
             .enumerate()
         {
-            if !state.popup_configured.get(level).copied().unwrap_or(false) {
+            if !state.popup_configured.get(level).copied().unwrap_or(false)
+                || state.popup_frames.get(level).copied().unwrap_or(false)
+            {
                 continue;
             }
             let (show_highlight, opacity) = self.tracker.appearance(level, now);
@@ -253,10 +268,35 @@ impl Menus {
                 appearance,
                 scale,
             };
+            if self.tracker.is_flashing() {
+                popup.surface.frame(handle, PopupLevel(level));
+                if let Some(pending) = state.popup_frames.get_mut(level) {
+                    *pending = true;
+                }
+            }
             if popup.shown == Some(look) {
+                if self.tracker.is_flashing() {
+                    popup.surface.commit();
+                }
                 continue;
             }
+            let opaque = Look {
+                opacity: 1.0,
+                ..look
+            };
+            let only_fading = popup.shown.is_some_and(|shown| {
+                Look {
+                    opacity: 1.0,
+                    ..shown
+                } == opaque
+            });
             popup.shown = Some(look);
+            if only_fading {
+                popup
+                    .target
+                    .present_faded(&shm, handle, &popup.surface, opacity)?;
+                continue;
+            }
             let size = panel.size();
             let shape = Shape::rounded(Rect::new(0.0, 0.0, size.width, size.height), MENU_RADIUS);
             let mut items = Item::shadows(shape, Elevation::Overlay, palette.scheme, true).to_vec();
@@ -265,20 +305,27 @@ impl Menus {
                 width: (size.width + 2.0 * MARGIN) as u32,
                 height: (size.height + 2.0 * MARGIN) as u32,
                 background: Color::TRANSPARENT,
-                items: vec![Item::Opacity {
-                    alpha: opacity,
-                    items: vec![Item::Translate {
-                        offset: Point::new(MARGIN, MARGIN),
-                        items,
-                    }],
+                items: vec![Item::Translate {
+                    offset: Point::new(MARGIN, MARGIN),
+                    items,
                 }],
             };
             if let Some(viewport) = &popup.viewport {
                 viewport.set_destination(scene.width as i32, scene.height as i32);
             }
-            popup
-                .target
-                .present(cpu, shm, handle, &popup.surface, &scene, scale, None)?;
+            match opacity < 1.0 {
+                true => {
+                    popup.target.render(cpu, &scene, scale, None)?;
+                    popup
+                        .target
+                        .present_faded(&shm, handle, &popup.surface, opacity)?;
+                }
+                false => {
+                    popup
+                        .target
+                        .present(cpu, &shm, handle, &popup.surface, &scene, scale, None)?;
+                }
+            }
         }
         Ok(())
     }
@@ -332,21 +379,7 @@ fn create(
         }
     };
     positioner.destroy();
-    xdg_surface.set_window_geometry(
-        whole(MARGIN),
-        whole(MARGIN),
-        whole(size.0).max(1),
-        whole(size.1).max(1),
-    );
-    let panel = compositor.create_region(handle, ());
-    panel.add(
-        whole(MARGIN),
-        whole(MARGIN),
-        whole(size.0).max(1),
-        whole(size.1).max(1),
-    );
-    surface.set_input_region(Some(&panel));
-    panel.destroy();
+    set_shape(compositor, handle, &surface, &xdg_surface, size);
     if let (Some(seat), Some(serial)) = (&state.seat, state.input.serial) {
         popup.grab(seat, serial);
     }
@@ -359,6 +392,8 @@ fn create(
     state.popup_surfaces.push(surface.clone());
     state.popup_configured.truncate(level);
     state.popup_configured.push(false);
+    state.popup_frames.truncate(level);
+    state.popup_frames.push(false);
     surface.commit();
     Ok(Popup {
         surface,
@@ -368,6 +403,23 @@ fn create(
         target: ShmTarget::default(),
         shown: None,
     })
+}
+
+fn set_shape(
+    compositor: &WlCompositor,
+    handle: &QueueHandle<State>,
+    surface: &WlSurface,
+    xdg_surface: &XdgSurface,
+    size: (f32, f32),
+) {
+    let whole = |value: f32| value.round() as i32;
+    let (x, y) = (whole(MARGIN), whole(MARGIN));
+    let (width, height) = (whole(size.0).max(1), whole(size.1).max(1));
+    xdg_surface.set_window_geometry(x, y, width, height);
+    let panel = compositor.create_region(handle, ());
+    panel.add(x, y, width, height);
+    surface.set_input_region(Some(&panel));
+    panel.destroy();
 }
 
 impl Dispatch<XdgSurface, PopupLevel> for State {
@@ -400,6 +452,24 @@ impl Dispatch<XdgPopup, PopupLevel> for State {
     ) {
         if let xdg_popup::Event::PopupDone = event {
             state.popup_dismissed = true;
+        }
+    }
+}
+
+impl Dispatch<WlCallback, PopupLevel> for State {
+    fn event(
+        state: &mut Self,
+        _: &WlCallback,
+        event: wl_callback::Event,
+        level: &PopupLevel,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        if let wl_callback::Event::Done { .. } = event
+            && let Some(pending) = state.popup_frames.get_mut(level.0)
+        {
+            *pending = false;
+            state.popups_changed = true;
         }
     }
 }

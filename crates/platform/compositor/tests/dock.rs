@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use smithay::utils::Size;
+use smithay::utils::{Point, Size};
 use unbound_compositor::{BACKGROUND, Headless, Renderer};
 use unbound_test_wayland::{
     Anchor, KeyboardInteractivity, Layer, LayerRequest, RED, ShmImage, TestClient, roundtrip,
@@ -17,6 +17,7 @@ const KEY_M: u32 = 50;
 const KEY_H: u32 = 35;
 const KEY_F2: u32 = 60;
 const KEY_F3: u32 = 61;
+const BTN_LEFT: u32 = 0x110;
 
 fn server() -> Headless {
     Headless::new(Size::from(OUTPUT)).expect("headless compositor")
@@ -236,4 +237,32 @@ fn the_combined_bar_takes_the_keyboard_for_both_super_f2_and_super_f3() {
     assert!(bar_has_keyboard);
     assert!(bar.layer_has_keyboard(0));
     assert_eq!(bar.shell_focus_requests(), ["dock", "menubar"]);
+}
+
+#[test]
+fn clicking_the_bar_keeps_the_active_app() {
+    let mut server = server();
+    let mut editor = app(&mut server, EDITOR);
+    let mut bar = shell(&mut server);
+    bar.show_named_layer(
+        &mut server,
+        &LayerRequest {
+            layer: Layer::Top,
+            anchor: Anchor::Top | Anchor::Left | Anchor::Bottom,
+            size: (64, 0),
+            exclusive_zone: 64,
+            keyboard: KeyboardInteractivity::OnDemand,
+            color: [0x80; 4],
+        },
+        "bar",
+    );
+    roundtrip(&mut server, &mut [&mut editor, &mut bar]);
+
+    server.move_pointer_to(Point::from((10.0, 60.0)), 5);
+    server.press_button(BTN_LEFT, true, 6);
+    server.press_button(BTN_LEFT, false, 7);
+    roundtrip(&mut server, &mut [&mut editor, &mut bar]);
+
+    assert!(bar.layer_has_keyboard(0));
+    assert_eq!(bar.active_apps(), [EDITOR]);
 }

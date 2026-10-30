@@ -12,7 +12,6 @@ const FLING_STOP_SPEED: f32 = 8.0;
 const VELOCITY_WINDOW: Duration = Duration::from_millis(100);
 const RUBBER_BAND: f32 = 0.55;
 const SCROLLBAR_LINGER: Duration = Duration::from_millis(900);
-const SCROLLBAR_FADE: Duration = Duration::from_millis(300);
 const SCROLLBAR_STRIP: f32 = 14.0;
 const SCROLLBAR_WIDTH: f32 = 6.0;
 const SCROLLBAR_INSET: f32 = 3.0;
@@ -35,7 +34,7 @@ pub struct ScrollState {
     motion: Motion,
     content: f32,
     viewport: f32,
-    samples: Vec<(Instant, f32)>,
+    samples: Vec<(Duration, f32)>,
     shown_until: Option<Instant>,
     knob_grab: Option<f32>,
 }
@@ -102,8 +101,11 @@ impl ScrollState {
 
     pub fn offset(&self, cx: &Context) -> f32 {
         let (offset, moving) = self.offset_at(cx.now());
-        if moving || self.scrollbar_alpha(cx.now()) > 0.0 {
+        if moving || self.scrollbar_fading(cx.now()) {
             cx.animating.set(true);
+        }
+        if let Some(until) = self.shown_until.filter(|until| *until >= cx.now()) {
+            cx.wake_at(until);
         }
         offset
     }
@@ -129,7 +131,7 @@ impl ScrollState {
         let (current, _) = self.offset_at(now);
         let mut animated = match self.motion {
             Motion::Spring(animated) => animated,
-            _ => Animated::new(current),
+            _ => Animated::points(current),
         };
         animated.animate_at(now, cx.reduce_motion, target, Spring::QUICK);
         self.motion = Motion::Spring(animated);
@@ -184,7 +186,7 @@ impl ScrollState {
                 let (current, _) = self.offset_at(now);
                 self.motion = Motion::Tracking(current + delta);
                 self.samples.clear();
-                self.samples.push((now, delta));
+                self.samples.push((scroll.time, delta));
             }
             ScrollPhase::Changed => {
                 let raw = match self.motion {
@@ -192,35 +194,41 @@ impl ScrollState {
                     _ => self.offset_at(now).0,
                 };
                 self.motion = Motion::Tracking(raw + delta);
-                self.samples.push((now, delta));
-                self.samples
-                    .retain(|(at, _)| now.saturating_duration_since(*at) <= VELOCITY_WINDOW);
+                self.samples.push((scroll.time, delta));
+                self.forget_samples_before(scroll.time);
             }
-            ScrollPhase::Ended => self.release(cx),
+            ScrollPhase::Ended => self.release(cx, scroll.time),
         }
         true
     }
 
-    fn release(&mut self, cx: &Context) {
+    fn forget_samples_before(&mut self, time: Duration) {
+        self.samples
+            .retain(|(at, _)| time.saturating_sub(*at) <= VELOCITY_WINDOW);
+    }
+
+    fn release_velocity(&mut self, time: Duration) -> f32 {
+        self.forget_samples_before(time);
+        let samples = std::mem::take(&mut self.samples);
+        let (Some((first, _)), Some((last, _))) = (samples.first(), samples.last()) else {
+            return 0.0;
+        };
+        let span = last.saturating_sub(*first).as_secs_f32();
+        if span <= 0.0 {
+            return 0.0;
+        }
+        let travelled: f32 = samples[1..].iter().map(|(_, delta)| delta).sum();
+        travelled / span
+    }
+
+    fn release(&mut self, cx: &Context, time: Duration) {
         let now = cx.now();
         let Motion::Tracking(raw) = self.motion else {
             return;
         };
-        self.samples
-            .retain(|(at, _)| now.saturating_duration_since(*at) <= VELOCITY_WINDOW);
-        let travelled: f32 = self.samples.iter().map(|(_, delta)| delta).sum();
-        let span = self
-            .samples
-            .first()
-            .map_or(VELOCITY_WINDOW, |(at, _)| {
-                now.saturating_duration_since(*at)
-            })
-            .max(Duration::from_millis(16))
-            .as_secs_f32();
-        let velocity = travelled / span;
-        self.samples.clear();
+        let velocity = self.release_velocity(time);
         if raw < 0.0 || raw > self.limit() {
-            let mut animated = Animated::new(self.rubber(raw));
+            let mut animated = Animated::points(self.rubber(raw));
             animated.animate_at(
                 now,
                 cx.reduce_motion,
@@ -239,19 +247,27 @@ impl ScrollState {
         }
     }
 
-    fn scrollbar_alpha(&self, now: Instant) -> f32 {
+    fn scrollbar_fade(&self, now: Instant) -> (f32, bool) {
         if self.knob_grab.is_some() {
-            return 1.0;
+            return (1.0, false);
         }
         let Some(until) = self.shown_until else {
-            return 0.0;
+            return (0.0, false);
         };
         if now <= until {
-            return 1.0;
+            return (1.0, false);
         }
-        let faded =
-            now.saturating_duration_since(until).as_secs_f32() / SCROLLBAR_FADE.as_secs_f32();
-        (1.0 - faded).max(0.0)
+        let mut fade = Animated::new(1.0);
+        fade.animate_at(until, false, 0.0, Spring::FADE);
+        fade.value_at(now)
+    }
+
+    fn scrollbar_alpha(&self, now: Instant) -> f32 {
+        self.scrollbar_fade(now).0
+    }
+
+    fn scrollbar_fading(&self, now: Instant) -> bool {
+        self.scrollbar_fade(now).1
     }
 
     fn strip(frame: Rect) -> Rect {

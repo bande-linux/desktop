@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use smithay::backend::renderer::element::Kind;
 use smithay::backend::renderer::element::surface::render_elements_from_surface_tree;
 use smithay::desktop::PopupUngrabStrategy;
@@ -17,7 +15,7 @@ use smithay::wayland::selection::data_device::{
 use unbound_render::VulkanRenderer;
 use unbound_spring::Spring;
 
-use crate::motion::{Look, Motion};
+use crate::motion::{Look, Motion, Tick};
 use crate::scene::{Area, Piece, SlideBack, area_of, pieces_of};
 use crate::state::{OutputElement, State};
 
@@ -165,12 +163,11 @@ impl State {
         }
     }
 
-    pub(crate) fn animate_slide_back(&mut self, time: Duration) {
-        let refresh = self.main_screen().refresh();
+    pub(crate) fn animate_slide_back(&mut self, tick: Tick) {
         let Some(slide) = self.slide_back.as_mut() else {
             return;
         };
-        slide.motion.advance(time, refresh);
+        slide.motion.advance(tick);
         if slide.motion.is_settled() {
             self.slide_back = None;
         }

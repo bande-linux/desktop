@@ -24,6 +24,7 @@ const FIRST_READING: Duration = Duration::from_millis(500);
 pub(crate) struct AppearanceWatch {
     readings: Receiver<Appearance>,
     woken: UnixStream,
+    _wake: UnixStream,
     current: Appearance,
 }
 
@@ -32,10 +33,12 @@ impl AppearanceWatch {
         let (sender, readings) = channel();
         let (wake, woken) = UnixStream::pair()?;
         woken.set_nonblocking(true)?;
-        thread::spawn(move || follow(&sender, &wake));
+        let follower = wake.try_clone()?;
+        thread::spawn(move || follow(&sender, &follower));
         Ok(Self {
             readings,
             woken,
+            _wake: wake,
             current: Appearance::default(),
         })
     }

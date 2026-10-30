@@ -10,7 +10,7 @@ accesskit.workspace = true
 accesskit_unix.workspace = true
 pollster.workspace = true
 raw-window-handle.workspace = true
-rustix = { workspace = true, features = ["fs", "pipe"] }
+rustix = { workspace = true, features = ["fs", "pipe", "time"] }
 tracing.workspace = true
 unbound-graphics.workspace = true
 unbound-l10n.workspace = true

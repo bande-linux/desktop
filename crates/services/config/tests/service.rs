@@ -1,12 +1,14 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+mod support;
+
 use std::collections::HashMap;
-use std::path::Path;
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver};
 use std::thread;
 use std::time::Duration;
 
+use support::replace_file;
 use unbound_config::{
     BUS_NAME, ConfigService, ConfigStore, Loaded, OBJECT_PATH, ReloadError, migrate_file,
 };
@@ -21,12 +23,6 @@ const SIGNAL_WAIT: Duration = Duration::from_secs(5);
 const QUIET_WAIT: Duration = Duration::from_millis(1500);
 
 type Changes = HashMap<String, OwnedValue>;
-
-fn replace_file(path: &Path, contents: &str) {
-    let staging = path.with_extension("kdl.tmp");
-    std::fs::write(&staging, contents).expect("write staging file");
-    std::fs::rename(&staging, path).expect("rename into place");
-}
 
 fn properties(connection: &Connection) -> PropertiesProxy<'static> {
     PropertiesProxy::builder(connection)
@@ -373,37 +369,53 @@ fn moving_the_lock_moves_a_suspend_that_follows_the_display() {
 }
 
 #[test]
-fn key_repeat_and_wallpaper_are_writable_properties() {
+fn settings_are_writable_properties_within_their_limits() {
     let fixture = start("");
     assert_eq!(
         u32::try_from(get(&fixture.client, "KeyRepeatDelay")).expect("u32"),
         600
     );
-    set(&fixture.client, "KeyRepeatRate", Value::from(40u32)).expect("Set");
-    set(
-        &fixture.client,
-        "WallpaperLight",
-        Value::from("/usr/share/backgrounds/day.jpg"),
-    )
-    .expect("Set");
-    assert_eq!(
-        u32::try_from(get(&fixture.client, "KeyRepeatRate")).expect("u32"),
-        40
-    );
-    assert_eq!(
-        String::try_from(get(&fixture.client, "WallpaperLight")).expect("string"),
-        "/usr/share/backgrounds/day.jpg"
-    );
-    let too_fast = set(&fixture.client, "KeyRepeatRate", Value::from(100u32));
     assert!(
-        matches!(too_fast, Err(zbus::fdo::Error::InvalidArgs(_))),
-        "{too_fast:?}"
+        !Vec::<String>::try_from(get(&fixture.client, "InputSources"))
+            .expect("strings")
+            .is_empty()
     );
-    set(&fixture.client, "WallpaperLight", Value::from("")).expect("Set");
-    assert_eq!(
-        String::try_from(get(&fixture.client, "WallpaperLight")).expect("string"),
-        ""
+    for (property, value) in [
+        ("KeyRepeatRate", Value::from(40u32)),
+        (
+            "WallpaperLight",
+            Value::from("/usr/share/backgrounds/day.jpg"),
+        ),
+        ("WallpaperLight", Value::from("")),
+        ("InputSources", Value::from(vec!["se", "us(dvorak)"])),
+        ("TrackpadSpeed", Value::from(0.5)),
+        ("TrackpadSecondaryClick", Value::from("corner")),
+        ("IdleSuspendAfter", Value::from(0u64)),
+    ] {
+        set(&fixture.client, property, value.try_clone().expect("clone")).expect(property);
+        assert_eq!(
+            get(&fixture.client, property),
+            OwnedValue::try_from(value).expect("owned"),
+            "{property}"
+        );
+    }
+    assert!(
+        std::fs::read_to_string(&fixture.path)
+            .expect("read")
+            .contains("suspend-after \"never\"")
     );
+    for (property, value) in [
+        ("KeyRepeatRate", Value::from(100u32)),
+        ("InputSources", Value::from(Vec::<&str>::new())),
+        ("InputSources", Value::from(vec!["us,se"])),
+        ("MouseSpeed", Value::from(3.0)),
+    ] {
+        let rejected = set(&fixture.client, property, value);
+        assert!(
+            matches!(rejected, Err(zbus::fdo::Error::InvalidArgs(_))),
+            "{property}: {rejected:?}"
+        );
+    }
 }
 
 #[test]
@@ -454,21 +466,6 @@ fn the_dock_apps_size_auto_hide_and_wallpaper_fit_are_writable_and_signalled() {
 }
 
 #[test]
-fn suspend_after_zero_means_never() {
-    let fixture = start("");
-    set(&fixture.client, "IdleSuspendAfter", Value::from(0u64)).expect("Set");
-    assert_eq!(
-        u64::try_from(get(&fixture.client, "IdleSuspendAfter")).expect("u64"),
-        0
-    );
-    assert!(
-        std::fs::read_to_string(&fixture.path)
-            .expect("read")
-            .contains("suspend-after \"never\"")
-    );
-}
-
-#[test]
 fn sleep_can_be_returned_to_following_the_display() {
     let fixture = start("idle {\n    suspend-after \"3h\"\n}\n");
     assert!(!bool::try_from(get(&fixture.client, "IdleSuspendWithDisplay")).expect("b"));
@@ -493,49 +490,6 @@ fn sleep_can_be_returned_to_following_the_display() {
         !std::fs::read_to_string(&fixture.path)
             .expect("read")
             .contains("suspend-after")
-    );
-}
-
-#[test]
-fn input_sources_and_pointer_settings_are_writable_properties() {
-    let fixture = start("");
-    let codes = |fixture: &Fixture| {
-        Vec::<String>::try_from(get(&fixture.client, "InputSources")).expect("strings")
-    };
-    assert!(!codes(&fixture).is_empty());
-    set(
-        &fixture.client,
-        "InputSources",
-        Value::from(vec!["se", "us(dvorak)"]),
-    )
-    .expect("Set");
-    assert_eq!(codes(&fixture), ["se", "us(dvorak)"]);
-    for invalid in [Value::from(Vec::<&str>::new()), Value::from(vec!["us,se"])] {
-        let rejected = set(&fixture.client, "InputSources", invalid);
-        assert!(
-            matches!(rejected, Err(zbus::fdo::Error::InvalidArgs(_))),
-            "{rejected:?}"
-        );
-    }
-    set(&fixture.client, "TrackpadSpeed", Value::from(0.5)).expect("Set");
-    set(
-        &fixture.client,
-        "TrackpadSecondaryClick",
-        Value::from("corner"),
-    )
-    .expect("Set");
-    assert_eq!(
-        f64::try_from(get(&fixture.client, "TrackpadSpeed")).expect("double"),
-        0.5
-    );
-    assert_eq!(
-        String::try_from(get(&fixture.client, "TrackpadSecondaryClick")).expect("string"),
-        "corner"
-    );
-    let too_fast = set(&fixture.client, "MouseSpeed", Value::from(3.0));
-    assert!(
-        matches!(too_fast, Err(zbus::fdo::Error::InvalidArgs(_))),
-        "{too_fast:?}"
     );
 }
 

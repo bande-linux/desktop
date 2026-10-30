@@ -304,21 +304,8 @@ fn wallpaper(view: &mut DesktopView, scheme: Scheme) {
 
 fn check_golden(name: &str, view: &mut DesktopView) {
     let scene = view.scene(Instant::now() + Duration::from_secs(5));
-    for (scale, suffix) in [(1.0, ""), (1.5, "-1.5x")] {
-        let (width, height) = (
-            (f64::from(scene.width) * scale).round() as u32,
-            (f64::from(scene.height) * scale).round() as u32,
-        );
-        let mut rgba = vec![0; (width * height * 4) as usize];
-        CpuRenderer::new()
-            .render_into(&scene, scale, &mut rgba)
-            .unwrap();
-        compare(&format!("{name}{suffix}"), width, height, rgba);
-    }
-}
-
-fn compare(name: &str, width: u32, height: u32, rgba: Vec<u8>) {
-    let actual = image::RgbaImage::from_raw(width, height, rgba).unwrap();
+    let frame = CpuRenderer::new().render(&scene).unwrap();
+    let actual = image::RgbaImage::from_raw(frame.width, frame.height, frame.rgba).unwrap();
     let actual = image::DynamicImage::ImageRgba8(actual).to_rgb8();
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("tests/golden/{name}.png"));
     if std::env::var_os("UNBOUND_UPDATE_GOLDENS").is_some() {

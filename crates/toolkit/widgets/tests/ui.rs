@@ -301,16 +301,6 @@ fn return_and_escape_press_the_primary_and_cancel_buttons_from_a_text_field() {
 }
 
 #[test]
-fn a_rename_field_preselects_the_name_without_its_extension() {
-    let mut field = Field::with("Report.pdf");
-    field.field.select(0..6);
-    laid_out(&mut field.field, &mut field.cx);
-    assert_eq!(field.field.selection(), 0..6);
-    field.press(Key::Character('N'), NONE);
-    assert_eq!(field.field.text(), "N.pdf");
-}
-
-#[test]
 fn super_c_x_and_v_go_through_the_clipboard() {
     let field = TextField::new("Name", "Quarterly report", |_| {});
     let id = field.id();

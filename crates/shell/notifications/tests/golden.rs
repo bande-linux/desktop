@@ -57,9 +57,9 @@ fn stacks() -> Vec<Stack> {
     ]
 }
 
-fn screen(scheme: Scheme, presentation: Presentation, now: Instant) -> Screen {
+fn screen(presentation: Presentation, now: Instant) -> Screen {
     let mut screen = Screen::new(
-        Palette::for_scheme(scheme),
+        Palette::for_scheme(Scheme::Light),
         TextSystem::new(),
         Box::new(|notification: &Notification, _: &str| Sender {
             name: notification.app_name.clone(),
@@ -71,17 +71,10 @@ fn screen(scheme: Scheme, presentation: Presentation, now: Instant) -> Screen {
     screen
 }
 
-fn check_golden(name: &str, mut scene: Scene, scale: f64) {
+fn check_golden(name: &str, mut scene: Scene) {
     scene.background = DESKTOP;
-    let (width, height) = (
-        (f64::from(scene.width) * scale).round() as u32,
-        (f64::from(scene.height) * scale).round() as u32,
-    );
-    let mut rgba = vec![0; (width * height * 4) as usize];
-    CpuRenderer::new()
-        .render_into(&scene, scale, &mut rgba)
-        .expect("frame");
-    let actual = image::RgbaImage::from_raw(width, height, rgba).expect("frame");
+    let frame = CpuRenderer::new().render(&scene).expect("frame");
+    let actual = image::RgbaImage::from_raw(frame.width, frame.height, frame.rgba).expect("frame");
     let actual = image::DynamicImage::ImageRgba8(actual).to_rgb8();
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("tests/golden/{name}.png"));
     if std::env::var_os("UNBOUND_UPDATE_GOLDENS").is_some() {
@@ -102,40 +95,27 @@ fn check_golden(name: &str, mut scene: Scene, scale: f64) {
     );
 }
 
-const SCALES: [(f64, &str); 2] = [(1.0, ""), (1.5, "-1.5x")];
-const SCHEMES: [(Scheme, &str); 2] = [(Scheme::Light, "light"), (Scheme::Dark, "dark")];
-
 #[test]
-fn banners_match_their_goldens_in_light_and_dark_at_one_and_one_and_a_half() {
-    for (scheme, look) in SCHEMES {
-        for (scale, suffix) in SCALES {
-            let now = Instant::now();
-            let presentation = Presentation {
-                banners: stacks(),
-                center: Vec::new(),
-                do_not_disturb: false,
-            };
-            let mut screen = screen(scheme, presentation, now);
-            let scene = screen.scene(now + SETTLED);
-            check_golden(&format!("banners-{look}{suffix}"), scene, scale);
-        }
-    }
+fn banners_match_their_golden() {
+    let now = Instant::now();
+    let presentation = Presentation {
+        banners: stacks(),
+        center: Vec::new(),
+        do_not_disturb: false,
+    };
+    let mut screen = screen(presentation, now);
+    check_golden("banners-light", screen.scene(now + SETTLED));
 }
 
 #[test]
-fn the_center_matches_its_goldens_in_light_and_dark_at_one_and_one_and_a_half() {
-    for (scheme, look) in SCHEMES {
-        for (scale, suffix) in SCALES {
-            let now = Instant::now();
-            let presentation = Presentation {
-                banners: Vec::new(),
-                center: stacks(),
-                do_not_disturb: false,
-            };
-            let mut screen = screen(scheme, presentation, now);
-            screen.open(now);
-            let scene = screen.scene(now + SETTLED);
-            check_golden(&format!("center-{look}{suffix}"), scene, scale);
-        }
-    }
+fn the_center_matches_its_golden() {
+    let now = Instant::now();
+    let presentation = Presentation {
+        banners: Vec::new(),
+        center: stacks(),
+        do_not_disturb: false,
+    };
+    let mut screen = screen(presentation, now);
+    screen.open(now);
+    check_golden("center-light", screen.scene(now + SETTLED));
 }

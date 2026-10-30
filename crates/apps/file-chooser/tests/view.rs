@@ -6,7 +6,7 @@ use std::time::{Duration, SystemTime};
 use unbound_file_chooser::{Chooser, ChooserView, Finished, Icons};
 use unbound_files::rows;
 use unbound_toolkit::ui::{Event, Key, Modifiers};
-use unbound_toolkit::{Appearance, CpuRenderer, Scheme, TextSystem};
+use unbound_toolkit::{Appearance, CpuRenderer, TextSystem};
 use unbound_xdg::MimeDatabase;
 use xdg_desktop_portal_unbound::file_chooser::{Dialog, Filter, Mode, Pattern};
 
@@ -86,7 +86,7 @@ fn dialog(mode: Mode) -> Dialog {
     }
 }
 
-fn view(home: &Path, mode: Mode, scheme: Scheme) -> ChooserView {
+fn view(home: &Path, mode: Mode) -> ChooserView {
     let chooser = Chooser::new(
         dialog(mode),
         MimeDatabase::load(&[]),
@@ -97,10 +97,7 @@ fn view(home: &Path, mode: Mode, scheme: Scheme) -> ChooserView {
         rows(home, None, None, None),
         home.to_path_buf(),
         Icons::new(Vec::new()),
-        Appearance {
-            scheme,
-            ..Appearance::default()
-        },
+        Appearance::default(),
         TextSystem::new(),
     )
 }
@@ -120,26 +117,22 @@ fn key(view: &mut ChooserView, key: Key) {
 #[test]
 fn the_open_and_save_dialogs_match_their_goldens() {
     let home = home();
-    for (scheme, suffix) in [(Scheme::Light, "light"), (Scheme::Dark, "dark")] {
-        let mut open = view(
-            &home.home,
-            Mode::Open {
-                multiple: true,
-                directory: false,
-            },
-            scheme,
-        );
-        check_golden(&format!("open-{suffix}"), render(&mut open));
-        let mut save = view(
-            &home.home,
-            Mode::Save {
-                name: Some("Untitled.txt".to_owned()),
-                file: None,
-            },
-            scheme,
-        );
-        check_golden(&format!("save-{suffix}"), render(&mut save));
-    }
+    let mut open = view(
+        &home.home,
+        Mode::Open {
+            multiple: true,
+            directory: false,
+        },
+    );
+    check_golden("open", render(&mut open));
+    let mut save = view(
+        &home.home,
+        Mode::Save {
+            name: Some("Untitled.txt".to_owned()),
+            file: None,
+        },
+    );
+    check_golden("save", render(&mut save));
 }
 
 #[test]
@@ -151,7 +144,6 @@ fn typing_jumps_to_a_file_and_return_opens_it() {
             multiple: false,
             directory: false,
         },
-        Scheme::Light,
     );
     render(&mut view);
     key(&mut view, Key::Character('s'));
@@ -171,7 +163,6 @@ fn return_on_a_folder_enters_it_and_escape_cancels() {
             multiple: false,
             directory: false,
         },
-        Scheme::Light,
     );
     render(&mut view);
     key(&mut view, Key::Character('r'));

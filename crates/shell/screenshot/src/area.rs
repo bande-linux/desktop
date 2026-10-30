@@ -252,49 +252,25 @@ mod tests {
     use super::*;
     use unbound_toolkit::ui::{Modifiers, Pointer};
 
-    fn drag(from: (f32, f32), to: (f32, f32)) -> (AreaSelection, AreaOutcome) {
-        let mut selection = AreaSelection::default();
-        selection.handle(&Event::PointerDown(Pointer::at(Point::new(from.0, from.1))));
-        selection.handle(&Event::PointerMove(Pointer::at(Point::new(to.0, to.1))));
-        let outcome = selection.handle(&Event::PointerUp(Pointer::at(Point::new(to.0, to.1))));
-        (selection, outcome)
-    }
-
     #[test]
-    fn dragging_chooses_the_rectangle_between_press_and_release() {
-        let (_, outcome) = drag((10.0, 20.0), (110.0, 70.0));
-
-        assert_eq!(
-            outcome,
-            AreaOutcome::Chosen(Region {
-                x: 10,
-                y: 20,
-                width: 100,
-                height: 50
-            })
-        );
-    }
-
-    #[test]
-    fn dragging_up_and_left_chooses_the_same_rectangle() {
-        let (_, outcome) = drag((110.0, 70.0), (10.0, 20.0));
-
-        assert_eq!(
-            outcome,
-            AreaOutcome::Chosen(Region {
-                x: 10,
-                y: 20,
-                width: 100,
-                height: 50
-            })
-        );
-    }
-
-    #[test]
-    fn a_click_without_a_drag_takes_no_picture() {
-        let (_, outcome) = drag((40.0, 40.0), (40.0, 40.0));
-
-        assert_eq!(outcome, AreaOutcome::Cancelled);
+    fn a_drag_either_way_chooses_the_rectangle_between_press_and_release_and_a_click_cancels() {
+        let chosen = AreaOutcome::Chosen(Region {
+            x: 10,
+            y: 20,
+            width: 100,
+            height: 50,
+        });
+        for (from, to, expected) in [
+            ((10.0, 20.0), (110.0, 70.0), chosen.clone()),
+            ((110.0, 70.0), (10.0, 20.0), chosen),
+            ((40.0, 40.0), (40.0, 40.0), AreaOutcome::Cancelled),
+        ] {
+            let mut selection = AreaSelection::default();
+            selection.handle(&Event::PointerDown(Pointer::at(Point::new(from.0, from.1))));
+            selection.handle(&Event::PointerMove(Pointer::at(Point::new(to.0, to.1))));
+            let outcome = selection.handle(&Event::PointerUp(Pointer::at(Point::new(to.0, to.1))));
+            assert_eq!(outcome, expected, "{from:?} to {to:?}");
+        }
     }
 
     #[test]

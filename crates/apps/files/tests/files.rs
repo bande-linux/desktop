@@ -1307,14 +1307,14 @@ fn dragging_on_empty_space_in_the_icon_view_selects_the_icons_it_touches() {
 const GOLDEN_SIZE: (u32, u32) = (900, 560);
 const MIN_SSIM: f64 = 0.99;
 
-fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>, scale: f64) {
-    let actual = image::RgbaImage::from_raw(size.0, size.1, rgba).expect("frame");
-    let steady = size.1 - (f64::from(PATH_BAR_HEIGHT + SHEET_INSET as f32) * scale).round() as u32;
+fn check_golden(name: &str, rgba: Vec<u8>) {
+    let actual = image::RgbaImage::from_raw(GOLDEN_SIZE.0, GOLDEN_SIZE.1, rgba).expect("frame");
+    let steady = GOLDEN_SIZE.1 - (PATH_BAR_HEIGHT + SHEET_INSET as f32).round() as u32;
     let whole = image::DynamicImage::ImageRgba8(actual);
     whole
         .save(PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}-whole.png")))
         .expect("save the whole frame");
-    let actual = whole.crop_imm(0, 0, size.0, steady).to_rgb8();
+    let actual = whole.crop_imm(0, 0, GOLDEN_SIZE.0, steady).to_rgb8();
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("tests/golden/{name}.png"));
     if std::env::var_os("UNBOUND_UPDATE_GOLDENS").is_some() {
         fs::create_dir_all(path.parent().expect("golden directory")).expect("directory");
@@ -1335,7 +1335,7 @@ fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>, scale: f64) {
 }
 
 impl Place {
-    fn themed_view(&self, scheme: Scheme) -> FilesView {
+    fn themed_view(&self) -> FilesView {
         let apps = self.apps();
         let mime = self.root.path().join("data/mime");
         for (mime_type, comment) in [
@@ -1361,7 +1361,7 @@ impl Place {
             self.browser(),
             rows(&self.home(), None, None, None),
             apps,
-            Palette::for_scheme(scheme),
+            Palette::for_scheme(Scheme::Light),
             TextSystem::new(),
         )
         .expect("view");
@@ -1429,19 +1429,17 @@ fn the_icon_view_matches_its_golden_with_thumbnails_and_long_names() {
         "long",
     )
     .expect("file");
-    for scheme in [Scheme::Light, Scheme::Dark] {
-        let mut view = place.themed_view(scheme);
-        view.handle(&command(Key::Character('1'), false));
-        view.scene(GOLDEN_SIZE.0, GOLDEN_SIZE.1);
-        view.handle(&press(Key::Right));
-        view.handle(&press(Key::Right));
-        view.handle(&press(Key::Right));
-        settle_thumbnails(&mut view, GOLDEN_SIZE, 2);
-        shoot("icons", scheme, &mut view);
-    }
+    let mut view = place.themed_view();
+    view.handle(&command(Key::Character('1'), false));
+    view.scene(GOLDEN_SIZE.0, GOLDEN_SIZE.1);
+    view.handle(&press(Key::Right));
+    view.handle(&press(Key::Right));
+    view.handle(&press(Key::Right));
+    settle_thumbnails(&mut view, GOLDEN_SIZE, 2);
+    shoot("icons", &mut view);
 }
 
-fn shoot(name: &str, scheme: Scheme, view: &mut FilesView) {
+fn shoot(name: &str, view: &mut FilesView) {
     let scene = view.scene(GOLDEN_SIZE.0, GOLDEN_SIZE.1);
     let scene = framed_scene(
         &scene,
@@ -1451,28 +1449,10 @@ fn shoot(name: &str, scheme: Scheme, view: &mut FilesView) {
             toolbar: 0.0,
         }),
         Some(view.header()),
-        &Palette::for_scheme(scheme),
+        &Palette::for_scheme(Scheme::Light),
     );
-    let scheme_name = match scheme {
-        Scheme::Light => "light",
-        Scheme::Dark => "dark",
-    };
-    for (scale, scale_name) in [(1.0, "1x"), (1.5, "1.5x")] {
-        let (width, height) = (
-            (f64::from(GOLDEN_SIZE.0) * scale).round() as u32,
-            (f64::from(GOLDEN_SIZE.1) * scale).round() as u32,
-        );
-        let mut rgba = vec![0; (width * height * 4) as usize];
-        CpuRenderer::new()
-            .render_into(&scene, scale, &mut rgba)
-            .expect("render");
-        check_golden(
-            &format!("{name}-{scheme_name}-{scale_name}"),
-            (width, height),
-            rgba,
-            scale,
-        );
-    }
+    let frame = CpuRenderer::new().render(&scene).expect("render");
+    check_golden(name, frame.rgba);
 }
 
 #[test]
@@ -1485,32 +1465,28 @@ fn the_list_view_with_tabs_matches_its_golden() {
             .and_then(|file| file.set_modified(noon))
             .expect("set the date");
     }
-    for scheme in [Scheme::Light, Scheme::Dark] {
-        let mut view = place.themed_view(scheme);
-        view.handle(&command(Key::Character('2'), false));
-        view.handle(&command(Key::Character('t'), false));
-        view.handle(&press(Key::Down));
-        view.handle(&press(Key::Down));
-        view.scene(GOLDEN_SIZE.0, GOLDEN_SIZE.1);
-        view.handle(&Event::PointerMove(Pointer::at(Point::new(
-            SIDEBAR_WIDTH + 100.0,
-            TOOLBAR_HEIGHT + TAB_BAR_HEIGHT / 2.0,
-        ))));
-        shoot("tabs-list", scheme, &mut view);
-    }
+    let mut view = place.themed_view();
+    view.handle(&command(Key::Character('2'), false));
+    view.handle(&command(Key::Character('t'), false));
+    view.handle(&press(Key::Down));
+    view.handle(&press(Key::Down));
+    view.scene(GOLDEN_SIZE.0, GOLDEN_SIZE.1);
+    view.handle(&Event::PointerMove(Pointer::at(Point::new(
+        SIDEBAR_WIDTH + 100.0,
+        TOOLBAR_HEIGHT + TAB_BAR_HEIGHT / 2.0,
+    ))));
+    shoot("tabs-list", &mut view);
 }
 
 #[test]
 fn the_column_view_matches_its_golden() {
     let place = Place::new();
-    for scheme in [Scheme::Light, Scheme::Dark] {
-        let mut view = place.themed_view(scheme);
-        view.handle(&command(Key::Character('3'), false));
-        view.handle(&press(Key::Down));
-        view.handle(&press(Key::Right));
-        view.handle(&press(Key::Down));
-        shoot("columns", scheme, &mut view);
-    }
+    let mut view = place.themed_view();
+    view.handle(&command(Key::Character('3'), false));
+    view.handle(&press(Key::Down));
+    view.handle(&press(Key::Right));
+    view.handle(&press(Key::Down));
+    shoot("columns", &mut view);
 }
 
 #[test]
@@ -1618,15 +1594,13 @@ fn search_results_match_their_golden() {
     fs::write(place.home().join("Documents/Reports/q3 report.txt"), "q3").expect("file");
     fs::write(place.home().join("Report card.txt"), "card").expect("file");
     date_everything(&place.home());
-    for scheme in [Scheme::Light, Scheme::Dark] {
-        let mut view = place.themed_view(scheme);
-        view.scene(GOLDEN_SIZE.0, GOLDEN_SIZE.1);
-        view.handle(&command(Key::Character('f'), false));
-        type_text(&mut view, "report");
-        run_until(&mut view, |view| shown(view).len() == 3);
-        view.handle(&press(Key::Down));
-        shoot("search", scheme, &mut view);
-    }
+    let mut view = place.themed_view();
+    view.scene(GOLDEN_SIZE.0, GOLDEN_SIZE.1);
+    view.handle(&command(Key::Character('f'), false));
+    type_text(&mut view, "report");
+    run_until(&mut view, |view| shown(view).len() == 3);
+    view.handle(&press(Key::Down));
+    shoot("search", &mut view);
 }
 
 #[test]

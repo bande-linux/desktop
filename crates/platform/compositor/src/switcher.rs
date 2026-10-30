@@ -14,7 +14,8 @@ use smithay::reexports::wayland_server::backend::ClientId;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Point, Rectangle, Size};
 use unbound_graphics::{
-    Color, Elevation, Image, Item, Paint, Palette, Rect, Scene, Shape, TextAlign, TextStyle,
+    Color, Elevation, Image, Item, Paint, Palette, Radius, Rect, Scene, Shape, TextAlign, TextRole,
+    TextStyle,
 };
 use unbound_render::VulkanRenderer;
 use unbound_spring::Spring;
@@ -28,7 +29,8 @@ use crate::label::Labels;
 use crate::motion::{Look, Motion, Tick};
 use crate::overview::real_rect;
 use crate::scene::{
-    Casting, FillElement, Shading, cast_shadows, fresh, pieces_of, rounded, scaled_pieces,
+    Casting, FillElement, Shading, cast_shadows, fresh, pieces_of, premultiplied, rounded,
+    scaled_pieces,
 };
 use crate::shell::toplevel_names;
 use crate::state::{Headless, OutputElement, State};
@@ -45,10 +47,9 @@ const ICON_INSET: f64 = 12.0;
 const THUMBNAIL: (f64, f64) = (220.0, 140.0);
 const THUMBNAIL_INSET: f64 = 8.0;
 const NAME_ROW: f64 = 30.0;
-const NAME_SIZE: f32 = 13.0;
-const CARD_RADIUS: f64 = 14.0;
-const TILE_RADIUS: f64 = 10.0;
-const THUMBNAIL_RADIUS: f64 = 6.0;
+const CARD_RADIUS: f64 = Radius::XL as f64;
+const TILE_RADIUS: f64 = Radius::L as f64;
+const THUMBNAIL_RADIUS: f64 = Radius::S as f64;
 const ICON_ROUNDING: f32 = 0.225;
 const INITIAL_SHARE: f32 = 0.45;
 const OPEN_SCALE: f64 = 0.96;
@@ -393,7 +394,7 @@ impl Switcher {
         let labels = self.labels.get_or_insert_with(Labels::default);
         let paragraph = labels.text().paragraph(
             &text,
-            TextStyle::new(NAME_SIZE, palette.ink).weight(TextStyle::SEMIBOLD),
+            TextStyle::role(TextRole::BodyStrong, palette.ink),
             Some(row.size.w as f32),
             TextAlign::Center,
         );
@@ -1029,11 +1030,7 @@ impl State {
             return Vec::new();
         }
         let palette = Palette::for_scheme(self.decorations.scheme);
-        let fill = |color: Color| {
-            let [r, g, b] =
-                [color.r, color.g, color.b].map(|channel| f32::from(channel) / 255.0 * alpha);
-            [r, g, b, alpha]
-        };
+        let fill = |color: Color| premultiplied(color, alpha);
         let layout = &card.layout;
         let place = |rect: Frame| fitted(rect, &layout.card, &look.rect);
         let factor = look.rect.size.w / layout.card.size.w.max(1.0);

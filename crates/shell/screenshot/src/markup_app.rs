@@ -7,8 +7,8 @@ use unbound_screenshot::L10N;
 use unbound_screenshot::markup::{Command, Commanded, Markup, TOOLBAR_HEIGHT, Toolbar};
 use unbound_toolkit::ui::{Context, Event, FreeLayout, Key, Size, Ui, Widget, WidgetId};
 use unbound_toolkit::{
-    App, Color, Image, Item, Point, Rect, Role, Scene, ScreenImage, Shape, TextSystem, Transfer,
-    Window, WindowError, WindowEvent,
+    App, Elevation, Image, Item, Palette, Point, Rect, Role, Scene, Scheme, ScreenImage, Shape,
+    TextSystem, Transfer, Window, WindowError, WindowEvent,
 };
 use unbound_xdg::file_uri;
 
@@ -205,7 +205,7 @@ impl App for MarkupApp {
         marks.extend(self.markup.items(&mut self.text, true));
         let full = Rect::new(0.0, 0.0, self.markup.width, self.markup.height);
         if crop != full {
-            let veil = Color::hex(0x000000).with_alpha(0x80);
+            let veil = Palette::for_scheme(Scheme::Dark).scrim;
             for outside in [
                 Rect::new(0.0, 0.0, full.width, crop.y),
                 Rect::new(
@@ -228,12 +228,12 @@ impl App for MarkupApp {
                 });
             }
         }
-        scene.items.push(Item::Shadow {
-            shape: Shape::rect(canvas),
-            offset: Point::new(0.0, 2.0),
-            blur_radius: 10.0,
-            color: Color::hex(0x000000).with_alpha(60),
-        });
+        scene.items.extend(Item::shadows(
+            Shape::rect(canvas),
+            Elevation::Overlay,
+            self.ui.context().palette.scheme,
+            true,
+        ));
         scene.items.push(Item::Translate {
             offset: Point::new(canvas.x, canvas.y),
             items: vec![Item::Clip {

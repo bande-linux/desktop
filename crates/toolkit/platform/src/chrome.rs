@@ -103,7 +103,7 @@ pub(crate) struct Frame {
 }
 
 impl Frame {
-    fn window(&self) -> Rect {
+    pub(crate) fn window(&self) -> Rect {
         Rect::new(self.margin, self.margin, self.width, self.height)
     }
 

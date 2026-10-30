@@ -184,7 +184,8 @@ fn every_app_we_ship_or_recommend_has_an_icon_in_the_theme() {
     let mut names: Vec<String> =
         fs::read_dir(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../apps"))
             .unwrap()
-            .flat_map(|app| fs::read_dir(app.unwrap().path().join("data")).unwrap())
+            .filter_map(|app| fs::read_dir(app.unwrap().path().join("data")).ok())
+            .flatten()
             .map(|entry| entry.unwrap().path())
             .filter(|path| {
                 path.extension()

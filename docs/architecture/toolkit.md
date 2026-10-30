@@ -74,6 +74,9 @@ writes a hex value, a corner radius or a font name of its own.
   `ink2`, the accent when selected, or `on_accent` on a selection.
 - **Elevation.** `Elevation::{Frame, Overlay}.shadows(scheme, active)` gives the key and ambient
   shadow pair (offset, σ, opacity); an inactive frame's ambient shadow is half as strong.
+  `Item::shadows(shape, elevation, scheme, active)` turns the pair into the two shadow items
+  under a shape, and `ui::focus_ring_for(palette, shape, items)` draws the focus ring around a
+  custom control.
 
 ## Goals
 
@@ -154,8 +157,11 @@ writes a hex value, a corner radius or a font name of its own.
     for third-party apps (`compositor/src/frame.rs`) draw the same header and pill from
     `title_bar.rs`, 40 pt high, and redraw when Alt is pressed or released so the zoom glyph
     follows it. Goldens: `platform/tests/golden/window-frame-*.png`, including an inactive
-    window behind a second one. `UNBOUND_RENDERER=cpu` keeps a window on
-  `CpuRenderer`. `crates/testing/sample` is a settings card on the toolkit that `ci/perf` starts
+    window behind a second one. When the only Vulkan device renders on the CPU (lavapipe or
+  llvmpipe, as in VMs) every window stays on `CpuRenderer` and presents `wl_shm` buffers with
+  only the changed regions damaged; `UNBOUND_RENDERER=gpu` or `=cpu` overrides the choice. A
+  window whose background is opaque declares its window rectangle as its opaque region, so
+  the compositor shades nothing beneath it. `crates/testing/sample` is a settings card on the toolkit that `ci/perf` starts
   to measure.
 - **Widgets.** `ui` holds the widget tree: `Stack` (rows and columns with spacing and padding; a
   column stretches its children across, a row centres them), `Label`, `Shortcut`, the controls
@@ -251,7 +257,10 @@ writes a hex value, a corner radius or a font name of its own.
 - **Accessibility.** Every widget produces an AccessKit node: role, label or value, bounds,
   toggled state or numeric range, and its actions. `Ui::accessibility` returns the `TreeUpdate`
   with the focus, and `Ui::perform` carries out Focus, Click, SetValue, Increment, Decrement,
-  ReplaceSelectedText and SetTextSelection requests. The tree is published on AT-SPI through `accesskit_unix`.
+  ReplaceSelectedText and SetTextSelection requests. The tree is published on AT-SPI through `accesskit_unix`;
+  table cells carry their text as their name, so a screen reader reads them. `platform/tests/screen_reader.rs`
+  starts at-spi2-core on a private bus and checks through AT-SPI the roles, names, actions and text of a
+  window with a button, field, pop-up button, table and menu, and clicks, types and chooses through it.
 - **Input.** `wl_seat` up to version 9. Pointer events carry the button (primary, secondary,
   middle, back, forward), the click count (a press within 500 ms and 4 pt of the previous press
   of the same button counts up) and the modifiers; Ctrl+primary is a secondary click. Scrolling

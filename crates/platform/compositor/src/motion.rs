@@ -386,6 +386,8 @@ impl State {
         self.animate_source_hud(tick.time);
         self.animate_switcher(tick);
         self.animate_assist(tick);
+        self.animate_zoom(tick.time);
+        self.animate_flash(tick.time);
         self.closing.retain(|closing| !closing.motion.is_settled());
         if self.is_animating() {
             self.needs_redraw = true;
@@ -402,6 +404,8 @@ impl State {
             || self.input_sources.is_animating()
             || self.switcher.is_animating()
             || self.assist.is_animating()
+            || self.zoom.is_animating()
+            || self.is_flashing()
             || self.windows.iter().any(|window| window.motion.is_some())
     }
 }

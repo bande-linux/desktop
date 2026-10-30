@@ -121,9 +121,31 @@ hours = { $count ->
     [one] { $count } hour
    *[other] { $count } hours
 }
-motion = Motion
+accessibility = Accessibility
+accessibility-keywords = a11y, disability, assistive, vision, hearing, motor
+vision = Vision
+screen-reader = Screen reader
+screen-reader-keywords = orca, voice, speech, spoken, read aloud, blind, voiceover, narrator
+zoom = Zoom
+zoom-keywords = magnifier, magnify, enlarge, low vision, Alt+Super+8
+increase-contrast = Increase contrast
+increase-contrast-keywords = high contrast, borders, outlines, legibility
+reduce-transparency = Reduce transparency
+reduce-transparency-keywords = blur, translucent, opaque, see-through
 reduce-motion = Reduce motion
-reduce-motion-keywords = accessibility, animation, animations, movement, motion sickness
+reduce-motion-keywords = animation, animations, movement, motion sickness
+cursor-size = Pointer size
+cursor-size-keywords = cursor size, mouse pointer, bigger pointer, arrow
+hearing = Hearing
+flash-screen = Flash the screen when an alert sound plays
+flash-screen-keywords = visual bell, alert, beep, deaf, hard of hearing
+motor = Motor
+sticky-keys = Sticky keys
+sticky-keys-keywords = modifier, one hand, shift five times, latch
+slow-keys = Slow keys
+slow-keys-keywords = delay, accidental keys, hold, acceptance
+bounce-keys = Bounce keys
+bounce-keys-keywords = double press, tremor, debounce, stutter
 wallpaper = Wallpaper
 wallpaper-keywords = background, desktop picture, picture, photo, image
 wallpaper-picture-keywords = background, picture, add picture

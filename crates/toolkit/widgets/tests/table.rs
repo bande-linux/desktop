@@ -491,7 +491,7 @@ fn an_outline_is_a_tree_grid_with_levels_and_expandable_rows() {
         .accessibility()
         .nodes
         .into_iter()
-        .find(|(_, node)| node.label() == Some("mail helper"))
+        .find(|(_, node)| node.role() == Role::Row && node.label() == Some("mail helper"))
         .expect("child row");
     assert_eq!(helper.1.level(), Some(2));
     assert!(fixture.selection().is_empty(), "expanding selects nothing");

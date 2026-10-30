@@ -13,10 +13,11 @@ use zbus::object_server::SignalEmitter;
 use zbus::zvariant::{OwnedValue, Value};
 
 use crate::{
-    ACCENTS, AlertSound, Appearance, BarEdge, CapsLock, ClockFormat, Config, ConfigStore,
-    DisplaySettings, InputSource, LidOnPower, Loaded, MenuBarPlacement, Placement, ReloadError,
-    Rotation, SecondaryClick, Setting, Suspend, WallpaperFit, WallpaperVariant, accent_keyword,
-    migrate, read_system_input_sources,
+    ACCENTS, Accessibility, AlertSound, Appearance, BarEdge, CURSOR_SIZE_RANGE, CapsLock,
+    ClockFormat, Config, ConfigStore, DisplaySettings, InputSource, LidOnPower, Loaded,
+    MenuBarPlacement, Placement, ReloadError, Rotation, SecondaryClick, Setting, Suspend,
+    TEXT_SIZE_RANGE, WallpaperFit, WallpaperVariant, ZOOM_RANGE, accent_keyword, migrate,
+    read_system_input_sources,
 };
 
 pub type ArrangedDisplay = (String, i32, i32, bool, String);
@@ -173,8 +174,39 @@ fn publish_changes(
         if before.power.lid_on_power != after.power.lid_on_power {
             let _ = guard.lid_on_power_changed(emitter).await;
         }
-        if before.reduce_motion != after.reduce_motion {
+        let (was, is) = (&before.accessibility, &after.accessibility);
+        if was.screen_reader != is.screen_reader {
+            let _ = guard.screen_reader_changed(emitter).await;
+        }
+        if was.zoom != is.zoom {
+            let _ = guard.zoom_changed(emitter).await;
+        }
+        if was.increase_contrast != is.increase_contrast {
+            let _ = guard.increase_contrast_changed(emitter).await;
+        }
+        if was.reduce_transparency != is.reduce_transparency {
+            let _ = guard.reduce_transparency_changed(emitter).await;
+        }
+        if was.reduce_motion != is.reduce_motion {
             let _ = guard.reduce_motion_changed(emitter).await;
+        }
+        if was.text_size != is.text_size {
+            let _ = guard.text_size_changed(emitter).await;
+        }
+        if was.cursor_size != is.cursor_size {
+            let _ = guard.cursor_size_changed(emitter).await;
+        }
+        if was.flash_screen != is.flash_screen {
+            let _ = guard.flash_screen_changed(emitter).await;
+        }
+        if was.sticky_keys != is.sticky_keys {
+            let _ = guard.sticky_keys_changed(emitter).await;
+        }
+        if was.slow_keys != is.slow_keys {
+            let _ = guard.slow_keys_changed(emitter).await;
+        }
+        if was.bounce_keys != is.bounce_keys {
+            let _ = guard.bounce_keys_changed(emitter).await;
         }
         if before.bar.edge != after.bar.edge {
             let _ = guard.bar_edge_changed(emitter).await;
@@ -363,6 +395,21 @@ impl ConfigInterface {
     }
 
     fn write(&self, setting: &Setting) -> zbus::fdo::Result<()> {
+        self.write_from(|_| setting.clone())
+    }
+
+    fn change_accessibility(
+        &self,
+        change: impl FnOnce(&mut Accessibility),
+    ) -> zbus::fdo::Result<()> {
+        self.write_from(|config| {
+            let mut access = config.accessibility;
+            change(&mut access);
+            Setting::Accessibility(access)
+        })
+    }
+
+    fn write_from(&self, setting: impl FnOnce(&Config) -> Setting) -> zbus::fdo::Result<()> {
         let mut published = lock(&self.published);
         let source = match std::fs::read_to_string(&self.path) {
             Ok(source) => source,
@@ -371,12 +418,12 @@ impl ConfigInterface {
                 return Err(Failed(format!("cannot read the configuration: {error}")));
             }
         };
-        if let Err(error) = Config::parse(&source) {
-            return Err(Failed(format!(
+        let config = Config::parse(&source).map_err(|error| {
+            Failed(format!(
                 "the configuration is invalid at {error} and must be fixed first"
-            )));
-        }
-        let edited = setting
+            ))
+        })?;
+        let edited = setting(&config)
             .apply(&source)
             .map_err(|error| InvalidArgs(error.message))?;
         replace(&self.path, &edited)
@@ -471,13 +518,116 @@ impl ConfigInterface {
     }
 
     #[zbus(property)]
-    fn reduce_motion(&self) -> bool {
-        self.store.current().reduce_motion
+    fn screen_reader(&self) -> bool {
+        self.store.current().accessibility.screen_reader
     }
 
     #[zbus(property)]
-    fn set_reduce_motion(&self, reduce: bool) -> zbus::fdo::Result<()> {
-        self.write(&Setting::ReduceMotion(reduce))
+    fn set_screen_reader(&self, on: bool) -> zbus::fdo::Result<()> {
+        self.change_accessibility(|access| access.screen_reader = on)
+    }
+
+    #[zbus(property)]
+    fn zoom(&self) -> f64 {
+        self.store.current().accessibility.zoom
+    }
+
+    #[zbus(property)]
+    fn set_zoom(&self, zoom: f64) -> zbus::fdo::Result<()> {
+        let zoom = ZOOM_RANGE.0.max(ZOOM_RANGE.1.min(zoom));
+        self.change_accessibility(|access| access.zoom = zoom)
+    }
+
+    #[zbus(property)]
+    fn increase_contrast(&self) -> bool {
+        self.store.current().accessibility.increase_contrast
+    }
+
+    #[zbus(property)]
+    fn set_increase_contrast(&self, on: bool) -> zbus::fdo::Result<()> {
+        self.change_accessibility(|access| access.increase_contrast = on)
+    }
+
+    #[zbus(property)]
+    fn reduce_transparency(&self) -> bool {
+        self.store.current().accessibility.reduce_transparency
+    }
+
+    #[zbus(property)]
+    fn set_reduce_transparency(&self, on: bool) -> zbus::fdo::Result<()> {
+        self.change_accessibility(|access| access.reduce_transparency = on)
+    }
+
+    #[zbus(property)]
+    fn reduce_motion(&self) -> bool {
+        self.store.current().accessibility.reduce_motion
+    }
+
+    #[zbus(property)]
+    fn set_reduce_motion(&self, on: bool) -> zbus::fdo::Result<()> {
+        self.change_accessibility(|access| access.reduce_motion = on)
+    }
+
+    #[zbus(property)]
+    fn text_size(&self) -> u32 {
+        self.store.current().accessibility.text_size
+    }
+
+    #[zbus(property)]
+    fn set_text_size(&self, percent: u32) -> zbus::fdo::Result<()> {
+        let percent = percent.clamp(TEXT_SIZE_RANGE.0, TEXT_SIZE_RANGE.1);
+        self.change_accessibility(|access| access.text_size = percent)
+    }
+
+    #[zbus(property)]
+    fn cursor_size(&self) -> u32 {
+        self.store.current().accessibility.cursor_size
+    }
+
+    #[zbus(property)]
+    fn set_cursor_size(&self, size: u32) -> zbus::fdo::Result<()> {
+        let size = size.clamp(CURSOR_SIZE_RANGE.0, CURSOR_SIZE_RANGE.1);
+        self.change_accessibility(|access| access.cursor_size = size)
+    }
+
+    #[zbus(property)]
+    fn flash_screen(&self) -> bool {
+        self.store.current().accessibility.flash_screen
+    }
+
+    #[zbus(property)]
+    fn set_flash_screen(&self, on: bool) -> zbus::fdo::Result<()> {
+        self.change_accessibility(|access| access.flash_screen = on)
+    }
+
+    #[zbus(property)]
+    fn sticky_keys(&self) -> bool {
+        self.store.current().accessibility.sticky_keys
+    }
+
+    #[zbus(property)]
+    fn set_sticky_keys(&self, on: bool) -> zbus::fdo::Result<()> {
+        self.change_accessibility(|access| access.sticky_keys = on)
+    }
+
+    #[zbus(property)]
+    fn slow_keys(&self) -> bool {
+        self.store.current().accessibility.slow_keys
+    }
+
+    #[zbus(property)]
+    fn set_slow_keys(&self, on: bool) -> zbus::fdo::Result<()> {
+        self.change_accessibility(|access| access.slow_keys = on)
+    }
+
+    #[zbus(property)]
+    fn bounce_keys(&self) -> bool {
+        self.store.current().accessibility.bounce_keys
+    }
+
+    #[zbus(property)]
+    fn set_bounce_keys(&self, on: bool) -> zbus::fdo::Result<()> {
+        self.change_accessibility(|access| access.bounce_keys = on)
     }
 
     #[zbus(property)]

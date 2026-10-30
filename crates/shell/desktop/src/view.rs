@@ -9,12 +9,12 @@ use unbound_toolkit::ui::{
     Size, Spring, TextField, Ui, Widget, WidgetId,
 };
 use unbound_toolkit::{
-    Appearance, Color, DragAction, DragIcon, Image, Item as SceneItem, Palette, Paragraph, Point,
-    Rect, Scene, Shape, TextAlign, TextStyle, TextSystem,
+    Appearance, Color, DragAction, DragIcon, Elevation, Image, Item as SceneItem, Palette,
+    Paragraph, Point, Radius, Rect, Scene, Scheme, Shape, TextAlign, TextStyle, TextSystem,
 };
 
 use crate::L10N;
-use crate::backdrop::{Backdrop, Layer, placeholder};
+use crate::backdrop::{Backdrop, Layer};
 use crate::menus::Command;
 use crate::model::{
     Bounds, Desktop, Direction, Grid, Item, Kind, LABEL_WIDTH, Positions, Slot, SortBy,
@@ -32,9 +32,18 @@ const EDITOR_HEIGHT: f32 = 18.0;
 const EDITOR_WIDTH: f32 = LABEL_WIDTH + 24.0;
 const FRAME: Duration = Duration::from_millis(8);
 const SPRING_DELAY: Duration = Duration::from_millis(900);
-const DARK_TEXT: Color = Color::hex(0x16181C);
-const LIGHT_TEXT: Color = Color::hex(0xFFFFFF);
-const UNFOCUSED_SELECTION: Color = Color::hex(0x8A9099);
+const LABEL_HALO: f32 = 0.6;
+const DRAGGED: f32 = 0.75;
+const BADGE_TEXT: f32 = 11.0;
+const BADGE_HEIGHT: f32 = 18.0;
+const BADGE_PADDING: f32 = 5.0;
+const BADGE_OFFSET: (f32, f32) = (22.0, -14.0);
+const THUMBNAIL_INSET: f32 = 6.0;
+const THUMBNAIL_RADIUS: f32 = 2.0;
+const THUMBNAIL_EDGE: f32 = 0.55;
+const LIFTED: f32 = 0.4;
+const DROP_TARGET: f32 = 0.35;
+const BAND_FILL: f32 = 0.18;
 const ROOT_NODE: NodeId = NodeId(1);
 const FIRST_ITEM_NODE: u64 = 2;
 
@@ -124,11 +133,17 @@ struct Motion {
     shown: Animated,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum Artwork {
+    Icon(Image),
+    Thumbnail(Image),
+}
+
 #[derive(Clone)]
 struct Label {
     name: String,
     on_light: bool,
-    selected: bool,
+    selected: Option<bool>,
     text: Paragraph,
     shadow: Option<Paragraph>,
 }
@@ -137,7 +152,7 @@ pub struct DesktopView {
     desktop: Desktop,
     layouts: Layouts,
     layouts_changed: bool,
-    icons: HashMap<PathBuf, Option<Image>>,
+    icons: HashMap<PathBuf, Option<Artwork>>,
     labels: HashMap<PathBuf, Label>,
     motions: HashMap<PathBuf, Motion>,
     backdrop: Backdrop,
@@ -173,6 +188,37 @@ fn fill(bounds: Bounds, radius: f32, color: Color) -> SceneItem {
         shape: Shape::rounded(rect(bounds), radius),
         paint: color.into(),
     }
+}
+
+fn thumbnail(image: &Image, room: Rect, palette: Palette, items: &mut Vec<SceneItem>) {
+    let (width, height) = (image.width() as f32, image.height() as f32);
+    let scale = (room.width / width).min(room.height / height);
+    let (shown_width, shown_height) = ((width * scale).round(), (height * scale).round());
+    let shown = Rect::new(
+        (room.x + (room.width - shown_width) / 2.0).round(),
+        (room.y + room.height - shown_height).round(),
+        shown_width,
+        shown_height,
+    );
+    let shape = Shape::rounded(shown, THUMBNAIL_RADIUS);
+    items.extend(SceneItem::shadows(
+        shape,
+        Elevation::Overlay,
+        palette.scheme,
+        true,
+    ));
+    items.push(SceneItem::Clip {
+        shape,
+        items: vec![SceneItem::Image {
+            rect: shown,
+            image: image.clone(),
+        }],
+    });
+    items.push(SceneItem::Stroke {
+        shape: Shape::rounded(shown.inset(0.5), THUMBNAIL_RADIUS - 0.5),
+        width: 1.0,
+        paint: palette.edge.with_opacity(THUMBNAIL_EDGE).into(),
+    });
 }
 
 fn distance(a: Point, b: Point) -> f32 {
@@ -289,7 +335,7 @@ impl DesktopView {
         }
     }
 
-    pub fn set_items(&mut self, items: Vec<(Item, Option<Image>)>, now: Instant) {
+    pub fn set_items(&mut self, items: Vec<(Item, Option<Artwork>)>, now: Instant) {
         let remembered = self.remembered();
         self.icons = items
             .iter()
@@ -738,7 +784,7 @@ impl DesktopView {
                 scene: Scene {
                     width: 1,
                     height: 1,
-                    background: Color::hex(0).with_alpha(0),
+                    background: Color::TRANSPARENT,
                     items: Vec::new(),
                 },
                 hotspot: Point::new(0.0, 0.0),
@@ -754,28 +800,71 @@ impl DesktopView {
                 Some((item, cell))
             })
             .collect();
-        let left = cells.iter().map(|(_, cell)| cell.x).fold(from.x, f32::min);
-        let top = cells.iter().map(|(_, cell)| cell.y).fold(from.y, f32::min);
-        let right = cells
-            .iter()
-            .map(|(_, cell)| cell.x + cell.width)
-            .fold(from.x, f32::max);
-        let bottom = cells
-            .iter()
-            .map(|(_, cell)| cell.y + cell.height)
-            .fold(from.y, f32::max);
+        let badge = (cells.len() > 1).then(|| {
+            let count = self.ui.context().text.paragraph(
+                &cells.len().to_string(),
+                TextStyle::new(BADGE_TEXT, palette.on_danger)
+                    .weight(TextStyle::BOLD)
+                    .tabular(),
+                None,
+                TextAlign::Start,
+            );
+            let width = (count.width() + 2.0 * BADGE_PADDING)
+                .max(BADGE_HEIGHT)
+                .ceil();
+            let rect = Rect::new(
+                (from.x + BADGE_OFFSET.0 - width / 2.0).round(),
+                (from.y + BADGE_OFFSET.1 - BADGE_HEIGHT / 2.0).round(),
+                width,
+                BADGE_HEIGHT,
+            );
+            (count, rect)
+        });
+        let reach = cells.iter().map(|(_, cell)| *cell).chain(
+            badge
+                .as_ref()
+                .map(|(_, rect)| Bounds::new(rect.x, rect.y, rect.width, rect.height)),
+        );
+        let (left, top, right, bottom) = reach.fold(
+            (from.x, from.y, from.x, from.y),
+            |(left, top, right, bottom), cell| {
+                (
+                    left.min(cell.x),
+                    top.min(cell.y),
+                    right.max(cell.x + cell.width),
+                    bottom.max(cell.y + cell.height),
+                )
+            },
+        );
         let mut items = Vec::new();
         for (item, cell) in cells {
             self.paint_item(&item, cell, 1.0, palette, &mut items);
+        }
+        let mut drawn = vec![SceneItem::Opacity {
+            alpha: DRAGGED,
+            items,
+        }];
+        if let Some((count, rect)) = badge {
+            drawn.push(SceneItem::Fill {
+                shape: Shape::rounded(rect, BADGE_HEIGHT / 2.0),
+                paint: palette.danger.into(),
+            });
+            drawn.push(SceneItem::Text {
+                origin: Point::new(
+                    (rect.x + (rect.width - count.width()) / 2.0).round(),
+                    (rect.y + (rect.height - count.height()) / 2.0).round(),
+                ),
+                paragraph: count,
+            });
         }
         DragIcon {
             scene: Scene {
                 width: (right - left).ceil().max(1.0) as u32,
                 height: (bottom - top).ceil().max(1.0) as u32,
-                background: Color::hex(0).with_alpha(0),
+                background: Color::TRANSPARENT,
                 items: vec![SceneItem::Translate {
                     offset: Point::new(-left, -top),
-                    items: vec![SceneItem::Opacity { alpha: 0.75, items }],
+                    items: drawn,
                 }],
             },
             hotspot: Point::new(from.x - left, from.y - top),
@@ -1059,11 +1148,12 @@ impl DesktopView {
     }
 
     fn label(&mut self, item: &Item, bounds: Bounds, selected: bool) -> Label {
-        let on_light = !selected
+        let selected = selected.then_some(self.focused);
+        let on_light = selected.is_none()
             && self
                 .backdrop
                 .is_light(bounds, self.scale)
-                .unwrap_or(self.appearance.scheme == unbound_toolkit::Scheme::Light);
+                .unwrap_or(self.appearance.scheme == Scheme::Light);
         if let Some(label) = self.labels.get(&item.path)
             && label.name == item.name
             && label.on_light == on_light
@@ -1071,10 +1161,22 @@ impl DesktopView {
         {
             return label.clone();
         }
-        let (color, shadow) = match (selected, on_light) {
-            (true, _) => (LIGHT_TEXT, None),
-            (false, true) => (DARK_TEXT, Some(LIGHT_TEXT.with_alpha(150))),
-            (false, false) => (LIGHT_TEXT, Some(Color::hex(0).with_alpha(150))),
+        let palette = self.appearance.palette();
+        let (color, shadow) = match selected {
+            Some(true) => (palette.on_accent, None),
+            Some(false) => (palette.ink, None),
+            None => {
+                let wallpaper = Palette::for_scheme(if on_light {
+                    Scheme::Light
+                } else {
+                    Scheme::Dark
+                });
+                let halo = match on_light {
+                    true => wallpaper.sheet,
+                    false => Color::BLACK,
+                };
+                (wallpaper.ink, Some(halo.with_opacity(LABEL_HALO)))
+            }
         };
         let style = TextStyle::new(LABEL_SIZE, color).weight(TextStyle::MEDIUM);
         let text = fitted_label(&mut self.ui.context().text, &item.name, style, LABEL_WIDTH);
@@ -1118,7 +1220,7 @@ impl DesktopView {
                 icon.width + 10.0,
                 icon.height + 10.0,
             );
-            drawn.push(fill(backdrop, 9.0, Color::hex(0).with_alpha(56)));
+            drawn.push(fill(backdrop, Radius::L, palette.scrim));
         }
         let grow = 0.85 + 0.15 * shown;
         let scaled = Bounds::new(
@@ -1128,11 +1230,19 @@ impl DesktopView {
             icon.height * grow,
         );
         match self.icons.get(&item.path).cloned().flatten() {
-            Some(image) => drawn.push(SceneItem::Image {
+            Some(Artwork::Icon(image)) => drawn.push(SceneItem::Image {
                 rect: rect(scaled),
                 image,
             }),
-            None => drawn.push(fill(scaled.inset(8.0), 8.0, palette.overlay)),
+            Some(Artwork::Thumbnail(image)) => {
+                thumbnail(
+                    &image,
+                    rect(scaled).inset(THUMBNAIL_INSET),
+                    palette,
+                    &mut drawn,
+                );
+            }
+            None => drawn.push(fill(scaled.inset(8.0), Radius::M, palette.overlay)),
         }
         let renaming = self
             .rename
@@ -1152,9 +1262,9 @@ impl DesktopView {
                 let color = if self.focused {
                     palette.accent
                 } else {
-                    UNFOCUSED_SELECTION
+                    palette.well
                 };
-                drawn.push(fill(pill, 5.0, color));
+                drawn.push(fill(pill, Radius::XS, color));
             }
             if let Some(shadow) = label.shadow {
                 drawn.push(SceneItem::Text {
@@ -1194,7 +1304,6 @@ impl DesktopView {
 
     pub fn scene(&mut self, now: Instant) -> Scene {
         let palette = self.appearance.palette();
-        let dark = self.appearance.scheme == unbound_toolkit::Scheme::Dark;
         let (width, height) = self.size;
         let mut items = Vec::new();
         self.backdrop
@@ -1239,14 +1348,18 @@ impl DesktopView {
                     icon.width + 10.0,
                     icon.height + 10.0,
                 );
-                items.push(fill(well, 9.0, palette.accent.with_alpha(90)));
+                items.push(fill(
+                    well,
+                    Radius::L,
+                    palette.accent.with_opacity(DROP_TARGET),
+                ));
             }
             match dragging.contains(&item.path) {
                 true => {
                     let mut lifted = Vec::new();
                     self.paint_item(item, *cell, *shown, palette, &mut lifted);
                     items.push(SceneItem::Opacity {
-                        alpha: 0.4,
+                        alpha: LIFTED,
                         items: lifted,
                     });
                 }
@@ -1255,11 +1368,15 @@ impl DesktopView {
         }
         if let Gesture::Band { from, to, .. } = &self.gesture {
             let band = Bounds::spanning((from.x, from.y), (to.x, to.y));
-            items.push(fill(band, 2.0, Color::hex(0xFFFFFF).with_alpha(40)));
+            items.push(fill(
+                band,
+                Radius::XS,
+                palette.accent.with_opacity(BAND_FILL),
+            ));
             items.push(SceneItem::Stroke {
-                shape: Shape::rounded(rect(band), 2.0),
+                shape: Shape::rounded(rect(band).inset(0.5), Radius::XS - 0.5),
                 width: 1.0,
-                paint: Color::hex(0xFFFFFF).with_alpha(170).into(),
+                paint: palette.accent.into(),
             });
         }
         self.place_editor();
@@ -1272,7 +1389,7 @@ impl DesktopView {
         Scene {
             width: width.round() as u32,
             height: height.round() as u32,
-            background: placeholder(dark),
+            background: palette.chassis,
             items,
         }
     }

@@ -2,13 +2,13 @@ use smithay::backend::renderer::element::Id;
 use smithay::input::keyboard::keysyms;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Point, Rectangle};
-use unbound_graphics::{Color, Elevation, Palette};
+use unbound_graphics::{Elevation, Palette, Radius};
 use unbound_render::VulkanRenderer;
 use unbound_spring::Spring;
 
 use crate::motion::{Look, Motion, Tick};
 use crate::overview::{arrange, real_rect};
-use crate::scene::{Casting, FillElement, Shading, cast_shadows, rounded};
+use crate::scene::{Casting, FillElement, Shading, cast_shadows, premultiplied, rounded};
 use crate::state::{Headless, OutputElement, State};
 use crate::tile::Tile;
 
@@ -16,9 +16,9 @@ type Frame = Rectangle<f64, Logical>;
 
 const INSET: f64 = 12.0;
 const PADDING: f64 = 24.0;
-const PANEL_RADIUS: f64 = 14.0;
-const RING: f64 = 6.0;
-const RING_RADIUS: f64 = 10.0;
+const PANEL_RADIUS: f64 = Radius::XL as f64;
+const RING: f64 = 3.0;
+const RING_RADIUS: f64 = Radius::L as f64;
 const OPEN_SCALE: f64 = 0.96;
 
 struct Offer {
@@ -49,11 +49,6 @@ impl Assist {
             .as_ref()
             .is_some_and(|offer| !offer.look.is_settled())
     }
-}
-
-fn fill(color: Color, alpha: f32) -> [f32; 4] {
-    let [r, g, b] = [color.r, color.g, color.b].map(|channel| f32::from(channel) / 255.0 * alpha);
-    [r, g, b, alpha]
 }
 
 impl State {
@@ -321,14 +316,14 @@ impl State {
             elements.push(OutputElement::Fill(FillElement::new(
                 offer.ids[0].clone(),
                 rounded(around.to_physical(scale), RING_RADIUS * scale),
-                fill(palette.hairline, alpha),
+                premultiplied(palette.accent, alpha),
             )));
         }
         let shape = rounded(look.rect.to_physical(scale), PANEL_RADIUS * factor * scale);
         elements.push(OutputElement::Fill(FillElement::new(
             offer.ids[1].clone(),
             shape,
-            fill(palette.overlay, alpha),
+            premultiplied(palette.overlay, alpha),
         )));
         let shading = Shading {
             active: true,

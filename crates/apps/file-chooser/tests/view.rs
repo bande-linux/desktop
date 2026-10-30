@@ -94,7 +94,7 @@ fn view(home: &Path, mode: Mode, scheme: Scheme) -> ChooserView {
     );
     ChooserView::new(
         chooser,
-        rows(home, None, None),
+        rows(home, None, None, None),
         home.to_path_buf(),
         Icons::new(Vec::new()),
         Appearance {

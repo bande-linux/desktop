@@ -17,7 +17,7 @@ use crate::state::OutputElement;
 use crate::state::mapped_size;
 use crate::tile::{Preview, TILED};
 use crate::window::Window;
-use unbound_graphics::{Elevation, Palette, Radius, Scheme};
+use unbound_graphics::{Color, Elevation, Palette, Radius, Scheme};
 use unbound_render::{
     Blur, RenderError, RoundedRect, Shadow, VulkanFrame, VulkanRenderer, VulkanTexture,
 };
@@ -445,8 +445,13 @@ impl RenderElement<VulkanRenderer> for PieceElement {
     }
 }
 
-const PREVIEW_FILL: [f32; 4] = [0.16, 0.16, 0.16, 0.16];
-const HUNG_VEIL: [f32; 4] = [0.12, 0.12, 0.12, 0.24];
+const PREVIEW_FILL: f32 = 0.16;
+
+pub(crate) fn premultiplied(color: Color, alpha: f32) -> [f32; 4] {
+    let alpha = f32::from(color.a) / 255.0 * alpha;
+    let [r, g, b] = [color.r, color.g, color.b].map(|channel| f32::from(channel) / 255.0 * alpha);
+    [r, g, b, alpha]
+}
 const BLUR_PASSES: u32 = 3;
 const BLUR_OFFSET: f64 = 1.5;
 
@@ -524,10 +529,43 @@ impl RenderElement<VulkanRenderer> for BlurElement {
     }
 }
 
+const SCRIM_OPACITY: f32 = 0.72;
+
+pub(crate) fn scrim(renderer: &VulkanRenderer, scheme: Scheme) -> Option<[f32; 4]> {
+    renderer.reduced_effects().then(|| {
+        let sheet = Palette::for_scheme(scheme).sheet;
+        let channel = |value: u8| f32::from(value) / 255.0 * SCRIM_OPACITY;
+        [
+            channel(sheet.r),
+            channel(sheet.g),
+            channel(sheet.b),
+            SCRIM_OPACITY,
+        ]
+    })
+}
+
+fn behind(
+    id: Id,
+    region: RoundedRect,
+    scale: f64,
+    alpha: f32,
+    backdrop: Option<[f32; 4]>,
+) -> OutputElement {
+    match backdrop {
+        Some(color) => OutputElement::Fill(FillElement::backdrop(
+            id,
+            region,
+            color.map(|channel| channel * alpha),
+        )),
+        None => OutputElement::Blur(BlurElement::new(id, region, scale, alpha)),
+    }
+}
+
 pub(crate) fn surface_blurs(
     surface: &WlSurface,
     location: Point<i32, Logical>,
     scale: f64,
+    backdrop: Option<[f32; 4]>,
 ) -> Vec<OutputElement> {
     let Some(size) = mapped_size(surface) else {
         return Vec::new();
@@ -538,12 +576,8 @@ pub(crate) fn surface_blurs(
         .into_iter()
         .filter_map(|(id, rect)| {
             let rect = Rectangle::new(location + rect.loc, rect.size).intersection(bounds)?;
-            Some(OutputElement::Blur(BlurElement::new(
-                id,
-                rounded(rect.to_f64().to_physical(scale), radius * scale),
-                scale,
-                1.0,
-            )))
+            let shape = rounded(rect.to_f64().to_physical(scale), radius * scale);
+            Some(behind(id, shape, scale, 1.0, backdrop))
         })
         .collect()
 }
@@ -584,9 +618,21 @@ pub struct FillElement {
     shape: RoundedRect,
     color: [f32; 4],
     commit: CommitCounter,
+    backdrop: bool,
 }
 
 impl FillElement {
+    fn backdrop(id: Id, shape: RoundedRect, color: [f32; 4]) -> Self {
+        Self {
+            backdrop: true,
+            ..Self::new(id, shape, color)
+        }
+    }
+
+    pub(crate) fn is_backdrop(&self) -> bool {
+        self.backdrop
+    }
+
     pub(crate) fn new(id: Id, shape: RoundedRect, color: [f32; 4]) -> Self {
         let mut hasher = DefaultHasher::new();
         for value in [shape.components(), color, [shape.radius, 0.0, 0.0, 0.0]].concat() {
@@ -597,6 +643,7 @@ impl FillElement {
             shape,
             color,
             commit: CommitCounter::from(hasher.finish() as usize),
+            backdrop: false,
         }
     }
 }
@@ -669,7 +716,7 @@ pub(crate) fn preview_elements(
     std::iter::once(OutputElement::Fill(FillElement::new(
         preview.fill.clone(),
         shape,
-        PREVIEW_FILL.map(|channel| channel * alpha),
+        premultiplied(Palette::for_scheme(scheme).accent, PREVIEW_FILL * alpha),
     )))
     .chain(cast_shadows(
         &preview.shadow,
@@ -847,6 +894,7 @@ pub(crate) fn window_elements(
     shading: Shading,
     hung: bool,
     look: Option<Look>,
+    backdrop: Option<[f32; 4]>,
 ) -> (Vec<OutputElement>, Option<Drawn>) {
     let alpha = look.map_or(1.0, |look| look.alpha) as f32;
     if alpha <= 0.0 {
@@ -907,6 +955,7 @@ pub(crate) fn window_elements(
         .into_iter()
         .flatten();
     let origin = window.surface_origin().to_f64();
+    let backdrop = backdrop.or_else(|| scrim(renderer, shading.scheme));
     let blurs = blur_rects(window.surface())
         .into_iter()
         .filter_map(|(id, rect)| {
@@ -914,18 +963,13 @@ pub(crate) fn window_elements(
                 .to_physical(scale)
                 .intersection(area)?;
             let mapped = placement.map_area(rect);
-            Some(OutputElement::Blur(BlurElement::new(
-                id,
-                rounded(mapped, radius),
-                scale,
-                alpha,
-            )))
+            Some(behind(id, rounded(mapped, radius), scale, alpha, backdrop))
         });
     let veil = hung.then(|| {
         OutputElement::Fill(FillElement::new(
             window.veil.clone(),
             clip,
-            HUNG_VEIL.map(|channel| channel * alpha),
+            premultiplied(Palette::for_scheme(shading.scheme).scrim, alpha),
         ))
     });
     let elements = veil

@@ -1,7 +1,8 @@
 pub use unbound_graphics::{
-    Appearance, Color, CpuRenderer, Elevation, GlyphRun, GpuRenderer, Image, Item, Paint, Palette,
-    Paragraph, Path, Point, PositionedGlyph, Radius, Rect, RenderError, Scene, Scheme, Shape,
-    Snapshot, Spacing, Stop, TextAlign, TextRole, TextStyle, TextSystem, window_controls_area,
+    Appearance, Color, ControlSize, CpuRenderer, Elevation, GlyphRun, GpuRenderer, Image, Item,
+    Paint, Palette, Paragraph, Path, Point, PositionedGlyph, Radius, Rect, RenderError, Scene,
+    Scheme, Shape, Snapshot, Spacing, Stop, TextAlign, TextRole, TextStyle, TextSystem,
+    window_controls_area,
 };
 pub use unbound_toolkit_platform::{
     ACTIVATION_TOKEN_VARIABLE, App, AppWindow, BrightnessKey, DisplayEdge, DragAction, DragEvent,

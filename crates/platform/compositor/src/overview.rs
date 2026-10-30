@@ -10,13 +10,17 @@ use smithay::input::keyboard::keysyms;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Point, Rectangle};
 use smithay::wayland::shell::wlr_layer::Layer;
+use unbound_graphics::Palette;
 use unbound_render::VulkanRenderer;
 use unbound_spring::{Animation, Spring, State as Phase};
 
 use crate::gesture::Tracker;
 use crate::label::{Label, Labels, TITLE};
 use crate::motion::{Look, Motion, Tick};
-use crate::scene::{CORNER_RADIUS, FillElement, Piece, fresh, pieces_of, rounded, scaled_pieces};
+use crate::scene::{
+    BlurElement, CORNER_RADIUS, FillElement, Piece, fresh, pieces_of, premultiplied, rounded,
+    scaled_pieces,
+};
 use crate::shell::toplevel_names;
 use crate::state::{Headless, OutputElement, State};
 use crate::window::Window;
@@ -39,11 +43,9 @@ const TITLE_ROOM: f64 = 24.0;
 const RING: f64 = 4.0;
 const DIMMED: f64 = 0.25;
 const MOMENTUM_SPEED: f64 = 2.0;
-const THUMB_FILL: [f32; 4] = [0.07, 0.08, 0.1, 1.0];
-const ADD_FILL: [f32; 4] = [0.12, 0.12, 0.12, 0.12];
-const PLUS_FILL: [f32; 4] = [0.75, 0.75, 0.75, 0.75];
-const RING_FILL: [f32; 4] = [0.55, 0.55, 0.55, 0.55];
-const TARGET_FILL: [f32; 4] = [0.3, 0.3, 0.3, 0.3];
+const ADD_FILL: f32 = 0.6;
+const TARGET_FILL: f32 = 0.45;
+const BACKDROP_IDS: usize = 2;
 
 #[derive(Debug, Clone, PartialEq)]
 struct Slot {
@@ -333,7 +335,7 @@ impl State {
         self.overview.slots = slots;
         self.overview.ids.resize_with(self.screens.len(), Vec::new);
         for (screen, ids) in self.overview.ids.iter_mut().enumerate() {
-            let wanted = 2 * self.screens[screen].workspaces.count() + 6;
+            let wanted = 2 * self.screens[screen].workspaces.count() + 4 + BACKDROP_IDS;
             if ids.len() < wanted {
                 ids.resize_with(wanted, Id::new);
             }
@@ -370,7 +372,10 @@ impl State {
             self.screens[self.screen_of(&self.windows[index])].scale()
         });
         if self.overview.title.as_ref().is_some_and(|(known, label)| {
-            known == &surface && label.text == text && label.scale == scale
+            known == &surface
+                && label.text == text
+                && label.scale == scale
+                && label.scheme == self.decorations.scheme
         }) {
             return;
         }
@@ -379,7 +384,7 @@ impl State {
             .overview
             .labels
             .get_or_insert_with(Labels::default)
-            .render(&text, TITLE, width, scale);
+            .render(&text, TITLE, width, self.decorations.scheme, scale);
         self.overview.title = label.map(|label| (surface, label));
     }
 
@@ -521,8 +526,47 @@ impl State {
                 rect.to_physical(scale),
                 (CORNER_RADIUS * shrink + RING) * scale,
             ),
-            RING_FILL.map(|channel| channel * alpha),
+            premultiplied(self.palette().accent, alpha),
         )))
+    }
+
+    fn palette(&self) -> Palette {
+        Palette::for_scheme(self.decorations.scheme)
+    }
+
+    pub(crate) fn overview_backdrop(
+        &self,
+        screen: usize,
+        scale: f64,
+        reduced_effects: bool,
+    ) -> Vec<OutputElement> {
+        let alpha = self.overview.progress as f32;
+        if alpha <= 0.0 {
+            return Vec::new();
+        }
+        let Some(ids) = self.overview.ids.get(screen) else {
+            return Vec::new();
+        };
+        let [scrim, blur] = [BACKDROP_IDS, 1].map(|from_end| {
+            ids.get(ids.len().wrapping_sub(from_end))
+                .cloned()
+                .unwrap_or_else(Id::new)
+        });
+        let output = self.screen_rect(screen);
+        let output = Rectangle::new(output.location.to_f64(), output.size.to_f64());
+        let area = rounded(output.to_physical(scale), 0.0);
+        let scrim = OutputElement::Fill(FillElement::new(
+            scrim,
+            area,
+            premultiplied(self.palette().scrim, alpha),
+        ));
+        if reduced_effects {
+            return vec![scrim];
+        }
+        vec![
+            scrim,
+            OutputElement::Blur(BlurElement::new(blur, area, scale, alpha)),
+        ]
     }
 
     pub(crate) fn dragged_in_overview(&self, window: &Window) -> bool {
@@ -587,6 +631,7 @@ impl State {
                 .cloned()
                 .unwrap_or_else(Id::new)
         };
+        let palette = self.palette();
         let mut elements: Vec<OutputElement> = title.into_iter().collect();
         let plus = Rectangle::new(add.loc + shift, add.size);
         let center = plus.loc + plus.size.downscale(2.0).to_point();
@@ -607,18 +652,18 @@ impl State {
             elements.push(OutputElement::Fill(FillElement::new(
                 id(1 + index),
                 rounded(bar.to_physical(scale), PLUS_THICKNESS / 2.0 * scale),
-                PLUS_FILL.map(|channel| channel * alpha),
+                premultiplied(palette.ink2, alpha),
             )));
         }
         let add_fill = if target == Some(&Hit::Add(screen)) {
-            TARGET_FILL
+            premultiplied(palette.accent, TARGET_FILL * alpha)
         } else {
-            ADD_FILL
+            premultiplied(palette.overlay, ADD_FILL * alpha)
         };
         elements.push(OutputElement::Fill(FillElement::new(
             id(3),
             rounded(plus.to_physical(scale), CORNER_RADIUS * scale),
-            add_fill.map(|channel| channel * alpha),
+            add_fill,
         )));
         for (index, thumbnail) in thumbnails.iter().enumerate() {
             let thumbnail = Rectangle::new(thumbnail.loc + shift, thumbnail.size);
@@ -675,12 +720,12 @@ impl State {
             elements.push(OutputElement::Fill(FillElement::new(
                 id(4 + 2 * index),
                 rounded(shown, radius),
-                THUMB_FILL.map(|channel| channel * alpha),
+                premultiplied(palette.chassis, alpha),
             )));
             let ring = if target == Some(&Hit::Space(screen, index)) {
-                Some(TARGET_FILL)
+                Some(premultiplied(palette.accent, TARGET_FILL * alpha))
             } else if index == workspaces.active() {
-                Some(RING_FILL)
+                Some(premultiplied(palette.accent, alpha))
             } else {
                 None
             };
@@ -691,7 +736,7 @@ impl State {
                         inflate(thumbnail, RING / 2.0).to_physical(scale),
                         radius + RING / 2.0 * scale,
                     ),
-                    ring.map(|channel| channel * alpha),
+                    ring,
                 )));
             }
         }
@@ -709,6 +754,7 @@ impl State {
     }
 
     fn prepare_overview(&mut self, app: Option<String>) {
+        self.close_menus();
         self.hide_desktop();
         self.overview.app = app;
         self.overview.filter.clear();

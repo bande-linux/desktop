@@ -1,7 +1,8 @@
 use accesskit::{Action, ActionRequest, Node, Role};
 use unbound_toolkit::ui::{Context, Event, Menu, MenuItem, Size, Widget, WidgetId};
 use unbound_toolkit::{
-    Color, Image, Item, Palette, Paragraph, Point, Rect, Shape, TextAlign, TextStyle,
+    Color, Image, Item, Palette, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextRole,
+    TextStyle,
 };
 
 use crate::L10N;
@@ -13,14 +14,12 @@ pub const ROW_HEIGHT: f32 = 32.0;
 pub const CELL_HEIGHT: f32 = 96.0;
 pub const GLYPH_HEIGHT: f32 = 52.0;
 const GLYPH_SIZE: f32 = 30.0;
-const ROW_RADIUS: f32 = 7.0;
+const ROW_RADIUS: f32 = Radius::S;
 const ROW_ICON: f32 = 22.0;
-const TITLE_SIZE: f32 = 14.0;
-const CELL_RADIUS: f32 = 10.0;
+const CELL_RADIUS: f32 = Radius::L;
 const CELL_ICON: f32 = 48.0;
-const CELL_TITLE_SIZE: f32 = 11.5;
+const BADGE_ON_SELECTION: f32 = 0.22;
 const CELL_TITLE_LINES: usize = 2;
-pub const SELECTED_LABEL: Color = Color::hex(0xFFFFFF);
 
 pub const OPEN: &str = "open";
 pub const REVEAL: &str = "reveal";
@@ -118,7 +117,7 @@ pub fn centered(paragraph: &Paragraph, frame: Rect, y: f32) -> Item {
 
 fn calculation_badge(cx: &mut Context, rect: Rect, selected: bool, items: &mut Vec<Item>) {
     let fill = if selected {
-        SELECTED_LABEL.with_alpha(56)
+        cx.palette.on_accent.with_opacity(BADGE_ON_SELECTION)
     } else {
         cx.palette.accent
     };
@@ -128,7 +127,8 @@ fn calculation_badge(cx: &mut Context, rect: Rect, selected: bool, items: &mut V
     });
     let sign = cx.text.paragraph(
         "=",
-        TextStyle::new((rect.height * 0.7).round(), SELECTED_LABEL).weight(TextStyle::SEMIBOLD),
+        TextStyle::new((rect.height * 0.7).round(), cx.palette.on_accent)
+            .weight(TextStyle::SEMIBOLD),
         None,
         TextAlign::Start,
     );
@@ -157,7 +157,7 @@ pub fn icon_items(
         }),
         (_, None) => items.push(Item::Fill {
             shape: Shape::rounded(rect, (rect.width * 0.22).round()),
-            paint: cx.palette.ink2.with_alpha(90).into(),
+            paint: cx.palette.well.into(),
         }),
     }
 }
@@ -291,7 +291,12 @@ impl Choice {
             Form::Cell | Form::Glyph => CELL_RADIUS,
         };
         let background = match self.shape {
-            Form::Row => self.rect,
+            Form::Row => Rect::new(
+                self.rect.x,
+                self.rect.y + 1.0,
+                self.rect.width,
+                self.rect.height - 2.0,
+            ),
             Form::Cell | Form::Glyph => self.rect.inset(2.0),
         };
         if selected {
@@ -302,11 +307,11 @@ impl Choice {
         } else if hovered {
             self.items.push(Item::Fill {
                 shape: Shape::rounded(background, radius),
-                paint: cx.palette.ink.with_alpha(16).into(),
+                paint: cx.palette.well.into(),
             });
         }
         let color = if selected {
-            SELECTED_LABEL
+            cx.palette.on_accent
         } else {
             cx.palette.ink
         };
@@ -336,7 +341,7 @@ impl Choice {
         icon_items(cx, hit, selected, self.icon.as_ref(), icon, &mut self.items);
         let x = icon.x + icon.width + 10.0;
         let width = self.rect.x + self.rect.width - x - 8.0;
-        let style = TextStyle::new(TITLE_SIZE, color);
+        let style = TextStyle::role(TextRole::Body, color);
         let runs = highlighted(cx, &hit.title, &hit.matched, style, width)
             .unwrap_or_else(|| vec![(0.0, fitted(cx, &hit.title, style, width))]);
         for (offset, paragraph) in runs {
@@ -359,7 +364,7 @@ impl Choice {
         );
         icon_items(cx, hit, selected, self.icon.as_ref(), icon, &mut self.items);
         let width = self.rect.width - 10.0;
-        let style = TextStyle::new(CELL_TITLE_SIZE, color);
+        let style = TextStyle::role(TextRole::Callout, color);
         let y = icon.y + CELL_ICON + 6.0;
         let wrapped = cx
             .text

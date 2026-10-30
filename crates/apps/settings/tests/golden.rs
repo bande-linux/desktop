@@ -234,6 +234,31 @@ fn the_keyboard_pane_matches_its_golden() {
 }
 
 #[test]
+fn the_accessibility_pane_matches_its_goldens() {
+    for (scheme, name) in [(Scheme::Light, "light"), (Scheme::Dark, "dark")] {
+        let mut view = SettingsView::new(Palette::for_scheme(scheme), TextSystem::new());
+        for (id, on) in [
+            (SettingId::ScreenReader, false),
+            (SettingId::Zoom, true),
+            (SettingId::IncreaseContrast, true),
+            (SettingId::ReduceTransparency, false),
+            (SettingId::ReduceMotion, false),
+            (SettingId::FlashScreen, false),
+            (SettingId::StickyKeys, true),
+            (SettingId::SlowKeys, false),
+            (SettingId::BounceKeys, false),
+        ] {
+            view.set_value(id, Value::Flag(on));
+        }
+        view.set_value(SettingId::CursorSize, Value::Number(32));
+        view.select_pane(PaneId::Accessibility);
+        let scene = view.scene(SIZE.0, SIZE.1);
+        let frame = CpuRenderer::new().render(&scene).expect("frame");
+        check_golden(&format!("accessibility-{name}"), frame.rgba);
+    }
+}
+
+#[test]
 fn the_wallpaper_pane_matches_its_golden() {
     let wallpapers = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../data/wallpapers");
     let pairs: Vec<(String, Pair)> = ["aurora", "drift", "horizon"]

@@ -23,11 +23,10 @@ use unbound_toolkit::{
 use unbound_volumes::{eject, media_roots, mounted_volumes};
 use unbound_wallpaper::{Choice, Inbox, Outbox, Picture, Variant, choose, follow, inbox, render};
 use unbound_xdg::{
-    Apps, DIRECTORY, DesktopEntry, OCTET_STREAM, UserDir, config_dirs, config_home, data_dirs,
-    file_uri, find_icon, launch, launch_with, path_from_file_uri, user_dir,
+    Apps, DIRECTORY, DesktopEntry, ICON_THEMES, OCTET_STREAM, UserDir, config_dirs, config_home,
+    data_dirs, file_uri, find_icon, launch, launch_with, path_from_file_uri, user_dir,
 };
 
-const ICON_THEMES: [&str; 1] = ["Adwaita"];
 const SETTINGS_APP: &str = "org.unbound.Settings";
 const WALLPAPER_PANE: &str = "wallpaper";
 const FILES_INFO_FLAG: &str = "--info";

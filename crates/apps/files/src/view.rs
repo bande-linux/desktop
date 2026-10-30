@@ -17,7 +17,7 @@ use unbound_toolkit::ui::{
     Context, Cursor, Event, FreeLayout, Key, Menu, Modifiers, Pointer, PointerButton, Scroll,
     ScrollState, Slider, Ui, Widget, WidgetId,
 };
-use unbound_toolkit::{Image, Item, Palette, Point, Rect, TextSystem};
+use unbound_toolkit::{Image, Item, Palette, Point, Rect, SHEET_INSET, TextSystem};
 use unbound_volumes::mounted_volumes;
 use unbound_xdg::{Apps, DesktopEntry, UserDir, path_from_file_uri, user_dir};
 
@@ -31,12 +31,12 @@ use crate::search::{Index, SEARCH_HEIGHT, Searching};
 use crate::sidebar::{Place, PlaceKind, Row, with_volumes};
 use crate::tabs::{Tab, location_title};
 use crate::thumbs::Thumbs;
-use crate::toolbar::TOOLBAR_HEIGHT;
+use crate::toolbar::{TOOLBAR_HEIGHT, Toolbar};
 use crate::views::{DEFAULT_ICON_SIZE, FolderView, ICON_SIZES, ViewMemory, ViewMode};
 
 pub const COLUMN_WIDTH: f32 = 240.0;
-pub const ROW_HEIGHT: f32 = 24.0;
-pub const SIDEBAR_WIDTH: f32 = 180.0;
+pub const ROW_HEIGHT: f32 = 28.0;
+pub const SIDEBAR_WIDTH: f32 = 200.0;
 pub const INSPECTOR_WIDTH: f32 = 260.0;
 pub const PATH_BAR_HEIGHT: f32 = 28.0;
 pub const PROGRESS_HEIGHT: f32 = 48.0;
@@ -46,6 +46,8 @@ pub(crate) const SLOW_CLICK_RENAME: Duration = Duration::from_millis(600);
 const TYPE_SELECT_PAUSE: Duration = Duration::from_millis(1000);
 const NOTICE_TIME: Duration = Duration::from_secs(5);
 const MAX_RECENTS: usize = 200;
+const HIDDEN: &str = "hidden";
+const TRASH_SOUND: &str = "trash-empty";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Source {
@@ -102,8 +104,6 @@ pub enum Hit {
     ChooseApp(usize),
     OpenWithChosen,
     UseForAll,
-    Back,
-    Forward,
     Tab(usize),
     CloseTab(usize),
     NewTab,
@@ -138,6 +138,8 @@ pub enum Request {
     Eject(PathBuf),
     NewWindow(Location),
     OpenTerminal(PathBuf),
+    ShowEmojiPicker,
+    PlaySound(&'static str),
 }
 
 pub struct FilesView {
@@ -158,6 +160,7 @@ pub struct FilesView {
     pub(crate) drag_sources: Vec<PathBuf>,
     pub(crate) reordering: Option<PathBuf>,
     pub(crate) status_bar: bool,
+    status_bar_file: Option<PathBuf>,
     templates: Option<PathBuf>,
     pub(crate) drop: Option<crate::drag::Hover>,
     pub(crate) scrolls: Vec<(Location, ScrollState)>,
@@ -177,8 +180,8 @@ pub struct FilesView {
     pub(crate) hover: Option<Hit>,
     pub(crate) searching: Option<Searching>,
     pub(crate) index: Option<Index>,
-    pub(crate) search_field: WidgetId,
-    pub(crate) view_control: WidgetId,
+    pub(crate) toolbar: Toolbar,
+    pub(crate) sheet_inset: f32,
     recents: Option<(PathBuf, PathBuf)>,
     pub(crate) menu_place: Option<usize>,
     media: Vec<PathBuf>,
@@ -266,6 +269,7 @@ impl FilesView {
             drag_sources: Vec::new(),
             reordering: None,
             status_bar: true,
+            status_bar_file: None,
             templates: None,
             drop: None,
             scrolls: Vec::new(),
@@ -285,8 +289,8 @@ impl FilesView {
             hover: None,
             searching: None,
             index: None,
-            search_field: WidgetId::next(),
-            view_control: WidgetId::next(),
+            toolbar: Toolbar::default(),
+            sheet_inset: SHEET_INSET as f32,
             recents: None,
             menu_place: None,
             media: Vec::new(),
@@ -311,8 +315,8 @@ impl FilesView {
             clipboard_files: false,
         };
         view.shown_root = Some(view.browser.root().clone());
-        view.search_field = view.insert(view.search_field_widget());
-        view.view_control = view.insert(view.view_control_widget());
+        view.insert_toolbar();
+        view.ui.set_sheet_top(TOOLBAR_HEIGHT);
         view.favourites = view.sidebar.clone();
         view.watch.watch(&view.watched());
         view.trash_full = !view.browser.trash().is_empty();
@@ -440,7 +444,10 @@ impl FilesView {
     }
 
     pub fn title(&self) -> String {
-        location_title(&self.browser.current_location())
+        match self.browser.single() {
+            true => location_title(&self.browser.active_column().location),
+            false => location_title(&self.browser.current_location()),
+        }
     }
 
     pub fn set_thumbnails(&mut self, thumbnails: Thumbnails) {
@@ -738,7 +745,24 @@ impl FilesView {
         });
     }
 
+    pub fn set_full_screen(&mut self, full_screen: bool) {
+        self.sheet_inset = match full_screen {
+            true => 0.0,
+            false => SHEET_INSET as f32,
+        };
+    }
+
+    pub fn sheet_frame(&self) -> Rect {
+        Rect::new(
+            SIDEBAR_WIDTH,
+            TOOLBAR_HEIGHT,
+            (self.size.0 - SIDEBAR_WIDTH - self.sheet_inset).max(0.0),
+            (self.size.1 - TOOLBAR_HEIGHT - self.sheet_inset).max(0.0),
+        )
+    }
+
     pub fn content_frame(&self) -> Rect {
+        let sheet = self.sheet_frame();
         let inspector = if self.inspector { INSPECTOR_WIDTH } else { 0.0 };
         let progress = self.visible_jobs() as f32 * PROGRESS_HEIGHT;
         let search = if self.searching.is_some() {
@@ -746,12 +770,12 @@ impl FilesView {
         } else {
             0.0
         };
-        let top = TOOLBAR_HEIGHT + self.tab_bar_height() + search;
+        let top = sheet.y + self.tab_bar_height() + search;
         Rect::new(
-            SIDEBAR_WIDTH,
+            sheet.x,
             top,
-            (self.size.0 - SIDEBAR_WIDTH - inspector).max(COLUMN_WIDTH),
-            (self.size.1 - self.status_bar_height() - progress - top).max(ROW_HEIGHT),
+            (sheet.width - inspector).max(COLUMN_WIDTH),
+            (sheet.y + sheet.height - self.status_bar_height() - progress - top).max(ROW_HEIGHT),
         )
     }
 
@@ -762,8 +786,33 @@ impl FilesView {
         }
     }
 
+    pub fn set_status_bar_file(&mut self, file: PathBuf) {
+        self.status_bar = std::fs::read_to_string(&file).map_or(true, |text| text.trim() != HIDDEN);
+        self.status_bar_file = Some(file);
+        self.refresh_size_slider();
+    }
+
+    fn remember_status_bar(&self) -> io::Result<()> {
+        let Some(file) = &self.status_bar_file else {
+            return Ok(());
+        };
+        if self.status_bar {
+            return match std::fs::remove_file(file) {
+                Err(error) if error.kind() != io::ErrorKind::NotFound => Err(error),
+                _ => Ok(()),
+            };
+        }
+        if let Some(parent) = file.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(file, format!("{HIDDEN}\n"))
+    }
+
     pub(crate) fn toggle_status_bar(&mut self) {
         self.status_bar = !self.status_bar;
+        if let Err(error) = self.remember_status_bar() {
+            tracing::warn!("cannot remember the status bar: {error}");
+        }
         self.refresh_size_slider();
         self.selection_changed();
     }
@@ -999,12 +1048,6 @@ impl FilesView {
             Hit::OpenWithChosen => self.open_with_chosen(),
             Hit::UseForAll => self.use_chosen_for_all(),
             Hit::Inspector => return false,
-            Hit::Back => self.back(),
-            Hit::Forward => {
-                self.end_search();
-                self.browser.go_forward();
-                self.selection_changed();
-            }
             Hit::Tab(index) => self.select_tab(index),
             Hit::CloseTab(index) => {
                 self.close_tab(index);
@@ -1014,7 +1057,13 @@ impl FilesView {
         true
     }
 
-    fn back(&mut self) {
+    pub(crate) fn forward(&mut self) {
+        self.end_search();
+        self.browser.go_forward();
+        self.selection_changed();
+    }
+
+    pub(crate) fn back(&mut self) {
         if self.searching.is_some() {
             self.end_search();
         } else {
@@ -1071,8 +1120,6 @@ impl FilesView {
                     | Hit::Eject(_)
                     | Hit::Segment(_)
                     | Hit::CancelJob(_)
-                    | Hit::Back
-                    | Hit::Forward
                     | Hit::Tab(_)
                     | Hit::CloseTab(_)
                     | Hit::NewTab
@@ -1119,6 +1166,7 @@ impl FilesView {
             }
             Sheet::GoTo(typed) if action == "go" => self.go_to(&typed),
             Sheet::EmptyTrash if action == "confirm" => {
+                self.requests.push(Request::PlaySound(TRASH_SOUND));
                 self.start(Task::EmptyTrash, Purpose::Erase);
             }
             Sheet::DeleteImmediately { paths, items } if action == "confirm" => {

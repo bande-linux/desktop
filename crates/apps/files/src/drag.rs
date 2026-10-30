@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 use unbound_fs::{Action, Purpose, Task, same_volume};
 use unbound_toolkit::ui::Pointer;
 use unbound_toolkit::{
-    Color, DragAction, DragIcon, Item, Point, Rect, Scene, Shape, TextAlign, TextStyle,
+    Color, DragAction, DragIcon, Item, Point, Radius, Rect, Scene, Shape, TextAlign, TextStyle,
 };
 use unbound_xdg::path_from_file_uri;
 
@@ -184,11 +184,12 @@ impl FilesView {
             let badge = Rect::new(size - BADGE, 0.0, BADGE, BADGE);
             items.push(Item::Fill {
                 shape: Shape::rounded(badge, BADGE / 2.0),
-                paint: self.palette.accent.into(),
+                paint: self.palette.danger.into(),
             });
+            let on_danger = self.palette.on_danger;
             let label = self.text().paragraph(
                 &count.to_string(),
-                TextStyle::new(11.0, Color::hex(0xFFFFFF)).weight(TextStyle::SEMIBOLD),
+                TextStyle::new(11.0, on_danger).weight(TextStyle::BOLD),
                 Some(BADGE),
                 TextAlign::Center,
             );
@@ -204,7 +205,7 @@ impl FilesView {
             scene: Scene {
                 width: pixels,
                 height: pixels,
-                background: Color::hex(0).with_alpha(0),
+                background: Color::TRANSPARENT,
                 items: vec![Item::Opacity { alpha: 0.85, items }],
             },
             hotspot: Point::new(
@@ -501,10 +502,10 @@ impl FilesView {
             });
             return;
         }
-        let shape = Shape::rounded(hover.highlight.inset(1.0), 6.0);
+        let shape = Shape::rounded(hover.highlight.inset(1.0), Radius::S);
         items.push(Item::Fill {
             shape,
-            paint: self.palette.accent.with_alpha(40).into(),
+            paint: self.palette.accent_soft.into(),
         });
         items.push(Item::Stroke {
             shape,

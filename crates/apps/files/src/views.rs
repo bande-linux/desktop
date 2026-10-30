@@ -43,11 +43,20 @@ pub struct ViewMemory {
     folders: Vec<(PathBuf, FolderView)>,
 }
 
-pub fn views_file(state_home: Option<&Path>, home: &Path) -> PathBuf {
+fn state_file(state_home: Option<&Path>, home: &Path, name: &str) -> PathBuf {
     state_home
         .filter(|path| path.is_absolute())
         .map_or_else(|| home.join(".local/state"), Path::to_path_buf)
-        .join("unbound/files-views")
+        .join("unbound")
+        .join(name)
+}
+
+pub fn views_file(state_home: Option<&Path>, home: &Path) -> PathBuf {
+    state_file(state_home, home, "files-views")
+}
+
+pub fn status_bar_file(state_home: Option<&Path>, home: &Path) -> PathBuf {
+    state_file(state_home, home, "files-status-bar")
 }
 
 fn parse(text: &str) -> Vec<(PathBuf, FolderView)> {

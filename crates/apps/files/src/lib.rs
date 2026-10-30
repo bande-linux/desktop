@@ -30,7 +30,7 @@ pub use view::{
     COLUMN_WIDTH, FilesView, Hit, Info, PATH_BAR_HEIGHT, QuickLook, ROW_HEIGHT, Rename, Request,
     SIDEBAR_WIDTH, Sheet,
 };
-pub use views::{FolderView, ViewMemory, ViewMode, views_file};
+pub use views::{FolderView, ViewMemory, ViewMode, status_bar_file, views_file};
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-files.ftl");
 

@@ -18,7 +18,10 @@ use unbound_toolkit::ui::{
     Event, HEADER_HEIGHT as LIST_HEADER, Key, Menu, Modifiers, Pointer, PointerButton,
     ROW_HEIGHT as LIST_ROW,
 };
-use unbound_toolkit::{CpuRenderer, DragAction, Image, Item, Palette, Point, Scheme, TextSystem};
+use unbound_toolkit::{
+    CpuRenderer, DragAction, FrameRegions, Image, Item, Palette, Point, SHEET_INSET, Scheme,
+    TextSystem, framed_scene,
+};
 use unbound_xdg::{Apps, file_uri};
 
 fn names(folder: &Path, show_hidden: bool) -> Vec<String> {
@@ -951,7 +954,7 @@ fn a_bookmark_is_removed_from_the_sidebar_but_not_from_the_disk() {
     view.set_sidebar(rows(&place.home(), None, Some(&bookmarks)));
     view.scene(1000, 600);
 
-    let menu = right_click(&mut view, Point::new(40.0, 38.0 + 26.0 * 3.5));
+    let menu = right_click(&mut view, Point::new(40.0, 84.0 + 30.0 * 3.5));
     assert_eq!(
         titles(&menu),
         ["Open", "Open in New Tab", "Remove from Sidebar"]
@@ -1240,7 +1243,7 @@ const MIN_SSIM: f64 = 0.99;
 
 fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>, scale: f64) {
     let actual = image::RgbaImage::from_raw(size.0, size.1, rgba).expect("frame");
-    let steady = size.1 - (f64::from(PATH_BAR_HEIGHT) * scale).round() as u32;
+    let steady = size.1 - (f64::from(PATH_BAR_HEIGHT + SHEET_INSET as f32) * scale).round() as u32;
     let whole = image::DynamicImage::ImageRgba8(actual);
     whole
         .save(PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}-whole.png")))
@@ -1265,17 +1268,28 @@ fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>, scale: f64) {
     );
 }
 
-const FOLDER_SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><path d="M6 14a4 4 0 0 1 4-4h14l5 5h25a4 4 0 0 1 4 4v31a4 4 0 0 1-4 4H10a4 4 0 0 1-4-4z" fill="#3D8AE0"/><path d="M6 22h52v28a4 4 0 0 1-4 4H10a4 4 0 0 1-4-4z" fill="#5FA2EC"/></svg>"##;
-const DOCUMENT_SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><path d="M14 6h26l12 12v38a2 2 0 0 1-2 2H14a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" fill="#F4F5F7" stroke="#9AA0A8" stroke-width="1.5"/><path d="M40 6v12h12" fill="#DCE0E5"/><path d="M20 28h24M20 34h24M20 40h16" stroke="#9AA0A8" stroke-width="2"/></svg>"##;
-
 impl Place {
     fn themed_view(&self, scheme: Scheme) -> FilesView {
         let apps = self.apps();
-        let data = self.root.path().join("data");
-        fs::create_dir_all(data.join("pixmaps")).expect("pixmaps");
-        fs::write(data.join("pixmaps/folder.svg"), FOLDER_SVG).expect("folder icon");
-        for name in ["text-x-generic", "image-x-generic"] {
-            fs::write(data.join(format!("pixmaps/{name}.svg")), DOCUMENT_SVG).expect("icon");
+        let mime = self.root.path().join("data/mime");
+        for (mime_type, comment) in [
+            ("inode/directory", "Folder"),
+            ("text/plain", "Plain text document"),
+            ("image/png", "PNG image"),
+        ] {
+            let file = mime.join(format!("{mime_type}.xml"));
+            fs::create_dir_all(file.parent().expect("type folder")).expect("mime folder");
+            fs::write(
+                file,
+                format!("<mime-type type=\"{mime_type}\"><comment>{comment}</comment></mime-type>"),
+            )
+            .expect("mime description");
+        }
+        let icons = self.root.path().join("data/icons");
+        fs::create_dir_all(&icons).expect("icons");
+        let theme = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../data/icons/Unbound");
+        if !icons.join("Unbound").exists() {
+            std::os::unix::fs::symlink(theme, icons.join("Unbound")).expect("icon theme");
         }
         let mut view = FilesView::new(
             self.browser(),
@@ -1363,6 +1377,16 @@ fn the_icon_view_matches_its_golden_with_thumbnails_and_long_names() {
 
 fn shoot(name: &str, scheme: Scheme, view: &mut FilesView) {
     let scene = view.scene(GOLDEN_SIZE.0, GOLDEN_SIZE.1);
+    let scene = framed_scene(
+        &scene,
+        &view.title(),
+        Some(FrameRegions {
+            sidebar: SIDEBAR_WIDTH,
+            toolbar: 0.0,
+        }),
+        Some(view.header()),
+        &Palette::for_scheme(scheme),
+    );
     let scheme_name = match scheme {
         Scheme::Light => "light",
         Scheme::Dark => "dark",
@@ -1407,6 +1431,19 @@ fn the_list_view_with_tabs_matches_its_golden() {
             TOOLBAR_HEIGHT + TAB_BAR_HEIGHT / 2.0,
         ))));
         shoot("tabs-list", scheme, &mut view);
+    }
+}
+
+#[test]
+fn the_column_view_matches_its_golden() {
+    let place = Place::new();
+    for scheme in [Scheme::Light, Scheme::Dark] {
+        let mut view = place.themed_view(scheme);
+        view.handle(&command(Key::Character('3'), false));
+        view.handle(&press(Key::Down));
+        view.handle(&press(Key::Right));
+        view.handle(&press(Key::Down));
+        shoot("columns", scheme, &mut view);
     }
 }
 
@@ -1658,7 +1695,7 @@ fn folders_dropped_between_favourites_and_dragged_bookmarks_join_the_sidebar() {
     let mut view = place.view();
     view.set_sidebar(rows(&place.home(), None, Some(&bookmarks)));
     view.scene(1000, 600);
-    let row_top = |row: f32| 38.0 + 26.0 * row;
+    let row_top = |row: f32| 84.0 + 30.0 * row;
 
     let uris = [file_uri(&place.home().join("Documents"))];
     let between_home_and_documents = Point::new(60.0, row_top(2.0));
@@ -1724,8 +1761,23 @@ fn templates_make_new_documents_and_folders_open_in_the_terminal() {
     view.handle(&command(Key::Character('z'), false));
     run_until(&mut view, idle);
     assert!(!letter.exists());
+}
 
-    let height = view.content_frame().height;
+#[test]
+fn hiding_the_status_bar_is_remembered_for_the_next_window() {
+    let place = Place::new();
+    let file = place.root.path().join("state/unbound/files-status-bar");
+    let mut view = place.view();
+    view.set_status_bar_file(file.clone());
+    let with_bar = view.content_frame().height;
+
     view.handle(&command(Key::Character('/'), false));
-    assert_eq!(view.content_frame().height, height + PATH_BAR_HEIGHT);
+    let mut next = place.view();
+    next.set_status_bar_file(file.clone());
+    assert_eq!(next.content_frame().height, with_bar + PATH_BAR_HEIGHT);
+
+    next.handle(&command(Key::Character('/'), false));
+    let mut third = place.view();
+    third.set_status_bar_file(file);
+    assert_eq!(third.content_frame().height, with_bar);
 }

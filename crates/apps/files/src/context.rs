@@ -154,7 +154,9 @@ impl FilesView {
 
     pub fn menu_action(&mut self, action: &str) -> bool {
         let Some(command) = command(action) else {
-            return false;
+            let handled = self.ui.menu_action(action);
+            self.after_ui();
+            return handled;
         };
         let place = self.menu_place.take();
         match command {

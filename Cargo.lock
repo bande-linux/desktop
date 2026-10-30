@@ -3956,10 +3956,12 @@ dependencies = [
  "unbound-log",
  "unbound-preview",
  "unbound-search",
+ "unbound-sound",
  "unbound-thumbnails",
  "unbound-toolkit",
  "unbound-volumes",
  "unbound-xdg",
+ "zbus",
 ]
 
 [[package]]

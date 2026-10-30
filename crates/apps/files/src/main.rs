@@ -8,15 +8,15 @@ use std::time::Instant;
 use accesskit::TreeUpdate;
 use unbound_app_menu::{AppMenu, Standard};
 use unbound_files::{
-    Browser, FilesView, Location, Request, Row, ViewMemory, rows, views_file, with_bookmarks,
-    without_bookmark,
+    Browser, FilesView, Location, Request, Row, SIDEBAR_WIDTH, TOOLBAR_HEIGHT, ViewMemory, rows,
+    status_bar_file, views_file, with_bookmarks, without_bookmark,
 };
 use unbound_fs::Trash;
 use unbound_search::{recently_used_path, usage_path};
 use unbound_thumbnails::Thumbnails;
 use unbound_toolkit::{
-    App, Appearance, DragAction, DragEvent, MenuPlacement, Rect, Role, Scene, TextSystem, Transfer,
-    Window, WindowEvent,
+    App, Appearance, DragAction, DragEvent, FrameRegions, Header, MenuPlacement, Rect, Role, Scene,
+    TextSystem, Transfer, Window, WindowEvent,
 };
 use unbound_volumes::{eject, media_roots};
 use unbound_xdg::{
@@ -146,6 +146,12 @@ impl Files {
                         Err(error) => tracing::warn!("cannot add the bookmarks: {error}"),
                     }
                 }
+                Request::ShowEmojiPicker => {
+                    if let Err(error) = window.show_emoji_picker() {
+                        tracing::warn!("cannot show the emoji picker: {error}");
+                    }
+                }
+                Request::PlaySound(name) => play_sound(name),
                 Request::RemoveBookmark(folder) => match remove_bookmark(&folder) {
                     Ok(()) => self.view.set_sidebar(sidebar(&self.home)),
                     Err(error) => tracing::warn!("cannot remove the bookmark: {error}"),
@@ -164,8 +170,13 @@ impl Files {
 
 impl App for Files {
     fn scene(&mut self, window: &mut Window) -> Scene {
+        let full_screen = window.header_height() == 0;
+        window.set_frame_regions(frame_regions(full_screen));
+        self.view.set_full_screen(full_screen);
         let (width, height) = window.size();
-        self.view.scene(width, height)
+        let scene = self.view.scene(width, height);
+        window.set_header(self.view.header());
+        scene
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
@@ -289,6 +300,25 @@ const TERMINAL_DIRECTORY: &str = "--working-directory";
 const TRASH_URI: &str = "trash:///";
 const RECENTS_URI: &str = "recent:///";
 
+fn frame_regions(full_screen: bool) -> FrameRegions {
+    FrameRegions {
+        sidebar: SIDEBAR_WIDTH,
+        toolbar: if full_screen { TOOLBAR_HEIGHT } else { 0.0 },
+    }
+}
+
+fn play_sound(name: &'static str) {
+    let played = std::thread::Builder::new()
+        .name("sound".to_owned())
+        .spawn(move || match zbus::blocking::Connection::session() {
+            Ok(session) => unbound_sound::play(&session, name),
+            Err(error) => tracing::debug!("cannot play {name}: {error}"),
+        });
+    if let Err(error) = played {
+        tracing::warn!("cannot play {name}: {error}");
+    }
+}
+
 fn open_terminal(window: &mut Window, folder: &Path) {
     let token = window.activation_token(TERMINAL_APP_ID).ok();
     let command = [
@@ -373,6 +403,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     view.set_templates(user_dir(&home, user_dirs.as_deref(), UserDir::Templates));
     let state_home = std::env::var_os("XDG_STATE_HOME").map(PathBuf::from);
     view.set_view_memory(ViewMemory::load(views_file(state_home.as_deref(), &home)));
+    view.set_status_bar_file(status_bar_file(state_home.as_deref(), &home));
     let data_home = std::env::var_os("XDG_DATA_HOME").map(PathBuf::from);
     if let Some(usage) = usage_path(state_home.as_deref(), Some(&home)) {
         view.set_recents_sources(recently_used_path(data_home.as_deref(), &home), usage);
@@ -383,6 +414,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     view.set_media(media_roots(&std::env::var("USER").unwrap_or_default()));
     let title = view.title();
     let mut window = Window::open(Role::toplevel(&title, APP_ID), WINDOW_SIZE)?;
+    window.set_frame_regions(frame_regions(false));
+    window.set_header(Header::default());
     let app_menu = AppMenu::export(APP_ID, menu_bar::app_menus())
         .inspect_err(|error| tracing::warn!("{error}"))
         .ok();

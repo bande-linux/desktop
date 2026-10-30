@@ -6,7 +6,8 @@ use unbound_fs::{Entry, Purpose, format_date, format_size};
 use unbound_preview::Preview;
 use unbound_thumbnails::ThumbnailSize;
 use unbound_toolkit::{
-    Color, Image, Item, Paragraph, Point, Rect, Scene, Shape, TextAlign, TextStyle,
+    Color, Elevation, Image, Item, Paragraph, Point, Radius, Rect, Scene, Shape, TextAlign,
+    TextRole, TextStyle,
 };
 
 use crate::L10N;
@@ -19,17 +20,21 @@ use crate::view::{
 };
 use crate::views::ViewMode;
 
-const ROW_INSET: f32 = 6.0;
+const ROW_INSET: f32 = 4.0;
 const NAME_SIZE: f32 = 13.0;
 const SMALL_SIZE: f32 = 11.0;
 const CODE_SIZE: f32 = 11.0;
 const ICON_SIZE: f32 = 16.0;
 const ICON_PIXELS: u32 = 32;
 const LARGE_ICON_PIXELS: u32 = 256;
-const SIDEBAR_ROW: f32 = 26.0;
+const SIDEBAR_ROW: f32 = 28.0;
+const SIDEBAR_PITCH: f32 = 30.0;
+const SIDEBAR_INSET: f32 = 8.0;
+const SIDEBAR_TEXT_X: f32 = 20.0;
+const PROGRESS_CELLS: usize = 24;
+const PROGRESS_GAP: f32 = 2.0;
 const QUICK_LOOK_SHARE: f32 = 0.8;
 const QUICK_LOOK_HEADER: f32 = 36.0;
-const RADIUS: f32 = 12.0;
 const PADDING: f32 = 16.0;
 const BUTTON_HEIGHT: f32 = 24.0;
 
@@ -104,20 +109,31 @@ impl FilesView {
         self.size = (width as f32, height as f32);
         self.hits.clear();
         self.layout_controls();
+        self.refresh_navigation();
         let (controls, sheet) = self.ui.paint_layers(width, height);
+        let sheet_shape = Shape::rounded(self.sheet_frame(), self.sheet_radius());
         let mut items = Vec::new();
         self.paint_sidebar(&mut items);
-        self.paint_columns(&mut items);
-        self.paint_scope_bar(&mut items);
-        self.paint_tab_bar(&mut items);
-        self.paint_toolbar(&mut items);
-        self.paint_path_bar(&mut items);
+        let mut content = Vec::new();
+        self.paint_columns(&mut content);
+        self.paint_scope_bar(&mut content);
+        self.paint_tab_bar(&mut content);
+        self.paint_path_bar(&mut content);
+        items.push(Item::Clip {
+            shape: sheet_shape,
+            items: content,
+        });
         items.extend(controls);
         self.paint_drop(&mut items);
-        self.paint_progress(&mut items);
+        let mut overlays = Vec::new();
+        self.paint_progress(&mut overlays);
         if self.inspector {
-            self.paint_inspector(&mut items);
+            self.paint_inspector(&mut overlays);
         }
+        items.push(Item::Clip {
+            shape: sheet_shape,
+            items: overlays,
+        });
         self.paint_notice(&mut items);
         self.paint_quick_look(&mut items);
         items.extend(sheet);
@@ -127,6 +143,13 @@ impl FilesView {
             height,
             background: self.palette.sheet,
             items,
+        }
+    }
+
+    fn sheet_radius(&self) -> f32 {
+        match self.sheet_inset > 0.0 {
+            true => Radius::concentric(Radius::XL, self.sheet_inset),
+            false => 0.0,
         }
     }
 
@@ -153,55 +176,67 @@ impl FilesView {
     }
 
     fn paint_sidebar(&mut self, items: &mut Vec<Item>) {
-        let height = self.size.1;
-        items.push(self.fill(
-            Rect::new(0.0, 0.0, SIDEBAR_WIDTH, height),
-            0.0,
-            self.palette.overlay,
-        ));
-        items.push(self.fill(
-            Rect::new(SIDEBAR_WIDTH - 1.0, 0.0, 1.0, height),
-            0.0,
-            self.palette.hairline,
-        ));
+        let palette = self.palette;
         let root = self.browser.root().clone();
         let trash_full = self.trash_full;
-        let mut y = 10.0;
+        let mut y = TOOLBAR_HEIGHT + 4.0;
         for (index, row) in self.sidebar.clone().iter().enumerate() {
             match row {
                 Row::Heading(title) => {
-                    y += 6.0;
-                    let muted = self.palette.ink2;
-                    let paragraph = self.paragraph(title, SMALL_SIZE, muted, TextStyle::SEMIBOLD);
+                    y += 8.0;
+                    let paragraph = self.text().paragraph(
+                        title,
+                        TextStyle::role(TextRole::Label, palette.ink3),
+                        None,
+                        TextAlign::Start,
+                    );
                     items.push(Item::Text {
-                        origin: Point::new(14.0, y + 4.0),
+                        origin: Point::new(SIDEBAR_TEXT_X, y + 4.0),
                         paragraph,
                     });
-                    y += 22.0;
+                    y += 24.0;
                 }
                 Row::Place(place) => {
-                    let rect = Rect::new(8.0, y, SIDEBAR_WIDTH - 16.0, SIDEBAR_ROW);
-                    if place.location == root {
-                        items.push(self.fill(rect, 6.0, self.palette.ink2.with_alpha(40)));
+                    let rect = Rect::new(
+                        SIDEBAR_INSET,
+                        y,
+                        SIDEBAR_WIDTH - 2.0 * SIDEBAR_INSET,
+                        SIDEBAR_ROW,
+                    );
+                    let selected = place.location == root;
+                    if selected {
+                        items.push(self.fill(rect, Radius::S, palette.well));
                     } else if self.hover == Some(Hit::Place(index)) {
-                        items.push(self.fill(rect, 6.0, self.palette.ink2.with_alpha(18)));
+                        items.push(self.fill(rect, Radius::S, palette.well.with_opacity(0.5)));
                     }
                     let icon = match (&place.location, trash_full) {
                         (Location::Trash, true) => "user-trash-full",
                         _ => place.icon,
                     };
-                    if let Some(image) = self.icons.first(&[icon, "folder"], ICON_PIXELS) {
+                    let tint = match selected {
+                        true => palette.accent,
+                        false => palette.ink2,
+                    };
+                    let symbol = format!("{icon}-symbolic");
+                    if let Some(image) =
+                        self.icons
+                            .symbol(&[&symbol, "folder-symbolic"], ICON_PIXELS, tint)
+                    {
                         items.push(Item::Image {
-                            rect: Rect::new(rect.x + 6.0, y + 5.0, ICON_SIZE, ICON_SIZE),
+                            rect: Rect::new(
+                                SIDEBAR_TEXT_X,
+                                y + ((SIDEBAR_ROW - ICON_SIZE) / 2.0).round(),
+                                ICON_SIZE,
+                                ICON_SIZE,
+                            ),
                             image,
                         });
                     }
-                    let primary = self.palette.ink;
                     let text = self.line(
                         &place.name,
                         NAME_SIZE,
-                        primary,
-                        rect.x + 30.0,
+                        palette.ink,
+                        SIDEBAR_TEXT_X + ICON_SIZE + 8.0,
                         y,
                         SIDEBAR_ROW,
                     );
@@ -213,11 +248,14 @@ impl FilesView {
                     if place.kind == PlaceKind::Volume {
                         let button = Rect::new(
                             rect.x + rect.width - ICON_SIZE - 6.0,
-                            y + 5.0,
+                            y + ((SIDEBAR_ROW - ICON_SIZE) / 2.0).round(),
                             ICON_SIZE,
                             ICON_SIZE,
                         );
-                        if let Some(image) = self.icons.first(&["media-eject"], ICON_PIXELS) {
+                        if let Some(image) =
+                            self.icons
+                                .symbol(&["media-eject-symbolic"], ICON_PIXELS, palette.ink2)
+                        {
                             items.push(Item::Image {
                                 rect: button,
                                 image,
@@ -225,7 +263,7 @@ impl FilesView {
                         }
                         self.hits.push((button.inset(-4.0), Hit::Eject(index)));
                     }
-                    y += SIDEBAR_ROW;
+                    y += SIDEBAR_PITCH;
                 }
             }
         }
@@ -275,24 +313,29 @@ impl FilesView {
             ));
             let marked = column.is_marked(position);
             let color = if marked && active {
-                Color::hex(0xFFFFFF)
+                self.palette.on_accent
             } else {
                 self.palette.ink
             };
             if marked {
                 rows.push(self.fill(
-                    row,
-                    5.0,
+                    Rect::new(row.x, row.y + 1.0, row.width, row.height - 2.0),
+                    Radius::S,
                     if active {
                         self.palette.accent
                     } else {
-                        self.palette.ink2.with_alpha(56)
+                        self.palette.well
                     },
                 ));
             }
             if let Some(image) = self.entry_icon(entry, ICON_PIXELS) {
                 rows.push(Item::Image {
-                    rect: Rect::new(row.x + 6.0, y + 4.0, ICON_SIZE, ICON_SIZE),
+                    rect: Rect::new(
+                        row.x + 6.0,
+                        y + ((ROW_HEIGHT - ICON_SIZE) / 2.0).round(),
+                        ICON_SIZE,
+                        ICON_SIZE,
+                    ),
                     image,
                 });
             }
@@ -307,7 +350,11 @@ impl FilesView {
                 items: vec![name],
             });
             if entry.is_folder() {
-                let chevron = self.label("\u{203A}", NAME_SIZE + 3.0, color.with_alpha(180));
+                let chevron_color = match marked && active {
+                    true => color,
+                    false => self.palette.ink3,
+                };
+                let chevron = self.label("\u{203A}", NAME_SIZE + 3.0, chevron_color);
                 let chevron_y = y + ((ROW_HEIGHT - chevron.height()) / 2.0).round();
                 rows.push(Item::Text {
                     origin: Point::new(row.x + row.width - 8.0 - chevron.width(), chevron_y),
@@ -352,26 +399,31 @@ impl FilesView {
             return;
         }
         let content = self.content_frame();
+        let sheet = self.sheet_frame();
         let bar = Rect::new(
             content.x,
-            self.size.1 - PATH_BAR_HEIGHT,
+            sheet.y + sheet.height - PATH_BAR_HEIGHT,
             content.width,
             PATH_BAR_HEIGHT,
         );
-        items.push(self.fill(bar, 0.0, self.palette.overlay));
         items.push(self.fill(
-            Rect::new(bar.x, bar.y, bar.width, 1.0),
+            Rect::new(bar.x + 12.0, bar.y, (bar.width - 24.0).max(0.0), 1.0),
             0.0,
             self.palette.hairline,
         ));
         let status = self.status_text();
         let muted = self.palette.ink2;
-        let status_paragraph = self.label(&status, SMALL_SIZE, muted);
+        let status_paragraph = self.text().paragraph(
+            &status,
+            TextStyle::role(TextRole::Callout, muted).tabular(),
+            None,
+            TextAlign::Start,
+        );
         let slider = match self.size_slider {
             Some(_) => crate::controls::SLIDER_WIDTH + 26.0,
             None => 0.0,
         };
-        let status_x = bar.x + bar.width - status_paragraph.width() - 12.0 - slider;
+        let status_x = bar.x + bar.width - status_paragraph.width() - 20.0 - slider;
         items.push(Item::Text {
             origin: Point::new(
                 status_x,
@@ -416,24 +468,43 @@ impl FilesView {
         let available = status_x - bar.x - 18.0;
         let mut widths = segments
             .iter()
-            .map(|(name, _, _)| self.label(name, SMALL_SIZE + 1.0, muted).width() + 38.0)
+            .map(|(name, _, _)| {
+                let style = TextStyle::role(TextRole::Callout, muted);
+                self.text()
+                    .paragraph(name, style, None, TextAlign::Start)
+                    .width()
+                    + 38.0
+            })
             .collect::<Vec<_>>();
         while widths.len() > 1 && widths.iter().sum::<f32>() > available {
             widths.remove(0);
             segments.remove(0);
         }
-        let mut x = bar.x + 10.0;
+        let mut x = bar.x + 20.0;
         let mut row = Vec::new();
         let count = segments.len();
         for (index, (name, path, icon)) in segments.into_iter().enumerate() {
-            if let Some(image) = self.icons.first(&[icon, "folder"], ICON_PIXELS) {
+            let symbol = format!("{icon}-symbolic");
+            if let Some(image) =
+                self.icons
+                    .symbol(&[&symbol, "folder-symbolic"], ICON_PIXELS, muted)
+            {
                 row.push(Item::Image {
-                    rect: Rect::new(x, bar.y + 6.0, ICON_SIZE, ICON_SIZE),
+                    rect: Rect::new(
+                        x,
+                        bar.y + ((PATH_BAR_HEIGHT - ICON_SIZE) / 2.0).round(),
+                        ICON_SIZE,
+                        ICON_SIZE,
+                    ),
                     image,
                 });
             }
-            let primary = self.palette.ink;
-            let paragraph = self.label(&name, SMALL_SIZE + 1.0, primary);
+            let paragraph = self.text().paragraph(
+                &name,
+                TextStyle::role(TextRole::Callout, muted),
+                None,
+                TextAlign::Start,
+            );
             let width = paragraph.width();
             row.push(Item::Text {
                 origin: Point::new(
@@ -446,7 +517,7 @@ impl FilesView {
                 let area = Rect::new(x - 4.0, bar.y + 3.0, width + 28.0, PATH_BAR_HEIGHT - 6.0);
                 let hit = Hit::Segment(path);
                 if self.hover.as_ref() == Some(&hit) {
-                    row.insert(0, self.fill(area, 5.0, self.palette.ink2.with_alpha(30)));
+                    row.insert(0, self.fill(area, Radius::S, self.palette.well));
                 }
                 self.hits.push((area, hit));
             }
@@ -539,7 +610,7 @@ impl FilesView {
             .collect::<Vec<_>>();
         for (index, label, detail, fraction) in jobs {
             let area = Rect::new(content.x, y, content.width, PROGRESS_HEIGHT);
-            items.push(self.fill(area, 0.0, self.palette.overlay));
+            items.push(self.fill(area, 0.0, self.palette.sheet));
             items.push(self.fill(
                 Rect::new(area.x, area.y, area.width, 1.0),
                 0.0,
@@ -563,46 +634,53 @@ impl FilesView {
                 });
             }
             let track = Rect::new(area.x + 14.0, y + 28.0, area.width - 58.0, 6.0);
-            items.push(self.fill(track, 3.0, self.palette.hairline));
-            items.push(self.fill(
-                Rect::new(
-                    track.x,
-                    track.y,
-                    (track.width * fraction).max(6.0),
-                    track.height,
-                ),
-                3.0,
-                self.palette.accent,
-            ));
+            self.paint_progress_cells(track, fraction, items);
             let cancel = Rect::new(area.x + area.width - 34.0, y + 17.0, 22.0, 22.0);
             let hovered = self.hover == Some(Hit::CancelJob(index));
             items.push(self.fill(
                 cancel,
-                11.0,
-                self.palette.ink2.with_alpha(if hovered { 90 } else { 50 }),
+                cancel.height / 2.0,
+                match hovered {
+                    true => self.palette.well.mix(self.palette.ink, 0.08),
+                    false => self.palette.well,
+                },
             ));
-            items.push(self.line(
-                "\u{00D7}",
-                NAME_SIZE + 2.0,
-                primary,
-                cancel.x + 6.5,
-                cancel.y,
-                cancel.height,
-            ));
+            let close = Rect::new(cancel.x + 3.0, cancel.y + 3.0, ICON_SIZE, ICON_SIZE);
+            if let Some(image) =
+                self.icons
+                    .symbol(&["window-close-symbolic"], ICON_PIXELS, self.palette.ink2)
+            {
+                items.push(Item::Image { rect: close, image });
+            }
             self.hits.push((cancel, Hit::CancelJob(index)));
             y += PROGRESS_HEIGHT;
         }
     }
 
+    fn paint_progress_cells(&self, track: Rect, fraction: f32, items: &mut Vec<Item>) {
+        let cells = PROGRESS_CELLS as f32;
+        let cell = (track.width - PROGRESS_GAP * (cells - 1.0)) / cells;
+        let lit = (fraction * cells).round() as usize;
+        for index in 0..PROGRESS_CELLS {
+            let x = track.x + index as f32 * (cell + PROGRESS_GAP);
+            let color = match index < lit {
+                true => self.palette.accent,
+                false => self.palette.well,
+            };
+            items.push(self.fill(Rect::new(x, track.y, cell, track.height), 1.0, color));
+        }
+    }
+
     fn paint_inspector(&mut self, items: &mut Vec<Item>) {
+        let sheet = self.sheet_frame();
         let area = Rect::new(
-            self.size.0 - INSPECTOR_WIDTH,
-            TOOLBAR_HEIGHT,
+            sheet.x + sheet.width - INSPECTOR_WIDTH,
+            sheet.y,
             INSPECTOR_WIDTH,
-            self.size.1 - TOOLBAR_HEIGHT,
+            sheet.height,
         );
         self.hits.push((area, Hit::Inspector));
-        items.push(self.fill(area, 0.0, self.palette.overlay));
+        items.push(self.fill(area, 0.0, self.palette.sheet));
         items.push(self.fill(
             Rect::new(area.x, area.y, 1.0, area.height),
             0.0,
@@ -777,7 +855,7 @@ impl FilesView {
                 let row = Rect::new(inner.x, y, inner.width, 24.0);
                 let chosen = info.chosen == Some(index);
                 if chosen {
-                    content.push(self.fill(row, 5.0, self.palette.accent.with_alpha(40)));
+                    content.push(self.fill(row, Radius::S, self.palette.accent_soft));
                 }
                 let name = if info.default.as_deref() == Some(app.id.as_str()) {
                     L10N.tr_args("default-app", [("app", app.name.clone().into())])
@@ -813,12 +891,12 @@ impl FilesView {
     }
 
     fn button(&mut self, title: &str, origin: Point, default: bool, items: &mut Vec<Item>) -> Rect {
-        let color = if default {
-            Color::hex(0xFFFFFF)
+        let (color, weight) = if default {
+            (self.palette.on_accent, TextStyle::SEMIBOLD)
         } else {
-            self.palette.ink
+            (self.palette.ink, TextStyle::MEDIUM)
         };
-        let paragraph = self.label(title, NAME_SIZE, color);
+        let paragraph = self.paragraph(title, NAME_SIZE, color, weight);
         let rect = Rect::new(
             origin.x,
             origin.y,
@@ -828,9 +906,9 @@ impl FilesView {
         let fill = if default {
             self.palette.accent
         } else {
-            self.palette.ink2.with_alpha(40)
+            self.palette.well
         };
-        items.push(self.fill(rect, 6.0, fill));
+        items.push(self.fill(rect, Radius::S, fill));
         items.push(Item::Text {
             origin: Point::new(
                 rect.x + 14.0,
@@ -846,9 +924,10 @@ impl FilesView {
             return;
         };
         let content = self.content_frame();
+        let chassis = self.palette.chassis;
         let paragraph = self.text().paragraph(
             &text,
-            TextStyle::new(NAME_SIZE, Color::hex(0xFFFFFF)),
+            TextStyle::new(NAME_SIZE, chassis),
             Some(content.width - 80.0),
             TextAlign::Start,
         );
@@ -860,13 +939,8 @@ impl FilesView {
             width,
             height,
         );
-        items.push(Item::Shadow {
-            shape: Shape::rounded(rect, 10.0),
-            offset: Point::new(0.0, 4.0),
-            blur_radius: 12.0,
-            color: Color::hex(0x000000).with_alpha(60),
-        });
-        items.push(self.fill(rect, 10.0, Color::hex(0x2A2D33).with_alpha(235)));
+        self.overlay_shadows(Shape::rounded(rect, Radius::L), items);
+        items.push(self.fill(rect, Radius::L, self.palette.ink));
         items.push(Item::Text {
             origin: Point::new(rect.x + 16.0, rect.y + 8.0),
             paragraph,
@@ -874,26 +948,31 @@ impl FilesView {
     }
 
     pub fn quick_look_frame(&self) -> Rect {
-        let (width, height) = self.size;
-        let (panel_width, panel_height) = (
-            (width * QUICK_LOOK_SHARE).round(),
-            (height * QUICK_LOOK_SHARE).round(),
-        );
+        let sheet = self.sheet_frame();
         centred(
-            Rect::new(0.0, 0.0, width, height),
-            panel_width,
-            panel_height,
+            sheet,
+            (sheet.width * QUICK_LOOK_SHARE).round(),
+            (sheet.height * QUICK_LOOK_SHARE).round(),
         )
     }
 
+    fn overlay_shadows(&self, shape: Shape, items: &mut Vec<Item>) {
+        items.extend(
+            Elevation::Overlay
+                .shadows(self.palette.scheme, true)
+                .into_iter()
+                .map(|shadow| Item::Shadow {
+                    shape,
+                    offset: Point::new(0.0, shadow.offset),
+                    blur_radius: shadow.blur,
+                    color: Color::BLACK.with_opacity(shadow.opacity),
+                }),
+        );
+    }
+
     fn panel(&self, panel: Rect, items: &mut Vec<Item>) -> Shape {
-        let shape = Shape::rounded(panel, RADIUS);
-        items.push(Item::Shadow {
-            shape,
-            offset: Point::new(0.0, 8.0),
-            blur_radius: 24.0,
-            color: Color::hex(0x000000).with_alpha(90),
-        });
+        let shape = Shape::rounded(panel, Radius::XL);
+        self.overlay_shadows(shape, items);
         items.push(Item::Fill {
             shape,
             paint: self.palette.overlay.into(),

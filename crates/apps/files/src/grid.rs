@@ -3,7 +3,9 @@ use std::ops::Range;
 use unbound_fs::Entry;
 use unbound_thumbnails::ThumbnailSize;
 use unbound_toolkit::ui::{Key, Modifiers, Pointer, Scroll, ScrollState};
-use unbound_toolkit::{Color, Image, Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle};
+use unbound_toolkit::{
+    Color, Image, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextStyle,
+};
 
 use crate::L10N;
 use crate::controls::Press;
@@ -18,7 +20,7 @@ const LABEL_INSET: f32 = 4.0;
 const ELLIPSIS: char = '\u{2026}';
 const KEPT_TAIL: usize = 7;
 const LABELS_KEPT: usize = 4000;
-const SELECTION_RADIUS: f32 = 6.0;
+const SELECTION_RADIUS: f32 = Radius::S;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct Grid {
@@ -351,7 +353,7 @@ impl FilesView {
             if marked {
                 shown.push(Item::Fill {
                     shape: Shape::rounded(icon.inset(-ICON_PAD + 1.0), SELECTION_RADIUS),
-                    paint: self.palette.ink2.with_alpha(40).into(),
+                    paint: self.palette.well.into(),
                 });
             }
             let (picture, thumbnail) = self.grid_picture(entry, size);
@@ -380,7 +382,7 @@ impl FilesView {
                 continue;
             }
             let color = if marked {
-                Color::hex(0xFFFFFF)
+                self.palette.on_accent
             } else {
                 self.palette.ink
             };
@@ -423,12 +425,12 @@ impl FilesView {
             let area = offset(normalised(band.origin, band.current), origin);
             shown.push(Item::Fill {
                 shape: Shape::rect(area),
-                paint: self.palette.ink2.with_alpha(40).into(),
+                paint: self.palette.accent_soft.with_opacity(0.6).into(),
             });
             shown.push(Item::Stroke {
                 shape: Shape::rect(area.inset(0.5)),
                 width: 1.0,
-                paint: self.palette.ink2.with_alpha(140).into(),
+                paint: self.palette.accent.into(),
             });
         }
         items.push(Item::Clip {

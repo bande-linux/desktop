@@ -105,6 +105,10 @@ impl SegmentedControl {
             return false;
         }
         self.selected = Some(index);
+        if self.frame.width <= 0.0 {
+            self.pill = None;
+            return true;
+        }
         let target = self.segment(index);
         let offset = target.x - self.frame.x;
         match &mut self.pill {

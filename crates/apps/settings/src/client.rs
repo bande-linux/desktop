@@ -5,7 +5,7 @@ use zbus::blocking::Connection;
 use zbus::proxy::CacheProperties;
 use zbus::zvariant::OwnedValue;
 
-use crate::registry::{SettingId, Value, WITH_DISPLAY};
+use unbound_settings_panes::{SettingId, Value, WITH_DISPLAY};
 
 #[zbus::proxy(
     interface = "org.unbound.Config",

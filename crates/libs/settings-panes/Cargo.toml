@@ -1,0 +1,12 @@
+[package]
+name = "unbound-settings-panes"
+description = "The System Settings panes of Unbound, their settings and ranked search"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+unbound-l10n.workspace = true
+
+[lints]
+workspace = true

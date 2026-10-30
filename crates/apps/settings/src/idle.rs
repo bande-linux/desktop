@@ -1,4 +1,4 @@
-use crate::registry::{DIM_CHOICES, LOCK_CHOICES, SettingId, Value, WITH_DISPLAY};
+use unbound_settings_panes::{DIM_CHOICES, LOCK_CHOICES, SettingId, Value, WITH_DISPLAY};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Idle {

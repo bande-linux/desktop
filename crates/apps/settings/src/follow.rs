@@ -11,11 +11,11 @@ use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
 use crate::client::{CONFIG_SETTINGS, SettingsClient};
-use crate::registry::{SettingId, Value};
 use crate::services::{
     AudioCommand, BluetoothCommand, NetworkCommand, follow_audio, follow_bluetooth, follow_network,
 };
 use crate::state::{Answer, BluetoothState, Joined, Question, WifiState};
+use unbound_settings_panes::{SettingId, Value};
 
 const NOTIFICATIONS: &str = "org.freedesktop.Notifications";
 const NOTIFICATIONS_PATH: &str = "/org/freedesktop/Notifications";

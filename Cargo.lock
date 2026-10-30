@@ -3738,7 +3738,7 @@ dependencies = [
  "unbound-l10n",
  "unbound-log",
  "unbound-search",
- "unbound-settings",
+ "unbound-settings-panes",
  "unbound-spring",
  "unbound-toolkit",
  "unbound-xdg",
@@ -3951,10 +3951,18 @@ dependencies = [
  "unbound-l10n",
  "unbound-log",
  "unbound-network",
+ "unbound-settings-panes",
  "unbound-test-bus",
  "unbound-toolkit",
  "wayland-client",
  "zbus",
+]
+
+[[package]]
+name = "unbound-settings-panes"
+version = "0.1.0"
+dependencies = [
+ "unbound-l10n",
 ]
 
 [[package]]

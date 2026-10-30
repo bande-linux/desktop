@@ -330,7 +330,7 @@ fn app_icons(entries: &[DesktopEntry], data_dirs: &[PathBuf]) -> HashMap<String,
 }
 
 fn settings_panes() -> Vec<PaneInfo> {
-    unbound_settings::panes()
+    unbound_settings_panes::panes()
         .into_iter()
         .map(|pane| PaneInfo {
             keyword: pane.id.keyword().to_owned(),

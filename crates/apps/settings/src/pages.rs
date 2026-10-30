@@ -7,13 +7,13 @@ use unbound_toolkit::ui::{
 };
 
 use crate::L10N;
-use crate::registry::{AUTOMATIC, Kind, List, PaneId, Section, Setting, SettingId, Value};
-use crate::search::SettingHit;
 use crate::state::{Answer, Display, Question};
 use crate::view::{Anchor, Intent, Intents, SettingsView, intent};
 use crate::widgets::{
     Caption, Captioned, Card, Check, Column, Row, Scroll, Segmented, SidebarRow, Signal, Text, Tone,
 };
+use unbound_settings_panes::SettingHit;
+use unbound_settings_panes::{AUTOMATIC, Kind, List, PaneId, Section, Setting, SettingId, Value};
 
 const PAGE_PADDING: f32 = Spacing::XL as f32;
 const PAGE_SPACING: f32 = Spacing::S as f32;

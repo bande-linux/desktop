@@ -88,6 +88,7 @@ unbound-sample = { path = "crates/testing/sample" }
 unbound-screenshot = { path = "crates/shell/screenshot" }
 unbound-search = { path = "crates/libs/search" }
 unbound-settings = { path = "crates/apps/settings" }
+unbound-settings-panes = { path = "crates/libs/settings-panes" }
 unbound-spring = { path = "crates/libs/spring" }
 unbound-term = { path = "crates/apps/terminal" }
 unbound-test-bus = { path = "crates/testing/test-bus" }

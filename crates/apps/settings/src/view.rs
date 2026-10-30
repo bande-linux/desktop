@@ -11,11 +11,11 @@ use unbound_toolkit::{Palette, Rect, Scene, TextSystem};
 use crate::L10N;
 use crate::follow::{Command, Update};
 use crate::idle::Idle;
-use crate::registry::{AUTOMATIC, Pane, PaneId, SettingId, Value, panes};
-use crate::search::{PaneHit, search};
 use crate::services::{AudioCommand, BluetoothCommand, NetworkCommand};
 use crate::state::{Answer, BluetoothState, Display, Joined, Question, WifiState};
 use crate::widgets::{Column, Root};
+use unbound_settings_panes::{AUTOMATIC, Pane, PaneId, SettingId, Value, panes};
+use unbound_settings_panes::{PaneHit, search};
 
 const PAGE_STEP: f32 = 240.0;
 

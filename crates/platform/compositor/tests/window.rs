@@ -612,3 +612,78 @@ fn a_window_kept_on_top_stays_in_front_of_a_newer_window_until_released() {
     assert!(pointed);
     assert_eq!(released, rgb(BLUE));
 }
+
+const KEY_ESC: u32 = 1;
+
+fn escape(server: &mut Headless, client: &mut TestClient) {
+    server.key(KEY_ESC, true, 5);
+    server.key(KEY_ESC, false, 6);
+    roundtrip(server, &mut [client]);
+}
+
+fn assert_released(server: &mut Headless, client: &mut TestClient) {
+    server.press_button(BTN_LEFT, false, 9);
+    roundtrip(server, &mut [&mut *client]);
+    assert!(!server.pointer_grabbed());
+    let before = client.buttons().len();
+    click(server, 110, 80);
+    roundtrip(server, &mut [&mut *client]);
+    assert_eq!(client.buttons().len(), before + 2);
+}
+
+#[test]
+fn escape_during_a_move_puts_the_window_back_and_ends_the_move() {
+    let mut server = server();
+    let mut editor = app(&mut server, RED);
+    drag_with(
+        &mut server,
+        &mut editor,
+        (110, 80),
+        (20, 30),
+        |server, client| client.request_move(server, 0),
+    );
+    assert_eq!(geometry(&server).location, (116, 102).into());
+
+    escape(&mut server, &mut editor);
+    assert_eq!(geometry(&server).location, CENTERED.into());
+    server.move_pointer_to(at(150, 140), 7);
+    roundtrip(&mut server, &mut [&mut editor]);
+
+    assert_eq!(geometry(&server).location, CENTERED.into());
+    assert!(editor.keys().is_empty());
+    assert_released(&mut server, &mut editor);
+    assert_eq!(geometry(&server).location, CENTERED.into());
+}
+
+#[test]
+fn escape_during_a_resize_gives_back_the_starting_size() {
+    let mut server = server();
+    let mut editor = app(&mut server, RED);
+    drag_with(
+        &mut server,
+        &mut editor,
+        (158, 118),
+        (20, 10),
+        |server, client| client.request_resize(server, 0, ResizeEdge::BottomRight),
+    );
+    editor.fill_configured_size(&mut server, 0, RED);
+    assert_eq!(geometry(&server).size, (84, 58).into());
+
+    escape(&mut server, &mut editor);
+    editor.fill_configured_size(&mut server, 0, RED);
+    server.move_pointer_to(at(200, 160), 7);
+    roundtrip(&mut server, &mut [&mut editor]);
+
+    let configured = editor.configured(0).expect("a configure");
+    assert_eq!((configured.width, configured.height), WINDOW);
+    assert!(!configured.states.contains(&ToplevelState::Resizing));
+    assert_eq!(
+        geometry(&server),
+        Rect {
+            location: CENTERED.into(),
+            size: WINDOW.into(),
+        }
+    );
+    assert!(editor.keys().is_empty());
+    assert_released(&mut server, &mut editor);
+}

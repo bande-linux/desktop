@@ -204,6 +204,7 @@ pub struct State {
     pub(crate) lock: Option<Lock>,
     pub(crate) session_lock_state: SessionLockManagerState,
     pub(crate) popup_grab: Option<PopupGrab<State>>,
+    pub(crate) held_window: Option<crate::grab::HeldWindow>,
     pub(crate) swallowed_button: Option<u32>,
     pub(crate) minimize_sequence: u64,
     pub(crate) closing: Vec<Closing>,
@@ -375,6 +376,7 @@ impl Headless {
             lock: None,
             session_lock_state: SessionLockManagerState::new::<State, _>(&handle, shell::is_shell),
             popup_grab: None,
+            held_window: None,
             swallowed_button: None,
             minimize_sequence: 0,
             closing: Vec::new(),
@@ -912,6 +914,9 @@ impl State {
         if self.redirect_focus_while_locked(&surface) {
             return;
         }
+        if self.popup_grab.is_some() && surface != self.menu_root() {
+            self.close_menus();
+        }
         self.windowless_app = None;
         self.typed_at = None;
         if let Some(surface) = &surface
@@ -977,7 +982,10 @@ impl State {
     }
 
     pub(crate) fn refocus_after_losing(&mut self, lost: &WlSurface) {
-        if self.focused().as_ref() != Some(lost) {
+        let Some(focused) = self.focused() else {
+            return;
+        };
+        if &focused != lost && focused.is_alive() && self.root_of(&focused).as_ref() != Some(lost) {
             return;
         }
         let owner = lost.client();

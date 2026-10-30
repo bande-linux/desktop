@@ -58,6 +58,7 @@ enum Shortcut {
     AppWindows,
     OverviewKey(u32, Option<char>),
     InputSource { backwards: bool },
+    CancelGrab,
 }
 
 fn volume_key(keysym: u32) -> Option<VolumeKey> {
@@ -167,14 +168,12 @@ impl State {
         let Some(pointer) = self.seat.get_pointer() else {
             return;
         };
-        let time = Clock::<Monotonic>::new().now().as_millis();
         if self
             .popup_grab
             .as_ref()
             .is_some_and(|grab| grab.has_ended())
         {
-            self.popup_grab = None;
-            pointer.unset_grab(self, SERIAL_COUNTER.next_serial(), time);
+            self.return_from_menu();
         }
         if pointer.is_grabbed() && self.popup_grab.is_none() {
             return;
@@ -191,13 +190,17 @@ impl State {
             &MotionEvent {
                 location: self.pointer_location,
                 serial: SERIAL_COUNTER.next_serial(),
-                time,
+                time: Clock::<Monotonic>::new().now().as_millis(),
             },
         );
         pointer.frame(self);
     }
 
     fn run(&mut self, shortcut: Shortcut) {
+        if shortcut == Shortcut::CancelGrab {
+            self.cancel_grab();
+            return;
+        }
         if let Shortcut::Volume(key, fine) = shortcut {
             self.volume_key(key, fine);
             return;
@@ -209,6 +212,12 @@ impl State {
         if let Shortcut::Media(key) = shortcut {
             self.media_key(key);
             return;
+        }
+        if !matches!(
+            shortcut,
+            Shortcut::InputSource { .. } | Shortcut::CaptureScreen
+        ) {
+            self.close_menus();
         }
         if shortcut == Shortcut::ShowLauncher {
             self.show_launcher();
@@ -369,7 +378,8 @@ impl State {
             | Shortcut::NextWindow { .. }
             | Shortcut::SwitcherKey(..)
             | Shortcut::AssistKey(..)
-            | Shortcut::InputSource { .. } => {}
+            | Shortcut::InputSource { .. }
+            | Shortcut::CancelGrab => {}
         }
     }
 }
@@ -638,6 +648,10 @@ impl Headless {
                     return FilterResult::Intercept(Some(Shortcut::Media(key)));
                 }
                 let sym = keysym.modified_sym();
+                if sym.raw() == keysyms::KEY_Escape && state.holds_cancellable_grab() {
+                    state.held_shortcut_keys.push(evdev_code);
+                    return FilterResult::Intercept(Some(Shortcut::CancelGrab));
+                }
                 if state.switcher.is_active() && !sym.is_modifier_key() {
                     state.held_shortcut_keys.push(evdev_code);
                     let pressed = if evdev_code == ABOVE_TAB {

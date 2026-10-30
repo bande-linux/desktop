@@ -11,6 +11,7 @@ pub(crate) struct Dnd {
     pub(crate) offer: Option<WlDataOffer>,
     pub(crate) chosen: Vec<DndAction>,
     pub(crate) drops: usize,
+    pub(crate) leaves: usize,
     icon: Option<WlSurface>,
 }
 
@@ -69,5 +70,9 @@ impl TestClient {
 
     pub fn drops(&self) -> usize {
         self.globals.dnd.drops
+    }
+
+    pub fn drag_leaves(&self) -> usize {
+        self.globals.dnd.leaves
     }
 }

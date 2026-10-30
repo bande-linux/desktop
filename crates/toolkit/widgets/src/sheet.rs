@@ -27,7 +27,14 @@ pub(crate) struct Sheet {
 }
 
 impl Sheet {
-    pub(crate) fn paint(&self, cx: &Context, shown: f32, area: Size, items: &mut Vec<Item>) {
+    pub(crate) fn paint(
+        &self,
+        cx: &Context,
+        shown: f32,
+        area: Size,
+        top: f32,
+        items: &mut Vec<Item>,
+    ) {
         let shown = shown.clamp(0.0, 1.0);
         items.push(Item::Fill {
             shape: Shape::rect(Rect::new(0.0, 0.0, area.width, area.height)),
@@ -55,6 +62,18 @@ impl Sheet {
             shape,
             items: inner,
         });
+        let content = match self.floating {
+            true => content,
+            false => vec![Item::Clip {
+                shape: Shape::rect(Rect::new(
+                    0.0,
+                    top,
+                    area.width,
+                    (area.height - top).max(0.0),
+                )),
+                items: content,
+            }],
+        };
         items.push(Item::Opacity {
             alpha: shown,
             items: content,

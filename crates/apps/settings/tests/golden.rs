@@ -4,16 +4,33 @@ use std::path::PathBuf;
 
 use unbound_audio::{Device, Direction, Level, Snapshot};
 use unbound_keyboard::Layouts;
+use unbound_settings::SIDEBAR_WIDTH;
 use unbound_settings::{
     About, App, AppNotifications, BatteryState, Category, Charge, Display, LoginItems, Mode,
     Package, Pair, PaneId, PointingDevices, SettingId, SettingsView, SoftwareState, Storage,
     TimeState, Update, Value, thumbnail,
 };
 use unbound_toolkit::ui::{Event, Key, Modifiers};
-use unbound_toolkit::{CpuRenderer, Palette, Scheme, TextSystem};
+use unbound_toolkit::{
+    CpuRenderer, FrameRegions, HEADER_HEIGHT, Palette, Scene, Scheme, TextSystem, framed_scene,
+};
 
 const SIZE: (u32, u32) = (900, 600);
 const MIN_SSIM: f64 = 0.99;
+
+fn framed(view: &mut SettingsView, scheme: Scheme) -> Scene {
+    let content = view.scene(SIZE.0, SIZE.1 - HEADER_HEIGHT);
+    framed_scene(
+        &content,
+        "Settings",
+        Some(FrameRegions {
+            sidebar: SIDEBAR_WIDTH,
+            toolbar: 0.0,
+        }),
+        None,
+        &Palette::for_scheme(scheme),
+    )
+}
 
 fn check_golden(name: &str, rgba: Vec<u8>) {
     check_golden_sized(name, SIZE, rgba);
@@ -65,7 +82,7 @@ fn a_search_matches_its_golden_in_light_and_dark() {
         (Scheme::Dark, "search-sleep-dark"),
     ] {
         let mut view = lock_screen_search(scheme);
-        let scene = view.scene(SIZE.0, SIZE.1);
+        let scene = framed(&mut view, scheme);
         let frame = CpuRenderer::new().render(&scene).expect("frame");
         check_golden(name, frame.rgba);
     }
@@ -133,7 +150,7 @@ fn the_sound_pane_matches_its_golden() {
         default_input: Some("microphone".to_owned()),
     })));
     open(&mut view, "sound");
-    let scene = view.scene(SIZE.0, SIZE.1);
+    let scene = framed(&mut view, Scheme::Light);
     let frame = CpuRenderer::new().render(&scene).expect("frame");
     check_golden("sound-light", frame.rgba);
 }
@@ -180,7 +197,7 @@ fn the_displays_pane_matches_its_golden_in_dark() {
     ]);
 
     open(&mut view, "displays");
-    let scene = view.scene(SIZE.0, SIZE.1);
+    let scene = framed(&mut view, Scheme::Dark);
     let frame = CpuRenderer::new().render(&scene).expect("frame");
     check_golden("displays-dark", frame.rgba);
 }
@@ -211,7 +228,7 @@ fn the_keyboard_pane_matches_its_golden() {
             modifiers: Modifiers::default(),
         });
     }
-    let scene = view.scene(SIZE.0, SIZE.1);
+    let scene = framed(&mut view, Scheme::Light);
     let frame = CpuRenderer::new().render(&scene).expect("frame");
     check_golden("keyboard-light", frame.rgba);
 }
@@ -246,7 +263,7 @@ fn the_wallpaper_pane_matches_its_golden() {
     );
     view.set_value(SettingId::WallpaperFit, Value::Keyword("fill".to_owned()));
     open(&mut view, "wallpaper");
-    let scene = view.scene(SIZE.0, SIZE.1);
+    let scene = framed(&mut view, Scheme::Light);
     let frame = CpuRenderer::new().render(&scene).expect("frame");
     check_golden("wallpaper-light", frame.rgba);
 }
@@ -271,7 +288,7 @@ fn the_trackpad_and_mouse_pane_matches_its_golden() {
         (SettingId::MouseSpeed, Value::Number(5)),
     ]));
     open(&mut view, "trackpad");
-    let scene = view.scene(SIZE.0, SIZE.1);
+    let scene = framed(&mut view, Scheme::Dark);
     let frame = CpuRenderer::new().render(&scene).expect("frame");
     check_golden("trackpad-mouse-dark", frame.rgba);
 }
@@ -279,7 +296,7 @@ fn the_trackpad_and_mouse_pane_matches_its_golden() {
 fn check_in_both_schemes_and_scales(name: &str, build: impl Fn(Scheme) -> SettingsView) {
     for (scheme, suffix) in [(Scheme::Light, "light"), (Scheme::Dark, "dark")] {
         let mut view = build(scheme);
-        let scene = view.scene(SIZE.0, SIZE.1);
+        let scene = framed(&mut view, scheme);
         for (scale, density) in [(1.0, ""), (1.5, "@1.5x")] {
             let pixels = (
                 (f64::from(SIZE.0) * scale).round() as u32,

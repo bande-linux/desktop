@@ -10,7 +10,7 @@ const CHEVRON_WIDTH: f32 = 4.0;
 const CHEVRON_HEIGHT: f32 = 2.25;
 const GLYPH_STROKE: f32 = 1.5;
 
-pub(crate) fn focus_ring(cx: &Context, shape: Shape, items: &mut Vec<Item>) {
+pub fn focus_ring(cx: &Context, shape: Shape, items: &mut Vec<Item>) {
     focus_ring_for(&cx.palette, shape, items);
 }
 

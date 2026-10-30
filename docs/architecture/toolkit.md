@@ -147,7 +147,12 @@ writes a hex value, a corner radius or a font name of its own.
     `Scene`'s background). An app with a sidebar or toolbar on the frame calls
     `Window::set_frame_regions(FrameRegions { sidebar, toolbar })`: its content then covers
     everything below the header, the left `sidebar` points and the top `toolbar` points stay on
-    `chassis` for the app to draw on, and the toolkit paints the sheet in the rest. The header
+    `chassis` for the app to draw on, and the toolkit paints the sheet in the rest. An app whose
+    toolbar lives in the header calls `Window::set_header(Header { title_x, items })`: its
+    content then also covers the header (`Window::header_height` is 0 in full screen), the
+    toolkit draws the title at `title_x` (clipped before the next item), presses on `items`
+    (content coordinates) go to the app, and the rest of the header still moves, zooms and
+    opens the window menu. `framed_scene` composes an app's scene with the frame for goldens. The header
     and its buttons are published to screen readers above the app's tree. Server-side frames
     for third-party apps (`compositor/src/frame.rs`) draw the same header and pill from
     `title_bar.rs`, 40 pt high, and redraw when Alt is pressed or released so the zoom glyph
@@ -158,7 +163,7 @@ writes a hex value, a corner radius or a font name of its own.
 - **Widgets.** `ui` holds the widget tree: `Stack` (rows and columns with spacing and padding; a
   column stretches its children across, a row centres them), `Label`, `Shortcut`, the controls
   below, `Table`, `ScrollView`, `Disclosure` and `FreeLayout`, laid out, painted into a `Scene`
-  and driven by `Ui`. Buttons and switches act on release inside, as in AppKit. Tab moves focus
+  and driven by `Ui`. `Ui::update_widget(id, |widget, cx| ...)` changes a widget from code with the context it needs (e.g. `SegmentedControl::set_selected`, `Slider::set_value`), so the change animates. Buttons and switches act on release inside, as in AppKit. Tab moves focus
   between text fields only unless `keyboard_navigation` is set, as macOS's Keyboard navigation
   setting (off by default) does; tabbing into a field selects its text. A widget opens a menu
   of its own (a pop-up button's choices) with `Context::show_menu`; the choice comes back to it
@@ -176,14 +181,14 @@ writes a hex value, a corner radius or a font name of its own.
   | `.cancel()` | secondary look, Escape |
   | `.quiet()` | `accent_text` 600, `well` fill on hover only |
   | `.destructive()` | danger fill, `on_danger` text; only for the destructive verb |
-  | `Button::symbol(image, label, action)` | 28×28 icon button: a symbolic `Image` tinted `ink2` (`ink` on hover), `well` on hover; `label` is its tooltip and accessible name |
+  | `Button::symbol(image, label, action)` | 28×28 icon button: a symbolic `Image` tinted `ink2` (`ink` on hover), `well` on hover; `label` is its tooltip and accessible name; `set_enabled(false)` dims any button to `ink3` and ignores it |
   | `TextField`, `TextView`, `SecureField` | `field` fill (`overlay` light, `well` dark), 1 pt `edge` outline, placeholder `ink3`, 1.5 pt accent caret, selection `accent_soft` (`well` when unfocused); `SecureField` shows a Caps Lock sign while focused with Caps Lock on (`Context::caps_lock`, set by `Window::drive`) |
   | `SearchField` | `well` fill, radius 8, no outline, magnifier `ink3`, clear button |
   | `ComboBox` | a text field with a single down chevron |
   | `Toggle` (switch) | 36×20 pill, `edge` off, accent on, white 15 pt knob with a small shadow |
   | `Checkbox` | 16 pt, radius 4, 1.5 pt `ink3` outline; on: accent with a square-capped check |
   | `RadioGroup` | 16 pt circles; on: accent with a 5 pt square centre |
-  | `SegmentedControl` | `well` track radius 8, a raised chip radius 6 (`raised`: `overlay` light, `edge` dark) that glides on `quick`; selected label 600 `ink`; `set_selected(cx, index)` from code |
+  | `SegmentedControl` | `well` track radius 8, a raised chip radius 6 (`raised`: `overlay` light, `edge` dark) that glides on `quick`; selected label 600 `ink`; `set_selected(cx, index)` from code; `SegmentedControl::symbols` shows 16 pt symbols (`ink2`, `ink` when selected) in 32 pt segments, each with its accessible name |
   | `PopUpButton` | `well` fill, single down chevron, the menu opens with the current choice over the button |
   | `Stepper` | one 96 pt `well` capsule: − value + (tabular figures); `.format(fn)` formats the value |
   | `Slider` | 4 pt `well` track, accent fill, a 7×20 white fader knob with an `edge` outline; `.ticks(n)` adds `ink3` tick marks and detents the knob settles on (`interactive` spring); `set_value(cx, value)` from code |
@@ -204,7 +209,7 @@ writes a hex value, a corner radius or a font name of its own.
   and the message in `ink2`; a footer tray on `chassis` holds the buttons: default at the right
   (`.primary` or `.destructive`), cancel left of it, alternatives (`.other`) as quiet buttons at
   the far left. When they do not fit side by side they stack, default on top. The parent dims
-  with `scrim` (18 % light, 40 % dark); `Ui::present_sheet` drops the card from under the header,
+  with `scrim` (18 % light, 40 % dark); `Ui::present_sheet` drops the card from under the header (`Ui::set_sheet_top` for an app whose content covers the header),
   `Ui::present_dialog` centres it.
 - **Tables** (golden `platform/tests/golden/table-*.png`). Rows 32, header 28 with `Label`-style
   tracked capitals in `ink3` (`ink2` for the sorted column) over a `hairline` underline, no

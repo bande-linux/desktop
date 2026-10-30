@@ -2,23 +2,27 @@ use unbound_app_menu::{Entry, app_submenu, close_window, window_submenu};
 use unbound_toolkit::ui::{Menu, MenuItem};
 
 use crate::L10N;
-use crate::model::Tab;
+use crate::model::{Column, Tab};
+
+pub const COLUMN_ACTION: &str = "column:";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MenuCommand {
     Quit,
     ForceQuit,
     ShowInFiles,
+    Inspect,
     CopyName,
     CopyPid,
     Find,
     Show(Tab),
 }
 
-const ACTIONS: [(MenuCommand, &str); 10] = [
+const ACTIONS: [(MenuCommand, &str); 12] = [
     (MenuCommand::Quit, "quit"),
     (MenuCommand::ForceQuit, "force-quit"),
     (MenuCommand::ShowInFiles, "show-in-files"),
+    (MenuCommand::Inspect, "inspect"),
     (MenuCommand::CopyName, "copy-name"),
     (MenuCommand::CopyPid, "copy-pid"),
     (MenuCommand::Find, "find"),
@@ -26,6 +30,7 @@ const ACTIONS: [(MenuCommand, &str); 10] = [
     (MenuCommand::Show(Tab::Memory), "show-memory"),
     (MenuCommand::Show(Tab::Disk), "show-disk"),
     (MenuCommand::Show(Tab::Network), "show-network"),
+    (MenuCommand::Show(Tab::Gpu), "show-gpu"),
 ];
 
 impl MenuCommand {
@@ -53,6 +58,7 @@ pub struct Selected {
     pub stoppable: bool,
     pub located: bool,
     pub has_pid: bool,
+    pub inspectable: bool,
 }
 
 pub fn process_menu(selected: Selected) -> Menu {
@@ -63,6 +69,9 @@ pub fn process_menu(selected: Selected) -> Menu {
             .enabled(selected.stoppable)
             .alternate(force_quit),
         MenuItem::separator(),
+        item("menu-inspect", MenuCommand::Inspect)
+            .shortcut("Super+I")
+            .enabled(selected.inspectable),
         item("menu-show-in-files", MenuCommand::ShowInFiles)
             .shortcut("Shift+Super+R")
             .enabled(selected.located),
@@ -70,6 +79,22 @@ pub fn process_menu(selected: Selected) -> Menu {
         item("menu-copy-name", MenuCommand::CopyName),
         item("menu-copy-pid", MenuCommand::CopyPid).enabled(selected.has_pid),
     ])
+}
+
+pub fn columns_menu(tab: Tab, shown: &[Column]) -> Menu {
+    Menu::new(
+        std::iter::once(Column::Name)
+            .chain(Column::CHOOSABLE)
+            .map(|column| {
+                MenuItem::new(
+                    &column.title(tab),
+                    &format!("{COLUMN_ACTION}{}", column.id()),
+                )
+                .checked(shown.contains(&column))
+                .enabled(column != Column::Name)
+            })
+            .collect(),
+    )
 }
 
 pub fn force_quit_menu(located: bool) -> Menu {
@@ -84,8 +109,8 @@ fn entry(message: &str, command: MenuCommand) -> Entry {
     Entry::item(&L10N.tr(message), command.action())
 }
 
-pub fn app_menus() -> Vec<Entry> {
-    let mut view = Tab::ALL
+pub fn app_menus(tabs: &[Tab]) -> Vec<Entry> {
+    let mut view = tabs
         .iter()
         .zip(1..)
         .map(|(tab, digit)| {
@@ -97,6 +122,7 @@ pub fn app_menus() -> Vec<Entry> {
         Entry::separator(),
         entry("menu-quit-process", MenuCommand::Quit).shortcut("Alt+Super+Q"),
         entry("menu-force-quit-process", MenuCommand::ForceQuit),
+        entry("menu-inspect", MenuCommand::Inspect).shortcut("Super+I"),
         Entry::separator(),
         entry("menu-show-in-files", MenuCommand::ShowInFiles).shortcut("Shift+Super+R"),
     ]);

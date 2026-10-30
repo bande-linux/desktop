@@ -3,42 +3,30 @@ use std::ops::Range;
 use std::rc::Rc;
 
 use accesskit::{Action, ActionRequest, Node, Role};
-use unbound_toolkit::ui::{Context, Event, Key, Size, Widget, WidgetId};
+use unbound_toolkit::ui::{Context, Event, Key, Size, Widget, WidgetId, focus_ring};
 use unbound_toolkit::{
-    Color, Image, Item, Paragraph, Point, Rect, Shape, Spacing, TextAlign, TextStyle,
+    Color, Image, Item, Paragraph, Point, Radius, Rect, SHEET_INSET, Shape, Spacing, TextAlign,
+    TextRole, TextStyle,
 };
 
 pub const SIDEBAR_WIDTH: f32 = 220.0;
 const MARGIN: f32 = Spacing::M as f32;
+const SIDEBAR_INSET: f32 = Spacing::S as f32;
 const BODY_SIZE: f32 = 13.0;
 const CAPTION_SIZE: f32 = 11.0;
 const SIDEBAR_ROW_HEIGHT: f32 = 28.0;
+const SIDEBAR_TEXT_INSET: f32 = 12.0;
 const ROW_PADDING: f32 = Spacing::M as f32;
-const ROW_MIN_HEIGHT: f32 = 40.0;
+const ROW_MIN_HEIGHT: f32 = 44.0;
 const CONTROL_WIDTH: f32 = 320.0;
-const CARD_RADIUS: f32 = 10.0;
-const FOCUS_RING: f32 = 3.0;
-const HIGHLIGHT_ALPHA: u8 = 48;
-const SCROLL_BAR_WIDTH: f32 = 4.0;
+const SCROLL_BAR_WIDTH: f32 = 6.0;
 const UNBOUNDED: f32 = 1.0e6;
-const WHITE: Color = Color::hex(0xFFFFFF);
 
 fn contains(frame: Rect, point: Point) -> bool {
     point.x >= frame.x
         && point.y >= frame.y
         && point.x < frame.x + frame.width
         && point.y < frame.y + frame.height
-}
-
-fn focus_ring(cx: &Context, shape: Shape, items: &mut Vec<Item>) {
-    items.push(Item::Stroke {
-        shape: Shape::rounded(
-            shape.rect.inset(-FOCUS_RING / 2.0),
-            shape.radius + FOCUS_RING / 2.0,
-        ),
-        width: FOCUS_RING,
-        paint: cx.palette.accent.with_alpha(128).into(),
-    });
 }
 
 fn is_activation(event: &Event) -> bool {
@@ -55,7 +43,7 @@ fn is_activation(event: &Event) -> bool {
 pub enum Tone {
     Primary,
     Muted,
-    OnAccent,
+    Faint,
 }
 
 pub struct Text {
@@ -63,6 +51,7 @@ pub struct Text {
     highlights: Vec<Range<usize>>,
     size: f32,
     weight: f32,
+    role: Option<TextRole>,
     tone: Tone,
     runs: Vec<(f32, Paragraph, bool)>,
     measured: Size,
@@ -75,6 +64,7 @@ impl Text {
             highlights: Vec::new(),
             size: BODY_SIZE,
             weight: TextStyle::REGULAR,
+            role: None,
             tone,
             runs: Vec::new(),
             measured: Size::default(),
@@ -99,6 +89,15 @@ impl Text {
         self
     }
 
+    pub fn role(mut self, role: TextRole) -> Self {
+        self.role = Some(role);
+        self
+    }
+
+    pub fn label(text: &str) -> Self {
+        Self::new(text, Tone::Faint).role(TextRole::Label)
+    }
+
     fn segments(&self) -> Vec<(&str, bool)> {
         let mut segments = Vec::new();
         let mut at = 0;
@@ -119,23 +118,21 @@ impl Text {
         let color = match self.tone {
             Tone::Primary => cx.palette.ink,
             Tone::Muted => cx.palette.ink2,
-            Tone::OnAccent => WHITE,
+            Tone::Faint => cx.palette.ink3,
         };
         let mut x = 0.0;
         let mut height: f32 = 0.0;
         let mut runs = Vec::new();
         for (segment, highlighted) in self.segments() {
-            let weight = if highlighted {
-                TextStyle::SEMIBOLD
-            } else {
-                self.weight
+            let style = match self.role {
+                Some(role) => TextStyle::role(role, color),
+                None => TextStyle::new(self.size, color).weight(self.weight),
             };
-            let paragraph = cx.text.paragraph(
-                segment,
-                TextStyle::new(self.size, color).weight(weight),
-                None,
-                TextAlign::Start,
-            );
+            let style = match highlighted {
+                true => style.weight(TextStyle::SEMIBOLD),
+                false => style,
+            };
+            let paragraph = cx.text.paragraph(segment, style, None, TextAlign::Start);
             let width = paragraph.width();
             height = height.max(paragraph.height());
             runs.push((x, paragraph, highlighted));
@@ -162,9 +159,9 @@ impl Text {
                             paragraph.width() + 2.0,
                             paragraph.height(),
                         ),
-                        3.0,
+                        Radius::XS,
                     ),
-                    paint: cx.palette.accent.with_alpha(HIGHLIGHT_ALPHA).into(),
+                    paint: cx.palette.accent_soft.into(),
                 });
             }
             items.push(Item::Text {
@@ -183,6 +180,7 @@ pub struct Root {
     id: WidgetId,
     children: Vec<Box<dyn Widget>>,
     sizes: Vec<Size>,
+    inset: f32,
     frame: Rect,
 }
 
@@ -195,8 +193,22 @@ impl Root {
             id: WidgetId::next(),
             children: vec![search, panes, content],
             sizes: Vec::new(),
+            inset: SHEET_INSET as f32,
             frame: Rect::default(),
         }
+    }
+
+    pub fn set_inset(&mut self, inset: f32) {
+        self.inset = inset;
+    }
+
+    fn sheet(&self) -> Rect {
+        Rect::new(
+            SIDEBAR_WIDTH,
+            self.frame.y,
+            (self.frame.width - SIDEBAR_WIDTH - self.inset).max(0.0),
+            (self.frame.height - self.inset).max(0.0),
+        )
     }
 }
 
@@ -206,8 +218,11 @@ impl Widget for Root {
     }
 
     fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
-        let sidebar = Size::new(SIDEBAR_WIDTH - 2.0 * MARGIN, available.height);
-        let content = Size::new((available.width - SIDEBAR_WIDTH).max(0.0), available.height);
+        let sidebar = Size::new(SIDEBAR_WIDTH - 2.0 * SIDEBAR_INSET, available.height);
+        let content = Size::new(
+            (available.width - SIDEBAR_WIDTH - self.inset).max(0.0),
+            (available.height - self.inset).max(0.0),
+        );
         self.sizes = self
             .children
             .iter_mut()
@@ -229,21 +244,16 @@ impl Widget for Root {
     fn place(&mut self, cx: &mut Context, frame: Rect) {
         self.frame = frame;
         let search_height = self.sizes.first().map_or(0.0, |size| size.height);
-        let width = SIDEBAR_WIDTH - 2.0 * MARGIN;
+        let width = SIDEBAR_WIDTH - 2.0 * SIDEBAR_INSET;
         let frames = [
-            Rect::new(MARGIN, MARGIN, width, search_height),
+            Rect::new(SIDEBAR_INSET, 0.0, width, search_height),
             Rect::new(
-                MARGIN,
-                2.0 * MARGIN + search_height,
+                SIDEBAR_INSET,
+                MARGIN + search_height,
                 width,
-                (frame.height - 3.0 * MARGIN - search_height).max(0.0),
+                (frame.height - 2.0 * MARGIN - search_height).max(0.0),
             ),
-            Rect::new(
-                SIDEBAR_WIDTH,
-                0.0,
-                (frame.width - SIDEBAR_WIDTH).max(0.0),
-                frame.height,
-            ),
+            self.sheet(),
         ];
         for (child, child_frame) in self.children.iter_mut().zip(frames) {
             child.place(cx, child_frame);
@@ -255,16 +265,21 @@ impl Widget for Root {
     }
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
-        items.push(Item::Fill {
-            shape: Shape::rect(Rect::new(0.0, 0.0, SIDEBAR_WIDTH, self.frame.height)),
-            paint: cx.palette.overlay.into(),
-        });
-        items.push(Item::Fill {
-            shape: Shape::rect(Rect::new(SIDEBAR_WIDTH - 1.0, 0.0, 1.0, self.frame.height)),
-            paint: cx.palette.hairline.into(),
-        });
-        for child in &self.children {
-            child.paint(cx, items);
+        for (index, child) in self.children.iter().enumerate() {
+            if index != Self::CONTENT {
+                child.paint(cx, items);
+                continue;
+            }
+            let radius = match self.inset > 0.0 {
+                true => Radius::concentric(Radius::XL, self.inset),
+                false => 0.0,
+            };
+            let mut content = Vec::new();
+            child.paint(cx, &mut content);
+            items.push(Item::Clip {
+                shape: Shape::rounded(self.sheet(), radius),
+                items: content,
+            });
         }
     }
 
@@ -452,11 +467,11 @@ impl Widget for SidebarRow {
     }
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
-        let shape = Shape::rounded(self.frame, 6.0);
+        let shape = Shape::rounded(self.frame, Radius::S);
         if self.selected {
             items.push(Item::Fill {
                 shape,
-                paint: cx.palette.accent.into(),
+                paint: cx.palette.well.into(),
             });
         }
         if cx.is_focused(self.id) {
@@ -466,7 +481,7 @@ impl Widget for SidebarRow {
         self.text.paint(
             cx,
             Point::new(
-                self.frame.x + 10.0,
+                self.frame.x + SIDEBAR_TEXT_INSET,
                 self.frame.y + (self.frame.height - height) / 2.0,
             ),
             items,
@@ -621,7 +636,7 @@ impl Widget for Scroll {
                     ),
                     SCROLL_BAR_WIDTH / 2.0,
                 ),
-                paint: cx.palette.ink2.with_alpha(110).into(),
+                paint: cx.palette.ink3.into(),
             });
         }
     }
@@ -688,28 +703,7 @@ impl Widget for Card {
     }
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
-        items.push(Item::Fill {
-            shape: Shape::rounded(self.frame, CARD_RADIUS),
-            paint: cx.palette.overlay.into(),
-        });
-        items.push(Item::Stroke {
-            shape: Shape::rounded(self.frame.inset(0.5), CARD_RADIUS - 0.5),
-            width: 1.0,
-            paint: cx.palette.hairline.with_alpha(160).into(),
-        });
-        for (index, child) in self.children.iter().enumerate() {
-            if index > 0 {
-                let frame = child.frame();
-                items.push(Item::Fill {
-                    shape: Shape::rect(Rect::new(
-                        frame.x + ROW_PADDING,
-                        frame.y,
-                        frame.width - 2.0 * ROW_PADDING,
-                        1.0,
-                    )),
-                    paint: cx.palette.hairline.into(),
-                });
-            }
+        for child in &self.children {
             child.paint(cx, items);
         }
     }
@@ -827,18 +821,17 @@ impl Widget for Row {
     }
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
-        let shape = Shape::rounded(self.frame.inset(2.0), CARD_RADIUS - 2.0);
+        let shape = Shape::rounded(self.frame, Radius::S);
         if self.highlighted {
-            items.push(Item::Stroke {
+            items.push(Item::Fill {
                 shape,
-                width: 2.0,
-                paint: cx.palette.accent.into(),
+                paint: cx.palette.accent_soft.into(),
             });
         }
         if self.pressed {
             items.push(Item::Fill {
                 shape,
-                paint: cx.palette.hairline.with_alpha(120).into(),
+                paint: cx.palette.well.into(),
             });
         }
         if cx.is_focused(self.id) {
@@ -1143,7 +1136,7 @@ impl Widget for Check {
 
 const THUMBNAIL: Size = Size::new(144.0, 90.0);
 const THUMBNAIL_GAP: f32 = Spacing::M as f32;
-const THUMBNAIL_RADIUS: f32 = 8.0;
+const THUMBNAIL_RADIUS: f32 = Radius::M;
 const THUMBNAIL_LABEL_GAP: f32 = 6.0;
 
 pub struct Thumbnail {
@@ -1250,7 +1243,7 @@ impl Widget for Thumbnails {
                 },
                 None => Item::Fill {
                     shape,
-                    paint: cx.palette.ink2.with_alpha(36).into(),
+                    paint: cx.palette.well.into(),
                 },
             };
             items.push(Item::Clip {
@@ -1336,9 +1329,9 @@ impl Widget for Thumbnails {
 }
 
 const USAGE_BAR_HEIGHT: f32 = 12.0;
-const USAGE_BAR_RADIUS: f32 = 4.0;
+const USAGE_BAR_RADIUS: f32 = Radius::XS;
 const SWATCH: f32 = 8.0;
-const SEGMENT_ALPHAS: [u8; 4] = [255, 185, 120, 70];
+const SEGMENT_SHARES: [f32; 4] = [1.0, 0.7, 0.45, 0.25];
 
 pub struct Segment {
     pub label: String,
@@ -1367,8 +1360,8 @@ impl UsageBar {
     }
 
     fn color(cx: &Context, index: usize) -> Color {
-        let alpha = SEGMENT_ALPHAS[index % SEGMENT_ALPHAS.len()];
-        cx.palette.accent.with_alpha(alpha)
+        let share = SEGMENT_SHARES[index % SEGMENT_SHARES.len()];
+        cx.palette.well.mix(cx.palette.accent, share)
     }
 }
 
@@ -1423,7 +1416,7 @@ impl Widget for UsageBar {
         );
         let mut fills = vec![Item::Fill {
             shape: Shape::rect(track),
-            paint: cx.palette.hairline.into(),
+            paint: cx.palette.well.into(),
         }];
         let mut x = track.x;
         for (index, segment) in self.segments.iter().enumerate() {

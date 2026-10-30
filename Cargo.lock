@@ -3958,10 +3958,12 @@ dependencies = [
  "unbound-log",
  "unbound-preview",
  "unbound-search",
+ "unbound-sound",
  "unbound-thumbnails",
  "unbound-toolkit",
  "unbound-volumes",
  "unbound-xdg",
+ "zbus",
 ]
 
 [[package]]
@@ -4365,12 +4367,17 @@ dependencies = [
  "alacritty_terminal",
  "image",
  "image-compare",
+ "tempfile",
  "tracing",
  "unbound-app-menu",
+ "unbound-design",
  "unbound-l10n",
  "unbound-log",
+ "unbound-notify",
  "unbound-toolkit",
+ "unbound-watch",
  "unbound-xdg",
+ "zbus",
 ]
 
 [[package]]

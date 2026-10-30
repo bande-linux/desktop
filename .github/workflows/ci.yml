@@ -94,7 +94,7 @@ jobs:
         env:
           RUSTFLAGS: --remap-path-prefix=${{ github.workspace }}=/build --remap-path-prefix=/root/.cargo=/cargo --remap-path-prefix=/root/.rustup=/rustup
         run: |
-          packages="unbound-compositor unbound-notify unbound-clipboard unbound-config unbound-power \
+          packages="unbound-compositor unbound-notify unbound-clipboard unbound-config unbound-power unbound-sound \
               xdg-desktop-portal-unbound unbound-tray unbound-automount \
               unbound-desktop-surface unbound-dock unbound-launcher unbound-term unbound-lock unbound-screenshot unbound-files unbound-settings unbound-greeter unbound-menubar unbound-controlcenter unbound-notifications unbound-monitor"
           cargo build --profile dist --locked $(printf -- '--package %s ' $packages)
@@ -174,6 +174,7 @@ jobs:
         run: |
           for entry in unbound-config:org.unbound.Config:org.unbound.Config \
               unbound-power:org.unbound.Power:org.freedesktop.ScreenSaver \
+              unbound-sound:org.unbound.Sound:org.unbound.Sound \
               unbound-tray:org.unbound.Tray:org.kde.StatusNotifierWatcher; do
             IFS=: read -r package file name <<< "$entry"
             deb=$(ls target/debian/"$package"_*.deb)

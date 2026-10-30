@@ -89,6 +89,12 @@ pub enum SettingId {
     InputVolume,
     InputMuted,
     InputDevice,
+    InputLevel,
+    AppVolumes,
+    AlertSound,
+    AlertVolume,
+    SoundEffects,
+    VolumeFeedback,
     Appearance,
     ReduceMotion,
     Wallpaper,
@@ -160,6 +166,8 @@ pub enum List {
     NearbyDevices,
     OutputDevices,
     InputDevices,
+    InputLevel,
+    AppVolumes,
     InputSources,
     Shortcuts,
     About,
@@ -501,6 +509,40 @@ fn connectivity_panes() -> Vec<Pane> {
             L10N.tr("sound-keywords"),
             vec![
                 section(
+                    Some(L10N.tr("sound-effects")),
+                    vec![
+                        setting(
+                            SettingId::AlertSound,
+                            L10N.tr("alert-sound"),
+                            L10N.tr("alert-sound-keywords"),
+                            Kind::Menu(keyword_choices(vec![
+                                (L10N.tr("alert-mallet"), "mallet"),
+                                (L10N.tr("alert-knock"), "knock"),
+                                (L10N.tr("alert-low"), "low"),
+                                (L10N.tr("alert-tick"), "tick"),
+                            ])),
+                        ),
+                        setting(
+                            SettingId::AlertVolume,
+                            L10N.tr("alert-volume"),
+                            L10N.tr("alert-volume-keywords"),
+                            Kind::Level,
+                        ),
+                        setting(
+                            SettingId::SoundEffects,
+                            L10N.tr("interface-sounds"),
+                            L10N.tr("interface-sounds-keywords"),
+                            Kind::Switch,
+                        ),
+                        setting(
+                            SettingId::VolumeFeedback,
+                            L10N.tr("volume-feedback"),
+                            L10N.tr("volume-feedback-keywords"),
+                            Kind::Switch,
+                        ),
+                    ],
+                ),
+                section(
                     Some(L10N.tr("output")),
                     vec![
                         setting(
@@ -541,6 +583,12 @@ fn connectivity_panes() -> Vec<Pane> {
                             L10N.tr("mute-input-keywords"),
                             Kind::Switch,
                         ),
+                        setting(
+                            SettingId::InputLevel,
+                            L10N.tr("input-level"),
+                            L10N.tr("input-level-keywords"),
+                            Kind::List(List::InputLevel),
+                        ),
                     ],
                 ),
                 section(
@@ -550,6 +598,15 @@ fn connectivity_panes() -> Vec<Pane> {
                         L10N.tr("input-device"),
                         L10N.tr("input-device-keywords"),
                         Kind::List(List::InputDevices),
+                    )],
+                ),
+                section(
+                    Some(L10N.tr("app-volumes")),
+                    vec![setting(
+                        SettingId::AppVolumes,
+                        L10N.tr("app-volumes"),
+                        L10N.tr("app-volumes-keywords"),
+                        Kind::List(List::AppVolumes),
                     )],
                 ),
             ],

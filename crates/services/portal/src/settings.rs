@@ -13,6 +13,8 @@ use crate::OBJECT_PATH;
 
 pub const APPEARANCE: &str = "org.freedesktop.appearance";
 pub const GNOME_INTERFACE: &str = "org.gnome.desktop.interface";
+pub const GNOME_SOUND: &str = "org.gnome.desktop.sound";
+pub const SOUND_THEME: &str = "Unbound";
 pub const VERSION: u32 = 2;
 
 const CONFIG_BUS_NAME: &str = "org.unbound.Config";
@@ -116,6 +118,13 @@ fn namespaces(look: Look, cursor: &CursorSettings) -> Namespaces {
                 ("color-scheme", Value::from(scheme.gnome_color_scheme())),
                 ("cursor-theme", Value::from(cursor.theme.as_str())),
                 ("cursor-size", Value::from(cursor.size)),
+            ]),
+        ),
+        (
+            GNOME_SOUND,
+            owned(vec![
+                ("theme-name", Value::from(SOUND_THEME)),
+                ("event-sounds", Value::from(true)),
             ]),
         ),
     ]

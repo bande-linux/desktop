@@ -30,6 +30,7 @@ fn serve() -> Result<Services, Box<dyn Error>> {
     if let Err(error) = adapter::follow(&system, &session) {
         tracing::warn!("cannot follow the power adapter: {error}");
     }
+    battery::chime_when_plugged_in(&system, &session)?;
     let logind = system.clone();
     let inhibitions = InhibitionService::start(&session, move |application, reason| {
         logind::inhibit(&logind, "idle", application, reason, "block")

@@ -1,14 +1,17 @@
 mod graph;
 mod level;
+mod stream;
 
 use std::fmt;
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, mpsc};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use graph::{Command, Shared, State};
-pub use level::{Level, VolumeKey};
+pub use level::{Level, VolumeKey, meter_level};
 use pipewire as pw;
+pub use stream::EFFECT_RATE;
 
 const REPLY_CHECK: Duration = Duration::from_millis(250);
 
@@ -57,11 +60,20 @@ pub struct Device {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct AppStream {
+    pub ids: Vec<u32>,
+    pub name: String,
+    pub icon: Option<String>,
+    pub level: Level,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct Snapshot {
     pub generation: u64,
     pub connected: bool,
     pub outputs: Vec<Device>,
     pub inputs: Vec<Device>,
+    pub apps: Vec<AppStream>,
     pub default_output: Option<String>,
     pub default_input: Option<String>,
 }
@@ -95,11 +107,40 @@ impl Snapshot {
         let (outputs, inputs) = devices
             .into_iter()
             .partition(|device| device.direction == Direction::Output);
+        let mut streams: Vec<(&u32, &graph::NodeState)> = state
+            .nodes
+            .iter()
+            .filter(|(_, node)| node.app.is_some() && !node.channels.is_empty())
+            .collect();
+        streams.sort_by_key(|(id, _)| **id);
+        let mut apps: Vec<AppStream> = Vec::new();
+        for (id, node) in streams {
+            let Some(app) = &node.app else {
+                continue;
+            };
+            let (channels, muted) = state.levels(node);
+            let volume = level::from_channel(channels.iter().copied().fold(0.0, f32::max));
+            match apps.iter_mut().find(|known| known.name == app.name) {
+                Some(known) => {
+                    known.ids.push(*id);
+                    known.level.volume = known.level.volume.max(volume);
+                    known.level.muted &= muted;
+                }
+                None => apps.push(AppStream {
+                    ids: vec![*id],
+                    name: app.name.clone(),
+                    icon: app.icon.clone(),
+                    level: Level { volume, muted },
+                }),
+            }
+        }
+        apps.sort_by_key(|app| app.name.to_lowercase());
         Self {
             generation: state.generation,
             connected: state.connected,
             outputs,
             inputs,
+            apps,
             default_output: state.default_output.clone(),
             default_input: state.default_input.clone(),
         }
@@ -127,15 +168,36 @@ pub struct Audio {
     thread: Option<JoinHandle<()>>,
 }
 
+pub struct Meter {
+    id: u64,
+    peak: Arc<AtomicU32>,
+    commands: pw::channel::Sender<Command>,
+}
+
+impl Meter {
+    pub fn take_peak(&self) -> f32 {
+        f32::from_bits(self.peak.swap(0, Ordering::Relaxed)).min(1.0)
+    }
+}
+
+impl Drop for Meter {
+    fn drop(&mut self) {
+        let _ = self.commands.send(Command::Stop(self.id));
+    }
+}
+
+static NEXT_METER: AtomicU64 = AtomicU64::new(1);
+
 impl Audio {
     pub fn connect() -> Result<Self, Error> {
         let shared = Arc::new(Shared::default());
         let (commands, receiver) = pw::channel::channel();
         let (ready, started) = mpsc::channel();
         let graph = Arc::clone(&shared);
+        let sender = commands.clone();
         let thread = std::thread::Builder::new()
             .name("pipewire".into())
-            .spawn(move || graph::run(graph, receiver, ready))
+            .spawn(move || graph::run(graph, receiver, sender, ready))
             .map_err(|error| Error::PipeWire(error.to_string()))?;
         let audio = Self {
             shared,
@@ -208,6 +270,42 @@ impl Audio {
             volume: None,
             muted: Some(muted),
             done,
+        })
+    }
+
+    pub fn set_app_level(&self, app: &AppStream, level: Level) -> Result<(), Error> {
+        for id in &app.ids {
+            self.send(|done| Command::SetLevel {
+                id: *id,
+                volume: Some(level.volume),
+                muted: Some(level.muted),
+                done,
+            })?;
+        }
+        Ok(())
+    }
+
+    pub fn play(&self, samples: Arc<[f32]>, gain: f32) -> Result<(), Error> {
+        self.send(|done| Command::Play {
+            samples,
+            gain,
+            done,
+        })
+    }
+
+    pub fn meter(&self, device: &Device) -> Result<Meter, Error> {
+        let id = NEXT_METER.fetch_add(1, Ordering::Relaxed);
+        let peak = Arc::new(AtomicU32::new(0));
+        self.send(|done| Command::Meter {
+            id,
+            device: device.name.clone(),
+            peak: Arc::clone(&peak),
+            done,
+        })?;
+        Ok(Meter {
+            id,
+            peak,
+            commands: self.commands.clone(),
         })
     }
 

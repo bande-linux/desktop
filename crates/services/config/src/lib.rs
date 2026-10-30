@@ -31,6 +31,7 @@ pub const DOCK_ICON_SIZE_RANGE: (u32, u32) = (24, 96);
 pub const DEFAULT_DOCK_ICON_SIZE: u32 = 48;
 pub const MAX_INPUT_SOURCES: usize = 4;
 pub const POINTER_SPEED_RANGE: (f64, f64) = (-1.0, 1.0);
+pub const ALERT_VOLUME_RANGE: (f64, f64) = (0.0, 1.0);
 pub const SYSTEM_KEYBOARD: &str = "/etc/default/keyboard";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -345,10 +346,51 @@ impl LidOnPower {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AlertSound {
+    #[default]
+    Mallet,
+    Knock,
+    Low,
+    Tick,
+}
+
+impl AlertSound {
+    pub const ALL: [Self; 4] = [Self::Mallet, Self::Knock, Self::Low, Self::Tick];
+
+    pub fn keyword(self) -> &'static str {
+        match self {
+            Self::Mallet => "mallet",
+            Self::Knock => "knock",
+            Self::Low => "low",
+            Self::Tick => "tick",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Power {
     pub show_battery_percentage: bool,
     pub low_power_on_battery: bool,
     pub lid_on_power: LidOnPower,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Sound {
+    pub effects: bool,
+    pub volume_feedback: bool,
+    pub alert: AlertSound,
+    pub alert_volume: f64,
+}
+
+impl Default for Sound {
+    fn default() -> Self {
+        Self {
+            effects: true,
+            volume_feedback: true,
+            alert: AlertSound::Mallet,
+            alert_volume: 0.75,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -434,6 +476,7 @@ pub struct Config {
     pub trackpad: Trackpad,
     pub mouse: Mouse,
     pub power: Power,
+    pub sound: Sound,
     pub wallpaper: Wallpaper,
     pub displays: BTreeMap<String, DisplaySettings>,
     pub arrangements: Vec<Vec<Placement>>,
@@ -469,6 +512,7 @@ impl Default for Config {
             trackpad: Trackpad::default(),
             mouse: Mouse::default(),
             power: Power::default(),
+            sound: Sound::default(),
             wallpaper: Wallpaper::default(),
             displays: BTreeMap::new(),
             arrangements: Vec::new(),
@@ -575,6 +619,7 @@ impl Parser<'_> {
                 "trackpad" => config.trackpad = self.trackpad(node)?,
                 "mouse" => config.mouse = self.mouse(node)?,
                 "power" => config.power = self.power(node)?,
+                "sound" => config.sound = self.sound(node)?,
                 "wallpaper" => config.wallpaper = self.wallpaper(node)?,
                 "display" => {
                     let (identity, display) = self.display(node)?;
@@ -892,6 +937,24 @@ impl Parser<'_> {
             }
         }
         Ok(mouse)
+    }
+
+    fn sound(&self, node: &KdlNode) -> Result<Sound, ConfigError> {
+        self.no_arguments(node)?;
+        let mut sound = Sound::default();
+        for child in self.children(node)? {
+            match child.name().value() {
+                "effects" => sound.effects = self.flag(child)?,
+                "volume-feedback" => sound.volume_feedback = self.flag(child)?,
+                "alert" => {
+                    let choices = AlertSound::ALL.map(|alert| (alert.keyword(), alert));
+                    sound.alert = self.keyword(child, &choices)?;
+                }
+                "alert-volume" => sound.alert_volume = self.number_in(child, ALERT_VOLUME_RANGE)?,
+                _ => return Err(self.unknown_child("sound", child)),
+            }
+        }
+        Ok(sound)
     }
 
     fn wallpaper(&self, node: &KdlNode) -> Result<Wallpaper, ConfigError> {

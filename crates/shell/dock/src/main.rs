@@ -410,6 +410,9 @@ impl Dock {
         let emptied = thread::Builder::new()
             .name("empty-trash".to_owned())
             .spawn(move || {
+                if let Ok(session) = zbus::blocking::Connection::session() {
+                    unbound_sound::play(&session, "trash-empty");
+                }
                 if let Err(error) = trash.empty() {
                     tracing::warn!("cannot empty the Trash: {error}");
                 }

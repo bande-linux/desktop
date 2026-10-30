@@ -4,9 +4,9 @@ use std::time::Duration;
 use kdl::{KdlDocument, KdlEntry, KdlEntryFormat, KdlNode, KdlValue};
 
 use crate::{
-    Appearance, CapsLock, ClockFormat, Config, ConfigError, DEFAULT_DOCK_ICON_SIZE,
-    DisplaySettings, DockEdge, InputSource, LidOnPower, Mouse, Placement, SecondaryClick, Suspend,
-    Trackpad, WallpaperFit, WallpaperVariant, same_displays,
+    AlertSound, Appearance, CapsLock, ClockFormat, Config, ConfigError, DEFAULT_DOCK_ICON_SIZE,
+    DisplaySettings, DockEdge, InputSource, LidOnPower, Mouse, Placement, SecondaryClick, Sound,
+    Suspend, Trackpad, WallpaperFit, WallpaperVariant, same_displays,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -35,6 +35,10 @@ pub enum Setting {
     TrackpadDisableWhileTyping(bool),
     MouseNaturalScrolling(bool),
     MouseSpeed(f64),
+    SoundEffects(bool),
+    VolumeFeedback(bool),
+    AlertSound(AlertSound),
+    AlertVolume(f64),
     Wallpaper(WallpaperVariant, Option<PathBuf>),
     WallpaperFit(WallpaperFit),
     Display(String, DisplaySettings),
@@ -200,6 +204,30 @@ impl Setting {
                 Some("mouse"),
                 "speed",
                 (*speed != Mouse::default().speed).then(|| number(*speed)),
+            ),
+            Self::SoundEffects(on) => set(
+                &mut document,
+                Some("sound"),
+                "effects",
+                (*on != Sound::default().effects).then_some(KdlValue::Bool(*on)),
+            ),
+            Self::VolumeFeedback(on) => set(
+                &mut document,
+                Some("sound"),
+                "volume-feedback",
+                (*on != Sound::default().volume_feedback).then_some(KdlValue::Bool(*on)),
+            ),
+            Self::AlertSound(alert) => set(
+                &mut document,
+                Some("sound"),
+                "alert",
+                (*alert != AlertSound::default()).then(|| alert.keyword().into()),
+            ),
+            Self::AlertVolume(volume) => set(
+                &mut document,
+                Some("sound"),
+                "alert-volume",
+                (*volume != Sound::default().alert_volume).then(|| number(*volume)),
             ),
             Self::Wallpaper(variant, path) => set(
                 &mut document,

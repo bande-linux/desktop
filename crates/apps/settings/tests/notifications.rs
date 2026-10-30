@@ -72,6 +72,7 @@ fn each_app_that_notified_gets_its_own_rules() {
             body: "",
             actions: &[],
             urgency: Urgency::Normal,
+            sound: None,
         },
     )
     .expect("notify");

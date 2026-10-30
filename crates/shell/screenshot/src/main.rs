@@ -8,12 +8,14 @@ use unbound_toolkit::{
     WindowError, WindowEvent,
 };
 use unbound_xdg::{UserDir, user_dir};
+use zbus::blocking::Connection;
 
 struct Screenshots {
     home: PathBuf,
     config_home: PathBuf,
     text: TextSystem,
     selection: Option<AreaSelection>,
+    session: Option<Connection>,
 }
 
 impl Screenshots {
@@ -35,6 +37,9 @@ impl Screenshots {
             },
             None => image,
         };
+        if let Some(session) = &self.session {
+            unbound_sound::play(session, "screen-capture");
+        }
         let user_dirs = std::fs::read_to_string(self.config_home.join("user-dirs.dirs")).ok();
         let dir = user_dir(&self.home, user_dirs.as_deref(), UserDir::Desktop);
         let taken = jiff::Zoned::now().datetime();
@@ -111,6 +116,9 @@ fn run() -> Result<(), WindowError> {
         config_home,
         text: TextSystem::new(),
         selection: None,
+        session: Connection::session()
+            .inspect_err(|error| tracing::warn!("no shutter sound without a session bus: {error}"))
+            .ok(),
     };
     unbound_toolkit::run(&mut window, &mut screenshots)
 }

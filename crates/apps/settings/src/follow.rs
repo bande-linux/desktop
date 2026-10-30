@@ -53,6 +53,7 @@ pub enum Update {
     NotificationApps(Vec<AppNotifications>),
     Software(SoftwareState),
     Locale(Option<LocaleState>),
+    InputLevel(f32),
     Failed(String),
 }
 

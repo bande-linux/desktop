@@ -253,6 +253,9 @@ impl Dispatch<UnboundShellV1, ()> for State {
                 key,
                 fine: fine != 0,
             }),
+            unbound_shell_v1::Event::MediaKey {
+                key: WEnum::Value(key),
+            } => state.events.push(WindowEvent::MediaKey(key)),
             unbound_shell_v1::Event::ToggleControlCenter => {
                 state.events.push(WindowEvent::ToggleControlCenter);
             }

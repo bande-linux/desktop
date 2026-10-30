@@ -3842,15 +3842,20 @@ name = "unbound-controlcenter"
 version = "0.1.0"
 dependencies = [
  "accesskit",
+ "image",
+ "image-compare",
  "tempfile",
  "tracing",
  "unbound-audio",
  "unbound-bluetooth",
+ "unbound-inbox",
  "unbound-l10n",
  "unbound-log",
  "unbound-network",
  "unbound-notify",
  "unbound-power",
+ "unbound-sound",
+ "unbound-test-bus",
  "unbound-toolkit",
  "unbound-xdg",
  "zbus",
@@ -3899,6 +3904,7 @@ dependencies = [
  "unbound-fs",
  "unbound-l10n",
  "unbound-log",
+ "unbound-sound",
  "unbound-toolkit",
  "unbound-xdg",
  "zbus",
@@ -4125,6 +4131,7 @@ dependencies = [
  "tracing",
  "unbound-bus",
  "unbound-log",
+ "unbound-sound",
  "unbound-test-bus",
  "zbus",
 ]
@@ -4154,6 +4161,7 @@ dependencies = [
  "unbound-l10n",
  "unbound-log",
  "unbound-notify",
+ "unbound-sound",
  "unbound-test-bus",
  "wayland-client",
  "wayland-protocols",
@@ -4222,8 +4230,10 @@ dependencies = [
  "tracing",
  "unbound-l10n",
  "unbound-log",
+ "unbound-sound",
  "unbound-toolkit",
  "unbound-xdg",
+ "zbus",
 ]
 
 [[package]]
@@ -4261,6 +4271,7 @@ dependencies = [
  "unbound-network",
  "unbound-notify",
  "unbound-settings-panes",
+ "unbound-sound",
  "unbound-test-bus",
  "unbound-toolkit",
  "unbound-wallpaper",
@@ -4275,6 +4286,18 @@ name = "unbound-settings-panes"
 version = "0.1.0"
 dependencies = [
  "unbound-l10n",
+]
+
+[[package]]
+name = "unbound-sound"
+version = "0.1.0"
+dependencies = [
+ "tracing",
+ "unbound-audio",
+ "unbound-config",
+ "unbound-log",
+ "unbound-test-bus",
+ "zbus",
 ]
 
 [[package]]

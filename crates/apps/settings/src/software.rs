@@ -253,6 +253,7 @@ pub fn announce_updates(session: &Connection, system: &Connection) -> zbus::Resu
             body: &body,
             actions: &[("default", &show)],
             urgency: Urgency::Normal,
+            sound: None,
         },
     )?;
     for message in signals.flatten() {

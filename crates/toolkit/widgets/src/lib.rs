@@ -43,7 +43,7 @@ pub use free_layout::FreeLayout;
 pub use label::Label;
 pub use menu::{Menu, MenuItem, MenuOutcome, MenuPanel, MenuTracker, shortcut_symbols};
 pub use pop_up_button::PopUpButton;
-pub use progress::{PROGRESS_HEIGHT, ProgressBar, SPINNER_SIZE, Spinner};
+pub use progress::{LevelIndicator, PROGRESS_HEIGHT, ProgressBar, SPINNER_SIZE, Spinner};
 pub use radio_group::RadioGroup;
 pub use scroll::{ScrollState, ScrollView};
 pub use search_field::SearchField;

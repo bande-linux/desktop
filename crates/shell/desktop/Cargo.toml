@@ -31,9 +31,7 @@ recommends = "xdg-user-dirs, adwaita-icon-theme"
 assets = [
     ["target/release/unbound-desktop-surface", "usr/bin/", "755"],
     ["../../../data/wallpapers/*.svg", "usr/share/unbound/wallpapers/", "644"],
-    ["../../../data/icons/Unbound/index.theme", "usr/share/icons/Unbound/", "644"],
-    ["../../../data/icons/Unbound/scalable/mimetypes/*.svg", "usr/share/icons/Unbound/scalable/mimetypes/", "644"],
-    ["../../../data/icons/Unbound/scalable/places/*.svg", "usr/share/icons/Unbound/scalable/places/", "644"],
+    ["../../../data/icons/Unbound*/**/*", "usr/share/icons/", "644"],
 ]
 extended-description = """\
 The desktop of the Unbound session: the wallpaper, in its light and dark \
@@ -41,7 +39,8 @@ variants, and the files in the Desktop folder and the plugged-in drives \
 as icons that open, rename, move and go to the Trash. unbound-compositor \
 starts it behind every window. It also installs the Unbound wallpapers \
 that the lock screen and the login window show, and the Unbound icon \
-theme: the document and Trash icons over Adwaita."""
+theme: app, file, folder, device and symbolic icons in the Datum design \
+language, with folder variants for every accent colour."""
 
 [lints]
 workspace = true

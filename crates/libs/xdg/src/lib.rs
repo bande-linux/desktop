@@ -1,3 +1,4 @@
+mod apps;
 mod dirs;
 mod entry;
 mod icon;
@@ -6,6 +7,7 @@ mod mime;
 mod mimeapps;
 mod uri;
 
+pub use apps::Apps;
 pub use dirs::{UserDir, user_dir};
 pub use entry::{
     CURRENT_DESKTOP, DesktopEntry, Locale, applications, current_desktops, data_dirs, handlers,

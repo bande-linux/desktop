@@ -16,8 +16,8 @@ use unbound_graphics::{
     ScrollSource, TextSystem,
 };
 use unbound_toolkit_platform::{
-    App, Edges, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement, Role, TITLE_BAR_HEIGHT,
-    Window, WindowEvent,
+    App, DragAction, DragEvent, Edges, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement, Role,
+    TITLE_BAR_HEIGHT, Transfer, Window, WindowEvent,
 };
 use unbound_widgets::{Context, ContextMenu, Label, Menu, MenuItem, Ui};
 
@@ -25,6 +25,7 @@ const OUTPUT: (i32, i32) = (320, 240);
 const WINDOW: (u32, u32) = (120, 80);
 const KEY_A: u32 = 30;
 const KEY_LEFTSHIFT: u32 = 42;
+const KEY_LEFTALT: u32 = 56;
 const KEY_LEFTCTRL: u32 = 29;
 const KEY_C: u32 = 46;
 const KEY_LEFTMETA: u32 = 125;
@@ -52,7 +53,8 @@ fn sample_menu() -> Menu {
                 MenuItem::new("Date", "sort-date"),
             ]),
         ),
-        MenuItem::new("Delete", "delete"),
+        MenuItem::new("Delete", "delete")
+            .alternate(MenuItem::new("Delete Immediately", "delete-now")),
     ])
 }
 
@@ -62,6 +64,7 @@ struct Forwarder {
     finished: bool,
     refuse_close: bool,
     ui: Option<Ui>,
+    drags: bool,
 }
 
 fn menu_ui(events: Sender<WindowEvent>) -> Ui {
@@ -95,6 +98,21 @@ impl App for Forwarder {
             },
             None => event,
         };
+        if self.drags
+            && let WindowEvent::Input(Event::PointerDown(pointer)) = &event
+            && pointer.button == PointerButton::Primary
+        {
+            window
+                .start_drag(
+                    Transfer::uris(vec!["file:///home/user/Report%20one.pdf".to_owned()]),
+                    &[DragAction::Copy, DragAction::Move],
+                    None,
+                )
+                .expect("drag");
+        }
+        if let WindowEvent::Drag(DragEvent::Entered { .. } | DragEvent::Moved(_)) = &event {
+            window.accept_drag(Some(DragAction::Copy));
+        }
         if let WindowEvent::Input(Event::PointerDown(pointer)) = &event
             && pointer.button == PointerButton::Secondary
         {
@@ -118,10 +136,19 @@ impl App for Forwarder {
         match command[0] {
             b'c' => window.copy("copied from the toolkit"),
             b'p' => window.paste().expect("paste"),
+            b'k' => window.copy_transfer(
+                Transfer::uris(vec![
+                    "file:///home/user/a.txt".to_owned(),
+                    "file:///home/user/b%20c.txt".to_owned(),
+                ])
+                .cut(),
+            ),
+            b'P' => window.paste_transfer().expect("paste files"),
             b'h' => window.hide().expect("hide"),
             b's' => window.show().expect("show"),
             b'b' => thread::sleep(BUSY),
             b'u' => self.ui = Some(menu_ui(self.events.clone())),
+            b'g' => self.drags = true,
             b'r' => {
                 self.refuse_close = true;
                 window.request_close();
@@ -201,6 +228,7 @@ impl Desktop {
                 finished: false,
                 refuse_close: false,
                 ui: None,
+                drags: false,
             };
             unbound_toolkit_platform::run(&mut window, &mut app).expect("run loop");
         });
@@ -636,6 +664,51 @@ fn text_copied_in_one_window_is_pasted_in_another() {
 }
 
 #[test]
+fn cut_files_reach_another_app_as_uris_marked_as_cut() {
+    let mut desktop = Desktop::new();
+    let mut source = desktop.open(Role::toplevel("source", "test.source"), false);
+    desktop.wait_for(
+        &mut [&mut source],
+        |events| events.contains(&WindowEvent::Focus(true)),
+        Desktop::mapped,
+    );
+    desktop.type_keys(&[KEY_A]);
+    desktop.wait_for(
+        &mut [&mut source],
+        |events| !typed(events).is_empty(),
+        |_| true,
+    );
+    source.send(b'k');
+    desktop.settle(&mut [&mut source]);
+    let mut target = desktop.open(Role::toplevel("target", "test.target"), false);
+    desktop.wait_for(
+        &mut [&mut target],
+        |events| events.contains(&WindowEvent::Focus(true)),
+        Desktop::mapped,
+    );
+    target.send(b'P');
+    desktop.wait_for(
+        &mut [&mut source, &mut target],
+        |events| {
+            events
+                .iter()
+                .any(|event| matches!(event, WindowEvent::PastedTransfer(_)))
+        },
+        |_| true,
+    );
+    let pasted = target.seen.iter().find_map(|event| match event {
+        WindowEvent::PastedTransfer(transfer) => Some(transfer.clone()),
+        _ => None,
+    });
+    let pasted = pasted.expect("files pasted");
+    assert_eq!(
+        pasted.uris,
+        ["file:///home/user/a.txt", "file:///home/user/b%20c.txt"]
+    );
+    assert!(pasted.cut);
+}
+
+#[test]
 fn a_launcher_overlay_takes_the_keyboard_while_shown_and_returns_it_when_hidden() {
     let mut desktop = Desktop::new();
     let mut app = desktop.open(Role::toplevel("app", "test.app"), false);
@@ -1011,4 +1084,119 @@ fn clicking_an_on_demand_background_layer_gives_it_the_keyboard_until_a_window_i
         |_| true,
     );
     assert!(typed(&app.seen).is_empty());
+}
+
+fn drags(events: &[WindowEvent]) -> Vec<DragEvent> {
+    events
+        .iter()
+        .filter_map(|event| match event {
+            WindowEvent::Drag(drag) => Some(drag.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn a_dragged_file_list_arrives_as_uris_where_it_is_dropped() {
+    let mut desktop = Desktop::new();
+    let mut client = pointed_window(&mut desktop, "drag");
+    client.send(b'g');
+    desktop.settle(&mut [&mut client]);
+    desktop.server.press_button(BTN_LEFT, true, 0);
+    desktop.settle(&mut [&mut client]);
+    desktop.point_into_content(80, 60);
+    desktop.wait_for(
+        &mut [&mut client],
+        |events| {
+            drags(events)
+                .iter()
+                .any(|drag| matches!(drag, DragEvent::Entered { uris: true, .. }))
+        },
+        |_| true,
+    );
+    desktop.settle(&mut [&mut client]);
+    desktop.server.press_button(BTN_LEFT, false, 0);
+    desktop.wait_for(
+        &mut [&mut client],
+        |events| {
+            drags(events)
+                .iter()
+                .any(|drag| matches!(drag, DragEvent::Finished(_)))
+        },
+        |_| true,
+    );
+    let dropped = drags(&client.seen)
+        .into_iter()
+        .find_map(|drag| match drag {
+            DragEvent::Dropped {
+                position,
+                transfer,
+                action,
+            } => Some((position, transfer, action)),
+            _ => None,
+        })
+        .expect("a drop");
+    assert_eq!(
+        (dropped.0.x, dropped.0.y),
+        (80.0, 60.0),
+        "drops land in content coordinates"
+    );
+    assert_eq!(dropped.1.uris, ["file:///home/user/Report%20one.pdf"]);
+    assert_eq!(dropped.2, Some(DragAction::Copy));
+    assert!(drags(&client.seen).contains(&DragEvent::Finished(Some(DragAction::Copy))));
+}
+
+#[test]
+fn holding_alt_swaps_in_an_items_alternate() {
+    let mut desktop = Desktop::new();
+    let mut client = pointed_window(&mut desktop, "menu alternate");
+    open_menu(&mut desktop, &mut client);
+    desktop.server.press_button(BTN_RIGHT, false, 0);
+    desktop.settle(&mut [&mut client]);
+    desktop.server.key(KEY_LEFTALT, true, 0);
+    desktop.settle(&mut [&mut client]);
+    desktop.point_into_content(30 + 40, 20 + 5 + 22 + 22 + 11 + 22 + 11);
+    desktop.click(BTN_LEFT);
+    desktop.wait_for(
+        &mut [&mut client],
+        |events| !menu_events(events).is_empty(),
+        |_| true,
+    );
+    desktop.server.key(KEY_LEFTALT, false, 0);
+    assert_eq!(
+        menu_events(&client.seen),
+        [WindowEvent::MenuAction("delete-now".to_owned())]
+    );
+}
+
+#[test]
+fn the_title_bar_menu_puts_the_window_in_full_screen() {
+    let mut desktop = Desktop::new();
+    let mut client = pointed_window(&mut desktop, "window menu");
+    desktop.point_into_window(90, 14);
+    desktop.server.press_button(BTN_RIGHT, true, 0);
+    desktop.wait_for(
+        &mut [&mut client],
+        |_| true,
+        |desktop| desktop.server.popup_count() == 1,
+    );
+    desktop.server.press_button(BTN_RIGHT, false, 0);
+    desktop.settle(&mut [&mut client]);
+    desktop.type_keys(&[KEY_DOWN]);
+    desktop.type_keys(&[KEY_DOWN]);
+    desktop.type_keys(&[KEY_DOWN]);
+    desktop.type_keys(&[KEY_ENTER]);
+    desktop.wait_for(
+        &mut [&mut client],
+        |events| {
+            events.iter().any(
+                |event| matches!(event, WindowEvent::ToplevelChanged(state) if state.fullscreen),
+            )
+        },
+        |desktop| desktop.server.popup_count() == 0,
+    );
+    assert!(
+        menu_events(&client.seen).is_empty(),
+        "the app is not involved"
+    );
 }

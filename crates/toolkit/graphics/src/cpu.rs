@@ -28,7 +28,7 @@ impl CpuRenderer {
             context: RenderContext::new(1, 1),
             resources: Resources::new(),
             outlines: GlyphOutlines::default(),
-            image_ids: ImageIds::new(),
+            image_ids: ImageIds::default(),
         }
     }
 
@@ -52,10 +52,13 @@ impl CpuRenderer {
         self.context.reset_and_resize(width, height);
         let mut images = Vec::new();
         draw::images(&scene.items, &mut images);
+        for id in self.image_ids.take_dropped() {
+            self.resources.destroy_image(id);
+        }
         for image in images {
-            if !self.image_ids.contains_key(&image.id()) {
+            if self.image_ids.get(&image).is_none() {
                 let id = self.resources.register_image(image.pixmap.clone());
-                self.image_ids.insert(image.id(), id);
+                self.image_ids.insert(&image, id);
             }
         }
         draw::encode(
@@ -134,5 +137,40 @@ impl Canvas for CpuCanvas<'_> {
             .hint(false)
             .normalized_coords(&run.coords)
             .fill_glyphs(glyphs.iter().copied());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+    use super::CpuRenderer;
+    use crate::scene::{Image, Item, Rect, Scene};
+    use crate::tokens::Color;
+
+    fn scene(items: Vec<Item>) -> Scene {
+        Scene {
+            width: 8,
+            height: 8,
+            background: Color::hex(0xFFFFFF),
+            items,
+        }
+    }
+
+    #[test]
+    fn an_image_nobody_holds_any_more_leaves_the_renderer() {
+        let mut renderer = CpuRenderer::new();
+        let image = Image::from_rgba(4, 4, vec![255; 64]).expect("image");
+        let shown = Item::Image {
+            rect: Rect::new(0.0, 0.0, 4.0, 4.0),
+            image: image.clone(),
+        };
+        renderer.render(&scene(vec![shown])).expect("frame");
+        let id = renderer.image_ids.get(&image).expect("uploaded");
+        renderer.render(&scene(Vec::new())).expect("frame");
+        assert!(renderer.resources.resolve_image(id).is_some(), "still held");
+        drop(image);
+        renderer.render(&scene(Vec::new())).expect("frame");
+        assert!(renderer.resources.resolve_image(id).is_none());
     }
 }

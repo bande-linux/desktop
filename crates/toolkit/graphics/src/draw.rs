@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Weak;
 use vello_cpu::color::{AlphaColor, Srgb};
 use vello_cpu::kurbo::{self, Affine, BezPath, Shape as _, Stroke, StrokeOpts};
 use vello_cpu::peniko::Gradient;
@@ -7,7 +8,7 @@ use vello_cpu::peniko::{ImageQuality, ImageSampler};
 use vello_cpu::{Glyph, ImageId, ImageSource, PaintType};
 
 use crate::outline::{GlyphOutlines, TOLERANCE};
-use crate::scene::{Image, Item, Paint, Shape};
+use crate::scene::{Image, Item, Paint, Path, PathElement, Shape};
 use crate::text::GlyphRun;
 use crate::tokens::Color;
 
@@ -85,7 +86,30 @@ fn stroke_path(shape: &Shape, width: f32) -> BezPath {
     ))
 }
 
-pub(crate) type ImageIds = HashMap<u64, ImageId>;
+#[derive(Default)]
+pub(crate) struct ImageIds(HashMap<u64, (ImageId, Weak<()>)>);
+
+impl ImageIds {
+    pub(crate) fn get(&self, image: &Image) -> Option<ImageId> {
+        self.0.get(&image.id()).map(|(id, _)| *id)
+    }
+
+    pub(crate) fn insert(&mut self, image: &Image, id: ImageId) {
+        self.0.insert(image.id(), (id, image.liveness()));
+    }
+
+    pub(crate) fn take_dropped(&mut self) -> Vec<ImageId> {
+        let mut dropped = Vec::new();
+        self.0.retain(|_, (id, alive)| {
+            let kept = alive.strong_count() > 0;
+            if !kept {
+                dropped.push(*id);
+            }
+            kept
+        });
+        dropped
+    }
+}
 
 pub(crate) fn images(items: &[Item], found: &mut Vec<Image>) {
     for item in items {
@@ -93,7 +117,8 @@ pub(crate) fn images(items: &[Item], found: &mut Vec<Image>) {
             Item::Image { image, .. } => found.push(image.clone()),
             Item::Clip { items, .. }
             | Item::Translate { items, .. }
-            | Item::Opacity { items, .. } => images(items, found),
+            | Item::Opacity { items, .. }
+            | Item::Scale { items, .. } => images(items, found),
             _ => {}
         }
     }
@@ -107,6 +132,23 @@ pub(crate) fn encode(
     scale: f64,
 ) {
     encode_at(canvas, outlines, image_ids, items, Affine::scale(scale));
+}
+
+fn bezier(path: &Path) -> BezPath {
+    let point =
+        |point: &crate::scene::Point| kurbo::Point::new(f64::from(point.x), f64::from(point.y));
+    let mut bezier = BezPath::new();
+    for element in &path.elements {
+        match element {
+            PathElement::Move(to) => bezier.move_to(point(to)),
+            PathElement::Line(to) => bezier.line_to(point(to)),
+            PathElement::Cubic(first, second, to) => {
+                bezier.curve_to(point(first), point(second), point(to));
+            }
+            PathElement::Close => bezier.close_path(),
+        }
+    }
+    bezier
 }
 
 fn snapped(base: Affine, offset: crate::scene::Point) -> Affine {
@@ -216,8 +258,40 @@ fn encode_at(
                     TOLERANCE,
                 )));
             }
+            Item::FillPath { path, paint: fill } => {
+                canvas.set_paint(paint(fill));
+                canvas.fill_path(&flattened(&bezier(path)));
+            }
+            Item::StrokePath {
+                path,
+                width,
+                paint: stroke,
+            } => {
+                canvas.set_paint(paint(stroke));
+                canvas.fill_path(&flattened(&kurbo::stroke(
+                    bezier(path),
+                    &Stroke::new(f64::from(*width))
+                        .with_caps(kurbo::Cap::Round)
+                        .with_join(kurbo::Join::Round),
+                    &StrokeOpts::default(),
+                    TOLERANCE,
+                )));
+            }
+            Item::Scale {
+                origin,
+                factor,
+                items,
+            } => {
+                let pivot = kurbo::Vec2::new(f64::from(origin.x), f64::from(origin.y));
+                let scaled = base
+                    * Affine::translate(pivot)
+                    * Affine::scale(f64::from(*factor))
+                    * Affine::translate(-pivot);
+                encode_at(canvas, outlines, image_ids, items, scaled);
+                canvas.set_transform(base);
+            }
             Item::Image { rect: area, image } => {
-                let Some(id) = image_ids.get(&image.id()) else {
+                let Some(id) = image_ids.get(image) else {
                     continue;
                 };
                 let shape = Shape::rect(*area);
@@ -231,7 +305,7 @@ fn encode_at(
                     ImageQuality::High
                 };
                 canvas.set_paint(PaintType::Image(vello_cpu::Image {
-                    image: ImageSource::opaque_id(*id),
+                    image: ImageSource::opaque_id(id),
                     sampler: ImageSampler::default().with_quality(quality),
                 }));
                 canvas.set_paint_transform(

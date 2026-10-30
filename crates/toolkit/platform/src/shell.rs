@@ -1,3 +1,4 @@
+use unbound_protocols::client::unbound_app_v1::{self, Placement, UnboundAppV1};
 use unbound_protocols::client::unbound_shell_v1::{self, UnboundShellV1};
 use wayland_client::{Connection, Dispatch, Proxy, QueueHandle, WEnum, event_created_child};
 use wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_handle_v1::{
@@ -23,6 +24,7 @@ struct Toplevel {
 #[derive(Default)]
 pub(crate) struct Shell {
     pub(crate) protocol: Option<UnboundShellV1>,
+    pub(crate) app: Option<UnboundAppV1>,
     toplevels: Vec<Toplevel>,
     token: Option<String>,
 }
@@ -105,6 +107,43 @@ impl Window {
             .token
             .take()
             .ok_or(WindowError::Missing("an activation token"))
+    }
+}
+
+impl Window {
+    pub(crate) fn can_place(&self) -> bool {
+        self.state
+            .shell
+            .app
+            .as_ref()
+            .is_some_and(|app| app.version() >= unbound_app_v1::REQ_PLACE_WINDOW_SINCE)
+    }
+
+    pub(crate) fn place(&mut self, placement: Placement) -> Result<(), WindowError> {
+        let app = self
+            .state
+            .shell
+            .app
+            .as_ref()
+            .filter(|app| app.version() >= unbound_app_v1::REQ_PLACE_WINDOW_SINCE)
+            .ok_or(WindowError::Missing("unbound_app_v1 version 2"))?;
+        app.place_window(self.toplevel()?, placement);
+        self.flush()
+    }
+}
+
+impl Dispatch<UnboundAppV1, ()> for State {
+    fn event(
+        state: &mut Self,
+        _: &UnboundAppV1,
+        event: unbound_app_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        if let unbound_app_v1::Event::QuitRequested = event {
+            state.events.push(WindowEvent::QuitRequested);
+        }
     }
 }
 

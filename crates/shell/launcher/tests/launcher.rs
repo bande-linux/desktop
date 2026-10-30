@@ -3,10 +3,11 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use unbound_files::{Entry, preview};
+use unbound_fs::Entry;
 use unbound_launcher::{
     Action, AppInfo, Catalog, Hit, Kind, Launcher, Loaded, PaneInfo, SettingInfo, Target,
 };
+use unbound_preview::preview;
 use unbound_search::{FileHit, FileResults, PREFIX, Usage, WORD, usage_path};
 use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer, PointerButton};
 use unbound_toolkit::{Appearance, Color, CpuRenderer, Image, Point, Scheme, TextSystem};
@@ -613,7 +614,7 @@ fn the_launcher_matches_its_goldens() {
         });
         let requested = launcher.preview_request().unwrap();
         let entry = Entry::read(requested, "notes.txt".to_owned());
-        let content = preview(&entry);
+        let content = preview(&entry, Image::from_rgba);
         launcher.set_preview(Loaded {
             entry: Entry {
                 modified: None,

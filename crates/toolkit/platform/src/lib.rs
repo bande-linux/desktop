@@ -23,6 +23,7 @@ static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", E
 
 pub use capture::ScreenImage;
 pub use chrome::TITLE_BAR_HEIGHT;
+pub use clipboard::{DragAction, DragEvent, Transfer};
 pub use popup::MenuPlacement;
 pub use run::{App, run};
 pub use unbound_protocols::client::unbound_shell_v1::VolumeKey;

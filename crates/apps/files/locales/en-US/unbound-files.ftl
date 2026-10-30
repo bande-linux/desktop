@@ -16,16 +16,6 @@ item-count = { $count ->
 selected-count = { $selected } of { $count } selected
 status-free = { $items }, { $free } available
 
-size-bytes = { $count ->
-    [0] Zero bytes
-    [one] { $count } byte
-   *[other] { $count } bytes
-}
-size-kilobytes = { $value } KB
-size-megabytes = { $value } MB
-size-gigabytes = { $value } GB
-size-terabytes = { $value } TB
-
 info-size = Size
 info-modified = Modified
 info-where = Where
@@ -87,3 +77,25 @@ go-to-title = Go to the folder:
 go = Go
 error-go-to = “{ $path }” can’t be found.
 error-default-app = The default app couldn’t be changed: { $error }
+
+menu-open-with = Open With
+menu-quick-look = Quick Look
+menu-get-info = Get Info
+menu-show-in-enclosing-folder = Show in Enclosing Folder
+menu-rename = Rename
+menu-duplicate = Duplicate
+menu-copy = Copy
+menu-move-to-trash = Move to Trash
+menu-move-items-to-trash = Move { $count } Items to Trash
+menu-put-back = Put Back
+menu-delete-immediately = Delete Immediately…
+menu-new-folder = New Folder
+menu-paste = Paste
+menu-sort-by = Sort By
+menu-as-columns = as Columns
+menu-as-list = as List
+menu-show-hidden-files = Show Hidden Files
+menu-hide-hidden-files = Hide Hidden Files
+menu-empty-trash = Empty Trash…
+menu-remove-from-sidebar = Remove from Sidebar
+menu-eject = Eject

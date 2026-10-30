@@ -10,18 +10,19 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use accesskit::TreeUpdate;
-use unbound_files::{Apps, Entry, preview};
+use unbound_fs::Entry;
 use unbound_launcher::{
     Action, AppInfo, Catalog, Hit, ICON_SIZE, Kind, Launcher, Loaded, PaneInfo, SettingInfo, Target,
 };
+use unbound_preview::preview;
 use unbound_search::{FileIndex, Usage, usage_path};
 use unbound_toolkit::{
     App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement, Rect, Role, Scene,
     TextSystem, Window, WindowError, WindowEvent,
 };
 use unbound_xdg::{
-    DIRECTORY, DesktopEntry, LaunchError, Locale, applications, config_dirs, current_desktops,
-    data_dirs, find_icon, launch, launch_with, spawn_detached,
+    Apps, DIRECTORY, DesktopEntry, LaunchError, Locale, applications, config_dirs,
+    current_desktops, data_dirs, find_icon, launch, launch_with, spawn_detached,
 };
 
 const ICON_THEMES: [&str; 1] = ["Adwaita"];
@@ -106,7 +107,7 @@ impl Previewer {
                         .map(|name| name.to_string_lossy().into_owned())
                         .unwrap_or_default();
                     let entry = Entry::read(path, name);
-                    let content = preview(&entry);
+                    let content = preview(&entry, Image::from_rgba);
                     if sender.send(Loaded { entry, content }).is_err() {
                         return;
                     }
@@ -185,7 +186,7 @@ impl LauncherShell {
                 }),
             Target::Path(path) => {
                 let apps = self.apps.borrow();
-                let handler = apps.default_for(&apps.mime_for(path)).cloned();
+                let handler = apps.default_for_path(path).cloned();
                 drop(apps);
                 handler.map(|entry| {
                     let token = window.activation_token(entry.app_id()).ok();

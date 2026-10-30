@@ -1,15 +1,23 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use unbound_xdg::{UserDir, path_from_file_uri, user_dir};
 
 use crate::L10N;
 use crate::browser::Location;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlaceKind {
+    Standard,
+    Bookmark,
+    Volume,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Place {
     pub name: String,
     pub location: Location,
     pub icon: &'static str,
+    pub kind: PlaceKind,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -48,6 +56,7 @@ fn bookmark(line: &str) -> Option<Place> {
         name,
         location: Location::Folder(path),
         icon: "folder",
+        kind: PlaceKind::Bookmark,
     })
 }
 
@@ -56,6 +65,7 @@ pub fn rows(home: &Path, user_dirs: Option<&str>, bookmarks: Option<&str>) -> Ve
         name: folder_name(home),
         location: Location::Folder(home.to_path_buf()),
         icon: "user-home",
+        kind: PlaceKind::Standard,
     }];
     for (dir, icon) in USER_DIRS {
         let path = user_dir(home, user_dirs, dir);
@@ -64,6 +74,7 @@ pub fn rows(home: &Path, user_dirs: Option<&str>, bookmarks: Option<&str>) -> Ve
                 name: folder_name(&path),
                 location: Location::Folder(path),
                 icon,
+                kind: PlaceKind::Standard,
             });
         }
     }
@@ -86,6 +97,42 @@ pub fn rows(home: &Path, user_dirs: Option<&str>, bookmarks: Option<&str>) -> Ve
         name: L10N.tr("trash"),
         location: Location::Trash,
         icon: "user-trash",
+        kind: PlaceKind::Standard,
     }));
+    rows
+}
+
+pub fn without_bookmark(bookmarks: &str, folder: &Path) -> String {
+    bookmarks
+        .lines()
+        .filter(|line| {
+            bookmark(line)
+                .is_none_or(|place| place.location != Location::Folder(folder.to_path_buf()))
+        })
+        .map(|line| format!("{line}\n"))
+        .collect()
+}
+
+pub fn with_volumes(rows: &[Row], volumes: &[PathBuf]) -> Vec<Row> {
+    let mut rows = rows
+        .iter()
+        .filter(|row| !matches!(row, Row::Place(place) if place.kind == PlaceKind::Volume))
+        .cloned()
+        .collect::<Vec<_>>();
+    let at = rows
+        .iter()
+        .position(|row| matches!(row, Row::Place(place) if place.location == Location::Trash))
+        .unwrap_or(rows.len());
+    rows.splice(
+        at..at,
+        volumes.iter().map(|volume| {
+            Row::Place(Place {
+                name: folder_name(volume),
+                location: Location::Folder(volume.clone()),
+                icon: "drive-removable-media",
+                kind: PlaceKind::Volume,
+            })
+        }),
+    );
     rows
 }

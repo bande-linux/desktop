@@ -2,11 +2,11 @@ use std::io;
 use std::os::fd::BorrowedFd;
 use std::time::{Duration, Instant};
 
-use unbound_fs::{
-    Action, Answer, Change, Conflict, History, Job, Outcome, Progress, Report, Step, Task, Trash,
-};
+use crate::ops::{Answer, Change, Conflict, Job, Outcome, Progress, Report, Task};
+use crate::trash::Trash;
+use crate::undo::{Action, History, Step};
 
-pub const REVEAL_DELAY: Duration = Duration::from_millis(500);
+const REVEAL_DELAY: Duration = Duration::from_millis(500);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Purpose {

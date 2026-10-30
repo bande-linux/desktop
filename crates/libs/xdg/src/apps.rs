@@ -3,10 +3,9 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use unbound_xdg::{
-    DIRECTORY, DesktopEntry, Locale, MimeApps, MimeDatabase, OCTET_STREAM, current_desktops,
-    handlers, mimeapps_paths, set_default_app,
-};
+use crate::entry::{DesktopEntry, Locale, current_desktops, handlers};
+use crate::mime::{DIRECTORY, MimeDatabase, OCTET_STREAM};
+use crate::mimeapps::{MimeApps, mimeapps_paths, set_default_app};
 
 const DESKTOP_ENTRY: &str = "application/x-desktop";
 
@@ -80,6 +79,14 @@ impl Apps {
     pub fn apps_for(&self, mime: &str) -> Vec<&DesktopEntry> {
         self.associations
             .apps_for(&self.mime.ancestors(mime), &self.handlers)
+    }
+
+    pub fn default_for_path(&self, path: &Path) -> Option<&DesktopEntry> {
+        self.default_for(&self.mime_for(path))
+    }
+
+    pub fn apps_for_path(&self, path: &Path) -> Vec<&DesktopEntry> {
+        self.apps_for(&self.mime_for(path))
     }
 
     pub fn set_default(&mut self, mime: &str, app: &DesktopEntry) -> io::Result<()> {

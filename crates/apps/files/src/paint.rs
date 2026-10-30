@@ -1,18 +1,17 @@
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use std::time::{Instant, SystemTime};
+use std::time::Instant;
 
+use unbound_fs::{Entry, Purpose, SortBy, format_date, format_size};
+use unbound_preview::Preview;
+use unbound_toolkit::ui::NameEditor;
 use unbound_toolkit::{
     Color, Image, Item, Paragraph, Point, Rect, Scene, Shape, TextAlign, TextStyle,
 };
 
 use crate::L10N;
 use crate::browser::Location;
-use crate::editor::NameEditor;
-use crate::listing::{Entry, SortBy, format_size};
-use crate::operations::Purpose;
-use crate::preview::Preview;
-use crate::sidebar::Row;
+use crate::sidebar::{PlaceKind, Row};
 use crate::view::{
     COLUMN_WIDTH, FilesView, HEADER_HEIGHT, Hit, INSPECTOR_WIDTH, PATH_BAR_HEIGHT, PROGRESS_HEIGHT,
     ROW_HEIGHT, SEARCH_HEIGHT, SIDEBAR_WIDTH, Sheet, SheetButton,
@@ -32,17 +31,6 @@ const RADIUS: f32 = 12.0;
 const PADDING: f32 = 16.0;
 const BUTTON_HEIGHT: f32 = 24.0;
 const SHEET_WIDTH: f32 = 420.0;
-
-pub fn format_date(time: SystemTime) -> String {
-    jiff::Timestamp::try_from(time)
-        .map(|timestamp| {
-            timestamp
-                .to_zoned(jiff::tz::TimeZone::system())
-                .strftime("%-d %b %Y, %H:%M")
-                .to_string()
-        })
-        .unwrap_or_default()
-}
 
 pub fn permissions(mode: u32) -> String {
     (0..9)
@@ -192,6 +180,21 @@ impl FilesView {
                         items: vec![text],
                     });
                     self.hits.push((rect, Hit::Place(index)));
+                    if place.kind == PlaceKind::Volume {
+                        let button = Rect::new(
+                            rect.x + rect.width - ICON_SIZE - 6.0,
+                            y + 5.0,
+                            ICON_SIZE,
+                            ICON_SIZE,
+                        );
+                        if let Some(image) = self.icons.first(&["media-eject"], ICON_PIXELS) {
+                            items.push(Item::Image {
+                                rect: button,
+                                image,
+                            });
+                        }
+                        self.hits.push((button.inset(-4.0), Hit::Eject(index)));
+                    }
                     y += SIDEBAR_ROW;
                 }
             }

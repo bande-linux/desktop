@@ -262,8 +262,13 @@ impl Reference {
                     }
                 }
                 Item::Clip { shape, items } => self.items(items, Some(*shape)),
-                Item::Translate { .. } | Item::Opacity { .. } | Item::Line { .. } => {
-                    panic!("the reference scenes do not use layers or lines")
+                Item::Translate { .. }
+                | Item::Opacity { .. }
+                | Item::Scale { .. }
+                | Item::Line { .. }
+                | Item::FillPath { .. }
+                | Item::StrokePath { .. } => {
+                    panic!("the reference scenes do not use layers, lines or paths")
                 }
                 Item::Image { rect, image } => {
                     assert!(

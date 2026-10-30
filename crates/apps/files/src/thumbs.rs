@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::os::fd::BorrowedFd;
 use std::path::PathBuf;
 use std::time::SystemTime;
@@ -17,6 +17,7 @@ pub(crate) struct Thumbs {
     pictures: HashMap<Key, (Option<SystemTime>, Option<Image>)>,
     asked: HashMap<Key, Option<SystemTime>>,
     wanted: Vec<Key>,
+    shown: HashSet<Key>,
 }
 
 impl Thumbs {
@@ -25,6 +26,7 @@ impl Thumbs {
         self.pictures.clear();
         self.asked.clear();
         self.wanted.clear();
+        self.shown.clear();
     }
 
     pub(crate) fn fd(&self) -> Option<BorrowedFd<'_>> {
@@ -50,9 +52,17 @@ impl Thumbs {
         let Some(service) = &self.service else {
             return;
         };
-        let missing = entries
+        let files = entries
             .into_iter()
-            .filter(|(entry, size)| !entry.is_folder() && self.fresh(entry, *size).is_none())
+            .filter(|(entry, _)| !entry.is_folder())
+            .collect::<Vec<_>>();
+        self.shown = files
+            .iter()
+            .map(|(entry, size)| (entry.path.clone(), *size))
+            .collect();
+        let missing = files
+            .into_iter()
+            .filter(|(entry, size)| self.fresh(entry, *size).is_none())
             .collect::<Vec<_>>();
         let keys = missing
             .iter()
@@ -86,8 +96,8 @@ impl Thumbs {
             return false;
         }
         if self.pictures.len() + done.len() > KEPT {
-            let wanted = &self.wanted;
-            self.pictures.retain(|key, _| wanted.contains(key));
+            let shown = &self.shown;
+            self.pictures.retain(|key, _| shown.contains(key));
         }
         for thumbnailed in done {
             let key = (thumbnailed.path, thumbnailed.size);

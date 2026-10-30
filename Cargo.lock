@@ -4363,12 +4363,17 @@ dependencies = [
  "alacritty_terminal",
  "image",
  "image-compare",
+ "tempfile",
  "tracing",
  "unbound-app-menu",
+ "unbound-design",
  "unbound-l10n",
  "unbound-log",
+ "unbound-notify",
  "unbound-toolkit",
+ "unbound-watch",
  "unbound-xdg",
+ "zbus",
 ]
 
 [[package]]

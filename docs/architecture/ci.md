@@ -55,7 +55,11 @@ status-check contexts:
   Sans CJK (`fonts-noto-cjk`) through fontconfig; their expected images are computed in the test
   from the scene (exact area coverage of shapes and of glyph outlines read with `ab_glyph`,
   Gaussian shadows by numeric integration), so they depend neither on Vello nor on the font
-  version, and both renderers must match them.
+  version, and both renderers must match them. The apps' and shell's goldens are images
+  rendered on Debian 13 and do depend on the fonts, so `ci/debian-fonts.sh` installs Debian 13's
+  own font packages (DejaVu, Inter, Manrope, JetBrains Mono, Noto Sans CJK, Noto Color Emoji),
+  pinned by version and checksum, over the Ubuntu image's older releases. Updating a pin means
+  regenerating the goldens with `UNBOUND_UPDATE_GOLDENS=1`.
 - `ci/deb`: `cargo deb --profile dist` for every packaged crate (compositor, session services, portal backend,
   shell clients and apps), then checks each package's architecture and version, the D-Bus
   activation files, the user units, the portal backend's registration and the login session,

@@ -51,10 +51,9 @@ jobs:
       - uses: actions/checkout@v7
       - run: rustup toolchain install
       - name: Install build and test dependencies
-        run: ci/apt-install.sh pkg-config libxkbcommon-dev libgbm-dev libinput-dev libseat-dev libudev-dev libpipewire-0.3-dev libclang-dev libvulkan1 mesa-vulkan-drivers fonts-dejavu-core dbus-daemon at-spi2-core
-      - name: Install the toolkit's fonts, fontconfig and libwayland-client
-        run: |
-          ci/apt-install.sh fonts-inter fonts-manrope fonts-jetbrains-mono fonts-noto-cjk libfontconfig1 libwayland-client0
+        run: ci/apt-install.sh pkg-config libxkbcommon-dev libgbm-dev libinput-dev libseat-dev libudev-dev libpipewire-0.3-dev libclang-dev libvulkan1 mesa-vulkan-drivers dbus-daemon at-spi2-core libfontconfig1 libwayland-client0
+      - name: Install Debian 13's fonts, which the goldens are rendered with
+        run: ci/debian-fonts.sh
       - name: Install kill for the clipboard daemon's restart test
         run: ci/apt-install.sh procps
       - run: cargo test --workspace --locked -- --show-output
@@ -166,7 +165,7 @@ jobs:
           test -x "$root/usr/bin/unbound-monitor"
           grep -qx 'Exec=unbound-monitor' "$root/usr/share/applications/org.unbound.ActivityMonitor.desktop"
           dpkg-deb --extract target/debian/unbound-greeter_*.deb "$root"
-          grep -qx 'command = "unbound-compositor --greeter"' "$root/usr/share/unbound-greeter/greetd-config.toml"
+          grep -qx 'command = "/usr/bin/unbound-compositor --greeter"' "$root/usr/share/unbound-greeter/greetd-config.toml"
           dpkg-deb --field target/debian/unbound-greeter_*.deb Depends | grep -qw greetd
           dpkg-deb --extract target/debian/unbound-lock_*.deb "$root"
           grep -qx '@include common-auth' "$root/etc/pam.d/unbound-lock"
@@ -242,13 +241,13 @@ jobs:
           dpkg-deb --extract target/debian/unbound-config_*.deb "$root"
           export XDG_CONFIG_HOME=$(mktemp -d)
           mkdir -p "$XDG_CONFIG_HOME/unbound"
-          echo 'panel { edge "top"; }' > "$XDG_CONFIG_HOME/unbound/config.kdl"
+          echo 'bar { edge "top"; }' > "$XDG_CONFIG_HOME/unbound/config.kdl"
           dbus-run-session -- bash -c '
             "$1/usr/bin/unbound-config" &
             daemon=$!
             for attempt in $(seq 50); do
               reply=$(dbus-send --session --print-reply --dest=org.unbound.Config /org/unbound/Config \
-                org.freedesktop.DBus.Properties.Get string:org.unbound.Config string:DockEdge 2>/dev/null) \
+                org.freedesktop.DBus.Properties.Get string:org.unbound.Config string:BarEdge 2>/dev/null) \
                 && break
               sleep 0.1
             done

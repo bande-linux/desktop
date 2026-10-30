@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::mpsc::{self, Sender};
 use std::thread;
 
-use unbound_config::{BUS_NAME, DockEdge, OBJECT_PATH};
+use unbound_config::{BUS_NAME, BarEdge, OBJECT_PATH};
 use unbound_inbox::Outbox;
 use zbus::blocking::fdo::PropertiesProxy;
 use zbus::blocking::{Connection, MessageIterator, Proxy};
@@ -16,10 +16,11 @@ const CONFIG_INTERFACE: &str = "org.unbound.Config";
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum BusEvent {
-    DockApps(Vec<String>),
-    Edge(DockEdge),
+    Apps(Vec<String>),
+    Edge(BarEdge),
     AutoHide(bool),
     IconSize(u32),
+    Names(bool),
     Launcher(String, LauncherUpdate),
 }
 
@@ -88,41 +89,33 @@ fn follow_launcher_entries(session: Connection, outbox: Outbox<BusEvent>) {
     });
 }
 
-pub fn edge_from_keyword(keyword: &str) -> Option<DockEdge> {
-    [
-        DockEdge::Left,
-        DockEdge::Bottom,
-        DockEdge::Right,
-        DockEdge::Top,
-    ]
-    .into_iter()
-    .find(|edge| edge.keyword() == keyword)
-}
-
-fn dock_settings(config: &Proxy<'_>) -> zbus::Result<Vec<BusEvent>> {
+fn bar_settings(config: &Proxy<'_>) -> zbus::Result<Vec<BusEvent>> {
     let mut events = Vec::new();
-    if let Ok(size) = config.get_property::<u32>("DockIconSize") {
+    if let Ok(size) = config.get_property::<u32>("BarIconSize") {
         events.push(BusEvent::IconSize(size));
     }
-    if let Ok(auto_hide) = config.get_property::<bool>("DockAutoHide") {
+    if let Ok(auto_hide) = config.get_property::<bool>("BarAutoHide") {
         events.push(BusEvent::AutoHide(auto_hide));
     }
+    if let Ok(names) = config.get_property::<bool>("BarNames") {
+        events.push(BusEvent::Names(names));
+    }
     if let Some(edge) = config
-        .get_property::<String>("DockEdge")
+        .get_property::<String>("BarEdge")
         .ok()
         .as_deref()
-        .and_then(edge_from_keyword)
+        .and_then(BarEdge::from_keyword)
     {
         events.push(BusEvent::Edge(edge));
     }
-    events.push(BusEvent::DockApps(
-        config.get_property::<Vec<String>>("DockApps")?,
+    events.push(BusEvent::Apps(
+        config.get_property::<Vec<String>>("BarApps")?,
     ));
     Ok(events)
 }
 
-fn follow_dock_apps(session: Connection, outbox: Outbox<BusEvent>) {
-    spawn("dock-apps", move || {
+fn follow_bar_settings(session: Connection, outbox: Outbox<BusEvent>) {
+    spawn("bar-settings", move || {
         let follow = || -> zbus::Result<()> {
             let config = Proxy::new(&session, BUS_NAME, OBJECT_PATH, CONFIG_INTERFACE)?;
             let changes = PropertiesProxy::builder(&session)
@@ -132,7 +125,7 @@ fn follow_dock_apps(session: Connection, outbox: Outbox<BusEvent>) {
                 .receive_properties_changed()?;
             let mut known: Vec<BusEvent> = Vec::new();
             let mut publish = || -> zbus::Result<bool> {
-                for event in dock_settings(&config)? {
+                for event in bar_settings(&config)? {
                     if known.contains(&event) {
                         continue;
                     }
@@ -157,14 +150,14 @@ fn follow_dock_apps(session: Connection, outbox: Outbox<BusEvent>) {
             Ok(())
         };
         if let Err(error) = follow() {
-            tracing::warn!("cannot follow the Dock's apps in org.unbound.Config: {error}");
+            tracing::warn!("cannot follow the bar's settings in org.unbound.Config: {error}");
         }
     });
 }
 
 pub fn keep_writer(session: Connection) -> Sender<Vec<String>> {
     let (sender, receiver) = mpsc::channel::<Vec<String>>();
-    spawn("dock-keep", move || {
+    spawn("bar-keep", move || {
         let config = Proxy::new(&session, BUS_NAME, OBJECT_PATH, CONFIG_INTERFACE);
         let config = match config {
             Ok(config) => config,
@@ -175,8 +168,8 @@ pub fn keep_writer(session: Connection) -> Sender<Vec<String>> {
         };
         while let Ok(first) = receiver.recv() {
             let apps = receiver.try_iter().last().unwrap_or(first);
-            if let Err(error) = config.set_property("DockApps", apps) {
-                tracing::warn!("cannot change the apps kept in the Dock: {error}");
+            if let Err(error) = config.set_property("BarApps", apps) {
+                tracing::warn!("cannot change the apps kept in the bar: {error}");
             }
         }
     });
@@ -185,5 +178,5 @@ pub fn keep_writer(session: Connection) -> Sender<Vec<String>> {
 
 pub fn follow(session: &Connection, outbox: Outbox<BusEvent>) {
     follow_launcher_entries(session.clone(), outbox.clone());
-    follow_dock_apps(session.clone(), outbox);
+    follow_bar_settings(session.clone(), outbox);
 }

@@ -10,7 +10,7 @@ use accesskit::Role;
 use unbound_bar::dock::{
     DockAction, DockApp, DockState, ICON_SIZE, MenuTarget, Shared, dock_ui, scene, surface_size,
 };
-use unbound_config::DockEdge;
+use unbound_config::BarEdge;
 use unbound_dock_model::LauncherUpdate;
 use unbound_dock_model::bus::launcher_update;
 use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer, PointerButton, Ui};
@@ -57,7 +57,7 @@ struct Harness {
 }
 
 impl Harness {
-    fn new(edge: DockEdge, scheme: Scheme) -> Self {
+    fn new(edge: BarEdge, scheme: Scheme) -> Self {
         let state = DockState::new(edge, ICON_SIZE);
         let appearance = Appearance {
             scheme,
@@ -178,9 +178,9 @@ fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>) {
 #[test]
 fn the_dock_matches_its_goldens_on_each_edge_in_light_and_dark() {
     for (edge, scheme, name) in [
-        (DockEdge::Left, Scheme::Light, "dock-left-light"),
-        (DockEdge::Left, Scheme::Dark, "dock-left-dark"),
-        (DockEdge::Bottom, Scheme::Light, "dock-bottom-light"),
+        (BarEdge::Left, Scheme::Light, "dock-left-light"),
+        (BarEdge::Left, Scheme::Dark, "dock-left-dark"),
+        (BarEdge::Bottom, Scheme::Light, "dock-bottom-light"),
     ] {
         let mut harness = Harness::new(edge, scheme);
         harness.state.borrow_mut().update_launcher(
@@ -202,7 +202,7 @@ fn the_dock_matches_its_goldens_on_each_edge_in_light_and_dark() {
 
 #[test]
 fn a_click_opens_the_app_or_the_trash_and_a_drag_off_cancels() {
-    let mut harness = Harness::new(DockEdge::Left, Scheme::Light);
+    let mut harness = Harness::new(BarEdge::Left, Scheme::Light);
     let editor = harness.center("org.example.Editor");
     let terminal = harness.center("org.unbound.Terminal");
     let trash = {
@@ -251,7 +251,7 @@ fn kept(ids: &[&str]) -> DockAction {
 
 #[test]
 fn dragging_a_kept_icon_reorders_the_dock_and_its_neighbours_slide_aside() {
-    let mut harness = Harness::new(DockEdge::Left, Scheme::Light);
+    let mut harness = Harness::new(BarEdge::Left, Scheme::Light);
     let now = harness.clock.get();
     harness.state.borrow_mut().set_apps(three_apps(), now);
     harness.advance(Duration::from_secs(2));
@@ -276,7 +276,7 @@ fn dragging_a_kept_icon_reorders_the_dock_and_its_neighbours_slide_aside() {
 
 #[test]
 fn dragging_a_kept_icon_off_the_dock_past_the_threshold_removes_it() {
-    let mut harness = Harness::new(DockEdge::Left, Scheme::Light);
+    let mut harness = Harness::new(BarEdge::Left, Scheme::Light);
     let now = harness.clock.get();
     harness.state.borrow_mut().set_apps(three_apps(), now);
     harness.advance(Duration::from_secs(2));
@@ -308,7 +308,7 @@ fn dragging_a_kept_icon_off_the_dock_past_the_threshold_removes_it() {
 
 #[test]
 fn dragging_a_running_app_into_the_kept_group_keeps_it() {
-    let mut harness = Harness::new(DockEdge::Left, Scheme::Light);
+    let mut harness = Harness::new(BarEdge::Left, Scheme::Light);
     let now = harness.clock.get();
     harness.state.borrow_mut().set_apps(three_apps(), now);
     harness.advance(Duration::from_secs(2));
@@ -328,10 +328,10 @@ fn dragging_a_running_app_into_the_kept_group_keeps_it() {
 
 #[test]
 fn moving_the_dock_to_another_edge_slides_it_in_there() {
-    let mut harness = Harness::new(DockEdge::Left, Scheme::Light);
+    let mut harness = Harness::new(BarEdge::Left, Scheme::Light);
     let now = harness.clock.get();
-    harness.state.borrow_mut().set_edge(DockEdge::Bottom, now);
-    harness.size = surface_size(DockEdge::Bottom, ICON_SIZE, OUTPUT);
+    harness.state.borrow_mut().set_edge(BarEdge::Bottom, now);
+    harness.size = surface_size(BarEdge::Bottom, ICON_SIZE, OUTPUT);
     harness.advance(Duration::from_millis(30));
     let entering = harness.state.borrow().panel();
     harness.advance(Duration::from_secs(2));
@@ -343,7 +343,7 @@ fn moving_the_dock_to_another_edge_slides_it_in_there() {
 
 #[test]
 fn every_icon_is_a_labelled_button_that_tells_its_state() {
-    let harness = Harness::new(DockEdge::Left, Scheme::Light);
+    let harness = Harness::new(BarEdge::Left, Scheme::Light);
     harness.state.borrow_mut().update_launcher(
         "org.example.Editor",
         launcher_update(&HashMap::from([
@@ -366,7 +366,7 @@ fn every_icon_is_a_labelled_button_that_tells_its_state() {
 
 #[test]
 fn a_launching_app_pulses_until_its_window_maps_or_ten_seconds_pass() {
-    let mut harness = Harness::new(DockEdge::Left, Scheme::Light);
+    let mut harness = Harness::new(BarEdge::Left, Scheme::Light);
     let mut stopped = apps();
     stopped[0].running = false;
     let now = harness.clock.get();
@@ -393,7 +393,7 @@ fn a_launching_app_pulses_until_its_window_maps_or_ten_seconds_pass() {
 
 #[test]
 fn neighbours_slide_into_the_gap_a_quitting_app_leaves() {
-    let mut harness = Harness::new(DockEdge::Left, Scheme::Light);
+    let mut harness = Harness::new(BarEdge::Left, Scheme::Light);
     let before = harness.rect("org.unbound.Terminal");
     let mut quit = apps();
     quit.truncate(1);
@@ -414,7 +414,7 @@ fn neighbours_slide_into_the_gap_a_quitting_app_leaves() {
 
 #[test]
 fn badges_follow_launcher_entry_updates_as_kde_reads_them() {
-    let harness = Harness::new(DockEdge::Left, Scheme::Light);
+    let harness = Harness::new(BarEdge::Left, Scheme::Light);
     let now = harness.clock.get();
     let update = |pairs: &[(&str, Value<'static>)]| {
         launcher_update(
@@ -467,7 +467,7 @@ fn badges_follow_launcher_entry_updates_as_kde_reads_them() {
 
 #[test]
 fn right_click_or_holding_an_icon_opens_its_menu_beside_the_dock_without_opening_the_app() {
-    let mut harness = Harness::new(DockEdge::Left, Scheme::Light);
+    let mut harness = Harness::new(BarEdge::Left, Scheme::Light);
     let editor = harness.center("org.example.Editor");
     let panel = harness.state.borrow().panel();
     let icon = harness.rect("org.example.Editor");
@@ -494,7 +494,7 @@ fn right_click_or_holding_an_icon_opens_its_menu_beside_the_dock_without_opening
 
 #[test]
 fn an_auto_hidden_dock_slides_in_on_an_edge_push_and_out_after_the_pointer_leaves() {
-    let mut harness = Harness::new(DockEdge::Left, Scheme::Light);
+    let mut harness = Harness::new(BarEdge::Left, Scheme::Light);
     let now = harness.clock.get();
     harness.state.borrow_mut().set_auto_hide(true, now);
     harness.advance(Duration::from_secs(1));
@@ -512,7 +512,7 @@ fn an_auto_hidden_dock_slides_in_on_an_edge_push_and_out_after_the_pointer_leave
     assert!(harness.state.borrow().is_shown());
     assert_eq!(harness.state.borrow().panel().x, 6.0);
     let shown = harness.state.borrow().input_region();
-    assert_eq!((shown.x, shown.width), (0.0, 6.0 + 64.0));
+    assert_eq!((shown.x, shown.width), (0.0, 6.0 + 56.0));
 
     harness.ui.handle(&Event::PointerLeave);
     harness.advance(Duration::from_millis(300));
@@ -522,49 +522,23 @@ fn an_auto_hidden_dock_slides_in_on_an_edge_push_and_out_after_the_pointer_leave
 }
 
 #[test]
-fn the_blur_behind_the_dock_stays_inside_its_rounded_corners() {
-    let harness = Harness::new(DockEdge::Bottom, Scheme::Light);
-    let state = harness.state.borrow();
-    let panel = state.panel();
-    let radius = ((ICON_SIZE + 16.0) * 0.3).round();
-    let inside = |x: f32, y: f32| {
-        let cx = x.clamp(panel.x + radius, panel.x + panel.width - radius);
-        let cy = y.clamp(panel.y + radius, panel.y + panel.height - radius);
-        (x - cx).powi(2) + (y - cy).powi(2) <= radius * radius + 0.01
-    };
-    let rects = state.blur_rects(false);
-    for rect in &rects {
-        for (x, y) in [
-            (rect.x, rect.y),
-            (rect.x + rect.width, rect.y),
-            (rect.x, rect.y + rect.height),
-            (rect.x + rect.width, rect.y + rect.height),
-        ] {
-            assert!(inside(x, y), "{rect:?} leaves the panel {panel:?}");
-        }
-    }
-    let covered: f32 = rects.iter().map(|rect| rect.width * rect.height).sum();
-    assert!(covered > 0.95 * panel.width * panel.height);
-}
-
-#[test]
 fn the_icon_size_setting_resizes_the_dock_within_sensible_bounds() {
-    let mut harness = Harness::new(DockEdge::Left, Scheme::Light);
-    assert!(harness.state.borrow_mut().set_icon_size(64.0));
-    assert!(!harness.state.borrow_mut().set_icon_size(64.0));
-    harness.size = surface_size(DockEdge::Left, 64.0, OUTPUT);
+    let mut harness = Harness::new(BarEdge::Left, Scheme::Light);
+    assert!(harness.state.borrow_mut().set_icon_size(52.0));
+    assert!(!harness.state.borrow_mut().set_icon_size(52.0));
+    harness.size = surface_size(BarEdge::Left, 52.0, OUTPUT);
     harness.frame();
-    assert_eq!(harness.rect("org.unbound.Terminal").width, 64.0);
-    assert_eq!(harness.state.borrow().panel().width, 80.0);
-    assert_eq!(harness.state.borrow().exclusive_zone(), 92);
+    assert_eq!(harness.rect("org.unbound.Terminal").width, 52.0);
+    assert_eq!(harness.state.borrow().panel().width, 68.0);
+    assert_eq!(harness.state.borrow().exclusive_zone(), 80);
 
     harness.state.borrow_mut().set_icon_size(400.0);
-    assert_eq!(harness.state.borrow().icon_size(), 96.0);
+    assert_eq!(harness.state.borrow().icon_size(), 56.0);
 }
 
 #[test]
 fn super_f3_lets_the_keyboard_walk_the_dock_open_apps_and_menus_and_give_the_keyboard_back() {
-    let harness = Harness::new(DockEdge::Left, Scheme::Light);
+    let harness = Harness::new(BarEdge::Left, Scheme::Light);
     let now = harness.clock.get();
     let plain = Modifiers::default();
     let mut state = harness.state.borrow_mut();
@@ -611,7 +585,7 @@ fn super_f3_lets_the_keyboard_walk_the_dock_open_apps_and_menus_and_give_the_key
 
 #[test]
 fn files_dragged_over_an_icon_find_their_target_and_grow_it() {
-    let mut harness = Harness::new(DockEdge::Left, Scheme::Light);
+    let mut harness = Harness::new(BarEdge::Left, Scheme::Light);
     let editor = harness.center("org.example.Editor");
     let panel = harness.state.borrow().panel();
     let trash = Point::new(panel.x + panel.width / 2.0, panel.y + panel.height - 30.0);

@@ -6,7 +6,7 @@ use smithay::wayland::shell::wlr_layer::KeyboardInteractivity;
 use unbound_protocols::server::unbound_shell_v1::{self, UnboundShellV1};
 use unbound_spring::Spring;
 
-use crate::motion::{BAR_NAMESPACE, Look};
+use crate::motion::{BAR_NAMESPACE, DOCK_NAMESPACE, Look};
 use crate::shell::{is_shell, toplevel_names};
 use crate::state::State;
 
@@ -171,7 +171,9 @@ impl State {
                     .map(|layer| layer.wl_surface().clone())
             })
         };
-        let surface = find(namespace).or_else(|| find(BAR_NAMESPACE));
+        let surface = find(namespace)
+            .or_else(|| find(BAR_NAMESPACE))
+            .or_else(|| find(DOCK_NAMESPACE));
 
         let Some(surface) = surface else {
             return;

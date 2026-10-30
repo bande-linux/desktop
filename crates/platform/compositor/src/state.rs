@@ -109,6 +109,7 @@ pub struct ScanoutDevice {
 }
 
 pub(crate) const MENU_BAR_NAMESPACE: &str = "menubar";
+pub(crate) const MENU_SEARCH_NAMESPACE: &str = "menu-search";
 
 #[derive(Clone)]
 pub(crate) enum Placed<'a> {

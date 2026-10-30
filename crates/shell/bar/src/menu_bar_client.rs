@@ -1,6 +1,8 @@
+use std::cell::Cell;
 use std::collections::HashMap;
 use std::os::fd::BorrowedFd;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::mpsc::{self, Sender};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -10,6 +12,7 @@ use unbound_bar::menus::{
     AppMenus, app_menu, battery_menu, bluetooth_menu, cascade, input_source_menu, sound_menu,
     system_menu, wifi_menu,
 };
+use unbound_config::{BUS_NAME, BarEdge, MenuBarPlacement, OBJECT_PATH};
 use unbound_datetime::DateFormats;
 use unbound_inbox::{Inbox, Outbox};
 use unbound_keyboard::Layouts;
@@ -29,6 +32,9 @@ use unbound_xdg::{
     launch_action, spawn_detached,
 };
 use zbus::blocking::Connection;
+use zbus::blocking::fdo::PropertiesProxy;
+
+use crate::menu_search_client::SharedHandoff;
 
 const CLOCK_TICK: Duration = Duration::from_secs(1);
 const TRAY_PIXELS: u32 = 32;
@@ -40,10 +46,15 @@ const TRAY_ITEM: &str = "tray-item:";
 const MENU_BAR_NAMESPACE: &str = "menubar";
 const OUTPUT_VARIABLE: &str = "UNBOUND_OUTPUT";
 const HEADER_ICON: f32 = 24.0;
-const BLUR_WIDTH: f32 = 16384.0;
+const CONFIG_INTERFACE: &str = "org.unbound.Config";
+
+pub type Restart = Rc<Cell<bool>>;
 
 pub struct MenuBarClient<V> {
     bar: V,
+    handoff: SharedHandoff,
+    layout: (MenuBarPlacement, BarEdge),
+    restart: Restart,
     names: Vec<(String, String)>,
     entries: Vec<DesktopEntry>,
     inbox: Inbox<Update>,
@@ -89,6 +100,19 @@ fn tray_image(icon: &TrayIcon, pixels: u32) -> Option<Image> {
 impl<V: StatusView> MenuBarClient<V> {
     pub fn view_mut(&mut self) -> &mut V {
         &mut self.bar
+    }
+
+    pub fn handoff(&self) -> SharedHandoff {
+        self.handoff.clone()
+    }
+
+    pub fn restart(&self) -> Restart {
+        self.restart.clone()
+    }
+
+    fn publish_menu(&mut self, window: &Window) {
+        let menu = self.cascade(window);
+        self.handoff.borrow_mut().menu = menu;
     }
 
     fn launch(&self, window: &mut Window, app_id: &str, command: &[&str]) {
@@ -446,7 +470,9 @@ impl<V: StatusView> App for MenuBarClient<V> {
                     self.follow_app_icon(window);
                     window.request_redraw();
                 }
+                self.publish_menu(window);
             }
+            WindowEvent::AppsChanged => self.publish_menu(window),
             WindowEvent::FocusShell(namespace) if namespace == MENU_BAR_NAMESPACE => {
                 if self.bar.cascades() && self.bar.open() != Some(Slot::App) {
                     self.open(window, Slot::App);
@@ -573,6 +599,17 @@ impl<V: StatusView> App for MenuBarClient<V> {
                         );
                     }
                 }
+                Update::BarLayout { menu_bar, edge } => {
+                    let wanted = (
+                        MenuBarPlacement::from_keyword(&menu_bar).unwrap_or(self.layout.0),
+                        BarEdge::from_keyword(&edge).unwrap_or(self.layout.1),
+                    );
+                    if wanted.0 != self.layout.0
+                        || (wanted.0 == MenuBarPlacement::InBar && wanted.1 != self.layout.1)
+                    {
+                        self.restart.set(true);
+                    }
+                }
                 Update::Unread(unread) => {
                     self.bar.set_unread(unread);
                 }
@@ -593,6 +630,7 @@ impl<V: StatusView> App for MenuBarClient<V> {
                         self.app_root = root;
                         let titles = self.app_menu_titles();
                         self.bar.set_app_menus(titles);
+                        self.publish_menu(window);
                     }
                 }
             }
@@ -601,7 +639,11 @@ impl<V: StatusView> App for MenuBarClient<V> {
     }
 
     fn deadline(&self) -> Option<Instant> {
-        Some(self.next_clock)
+        if self.handoff.borrow().chosen.is_empty() && !self.restart.get() {
+            Some(self.next_clock)
+        } else {
+            Some(Instant::now())
+        }
     }
 
     fn accessibility(&self) -> Option<accesskit::TreeUpdate> {
@@ -609,6 +651,15 @@ impl<V: StatusView> App for MenuBarClient<V> {
     }
 
     fn tick(&mut self, window: &mut Window, now: Instant) {
+        let chosen = std::mem::take(&mut self.handoff.borrow_mut().chosen);
+        for action in chosen {
+            if let Some(command) = Command::parse(&action) {
+                self.run(window, command);
+            }
+        }
+        if now < self.next_clock {
+            return;
+        }
         self.next_clock = now + CLOCK_TICK;
         if self.bar.set_time(&jiff::Zoned::now(), &self.dates) {
             window.request_redraw();
@@ -639,14 +690,10 @@ impl MenuBarClient<MenuBar> {
         text: TextSystem,
         session: Option<&Connection>,
         system: Option<&Connection>,
+        layout: (MenuBarPlacement, BarEdge),
     ) -> std::io::Result<Self> {
-        let blurred = window
-            .set_background_blur(&[Rect::new(0.0, 0.0, BLUR_WIDTH, HEIGHT as f32)])
-            .inspect_err(|error| tracing::info!("the menu bar is not blurred: {error}"))
-            .is_ok();
-        let mut bar = MenuBar::new(window.appearance().palette(), text, String::new());
-        bar.set_translucent(blurred);
-        MenuBarClient::with_view(bar, session, system)
+        let bar = MenuBar::new(window.appearance().palette(), text, String::new());
+        MenuBarClient::with_view(bar, session, system, layout)
     }
 }
 
@@ -655,6 +702,7 @@ impl<V: StatusView> MenuBarClient<V> {
         mut view: V,
         session: Option<&Connection>,
         system: Option<&Connection>,
+        layout: (MenuBarPlacement, BarEdge),
     ) -> std::io::Result<Self> {
         let entries = applications(
             &data_dirs(),
@@ -702,6 +750,9 @@ impl<V: StatusView> MenuBarClient<V> {
         view.set_time(&jiff::Zoned::now(), &dates);
         Ok(Self {
             bar: view,
+            handoff: SharedHandoff::default(),
+            layout,
+            restart: Restart::default(),
             names,
             entries,
             inbox,
@@ -722,36 +773,35 @@ impl<V: StatusView> MenuBarClient<V> {
 }
 
 fn config(session: &Connection) -> zbus::Result<zbus::blocking::Proxy<'static>> {
-    zbus::blocking::Proxy::new(
-        session,
-        "org.unbound.Config",
-        "/org/unbound/Config",
-        "org.unbound.Config",
-    )
+    zbus::blocking::proxy::Builder::new(session)
+        .destination(BUS_NAME)?
+        .path(OBJECT_PATH)?
+        .interface(CONFIG_INTERFACE)?
+        .cache_properties(zbus::proxy::CacheProperties::No)
+        .build()
 }
 
 fn follow_config(session: &Connection, outbox: &Outbox<Update>) -> zbus::Result<()> {
     let config = config(session)?;
-    let percentage = config.receive_property_changed::<bool>("ShowBatteryPercentage");
-    let changes = config.receive_property_changed::<String>("ClockFormat");
-    outbox.send(Update::BatteryPercentage(
-        config.get_property("ShowBatteryPercentage")?,
-    ));
-    outbox.send(Update::ClockFormat(config.get_property("ClockFormat")?));
-    let percentages = outbox.clone();
-    thread::spawn(move || {
-        for change in percentage {
-            if let Ok(shown) = change.get()
-                && !percentages.send(Update::BatteryPercentage(shown))
-            {
-                break;
-            }
-        }
-    });
-    for change in changes {
-        if let Ok(format) = change.get()
-            && !outbox.send(Update::ClockFormat(format))
-        {
+    let changes = PropertiesProxy::builder(session)
+        .destination(BUS_NAME)?
+        .path(OBJECT_PATH)?
+        .build()?
+        .receive_properties_changed()?;
+    let publish = || -> zbus::Result<bool> {
+        Ok(outbox.send(Update::BatteryPercentage(
+            config.get_property("ShowBatteryPercentage")?,
+        )) && outbox.send(Update::ClockFormat(config.get_property("ClockFormat")?))
+            && outbox.send(Update::BarLayout {
+                menu_bar: config.get_property("BarMenuBar")?,
+                edge: config.get_property("BarEdge")?,
+            }))
+    };
+    if !publish()? {
+        return Ok(());
+    }
+    for _ in changes {
+        if !publish()? {
             break;
         }
     }

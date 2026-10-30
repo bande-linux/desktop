@@ -64,10 +64,15 @@ impl Menu {
         }
     }
 
+    pub fn matching(&self, query: &str) -> Vec<MenuItem> {
+        let mut items = Vec::new();
+        collect_found(&self.items, &[], &query.to_lowercase(), &mut items);
+        items
+    }
+
     pub fn found(&self, query: &str) -> Menu {
         let query = query.to_lowercase();
-        let mut items = Vec::new();
-        collect_found(&self.items, &[], &query, &mut items);
+        let mut items = self.matching(&query);
         let search = self.search.clone().map(|search| Search {
             query: query.clone(),
             ..search

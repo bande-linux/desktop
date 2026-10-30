@@ -18,7 +18,7 @@ use crate::frame::Target;
 use crate::gesture::Gesture;
 use crate::motion::DOCK_NAMESPACE;
 use crate::shell::toplevel_names;
-use crate::state::{Headless, MENU_BAR_NAMESPACE, State};
+use crate::state::{Headless, MENU_BAR_NAMESPACE, MENU_SEARCH_NAMESPACE, State};
 use crate::tile::Direction;
 
 const EVDEV_OFFSET: u32 = 8;
@@ -113,6 +113,9 @@ fn shortcut(
         }
         Some(keysyms::KEY_v) if shift && !ctrl && !alt => {
             return Some(Shortcut::OpenLauncher(LauncherMode::Clipboard));
+        }
+        Some(keysyms::KEY_slash) if shift && !ctrl && !alt => {
+            return Some(Shortcut::FocusShell(MENU_SEARCH_NAMESPACE));
         }
         _ => {}
     }
@@ -715,7 +718,7 @@ mod tests {
 
     use super::{Shortcut, shortcut};
     use crate::motion::DOCK_NAMESPACE;
-    use crate::state::MENU_BAR_NAMESPACE;
+    use crate::state::{MENU_BAR_NAMESPACE, MENU_SEARCH_NAMESPACE};
     use crate::tile::Direction;
 
     fn keysym(key: &str) -> u32 {
@@ -764,6 +767,7 @@ mod tests {
             Action::ShowEmojiPicker => Shortcut::OpenLauncher(LauncherMode::Emoji),
             Action::FocusMenuBar => Shortcut::FocusShell(MENU_BAR_NAMESPACE),
             Action::FocusDock => Shortcut::FocusShell(DOCK_NAMESPACE),
+            Action::SearchMenus => Shortcut::FocusShell(MENU_SEARCH_NAMESPACE),
             Action::LockScreen => Shortcut::LockScreen,
         }
     }

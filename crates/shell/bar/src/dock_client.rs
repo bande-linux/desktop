@@ -12,7 +12,7 @@ use unbound_bar::dock::{
     surface_size,
 };
 use unbound_bar::rail::surface_size as rail_surface_size;
-use unbound_config::{Dock as DockConfig, DockEdge};
+use unbound_config::{Bar as BarConfig, BarEdge};
 use unbound_dock_model::arrange;
 use unbound_dock_model::bus::{self, BusEvent};
 use unbound_fs::{FolderWatch, Trash};
@@ -87,8 +87,6 @@ pub struct Dock {
     reported: HashMap<String, Rect>,
     input: Option<Rect>,
     zone: i32,
-    blur: Option<Vec<Rect>>,
-    corner: Option<(u32, bool)>,
     menu: Option<MenuTarget>,
     confirming: bool,
     active: Option<String>,
@@ -615,31 +613,6 @@ impl Dock {
     }
 
     fn report(&mut self, window: &mut Window) {
-        let radius = self.state.borrow().panel_radius() as u32;
-        if self.corner.is_none_or(|(known, _)| known != radius) {
-            let rounded = match window.set_corner_radius(radius) {
-                Ok(()) => true,
-                Err(error) => {
-                    tracing::debug!("the compositor does not round the blur: {error}");
-                    false
-                }
-            };
-            self.corner = Some((radius, rounded));
-            self.blur = Some(Vec::new());
-        }
-        let rounded = self.corner.is_some_and(|(_, rounded)| rounded);
-        let blur = self.state.borrow().blur_rects(rounded);
-        if self.blur.as_ref().is_some_and(|known| *known != blur) {
-            let blurred = match window.set_background_blur(&blur) {
-                Ok(()) => true,
-                Err(error) => {
-                    tracing::info!("the Dock is not blurred: {error}");
-                    false
-                }
-            };
-            self.blur = blurred.then_some(blur);
-            self.state.borrow_mut().set_blurred(blurred);
-        }
         let state = self.state.borrow();
         let region = state.input_region();
         if self.input != Some(region) {
@@ -685,7 +658,7 @@ impl Dock {
         }
     }
 
-    fn move_to(&mut self, window: &mut Window, edge: DockEdge, now: Instant) {
+    fn move_to(&mut self, window: &mut Window, edge: BarEdge, now: Instant) {
         let state = self.state.borrow();
         if state.edge() == edge || state.rail().is_some() {
             return;
@@ -730,13 +703,14 @@ impl Dock {
                 BusEvent::AutoHide(auto_hide) => {
                     self.state.borrow_mut().set_auto_hide(auto_hide, now);
                 }
-                BusEvent::DockApps(apps) => {
+                BusEvent::Apps(apps) => {
                     if apps != self.kept && !self.state.borrow().is_dragging() {
                         self.kept = apps;
                         self.sync();
                     }
                 }
                 BusEvent::Edge(edge) => self.move_to(window, edge, now),
+                BusEvent::Names(_) => {}
                 BusEvent::Launcher(app_id, update) => {
                     self.state
                         .borrow_mut()
@@ -917,16 +891,16 @@ impl App for Dock {
     }
 }
 
-pub fn anchor(edge: DockEdge) -> Edges {
+pub fn anchor(edge: BarEdge) -> Edges {
     Edges {
-        left: edge != DockEdge::Right,
-        right: edge != DockEdge::Left,
-        top: edge != DockEdge::Bottom,
-        bottom: edge != DockEdge::Top,
+        left: edge != BarEdge::Right,
+        right: edge != BarEdge::Left,
+        top: edge != BarEdge::Bottom,
+        bottom: edge != BarEdge::Top,
     }
 }
 
-pub fn dock_role(edge: DockEdge, icon_size: f32) -> Role {
+pub fn dock_role(edge: BarEdge, icon_size: f32) -> Role {
     Role::Layer(LayerOptions {
         layer: LayerKind::Top,
         anchor: anchor(edge),
@@ -939,7 +913,7 @@ pub fn dock_role(edge: DockEdge, icon_size: f32) -> Role {
 impl Dock {
     pub fn new(
         window: &Window,
-        config: &DockConfig,
+        config: &BarConfig,
         text: TextSystem,
         session: Option<&Connection>,
         home: (Option<&Path>, Option<&Path>),
@@ -974,8 +948,6 @@ impl Dock {
             reported: HashMap::new(),
             input: None,
             zone: exclusive_zone(icon_size).round() as i32,
-            blur: Some(Vec::new()),
-            corner: None,
             menu: None,
             confirming: false,
             active: None,

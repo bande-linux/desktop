@@ -175,8 +175,10 @@
 
     <event name="focus_shell" since="7">
       <description summary="the user asked to reach a shell element from the keyboard">
-        Sent with the layer namespace "dock" for Super+F3 and "menubar" for
-        Super+F2, after the compositor gave that layer surface the keyboard.
+        Sent with the layer namespace "dock" for Super+F3, "menubar" for
+        Super+F2 and "menu-search" for Shift+Super+/, after the compositor gave
+        the keyboard to the layer surface with that namespace or, when there is
+        none, to the bar or the Dock.
         The client shows its keyboard selection. To give the keyboard back, for
         example on Escape, it calls activate_app with the active app.
       </description>

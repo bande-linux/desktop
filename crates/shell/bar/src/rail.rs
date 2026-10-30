@@ -352,11 +352,11 @@ impl RailView {
         let mut items = vec![
             Item::Fill {
                 shape: Shape::rect(Rect::new(0.0, 0.0, width, height)),
-                paint: palette.sheet.into(),
+                paint: palette.chassis.into(),
             },
             Item::Fill {
                 shape: Shape::rect(Rect::new(width - 1.0, 0.0, 1.0, height)),
-                paint: palette.hairline.into(),
+                paint: palette.edge.into(),
             },
         ];
         for y in hairlines {

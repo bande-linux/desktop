@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use unbound_bar::dock::{DockAction, DockApp, DockState, MenuTarget, Shared, dock_ui, scene};
 use unbound_bar::menubar::{Slot, StatusView};
 use unbound_bar::rail::{RailView, bar_width, surface_size};
-use unbound_config::DockEdge;
+use unbound_config::BarEdge;
 use unbound_datetime::{DateFormats, posix_locale};
 use unbound_dock_model::LauncherUpdate;
 use unbound_status::status::{
@@ -132,7 +132,7 @@ impl Rail {
             .parse()
             .expect("time");
         view.set_time(&at, &DateFormats::for_locale(&posix_locale("en_GB")));
-        let state = DockState::new(DockEdge::Left, ICON);
+        let state = DockState::new(BarEdge::Left, ICON);
         state.borrow_mut().set_appearance(Appearance {
             scheme,
             ..Appearance::default()

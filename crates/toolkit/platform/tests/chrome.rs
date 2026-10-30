@@ -30,6 +30,18 @@ fn show_menu(window: &mut Window) -> Option<Ui> {
     None
 }
 
+fn show_long_menu(window: &mut Window) -> Option<Ui> {
+    let menu = Menu::new(
+        (1..=30)
+            .map(|index| MenuItem::new(&format!("Network {index}"), "join").checked(index == 3))
+            .collect(),
+    );
+    window
+        .show_menu(menu, MenuPlacement::AtPoint(Point::new(30.0, 10.0)))
+        .expect("menu");
+    None
+}
+
 fn processes(window: &mut Window) -> Option<Ui> {
     let names = [
         ("Files", "1.2", "84.3 MB", "unbound"),
@@ -122,6 +134,11 @@ fn menus_tables_and_alerts_match_their_goldens_in_both_schemes_at_1x_and_1_5x() 
                 &format!("menu-submenu-{suffix}"),
                 show_menu,
                 shot_at("Documents", content(60, SORT_BY), 2),
+            );
+            shot(
+                &format!("menu-long-{suffix}"),
+                show_long_menu,
+                shot_at("Networks", content(60, 60), 1),
             );
             shot(
                 &format!("table-{suffix}"),

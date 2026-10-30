@@ -20,7 +20,9 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::ZwlrL
 use crate::window::{ShmTarget, State, WindowError};
 
 const MARGIN: f32 = 24.0;
-const SUBMENU_OFFSET: (i32, i32) = (-2, -4);
+const SUBMENU_OVERLAP: f32 = 2.0;
+const SUBMENU_LIFT: i32 = -4;
+const BELOW_GAP: f32 = 4.0;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum MenuPlacement {
@@ -31,6 +33,12 @@ pub enum MenuPlacement {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct PopupLevel(pub(crate) usize);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct PopupPlacement {
+    beside_left: bool,
+    height: i32,
+}
+
 pub(crate) enum Parent<'a> {
     Toplevel(&'a XdgSurface),
     Layer(&'a ZwlrLayerSurfaceV1),
@@ -40,7 +48,57 @@ pub(crate) enum Parent<'a> {
 struct Placement {
     anchor_rect: Rect,
     anchor: Anchor,
+    gravity: Gravity,
     offset: (i32, i32),
+    adjustment: ConstraintAdjustment,
+}
+
+impl Placement {
+    fn menu(placement: MenuPlacement) -> Self {
+        let fitting = ConstraintAdjustment::FlipY
+            | ConstraintAdjustment::SlideX
+            | ConstraintAdjustment::SlideY
+            | ConstraintAdjustment::ResizeY;
+        match placement {
+            MenuPlacement::AtPoint(point) => Self {
+                anchor_rect: Rect::new(point.x, point.y, 1.0, 1.0),
+                anchor: Anchor::TopLeft,
+                gravity: Gravity::BottomRight,
+                offset: (0, 0),
+                adjustment: fitting | ConstraintAdjustment::FlipX,
+            },
+            MenuPlacement::Below(rect) => Self {
+                anchor_rect: Rect::new(
+                    rect.x,
+                    rect.y - BELOW_GAP,
+                    rect.width,
+                    rect.height + 2.0 * BELOW_GAP,
+                ),
+                anchor: Anchor::BottomLeft,
+                gravity: Gravity::BottomRight,
+                offset: (0, 0),
+                adjustment: fitting,
+            },
+        }
+    }
+
+    fn submenu(row: Rect) -> Self {
+        Self {
+            anchor_rect: Rect::new(
+                row.x + SUBMENU_OVERLAP,
+                row.y,
+                row.width - 2.0 * SUBMENU_OVERLAP,
+                row.height,
+            ),
+            anchor: Anchor::TopRight,
+            gravity: Gravity::BottomRight,
+            offset: (0, SUBMENU_LIFT),
+            adjustment: ConstraintAdjustment::FlipX
+                | ConstraintAdjustment::SlideX
+                | ConstraintAdjustment::SlideY
+                | ConstraintAdjustment::ResizeY,
+        }
+    }
 }
 
 struct Popup {
@@ -61,6 +119,8 @@ struct Look {
     opacity: f32,
     appearance: Appearance,
     scale: f64,
+    scrolled: f32,
+    height: f32,
 }
 
 impl Popup {
@@ -100,23 +160,11 @@ impl Menus {
             tracker: MenuTracker::new(panel, opening.state.input.keyboard_initiated),
             popups: Vec::new(),
         };
-        let placement = match placement {
-            MenuPlacement::AtPoint(point) => Placement {
-                anchor_rect: Rect::new(point.x, point.y, 1.0, 1.0),
-                anchor: Anchor::TopLeft,
-                offset: (0, 0),
-            },
-            MenuPlacement::Below(rect) => Placement {
-                anchor_rect: rect,
-                anchor: Anchor::BottomLeft,
-                offset: (0, 4),
-            },
-        };
         let popup = create(
             opening.state,
             opening.handle,
             parent,
-            placement,
+            Placement::menu(placement),
             (size.width, size.height),
             0,
         )?;
@@ -149,6 +197,7 @@ impl Menus {
                 self.tracker
                     .pointer_release(level, local(pointer.position), now)
             }
+            Event::Scroll(scroll) => self.tracker.scroll(level, scroll.delta.y),
             Event::Key { key, modifiers } => self.tracker.key(*key, *modifiers, now),
             Event::ModifiersChanged(modifiers) => self.tracker.show_alternates(modifiers.alt),
             _ => MenuOutcome::Nothing,
@@ -179,16 +228,11 @@ impl Menus {
         };
         let panel = MenuPanel::new(menu, opening.text, &opening.palette);
         let size = panel.size();
-        let placement = Placement {
-            anchor_rect: self.tracker.panels()[level].row_rect(index),
-            anchor: Anchor::TopRight,
-            offset: SUBMENU_OFFSET,
-        };
         let popup = create(
             opening.state,
             opening.handle,
             Parent::Popup(&parent.xdg_surface),
-            placement,
+            Placement::submenu(self.tracker.panels()[level].row_rect(index)),
             (size.width, size.height),
             level + 1,
         )?;
@@ -236,6 +280,35 @@ impl Menus {
         state.input.forget_popups();
     }
 
+    fn fit_placements(
+        &mut self,
+        state: &mut State,
+        handle: &QueueHandle<State>,
+    ) -> Result<(), WindowError> {
+        for level in 0..self.popups.len() {
+            let Some(placement) = state.popup_placements.get_mut(level).and_then(Option::take)
+            else {
+                continue;
+            };
+            self.tracker
+                .placed(level, placement.height as f32, placement.beside_left);
+            let size = self.tracker.panels()[level].size();
+            let compositor = state
+                .compositor
+                .as_ref()
+                .ok_or(WindowError::Missing("wl_compositor"))?;
+            let popup = &self.popups[level];
+            set_shape(
+                compositor,
+                handle,
+                &popup.surface,
+                &popup.xdg_surface,
+                (size.width, size.height),
+            );
+        }
+        Ok(())
+    }
+
     pub(crate) fn draw(
         &mut self,
         state: &mut State,
@@ -245,6 +318,7 @@ impl Menus {
         scale: f64,
         now: Instant,
     ) -> Result<(), WindowError> {
+        self.fit_placements(state, handle)?;
         let palette = appearance.palette();
         let shm = state.shm.clone().ok_or(WindowError::Missing("wl_shm"))?;
         for (level, (popup, panel)) in self
@@ -267,6 +341,8 @@ impl Menus {
                 opacity,
                 appearance,
                 scale,
+                scrolled: panel.scroll_offset(),
+                height: panel.size().height,
             };
             if self.tracker.is_flashing() {
                 popup.surface.frame(handle, PopupLevel(level));
@@ -358,14 +434,9 @@ fn create(
         whole(anchor_rect.height).max(1),
     );
     positioner.set_anchor(placement.anchor);
-    positioner.set_gravity(Gravity::BottomRight);
+    positioner.set_gravity(placement.gravity);
     positioner.set_offset(placement.offset.0, placement.offset.1);
-    positioner.set_constraint_adjustment(
-        ConstraintAdjustment::FlipX
-            | ConstraintAdjustment::FlipY
-            | ConstraintAdjustment::SlideX
-            | ConstraintAdjustment::SlideY,
-    );
+    positioner.set_constraint_adjustment(placement.adjustment);
     let surface = compositor.create_surface(handle, ());
     let xdg_surface = wm_base.get_xdg_surface(&surface, handle, PopupLevel(level));
     let popup = match parent {
@@ -394,6 +465,8 @@ fn create(
     state.popup_configured.push(false);
     state.popup_frames.truncate(level);
     state.popup_frames.push(false);
+    state.popup_placements.truncate(level);
+    state.popup_placements.push(None);
     surface.commit();
     Ok(Popup {
         surface,
@@ -446,12 +519,21 @@ impl Dispatch<XdgPopup, PopupLevel> for State {
         state: &mut Self,
         _: &XdgPopup,
         event: xdg_popup::Event,
-        _: &PopupLevel,
+        level: &PopupLevel,
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
-        if let xdg_popup::Event::PopupDone = event {
-            state.popup_dismissed = true;
+        match event {
+            xdg_popup::Event::PopupDone => state.popup_dismissed = true,
+            xdg_popup::Event::Configure { x, height, .. } => {
+                if let Some(placement) = state.popup_placements.get_mut(level.0) {
+                    *placement = Some(PopupPlacement {
+                        beside_left: x < 0,
+                        height,
+                    });
+                }
+            }
+            _ => {}
         }
     }
 }

@@ -184,3 +184,135 @@ fn moving_straight_down_switches_rows_at_once() {
         MenuOutcome::CloseFrom(1)
     );
 }
+
+const SHORTENED: f32 = 300.0;
+const LONG_MENU_ROWS: usize = 40;
+
+fn long_menu() -> Menu {
+    Menu::new(
+        (0..LONG_MENU_ROWS)
+            .map(|index| MenuItem::new(&format!("Network {index}"), &format!("join-{index}")))
+            .collect(),
+    )
+}
+
+fn shortened(text: &mut TextSystem) -> MenuTracker {
+    let mut tracker = tracker(long_menu(), text);
+    tracker.placed(0, SHORTENED, false);
+    tracker
+}
+
+fn row_centre(tracker: &MenuTracker, index: usize) -> Point {
+    let row = tracker.panels()[0].row_rect(index);
+    Point::new(row.width / 2.0, row.y + row.height / 2.0)
+}
+
+#[test]
+fn a_menu_shortened_to_fit_the_screen_scrolls_to_every_item_by_keyboard() {
+    let mut text = TextSystem::new();
+    let mut tracker = shortened(&mut text);
+    let now = Instant::now();
+    assert_eq!(tracker.panels()[0].size().height, SHORTENED);
+    assert!(tracker.panels()[0].is_scrollable());
+
+    tracker.key(Key::End, Modifiers::default(), now);
+    let last = LONG_MENU_ROWS - 1;
+    let row = tracker.panels()[0].row_rect(last);
+    assert!(row.y + row.height <= SHORTENED, "{row:?}");
+    assert_eq!(
+        tracker.panels()[0].item_at(row_centre(&tracker, last)),
+        Some(last)
+    );
+    assert_eq!(
+        tracker.key(Key::Enter, Modifiers::default(), now),
+        MenuOutcome::Activate(format!("join-{last}"))
+    );
+}
+
+#[test]
+fn resting_on_the_bottom_edge_of_a_shortened_menu_scrolls_it_until_the_end() {
+    let mut text = TextSystem::new();
+    let mut tracker = shortened(&mut text);
+    let now = Instant::now();
+    let edge = Point::new(tracker.panels()[0].size().width / 2.0, SHORTENED - 5.0);
+    assert_eq!(
+        tracker.panels()[0].item_at(edge),
+        None,
+        "the scroll zone is not an item"
+    );
+
+    tracker.pointer_move(0, edge, now);
+    tracker.tick(now + Duration::from_millis(100));
+    assert!(tracker.panels()[0].scroll_offset() > 0.0);
+    tracker.tick(now + Duration::from_secs(10));
+    let full = tracker.panels()[0].row_rect(LONG_MENU_ROWS - 1).y + 28.0 + 4.0;
+    assert_eq!(full, SHORTENED);
+    assert_eq!(tracker.deadline(), None);
+}
+
+#[test]
+fn the_wheel_scrolls_a_shortened_menu_and_the_row_under_the_pointer_follows() {
+    let mut text = TextSystem::new();
+    let mut tracker = shortened(&mut text);
+    let now = Instant::now();
+    tracker.pointer_move(0, row_centre(&tracker, 3), now);
+    assert_eq!(tracker.panels()[0].highlighted(), Some(3));
+
+    assert_eq!(tracker.scroll(0, 56.0), MenuOutcome::Redraw);
+    assert_eq!(tracker.panels()[0].highlighted(), Some(5));
+    assert_eq!(tracker.scroll(0, -1000.0), MenuOutcome::Redraw);
+    assert_eq!(tracker.scroll(0, -10.0), MenuOutcome::Nothing);
+    assert_eq!(tracker.panels()[0].highlighted(), Some(3));
+}
+
+#[test]
+fn a_menu_that_fits_does_not_scroll() {
+    let mut text = TextSystem::new();
+    let mut tracker = tracker(Menu::new(app_menus().items), &mut text);
+    let height = tracker.panels()[0].size().height;
+    tracker.placed(0, height, false);
+    assert!(!tracker.panels()[0].is_scrollable());
+    assert_eq!(tracker.scroll(0, 40.0), MenuOutcome::Nothing);
+}
+
+#[test]
+fn a_menu_is_never_shortened_below_three_rows() {
+    let mut text = TextSystem::new();
+    let mut tracker = tracker(long_menu(), &mut text);
+    tracker.placed(0, 20.0, false);
+    let visible = (0..LONG_MENU_ROWS)
+        .filter(|index| {
+            tracker.panels()[0]
+                .item_at(row_centre(&tracker, *index))
+                .is_some()
+        })
+        .count();
+    assert!(visible >= 3, "{visible} rows remain");
+}
+
+#[test]
+fn moving_diagonally_toward_a_submenu_that_opened_on_the_left_keeps_it() {
+    let mut text = TextSystem::new();
+    let mut tracker = tracker(Menu::new(app_menus().items), &mut text);
+    let now = Instant::now();
+    let files = tracker.panels()[0].row_rect(0);
+    let edit = tracker.panels()[0].row_rect(1);
+    tracker.pointer_move(0, Point::new(40.0, files.y + files.height / 2.0), now);
+    tracker.tick(now + Duration::from_millis(250));
+    tracker.opened_submenu(
+        MenuPanel::new(
+            tracker.submenu(0, 0).expect("the Files menu"),
+            &mut text,
+            &Palette::for_scheme(Scheme::Light),
+        ),
+        false,
+    );
+    tracker.placed(1, 200.0, true);
+
+    let later = now + Duration::from_millis(300);
+    assert_eq!(
+        tracker.pointer_move(0, Point::new(8.0, edit.y + edit.height / 2.0), later),
+        MenuOutcome::Nothing
+    );
+    assert_eq!(tracker.panels()[0].highlighted(), Some(0));
+}

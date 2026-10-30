@@ -65,7 +65,7 @@ use crate::clipboard::Clipboard;
 use crate::clipboard::{DragAction, DragEvent, DragIcon, Transfer};
 use crate::effect::BackgroundEffect;
 use crate::lock::{Locked, SessionLock};
-use crate::popup::{MenuPlacement, Menus, Opening, Parent};
+use crate::popup::{MenuPlacement, Menus, Opening, Parent, PopupPlacement};
 use crate::presentation::Presentation;
 use crate::scale::{Scaling, SurfaceScale};
 use crate::seat::{CLICK_SLOP, Input};
@@ -329,6 +329,7 @@ pub(crate) struct State {
     pub(crate) own_surface: Option<WlSurface>,
     pub(crate) popup_surfaces: Vec<WlSurface>,
     pub(crate) popup_configured: Vec<bool>,
+    pub(crate) popup_placements: Vec<Option<PopupPlacement>>,
     pub(crate) popup_frames: Vec<bool>,
     pub(crate) popup_input: Vec<(usize, Event)>,
     pub(crate) popups_changed: bool,

@@ -20,6 +20,7 @@ const AFTERMATH: Duration = Duration::from_millis(600);
 const STEPS: u32 = 120;
 const FOLDER_ENTRIES: usize = 400;
 const BUTTON_LEFT: u32 = 0x110;
+const BUTTON_RIGHT: u32 = 0x111;
 const KEY_ESC: u32 = 1;
 const KEY_A: u32 = 30;
 const KEY_SPACE: u32 = 57;
@@ -115,7 +116,7 @@ fn run() -> Result<(), Box<dyn Error>> {
     let mut bench = Bench::start(&binaries, home.path(), &folder, full_effects)?;
     bench.list_frames = list_frames;
     let adapter = bench.output.renderer.device_info().name.clone();
-    let scenarios: [(&'static str, Scenario); 7] = [
+    let scenarios: [(&'static str, Scenario); 9] = [
         ("idle", |bench| bench.wait(STEPS)),
         ("pointer over a window", Bench::hover),
         ("dragging a window", Bench::drag),
@@ -123,6 +124,8 @@ fn run() -> Result<(), Box<dyn Error>> {
         ("scrolling a list", Bench::scroll),
         ("opening the launcher", Bench::launcher),
         ("opening the overview", Bench::overview),
+        ("opening a menu", Bench::menu),
+        ("a notification banner", Bench::notification),
     ];
     println!(
         "### Session on {adapter}, {}×{} at {SCALE}×\n\nHost load average: {}\n",
@@ -184,7 +187,14 @@ impl Bench {
             clients: Vec::new(),
             list_frames: false,
         };
-        for shell in ["unbound-desktop-surface", "unbound-bar", "unbound-launcher"] {
+        let notify = Command::new(binaries.join("unbound-notify")).spawn()?;
+        bench.clients.push(("unbound-notify".to_owned(), notify));
+        for shell in [
+            "unbound-desktop-surface",
+            "unbound-bar",
+            "unbound-launcher",
+            "unbound-notifications",
+        ] {
             let child = bench.server.spawn_shell_client(&binaries.join(shell))?;
             bench.clients.push((shell.to_owned(), child));
         }
@@ -373,6 +383,52 @@ impl Bench {
             self.wait(STEPS / 2)?;
             self.tap(&[KEY_ESC]);
             self.wait(STEPS / 2)?;
+        }
+        Ok(())
+    }
+
+    fn menu(&mut self) -> Result<(), Box<dyn Error>> {
+        let (x, y, width, height) = self.raise(FILES)?;
+        self.point(x + width * 0.6, y + height * 0.5);
+        for _ in 0..2 {
+            let time = self.tick();
+            self.server.press_button(BUTTON_RIGHT, true, time);
+            let time = self.tick();
+            self.server.press_button(BUTTON_RIGHT, false, time);
+            self.wait(STEPS / 2)?;
+            self.tap(&[KEY_ESC]);
+            self.wait(STEPS / 2)?;
+        }
+        Ok(())
+    }
+
+    fn notification(&mut self) -> Result<(), Box<dyn Error>> {
+        for round in 0..2 {
+            let status = Command::new("gdbus")
+                .args([
+                    "call",
+                    "--session",
+                    "--dest",
+                    "org.freedesktop.Notifications",
+                    "--object-path",
+                    "/org/freedesktop/Notifications",
+                    "--method",
+                    "org.freedesktop.Notifications.Notify",
+                    "Benchmark",
+                    "0",
+                    "",
+                    &format!("Message {round}"),
+                    "A notification banner slides in and out",
+                    "[]",
+                    "{}",
+                    "1500",
+                ])
+                .stdout(Stdio::null())
+                .status()?;
+            if !status.success() {
+                return Err("cannot send a notification".into());
+            }
+            self.wait(STEPS * 3)?;
         }
         Ok(())
     }

@@ -184,6 +184,27 @@ fn switching_to_dark_signals_the_color_scheme_and_accent() {
 }
 
 #[test]
+fn reduce_motion_in_the_configuration_is_served_and_signalled_as_reduced_motion() {
+    let fixture = start("");
+    let reduced = |fixture: &Fixture| {
+        u32::try_from(&fixture.read_all(&[APPEARANCE])[APPEARANCE]["reduced-motion"]).expect("u")
+    };
+    assert_eq!(reduced(&fixture), 0);
+    let changes = fixture.changes();
+    let staging = fixture.path.with_extension("tmp");
+    std::fs::write(&staging, "accessibility {\n    reduce-motion #true\n}\n").expect("write");
+    std::fs::rename(&staging, &fixture.path).expect("rename");
+
+    let (namespace, key, value) = changes.recv_timeout(WAIT).expect("SettingChanged");
+    assert_eq!(
+        (namespace.as_str(), key.as_str()),
+        (APPEARANCE, "reduced-motion")
+    );
+    assert_eq!(u32::try_from(&value).expect("u"), 1);
+    assert_eq!(reduced(&fixture), 1);
+}
+
+#[test]
 fn the_interface_is_version_2() {
     let fixture = start("");
     let version: OwnedValue = fixture

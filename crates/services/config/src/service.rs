@@ -14,7 +14,7 @@ use zbus::object_server::SignalEmitter;
 use zbus::zvariant::{OwnedValue, Value};
 
 use crate::{
-    Appearance, Config, ConfigStore, DockEdge, Output, ReloadError, Setting, Suspend,
+    Appearance, Config, ConfigStore, DockEdge, Output, ReloadError, Setting, Suspend, WallpaperFit,
     WallpaperVariant,
 };
 
@@ -143,11 +143,20 @@ fn publish_changes(
         if before.appearance != after.appearance {
             let _ = guard.appearance_changed(emitter).await;
         }
-        if before.dock_edge != after.dock_edge {
+        if before.reduce_motion != after.reduce_motion {
+            let _ = guard.reduce_motion_changed(emitter).await;
+        }
+        if before.dock.edge != after.dock.edge {
             let _ = guard.dock_edge_changed(emitter).await;
         }
-        if before.dock_apps != after.dock_apps {
+        if before.dock.apps != after.dock.apps {
             let _ = guard.dock_apps_changed(emitter).await;
+        }
+        if before.dock.auto_hide != after.dock.auto_hide {
+            let _ = guard.dock_auto_hide_changed(emitter).await;
+        }
+        if before.dock.icon_size != after.dock.icon_size {
+            let _ = guard.dock_icon_size_changed(emitter).await;
         }
         if before.idle.dim_after != after.idle.dim_after {
             let _ = guard.idle_dim_after_changed(emitter).await;
@@ -174,6 +183,9 @@ fn publish_changes(
         }
         if before.wallpaper.dark != after.wallpaper.dark {
             let _ = guard.wallpaper_dark_changed(emitter).await;
+        }
+        if before.wallpaper.fit != after.wallpaper.fit {
+            let _ = guard.wallpaper_fit_changed(emitter).await;
         }
         if before.outputs != after.outputs {
             let _ = guard.outputs_changed(emitter).await;
@@ -285,13 +297,48 @@ impl ConfigInterface {
     }
 
     #[zbus(property)]
+    fn reduce_motion(&self) -> bool {
+        self.store.current().reduce_motion
+    }
+
+    #[zbus(property)]
+    fn set_reduce_motion(&self, reduce: bool) -> zbus::fdo::Result<()> {
+        self.write(&Setting::ReduceMotion(reduce))
+    }
+
+    #[zbus(property)]
     fn dock_apps(&self) -> Vec<String> {
-        self.store.current().dock_apps.clone()
+        self.store.current().dock.apps.clone()
+    }
+
+    #[zbus(property)]
+    fn set_dock_apps(&self, apps: Vec<String>) -> zbus::fdo::Result<()> {
+        self.write(&Setting::DockApps(apps))
+    }
+
+    #[zbus(property)]
+    fn dock_auto_hide(&self) -> bool {
+        self.store.current().dock.auto_hide
+    }
+
+    #[zbus(property)]
+    fn set_dock_auto_hide(&self, auto_hide: bool) -> zbus::fdo::Result<()> {
+        self.write(&Setting::DockAutoHide(auto_hide))
+    }
+
+    #[zbus(property)]
+    fn dock_icon_size(&self) -> u32 {
+        self.store.current().dock.icon_size
+    }
+
+    #[zbus(property)]
+    fn set_dock_icon_size(&self, size: u32) -> zbus::fdo::Result<()> {
+        self.write(&Setting::DockIconSize(size))
     }
 
     #[zbus(property)]
     fn dock_edge(&self) -> String {
-        self.store.current().dock_edge.keyword().to_owned()
+        self.store.current().dock.edge.keyword().to_owned()
     }
 
     #[zbus(property)]
@@ -429,6 +476,21 @@ impl ConfigInterface {
     #[zbus(property)]
     fn set_wallpaper_dark(&self, path: String) -> zbus::fdo::Result<()> {
         self.set_wallpaper(WallpaperVariant::Dark, path)
+    }
+
+    #[zbus(property)]
+    fn wallpaper_fit(&self) -> String {
+        self.store.current().wallpaper.fit.keyword().to_owned()
+    }
+
+    #[zbus(property)]
+    fn set_wallpaper_fit(&self, value: String) -> zbus::fdo::Result<()> {
+        let fit = keyword(
+            &[WallpaperFit::Fill, WallpaperFit::Fit],
+            WallpaperFit::keyword,
+            &value,
+        )?;
+        self.write(&Setting::WallpaperFit(fit))
     }
 
     #[zbus(property)]

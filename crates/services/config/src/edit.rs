@@ -3,18 +3,26 @@ use std::time::Duration;
 
 use kdl::{KdlDocument, KdlEntry, KdlEntryFormat, KdlNode, KdlValue};
 
-use crate::{Appearance, Config, ConfigError, DockEdge, Output, Suspend, WallpaperVariant};
+use crate::{
+    Appearance, Config, ConfigError, DEFAULT_DOCK_ICON_SIZE, DockEdge, Output, Suspend,
+    WallpaperFit, WallpaperVariant,
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Setting {
     Appearance(Appearance),
+    ReduceMotion(bool),
     DockEdge(DockEdge),
+    DockApps(Vec<String>),
+    DockAutoHide(bool),
+    DockIconSize(u32),
     IdleDimAfter(Duration),
     IdleLockAfter(Duration),
     IdleSuspend(Suspend),
     KeyRepeatRate(u32),
     KeyRepeatDelay(Duration),
     Wallpaper(WallpaperVariant, Option<PathBuf>),
+    WallpaperFit(WallpaperFit),
     Output(String, Output),
 }
 
@@ -33,11 +41,35 @@ impl Setting {
                 "appearance",
                 Some(appearance.keyword().into()),
             ),
+            Self::ReduceMotion(reduce) => set(
+                &mut document,
+                Some("accessibility"),
+                "reduce-motion",
+                reduce.then_some(KdlValue::Bool(true)),
+            ),
             Self::DockEdge(edge) => set(
                 &mut document,
                 Some("dock"),
                 "edge",
                 Some(edge.keyword().into()),
+            ),
+            Self::DockApps(apps) => set_values(
+                &mut document,
+                Some("dock"),
+                "apps",
+                Some(apps.iter().map(|app| app.as_str().into()).collect()),
+            ),
+            Self::DockAutoHide(auto_hide) => set(
+                &mut document,
+                Some("dock"),
+                "auto-hide",
+                auto_hide.then_some(KdlValue::Bool(true)),
+            ),
+            Self::DockIconSize(size) => set(
+                &mut document,
+                Some("dock"),
+                "size",
+                (*size != DEFAULT_DOCK_ICON_SIZE).then_some(KdlValue::Integer((*size).into())),
             ),
             Self::IdleDimAfter(after) => set(
                 &mut document,
@@ -81,6 +113,12 @@ impl Setting {
                 variant.keyword(),
                 path.as_ref()
                     .map(|path| path.to_string_lossy().into_owned().into()),
+            ),
+            Self::WallpaperFit(fit) => set(
+                &mut document,
+                Some("wallpaper"),
+                "fit",
+                (*fit != WallpaperFit::Fill).then(|| fit.keyword().into()),
             ),
             Self::Output(connector, output) => set_output(&mut document, connector, output),
         }
@@ -152,7 +190,7 @@ fn set_output(document: &mut KdlDocument, connector: &str, output: &Output) {
         Some(position) => {
             let children = document.nodes_mut()[position].ensure_children();
             for (name, value) in settings {
-                set_child(children, name, value, CHILD_INDENT);
+                set_child(children, name, value.map(|value| vec![value]), CHILD_INDENT);
             }
         }
         None if *output == Output::default() => {}
@@ -175,8 +213,17 @@ fn set_output(document: &mut KdlDocument, connector: &str, output: &Output) {
 const CHILD_INDENT: &str = "    ";
 
 fn set(document: &mut KdlDocument, section: Option<&str>, name: &str, value: Option<KdlValue>) {
+    set_values(document, section, name, value.map(|value| vec![value]));
+}
+
+fn set_values(
+    document: &mut KdlDocument,
+    section: Option<&str>,
+    name: &str,
+    values: Option<Vec<KdlValue>>,
+) {
     let Some(section) = section else {
-        set_child(document, name, value, "");
+        set_child(document, name, values, "");
         return;
     };
     match document
@@ -186,17 +233,16 @@ fn set(document: &mut KdlDocument, section: Option<&str>, name: &str, value: Opt
     {
         Some(position) => {
             let children = document.nodes_mut()[position].ensure_children();
-            set_child(children, name, value, CHILD_INDENT);
+            set_child(children, name, values, CHILD_INDENT);
             if children.nodes().is_empty() {
                 remove(document, position);
             }
         }
         None => {
-            if let Some(value) = value {
-                let value = repr(&value);
+            if let Some(values) = values {
                 append(
                     document,
-                    &format!("{section} {{\n{CHILD_INDENT}{name} {value}\n}}\n"),
+                    &format!("{section} {{\n{CHILD_INDENT}{}\n}}\n", line(name, &values)),
                     "",
                 );
             }
@@ -204,33 +250,51 @@ fn set(document: &mut KdlDocument, section: Option<&str>, name: &str, value: Opt
     }
 }
 
-fn set_child(document: &mut KdlDocument, name: &str, value: Option<KdlValue>, indent: &str) {
+fn line(name: &str, values: &[KdlValue]) -> String {
+    std::iter::once(name.to_owned())
+        .chain(values.iter().map(repr))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn spaced() -> KdlEntryFormat {
+    KdlEntryFormat {
+        leading: " ".to_owned(),
+        ..KdlEntryFormat::default()
+    }
+}
+
+fn set_child(document: &mut KdlDocument, name: &str, values: Option<Vec<KdlValue>>, indent: &str) {
     let position = document
         .nodes()
         .iter()
         .position(|node| node.name().value() == name);
-    match (position, value) {
+    match (position, values) {
         (Some(position), None) => {
             remove(document, position);
         }
         (None, None) => {}
-        (Some(position), Some(value)) => {
+        (Some(position), Some(values)) => {
             let entries = document.nodes_mut()[position].entries_mut();
-            let mut format = entries
+            let first = entries
                 .first()
                 .and_then(KdlEntry::format)
                 .cloned()
-                .unwrap_or_else(|| KdlEntryFormat {
-                    leading: " ".to_owned(),
-                    ..KdlEntryFormat::default()
-                });
-            format.value_repr = repr(&value);
-            let mut entry = KdlEntry::new(value);
-            entry.set_format(format);
-            *entries = vec![entry];
+                .unwrap_or_else(spaced);
+            *entries = values
+                .into_iter()
+                .enumerate()
+                .map(|(index, value)| {
+                    let mut format = if index == 0 { first.clone() } else { spaced() };
+                    format.value_repr = repr(&value);
+                    let mut entry = KdlEntry::new(value);
+                    entry.set_format(format);
+                    entry
+                })
+                .collect();
         }
-        (None, Some(value)) => {
-            append(document, &format!("{name} {}\n", repr(&value)), indent);
+        (None, Some(values)) => {
+            append(document, &format!("{}\n", line(name, &values)), indent);
         }
     }
 }

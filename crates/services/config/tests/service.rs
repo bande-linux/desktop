@@ -370,6 +370,53 @@ fn key_repeat_and_wallpaper_are_writable_properties() {
 }
 
 #[test]
+fn the_dock_apps_size_auto_hide_and_wallpaper_fit_are_writable_and_signalled() {
+    let fixture = start("dock {\n    apps \"org.unbound.Files\" // mine\n}\n");
+    let changes = watch_changes(&fixture.client);
+
+    set(
+        &fixture.client,
+        "DockApps",
+        Value::from(vec!["org.unbound.Terminal", "org.unbound.Files"]),
+    )
+    .expect("Set");
+    set(&fixture.client, "DockAutoHide", Value::from(true)).expect("Set");
+    set(&fixture.client, "DockIconSize", Value::from(64u32)).expect("Set");
+    set(&fixture.client, "WallpaperFit", Value::from("fit")).expect("Set");
+
+    let mut changed = Changes::new();
+    while changed.len() < 4 {
+        changed.extend(
+            changes
+                .recv_timeout(SIGNAL_WAIT)
+                .expect("PropertiesChanged"),
+        );
+    }
+    assert_eq!(
+        Vec::<String>::try_from(changed["DockApps"].try_clone().expect("clone")).expect("as"),
+        ["org.unbound.Terminal", "org.unbound.Files"]
+    );
+    assert!(bool::try_from(get(&fixture.client, "DockAutoHide")).expect("b"));
+    assert_eq!(
+        u32::try_from(get(&fixture.client, "DockIconSize")).expect("u32"),
+        64
+    );
+    assert_eq!(
+        String::try_from(get(&fixture.client, "WallpaperFit")).expect("s"),
+        "fit"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&fixture.path).expect("read"),
+        "dock {\n    apps \"org.unbound.Terminal\" \"org.unbound.Files\" // mine\n    auto-hide #true\n    size 64\n}\nwallpaper {\n    fit \"fit\"\n}\n"
+    );
+    let too_big = set(&fixture.client, "DockIconSize", Value::from(200u32));
+    assert!(
+        matches!(too_big, Err(zbus::fdo::Error::InvalidArgs(_))),
+        "{too_big:?}"
+    );
+}
+
+#[test]
 fn suspend_after_zero_means_never() {
     let fixture = start("");
     set(&fixture.client, "IdleSuspendAfter", Value::from(0u64)).expect("Set");

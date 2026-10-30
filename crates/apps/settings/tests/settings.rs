@@ -305,7 +305,7 @@ fn changes_are_written_through_org_unbound_config() {
     let written =
         Config::parse(&std::fs::read_to_string(&path).expect("config.kdl")).expect("valid config");
     assert_eq!(written.appearance, Appearance::Dark);
-    assert_eq!(written.dock_edge, DockEdge::Bottom);
+    assert_eq!(written.dock.edge, DockEdge::Bottom);
     assert_eq!(written.idle.suspend, Suspend::Never);
     assert_eq!(written.keyboard.repeat_delay, Duration::from_millis(300));
 

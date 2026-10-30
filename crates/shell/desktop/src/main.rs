@@ -604,7 +604,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .and_then(|path| std::fs::read_to_string(path).ok())
         .and_then(|source| Config::parse(&source).ok())
         .unwrap_or_default()
-        .dock_edge;
+        .dock
+        .edge;
     let desktop_dir = desktop_folder(home.as_deref().unwrap_or(Path::new("/")));
     let user = std::env::var("USER").unwrap_or_default();
     let trash = Trash::for_user().ok_or("no home folder for the Trash")?;

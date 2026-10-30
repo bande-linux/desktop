@@ -1,28 +1,16 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use unbound_compositor::BACKGROUND;
+use unbound_compositor::Renderer;
 use unbound_test_wayland::{BLUE, GREEN, HALF_WHITE, Memory, RED, ShmImage, quadrants};
 use wayland_client::protocol::wl_shm::Format;
 
 use crate::card::Scanout;
 use crate::session::Session;
 
+const SETTLE_FRAMES: usize = 300;
+
 fn rgb(bgra: [u8; 4]) -> [u8; 3] {
     [bgra[2], bgra[1], bgra[0]]
-}
-
-fn over_background(bgra: [u8; 4]) -> [u8; 3] {
-    let alpha = u32::from(bgra[3]);
-    let [r, g, b] = rgb(bgra);
-    [r, g, b]
-        .iter()
-        .zip(BACKGROUND)
-        .map(|(&source, below)| {
-            (u32::from(source) + u32::from(below) * (255 - alpha) / 255).min(255) as u8
-        })
-        .collect::<Vec<_>>()
-        .try_into()
-        .expect("three channels")
 }
 
 fn quadrant_color(x: usize, y: usize, width: usize, height: usize) -> [u8; 4] {
@@ -55,6 +43,49 @@ fn assert_matches(scanout: &Scanout, expected: impl Fn(usize, usize) -> [u8; 3])
     );
 }
 
+fn present_until(
+    session: &mut Session,
+    what: &str,
+    done: impl Fn(&Session, bool) -> bool,
+) -> Scanout {
+    for _ in 0..SETTLE_FRAMES {
+        let damaged = session.present_damage();
+        if done(session, damaged) {
+            return session.scanout();
+        }
+    }
+    panic!("no {what} within {SETTLE_FRAMES} frames");
+}
+
+fn composed_offscreen(session: &mut Session) -> Vec<[u8; 3]> {
+    let mut renderer = Renderer::new().expect("Vulkan renderer");
+    renderer
+        .render(&mut session.shared.server)
+        .expect("offscreen frame");
+    renderer
+        .snapshot(&session.shared.server)
+        .expect("read back the offscreen frame")
+        .rgba
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|&[r, g, b, _]| [r, g, b])
+        .collect()
+}
+
+fn show_fullscreen(session: &mut Session, image: &ShmImage) {
+    session
+        .client
+        .show_window_in(&mut session.shared.server, image, Memory::Udmabuf);
+    session
+        .client
+        .set_fullscreen(&mut session.shared.server, 0, true);
+    session
+        .client
+        .commit_buffer_in(0, image, (0, 0, image.width, image.height), Memory::Udmabuf);
+    session.client.exchange(&mut session.shared.server);
+}
+
 #[test]
 #[ignore = "needs the ci/vm guest"]
 fn a_composed_window_is_scanned_out() {
@@ -73,7 +104,7 @@ fn a_composed_window_is_scanned_out() {
         },
     );
 
-    let scanout = session.present();
+    let scanout = present_until(&mut session, "settled screen", |_, damaged| !damaged);
     scanout.save("composed-window");
 
     assert!(
@@ -82,22 +113,8 @@ fn a_composed_window_is_scanned_out() {
             .scanned_out_directly(&session.shared.server.main_output())
     );
     assert_eq!((scanout.width, scanout.height), (width, height));
-    let left = (width - window_width) / 2;
-    let top = (height - window_height) / 2;
-    assert_matches(&scanout, |x, y| {
-        let inside =
-            (left..left + window_width).contains(&x) && (top..top + window_height).contains(&y);
-        if inside {
-            over_background(quadrant_color(
-                x - left,
-                y - top,
-                window_width,
-                window_height,
-            ))
-        } else {
-            BACKGROUND
-        }
-    });
+    let composed = composed_offscreen(&mut session);
+    assert_matches(&scanout, |x, y| composed[y * width + x]);
 }
 
 #[test]
@@ -106,8 +123,8 @@ fn a_fullscreen_opaque_dmabuf_window_is_scanned_out_directly() {
     let mut session = Session::open();
     let (width, height) = session.output_size();
     let pixels = quadrants(width, height, width * 4);
-    session.client.show_window_in(
-        &mut session.shared.server,
+    show_fullscreen(
+        &mut session,
         &ShmImage {
             width: width as i32,
             height: height as i32,
@@ -115,17 +132,15 @@ fn a_fullscreen_opaque_dmabuf_window_is_scanned_out_directly() {
             format: Format::Xrgb8888,
             bytes: &pixels,
         },
-        Memory::Udmabuf,
     );
 
-    let scanout = session.present();
-    scanout.save("direct-scanout");
-
-    assert!(
+    let scanout = present_until(&mut session, "direct scanout", |session, _| {
         session
             .output
             .scanned_out_directly(&session.shared.server.main_output())
-    );
+    });
+    scanout.save("direct-scanout");
+
     assert_matches(&scanout, |x, y| rgb(quadrant_color(x, y, width, height)));
 }
 
@@ -133,11 +148,11 @@ fn a_fullscreen_opaque_dmabuf_window_is_scanned_out_directly() {
 #[ignore = "needs the ci/vm guest"]
 fn an_opaque_dmabuf_window_on_an_overlay_plane_shows_its_pixels() {
     let mut session = Session::open();
-    let (width, height) = session.output_size();
+    let width = session.output_size().0;
     let (window_width, window_height) = (64, 64);
     let pixels = RED.repeat(window_width * window_height);
-    session.client.show_window_in(
-        &mut session.shared.server,
+    show_fullscreen(
+        &mut session,
         &ShmImage {
             width: window_width as i32,
             height: window_height as i32,
@@ -145,18 +160,14 @@ fn an_opaque_dmabuf_window_on_an_overlay_plane_shows_its_pixels() {
             format: Format::Xrgb8888,
             bytes: &pixels,
         },
-        Memory::Udmabuf,
     );
 
-    let scanout = session.present();
+    let scanout = present_until(&mut session, "overlay plane", |session, _| {
+        session.card.overlay_planes_in_use() == 1
+    });
     scanout.save("overlay-window");
 
-    assert_eq!(session.card.overlay_planes_in_use(), 1);
-    let left = (width - window_width) / 2;
-    let top = (height - window_height) / 2;
-    assert_matches(&scanout, |x, y| {
-        let inside =
-            (left..left + window_width).contains(&x) && (top..top + window_height).contains(&y);
-        if inside { rgb(RED) } else { BACKGROUND }
-    });
+    let composed = composed_offscreen(&mut session);
+    assert!(composed.contains(&rgb(RED)), "the window is composed");
+    assert_matches(&scanout, |x, y| composed[y * width + x]);
 }

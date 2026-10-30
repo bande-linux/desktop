@@ -10,6 +10,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use unbound_compositor::BACKGROUND;
+use unbound_graphics::{Palette, Scheme};
 use unbound_test_bus::SessionBus;
 
 use crate::card::{Scanout, card_with_driver};
@@ -23,6 +24,7 @@ const COMPOSITOR: &str = "/usr/bin/unbound-compositor";
 const RUNTIME_DIR: &str = "/run/user/0";
 const TYPED: &str = "/tmp/typed-in-unbound-term";
 const STARTUP: Duration = Duration::from_secs(60);
+const LAUNCHER_SELECTION_PIXELS: usize = 2000;
 
 struct Desktop {
     compositor: Child,
@@ -139,9 +141,22 @@ fn the_launcher_opens_a_terminal_that_takes_typing() {
 
     keyboard.tap(KEY_ENTER);
     wait_for("the terminal", STARTUP, || running("unbound-term"));
-    wait_for("the launcher to close", STARTUP, || {
+    let palette = Palette::for_scheme(Scheme::Light);
+    let (sheet, accent) = (palette.sheet, palette.accent);
+    let accent_pixels = |scanout: &Scanout| {
+        scanout
+            .rgb
+            .iter()
+            .filter(|&&shown| !differs(shown, [accent.r, accent.g, accent.b]))
+            .count()
+    };
+    wait_for("the launcher to close over the terminal", STARTUP, || {
         let now = scanout();
-        pixel(&now, center_x, now.height / 2) == [0xFF, 0xFF, 0xFF]
+        accent_pixels(&now) < LAUNCHER_SELECTION_PIXELS
+            && !differs(
+                pixel(&now, center_x, now.height / 2),
+                [sheet.r, sheet.g, sheet.b],
+            )
     });
     thread::sleep(Duration::from_secs(2));
 
@@ -590,6 +605,7 @@ fn super_shift_4_saves_a_dragged_out_area_to_the_desktop() {
 }
 
 const FILES: &str = "/usr/bin/unbound-files";
+const BAR_HEADER: (usize, usize) = (64, 120);
 
 #[test]
 #[ignore = "needs the ci/vm guest"]
@@ -621,9 +637,14 @@ fn files_drills_into_a_folder_and_quick_looks_a_picture() {
     wait_for("the files window", STARTUP, || {
         centre(&scanout()) != centre(&without_files)
     });
-    let menu_bar = |scanout: &Scanout| scanout.rgb[..scanout.width * 24].to_vec();
-    wait_for("the menu bar to name Files", STARTUP, || {
-        running("unbound-bar") && menu_bar(&scanout()) != menu_bar(&without_files)
+    let bar_header = |scanout: &Scanout| {
+        (0..BAR_HEADER.1)
+            .flat_map(|y| (0..BAR_HEADER.0).map(move |x| (x, y)))
+            .map(|(x, y)| pixel(scanout, x, y))
+            .collect::<Vec<_>>()
+    };
+    wait_for("the bar to name Files", STARTUP, || {
+        running("unbound-bar") && bar_header(&scanout()) != bar_header(&without_files)
     });
     thread::sleep(Duration::from_secs(1));
 
@@ -744,7 +765,14 @@ fn the_greeter_takes_a_password_typed_in_the_system_layout_after_a_refusal_and_h
     );
     wait_for("the greeter", STARTUP, || running("unbound-greeter"));
     wait_for("the greeter to draw", STARTUP, || {
-        current_scanout().is_some()
+        current_scanout().is_some_and(|scanout| {
+            scanout
+                .rgb
+                .iter()
+                .filter(|&&shown| differs(shown, BACKGROUND))
+                .count()
+                > CARET_PIXELS
+        })
     });
     thread::sleep(Duration::from_secs(1));
     scanout().save("m24-greeter");

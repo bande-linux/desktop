@@ -32,6 +32,8 @@ mkdir -p "$share/etc/pam.d"
 cp crates/shell/lock/data/unbound-lock.pam "$share/etc/pam.d/unbound-lock"
 cp crates/apps/terminal/data/org.unbound.Terminal.desktop "$share/usr/share/applications/"
 cp crates/apps/terminal/data/org.unbound.Terminal.svg "$share/usr/share/icons/hicolor/scalable/apps/"
+cp crates/apps/files/data/org.unbound.Files.desktop "$share/usr/share/applications/"
+cp crates/apps/files/data/org.unbound.Files.svg "$share/usr/share/icons/hicolor/scalable/apps/"
 
 mkdir "$share/bin"
 while read -r executable; do

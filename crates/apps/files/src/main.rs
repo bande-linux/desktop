@@ -125,23 +125,27 @@ impl App for Files {
     }
 }
 
-fn start_location(home: &Path) -> Location {
-    let Some(argument) = std::env::args().nth(1) else {
+const INFO_FLAG: &str = "--info";
+
+fn start_location(home: &Path, argument: Option<&str>) -> Location {
+    let Some(argument) = argument else {
         return Location::Folder(home.to_path_buf());
     };
     if argument == "trash:///" || argument == "trash:" {
         return Location::Trash;
     }
-    let path = path_from_file_uri(&argument).unwrap_or_else(|| PathBuf::from(&argument));
+    let path = path_from_file_uri(argument).unwrap_or_else(|| PathBuf::from(argument));
     Location::Folder(std::path::absolute(&path).unwrap_or(path))
 }
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let home = std::env::var_os("HOME").map_or_else(|| PathBuf::from("/"), PathBuf::from);
     let trash = Trash::for_user().ok_or("no home folder for the Trash")?;
-    let location = start_location(&home);
+    let arguments = std::env::args().skip(1).collect::<Vec<_>>();
+    let info = arguments.first().is_some_and(|flag| flag == INFO_FLAG);
+    let location = start_location(&home, arguments.get(usize::from(info)).map(String::as_str));
     let reveal = match &location {
-        Location::Folder(path) if !path.is_dir() => Some(path.clone()),
+        Location::Folder(path) if info || !path.is_dir() => Some(path.clone()),
         _ => None,
     };
     let mut browser = Browser::open(
@@ -165,6 +169,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         Appearance::default().palette(),
         TextSystem::new(),
     )?;
+    if info {
+        view.show_inspector();
+    }
     view.set_media(media_roots(&std::env::var("USER").unwrap_or_default()));
     let title = view.title();
     let mut window = Window::open(Role::toplevel(&title, APP_ID), WINDOW_SIZE)?;

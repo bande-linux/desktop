@@ -710,6 +710,11 @@ fn right_clicking_an_item_selects_it_and_its_menu_acts_on_it() {
         &mut view,
         Point::new(SIDEBAR_WIDTH + 60.0, 6.0 + ROW_HEIGHT * 2.5),
     );
+    assert!(view.menu_action("info"));
+    assert_eq!(
+        view.info().map(|info| info.entries[0].name.as_str()),
+        Some("notes.txt")
+    );
     assert!(view.menu_action("trash"));
     run_until(&mut view, idle);
     assert!(!place.home().join("notes.txt").exists());

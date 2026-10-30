@@ -1088,6 +1088,11 @@ impl FilesView {
         true
     }
 
+    pub fn show_inspector(&mut self) {
+        self.inspector = true;
+        self.selection_changed();
+    }
+
     pub(crate) fn toggle_hidden(&mut self) {
         self.browser.toggle_hidden();
         self.selection_changed();

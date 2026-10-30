@@ -140,10 +140,7 @@ impl FilesView {
                     self.toggle_quick_look();
                 }
             }
-            Command::Info => {
-                self.inspector = true;
-                self.selection_changed();
-            }
+            Command::Info => self.show_inspector(),
             Command::Rename => self.start_rename(),
             Command::Duplicate => self.duplicate(),
             Command::Copy => self.copy_selection(),

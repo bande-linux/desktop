@@ -54,6 +54,18 @@ pub enum DockEdge {
     Top,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MenuBarPlacement {
+    #[default]
+    Separate,
+    Combined,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Bar {
+    pub menu_bar: MenuBarPlacement,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Suspend {
     WithDisplayOff,
@@ -430,6 +442,7 @@ pub struct Config {
     pub appearance: Appearance,
     pub reduce_motion: bool,
     pub dock: Dock,
+    pub bar: Bar,
     pub idle: Idle,
     pub keyboard: Keyboard,
     pub trackpad: Trackpad,
@@ -456,6 +469,7 @@ impl Default for Config {
             appearance: Appearance::Automatic,
             reduce_motion: false,
             dock: Dock::default(),
+            bar: Bar::default(),
             idle: Idle {
                 dim_after: Duration::from_secs(5 * 60),
                 lock_after: Duration::from_secs(10 * 60),
@@ -613,6 +627,10 @@ impl Parser<'_> {
                     config.dock = self.dock(node);
                     Ok(())
                 }
+                "bar" => {
+                    config.bar = self.bar(node);
+                    Ok(())
+                }
                 "idle" => {
                     config.idle = self.idle(node, config.idle);
                     Ok(())
@@ -768,6 +786,26 @@ impl Parser<'_> {
                 format!("`{}` must be #true or #false", node.name().value()),
             )
         })
+    }
+
+    fn bar(&self, node: &KdlNode) -> Bar {
+        let mut bar = Bar::default();
+        self.section(node, |child| {
+            match child.name().value() {
+                "menu-bar" => {
+                    bar.menu_bar = self.keyword(
+                        child,
+                        &[
+                            ("separate", MenuBarPlacement::Separate),
+                            ("combined", MenuBarPlacement::Combined),
+                        ],
+                    )?
+                }
+                _ => return Err(self.unknown_child("bar", child)),
+            }
+            Ok(())
+        });
+        bar
     }
 
     fn dock(&self, node: &KdlNode) -> Dock {

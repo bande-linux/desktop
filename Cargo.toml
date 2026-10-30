@@ -70,6 +70,7 @@ wgpu = { version = "=30.0.1", default-features = false, features = ["std", "park
 unbound-app-menu = { path = "crates/libs/app-menu" }
 unbound-audio = { path = "crates/libs/audio" }
 unbound-automount = { path = "crates/services/automount" }
+unbound-bar = { path = "crates/shell/bar" }
 unbound-bench = { path = "crates/testing/bench" }
 unbound-bluetooth = { path = "crates/libs/bluetooth" }
 unbound-bus = { path = "crates/libs/bus" }
@@ -78,7 +79,7 @@ unbound-compositor = { path = "crates/platform/compositor" }
 unbound-config = { path = "crates/services/config" }
 unbound-datetime = { path = "crates/libs/datetime" }
 unbound-controlcenter = { path = "crates/shell/controlcenter" }
-unbound-dock = { path = "crates/shell/dock" }
+unbound-dock-model = { path = "crates/libs/dock-model" }
 unbound-edid = { path = "crates/libs/edid" }
 unbound-files = { path = "crates/apps/files" }
 unbound-fs = { path = "crates/libs/fs" }
@@ -90,7 +91,6 @@ unbound-l10n = { path = "crates/libs/l10n" }
 unbound-launcher = { path = "crates/shell/launcher" }
 unbound-lock = { path = "crates/shell/lock" }
 unbound-log = { path = "crates/libs/log" }
-unbound-menubar = { path = "crates/shell/menubar" }
 unbound-monitor = { path = "crates/apps/monitor" }
 unbound-network = { path = "crates/libs/network" }
 unbound-notifications = { path = "crates/shell/notifications" }
@@ -108,6 +108,7 @@ unbound-settings = { path = "crates/apps/settings" }
 unbound-settings-panes = { path = "crates/libs/settings-panes" }
 unbound-sound = { path = "crates/services/sound", default-features = false }
 unbound-spring = { path = "crates/libs/spring" }
+unbound-status = { path = "crates/libs/status" }
 unbound-term = { path = "crates/apps/terminal" }
 unbound-test-bus = { path = "crates/testing/test-bus" }
 unbound-test-wayland = { path = "crates/testing/test-wayland" }

@@ -1,0 +1,10 @@
+confirm-restart = Are you sure you want to restart your computer now?
+confirm-shut-down = Are you sure you want to shut down your computer now?
+confirm-log-out = Are you sure you want to quit all apps and log out now?
+countdown-restart = The computer restarts automatically in { $seconds } seconds.
+countdown-shut-down = The computer shuts down automatically in { $seconds } seconds.
+countdown-log-out = You are logged out automatically in { $seconds } seconds.
+button-restart = Restart
+button-shut-down = Shut Down
+button-log-out = Log Out
+memory-gigabytes = { $gigabytes } GB

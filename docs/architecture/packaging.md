@@ -14,13 +14,13 @@ profiles. Sizes are tracked in [performance.md](performance.md).
 
 - **Per crate** (`cargo deb`, arm64): `unbound-compositor`, the session services
   (`unbound-config`, `unbound-notify`, `unbound-power`, `unbound-clipboard`, `unbound-tray`,
-  `unbound-automount`, `xdg-desktop-portal-unbound`), the shell clients (`unbound-dock`,
-  `unbound-menubar`, `unbound-launcher`, `unbound-controlcenter`, `unbound-notifications`, `unbound-screenshot`,
+  `unbound-automount`, `xdg-desktop-portal-unbound`), the shell clients (`unbound-bar`,
+  `unbound-launcher`, `unbound-controlcenter`, `unbound-notifications`, `unbound-screenshot`,
   `unbound-lock`, `unbound-greeter`) and the apps (`unbound-term`, `unbound-files`,
   `unbound-settings`). Package names stay `unbound-*` whatever directory the crate lives in
   ([decision 0003](../decisions/0003-repository-layout.md)).
 - **`unbound-desktop`** (`packaging/unbound-desktop`, architecture `all`): the meta-package.
-  It depends on the compositor, the core session services, the Dock, the launcher, the lock
+  It depends on the compositor, the core session services, the bar, the launcher, the lock
   screen and the portal backend at the same version, and on `xdg-desktop-portal`,
   `dbus-user-session`, logind and `libpam-systemd`; it recommends the terminal, screenshot
   tool, Files, Settings, Activity Monitor, tray and automount services, `gnome-keyring` with
@@ -33,6 +33,8 @@ profiles. Sizes are tracked in [performance.md](performance.md).
   wins. `ci/deb-install` installs without the third-party recommends and checks that each of
   them has an installation candidate in Debian 13. Installing it adds "Unbound" to the sessions a
   display manager such as GDM, SDDM or greetd offers.
+- **`unbound-dock`, `unbound-menubar`** (`packaging/unbound-desktop`, architecture `all`):
+  transitional packages that depend on `unbound-bar`, so upgrades replace the two old clients.
 - **`unbound-archive-keyring`, `unbound-apt-source`, `unbound-apt-source-testing`**
   (`packaging/unbound-apt-source`): the repository's signing key and the APT source for the
   release and testing channels. Installation is described in the top-level `README.md`.

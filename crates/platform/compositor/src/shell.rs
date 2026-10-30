@@ -112,6 +112,18 @@ impl State {
                     .map(|(_, app_id)| app_id.clone())
             })
             .unwrap_or_default();
+        let output = key
+            .and_then(|surface| self.window_index(surface))
+            .map(|index| self.screens[self.screen_of(&self.windows[index])].name())
+            .unwrap_or_default();
+        if output != self.active_output {
+            for shell in &self.shell_resources {
+                if shell.version() >= unbound_shell_v1::EVT_ACTIVE_OUTPUT_SINCE {
+                    shell.active_output(output.clone());
+                }
+            }
+            self.active_output = output;
+        }
         if app_id == self.active_app {
             return;
         }
@@ -249,6 +261,9 @@ impl GlobalDispatch<UnboundShellV1, ()> for State {
         if shell.version() >= unbound_shell_v1::EVT_ACTIVE_APP_SINCE {
             shell.active_app(state.active_app.clone());
         }
+        if shell.version() >= unbound_shell_v1::EVT_ACTIVE_OUTPUT_SINCE {
+            shell.active_output(state.active_output.clone());
+        }
         state.announce_unresponsive(&shell);
         state.announce_minimized_windows(&shell);
         state.announce_workspaces_to(&shell);
@@ -274,6 +289,7 @@ impl Dispatch<UnboundShellV1, ()> for State {
         match request {
             unbound_shell_v1::Request::ActivateApp { app_id } => state.activate_app(&app_id),
             unbound_shell_v1::Request::ToggleControlCenter => state.toggle_control_center(),
+            unbound_shell_v1::Request::ShowLauncher => state.show_launcher(),
             unbound_shell_v1::Request::SetIconRect {
                 app_id,
                 surface,

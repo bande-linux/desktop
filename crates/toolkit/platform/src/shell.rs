@@ -95,6 +95,18 @@ impl Window {
         self.flush()
     }
 
+    pub fn show_launcher(&mut self) -> Result<(), WindowError> {
+        self.shell_since(unbound_shell_v1::REQ_SHOW_LAUNCHER_SINCE)?
+            .show_launcher();
+        self.flush()
+    }
+
+    pub fn show_windows(&mut self, app_id: &str) -> Result<(), WindowError> {
+        self.shell_since(unbound_shell_v1::REQ_SHOW_WINDOWS_SINCE)?
+            .show_windows(app_id.to_owned());
+        self.flush()
+    }
+
     pub fn select_input_source(&mut self, index: usize) -> Result<(), WindowError> {
         self.shell_since(unbound_shell_v1::REQ_SELECT_INPUT_SOURCE_SINCE)?
             .select_input_source(u32::try_from(index).unwrap_or(u32::MAX));
@@ -284,6 +296,15 @@ impl Dispatch<UnboundShellV1, ()> for State {
             }
             unbound_shell_v1::Event::FocusShell { namespace } => {
                 state.events.push(WindowEvent::FocusShell(namespace));
+            }
+            unbound_shell_v1::Event::ActiveOutput { name } => {
+                state.events.push(WindowEvent::ActiveOutput(name));
+            }
+            unbound_shell_v1::Event::Workspaces { count, active } => {
+                state.events.push(WindowEvent::Workspaces {
+                    count: count as usize,
+                    active: active as usize,
+                });
             }
             unbound_shell_v1::Event::InputSources { sources, active } => {
                 state.events.push(WindowEvent::InputSources {

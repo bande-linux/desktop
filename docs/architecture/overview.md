@@ -83,8 +83,8 @@ graph TB
     SETTINGS & MENUBAR & CC <-->|D-Bus| CONFIG
 ```
 
-The Dock is the crate `unbound-dock` today; [decision 0003](../decisions/0003-repository-layout.md)
-renames its directory.
+The Dock and the menu bar are one process, `unbound-bar` (`crates/shell/bar`); their models live in
+`unbound-dock-model` and `unbound-status` (`crates/libs`).
 
 ## Process model
 

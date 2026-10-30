@@ -96,7 +96,7 @@ jobs:
         run: |
           packages="unbound-compositor unbound-notify unbound-clipboard unbound-config unbound-power unbound-sound \
               xdg-desktop-portal-unbound unbound-tray unbound-automount \
-              unbound-desktop-surface unbound-dock unbound-launcher unbound-term unbound-lock unbound-screenshot unbound-files unbound-settings unbound-greeter unbound-menubar unbound-controlcenter unbound-notifications unbound-monitor"
+              unbound-desktop-surface unbound-bar unbound-launcher unbound-term unbound-lock unbound-screenshot unbound-files unbound-settings unbound-greeter unbound-controlcenter unbound-notifications unbound-monitor"
           cargo build --profile dist --locked $(printf -- '--package %s ' $packages)
           for package in $packages; do
             cargo deb --profile dist --no-build --package "$package" --locked --deb-version "$DEB_VERSION"
@@ -143,7 +143,7 @@ jobs:
             | grep -qw 'unbound-clipboard'
       - name: Check the shell's packages
         run: |
-          for package in unbound-desktop-surface unbound-dock unbound-launcher unbound-term unbound-lock unbound-screenshot unbound-files unbound-settings unbound-menubar unbound-controlcenter unbound-notifications; do
+          for package in unbound-desktop-surface unbound-bar unbound-launcher unbound-term unbound-lock unbound-screenshot unbound-files unbound-settings unbound-controlcenter unbound-notifications; do
             dpkg-deb --field target/debian/unbound-compositor_*.deb Recommends | grep -q "$package"
             dpkg-deb --contents target/debian/"$package"_*.deb | grep -q " ./usr/bin/$package\$"
           done

@@ -5,7 +5,7 @@ use smithay::wayland::shell::wlr_layer::KeyboardInteractivity;
 use unbound_protocols::server::unbound_shell_v1::{self, UnboundShellV1};
 use unbound_spring::Spring;
 
-use crate::motion::Look;
+use crate::motion::{BAR_NAMESPACE, Look};
 use crate::shell::{is_shell, toplevel_names};
 use crate::state::State;
 
@@ -144,18 +144,20 @@ impl State {
         let pointer = self.pointer_screen();
         let order =
             std::iter::once(pointer).chain((0..self.screens.len()).filter(|s| *s != pointer));
-        let surface = order
-            .filter_map(|screen| {
-                let map = layer_map_for_output(&self.screens[screen].output);
+        let order: Vec<usize> = order.collect();
+        let find = |wanted: &str| {
+            order.iter().find_map(|screen| {
+                let map = layer_map_for_output(&self.screens[*screen].output);
                 map.layers()
                     .find(|layer| {
-                        layer.namespace() == namespace
+                        layer.namespace() == wanted
                             && layer.cached_state().keyboard_interactivity
                                 != KeyboardInteractivity::None
                     })
                     .map(|layer| layer.wl_surface().clone())
             })
-            .next();
+        };
+        let surface = find(namespace).or_else(|| find(BAR_NAMESPACE));
 
         let Some(surface) = surface else {
             return;

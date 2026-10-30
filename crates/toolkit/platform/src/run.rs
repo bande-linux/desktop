@@ -129,7 +129,8 @@ pub fn run(window: &mut Window, app: &mut impl App) -> Result<(), WindowError> {
         let (wayland_ready, accessibility_ready, appearance_ready, pastes_ready, sources_ready) = {
             let connection = guard.connection_fd();
             let accessibility = window.accessibility.fd();
-            let appearance = window.appearance.fd();
+            let appearance = window.appearance.borrow();
+            let appearance = appearance.fd();
             let pastes = window.transfer_fds();
             let sources = app.sources();
             let mut fds = Vec::with_capacity(BUILT_IN_SOURCES + pastes.len() + sources.len());
@@ -180,7 +181,10 @@ pub fn run(window: &mut Window, app: &mut impl App) -> Result<(), WindowError> {
                 }
             }
         }
-        if appearance_ready && let Some(appearance) = window.appearance.take_change() {
+        let change = appearance_ready
+            .then(|| window.appearance.borrow_mut().take_change())
+            .flatten();
+        if let Some(appearance) = change {
             window.request_redraw();
             app.event(window, WindowEvent::AppearanceChanged(appearance));
         }
@@ -196,6 +200,217 @@ pub fn run(window: &mut Window, app: &mut impl App) -> Result<(), WindowError> {
         }
         if app_deadline.is_some_and(|deadline| deadline <= now) {
             app.tick(window, now);
+        }
+    }
+}
+
+pub trait Surfaces {
+    fn windows(&self) -> &[Window];
+
+    fn windows_mut(&mut self) -> &mut [Window];
+
+    fn scene(&mut self, index: usize) -> Scene;
+
+    fn event(&mut self, index: usize, event: WindowEvent);
+
+    fn sources(&self) -> Vec<BorrowedFd<'_>> {
+        Vec::new()
+    }
+
+    fn source_ready(&mut self, _index: usize) {}
+
+    fn deadline(&self) -> Option<Instant> {
+        None
+    }
+
+    fn tick(&mut self, _now: Instant) {}
+
+    fn animating(&self, _index: usize) -> bool {
+        false
+    }
+
+    fn accessibility(&self, _index: usize) -> Option<TreeUpdate> {
+        None
+    }
+}
+
+fn deliver(app: &mut impl Surfaces) -> Result<bool, WindowError> {
+    let now = Instant::now();
+    for index in 0..app.windows().len() {
+        let Some(window) = app.windows_mut().get_mut(index) else {
+            break;
+        };
+        window.dispatch_pending()?;
+        window.fire_repeats(now);
+        for event in window.take_events() {
+            if let WindowEvent::Focus(focused) = event
+                && let Some(window) = app.windows_mut().get_mut(index)
+            {
+                window.accessibility.set_window_focused(focused);
+            }
+            app.event(index, event);
+        }
+    }
+    Ok(app.windows().iter().any(Window::is_closed))
+}
+
+struct Readiness {
+    wayland: bool,
+    appearance: bool,
+    accessibility: Vec<usize>,
+    pastes: Vec<(usize, usize)>,
+    sources: Vec<usize>,
+}
+
+fn wait(
+    app: &impl Surfaces,
+    guard: &ReadEventsGuard,
+    deadline: Option<Instant>,
+) -> Result<Readiness, WindowError> {
+    let windows = app.windows();
+    let count = windows.len();
+    let connection = guard.connection_fd();
+    let appearance = windows[0].appearance.borrow();
+    let appearance = appearance.fd();
+    let accessibility: Vec<BorrowedFd<'_>> = windows
+        .iter()
+        .map(|window| window.accessibility.fd())
+        .collect();
+    let pastes: Vec<(usize, BorrowedFd<'_>)> = windows
+        .iter()
+        .enumerate()
+        .flat_map(|(index, window)| window.transfer_fds().into_iter().map(move |fd| (index, fd)))
+        .collect();
+    let sources = app.sources();
+    let mut fds = Vec::with_capacity(2 + count + pastes.len() + sources.len());
+    fds.push(PollFd::new(&connection, PollFlags::IN));
+    fds.push(PollFd::new(&appearance, PollFlags::IN));
+    for fd in accessibility
+        .iter()
+        .chain(pastes.iter().map(|(_, fd)| fd))
+        .chain(&sources)
+    {
+        fds.push(PollFd::new(fd, PollFlags::IN));
+    }
+    let timeout = deadline.map(|deadline| {
+        let wait = deadline.saturating_duration_since(Instant::now());
+        Timespec {
+            tv_sec: i64::try_from(wait.as_secs()).unwrap_or(i64::MAX),
+            tv_nsec: i64::from(wait.subsec_nanos()),
+        }
+    });
+    match poll(&mut fds, timeout.as_ref()) {
+        Ok(_) | Err(rustix::io::Errno::INTR) => {}
+        Err(error) => return Err(io::Error::from(error).into()),
+    }
+    let ready = |at: usize| !fds[at].revents().is_empty();
+    let mut readiness = Readiness {
+        wayland: ready(0),
+        appearance: ready(1),
+        accessibility: (0..count).filter(|at| ready(2 + at)).collect(),
+        pastes: Vec::new(),
+        sources: (0..sources.len())
+            .filter(|at| ready(2 + count + pastes.len() + at))
+            .collect(),
+    };
+    let mut seen = vec![0; count];
+    for (at, (index, _)) in pastes.iter().enumerate() {
+        if ready(2 + count + at) {
+            readiness.pastes.push((*index, seen[*index]));
+        }
+        seen[*index] += 1;
+    }
+    Ok(readiness)
+}
+
+pub fn run_surfaces(app: &mut impl Surfaces) -> Result<(), WindowError> {
+    loop {
+        if app.windows().is_empty() {
+            return Ok(());
+        }
+        if deliver(app)? {
+            return Ok(());
+        }
+        for index in 0..app.windows().len() {
+            let frame_drawn = app.windows()[index].wants_frame();
+            if frame_drawn {
+                let scene = app.scene(index);
+                let animating = app.animating(index);
+                let window = &mut app.windows_mut()[index];
+                window.draw(&scene)?;
+                if animating {
+                    window.request_redraw();
+                }
+            }
+            if app.windows()[index].accessibility.wants_tree(frame_drawn)
+                && let Some(tree) = app.accessibility(index)
+            {
+                app.windows_mut()[index].publish_accessibility(tree);
+            }
+        }
+        app.windows_mut()[0].flush()?;
+        let mut waiting = false;
+        for window in app.windows_mut() {
+            window.dispatch_pending()?;
+            waiting |= window.has_events();
+        }
+        if waiting {
+            continue;
+        }
+        let Some(guard) = app.windows_mut()[0].queue.prepare_read() else {
+            continue;
+        };
+        let window_deadlines: Vec<Option<Instant>> =
+            app.windows().iter().map(Window::deadline).collect();
+        let app_deadline = app.deadline();
+        let deadline = earliest(
+            app.windows()
+                .iter()
+                .map(|window| window.state.input.repeat_deadline())
+                .chain(window_deadlines.iter().copied())
+                .chain([app_deadline]),
+        );
+        let readiness = wait(app, &guard, deadline)?;
+        if readiness.wayland {
+            read_events(guard)?;
+        } else {
+            drop(guard);
+        }
+        for index in readiness.accessibility {
+            let requests = app.windows_mut()[index].accessibility.take_requests();
+            for request in requests {
+                if !app.windows_mut()[index].perform_window_action(&request) {
+                    app.event(index, WindowEvent::Accessibility(request));
+                }
+            }
+        }
+        if readiness.appearance {
+            let change = app.windows()[0].appearance.borrow_mut().take_change();
+            if let Some(appearance) = change {
+                for index in 0..app.windows().len() {
+                    app.windows_mut()[index].request_redraw();
+                    app.event(index, WindowEvent::AppearanceChanged(appearance));
+                }
+            }
+        }
+        for (index, paste) in readiness.pastes.into_iter().rev() {
+            if let Some(window) = app.windows_mut().get_mut(index) {
+                window.read_transfer(paste);
+            }
+        }
+        for source in readiness.sources {
+            app.source_ready(source);
+        }
+        let now = Instant::now();
+        for (index, deadline) in window_deadlines.into_iter().enumerate() {
+            if deadline.is_some_and(|deadline| deadline <= now)
+                && let Some(window) = app.windows_mut().get_mut(index)
+            {
+                window.tick(now);
+            }
+        }
+        if app_deadline.is_some_and(|deadline| deadline <= now) {
+            app.tick(now);
         }
     }
 }

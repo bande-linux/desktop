@@ -190,6 +190,7 @@ pub struct State {
     pub(crate) overview: crate::overview::Overview,
     pub(crate) gesture_route: Option<crate::gesture::Route>,
     pub(crate) active_app: String,
+    pub(crate) active_output: String,
     pub(crate) idle: crate::idle::Idle,
     _idle_inhibit_state: smithay::wayland::idle_inhibit::IdleInhibitManagerState,
     pub(crate) lock_states: Option<std::sync::mpsc::Sender<bool>>,
@@ -281,7 +282,7 @@ impl Headless {
         };
         let center = settings.logical_size().to_f64().downscale(2.0);
         let screen = Screen::new(&handle, config, settings);
-        handle.create_global::<State, UnboundShellV1, ()>(11, ());
+        handle.create_global::<State, UnboundShellV1, ()>(12, ());
         handle.create_global::<State, UnboundAppV1, ()>(3, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
         handle.create_global::<State, smithay::reexports::wayland_protocols_wlr::output_management::v1::server::zwlr_output_manager_v1::ZwlrOutputManagerV1, ()>(crate::management::MANAGER_VERSION, ());
@@ -352,6 +353,7 @@ impl Headless {
             overview: crate::overview::Overview::default(),
             gesture_route: None,
             active_app: String::new(),
+            active_output: String::new(),
             idle: crate::idle::Idle::default(),
             _idle_inhibit_state: smithay::wayland::idle_inhibit::IdleInhibitManagerState::new::<
                 State,

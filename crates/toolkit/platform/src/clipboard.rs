@@ -629,6 +629,11 @@ impl Dispatch<WlDataDevice, ()> for State {
                 }
             }
             wl_data_device::Event::Enter {
+                surface,
+                id: Some(offer),
+                ..
+            } if state.is_foreign(&surface) => offer.destroy(),
+            wl_data_device::Event::Enter {
                 serial,
                 x,
                 y,

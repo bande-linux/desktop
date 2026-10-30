@@ -208,3 +208,32 @@ fn super_f3_gives_the_dock_the_keyboard_and_super_f2_the_menu_bar() {
     assert!(!editor.keyboard_focus_on(0));
     assert_eq!(dock.shell_focus_requests(), ["dock", "menubar"]);
 }
+
+#[test]
+fn the_combined_bar_takes_the_keyboard_for_both_super_f2_and_super_f3() {
+    let mut server = server();
+    let mut editor = app(&mut server, EDITOR);
+    let mut bar = shell(&mut server);
+    bar.show_named_layer(
+        &mut server,
+        &LayerRequest {
+            layer: Layer::Top,
+            anchor: Anchor::Top | Anchor::Left | Anchor::Bottom,
+            size: (64, 0),
+            exclusive_zone: 64,
+            keyboard: KeyboardInteractivity::OnDemand,
+            color: [0x80; 4],
+        },
+        "bar",
+    );
+
+    super_key(&mut server, KEY_F3);
+    roundtrip(&mut server, &mut [&mut editor, &mut bar]);
+    let bar_has_keyboard = bar.layer_has_keyboard(0);
+    super_key(&mut server, KEY_F2);
+    roundtrip(&mut server, &mut [&mut editor, &mut bar]);
+
+    assert!(bar_has_keyboard);
+    assert!(bar.layer_has_keyboard(0));
+    assert_eq!(bar.shell_focus_requests(), ["dock", "menubar"]);
+}

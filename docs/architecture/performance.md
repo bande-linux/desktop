@@ -73,6 +73,20 @@ What remains in the desktop surface's 365 MiB on lavapipe: device memory 106 MiB
 the wallpaper, the frame texture, the depth texture and the swapchain), lavapipe's presentation
 buffers 62 MiB, libLLVM 51 MiB, decoded wallpapers and heap 94 MiB.
 
+## 2026-10-30: one bar process
+
+`unbound-bar` hosts the Dock and the menu bar of a display in one process: one Wayland connection
+(the menu bar's surface opens the Dock's beside it with `Window::open_beside`, both driven by
+`run_surfaces`), one connection per D-Bus bus, one font database and one Vulkan device. Same
+headless setup as above, release build, the Dock and menu bar settled side by side:
+
+| Client | RSS + swap | Device memory | Threads |
+| :--- | ---: | ---: | ---: |
+| Dock + menu bar before (two processes, table above) | 247.8 MiB | 15.4 MiB | 65 |
+| `unbound-bar` (one process) | 160.9 MiB | 14.5 MiB | 37 |
+
+−87 MiB (−35 %) and 28 fewer threads per display.
+
 ## 2026-10-30: dependency trims
 
 | Package | Crates before | after | Change |

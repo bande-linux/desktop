@@ -116,6 +116,13 @@ impl TextSystem {
         }
     }
 
+    pub fn sharing_fonts(&self) -> Self {
+        Self {
+            fonts: self.fonts.clone(),
+            layouts: LayoutContext::new(),
+        }
+    }
+
     pub fn contexts(&mut self) -> (&mut FontContext, &mut LayoutContext<Color>) {
         (&mut self.fonts, &mut self.layouts)
     }

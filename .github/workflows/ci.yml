@@ -67,7 +67,7 @@ jobs:
   deb:
     name: ci/deb
     runs-on: [self-hosted, unbound]
-    timeout-minutes: 60
+    timeout-minutes: 90
     env:
       CARGO_DEB_VERSION: 3.8.0
     steps:
@@ -94,25 +94,27 @@ jobs:
         env:
           RUSTFLAGS: --remap-path-prefix=${{ github.workspace }}=/build --remap-path-prefix=/root/.cargo=/cargo --remap-path-prefix=/root/.rustup=/rustup
         run: |
-          for package in unbound-compositor unbound-notify unbound-clipboard unbound-config unbound-power \
+          packages="unbound-compositor unbound-notify unbound-clipboard unbound-config unbound-power \
               xdg-desktop-portal-unbound unbound-tray unbound-automount \
-              unbound-desktop-surface unbound-dock unbound-launcher unbound-term unbound-lock unbound-screenshot unbound-files unbound-settings unbound-greeter unbound-menubar unbound-controlcenter unbound-notifications unbound-monitor; do
-            cargo deb --package "$package" --locked --deb-version "$DEB_VERSION"
+              unbound-desktop-surface unbound-dock unbound-launcher unbound-term unbound-lock unbound-screenshot unbound-files unbound-settings unbound-greeter unbound-menubar unbound-controlcenter unbound-notifications unbound-monitor"
+          cargo build --profile dist --locked $(printf -- '--package %s ' $packages)
+          for package in $packages; do
+            cargo deb --profile dist --no-build --package "$package" --locked --deb-version "$DEB_VERSION"
           done
       - name: Build the benchmarks for ci/perf against the packaged release build
         if: github.ref == 'refs/heads/main' || contains(github.event.head_commit.message, '[perf]')
         env:
           RUSTFLAGS: --remap-path-prefix=${{ github.workspace }}=/build --remap-path-prefix=/root/.cargo=/cargo --remap-path-prefix=/root/.rustup=/rustup
-        run: cargo build --release --locked --package unbound-bench --package unbound-sample
+        run: cargo build --profile dist --locked --package unbound-bench --package unbound-sample
       - uses: actions/upload-artifact@v7
         if: github.ref == 'refs/heads/main' || contains(github.event.head_commit.message, '[perf]')
         with:
           name: perf-binaries
           path: |
-            target/release/unbound-compositor
-            target/release/unbound-bench
-            target/release/unbound-toolkit-bench
-            target/release/unbound-sample
+            target/dist/unbound-compositor
+            target/dist/unbound-bench
+            target/dist/unbound-toolkit-bench
+            target/dist/unbound-sample
           if-no-files-found: error
       - name: Inspect the packages
         run: |

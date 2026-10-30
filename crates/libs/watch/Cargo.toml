@@ -1,0 +1,15 @@
+[package]
+name = "unbound-watch"
+description = "Folder change notifications for Unbound through inotify"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+rustix = { workspace = true, features = ["fs", "pipe"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

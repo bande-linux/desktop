@@ -4,7 +4,7 @@ mod support;
 
 use unbound_graphics::{
     Color, CpuRenderer, GpuRenderer, Image, Item, Paint, Palette, Point, Rect, Scene, Scheme,
-    Shape, Spacing, Stop, TextAlign, TextStyle, TextSystem,
+    Shape, Spacing, Stop, TextAlign, TextStyle, TextSystem, damage,
 };
 
 use support::{Reference, assert_all_match, compare};
@@ -247,4 +247,51 @@ fn an_image_replacing_a_dropped_one_is_drawn_whole_on_the_gpu() {
         .expect("second frame");
     let centre = ((32 * snapshot.width + 32) * 4) as usize;
     assert_eq!(&snapshot.rgba[centre..centre + 4], [0, 0, 255, 255]);
+}
+
+fn highlighted(scene: &Scene) -> Scene {
+    let mut highlighted = scene.clone();
+    highlighted.items.insert(
+        1,
+        Item::Fill {
+            shape: Shape::rounded(Rect::new(20.5, 10.25, 40.0, 24.0), 8.0),
+            paint: Color::hex(0x3478F6).with_alpha(100).into(),
+        },
+    );
+    highlighted
+}
+
+#[test]
+fn repainting_only_the_damaged_regions_gives_the_full_frame() {
+    let mut text = TextSystem::new();
+    let mut renderer = CpuRenderer::new();
+    for (name, before) in scenes(&mut text) {
+        let after = highlighted(&before);
+        let regions = damage(&before, &after, 1.0).expect("a partial change");
+        assert!(!regions.is_empty(), "{name}: the highlight is damaged");
+        let mut patched = renderer.render(&before).expect("first frame").rgba;
+        for region in regions {
+            let row_bytes = region.width as usize * 4;
+            let mut pixels = vec![0; row_bytes * region.height as usize];
+            renderer
+                .render_region(&after, 1.0, region, &mut pixels)
+                .expect("region");
+            for (row, source) in pixels.chunks_exact(row_bytes).enumerate() {
+                let start =
+                    ((region.y as usize + row) * after.width as usize + region.x as usize) * 4;
+                patched[start..start + row_bytes].copy_from_slice(source);
+            }
+        }
+        let whole = renderer.render(&after).expect("full frame").rgba;
+        let delta = patched
+            .iter()
+            .zip(&whole)
+            .map(|(a, b)| a.abs_diff(*b))
+            .max()
+            .unwrap_or(0);
+        assert!(
+            delta <= 1,
+            "{name}: partial and full frames differ by {delta}"
+        );
+    }
 }

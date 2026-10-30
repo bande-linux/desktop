@@ -5,10 +5,13 @@ use zbus::blocking::Connection;
 
 fn main() -> ExitCode {
     unbound_log::init("unbound-tray");
-    match Connection::session().and_then(|connection| Watcher::start(&connection)) {
-        Ok(_watcher) => loop {
-            std::thread::park();
-        },
+    let started =
+        Connection::session().and_then(|connection| Ok((Watcher::start(&connection)?, connection)));
+    match started {
+        Ok((_watcher, connection)) => {
+            unbound_bus::serve_until_closed(&connection);
+            ExitCode::SUCCESS
+        }
         Err(error) => {
             tracing::error!("{error}");
             ExitCode::FAILURE

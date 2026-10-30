@@ -7,8 +7,8 @@ repository.workspace = true
 
 [dependencies]
 jiff.workspace = true
-notify.workspace = true
 tracing.workspace = true
+unbound-watch.workspace = true
 unbound-xdg.workspace = true
 
 [dev-dependencies]

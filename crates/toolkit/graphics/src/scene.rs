@@ -175,6 +175,12 @@ pub struct Image {
     alive: Arc<()>,
 }
 
+impl PartialEq for Image {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
 impl fmt::Debug for Image {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Image")
@@ -239,6 +245,20 @@ impl Image {
         })
     }
 
+    pub fn tinted(&self, color: Color) -> Option<Self> {
+        let rgba = self
+            .premultiplied_rgba()
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .flat_map(|pixel| {
+                let alpha = (u16::from(pixel[3]) * u16::from(color.a) + 127) / 255;
+                [color.r, color.g, color.b, alpha as u8]
+            })
+            .collect();
+        Self::from_rgba(self.width(), self.height(), rgba)
+    }
+
     pub(crate) fn id(&self) -> u64 {
         self.id
     }
@@ -260,7 +280,7 @@ impl Image {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Item {
     Fill {
         shape: Shape,

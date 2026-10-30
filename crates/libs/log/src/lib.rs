@@ -1,14 +1,14 @@
 use std::io::{self, IsTerminal};
 
+use tracing_subscriber::filter::{LevelFilter, Targets};
+use tracing_subscriber::fmt;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::{EnvFilter, fmt};
 
-const DEFAULT_LEVEL: &str = "info";
+const FILTER_VARIABLE: &str = "RUST_LOG";
 
 pub fn init(identifier: &str) {
-    let filter =
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(DEFAULT_LEVEL));
+    let filter = targets(std::env::var(FILTER_VARIABLE).ok().as_deref());
     let registry = tracing_subscriber::registry().with(filter);
     let journal = stderr_is_journal()
         .then(tracing_journald::layer)
@@ -25,6 +25,12 @@ pub fn init(identifier: &str) {
             )
             .try_init(),
     };
+}
+
+fn targets(directives: Option<&str>) -> Targets {
+    directives
+        .and_then(|directives| directives.parse().ok())
+        .unwrap_or_else(|| Targets::new().with_default(LevelFilter::INFO))
 }
 
 fn stderr_is_journal() -> bool {
@@ -48,7 +54,25 @@ fn is_journal_stream(journal_stream: Option<&str>, device: u64, inode: u64) -> b
 
 #[cfg(test)]
 mod tests {
-    use super::is_journal_stream;
+    use tracing_subscriber::filter::LevelFilter;
+
+    use super::{is_journal_stream, targets};
+
+    #[test]
+    fn rust_log_directives_set_the_level_per_target() {
+        let filter = targets(Some("warn,unbound_dock=debug"));
+        assert_eq!(filter.default_level(), Some(LevelFilter::WARN));
+        assert!(filter.would_enable("unbound_dock::view", &tracing::Level::DEBUG));
+        assert!(!filter.would_enable("zbus", &tracing::Level::INFO));
+    }
+
+    #[test]
+    fn without_valid_directives_info_and_above_is_logged() {
+        for directives in [None, Some("=nonsense=")] {
+            let filter = targets(directives);
+            assert_eq!(filter.default_level(), Some(LevelFilter::INFO));
+        }
+    }
 
     #[test]
     fn stderr_matching_the_journal_stream_goes_to_the_journal() {

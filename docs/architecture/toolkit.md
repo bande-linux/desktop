@@ -69,6 +69,9 @@ writes a hex value, a corner radius or a font name of its own.
   `Label` 10.5/14 semibold tracked capitals in Inter; `Mono` 13/18 in JetBrains Mono.
   `TextStyle::new(size, colour)` remains for free sizes: Inter below 20 pt, Manrope from 20 pt.
   `.tabular()` adds `tnum` for numbers in columns.
+- **Symbolic icons.** The theme's symbolic icons are a single fill of light `ink`;
+  `Image::tinted(colour)` keeps an image's shape and gives it one colour, so a symbol follows
+  `ink2`, the accent when selected, or `on_accent` on a selection.
 - **Elevation.** `Elevation::{Frame, Overlay}.shadows(scheme, active)` gives the key and ambient
   shadow pair (offset, σ, opacity); an inactive frame's ambient shadow is half as strong.
 
@@ -109,8 +112,15 @@ writes a hex value, a corner radius or a font name of its own.
   surface through libwayland, loaded at run time, so that Vulkan's WSI can present on the same
   connection. The first frame is drawn by `CpuRenderer` into a `wl_shm` buffer while a thread
   creates the Vulkan device and a surface on the window; once it is ready, frames are drawn by
-  `GpuRenderer` straight into the surface (mailbox when offered). Frames are paced by
+  `GpuRenderer` into a kept frame texture that is copied to the surface (mailbox when offered). Frames are paced by
   `wl_surface.frame`. Windows follow the output's fractional scale through `wp_viewporter`.
+  All windows of a process share one Vulkan device, opened with the first and closed with the
+  last. Each renderer's image atlas starts at the surface's size (rounded up to 256 px) and grows
+  only when an image does not fit. A window hidden for 30 s drops its renderer, frame textures,
+  `wl_shm` buffers and, with the last one, the device; showing it again draws the first frames on
+  the CPU while the GPU comes back. Every frame is diffed against the last one item by item
+  (`damage`): only the changed regions are redrawn (clipped on the GPU into a kept frame texture,
+  rendered region by region on the CPU) and only they are damaged on `wl_shm` buffers.
   Text input v3 and the clipboard are supported.
   - **Window frame.** A toplevel gets its frame from the toolkit, in Datum's frame and sheet:
     the window is `chassis`, with a 48 pt header holding the window controls at the left and

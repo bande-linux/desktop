@@ -69,6 +69,7 @@ struct Forwarder {
     finished: bool,
     refuse_close: bool,
     ui: Option<Ui>,
+    menu: fn() -> Menu,
 }
 
 fn menu_ui(events: Sender<WindowEvent>) -> Ui {
@@ -106,7 +107,7 @@ impl App for Forwarder {
             && pointer.button == PointerButton::Secondary
         {
             window
-                .show_menu(sample_menu(), MenuPlacement::AtPoint(pointer.position))
+                .show_menu((self.menu)(), MenuPlacement::AtPoint(pointer.position))
                 .expect("menu");
         }
         let _ = self.events.send(event);
@@ -180,12 +181,17 @@ impl Desktop {
     }
 
     fn open(&mut self, role: Role, as_shell: bool) -> Client {
-        self.open_app(role, as_shell, WINDOW, |events, commands| Forwarder {
+        self.open_with_menu(role, as_shell, sample_menu)
+    }
+
+    fn open_with_menu(&mut self, role: Role, as_shell: bool, menu: fn() -> Menu) -> Client {
+        self.open_app(role, as_shell, WINDOW, move |events, commands| Forwarder {
             events,
             commands,
             finished: false,
             refuse_close: false,
             ui: None,
+            menu,
         })
     }
 
@@ -1206,4 +1212,187 @@ fn the_title_bar_menu_puts_the_window_in_full_screen() {
         menu_events(&client.seen).is_empty(),
         "the app is not involved"
     );
+}
+
+const KEY_END: u32 = 107;
+
+fn long_menu() -> Menu {
+    Menu::new(
+        (0..40)
+            .map(|index| MenuItem::new(&format!("Network {index}"), &format!("join-{index}")))
+            .collect(),
+    )
+}
+
+fn inside(outer: unbound_compositor::Rect, inner: unbound_compositor::Rect) -> bool {
+    inner.location.x >= outer.location.x
+        && inner.location.y >= outer.location.y
+        && inner.location.x + inner.size.w <= outer.location.x + outer.size.w
+        && inner.location.y + inner.size.h <= outer.location.y + outer.size.h
+}
+
+impl Desktop {
+    fn desktop_layer(&mut self, menu: fn() -> Menu) -> Client {
+        let mut client = self.open_with_menu(
+            Role::Layer(LayerOptions {
+                layer: LayerKind::Background,
+                anchor: Edges::ALL,
+                exclusive_zone: -1,
+                keyboard: KeyboardFocus::OnDemand,
+                namespace: "desktop".to_owned(),
+            }),
+            true,
+            menu,
+        );
+        let deadline = Instant::now() + Duration::from_secs(20);
+        let mut nudge = 0.0;
+        while !client.seen.iter().any(|event| {
+            matches!(
+                event,
+                WindowEvent::Input(Event::PointerEnter(_) | Event::PointerMove(_))
+            )
+        }) {
+            assert!(
+                Instant::now() < deadline,
+                "the layer never took the pointer"
+            );
+            nudge = 1.0 - nudge;
+            self.server
+                .move_pointer_to(Point::from((40.0 + nudge, 40.0)), 0);
+            self.settle(&mut [&mut client]);
+        }
+        client
+    }
+
+    fn open_menu_at(&mut self, client: &mut Client, at: (f64, f64), popups: usize) {
+        self.server.move_pointer_to(Point::from(at), 0);
+        self.server.press_button(BTN_RIGHT, true, 0);
+        self.server.press_button(BTN_RIGHT, false, 0);
+        self.wait_for(
+            &mut [client],
+            |_| true,
+            |desktop| desktop.server.popup_rects().len() == popups,
+        );
+        self.settle(&mut [client]);
+    }
+
+    fn close_menus(&mut self, client: &mut Client) {
+        self.type_keys(&[KEY_ESC]);
+        self.type_keys(&[KEY_ESC]);
+        self.wait_for(
+            &mut [client],
+            |_| true,
+            |desktop| desktop.server.popup_count() == 0,
+        );
+    }
+}
+
+#[test]
+fn a_desktop_menu_opened_in_any_corner_or_edge_stays_on_the_screen_at_1x_and_1_5x() {
+    for scale in [1.0, 1.5] {
+        let mut desktop = Desktop::sized((480, 360));
+        desktop.server.set_output_scale(scale);
+        let mut client = desktop.desktop_layer(sample_menu);
+        let screen = desktop.server.usable_area();
+        let (width, height) = (f64::from(screen.size.w), f64::from(screen.size.h));
+        for at in [
+            (3.0, 3.0),
+            (width / 2.0, 3.0),
+            (width - 3.0, 3.0),
+            (width - 3.0, height / 2.0),
+            (width - 3.0, height - 3.0),
+            (width / 2.0, height - 3.0),
+            (3.0, height - 3.0),
+            (3.0, height / 2.0),
+        ] {
+            desktop.open_menu_at(&mut client, at, 1);
+            let placed = desktop.server.popup_rects()[0];
+            assert!(
+                inside(screen, placed),
+                "at {scale}x a menu at {at:?} lands at {placed:?}"
+            );
+            desktop.close_menus(&mut client);
+        }
+    }
+}
+
+#[test]
+fn a_submenu_without_room_on_the_right_opens_on_the_left_overlapping_its_menu() {
+    let mut desktop = Desktop::sized((640, 360));
+    let mut client = desktop.desktop_layer(sample_menu);
+    let screen = desktop.server.usable_area();
+    desktop.open_menu_at(&mut client, (10.0, 10.0), 1);
+    let width = desktop.server.popup_rects()[0].size.w;
+    desktop.close_menus(&mut client);
+
+    let at = f64::from(screen.size.w - width - 4);
+    desktop.open_menu_at(&mut client, (at, 10.0), 1);
+    desktop.type_keys(&[KEY_DOWN]);
+    desktop.type_keys(&[KEY_DOWN]);
+    desktop.type_keys(&[KEY_RIGHT]);
+    desktop.wait_for(
+        &mut [&mut client],
+        |_| true,
+        |desktop| desktop.server.popup_rects().len() == 2,
+    );
+    let mut rects = desktop.server.popup_rects();
+    rects.sort_by_key(|rect| std::cmp::Reverse(rect.size.h));
+    let [menu, submenu] = rects[..] else {
+        panic!("{rects:?}");
+    };
+    assert_eq!(menu.location.x, at as i32);
+    assert!(inside(screen, submenu), "{submenu:?}");
+    assert_eq!(submenu.location.x + submenu.size.w, menu.location.x + 2);
+}
+
+#[test]
+fn a_menu_taller_than_the_screen_is_shortened_and_reaches_every_item_by_keyboard_and_wheel() {
+    let mut desktop = Desktop::new();
+    let mut client = desktop.desktop_layer(long_menu);
+    let screen = desktop.server.usable_area();
+    desktop.open_menu_at(&mut client, (20.0, 20.0), 1);
+    let placed = desktop.server.popup_rects()[0];
+    assert_eq!(placed.location.y, screen.location.y);
+    assert_eq!(placed.size.h, screen.size.h);
+    assert!(inside(screen, placed));
+
+    desktop.type_keys(&[KEY_END]);
+    desktop.type_keys(&[KEY_ENTER]);
+    desktop.wait_for(
+        &mut [&mut client],
+        |events| !menu_events(events).is_empty(),
+        |desktop| desktop.server.popup_count() == 0,
+    );
+    assert_eq!(
+        menu_events(&client.seen),
+        [WindowEvent::MenuAction("join-39".to_owned())]
+    );
+    client.seen.clear();
+
+    desktop.open_menu_at(&mut client, (20.0, 20.0), 1);
+    desktop.server.scroll(
+        AxisFrame::new(0)
+            .source(AxisSource::Wheel)
+            .value(Axis::Vertical, 3000.0),
+    );
+    desktop.settle(&mut [&mut client]);
+    let middle = f64::from(placed.location.y + placed.size.h / 2);
+    desktop
+        .server
+        .move_pointer_to(Point::from((40.0, middle)), 0);
+    desktop.settle(&mut [&mut client]);
+    desktop.click(BTN_LEFT);
+    desktop.wait_for(
+        &mut [&mut client],
+        |events| !menu_events(events).is_empty(),
+        |_| true,
+    );
+    let [WindowEvent::MenuAction(action)] = &menu_events(&client.seen)[..] else {
+        panic!("{:?}", client.seen);
+    };
+    let index: usize = action
+        .trim_start_matches("join-")
+        .parse()
+        .expect("a network");
+    assert!(index >= 30, "the wheel left {action} in the middle");
 }

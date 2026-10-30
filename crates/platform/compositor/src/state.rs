@@ -1278,6 +1278,7 @@ impl State {
             && layer.cached_state().keyboard_interactivity == KeyboardInteractivity::Exclusive)
             .then(|| layer.layer());
         drop(map);
+        self.follow_panel_zones();
         self.follow_exclusive_layer(surface, exclusive);
         let configured = with_states(surface, |states| {
             states
@@ -1672,6 +1673,10 @@ impl WlrLayerShellHandler for State {
         }
     }
 
+    fn new_popup(&mut self, _parent: LayerSurface, popup: PopupSurface) {
+        self.adopt_layer_popup(popup);
+    }
+
     fn layer_destroyed(&mut self, surface: LayerSurface) {
         if let Some(screen) = self.layer_screen(surface.wl_surface()) {
             let mut map = layer_map_for_output(&self.screens[screen].output);
@@ -1683,6 +1688,7 @@ impl WlrLayerShellHandler for State {
             }
         }
         self.needs_redraw = true;
+        self.follow_panel_zones();
         self.follow_exclusive_layer(surface.wl_surface(), None);
     }
 }

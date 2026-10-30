@@ -6,8 +6,8 @@ use std::time::Duration;
 use unbound_compositor::{Headless, OutputConfig, OutputMode, Rect, Renderer};
 use unbound_config::Config;
 use unbound_test_wayland::{
-    Anchor, BLUE, DecorationMode, GREEN, KeyboardInteractivity, Layer, LayerRequest, PopupRequest,
-    RED, ShmImage, TestClient, quadrants, roundtrip,
+    Anchor, BLUE, ConstraintAdjustment, DecorationMode, GREEN, KeyboardInteractivity, Layer,
+    LayerRequest, PopupRequest, RED, ShmImage, TestClient, quadrants, roundtrip,
 };
 
 use wayland_client::protocol::wl_shm::Format;
@@ -126,7 +126,7 @@ fn a_menu_on_the_second_display_closes_on_a_click_beside_it_and_the_next_click_l
             parent: 0,
             anchor_rect: (10, 10, 1, 1),
             size: (30, 20),
-            flip_x: false,
+            adjustment: ConstraintAdjustment::empty(),
             grab: true,
             color: BLUE,
         },

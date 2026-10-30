@@ -1,9 +1,11 @@
+use smithay::backend::renderer::utils::with_renderer_surface_state;
 use smithay::desktop::{
     PopupKeyboardGrab, PopupKind, PopupManager, PopupPointerGrab, PopupUngrabStrategy,
     WindowSurfaceType, find_popup_root_surface, get_popup_toplevel_coords, layer_map_for_output,
 };
 use smithay::input::Seat;
 use smithay::input::pointer::Focus;
+use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_seat::WlSeat;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
@@ -13,7 +15,8 @@ use smithay::wayland::shell::wlr_layer::KeyboardInteractivity;
 use smithay::wayland::shell::xdg::{PopupSurface, PositionerState};
 
 use crate::motion::{BAR_NAMESPACE, DOCK_NAMESPACE};
-use crate::state::{Headless, MENU_BAR_NAMESPACE, State};
+
+use crate::state::{Headless, MENU_BAR_NAMESPACE, Rect, State};
 
 impl State {
     pub(crate) fn toplevel_of(&self, surface: &WlSurface) -> Option<WlSurface> {
@@ -76,16 +79,32 @@ impl State {
         positioner: PositionerState,
     ) -> Rectangle<i32, Logical> {
         let kind = PopupKind::Xdg(popup.clone());
-        let Some((origin, output)) = find_popup_root_surface(&kind).ok().and_then(|root| {
-            let origin = self.geometry_origin(&root)?;
-            Some((origin, self.screen_rect(self.screen_of_surface(&root))))
-        }) else {
+        let Some((root, origin)) = find_popup_root_surface(&kind)
+            .ok()
+            .and_then(|root| Some((root.clone(), self.geometry_origin(&root)?)))
+        else {
             return positioner.get_geometry();
         };
-        let parent = get_popup_toplevel_coords(&kind);
-        let target = Rectangle::new(output.location - origin - parent, output.size);
+        let parent = origin + get_popup_toplevel_coords(&kind);
+        let anchor = positioner.anchor_rect;
+        let anchor_centre =
+            parent + anchor.loc + Point::from((anchor.size.w / 2, anchor.size.h / 2));
+        let screen = self
+            .screen_at(anchor_centre.to_f64())
+            .unwrap_or_else(|| self.screen_of_surface(&root));
+        let area = self.popup_area(&root, screen);
+        positioner.get_unconstrained_geometry(Rectangle::new(area.location - parent, area.size))
+    }
 
-        positioner.get_unconstrained_geometry(target)
+    fn popup_area(&self, root: &WlSurface, screen: usize) -> Rect {
+        let whole_screen = self.is_panel(root)
+            || self.window_index(root).is_some_and(|index| {
+                self.windows[index].has_state(xdg_toplevel::State::Fullscreen)
+            });
+        match whole_screen {
+            true => self.screen_rect(screen),
+            false => self.usable_area(screen),
+        }
     }
 
     pub(crate) fn new_popup(&mut self, popup: PopupSurface, positioner: PositionerState) {
@@ -94,6 +113,14 @@ impl State {
             state.geometry = geometry;
         });
         let _ = self.popups.track_popup(PopupKind::Xdg(popup));
+    }
+
+    pub(crate) fn adopt_layer_popup(&mut self, popup: PopupSurface) {
+        let positioner = popup.with_pending_state(|state| state.positioner);
+        let geometry = self.unconstrained(&popup, positioner);
+        popup.with_pending_state(|state| {
+            state.geometry = geometry;
+        });
     }
 
     pub(crate) fn reposition_popup(
@@ -260,6 +287,25 @@ impl State {
 }
 
 impl Headless {
+    pub fn popup_rects(&self) -> Vec<Rect> {
+        (0..self.state.screens.len())
+            .flat_map(|screen| self.state.stack(screen))
+            .filter_map(|(surface, origin)| {
+                let geometry = self.state.popups.find_popup(&surface)?.geometry();
+                let drawn = with_renderer_surface_state(&surface, |state| {
+                    state.buffer().and(state.surface_size())
+                })??;
+                Some(Rect {
+                    location: origin + geometry.loc,
+                    size: match geometry.size.is_empty() {
+                        true => drawn,
+                        false => geometry.size,
+                    },
+                })
+            })
+            .collect()
+    }
+
     pub fn pointer_grabbed(&self) -> bool {
         self.state.popup_grab.is_some()
             || self

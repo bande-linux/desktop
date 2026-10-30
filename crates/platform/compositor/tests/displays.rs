@@ -6,8 +6,8 @@ use std::time::Duration;
 use unbound_compositor::{Headless, OutputConfig, OutputMode, Rect, Renderer};
 use unbound_config::Config;
 use unbound_test_wayland::{
-    Anchor, BLUE, DecorationMode, GREEN, KeyboardInteractivity, Layer, LayerRequest, RED, ShmImage,
-    TestClient, quadrants, roundtrip,
+    Anchor, BLUE, DecorationMode, GREEN, KeyboardInteractivity, Layer, LayerRequest, PopupRequest,
+    RED, ShmImage, TestClient, quadrants, roundtrip,
 };
 
 use wayland_client::protocol::wl_shm::Format;
@@ -109,6 +109,47 @@ fn the_pointer_crosses_between_displays_but_never_leaves_them() {
     assert_eq!(server.pointer_location(), at(300.0, 230.0));
     server.move_pointer_to(at(100.0, 230.0), 0);
     assert_eq!(server.pointer_location(), at(100.0, 191.0));
+}
+
+#[test]
+fn a_menu_on_the_second_display_closes_on_a_click_beside_it_and_the_next_click_lands() {
+    let mut server = two_displays();
+    server.move_pointer_to(at(400.0, 100.0), 0);
+    let mut editor = app(&mut server);
+    let origin = geometry(&server).location;
+    server.move_pointer_to(at(f64::from(origin.x + 5), f64::from(origin.y + 5)), 0);
+    server.press_button(BTN_LEFT, true, 1);
+    roundtrip(&mut server, &mut [&mut editor]);
+    let menu = editor.open_popup(
+        &mut server,
+        &PopupRequest {
+            parent: 0,
+            anchor_rect: (10, 10, 1, 1),
+            size: (30, 20),
+            flip_x: false,
+            grab: true,
+            color: BLUE,
+        },
+    );
+    server.press_button(BTN_LEFT, false, 2);
+    roundtrip(&mut server, &mut [&mut editor]);
+    let delivered = editor.buttons().len();
+    let beside = at(f64::from(origin.x + 5), f64::from(origin.y + 40));
+
+    server.move_pointer_to(at(100.0, 100.0), 3);
+    assert_eq!(server.pointer_location(), at(100.0, 100.0));
+    server.move_pointer_to(beside, 4);
+    server.press_button(BTN_LEFT, true, 5);
+    server.press_button(BTN_LEFT, false, 6);
+    roundtrip(&mut server, &mut [&mut editor]);
+    assert!(editor.popup_dismissed(menu));
+    assert_eq!(editor.buttons().len(), delivered);
+
+    server.move_pointer_to(beside, 7);
+    server.press_button(BTN_LEFT, true, 8);
+    server.press_button(BTN_LEFT, false, 9);
+    roundtrip(&mut server, &mut [&mut editor]);
+    assert_eq!(editor.buttons().len(), delivered + 2);
 }
 
 #[test]

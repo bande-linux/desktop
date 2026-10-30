@@ -233,6 +233,18 @@ impl Audio {
         }
     }
 
+    pub fn changed_since(&self, generation: Option<u64>) -> Snapshot {
+        let mut state = self.shared.lock();
+        while Some(state.generation) == generation {
+            state = self
+                .shared
+                .changed
+                .wait(state)
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+        }
+        Snapshot::of(&state)
+    }
+
     fn send(&self, command: impl FnOnce(graph::Reply) -> Command) -> Result<(), Error> {
         let (done, outcome) = mpsc::channel();
         self.commands

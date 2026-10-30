@@ -6,6 +6,7 @@ edition.workspace = true
 repository.workspace = true
 
 [dependencies]
+rustix = { workspace = true, features = ["time"] }
 tracing.workspace = true
 unbound-app-menu.workspace = true
 unbound-audio.workspace = true
@@ -15,6 +16,10 @@ unbound-l10n.workspace = true
 unbound-network.workspace = true
 unbound-notify.workspace = true
 zbus.workspace = true
+
+[dev-dependencies]
+rustix = { workspace = true, features = ["event"] }
+unbound-test-bus.workspace = true
 
 [lints]
 workspace = true

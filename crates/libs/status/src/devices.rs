@@ -1,20 +1,28 @@
-use std::sync::mpsc::{Receiver, RecvTimeoutError};
+use std::sync::Arc;
+use std::sync::mpsc::{self, Receiver, Sender};
+use std::thread;
 use std::time::Duration;
 
 use unbound_audio::{Audio, Level, Snapshot};
 use unbound_bluetooth::Bluetooth as BlueZ;
 use unbound_inbox::Outbox;
 use unbound_network::NetworkManager;
-use zbus::blocking::Connection;
+use zbus::blocking::fdo::DBusProxy;
+use zbus::blocking::{Connection, MessageIterator};
 use zbus::proxy::CacheProperties;
 use zbus::zvariant::OwnedObjectPath;
+use zbus::{MatchRule, Message, message};
 
 use crate::session::Ending;
 use crate::status::{Battery, Bluetooth, Gadget, Output, Power, Sound, Wifi};
 use crate::{Command, Update};
 
-const REFRESH: Duration = Duration::from_secs(3);
-const SOUND_POLL: Duration = Duration::from_millis(200);
+const DEVICE_SERVICES: [&str; 3] = [
+    "org.freedesktop.UPower",
+    "org.freedesktop.NetworkManager",
+    "org.bluez",
+];
+const BUS: &str = "org.freedesktop.DBus";
 const UPOWER_CHARGING: u32 = 1;
 const UPOWER_FULL: u32 = 4;
 const UPOWER_BATTERY: u32 = 2;
@@ -141,6 +149,7 @@ pub enum Control {
     Run(Command),
     Scan,
     End(Ending),
+    Refresh,
 }
 
 fn report<E: std::fmt::Display>(what: &str, result: Result<(), E>) {
@@ -206,17 +215,77 @@ pub fn end_session(system: &Connection, ending: Ending) -> zbus::Result<()> {
     }
 }
 
-pub fn run_controls(system: &Connection, controls: &Receiver<Control>, outbox: &Outbox<Update>) {
+fn device_rules() -> zbus::Result<Vec<MatchRule<'static>>> {
+    let mut rules = Vec::new();
+    for service in DEVICE_SERVICES {
+        rules.push(
+            MatchRule::builder()
+                .msg_type(message::Type::Signal)
+                .sender(service)?
+                .build(),
+        );
+        rules.push(
+            MatchRule::builder()
+                .msg_type(message::Type::Signal)
+                .sender(BUS)?
+                .interface(BUS)?
+                .member("NameOwnerChanged")?
+                .add_arg(service)?
+                .build(),
+        );
+    }
+    Ok(rules)
+}
+
+fn changes_devices(message: &Message) -> bool {
+    let header = message.header();
+    if header.message_type() != message::Type::Signal {
+        return false;
+    }
+    if header
+        .interface()
+        .is_none_or(|interface| interface.as_str() != BUS)
+    {
+        return true;
+    }
+    header
+        .member()
+        .is_some_and(|member| member.as_str() == "NameOwnerChanged")
+        && message
+            .body()
+            .deserialize::<(String, String, String)>()
+            .is_ok_and(|(name, _, _)| DEVICE_SERVICES.contains(&name.as_str()))
+}
+
+fn watch_devices(system: &Connection, controls: &Sender<Control>) -> zbus::Result<()> {
+    let messages = MessageIterator::from(system);
+    let bus = DBusProxy::new(system)?;
+    for rule in device_rules()? {
+        bus.add_match_rule(rule)?;
+    }
+    if controls.send(Control::Refresh).is_err() {
+        return Ok(());
+    }
+    for message in messages.flatten() {
+        if changes_devices(&message) && controls.send(Control::Refresh).is_err() {
+            break;
+        }
+    }
+    Ok(())
+}
+
+fn run_controls(system: &Connection, controls: &Receiver<Control>, outbox: &Outbox<Update>) {
     let network = NetworkManager::new(system);
     let bluez = BlueZ::new(system);
     let mut shown: Option<Devices> = None;
-    loop {
-        match controls.recv_timeout(REFRESH) {
-            Ok(Control::Run(command)) => run(system, &network, &bluez, command),
-            Ok(Control::Scan) => report("scan for networks", network.scan()),
-            Ok(Control::End(ending)) => report("end the session", end_session(system, ending)),
-            Err(RecvTimeoutError::Timeout) => {}
-            Err(RecvTimeoutError::Disconnected) => return,
+    while let Ok(first) = controls.recv() {
+        for control in std::iter::once(first).chain(controls.try_iter()) {
+            match control {
+                Control::Run(command) => run(system, &network, &bluez, command),
+                Control::Scan => report("scan for networks", network.scan()),
+                Control::End(ending) => report("end the session", end_session(system, ending)),
+                Control::Refresh => {}
+            }
         }
         let devices = (battery(system), wifi(&network), bluetooth(&bluez));
         if shown.as_ref() != Some(&devices) {
@@ -226,6 +295,20 @@ pub fn run_controls(system: &Connection, controls: &Receiver<Control>, outbox: &
             }
         }
     }
+}
+
+pub fn follow_devices(system: &Connection, outbox: Outbox<Update>) -> Sender<Control> {
+    let (controls, received) = mpsc::channel();
+    let (watching, refreshes) = (system.clone(), controls.clone());
+    thread::spawn(move || {
+        if let Err(error) = watch_devices(&watching, &refreshes) {
+            tracing::warn!("battery, Wi-Fi and Bluetooth changes are not followed: {error}");
+            let _ = refreshes.send(Control::Refresh);
+        }
+    });
+    let system = system.clone();
+    thread::spawn(move || run_controls(&system, &received, &outbox));
+    controls
 }
 
 pub enum SoundControl {
@@ -275,30 +358,32 @@ fn control_sound(audio: &Audio, control: SoundControl) -> Result<(), unbound_aud
     }
 }
 
-pub fn run_sound(controls: &Receiver<SoundControl>, outbox: &Outbox<Update>) {
+fn run_sound(controls: Receiver<SoundControl>, outbox: &Outbox<Update>) {
     let audio = match Audio::connect() {
-        Ok(audio) => audio,
+        Ok(audio) => Arc::new(audio),
         Err(error) => {
             tracing::warn!("no sound: {error}");
             return;
         }
     };
+    let controlled = Arc::clone(&audio);
+    thread::spawn(move || {
+        for control in controls {
+            report("change the sound", control_sound(&controlled, control));
+        }
+    });
     let mut generation = None;
     loop {
-        loop {
-            match controls.try_recv() {
-                Ok(control) => report("change the sound", control_sound(&audio, control)),
-                Err(std::sync::mpsc::TryRecvError::Empty) => break,
-                Err(std::sync::mpsc::TryRecvError::Disconnected) => return,
-            }
-        }
-        if let Some(snapshot) = audio.wait_until(SOUND_POLL, |snapshot| {
-            Some(snapshot.generation) != generation
-        }) {
-            generation = Some(snapshot.generation);
-            if !outbox.send(Update::Sound(sound_of(&snapshot))) {
-                return;
-            }
+        let snapshot = audio.changed_since(generation);
+        generation = Some(snapshot.generation);
+        if !outbox.send(Update::Sound(sound_of(&snapshot))) {
+            return;
         }
     }
+}
+
+pub fn follow_sound(outbox: Outbox<Update>) -> Sender<SoundControl> {
+    let (controls, received) = mpsc::channel();
+    thread::spawn(move || run_sound(received, &outbox));
+    controls
 }

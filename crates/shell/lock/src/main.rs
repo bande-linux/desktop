@@ -110,7 +110,7 @@ impl App for Locker {
 
     fn source_ready(&mut self, window: &mut Window, index: usize) {
         if index == 1 {
-            if let Some(image) = self.backdrop.as_ref().and_then(|inbox| inbox.drain().pop()) {
+            if let Some(image) = self.backdrop.as_mut().and_then(|inbox| inbox.drain().pop()) {
                 self.screen.set_backdrop(image, frame_time().on_screen());
                 window.request_redraw();
             }

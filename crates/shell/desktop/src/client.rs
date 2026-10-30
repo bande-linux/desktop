@@ -16,6 +16,7 @@ use unbound_config::{BarEdge, Config};
 use unbound_fs::{
     Action, Answer, Change, FolderWatch, Operations, Purpose, Resolution, Task, Trash,
 };
+use unbound_inbox::Inbox;
 use unbound_thumbnails::{Request as ThumbnailRequest, ThumbnailSize, Thumbnails};
 use unbound_toolkit::ui::frame_time;
 use unbound_toolkit::{
@@ -23,7 +24,6 @@ use unbound_toolkit::{
     MenuPlacement, Point, Role, Scene, Scheme, TextSystem, Transfer, Window, WindowEvent,
 };
 use unbound_volumes::{eject, media_roots, mounted_volumes};
-use unbound_inbox::Inbox;
 use unbound_wallpaper::{Choice, Picture, Variant, choose, follow, render};
 use unbound_xdg::{
     Apps, DIRECTORY, DesktopEntry, ICON_THEMES, OCTET_STREAM, UserDir, config_dirs, config_home,

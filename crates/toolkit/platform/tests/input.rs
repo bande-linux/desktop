@@ -16,8 +16,8 @@ use unbound_graphics::{
     ScrollSource, TextSystem,
 };
 use unbound_toolkit_platform::{
-    App, Edges, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement, Role, TITLE_BAR_HEIGHT,
-    Window, WindowEvent,
+    App, DragAction, DragEvent, Edges, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement, Role,
+    TITLE_BAR_HEIGHT, Transfer, Window, WindowEvent,
 };
 use unbound_widgets::{Context, ContextMenu, Label, Menu, MenuItem, Ui};
 
@@ -62,6 +62,7 @@ struct Forwarder {
     finished: bool,
     refuse_close: bool,
     ui: Option<Ui>,
+    drags: bool,
 }
 
 fn menu_ui(events: Sender<WindowEvent>) -> Ui {
@@ -95,6 +96,21 @@ impl App for Forwarder {
             },
             None => event,
         };
+        if self.drags
+            && let WindowEvent::Input(Event::PointerDown(pointer)) = &event
+            && pointer.button == PointerButton::Primary
+        {
+            window
+                .start_drag(
+                    Transfer::uris(vec!["file:///home/user/Report%20one.pdf".to_owned()]),
+                    &[DragAction::Copy, DragAction::Move],
+                    None,
+                )
+                .expect("drag");
+        }
+        if let WindowEvent::Drag(DragEvent::Entered { .. } | DragEvent::Moved(_)) = &event {
+            window.accept_drag(Some(DragAction::Copy));
+        }
         if let WindowEvent::Input(Event::PointerDown(pointer)) = &event
             && pointer.button == PointerButton::Secondary
         {
@@ -122,6 +138,7 @@ impl App for Forwarder {
             b's' => window.show().expect("show"),
             b'b' => thread::sleep(BUSY),
             b'u' => self.ui = Some(menu_ui(self.events.clone())),
+            b'g' => self.drags = true,
             b'r' => {
                 self.refuse_close = true;
                 window.request_close();
@@ -201,6 +218,7 @@ impl Desktop {
                 finished: false,
                 refuse_close: false,
                 ui: None,
+                drags: false,
             };
             unbound_toolkit_platform::run(&mut window, &mut app).expect("run loop");
         });
@@ -1011,4 +1029,64 @@ fn clicking_an_on_demand_background_layer_gives_it_the_keyboard_until_a_window_i
         |_| true,
     );
     assert!(typed(&app.seen).is_empty());
+}
+
+fn drags(events: &[WindowEvent]) -> Vec<DragEvent> {
+    events
+        .iter()
+        .filter_map(|event| match event {
+            WindowEvent::Drag(drag) => Some(drag.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn a_dragged_file_list_arrives_as_uris_where_it_is_dropped() {
+    let mut desktop = Desktop::new();
+    let mut client = pointed_window(&mut desktop, "drag");
+    client.send(b'g');
+    desktop.settle(&mut [&mut client]);
+    desktop.server.press_button(BTN_LEFT, true, 0);
+    desktop.settle(&mut [&mut client]);
+    desktop.point_into_content(80, 60);
+    desktop.wait_for(
+        &mut [&mut client],
+        |events| {
+            drags(events)
+                .iter()
+                .any(|drag| matches!(drag, DragEvent::Entered { uris: true, .. }))
+        },
+        |_| true,
+    );
+    desktop.settle(&mut [&mut client]);
+    desktop.server.press_button(BTN_LEFT, false, 0);
+    desktop.wait_for(
+        &mut [&mut client],
+        |events| {
+            drags(events)
+                .iter()
+                .any(|drag| matches!(drag, DragEvent::Finished(_)))
+        },
+        |_| true,
+    );
+    let dropped = drags(&client.seen)
+        .into_iter()
+        .find_map(|drag| match drag {
+            DragEvent::Dropped {
+                position,
+                transfer,
+                action,
+            } => Some((position, transfer, action)),
+            _ => None,
+        })
+        .expect("a drop");
+    assert_eq!(
+        (dropped.0.x, dropped.0.y),
+        (80.0, 60.0),
+        "drops land in content coordinates"
+    );
+    assert_eq!(dropped.1.uris, ["file:///home/user/Report%20one.pdf"]);
+    assert_eq!(dropped.2, Some(DragAction::Copy));
+    assert!(drags(&client.seen).contains(&DragEvent::Finished(Some(DragAction::Copy))));
 }

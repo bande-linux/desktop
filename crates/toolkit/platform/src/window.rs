@@ -54,6 +54,7 @@ use crate::appearance::AppearanceWatch;
 use crate::capture::Capture;
 use crate::chrome::{Chrome, Control, Frame, RESIZE_MARGIN, TITLE_BAR_HEIGHT, Zone};
 use crate::clipboard::Clipboard;
+use crate::clipboard::{DragEvent, Transfer};
 use crate::effect::BackgroundEffect;
 use crate::lock::{Locked, SessionLock};
 use crate::popup::{MenuPlacement, Menus, Opening, Parent};
@@ -137,6 +138,8 @@ pub enum WindowEvent {
     MenuAction(String),
     MenuClosed,
     Pasted(String),
+    PastedTransfer(Transfer),
+    Drag(DragEvent),
     ShowLauncher,
     CaptureScreen,
     CaptureArea,
@@ -332,7 +335,7 @@ enum ShellSurface {
 
 pub struct Window {
     gpu: Gpu,
-    cpu: CpuRenderer,
+    pub(crate) cpu: CpuRenderer,
     shm_target: ShmTarget,
     role: ShellSurface,
     pub(crate) surface: WlSurface,
@@ -712,6 +715,7 @@ impl Window {
     }
 
     pub fn take_events(&mut self) -> Vec<WindowEvent> {
+        self.take_drop();
         self.serve_menus(Instant::now());
         let events = std::mem::take(&mut self.state.events);
         if self.chrome.is_none() {
@@ -936,6 +940,32 @@ impl Window {
         };
         let input = match event {
             WindowEvent::Input(input) => input,
+            WindowEvent::Drag(drag) => {
+                let shift = |point: Point| Point::new(point.x - origin.x, point.y - origin.y);
+                passed.push(WindowEvent::Drag(match drag {
+                    DragEvent::Entered {
+                        position,
+                        uris,
+                        text,
+                    } => DragEvent::Entered {
+                        position: shift(position),
+                        uris,
+                        text,
+                    },
+                    DragEvent::Moved(position) => DragEvent::Moved(shift(position)),
+                    DragEvent::Dropped {
+                        position,
+                        transfer,
+                        action,
+                    } => DragEvent::Dropped {
+                        position: shift(position),
+                        transfer,
+                        action,
+                    },
+                    other => other,
+                }));
+                return;
+            }
             WindowEvent::ToplevelChanged(_) => {
                 self.needs_redraw = true;
                 passed.push(event);

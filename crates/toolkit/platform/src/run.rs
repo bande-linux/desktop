@@ -117,7 +117,7 @@ pub fn run(window: &mut Window, app: &mut impl App) -> Result<(), WindowError> {
             let connection = guard.connection_fd();
             let accessibility = window.accessibility.fd();
             let appearance = window.appearance.fd();
-            let pastes = window.paste_fds();
+            let pastes = window.transfer_fds();
             let sources = app.sources();
             let mut fds = Vec::with_capacity(BUILT_IN_SOURCES + pastes.len() + sources.len());
             fds.push(PollFd::new(&connection, PollFlags::IN));
@@ -172,7 +172,7 @@ pub fn run(window: &mut Window, app: &mut impl App) -> Result<(), WindowError> {
             app.event(window, WindowEvent::AppearanceChanged(appearance));
         }
         for index in pastes_ready.into_iter().rev() {
-            window.read_paste(index);
+            window.read_transfer(index);
         }
         for index in sources_ready {
             app.source_ready(window, index);

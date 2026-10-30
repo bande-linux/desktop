@@ -1,5 +1,6 @@
 use std::process;
-use std::sync::mpsc::Receiver;
+use std::sync::mpsc::{self, Receiver};
+use std::thread;
 
 use unbound_inbox::Outbox;
 use zbus::blocking::fdo::DBusProxy;
@@ -8,7 +9,7 @@ use zbus::fdo::RequestNameFlags;
 use zbus::names::BusName;
 use zbus::proxy::CacheProperties;
 use zbus::zvariant::{OwnedObjectPath, Value};
-use zbus::{MatchRule, message};
+use zbus::{MatchRule, Message, message};
 
 use crate::Update;
 use crate::dbusmenu::{APP_MENU_PATH, DBusMenu, Node, tree};
@@ -20,6 +21,7 @@ const MENU_INTERFACE: &str = "com.canonical.dbusmenu";
 const ICON_PIXELS: i32 = 32;
 const NOTIFICATION_SCREEN: &str = "org.unbound.NotificationScreen";
 const NOTIFICATION_SCREEN_PATH: &str = "/org/unbound/NotificationScreen";
+const BUS: &str = "org.freedesktop.DBus";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TrayIcon {
@@ -181,41 +183,40 @@ pub fn host(connection: &Connection, outbox: &Outbox<Update>) -> zbus::Result<()
         name.as_str().try_into()?,
         RequestNameFlags::DoNotQueue.into(),
     )?;
-    let rule = MatchRule::builder().msg_type(message::Type::Signal).build();
-    let signals = MessageIterator::for_match_rule(rule, connection, Some(256))?;
+    let messages = MessageIterator::from(connection);
+    let bus = DBusProxy::new(connection)?;
+    for rule in tray_rules()? {
+        bus.add_match_rule(rule)?;
+    }
+    let (events, received) = mpsc::channel();
+    thread::spawn(move || {
+        for message in messages.flatten() {
+            if let Some(event) = tray_event(&message)
+                && events.send(event).is_err()
+            {
+                break;
+            }
+        }
+    });
     register(connection, &name);
     let mut shown = items(connection);
     outbox.send(Update::Tray(shown.clone()));
-    for signal in signals.flatten() {
-        let header = signal.header();
-        let interface = header.interface().map(|name| name.as_str().to_owned());
-        let watcher_returned = interface.as_deref() == Some("org.freedesktop.DBus")
-            && header
-                .member()
-                .is_some_and(|member| member == "NameOwnerChanged")
-            && signal
-                .body()
-                .deserialize::<(String, String, String)>()
-                .is_ok_and(|(owner_of, _, new)| owner_of == WATCHER && !new.is_empty());
-        if watcher_returned {
-            register(connection, &name);
+    while let Ok(first) = received.recv() {
+        let mut changed = false;
+        for event in std::iter::once(first).chain(received.try_iter()) {
+            match event {
+                TrayEvent::WatcherReturned => register(connection, &name),
+                TrayEvent::AppMenuChanged => {
+                    if !outbox.send(Update::AppMenuChanged) {
+                        return Ok(());
+                    }
+                    continue;
+                }
+                TrayEvent::Items => {}
+            }
+            changed = true;
         }
-        let app_menu_changed = interface.as_deref() == Some(MENU_INTERFACE)
-            && header
-                .path()
-                .is_some_and(|path| path.as_str() == APP_MENU_PATH)
-            && header
-                .member()
-                .is_some_and(|member| member == "LayoutUpdated");
-        if app_menu_changed && !outbox.send(Update::AppMenuChanged) {
-            return Ok(());
-        }
-        let relevant = watcher_returned
-            || matches!(
-                interface.as_deref(),
-                Some(ITEM_INTERFACE | WATCHER_INTERFACE)
-            );
-        if !relevant {
+        if !changed {
             continue;
         }
         let current = items(connection);
@@ -227,6 +228,56 @@ pub fn host(connection: &Connection, outbox: &Outbox<Update>) -> zbus::Result<()
         }
     }
     Ok(())
+}
+
+enum TrayEvent {
+    Items,
+    WatcherReturned,
+    AppMenuChanged,
+}
+
+fn tray_rules() -> zbus::Result<[MatchRule<'static>; 4]> {
+    let signal = || MatchRule::builder().msg_type(message::Type::Signal);
+    Ok([
+        signal().interface(ITEM_INTERFACE)?.build(),
+        signal().interface(WATCHER_INTERFACE)?.build(),
+        signal()
+            .sender(BUS)?
+            .interface(BUS)?
+            .member("NameOwnerChanged")?
+            .add_arg(WATCHER)?
+            .build(),
+        signal()
+            .interface(MENU_INTERFACE)?
+            .member("LayoutUpdated")?
+            .path(APP_MENU_PATH)?
+            .build(),
+    ])
+}
+
+fn tray_event(message: &Message) -> Option<TrayEvent> {
+    let header = message.header();
+    if header.message_type() != message::Type::Signal {
+        return None;
+    }
+    let member = header.member()?.as_str();
+    match header.interface()?.as_str() {
+        ITEM_INTERFACE | WATCHER_INTERFACE => Some(TrayEvent::Items),
+        BUS if member == "NameOwnerChanged" => message
+            .body()
+            .deserialize::<(String, String, String)>()
+            .is_ok_and(|(owner_of, _, new)| owner_of == WATCHER && !new.is_empty())
+            .then_some(TrayEvent::WatcherReturned),
+        MENU_INTERFACE
+            if member == "LayoutUpdated"
+                && header
+                    .path()
+                    .is_some_and(|path| path.as_str() == APP_MENU_PATH) =>
+        {
+            Some(TrayEvent::AppMenuChanged)
+        }
+        _ => None,
+    }
 }
 
 #[derive(Debug, Clone)]

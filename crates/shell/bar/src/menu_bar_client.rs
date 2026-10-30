@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::mpsc::{self, Sender};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use unbound_bar::menubar::{HEIGHT, MenuBar, Slot, StatusView, app_name};
 use unbound_bar::menus::{
@@ -16,8 +16,9 @@ use unbound_config::{BUS_NAME, BarEdge, MenuBarPlacement, OBJECT_PATH};
 use unbound_datetime::DateFormats;
 use unbound_inbox::{Inbox, Outbox};
 use unbound_keyboard::Layouts;
+use unbound_status::clock::follow_minutes;
 use unbound_status::dbusmenu::{APP_MENU_PATH, Node};
-use unbound_status::devices::{Control, SoundControl, run_controls, run_sound};
+use unbound_status::devices::{Control, SoundControl, follow_devices, follow_sound};
 use unbound_status::session::full_name;
 use unbound_status::status::{InputSource, InputSources};
 use unbound_status::tray::{Errand, TrayIcon, TrayItem, host, run_errands};
@@ -37,7 +38,6 @@ use zbus::blocking::fdo::PropertiesProxy;
 
 use crate::menu_search_client::SharedHandoff;
 
-const CLOCK_TICK: Duration = Duration::from_secs(1);
 const TRAY_PIXELS: u32 = 32;
 const SCROLL_STEP: f32 = 1.0 / 16.0;
 const SETTINGS: &str = "org.unbound.Settings";
@@ -73,7 +73,6 @@ pub struct MenuBarClient<V> {
     user: String,
     layouts: Layouts,
     dates: DateFormats,
-    next_clock: Instant,
 }
 
 fn report<E: std::fmt::Display>(what: &str, result: Result<(), E>) {
@@ -658,6 +657,9 @@ impl<V: StatusView> App for MenuBarClient<V> {
                     self.dates = DateFormats::from_env().with_clock_format(&format);
                     self.bar.set_time(&jiff::Zoned::now(), &self.dates);
                 }
+                Update::Minute => {
+                    self.bar.set_time(&jiff::Zoned::now(), &self.dates);
+                }
                 Update::AppMenuChanged => {
                     if !self.app_id.is_empty() {
                         let _ = self.errands.send(Errand::AppMenu(self.app_id.clone()));
@@ -677,30 +679,19 @@ impl<V: StatusView> App for MenuBarClient<V> {
     }
 
     fn deadline(&self) -> Option<Instant> {
-        if self.handoff.borrow().chosen.is_empty() && !self.restart.get() {
-            Some(self.next_clock)
-        } else {
-            Some(Instant::now())
-        }
+        (!self.handoff.borrow().chosen.is_empty() || self.restart.get()).then(Instant::now)
     }
 
     fn accessibility(&self) -> Option<accesskit::TreeUpdate> {
         Some(self.bar.accessibility())
     }
 
-    fn tick(&mut self, window: &mut Window, now: Instant) {
+    fn tick(&mut self, window: &mut Window, _now: Instant) {
         let chosen = std::mem::take(&mut self.handoff.borrow_mut().chosen);
         for action in chosen {
             if let Some(command) = Command::parse(&action) {
                 self.run(window, command);
             }
-        }
-        if now < self.next_clock {
-            return;
-        }
-        self.next_clock = now + CLOCK_TICK;
-        if self.bar.set_time(&jiff::Zoned::now(), &self.dates) {
-            window.request_redraw();
         }
     }
 }
@@ -752,15 +743,14 @@ impl<V: StatusView> MenuBarClient<V> {
             .map(|entry| (entry.app_id().to_owned(), entry.name.clone()))
             .collect();
         let inbox = Inbox::new()?;
-        let controls = system.map(|system| {
-            let (controls, received) = mpsc::channel();
-            let (system, outbox) = (system.clone(), inbox.outbox());
-            thread::spawn(move || run_controls(&system, &received, &outbox));
-            controls
+        let controls = system.map(|system| follow_devices(system, inbox.outbox()));
+        let sound = follow_sound(inbox.outbox());
+        let minutes = inbox.outbox();
+        thread::spawn(move || {
+            if let Err(error) = follow_minutes(&minutes) {
+                tracing::warn!("the clock does not advance: {error}");
+            }
         });
-        let (sound, sound_controls) = mpsc::channel();
-        let outbox = inbox.outbox();
-        thread::spawn(move || run_sound(&sound_controls, &outbox));
         let (errands, errand_queue) = mpsc::channel();
         if let Some(session) = session {
             let (hosting, outbox) = (session.clone(), inbox.outbox());
@@ -807,7 +797,6 @@ impl<V: StatusView> MenuBarClient<V> {
             user: full_name(),
             layouts: Layouts::load(),
             dates,
-            next_clock: Instant::now() + CLOCK_TICK,
         })
     }
 }

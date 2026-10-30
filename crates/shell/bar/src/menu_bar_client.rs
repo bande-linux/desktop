@@ -367,14 +367,24 @@ impl<V: StatusView> MenuBarClient<V> {
             Slot::Sound => status.sound.as_ref().map(sound_menu),
             Slot::Bluetooth => status.bluetooth.as_ref().map(bluetooth_menu),
             Slot::InputSource => Some(input_source_menu(&status.input_sources)),
-            Slot::TrayMore => Some(Menu::new(
-                self.tray
+            Slot::TrayMore => {
+                let mut items: Vec<MenuItem> = self
+                    .tray
                     .iter()
                     .enumerate()
                     .skip(self.bar.shown_tray_items())
                     .map(|(index, item)| MenuItem::new(&item.title, &format!("{TRAY_ITEM}{index}")))
-                    .collect(),
-            )),
+                    .collect();
+                if status.input_sources.current().is_some()
+                    && self.bar.slot_rect(Slot::InputSource).is_none()
+                {
+                    if !items.is_empty() {
+                        items.push(MenuItem::separator());
+                    }
+                    items.extend(input_source_menu(&status.input_sources).items);
+                }
+                Some(Menu::new(items))
+            }
             Slot::App if self.app_root.is_none() => Some(Menu::new(vec![MenuItem::new(
                 self.bar.app(),
                 BRING_TO_FRONT,

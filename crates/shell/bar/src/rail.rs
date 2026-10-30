@@ -1151,7 +1151,10 @@ impl StatusView for RailView {
 
     fn slot_of_node(&self, node: NodeId) -> Option<Slot> {
         let index = usize::try_from(node.0.checked_sub(NODE_BASE)?).ok()?;
-        self.slots.get(index).map(|(slot, _)| *slot)
+        self.slots.get(index).map(|(slot, _)| match slot {
+            Slot::System => Slot::Launcher,
+            slot => *slot,
+        })
     }
 
     fn edge(&self) -> DisplayEdge {

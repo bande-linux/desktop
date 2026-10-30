@@ -192,6 +192,7 @@ impl FilesView {
         Header {
             title_x: forward.x + forward.width + TITLE_GAP,
             items: frames.iter().map(|(_, frame)| *frame).collect(),
+            tabs: Vec::new(),
         }
     }
 }

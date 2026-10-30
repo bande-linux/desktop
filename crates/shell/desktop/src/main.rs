@@ -17,6 +17,7 @@ use unbound_fs::{
     Action, Answer, Change, FolderWatch, Operations, Purpose, Resolution, Task, Trash,
 };
 use unbound_thumbnails::{Request as ThumbnailRequest, ThumbnailSize, Thumbnails};
+use unbound_toolkit::ui::frame_time;
 use unbound_toolkit::{
     App, DragAction, DragEvent, Edges, Image, KeyboardFocus, LayerKind, LayerOptions,
     MenuPlacement, Point, Role, Scene, Scheme, Transfer, Window, WindowEvent,
@@ -131,7 +132,8 @@ impl Surface {
         match self.wallpapers.get(&wanted) {
             Some(layer) => {
                 if self.view.wallpaper_key() != Some(&wanted) {
-                    self.view.show_wallpaper(layer.clone(), Instant::now());
+                    self.view
+                        .show_wallpaper(layer.clone(), frame_time().on_screen());
                     window.request_redraw();
                 }
                 if let Some(spare) = spare {
@@ -245,7 +247,7 @@ impl Surface {
         if let Some(thumbnails) = self.thumbnails.as_ref().filter(|_| !wanted.is_empty()) {
             thumbnails.want(wanted);
         }
-        self.view.set_items(with_icons, Instant::now());
+        self.view.set_items(with_icons, frame_time().on_screen());
         self.watch_folders();
         self.save_layouts();
     }
@@ -310,7 +312,7 @@ impl Surface {
             (size.0 as f32, size.1 as f32),
             scale as f32,
             self.area(size),
-            Instant::now(),
+            frame_time().on_screen(),
         );
         if relist {
             self.icons.clear();
@@ -546,10 +548,9 @@ impl Surface {
                         tracing::warn!("cannot paste: {error}");
                     }
                 }
-                Request::CopyText(text) => window.copy(&text),
-                Request::PasteText => {
-                    if let Err(error) = window.paste() {
-                        tracing::warn!("cannot paste: {error}");
+                Request::Clipboard(request) => {
+                    if let Err(error) = window.serve_clipboard(request) {
+                        tracing::warn!("cannot use the clipboard: {error}");
                     }
                 }
                 Request::Eject(paths) => eject(paths),
@@ -682,13 +683,13 @@ impl Surface {
 impl App for Surface {
     fn scene(&mut self, window: &mut Window) -> Scene {
         self.follow_viewport(window);
-        self.view.scene(Instant::now())
+        self.view.scene(frame_time().presentation)
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
         match event {
             WindowEvent::Input(input) => {
-                if self.view.handle(&input, Instant::now()) {
+                if self.view.handle(&input, frame_time().on_screen()) {
                     window.request_redraw();
                 }
                 self.run_requests(window);
@@ -701,7 +702,7 @@ impl App for Surface {
             }
             WindowEvent::MenuAction(action) => {
                 if let Some(command) = command(&action) {
-                    self.view.run_command(command, Instant::now());
+                    self.view.run_command(command, frame_time().on_screen());
                 }
                 self.run_requests(window);
             }
@@ -721,8 +722,12 @@ impl App for Surface {
                         transfer,
                         action,
                     } => {
-                        self.view
-                            .dropped(position, &transfer.uris, action, Instant::now());
+                        self.view.dropped(
+                            position,
+                            &transfer.uris,
+                            action,
+                            frame_time().on_screen(),
+                        );
                     }
                     DragEvent::Finished(_) => self.view.drag_finished(),
                 }
@@ -806,10 +811,14 @@ impl App for Surface {
     }
 
     fn deadline(&self) -> Option<Instant> {
-        [self.watch.deadline(), self.view.deadline(Instant::now())]
+        [self.watch.deadline(), self.view.deadline()]
             .into_iter()
             .flatten()
             .min()
+    }
+
+    fn animating(&self) -> bool {
+        self.view.is_animating()
     }
 
     fn tick(&mut self, window: &mut Window, now: Instant) {

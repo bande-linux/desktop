@@ -1197,8 +1197,8 @@ impl Table {
             None => {
                 self.glide = Some(Glide {
                     run,
-                    top: Animated::new(top),
-                    bottom: Animated::new(bottom),
+                    top: Animated::points(top),
+                    bottom: Animated::points(bottom),
                 });
             }
         }

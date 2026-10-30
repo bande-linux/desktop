@@ -6,7 +6,7 @@ use std::time::Duration;
 use rustix::process::{Pid, Signal, kill_process};
 use smithay::backend::renderer::element::Id;
 use smithay::utils::Rectangle;
-use unbound_config::{Accessibility, BUS_NAME, OBJECT_PATH};
+use unbound_config::{Accessibility, BUS_NAME, OBJECT_PATH, SCREEN_READER};
 use unbound_graphics::Palette;
 use unbound_spring::{Animation, Spring, State as Phase};
 use zbus::blocking::{Connection, Proxy};
@@ -17,13 +17,16 @@ use crate::environment::export_cursor_environment;
 use crate::scene::{FillElement, rounded};
 use crate::state::{Headless, OutputElement, State};
 
-const SCREEN_READER: &str = "orca";
 const SOUND_BUS_NAME: &str = "org.unbound.Sound";
 const SOUND_PATH: &str = "/org/unbound/Sound";
 const FLASH_OPACITY: f64 = 0.45;
 const FLASH_SETTLED: f64 = 0.004;
 
 type Remembered = (&'static str, OwnedValue);
+
+pub(crate) fn screen_reader_installed() -> bool {
+    unbound_xdg::find_executable(SCREEN_READER).is_some()
+}
 
 #[derive(Default)]
 pub(crate) struct Assistive {
@@ -173,7 +176,7 @@ impl State {
             .map_or(Duration::ZERO, |last| time.saturating_sub(last));
         flash.last = Some(time);
         flash.opacity.advance(step.as_secs_f64());
-        if flash.opacity.is_settled(FLASH_SETTLED, FLASH_SETTLED) {
+        if flash.opacity.is_at_rest(FLASH_SETTLED) {
             self.assistive.flash = None;
         }
     }

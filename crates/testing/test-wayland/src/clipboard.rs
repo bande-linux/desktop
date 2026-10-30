@@ -245,6 +245,7 @@ impl Dispatch<WlDataDevice, ()> for Globals {
         match event {
             wl_data_device::Event::Selection { id } => globals.clipboard.selection = id,
             wl_data_device::Event::Enter { serial, id, .. } => globals.drag_entered(serial, id),
+            wl_data_device::Event::Motion { .. } => globals.drag_moved(),
             wl_data_device::Event::Drop => globals.drag_dropped(),
             wl_data_device::Event::Leave => globals.dnd.leaves += 1,
             _ => {}

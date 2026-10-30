@@ -35,6 +35,7 @@ pub struct Window {
     pub(crate) tile: Option<(Tile, Rect)>,
     pub(crate) workspace: u64,
     pub(crate) recalled: Option<Point<i32, Logical>>,
+    pub(crate) parent_anchor: Option<Point<i32, Logical>>,
     pub(crate) keep_on_top: bool,
     pub(crate) announced_workspace: Option<usize>,
     pub(crate) frame: Frame,
@@ -112,6 +113,7 @@ impl Window {
             tile: None,
             workspace,
             recalled: None,
+            parent_anchor: None,
             keep_on_top: false,
             announced_workspace: None,
             frame: Frame::default(),
@@ -264,6 +266,11 @@ impl State {
         let Some(index) = self.window_index(surface) else {
             return;
         };
+        if self.windows[index].size.is_none()
+            && let Some(workspace) = self.parent_workspace(index)
+        {
+            self.windows[index].workspace = workspace;
+        }
         let screen = self.screen_of(&self.windows[index]);
         let area = self.usable_area(screen);
         let output = self.screen_rect(screen);
@@ -285,9 +292,14 @@ impl State {
         if size.is_none() && self.windows[index].size.is_some() {
             self.remember_frame(index);
         }
+        let mapped = self.windows[index].size.is_some();
+        self.windows[index].size = size;
+        let over_parent = if mapped {
+            None
+        } else {
+            self.place_over_parent(index, area)
+        };
         let window = &mut self.windows[index];
-        let mapped = window.size.is_some();
-        window.size = size;
         if let Some(geometry) = window.geometry() {
             let acked = window.acked;
             if !mapped {
@@ -295,6 +307,8 @@ impl State {
                     output.location
                 } else if window.has_state(xdg_toplevel::State::Maximized) {
                     area.location
+                } else if let Some(at) = over_parent {
+                    at
                 } else if let Some(at) = window.recalled.take() {
                     crate::recall::clamp_into(
                         Rect {
@@ -354,7 +368,11 @@ impl State {
             Some(layer) => layer.previous.clone(),
             None => self.focused(),
         }?;
-        self.toplevel_of(&focused)
+        self.toplevel_of(&focused).or_else(|| {
+            self.key_behind_layer
+                .clone()
+                .filter(|key| self.window_index(key).is_some())
+        })
     }
 
     fn place(&mut self, index: usize, state: xdg_toplevel::State, target: Option<Rect>) {
@@ -401,15 +419,7 @@ impl State {
         {
             window.pending_location = Some((serial, location));
         }
-        self.animate_window(
-            index,
-            if state == xdg_toplevel::State::Fullscreen {
-                Spring::GENTLE
-            } else {
-                Spring::STANDARD
-            },
-            None,
-        );
+        self.animate_window(index, Spring::STANDARD, None);
     }
 
     pub(crate) fn maximize(&mut self, surface: &WlSurface) {
@@ -490,6 +500,7 @@ impl State {
         let Some(index) = self.window_index(surface) else {
             return;
         };
+        let index = self.root_index(index);
         if self.windows[index].minimized.is_some() {
             return;
         }
@@ -497,15 +508,20 @@ impl State {
         self.windows[index].minimized = Some(self.minimize_sequence);
         self.announce_minimized(index, true);
         self.animate_window(index, Spring::GENTLE, None);
-        self.refocus_after_losing(surface);
+        let root = self.windows[index].surface().clone();
+        self.keep_families_together();
+        self.refocus_after_losing(&root);
     }
 
     pub(crate) fn unminimize(&mut self, surface: &WlSurface) {
-        if let Some(index) = self.window_index(surface)
-            && self.windows[index].minimized.take().is_some()
-        {
+        let Some(index) = self.window_index(surface) else {
+            return;
+        };
+        let index = self.root_index(index);
+        if self.windows[index].minimized.take().is_some() {
             self.announce_minimized(index, false);
             self.restore_window(index);
+            self.keep_families_together();
         }
     }
 
@@ -576,6 +592,7 @@ impl State {
         };
         let screen = self.pointer_screen();
         if screen != self.screen_of(&self.windows[index])
+            && self.parent_index(index).is_none()
             && !self.on_full_screen_space(&self.windows[index])
         {
             let left = self.windows[index].workspace;
@@ -592,6 +609,7 @@ impl State {
         window.location = (location.x, location.y.max(top)).into();
         window.pending_location = None;
         self.needs_redraw = true;
+        self.keep_families_together();
     }
 
     pub(crate) fn begin_move(

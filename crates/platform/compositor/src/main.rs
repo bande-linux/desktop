@@ -398,7 +398,8 @@ fn start_user_session<O: 'static>(
             .compositor
             .start_session_client(Path::new(executable), role)
         {
-            tracing::warn!("cannot start {executable}: {error}");
+            app.compositor
+                .report_start_failure(Path::new(executable), &error);
         }
     }
     if std::env::var_os("UNBOUND_REVIEW_JOB").is_none() {
@@ -427,10 +428,15 @@ where
         Session::User => (None, start_user_session(event_loop, &mut app)?),
         Session::Greeter => {
             app.compositor.apply_input_settings(InputSettings::system());
-            (
-                Some(app.compositor.spawn_shell_client(Path::new(GREETER))?),
-                None,
-            )
+            let greeter = app
+                .compositor
+                .spawn_shell_client(Path::new(GREETER))
+                .inspect_err(|error| {
+                    app.compositor
+                        .report_start_failure(Path::new(GREETER), error)
+                })
+                .ok();
+            (Some(greeter), None)
         }
     };
     let mut timeout = None;
@@ -442,16 +448,17 @@ where
             review = None;
         }
         let upkeep = match greeter.as_mut() {
-            Some(greeter) => {
+            Some(Some(greeter)) => {
                 if greeter.try_wait()?.is_some() {
                     return Ok(());
                 }
                 SessionUpkeep::default()
             }
+            Some(None) => SessionUpkeep::default(),
             None => app.compositor.keep_session_clients_running(),
         };
         for (executable, error) in &upkeep.failures {
-            tracing::warn!("cannot restart {}: {error}", executable.display());
+            app.compositor.report_start_failure(executable, error);
         }
         let App {
             compositor,

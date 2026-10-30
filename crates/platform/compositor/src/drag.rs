@@ -1,13 +1,12 @@
-use std::time::Duration;
-
 use smithay::backend::renderer::element::Kind;
 use smithay::backend::renderer::element::surface::render_elements_from_surface_tree;
 use smithay::desktop::PopupUngrabStrategy;
 use smithay::input::Seat;
+use smithay::input::pointer::{CursorIcon, MotionEvent};
 use smithay::reexports::wayland_server::protocol::wl_data_device_manager::DndAction;
 use smithay::reexports::wayland_server::protocol::wl_data_source::WlDataSource;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
-use smithay::utils::{Logical, Point, Rectangle};
+use smithay::utils::{Clock, IsAlive, Logical, Monotonic, Point, Rectangle, SERIAL_COUNTER};
 use smithay::wayland::compositor::{SurfaceAttributes, with_states};
 use smithay::wayland::selection::data_device::{
     ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler,
@@ -16,12 +15,15 @@ use smithay::wayland::selection::data_device::{
 use unbound_render::VulkanRenderer;
 use unbound_spring::Spring;
 
-use crate::motion::{Look, Motion};
+use crate::motion::{Look, Motion, Tick};
 use crate::scene::{Area, Piece, SlideBack, area_of, pieces_of};
 use crate::state::{OutputElement, State};
 
 pub(crate) struct Drag {
+    source: Option<WlDataSource>,
     icon: Option<WlSurface>,
+    over: Option<WlSurface>,
+    action: DndAction,
     offset: Point<i32, Logical>,
     origin: Point<f64, Logical>,
     drawn: Option<(Vec<Piece>, Area)>,
@@ -40,6 +42,73 @@ fn take_offset(surface: &WlSurface) -> Point<i32, Logical> {
 }
 
 impl State {
+    pub(crate) fn drag_cursor(&self) -> Option<CursorIcon> {
+        let action = self.drag.as_ref()?.action;
+        Some(if action.contains(DndAction::Copy) {
+            CursorIcon::Copy
+        } else if action.is_empty() {
+            CursorIcon::NoDrop
+        } else {
+            CursorIcon::Move
+        })
+    }
+
+    fn show_drag_action(&mut self, action: DndAction) {
+        let Some(drag) = self.drag.as_mut() else {
+            return;
+        };
+        if drag.action == action {
+            return;
+        }
+        drag.action = action;
+        if let Some(cursor) = self.drag_cursor() {
+            self.load_named_cursor(cursor);
+        }
+        self.needs_redraw = true;
+    }
+
+    pub(crate) fn drag_over(&mut self, surface: Option<&WlSurface>) {
+        if self
+            .drag
+            .as_ref()
+            .is_none_or(|drag| drag.over.as_ref() == surface)
+        {
+            return;
+        }
+        if let Some(drag) = self.drag.as_mut() {
+            drag.over = surface.cloned();
+        }
+        self.show_drag_action(DndAction::empty());
+    }
+
+    pub(crate) fn renegotiate_drag(&mut self) {
+        let Some(pointer) = self.seat.get_pointer().filter(|_| self.drag.is_some()) else {
+            return;
+        };
+        let under = self.surface_under(self.pointer_location);
+        self.drag_over(under.as_ref().map(|(surface, _)| surface));
+        pointer.motion(
+            self,
+            under,
+            &MotionEvent {
+                location: self.pointer_location,
+                serial: SERIAL_COUNTER.next_serial(),
+                time: Clock::<Monotonic>::new().now().as_millis(),
+            },
+        );
+        pointer.frame(self);
+    }
+
+    pub(crate) fn end_orphaned_drag(&mut self) {
+        let orphaned = self.drag.as_ref().is_some_and(|drag| {
+            drag.source.as_ref().is_some_and(|source| !source.alive())
+                || drag.over.as_ref().is_some_and(|surface| !surface.alive())
+        });
+        if orphaned {
+            self.renegotiate_drag();
+        }
+    }
+
     pub(crate) fn commit_drag_icon(&mut self, surface: &WlSurface) -> bool {
         let Some(drag) = self
             .drag
@@ -94,12 +163,11 @@ impl State {
         }
     }
 
-    pub(crate) fn animate_slide_back(&mut self, time: Duration) {
-        let refresh = self.main_screen().refresh();
+    pub(crate) fn animate_slide_back(&mut self, tick: Tick) {
         let Some(slide) = self.slide_back.as_mut() else {
             return;
         };
-        slide.motion.advance(time, refresh);
+        slide.motion.advance(tick);
         if slide.motion.is_settled() {
             self.slide_back = None;
         }
@@ -126,6 +194,12 @@ impl State {
     }
 }
 
+impl crate::state::Headless {
+    pub fn is_dragging(&self) -> bool {
+        self.state.drag.is_some()
+    }
+}
+
 impl DataDeviceHandler for State {
     fn data_device_state(&self) -> &DataDeviceState {
         &self.data_device_state
@@ -141,16 +215,18 @@ impl DataDeviceHandler for State {
             Some(modifiers) if modifiers.logo => Some(DndAction::Move),
             _ => None,
         };
-        wanted
+        let chosen = wanted
             .filter(|action| available.contains(*action))
-            .unwrap_or_else(|| default_action_chooser(available, preferred))
+            .unwrap_or_else(|| default_action_chooser(available, preferred));
+        self.show_drag_action(chosen);
+        chosen
     }
 }
 
 impl ClientDndGrabHandler for State {
     fn started(
         &mut self,
-        _source: Option<WlDataSource>,
+        source: Option<WlDataSource>,
         icon: Option<WlSurface>,
         _seat: Seat<Self>,
     ) {
@@ -160,11 +236,15 @@ impl ClientDndGrabHandler for State {
         }
         self.slide_back = None;
         self.drag = Some(Drag {
+            source,
             icon,
+            over: None,
+            action: DndAction::empty(),
             offset,
             origin: self.pointer_location,
             drawn: None,
         });
+        self.load_named_cursor(CursorIcon::NoDrop);
         self.needs_redraw = true;
     }
 

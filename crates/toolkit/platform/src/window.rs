@@ -26,7 +26,7 @@ use unbound_graphics::{
 use unbound_protocols::client::unbound_shell_v1::{
     BrightnessKey, Edge as DisplayEdge, LauncherMode, MediaKey, Panel, VolumeKey,
 };
-use unbound_widgets::{ClipboardRequest, Menu, MenuItem, MenuOutcome, Ui};
+use unbound_widgets::{FrameTime, Menu, MenuItem, MenuOutcome, Ui};
 use wayland_client::backend::WaylandError;
 use wayland_client::protocol::wl_buffer::{self, WlBuffer};
 use wayland_client::protocol::wl_callback::{self, WlCallback};
@@ -62,12 +62,13 @@ use crate::chrome::{
     Zone, control_for_node,
 };
 use crate::clipboard::Clipboard;
-use crate::clipboard::{DragEvent, Transfer};
+use crate::clipboard::{DragAction, DragEvent, DragIcon, Transfer};
 use crate::effect::BackgroundEffect;
 use crate::lock::{Locked, SessionLock};
 use crate::popup::{MenuPlacement, Menus, Opening, Parent};
+use crate::presentation::Presentation;
 use crate::scale::{Scaling, SurfaceScale};
-use crate::seat::Input;
+use crate::seat::{CLICK_SLOP, Input};
 use crate::shell::Shell;
 use crate::text_input::TextInput;
 
@@ -327,6 +328,7 @@ pub(crate) struct State {
     pub(crate) own_surface: Option<WlSurface>,
     pub(crate) popup_surfaces: Vec<WlSurface>,
     pub(crate) popup_configured: Vec<bool>,
+    pub(crate) popup_frames: Vec<bool>,
     pub(crate) popup_input: Vec<(usize, Event)>,
     pub(crate) popups_changed: bool,
     pub(crate) popup_dismissed: bool,
@@ -338,6 +340,7 @@ pub(crate) struct State {
     pub(crate) text_input: TextInput,
     pub(crate) scaling: Scaling,
     pub(crate) effect: BackgroundEffect,
+    pub(crate) presentation: Presentation,
 }
 
 impl State {
@@ -404,6 +407,7 @@ pub struct Window {
     pub(crate) closed_by_button: bool,
     text: Option<TextSystem>,
     shown_frame: Option<Frame>,
+    planned: Option<FrameTime>,
     shown_opaque: Option<Rect>,
     pub(crate) app_cursor: Cursor,
     pub(crate) accessibility: Accessibility,
@@ -492,6 +496,7 @@ impl Window {
             .ok_or(WindowError::Missing("wl_compositor"))?;
         state.shm.as_ref().ok_or(WindowError::Missing("wl_shm"))?;
         state.join_data_device(&handle);
+        state.join_primary_selection(&handle);
 
         let surface = compositor.create_surface(&handle, ());
         state.own_surface = Some(surface.clone());
@@ -603,6 +608,7 @@ impl Window {
             closed_by_button: false,
             text: None,
             shown_frame: None,
+            planned: None,
             shown_opaque: None,
             app_cursor: Cursor::Default,
             accessibility: Accessibility::new()?,
@@ -895,6 +901,18 @@ impl Window {
         self.needs_redraw = true;
     }
 
+    pub fn frame_time(&self) -> FrameTime {
+        self.state
+            .presentation
+            .frame_time(Instant::now(), self.state.frame_pending)
+    }
+
+    pub(crate) fn plan_frame(&mut self) -> FrameTime {
+        let frame = self.frame_time();
+        self.planned = Some(frame);
+        frame
+    }
+
     pub(crate) fn wants_frame(&self) -> bool {
         self.visible
             && !self.state.frame_pending
@@ -961,7 +979,7 @@ impl Window {
     pub fn take_events(&mut self) -> Vec<WindowEvent> {
         self.take_arrival();
         self.take_drop();
-        self.serve_menus(Instant::now());
+        self.serve_menus(self.frame_time());
         let events = std::mem::take(&mut self.state.events);
         if self.chrome.is_none() {
             return events;
@@ -1010,7 +1028,7 @@ impl Window {
         {
             self.queue.blocking_dispatch(&mut self.state)?;
         }
-        self.draw_menus(Instant::now())
+        self.draw_menus(self.frame_time().presentation)
     }
 
     pub fn drive(
@@ -1024,17 +1042,23 @@ impl Window {
                 if let Some((menu, at)) = ui.take_menu_request() {
                     self.show_menu(menu, MenuPlacement::AtPoint(at))?;
                 }
-                match ui.take_clipboard_request() {
-                    Some(ClipboardRequest::Copy(text)) => self.copy(&text),
-                    Some(ClipboardRequest::Paste) => self.paste()?,
-                    None => {}
+                if let Some(request) = ui.take_clipboard_request() {
+                    self.serve_clipboard(request)?;
                 }
                 if ui.take_input_method_reset() {
                     self.reset_text_input();
                 }
+                if let Some((scene, hotspot, text)) = ui.take_text_drag() {
+                    self.start_drag(
+                        Transfer::text(&text),
+                        &[DragAction::Copy, DragAction::Move],
+                        Some(DragIcon { scene, hotspot }),
+                    )?;
+                }
                 self.set_cursor(ui.cursor());
                 (changed, None)
             }
+            WindowEvent::Drag(drag) => self.drive_drag(ui, drag),
 
             WindowEvent::Accessibility(request) => match ui.perform(&request) {
                 true => (true, None),
@@ -1092,10 +1116,50 @@ impl Window {
         let scale = self.scale();
         let handle = self.queue.handle();
         if let Some(menus) = &mut self.menus {
-            menus.draw(&self.state, &handle, &mut self.cpu, appearance, scale, now)?;
+            menus.draw(
+                &mut self.state,
+                &handle,
+                &mut self.cpu,
+                appearance,
+                scale,
+                now,
+            )?;
         }
         self.accessibility.request_tree();
         self.flush()
+    }
+
+    fn drive_drag(&mut self, ui: &mut Ui, drag: DragEvent) -> (bool, Option<WindowEvent>) {
+        let was_target = ui.is_drop_target();
+        match &drag {
+            DragEvent::Entered { position, .. } | DragEvent::Moved(position)
+                if self.drag_offers_text() =>
+            {
+                match ui.drag_over(Some(*position)) {
+                    Some(action) => {
+                        self.accept_drag(Some(action));
+                        (true, None)
+                    }
+                    None => {
+                        if was_target {
+                            self.accept_drag(None);
+                        }
+                        (was_target, Some(WindowEvent::Drag(drag)))
+                    }
+                }
+            }
+            DragEvent::Left => {
+                ui.drag_over(None);
+                (was_target, Some(WindowEvent::Drag(drag)))
+            }
+            DragEvent::Dropped {
+                position,
+                transfer,
+                action: Some(action),
+            } if was_target => (ui.dropped(*position, &transfer.text, *action), None),
+            DragEvent::Finished(action) if ui.drag_finished(*action) => (true, None),
+            _ => (false, Some(WindowEvent::Drag(drag))),
+        }
     }
 
     pub(crate) fn deadline(&self) -> Option<Instant> {
@@ -1105,6 +1169,7 @@ impl Window {
             .into_iter()
             .chain(self.ui_deadline)
             .chain(self.release_deadline())
+            .chain(self.drag_deadline())
             .min()
     }
 
@@ -1125,6 +1190,12 @@ impl Window {
         self.cpu = CpuRenderer::new();
     }
 
+    pub(crate) fn wake_ui_at(&mut self, wake: Option<Instant>) {
+        if wake.is_some() {
+            self.ui_deadline = self.ui_deadline.into_iter().chain(wake).min();
+        }
+    }
+
     pub(crate) fn tick(&mut self, now: Instant) {
         if self
             .release_deadline()
@@ -1132,14 +1203,16 @@ impl Window {
         {
             self.release_rendering();
         }
-        self.serve_menus(now);
+        self.serve_menus(self.frame_time());
+        self.abandon_unfinished_drag(now);
         if self.ui_deadline.is_some_and(|deadline| deadline <= now) {
             self.ui_deadline = None;
             self.request_redraw();
         }
     }
 
-    fn serve_menus(&mut self, now: Instant) {
+    fn serve_menus(&mut self, frame: FrameTime) {
+        let now = frame.on_screen();
         if self.menus.is_none() {
             self.state.popup_input.clear();
             return;
@@ -1154,7 +1227,7 @@ impl Window {
                 let keyboard = matches!(event, Event::Key { .. });
                 outcomes.push((menus.handle(*level, event, now), keyboard));
             }
-            outcomes.push((menus.tick(now), false));
+            outcomes.push((menus.tick(Instant::now().max(now)), false));
         }
         let mut redraw = std::mem::take(&mut self.state.popups_changed)
             || self
@@ -1165,7 +1238,7 @@ impl Window {
             redraw |= self.apply_menu_outcome(outcome, keyboard);
         }
         if redraw && self.menus.is_some() {
-            let _ = self.draw_menus(now);
+            let _ = self.draw_menus(frame.presentation);
         }
     }
 
@@ -1209,7 +1282,9 @@ impl Window {
                         text: self.text.get_or_insert_with(TextSystem::new),
                         palette,
                     };
-                    menus.search(opening, menu);
+                    if let Err(error) = menus.search(opening, menu) {
+                        tracing::warn!(%error, "cannot resize the searched menu");
+                    }
                 }
                 true
             }
@@ -1247,7 +1322,7 @@ impl Window {
             position: Point::new(pointer.position.x - origin.x, pointer.position.y - origin.y),
             ..pointer
         };
-        let now = Instant::now();
+        let now = self.frame_time().on_screen();
         let reduce_motion = self.appearance.borrow().current().reduce_motion;
         let Some(chrome) = self.chrome.as_mut() else {
             passed.push(event);
@@ -1293,6 +1368,20 @@ impl Window {
         };
         match input {
             Event::PointerEnter(pointer) | Event::PointerMove(pointer) => {
+                if let Some(start) = chrome.tab_press
+                    && (pointer.position.x - start.x).hypot(pointer.position.y - start.y)
+                        > CLICK_SLOP
+                {
+                    chrome.tab_press = None;
+                    chrome.content_buttons = 0;
+                    if std::mem::take(&mut chrome.pointer_in_content) {
+                        passed.push(WindowEvent::Input(Event::PointerLeave));
+                    }
+                    if self.start_move().is_err() {
+                        self.needs_redraw = true;
+                    }
+                    return;
+                }
                 let zone = chrome.zone_at(&frame, pointer.position);
                 if let Some(control) = chrome.pressed {
                     let inside = zone == Zone::Control(control);
@@ -1329,6 +1418,12 @@ impl Window {
             Event::PointerDown(pointer) => {
                 let zone = chrome.zone_at(&frame, pointer.position);
                 if zone == Zone::Content || chrome.content_buttons > 0 {
+                    if chrome.content_buttons == 0
+                        && pointer.button == PointerButton::Primary
+                        && chrome.tab_at(&frame, pointer.position)
+                    {
+                        chrome.tab_press = Some(pointer.position);
+                    }
                     chrome.content_buttons += 1;
                     passed.push(WindowEvent::Input(Event::PointerDown(into_content(
                         pointer,
@@ -1363,6 +1458,7 @@ impl Window {
                 }
             }
             Event::PointerUp(pointer) => {
+                chrome.tab_press = None;
                 if chrome.content_buttons > 0 {
                     chrome.content_buttons -= 1;
                     passed.push(WindowEvent::Input(Event::PointerUp(into_content(pointer))));
@@ -1398,6 +1494,7 @@ impl Window {
             }
             Event::PointerLeave => {
                 chrome.content_buttons = 0;
+                chrome.tab_press = None;
                 if chrome.hover(&frame, None, now, reduce_motion) {
                     self.needs_redraw = true;
                 }
@@ -1449,10 +1546,11 @@ impl Window {
             .menus
             .as_ref()
             .and_then(|menus| menus.tracker().item_for_node(request.target_node));
+        let frame = self.frame_time();
         if let (Some((level, index)), Some(menus)) = (item, &mut self.menus) {
-            let outcome = menus.activate(level, index, Instant::now());
+            let outcome = menus.activate(level, index, frame.on_screen());
             if self.apply_menu_outcome(outcome, true) {
-                let _ = self.draw_menus(Instant::now());
+                let _ = self.draw_menus(frame.presentation);
             }
             return true;
         }
@@ -1477,7 +1575,7 @@ impl Window {
         result.is_ok()
     }
 
-    fn framed(&mut self, frame: &Frame, scene: &Scene) -> Scene {
+    fn framed(&mut self, frame: &Frame, scene: &Scene, presentation: Instant) -> Scene {
         let appearance = self.appearance.borrow().current();
         let toplevel = self.state.toplevel;
         let look = Look {
@@ -1491,7 +1589,7 @@ impl Window {
                 &appearance.palette(),
                 appearance.scheme,
                 look,
-                Instant::now(),
+                presentation,
             ),
             None => scene.clone(),
         }
@@ -1670,13 +1768,17 @@ impl Window {
         self.wait_for_frame()?;
         self.queue.dispatch_pending(&mut self.state)?;
         self.poll_gpu();
+        let frame_time = match self.planned.take() {
+            Some(planned) => planned,
+            None => self.frame_time(),
+        };
         self.state.suggested_size = None;
         let (extra_width, extra_height) = self.frame().chrome_size();
         self.size = (scene.width + extra_width, scene.height + extra_height);
         let framed;
         let (scene, opaque) = if self.chrome.is_some() {
             let frame = self.frame();
-            framed = self.framed(&frame, scene);
+            framed = self.framed(&frame, scene, frame_time.presentation);
             self.frame_surface(&frame);
             let chassis = self.appearance.borrow().current().palette().chassis;
             let opaque =
@@ -1689,7 +1791,11 @@ impl Window {
         };
         self.declare_opaque(opaque);
         self.needs_redraw = self.chrome.as_ref().is_some_and(|chrome| chrome.animating);
-        self.surface.frame(&self.queue.handle(), ());
+        let handle = self.queue.handle();
+        self.surface.frame(&handle, ());
+        self.state
+            .presentation
+            .committing(&self.surface, &handle, frame_time);
         self.state.frame_pending = true;
         let scale = self.scale();
         self.drawn_scale = scale;
@@ -1761,6 +1867,7 @@ pub(crate) struct ShmTarget {
     buffers: Vec<ShmBuffer>,
     bgra: Vec<u8>,
     scratch: Vec<u8>,
+    size: (u32, u32),
 }
 
 fn copy_swizzled(source: &[u8], target: &mut [u8]) {
@@ -1786,6 +1893,17 @@ impl ShmTarget {
         scale: f64,
         damage: Option<&[Region]>,
     ) -> Result<(), WindowError> {
+        let damage = self.render(cpu, scene, scale, damage)?;
+        self.commit(shm, handle, surface, damage, false)
+    }
+
+    pub(crate) fn render<'a>(
+        &mut self,
+        cpu: &mut CpuRenderer,
+        scene: &Scene,
+        scale: f64,
+        damage: Option<&'a [Region]>,
+    ) -> Result<Option<&'a [Region]>, WindowError> {
         let (width, height) = (pixels(scene.width, scale), pixels(scene.height, scale));
         let bytes = width as usize * height as usize * 4;
         let damage = damage.filter(|_| self.bgra.len() == bytes);
@@ -1799,6 +1917,36 @@ impl ShmTarget {
                 }
             }
         }
+        self.size = (width, height);
+        Ok(damage)
+    }
+
+    pub(crate) fn present_faded(
+        &mut self,
+        shm: &WlShm,
+        handle: &QueueHandle<State>,
+        surface: &WlSurface,
+        alpha: f32,
+    ) -> Result<(), WindowError> {
+        let factor = (alpha.clamp(0.0, 1.0) * 256.0) as u32;
+        self.scratch.clear();
+        self.scratch.extend(
+            self.bgra
+                .iter()
+                .map(|channel| ((u32::from(*channel) * factor) >> 8) as u8),
+        );
+        self.commit(shm, handle, surface, None, true)
+    }
+
+    fn commit(
+        &mut self,
+        shm: &WlShm,
+        handle: &QueueHandle<State>,
+        surface: &WlSurface,
+        damage: Option<&[Region]>,
+        faded: bool,
+    ) -> Result<(), WindowError> {
+        let (width, height) = self.size;
         self.buffers.retain(|buffer| {
             buffer.width == width && buffer.height == height || buffer.busy.load(Ordering::Acquire)
         });
@@ -1824,8 +1972,12 @@ impl ShmTarget {
             }
         };
         let buffer = &mut self.buffers[index];
+        let pixels = match faded {
+            true => &self.scratch,
+            false => &self.bgra,
+        };
         match buffer.stale.replace(Vec::new()) {
-            None => buffer.file.write_all_at(&self.bgra, 0)?,
+            None => buffer.file.write_all_at(pixels, 0)?,
             Some(stale) => {
                 let stride = width as usize * 4;
                 for region in stale {
@@ -1834,7 +1986,7 @@ impl ShmTarget {
                         let end = start + region.width as usize * 4;
                         buffer
                             .file
-                            .write_all_at(&self.bgra[start..end], start as u64)?;
+                            .write_all_at(&pixels[start..end], start as u64)?;
                     }
                 }
             }
@@ -2113,6 +2265,9 @@ impl Dispatch<WlRegistry, ()> for State {
                     state.data_device_manager =
                         Some(registry.bind(name, version.min(3), handle, ()));
                 }
+                "zwp_primary_selection_device_manager_v1" => {
+                    state.clipboard.primary.manager = Some(registry.bind(name, 1, handle, ()));
+                }
                 "ext_background_effect_manager_v1" => {
                     state.effect.manager = Some(registry.bind(name, 1, handle, ()));
                 }
@@ -2148,6 +2303,9 @@ impl Dispatch<WlRegistry, ()> for State {
                 }
                 "wp_fractional_scale_manager_v1" => {
                     state.scaling.fractional_manager = Some(registry.bind(name, 1, handle, ()));
+                }
+                "wp_presentation" => {
+                    state.presentation.manager = Some(registry.bind(name, 1, handle, ()));
                 }
                 "wp_viewporter" => {
                     state.scaling.viewporter = Some(registry.bind(name, 1, handle, ()));

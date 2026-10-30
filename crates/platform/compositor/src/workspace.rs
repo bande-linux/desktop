@@ -9,12 +9,10 @@ use unbound_protocols::server::unbound_shell_v1::{self, UnboundShellV1};
 use unbound_spring::{Animation, Spring, State as Phase};
 
 use crate::gesture::Tracker;
-use crate::motion::Look;
+use crate::motion::{Look, Tick, progress_precision};
 use crate::state::{Headless, State};
 use crate::window::Window;
 
-const SETTLED_VIEW: f64 = 1e-3;
-const SETTLED_SPEED: f64 = 1e-2;
 const SWIPE_PER_WORKSPACE: f64 = 350.0;
 const MOMENTUM_SPEED: f64 = 2.0;
 
@@ -351,9 +349,11 @@ impl State {
         let workspaces = &self.screens[self.screen_of(&self.windows[index])].workspaces;
         let from = workspaces.index_of(self.windows[index].workspace);
         let to = workspaces.index_of(target);
-        self.windows[index].workspace = target;
-        if let (Some(from), Some(to)) = (from, to) {
-            self.carry(index, from as f64 - to as f64);
+        for member in self.family_from(index) {
+            self.windows[member].workspace = target;
+            if let (Some(from), Some(to)) = (from, to) {
+                self.carry(member, from as f64 - to as f64);
+            }
         }
         self.needs_redraw = true;
     }
@@ -376,6 +376,7 @@ impl State {
         let Some(index) = self.window_index(surface) else {
             return;
         };
+        let index = self.root_index(index);
         if self.on_full_screen_space(&self.windows[index]) {
             return;
         }
@@ -399,6 +400,7 @@ impl State {
         let Some(index) = self.window_index(surface) else {
             return;
         };
+        let index = self.root_index(index);
         if self.on_full_screen_space(&self.windows[index]) {
             return;
         }
@@ -432,6 +434,11 @@ impl State {
     }
 
     pub(crate) fn assign_new_window(&mut self, index: usize) {
+        if let Some(workspace) = self.parent_workspace(index) {
+            self.windows[index].workspace = workspace;
+            self.announce_workspaces();
+            return;
+        }
         let screen = self.screen_of(&self.windows[index]);
         let workspaces = &self.screens[screen].workspaces;
         let active = workspaces.active_id();
@@ -566,20 +573,22 @@ impl State {
         }
     }
 
-    pub(crate) fn animate_workspaces(&mut self, time: Duration) {
+    pub(crate) fn animate_workspaces(&mut self, tick: Tick) {
         let mut settled = false;
         for screen in &mut self.screens {
-            let refresh = screen.refresh();
+            let tick = Tick {
+                refresh: screen.refresh(),
+                ..tick
+            };
+            let precision = progress_precision(screen.mode_size());
             let workspaces = &mut screen.workspaces;
             let Some(settle) = workspaces.settle.as_mut() else {
                 continue;
             };
-            let step = workspaces
-                .last
-                .map_or(refresh, |last| time.saturating_sub(last));
-            workspaces.last = Some(time);
-            workspaces.view = settle.advance(step.as_secs_f64()).position;
-            if settle.is_settled(SETTLED_VIEW, SETTLED_SPEED) {
+            let step = tick.step_since(workspaces.last);
+            workspaces.last = Some(tick.time);
+            workspaces.view = settle.advance(step).position;
+            if settle.is_at_rest(precision) {
                 workspaces.view = workspaces.active as f64;
                 workspaces.settle = None;
                 workspaces.last = None;

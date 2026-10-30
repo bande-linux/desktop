@@ -169,9 +169,9 @@ fn retargeting_mid_flight_keeps_position_and_velocity_continuous() {
 #[test]
 fn animation_settles_on_its_target() {
     let mut animation = Animation::new(spring(1.0), released(0.0, 0.0), 1.0);
-    assert!(!animation.is_settled(1e-3, 1e-3));
+    assert!(!animation.is_at_rest(1e-3));
     animation.advance(2.0);
-    assert!(animation.is_settled(1e-3, 1e-3));
+    assert!(animation.is_at_rest(1e-3));
 }
 
 #[test]
@@ -200,13 +200,13 @@ fn presets_settle_to_a_thousandth_of_the_distance_in_their_named_times() {
     let settled_after = |spring: Spring, seconds: f64| {
         let mut animation = Animation::new(spring, released(0.0, 0.0), 1000.0);
         animation.advance(seconds);
-        animation.is_settled(1.0, 50.0)
+        animation.is_at_rest(1.0)
     };
     for (spring, settles) in [
-        (Spring::QUICK, 0.37),
-        (Spring::STANDARD, 0.51),
-        (Spring::GENTLE, 0.73),
-        (Spring::FADE, 0.29),
+        (Spring::QUICK, 0.27),
+        (Spring::STANDARD, 0.37),
+        (Spring::GENTLE, 0.52),
+        (Spring::FADE, 0.18),
     ] {
         assert!(settled_after(spring, settles * 1.05), "{spring:?}");
         assert!(!settled_after(spring, settles * 0.8), "{spring:?}");
@@ -215,9 +215,9 @@ fn presets_settle_to_a_thousandth_of_the_distance_in_their_named_times() {
 
 #[test]
 fn duration_and_bounce_map_to_frequency_and_damping() {
-    let spring = Spring::from_duration_bounce(0.4, 0.15).expect("valid spring");
+    let spring = Spring::from_duration_bounce(0.3, 0.15).expect("valid spring");
 
-    assert!(close(spring.angular_frequency(), 2.0 * PI / 0.4, 1e-12));
+    assert!(close(spring.angular_frequency(), 2.0 * PI / 0.3, 1e-12));
     assert!(close(spring.damping_ratio(), 0.85, 1e-12));
     assert_eq!(spring, Spring::MOMENTUM);
     assert!(Spring::from_duration_bounce(0.3, 1.5).is_err());
@@ -249,7 +249,7 @@ fn an_injected_velocity_carries_into_the_new_target() {
     assert!(close(before.velocity, 800.0, 1e-12));
     assert!(after.position > before.position);
     animation.advance(2.0);
-    assert!(animation.is_settled(0.01, 0.01));
+    assert!(animation.is_at_rest(0.01));
 }
 
 #[test]

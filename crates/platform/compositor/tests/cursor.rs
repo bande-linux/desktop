@@ -8,10 +8,12 @@ use smithay::utils::{Point, Size};
 use unbound_compositor::{
     BACKGROUND, CursorTheme, Headless, Renderer, Snapshot, UNRESPONSIVE_AFTER,
 };
-use unbound_test_wayland::{CursorShape, RED, ShmImage, TestClient};
+use unbound_test_wayland::{BLUE, CursorShape, RED, ShmImage, TestClient};
 use wayland_client::protocol::wl_shm::Format;
 
 const POINTER: (i32, i32) = (100, 80);
+const BTN_LEFT: u32 = 0x110;
+const KEY_LEFTALT: u32 = 56;
 
 struct Image {
     nominal: u32,
@@ -295,4 +297,76 @@ fn the_pointer_over_an_app_that_stopped_answering_is_the_themes_wait_cursor() {
     let frame = renderer.snapshot(&server).expect("read back");
 
     assert_eq!(rgb(&frame, pointer.0, pointer.1), wait);
+}
+
+#[test]
+fn the_pointer_shows_what_a_drop_would_do() {
+    let root = tempfile::tempdir().expect("icon directory");
+    let (arrow, copy, refused) = ([0x20, 0xc0, 0x40], [0xc0, 0x20, 0xa0], [0x30, 0x40, 0xd0]);
+    let image = |rgb| Image {
+        nominal: 24,
+        side: 24,
+        hotspot: (0, 0),
+        rgb,
+    };
+    install(
+        root.path(),
+        "Fixture",
+        "[Icon Theme]\nName=Fixture\n",
+        &[
+            ("default", &[image(arrow)]),
+            ("move", &[image(arrow)]),
+            ("copy", &[image(copy)]),
+            ("no-drop", &[image(refused)]),
+        ],
+    );
+    let shown = |accepts: bool, option: bool| {
+        let mut server = Headless::new(Size::from((256, 192))).expect("headless compositor");
+        server.use_cursor_theme(CursorTheme {
+            search_path: vec![root.path().to_path_buf()],
+            name: "Fixture".to_owned(),
+            size: 24,
+        });
+        let mut client = TestClient::connect(&mut server);
+        client.use_seat(&mut server);
+        client.join_seat(&mut server);
+        client.accept_drops(accepts);
+        let pixels = RED.repeat(96 * 96);
+        let window = ShmImage {
+            width: 96,
+            height: 96,
+            stride: 96 * 4,
+            format: Format::Xrgb8888,
+            bytes: &pixels,
+        };
+        client.show_window(&mut server, &window);
+        let origin = server.windows()[0].location();
+        let pointer = Point::from((f64::from(origin.x + 30), f64::from(origin.y + 30)));
+        server.move_pointer_to(pointer, 1);
+        server.press_button(BTN_LEFT, true, 2);
+        client.exchange(&mut server);
+        let icon = BLUE.repeat(4 * 4);
+        let icon = ShmImage {
+            width: 4,
+            height: 4,
+            stride: 16,
+            format: Format::Argb8888,
+            bytes: &icon,
+        };
+        client.start_drag(&mut server, &icon, (-8, -8));
+        server.move_pointer_to(pointer, 3);
+        client.exchange(&mut server);
+        if option {
+            server.key(KEY_LEFTALT, true, 4);
+            client.exchange(&mut server);
+        }
+        let mut renderer = Renderer::new().expect("Vulkan renderer");
+        renderer.render(&mut server).expect("frame");
+        let frame = renderer.snapshot(&server).expect("read back");
+        rgb(&frame, origin.x + 42, origin.y + 42)
+    };
+
+    assert_eq!(shown(true, false), arrow);
+    assert_eq!(shown(true, true), copy);
+    assert_eq!(shown(false, false), refused);
 }

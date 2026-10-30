@@ -4,8 +4,9 @@ use unbound_spring::{Spring, State};
 
 use super::Context;
 
-const SETTLED_DISTANCE: f64 = 0.001;
-const SETTLED_SPEED: f64 = 0.01;
+const UNIT_PRECISION: f64 = 1.0 / 512.0;
+const POINT_PRECISION: f64 = 0.05;
+const REST_HORIZON: f64 = 0.02;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Animated {
@@ -13,6 +14,7 @@ pub struct Animated {
     start: State,
     target: f64,
     since: Option<Instant>,
+    precision: f64,
 }
 
 impl Default for Animated {
@@ -23,6 +25,14 @@ impl Default for Animated {
 
 impl Animated {
     pub const fn new(value: f32) -> Self {
+        Self::with_precision(value, UNIT_PRECISION)
+    }
+
+    pub const fn points(value: f32) -> Self {
+        Self::with_precision(value, POINT_PRECISION)
+    }
+
+    const fn with_precision(value: f32, precision: f64) -> Self {
         Self {
             spring: Spring::QUICK,
             start: State {
@@ -31,6 +41,7 @@ impl Animated {
             },
             target: value as f64,
             since: None,
+            precision,
         }
     }
 
@@ -50,7 +61,7 @@ impl Animated {
     }
 
     pub fn animate_to(&mut self, cx: &Context, target: f32, spring: Spring) {
-        if self.animate_at(cx.now(), cx.reduce_motion, target, spring) {
+        if self.animate_at(cx.animation_start(), cx.reduce_motion, target, spring) {
             cx.animating.set(true);
         }
     }
@@ -78,7 +89,7 @@ impl Animated {
     }
 
     pub fn jump_to(&mut self, value: f32) {
-        *self = Self::new(value);
+        *self = Self::with_precision(value, self.precision);
     }
 
     pub fn value(&self, cx: &Context) -> f32 {
@@ -91,8 +102,8 @@ impl Animated {
 
     pub fn value_at(&self, now: Instant) -> (f32, bool) {
         let state = self.state(now);
-        let settled = (state.position - self.target).abs() <= SETTLED_DISTANCE
-            && state.velocity.abs() <= SETTLED_SPEED;
+        let settled = (state.position - self.target).abs() <= self.precision
+            && state.velocity.abs() * REST_HORIZON <= self.precision;
         if settled {
             (self.target as f32, false)
         } else {

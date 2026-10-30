@@ -291,6 +291,22 @@ impl SettingsView {
         }
     }
 
+    pub fn hide_screen_reader(&mut self) {
+        for section in self.panes.iter_mut().flat_map(|pane| &mut pane.sections) {
+            section
+                .settings
+                .retain(|setting| setting.id != SettingId::ScreenReader);
+        }
+        self.availability_changed();
+    }
+
+    pub(crate) fn offers_screen_reader(&self) -> bool {
+        self.panes
+            .iter()
+            .flat_map(Pane::settings)
+            .any(|setting| setting.id == SettingId::ScreenReader)
+    }
+
     pub fn adding_source(&self) -> Option<&str> {
         self.adding_source.as_deref()
     }

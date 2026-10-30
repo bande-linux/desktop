@@ -141,3 +141,71 @@ fn nothing_is_composed_while_no_client_commits() {
 
     assert_eq!(poll.wake_at, None);
 }
+
+fn milliseconds(count: u64) -> Duration {
+    Duration::from_millis(count)
+}
+
+#[test]
+fn a_slow_frame_moves_the_deadline_at_once_and_is_forgotten_later() {
+    let mut clock = FrameClock::new(Duration::ZERO, REFRESH);
+    let next = clock.vblank_after(Duration::ZERO);
+    clock.record_render(Duration::ZERO, Duration::ZERO, milliseconds(2));
+    clock.record_render(Duration::ZERO, Duration::ZERO, milliseconds(6));
+    let after_the_slow_frame = clock.deadline(next);
+    for _ in 0..100 {
+        clock.record_render(Duration::ZERO, Duration::ZERO, milliseconds(2));
+    }
+
+    assert_eq!(
+        after_the_slow_frame,
+        next.time - milliseconds(6) - SAFETY_MARGIN
+    );
+    assert_eq!(
+        clock.deadline(next),
+        next.time - milliseconds(2) - SAFETY_MARGIN
+    );
+}
+
+#[test]
+fn a_render_slower_than_a_refresh_still_leaves_a_reachable_vblank() {
+    let mut clock = FrameClock::new(Duration::ZERO, REFRESH);
+    clock.record_render(Duration::ZERO, Duration::ZERO, REFRESH * 3);
+    let now = REFRESH * 5 + milliseconds(1);
+
+    let frame = clock.frame_for(now);
+
+    assert_eq!(frame.sequence, 7);
+    assert!(clock.deadline(frame) >= now);
+}
+
+fn late_wake_up(late_by: Duration) -> (Vblank, Option<Duration>, Vblank) {
+    let (mut session, last) = Session::with_a_window();
+    let mut clock = FrameClock::new(Duration::ZERO, REFRESH);
+    clock.record_render(Duration::ZERO, milliseconds(2), milliseconds(4));
+    session.scheduler = FrameScheduler::new(clock);
+    let next = session.scheduler.clock().vblank_after(last.time);
+
+    session.commit_with_feedback();
+    let waiting = session
+        .scheduler
+        .poll(|| last.time, &mut session.server, &mut session.renderer)
+        .expect("frame");
+    let deadline = next.time - milliseconds(4) - SAFETY_MARGIN;
+    (next, waiting.wake_at, session.run_from(deadline + late_by))
+}
+
+#[test]
+fn a_wake_up_late_with_time_left_to_render_still_makes_its_vblank() {
+    let (next, wake_at, presented) = late_wake_up(milliseconds(2));
+
+    assert_eq!(wake_at, Some(next.time - milliseconds(4) - SAFETY_MARGIN));
+    assert_eq!(presented.sequence, next.sequence);
+}
+
+#[test]
+fn a_wake_up_too_late_to_render_in_time_draws_at_once_for_the_next_vblank() {
+    let (next, _, presented) = late_wake_up(milliseconds(3) + MICROSECOND);
+
+    assert_eq!(presented.sequence, next.sequence + 1);
+}

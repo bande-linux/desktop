@@ -170,6 +170,29 @@ fn outputs_and_inputs_are_listed_by_name() {
 
 #[test]
 #[ignore = "needs pipewire and wireplumber; ci/vm runs it in the guest"]
+fn a_change_wakes_whoever_waits_for_one() {
+    let session = Session::start();
+    let audio = session.audio();
+    let before = audio.snapshot();
+    let speakers = session.device("speakers");
+    std::thread::scope(|scope| {
+        let waiter = scope.spawn(|| {
+            let mut snapshot = audio.changed_since(Some(before.generation));
+            while !snapshot
+                .device("speakers")
+                .is_some_and(|device| device.level.muted)
+            {
+                snapshot = audio.changed_since(Some(snapshot.generation));
+            }
+            snapshot
+        });
+        audio.set_muted(&speakers, true).expect("mute");
+        assert!(waiter.join().expect("waiter").generation > before.generation);
+    });
+}
+
+#[test]
+#[ignore = "needs pipewire and wireplumber; ci/vm runs it in the guest"]
 fn choosing_an_output_makes_it_the_default() {
     let session = Session::start();
     session

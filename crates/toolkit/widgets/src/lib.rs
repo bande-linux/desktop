@@ -1,6 +1,7 @@
 mod animation;
 mod button;
 mod checkbox;
+mod clock;
 mod combo_box;
 mod context_menu;
 mod control;
@@ -38,6 +39,7 @@ use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId, TreeInfo, Tre
 pub use animation::Animated;
 pub use button::{BUTTON_HEIGHT, Button};
 pub use checkbox::{CHECKBOX_SIZE, CheckState, Checkbox};
+pub use clock::{FrameTime, frame_time, request_wake, set_frame_time, take_wake};
 pub use combo_box::ComboBox;
 pub use context_menu::ContextMenu;
 pub use disclosure::{DISCLOSURE_HEIGHT, Disclosure};
@@ -72,10 +74,18 @@ const ENGLISH: &str = include_str!("../locales/en-US/unbound-widgets.ftl");
 static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
 pub use control::{focus_ring, focus_ring_for};
-use unbound_graphics::{Appearance, Item, Palette, Point, Rect, Scene, TextSystem};
+use unbound_graphics::{
+    Appearance, Color, Item, Palette, Point, Rect, Scene, TextAlign, TextStyle, TextSystem,
+};
 pub use unbound_graphics::{
     Cursor, Event, Key, Modifiers, Pointer, PointerButton, Scroll, ScrollPhase, ScrollSource,
 };
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DragAction {
+    Copy,
+    Move,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct WidgetId(u64);
@@ -136,17 +146,22 @@ pub struct Context {
     pub caps_lock: bool,
     focus: Option<WidgetId>,
     now: Instant,
+    start: Instant,
     animating: cell::Cell<bool>,
+    wake: cell::Cell<Option<Instant>>,
     clipboard: Option<ClipboardRequest>,
     input_method_reset: bool,
     emoji_picker: bool,
     menu: Option<(Menu, Point)>,
+    drag: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ClipboardRequest {
     Copy(String),
     Paste,
+    SelectPrimary(String),
+    PastePrimary,
 }
 
 impl Context {
@@ -159,16 +174,23 @@ impl Context {
             caps_lock: false,
             focus: None,
             now: Instant::now(),
+            start: Instant::now(),
             animating: cell::Cell::new(false),
+            wake: cell::Cell::new(None),
             clipboard: None,
             input_method_reset: false,
             emoji_picker: false,
             menu: None,
+            drag: None,
         }
     }
 
     pub fn copy(&mut self, text: &str) {
         self.clipboard = Some(ClipboardRequest::Copy(text.to_owned()));
+    }
+
+    pub fn start_text_drag(&mut self, text: String) {
+        self.drag = Some(text);
     }
 
     pub fn show_emoji_picker(&mut self) {
@@ -183,12 +205,25 @@ impl Context {
         self.now
     }
 
+    pub fn animation_start(&self) -> Instant {
+        self.start
+    }
+
+    pub fn wake_at(&self, at: Instant) {
+        let wake = self.wake.get().map_or(at, |wake| wake.min(at));
+        self.wake.set(Some(wake));
+    }
+
     pub fn is_focused(&self, id: WidgetId) -> bool {
         self.focus == Some(id)
     }
 }
 
 const DIALOG_RISE: f32 = 12.0;
+const DRAG_CHARACTERS: usize = 40;
+const DRAG_FONT_SIZE: f32 = 13.0;
+const DRAG_OPACITY: f32 = 0.75;
+const DRAG_WIDTH: f32 = 320.0;
 
 pub trait AsAny {
     fn as_any(&self) -> &dyn Any;
@@ -220,6 +255,14 @@ pub trait Widget: AsAny {
     fn perform(&mut self, _cx: &mut Context, _request: &ActionRequest) -> bool {
         false
     }
+
+    fn drop_target(&mut self, _cx: &mut Context, _point: Option<Point>) -> Option<DragAction> {
+        None
+    }
+
+    fn drop_text(&mut self, _cx: &mut Context, _point: Point, _text: &str, _action: DragAction) {}
+
+    fn drag_ended(&mut self, _action: Option<DragAction>) {}
 
     fn accepts_focus(&self, _cx: &Context) -> bool {
         false
@@ -283,7 +326,7 @@ pub trait Widget: AsAny {
 pub struct Ui {
     root: Box<dyn Widget>,
     cx: Context,
-    clock: Box<dyn Fn() -> Instant>,
+    clock: Box<dyn Fn() -> FrameTime>,
     captured: Option<(WidgetId, PointerButton)>,
     hovered: Vec<WidgetId>,
     pointer: Option<Point>,
@@ -293,6 +336,8 @@ pub struct Ui {
     sheet: Option<Sheet>,
     sheet_top: f32,
     tooltips: Tooltips,
+    drag_source: Option<WidgetId>,
+    drop_owner: Option<WidgetId>,
 }
 
 fn contains(frame: Rect, point: Point) -> bool {
@@ -434,7 +479,7 @@ impl Ui {
         Self {
             root,
             cx,
-            clock: Box::new(Instant::now),
+            clock: Box::new(clock::frame_time),
             captured: None,
             hovered: Vec::new(),
             pointer: None,
@@ -444,6 +489,8 @@ impl Ui {
             sheet: None,
             sheet_top: 0.0,
             tooltips: Tooltips::default(),
+            drag_source: None,
+            drop_owner: None,
         }
     }
 
@@ -478,7 +525,7 @@ impl Ui {
         id: WidgetId,
         update: impl FnOnce(&mut T, &Context),
     ) -> bool {
-        self.cx.now = (self.clock)();
+        self.sync_event_clock();
         let widget = lookup_in(&mut self.root, &mut self.sheet, id)
             .and_then(|widget| widget.as_any_mut().downcast_mut::<T>());
         match widget {
@@ -522,7 +569,7 @@ impl Ui {
     }
 
     fn present(&mut self, widget: Box<dyn Widget>, floating: bool) {
-        self.cx.now = (self.clock)();
+        self.sync_event_clock();
         self.captured = None;
         let previous_focus = self.cx.focus.take();
         let mut shown = Animated::new(0.0);
@@ -594,8 +641,14 @@ impl Ui {
     }
 
     pub fn set_clock(&mut self, clock: impl Fn() -> Instant + 'static) {
-        self.clock = Box::new(clock);
-        self.cx.now = (self.clock)();
+        self.clock = Box::new(move || FrameTime::immediate(clock()));
+        self.sync_event_clock();
+    }
+
+    fn sync_event_clock(&mut self) {
+        let on_screen = (self.clock)().on_screen();
+        self.cx.now = on_screen;
+        self.cx.start = on_screen;
     }
 
     pub fn set_appearance(&mut self, appearance: Appearance) {
@@ -619,8 +672,11 @@ impl Ui {
     }
 
     pub fn paint_layers(&mut self, width: u32, height: u32) -> (Vec<Item>, Vec<Item>) {
-        self.cx.now = (self.clock)();
+        let time = (self.clock)();
+        self.cx.now = time.presentation;
+        self.cx.start = time.on_screen();
         self.cx.animating.set(false);
+        self.cx.wake.set(None);
         self.layout(Size::new(width as f32, height as f32));
         let mut items = Vec::new();
         self.root.paint(&self.cx, &mut items);
@@ -657,11 +713,14 @@ impl Ui {
         {
             self.cx.animating.set(true);
         }
+        if let Some(wake) = self.deadline() {
+            request_wake(wake);
+        }
         (items, above)
     }
 
     pub fn handle(&mut self, event: &Event) -> bool {
-        self.cx.now = (self.clock)();
+        self.sync_event_clock();
         match event {
             Event::PointerDown(pointer) => {
                 let hovered = self.hover(Some(pointer));
@@ -676,6 +735,11 @@ impl Ui {
                     self.cx.focus = Some(target);
                 }
                 let delivered = self.deliver(target, event);
+                if self.cx.clipboard == Some(ClipboardRequest::PastePrimary)
+                    && self.accepts_focus(target)
+                {
+                    self.cx.focus = Some(target);
+                }
                 if pointer.button == PointerButton::Secondary {
                     self.captured = None;
                     return self.request_menu(pointer.position) | delivered | hovered;
@@ -800,7 +864,10 @@ impl Ui {
 
     pub fn take_clipboard_request(&mut self) -> Option<ClipboardRequest> {
         let request = self.cx.clipboard.take();
-        if request == Some(ClipboardRequest::Paste) {
+        if matches!(
+            request,
+            Some(ClipboardRequest::Paste | ClipboardRequest::PastePrimary)
+        ) {
             self.awaiting_paste = true;
         }
         request
@@ -811,6 +878,92 @@ impl Ui {
             return false;
         }
         self.handle(&Event::Commit(text.to_owned()));
+        true
+    }
+
+    pub fn take_text_drag(&mut self) -> Option<(Scene, Point, String)> {
+        let text = self.cx.drag.take()?;
+        let shown: String = text
+            .lines()
+            .next()
+            .unwrap_or_default()
+            .chars()
+            .take(DRAG_CHARACTERS)
+            .collect();
+        let paragraph = self.cx.text.paragraph(
+            &shown,
+            TextStyle::new(
+                DRAG_FONT_SIZE,
+                self.cx.palette.ink.with_opacity(DRAG_OPACITY),
+            ),
+            Some(DRAG_WIDTH),
+            TextAlign::Start,
+        );
+        let (width, height) = (paragraph.width(), paragraph.height());
+        let scene = Scene {
+            width: width.ceil().max(1.0) as u32,
+            height: height.ceil().max(1.0) as u32,
+            background: Color::TRANSPARENT,
+            items: vec![Item::Text {
+                origin: Point::new(0.0, 0.0),
+                paragraph,
+            }],
+        };
+        let hotspot = Point::new(0.0, height / 2.0);
+        Some((scene, hotspot, text))
+    }
+
+    pub fn drag_over(&mut self, position: Option<Point>) -> Option<DragAction> {
+        let mut path = Vec::new();
+        if let Some(point) = position {
+            hit_path(self.active(), point, &mut path);
+        }
+        let mut accepted = None;
+        for id in path.into_iter().rev() {
+            let Some(widget) = lookup_in(&mut self.root, &mut self.sheet, id) else {
+                continue;
+            };
+            if let Some(action) = widget.drop_target(&mut self.cx, position) {
+                accepted = Some((id, action));
+                break;
+            }
+        }
+        let owner = accepted.map(|(id, _)| id);
+        if let Some(previous) = self.drop_owner.filter(|previous| Some(*previous) != owner)
+            && let Some(widget) = lookup_in(&mut self.root, &mut self.sheet, previous)
+        {
+            widget.drop_target(&mut self.cx, None);
+        }
+        self.drop_owner = owner;
+        accepted.map(|(_, action)| action)
+    }
+
+    pub fn is_drop_target(&self) -> bool {
+        self.drop_owner.is_some()
+    }
+
+    pub fn dropped(&mut self, position: Point, text: &str, action: DragAction) -> bool {
+        let Some(owner) = self.drop_owner.take() else {
+            return false;
+        };
+        let Some(widget) = lookup_in(&mut self.root, &mut self.sheet, owner) else {
+            return false;
+        };
+        widget.drop_text(&mut self.cx, position, text, action);
+        widget.drop_target(&mut self.cx, None);
+        if widget.accepts_focus(&self.cx) {
+            self.cx.focus = Some(owner);
+        }
+        true
+    }
+
+    pub fn drag_finished(&mut self, action: Option<DragAction>) -> bool {
+        let Some(source) = self.drag_source.take() else {
+            return false;
+        };
+        if let Some(widget) = lookup_in(&mut self.root, &mut self.sheet, source) {
+            widget.drag_ended(action);
+        }
         true
     }
 
@@ -831,7 +984,7 @@ impl Ui {
     }
 
     pub fn menu_action(&mut self, action: &str) -> bool {
-        self.cx.now = (self.clock)();
+        self.sync_event_clock();
         let Some(owner) = self.menu_owner.take() else {
             return false;
         };
@@ -907,6 +1060,9 @@ impl Ui {
             return false;
         };
         let handled = widget.handle(&mut self.cx, event);
+        if self.cx.drag.is_some() {
+            self.drag_source = Some(target);
+        }
         self.take_widget_menu(target);
         self.dismiss_finished_sheet();
         self.keep_focus_reachable(focus_path);
@@ -914,7 +1070,12 @@ impl Ui {
     }
 
     pub fn deadline(&self) -> Option<Instant> {
-        self.tooltips.deadline((self.clock)())
+        let now = (self.clock)().presentation;
+        self.tooltips
+            .deadline(now)
+            .into_iter()
+            .chain(self.cx.wake.get())
+            .min()
     }
 
     fn show_focus_tooltip(&mut self) {
@@ -1034,7 +1195,7 @@ impl Ui {
     }
 
     pub fn perform(&mut self, request: &ActionRequest) -> bool {
-        self.cx.now = (self.clock)();
+        self.sync_event_clock();
         if let Some((owner, part)) = WidgetId::owner_of_part(request.target_node) {
             if find(self.active(), owner).is_none() {
                 return false;

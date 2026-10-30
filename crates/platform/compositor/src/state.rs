@@ -66,6 +66,7 @@ use smithay::wayland::shell::wlr_layer::{
 use smithay::wayland::shm::{ShmHandler, ShmState, with_buffer_contents};
 use smithay::wayland::session_lock::SessionLockManagerState;
 use smithay::wayland::shell::xdg::decoration::XdgDecorationState;
+use smithay::wayland::shell::xdg::dialog::XdgDialogState;
 use smithay::wayland::viewporter::ViewporterState;
 use smithay::wayland::xdg_activation::{
     XdgActivationHandler, XdgActivationState, XdgActivationToken, XdgActivationTokenData,
@@ -165,11 +166,13 @@ pub struct State {
     _cursor_shape_state: CursorShapeManagerState,
     _pointer_gestures_state: PointerGesturesState,
     _decoration_state: XdgDecorationState,
+    _dialog_state: XdgDialogState,
     _text_input_state: TextInputManagerState,
     _input_method_state: InputMethodManagerState,
     _virtual_keyboard_state: VirtualKeyboardManagerState,
     pending_activation: Option<WlSurface>,
     pub(crate) windowless_app: Option<(Client, String)>,
+    pub(crate) key_behind_layer: Option<WlSurface>,
     pub(crate) shell_resources: Vec<UnboundShellV1>,
     pub(crate) capture_resources:
         Vec<unbound_protocols::server::unbound_capture_v1::UnboundCaptureV1>,
@@ -218,7 +221,6 @@ pub struct State {
     pub(crate) keys: crate::access_keys::AccessKeys,
     pub(crate) keyboard_monitor: crate::keyboard_monitor::KeyboardMonitor,
     pub(crate) needs_redraw: bool,
-    pub(crate) animated_at: Option<Duration>,
     pub(crate) pointer_location: Point<f64, Logical>,
     pub(crate) cursor_shown: bool,
     pub(crate) cursor_status: CursorImageStatus,
@@ -233,6 +235,7 @@ pub struct State {
     pub(crate) pointing: crate::pointing::Pointing,
     pub(crate) pending_captures: Vec<crate::capture::PendingCapture>,
     pub(crate) decorations: crate::frame::Decorations,
+    pub(crate) alerts: crate::alert::Alerts,
 }
 
 pub struct Headless {
@@ -333,6 +336,7 @@ impl Headless {
             _viewporter_state: ViewporterState::new::<State>(&handle),
             _fractional_scale_state: FractionalScaleManagerState::new::<State>(&handle),
             _decoration_state: XdgDecorationState::new::<State>(&handle),
+            _dialog_state: XdgDialogState::new::<State>(&handle),
             _cursor_shape_state: CursorShapeManagerState::new::<State>(&handle),
             _pointer_gestures_state: PointerGesturesState::new::<State>(&handle),
             _text_input_state: TextInputManagerState::new::<State>(&handle),
@@ -342,6 +346,7 @@ impl Headless {
             }),
             pending_activation: None,
             windowless_app: None,
+            key_behind_layer: None,
             shell_resources: Vec::new(),
             capture_resources: Vec::new(),
             pending_insert: None,
@@ -394,7 +399,6 @@ impl Headless {
             keys: crate::access_keys::AccessKeys::default(),
             keyboard_monitor: crate::keyboard_monitor::KeyboardMonitor::default(),
             needs_redraw: false,
-            animated_at: None,
             pointer_location: (center.w, center.h).into(),
             cursor_shown: false,
             cursor_status: CursorImageStatus::default_named(),
@@ -412,6 +416,7 @@ impl Headless {
             pointing: crate::pointing::Pointing::default(),
             pending_captures: Vec::new(),
             decorations: crate::frame::Decorations::default(),
+            alerts: crate::alert::Alerts::default(),
         };
         Ok(Self {
             display,
@@ -441,6 +446,8 @@ impl Headless {
         self.state.deliver_pending_insert();
         self.state.activate_next_app_if_the_windowless_one_quit();
         self.state.popups.cleanup();
+        self.state.end_orphaned_drag();
+        self.state.keep_families_together();
         self.state.refocus_pointer();
         self.display.flush_clients()
     }
@@ -675,14 +682,16 @@ impl Headless {
     ) -> Composed<OutputElement> {
         let mut drawn = Vec::new();
         let pointer_here = self.state.pointer_screen() == screen;
-        let (mut elements, icon): (Vec<OutputElement>, _) = if with_cursor && pointer_here {
-            let (dragged, icon) = self.state.drag_icon_elements(renderer, scale);
-            let mut elements = self.cursor_elements(renderer, scale);
-            elements.extend(dragged);
-            (elements, icon)
-        } else {
-            (Vec::new(), None)
+        let (dragged, icon) = match with_cursor {
+            true => self.state.drag_icon_elements(renderer, scale),
+            false => (Vec::new(), None),
         };
+        let mut elements: Vec<OutputElement> = match with_cursor && pointer_here {
+            true => self.cursor_elements(renderer, scale),
+            false => Vec::new(),
+        };
+        elements.extend(dragged);
+        elements.extend(self.state.alert_elements(renderer, screen, scale));
         elements.extend(self.state.flash_elements(screen, scale));
         elements.extend(self.state.source_hud_element(renderer, screen, scale));
         elements.extend(self.state.switcher_elements(renderer, screen, scale));
@@ -794,16 +803,17 @@ impl Headless {
         }
         let at: Point<i32, Physical> = state.pointer_location.to_physical(scale).to_i32_round();
         let busy = CursorImageStatus::Named(CursorIcon::Wait);
+        let dragging = state.drag_cursor().map(CursorImageStatus::Named);
         let over_hung_app = state
             .seat
             .get_pointer()
             .and_then(|pointer| pointer.current_focus())
             .and_then(|surface| surface.client())
             .is_some_and(|owner| state.watchdog.is_unresponsive(&owner.id()));
-        let status = if over_hung_app {
-            &busy
-        } else {
-            &state.cursor_status
+        let status = match &dragging {
+            Some(dragging) => dragging,
+            None if over_hung_app => &busy,
+            None => &state.cursor_status,
         };
         match status {
             CursorImageStatus::Hidden => Vec::new(),
@@ -924,14 +934,15 @@ impl State {
         if let CursorImageStatus::Named(icon) = self.cursor_status {
             self.load_named_cursor(icon);
         }
+        if let Some(icon) = self.drag_cursor() {
+            self.load_named_cursor(icon);
+        }
     }
 
     pub(crate) fn use_cursor_theme(&mut self, theme: CursorTheme) {
         self.cursor_theme = theme;
         self.named_cursors.clear();
-        if let CursorImageStatus::Named(icon) = self.cursor_status {
-            self.load_named_cursor(icon);
-        }
+        self.reload_cursor();
         self.needs_redraw = true;
     }
 
@@ -945,10 +956,17 @@ impl State {
         if self.redirect_focus_while_locked(&surface) {
             return;
         }
+        let surface = surface.map(|surface| self.modal_blocker(&surface).unwrap_or(surface));
         if self.popup_grab.is_some() && surface != self.menu_root() {
             self.close_menus();
         }
-        self.windowless_app = None;
+        let onto_layer = surface
+            .as_ref()
+            .is_some_and(|surface| self.toplevel_of(surface).is_none());
+        self.key_behind_layer = self.key_window().filter(|_| onto_layer);
+        if !onto_layer {
+            self.windowless_app = None;
+        }
         self.typed_at = None;
         if let Some(surface) = &surface
             && self.window_index(surface).is_some()
@@ -960,28 +978,20 @@ impl State {
             && surface.as_ref() != Some(&exclusive.surface)
         {
             exclusive.previous = surface.clone();
-            if let Some(surface) = &surface
-                && let Some(index) = self
-                    .windows
-                    .iter()
-                    .position(|window| window.toplevel.wl_surface() == surface)
+            if let Some(index) = surface
+                .as_ref()
+                .and_then(|surface| self.window_index(surface))
             {
-                let window = self.windows.remove(index);
-                self.windows.push(window);
-                self.needs_redraw = true;
+                self.raise(index);
             }
             self.sync_activated();
             return;
         }
-        if let Some(surface) = &surface
-            && let Some(index) = self
-                .windows
-                .iter()
-                .position(|window| window.toplevel.wl_surface() == surface)
+        if let Some(index) = surface
+            .as_ref()
+            .and_then(|surface| self.window_index(surface))
         {
-            let window = self.windows.remove(index);
-            self.windows.push(window);
-            self.needs_redraw = true;
+            self.raise(index);
         }
         if let Some(keyboard) = self.seat.get_keyboard() {
             keyboard.set_focus(self, surface, SERIAL_COUNTER.next_serial());
@@ -1067,13 +1077,12 @@ impl State {
     }
 
     fn place_behind_frontmost(&mut self, surface: &WlSurface) {
-        let Some(index) = self
-            .windows
-            .iter()
-            .position(|window| window.toplevel.wl_surface() == surface)
-        else {
+        let Some(index) = self.window_index(surface) else {
             return;
         };
+        if self.stack_above_parent(index) {
+            return;
+        }
         let window = self.windows.remove(index);
         let behind = self.windows.len().saturating_sub(1);
         self.windows.insert(behind, window);

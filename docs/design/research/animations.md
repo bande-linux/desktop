@@ -174,16 +174,30 @@ user is waiting. Our presets sit between the two.
 Mass 1, `k = ω²`. "Settles" is the time to within 0.1 % of the distance, computed from the
 closed form. The perceptual duration is what the eye reads as done.
 
+The durations are deliberately shorter than SwiftUI's app defaults (0.5 s `smooth`): a window
+manager is something the user waits on, so it must feel fast, and even `standard` still gives
+about 30 frames of motion at 120 Hz (15 at 60 Hz), which reads as smooth rather than a jump.
+They sit between macOS' observed system speeds (0.2 to 0.3 s for window zoom, Mission Control
+and Spaces) and niri's 0.2 s springs.
+
+An animation stops redrawing once the change is no longer visible, not at a unit-less epsilon:
+`Animation::is_at_rest(precision)` holds when the value is within `precision` of its target and
+its speed would move it less than `precision` in 20 ms. The compositor uses 0.1 *physical*
+pixel for geometry (divided by the output scale for logical values, and by the output's size
+for progress values such as the workspace view or the overview) and 1/512 for opacity. A
+`standard` window open at 120 Hz therefore renders 37 frames instead of the 61 the earlier
+0.25 px / 0.35 s combination needed.
+
 | Name | Use | Duration, bounce | ω (rad/s), ζ | k | Overshoot | Settles |
 |---|---|---|---|---|---|---|
 | `interactive` | Following a pointer or finger when not 1:1 (rubber-band tracking, Dock magnification release, slider thumb catch-up) | response 0.15, ζ 0.86 (SwiftUI `interactiveSpring`) | 41.9, 0.86 | 1755 | 0.5 % | 0.19 s |
-| `quick` | Small UI: popover, menu appear, focus ring, switcher, tile outline, hover states, button press | 0.25 s, 0 | 25.1, 1.0 | 632 | none | 0.37 s |
-| `standard` | Default for windows: open, zoom, tile, workspace switch, overview, sheet, Quick Look, notification slide | 0.35 s, 0 | 18.0, 1.0 | 322 | none | 0.51 s |
-| `gentle` | Large or long-distance moves: minimise to and restore from the Dock, full screen, display changes | 0.5 s, 0 (SwiftUI `smooth`) | 12.6, 1.0 | 158 | none | 0.73 s |
-| `momentum` | Release of a gesture with velocity: flick-dismiss a notification, fling a window to a tile, workspace swipe with fast release | 0.4 s, 0.15 (SwiftUI `snappy` bounce) | 15.7, 0.85 | 247 | 0.6 % | 0.52 s |
-| `bouncy` | Attention only: a refused action's nudge, the launch pulse if it is ever made physical | 0.5 s, 0.3 (SwiftUI `bouncy`) | 12.6, 0.70 | 158 | 4.6 % | 0.79 s |
+| `quick` | Small UI: popover, menu appear, focus ring, switcher, tile outline, hover states, button press, window close | 0.18 s, 0 | 34.9, 1.0 | 1218 | none | 0.26 s |
+| `standard` | Default for windows: open, zoom, full screen, tile, workspace switch, overview, sheet, Quick Look, notification slide | 0.25 s, 0 | 25.1, 1.0 | 632 | none | 0.37 s |
+| `gentle` | Large or long-distance moves: minimise to and restore from the bar, wallpaper cross-fade | 0.35 s, 0 | 18.0, 1.0 | 322 | none | 0.51 s |
+| `momentum` | Release of a gesture with velocity: flick-dismiss a notification, fling a window to a tile, workspace swipe with fast release | 0.3 s, 0.15 (SwiftUI `snappy` bounce) | 20.9, 0.85 | 439 | 0.6 % | 0.39 s |
+| `bouncy` | Attention only: a bar badge appearing, a refused action's nudge | 0.4 s, 0.3 (SwiftUI `bouncy`) | 15.7, 0.70 | 247 | 4.6 % | 0.63 s |
 | `shake` | Wrong password: target 0, initial velocity about 600 px/s | period 0.12 s, ζ 0.2 | 52.4, 0.2 | 2742 | n/a (oscillates) | 0.4 s visible |
-| `fade` | Opacity-only changes, and the Reduce Motion substitute for every spatial preset | 0.2 s, 0 | 31.4, 1.0 | 987 | none | 0.29 s |
+| `fade` | Opacity-only changes (hide, HUD fade-out, hover), and the Reduce Motion substitute for every spatial preset | 0.12 s, 0 | 52.4, 1.0 | 2742 | none | 0.17 s |
 | `decay` | Scroll and swipe momentum after release | per-ms rate 0.998 (normal) or 0.99 (fast), UIKit values (unverified exact) | n/a | n/a | n/a | velocity-dependent |
 | `rubber-band` | Overscroll resistance while dragging | `d · c · x / (d + c · x)`, c = 0.55 (unverified UIKit constant), then `standard` back to the edge on release | n/a | n/a | n/a | n/a |
 

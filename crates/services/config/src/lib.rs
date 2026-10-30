@@ -34,6 +34,7 @@ static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", E
 
 const SCALE_RANGE: (f64, f64) = (1.0, 3.0);
 const REFRESH_RATE_RANGE: (f64, f64) = (60.0, 240.0);
+pub const SCREEN_READER: &str = "orca";
 pub const KEY_REPEAT_RATE_RANGE: (u32, u32) = (1, 60);
 pub const KEY_REPEAT_DELAY_RANGE: (u32, u32) = (150, 2000);
 pub const BAR_ICON_SIZE_RANGE: (u32, u32) = (32, 56);

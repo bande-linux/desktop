@@ -10,7 +10,6 @@ use unbound_settings::{
     announce_updates, feed,
 };
 use unbound_settings_panes::panes;
-use unbound_toolkit::ui::ClipboardRequest;
 use unbound_toolkit::{
     App, FrameRegions, MenuPlacement, Rect, Role, Scene, TextSystem, Window, WindowEvent,
 };
@@ -42,14 +41,10 @@ impl Settings {
         {
             tracing::warn!("cannot show the menu: {error}");
         }
-        match clipboard {
-            Some(ClipboardRequest::Copy(text)) => window.copy(&text),
-            Some(ClipboardRequest::Paste) => {
-                if let Err(error) = window.paste() {
-                    tracing::warn!("cannot paste: {error}");
-                }
-            }
-            None => {}
+        if let Some(request) = clipboard
+            && let Err(error) = window.serve_clipboard(request)
+        {
+            tracing::warn!("cannot use the clipboard: {error}");
         }
     }
 }
@@ -221,6 +216,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     });
     let mut view = SettingsView::new(window.appearance().palette(), TextSystem::new());
     view.set_pointing_devices(PointingDevices::scan(Path::new(UDEV_DATA)));
+    if unbound_xdg::find_executable(unbound_config::SCREEN_READER).is_none() {
+        view.hide_screen_reader();
+    }
     let requested = std::env::args().nth(1);
     match requested.as_deref().map(PaneId::from_keyword) {
         Some(Some(pane)) => view.select_pane(pane),

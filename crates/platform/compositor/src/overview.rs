@@ -16,7 +16,7 @@ use unbound_spring::{Animation, Spring, State as Phase};
 
 use crate::gesture::Tracker;
 use crate::label::{Label, Labels, TITLE};
-use crate::motion::{Look, Motion};
+use crate::motion::{Look, Motion, Tick};
 use crate::scene::{
     BlurElement, CORNER_RADIUS, FillElement, Piece, fresh, pieces_of, premultiplied, rounded,
     scaled_pieces,
@@ -43,8 +43,6 @@ const TITLE_ROOM: f64 = 24.0;
 const RING: f64 = 4.0;
 const DIMMED: f64 = 0.25;
 const MOMENTUM_SPEED: f64 = 2.0;
-const SETTLED_PROGRESS: f64 = 1e-3;
-const SETTLED_SPEED: f64 = 1e-2;
 const ADD_FILL: f32 = 0.6;
 const TARGET_FILL: f32 = 0.45;
 const BACKDROP_IDS: usize = 2;
@@ -283,12 +281,25 @@ impl State {
         )
     }
 
+    fn family_root(&self, window: &Window) -> Option<&Window> {
+        let index = self.window_index(window.surface())?;
+        Some(&self.windows[self.root_index(index)])
+    }
+
     fn arranged(&self, windows: Vec<&Window>, space: u64, area: Frame) -> Vec<Slot> {
-        let rects: Vec<Frame> = windows
+        let (attached, roots): (Vec<&Window>, Vec<&Window>) = windows.iter().partition(|window| {
+            self.family_root(window).is_some_and(|root| {
+                root.surface() != window.surface()
+                    && windows
+                        .iter()
+                        .any(|shown| shown.surface() == root.surface())
+            })
+        });
+        let rects: Vec<Frame> = roots
             .iter()
             .filter_map(|window| real_rect(window))
             .collect();
-        windows
+        let mut slots: Vec<Slot> = roots
             .into_iter()
             .zip(arrange(&rects, area))
             .map(|(window, rect)| Slot {
@@ -296,7 +307,26 @@ impl State {
                 space,
                 rect,
             })
-            .collect()
+            .collect();
+        let carried: Vec<Slot> = attached
+            .into_iter()
+            .filter_map(|window| {
+                let root = self.family_root(window)?;
+                let slot = slots.iter().find(|slot| &slot.surface == root.surface())?;
+                let (home, own) = (real_rect(root)?, real_rect(window)?);
+                let scale = slot.rect.size.w / home.size.w.max(1.0);
+                Some(Slot {
+                    surface: window.surface().clone(),
+                    space,
+                    rect: Rectangle::new(
+                        slot.rect.loc + (own.loc - home.loc).upscale(scale),
+                        own.size.upscale(scale),
+                    ),
+                })
+            })
+            .collect();
+        slots.extend(carried);
+        slots
     }
 
     pub(crate) fn relayout_overview(&mut self) {
@@ -473,7 +503,7 @@ impl State {
         {
             target.rect = returning.rect;
         }
-        if self.overview.dragged() == Some(window.surface())
+        if self.dragged_in_overview(window)
             && let Some(press) = &self.overview.press
         {
             target.rect.loc += self.overview.pointer - press.at;
@@ -572,7 +602,11 @@ impl State {
     }
 
     pub(crate) fn dragged_in_overview(&self, window: &Window) -> bool {
-        self.overview.dragged() == Some(window.surface())
+        self.overview.dragged().is_some_and(|dragged| {
+            self.window_index(dragged)
+                .zip(self.window_index(window.surface()))
+                .is_some_and(|(dragged, index)| self.descends_from(index, dragged))
+        })
     }
 
     fn strip_shift(&self, screen: usize) -> f64 {
@@ -830,22 +864,19 @@ impl State {
         self.focus(Some(surface));
     }
 
-    pub(crate) fn animate_overview(&mut self, time: Duration) {
-        let refresh = self.main_screen().refresh();
+    pub(crate) fn animate_overview(&mut self, tick: Tick) {
+        let precision = self.progress_precision();
         if let Some((_, motion)) = &mut self.overview.returning {
-            motion.advance(time, refresh);
+            motion.advance(tick);
             if motion.is_settled() {
                 self.overview.returning = None;
             }
         }
         if let Some(settle) = self.overview.settle.as_mut() {
-            let step = self
-                .overview
-                .last
-                .map_or(refresh, |last| time.saturating_sub(last));
-            self.overview.last = Some(time);
-            self.overview.progress = settle.advance(step.as_secs_f64()).position;
-            if settle.is_settled(SETTLED_PROGRESS, SETTLED_SPEED) {
+            let step = tick.step_since(self.overview.last);
+            self.overview.last = Some(tick.time);
+            self.overview.progress = settle.advance(step).position;
+            if settle.is_at_rest(precision) {
                 self.overview.progress = self.overview.target;
                 self.overview.settle = None;
                 self.overview.last = None;
@@ -925,6 +956,7 @@ impl State {
         self.overview
             .slots
             .iter()
+            .rev()
             .filter(|slot| Some(&slot.surface) != dragged)
             .find(|slot| self.slot_on_screen(slot).contains(at))
             .map_or(Hit::Nothing, |slot| Hit::Window(slot.surface.clone()))

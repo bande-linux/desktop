@@ -1,0 +1,34 @@
+# Drag a file from Files to the desktop, from the desktop to the Trash in the Dock, and from Files straight to the Trash.
+key super+space
+wait 600ms
+type "terminal"
+wait 500ms
+key enter
+wait-for-window "org.unbound.Terminal"
+wait 1s
+type "touch ~/review-drag.txt ~/review-trash.txt; exit\n"
+wait 1500ms
+key super+space
+wait 600ms
+type "files"
+wait 500ms
+key enter
+wait-for-window "org.unbound.Files"
+wait 1500ms
+shot "files with the two new files"
+note "Drag review-drag.txt onto the desktop"
+drag 980 902 to 2750 1100
+wait 1500ms
+shot "dropped on the desktop"
+note "Drag it from the desktop onto the Trash in the Dock"
+drag 2750 1090 to 75 1120
+wait 1500ms
+shot "dropped on the trash"
+note "Drag review-trash.txt from Files straight to the Trash"
+drag 980 902 to 75 1120
+wait 1500ms
+shot "second file in the trash"
+note "The Trash opens in Files"
+click 75 1120
+wait 1500ms
+shot "trash in files"

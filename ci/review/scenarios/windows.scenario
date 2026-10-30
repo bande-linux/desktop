@@ -1,4 +1,4 @@
-# Place windows with Super+Ctrl+arrows, snap one by dragging it to the edge, and spread four fingers to reveal the desktop.
+# Place windows with Super+Ctrl+arrows and F and spread four fingers to reveal the desktop.
 key super+space
 wait 600ms
 type "terminal"
@@ -24,13 +24,19 @@ wait 800ms
 key super+ctrl+right
 wait 1s
 shot "side by side"
-note "Super+Ctrl+Up fills the screen"
+note "Super+Ctrl+Up keeps the top of its half"
 key super+ctrl+up
 wait 1s
-shot "terminal filling the screen"
+shot "terminal in the top right quarter"
 key super+ctrl+down
 wait 1s
-shot "terminal restored"
+shot "terminal back on the right half"
+note "Super+Ctrl+F fills the screen and toggles back"
+key super+ctrl+f
+wait 1200ms
+shot "terminal full screen"
+key super+ctrl+f
+wait 1200ms
 note "Spread four fingers to reveal the desktop"
 pinch out 4
 wait 1200ms

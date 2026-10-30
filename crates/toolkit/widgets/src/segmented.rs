@@ -116,7 +116,7 @@ impl SegmentedControl {
                 x.animate_to(cx, offset, Spring::QUICK);
                 width.animate_to(cx, target.width, Spring::QUICK);
             }
-            None => self.pill = Some((Animated::new(offset), Animated::new(target.width))),
+            None => self.pill = Some((Animated::points(offset), Animated::points(target.width))),
         }
         true
     }
@@ -172,8 +172,8 @@ impl Widget for SegmentedControl {
         {
             let target = self.segment(index);
             self.pill = Some((
-                Animated::new(target.x - self.frame.x),
-                Animated::new(target.width),
+                Animated::points(target.x - self.frame.x),
+                Animated::points(target.width),
             ));
         }
     }

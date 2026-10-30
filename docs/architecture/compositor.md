@@ -123,18 +123,28 @@ when they reach the screen is Unbound's own.
 - **Frame pacing.** Frames are paced by a vblank clock (virtual at 120 Hz in the headless
   backend; on DRM re-anchored to each page flip at the mode's refresh, advertised as the
   `wl_output` mode). A commit is latched into the frame whose deadline it arrives before: the
-  vblank minus the longest time from deadline to finished render over the last 16 frames, minus
-  1 ms. Frame callbacks and `wp_presentation` feedback (vblank time, refresh, sequence, `vsync`)
+  vblank minus the longest time from deadline to finished render over the last 16 frames
+  (capped at one refresh, so a vblank is always reachable), minus 1 ms. The longest rather than
+  a percentile is deliberate: heavier content, such as the overview opening, then misses at
+  most one vblank instead of several while a percentile catches up, and on a loaded machine
+  wake-up jitter is what makes frames late. When a wake-up is so late that the typical render
+  time (a moving average) no longer fits before the planned vblank, the frame is drawn at once
+  for the next vblank it can reach, with animations sampled for that vblank, so it is not shown
+  one refresh stale and the scheduler does not sleep (and risk waking late) again. Frame callbacks and `wp_presentation` feedback (vblank time, refresh, sequence, `vsync`)
   are taken when the frame is latched and sent at its vblank (on DRM, at the page-flip event
   with its time and sequence); a superseded commit's feedback is discarded, and a render that
   overruns its vblank is presented at the next one.
 - **Window motion.** Every window state change is animated by springs on x, y, width, height
-  and opacity, sampled at the frame's vblank (`Headless::animate`, called by the scheduler
-  before it latches a frame). Opening grows from 95 % and fades in (`standard`); closing keeps
-  the last frame's textures and shrinks to 92 % while fading out (`quick`); minimising scales
+  and opacity, sampled at the frame's vblank (`Headless::animate_on`, called by each output's
+  scheduler before it latches a frame). Animations are closed-form springs, so every display
+  samples its own vblank, even one earlier than another display's last frame, and displays
+  of different rates never repeat a frame. An animation stops once its remaining motion is
+  invisible: within 0.25 physical pixel (1/512 for opacity) and slower than that per 20 ms.
+  Opening grows from 96 % and fades in (`standard`); closing keeps the last frame's textures
+  and shrinks to 98 % while fading out (`quick`); minimising scales
   into the app's Dock icon, reported with `unbound_shell_v1.set_icon_rect`, or toward the
   Dock's centre (the bottom edge without a Dock), drawn above the Dock (`gentle`); restoring
-  plays it back. Zoom and full screen (`standard`, `gentle`) start at the request and stretch
+  plays it back. Zoom and full screen (`standard`) start at the request and stretch
   the current buffer until the app commits its new size. Each operation only sets a new
   destination, so a second action mid-flight turns back from the current position and
   velocity. Input, focus and configure go to the destination at once; the input stack never

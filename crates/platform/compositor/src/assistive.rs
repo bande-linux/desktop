@@ -173,7 +173,7 @@ impl State {
             .map_or(Duration::ZERO, |last| time.saturating_sub(last));
         flash.last = Some(time);
         flash.opacity.advance(step.as_secs_f64());
-        if flash.opacity.is_settled(FLASH_SETTLED, FLASH_SETTLED) {
+        if flash.opacity.is_at_rest(FLASH_SETTLED) {
             self.assistive.flash = None;
         }
     }

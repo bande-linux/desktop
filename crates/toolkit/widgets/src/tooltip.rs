@@ -4,11 +4,12 @@ use unbound_graphics::{
     Color, Item, Palette, Point, Radius, Rect, Shape, TextAlign, TextStyle, TextSystem,
 };
 
-use super::{Size, WidgetId};
+use unbound_spring::Spring;
 
-pub const TOOLTIP_DELAY: Duration = Duration::from_millis(900);
+use super::{Animated, Size, WidgetId};
+
+pub const TOOLTIP_DELAY: Duration = Duration::from_millis(700);
 const WARM: Duration = Duration::from_millis(600);
-const FADE: Duration = Duration::from_millis(120);
 const POINTER_HEIGHT: f32 = 20.0;
 const FONT_SIZE: f32 = 12.0;
 const MAX_WIDTH: f32 = 280.0;
@@ -109,8 +110,9 @@ impl Tooltips {
         if now < shown {
             return false;
         }
-        let alpha =
-            (now.saturating_duration_since(shown).as_secs_f32() / FADE.as_secs_f32()).min(1.0);
+        let mut fade = Animated::new(0.0);
+        fade.animate_at(shown, false, 1.0, Spring::FADE);
+        let (alpha, fading) = fade.value_at(now);
         let paragraph = system.paragraph(
             text,
             TextStyle::new(FONT_SIZE, palette.chassis).weight(TextStyle::MEDIUM),
@@ -149,6 +151,6 @@ impl Tooltips {
                 },
             ],
         });
-        alpha < 1.0
+        fading
     }
 }

@@ -6,6 +6,7 @@ mod clipboard;
 mod effect;
 mod lock;
 mod popup;
+mod presentation;
 mod run;
 mod scale;
 mod seat;

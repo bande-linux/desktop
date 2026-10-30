@@ -15,6 +15,7 @@ const VIEWPORT: Size = Size::new(200.0, 100.0);
 struct Scrolling {
     ui: Ui,
     now: Rc<Cell<Instant>>,
+    epoch: Instant,
     view: WidgetId,
     fields: Vec<WidgetId>,
 }
@@ -43,9 +44,11 @@ impl Scrolling {
         let now = Rc::new(Cell::new(Instant::now()));
         let shared = now.clone();
         ui.set_clock(move || shared.get());
+        let epoch = now.get();
         let mut scrolling = Self {
             ui,
             now,
+            epoch,
             view: view_id,
             fields: ids,
         };
@@ -82,6 +85,7 @@ impl Scrolling {
             source,
             phase,
             modifiers: Modifiers::default(),
+            time: self.now.get() - self.epoch,
         }))
     }
 
@@ -133,6 +137,70 @@ fn a_finger_flick_keeps_gliding_after_the_lift_and_slows_to_a_stop() {
     view.advance(500);
     assert_eq!(view.offset(), rest, "it comes to rest");
     assert!(rest < view.limit());
+}
+
+#[test]
+fn a_flick_is_measured_by_event_timestamps_even_when_events_arrive_together() {
+    let mut view = Scrolling::new(100);
+    let at = Duration::from_millis;
+    view.ui.handle(&finger(10.0, ScrollPhase::Began, at(0)));
+    for step in 1..=5 {
+        view.ui
+            .handle(&finger(20.0, ScrollPhase::Changed, at(step * 10)));
+    }
+    view.ui.handle(&finger(0.0, ScrollPhase::Ended, at(50)));
+    let lifted = view.offset();
+    view.advance(100);
+    let gliding = view.offset() - lifted;
+    assert!(
+        gliding > 100.0 && gliding < 300.0,
+        "a 2000 pt/s flick glides like one: {gliding}"
+    );
+}
+
+#[test]
+fn a_finger_that_rests_before_lifting_does_not_fling() {
+    let mut view = Scrolling::new(100);
+    let at = Duration::from_millis;
+    view.ui.handle(&finger(10.0, ScrollPhase::Began, at(0)));
+    for step in 1..=5 {
+        view.ui
+            .handle(&finger(20.0, ScrollPhase::Changed, at(step * 10)));
+    }
+    view.ui.handle(&finger(0.0, ScrollPhase::Ended, at(400)));
+    let lifted = view.offset();
+    view.advance(300);
+    assert_eq!(view.offset(), lifted);
+}
+
+#[test]
+fn the_scrollbar_lingers_without_redrawing_then_fades_out() {
+    let mut view = Scrolling::new(10);
+    view.scroll(40.0, ScrollSource::Wheel, ScrollPhase::Changed);
+    view.advance(400);
+    assert!(!view.ui.is_animating(), "a still scrollbar needs no frames");
+    let wake = view
+        .ui
+        .deadline()
+        .expect("the end of the linger is scheduled");
+    assert!(wake > view.now.get());
+    view.now.set(wake + Duration::from_millis(16));
+    view.frame();
+    assert!(view.ui.is_animating(), "the fade-out animates");
+    view.advance(400);
+    assert!(!view.ui.is_animating());
+    assert_eq!(view.ui.deadline(), None);
+}
+
+fn finger(delta: f32, phase: ScrollPhase, time: Duration) -> Event {
+    Event::Scroll(Scroll {
+        position: Point::new(50.0, 50.0),
+        delta: Point::new(0.0, delta),
+        source: ScrollSource::Finger,
+        phase,
+        modifiers: Modifiers::default(),
+        time,
+    })
 }
 
 #[test]

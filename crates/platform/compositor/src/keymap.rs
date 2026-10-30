@@ -3,10 +3,11 @@ use std::time::Duration;
 use smithay::backend::renderer::element::Kind;
 use smithay::backend::renderer::element::memory::MemoryRenderBufferRenderElement;
 use smithay::input::keyboard::{Layout, XkbConfig};
-use smithay::utils::{Clock, Logical, Monotonic, Point};
+use smithay::utils::{Logical, Point};
 use unbound_config::{CapsLock, InputSource, Keyboard};
 use unbound_graphics::TextRole;
 use unbound_render::VulkanRenderer;
+use unbound_spring::{Animation, Spring, State as Phase};
 
 use crate::label::{Label, LabelStyle, Labels, Look};
 use crate::state::{Headless, OutputElement, State};
@@ -16,8 +17,8 @@ const HUD_STYLE: LabelStyle = LabelStyle {
     padding: (24.0, 12.0),
     look: Look::Card,
 };
-const HUD_HOLD: Duration = Duration::from_millis(1000);
-const HUD_FADE_OUT: Duration = Duration::from_millis(300);
+const HUD_HOLD: Duration = Duration::from_millis(800);
+const HUD_SETTLED_ALPHA: f64 = 1.0 / 512.0;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KeyboardSettings {
@@ -56,7 +57,8 @@ impl KeyboardSettings {
 struct Hud {
     label: Label,
     screen: usize,
-    shown_at: Duration,
+    shown_at: Option<Duration>,
+    opacity: f32,
 }
 
 #[derive(Default)]
@@ -69,18 +71,20 @@ pub(crate) struct InputSources {
     labels: Option<Labels>,
 }
 
-fn now() -> Duration {
-    Duration::from(Clock::<Monotonic>::new().now())
-}
-
 fn hud_opacity(elapsed: Duration) -> Option<f32> {
-    if elapsed < HUD_HOLD {
-        Some(1.0)
-    } else if elapsed < HUD_HOLD + HUD_FADE_OUT {
-        Some(1.0 - (elapsed - HUD_HOLD).as_secs_f32() / HUD_FADE_OUT.as_secs_f32())
-    } else {
-        None
-    }
+    let Some(fading) = elapsed.checked_sub(HUD_HOLD) else {
+        return Some(1.0);
+    };
+    let mut fade = Animation::new(
+        Spring::FADE,
+        Phase {
+            position: 1.0,
+            velocity: 0.0,
+        },
+        0.0,
+    );
+    let opacity = fade.advance(fading.as_secs_f64()).position;
+    (!fade.is_at_rest(HUD_SETTLED_ALPHA)).then_some(opacity.clamp(0.0, 1.0) as f32)
 }
 
 impl InputSources {
@@ -224,18 +228,22 @@ impl State {
         self.input_sources.hud = label.map(|label| Hud {
             label,
             screen,
-            shown_at: now(),
+            shown_at: None,
+            opacity: 1.0,
         });
         self.needs_redraw = true;
     }
 
     pub(crate) fn animate_source_hud(&mut self, time: Duration) {
-        if let Some(hud) = &self.input_sources.hud
-            && hud_opacity(time.saturating_sub(hud.shown_at)).is_none()
-        {
-            self.input_sources.hud = None;
-            self.needs_redraw = true;
+        let Some(hud) = &mut self.input_sources.hud else {
+            return;
+        };
+        let shown_at = *hud.shown_at.get_or_insert(time);
+        match hud_opacity(time.saturating_sub(shown_at)) {
+            Some(opacity) => hud.opacity = opacity,
+            None => self.input_sources.hud = None,
         }
+        self.needs_redraw = true;
     }
 
     pub(crate) fn source_hud_element(
@@ -249,7 +257,6 @@ impl State {
             .hud
             .as_ref()
             .filter(|hud| hud.screen == screen)?;
-        let opacity = hud_opacity(now().saturating_sub(hud.shown_at))?;
         let output = self.screen_rect(screen);
         let location = Point::<f64, Logical>::from((
             f64::from(output.location.x) + (f64::from(output.size.w) - hud.label.size.w) / 2.0,
@@ -262,7 +269,7 @@ impl State {
             renderer,
             location,
             &hud.label.buffer,
-            Some(opacity),
+            Some(hud.opacity),
             None,
             None,
             Kind::Unspecified,

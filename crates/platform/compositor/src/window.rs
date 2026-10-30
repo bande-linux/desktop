@@ -405,15 +405,7 @@ impl State {
         {
             window.pending_location = Some((serial, location));
         }
-        self.animate_window(
-            index,
-            if state == xdg_toplevel::State::Fullscreen {
-                Spring::GENTLE
-            } else {
-                Spring::STANDARD
-            },
-            None,
-        );
+        self.animate_window(index, Spring::STANDARD, None);
     }
 
     pub(crate) fn maximize(&mut self, surface: &WlSurface) {

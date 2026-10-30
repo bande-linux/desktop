@@ -69,13 +69,13 @@ are in [animations.md](animations.md#motion-presets-for-unbound-spring).
 | Name | Use | Parameters | Feel |
 |---|---|---|---|
 | `interactive` | Following input when not 1:1 (catch-up, rubber-band tracking, magnification release) | response 0.15 s, ζ 0.86 (ω 41.9, k 1755) | Immediate; settles 0.19 s |
-| `quick` | Popovers, menus, focus ring, switcher selection, tile outline, hover | 0.25 s, bounce 0 (ω 25.1, ζ 1, k 632) | Crisp; settles 0.37 s |
-| `standard` | Window open, zoom, tile, workspace switch, overview, sheets, Quick Look, banners | 0.35 s, bounce 0 (ω 18.0, ζ 1, k 322) | The default; settles 0.51 s |
-| `gentle` | Minimise and restore, full screen, long moves | 0.5 s, bounce 0 (ω 12.6, ζ 1, k 158) | Calm; settles 0.73 s |
-| `momentum` | Release of a flick: dismiss, fling to a tile, fast workspace swipe | 0.4 s, bounce 0.15 (ω 15.7, ζ 0.85, k 247) | 0.6 % overshoot; settles 0.52 s |
-| `bouncy` | Attention only | 0.5 s, bounce 0.3 (ω 12.6, ζ 0.7, k 158) | 4.6 % overshoot; use rarely |
+| `quick` | Popovers, menus, focus ring, switcher selection, tile outline, window close | 0.18 s, bounce 0 (ω 34.9, ζ 1, k 1218) | Crisp; settles 0.26 s |
+| `standard` | Window open, zoom, full screen, tile, workspace switch, overview, sheets, Quick Look, banners | 0.25 s, bounce 0 (ω 25.1, ζ 1, k 632) | The default; settles 0.37 s |
+| `gentle` | Minimise and restore, long moves | 0.35 s, bounce 0 (ω 18.0, ζ 1, k 322) | Calm; settles 0.51 s |
+| `momentum` | Release of a flick: dismiss, fling to a tile, fast workspace swipe | 0.3 s, bounce 0.15 (ω 20.9, ζ 0.85, k 439) | 0.6 % overshoot; settles 0.39 s |
+| `bouncy` | Attention only | 0.4 s, bounce 0.3 (ω 15.7, ζ 0.7, k 247) | 4.6 % overshoot; use rarely |
 | `shake` | Wrong password | period 0.12 s, ζ 0.2, initial velocity kick | About three swings in 0.4 s |
-| `fade` | Opacity, and Reduce Motion's substitute for every spatial preset | 0.2 s, bounce 0 (ω 31.4, ζ 1, k 987) | Settles 0.29 s |
+| `fade` | Opacity, and Reduce Motion's substitute for every spatial preset | 0.12 s, bounce 0 (ω 52.4, ζ 1, k 2742) | Settles 0.17 s |
 | `decay` | Scroll and swipe momentum | 0.998 per ms (normal), 0.99 (fast) | Velocity-dependent |
 | `rubber-band` | Overscroll resistance | `d·c·x/(d+c·x)`, c = 0.55; back with `standard` | Soft edge |
 

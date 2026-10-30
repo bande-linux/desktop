@@ -42,6 +42,7 @@ struct ScrollFrame {
     delta: (f32, f32),
     source: Option<ScrollSource>,
     stopped: bool,
+    time: Option<Duration>,
 }
 
 #[derive(Default)]
@@ -86,6 +87,7 @@ pub(crate) struct Input {
     clicks: Clicks,
     scroll: ScrollFrame,
     scroll_source: ScrollSource,
+    scroll_time: Duration,
     scrolling: bool,
     repeat_interval: Option<Duration>,
     repeat_delay: Duration,
@@ -349,7 +351,9 @@ impl State {
             source,
             phase,
             modifiers: input.modifiers,
+            time: frame.time.unwrap_or(input.scroll_time),
         };
+        input.scroll_time = scroll.time;
         self.pointer_event(Event::Scroll(scroll));
     }
 }
@@ -448,14 +452,17 @@ impl Dispatch<WlPointer, ()> for State {
                 Instant::now(),
             ),
             wl_pointer::Event::Axis {
+                time,
                 axis: WEnum::Value(axis),
                 value,
-                ..
-            } => match axis {
-                wl_pointer::Axis::VerticalScroll => input.scroll.delta.1 += value as f32,
-                wl_pointer::Axis::HorizontalScroll => input.scroll.delta.0 += value as f32,
-                _ => {}
-            },
+            } => {
+                input.scroll.time = Some(Duration::from_millis(u64::from(time)));
+                match axis {
+                    wl_pointer::Axis::VerticalScroll => input.scroll.delta.1 += value as f32,
+                    wl_pointer::Axis::HorizontalScroll => input.scroll.delta.0 += value as f32,
+                    _ => {}
+                }
+            }
             wl_pointer::Event::AxisSource {
                 axis_source: WEnum::Value(source),
             } => {
@@ -465,7 +472,10 @@ impl Dispatch<WlPointer, ()> for State {
                     _ => ScrollSource::Wheel,
                 });
             }
-            wl_pointer::Event::AxisStop { .. } => input.scroll.stopped = true,
+            wl_pointer::Event::AxisStop { time, .. } => {
+                input.scroll.stopped = true;
+                input.scroll.time = Some(Duration::from_millis(u64::from(time)));
+            }
             wl_pointer::Event::Frame => state.scroll_frame(),
             _ => {}
         }

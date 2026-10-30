@@ -744,6 +744,8 @@ impl State {
                 )
                 .filter(|shortcut| {
                     modifiers.logo
+                        && (*shortcut != Shortcut::ToggleScreenReader
+                            || crate::assistive::screen_reader_installed())
                         && (!state.is_locked()
                             || matches!(
                                 shortcut,

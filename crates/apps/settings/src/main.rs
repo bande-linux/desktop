@@ -221,6 +221,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     });
     let mut view = SettingsView::new(window.appearance().palette(), TextSystem::new());
     view.set_pointing_devices(PointingDevices::scan(Path::new(UDEV_DATA)));
+    if unbound_xdg::find_executable(unbound_config::SCREEN_READER).is_none() {
+        view.hide_screen_reader();
+    }
     let requested = std::env::args().nth(1);
     match requested.as_deref().map(PaneId::from_keyword) {
         Some(Some(pane)) => view.select_pane(pane),

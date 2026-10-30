@@ -483,6 +483,8 @@ impl FilesView {
         }
         if self.inspector {
             self.update_info();
+        } else {
+            self.info = None;
         }
         if let Some(entry) = entry
             && (self.quick_look.is_some() || self.inspector)

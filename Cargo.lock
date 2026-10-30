@@ -4077,7 +4077,6 @@ dependencies = [
  "unbound-preview",
  "unbound-search",
  "unbound-settings-panes",
- "unbound-spring",
  "unbound-thumbnails",
  "unbound-toolkit",
  "unbound-xdg",

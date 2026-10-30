@@ -172,7 +172,7 @@ impl State {
     ) -> Option<(WlSurface, Point<f64, Logical>)> {
         match self.pointer_target(location)? {
             Target::Surface(surface, at) => Some((surface, at)),
-            Target::Frame(..) => None,
+            Target::Frame(..) | Target::Scrim(_) => None,
         }
     }
 
@@ -589,6 +589,11 @@ impl Headless {
         if pressed {
             let under = state.surface_under(state.pointer_location);
             if state.dismisses_popups(under.as_ref().map(|(surface, _)| surface)) {
+                state.swallowed_button = Some(button);
+                return;
+            }
+            if let Some(Target::Scrim(owner)) = state.pointer_target(state.pointer_location) {
+                state.scrim_pressed(&owner);
                 state.swallowed_button = Some(button);
                 return;
             }

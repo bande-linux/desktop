@@ -579,11 +579,25 @@ impl State {
         let Some(ids) = self.overview.ids.get(screen) else {
             return Vec::new();
         };
-        let [scrim, blur] = [BACKDROP_IDS, 1].map(|from_end| {
+        let ids = [BACKDROP_IDS, 1].map(|from_end| {
             ids.get(ids.len().wrapping_sub(from_end))
                 .cloned()
                 .unwrap_or_else(Id::new)
         });
+        self.dim_screen(screen, scale, reduced_effects, ids, alpha)
+    }
+
+    pub(crate) fn dim_screen(
+        &self,
+        screen: usize,
+        scale: f64,
+        reduced_effects: bool,
+        [scrim, blur]: [Id; 2],
+        alpha: f32,
+    ) -> Vec<OutputElement> {
+        if alpha <= 0.0 {
+            return Vec::new();
+        }
         let output = self.screen_rect(screen);
         let output = Rectangle::new(output.location.to_f64(), output.size.to_f64());
         let area = rounded(output.to_physical(scale), 0.0);

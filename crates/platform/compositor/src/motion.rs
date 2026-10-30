@@ -14,7 +14,7 @@ use crate::state::{Headless, State};
 use crate::window::Window;
 
 const SETTLED_PIXELS: f64 = 0.25;
-const SETTLED_ALPHA: f64 = 1.0 / 512.0;
+pub(crate) const SETTLED_ALPHA: f64 = 1.0 / 512.0;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct Tick {
@@ -405,7 +405,7 @@ impl State {
             || self.input_sources.is_animating()
             || self.switcher.is_animating()
             || self.assist.is_animating()
-            || self.zoom.is_animating()
+            || self.zoom.is_animating(self.progress_precision())
             || self.is_flashing()
             || self.windows.iter().any(|window| window.motion.is_some())
     }

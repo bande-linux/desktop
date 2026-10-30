@@ -77,6 +77,16 @@ impl State {
         }
     }
 
+    pub(crate) fn scrim_pressed(&self, owner: &WlSurface) {
+        for shell in &self.shell_resources {
+            if shell.version() >= unbound_shell_v1::EVT_SCRIM_PRESSED_SINCE
+                && shell.client() == owner.client()
+            {
+                shell.scrim_pressed(owner);
+            }
+        }
+    }
+
     pub(crate) fn open_launcher(&mut self, mode: unbound_shell_v1::LauncherMode) {
         let mut text_field = false;
         self.seat
@@ -496,6 +506,10 @@ impl Dispatch<UnboundShellV1, ()> for State {
             unbound_shell_v1::Request::ForceQuitApp { app_id } => state.force_quit_app(&app_id),
             unbound_shell_v1::Request::ActivateWindow { identifier } => {
                 state.activate_window(&identifier);
+            }
+            unbound_shell_v1::Request::SetScrim { surface, opacity } => {
+                crate::effect::set_scrim(&surface, opacity);
+                state.needs_redraw = true;
             }
             unbound_shell_v1::Request::SetCornerRadius { surface, radius } => {
                 crate::effect::set_corner_radius(&surface, radius);

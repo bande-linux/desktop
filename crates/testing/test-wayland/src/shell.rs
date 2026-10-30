@@ -42,6 +42,7 @@ pub(crate) struct Shell {
     pub(crate) layers: Vec<(WlSurface, ZwlrLayerSurfaceV1)>,
     shell: Option<UnboundShellV1>,
     launcher_requests: usize,
+    scrim_presses: usize,
     launcher_modes: Vec<(unbound_shell_v1::LauncherMode, bool)>,
     capture_requests: usize,
     area_capture_requests: usize,
@@ -154,10 +155,21 @@ impl TestClient {
     }
 
     pub fn join_shell(&mut self, server: &mut Headless) {
-        let shell: UnboundShellV1 = self.bind("unbound_shell_v1", 14);
+        let shell: UnboundShellV1 = self.bind("unbound_shell_v1", 16);
         self.globals.shell.shell = Some(shell);
         let _: ExtForeignToplevelListV1 = self.bind("ext_foreign_toplevel_list_v1", 1);
         self.exchange(server);
+    }
+
+    pub fn set_scrim(&mut self, server: &mut Headless, index: usize, opacity: f64) {
+        if let Some(shell) = &self.globals.shell.shell {
+            shell.set_scrim(&self.globals.shell.layers[index].0, opacity);
+        }
+        self.exchange(server);
+    }
+
+    pub fn scrim_presses(&self) -> usize {
+        self.globals.shell.scrim_presses
     }
 
     pub fn launcher_requests(&self) -> usize {
@@ -525,6 +537,7 @@ impl Dispatch<UnboundShellV1, ()> for Globals {
     ) {
         match event {
             unbound_shell_v1::Event::ShowLauncher => globals.shell.launcher_requests += 1,
+            unbound_shell_v1::Event::ScrimPressed { .. } => globals.shell.scrim_presses += 1,
             unbound_shell_v1::Event::OpenLauncher {
                 mode: WEnum::Value(mode),
                 text_field,

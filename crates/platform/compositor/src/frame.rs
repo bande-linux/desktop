@@ -156,6 +156,7 @@ fn hovered_control(
 pub(crate) enum Target {
     Surface(WlSurface, Point<f64, Logical>),
     Frame(WlSurface, Zone),
+    Scrim(WlSurface),
 }
 
 fn surface_at(
@@ -177,6 +178,7 @@ impl State {
                 Placed::Window(window) => zone_at(window, location)
                     .map(|zone| Target::Frame(window.surface().clone(), zone))
                     .or_else(|| surface_at(window.surface(), window.surface_origin(), location)),
+                Placed::Scrim(owner, _) => Some(Target::Scrim(owner)),
                 Placed::Closing(_) | Placed::Overview(_) | Placed::Backdrop(_) => None,
             })
     }
@@ -184,7 +186,7 @@ impl State {
     fn frame_under(&self, location: Point<f64, Logical>) -> Option<(WlSurface, Zone)> {
         match self.pointer_target(location)? {
             Target::Frame(surface, zone) => Some((surface, zone)),
-            Target::Surface(..) => None,
+            Target::Surface(..) | Target::Scrim(_) => None,
         }
     }
 

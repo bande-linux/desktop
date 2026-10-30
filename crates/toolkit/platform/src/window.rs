@@ -65,7 +65,7 @@ use crate::clipboard::Clipboard;
 use crate::clipboard::{DragAction, DragEvent, DragIcon, Transfer};
 use crate::effect::BackgroundEffect;
 use crate::lock::{Locked, SessionLock};
-use crate::popup::{MenuPlacement, Menus, Opening, Parent, PopupPlacement};
+use crate::popup::{Fading, MenuPlacement, Menus, Opening, Parent};
 use crate::presentation::Presentation;
 use crate::scale::{Scaling, SurfaceScale};
 use crate::seat::{CLICK_SLOP, Input};
@@ -153,6 +153,7 @@ pub enum WindowEvent {
     PastedTransfer(Transfer),
     Drag(DragEvent),
     ShowLauncher,
+    ScrimPressed,
     OpenLauncher {
         mode: LauncherMode,
         text_field: bool,
@@ -328,12 +329,8 @@ pub(crate) struct State {
     pub(crate) events: Vec<WindowEvent>,
     pub(crate) own_surface: Option<WlSurface>,
     pub(crate) popup_surfaces: Vec<WlSurface>,
-    pub(crate) popup_configured: Vec<bool>,
-    pub(crate) popup_placements: Vec<Option<PopupPlacement>>,
-    pub(crate) popup_frames: Vec<bool>,
     pub(crate) popup_input: Vec<(usize, Event)>,
     pub(crate) popups_changed: bool,
-    pub(crate) popup_dismissed: bool,
     pub(crate) input: Input,
     pub(crate) clipboard: Clipboard,
     pub(crate) shell: Shell,
@@ -403,6 +400,7 @@ pub struct Window {
     needs_redraw: bool,
     chrome: Option<Chrome>,
     menus: Option<Menus>,
+    fading: Option<Fading>,
     ui_deadline: Option<Instant>,
     window_menu: bool,
     keep_on_top: bool,
@@ -629,6 +627,7 @@ impl Window {
             needs_redraw: true,
             chrome,
             menus: None,
+            fading: None,
             ui_deadline: None,
             window_menu: false,
             keep_on_top: false,
@@ -1033,29 +1032,32 @@ impl Window {
             )),
         };
         let parent = match &self.role {
-            ShellSurface::Toplevel(xdg_surface, _) => Parent::Toplevel(xdg_surface),
-            ShellSurface::Layer(layer) => Parent::Layer(layer),
+            ShellSurface::Toplevel(xdg_surface, _) => Parent::Toplevel(xdg_surface.clone()),
+            ShellSurface::Layer(layer) => Parent::Layer(layer.clone()),
             ShellSurface::Lock(_) => {
                 return Err(WindowError::Missing("a surface that takes popups"));
             }
         };
+        let frame = self.frame_time();
+        let opacity = self.fading.take().map_or(0.0, |fading| {
+            let opacity = fading.opacity(frame.on_screen());
+            fading.destroy();
+            opacity
+        });
         let handle = self.queue.handle();
-        self.state.popup_dismissed = false;
         let opening = Opening {
             state: &mut self.state,
             handle: &handle,
             text: self.text.get_or_insert_with(TextSystem::new),
             palette: self.appearance.borrow().current().palette(),
         };
-        let menus = Menus::open(opening, menu, parent, placement)?;
+        let menus = Menus::open(opening, menu, parent, placement, opacity)?;
         self.menus = Some(menus);
         self.flush()?;
-        while !self.state.popup_configured.first().copied().unwrap_or(true)
-            && !self.state.popup_dismissed
-        {
+        while self.menus.as_ref().is_some_and(Menus::waiting) {
             self.queue.blocking_dispatch(&mut self.state)?;
         }
-        self.draw_menus(self.frame_time().presentation)
+        self.draw_menus(self.frame_time())
     }
 
     pub fn drive(
@@ -1132,13 +1134,35 @@ impl Window {
     pub fn close_menu(&mut self) {
         self.window_menu = false;
         if let Some(menus) = self.menus.take() {
-            menus.close(&mut self.state);
+            if let Some(fading) = self.fading.take() {
+                fading.destroy();
+            }
+            let handle = self.queue.handle();
+            let now = self.frame_time().on_screen();
+            self.fading = Some(menus.close(&mut self.state, &handle, now));
             self.state.popup_input.clear();
             self.accessibility.request_tree();
+            let _ = self.flush();
         }
     }
 
-    fn draw_menus(&mut self, now: Instant) -> Result<(), WindowError> {
+    fn draw_fading(&mut self, frame: FrameTime) {
+        let handle = self.queue.handle();
+        let Some(fading) = &mut self.fading else {
+            return;
+        };
+        match fading.draw(&self.state, &handle, frame) {
+            Ok(true) => {}
+            Ok(false) | Err(_) => {
+                if let Some(fading) = self.fading.take() {
+                    fading.destroy();
+                }
+            }
+        }
+        let _ = self.flush();
+    }
+
+    fn draw_menus(&mut self, now: FrameTime) -> Result<(), WindowError> {
         let appearance = self.appearance.borrow().current();
         let scale = self.scale();
         let handle = self.queue.handle();
@@ -1240,23 +1264,31 @@ impl Window {
 
     fn serve_menus(&mut self, frame: FrameTime) {
         let now = frame.on_screen();
+        let changed = std::mem::take(&mut self.state.popups_changed);
+        if changed && self.fading.is_some() {
+            self.draw_fading(frame);
+        }
         if self.menus.is_none() {
             self.state.popup_input.clear();
             return;
         }
         let mut outcomes = Vec::new();
-        if std::mem::take(&mut self.state.popup_dismissed) {
+        if self.menus.as_ref().is_some_and(Menus::dismissed) {
             outcomes.push((MenuOutcome::Dismiss, false));
         }
         let input = std::mem::take(&mut self.state.popup_input);
         if let Some(menus) = &mut self.menus {
-            for (level, event) in &input {
+            for (level, event) in input {
                 let keyboard = matches!(event, Event::Key { .. });
-                outcomes.push((menus.handle(*level, event, now), keyboard));
+                if keyboard && menus.tracker().is_flashing() {
+                    self.state.events.push(WindowEvent::Input(event));
+                    continue;
+                }
+                outcomes.push((menus.handle(level, &event, now), keyboard));
             }
             outcomes.push((menus.tick(Instant::now().max(now)), false));
         }
-        let mut redraw = std::mem::take(&mut self.state.popups_changed)
+        let mut redraw = changed
             || self
                 .menus
                 .as_ref()
@@ -1265,7 +1297,7 @@ impl Window {
             redraw |= self.apply_menu_outcome(outcome, keyboard);
         }
         if redraw && self.menus.is_some() {
-            let _ = self.draw_menus(frame.presentation);
+            let _ = self.draw_menus(frame);
         }
     }
 
@@ -1577,7 +1609,7 @@ impl Window {
         if let (Some((level, index)), Some(menus)) = (item, &mut self.menus) {
             let outcome = menus.activate(level, index, frame.on_screen());
             if self.apply_menu_outcome(outcome, true) {
-                let _ = self.draw_menus(frame.presentation);
+                let _ = self.draw_menus(frame);
             }
             return true;
         }
@@ -1735,6 +1767,13 @@ impl Window {
     pub fn set_layer_anchor(&mut self, anchor: Edges) {
         if let ShellSurface::Layer(layer) = &self.role {
             layer.set_anchor(anchor_of(anchor));
+            self.needs_redraw = true;
+        }
+    }
+
+    pub fn set_layer_margin(&mut self, top: i32) {
+        if let ShellSurface::Layer(layer) = &self.role {
+            layer.set_margin(top, 0, 0, 0);
             self.needs_redraw = true;
         }
     }
@@ -1948,20 +1987,41 @@ impl ShmTarget {
         Ok(damage)
     }
 
-    pub(crate) fn present_faded(
+    pub(crate) fn present_moved(
         &mut self,
         shm: &WlShm,
         handle: &QueueHandle<State>,
         surface: &WlSurface,
-        alpha: f32,
+        alpha: u32,
+        (dx, dy): (i32, i32),
     ) -> Result<(), WindowError> {
-        let factor = (alpha.clamp(0.0, 1.0) * 256.0) as u32;
+        if alpha >= 256 && (dx, dy) == (0, 0) {
+            return self.commit(shm, handle, surface, None, false);
+        }
+        let (width, height) = (self.size.0 as usize, self.size.1 as usize);
+        let stride = width * 4;
+        let columns = width.saturating_sub(dx.unsigned_abs() as usize) * 4;
+        let (from_x, to_x) = match dx >= 0 {
+            true => (0, dx as usize * 4),
+            false => (dx.unsigned_abs() as usize * 4, 0),
+        };
         self.scratch.clear();
-        self.scratch.extend(
-            self.bgra
-                .iter()
-                .map(|channel| ((u32::from(*channel) * factor) >> 8) as u8),
-        );
+        self.scratch.resize(self.bgra.len(), 0);
+        for (row, target) in self.scratch.chunks_exact_mut(stride).enumerate() {
+            let Some(source) = row
+                .checked_add_signed(-(dy as isize))
+                .filter(|source| *source < height)
+                .and_then(|source| self.bgra.chunks_exact(stride).nth(source))
+            else {
+                continue;
+            };
+            for (to, from) in target[to_x..to_x + columns]
+                .iter_mut()
+                .zip(&source[from_x..from_x + columns])
+            {
+                *to = ((u32::from(*from) * alpha) >> 8) as u8;
+            }
+        }
         self.commit(shm, handle, surface, None, true)
     }
 
@@ -2112,6 +2172,12 @@ fn create_buffer(
 
 impl Drop for Window {
     fn drop(&mut self) {
+        if let Some(menus) = self.menus.take() {
+            menus.destroy(&mut self.state);
+        }
+        if let Some(fading) = self.fading.take() {
+            fading.destroy();
+        }
         self.wait_for_gpu();
         self.gpu = Gpu::Unavailable;
         self.shm_target.destroy();
@@ -2314,7 +2380,7 @@ impl Dispatch<WlRegistry, ()> for State {
                     }
                 }
                 "unbound_shell_v1" => {
-                    state.shell.protocol = Some(registry.bind(name, version.min(15), handle, ()));
+                    state.shell.protocol = Some(registry.bind(name, version.min(16), handle, ()));
                 }
                 "unbound_app_v1" => {
                     state.shell.app = Some(registry.bind(name, version.min(5), handle, ()));

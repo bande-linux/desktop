@@ -154,7 +154,7 @@ impl Slot {
             name_text: None,
             badge_text: None,
             cell: Rect::default(),
-            shift: (Animated::new(0.0), Animated::new(0.0)),
+            shift: (Animated::points(0.0), Animated::points(0.0)),
             pinned: None,
             hidden: false,
         }
@@ -301,7 +301,7 @@ impl DockState {
                 key: None,
                 pending: None,
                 opacity: Animated::new(0.0),
-                along: Animated::new(0.0),
+                along: Animated::points(0.0),
                 hidden_at: None,
                 text: None,
             },
@@ -885,7 +885,7 @@ impl DockState {
         for slot in &mut self.slots {
             slot.cell = Rect::default();
             slot.pinned = None;
-            slot.shift = (Animated::new(0.0), Animated::new(0.0));
+            slot.shift = (Animated::points(0.0), Animated::points(0.0));
         }
         self.reveal.jump_to(0.0);
         let shown = !self.hides() || self.pointer_inside || self.menu_open;
@@ -945,7 +945,7 @@ impl DockState {
         self.hold = None;
         self.hide_label(now);
         self.slots[origin].pinned = Some(center);
-        self.slots[origin].shift = (Animated::new(0.0), Animated::new(0.0));
+        self.slots[origin].shift = (Animated::points(0.0), Animated::points(0.0));
         self.drag = Some(Drag {
             key: key.clone(),
             grab: Point::new(origin_point.x - center.x, origin_point.y - center.y),

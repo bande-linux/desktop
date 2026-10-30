@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <protocol name="unbound_shell_v1">
-  <interface name="unbound_shell_v1" version="15">
+  <interface name="unbound_shell_v1" version="16">
     <description summary="requests and events between the compositor and the shell">
       Offered only on the connections of the shell clients the compositor starts
       itself (the shell and the screenshot tool), never on the listening socket.
@@ -401,6 +401,28 @@
         shell puts a desktop and a bar on each of them.
       </description>
       <arg name="names" type="string"/>
+    </event>
+
+    <request name="set_scrim" since="16">
+      <description summary="dim the display behind a layer surface">
+        While this layer surface is mapped, the compositor dims the whole
+        display behind it with the scrim colour at the given opacity (0 to 1),
+        blurred where the renderer allows, so that a centred panel such as the
+        launcher need only be as big as itself. A pointer press on the scrim
+        reaches nothing below it: the compositor sends scrim_pressed instead.
+        The opacity applies at once; send it right before the surface's commit
+        to animate it with the surface.
+      </description>
+      <arg name="surface" type="object" interface="wl_surface"/>
+      <arg name="opacity" type="fixed"/>
+    </request>
+
+    <event name="scrim_pressed" since="16">
+      <description summary="the pointer pressed on a scrim">
+        Sent to the client whose layer surface set the scrim when a pointer
+        button is pressed on the scrim outside the surface and its popups.
+      </description>
+      <arg name="surface" type="object" interface="wl_surface"/>
     </event>
   </interface>
 

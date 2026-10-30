@@ -1,4 +1,10 @@
 pub mod area;
+pub mod cast;
+pub mod color;
+pub mod engine;
+pub mod indicator;
+pub mod picker;
+pub mod service;
 
 use std::fs;
 use std::io;
@@ -9,10 +15,22 @@ use image::{ImageFormat, RgbaImage};
 use jiff::civil::DateTime;
 use unbound_l10n::Localizer;
 use unbound_toolkit::ScreenImage;
+use unbound_xdg::{Locale, applications, current_desktops, data_dirs};
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-screenshot.ftl");
 
 pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+
+pub fn app_name(app_id: &str) -> Option<String> {
+    if app_id.is_empty() {
+        return None;
+    }
+    let locale = Locale::from_env();
+    applications(&data_dirs(), locale.as_ref(), &current_desktops())
+        .into_iter()
+        .find(|entry| entry.app_id() == app_id)
+        .map(|entry| entry.name)
+}
 
 pub fn file_stem(taken: DateTime) -> String {
     L10N.tr_args(
@@ -61,6 +79,8 @@ mod tests {
             include_str!("lib.rs"),
             include_str!("main.rs"),
             include_str!("area.rs"),
+            include_str!("picker.rs"),
+            include_str!("service.rs"),
         ];
         assert_eq!(
             unbound_l10n::missing_ids(ENGLISH, &sources),

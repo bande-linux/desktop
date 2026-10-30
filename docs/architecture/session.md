@@ -88,12 +88,35 @@ graph LR
   the permission store, and `PickColor`) and `ScreenCast` (sessions, source and cursor
   validation, PipeWire streams, `persist_mode` with restore data that skips the picker, closing
   stops the streams) are implemented over `FileChooserUi`, `ScreenshotUi` and
-  `ScreenCastBackend` traits, which the toolkit and the compositor's capture will implement.
-  No UI or PipeWire producer implements them yet, so the package registers only `Settings`;
-  `unbound-portals.conf` (picked when `XDG_CURRENT_DESKTOP=Unbound`) sends Open and Save
-  dialogs to the GTK backend, secrets to GNOME Keyring, and everything else to GTK. Screenshot
-  and ScreenCast have no backend in an Unbound session (the GTK backend has neither, and the
-  wlr backend needs `wlr-screencopy`), so browser screen sharing does not work yet.
+  `ScreenCastBackend` traits. `unbound-portals.conf` (picked when `XDG_CURRENT_DESKTOP=Unbound`)
+  sends Open and Save dialogs to the GTK backend, secrets to GNOME Keyring, Screenshot and
+  ScreenCast to Unbound, and everything else to GTK.
+- **Capture lives in the screenshot tool.** The portal process has no Wayland connection: its
+  `ScreenshotUi` and `ScreenCastBackend` forward to `org.unbound.Screenshot`, served by
+  `unbound-screenshot`, which the compositor starts as a shell client and so already holds the
+  trusted connection that sees the capture globals (as the clipboard daemon's socket pair does
+  for data control). That service answers only the current owner of the portal's bus name, and
+  sandboxed apps cannot reach it past the Flatpak bus proxy. The tool captures on a second event
+  queue of that same connection, in its own thread, so capturing never waits for its UI.
+- **Screen sharing**: `SelectSources` shows a picker on the tool's overlay: the entire screen and
+  every open window as live thumbnails (other workspaces and minimised windows included), the
+  first chosen; arrow keys move, Space adds a source when the app allows several, Return
+  shares, Escape cancels, a double click shares at once; the dialog, the list and each source
+  are published to screen readers. `Start` opens one PipeWire `Video/Source` node per source
+  (shared memory, BGRx or BGRA, the source's size, renegotiated when a window is resized, at most
+  60 frames per second and only when something on the screen changed), with the cursor
+  painted in for `cursor_mode` embedded and left out for hidden. While anything is shared, a
+  blue screen symbol sits in the menu bar (a StatusNotifierItem on a connection of its own, so it
+  disappears with it); clicking it stops sharing, and the portal then closes the app's session
+  with `Session.Closed`, as it does when a shared window closes. `persist_mode` hands back
+  restore data with the source ids, and a restored window that has since closed brings the
+  picker back.
+- **Screenshot portal**: a non-interactive request takes the whole screen at once; when the
+  frontend has not checked the permission store the tool first asks "Allow <app> to take a
+  screenshot?" (Don't Allow, Allow). An interactive request lets the user drag out an area.
+  The picture is saved as a PNG under `$XDG_CACHE_HOME/unbound-screenshot` (not the Desktop:
+  the app asked for it, the user did not) and returned as a `file://` URI. `PickColor` shows a
+  loupe with the colour's hex value under the pointer; a click picks, Escape cancels.
 - Qt apps follow dark mode through Qt's own portal platform theme: `unbound-session` sets
   `QT_QPA_PLATFORMTHEME=xdgdesktopportal` (unless already set) and `unbound-desktop`
   recommends `qt6-xdgdesktopportal-platformtheme`, a 66 kB plugin from Qt itself rather than a

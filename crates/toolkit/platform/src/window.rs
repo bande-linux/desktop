@@ -598,6 +598,10 @@ impl Window {
         self.appearance.current()
     }
 
+    pub fn connection(&self) -> Connection {
+        self.connection.clone()
+    }
+
     pub fn is_closed(&self) -> bool {
         self.state.closed
     }

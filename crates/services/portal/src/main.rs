@@ -1,12 +1,45 @@
 use std::process::ExitCode;
+use std::sync::Arc;
+use std::thread;
 
-use xdg_desktop_portal_unbound::BUS_NAME;
+use xdg_desktop_portal_unbound::capture::{ScreenshotService, ScreenshotTool};
+use xdg_desktop_portal_unbound::screencast::{ScreenCast, close_sessions_streaming};
+use xdg_desktop_portal_unbound::screenshot::Screenshot;
 use xdg_desktop_portal_unbound::settings::{CursorSettings, Settings};
+use xdg_desktop_portal_unbound::{BUS_NAME, OBJECT_PATH};
 use zbus::blocking::Connection;
+
+fn close_sessions_when_sharing_ends(
+    connection: &Connection,
+    tool: &Connection,
+) -> zbus::Result<()> {
+    let ended = ScreenshotService::new(tool)?.receive_streams_ended()?;
+    let connection = connection.clone();
+    thread::spawn(move || {
+        for signal in ended {
+            let Ok(arguments) = signal.args() else {
+                continue;
+            };
+            if let Err(error) = close_sessions_streaming(&connection, &arguments.nodes) {
+                tracing::warn!("cannot close the sharing session: {error}");
+            }
+        }
+    });
+    Ok(())
+}
 
 fn serve() -> zbus::Result<Connection> {
     let connection = Connection::session()?;
+    let tool_connection = Connection::session()?;
+    let tool = Arc::new(ScreenshotTool::new(tool_connection.clone()));
     Settings::serve(&connection, CursorSettings::from_environment())?;
+    connection
+        .object_server()
+        .at(OBJECT_PATH, ScreenCast::new(tool.clone()))?;
+    connection
+        .object_server()
+        .at(OBJECT_PATH, Screenshot { ui: tool })?;
+    close_sessions_when_sharing_ends(&connection, &tool_connection)?;
     connection.request_name(BUS_NAME)?;
     Ok(connection)
 }

@@ -21,12 +21,14 @@ unbound-test-bus.workspace = true
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
 depends = "$auto, xdg-desktop-portal (>= 1.18), dbus-session-bus | default-dbus-session-bus"
-recommends = "unbound-config, xdg-desktop-portal-gtk"
+recommends = "unbound-config, unbound-screenshot, xdg-desktop-portal-gtk"
 extended-description = """\
-Implements xdg-desktop-portal's Settings backend for the Unbound desktop: \
-the colour scheme, accent colour and Reduce Motion follow config.kdl, so \
-GTK, libadwaita and Qt apps follow them. Open and Save dialogs and the \
-other interfaces Unbound does not show yet come from the GTK backend, and \
+Implements xdg-desktop-portal's Settings, Screenshot and ScreenCast \
+backends for the Unbound desktop: the colour scheme, accent colour and \
+Reduce Motion follow config.kdl, so GTK, libadwaita and Qt apps follow \
+them, and browsers and video call apps can share the screen or a window \
+through the Unbound screenshot tool. Open and Save dialogs and the other \
+interfaces Unbound does not show yet come from the GTK backend, and \
 secrets from GNOME Keyring."""
 assets = [
     ["target/release/xdg-desktop-portal-unbound", "usr/libexec/", "755"],

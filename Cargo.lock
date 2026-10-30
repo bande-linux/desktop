@@ -4128,14 +4128,27 @@ dependencies = [
 name = "unbound-screenshot"
 version = "0.1.0"
 dependencies = [
+ "accesskit",
+ "blocking",
  "image",
  "jiff",
+ "pipewire",
+ "rustix 1.1.6",
+ "smithay",
  "tempfile",
  "tracing",
+ "unbound-compositor",
+ "unbound-inbox",
  "unbound-l10n",
  "unbound-log",
+ "unbound-protocols",
+ "unbound-test-bus",
+ "unbound-test-wayland",
  "unbound-toolkit",
  "unbound-xdg",
+ "wayland-client",
+ "wayland-protocols",
+ "zbus",
 ]
 
 [[package]]

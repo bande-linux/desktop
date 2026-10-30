@@ -6,25 +6,42 @@ edition.workspace = true
 repository.workspace = true
 
 [dependencies]
+accesskit.workspace = true
+blocking.workspace = true
 image.workspace = true
 jiff.workspace = true
+pipewire.workspace = true
+rustix = { workspace = true, features = ["event", "fs"] }
 tracing.workspace = true
+unbound-inbox.workspace = true
 unbound-l10n.workspace = true
 unbound-log.workspace = true
+unbound-protocols = { workspace = true, features = ["client"] }
 unbound-toolkit.workspace = true
 unbound-xdg.workspace = true
+wayland-client.workspace = true
+wayland-protocols.workspace = true
+zbus.workspace = true
 
 [dev-dependencies]
+smithay.workspace = true
 tempfile.workspace = true
+unbound-compositor.workspace = true
+unbound-test-bus.workspace = true
+unbound-test-wayland.workspace = true
 
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
 depends = "$auto"
+recommends = "pipewire"
 extended-description = """\
 The screenshot tool of the Unbound desktop. Super+Shift+3 saves a picture \
 of the whole screen, and Super+Shift+4 one of an area dragged out with the \
-pointer, to the desktop folder as a PNG named after the moment it was taken. unbound-compositor starts it and keeps it running."""
+pointer, to the desktop folder as a PNG named after the moment it was taken. \
+It also captures the screen and windows for the desktop portal: the picker \
+for screen sharing, the PipeWire streams, and screenshots apps ask for. \
+unbound-compositor starts it and keeps it running."""
 
 [lints]
 workspace = true

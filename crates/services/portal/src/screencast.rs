@@ -100,6 +100,50 @@ impl ScreenCast {
             sessions: Sessions::default(),
         }
     }
+
+    fn take_sessions_streaming(&self, nodes: &[u32]) -> Vec<OwnedObjectPath> {
+        let mut sessions = lock(&self.sessions);
+        let ended: Vec<OwnedObjectPath> = sessions
+            .iter()
+            .filter(|(_, session)| {
+                session
+                    .streams
+                    .iter()
+                    .any(|stream| nodes.contains(&stream.node_id))
+            })
+            .map(|(path, _)| path.clone())
+            .collect();
+        for path in &ended {
+            if let Some(session) = sessions.remove(path) {
+                let rest: Vec<Stream> = session
+                    .streams
+                    .into_iter()
+                    .filter(|stream| !nodes.contains(&stream.node_id))
+                    .collect();
+                if !rest.is_empty() {
+                    self.backend.stop(&rest);
+                }
+            }
+        }
+        ended
+    }
+}
+
+pub fn close_sessions_streaming(
+    connection: &zbus::blocking::Connection,
+    nodes: &[u32],
+) -> zbus::Result<()> {
+    let server = connection.object_server();
+    let ended = server
+        .interface::<_, ScreenCast>(crate::OBJECT_PATH)?
+        .get()
+        .take_sessions_streaming(nodes);
+    for path in ended {
+        let emitter = SignalEmitter::new(connection.inner(), path.clone())?;
+        zbus::block_on(SessionObject::closed(&emitter))?;
+        server.remove::<SessionObject, _>(&path)?;
+    }
+    Ok(())
 }
 
 #[zbus::interface(name = "org.freedesktop.impl.portal.ScreenCast")]
@@ -162,7 +206,13 @@ impl ScreenCast {
             return (OTHER, Results::new());
         }
         let persist_mode = option::<u32>(&options, "persist_mode").unwrap_or(0).min(2);
-        let restored = restored_ids(&options).and_then(|ids| self.backend.resolve(&ids));
+        let restored = match restored_ids(&options) {
+            Some(ids) => {
+                let backend = Arc::clone(&self.backend);
+                blocking::unblock(move || backend.resolve(&ids)).await
+            }
+            None => None,
+        };
         let sources = match restored {
             Some(sources) => Some(Some(sources)),
             None => {

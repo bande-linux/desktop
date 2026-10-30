@@ -1,1 +1,16 @@
 file-name = Screenshot { $date } at { $time }
+entire-screen = Entire Screen
+stream-name = Unbound Screen Sharing
+sharing-screen = Sharing your screen. Click to stop.
+recording-screen = Recording the screen. Click to stop.
+share-sources = Screens and windows
+untitled-window = Untitled Window
+cancel = Cancel
+share = Share
+share-with = Choose what to share with { $app }
+share-with-an-app = Choose what to share
+an-app = An app
+allow-screenshot = Allow { $app } to take a screenshot?
+allow-screenshot-detail = It will see everything on your screen right now.
+deny = Don’t Allow
+allow = Allow

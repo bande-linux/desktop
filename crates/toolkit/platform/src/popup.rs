@@ -146,9 +146,10 @@ impl Menus {
     pub(crate) fn handle(&mut self, level: usize, event: &Event, now: Instant) -> MenuOutcome {
         let local = |point: Point| Point::new(point.x - MARGIN, point.y - MARGIN);
         match event {
-            Event::PointerEnter(pointer) | Event::PointerMove(pointer) => self
-                .tracker
-                .pointer_move(level, local(pointer.position), now),
+            Event::PointerMove(pointer) => {
+                self.tracker
+                    .pointer_move(level, local(pointer.position), now)
+            }
             Event::PointerLeave => self
                 .tracker
                 .pointer_move(level, Point::new(-1.0, -1.0), now),

@@ -116,12 +116,20 @@ impl State {
         let Some(pointer) = self.seat.get_pointer() else {
             return;
         };
+        let time = Clock::<Monotonic>::new().now().as_millis();
+        if self
+            .popup_grab
+            .as_ref()
+            .is_some_and(|grab| grab.has_ended())
+        {
+            self.popup_grab = None;
+            pointer.unset_grab(self, SERIAL_COUNTER.next_serial(), time);
+        }
         let mut under = self.surface_under(self.pointer_location);
         if pointer.is_grabbed() {
             let Some(popup) = self
                 .popup_grab
                 .as_ref()
-                .filter(|grab| !grab.has_ended())
                 .and_then(|grab| grab.current_grab())
             else {
                 return;
@@ -137,7 +145,7 @@ impl State {
             &MotionEvent {
                 location: self.pointer_location,
                 serial: SERIAL_COUNTER.next_serial(),
-                time: Clock::<Monotonic>::new().now().as_millis(),
+                time,
             },
         );
         pointer.frame(self);

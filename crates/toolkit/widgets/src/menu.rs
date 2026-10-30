@@ -126,7 +126,7 @@ const KEY_SYMBOLS: [(&str, &str); 14] = [
     ("End", "↘"),
 ];
 
-pub fn shortcut_symbols(shortcut: &str) -> String {
+fn shortcut_symbols(shortcut: &str) -> String {
     let parts: Vec<&str> = shortcut.split('+').collect();
     let (key, modifiers) = match parts.split_last() {
         Some((&"", rest)) if rest.last() == Some(&"") => ("+", &rest[..rest.len() - 1]),

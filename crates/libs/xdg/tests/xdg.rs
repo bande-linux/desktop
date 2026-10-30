@@ -327,57 +327,40 @@ fn launched_apps_receive_the_activation_token() {
 }
 
 #[test]
-fn user_dirs_default_to_their_english_names_in_home() {
-    let home = Path::new("/home/ada");
-
-    assert_eq!(user_dir(home, None, UserDir::Desktop), home.join("Desktop"));
-    assert_eq!(
-        user_dir(home, Some("# nothing\n"), UserDir::Downloads),
-        home.join("Downloads")
-    );
-}
-
-#[test]
-fn user_dirs_follow_xdg_user_dirs() {
+fn user_dirs_follow_xdg_user_dirs_and_default_to_english_names_in_home() {
     let home = Path::new("/home/ada");
     let user_dirs = "# written by xdg-user-dirs-update\n\
         XDG_DOWNLOAD_DIR=\"$HOME/Hämtningar\"\n\
         XDG_DESKTOP_DIR=\"$HOME/Skrivbord\"\n";
 
-    assert_eq!(
-        user_dir(home, Some(user_dirs), UserDir::Desktop),
-        home.join("Skrivbord")
-    );
-    assert_eq!(
-        user_dir(home, Some(user_dirs), UserDir::Downloads),
-        home.join("Hämtningar")
-    );
-    assert_eq!(
-        user_dir(
-            home,
+    for (file, dir, expected) in [
+        (None, UserDir::Desktop, home.join("Desktop")),
+        (Some("# nothing\n"), UserDir::Downloads, home.join("Downloads")),
+        (Some(user_dirs), UserDir::Desktop, home.join("Skrivbord")),
+        (Some(user_dirs), UserDir::Downloads, home.join("Hämtningar")),
+        (
             Some("XDG_DESKTOP_DIR=\"/srv/desk\""),
-            UserDir::Desktop
+            UserDir::Desktop,
+            PathBuf::from("/srv/desk"),
         ),
-        PathBuf::from("/srv/desk")
-    );
-    assert_eq!(
-        user_dir(home, Some("XDG_DESKTOP_DIR=\"$HOME/\""), UserDir::Desktop),
-        home.to_path_buf()
-    );
-}
-
-#[test]
-fn a_relative_or_unquoted_user_dir_is_ignored() {
-    let home = Path::new("/home/ada");
-
-    assert_eq!(
-        user_dir(home, Some("XDG_DESKTOP_DIR=\"desk\""), UserDir::Desktop),
-        home.join("Desktop")
-    );
-    assert_eq!(
-        user_dir(home, Some("XDG_DESKTOP_DIR=$HOME/desk"), UserDir::Desktop),
-        home.join("Desktop")
-    );
+        (
+            Some("XDG_DESKTOP_DIR=\"$HOME/\""),
+            UserDir::Desktop,
+            home.to_path_buf(),
+        ),
+        (
+            Some("XDG_DESKTOP_DIR=\"desk\""),
+            UserDir::Desktop,
+            home.join("Desktop"),
+        ),
+        (
+            Some("XDG_DESKTOP_DIR=$HOME/desk"),
+            UserDir::Desktop,
+            home.join("Desktop"),
+        ),
+    ] {
+        assert_eq!(user_dir(home, file, dir), expected, "{file:?}");
+    }
 }
 
 #[test]

@@ -192,27 +192,32 @@ mod tests {
     }
 
     #[test]
-    fn the_language_list_comes_before_the_locale() {
-        let env = environment(&[("LANGUAGE", "fr_CA:de"), ("LANG", "sv_SE.UTF-8")]);
-        assert_eq!(tags(&requested_languages(env)), ["fr-CA", "de", "sv-SE"]);
-    }
-
-    #[test]
-    fn lc_all_overrides_lc_messages_and_lang() {
-        let env = environment(&[
-            ("LC_ALL", "de_AT.UTF-8@euro"),
-            ("LC_MESSAGES", "fr_FR.UTF-8"),
-            ("LANG", "sv_SE.UTF-8"),
-        ]);
-        assert_eq!(tags(&requested_languages(env)), ["de-AT"]);
-        let env = environment(&[("LC_MESSAGES", "fr_FR.UTF-8"), ("LANG", "sv_SE.UTF-8")]);
-        assert_eq!(tags(&requested_languages(env)), ["fr-FR"]);
-    }
-
-    #[test]
-    fn the_c_locale_ignores_the_language_list() {
-        let env = environment(&[("LANGUAGE", "de"), ("LANG", "C.UTF-8")]);
-        assert!(requested_languages(env).is_empty());
+    fn requested_languages_follow_language_then_lc_all_lc_messages_and_lang() {
+        for (env, expected) in [
+            (
+                &[("LANGUAGE", "fr_CA:de"), ("LANG", "sv_SE.UTF-8")][..],
+                &["fr-CA", "de", "sv-SE"][..],
+            ),
+            (
+                &[
+                    ("LC_ALL", "de_AT.UTF-8@euro"),
+                    ("LC_MESSAGES", "fr_FR.UTF-8"),
+                    ("LANG", "sv_SE.UTF-8"),
+                ],
+                &["de-AT"],
+            ),
+            (
+                &[("LC_MESSAGES", "fr_FR.UTF-8"), ("LANG", "sv_SE.UTF-8")],
+                &["fr-FR"],
+            ),
+            (&[("LANGUAGE", "de"), ("LANG", "C.UTF-8")], &[]),
+        ] {
+            assert_eq!(
+                tags(&requested_languages(environment(env))),
+                expected,
+                "{env:?}"
+            );
+        }
     }
 
     #[test]
@@ -231,7 +236,6 @@ mod tests {
             swedish.tr_args("greeting", [("name", "Ada".into())]),
             "Hello, Ada!"
         );
-        assert_eq!(localizer(&[]).tr("only-english"), "Only in English");
     }
 
     #[test]

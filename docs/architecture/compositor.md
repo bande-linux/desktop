@@ -139,7 +139,7 @@ when they reach the screen is Unbound's own.
   scheduler before it latches a frame). Animations are closed-form springs, so every display
   samples its own vblank, even one earlier than another display's last frame, and displays
   of different rates never repeat a frame. An animation stops once its remaining motion is
-  invisible: within 0.1 physical pixel (1/512 for opacity) and slower than that per 20 ms.
+  invisible: within 0.25 physical pixel (1/512 for opacity) and slower than that per 20 ms.
   Opening grows from 96 % and fades in (`standard`); closing keeps the last frame's textures
   and shrinks to 98 % while fading out (`quick`); minimising scales
   into the app's Dock icon, reported with `unbound_shell_v1.set_icon_rect`, or toward the

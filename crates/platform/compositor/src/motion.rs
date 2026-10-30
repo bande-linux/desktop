@@ -13,7 +13,7 @@ use crate::shell::toplevel_names;
 use crate::state::{Headless, State};
 use crate::window::Window;
 
-const SETTLED_PIXELS: f64 = 0.1;
+const SETTLED_PIXELS: f64 = 0.25;
 const SETTLED_ALPHA: f64 = 1.0 / 512.0;
 
 #[derive(Debug, Clone, Copy, PartialEq)]

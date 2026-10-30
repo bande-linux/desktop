@@ -160,6 +160,12 @@ impl Window {
         self.flush()
     }
 
+    pub fn set_scrim(&mut self, opacity: f32) -> Result<(), WindowError> {
+        self.shell_since(unbound_shell_v1::REQ_SET_SCRIM_SINCE)?
+            .set_scrim(&self.surface, f64::from(opacity));
+        Ok(())
+    }
+
     pub fn set_corner_radius(&mut self, radius: u32) -> Result<(), WindowError> {
         self.shell_since(unbound_shell_v1::REQ_SET_CORNER_RADIUS_SINCE)?
             .set_corner_radius(&self.surface, radius);
@@ -313,6 +319,11 @@ impl Dispatch<UnboundShellV1, ()> for State {
     ) {
         match event {
             unbound_shell_v1::Event::ShowLauncher => state.events.push(WindowEvent::ShowLauncher),
+            unbound_shell_v1::Event::ScrimPressed { surface } => {
+                if state.own_surface.as_ref() == Some(&surface) {
+                    state.events.push(WindowEvent::ScrimPressed);
+                }
+            }
             unbound_shell_v1::Event::OpenLauncher {
                 mode: WEnum::Value(mode),
                 text_field,

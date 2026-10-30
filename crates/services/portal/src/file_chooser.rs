@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
+use unbound_xdg::file_uri;
 use zbus::Connection;
 use zbus::zvariant::{ObjectPath, OwnedValue, Value};
 
@@ -160,18 +161,6 @@ fn dialog(
     }
 }
 
-pub fn uri(path: &Path) -> String {
-    let mut uri = String::from("file://");
-    for &byte in path.as_os_str().as_bytes() {
-        if byte.is_ascii_alphanumeric() || b"-._~/".contains(&byte) {
-            uri.push(char::from(byte));
-        } else {
-            uri.push_str(&format!("%{byte:02X}"));
-        }
-    }
-    uri
-}
-
 fn results(dialog: &Dialog, selection: Selection) -> Results {
     let paths: Vec<PathBuf> = match &dialog.mode {
         Mode::SaveMany { names } => selection
@@ -182,7 +171,7 @@ fn results(dialog: &Dialog, selection: Selection) -> Results {
         _ => selection.paths,
     };
     let owned = |value: Value<'_>| OwnedValue::try_from(value).ok();
-    let uris: Vec<String> = paths.iter().map(|path| uri(path)).collect();
+    let uris: Vec<String> = paths.iter().map(|path| file_uri(path)).collect();
     let mut results = Results::new();
     let entries = [
         ("uris", owned(Value::from(uris))),

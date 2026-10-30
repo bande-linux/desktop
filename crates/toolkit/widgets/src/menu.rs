@@ -8,7 +8,7 @@ use unbound_graphics::{
 
 use super::control::square_capped;
 use super::shortcut::ShortcutText;
-use super::{Animated, Key, Modifiers, Size, Spring};
+use super::{Key, Modifiers, Size};
 
 pub(crate) const ROW_HEIGHT: f32 = 28.0;
 const SEPARATOR_HEIGHT: f32 = 9.0;
@@ -36,13 +36,13 @@ const MAX_FOUND: usize = 12;
 const PATH_SEPARATOR: &str = " › ";
 const TYPE_SELECT_PAUSE: Duration = Duration::from_secs(1);
 const FLASH_STEP: Duration = Duration::from_millis(50);
-const FADE_LIMIT: Duration = Duration::from_millis(500);
-
-fn fade_after(chosen: Instant) -> Animated {
-    let mut fade = Animated::new(1.0);
-    fade.animate_at(chosen + 2 * FLASH_STEP, false, 0.0, Spring::FADE);
-    fade
-}
+const FLASH: Duration = Duration::from_millis(100);
+const SCROLL_ZONE: f32 = 20.0;
+const FEWEST_ROWS: f32 = 3.0;
+const SCROLL_SPEED: f32 = 300.0;
+const SCROLL_STEP: Duration = Duration::from_millis(16);
+const CHEVRON_HALF_WIDTH: f32 = 4.0;
+const CHEVRON_RISE: f32 = 2.0;
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Menu {
@@ -222,6 +222,9 @@ pub struct MenuPanel {
     rows: [Vec<Row>; 2],
     alternates: bool,
     size: Size,
+    content_height: f32,
+    scrolled: f32,
+    submenus_open_left: bool,
     highlighted: Option<usize>,
     search: Option<SearchLook>,
 }
@@ -339,24 +342,119 @@ impl MenuPanel {
         let width = (TEXT_START + widest_label + shortcut_space + chevron_space + TRAILING_PADDING)
             .max(minimum_width)
             .ceil();
+        let height = top + VERTICAL_PADDING + footer;
         Self {
             menus: [menu, alternate],
             rows,
             alternates: false,
-            size: Size::new(width, top + VERTICAL_PADDING + footer),
+            size: Size::new(width, height),
+            content_height: height,
+            scrolled: 0.0,
+            submenus_open_left: false,
             highlighted: None,
             search,
         }
     }
 
-    pub fn at_least(self, size: Size) -> Self {
+    pub fn at_least_as_wide_as(self, width: f32) -> Self {
         Self {
-            size: Size::new(
-                self.size.width.max(size.width),
-                self.size.height.max(size.height),
-            ),
+            size: Size::new(self.size.width.max(width), self.size.height),
             ..self
         }
+    }
+
+    pub fn fit_height(&mut self, height: f32) {
+        let (header, footer) = self.header_and_footer();
+        let fewest = 2.0 * VERTICAL_PADDING + header + footer + 2.0 * SCROLL_ZONE;
+        let fewest = fewest + FEWEST_ROWS * ROW_HEIGHT;
+        self.size.height = height
+            .max(fewest.min(self.content_height))
+            .min(self.content_height);
+        self.scrolled = self.scrolled.clamp(0.0, self.scroll_limit());
+        if let Some(index) = self.highlighted {
+            self.reveal(index);
+        }
+    }
+
+    pub fn scroll_offset(&self) -> f32 {
+        self.scrolled
+    }
+
+    pub fn is_scrollable(&self) -> bool {
+        self.scroll_limit() > 0.0
+    }
+
+    fn scroll_limit(&self) -> f32 {
+        (self.content_height - self.size.height).max(0.0)
+    }
+
+    fn header_and_footer(&self) -> (f32, f32) {
+        match &self.search {
+            Some(SearchLook::Query(_)) => (SEARCH_LINE, 0.0),
+            Some(SearchLook::Hint(..)) => (0.0, FOOTER_HEIGHT),
+            None => (0.0, 0.0),
+        }
+    }
+
+    fn rows_area(&self) -> (f32, f32) {
+        let (header, footer) = self.header_and_footer();
+        (
+            VERTICAL_PADDING + header,
+            self.size.height - VERTICAL_PADDING - footer,
+        )
+    }
+
+    fn scrolls_up(&self) -> bool {
+        self.scrolled > 0.0
+    }
+
+    fn scrolls_down(&self) -> bool {
+        self.scrolled < self.scroll_limit()
+    }
+
+    fn visible_rows(&self) -> (f32, f32) {
+        let (top, bottom) = self.rows_area();
+        let zone = |shown: bool| if shown { SCROLL_ZONE } else { 0.0 };
+        (
+            top + zone(self.scrolls_up()),
+            bottom - zone(self.scrolls_down()),
+        )
+    }
+
+    fn scroll_zone_at(&self, point: Point) -> Option<f32> {
+        if point.x < 0.0 || point.x >= self.size.width || point.y < 0.0 {
+            return None;
+        }
+        let (top, bottom) = self.visible_rows();
+        if self.scrolls_up() && point.y < top {
+            return Some(-1.0);
+        }
+        (self.scrolls_down() && point.y >= bottom && point.y < self.size.height).then_some(1.0)
+    }
+
+    pub fn scroll_by(&mut self, delta: f32) -> bool {
+        let scrolled = (self.scrolled + delta).clamp(0.0, self.scroll_limit());
+        let moved = scrolled != self.scrolled;
+        self.scrolled = scrolled;
+        moved
+    }
+
+    fn reveal(&mut self, index: usize) {
+        let Some(row) = self.current_rows().get(index) else {
+            return;
+        };
+        let (row_top, row_bottom) = (row.top, row.top + row.height);
+        let (top, bottom) = self.rows_area();
+        if row_top - self.scrolled < top + SCROLL_ZONE {
+            self.scrolled = row_top - top - SCROLL_ZONE;
+        } else if row_bottom - self.scrolled > bottom - SCROLL_ZONE {
+            self.scrolled = row_bottom - bottom + SCROLL_ZONE;
+        }
+        self.scrolled = self.scrolled.clamp(0.0, self.scroll_limit());
+    }
+
+    pub fn open_submenus_left(&mut self, left: bool) {
+        self.submenus_open_left = left;
     }
 
     pub fn shows_alternates(&self) -> bool {
@@ -383,17 +481,19 @@ impl MenuPanel {
         self.current_rows()
             .get(index)
             .map_or(Rect::default(), |row| {
-                Rect::new(0.0, row.top, self.size.width, row.height)
+                Rect::new(0.0, row.top - self.scrolled, self.size.width, row.height)
             })
     }
 
     pub fn item_at(&self, point: Point) -> Option<usize> {
-        if point.x < 0.0 || point.x >= self.size.width {
+        let (top, bottom) = self.visible_rows();
+        if point.x < 0.0 || point.x >= self.size.width || point.y < top || point.y >= bottom {
             return None;
         }
+        let y = point.y + self.scrolled;
         self.current_rows()
             .iter()
-            .position(|row| point.y >= row.top && point.y < row.top + row.height)
+            .position(|row| y >= row.top && y < row.top + row.height)
             .filter(|index| self.menu().items[*index].selectable())
     }
 
@@ -424,7 +524,6 @@ impl MenuPanel {
                 paint: palette.hairline.into(),
             },
         ];
-        let highlight_radius = Radius::concentric(MENU_RADIUS, HIGHLIGHT_INSET);
         match &self.search {
             Some(SearchLook::Query(query)) => self.paint_query(query, palette, &mut items),
             Some(SearchLook::Hint(hint, shortcut)) => {
@@ -432,6 +531,42 @@ impl MenuPanel {
             }
             None => {}
         }
+        let rows = self.paint_rows(palette, show_highlight);
+        if !self.is_scrollable() {
+            items.extend(rows);
+            return items;
+        }
+        let (top, bottom) = self.visible_rows();
+        items.push(Item::Clip {
+            shape: Shape::rect(Rect::new(0.0, top, self.size.width, bottom - top)),
+            items: vec![Item::Translate {
+                offset: Point::new(0.0, -self.scrolled),
+                items: rows,
+            }],
+        });
+        let (area_top, area_bottom) = self.rows_area();
+        let centre = self.size.width / 2.0;
+        let chevron = |middle: f32, toward: f32| Item::StrokePath {
+            path: Path::through(&[
+                Point::new(centre - CHEVRON_HALF_WIDTH, middle - toward),
+                Point::new(centre, middle + toward),
+                Point::new(centre + CHEVRON_HALF_WIDTH, middle - toward),
+            ]),
+            width: MARK_STROKE,
+            paint: palette.ink2.into(),
+        };
+        if self.scrolls_up() {
+            items.push(chevron(area_top + SCROLL_ZONE / 2.0, -CHEVRON_RISE));
+        }
+        if self.scrolls_down() {
+            items.push(chevron(area_bottom - SCROLL_ZONE / 2.0, CHEVRON_RISE));
+        }
+        items
+    }
+
+    fn paint_rows(&self, palette: &Palette, show_highlight: bool) -> Vec<Item> {
+        let mut items = Vec::new();
+        let highlight_radius = Radius::concentric(MENU_RADIUS, HIGHLIGHT_INSET);
         for (index, (item, row)) in self
             .menu()
             .items
@@ -717,6 +852,7 @@ pub struct MenuTracker {
     revision: u32,
     pointer: Option<(usize, Point)>,
     settle: Option<(usize, Point, Instant)>,
+    autoscroll: Option<(usize, f32, Instant)>,
 }
 
 fn inside_triangle(point: Point, corners: [Point; 3]) -> bool {
@@ -744,6 +880,7 @@ impl MenuTracker {
             revision: 0,
             pointer: None,
             settle: None,
+            autoscroll: None,
         }
     }
 
@@ -753,7 +890,7 @@ impl MenuTracker {
 
     pub fn searched(&mut self, panel: MenuPanel) {
         let width = self.panels[0].size().width;
-        let mut panel = panel.at_least(Size::new(width, 0.0));
+        let mut panel = panel.at_least_as_wide_as(width);
         panel.highlighted = panel.step(None, true);
         self.panels = vec![panel];
         self.submenu_due = None;
@@ -790,6 +927,9 @@ impl MenuTracker {
 
     pub fn truncate(&mut self, levels: usize) {
         self.panels.truncate(levels.max(1));
+        self.autoscroll = self
+            .autoscroll
+            .filter(|(level, _, _)| *level < self.panels.len());
     }
 
     pub fn submenu(&self, level: usize, index: usize) -> Option<Menu> {
@@ -810,6 +950,9 @@ impl MenuTracker {
             return MenuOutcome::Nothing;
         }
         panel.highlighted = index;
+        if let Some(index) = index {
+            panel.reveal(index);
+        }
         self.submenu_due = index
             .filter(|index| panel.menu().items[*index].submenu.is_some())
             .map(|index| (level, index, now + SUBMENU_DELAY));
@@ -826,6 +969,20 @@ impl MenuTracker {
         let Some(panel) = self.panels.get(level) else {
             return MenuOutcome::Nothing;
         };
+        if let Some(direction) = panel.scroll_zone_at(point) {
+            if self
+                .autoscroll
+                .is_none_or(|(known, toward, _)| known != level || toward != direction)
+            {
+                self.autoscroll = Some((level, direction, now));
+            }
+            self.pointer = Some((level, point));
+            self.settle = None;
+            return self.highlight(level, None, now);
+        }
+        if self.autoscroll.is_some_and(|(known, _, _)| known == level) {
+            self.autoscroll = None;
+        }
         let index = panel.item_at(point);
         if index.is_some() {
             self.armed = true;
@@ -865,16 +1022,86 @@ impl MenuTracker {
             .panels
             .get(level + 1)
             .map_or(row.height, |submenu| submenu.size().height);
-        let edge = panel.size().width;
-        point.x > from.x
+        let (edge, behind, moving_away) = match panel.submenus_open_left {
+            true => (-SAFE_MARGIN, from.x + 1.0, point.x < from.x),
+            false => (
+                panel.size().width + SAFE_MARGIN,
+                from.x - 1.0,
+                point.x > from.x,
+            ),
+        };
+        moving_away
             && inside_triangle(
                 point,
                 [
-                    Point::new(from.x - 1.0, from.y),
-                    Point::new(edge + SAFE_MARGIN, row.y - SAFE_MARGIN),
-                    Point::new(edge + SAFE_MARGIN, row.y + height + SAFE_MARGIN),
+                    Point::new(behind, from.y),
+                    Point::new(edge, row.y - SAFE_MARGIN),
+                    Point::new(edge, row.y + height + SAFE_MARGIN),
                 ],
             )
+    }
+
+    pub fn placed(&mut self, level: usize, height: f32, beside_left: bool) {
+        if level > 0
+            && let Some(parent) = self.panels.get_mut(level - 1)
+        {
+            parent.open_submenus_left(beside_left);
+        }
+        if let Some(panel) = self.panels.get_mut(level) {
+            panel.fit_height(height);
+            self.revision = self.revision.wrapping_add(1);
+        }
+    }
+
+    pub fn scroll(&mut self, level: usize, delta: f32) -> MenuOutcome {
+        let Some(panel) = self.panels.get_mut(level) else {
+            return MenuOutcome::Nothing;
+        };
+        if !panel.scroll_by(delta) {
+            return MenuOutcome::Nothing;
+        }
+        self.after_scroll(level)
+    }
+
+    fn after_scroll(&mut self, level: usize) -> MenuOutcome {
+        let pointer = self
+            .pointer
+            .filter(|(known, _)| *known == level)
+            .map(|(_, point)| point);
+        let Some(panel) = self.panels.get_mut(level) else {
+            return MenuOutcome::Nothing;
+        };
+        if let Some(point) = pointer {
+            panel.highlighted = panel.item_at(point);
+            self.submenu_due = None;
+        }
+        if self.panels.len() > level + 1 {
+            return MenuOutcome::CloseFrom(level + 1);
+        }
+        MenuOutcome::Redraw
+    }
+
+    fn step_autoscroll(&mut self, now: Instant) -> MenuOutcome {
+        let Some((level, direction, at)) = self.autoscroll else {
+            return MenuOutcome::Nothing;
+        };
+        if now < at + SCROLL_STEP {
+            return MenuOutcome::Nothing;
+        }
+        let distance = direction * SCROLL_SPEED * now.duration_since(at).as_secs_f32();
+        let Some(panel) = self.panels.get_mut(level) else {
+            return MenuOutcome::Nothing;
+        };
+        let moved = panel.scroll_by(distance);
+        let more = match direction > 0.0 {
+            true => panel.scrolls_down(),
+            false => panel.scrolls_up(),
+        };
+        self.autoscroll = (moved && more).then_some((level, direction, now));
+        match moved {
+            true => self.after_scroll(level),
+            false => MenuOutcome::Nothing,
+        }
     }
 
     pub fn pointer_press(&mut self, level: usize, point: Point) -> MenuOutcome {
@@ -1018,12 +1245,22 @@ impl MenuTracker {
 
     pub fn deadline(&self) -> Option<Instant> {
         let submenu = self.submenu_due.map(|(_, _, at)| at);
-        let flash = self.flash.map(|(_, at)| at + 2 * FLASH_STEP + FADE_LIMIT);
+        let flash = self.flash.map(|(_, at)| at + FLASH);
         let settle = self.settle.map(|(_, _, at)| at);
-        submenu.into_iter().chain(flash).chain(settle).min()
+        let autoscroll = self.autoscroll.map(|(_, _, at)| at + SCROLL_STEP);
+        submenu
+            .into_iter()
+            .chain(flash)
+            .chain(settle)
+            .chain(autoscroll)
+            .min()
     }
 
     pub fn tick(&mut self, now: Instant) -> MenuOutcome {
+        let scrolled = self.step_autoscroll(now);
+        if scrolled != MenuOutcome::Nothing {
+            return scrolled;
+        }
         if let Some((level, point, at)) = self.settle
             && at <= now
         {
@@ -1046,22 +1283,17 @@ impl MenuTracker {
     }
 
     pub fn is_finished(&self, now: Instant) -> bool {
-        self.flash.is_some_and(|(_, at)| {
-            now >= at + 2 * FLASH_STEP + FADE_LIMIT || fade_after(at).value_at(now) == (0.0, false)
-        })
+        self.flash.is_some_and(|(_, at)| now >= at + FLASH)
     }
 
     pub fn is_flashing(&self) -> bool {
         self.flash.is_some()
     }
 
-    pub fn appearance(&self, level: usize, now: Instant) -> (bool, f32) {
-        let Some((flashed, at)) = self.flash else {
-            return (true, 1.0);
-        };
-        let elapsed = now.saturating_duration_since(at);
-        let blink_off = elapsed < FLASH_STEP && level == flashed;
-        (!blink_off, fade_after(at).value_at(now).0.clamp(0.0, 1.0))
+    pub fn shows_highlight(&self, level: usize, now: Instant) -> bool {
+        self.flash.is_none_or(|(flashed, at)| {
+            level != flashed || now.saturating_duration_since(at) >= FLASH_STEP
+        })
     }
 
     pub fn access(&self) -> (Vec<(NodeId, Node)>, Vec<NodeId>, Option<NodeId>) {

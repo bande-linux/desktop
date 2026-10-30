@@ -3,6 +3,7 @@ use std::process::ExitCode;
 use std::sync::Arc;
 use std::thread;
 
+use unbound_xdg::config_home;
 use xdg_desktop_portal_unbound::capture::{ScreenshotService, ScreenshotTool};
 use xdg_desktop_portal_unbound::dialog_process::{DIALOG_PROGRAM, DialogProcess};
 use xdg_desktop_portal_unbound::file_chooser::FileChooser;
@@ -55,13 +56,6 @@ fn serve() -> zbus::Result<Connection> {
     close_sessions_when_sharing_ends(&connection, &tool_connection)?;
     connection.request_name(BUS_NAME)?;
     Ok(connection)
-}
-
-fn config_home() -> Option<PathBuf> {
-    std::env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .filter(|path| path.is_absolute())
-        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
 }
 
 fn main() -> ExitCode {

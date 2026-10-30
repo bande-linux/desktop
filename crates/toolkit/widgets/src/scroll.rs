@@ -60,8 +60,12 @@ impl ScrollState {
     pub fn set_extent(&mut self, content: f32, viewport: f32) {
         self.content = content;
         self.viewport = viewport;
-        if let Motion::Still(offset) = self.motion {
-            self.motion = Motion::Still(offset.clamp(0.0, self.limit()));
+        match self.motion {
+            Motion::Still(offset) => self.motion = Motion::Still(offset.clamp(0.0, self.limit())),
+            Motion::Spring(animated) if animated.target() > self.limit() => {
+                self.motion = Motion::Still(self.limit());
+            }
+            _ => {}
         }
     }
 

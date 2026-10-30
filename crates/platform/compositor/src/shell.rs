@@ -7,7 +7,7 @@ use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{
     Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource,
 };
-use smithay::utils::{Logical, Rectangle};
+use smithay::utils::{Logical, Point, Rectangle};
 use smithay::wayland::compositor::with_states;
 use smithay::wayland::foreign_toplevel_list::{
     ForeignToplevelListHandler, ForeignToplevelListState,
@@ -27,6 +27,7 @@ pub(crate) struct PanelAnchor {
     output: String,
     edge: unbound_shell_v1::Edge,
     rect: Rectangle<i32, Logical>,
+    zone: Point<i32, Logical>,
 }
 
 pub(crate) struct PendingInsert {
@@ -73,6 +74,16 @@ impl State {
     pub(crate) fn show_launcher(&mut self) {
         for shell in &self.shell_resources {
             shell.show_launcher();
+        }
+    }
+
+    pub(crate) fn scrim_pressed(&self, owner: &WlSurface) {
+        for shell in &self.shell_resources {
+            if shell.version() >= unbound_shell_v1::EVT_SCRIM_PRESSED_SINCE
+                && shell.client() == owner.client()
+            {
+                shell.scrim_pressed(owner);
+            }
         }
     }
 
@@ -178,6 +189,7 @@ impl State {
             return;
         };
         let output = self.screens[screen].name();
+        let zone = self.zone_origin(screen);
         let origin = {
             let map = layer_map_for_output(&self.screens[screen].output);
             let Some(geometry) = map
@@ -193,6 +205,7 @@ impl State {
             output,
             edge,
             rect: Rectangle::new(origin + rect.loc, rect.size),
+            zone,
         };
         self.panel_anchors
             .retain(|known| known.panel != panel || known.output != anchor.output);
@@ -200,6 +213,26 @@ impl State {
             send_panel_anchor(shell, &anchor);
         }
         self.panel_anchors.push(anchor);
+    }
+
+    fn zone_origin(&self, screen: usize) -> Point<i32, Logical> {
+        self.usable_area(screen).location - self.screen_rect(screen).location
+    }
+
+    pub(crate) fn follow_panel_zones(&mut self) {
+        for index in 0..self.panel_anchors.len() {
+            let Some(screen) = self.screen_named(&self.panel_anchors[index].output) else {
+                continue;
+            };
+            let zone = self.zone_origin(screen);
+            if self.panel_anchors[index].zone == zone {
+                continue;
+            }
+            self.panel_anchors[index].zone = zone;
+            for shell in &self.shell_resources {
+                send_panel_anchor(shell, &self.panel_anchors[index]);
+            }
+        }
     }
 
     pub(crate) fn shown_displays(&self) -> Vec<String> {
@@ -474,6 +507,10 @@ impl Dispatch<UnboundShellV1, ()> for State {
             unbound_shell_v1::Request::ActivateWindow { identifier } => {
                 state.activate_window(&identifier);
             }
+            unbound_shell_v1::Request::SetScrim { surface, opacity } => {
+                crate::effect::set_scrim(&surface, opacity);
+                state.needs_redraw = true;
+            }
             unbound_shell_v1::Request::SetCornerRadius { surface, radius } => {
                 crate::effect::set_corner_radius(&surface, radius);
                 state.needs_redraw = true;
@@ -522,8 +559,8 @@ fn send_panel_anchor(shell: &UnboundShellV1, anchor: &PanelAnchor) {
             anchor.panel,
             anchor.output.clone(),
             anchor.edge,
-            anchor.rect.loc.x,
-            anchor.rect.loc.y,
+            anchor.rect.loc.x - anchor.zone.x,
+            anchor.rect.loc.y - anchor.zone.y,
             anchor.rect.size.w,
             anchor.rect.size.h,
         );

@@ -4078,7 +4078,6 @@ dependencies = [
  "unbound-preview",
  "unbound-search",
  "unbound-settings-panes",
- "unbound-spring",
  "unbound-thumbnails",
  "unbound-toolkit",
  "unbound-xdg",
@@ -5439,6 +5438,7 @@ dependencies = [
  "unbound-log",
  "unbound-test-bus",
  "unbound-wallpaper",
+ "unbound-xdg",
  "zbus",
 ]
 

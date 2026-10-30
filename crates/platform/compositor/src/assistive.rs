@@ -14,13 +14,13 @@ use zbus::zvariant::{OwnedValue, Value};
 
 use crate::cursor::CursorTheme;
 use crate::environment::export_cursor_environment;
+use crate::motion::SETTLED_ALPHA;
 use crate::scene::{FillElement, rounded};
 use crate::state::{Headless, OutputElement, State};
 
 const SOUND_BUS_NAME: &str = "org.unbound.Sound";
 const SOUND_PATH: &str = "/org/unbound/Sound";
 const FLASH_OPACITY: f64 = 0.45;
-const FLASH_SETTLED: f64 = 0.004;
 
 type Remembered = (&'static str, OwnedValue);
 
@@ -176,7 +176,7 @@ impl State {
             .map_or(Duration::ZERO, |last| time.saturating_sub(last));
         flash.last = Some(time);
         flash.opacity.advance(step.as_secs_f64());
-        if flash.opacity.is_at_rest(FLASH_SETTLED) {
+        if flash.opacity.is_at_rest(SETTLED_ALPHA) {
             self.assistive.flash = None;
         }
     }

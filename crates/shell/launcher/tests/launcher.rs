@@ -11,7 +11,7 @@ use unbound_launcher::{
 use unbound_preview::preview;
 use unbound_search::{EXACT, FileHit, FileResults, PREFIX, Usage, WORD, usage_path};
 use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer, PointerButton};
-use unbound_toolkit::{Appearance, Color, CpuRenderer, Image, Point, Scheme, TextSystem};
+use unbound_toolkit::{Appearance, Color, CpuRenderer, Image, Point, Scene, Scheme, TextSystem};
 
 const SCREEN: (u32, u32) = (1024, 720);
 const MIN_SSIM: f64 = 0.99;
@@ -339,9 +339,9 @@ fn a_right_click_on_a_file_offers_open_show_in_files_and_copy_path() {
     let mut launcher = launcher();
     typed(&mut launcher, "budget");
     files(&mut launcher, &[("budget.ods", false, PREFIX)]);
-    launcher.scene(SCREEN.0, SCREEN.1, Instant::now());
-    let card_x = (SCREEN.0 as f32 - unbound_launcher::CARD_WIDTH) / 2.0;
-    let card_y = (SCREEN.1 as f32 * 0.22).round();
+    scene(&mut launcher, Instant::now());
+    let card_x = 48.0;
+    let card_y = 48.0;
     let row = Point::new(card_x + 60.0, card_y + 61.0 + 8.0 + 26.0 + 16.0);
     launcher.handle(&Event::PointerDown(
         Pointer::at(row).with_button(PointerButton::Secondary),
@@ -445,16 +445,16 @@ fn escape_clears_the_query_and_then_closes() {
 #[test]
 fn a_click_beside_the_card_closes_and_a_click_on_a_result_opens_it() {
     let mut launcher = launcher();
-    launcher.scene(SCREEN.0, SCREEN.1, Instant::now());
+    scene(&mut launcher, Instant::now());
     let beside = Pointer::at(Point::new(10.0, 10.0));
     launcher.handle(&Event::PointerDown(beside));
     launcher.handle(&Event::PointerUp(beside));
     assert_eq!(launcher.take_actions(), [Action::Close]);
 
     typed(&mut launcher, "te");
-    launcher.scene(SCREEN.0, SCREEN.1, Instant::now());
-    let card_x = (SCREEN.0 as f32 - unbound_launcher::CARD_WIDTH) / 2.0;
-    let card_y = (SCREEN.1 as f32 * 0.22).round();
+    scene(&mut launcher, Instant::now());
+    let card_x = 48.0;
+    let card_y = 48.0;
     let second_row = Point::new(
         card_x + 60.0,
         card_y + 61.0 + 8.0 + 26.0 + 32.0 + 26.0 + 16.0,
@@ -486,7 +486,7 @@ fn reduce_motion_fades_the_card_in_without_moving_it() {
     );
     let shown = Instant::now();
     launcher.appear(shown);
-    let scene = launcher.scene(SCREEN.0, SCREEN.1, shown + Duration::from_millis(30));
+    let scene = scene(&mut launcher, shown + Duration::from_millis(30));
     let [unbound_toolkit::Item::Opacity { items, .. }] = scene.items.as_slice() else {
         panic!("the card fades in");
     };
@@ -505,7 +505,7 @@ fn the_card_appears_with_a_quick_fade_and_settles() {
     assert!(launcher.is_animating(shown));
     assert!(launcher.is_animating(shown + Duration::from_millis(60)));
     assert!(!launcher.is_animating(shown + Duration::from_millis(600)));
-    let scene = launcher.scene(SCREEN.0, SCREEN.1, shown + Duration::from_millis(30));
+    let scene = scene(&mut launcher, shown + Duration::from_millis(30));
     assert!(matches!(
         scene.items.as_slice(),
         [unbound_toolkit::Item::Opacity { alpha, .. }] if *alpha > 0.0 && *alpha < 1.0
@@ -517,7 +517,7 @@ fn results_are_published_as_list_options() {
     let mut launcher = launcher();
     typed(&mut launcher, "te");
     files(&mut launcher, &[("tests", true, WORD)]);
-    launcher.scene(SCREEN.0, SCREEN.1, Instant::now());
+    scene(&mut launcher, Instant::now());
     let accessibility = launcher.ui.accessibility();
     let options = accessibility
         .nodes
@@ -552,14 +552,14 @@ fn every_keystroke_updates_the_results_within_a_frame() {
         appearance(Scheme::Light),
         TextSystem::new(),
     );
-    launcher.scene(SCREEN.0, SCREEN.1, Instant::now());
+    scene(&mut launcher, Instant::now());
     let mut timings = Vec::new();
     for query in ["exam", "te", "tool 4", "settings", "2*21"] {
         launcher.clear();
         for character in query.chars() {
             let started = thread_cpu_time();
             typed(&mut launcher, &character.to_string());
-            launcher.scene(SCREEN.0, SCREEN.1, Instant::now());
+            scene(&mut launcher, Instant::now());
             timings.push(thread_cpu_time().saturating_sub(started));
         }
     }
@@ -592,13 +592,18 @@ fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>) {
     );
 }
 
+fn scene(launcher: &mut Launcher, now: Instant) -> Scene {
+    let surface = launcher.surface(SCREEN);
+    launcher.scene(surface.size.0, surface.size.1, now)
+}
+
 fn render(launcher: &mut Launcher, name: &str) {
-    let mut scene = launcher.scene(SCREEN.0, SCREEN.1, Instant::now());
+    let mut scene = scene(launcher, Instant::now());
     scene.background = Color::hex(0x5A6B7D);
     for (scale, suffix) in [(1.0, "1x"), (1.5, "1.5x")] {
         let size = (
-            (f64::from(SCREEN.0) * scale).round() as u32,
-            (f64::from(SCREEN.1) * scale).round() as u32,
+            (f64::from(scene.width) * scale).round() as u32,
+            (f64::from(scene.height) * scale).round() as u32,
         );
         let mut rgba = vec![0; (size.0 * size.1 * 4) as usize];
         CpuRenderer::new()
@@ -788,7 +793,7 @@ fn a_long_list_scrolls_to_keep_the_selection_in_view() {
         TextSystem::new(),
     );
     let scroll = |launcher: &mut Launcher| {
-        launcher.scene(SCREEN.0, SCREEN.1, Instant::now() + Duration::from_secs(5));
+        scene(launcher, Instant::now() + Duration::from_secs(5));
         launcher
             .ui
             .accessibility()
@@ -805,7 +810,7 @@ fn a_long_list_scrolls_to_keep_the_selection_in_view() {
     }
     assert!(scroll(&mut launcher) > 500.0);
     launcher.handle(&Event::Scroll(unbound_toolkit::ui::Scroll {
-        position: Point::new(SCREEN.0 as f32 / 2.0, SCREEN.1 as f32 * 0.5),
+        position: Point::new(400.0, 300.0),
         delta: Point::new(0.0, -10_000.0),
         ..unbound_toolkit::ui::Scroll::default()
     }));
@@ -817,11 +822,11 @@ fn the_menu_key_and_shift_f10_open_the_menu_of_the_selection() {
     let mut launcher = launcher();
     typed(&mut launcher, "budget");
     files(&mut launcher, &[("budget.ods", false, PREFIX)]);
-    launcher.scene(SCREEN.0, SCREEN.1, Instant::now());
+    scene(&mut launcher, Instant::now());
     key(&mut launcher, Key::Menu);
     let (menu, point) = launcher.take_menu_request().expect("a context menu");
     assert_eq!(menu.items[0].action, "open");
-    assert!(point.y > SCREEN.1 as f32 * 0.22 + 60.0);
+    assert!(point.y > 48.0 + 60.0);
     launcher.handle(&Event::Key {
         key: Key::Function(10),
         modifiers: Modifiers {
@@ -911,7 +916,7 @@ fn a_skin_tone_chosen_from_the_menu_is_remembered_and_used() {
     let mut launcher = launcher();
     launcher.open(Mode::Emoji, true);
     typed(&mut launcher, "waving hand");
-    launcher.scene(SCREEN.0, SCREEN.1, Instant::now());
+    scene(&mut launcher, Instant::now());
     key(&mut launcher, Key::Menu);
     let (menu, _) = launcher.take_menu_request().expect("a menu");
     let tones: Vec<&str> = menu
@@ -1033,7 +1038,7 @@ fn delete_removes_a_copy_and_clear_history_removes_them_all() {
     assert_eq!(launcher.take_actions(), [Action::RemoveClip(2)]);
     assert_eq!(launcher.selection().unwrap().target, Target::Clip(3));
     assert_eq!(launcher.hits().len(), 3);
-    launcher.scene(SCREEN.0, SCREEN.1, Instant::now());
+    scene(&mut launcher, Instant::now());
     key(&mut launcher, Key::Menu);
     let (menu, _) = launcher.take_menu_request().expect("a menu");
     let actions: Vec<&str> = menu

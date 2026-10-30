@@ -63,6 +63,49 @@ pub(crate) fn corner_radius(surface: &WlSurface) -> f64 {
     with_region(surface, |region| f64::from(region.radius))
 }
 
+#[derive(Clone)]
+pub(crate) struct Scrim {
+    pub(crate) opacity: f32,
+    pub(crate) ids: [Id; 2],
+}
+
+pub(crate) fn set_scrim(surface: &WlSurface, opacity: f64) {
+    with_states(surface, |states| {
+        states
+            .data_map
+            .insert_if_missing_threadsafe(|| Mutex::new(None::<Scrim>));
+        if let Some(scrim) = states.data_map.get::<Mutex<Option<Scrim>>>() {
+            let mut scrim = scrim
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let opacity = opacity.clamp(0.0, 1.0) as f32;
+            match scrim.as_mut() {
+                Some(scrim) => scrim.opacity = opacity,
+                None => {
+                    *scrim = Some(Scrim {
+                        opacity,
+                        ids: [Id::new(), Id::new()],
+                    });
+                }
+            }
+        }
+    });
+}
+
+pub(crate) fn scrim(surface: &WlSurface) -> Option<Scrim> {
+    with_states(surface, |states| {
+        states
+            .data_map
+            .get::<Mutex<Option<Scrim>>>()
+            .and_then(|scrim| {
+                scrim
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .clone()
+            })
+    })
+}
+
 pub(crate) fn commit_blur(surface: &WlSurface) {
     with_region(surface, |region| {
         if let Some(pending) = region.pending.take() {

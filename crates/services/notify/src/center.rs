@@ -328,7 +328,10 @@ impl Center {
             .entries
             .values()
             .filter(|entry| !self.paused(entry))
-            .filter(|entry| entry.expires_at.is_some_and(|deadline| deadline <= now))
+            .filter(|entry| match entry.expires_at {
+                Some(deadline) => deadline <= now,
+                None => entry.notification.transient && entry.banner == Banner::Hidden,
+            })
             .map(|entry| entry.notification.id)
             .collect();
         for id in &expired {

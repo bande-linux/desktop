@@ -70,7 +70,11 @@ fn replace(file: &Path, text: &str) -> std::io::Result<()> {
 
 fn edit_bookmarks(edit: &BookmarkEdit) -> std::io::Result<()> {
     let file = bookmarks_file().ok_or(std::io::ErrorKind::NotFound)?;
-    let text = std::fs::read_to_string(&file).unwrap_or_default();
+    let text = match std::fs::read_to_string(&file) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(error) => return Err(error),
+    };
     let edited = match edit {
         BookmarkEdit::Add(folders) => with_bookmarks(&text, folders, None),
         BookmarkEdit::Remove(folder) => without_bookmark(&text, folder),

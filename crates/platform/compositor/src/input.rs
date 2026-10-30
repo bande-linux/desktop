@@ -1,9 +1,9 @@
 use std::io;
 
 use smithay::backend::input::{
-    AbsolutePositionEvent, Axis, ButtonState, Event, GestureBeginEvent, GestureEndEvent,
-    GesturePinchUpdateEvent, GestureSwipeUpdateEvent, InputBackend, InputEvent, KeyState,
-    KeyboardKeyEvent, PointerAxisEvent, PointerButtonEvent, PointerMotionEvent,
+    AbsolutePositionEvent, Axis, AxisSource, ButtonState, Event, GestureBeginEvent,
+    GestureEndEvent, GesturePinchUpdateEvent, GestureSwipeUpdateEvent, InputBackend, InputEvent,
+    KeyState, KeyboardKeyEvent, PointerAxisEvent, PointerButtonEvent, PointerMotionEvent,
 };
 use smithay::input::keyboard::{FilterResult, Keycode, keysyms};
 use smithay::input::pointer::{AxisFrame, ButtonEvent, MotionEvent};
@@ -129,6 +129,11 @@ fn shortcut(
         Some(keysyms::KEY_slash) if shift && !ctrl && !alt => {
             return Some(Shortcut::FocusShell(MENU_SEARCH_NAMESPACE));
         }
+        Some(keysyms::KEY_f) if ctrl => return Some(Shortcut::ToggleFullscreen),
+        Some(keysyms::KEY_q) if ctrl => return Some(Shortcut::LockScreen),
+        Some(keysyms::KEY_m) => return Some(Shortcut::MinimizeWindow),
+        Some(keysyms::KEY_w) => return Some(Shortcut::CloseWindow),
+        Some(keysyms::KEY_q) => return Some(Shortcut::QuitApp),
         _ => {}
     }
     match keysym {
@@ -136,7 +141,6 @@ fn shortcut(
         keysyms::KEY_F2 => Some(Shortcut::FocusShell(MENU_BAR_NAMESPACE)),
         keysyms::KEY_F3 => Some(Shortcut::FocusShell(DOCK_NAMESPACE)),
         keysyms::KEY_F5 => Some(Shortcut::ToggleScreenReader),
-        keysyms::KEY_f | keysyms::KEY_F if ctrl => Some(Shortcut::ToggleFullscreen),
         keysyms::KEY_Left if ctrl && shift => Some(Shortcut::CarryWindow(false)),
         keysyms::KEY_Right if ctrl && shift => Some(Shortcut::CarryWindow(true)),
         keysyms::KEY_Left if alt && shift => Some(Shortcut::MoveToDisplay(-1, 0)),
@@ -151,10 +155,6 @@ fn shortcut(
         keysyms::KEY_Right if ctrl => Some(Shortcut::Place(Direction::Right)),
         keysyms::KEY_Up if ctrl => Some(Shortcut::Place(Direction::Up)),
         keysyms::KEY_Down if ctrl => Some(Shortcut::Place(Direction::Down)),
-        keysyms::KEY_q | keysyms::KEY_Q if ctrl => Some(Shortcut::LockScreen),
-        keysyms::KEY_m | keysyms::KEY_M => Some(Shortcut::MinimizeWindow),
-        keysyms::KEY_w | keysyms::KEY_W => Some(Shortcut::CloseWindow),
-        keysyms::KEY_q | keysyms::KEY_Q => Some(Shortcut::QuitApp),
         keysyms::KEY_Tab | keysyms::KEY_ISO_Left_Tab if !ctrl && !alt => {
             Some(Shortcut::NextApp { backwards: shift })
         }
@@ -172,7 +172,7 @@ impl State {
     ) -> Option<(WlSurface, Point<f64, Logical>)> {
         match self.pointer_target(location)? {
             Target::Surface(surface, at) => Some((surface, at)),
-            Target::Frame(..) => None,
+            Target::Frame(..) | Target::Scrim(_) => None,
         }
     }
 
@@ -311,7 +311,10 @@ impl State {
             self.watchdog.ping_everyone();
             return;
         }
-        let Some(focused) = self.focused() else {
+        let Some(focused) = self
+            .focused()
+            .and_then(|focused| self.toplevel_of(&focused))
+        else {
             if shortcut == Shortcut::QuitApp
                 && let Some((app, app_id)) = self.windowless_app.clone()
             {
@@ -344,41 +347,23 @@ impl State {
             Shortcut::HideApp => self.hide_app(&toplevel_names(&focused).1),
             Shortcut::HideOthers => {
                 let keep = toplevel_names(&focused).1;
-                let others: Vec<String> = self
+                let mut others: Vec<String> = self
                     .windows
                     .iter()
                     .map(|window| toplevel_names(window.surface()).1)
                     .filter(|app_id| *app_id != keep)
                     .collect();
+                others.sort_unstable();
+                others.dedup();
                 for app_id in others {
                     self.hide_app(&app_id);
                 }
             }
-            Shortcut::MinimizeWindow => {
-                if let Some(window) = self.toplevel_of(&focused) {
-                    self.minimize(&window);
-                }
-            }
-            Shortcut::Place(direction) => {
-                if let Some(window) = self.toplevel_of(&focused) {
-                    self.place_with_key(&window, direction);
-                }
-            }
-            Shortcut::CarryWindow(forward) => {
-                if let Some(window) = self.toplevel_of(&focused) {
-                    self.move_to_workspace(&window, forward, true);
-                }
-            }
-            Shortcut::MoveToDisplay(dx, dy) => {
-                if let Some(window) = self.toplevel_of(&focused) {
-                    self.move_to_screen_beside(&window, (dx, dy));
-                }
-            }
-            Shortcut::ToggleFullscreen => {
-                if let Some(window) = self.toplevel_of(&focused) {
-                    self.toggle_fullscreen(&window);
-                }
-            }
+            Shortcut::MinimizeWindow => self.minimize(&focused),
+            Shortcut::Place(direction) => self.place_with_key(&focused, direction),
+            Shortcut::CarryWindow(forward) => self.move_to_workspace(&focused, forward, true),
+            Shortcut::MoveToDisplay(dx, dy) => self.move_to_screen_beside(&focused, (dx, dy)),
+            Shortcut::ToggleFullscreen => self.toggle_fullscreen(&focused),
             Shortcut::ShowLauncher
             | Shortcut::OpenLauncher(_)
             | Shortcut::LockScreen
@@ -435,9 +420,12 @@ impl Headless {
                 self.press_button(event.button_code(), pressed, event.time_msec());
             }
             InputEvent::PointerAxis { event } => {
-                let mut frame = AxisFrame::new(event.time_msec()).source(event.source());
+                let source = event.source();
+                let mut frame = AxisFrame::new(event.time_msec()).source(source);
                 for axis in [Axis::Horizontal, Axis::Vertical] {
-                    if let Some(amount) = event.amount(axis) {
+                    if source == AxisSource::Finger && event.amount(axis) == Some(0.0) {
+                        frame = frame.stop(axis);
+                    } else if let Some(amount) = event.amount(axis) {
                         frame = frame.value(axis, amount);
                     } else if let Some(v120) = event.amount_v120(axis) {
                         frame = frame.value(axis, v120 / 120.0 * SCROLL_PER_DETENT);
@@ -589,6 +577,11 @@ impl Headless {
         if pressed {
             let under = state.surface_under(state.pointer_location);
             if state.dismisses_popups(under.as_ref().map(|(surface, _)| surface)) {
+                state.swallowed_button = Some(button);
+                return;
+            }
+            if let Some(Target::Scrim(owner)) = state.pointer_target(state.pointer_location) {
+                state.scrim_pressed(&owner);
                 state.swallowed_button = Some(button);
                 return;
             }

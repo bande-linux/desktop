@@ -183,6 +183,15 @@ fn system_time(time: DateTime) -> Option<SystemTime> {
     Some(SystemTime::from(zoned.timestamp()))
 }
 
+fn passes_through_link(into: &Path, relative: &Path) -> bool {
+    let mut path = into.to_path_buf();
+    relative.components().any(|part| {
+        path.push(part);
+        path.symlink_metadata()
+            .is_ok_and(|metadata| metadata.file_type().is_symlink())
+    })
+}
+
 fn settle(staging: &Path, destination: &Path, stem: &str) -> io::Result<PathBuf> {
     let entries = fs::read_dir(staging)?.collect::<Result<Vec<_>, _>>()?;
     if let [only] = entries.as_slice() {
@@ -214,7 +223,14 @@ impl Worker {
 
     pub(super) fn compress(&mut self, sources: &[PathBuf], archive: &Path) -> Result<(), Halt> {
         self.count(sources);
-        match self.write_zip(sources, archive) {
+        let file = match File::create_new(archive) {
+            Ok(file) => file,
+            Err(error) => {
+                self.fail(archive, error);
+                return Ok(());
+            }
+        };
+        match self.write_zip(file, sources) {
             Ok(()) => {
                 self.outcome
                     .changes
@@ -234,8 +250,7 @@ impl Worker {
         }
     }
 
-    fn write_zip(&mut self, sources: &[PathBuf], archive: &Path) -> Result<(), Stop> {
-        let file = File::create_new(archive)?;
+    fn write_zip(&mut self, file: File, sources: &[PathBuf]) -> Result<(), Stop> {
         let mut zip = ZipWriter::new(BufWriter::new(file));
         for source in sources {
             let base = source.parent().unwrap_or(Path::new("/"));
@@ -360,6 +375,12 @@ impl Worker {
             let Some(relative) = entry.enclosed_name() else {
                 continue;
             };
+            if passes_through_link(into, &relative) {
+                return Err(Stop::Io(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "the archive writes through a link",
+                )));
+            }
             let target = into.join(relative);
             if entry.is_dir() {
                 fs::create_dir_all(&target)?;

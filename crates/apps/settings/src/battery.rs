@@ -6,6 +6,7 @@ use zbus::{MatchRule, message};
 
 use crate::follow::{Update, Updates, spawn};
 
+const UPOWER_PATH: &str = "/org/freedesktop/UPower";
 const BATTERY_TYPE: u32 = 2;
 const CHARGING: u32 = 1;
 const FULL: u32 = 4;
@@ -175,16 +176,14 @@ pub fn follow_battery(system: &Connection, updates: Updates) -> Sender<BatteryCo
                 .msg_type(message::Type::Signal)
                 .interface("org.freedesktop.DBus.Properties")?
                 .member("PropertiesChanged")?
+                .path_namespace(UPOWER_PATH)?
                 .build();
             let changes = MessageIterator::for_match_rule(rule, &reader, None)?;
             if !feed.send(Update::Battery(read(&reader))) {
                 return Ok(());
             }
-            for message in changes.flatten() {
-                let header = message.header();
-                let path = header.path().map(|path| path.as_str().to_owned());
-                let ours = path.is_some_and(|path| path.starts_with("/org/freedesktop/UPower"));
-                if ours && !feed.send(Update::Battery(read(&reader))) {
+            for _ in changes.flatten() {
+                if !feed.send(Update::Battery(read(&reader))) {
                     break;
                 }
             }

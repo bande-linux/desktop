@@ -13,13 +13,15 @@ use unbound_compositor::{FrameClock, FrameScheduler, Headless, REFRESH, Renderer
 use unbound_test_bus::SessionBus;
 use unbound_toolkit::ui::{Axis, Button, Context, Label, Stack, Ui};
 use unbound_toolkit::{App, Palette, Role, Scene, Scheme, TextSystem, Window, WindowEvent};
-use zbus::blocking::{Connection, Proxy};
+use zbus::blocking::{Connection, Proxy, connection, proxy};
+use zbus::proxy::CacheProperties;
 use zbus::zvariant::OwnedObjectPath;
 
 const OUTPUT: (i32, i32) = (320, 240);
 const REGISTRY: &str = "org.a11y.atspi.Registry";
 const ROOT_PATH: &str = "/org/a11y/atspi/accessible/root";
 const TIMEOUT: Duration = Duration::from_secs(60);
+const CALL_TIMEOUT: Duration = Duration::from_secs(2);
 const ATSPI_ROLE_BUTTON: u32 = 43;
 
 type ObjectRef = (String, OwnedObjectPath);
@@ -109,7 +111,16 @@ impl App for Greeting {
 }
 
 fn accessible<'a>(atspi: &'a Connection, object: &'a ObjectRef, interface: &'a str) -> Proxy<'a> {
-    Proxy::new(atspi, object.0.as_str(), object.1.as_str(), interface).expect("proxy")
+    proxy::Builder::new(atspi)
+        .destination(object.0.as_str())
+        .expect("destination")
+        .path(object.1.as_str())
+        .expect("path")
+        .interface(interface)
+        .expect("interface")
+        .cache_properties(CacheProperties::No)
+        .build()
+        .expect("proxy")
 }
 
 fn find_named(atspi: &Connection, object: &ObjectRef, name: &str) -> Option<ObjectRef> {
@@ -165,7 +176,11 @@ fn a_screen_reader_finds_a_button_over_atspi_and_presses_it() {
         greeting.greeted.get()
     });
 
-    let atspi = bus.connect().expect("screen reader connection");
+    let atspi = connection::Builder::address(bus.address())
+        .expect("address")
+        .method_timeout(CALL_TIMEOUT)
+        .build()
+        .expect("screen reader connection");
     let screen_reader = thread::spawn(move || {
         let app_name = plugs
             .recv_timeout(TIMEOUT)
@@ -175,20 +190,22 @@ fn a_screen_reader_finds_a_button_over_atspi_and_presses_it() {
             OwnedObjectPath::try_from(ROOT_PATH).expect("root path"),
         );
         let started = Instant::now();
-        let button = loop {
-            if let Some(button) = find_named(&atspi, &root, "Greet") {
-                break button;
+        loop {
+            let pressed = find_named(&atspi, &root, "Greet").and_then(|button| {
+                let role: u32 = accessible(&atspi, &button, "org.a11y.atspi.Accessible")
+                    .call("GetRole", &())
+                    .ok()?;
+                let pressed: bool = accessible(&atspi, &button, "org.a11y.atspi.Action")
+                    .call("DoAction", &(0i32))
+                    .ok()?;
+                Some((role, pressed))
+            });
+            if let Some(pressed) = pressed {
+                break pressed;
             }
             assert!(started.elapsed() < TIMEOUT, "no Greet button over AT-SPI");
             thread::sleep(Duration::from_millis(50));
-        };
-        let role: u32 = accessible(&atspi, &button, "org.a11y.atspi.Accessible")
-            .call("GetRole", &())
-            .expect("role");
-        let pressed: bool = accessible(&atspi, &button, "org.a11y.atspi.Action")
-            .call("DoAction", &(0i32))
-            .expect("press the button");
-        (role, pressed)
+        }
     });
 
     let mut renderer = Renderer::new().expect("Vulkan renderer");

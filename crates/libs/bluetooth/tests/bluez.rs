@@ -80,6 +80,15 @@ impl Fixture {
 }
 
 #[test]
+fn without_bluez_running_bluetooth_is_unavailable_and_nothing_is_started() {
+    let bus = SessionBus::start().expect("dbus-daemon");
+    let client = Bluetooth::new(&bus.connect().expect("client connection"));
+    assert!(!client.available().expect("available"));
+    assert!(!client.powered().expect("powered"));
+    assert!(client.paired_devices().expect("paired").is_empty());
+}
+
+#[test]
 fn turning_bluetooth_off_and_on_writes_the_adapter_power() {
     let fixture = start(true);
     assert!(fixture.client.available().expect("available"));

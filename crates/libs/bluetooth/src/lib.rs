@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 pub use agent::{AGENT_PATH, PairingPrompt, register_agent};
 use zbus::blocking::Connection;
-use zbus::blocking::fdo::ObjectManagerProxy;
+use zbus::blocking::fdo::{DBusProxy, ObjectManagerProxy};
 use zbus::names::OwnedInterfaceName;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue};
 
@@ -75,6 +75,10 @@ impl Device {
     }
 }
 
+fn bluez_running(bus: &Connection) -> zbus::Result<bool> {
+    Ok(DBusProxy::new(bus)?.name_has_owner(SERVICE.try_into()?)?)
+}
+
 pub struct Bluetooth {
     bus: Connection,
 }
@@ -87,6 +91,9 @@ impl Bluetooth {
     }
 
     fn objects(&self) -> zbus::Result<HashMap<OwnedObjectPath, Interfaces>> {
+        if !bluez_running(&self.bus)? {
+            return Ok(HashMap::new());
+        }
         let manager = ObjectManagerProxy::builder(&self.bus)
             .destination(SERVICE)?
             .path("/")?

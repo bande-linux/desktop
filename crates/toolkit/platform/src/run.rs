@@ -35,6 +35,10 @@ pub trait App {
         true
     }
 
+    fn should_quit(&mut self, window: &mut Window) -> bool {
+        self.should_close(window)
+    }
+
     fn animating(&self) -> bool {
         false
     }
@@ -77,6 +81,13 @@ pub fn run(window: &mut Window, app: &mut impl App) -> Result<(), WindowError> {
             match event {
                 WindowEvent::CloseRequested => {
                     if app.should_close(window) {
+                        window.close();
+                    }
+                    window.closed_by_button = false;
+                    continue;
+                }
+                WindowEvent::QuitRequested => {
+                    if app.should_quit(window) {
                         window.close();
                     }
                     continue;

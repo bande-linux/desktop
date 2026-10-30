@@ -1168,3 +1168,35 @@ fn holding_alt_swaps_in_an_items_alternate() {
         [WindowEvent::MenuAction("delete-now".to_owned())]
     );
 }
+
+#[test]
+fn the_title_bar_menu_puts_the_window_in_full_screen() {
+    let mut desktop = Desktop::new();
+    let mut client = pointed_window(&mut desktop, "window menu");
+    desktop.point_into_window(90, 14);
+    desktop.server.press_button(BTN_RIGHT, true, 0);
+    desktop.wait_for(
+        &mut [&mut client],
+        |_| true,
+        |desktop| desktop.server.popup_count() == 1,
+    );
+    desktop.server.press_button(BTN_RIGHT, false, 0);
+    desktop.settle(&mut [&mut client]);
+    desktop.type_keys(&[KEY_DOWN]);
+    desktop.type_keys(&[KEY_DOWN]);
+    desktop.type_keys(&[KEY_DOWN]);
+    desktop.type_keys(&[KEY_ENTER]);
+    desktop.wait_for(
+        &mut [&mut client],
+        |events| {
+            events.iter().any(
+                |event| matches!(event, WindowEvent::ToplevelChanged(state) if state.fullscreen),
+            )
+        },
+        |desktop| desktop.server.popup_count() == 0,
+    );
+    assert!(
+        menu_events(&client.seen).is_empty(),
+        "the app is not involved"
+    );
+}

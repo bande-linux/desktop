@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use jiff::{Timestamp, Zoned};
 use unbound_config::{ACCENTS, Accent};
-use unbound_design::{Color, Scheme};
+use unbound_design::{Color, Scheme, Typeface};
 use unbound_wallpaper::{Choice, Variant};
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
@@ -51,6 +51,15 @@ impl ColorScheme {
             Self::PreferLight => "prefer-light",
         }
     }
+
+    fn gtk_theme(self, increase_contrast: bool) -> &'static str {
+        match (self, increase_contrast) {
+            (Self::PreferLight, false) => "Adwaita",
+            (Self::PreferDark, false) => "Adwaita-dark",
+            (Self::PreferLight, true) => "HighContrast",
+            (Self::PreferDark, true) => "HighContrastInverse",
+        }
+    }
 }
 
 impl From<Scheme> for ColorScheme {
@@ -60,6 +69,10 @@ impl From<Scheme> for ColorScheme {
             Scheme::Light => Self::PreferLight,
         }
     }
+}
+
+fn font(typeface: Typeface, points: u32) -> String {
+    format!("{} {points}", typeface.family())
 }
 
 fn fractions(color: Color) -> (f64, f64, f64) {
@@ -288,6 +301,20 @@ fn namespaces(look: Look, cursor: &CursorSettings) -> Namespaces {
                     "color-scheme",
                     Value::from(look.scheme.gnome_color_scheme()),
                 ),
+                (
+                    "gtk-theme",
+                    Value::from(look.scheme.gtk_theme(look.increase_contrast)),
+                ),
+                ("font-name", Value::from(font(Typeface::Interface, 10))),
+                (
+                    "document-font-name",
+                    Value::from(font(Typeface::Interface, 11)),
+                ),
+                (
+                    "monospace-font-name",
+                    Value::from(font(Typeface::Monospace, 10)),
+                ),
+                ("enable-animations", Value::from(!look.reduce_motion)),
                 ("icon-theme", Value::from(icon_theme(look.accent))),
                 ("cursor-theme", Value::from(cursor.theme.as_str())),
                 (

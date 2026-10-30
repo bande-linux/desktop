@@ -1,101 +1,170 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
+use std::io::Read;
+use std::os::fd::{AsFd, BorrowedFd};
+use std::os::unix::net::UnixStream;
+use std::path::PathBuf;
 use std::process::ExitCode;
-use std::rc::Rc;
-use std::time::{Duration, Instant};
+use std::sync::mpsc::{self, Receiver};
+use std::time::Instant;
 
 use accesskit::TreeUpdate;
 use unbound_config::{Config, DockEdge, config_path};
+use unbound_dock::autostart::{autostart_dir, opens_at_login, set_open_at_login};
+use unbound_dock::bus::{self, BusEvent};
 use unbound_dock::{
-    Actions, DockAction, DockApp, ICON_SIZE, THICKNESS, clock_text, dock_ui, merge_apps,
+    DockAction, DockApp, DockState, ICON_SIZE, L10N, MenuTarget, Shared, dock_ui, exclusive_zone,
+    scene, surface_size,
 };
-use unbound_toolkit::ui::Ui;
+use unbound_fs::{FolderWatch, Trash};
+use unbound_toolkit::ui::{Menu, MenuItem, Ui};
 use unbound_toolkit::{
-    App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Palette, Role, Scene, TextSystem,
-    Window, WindowError, WindowEvent,
+    App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement, Point, Rect, Role,
+    Scene, TextSystem, Window, WindowError, WindowEvent,
 };
 use unbound_xdg::{DesktopEntry, Locale, applications, current_desktops, data_dirs, find_icon};
 
-const PINNED: &[&str] = &["org.unbound.Terminal"];
+const FILES: &str = "org.unbound.Files";
+const TRASH_URI: &str = "trash:///";
+const ICON_THEMES: &[&str] = &["Adwaita"];
+const MENU_OPEN: &str = "open";
+const MENU_KEEP: &str = "keep";
+const MENU_LOGIN: &str = "login";
+const MENU_SHOW: &str = "show";
+
+struct TrashWatch {
+    trash: Trash,
+    watch: FolderWatch,
+}
+
+impl TrashWatch {
+    fn start() -> Option<Self> {
+        let trash = Trash::for_user()?;
+        let watch = FolderWatch::new()
+            .inspect_err(|error| tracing::warn!("cannot watch the Trash: {error}"))
+            .ok()?;
+        let mut trash_watch = Self { trash, watch };
+        trash_watch.rewatch();
+        Some(trash_watch)
+    }
+
+    fn folders(&self) -> Vec<PathBuf> {
+        let home = self.trash.home();
+        let mut folders = vec![home.root().to_path_buf(), home.files()];
+        folders.extend(home.root().parent().map(PathBuf::from));
+        folders
+    }
+
+    fn rewatch(&mut self) {
+        let folders = self.folders();
+        self.watch.watch(&folders);
+    }
+}
 
 struct Dock {
-    edge: DockEdge,
-    palette: Palette,
+    state: Shared,
+    ui: Ui,
     entries: Vec<DesktopEntry>,
-    icons: HashMap<String, Option<Image>>,
-    actions: Actions,
-    ui: Option<Ui>,
+    kept: Vec<String>,
     running: Vec<String>,
-    next_minute: Instant,
+    icons: HashMap<String, Option<Image>>,
+    icon_scale: f64,
+    reported: HashMap<String, Rect>,
+    input: Option<Rect>,
+    zone: i32,
+    blur: Option<Vec<Rect>>,
+    menu: Option<MenuTarget>,
+    autostart: Option<PathBuf>,
+    bus: Receiver<BusEvent>,
+    wake: UnixStream,
+    trash: Option<TrashWatch>,
 }
 
 impl Dock {
+    fn pixels(&self) -> u32 {
+        (f64::from(self.state.borrow().icon_size()) * self.icon_scale).ceil() as u32
+    }
+
     fn icon(&mut self, name: Option<&str>) -> Option<Image> {
         let name = name?;
+        let pixels = self.pixels();
         self.icons
             .entry(name.to_owned())
             .or_insert_with(|| {
-                let path = find_icon(name, ICON_SIZE, &[], &data_dirs())?;
-                Image::load(&path, ICON_SIZE)
+                let path = find_icon(name, pixels, ICON_THEMES, &data_dirs())?;
+                Image::load(&path, pixels)
             })
             .clone()
     }
 
-    fn describe(&mut self, app_id: &str) -> DockApp {
-        let entry = self
-            .entries
-            .iter()
-            .find(|entry| entry.app_id() == app_id)
-            .cloned();
-        match entry {
-            Some(entry) => DockApp {
-                app_id: app_id.to_owned(),
-                name: entry.name.clone(),
-                icon: self.icon(entry.icon.as_deref()),
-                running: false,
-            },
-            None => DockApp {
-                app_id: app_id.to_owned(),
-                name: app_id.rsplit('.').next().unwrap_or(app_id).to_owned(),
-                icon: None,
-                running: false,
-            },
+    fn entry(&self, app_id: &str) -> Option<&DesktopEntry> {
+        self.entries.iter().find(|entry| entry.app_id() == app_id)
+    }
+
+    fn describe(&mut self, app_id: &str, kept: bool) -> Option<DockApp> {
+        let running = self.running.iter().any(|running| running == app_id);
+        let entry = self.entry(app_id).cloned();
+        if kept && entry.is_none() && !running {
+            return None;
+        }
+        let name = entry.as_ref().map_or_else(
+            || app_id.rsplit('.').next().unwrap_or(app_id).to_owned(),
+            |entry| entry.name.clone(),
+        );
+        let icon = self.icon(entry.as_ref().and_then(|entry| entry.icon.as_deref()));
+        Some(DockApp {
+            app_id: app_id.to_owned(),
+            name,
+            icon,
+            kept,
+            running,
+        })
+    }
+
+    fn sync(&mut self) {
+        let mut apps = Vec::new();
+        for app_id in self.kept.clone() {
+            apps.extend(self.describe(&app_id, true));
+        }
+        for app_id in self.running.clone() {
+            if !self.kept.contains(&app_id) {
+                apps.extend(self.describe(&app_id, false));
+            }
+        }
+        self.state.borrow_mut().set_apps(apps, Instant::now());
+    }
+
+    fn load_trash_icons(&mut self) {
+        let empty = self.icon(Some("user-trash"));
+        let full = self.icon(Some("user-trash-full"));
+        let mut state = self.state.borrow_mut();
+        state.set_trash_icons(empty, full);
+        if let Some(trash) = &self.trash {
+            state.set_trash_full(!trash.trash.is_empty());
         }
     }
 
-    fn rebuild(&mut self) {
-        let pinned: Vec<DockApp> = PINNED.iter().map(|app_id| self.describe(app_id)).collect();
-        let running = self.running.clone();
-        let described: HashMap<String, DockApp> = running
-            .iter()
-            .map(|app_id| (app_id.clone(), self.describe(app_id)))
-            .collect();
-        let apps = merge_apps(&pinned, &running, |app_id| {
-            described.get(app_id).cloned().unwrap_or_else(|| DockApp {
-                app_id: app_id.to_owned(),
-                name: app_id.to_owned(),
-                icon: None,
-                running: true,
-            })
-        });
-        let now = jiff::Zoned::now();
-        self.ui = Some(dock_ui(
-            self.edge,
-            apps,
-            &clock_text(&now),
-            self.palette,
-            TextSystem::new(),
-            self.actions.clone(),
-        ));
+    fn follow_scale(&mut self, window: &Window) {
+        let scale = window.scale();
+        if scale == self.icon_scale {
+            return;
+        }
+        self.icon_scale = scale;
+        self.icons.clear();
+        self.load_trash_icons();
+        self.sync();
     }
 
     fn run_actions(&mut self, window: &mut Window) {
-        let actions = std::mem::take(&mut *self.actions.borrow_mut());
+        let actions = self.state.borrow_mut().take_actions();
         for action in actions {
             match action {
                 DockAction::Open(app_id) => self.open(window, &app_id),
+                DockAction::OpenTrash => self.open_in_files(window, TRASH_URI),
+                DockAction::ShowInFiles(app_id) => self.show_in_files(window, &app_id),
+                DockAction::Menu { target, at } => self.show_menu(window, target, at),
             }
         }
+        window.request_redraw();
     }
 
     fn open(&mut self, window: &mut Window, app_id: &str) {
@@ -105,141 +174,376 @@ impl Dock {
             }
             return;
         }
-        let Some(entry) = self.entries.iter().find(|entry| entry.app_id() == app_id) else {
+        if self.state.borrow().is_launching(app_id) {
+            return;
+        }
+        let Some(entry) = self.entry(app_id).cloned() else {
             return;
         };
         let token = window.activation_token(app_id).ok();
-        if let Err(error) = unbound_xdg::launch(entry, token.as_deref()) {
-            tracing::warn!("cannot open {}: {error}", entry.name);
+        match unbound_xdg::launch(&entry, token.as_deref()) {
+            Ok(_) => self.state.borrow_mut().launching(app_id, Instant::now()),
+            Err(error) => tracing::warn!("cannot open {}: {error}", entry.name),
         }
     }
-}
 
-fn next_minute() -> Instant {
-    let now = jiff::Zoned::now();
-    let into_minute = Duration::from_nanos(
-        u64::try_from(now.second()).unwrap_or(0) * 1_000_000_000
-            + u64::try_from(now.subsec_nanosecond()).unwrap_or(0),
-    );
-    Instant::now() + Duration::from_secs(60).saturating_sub(into_minute)
+    fn show_in_files(&mut self, window: &mut Window, app_id: &str) {
+        let Some(folder) = self
+            .entry(app_id)
+            .and_then(|entry| entry.path.parent())
+            .map(|folder| folder.to_string_lossy().into_owned())
+        else {
+            return;
+        };
+        self.open_in_files(window, &folder);
+    }
+
+    fn opens_at_login(&self, app_id: &str) -> bool {
+        match (&self.autostart, self.entry(app_id)) {
+            (Some(dir), Some(entry)) => opens_at_login(dir, &entry.id),
+            _ => false,
+        }
+    }
+
+    fn show_menu(&mut self, window: &mut Window, target: MenuTarget, at: Point) {
+        let items = match &target {
+            MenuTarget::Trash => vec![MenuItem::new(&L10N.tr("menu-open"), MENU_OPEN)],
+            MenuTarget::App(app_id) => {
+                let installed = self.entry(app_id).is_some();
+                let running = self.running.iter().any(|running| running == app_id);
+                let mut items = Vec::new();
+                if !running {
+                    items.push(MenuItem::new(&L10N.tr("menu-open"), MENU_OPEN).enabled(installed));
+                    items.push(MenuItem::separator());
+                }
+                items.push(
+                    MenuItem::new(&L10N.tr("menu-keep"), MENU_KEEP)
+                        .checked(self.kept.contains(app_id))
+                        .enabled(false),
+                );
+                items.push(
+                    MenuItem::new(&L10N.tr("menu-login"), MENU_LOGIN)
+                        .checked(self.opens_at_login(app_id))
+                        .enabled(installed && self.autostart.is_some()),
+                );
+                items.push(MenuItem::new(&L10N.tr("menu-show"), MENU_SHOW).enabled(installed));
+                items
+            }
+        };
+        match window.show_menu(Menu::new(items), MenuPlacement::AtPoint(at)) {
+            Ok(()) => {
+                self.menu = Some(target);
+                self.state.borrow_mut().set_menu_open(true, Instant::now());
+            }
+            Err(error) => tracing::warn!("cannot show the Dock menu: {error}"),
+        }
+    }
+
+    fn menu_action(&mut self, window: &mut Window, action: &str) {
+        self.state.borrow_mut().set_menu_open(false, Instant::now());
+        let Some(target) = self.menu.take() else {
+            return;
+        };
+        match (target, action) {
+            (MenuTarget::Trash, MENU_OPEN) => self.open_in_files(window, TRASH_URI),
+            (MenuTarget::App(app_id), MENU_OPEN) => self.open(window, &app_id),
+            (MenuTarget::App(app_id), MENU_SHOW) => self.show_in_files(window, &app_id),
+            (MenuTarget::App(app_id), MENU_LOGIN) => {
+                let open = !self.opens_at_login(&app_id);
+                if let (Some(dir), Some(entry)) = (&self.autostart, self.entry(&app_id))
+                    && let Err(error) = set_open_at_login(dir, &entry.id, &entry.path, open)
+                {
+                    tracing::warn!("cannot change whether {app_id} opens at login: {error}");
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn open_in_files(&mut self, window: &mut Window, location: &str) {
+        let Some(entry) = self.entry(FILES).cloned() else {
+            tracing::warn!("cannot open {location}: Files is not installed");
+            return;
+        };
+        let command = entry.command().map(|mut command| {
+            command.push(location.to_owned());
+            command
+        });
+        let token = window.activation_token(FILES).ok();
+        let started = command
+            .map_err(|error| error.to_string())
+            .and_then(|command| {
+                unbound_xdg::spawn_detached(
+                    &command,
+                    entry.working_directory.as_deref(),
+                    token.as_deref(),
+                )
+                .map_err(|error| error.to_string())
+            });
+        if let Err(error) = started {
+            tracing::warn!("cannot open {location}: {error}");
+        }
+    }
+
+    fn report(&mut self, window: &mut Window) {
+        let blur = self.state.borrow().blur_rects();
+        if self.blur.as_ref().is_some_and(|known| *known != blur) {
+            let blurred = match window.set_background_blur(&blur) {
+                Ok(()) => true,
+                Err(error) => {
+                    tracing::info!("the Dock is not blurred: {error}");
+                    false
+                }
+            };
+            self.blur = blurred.then_some(blur);
+            self.state.borrow_mut().set_blurred(blurred);
+        }
+        let state = self.state.borrow();
+        let region = state.input_region();
+        if self.input != Some(region) {
+            self.input = Some(region);
+            window.set_input_region(Some(region));
+        }
+        let zone = state.exclusive_zone();
+        if self.zone != zone {
+            self.zone = zone;
+            window.set_exclusive_zone(zone);
+        }
+        let rects = state.icon_rects();
+        drop(state);
+        let forgotten = self
+            .reported
+            .keys()
+            .filter(|app_id| !rects.iter().any(|(known, _)| known == *app_id))
+            .cloned()
+            .collect::<Vec<_>>();
+        for app_id in forgotten {
+            self.reported.remove(&app_id);
+            let _ = window.set_icon_rect(&app_id, Rect::default());
+        }
+        for (app_id, rect) in rects {
+            let rounded = Rect::new(
+                rect.x.round(),
+                rect.y.round(),
+                rect.width.round(),
+                rect.height.round(),
+            );
+            if self.reported.get(&app_id) == Some(&rounded) {
+                continue;
+            }
+            match window.set_icon_rect(&app_id, rounded) {
+                Ok(()) => {
+                    self.reported.insert(app_id, rounded);
+                }
+                Err(error) => {
+                    tracing::debug!("cannot report the icon of {app_id}: {error}");
+                    return;
+                }
+            }
+        }
+    }
+
+    fn resize(&mut self, window: &mut Window, size: f32) {
+        if !self.state.borrow_mut().set_icon_size(size) {
+            return;
+        }
+        let (edge, icon_size) = {
+            let state = self.state.borrow();
+            (state.edge(), state.icon_size())
+        };
+        self.icons.clear();
+        self.load_trash_icons();
+        self.sync();
+        if let Err(error) = window.set_layer_size(surface_size(edge, icon_size, (0, 0))) {
+            tracing::warn!("cannot resize the Dock: {error}");
+        }
+    }
+
+    fn receive(&mut self, window: &mut Window) {
+        let mut drained = [0; 64];
+        let _ = self.wake.read(&mut drained);
+        let now = Instant::now();
+        for event in self.bus.try_iter().collect::<Vec<_>>() {
+            match event {
+                BusEvent::IconSize(size) => self.resize(window, size as f32),
+                BusEvent::AutoHide(auto_hide) => {
+                    self.state.borrow_mut().set_auto_hide(auto_hide, now);
+                }
+                BusEvent::DockApps(apps) => {
+                    self.kept = apps;
+                    self.sync();
+                }
+                BusEvent::Launcher(app_id, update) => {
+                    self.state
+                        .borrow_mut()
+                        .update_launcher(&app_id, update, now);
+                }
+            }
+        }
+        window.request_redraw();
+    }
 }
 
 impl App for Dock {
     fn scene(&mut self, window: &mut Window) -> Scene {
-        let (width, height) = window.size();
-        match &mut self.ui {
-            Some(ui) => ui.scene(width, height),
-            None => Scene {
-                width,
-                height,
-                background: self.palette.surface_elevated,
-                items: Vec::new(),
-            },
-        }
+        self.follow_scale(window);
+        let scene = scene(&mut self.ui, window.size());
+        self.report(window);
+        scene
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
         match event {
             WindowEvent::Input(input) => {
-                if let Some(ui) = &mut self.ui
-                    && ui.handle(&input)
-                {
+                if self.ui.handle(&input) {
                     window.request_redraw();
                 }
                 self.run_actions(window);
             }
             WindowEvent::Accessibility(request) => {
-                if let Some(ui) = &mut self.ui
-                    && ui.perform(&request)
-                {
+                if self.ui.perform(&request) {
                     window.request_redraw();
                 }
                 self.run_actions(window);
             }
             WindowEvent::AppsChanged => {
                 self.running = window.running_apps();
-                self.rebuild();
+                self.sync();
+                window.request_redraw();
+            }
+            WindowEvent::MenuAction(action) => {
+                self.menu_action(window, &action);
+                window.request_redraw();
+            }
+            WindowEvent::MenuClosed => {
+                self.menu = None;
+                self.state.borrow_mut().set_menu_open(false, Instant::now());
+                window.request_redraw();
+            }
+            WindowEvent::ActiveApp(app_id) => {
+                self.state.borrow_mut().activated(&app_id);
                 window.request_redraw();
             }
             WindowEvent::AppearanceChanged(appearance) => {
-                self.palette = appearance.palette();
-                self.rebuild();
+                self.ui.set_appearance(appearance);
+                self.state.borrow_mut().set_appearance(appearance);
+                window.request_redraw();
             }
             _ => {}
         }
     }
 
+    fn sources(&self) -> Vec<BorrowedFd<'_>> {
+        let mut sources = vec![self.wake.as_fd()];
+        sources.extend(self.trash.as_ref().map(|trash| trash.watch.fd()));
+        sources
+    }
+
+    fn source_ready(&mut self, window: &mut Window, index: usize) {
+        match index {
+            0 => self.receive(window),
+            _ => {
+                if let Some(trash) = &mut self.trash {
+                    trash.watch.read();
+                }
+            }
+        }
+    }
+
     fn deadline(&self) -> Option<Instant> {
-        Some(self.next_minute)
+        let watch = self.trash.as_ref().and_then(|trash| trash.watch.deadline());
+        [self.state.borrow().deadline(), watch]
+            .into_iter()
+            .flatten()
+            .min()
+    }
+
+    fn tick(&mut self, window: &mut Window, now: Instant) {
+        self.state.borrow_mut().tick(now);
+        if let Some(trash) = &mut self.trash
+            && !trash.watch.take_changed(now).is_empty()
+        {
+            trash.rewatch();
+            let full = !trash.trash.is_empty();
+            self.state.borrow_mut().set_trash_full(full);
+        }
+        window.request_redraw();
+    }
+
+    fn animating(&self) -> bool {
+        self.ui.is_animating() || self.state.borrow().pulsing(Instant::now())
     }
 
     fn accessibility(&self) -> Option<TreeUpdate> {
-        self.ui.as_ref().map(Ui::accessibility)
-    }
-
-    fn tick(&mut self, window: &mut Window, _now: Instant) {
-        self.next_minute = next_minute();
-        self.rebuild();
-        window.request_redraw();
+        Some(self.ui.accessibility())
     }
 }
 
+fn anchor(edge: DockEdge) -> Edges {
+    Edges {
+        left: edge != DockEdge::Right,
+        right: edge != DockEdge::Left,
+        top: edge != DockEdge::Bottom,
+        bottom: edge != DockEdge::Top,
+    }
+}
+
+fn read_config(config_home: Option<&PathBuf>, home: Option<&PathBuf>) -> Config {
+    config_path(
+        config_home.map(PathBuf::as_path),
+        home.map(PathBuf::as_path),
+    )
+    .and_then(|path| std::fs::read_to_string(path).ok())
+    .and_then(|source| Config::parse(&source).ok())
+    .unwrap_or_default()
+}
+
 fn run() -> Result<(), WindowError> {
-    let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
-    let config_home = std::env::var_os("XDG_CONFIG_HOME").map(std::path::PathBuf::from);
-    let config = config_path(config_home.as_deref(), home.as_deref())
-        .and_then(|path| std::fs::read_to_string(path).ok())
-        .and_then(|source| Config::parse(&source).ok())
-        .unwrap_or_default();
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let config_home = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from);
+    let config = read_config(config_home.as_ref(), home.as_ref());
     let edge = config.dock_edge;
-    let anchor = match edge {
-        DockEdge::Left => Edges {
-            left: true,
-            top: true,
-            bottom: true,
-            right: false,
-        },
-        DockEdge::Right => Edges {
-            right: true,
-            top: true,
-            bottom: true,
-            left: false,
-        },
-        DockEdge::Top => Edges {
-            top: true,
-            left: true,
-            right: true,
-            bottom: false,
-        },
-        DockEdge::Bottom => Edges {
-            bottom: true,
-            left: true,
-            right: true,
-            top: false,
-        },
-    };
+    let icon_size = ICON_SIZE;
     let mut window = Window::open(
         Role::Layer(LayerOptions {
             layer: LayerKind::Top,
-            anchor,
-            exclusive_zone: THICKNESS as i32,
+            anchor: anchor(edge),
+            exclusive_zone: exclusive_zone(icon_size).round() as i32,
             keyboard: KeyboardFocus::None,
             namespace: "dock".to_owned(),
         }),
-        (THICKNESS, THICKNESS),
+        surface_size(edge, icon_size, (1, 1)),
     )?;
+    let (events, bus) = mpsc::channel();
+    let (wake, wake_sender) = UnixStream::pair()?;
+    wake.set_nonblocking(true)?;
+    bus::follow(events, wake_sender);
+    let appearance = window.appearance();
+    let state = DockState::new(edge, icon_size);
+    state.borrow_mut().set_appearance(appearance);
+    let mut ui = dock_ui(state.clone(), appearance.palette(), TextSystem::new());
+    ui.set_appearance(appearance);
     let locale = Locale::from_env();
     let mut dock = Dock {
-        edge,
-        palette: window.appearance().palette(),
+        state,
+        ui,
         entries: applications(&data_dirs(), locale.as_ref(), &current_desktops()),
-        icons: HashMap::new(),
-        actions: Rc::new(RefCell::new(Vec::new())),
-        ui: None,
+        kept: config.dock_apps,
         running: window.running_apps(),
-        next_minute: next_minute(),
+        icons: HashMap::new(),
+        icon_scale: window.scale(),
+        reported: HashMap::new(),
+        input: None,
+        zone: exclusive_zone(icon_size).round() as i32,
+        blur: Some(Vec::new()),
+        menu: None,
+        autostart: autostart_dir(config_home.as_deref(), home.as_deref()),
+        bus,
+        wake,
+        trash: TrashWatch::start(),
     };
-    dock.rebuild();
+    dock.load_trash_icons();
+    dock.sync();
     unbound_toolkit::run(&mut window, &mut dock)
 }
 

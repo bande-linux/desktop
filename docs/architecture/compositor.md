@@ -69,8 +69,9 @@ when they reach the screen is Unbound's own.
   destination, so a second action mid-flight turns back from the current position and
   velocity. Input, focus and configure go to the destination at once; the input stack never
   contains a window that is only still animating. An animation that has never been sampled
-  is drawn at its destination. Reduce Motion (`Headless::set_reduce_motion`; not yet read
-  from the portal's `reduced-motion`) keeps rectangles in place and fades with `fade`.
+  is drawn at its destination. Reduce Motion follows the Settings portal's
+  `org.freedesktop.appearance` `reduced-motion` key (read once at session start, then on
+  `SettingChanged`): windows and the snap preview keep their rectangles and fade with `fade`.
 - **Snapping and tiling.** Dragging a window until the pointer touches the left or right screen
   edge previews the half, within 64 pt of a corner the quarter, and against the top of the
   usable area zoom; the translucent rounded preview grows from the pointer (`quick`) only after

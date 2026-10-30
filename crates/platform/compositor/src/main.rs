@@ -4,16 +4,16 @@ use std::process::{Child, ExitCode};
 use std::time::Duration;
 
 use smithay::backend::drm::DrmEvent;
-use smithay::reexports::calloop::channel::Event;
+use smithay::reexports::calloop::channel::{self, Event};
 use smithay::reexports::calloop::generic::Generic;
 use smithay::reexports::calloop::{EventLoop, Interest, LoopHandle, Mode, PostAction};
 use smithay::utils::{Clock, Monotonic, Size};
 use smithay::wayland::socket::ListeningSocketSource;
 use unbound_compositor::{
-    CLIPBOARD_DAEMON, CONTROL_CENTER, CursorTheme, DOCK, DrmOutput, FrameClock, FrameOutput,
-    FrameScheduler, GREETER, Headless, LAUNCHER, MENU_BAR, REFRESH, REVIEW, Renderer, SCREENSHOT,
-    SessionRequest, SessionRole, SessionUpkeep, automatic_scale, export_session_environment,
-    follow_session, notify_ready,
+    CLIPBOARD_DAEMON, CONTROL_CENTER, CursorTheme, DESKTOP_SURFACE, DOCK, DrmOutput, FrameClock,
+    FrameOutput, FrameScheduler, GREETER, Headless, LAUNCHER, MENU_BAR, REFRESH, REVIEW, Renderer,
+    SCREENSHOT, SessionRequest, SessionRole, SessionUpkeep, automatic_scale,
+    export_session_environment, follow_reduced_motion, follow_session, notify_ready,
 };
 use unbound_config::{Config, config_path};
 
@@ -188,6 +188,22 @@ fn start_user_session<O: 'static>(
     event_loop: &mut EventLoop<'static, App<O>>,
     app: &mut App<O>,
 ) -> Result<Option<Child>, Box<dyn Error>> {
+    let (reduce_motion, reduce_motion_changes) = channel::channel();
+    let followed = zbus::blocking::Connection::session().and_then(|connection| {
+        follow_reduced_motion(connection, move |reduce| reduce_motion.send(reduce).is_ok())
+    });
+    match followed {
+        Ok(()) => {
+            event_loop
+                .handle()
+                .insert_source(reduce_motion_changes, |event, _, app| {
+                    if let Event::Msg(reduce) = event {
+                        app.compositor.set_reduce_motion(reduce);
+                    }
+                })?;
+        }
+        Err(error) => tracing::warn!("cannot follow Reduce Motion: {error}"),
+    }
     let (lock_states, reported) = std::sync::mpsc::channel();
     match follow_session(reported) {
         Ok(requests) => {
@@ -204,6 +220,7 @@ fn start_user_session<O: 'static>(
     }
     for (executable, role) in [
         (CLIPBOARD_DAEMON, SessionRole::ClipboardDaemon),
+        (DESKTOP_SURFACE, SessionRole::Shell),
         (MENU_BAR, SessionRole::Shell),
         (CONTROL_CENTER, SessionRole::Shell),
         (DOCK, SessionRole::Shell),

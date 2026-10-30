@@ -957,3 +957,50 @@ fn the_menu_key_opens_the_focused_widgets_menu_with_its_first_item_ready() {
         [WindowEvent::MenuAction("ui:open".to_owned())]
     );
 }
+
+#[test]
+fn clicking_an_on_demand_background_layer_gives_it_the_keyboard_until_a_window_is_clicked() {
+    let mut desktop = Desktop::new();
+    let mut surface = desktop.open(
+        Role::Layer(LayerOptions {
+            layer: LayerKind::Background,
+            anchor: Edges::ALL,
+            exclusive_zone: -1,
+            keyboard: KeyboardFocus::OnDemand,
+            namespace: "desktop".to_owned(),
+        }),
+        true,
+    );
+    let mut app = desktop.open(Role::toplevel("app", "test.app"), false);
+    desktop.wait_for(
+        &mut [&mut app],
+        |events| events.contains(&WindowEvent::Focus(true)),
+        Desktop::mapped,
+    );
+    desktop.server.move_pointer_to(Point::from((4.0, 4.0)), 0);
+    desktop.click(BTN_LEFT);
+    desktop.wait_for(
+        &mut [&mut surface],
+        |events| events.contains(&WindowEvent::Focus(true)),
+        |_| true,
+    );
+    desktop.type_keys(&[KEY_A]);
+    desktop.wait_for(
+        &mut [&mut surface],
+        |events| !typed(events).is_empty(),
+        |_| true,
+    );
+    desktop.wait_for(
+        &mut [&mut app],
+        |events| events.contains(&WindowEvent::Focus(false)),
+        |_| true,
+    );
+    desktop.point_into_content(10, 10);
+    desktop.click(BTN_LEFT);
+    desktop.wait_for(
+        &mut [&mut surface],
+        |events| events.contains(&WindowEvent::Focus(false)),
+        |_| true,
+    );
+    assert!(typed(&app.seen).is_empty());
+}

@@ -51,8 +51,8 @@ const MIN_JUDGED_FRAMES: usize = 256;
 const POLARITY_WINDOW_SECONDS: f64 = 0.5;
 const POLARITY_MIN_POWER: f64 = 0.001;
 const POLARITY_RATIO: f64 = -0.25;
-const IMPEDANCE_CHECK_CURRENT: f64 = 0.05;
-const MIN_IMPEDANCE_RATIO: f64 = 0.5;
+const IMPEDANCE_CHECK_VOLTAGE: f64 = 0.2;
+const MIN_IMPEDANCE_RATIO: f64 = 0.8;
 const MAX_IMPEDANCE_RATIO: f64 = 8.0;
 
 impl SenseLayout {
@@ -144,8 +144,8 @@ impl SenseMonitor {
         }
         self.voltage_seen_live |= !voltage_frozen;
         self.current_seen_live |= !current_frozen;
-        if measurement.current_rms > IMPEDANCE_CHECK_CURRENT {
-            let impedance = measurement.voltage_rms / measurement.current_rms;
+        if measurement.voltage_rms > IMPEDANCE_CHECK_VOLTAGE {
+            let impedance = measurement.voltage_rms / measurement.current_rms.max(1e-6);
             let resistance = self.layout.dc_resistance;
             if !(MIN_IMPEDANCE_RATIO * resistance..=MAX_IMPEDANCE_RATIO * resistance)
                 .contains(&impedance)
@@ -250,6 +250,19 @@ mod tests {
         assert!(assess(&mut monitor, &inverted).is_ok());
         let normal = stream(1.0, 4.6, 1.0);
         assert!((0..30).all(|_| assess(&mut monitor, &normal).is_ok()));
+    }
+
+    #[test]
+    fn swapped_voltage_and_current_channels_are_a_fault() {
+        let mut monitor = j473();
+        let swapped: Vec<i16> = stream(1.0, 4.6, 1.0)
+            .chunks(2)
+            .flat_map(|frame| [frame[1], frame[0]])
+            .collect();
+        assert!(matches!(
+            assess(&mut monitor, &swapped),
+            Err(Fault::Impedance(_))
+        ));
     }
 
     #[test]

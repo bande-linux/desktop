@@ -13,6 +13,7 @@ use unbound_toolkit::{
 use unbound_xdg::{DesktopEntry, Locale, applications, current_desktops, data_dirs, find_icon};
 use zbus::blocking::Connection;
 
+pub const CONFIRMATION_SIZE: (u32, u32) = (420, 130);
 const ABOUT_SIZE: (u32, u32) = (280, 190);
 const ABOUT_ICON: f32 = 64.0;
 const ABOUT_PADDING: f32 = 28.0;
@@ -47,23 +48,71 @@ enum Choice {
     Confirm,
 }
 
-fn dialog_ui(lines: Vec<Box<dyn Widget>>, buttons: Vec<Box<dyn Widget>>, window: &Window) -> Ui {
+fn dialog_ui(lines: Widgets, buttons: Widgets, palette: Palette) -> Ui {
     let mut rows = lines;
     if !buttons.is_empty() {
         rows.push(Box::new(Stack::new(Axis::Horizontal, 12.0, 0.0, buttons)));
     }
     Ui::new(
         Box::new(Stack::new(Axis::Vertical, 10.0, 20.0, rows)),
-        unbound_toolkit::ui::Context::new(TextSystem::new(), window.appearance().palette()),
+        unbound_toolkit::ui::Context::new(TextSystem::new(), palette),
     )
 }
 
-fn choice_button(title: &str, choice: &Rc<Cell<Choice>>, picked: Choice) -> Box<dyn Widget> {
+fn choice_button(title: &str, choice: &Rc<Cell<Choice>>, picked: Choice) -> Button {
     let choice = Rc::clone(choice);
-    Box::new(Button::new(title, move || choice.set(picked)))
+    Button::new(title, move || choice.set(picked))
 }
 
 type Widgets = Vec<Box<dyn Widget>>;
+
+fn confirmation_ui(
+    session: &SessionEnding,
+    choice: &Rc<Cell<Choice>>,
+    palette: Palette,
+    now: Instant,
+) -> Ui {
+    let ending = session.ending;
+    let cancel = Box::new(choice_button(
+        &L10N.tr("button-cancel"),
+        choice,
+        Choice::Cancel,
+    ));
+    let (lines, buttons): (Widgets, Widgets) = match session.stage() {
+        Stage::Asking { .. } => (
+            vec![
+                Box::new(Label::new(&ending.question())),
+                Box::new(Label::new(
+                    &ending.countdown(session.left(now) + Duration::from_millis(999)),
+                )),
+            ],
+            vec![
+                cancel,
+                Box::new(choice_button(&ending.button(), choice, Choice::Confirm).primary()),
+            ],
+        ),
+        Stage::Quitting { .. } => (vec![Box::new(Label::new(&quitting_apps()))], vec![cancel]),
+        Stage::Blocked { app_id } => (
+            vec![Box::new(Label::new(&ending.blocked(&app_name(app_id))))],
+            vec![
+                cancel,
+                Box::new(choice_button(&ending.anyway(), choice, Choice::Confirm).destructive()),
+            ],
+        ),
+        Stage::Ending => (Vec::new(), Vec::new()),
+    };
+    dialog_ui(lines, buttons, palette)
+}
+
+pub fn session_ending_scene(
+    session: &SessionEnding,
+    palette: Palette,
+    (width, height): (u32, u32),
+    now: Instant,
+) -> Scene {
+    let choice = Rc::new(Cell::new(Choice::Undecided));
+    confirmation_ui(session, &choice, palette, now).scene(width, height)
+}
 
 struct Confirmation {
     session: SessionEnding,
@@ -73,32 +122,8 @@ struct Confirmation {
 
 impl Confirmation {
     fn rebuild(&mut self, window: &mut Window, now: Instant) {
-        let ending = self.session.ending;
-        let cancel = choice_button(&L10N.tr("button-cancel"), &self.choice, Choice::Cancel);
-        let (lines, buttons): (Widgets, Widgets) = match self.session.stage() {
-            Stage::Asking { .. } => (
-                vec![
-                    Box::new(Label::new(&ending.question())),
-                    Box::new(Label::new(
-                        &ending.countdown(self.session.left(now) + Duration::from_millis(999)),
-                    )),
-                ],
-                vec![
-                    cancel,
-                    choice_button(&ending.button(), &self.choice, Choice::Confirm),
-                ],
-            ),
-            Stage::Quitting { .. } => (vec![Box::new(Label::new(&quitting_apps()))], vec![cancel]),
-            Stage::Blocked { app_id } => (
-                vec![Box::new(Label::new(&ending.blocked(&app_name(app_id))))],
-                vec![
-                    cancel,
-                    choice_button(&ending.anyway(), &self.choice, Choice::Confirm),
-                ],
-            ),
-            Stage::Ending => (Vec::new(), Vec::new()),
-        };
-        self.ui = dialog_ui(lines, buttons, window);
+        let palette = window.appearance().palette();
+        self.ui = confirmation_ui(&self.session, &self.choice, palette, now);
         window.request_redraw();
     }
 
@@ -198,13 +223,13 @@ impl App for Confirmation {
 pub fn run_confirmation(ending: Ending) -> Result<(), Box<dyn std::error::Error>> {
     let mut window = Window::open(
         Role::toplevel(&ending.button(), "org.unbound.MenuBar"),
-        (420, 130),
+        CONFIRMATION_SIZE,
     )?;
     report("keep the dialog in front", window.set_keep_on_top(true));
     let now = Instant::now();
     let mut confirmation = Confirmation {
         session: SessionEnding::new(ending, now),
-        ui: dialog_ui(Vec::new(), Vec::new(), &window),
+        ui: dialog_ui(Vec::new(), Vec::new(), window.appearance().palette()),
         choice: Rc::new(Cell::new(Choice::Undecided)),
     };
     confirmation.rebuild(&mut window, now);
@@ -274,7 +299,7 @@ pub fn run_about() -> Result<(), Box<dyn std::error::Error>> {
         &L10N.tr("about-desktop"),
         &format!("Unbound {}", env!("CARGO_PKG_VERSION")),
     ));
-    let ui = dialog_ui(lines, Vec::new(), &window);
+    let ui = dialog_ui(lines, Vec::new(), window.appearance().palette());
     unbound_toolkit::run(&mut window, &mut About { ui })?;
     Ok(())
 }

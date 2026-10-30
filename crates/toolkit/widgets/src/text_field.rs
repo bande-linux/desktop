@@ -2,17 +2,18 @@ use accesskit::{ActionRequest, Node, Role};
 
 use std::ops::Range;
 
+use super::control::{field_focus, paint_field};
 use super::editor::Editor;
 use super::{Context, Cursor, Event, Menu, Parts, Size, Widget, WidgetId};
-use unbound_graphics::{Color, Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle};
+use unbound_graphics::{
+    Color, ControlSize, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextStyle,
+};
 
-pub const TEXT_FIELD_HEIGHT: f32 = 22.0;
+pub const TEXT_FIELD_HEIGHT: f32 = ControlSize::Regular.height();
 const FONT_SIZE: f32 = 13.0;
-const RADIUS: f32 = 5.0;
-const PADDING: f32 = 6.0;
-const CARET_ROOM: f32 = 1.0;
-const IN_PLACE_RADIUS: f32 = 4.0;
-const SEARCH_RADIUS: f32 = 7.0;
+const PADDING: f32 = 8.0;
+const CARET_ROOM: f32 = 1.5;
+const IN_PLACE_SHADOW: f32 = 0.24;
 const WHOLE_LINE: Range<f32> = 0.0..f32::MAX;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -173,7 +174,7 @@ impl Widget for TextField {
         self.placeholder_paragraph = (!self.placeholder.is_empty()).then(|| {
             cx.text.paragraph(
                 &self.placeholder,
-                TextStyle::new(self.editor.font_size(), cx.palette.ink2),
+                TextStyle::new(self.editor.font_size(), cx.palette.ink3),
                 None,
                 TextAlign::Start,
             )
@@ -204,49 +205,31 @@ impl Widget for TextField {
     }
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
-        let shape = Shape::rounded(self.frame, RADIUS);
         let focused = cx.is_focused(self.id);
         match self.border {
-            Border::Field => {
-                items.push(Item::Fill {
-                    shape,
-                    paint: cx.palette.overlay.into(),
-                });
-                items.push(Item::Stroke {
-                    shape: Shape::rounded(self.frame.inset(0.5), RADIUS - 0.5),
-                    width: 1.0,
-                    paint: cx.palette.hairline.into(),
-                });
-                if focused {
-                    super::focus_ring(cx, shape, items);
-                }
-            }
+            Border::Field => paint_field(cx, self.frame, focused, items),
             Border::InPlace => {
-                let shape = Shape::rounded(self.frame, IN_PLACE_RADIUS);
+                let shape = Shape::rounded(self.frame, Radius::XS);
                 items.push(Item::Shadow {
                     shape,
                     offset: Point::new(0.0, 1.0),
                     blur_radius: 4.0,
-                    color: Color::hex(0).with_alpha(60),
+                    color: Color::BLACK.with_opacity(IN_PLACE_SHADOW),
                 });
                 items.push(Item::Fill {
                     shape,
-                    paint: cx.palette.overlay.into(),
+                    paint: cx.palette.field.into(),
                 });
-                items.push(Item::Stroke {
-                    shape,
-                    width: 1.5,
-                    paint: cx.palette.accent.into(),
-                });
+                field_focus(cx, shape, items);
             }
             Border::Search => {
-                let shape = Shape::rounded(self.frame, SEARCH_RADIUS);
+                let shape = Shape::rounded(self.frame, Radius::M);
                 items.push(Item::Fill {
                     shape,
-                    paint: cx.palette.ink2.with_alpha(36).into(),
+                    paint: cx.palette.well.into(),
                 });
                 if focused {
-                    super::focus_ring(cx, shape, items);
+                    field_focus(cx, shape, items);
                 }
             }
             Border::None => {}

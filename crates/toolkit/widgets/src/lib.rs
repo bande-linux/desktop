@@ -3,6 +3,7 @@ mod button;
 mod checkbox;
 mod combo_box;
 mod context_menu;
+mod control;
 mod disclosure;
 mod editor;
 mod free_layout;
@@ -14,6 +15,7 @@ mod radio_group;
 mod scroll;
 mod search_field;
 mod secure_field;
+mod shortcut;
 mod segmented;
 mod sheet;
 mod slider;
@@ -41,13 +43,14 @@ pub use context_menu::ContextMenu;
 pub use disclosure::{DISCLOSURE_HEIGHT, Disclosure};
 pub use free_layout::FreeLayout;
 pub use label::Label;
-pub use menu::{Menu, MenuItem, MenuOutcome, MenuPanel, MenuTracker, Search, shortcut_symbols};
+pub use menu::{MENU_RADIUS, Menu, MenuItem, MenuOutcome, MenuPanel, MenuTracker, Search};
 pub use pop_up_button::PopUpButton;
 pub use progress::{LevelIndicator, PROGRESS_HEIGHT, ProgressBar, SPINNER_SIZE, Spinner};
 pub use radio_group::RadioGroup;
 pub use scroll::{ScrollState, ScrollView};
 pub use search_field::SearchField;
 pub use secure_field::SecureField;
+pub use shortcut::{Shortcut, ShortcutKeys, shortcut_keys};
 pub use segmented::{SEGMENTED_HEIGHT, SegmentedControl};
 pub use sheet::Alert;
 use sheet::Sheet;
@@ -68,7 +71,8 @@ const ENGLISH: &str = include_str!("../locales/en-US/unbound-widgets.ftl");
 
 static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
-use unbound_graphics::{Appearance, Item, Palette, Point, Rect, Scene, Shape, TextSystem};
+use control::focus_ring;
+use unbound_graphics::{Appearance, Item, Palette, Point, Rect, Scene, TextSystem};
 pub use unbound_graphics::{
     Cursor, Event, Key, Modifiers, Pointer, PointerButton, Scroll, ScrollPhase, ScrollSource,
 };
@@ -129,6 +133,7 @@ pub struct Context {
     pub palette: Palette,
     pub keyboard_navigation: bool,
     pub reduce_motion: bool,
+    pub caps_lock: bool,
     focus: Option<WidgetId>,
     now: Instant,
     animating: cell::Cell<bool>,
@@ -151,6 +156,7 @@ impl Context {
             palette,
             keyboard_navigation: false,
             reduce_motion: false,
+            caps_lock: false,
             focus: None,
             now: Instant::now(),
             animating: cell::Cell::new(false),
@@ -182,19 +188,7 @@ impl Context {
     }
 }
 
-const FOCUS_RING: f32 = 3.0;
 const DIALOG_RISE: f32 = 12.0;
-
-fn focus_ring(cx: &Context, shape: Shape, items: &mut Vec<Item>) {
-    items.push(Item::Stroke {
-        shape: Shape::rounded(
-            shape.rect.inset(-FOCUS_RING / 2.0),
-            shape.radius + FOCUS_RING / 2.0,
-        ),
-        width: FOCUS_RING,
-        paint: cx.palette.accent.with_alpha(128).into(),
-    });
-}
 
 pub trait AsAny {
     fn as_any(&self) -> &dyn Any;

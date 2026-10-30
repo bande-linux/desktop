@@ -4,7 +4,8 @@ use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Node, Role, SortDirection};
 use unbound_graphics::{
-    Color, Image, Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle, TextSystem,
+    Color, Image, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextRole, TextStyle,
+    TextSystem,
 };
 
 use super::disclosure::chevron;
@@ -13,9 +14,10 @@ use super::{
     ScrollState, Size, Spring, Widget, WidgetId, contains,
 };
 
-pub const ROW_HEIGHT: f32 = 24.0;
-pub const HEADER_HEIGHT: f32 = 26.0;
-const CELL_PADDING: f32 = 6.0;
+pub const ROW_HEIGHT: f32 = 32.0;
+pub const HEADER_HEIGHT: f32 = 28.0;
+const CELL_PADDING: f32 = 8.0;
+const SELECTION_INSET: (f32, f32) = (4.0, 1.0);
 const ICON_SIZE: f32 = 16.0;
 const ICON_GAP: f32 = 6.0;
 const TEXT_SIZE: f32 = 13.0;
@@ -226,6 +228,13 @@ pub struct Table {
     on_drag: Option<DragStart>,
     offset: f32,
     pending_reveal: Option<usize>,
+    glide: Option<Glide>,
+}
+
+struct Glide {
+    run: (usize, usize),
+    top: Animated,
+    bottom: Animated,
 }
 
 impl Table {
@@ -260,6 +269,7 @@ impl Table {
             on_drag: None,
             offset: 0.0,
             pending_reveal: None,
+            glide: None,
         }
     }
 
@@ -1028,7 +1038,7 @@ impl Table {
     ) -> TextKey {
         let cell = &line.cells[column];
         let color = match (lit, cell.tint, cell.muted) {
-            (true, _, _) => Color::hex(0xFFFFFF),
+            (true, _, _) => cx.palette.on_accent,
             (false, Some(tint), _) => tint,
             (false, None, true) => cx.palette.ink2,
             (false, None, false) => cx.palette.ink,
@@ -1057,7 +1067,7 @@ impl Table {
         let mut old = std::mem::take(&mut *self.texts.borrow_mut());
         let mut texts = HashMap::with_capacity(old.len());
         for index in first..last {
-            let lit = focused && self.selected.get(index).copied().unwrap_or(false);
+            let lit = focused && self.lit(cx, index);
             let Some(line) = self.line(index) else {
                 continue;
             };
@@ -1097,7 +1107,7 @@ impl Table {
         let header = Rect::new(self.frame.x, self.frame.y, self.frame.width, HEADER_HEIGHT);
         items.push(Item::Fill {
             shape: Shape::rect(header),
-            paint: cx.palette.overlay.into(),
+            paint: cx.palette.sheet.into(),
         });
         for (column, ((x, width), paragraph)) in self
             .column_edges()
@@ -1136,14 +1146,6 @@ impl Table {
                 origin: Point::new(text_x, text_y),
                 paragraph,
             });
-            if column + 1 < self.columns.len() {
-                items.push(Item::Line {
-                    from: Point::new(x + width - 0.5, self.frame.y + 5.0),
-                    to: Point::new(x + width - 0.5, self.frame.y + HEADER_HEIGHT - 5.0),
-                    width: 1.0,
-                    paint: cx.palette.hairline.into(),
-                });
-            }
         }
         items.push(Item::Line {
             from: Point::new(self.frame.x, self.frame.y + HEADER_HEIGHT - 0.5),
@@ -1154,6 +1156,86 @@ impl Table {
             width: 1.0,
             paint: cx.palette.hairline.into(),
         });
+    }
+
+    fn runs(&self) -> Vec<(usize, usize)> {
+        let mut runs: Vec<(usize, usize)> = Vec::new();
+        for (index, selected) in self.selected.iter().enumerate() {
+            match runs.last_mut() {
+                Some(run) if *selected && run.1 == index => run.1 = index + 1,
+                _ if *selected => runs.push((index, index + 1)),
+                _ => {}
+            }
+        }
+        runs
+    }
+
+    fn lit(&self, cx: &Context, index: usize) -> bool {
+        match &self.glide {
+            Some(glide) => {
+                let centre = (index as f32 + 0.5) * ROW_HEIGHT;
+                glide.top.value(cx) <= centre && centre < glide.bottom.value(cx)
+            }
+            None => self.selected.get(index).copied().unwrap_or(false),
+        }
+    }
+
+    fn follow_selection(&mut self, cx: &Context) {
+        let runs = self.runs();
+        let [run] = runs[..] else {
+            self.glide = None;
+            return;
+        };
+        let (top, bottom) = (run.0 as f32 * ROW_HEIGHT, run.1 as f32 * ROW_HEIGHT);
+        match &mut self.glide {
+            Some(glide) if glide.run == run => {}
+            Some(glide) => {
+                glide.run = run;
+                glide.top.animate_to(cx, top, Spring::QUICK);
+                glide.bottom.animate_to(cx, bottom, Spring::QUICK);
+            }
+            None => {
+                self.glide = Some(Glide {
+                    run,
+                    top: Animated::new(top),
+                    bottom: Animated::new(bottom),
+                });
+            }
+        }
+    }
+
+    fn paint_selection(
+        &self,
+        cx: &Context,
+        body: Rect,
+        offset: f32,
+        focused: bool,
+        items: &mut Vec<Item>,
+    ) {
+        let color = match focused {
+            true => cx.palette.accent,
+            false => cx.palette.well,
+        };
+        let spans: Vec<(f32, f32)> = match &self.glide {
+            Some(glide) => vec![(glide.top.value(cx), glide.bottom.value(cx))],
+            None => self
+                .runs()
+                .into_iter()
+                .map(|(first, last)| (first as f32 * ROW_HEIGHT, last as f32 * ROW_HEIGHT))
+                .collect(),
+        };
+        for (top, bottom) in spans {
+            let rect = Rect::new(
+                body.x + SELECTION_INSET.0,
+                body.y + top - offset + SELECTION_INSET.1,
+                body.width - 2.0 * SELECTION_INSET.0,
+                bottom - top - 2.0 * SELECTION_INSET.1,
+            );
+            items.push(Item::Fill {
+                shape: Shape::rounded(rect, Radius::S),
+                paint: color.into(),
+            });
+        }
     }
 
     fn header_parts(&self, parts: &mut Parts) {
@@ -1255,6 +1337,7 @@ impl Widget for Table {
             self.reveal_row(cx, index);
         }
         self.offset = self.scroll.offset(cx);
+        self.follow_selection(cx);
         self.turns
             .retain(|_, turn| (turn.value(cx) - turn.target()).abs() > f32::EPSILON);
         let (first, last) = self.visible_rows(cx);
@@ -1265,13 +1348,12 @@ impl Widget for Table {
             .enumerate()
             .map(|(column, (_, width))| {
                 let sorted = self.sort.is_some_and(|sort| sort.column == column);
-                let weight = if sorted {
-                    TextStyle::SEMIBOLD
-                } else {
-                    TextStyle::MEDIUM
+                let color = match sorted {
+                    true => cx.palette.ink2,
+                    false => cx.palette.ink3,
                 };
-                let style = TextStyle::new(12.0, cx.palette.ink2).weight(weight);
-                let title = self.columns[column].title.clone();
+                let style = TextStyle::role(TextRole::Label, color);
+                let title = self.columns[column].title.to_uppercase();
                 self.text(
                     &mut cx.text,
                     &title,
@@ -1295,41 +1377,10 @@ impl Widget for Table {
         let edges = self.column_edges();
         let texts = self.texts.borrow();
         let mut rows = Vec::new();
+        self.paint_selection(cx, body, offset, focused, &mut rows);
         for index in first..last {
             let y = body.y + index as f32 * ROW_HEIGHT - offset;
-            let row_rect = Rect::new(body.x, y, body.width, ROW_HEIGHT);
-            let selected = self.selected.get(index).copied().unwrap_or(false);
-            if selected {
-                let color = match focused {
-                    true => cx.palette.accent,
-                    false => cx.palette.ink2.with_alpha(56),
-                };
-                let continues_above = index > 0 && self.selected[index - 1];
-                let continues_below = self.selected.get(index + 1).copied().unwrap_or(false);
-                let inset = Rect::new(
-                    row_rect.x + 4.0,
-                    row_rect.y + if continues_above { 0.0 } else { 1.0 },
-                    row_rect.width - 8.0,
-                    ROW_HEIGHT
-                        - if continues_above { 0.0 } else { 1.0 }
-                        - if continues_below { 0.0 } else { 1.0 },
-                );
-                let radius = if continues_above || continues_below {
-                    0.0
-                } else {
-                    5.0
-                };
-                rows.push(Item::Fill {
-                    shape: Shape::rounded(inset, radius),
-                    paint: color.into(),
-                });
-            } else if index % 2 == 1 {
-                rows.push(Item::Fill {
-                    shape: Shape::rect(row_rect),
-                    paint: cx.palette.ink.with_alpha(8).into(),
-                });
-            }
-            let lit = focused && selected;
+            let lit = focused && self.lit(cx, index);
             let Some(line) = self.line(index) else {
                 continue;
             };
@@ -1343,7 +1394,7 @@ impl Widget for Table {
                     y + ROW_HEIGHT / 2.0,
                 );
                 let color = match lit {
-                    true => Color::hex(0xFFFFFF),
+                    true => cx.palette.on_accent,
                     false => cx.palette.ink2,
                 };
                 chevron(centre, self.turn(cx, line), color, &mut rows);

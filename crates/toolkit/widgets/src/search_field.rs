@@ -124,7 +124,7 @@ impl Widget for SearchField {
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
         self.field.paint(cx, items);
-        self.paint_lens(cx.palette.ink2, items);
+        self.paint_lens(cx.palette.ink3, items);
         if let Some(button) = self.clear_button() {
             self.paint_clear(cx, button, items);
         }

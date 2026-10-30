@@ -1,12 +1,18 @@
 use accesskit::{Action, ActionData, ActionRequest, Node, Role};
 
+use super::control::paint_field;
 use super::{Context, Cursor, Event, Key, Size, Widget, WidgetId};
-use unbound_graphics::{Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle};
+use crate::L10N;
+use unbound_graphics::{
+    ControlSize, Item, Paragraph, Path, Point, Rect, Shape, TextAlign, TextStyle,
+};
 
 const BULLET: char = '\u{25CF}';
-const RADIUS: f32 = 6.0;
 const PADDING: f32 = 8.0;
-const CARET_WIDTH: f32 = 1.0;
+const CARET_WIDTH: f32 = 1.5;
+const CAPS_LOCK_SIZE: f32 = 12.0;
+const CAPS_LOCK_STROKE: f32 = 1.25;
+const BODY_FONT: f32 = 13.0;
 
 pub struct SecureField {
     id: WidgetId,
@@ -38,7 +44,40 @@ impl SecureField {
     }
 
     fn height(&self) -> f32 {
-        (self.font_size * 1.6 + PADDING).ceil()
+        (self.font_size * 1.6 + PADDING)
+            .ceil()
+            .max(ControlSize::Regular.height())
+    }
+
+    fn paint_caps_lock(&self, cx: &Context, items: &mut Vec<Item>) {
+        let size = CAPS_LOCK_SIZE * (self.font_size / BODY_FONT).max(1.0);
+        let unit = size / CAPS_LOCK_SIZE;
+        let x = self.frame.x + self.frame.width - PADDING - size;
+        let y = self.frame.y + ((self.frame.height - size) / 2.0).round();
+        let at = |dx: f32, dy: f32| Point::new(x + dx * unit, y + dy * unit);
+        items.push(Item::StrokePath {
+            path: Path::through(&[
+                at(6.0, 0.5),
+                at(11.5, 6.0),
+                at(8.5, 6.0),
+                at(8.5, 8.5),
+                at(3.5, 8.5),
+                at(3.5, 6.0),
+                at(0.5, 6.0),
+            ])
+            .close(),
+            width: CAPS_LOCK_STROKE * unit,
+            paint: cx.palette.ink2.into(),
+        });
+        items.push(Item::Fill {
+            shape: Shape::rect(Rect::new(
+                at(3.5, 10.25).x - CAPS_LOCK_STROKE * unit / 2.0,
+                at(3.5, 10.25).y,
+                5.0 * unit + CAPS_LOCK_STROKE * unit,
+                1.5 * unit,
+            )),
+            paint: cx.palette.ink2.into(),
+        });
     }
 
     fn text_origin(&self, paragraph: Option<&Paragraph>) -> Point {
@@ -65,7 +104,7 @@ impl Widget for SecureField {
         ));
         self.placeholder_paragraph = Some(cx.text.paragraph(
             &self.placeholder,
-            TextStyle::new(self.font_size, cx.palette.ink2),
+            TextStyle::new(self.font_size, cx.palette.ink3),
             None,
             TextAlign::Start,
         ));
@@ -81,19 +120,10 @@ impl Widget for SecureField {
     }
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
-        let shape = Shape::rounded(self.frame, RADIUS);
-        items.push(Item::Fill {
-            shape,
-            paint: cx.palette.overlay.into(),
-        });
-        items.push(Item::Stroke {
-            shape: Shape::rounded(self.frame.inset(0.5), RADIUS - 0.5),
-            width: 1.0,
-            paint: cx.palette.hairline.into(),
-        });
         let focused = cx.is_focused(self.id);
-        if focused {
-            super::focus_ring(cx, shape, items);
+        paint_field(cx, self.frame, focused, items);
+        if focused && cx.caps_lock {
+            self.paint_caps_lock(cx, items);
         }
         let shown = if self.secret.is_empty() {
             self.placeholder_paragraph.as_ref()
@@ -117,7 +147,7 @@ impl Widget for SecureField {
             let height = shown.map_or(self.font_size, Paragraph::height);
             content.push(Item::Fill {
                 shape: Shape::rect(Rect::new(origin.x + advance, origin.y, CARET_WIDTH, height)),
-                paint: cx.palette.ink.into(),
+                paint: cx.palette.accent.into(),
             });
         }
         items.push(Item::Clip {
@@ -126,9 +156,12 @@ impl Widget for SecureField {
         });
     }
 
-    fn access(&self, _cx: &Context) -> Node {
+    fn access(&self, cx: &Context) -> Node {
         let mut node = Node::new(Role::PasswordInput);
         node.set_placeholder(self.placeholder.clone());
+        if cx.caps_lock && cx.is_focused(self.id) {
+            node.set_description(L10N.tr("caps-lock-on"));
+        }
         node.add_action(Action::Focus);
         node.add_action(Action::SetValue);
         node

@@ -304,6 +304,12 @@ impl State {
         }
     }
 
+    pub(crate) fn has_server_side_frames(&self) -> bool {
+        self.windows
+            .iter()
+            .any(|window| window.title_bar_height() > 0)
+    }
+
     fn alternate_held(&self) -> bool {
         self.seat
             .get_keyboard()

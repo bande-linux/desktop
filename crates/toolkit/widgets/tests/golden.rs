@@ -6,12 +6,12 @@ use accesskit::{Action, ActionRequest, TreeId};
 use std::cell::Cell;
 use std::rc::Rc;
 use std::time::Instant;
-use unbound_graphics::{CpuRenderer, Palette, Scheme, TextSystem, pixels};
+use unbound_graphics::{CpuRenderer, Image, Palette, Scheme, TextSystem, pixels};
 
 use unbound_widgets::{
     Axis, Button, CheckState, Checkbox, ComboBox, Context, Event, Pointer, PopUpButton,
-    ProgressBar, RadioGroup, SearchField, SegmentedControl, Size, Spinner, Stack, Stepper,
-    TOOLTIP_DELAY, TextField, TextView, Ui, Widget, WidgetId,
+    ProgressBar, RadioGroup, SearchField, SegmentedControl, Size, Slider, Spinner, Stack, Stepper,
+    TOOLTIP_DELAY, TextField, TextView, Toggle, Ui, Widget, WidgetId,
 };
 
 const MIN_SSIM: f64 = 0.99;
@@ -117,51 +117,70 @@ fn row(children: Vec<Box<dyn Widget>>) -> Box<dyn Widget> {
     Box::new(Stack::new(Axis::Horizontal, 16.0, 0.0, children))
 }
 
+const TRASH: &[u8] = br##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill="#201E1A" d="M6 1h4l1 1h3v1.5H2V2h3zM3 5h10l-.8 9.2A1 1 0 0 1 11.2 15H4.8a1 1 0 0 1-1-.8zm3 2v6h1.2V7zm2.8 0v6H10V7z"/></svg>"##;
+
 fn controls(scheme: Scheme) -> Ui {
-    let checks = row(vec![
-        Box::new(Checkbox::new("Off", CheckState::Off, |_| {})),
-        Box::new(Checkbox::new("On", CheckState::On, |_| {})),
-        Box::new(Checkbox::new("Mixed", CheckState::Mixed, |_| {})),
+    let trash = Image::from_svg(TRASH, 32, 32).expect("symbol");
+    let delete = Button::symbol(trash, "Move to Trash", || {});
+    let delete_id = delete.id();
+    let buttons = row(vec![
+        Box::new(Button::new("Save", || {}).primary()),
+        Box::new(Button::new("Cancel", || {}).cancel()),
+        Box::new(Button::new("Options", || {}).quiet()),
+        Box::new(Button::new("Move to Trash", || {}).destructive()),
+        Box::new(delete),
     ]);
+    let empty = TextField::new("Name", "", |_| {});
+    let typed = TextField::new("Name", "Field recordings", |_| {});
+    let typed_id = typed.id();
     let choices = row(vec![
+        Box::new(Toggle::new("Hidden files", true, |_| {})),
+        Box::new(Toggle::new("Ask first", false, |_| {})),
+        Box::new(Checkbox::new("On", CheckState::On, |_| {})),
+        Box::new(Checkbox::new("Off", CheckState::Off, |_| {})),
+        Box::new(Checkbox::new("Mixed", CheckState::Mixed, |_| {})),
         Box::new(RadioGroup::new(
-            "Size",
-            &["Small", "Large"],
-            Some(1),
+            "Sort",
+            &["Name", "Date"],
+            Some(0),
             |_| {},
         )),
+    ]);
+    let pickers = row(vec![
         Box::new(SegmentedControl::new(
             "View",
             &["Icons", "List", "Columns"],
             Some(1),
             |_| {},
         )),
-    ]);
-    let pickers = row(vec![
         Box::new(PopUpButton::new(
             "Sort by",
             &["Name", "Date Modified"],
             1,
             |_| {},
         )),
-        Box::new(Stepper::new("Copies", 2.0, (1.0, 9.0), 1.0, |_| {})),
+        Box::new(
+            Stepper::new("Size", 12.0, (9.0, 24.0), 1.0, |_| {})
+                .format(|value| format!("{value} pt")),
+        ),
         Box::new(Spinner::new("Loading")),
     ]);
     let combo = Box::new(ComboBox::new("Size", "12 pt", &["10 pt", "12 pt"], |_| {}));
-    let help = Button::new("Stop", || {}).tooltip("Quit the selected process");
-    let help_id = help.id();
     let stack = Stack::new(
         Axis::Vertical,
         14.0,
         16.0,
         vec![
-            checks,
+            buttons,
+            Box::new(empty),
+            Box::new(typed),
             choices,
             pickers,
             combo,
+            Box::new(Slider::new("Volume", 0.62, (0.0, 1.0), 0.01, |_| {})),
+            Box::new(Slider::new("Speed", 0.5, (0.0, 1.0), 0.01, |_| {}).ticks(5)),
             Box::new(ProgressBar::new("Copying", Some(0.4))),
             Box::new(ProgressBar::new("Preparing", None)),
-            row(vec![Box::new(help)]),
         ],
     );
     let mut ui = Ui::new(
@@ -171,8 +190,9 @@ fn controls(scheme: Scheme) -> Ui {
     let clock = Rc::new(Cell::new(Instant::now()));
     let time = clock.clone();
     ui.set_clock(move || time.get());
-    ui.layout(Size::new(360.0, 296.0));
-    let frame = ui.widget(help_id).expect("button").frame();
+    ui.layout(Size::new(CONTROLS.0 as f32, CONTROLS.1 as f32));
+    focus(&mut ui, typed_id);
+    let frame = ui.widget(delete_id).expect("button").frame();
     ui.handle(&Event::PointerMove(Pointer::at(
         unbound_graphics::Point::new(frame.x + 10.0, frame.y + 8.0),
     )));
@@ -180,7 +200,9 @@ fn controls(scheme: Scheme) -> Ui {
     ui
 }
 
+const CONTROLS: (u32, u32) = (600, 470);
+
 #[test]
 fn controls_match_their_goldens() {
-    shoot("controls", (360, 296), controls);
+    shoot("controls", CONTROLS, controls);
 }

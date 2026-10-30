@@ -753,7 +753,7 @@ fn escape_stops_adding_a_layout_and_a_full_list_offers_no_more() {
 #[test]
 fn the_keyboard_pane_lists_the_desktop_shortcuts_with_key_symbols() {
     let mut view = keyboard_view(&["se"]);
-    assert!(has_text(&mut view, "⌥⌘Space"));
+    assert!(has_text(&mut view, "Alt+Super+Space"));
     assert!(has_text(&mut view, "Lock Screen"));
 }
 

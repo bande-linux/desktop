@@ -6,7 +6,7 @@ use unbound_keyboard::shortcuts_in;
 use unbound_toolkit::Spacing;
 use unbound_toolkit::ui::{
     Axis, Button, Label, LevelIndicator, PopUpButton, SearchField, SecureField, SegmentedControl,
-    Slider, Stack, TextField, Toggle, Widget, WidgetId, shortcut_symbols,
+    Shortcut, Slider, Stack, TextField, Toggle, Widget, WidgetId,
 };
 
 use crate::L10N;
@@ -756,7 +756,7 @@ impl SettingsView {
                 .map(|shortcut| {
                     boxed(Row::new(
                         Text::new(&shortcut.action.label(), Tone::Primary),
-                        Some(boxed(Label::new(&shortcut_symbols(shortcut.keys)))),
+                        Some(boxed(Shortcut::new(shortcut.keys))),
                     ))
                 })
                 .collect();

@@ -109,10 +109,13 @@ impl Accent {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Palette {
+    pub scheme: Scheme,
     pub chassis: Color,
     pub sheet: Color,
     pub overlay: Color,
     pub well: Color,
+    pub field: Color,
+    pub raised: Color,
     pub hairline: Color,
     pub edge: Color,
     pub ink: Color,
@@ -124,6 +127,7 @@ pub struct Palette {
     pub accent_soft: Color,
     pub focus: Color,
     pub danger: Color,
+    pub on_danger: Color,
     pub warning: Color,
     pub success: Color,
     pub scrim: Color,
@@ -183,15 +187,27 @@ impl Palette {
             ink3,
         ] = neutrals;
         let signal = accent.color(scheme);
-        let on_accent = [Color::WHITE, dark_text]
-            .into_iter()
-            .max_by(|a, b| crate::wcag(*a, signal).total_cmp(&crate::wcag(*b, signal)))
-            .unwrap_or(Color::WHITE);
+        let danger = DANGER.color(scheme);
+        let legible_on = |fill: Color| {
+            [Color::WHITE, dark_text]
+                .into_iter()
+                .max_by(|a, b| crate::wcag(*a, fill).total_cmp(&crate::wcag(*b, fill)))
+                .unwrap_or(Color::WHITE)
+        };
         Self {
+            scheme,
             chassis,
             sheet,
             overlay,
             well,
+            field: match scheme {
+                Scheme::Light => overlay,
+                Scheme::Dark => well,
+            },
+            raised: match scheme {
+                Scheme::Light => overlay,
+                Scheme::Dark => edge,
+            },
             hairline,
             edge,
             ink,
@@ -199,10 +215,11 @@ impl Palette {
             ink3,
             accent: signal,
             accent_text: signal,
-            on_accent,
+            on_accent: legible_on(signal),
             accent_soft: signal.mix(sheet, soft),
             focus: signal,
-            danger: DANGER.color(scheme),
+            danger,
+            on_danger: legible_on(danger),
             warning: WARNING.color(scheme),
             success: SUCCESS.color(scheme),
             scrim: Color::BLACK.with_opacity(scrim),

@@ -1,13 +1,13 @@
 use accesskit::{ActionRequest, Node, Role};
 
+use super::control::paint_field;
 use super::editor::Editor;
 use super::{Context, Cursor, Event, Menu, Parts, ScrollState, Size, Widget, WidgetId};
 use unbound_graphics::{Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle};
 
 const FONT_SIZE: f32 = 13.0;
-const RADIUS: f32 = 5.0;
-const HORIZONTAL_PADDING: f32 = 6.0;
-const VERTICAL_PADDING: f32 = 4.0;
+const HORIZONTAL_PADDING: f32 = 8.0;
+const VERTICAL_PADDING: f32 = 5.0;
 const CARET_ROOM: f32 = 1.0;
 
 pub struct TextView {
@@ -130,7 +130,7 @@ impl Widget for TextView {
         self.placeholder_paragraph = (!self.placeholder.is_empty()).then(|| {
             cx.text.paragraph(
                 &self.placeholder,
-                TextStyle::new(FONT_SIZE, cx.palette.ink2),
+                TextStyle::new(FONT_SIZE, cx.palette.ink3),
                 Some((available.width - 2.0 * HORIZONTAL_PADDING).max(0.0)),
                 TextAlign::Start,
             )
@@ -154,20 +154,8 @@ impl Widget for TextView {
     }
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
-        let shape = Shape::rounded(self.frame, RADIUS);
         let focused = cx.is_focused(self.id);
-        items.push(Item::Fill {
-            shape,
-            paint: cx.palette.overlay.into(),
-        });
-        items.push(Item::Stroke {
-            shape: Shape::rounded(self.frame.inset(0.5), RADIUS - 0.5),
-            width: 1.0,
-            paint: cx.palette.hairline.into(),
-        });
-        if focused {
-            super::focus_ring(cx, shape, items);
-        }
+        paint_field(cx, self.frame, focused, items);
         let content = self.content();
         let mut inner = Vec::new();
         if self.editor.is_empty()

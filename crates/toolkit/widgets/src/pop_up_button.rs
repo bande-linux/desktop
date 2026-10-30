@@ -1,15 +1,12 @@
 use accesskit::{Action, ActionRequest, HasPopup, Node, Role};
-use unbound_graphics::{Item, Paragraph, Path, Point, Rect, Shape, TextAlign, TextStyle};
+use unbound_graphics::{Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextStyle};
 
+use super::control::{chevron_down, focus_ring};
 use super::menu::{ROW_HEIGHT, TEXT_START, VERTICAL_PADDING};
 use super::{BUTTON_HEIGHT, Context, Event, Key, Menu, MenuItem, Size, Widget, WidgetId};
 
-const RADIUS: f32 = 5.0;
-const PADDING: f32 = 9.0;
-const CHEVRONS: f32 = 18.0;
-const CHEVRON_WIDTH: f32 = 3.5;
-const CHEVRON_HEIGHT: f32 = 2.5;
-const CHEVRON_GAP: f32 = 2.0;
+const PADDING: f32 = 10.0;
+const CHEVRON_SPACE: f32 = 28.0;
 const FONT_SIZE: f32 = 13.0;
 
 pub struct PopUpButton {
@@ -100,7 +97,7 @@ impl Widget for PopUpButton {
             .iter()
             .map(Paragraph::width)
             .fold(0.0, f32::max);
-        self.width = (PADDING + widest + CHEVRONS).ceil();
+        self.width = (PADDING + widest + CHEVRON_SPACE).ceil();
         Size::new(self.width, BUTTON_HEIGHT)
     }
 
@@ -113,25 +110,20 @@ impl Widget for PopUpButton {
     }
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
-        let shape = Shape::rounded(self.frame, RADIUS);
+        let shape = Shape::rounded(self.frame, Radius::S);
         items.push(Item::Fill {
             shape,
-            paint: cx.palette.overlay.into(),
-        });
-        items.push(Item::Stroke {
-            shape: Shape::rounded(self.frame.inset(0.5), RADIUS - 0.5),
-            width: 1.0,
-            paint: cx.palette.hairline.into(),
+            paint: cx.palette.well.into(),
         });
         if cx.is_focused(self.id) {
-            super::focus_ring(cx, shape, items);
+            focus_ring(cx, shape, items);
         }
         if let Some(paragraph) = self.paragraphs.get(self.selected) {
             items.push(Item::Clip {
                 shape: Shape::rect(Rect::new(
                     self.frame.x,
                     self.frame.y,
-                    (self.frame.width - CHEVRONS).max(0.0),
+                    (self.frame.width - CHEVRON_SPACE).max(0.0),
                     self.frame.height,
                 )),
                 items: vec![Item::Text {
@@ -143,28 +135,14 @@ impl Widget for PopUpButton {
                 }],
             });
         }
-        let centre = Point::new(
-            self.frame.x + self.frame.width - CHEVRONS / 2.0 - 1.0,
-            self.frame.y + self.frame.height / 2.0,
+        chevron_down(
+            Point::new(
+                self.frame.x + self.frame.width - CHEVRON_SPACE / 2.0,
+                self.frame.y + self.frame.height / 2.0,
+            ),
+            cx.palette.ink2,
+            items,
         );
-        let chevron = |tip: f32, base: f32| {
-            Path::new()
-                .move_to(Point::new(centre.x - CHEVRON_WIDTH, base))
-                .line_to(Point::new(centre.x, tip))
-                .line_to(Point::new(centre.x + CHEVRON_WIDTH, base))
-        };
-        let up = centre.y - CHEVRON_GAP;
-        let down = centre.y + CHEVRON_GAP;
-        for path in [
-            chevron(up - CHEVRON_HEIGHT, up),
-            chevron(down + CHEVRON_HEIGHT, down),
-        ] {
-            items.push(Item::StrokePath {
-                path,
-                width: 1.5,
-                paint: cx.palette.ink.into(),
-            });
-        }
     }
 
     fn access(&self, _cx: &Context) -> Node {

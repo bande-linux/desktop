@@ -1,14 +1,13 @@
 use accesskit::{Action, ActionRequest, HasPopup, Node, Role};
-use unbound_graphics::{Item, Path, Point, Rect, Shape};
+use unbound_graphics::{Item, Point, Rect};
 
+use super::control::chevron_down;
 use super::{
     Context, Cursor, Event, Key, Menu, MenuItem, Parts, Size, TextField, Widget, WidgetId, contains,
 };
 use crate::L10N;
 
-const BUTTON_WIDTH: f32 = 20.0;
-const CHEVRON_WIDTH: f32 = 3.5;
-const CHEVRON_HEIGHT: f32 = 2.5;
+const BUTTON_WIDTH: f32 = 26.0;
 const MENU_GAP: f32 = 4.0;
 const BUTTON_PART: u64 = 0xFFFF;
 
@@ -25,7 +24,7 @@ impl ComboBox {
         on_change: impl FnMut(&str) + 'static,
     ) -> Self {
         Self {
-            field: TextField::new(placeholder, text, on_change).with_trailing(BUTTON_WIDTH + 4.0),
+            field: TextField::new(placeholder, text, on_change).with_trailing(BUTTON_WIDTH),
             choices: choices
                 .iter()
                 .map(|choice| choice.as_ref().to_owned())
@@ -83,33 +82,14 @@ impl Widget for ComboBox {
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
         self.field.paint(cx, items);
         let button = self.button();
-        items.push(Item::Fill {
-            shape: Shape::rect(Rect::new(
-                button.x,
-                button.y + 4.0,
-                1.0,
-                button.height - 8.0,
-            )),
-            paint: cx.palette.hairline.into(),
-        });
-        let centre = Point::new(
-            button.x + button.width / 2.0,
-            button.y + button.height / 2.0,
+        chevron_down(
+            Point::new(
+                button.x + button.width / 2.0,
+                button.y + button.height / 2.0,
+            ),
+            cx.palette.ink2,
+            items,
         );
-        items.push(Item::StrokePath {
-            path: Path::new()
-                .move_to(Point::new(
-                    centre.x - CHEVRON_WIDTH,
-                    centre.y - CHEVRON_HEIGHT / 2.0,
-                ))
-                .line_to(Point::new(centre.x, centre.y + CHEVRON_HEIGHT / 2.0))
-                .line_to(Point::new(
-                    centre.x + CHEVRON_WIDTH,
-                    centre.y - CHEVRON_HEIGHT / 2.0,
-                )),
-            width: 1.5,
-            paint: cx.palette.ink.into(),
-        });
     }
 
     fn access(&self, cx: &Context) -> Node {

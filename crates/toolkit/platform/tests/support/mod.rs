@@ -1,5 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+use std::collections::HashMap;
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -10,11 +11,59 @@ use std::time::{Duration, Instant};
 use smithay::utils::{Point, Size};
 use unbound_compositor::{FrameClock, FrameScheduler, Headless, REFRESH, Renderer};
 use unbound_graphics::Scene;
+use unbound_test_bus::SessionBus;
 use unbound_toolkit_platform::{App, Role, Window, WindowEvent, run};
 use unbound_widgets::Ui;
+use zbus::zvariant::{OwnedValue, Value};
+
+const PORTAL_PATH: &str = "/org/freedesktop/portal/desktop";
+const APPEARANCE: &str = "org.freedesktop.appearance";
+
+static DARK: AtomicBool = AtomicBool::new(false);
+
+struct Settings;
+
+#[zbus::interface(name = "org.freedesktop.portal.Settings")]
+impl Settings {
+    fn read_all(&self, _namespaces: Vec<String>) -> HashMap<String, HashMap<String, OwnedValue>> {
+        let scheme = if DARK.load(Ordering::SeqCst) { 1u32 } else { 2 };
+        let appearance = HashMap::from([(
+            "color-scheme".to_owned(),
+            OwnedValue::try_from(Value::from(scheme)).expect("owned value"),
+        )]);
+        HashMap::from([(APPEARANCE.to_owned(), appearance)])
+    }
+}
+
+pub struct Portal {
+    _bus: SessionBus,
+    _connection: zbus::blocking::Connection,
+}
+
+pub fn appearance_portal() -> Portal {
+    let bus = SessionBus::start().expect("private session bus");
+    unsafe {
+        std::env::set_var("DBUS_SESSION_BUS_ADDRESS", bus.address());
+    }
+    let connection = bus.connect().expect("portal connection");
+    connection
+        .object_server()
+        .at(PORTAL_PATH, Settings)
+        .expect("serve the settings");
+    connection
+        .request_name("org.freedesktop.portal.Desktop")
+        .expect("own the portal name");
+    Portal {
+        _bus: bus,
+        _connection: connection,
+    }
+}
+
+pub const SCHEMES: [(bool, &str); 2] = [(false, "light"), (true, "dark")];
+pub const SCALES: [(f64, &str); 2] = [(1.0, "1x"), (1.5, "1.5x")];
 
 const MIN_SSIM: f64 = 0.99;
-const OUTPUT: (i32, i32) = (420, 300);
+const OUTPUT: (i32, i32) = (480, 340);
 const SHOWN_AT_REST: u32 = 3;
 
 fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>) {
@@ -88,6 +137,7 @@ impl App for Still {
 }
 
 pub struct Shot {
+    pub title: &'static str,
     pub scale: f64,
     pub dark: bool,
     pub pointer: (i32, i32),
@@ -102,7 +152,9 @@ pub fn shot(name: &str, prepare: fn(&mut Window) -> Option<Ui>, shot: Shot) {
     let mut server = Headless::new(Size::from(output)).expect("headless compositor");
     server.set_output_scale(shot.scale);
     server.set_dark_appearance(shot.dark);
+    DARK.store(shot.dark, Ordering::SeqCst);
     let pointer = shot.pointer;
+    let title = shot.title;
     let (client_end, server_end) = UnixStream::pair().expect("socket pair");
     server.insert_client(server_end).expect("insert client");
     let (drawn, on_screen) = mpsc::channel();
@@ -112,8 +164,8 @@ pub fn shot(name: &str, prepare: fn(&mut Window) -> Option<Ui>, shot: Shot) {
     let client = thread::spawn(move || {
         let mut window = Window::open_on(
             client_end,
-            Role::toplevel("Documents", "unbound-toolkit-test"),
-            (300, 160),
+            Role::toplevel(title, "unbound-toolkit-test"),
+            (360, 200),
         )
         .expect("window");
         let mut still = Still {

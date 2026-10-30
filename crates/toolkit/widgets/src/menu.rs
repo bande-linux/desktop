@@ -2,29 +2,32 @@ use std::time::{Duration, Instant};
 
 use accesskit::{Action, Node, NodeId, Role, Toggled};
 use unbound_graphics::{
-    Color, Item, Palette, Paragraph, Point, Rect, Shape, TextAlign, TextStyle, TextSystem,
+    Color, Item, Palette, Paragraph, Path, Point, Radius, Rect, Shape, TextAlign, TextStyle,
+    TextSystem,
 };
 
+use super::control::square_capped;
+use super::shortcut::ShortcutText;
 use super::{Key, Modifiers, Size};
 
-pub(crate) const ROW_HEIGHT: f32 = 22.0;
-const SEPARATOR_HEIGHT: f32 = 11.0;
-pub(crate) const VERTICAL_PADDING: f32 = 5.0;
-const HIGHLIGHT_INSET: f32 = 5.0;
-pub(crate) const TEXT_START: f32 = 24.0;
-const TRAILING_PADDING: f32 = 16.0;
+pub(crate) const ROW_HEIGHT: f32 = 28.0;
+const SEPARATOR_HEIGHT: f32 = 9.0;
+pub(crate) const VERTICAL_PADDING: f32 = 4.0;
+const HIGHLIGHT_INSET: f32 = 4.0;
+const SEPARATOR_INSET: f32 = 12.0;
+pub(crate) const TEXT_START: f32 = 28.0;
+const TRAILING_PADDING: f32 = 12.0;
 const SHORTCUT_GAP: f32 = 28.0;
 const CHEVRON_SPACE: f32 = 18.0;
-const MINIMUM_WIDTH: f32 = 120.0;
-const RADIUS: f32 = 8.0;
+const MINIMUM_WIDTH: f32 = 140.0;
+pub const MENU_RADIUS: f32 = Radius::L;
 const FONT_SIZE: f32 = 13.0;
+const MARK_STROKE: f32 = 1.6;
 pub const SUBMENU_DELAY: Duration = Duration::from_millis(200);
 const SAFE_DELAY: Duration = Duration::from_millis(300);
 const SAFE_MARGIN: f32 = 6.0;
-const FIELD_HEIGHT: f32 = 30.0;
-const FIELD_INSET: f32 = 6.0;
-const FIELD_RADIUS: f32 = 6.0;
-const FIELD_ALPHA: u8 = 16;
+const FIELD_HEIGHT: f32 = 34.0;
+const FIELD_INSET: f32 = 4.0;
 const SEARCH_WIDTH: f32 = 260.0;
 const MAX_FOUND: usize = 12;
 const PATH_SEPARATOR: &str = " › ";
@@ -181,64 +184,11 @@ impl MenuItem {
     }
 }
 
-const MODIFIER_SYMBOLS: [(&[&str], char); 4] = [
-    (&["Ctrl", "Control"], '⌃'),
-    (&["Alt", "Option"], '⌥'),
-    (&["Shift"], '⇧'),
-    (&["Super", "Logo", "Meta"], '⌘'),
-];
-
-const KEY_SYMBOLS: [(&str, &str); 14] = [
-    ("Backspace", "⌫"),
-    ("Delete", "⌦"),
-    ("Return", "↩"),
-    ("Enter", "↩"),
-    ("Escape", "⎋"),
-    ("Tab", "⇥"),
-    ("Left", "←"),
-    ("Right", "→"),
-    ("Up", "↑"),
-    ("Down", "↓"),
-    ("PageUp", "⇞"),
-    ("PageDown", "⇟"),
-    ("Home", "↖"),
-    ("End", "↘"),
-];
-
-pub fn shortcut_symbols(shortcut: &str) -> String {
-    let parts: Vec<&str> = shortcut.split('+').collect();
-    let (key, modifiers) = match parts.split_last() {
-        Some((&"", rest)) if rest.last() == Some(&"") => ("+", &rest[..rest.len() - 1]),
-        Some((key, rest)) => (*key, rest),
-        None => ("", &[][..]),
-    };
-    let mut symbols: String = MODIFIER_SYMBOLS
-        .iter()
-        .filter(|(names, _)| {
-            modifiers
-                .iter()
-                .any(|modifier| names.iter().any(|name| name.eq_ignore_ascii_case(modifier)))
-        })
-        .map(|(_, symbol)| *symbol)
-        .collect();
-    match KEY_SYMBOLS
-        .iter()
-        .find(|(name, _)| name.eq_ignore_ascii_case(key))
-    {
-        Some((_, symbol)) => symbols.push_str(symbol),
-        None if key.chars().count() == 1 => {
-            symbols.extend(key.chars().flat_map(char::to_uppercase))
-        }
-        None => symbols.push_str(key),
-    }
-    symbols
-}
-
 struct Row {
     top: f32,
     height: f32,
     labels: Option<[Paragraph; 2]>,
-    shortcuts: Option<[Paragraph; 2]>,
+    shortcuts: Option<[ShortcutText; 2]>,
 }
 
 pub struct MenuPanel {
@@ -252,7 +202,7 @@ pub struct MenuPanel {
 
 impl MenuPanel {
     pub fn new(menu: Menu, text: &mut TextSystem, palette: &Palette) -> Self {
-        let on_accent = Color::hex(0xFFFFFF);
+        let on_accent = palette.on_accent;
         let paragraphs = |text: &mut TextSystem, content: &str, normal: Color| {
             [normal, on_accent].map(|color| {
                 text.paragraph(
@@ -262,6 +212,10 @@ impl MenuPanel {
                     TextAlign::Start,
                 )
             })
+        };
+        let shortcut_texts = |text: &mut TextSystem, shortcut: &str| {
+            [palette.ink3, on_accent]
+                .map(|color| ShortcutText::new(text, shortcut, TextStyle::new(FONT_SIZE, color)))
         };
         let alternate = Menu::new(
             menu.items
@@ -279,7 +233,7 @@ impl MenuPanel {
         let has_submenu = menu.items.iter().any(|item| item.submenu.is_some());
         let field = menu.search.as_ref().map(|search| {
             let (content, color) = if search.query.is_empty() {
-                (search.placeholder.as_str(), palette.ink2)
+                (search.placeholder.as_str(), palette.ink3)
             } else {
                 (search.query.as_str(), palette.ink)
             };
@@ -312,13 +266,14 @@ impl MenuPanel {
                     let label_color = if item.enabled {
                         palette.ink
                     } else {
-                        palette.ink2
+                        palette.ink3
                     };
                     let labels =
                         (!item.separator).then(|| paragraphs(text, &item.title, label_color));
-                    let shortcuts = item.shortcut.as_deref().map(|shortcut| {
-                        paragraphs(text, &shortcut_symbols(shortcut), palette.ink2)
-                    });
+                    let shortcuts = item
+                        .shortcut
+                        .as_deref()
+                        .map(|shortcut| shortcut_texts(text, shortcut));
                     if let Some([label, _]) = &labels {
                         widest_label = widest_label.max(label.width());
                     }
@@ -420,7 +375,7 @@ impl MenuPanel {
     pub fn paint(&self, palette: &Palette, show_highlight: bool) -> Vec<Item> {
         let outline = Shape::rounded(
             Rect::new(0.0, 0.0, self.size.width, self.size.height),
-            RADIUS,
+            MENU_RADIUS,
         );
         let mut items = vec![
             Item::Fill {
@@ -428,21 +383,22 @@ impl MenuPanel {
                 paint: palette.overlay.into(),
             },
             Item::Stroke {
-                shape: Shape::rounded(outline.rect.inset(0.25), RADIUS - 0.25),
+                shape: Shape::rounded(outline.rect.inset(0.25), MENU_RADIUS - 0.25),
                 width: 0.5,
                 paint: palette.hairline.into(),
             },
         ];
+        let highlight_radius = Radius::concentric(MENU_RADIUS, HIGHLIGHT_INSET);
         if let Some((field, typed)) = &self.field {
             let well = Rect::new(
                 FIELD_INSET,
                 VERTICAL_PADDING,
                 self.size.width - 2.0 * FIELD_INSET,
-                FIELD_HEIGHT - FIELD_INSET,
+                FIELD_HEIGHT - 2.0 * FIELD_INSET,
             );
             items.push(Item::Fill {
-                shape: Shape::rounded(well, FIELD_RADIUS),
-                paint: palette.ink.with_alpha(FIELD_ALPHA).into(),
+                shape: Shape::rounded(well, highlight_radius),
+                paint: palette.well.into(),
             });
             let x = well.x + 2.0 * FIELD_INSET;
             let y = (well.y + (well.height - field.height()) / 2.0).round();
@@ -451,11 +407,11 @@ impl MenuPanel {
                 paragraph: field.clone(),
             });
             if *typed {
-                let caret = (x + field.width() + 1.0).round() + 0.5;
+                let caret = (x + field.width() + 1.0).round() + 0.75;
                 items.push(Item::Line {
                     from: Point::new(caret, y + 1.0),
                     to: Point::new(caret, y + field.height() - 1.0),
-                    width: 1.0,
+                    width: 1.5,
                     paint: palette.accent.into(),
                 });
             }
@@ -472,9 +428,9 @@ impl MenuPanel {
             if item.separator {
                 items.push(Item::Fill {
                     shape: Shape::rect(Rect::new(
-                        HIGHLIGHT_INSET * 2.0,
+                        SEPARATOR_INSET,
                         centre.round() - 0.5,
-                        self.size.width - HIGHLIGHT_INSET * 4.0,
+                        self.size.width - 2.0 * SEPARATOR_INSET,
                         1.0,
                     )),
                     paint: palette.hairline.into(),
@@ -491,18 +447,18 @@ impl MenuPanel {
                             self.size.width - 2.0 * HIGHLIGHT_INSET,
                             rect.height,
                         ),
-                        4.0,
+                        highlight_radius,
                     ),
                     paint: palette.accent.into(),
                 });
             }
             let variant = usize::from(lit);
             let mark = if lit {
-                Color::hex(0xFFFFFF)
+                palette.on_accent
             } else if item.enabled {
                 palette.ink
             } else {
-                palette.ink2
+                palette.ink3
             };
             if let Some(labels) = &row.labels {
                 let label = &labels[variant];
@@ -511,31 +467,38 @@ impl MenuPanel {
                     paragraph: label.clone(),
                 });
             }
+            let trailing = self.size.width - TRAILING_PADDING;
             if let Some(shortcuts) = &row.shortcuts {
                 let shortcut = &shortcuts[variant];
-                let right = self.size.width - TRAILING_PADDING;
-                items.push(Item::Text {
-                    origin: Point::new(
-                        (right - shortcut.width()).round(),
+                shortcut.paint(
+                    Point::new(
+                        (trailing - shortcut.width()).round(),
                         (centre - shortcut.height() / 2.0).round(),
                     ),
-                    paragraph: shortcut.clone(),
+                    if lit { palette.on_accent } else { palette.ink3 },
+                    &mut items,
+                );
+            }
+            let at = |x: f32, y: f32| Point::new(x, centre + y);
+            if item.checked {
+                items.push(Item::FillPath {
+                    path: square_capped(
+                        &[at(10.0, 0.5), at(13.0, 3.5), at(18.0, -3.5)],
+                        MARK_STROKE,
+                    ),
+                    paint: mark.into(),
                 });
             }
-            let line = |from: (f32, f32), to: (f32, f32), width: f32| Item::Line {
-                from: Point::new(from.0, centre + from.1),
-                to: Point::new(to.0, centre + to.1),
-                width,
-                paint: mark.into(),
-            };
-            if item.checked {
-                items.push(line((9.0, 0.5), (12.0, 3.5), 1.5));
-                items.push(line((12.0, 3.5), (17.0, -3.5), 1.5));
-            }
             if item.submenu.is_some() {
-                let x = self.size.width - TRAILING_PADDING;
-                items.push(line((x - 3.0, -4.0), (x + 1.0, 0.0), 1.4));
-                items.push(line((x + 1.0, 0.0), (x - 3.0, 4.0), 1.4));
+                items.push(Item::StrokePath {
+                    path: Path::through(&[
+                        at(trailing - 3.5, -4.0),
+                        at(trailing + 0.5, 0.0),
+                        at(trailing - 3.5, 4.0),
+                    ]),
+                    width: MARK_STROKE,
+                    paint: mark.into(),
+                });
             }
         }
         items
@@ -993,24 +956,5 @@ impl MenuTracker {
                 .find(|index| menu_node(level, Some(*index)) == node)
                 .map(|index| (level, index))
         })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::shortcut_symbols;
-
-    #[test]
-    fn shortcuts_read_as_key_symbols_in_the_standard_modifier_order() {
-        assert_eq!(shortcut_symbols("Super+Q"), "⌘Q");
-        assert_eq!(shortcut_symbols("Shift+Super+N"), "⇧⌘N");
-        assert_eq!(shortcut_symbols("Super+Ctrl+Alt+Shift+z"), "⌃⌥⇧⌘Z");
-        assert_eq!(shortcut_symbols("Control+Shift+q"), "⌃⇧Q");
-        assert_eq!(shortcut_symbols("Alt+Super+Backspace"), "⌥⌘⌫");
-        assert_eq!(shortcut_symbols("Ctrl+Super+Left"), "⌃⌘←");
-        assert_eq!(shortcut_symbols("Super++"), "⌘+");
-        assert_eq!(shortcut_symbols("Shift+Super+."), "⇧⌘.");
-        assert_eq!(shortcut_symbols("F2"), "F2");
-        assert_eq!(shortcut_symbols("Space"), "Space");
     }
 }

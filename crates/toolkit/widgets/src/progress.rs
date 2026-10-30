@@ -10,12 +10,44 @@ use super::{Animated, Context, Size, Spring, Widget, WidgetId};
 
 pub const PROGRESS_HEIGHT: f32 = 6.0;
 pub const SPINNER_SIZE: f32 = 16.0;
-const SWEEP: Duration = Duration::from_millis(1400);
-const SWEEP_FRACTION: f32 = 0.3;
+const SWEEP: Duration = Duration::from_millis(1600);
+const SWEEP_CELLS: f32 = 4.0;
 const SPOKES: u32 = 12;
 const SPIN: Duration = Duration::from_millis(1000);
-const LEVEL_CELLS: usize = 24;
-const LEVEL_GAP: f32 = 2.0;
+const CELLS: usize = 24;
+const CELL_GAP: f32 = 2.0;
+const CELL_RADIUS: f32 = 1.0;
+
+fn paint_cells(
+    cx: &Context,
+    frame: Rect,
+    lit: impl Fn(f32) -> f32,
+    items: &mut Vec<Item>,
+) {
+    let width = (frame.width - CELL_GAP * (CELLS - 1) as f32) / CELLS as f32;
+    for index in 0..CELLS {
+        let shape = Shape::rounded(
+            Rect::new(
+                frame.x + index as f32 * (width + CELL_GAP),
+                frame.y,
+                width,
+                frame.height,
+            ),
+            CELL_RADIUS,
+        );
+        items.push(Item::Fill {
+            shape,
+            paint: cx.palette.well.into(),
+        });
+        let fill = lit(index as f32).clamp(0.0, 1.0);
+        if fill > 0.0 {
+            items.push(Item::Fill {
+                shape,
+                paint: cx.palette.accent.with_opacity(fill).into(),
+            });
+        }
+    }
+}
 
 pub struct ProgressBar {
     id: WidgetId,
@@ -52,33 +84,19 @@ impl ProgressBar {
         self.value = value;
     }
 
-    fn sweep(&self, cx: &Context, track: Rect, items: &mut Vec<Item>) {
+    fn sweep(&self, cx: &Context) -> impl Fn(f32) -> f32 {
         let elapsed = self.started.map_or(0.0, |started| {
             cx.now().saturating_duration_since(started).as_secs_f32()
         });
         let phase = (elapsed / SWEEP.as_secs_f32()).fract();
         cx.animating.set(true);
-        if cx.reduce_motion {
-            let alpha = 0.35 + 0.35 * (1.0 - (phase * TAU).cos()) / 2.0;
-            items.push(Item::Fill {
-                shape: Shape::rounded(track, track.height / 2.0),
-                paint: cx.palette.accent.with_alpha((alpha * 255.0) as u8).into(),
-            });
-            return;
+        let reduce_motion = cx.reduce_motion;
+        let eased = (1.0 - (phase * TAU).cos()) / 2.0;
+        let start = eased * (CELLS as f32 - SWEEP_CELLS);
+        move |cell: f32| match reduce_motion {
+            true => 0.35 + 0.35 * eased,
+            false => (cell + 1.0 - start).min(start + SWEEP_CELLS - cell).min(1.0),
         }
-        let eased = (1.0 - (phase * std::f32::consts::PI).cos()) / 2.0;
-        let width = track.width * SWEEP_FRACTION;
-        let x = track.x - width + (track.width + width) * eased;
-        items.push(Item::Clip {
-            shape: Shape::rounded(track, track.height / 2.0),
-            items: vec![Item::Fill {
-                shape: Shape::rounded(
-                    Rect::new(x, track.y, width, track.height),
-                    track.height / 2.0,
-                ),
-                paint: cx.palette.accent.into(),
-            }],
-        });
     }
 }
 
@@ -103,29 +121,12 @@ impl Widget for ProgressBar {
     }
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
-        let radius = self.frame.height / 2.0;
-        items.push(Item::Fill {
-            shape: Shape::rounded(self.frame, radius),
-            paint: cx.palette.hairline.into(),
-        });
-        if self.value.is_none() {
-            self.sweep(cx, self.frame, items);
-            return;
-        }
-        let width = self.frame.width * self.shown.value(cx);
-        if width > 0.0 {
-            items.push(Item::Fill {
-                shape: Shape::rounded(
-                    Rect::new(
-                        self.frame.x,
-                        self.frame.y,
-                        width.max(self.frame.height),
-                        self.frame.height,
-                    ),
-                    radius,
-                ),
-                paint: cx.palette.accent.into(),
-            });
+        match self.value {
+            None => paint_cells(cx, self.frame, self.sweep(cx), items),
+            Some(_) => {
+                let lit = self.shown.value(cx) * CELLS as f32;
+                paint_cells(cx, self.frame, |cell| lit - cell, items);
+            }
         }
     }
 
@@ -231,7 +232,7 @@ impl LevelIndicator {
     }
 
     fn lit(&self) -> f32 {
-        self.level.get().clamp(0.0, 1.0) * LEVEL_CELLS as f32
+        self.level.get().clamp(0.0, 1.0) * CELLS as f32
     }
 }
 
@@ -253,28 +254,8 @@ impl Widget for LevelIndicator {
     }
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
-        let cell = (self.frame.width - LEVEL_GAP * (LEVEL_CELLS - 1) as f32) / LEVEL_CELLS as f32;
         let lit = self.lit();
-        for index in 0..LEVEL_CELLS {
-            let rect = Rect::new(
-                self.frame.x + index as f32 * (cell + LEVEL_GAP),
-                self.frame.y,
-                cell,
-                self.frame.height,
-            );
-            let shape = Shape::rounded(rect, 1.0);
-            items.push(Item::Fill {
-                shape,
-                paint: cx.palette.hairline.into(),
-            });
-            let fill = (lit - index as f32).clamp(0.0, 1.0);
-            if fill > 0.0 {
-                items.push(Item::Fill {
-                    shape,
-                    paint: cx.palette.accent.with_alpha((fill * 255.0) as u8).into(),
-                });
-            }
-        }
+        paint_cells(cx, self.frame, |cell| lit - cell, items);
     }
 
     fn access(&self, _cx: &Context) -> Node {

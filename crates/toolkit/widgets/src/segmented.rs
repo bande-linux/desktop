@@ -1,14 +1,15 @@
 use accesskit::{Action, ActionRequest, Node, Role, Toggled};
-use unbound_graphics::{Color, Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle};
+use unbound_graphics::{
+    Color, ControlSize, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextStyle,
+};
 
 use super::{Animated, Context, Event, Key, Parts, Size, Spring, Widget, WidgetId, contains};
 
-pub const SEGMENTED_HEIGHT: f32 = 24.0;
-const PADDING: f32 = 10.0;
-const RADIUS: f32 = 7.0;
+pub const SEGMENTED_HEIGHT: f32 = ControlSize::Regular.height();
+const PADDING: f32 = 14.0;
 const INSET: f32 = 2.0;
-const PILL_RADIUS: f32 = 5.0;
 const FONT_SIZE: f32 = 13.0;
+const CHIP_SHADOW: f32 = 0.14;
 
 struct Segment {
     title: String,
@@ -57,6 +58,10 @@ impl SegmentedControl {
         self.selected
     }
 
+    pub fn set_selected(&mut self, cx: &Context, index: usize) {
+        self.glide_to(cx, index);
+    }
+
     fn segment(&self, index: usize) -> Rect {
         let x = self.segments[..index]
             .iter()
@@ -71,8 +76,14 @@ impl SegmentedControl {
     }
 
     fn select(&mut self, cx: &Context, index: usize) {
+        if self.glide_to(cx, index) {
+            (self.on_select)(index);
+        }
+    }
+
+    fn glide_to(&mut self, cx: &Context, index: usize) -> bool {
         if index >= self.segments.len() || self.selected == Some(index) {
-            return;
+            return false;
         }
         self.selected = Some(index);
         let target = self.segment(index);
@@ -84,7 +95,7 @@ impl SegmentedControl {
             }
             None => self.pill = Some((Animated::new(offset), Animated::new(target.width))),
         }
-        (self.on_select)(index);
+        true
     }
 
     fn pill(&self, cx: &Context) -> Option<Rect> {
@@ -105,14 +116,14 @@ impl Widget for SegmentedControl {
 
     fn measure(&mut self, cx: &mut Context, _available: Size) -> Size {
         for segment in &mut self.segments {
-            let style = TextStyle::new(FONT_SIZE, cx.palette.ink);
+            let style = TextStyle::new(FONT_SIZE, cx.palette.ink2);
             let plain = cx
                 .text
                 .paragraph(&segment.title, style, None, TextAlign::Start);
             segment.width = (plain.width() + 2.0 * PADDING).round();
             segment.selected = Some(cx.text.paragraph(
                 &segment.title,
-                TextStyle::new(FONT_SIZE, Color::hex(0xFFFFFF)),
+                TextStyle::new(FONT_SIZE, cx.palette.ink).weight(TextStyle::SEMIBOLD),
                 None,
                 TextAlign::Start,
             ));
@@ -143,10 +154,10 @@ impl Widget for SegmentedControl {
     }
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
-        let track = Shape::rounded(self.frame, RADIUS);
+        let track = Shape::rounded(self.frame, Radius::M);
         items.push(Item::Fill {
             shape: track,
-            paint: cx.palette.ink2.with_alpha(36).into(),
+            paint: cx.palette.well.into(),
         });
         if cx.is_focused(self.id) {
             super::focus_ring(cx, track, items);
@@ -168,10 +179,16 @@ impl Widget for SegmentedControl {
         let Some(pill) = self.pill(cx) else {
             return;
         };
-        let shape = Shape::rounded(pill, PILL_RADIUS);
+        let shape = Shape::rounded(pill, Radius::concentric(Radius::M, INSET));
+        items.push(Item::Shadow {
+            shape,
+            offset: Point::new(0.0, 1.0),
+            blur_radius: 1.5,
+            color: Color::BLACK.with_opacity(CHIP_SHADOW),
+        });
         let mut selected = vec![Item::Fill {
             shape,
-            paint: cx.palette.accent.into(),
+            paint: cx.palette.raised.into(),
         }];
         for (index, segment) in self.segments.iter().enumerate() {
             if let Some(paragraph) = &segment.selected {

@@ -2,19 +2,12 @@
 
 mod support;
 
-use support::{Shot, shot};
-use unbound_graphics::{Palette, Scheme, TextSystem};
+use support::{SCALES, SCHEMES, Shot, appearance_portal, shot};
+use unbound_graphics::{Point, TextSystem};
 use unbound_toolkit_platform::{HEADER_HEIGHT, MenuPlacement, SHEET_INSET, Window};
 use unbound_widgets::{Alert, Cell, Column, Context, Menu, MenuItem, Row, Sort, Table, Ui, Widget};
 
-fn in_content(x: i32, y: i32, popups: usize) -> Shot {
-    Shot {
-        scale: 2.0,
-        dark: false,
-        pointer: (x + SHEET_INSET as i32, y + HEADER_HEIGHT as i32),
-        popups,
-    }
-}
+const SORT_BY: i32 = 4 + 28 + 28 + 9 + 14;
 
 fn show_menu(window: &mut Window) -> Option<Ui> {
     let menu = Menu::new(vec![
@@ -29,23 +22,15 @@ fn show_menu(window: &mut Window) -> Option<Ui> {
             ]),
         ),
         MenuItem::new("Move to Trash", "trash").shortcut("Super+Backspace"),
+        MenuItem::new("Show Inspector", "inspector").shortcut("Alt+Super+I"),
     ]);
     window
-        .show_menu(
-            menu,
-            MenuPlacement::AtPoint(unbound_graphics::Point::new(30.0, 10.0)),
-        )
+        .show_menu(menu, MenuPlacement::AtPoint(Point::new(30.0, 10.0)))
         .expect("menu");
     None
 }
 
-#[test]
-fn a_menu_with_an_open_submenu_matches_its_golden() {
-    let sort_by = 10 + 5 + 22 + 22 + 11 + 11;
-    shot("menu-submenu", show_menu, in_content(60, sort_by, 2));
-}
-
-fn processes(_window: &mut Window) -> Option<Ui> {
+fn processes(window: &mut Window) -> Option<Ui> {
     let names = [
         ("Files", "1.2", "84.3 MB", "unbound"),
         ("Terminal", "12.8", "211.0 MB", "unbound"),
@@ -60,9 +45,9 @@ fn processes(_window: &mut Window) -> Option<Ui> {
         ("systemd", "0.1", "11.1 MB", "root"),
     ];
     let mut table = Table::new(vec![
-        Column::new("Process", 110.0),
-        Column::new("% CPU", 60.0).numeric(),
-        Column::new("Memory", 76.0).numeric(),
+        Column::new("Process", 120.0),
+        Column::new("% CPU", 64.0).numeric(),
+        Column::new("Memory", 88.0).numeric(),
         Column::new("User", 60.0),
     ]);
     table.set_rows(
@@ -92,7 +77,7 @@ fn processes(_window: &mut Window) -> Option<Ui> {
     let id = table.id();
     let mut ui = Ui::new(
         Box::new(table),
-        Context::new(TextSystem::new(), Palette::for_scheme(Scheme::Light)),
+        Context::new(TextSystem::new(), window.appearance().palette()),
     );
     ui.perform(&accesskit::ActionRequest {
         action: accesskit::Action::Focus,
@@ -103,11 +88,6 @@ fn processes(_window: &mut Window) -> Option<Ui> {
     Some(ui)
 }
 
-#[test]
-fn a_table_with_a_sorted_column_and_a_selection_matches_its_golden() {
-    shot("table", processes, in_content(100, 60, 0));
-}
-
 fn alert(window: &mut Window) -> Option<Ui> {
     let mut ui = processes(window)?;
     ui.present_sheet(
@@ -116,6 +96,7 @@ fn alert(window: &mut Window) -> Option<Ui> {
             "Its processes will stop and unsaved work will be lost.",
             |_| {},
         )
+        .other("Don’t Quit", "keep")
         .cancel("Cancel", "cancel")
         .primary("Quit", "quit"),
     );
@@ -123,6 +104,34 @@ fn alert(window: &mut Window) -> Option<Ui> {
 }
 
 #[test]
-fn an_alert_sheet_matches_its_golden() {
-    shot("alert", alert, in_content(10, 150, 0));
+fn menus_tables_and_alerts_match_their_goldens_in_both_schemes_at_1x_and_1_5x() {
+    let _portal = appearance_portal();
+    let content = |x: i32, y: i32| (x + SHEET_INSET as i32, y + HEADER_HEIGHT as i32);
+    for (dark, scheme) in SCHEMES {
+        for (scale, scale_name) in SCALES {
+            let suffix = format!("{scheme}-{scale_name}");
+            let shot_at = |title, pointer, popups| Shot {
+                title,
+                scale,
+                dark,
+                pointer,
+                popups,
+            };
+            shot(
+                &format!("menu-submenu-{suffix}"),
+                show_menu,
+                shot_at("Documents", content(60, SORT_BY), 2),
+            );
+            shot(
+                &format!("table-{suffix}"),
+                processes,
+                shot_at("Monitor", content(100, 60), 0),
+            );
+            shot(
+                &format!("alert-{suffix}"),
+                alert,
+                shot_at("Monitor", content(10, 150), 0),
+            );
+        }
+    }
 }

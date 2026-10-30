@@ -1,5 +1,5 @@
 use accesskit::{Action, ActionRequest, Node, Role};
-use unbound_graphics::{Color, Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle};
+use unbound_graphics::{Color, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextStyle};
 use unbound_spring::Spring;
 
 use super::{Animated, Context, Event, Key, Size, Widget, WidgetId, contains};
@@ -137,7 +137,7 @@ impl Widget for Disclosure {
             });
         }
         if cx.is_focused(self.id) {
-            super::focus_ring(cx, Shape::rounded(header, 4.0), items);
+            super::focus_ring(cx, Shape::rounded(header, Radius::XS), items);
         }
         if turn > 0.0 {
             let mut content = Vec::new();

@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
 use unbound_graphics::{
-    Color, Item, Palette, Point, Rect, Shape, TextAlign, TextStyle, TextSystem,
+    Color, Item, Palette, Point, Radius, Rect, Shape, TextAlign, TextStyle, TextSystem,
 };
 
 use super::{Size, WidgetId};
@@ -10,12 +10,12 @@ pub const TOOLTIP_DELAY: Duration = Duration::from_millis(900);
 const WARM: Duration = Duration::from_millis(600);
 const FADE: Duration = Duration::from_millis(120);
 const POINTER_HEIGHT: f32 = 20.0;
-const FONT_SIZE: f32 = 11.0;
+const FONT_SIZE: f32 = 12.0;
 const MAX_WIDTH: f32 = 280.0;
-const HORIZONTAL_PADDING: f32 = 7.0;
-const VERTICAL_PADDING: f32 = 4.0;
-const RADIUS: f32 = 5.0;
+const HORIZONTAL_PADDING: f32 = 10.0;
+const VERTICAL_PADDING: f32 = 5.0;
 const MARGIN: f32 = 4.0;
+const SHADOW: f32 = 0.18;
 
 struct Pending {
     owner: WidgetId,
@@ -113,7 +113,7 @@ impl Tooltips {
             (now.saturating_duration_since(shown).as_secs_f32() / FADE.as_secs_f32()).min(1.0);
         let paragraph = system.paragraph(
             text,
-            TextStyle::new(FONT_SIZE, palette.ink),
+            TextStyle::new(FONT_SIZE, palette.chassis).weight(TextStyle::MEDIUM),
             Some(MAX_WIDTH),
             TextAlign::Start,
         );
@@ -129,7 +129,7 @@ impl Tooltips {
         };
         let x = avoid.x.min(window.width - size.width - MARGIN).max(MARGIN);
         let frame = Rect::new(x.round(), y.round(), size.width, size.height);
-        let shape = Shape::rounded(frame, RADIUS);
+        let shape = Shape::rounded(frame, Radius::S);
         items.push(Item::Opacity {
             alpha,
             items: vec![
@@ -137,16 +137,11 @@ impl Tooltips {
                     shape,
                     offset: Point::new(0.0, 2.0),
                     blur_radius: 6.0,
-                    color: Color::hex(0).with_alpha(50),
+                    color: Color::BLACK.with_opacity(SHADOW),
                 },
                 Item::Fill {
                     shape,
-                    paint: palette.overlay.into(),
-                },
-                Item::Stroke {
-                    shape: Shape::rounded(frame.inset(0.5), RADIUS - 0.5),
-                    width: 1.0,
-                    paint: palette.hairline.into(),
+                    paint: palette.ink.into(),
                 },
                 Item::Text {
                     origin: Point::new(frame.x + HORIZONTAL_PADDING, frame.y + VERTICAL_PADDING),

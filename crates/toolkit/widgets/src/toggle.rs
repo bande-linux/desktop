@@ -1,10 +1,11 @@
 use accesskit::{Action, ActionRequest, Node, Role, Toggled};
 
 use super::{Animated, Context, Event, Key, Size, Spring, Widget, WidgetId, contains};
-use unbound_graphics::{Color, Item, Rect, Shape};
+use unbound_graphics::{Color, Item, Point, Rect, Shape};
 
-pub const SWITCH_SIZE: Size = Size::new(38.0, 22.0);
-const KNOB_INSET: f32 = 1.0;
+pub const SWITCH_SIZE: Size = Size::new(36.0, 20.0);
+const KNOB_INSET: f32 = 2.5;
+const KNOB_SHADOW: f32 = 0.25;
 
 pub struct Toggle {
     id: WidgetId,
@@ -63,17 +64,24 @@ impl Widget for Toggle {
         let progress = self.knob.value(cx);
         items.push(Item::Fill {
             shape: track,
-            paint: cx.palette.hairline.mix(cx.palette.accent, progress).into(),
+            paint: cx.palette.edge.mix(cx.palette.accent, progress).into(),
         });
         let diameter = self.frame.height - 2.0 * KNOB_INSET;
         let travel = self.frame.width - 2.0 * KNOB_INSET - diameter;
         let x = self.frame.x + KNOB_INSET + travel * progress;
+        let knob = Shape::rounded(
+            Rect::new(x, self.frame.y + KNOB_INSET, diameter, diameter),
+            diameter / 2.0,
+        );
+        items.push(Item::Shadow {
+            shape: knob,
+            offset: Point::new(0.0, 1.0),
+            blur_radius: 2.0,
+            color: Color::BLACK.with_opacity(KNOB_SHADOW),
+        });
         items.push(Item::Fill {
-            shape: Shape::rounded(
-                Rect::new(x, self.frame.y + KNOB_INSET, diameter, diameter),
-                diameter / 2.0,
-            ),
-            paint: Color::hex(0xFFFFFF).into(),
+            shape: knob,
+            paint: Color::WHITE.into(),
         });
         if cx.is_focused(self.id) {
             super::focus_ring(cx, track, items);

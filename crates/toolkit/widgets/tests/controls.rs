@@ -207,7 +207,7 @@ fn a_pop_up_button_opens_its_menu_with_the_current_choice_over_the_button() {
             .collect::<Vec<_>>(),
         [false, true, false]
     );
-    let row_top = at.y + 5.0 + BUTTON_HEIGHT;
+    let row_top = at.y + 4.0 + BUTTON_HEIGHT;
     assert!(
         (row_top - frame.y).abs() < 0.5,
         "the checked row covers the button"
@@ -235,10 +235,10 @@ fn a_stepper_steps_clamps_and_repeats_while_held() {
     let id = stepper.id();
     let mut harness = Harness::new(stepper);
     let frame = harness.frame(id);
-    let down = Point::new(centre(frame).x, frame.y + frame.height - 3.0);
+    let down = Point::new(frame.x + 6.0, centre(frame).y);
     harness.click(down);
     assert!(values.borrow().is_empty(), "the stepper is at its minimum");
-    let up = Point::new(centre(frame).x, frame.y + 3.0);
+    let up = Point::new(frame.x + frame.width - 6.0, centre(frame).y);
     harness.ui.handle(&Event::PointerDown(Pointer::at(up)));
     assert_eq!(*values.borrow(), [2.0]);
     harness.advance(Duration::from_millis(300));

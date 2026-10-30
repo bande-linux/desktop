@@ -1,12 +1,13 @@
 use accesskit::{Action, ActionRequest, Node, Role, Toggled};
-use unbound_graphics::{Color, Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle};
+use unbound_graphics::{Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle};
 
 use super::checkbox::{CHECKBOX_SIZE, paint_box};
 use super::{Animated, Context, Event, Key, Parts, Size, Spring, Widget, WidgetId, contains};
 
-const GAP: f32 = 6.0;
-const ROW_GAP: f32 = 6.0;
-const DOT: f32 = 6.0;
+const GAP: f32 = 8.0;
+const ROW_GAP: f32 = 8.0;
+const CENTRE: f32 = 5.0;
+const CENTRE_RADIUS: f32 = 0.5;
 const FONT_SIZE: f32 = 13.0;
 
 struct Choice {
@@ -144,18 +145,18 @@ impl Widget for RadioGroup {
                 items,
             );
             if shown > 0.0 {
-                let dot = DOT * shown;
+                let centre = CENTRE * shown;
                 items.push(Item::Fill {
                     shape: Shape::rounded(
                         Rect::new(
-                            circle.x + (CHECKBOX_SIZE - dot) / 2.0,
-                            circle.y + (CHECKBOX_SIZE - dot) / 2.0,
-                            dot,
-                            dot,
+                            circle.x + (CHECKBOX_SIZE - centre) / 2.0,
+                            circle.y + (CHECKBOX_SIZE - centre) / 2.0,
+                            centre,
+                            centre,
                         ),
-                        dot / 2.0,
+                        CENTRE_RADIUS,
                     ),
-                    paint: Color::hex(0xFFFFFF).into(),
+                    paint: cx.palette.on_accent.into(),
                 });
             }
             if focused && self.selected.unwrap_or(0) == index {

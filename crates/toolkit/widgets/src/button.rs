@@ -1,21 +1,39 @@
 use accesskit::{Action, ActionRequest, Node, Role};
 
+use super::control::{Symbol, focus_ring};
 use super::{Context, Event, Key, Size, Widget, WidgetId, contains};
-use unbound_graphics::{Color, Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle};
+use unbound_graphics::{
+    Color, ControlSize, Image, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextStyle,
+};
 
-pub const BUTTON_HEIGHT: f32 = 22.0;
-const RADIUS: f32 = 5.0;
-const PADDING: f32 = 12.0;
+pub const BUTTON_HEIGHT: f32 = ControlSize::Regular.height();
+const PADDING: f32 = 16.0;
+const FONT_SIZE: f32 = 13.0;
+const SYMBOL_SIZE: f32 = 16.0;
+const HOVER_INK: f32 = 0.08;
+const PRESSED_INK: f32 = 0.16;
+const PRESSED_SHADE: f32 = 0.15;
 
 pub struct Button {
     id: WidgetId,
     title: String,
     on_click: Box<dyn FnMut()>,
     pressed: bool,
+    hovered: bool,
     role: ButtonRole,
     tooltip: Option<String>,
     paragraph: Option<Paragraph>,
+    symbol: Option<Symbol>,
     frame: Rect,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ButtonRole {
+    Plain,
+    Primary,
+    Cancel,
+    Quiet,
+    Destructive,
 }
 
 impl Button {
@@ -25,16 +43,47 @@ impl Button {
             title: title.to_owned(),
             on_click: Box::new(on_click),
             pressed: false,
+            hovered: false,
             role: ButtonRole::Plain,
             tooltip: None,
             paragraph: None,
+            symbol: None,
             frame: Rect::default(),
+        }
+    }
+
+    pub fn symbol(symbol: Image, label: &str, on_click: impl FnMut() + 'static) -> Self {
+        Self {
+            symbol: Some(Symbol::new(symbol)),
+            tooltip: Some(label.to_owned()),
+            ..Self::new(label, on_click)
         }
     }
 
     pub fn primary(self) -> Self {
         Self {
             role: ButtonRole::Primary,
+            ..self
+        }
+    }
+
+    pub fn cancel(self) -> Self {
+        Self {
+            role: ButtonRole::Cancel,
+            ..self
+        }
+    }
+
+    pub fn quiet(self) -> Self {
+        Self {
+            role: ButtonRole::Quiet,
+            ..self
+        }
+    }
+
+    pub fn destructive(self) -> Self {
+        Self {
+            role: ButtonRole::Destructive,
             ..self
         }
     }
@@ -46,19 +95,44 @@ impl Button {
         }
     }
 
-    pub fn cancel(self) -> Self {
-        Self {
-            role: ButtonRole::Cancel,
-            ..self
+    fn text_style(&self, cx: &Context) -> TextStyle {
+        let palette = &cx.palette;
+        match self.role {
+            ButtonRole::Primary => {
+                TextStyle::new(FONT_SIZE, palette.on_accent).weight(TextStyle::SEMIBOLD)
+            }
+            ButtonRole::Destructive => {
+                TextStyle::new(FONT_SIZE, palette.on_danger).weight(TextStyle::MEDIUM)
+            }
+            ButtonRole::Quiet => {
+                TextStyle::new(FONT_SIZE, palette.accent_text).weight(TextStyle::SEMIBOLD)
+            }
+            ButtonRole::Plain | ButtonRole::Cancel => {
+                TextStyle::new(FONT_SIZE, palette.ink).weight(TextStyle::MEDIUM)
+            }
         }
     }
-}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ButtonRole {
-    Plain,
-    Primary,
-    Cancel,
+    fn fill(&self, cx: &Context) -> Option<Color> {
+        let palette = &cx.palette;
+        let shaded = |color: Color| match self.pressed {
+            true => color.mix(Color::BLACK, PRESSED_SHADE),
+            false => color,
+        };
+        let inked = |color: Color| match (self.pressed, self.hovered) {
+            (true, _) => color.mix(palette.ink, PRESSED_INK),
+            (false, true) => color.mix(palette.ink, HOVER_INK),
+            (false, false) => color,
+        };
+        match self.role {
+            ButtonRole::Primary => Some(shaded(palette.accent)),
+            ButtonRole::Destructive => Some(shaded(palette.danger)),
+            ButtonRole::Plain | ButtonRole::Cancel if self.symbol.is_none() => {
+                Some(inked(palette.well))
+            }
+            _ => (self.hovered || self.pressed).then(|| inked(palette.well)),
+        }
+    }
 }
 
 impl Widget for Button {
@@ -67,12 +141,14 @@ impl Widget for Button {
     }
 
     fn measure(&mut self, cx: &mut Context, _available: Size) -> Size {
-        let style = match self.role {
-            ButtonRole::Primary => {
-                TextStyle::new(13.0, Color::hex(0xFFFFFF)).weight(TextStyle::MEDIUM)
-            }
-            _ => TextStyle::new(13.0, cx.palette.ink),
-        };
+        if let Some(symbol) = &mut self.symbol {
+            symbol.tint(match self.hovered || self.pressed {
+                true => cx.palette.ink,
+                false => cx.palette.ink2,
+            });
+            return Size::new(BUTTON_HEIGHT, BUTTON_HEIGHT);
+        }
+        let style = self.text_style(cx);
         let paragraph = cx
             .text
             .paragraph(&self.title, style, None, TextAlign::Start);
@@ -90,41 +166,31 @@ impl Widget for Button {
     }
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
-        let shape = Shape::rounded(self.frame, RADIUS);
-        if self.role == ButtonRole::Primary {
-            items.push(Item::Fill {
-                shape,
-                paint: cx.palette.accent.into(),
-            });
-            if self.pressed {
-                items.push(Item::Fill {
-                    shape,
-                    paint: Color::hex(0x000000).with_alpha(48).into(),
-                });
-            }
-        } else {
-            let fill = if self.pressed {
-                cx.palette.hairline
-            } else {
-                cx.palette.overlay
-            };
+        let shape = Shape::rounded(self.frame, Radius::S);
+        if let Some(fill) = self.fill(cx) {
             items.push(Item::Fill {
                 shape,
                 paint: fill.into(),
             });
-            items.push(Item::Stroke {
-                shape: Shape::rounded(self.frame.inset(0.5), RADIUS - 0.5),
-                width: 1.0,
-                paint: cx.palette.hairline.into(),
-            });
         }
         if cx.is_focused(self.id) {
-            super::focus_ring(cx, shape, items);
+            focus_ring(cx, shape, items);
         }
-        if let Some(paragraph) = &self.paragraph {
+        if let Some(symbol) = &self.symbol {
+            symbol.paint(
+                Rect::new(
+                    self.frame.x + ((self.frame.width - SYMBOL_SIZE) / 2.0).round(),
+                    self.frame.y + ((self.frame.height - SYMBOL_SIZE) / 2.0).round(),
+                    SYMBOL_SIZE,
+                    SYMBOL_SIZE,
+                ),
+                items,
+            );
+        }
+        if let Some(paragraph) = self.paragraph.as_ref().filter(|_| self.symbol.is_none()) {
             items.push(Item::Text {
                 origin: Point::new(
-                    self.frame.x + ((self.frame.width - paragraph.width()) / 2.0),
+                    self.frame.x + ((self.frame.width - paragraph.width()) / 2.0).round(),
                     self.frame.y + ((self.frame.height - paragraph.height()) / 2.0).round(),
                 ),
                 paragraph: paragraph.clone(),
@@ -141,6 +207,11 @@ impl Widget for Button {
 
     fn handle(&mut self, _cx: &mut Context, event: &Event) -> bool {
         match event {
+            Event::PointerEnter(_) => self.hovered = true,
+            Event::PointerLeave => {
+                self.hovered = false;
+                self.pressed = false;
+            }
             Event::PointerDown(pointer) if pointer.is_primary() => self.pressed = true,
             Event::PointerMove(pointer) if self.pressed => {
                 self.pressed = contains(self.frame, pointer.position);
@@ -178,9 +249,9 @@ impl Widget for Button {
 
     fn key_equivalent(&self) -> Option<Key> {
         match self.role {
-            ButtonRole::Plain => None,
             ButtonRole::Primary => Some(Key::Enter),
             ButtonRole::Cancel => Some(Key::Escape),
+            ButtonRole::Plain | ButtonRole::Quiet | ButtonRole::Destructive => None,
         }
     }
 }

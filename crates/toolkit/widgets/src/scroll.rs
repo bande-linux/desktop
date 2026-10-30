@@ -14,7 +14,7 @@ const RUBBER_BAND: f32 = 0.55;
 const SCROLLBAR_LINGER: Duration = Duration::from_millis(900);
 const SCROLLBAR_FADE: Duration = Duration::from_millis(300);
 const SCROLLBAR_STRIP: f32 = 14.0;
-const SCROLLBAR_WIDTH: f32 = 7.0;
+const SCROLLBAR_WIDTH: f32 = 6.0;
 const SCROLLBAR_INSET: f32 = 3.0;
 const KNOB_MIN: f32 = 24.0;
 
@@ -345,10 +345,9 @@ impl ScrollState {
         }
         let (offset, _) = self.offset_at(cx.now());
         let knob = self.knob(frame, offset);
-        let color = cx.palette.ink;
         items.push(Item::Fill {
             shape: Shape::rounded(knob, SCROLLBAR_WIDTH / 2.0),
-            paint: color.with_alpha((alpha * 110.0) as u8).into(),
+            paint: cx.palette.ink3.with_opacity(alpha).into(),
         });
     }
 

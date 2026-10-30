@@ -1032,6 +1032,10 @@ impl Window {
                 ui.set_appearance(appearance);
                 (true, Some(WindowEvent::AppearanceChanged(appearance)))
             }
+            WindowEvent::CapsLock(on) => {
+                ui.context().caps_lock = on;
+                (true, Some(WindowEvent::CapsLock(on)))
+            }
             event => (false, Some(event)),
         };
         if changed || ui.is_animating() {
@@ -1055,11 +1059,11 @@ impl Window {
     }
 
     fn draw_menus(&mut self, now: Instant) -> Result<(), WindowError> {
-        let palette = self.appearance.borrow().current().palette();
+        let appearance = self.appearance.borrow().current();
         let scale = self.scale();
         let handle = self.queue.handle();
         if let Some(menus) = &mut self.menus {
-            menus.draw(&self.state, &handle, &mut self.cpu, &palette, scale, now)?;
+            menus.draw(&self.state, &handle, &mut self.cpu, appearance, scale, now)?;
         }
         self.accessibility.request_tree();
         self.flush()

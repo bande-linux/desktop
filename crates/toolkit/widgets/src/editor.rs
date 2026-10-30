@@ -10,7 +10,7 @@ use unbound_graphics::{Color, Item, Paint, Paragraph, Point, Rect, Shape, TextSt
 use super::{ClipboardRequest, Context, Event, Key, Menu, MenuItem, Modifiers, WidgetId};
 use crate::L10N;
 
-const CARET_WIDTH: f32 = 1.0;
+const CARET_WIDTH: f32 = 1.5;
 const AVERAGE_ADVANCE: f32 = 0.55;
 const LINE_HEIGHT_RATIO: f32 = 1.21;
 const KEPT_LAYOUTS: usize = 1024;
@@ -230,7 +230,7 @@ impl Editor {
             font_size,
             multi_line,
             width: None,
-            color: Color::hex(0),
+            color: Color::BLACK,
             line_height: (font_size * LINE_HEIGHT_RATIO).ceil(),
             drag: None,
             drag_point: None,
@@ -1386,8 +1386,8 @@ impl Editor {
     ) {
         let (start, end) = (self.selection.start(), self.selection.end());
         let selection_color = match (focused, self.multi_line) {
-            (true, _) => cx.palette.accent.with_alpha(80),
-            (false, true) => cx.palette.ink2.with_alpha(56),
+            (true, _) => cx.palette.accent_soft,
+            (false, true) => cx.palette.well,
             (false, false) => Color::TRANSPARENT,
         };
         for paragraph in self.visible(&visible) {
@@ -1497,7 +1497,7 @@ impl Editor {
                     CARET_WIDTH,
                     caret.height,
                 )),
-                paint: cx.palette.ink.into(),
+                paint: cx.palette.accent.into(),
             });
         }
     }

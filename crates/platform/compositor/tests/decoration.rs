@@ -10,6 +10,8 @@ const WINDOW: (i32, i32) = (120, 40);
 const BAR: i32 = 40;
 const CLOSE: (i32, i32) = (24, BAR / 2);
 const BTN_LEFT: u32 = 0x110;
+const KEY_LEFTALT: u32 = 56;
+const ZOOM: (i32, i32) = (CLOSE.0 + 42, BAR / 2);
 
 fn decorated(server: &mut Headless, requested: Option<DecorationMode>) -> TestClient {
     decorated_sized(server, requested, WINDOW)
@@ -278,4 +280,26 @@ fn a_window_taller_than_the_screen_opens_with_its_title_bar_on_screen() {
     );
 
     assert_eq!(geometry(&server).location, (0, 0).into());
+}
+
+#[test]
+fn holding_alt_redraws_the_zoom_button_as_a_plus() {
+    let mut server = server();
+    let _client = decorated(&mut server, Some(DecorationMode::ServerSide));
+    let top_left = origin(&server);
+    let centre = (top_left.0 + ZOOM.0, top_left.1 + ZOOM.1);
+    let well = [0xE2, 0xDF, 0xDB];
+    let output = server.main_output();
+
+    assert!(close_to(pixel(&mut server, centre.0, centre.1), well));
+    while server.take_redraw_on(&output) {}
+    server.key(KEY_LEFTALT, true, 10);
+    assert!(
+        server.take_redraw_on(&output),
+        "holding Alt asks for a new frame"
+    );
+    assert!(!close_to(pixel(&mut server, centre.0, centre.1), well));
+    server.key(KEY_LEFTALT, false, 11);
+    assert!(server.take_redraw_on(&output));
+    assert!(close_to(pixel(&mut server, centre.0, centre.1), well));
 }

@@ -113,6 +113,8 @@ fn the_signal_reads_on_every_surface_and_carries_legible_text() {
         }
         let ratio = wcag(palette.on_accent, palette.accent);
         assert!(ratio >= 4.5, "{name}: text on the accent is {ratio:.2}:1");
+        let ratio = wcag(palette.on_danger, palette.danger);
+        assert!(ratio >= 4.5, "{name}: text on danger is {ratio:.2}:1");
     }
 }
 

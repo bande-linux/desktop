@@ -1,13 +1,17 @@
 use accesskit::{Action, ActionRequest, Node, Role, Toggled};
-use unbound_graphics::{Color, Item, Paragraph, Path, Point, Rect, Shape, TextAlign, TextStyle};
+use unbound_graphics::{
+    Color, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextStyle,
+};
 
+use super::control::square_capped;
 use super::{Animated, Context, Event, Key, Size, Spring, Widget, WidgetId, contains};
 
-pub const CHECKBOX_SIZE: f32 = 14.0;
-const RADIUS: f32 = 3.5;
-const GAP: f32 = 6.0;
+pub const CHECKBOX_SIZE: f32 = 16.0;
+const GAP: f32 = 8.0;
 const FONT_SIZE: f32 = 13.0;
-const MARK: f32 = 1.75;
+const MARK: f32 = 2.0;
+const OUTLINE: f32 = 1.5;
+const PRESSED_SHADE: f32 = 0.15;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CheckState {
@@ -93,23 +97,23 @@ pub(crate) fn paint_box(
     let shape = Shape::rounded(rect, radius);
     items.push(Item::Fill {
         shape,
-        paint: cx.palette.overlay.into(),
+        paint: cx.palette.field.into(),
     });
     items.push(Item::Stroke {
-        shape: Shape::rounded(rect.inset(0.5), radius - 0.5),
-        width: 1.0,
-        paint: cx.palette.hairline.mix(cx.palette.ink2, 0.35).into(),
+        shape: Shape::rounded(rect.inset(OUTLINE / 2.0), radius - OUTLINE / 2.0),
+        width: OUTLINE,
+        paint: cx.palette.ink3.into(),
     });
     if shown > 0.0 {
         items.push(Item::Fill {
             shape,
-            paint: cx.palette.accent.with_alpha((shown * 255.0) as u8).into(),
+            paint: cx.palette.accent.with_opacity(shown).into(),
         });
     }
     if pressed {
         items.push(Item::Fill {
             shape,
-            paint: Color::hex(0).with_alpha(36).into(),
+            paint: Color::BLACK.with_opacity(PRESSED_SHADE).into(),
         });
     }
 }
@@ -146,24 +150,19 @@ impl Widget for Checkbox {
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
         let rect = self.box_rect();
         let shown = self.shown.value(cx);
-        paint_box(cx, rect, RADIUS, shown, self.pressed, items);
+        paint_box(cx, rect, Radius::XS, shown, self.pressed, items);
         if cx.is_focused(self.id) {
-            super::focus_ring(cx, Shape::rounded(rect, RADIUS), items);
+            super::focus_ring(cx, Shape::rounded(rect, Radius::XS), items);
         }
-        let mark = Color::hex(0xFFFFFF).with_alpha((shown * 255.0) as u8);
         let at = |x: f32, y: f32| Point::new(rect.x + x, rect.y + y);
-        let path = match self.state {
-            CheckState::Mixed => Path::new().move_to(at(3.5, 7.0)).line_to(at(10.5, 7.0)),
-            _ => Path::new()
-                .move_to(at(3.5, 7.25))
-                .line_to(at(6.0, 9.75))
-                .line_to(at(10.75, 4.25)),
+        let points = match self.state {
+            CheckState::Mixed => vec![at(4.5, 8.0), at(11.5, 8.0)],
+            _ => vec![at(4.5, 8.25), at(7.0, 10.75), at(11.75, 5.25)],
         };
         if self.state != CheckState::Off || shown > 0.0 {
-            items.push(Item::StrokePath {
-                path,
-                width: MARK,
-                paint: mark.into(),
+            items.push(Item::FillPath {
+                path: square_capped(&points, MARK),
+                paint: cx.palette.on_accent.with_opacity(shown).into(),
             });
         }
         if let Some(paragraph) = &self.paragraph {

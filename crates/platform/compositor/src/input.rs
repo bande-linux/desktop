@@ -604,6 +604,7 @@ impl Headless {
         } else {
             KeyState::Released
         };
+        let alternate = keyboard.modifier_state().alt;
         let action = keyboard.input(
             state,
             Keycode::new(evdev_code + EVDEV_OFFSET),
@@ -700,6 +701,9 @@ impl Headless {
         );
         if let Some(Some(shortcut)) = action {
             state.run(shortcut);
+        }
+        if keyboard.modifier_state().alt != alternate && state.has_server_side_frames() {
+            state.needs_redraw = true;
         }
         if state.switcher.is_active() && !keyboard.modifier_state().logo {
             state.commit_switcher();

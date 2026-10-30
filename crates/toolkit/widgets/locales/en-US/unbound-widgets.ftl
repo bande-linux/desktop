@@ -7,3 +7,4 @@ select-all = Select All
 emoji-and-symbols = Emoji & Symbols…
 clear-search = Clear
 show-choices = Show Choices
+caps-lock-on = Caps Lock is on

@@ -43,6 +43,7 @@ pub struct Status {
     pub volume: Option<f32>,
     pub output: Option<String>,
     pub brightness: Option<f32>,
+    pub keyboard_brightness: Option<f32>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -52,6 +53,7 @@ pub enum Change {
     DoNotDisturb(bool),
     Volume(f32),
     Brightness(f32),
+    KeyboardBrightness(f32),
     ChooseNetwork,
     ChooseOutput,
 }
@@ -134,6 +136,15 @@ pub fn panel(status: &Status, palette: Palette, text: TextSystem, changes: &Chan
             brightness,
             changes,
             Change::Brightness,
+        ));
+        heights.extend([LABEL_HEIGHT, SLIDER_HEIGHT]);
+    }
+    if let Some(brightness) = status.keyboard_brightness {
+        controls.extend(slider(
+            &L10N.tr("keyboard-brightness"),
+            brightness,
+            changes,
+            Change::KeyboardBrightness,
         ));
         heights.extend([LABEL_HEIGHT, SLIDER_HEIGHT]);
     }

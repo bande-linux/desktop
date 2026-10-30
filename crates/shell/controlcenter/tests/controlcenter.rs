@@ -66,6 +66,31 @@ fn only_the_controls_this_computer_has_are_shown() {
 }
 
 #[test]
+fn the_keyboard_backlight_slider_appears_only_with_a_backlight_and_asks_for_its_level() {
+    let (ui, _, _) = open(&Status::default());
+    assert!(control(&ui, "Keyboard Brightness").is_none());
+
+    let (mut ui, _, changes) = open(&Status {
+        keyboard_brightness: Some(0.5),
+        ..Status::default()
+    });
+    let (slider, node) = ui
+        .accessibility()
+        .nodes
+        .into_iter()
+        .find(|(_, node)| node.role() == Role::Slider)
+        .expect("a keyboard brightness slider");
+    assert_eq!(node.label(), Some("Keyboard Brightness"));
+    assert!(ui.perform(&ActionRequest {
+        action: Action::Increment,
+        target_tree: TreeId::ROOT,
+        target_node: slider,
+        data: None,
+    }));
+    assert_eq!(*changes.borrow(), [Change::KeyboardBrightness(9.0 / 16.0)]);
+}
+
+#[test]
 fn every_switch_is_named_on_screen_beside_it() {
     let (ui, _, _) = open(&Status {
         wifi: Some(false),

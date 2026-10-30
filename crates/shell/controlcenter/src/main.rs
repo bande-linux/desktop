@@ -160,6 +160,7 @@ impl ControlCenter {
                 })
                 .map(|output| output.description.clone()),
             brightness: self.brightness(),
+            keyboard_brightness: self.keyboard_light.as_ref().and_then(KeyboardLight::level),
         }
     }
 
@@ -284,6 +285,7 @@ impl ControlCenter {
                     );
                 }
             }
+            Change::KeyboardBrightness(level) => self.set_keyboard_light(level),
             Change::ChooseNetwork => self.choose_network(window),
             Change::ChooseOutput => self.choose_output(window),
         }

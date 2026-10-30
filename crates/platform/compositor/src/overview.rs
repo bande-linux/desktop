@@ -137,7 +137,7 @@ impl Overview {
     }
 }
 
-fn arrange(windows: &[Frame], area: Frame) -> Vec<Frame> {
+pub(crate) fn arrange(windows: &[Frame], area: Frame) -> Vec<Frame> {
     if windows.is_empty() || area.size.w <= 0.0 || area.size.h <= 0.0 {
         return vec![area; windows.len()];
     }

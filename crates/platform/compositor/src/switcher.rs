@@ -933,7 +933,7 @@ impl State {
         true
     }
 
-    fn thumbnail_elements(
+    pub(crate) fn thumbnail_elements(
         &self,
         renderer: &mut VulkanRenderer,
         surface: &WlSurface,

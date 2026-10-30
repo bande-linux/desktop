@@ -61,6 +61,10 @@ enum Placing {
 }
 
 impl Tile {
+    pub(crate) fn opposite(self) -> Self {
+        Self::on_side(!self.on_left(), self.row())
+    }
+
     fn on_left(self) -> bool {
         matches!(self, Self::Left | Self::TopLeft | Self::BottomLeft)
     }
@@ -255,6 +259,7 @@ impl State {
             }
         };
         self.tile_window(index, tile);
+        self.offer_other_half(index);
     }
 
     pub(crate) fn place_with_key(&mut self, surface: &WlSurface, direction: Direction) {
@@ -268,7 +273,10 @@ impl State {
         let tile = window.tile.map(|(tile, _)| tile);
         let zoomed = window.has_state(xdg_toplevel::State::Maximized);
         match placing(tile, zoomed, direction) {
-            Some(Placing::Tile(tile)) => self.tile_window(index, tile),
+            Some(Placing::Tile(tile)) => {
+                self.tile_window(index, tile);
+                self.offer_other_half(index);
+            }
             Some(Placing::Zoom) => self.maximize(surface),
             Some(Placing::Previous) if zoomed => self.unmaximize(surface),
             Some(Placing::Previous) | None => {}
@@ -413,7 +421,10 @@ impl State {
             return;
         };
         match shown {
-            Some(Snap::Tile(tile)) => self.tile_window(index, tile),
+            Some(Snap::Tile(tile)) => {
+                self.tile_window(index, tile);
+                self.offer_other_half(index);
+            }
             Some(Snap::Zoom) => self.maximize(surface),
             None => {}
         }

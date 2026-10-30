@@ -187,6 +187,7 @@ pub struct State {
     pub(crate) desktop: crate::gesture::ShowDesktop,
     pub(crate) overview: crate::overview::Overview,
     pub(crate) switcher: crate::switcher::Switcher,
+    pub(crate) assist: crate::assist::Assist,
     pub(crate) recall: crate::recall::Recall,
     pub(crate) gesture_route: Option<crate::gesture::Route>,
     pub(crate) active_app: String,
@@ -349,6 +350,7 @@ impl Headless {
             desktop: crate::gesture::ShowDesktop::default(),
             overview: crate::overview::Overview::default(),
             switcher: crate::switcher::Switcher::default(),
+            assist: crate::assist::Assist::default(),
             recall: crate::recall::Recall::default(),
             gesture_route: None,
             active_app: String::new(),
@@ -658,6 +660,7 @@ impl Headless {
         };
         elements.extend(self.state.source_hud_element(renderer, screen, scale));
         elements.extend(self.state.switcher_elements(renderer, screen, scale));
+        elements.extend(self.state.assist_elements(renderer, screen, scale));
         let key = self.state.key_window();
         for placed in self.state.scene(true, screen) {
             match placed {

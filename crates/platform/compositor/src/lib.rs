@@ -2,6 +2,7 @@ mod access;
 mod app;
 mod appearance;
 mod arrange;
+mod assist;
 mod capture;
 mod cascade;
 mod clock;

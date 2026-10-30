@@ -31,6 +31,7 @@ enum Shortcut {
     NextApp { backwards: bool },
     NextWindow { backwards: bool },
     SwitcherKey(u32, bool),
+    AssistKey(u32, bool),
     ShowLauncher,
     MinimizeWindow,
     LockScreen,
@@ -230,6 +231,11 @@ impl State {
             self.overview_key(keysym, text);
             return;
         }
+        if let Shortcut::AssistKey(keysym, shift) = shortcut {
+            self.assist_key(keysym, shift);
+            return;
+        }
+        self.dismiss_assist();
         match shortcut {
             Shortcut::NextApp { backwards } => return self.switch_apps(backwards),
             Shortcut::NextWindow { backwards } => return self.cycle_windows(backwards),
@@ -345,6 +351,7 @@ impl State {
             | Shortcut::NextApp { .. }
             | Shortcut::NextWindow { .. }
             | Shortcut::SwitcherKey(..)
+            | Shortcut::AssistKey(..)
             | Shortcut::InputSource { .. } => {}
         }
     }
@@ -481,6 +488,9 @@ impl Headless {
         if state.switcher.is_shown() {
             state.switcher_pointer(location);
         }
+        if state.assist.is_open() {
+            state.assist_pointer(location);
+        }
         let under = state.surface_under(location);
         let Some(pointer) = state.seat.get_pointer() else {
             return;
@@ -510,7 +520,7 @@ impl Headless {
             state.swallowed_button = None;
             return;
         }
-        if pressed && state.switcher_click() {
+        if pressed && (state.switcher_click() || state.assist_click()) {
             state.swallowed_button = Some(button);
             return;
         }
@@ -617,6 +627,13 @@ impl Headless {
                     };
                     return FilterResult::Intercept(Some(Shortcut::SwitcherKey(
                         pressed,
+                        modifiers.shift,
+                    )));
+                }
+                if state.assist.is_open() && !modifiers.logo && !sym.is_modifier_key() {
+                    state.held_shortcut_keys.push(evdev_code);
+                    return FilterResult::Intercept(Some(Shortcut::AssistKey(
+                        sym.raw(),
                         modifiers.shift,
                     )));
                 }

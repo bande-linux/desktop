@@ -141,6 +141,10 @@ impl Window {
         self.hidden
     }
 
+    pub fn tile(&self) -> Option<Rect> {
+        self.tile.map(|(_, rect)| rect)
+    }
+
     pub fn app_id(&self) -> String {
         crate::shell::toplevel_names(self.surface()).1
     }

@@ -7,16 +7,18 @@ pub enum Area {
     Workspaces,
     Keyboard,
     Screenshots,
+    Accessibility,
     System,
 }
 
 impl Area {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::Windows,
         Self::Apps,
         Self::Workspaces,
         Self::Keyboard,
         Self::Screenshots,
+        Self::Accessibility,
         Self::System,
     ];
 
@@ -27,6 +29,7 @@ impl Area {
             Self::Workspaces => L10N.tr("area-workspaces"),
             Self::Keyboard => L10N.tr("area-keyboard"),
             Self::Screenshots => L10N.tr("area-screenshots"),
+            Self::Accessibility => L10N.tr("area-accessibility"),
             Self::System => L10N.tr("area-system"),
         }
     }
@@ -61,6 +64,10 @@ pub enum Action {
     FocusMenuBar,
     FocusDock,
     LockScreen,
+    ToggleZoom,
+    ZoomIn,
+    ZoomOut,
+    ToggleScreenReader,
 }
 
 impl Action {
@@ -85,6 +92,9 @@ impl Action {
             | Self::AppWindows => Area::Workspaces,
             Self::NextInputSource | Self::PreviousInputSource => Area::Keyboard,
             Self::CaptureScreen | Self::CaptureArea => Area::Screenshots,
+            Self::ToggleZoom | Self::ZoomIn | Self::ZoomOut | Self::ToggleScreenReader => {
+                Area::Accessibility
+            }
             Self::ShowLauncher
             | Self::ShowClipboardHistory
             | Self::ShowEmojiPicker
@@ -123,6 +133,10 @@ impl Action {
             Self::FocusMenuBar => L10N.tr("focus-menu-bar"),
             Self::FocusDock => L10N.tr("focus-dock"),
             Self::LockScreen => L10N.tr("lock-screen"),
+            Self::ToggleZoom => L10N.tr("toggle-zoom"),
+            Self::ZoomIn => L10N.tr("zoom-in"),
+            Self::ZoomOut => L10N.tr("zoom-out"),
+            Self::ToggleScreenReader => L10N.tr("toggle-screen-reader"),
         }
     }
 }
@@ -137,7 +151,7 @@ const fn shortcut(action: Action, keys: &'static str) -> Shortcut {
     Shortcut { action, keys }
 }
 
-pub const SHORTCUTS: [Shortcut; 27] = [
+pub const SHORTCUTS: [Shortcut; 31] = [
     shortcut(Action::CloseWindow, "Super+W"),
     shortcut(Action::MinimizeWindow, "Super+M"),
     shortcut(Action::ToggleFullScreen, "Ctrl+Super+F"),
@@ -165,6 +179,10 @@ pub const SHORTCUTS: [Shortcut; 27] = [
     shortcut(Action::FocusMenuBar, "Super+F2"),
     shortcut(Action::FocusDock, "Super+F3"),
     shortcut(Action::LockScreen, "Ctrl+Super+Q"),
+    shortcut(Action::ToggleZoom, "Alt+Super+0"),
+    shortcut(Action::ZoomIn, "Alt+Super+="),
+    shortcut(Action::ZoomOut, "Alt+Super+-"),
+    shortcut(Action::ToggleScreenReader, "Super+F5"),
 ];
 
 pub fn shortcuts_in(area: Area) -> impl Iterator<Item = &'static Shortcut> {

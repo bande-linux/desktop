@@ -52,7 +52,14 @@ pub fn export_session_environment(
     socket_name: &str,
     cursor: &CursorTheme,
 ) -> zbus::Result<()> {
-    let environment = session_environment(socket_name, cursor);
+    export(session, &session_environment(socket_name, cursor))
+}
+
+pub fn export_cursor_environment(session: &Connection, cursor: &CursorTheme) -> zbus::Result<()> {
+    export(session, &cursor_environment(cursor))
+}
+
+fn export(session: &Connection, environment: &[(&str, String)]) -> zbus::Result<()> {
     let assignments: Vec<String> = environment
         .iter()
         .map(|(name, value)| format!("{name}={value}"))

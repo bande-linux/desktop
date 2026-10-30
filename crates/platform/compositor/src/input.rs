@@ -16,6 +16,7 @@ use unbound_protocols::server::unbound_shell_v1::{
 
 use crate::frame::Target;
 use crate::gesture::Gesture;
+use crate::keyboard_monitor::KeyEvent;
 use crate::motion::DOCK_NAMESPACE;
 use crate::shell::toplevel_names;
 use crate::state::{Headless, MENU_BAR_NAMESPACE, State};
@@ -58,6 +59,9 @@ enum Shortcut {
     AppWindows,
     OverviewKey(u32, Option<char>),
     InputSource { backwards: bool },
+    ToggleZoom,
+    Zoom { closer: bool },
+    ToggleScreenReader,
 }
 
 fn volume_key(keysym: u32) -> Option<VolumeKey> {
@@ -103,6 +107,13 @@ fn shortcut(
         _ => {}
     }
     match unshifted {
+        Some(keysyms::KEY_0) if alt && !ctrl => return Some(Shortcut::ToggleZoom),
+        Some(keysyms::KEY_equal | keysyms::KEY_plus) if alt && !ctrl => {
+            return Some(Shortcut::Zoom { closer: true });
+        }
+        Some(keysyms::KEY_minus) if alt && !ctrl => {
+            return Some(Shortcut::Zoom { closer: false });
+        }
         Some(digit @ keysyms::KEY_1..=keysyms::KEY_9) if alt && !ctrl => {
             return Some(Shortcut::WorkspaceAt((digit - keysyms::KEY_1) as usize));
         }
@@ -120,6 +131,7 @@ fn shortcut(
         keysyms::KEY_Escape if alt => Some(Shortcut::ForceQuit),
         keysyms::KEY_F2 => Some(Shortcut::FocusShell(MENU_BAR_NAMESPACE)),
         keysyms::KEY_F3 => Some(Shortcut::FocusShell(DOCK_NAMESPACE)),
+        keysyms::KEY_F5 => Some(Shortcut::ToggleScreenReader),
         keysyms::KEY_f | keysyms::KEY_F if ctrl => Some(Shortcut::ToggleFullscreen),
         keysyms::KEY_Left if ctrl && shift => Some(Shortcut::CarryWindow(false)),
         keysyms::KEY_Right if ctrl && shift => Some(Shortcut::CarryWindow(true)),
@@ -211,6 +223,12 @@ impl State {
         if let Shortcut::Media(key) = shortcut {
             self.media_key(key);
             return;
+        }
+        match shortcut {
+            Shortcut::ToggleZoom => return self.toggle_magnifier(),
+            Shortcut::Zoom { closer } => return self.step_magnifier(closer),
+            Shortcut::ToggleScreenReader => return self.toggle_screen_reader(),
+            _ => {}
         }
         if shortcut == Shortcut::ShowLauncher {
             self.show_launcher();
@@ -367,6 +385,9 @@ impl State {
             | Shortcut::Overview
             | Shortcut::AppWindows
             | Shortcut::OverviewKey(..)
+            | Shortcut::ToggleZoom
+            | Shortcut::Zoom { .. }
+            | Shortcut::ToggleScreenReader
             | Shortcut::NextApp { .. }
             | Shortcut::NextWindow { .. }
             | Shortcut::SwitcherKey(..)
@@ -495,6 +516,7 @@ impl Headless {
         let location = state.nearest_on_screens(location);
         let entered = state.screen_at(location) != state.screen_at(state.pointer_location);
         state.pointer_location = location;
+        state.zoom.follow_pointer();
         state.cursor_shown = true;
         state.needs_redraw = true;
         if entered {
@@ -592,10 +614,11 @@ impl Headless {
         );
         pointer.frame(state);
     }
+}
 
-    pub fn key(&mut self, evdev_code: u32, pressed: bool, time: u32) {
-        self.state.note_activity();
-        let state = &mut self.state;
+impl State {
+    pub(crate) fn deliver_key(&mut self, evdev_code: u32, pressed: bool, time: u32) {
+        let state = self;
         let Some(keyboard) = state.seat.get_keyboard() else {
             return;
         };
@@ -612,6 +635,17 @@ impl Headless {
             SERIAL_COUNTER.next_serial(),
             time,
             |state, modifiers, keysym| {
+                let serialized = modifiers.serialized;
+                let monitored = KeyEvent {
+                    released: !pressed,
+                    state: serialized.depressed | serialized.latched | serialized.locked,
+                    keysym: keysym.modified_sym().raw(),
+                    unichar: keysym.modified_sym().key_char().map_or(0, u32::from),
+                    keycode: u16::try_from(evdev_code + EVDEV_OFFSET).unwrap_or_default(),
+                };
+                if state.monitor_key(monitored) {
+                    return FilterResult::Intercept(None);
+                }
                 if !(modifiers.logo && modifiers.alt) {
                     state.input_sources.end_cycle();
                 }
@@ -684,7 +718,14 @@ impl Headless {
                 )
                 .filter(|shortcut| {
                     modifiers.logo
-                        && (!state.is_locked() || matches!(shortcut, Shortcut::InputSource { .. }))
+                        && (!state.is_locked()
+                            || matches!(
+                                shortcut,
+                                Shortcut::InputSource { .. }
+                                    | Shortcut::ToggleZoom
+                                    | Shortcut::Zoom { .. }
+                                    | Shortcut::ToggleScreenReader
+                            ))
                 }) {
                     Some(shortcut) => {
                         state.held_shortcut_keys.push(evdev_code);
@@ -733,6 +774,7 @@ mod tests {
             "Down" => keysyms::KEY_Down,
             "F2" => keysyms::KEY_F2,
             "F3" => keysyms::KEY_F3,
+            "F5" => keysyms::KEY_F5,
             single => single
                 .chars()
                 .next()
@@ -769,6 +811,10 @@ mod tests {
             Action::FocusMenuBar => Shortcut::FocusShell(MENU_BAR_NAMESPACE),
             Action::FocusDock => Shortcut::FocusShell(DOCK_NAMESPACE),
             Action::LockScreen => Shortcut::LockScreen,
+            Action::ToggleZoom => Shortcut::ToggleZoom,
+            Action::ZoomIn => Shortcut::Zoom { closer: true },
+            Action::ZoomOut => Shortcut::Zoom { closer: false },
+            Action::ToggleScreenReader => Shortcut::ToggleScreenReader,
         }
     }
 

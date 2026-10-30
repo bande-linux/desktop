@@ -75,7 +75,8 @@ impl Renderer {
         let Some(settings) = compositor.output_settings(name) else {
             return Err(RenderError::NothingRendered);
         };
-        let (size, scale, transform) = (settings.mode.size, settings.scale, settings.transform);
+        let scale = compositor.render_scale(name).unwrap_or(settings.scale);
+        let (size, transform) = (settings.mode.size, settings.transform);
         self.outputs
             .retain(|known, _| compositor.outputs().iter().any(|output| output == known));
         let output = match self.outputs.remove(name) {

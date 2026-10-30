@@ -143,3 +143,16 @@ fn a_shell_surface_with_a_corner_radius_blurs_only_inside_its_rounded_shape() {
     assert!(blurred(square_middle) && blurred(round_middle));
     assert!(round_corner == 0 || round_corner == 0xff, "{round_corner}");
 }
+
+#[test]
+fn reduce_transparency_puts_an_opaque_chassis_behind_a_surface_instead_of_blur() {
+    let (mut server, mut renderer, _below, _glass) = scene(true);
+    server.apply_accessibility(unbound_config::Accessibility {
+        reduce_transparency: true,
+        ..unbound_config::Accessibility::default()
+    });
+    renderer.render(&mut server).expect("frame");
+    let chassis = unbound_graphics::Palette::for_scheme(unbound_graphics::Scheme::Light).chassis;
+    let solid = row(&renderer.snapshot(&server).expect("read back"));
+    assert!(solid.iter().all(|value| *value == chassis.r), "{solid:?}");
+}

@@ -1,2 +1,10 @@
 app-switcher = App Switcher
+accessibility = Accessibility
+sticky-keys-turn-on-title = Turn on Sticky Keys?
+sticky-keys-turn-on-body = You pressed Shift five times. Sticky Keys let you press modifier keys one at a time, so Shift then A types a capital A.
+sticky-keys-turn-on = Turn On
+sticky-keys-turn-off-title = Turn off Sticky Keys?
+sticky-keys-turn-off-body = You pressed Shift five times while Sticky Keys are on.
+sticky-keys-turn-off = Turn Off
+sticky-keys-keep = Cancel
 window-switcher = Windows

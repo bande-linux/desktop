@@ -281,6 +281,7 @@ impl Headless {
         let mut upkeep = SessionUpkeep::default();
         self.keep_lock_screen(&mut upkeep);
         self.keep_force_quit(&mut upkeep);
+        self.keep_screen_reader();
         self.follow_displays();
         for index in 0..self.session_clients.len() {
             let client = &mut self.session_clients[index];

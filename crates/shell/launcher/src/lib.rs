@@ -1,4 +1,6 @@
 mod model;
+mod preview;
+mod rows;
 mod view;
 
 use std::sync::LazyLock;
@@ -20,6 +22,8 @@ mod tests {
             include_str!("lib.rs"),
             include_str!("main.rs"),
             include_str!("view.rs"),
+            include_str!("rows.rs"),
+            include_str!("preview.rs"),
         ];
         assert_eq!(
             unbound_l10n::missing_ids(super::ENGLISH, &sources),

@@ -15,7 +15,7 @@ use unbound_launcher::{
     Action, AppInfo, Catalog, Hit, ICON_SIZE, Kind, Launcher, Loaded, PaneInfo, SettingInfo, Target,
 };
 use unbound_preview::{Preview, preview};
-use unbound_search::{FileIndex, Usage, usage_path};
+use unbound_search::{FileIndex, Usage, recently_used_path, usage_path};
 use unbound_thumbnails::{Cache, ThumbnailSize, Thumbnailers, thumbnail};
 use unbound_toolkit::{
     App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement, Rect, Role, Scene,
@@ -150,6 +150,7 @@ struct LauncherShell {
     index: Option<FileIndex>,
     previewer: Option<Previewer>,
     apps: Rc<RefCell<Apps>>,
+    recently_used: PathBuf,
 }
 
 fn unix_now() -> u64 {
@@ -167,7 +168,7 @@ impl LauncherShell {
     }
 
     fn sync(&mut self, window: &mut Window) {
-        if let Some((menu, point)) = self.launcher.ui.take_menu_request()
+        if let Some((menu, point)) = self.launcher.take_menu_request()
             && let Err(error) = window.show_menu(menu, MenuPlacement::AtPoint(point))
         {
             tracing::warn!("cannot show the menu: {error}");
@@ -266,6 +267,8 @@ impl App for LauncherShell {
             WindowEvent::ShowLauncher if window.is_visible() => self.close(window),
             WindowEvent::ShowLauncher => {
                 self.launcher.set_now(unix_now());
+                let xbel = std::fs::read_to_string(&self.recently_used).ok();
+                self.launcher.set_recently_used(xbel.as_deref());
                 self.launcher.appear(Instant::now());
                 if let Err(error) = window.show() {
                     tracing::warn!("cannot show: {error}");
@@ -283,7 +286,7 @@ impl App for LauncherShell {
                 self.launcher.set_appearance(appearance);
             }
             WindowEvent::MenuAction(action) => {
-                self.launcher.ui.menu_action(&action);
+                self.launcher.menu_action(&action);
                 self.sync(window);
             }
             _ => {}
@@ -379,6 +382,12 @@ fn run() -> Result<(), WindowError> {
         .collect();
     let home = std::env::var_os("HOME").map_or_else(|| PathBuf::from("/"), PathBuf::from);
     let state_home = std::env::var_os("XDG_STATE_HOME").map(PathBuf::from);
+    let recently_used = recently_used_path(
+        std::env::var_os("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .as_deref(),
+        &home,
+    );
     let usage = usage_path(state_home.as_deref(), Some(&home))
         .map(Usage::load)
         .unwrap_or_default();
@@ -424,6 +433,7 @@ fn run() -> Result<(), WindowError> {
         index,
         previewer,
         apps: apps_by_type,
+        recently_used,
     };
     unbound_toolkit::run(&mut window, &mut shell)
 }

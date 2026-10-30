@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use unbound_search::{FileHit, FileResults, Query, Usage, calculate, fold};
+use unbound_search::{FileHit, FileResults, Query, Usage, calculate, fold, recent_files};
 
+pub const GRID_COLUMNS: usize = 8;
 pub const MAX_APPS: usize = 4;
 pub const MAX_SETTINGS: usize = 3;
 pub const MAX_FOLDERS: usize = 3;
@@ -173,6 +174,7 @@ pub struct Hit {
     pub title: String,
     pub detail: Option<String>,
     pub target: Target,
+    pub matched: Vec<usize>,
     score: u32,
 }
 
@@ -183,6 +185,9 @@ pub enum Heading {
     Settings,
     Folders,
     Documents,
+    RecentApps,
+    RecentDocuments,
+    AllApps,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -202,9 +207,11 @@ pub struct Model {
     pub query: String,
     pub generation: u64,
     files: Vec<FileHit>,
+    recent_documents: Vec<PathBuf>,
     pub files_complete: bool,
     pub hits: Vec<Hit>,
     pub headings: Vec<(usize, Heading)>,
+    pub columns: usize,
     pub selected: usize,
     pub copied: bool,
     pub actions: Vec<Action>,
@@ -227,7 +234,7 @@ impl Model {
         usage: Usage,
         now: u64,
     ) -> Self {
-        Self {
+        let mut model = Self {
             apps: apps.into_iter().map(IndexedApp::new).collect(),
             panes: panes.into_iter().map(IndexedPane::new).collect(),
             home,
@@ -236,13 +243,27 @@ impl Model {
             query: String::new(),
             generation: 0,
             files: Vec::new(),
+            recent_documents: Vec::new(),
             files_complete: false,
             hits: Vec::new(),
             headings: Vec::new(),
+            columns: 0,
             selected: 0,
             copied: false,
             actions: Vec::new(),
             revision: 0,
+        };
+        model.rebuild(None);
+        model
+    }
+
+    pub fn set_recently_used(&mut self, xbel: Option<&str>) {
+        let documents = recent_files(xbel, &self.usage, GRID_COLUMNS);
+        if documents != self.recent_documents {
+            self.recent_documents = documents;
+            if Query::new(&self.query).is_none() {
+                self.rebuild(None);
+            }
         }
     }
 
@@ -298,6 +319,7 @@ impl Model {
             query.score(&fold(&name))?
         };
         Some(Hit {
+            matched: query.matched(&fold(&name)),
             kind: if file.folder {
                 Kind::Folder
             } else {
@@ -320,13 +342,16 @@ impl Model {
         self.headings.clear();
         let Some(query) = Query::new(&self.query) else {
             self.files.clear();
+            self.browse();
             return;
         };
+        self.columns = 0;
         let calculation = calculate(&self.query).map(|value| Hit {
             kind: Kind::Calculation,
             title: value.clone(),
             detail: Some(self.query.trim().to_owned()),
             target: Target::Value(value),
+            matched: Vec::new(),
             score: CALCULATION_SCORE,
         });
         let mut apps: Vec<Hit> = self
@@ -338,6 +363,7 @@ impl Model {
                     .usage_key()
                     .map_or(0, |key| self.usage.boost(&key, self.now));
                 app.score(&query).map(|score| Hit {
+                    matched: query.matched(&app.name),
                     kind: Kind::Application,
                     title: app.info.name.clone(),
                     detail: app
@@ -367,6 +393,7 @@ impl Model {
                     .usage_key()
                     .map_or(0, |key| self.usage.boost(&key, self.now));
                 Some(Hit {
+                    matched: query.matched(&pane.name),
                     kind: Kind::Setting,
                     title: pane.info.name.clone(),
                     detail: setting,
@@ -413,6 +440,128 @@ impl Model {
         self.selected = keep
             .and_then(|target| self.hits.iter().position(|hit| hit.target == target))
             .unwrap_or(0);
+    }
+
+    fn app_hit(&self, app: &IndexedApp) -> Hit {
+        Hit {
+            kind: Kind::Application,
+            title: app.info.name.clone(),
+            detail: app
+                .info
+                .generic_name
+                .clone()
+                .or_else(|| app.info.comment.clone()),
+            target: Target::App(app.info.app_id.clone()),
+            matched: Vec::new(),
+            score: 0,
+        }
+    }
+
+    fn browse(&mut self) {
+        self.columns = GRID_COLUMNS;
+        let mut used: Vec<(PathBuf, u64)> = self.usage.last_used("app:").collect();
+        used.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+        let recent_apps: Vec<Hit> = used
+            .iter()
+            .filter_map(|(app_id, _)| {
+                self.apps
+                    .iter()
+                    .find(|app| Path::new(&app.info.app_id) == app_id)
+            })
+            .take(GRID_COLUMNS)
+            .map(|app| self.app_hit(app))
+            .collect();
+        let recent_documents: Vec<Hit> = self
+            .recent_documents
+            .iter()
+            .filter_map(|path| {
+                Some(Hit {
+                    kind: Kind::Document,
+                    title: path.file_name()?.to_string_lossy().into_owned(),
+                    detail: path.parent().map(|parent| display_path(parent, &self.home)),
+                    target: Target::Path(path.clone()),
+                    matched: Vec::new(),
+                    score: 0,
+                })
+            })
+            .collect();
+        let mut all: Vec<&IndexedApp> = self.apps.iter().collect();
+        all.sort_by(|a, b| {
+            a.name
+                .cmp(&b.name)
+                .then_with(|| a.info.name.cmp(&b.info.name))
+        });
+        let all_apps: Vec<Hit> = all.into_iter().map(|app| self.app_hit(app)).collect();
+        for (heading, group) in [
+            (Heading::RecentApps, recent_apps),
+            (Heading::RecentDocuments, recent_documents),
+            (Heading::AllApps, all_apps),
+        ] {
+            if !group.is_empty() {
+                self.headings.push((self.hits.len(), heading));
+                self.hits.extend(group);
+            }
+        }
+        self.selected = 0;
+    }
+
+    fn sections(&self) -> Vec<(usize, usize)> {
+        let mut starts: Vec<usize> = self.headings.iter().map(|(start, _)| *start).collect();
+        if starts.first() != Some(&0) {
+            starts.insert(0, 0);
+        }
+        starts
+            .iter()
+            .enumerate()
+            .map(|(index, start)| {
+                (
+                    *start,
+                    starts.get(index + 1).copied().unwrap_or(self.hits.len()),
+                )
+            })
+            .collect()
+    }
+
+    pub fn select_vertically(&mut self, down: bool) {
+        if self.columns == 0 {
+            if down {
+                self.select_next();
+            } else {
+                self.select_previous();
+            }
+            return;
+        }
+        let columns = self.columns;
+        let sections = self.sections();
+        let Some(section) = sections
+            .iter()
+            .position(|(start, end)| (*start..*end).contains(&self.selected))
+        else {
+            return;
+        };
+        let (start, end) = sections[section];
+        let offset = self.selected - start;
+        let column = offset % columns;
+        let row = offset / columns;
+        let last_row = (end - start - 1) / columns;
+        let target = if down && row < last_row {
+            Some((start + (row + 1) * columns + column).min(end - 1))
+        } else if !down && row > 0 {
+            Some(start + (row - 1) * columns + column)
+        } else if down {
+            sections
+                .get(section + 1)
+                .map(|(next, next_end)| (next + column).min(next_end - 1))
+        } else {
+            section.checked_sub(1).map(|previous| {
+                let (previous_start, previous_end) = sections[previous];
+                let last = (previous_end - previous_start - 1) / columns * columns;
+                (previous_start + last + column).min(previous_end - 1)
+            })
+        };
+        if let Some(target) = target {
+            self.select(target);
+        }
     }
 
     pub fn selection(&self) -> Option<&Hit> {

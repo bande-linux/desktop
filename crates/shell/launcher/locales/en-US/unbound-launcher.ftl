@@ -24,3 +24,6 @@ menu-open = Open
 menu-show-in-files = Show in Files
 menu-copy = Copy
 menu-copy-path = Copy Path
+recent-apps = Recent Apps
+recent-documents = Recent Documents
+all-apps = All Apps

@@ -176,6 +176,16 @@ pub fn keep_writer(session: Connection) -> Sender<Vec<String>> {
     sender
 }
 
+pub fn write_names(session: Connection, names: bool) {
+    spawn("bar-names", move || {
+        let written = Proxy::new(&session, BUS_NAME, OBJECT_PATH, CONFIG_INTERFACE)
+            .and_then(|config| config.set_property("BarNames", names).map_err(Into::into));
+        if let Err(error) = written {
+            tracing::warn!("cannot save whether the bar shows names: {error}");
+        }
+    });
+}
+
 pub fn follow(session: &Connection, outbox: Outbox<BusEvent>) {
     follow_launcher_entries(session.clone(), outbox.clone());
     follow_bar_settings(session.clone(), outbox);

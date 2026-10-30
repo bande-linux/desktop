@@ -56,6 +56,11 @@ const RAIL_RUNNING: f32 = 3.0;
 const RAIL_TICK: (f32, f32) = (3.0, 16.0);
 const MORE_TEXT: f32 = 13.0;
 const RAIL_WELL_RADIUS: f32 = 10.0;
+const ROW_ICON: f32 = 30.0;
+const ROW_INSET: f32 = 8.0;
+const ROW_TEXT_GAP: f32 = 10.0;
+const ROW_TEXT: f32 = 13.0;
+const ROW_RADIUS: f32 = 6.0;
 pub const WELL_ALPHA: u8 = 14;
 
 #[derive(Debug, Clone)]
@@ -79,6 +84,7 @@ pub struct Rail {
     pub top: f32,
     pub bottom: f32,
     pub width: f32,
+    pub expanded: bool,
 }
 
 struct More {
@@ -123,6 +129,7 @@ struct Slot {
     progress: Animated,
     pressed: bool,
     initial: Option<Paragraph>,
+    name_text: Option<(String, Color, Paragraph)>,
     badge_text: Option<(String, Paragraph)>,
     cell: Rect,
     shift: (Animated, Animated),
@@ -144,6 +151,7 @@ impl Slot {
             progress: Animated::new(0.0),
             pressed: false,
             initial: None,
+            name_text: None,
             badge_text: None,
             cell: Rect::default(),
             shift: (Animated::new(0.0), Animated::new(0.0)),
@@ -1171,8 +1179,20 @@ impl DockState {
         self.icon_size.min(fitting).max(16.0)
     }
 
+    fn expanded(&self) -> bool {
+        self.rail.is_some_and(|rail| rail.expanded)
+    }
+
     fn icon_rect(&self, cell: Rect) -> Rect {
         let icon = self.effective_icon(self.along(self.surface));
+        if self.expanded() {
+            return Rect::new(
+                cell.x + ROW_INSET + 4.0,
+                cell.y + (cell.height - icon) / 2.0,
+                icon,
+                icon,
+            );
+        }
         Rect::new(
             cell.x + (cell.width - icon) / 2.0,
             cell.y + (cell.height - icon) / 2.0,
@@ -1255,7 +1275,11 @@ impl DockState {
                 .map(|slot| slot.cell_length(icon, RAIL_PADDING) * slot.presence.target())
                 .sum()
         };
-        let full = self.icon_size;
+        let full = if rail.expanded {
+            ROW_ICON
+        } else {
+            self.icon_size
+        };
         let trash_cell = full + 2.0 * RAIL_PADDING;
         let room = rail.bottom - rail.top - trash_cell - SEPARATOR_CELL;
         let icon = if wanted(full) <= room {
@@ -1267,7 +1291,11 @@ impl DockState {
         let overflowing = wanted(icon) > room;
         let more_cell = icon + 2.0 * RAIL_PADDING;
         let limit = if overflowing { room - more_cell } else { room };
-        let thick = thickness(self.icon_size);
+        let thick = if rail.expanded {
+            rail.width
+        } else {
+            thickness(self.icon_size)
+        };
         let cross = ((rail.width - thick) / 2.0).round();
         self.panel = Rect::new(0.0, rail.top, rail.width, rail.bottom - rail.top);
         let before = self
@@ -1334,6 +1362,9 @@ impl DockState {
     }
 
     fn hover_enter(&mut self, key: Key, now: Instant) {
+        if self.expanded() {
+            return;
+        }
         let recently_shown = self.label.opacity.target() > 0.0
             || self
                 .label
@@ -1483,7 +1514,38 @@ impl DockState {
     }
 
     fn prepare_text(&mut self, cx: &mut Context) {
+        let expanded = self.expanded();
+        let room = self.rail.map_or(0.0, |rail| rail.width)
+            - 2.0 * ROW_INSET
+            - ROW_ICON
+            - 3.0 * ROW_TEXT_GAP
+            - 24.0;
         for slot in &mut self.slots {
+            let name = match (&slot.key, &slot.app) {
+                (Key::App(_), Some(app)) => Some(app.name.clone()),
+                (Key::Trash, _) => Some(L10N.tr("trash")),
+                _ => None,
+            };
+            let ink = cx.palette.ink;
+            if let Some(name) = name.filter(|_| expanded)
+                && slot
+                    .name_text
+                    .as_ref()
+                    .is_none_or(|(known, color, _)| *known != name || *color != ink)
+            {
+                let style = TextStyle::new(ROW_TEXT, ink).weight(TextStyle::MEDIUM);
+                let mut characters: Vec<char> = name.chars().collect();
+                let mut shown = name.clone();
+                let paragraph = loop {
+                    let paragraph = cx.text.paragraph(&shown, style, None, TextAlign::Start);
+                    if paragraph.width() <= room || characters.len() <= 1 {
+                        break paragraph;
+                    }
+                    characters.pop();
+                    shown = format!("{}…", characters.iter().collect::<String>().trim_end());
+                };
+                slot.name_text = Some((name, ink, paragraph));
+            }
             if let Some(app) = &slot.app
                 && app.icon.is_none()
                 && slot.initial.is_none()
@@ -1586,6 +1648,7 @@ impl DockState {
                     self.paint_separator(cx, cell, &mut slot_items);
                 }
                 Key::Trash => {
+                    self.paint_name(slot, cell, &mut slot_items);
                     let rect = scaled(self.icon_rect(cell), slot.press.value(cx));
                     let image = if self.trash.is_full {
                         self.trash.full.as_ref().or(self.trash.empty.as_ref())
@@ -1738,11 +1801,16 @@ impl DockState {
 
     fn paint_separator(&self, cx: &Context, cell: Rect, items: &mut Vec<Item>) {
         if let Some(rail) = self.rail {
+            let length = if rail.expanded {
+                rail.width - 4.0 * ROW_INSET
+            } else {
+                RAIL_HAIRLINE
+            };
             items.push(Item::Fill {
                 shape: Shape::rect(Rect::new(
-                    ((rail.width - RAIL_HAIRLINE) / 2.0).round(),
+                    ((rail.width - length) / 2.0).round(),
                     (cell.y + cell.height / 2.0 - 0.5).round(),
-                    RAIL_HAIRLINE,
+                    length,
                     1.0,
                 )),
                 paint: cx.palette.hairline.into(),
@@ -1783,6 +1851,21 @@ impl DockState {
         let Some(app) = &slot.app else {
             return;
         };
+        if self.expanded() && self.active.as_deref() == Some(app_id) {
+            items.push(Item::Fill {
+                shape: Shape::rounded(
+                    Rect::new(
+                        cell.x + ROW_INSET,
+                        cell.y + 1.0,
+                        cell.width - 2.0 * ROW_INSET,
+                        cell.height - 2.0,
+                    ),
+                    ROW_RADIUS,
+                ),
+                paint: cx.palette.well.into(),
+            });
+        }
+        self.paint_name(slot, cell, items);
         let base = self.icon_rect(cell);
         let mut factor = slot.press.value(cx);
         let mut alpha = 1.0;
@@ -1872,12 +1955,21 @@ impl DockState {
             && let Some((_, text)) = &slot.badge_text
         {
             let width = (text.width() + 10.0).max(BADGE_HEIGHT);
-            let rest = Rect::new(
-                base.x + base.width - width + 4.0,
-                base.y - 4.0,
-                width,
-                BADGE_HEIGHT,
-            );
+            let rest = if self.expanded() {
+                Rect::new(
+                    cell.x + cell.width - ROW_INSET - 6.0 - width,
+                    cell.y + (cell.height - BADGE_HEIGHT) / 2.0,
+                    width,
+                    BADGE_HEIGHT,
+                )
+            } else {
+                Rect::new(
+                    base.x + base.width - width + 4.0,
+                    base.y - 4.0,
+                    width,
+                    BADGE_HEIGHT,
+                )
+            };
             let pill = scaled(rest, badge);
             let mut badge_items = vec![
                 Item::Shadow {
@@ -1905,6 +1997,20 @@ impl DockState {
                 items: badge_items,
             });
         }
+    }
+
+    fn paint_name(&self, slot: &Slot, cell: Rect, items: &mut Vec<Item>) {
+        let Some((_, _, text)) = slot.name_text.as_ref().filter(|_| self.expanded()) else {
+            return;
+        };
+        let icon = self.icon_rect(cell);
+        items.push(Item::Text {
+            origin: Point::new(
+                (icon.x + icon.width + ROW_TEXT_GAP).round(),
+                (cell.y + (cell.height - text.height()) / 2.0).round(),
+            ),
+            paragraph: text.clone(),
+        });
     }
 
     fn paint_rail_indicators(

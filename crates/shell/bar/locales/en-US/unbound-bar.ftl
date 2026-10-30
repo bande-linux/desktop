@@ -85,3 +85,5 @@ app-quit = Quit { $app }
 search-menus = Search menus
 no-menu-results = No Results
 app-menus = Menus of { $app }
+search = Search
+search-shortcut = Super Space

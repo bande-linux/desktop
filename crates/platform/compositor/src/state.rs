@@ -296,7 +296,7 @@ impl Headless {
         output.change_current_state(Some(mode), None, None, Some((0, 0).into()));
         output.set_preferred(mode);
         output.create_global::<State>(&handle);
-        handle.create_global::<State, UnboundShellV1, ()>(7, ());
+        handle.create_global::<State, UnboundShellV1, ()>(8, ());
         handle.create_global::<State, UnboundAppV1, ()>(2, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
         State::create_capture_globals(&handle);

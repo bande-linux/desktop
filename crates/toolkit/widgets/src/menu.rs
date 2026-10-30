@@ -102,6 +102,59 @@ impl MenuItem {
     }
 }
 
+const MODIFIER_SYMBOLS: [(&[&str], char); 4] = [
+    (&["Ctrl", "Control"], '⌃'),
+    (&["Alt", "Option"], '⌥'),
+    (&["Shift"], '⇧'),
+    (&["Super", "Logo", "Meta"], '⌘'),
+];
+
+const KEY_SYMBOLS: [(&str, &str); 14] = [
+    ("Backspace", "⌫"),
+    ("Delete", "⌦"),
+    ("Return", "↩"),
+    ("Enter", "↩"),
+    ("Escape", "⎋"),
+    ("Tab", "⇥"),
+    ("Left", "←"),
+    ("Right", "→"),
+    ("Up", "↑"),
+    ("Down", "↓"),
+    ("PageUp", "⇞"),
+    ("PageDown", "⇟"),
+    ("Home", "↖"),
+    ("End", "↘"),
+];
+
+pub fn shortcut_symbols(shortcut: &str) -> String {
+    let parts: Vec<&str> = shortcut.split('+').collect();
+    let (key, modifiers) = match parts.split_last() {
+        Some((&"", rest)) if rest.last() == Some(&"") => ("+", &rest[..rest.len() - 1]),
+        Some((key, rest)) => (*key, rest),
+        None => ("", &[][..]),
+    };
+    let mut symbols: String = MODIFIER_SYMBOLS
+        .iter()
+        .filter(|(names, _)| {
+            modifiers
+                .iter()
+                .any(|modifier| names.iter().any(|name| name.eq_ignore_ascii_case(modifier)))
+        })
+        .map(|(_, symbol)| *symbol)
+        .collect();
+    match KEY_SYMBOLS
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case(key))
+    {
+        Some((_, symbol)) => symbols.push_str(symbol),
+        None if key.chars().count() == 1 => {
+            symbols.extend(key.chars().flat_map(char::to_uppercase))
+        }
+        None => symbols.push_str(key),
+    }
+    symbols
+}
+
 struct Row {
     top: f32,
     height: f32,
@@ -161,10 +214,9 @@ impl MenuPanel {
                     };
                     let labels =
                         (!item.separator).then(|| paragraphs(text, &item.title, label_color));
-                    let shortcuts = item
-                        .shortcut
-                        .as_deref()
-                        .map(|shortcut| paragraphs(text, shortcut, palette.label_muted));
+                    let shortcuts = item.shortcut.as_deref().map(|shortcut| {
+                        paragraphs(text, &shortcut_symbols(shortcut), palette.label_muted)
+                    });
                     if let Some([label, _]) = &labels {
                         widest_label = widest_label.max(label.width());
                     }
@@ -683,5 +735,24 @@ impl MenuTracker {
                 .find(|index| menu_node(level, Some(*index)) == node)
                 .map(|index| (level, index))
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::shortcut_symbols;
+
+    #[test]
+    fn shortcuts_read_as_key_symbols_in_the_standard_modifier_order() {
+        assert_eq!(shortcut_symbols("Super+Q"), "⌘Q");
+        assert_eq!(shortcut_symbols("Shift+Super+N"), "⇧⌘N");
+        assert_eq!(shortcut_symbols("Super+Ctrl+Alt+Shift+z"), "⌃⌥⇧⌘Z");
+        assert_eq!(shortcut_symbols("Control+Shift+q"), "⌃⇧Q");
+        assert_eq!(shortcut_symbols("Alt+Super+Backspace"), "⌥⌘⌫");
+        assert_eq!(shortcut_symbols("Ctrl+Super+Left"), "⌃⌘←");
+        assert_eq!(shortcut_symbols("Super++"), "⌘+");
+        assert_eq!(shortcut_symbols("Shift+Super+."), "⇧⌘.");
+        assert_eq!(shortcut_symbols("F2"), "F2");
+        assert_eq!(shortcut_symbols("Space"), "Space");
     }
 }

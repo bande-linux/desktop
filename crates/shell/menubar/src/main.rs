@@ -21,8 +21,8 @@ use unbound_toolkit::ui::{
     Axis, Button, Event, Key, Label, Menu, MenuItem, PointerButton, Stack, Ui, Widget,
 };
 use unbound_toolkit::{
-    App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement, Role, Scene,
-    TextSystem, Window, WindowEvent,
+    App, Edges, Image, Item, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement, Palette, Point,
+    Rect, Role, Scene, TextAlign, TextStyle, TextSystem, Window, WindowEvent,
 };
 use unbound_xdg::{Locale, applications, current_desktops, data_dirs, find_icon, spawn_detached};
 use zbus::blocking::Connection;
@@ -34,6 +34,12 @@ const SETTINGS: &str = "org.unbound.Settings";
 const MONITOR: &str = "org.unbound.ActivityMonitor";
 const BRING_TO_FRONT: &str = "bring-to-front";
 const BLUR_WIDTH: f32 = 16384.0;
+const ABOUT_SIZE: (u32, u32) = (280, 190);
+const ABOUT_ICON: f32 = 64.0;
+const ABOUT_PADDING: f32 = 28.0;
+const ABOUT_GAP: f32 = 14.0;
+const ABOUT_NAME_SIZE: f32 = 15.0;
+const ABOUT_VERSION_SIZE: f32 = 11.0;
 
 struct Bar {
     bar: MenuBar,
@@ -119,6 +125,23 @@ impl Bar {
             }
             Command::Item { item, id } => {
                 let _ = self.errands.send(Errand::Clicked { menu: item, id });
+            }
+            Command::AboutApp(version) => {
+                let app = self.app_id.clone();
+                self.launch(window, "", &[&myself, "--about-app", &app, &version]);
+            }
+            Command::HideApp => report("hide the app", window.hide_app(&self.app_id)),
+            Command::HideOthers => {
+                for app in window.running_apps() {
+                    if app != self.app_id {
+                        report("hide an app", window.hide_app(&app));
+                    }
+                }
+            }
+            Command::ShowAll => {
+                for app in window.running_apps() {
+                    report("show an app", window.show_app(&app));
+                }
             }
             Command::Join(ssid) => {
                 let needs_password = self
@@ -220,13 +243,7 @@ impl Bar {
         }
     }
 
-    fn open_tray(
-        &mut self,
-        window: &mut Window,
-        index: usize,
-        anchor: unbound_toolkit::Rect,
-        secondary: bool,
-    ) {
+    fn open_tray(&mut self, window: &mut Window, index: usize, anchor: Rect, secondary: bool) {
         let Some(item) = self.tray.get(index) else {
             return;
         };
@@ -389,6 +406,11 @@ impl App for Bar {
                         );
                     }
                 }
+                Update::AppMenuChanged => {
+                    if !self.app_id.is_empty() {
+                        let _ = self.errands.send(Errand::AppMenu(self.app_id.clone()));
+                    }
+                }
                 Update::AppMenu { app, root } => {
                     if app == self.app_id {
                         self.app_root = root;
@@ -472,12 +494,7 @@ fn run_bar() -> Result<(), Box<dyn std::error::Error>> {
         (0, HEIGHT),
     )?;
     let blurred = window
-        .set_background_blur(&[unbound_toolkit::Rect::new(
-            0.0,
-            0.0,
-            BLUR_WIDTH,
-            HEIGHT as f32,
-        )])
+        .set_background_blur(&[Rect::new(0.0, 0.0, BLUR_WIDTH, HEIGHT as f32)])
         .inspect_err(|error| tracing::info!("the menu bar is not blurred: {error}"))
         .is_ok();
     let mut bar = Bar {
@@ -701,6 +718,113 @@ fn run_about() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+struct AppAbout {
+    name: String,
+    version: String,
+    icon: Option<Image>,
+    palette: Palette,
+    text: TextSystem,
+}
+
+impl App for AppAbout {
+    fn scene(&mut self, window: &mut Window) -> Scene {
+        let (width, height) = window.size();
+        let width_points = width as f32;
+        let centred = |text: &mut TextSystem, content: &str, style: TextStyle| {
+            text.paragraph(content, style, Some(width_points), TextAlign::Center)
+        };
+        let name = centred(
+            &mut self.text,
+            &self.name,
+            TextStyle::new(ABOUT_NAME_SIZE, self.palette.label_primary).weight(TextStyle::SEMIBOLD),
+        );
+        let version = centred(
+            &mut self.text,
+            &L10N.tr_args(
+                "about-app-version",
+                [("version", self.version.clone().into())],
+            ),
+            TextStyle::new(ABOUT_VERSION_SIZE, self.palette.label_muted),
+        );
+        let mut items = Vec::new();
+        if let Some(icon) = &self.icon {
+            items.push(Item::Image {
+                rect: Rect::new(
+                    ((width_points - ABOUT_ICON) / 2.0).round(),
+                    ABOUT_PADDING,
+                    ABOUT_ICON,
+                    ABOUT_ICON,
+                ),
+                image: icon.clone(),
+            });
+        }
+        let name_top = ABOUT_PADDING + ABOUT_ICON + ABOUT_GAP;
+        let version_top = name_top + name.height() + 4.0;
+        items.push(Item::Text {
+            origin: Point::new(0.0, name_top),
+            paragraph: name,
+        });
+        items.push(Item::Text {
+            origin: Point::new(0.0, version_top),
+            paragraph: version,
+        });
+        Scene {
+            width,
+            height,
+            background: self.palette.surface_background,
+            items,
+        }
+    }
+
+    fn event(&mut self, window: &mut Window, event: WindowEvent) {
+        match event {
+            WindowEvent::Input(Event::Key {
+                key: Key::Escape, ..
+            }) => window.close(),
+            WindowEvent::AppearanceChanged(appearance) => {
+                self.palette = appearance.palette();
+                window.request_redraw();
+            }
+            _ => {}
+        }
+    }
+}
+
+fn run_about_app(app_id: &str, version: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let directories = data_dirs();
+    let entry = applications(
+        &directories,
+        Locale::from_env().as_ref(),
+        &current_desktops(),
+    )
+    .into_iter()
+    .find(|entry| entry.app_id() == app_id);
+    let name = entry
+        .as_ref()
+        .map_or_else(|| app_id.to_owned(), |entry| entry.name.clone());
+    let mut window = Window::open(
+        Role::toplevel(
+            &L10N.tr_args("about-app-title", [("app", name.clone().into())]),
+            "org.unbound.MenuBar",
+        ),
+        ABOUT_SIZE,
+    )?;
+    let pixels = (f64::from(ABOUT_ICON) * window.scale().max(2.0)).round() as u32;
+    let icon = entry
+        .and_then(|entry| entry.icon)
+        .and_then(|icon| find_icon(&icon, pixels, &[], &directories))
+        .and_then(|path| Image::load(&path, pixels));
+    let mut about = AppAbout {
+        name,
+        version: version.to_owned(),
+        icon,
+        palette: window.appearance().palette(),
+        text: TextSystem::new(),
+    };
+    unbound_toolkit::run(&mut window, &mut about)?;
+    Ok(())
+}
+
 fn main() -> ExitCode {
     unbound_log::init("unbound-menubar");
     let arguments: Vec<String> = std::env::args().skip(1).collect();
@@ -711,6 +835,7 @@ fn main() -> ExitCode {
         .as_slice()
     {
         ["--about"] => run_about(),
+        ["--about-app", app_id, version] => run_about_app(app_id, version),
         ["--confirm", keyword] => match Ending::from_keyword(keyword) {
             Some(ending) => run_confirmation(ending),
             None => Err(format!("unknown session ending {keyword}").into()),

@@ -60,6 +60,7 @@ pub enum Update {
     Tray(Vec<TrayItem>),
     Menu { menu: Menu, anchor: Rect },
     AppMenu { app: String, root: Option<Node> },
+    AppMenuChanged,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -45,3 +45,5 @@ system-menu = Unbound
 control-center = Control Center
 menu-bar = Menu Bar
 sound = Sound
+about-app-title = About { $app }
+about-app-version = Version { $version }

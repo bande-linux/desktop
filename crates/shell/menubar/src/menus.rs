@@ -20,6 +20,10 @@ pub enum Command {
     SetBluetooth(bool),
     ToggleGadget(String),
     Item { item: String, id: i32 },
+    AboutApp(String),
+    HideApp,
+    HideOthers,
+    ShowAll,
 }
 
 fn hex(bytes: &[u8]) -> String {
@@ -56,6 +60,10 @@ impl Command {
             Self::SetBluetooth(on) => format!("bluetooth:{}", switch(*on)),
             Self::ToggleGadget(address) => format!("gadget:{address}"),
             Self::Item { item, id } => format!("item:{item}|{id}"),
+            Self::AboutApp(version) => format!("about-app:{version}"),
+            Self::HideApp => "hide-app".to_owned(),
+            Self::HideOthers => "hide-others".to_owned(),
+            Self::ShowAll => "show-all".to_owned(),
         }
     }
 
@@ -81,6 +89,10 @@ impl Command {
             "output" => Self::UseOutput(argument.to_owned()),
             "bluetooth" => Self::SetBluetooth(on()?),
             "gadget" => Self::ToggleGadget(argument.to_owned()),
+            "about-app" => Self::AboutApp(argument.to_owned()),
+            "hide-app" => Self::HideApp,
+            "hide-others" => Self::HideOthers,
+            "show-all" => Self::ShowAll,
             "item" => {
                 let (item, id) = argument.rsplit_once('|')?;
                 Self::Item {

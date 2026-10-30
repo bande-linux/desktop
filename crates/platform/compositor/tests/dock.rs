@@ -14,6 +14,7 @@ const WINDOW: i32 = 64;
 const EDITOR: &str = "org.example.Editor";
 const KEY_LEFTMETA: u32 = 125;
 const KEY_M: u32 = 50;
+const KEY_H: u32 = 35;
 const KEY_F2: u32 = 60;
 const KEY_F3: u32 = 61;
 
@@ -94,6 +95,27 @@ fn a_hidden_app_fades_out_loses_the_keyboard_and_comes_back_when_activated() {
     assert!(!typing_while_hidden);
     assert_eq!(window_pixel(&mut renderer, &mut server), [0xff, 0, 0]);
     assert!(editor.keyboard_focus_on(0));
+}
+
+#[test]
+fn super_h_hides_the_focused_app_and_show_app_brings_it_back_without_the_keyboard() {
+    let mut server = server();
+    let mut renderer = Renderer::new().expect("renderer");
+    let mut editor = app(&mut server, EDITOR);
+    let mut menu_bar = shell(&mut server);
+    settle(&mut server);
+
+    super_key(&mut server, KEY_H);
+    settle(&mut server);
+    editor.exchange(&mut server);
+    let hidden = window_pixel(&mut renderer, &mut server);
+    menu_bar.show_app(&mut server, EDITOR);
+    settle(&mut server);
+    editor.exchange(&mut server);
+
+    assert_eq!(hidden, BACKGROUND);
+    assert_eq!(window_pixel(&mut renderer, &mut server), [0xff, 0, 0]);
+    assert!(!editor.keyboard_focus_on(0));
 }
 
 #[test]

@@ -3794,6 +3794,7 @@ dependencies = [
  "accesskit",
  "jiff",
  "tracing",
+ "unbound-app-menu",
  "unbound-audio",
  "unbound-bluetooth",
  "unbound-inbox",

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <protocol name="unbound_shell_v1">
-  <interface name="unbound_shell_v1" version="7">
+  <interface name="unbound_shell_v1" version="8">
     <description summary="requests and events between the compositor and the shell">
       Offered only on the connections of the shell clients the compositor starts
       itself (the Dock and the launcher), never on the listening socket.
@@ -181,6 +181,32 @@
         example on Escape, it calls activate_app with the active app.
       </description>
       <arg name="namespace" type="string"/>
+    </event>
+
+    <request name="show_app" since="8">
+      <description summary="show the hidden windows of an app">
+        Fades the windows of the app with this app id back in after hide_app,
+        without raising them or moving the keyboard focus, as Show All in a
+        Mac's app menu does.
+      </description>
+      <arg name="app_id" type="string"/>
+    </request>
+
+    <enum name="brightness_key" since="8">
+      <entry name="display_down" value="0" summary="the display brightness down key"/>
+      <entry name="display_up" value="1" summary="the display brightness up key"/>
+      <entry name="keyboard_down" value="2" summary="the keyboard backlight down key"/>
+      <entry name="keyboard_up" value="3" summary="the keyboard backlight up key"/>
+    </enum>
+
+    <event name="brightness_key" since="8">
+      <description summary="the user pressed a brightness key">
+        Sent for the display and keyboard brightness keys, with or without
+        Super and also while the session is locked, as volume_key is. Fine is 1
+        when Option and Shift are held, for quarter steps.
+      </description>
+      <arg name="key" type="uint" enum="brightness_key"/>
+      <arg name="fine" type="uint"/>
     </event>
   </interface>
 

@@ -152,7 +152,13 @@ graph LR
     when the name has an owner, so it never starts an app by D-Bus activation. Toolkit apps
     export their menus through `crates/libs/app-menu` (`unbound-app-menu`), which also builds
     the standard app and Window menus; the window that gains focus claims the name, so the menu
-    bar talks to the process the user is working in.
+    bar talks to the process the user is working in. The menu bar reads the menu again on
+    `LayoutUpdated` and shows each item's `shortcut` right-aligned with key symbols (⌃ ⌥ ⇧ ⌘,
+    Super being ⌘ as the Command key of the Apple keyboards Unbound runs on). Items of the
+    standard app menu carry `x-unbound-shell-action`, which the menu bar performs itself
+    through `unbound_shell_v1`, since an app cannot hide itself: About (a small window with the
+    app's icon and name from its desktop entry and the version in `x-unbound-version`), Hide
+    (`Super+H`), Hide Others (`Alt+Super+H`) and Show All (`show_app` for every running app).
 - **Network and Bluetooth**: NetworkManager (`org.freedesktop.NetworkManager`) and BlueZ
   (`org.bluez`) for Wi-Fi selection and Bluetooth pairing in Control Center and Settings, through
   `crates/libs/network` and `crates/libs/bluetooth`.

@@ -9,6 +9,7 @@ repository.workspace = true
 accesskit.workspace = true
 jiff.workspace = true
 tracing.workspace = true
+unbound-app-menu.workspace = true
 unbound-audio.workspace = true
 unbound-bluetooth.workspace = true
 unbound-inbox.workspace = true

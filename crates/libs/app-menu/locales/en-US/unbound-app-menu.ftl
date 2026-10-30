@@ -1,4 +1,7 @@
+about-app = About { $app }
 hide-app = Hide { $app }
+hide-others = Hide Others
+show-all = Show All
 quit-app = Quit { $app }
 window = Window
 minimize = Minimize

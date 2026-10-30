@@ -1,10 +1,10 @@
 pub mod bluez;
 pub mod networkmanager;
 
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Command, Stdio};
 
-const CONFIG_FILE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/data/session.conf");
+const CONFIG: &str = include_str!("../data/session.conf");
 
 pub struct SessionBus {
     daemon: Child,
@@ -13,8 +13,10 @@ pub struct SessionBus {
 
 impl SessionBus {
     pub fn start() -> std::io::Result<Self> {
+        let mut config = tempfile::NamedTempFile::new()?;
+        config.write_all(CONFIG.as_bytes())?;
         let mut daemon = Command::new("dbus-daemon")
-            .arg(format!("--config-file={CONFIG_FILE}"))
+            .arg(format!("--config-file={}", config.path().display()))
             .args(["--nofork", "--nopidfile", "--print-address=1"])
             .stdout(Stdio::piped())
             .spawn()?;

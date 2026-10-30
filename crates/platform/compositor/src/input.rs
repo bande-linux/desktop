@@ -226,7 +226,9 @@ impl State {
                 && let Some((app, app_id)) = self.windowless_app.clone()
             {
                 self.quit_app(Some(app));
-                self.quit_app_named(&app_id);
+                if !app_id.is_empty() {
+                    self.quit_app_named(&app_id);
+                }
             }
             return;
         };

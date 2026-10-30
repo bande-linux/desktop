@@ -14,7 +14,8 @@ use unbound_toolkit::{
     TextSystem, Window, WindowEvent,
 };
 use unbound_xdg::{
-    DesktopEntry, Locale, applications, current_desktops, data_dirs, find_icon, launch,
+    DesktopEntry, Locale, applications, current_desktops, data_dirs, find_app, find_icon, launch,
+    running_app,
 };
 use zbus::blocking::Connection;
 
@@ -60,8 +61,10 @@ fn sender_lookup(
     let mut icons: HashMap<String, Option<Image>> = HashMap::new();
     let directories = data_dirs();
     move |notification, group| {
-        let entry = entries.iter().find(|entry| {
-            entry.app_id() == group || entry.name.eq_ignore_ascii_case(&notification.app_name)
+        let entry = find_app(&entries, group).or_else(|| {
+            entries
+                .iter()
+                .find(|entry| entry.name.eq_ignore_ascii_case(&notification.app_name))
         });
         let name = entry.map_or_else(
             || {
@@ -145,11 +148,11 @@ impl Notifications {
     }
 
     fn focus(&self, window: &mut Window, app: &str, token: &str) {
-        if window.running_apps().iter().any(|running| running == app) {
-            report("bring the app forward", window.activate_app(app));
+        if let Some(running) = running_app(&self.entries, &window.running_apps(), app) {
+            report("bring the app forward", window.activate_app(running));
             return;
         }
-        if let Some(entry) = self.entries.iter().find(|entry| entry.app_id() == app) {
+        if let Some(entry) = find_app(&self.entries, app) {
             let token = Some(token).filter(|token| !token.is_empty());
             if let Err(error) = launch(entry, token) {
                 tracing::warn!("cannot open {}: {error}", entry.name);

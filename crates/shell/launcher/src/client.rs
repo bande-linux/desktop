@@ -22,8 +22,8 @@ use unbound_toolkit::{
     Role, Scene, TextSystem, Window, WindowError, WindowEvent, ui::frame_time,
 };
 use unbound_xdg::{
-    Apps, DIRECTORY, DesktopEntry, ICON_THEMES, LaunchError, Locale, MimeDatabase, applications,
-    config_dirs, current_desktops, data_dirs, find_icon, launch, launch_with, spawn_detached,
+    Apps, DIRECTORY, DesktopEntry, ICON_THEMES, Locale, MimeDatabase, applications, config_dirs,
+    current_desktops, data_dirs, find_icon, launch, launch_with, launch_with_arguments,
 };
 
 const FALLBACK_DOCUMENT: &str = "application-x-generic";
@@ -303,11 +303,8 @@ impl LauncherShell {
                 .find(|entry| entry.app_id() == SETTINGS_APP)
                 .map(|entry| {
                     let token = window.activation_token(SETTINGS_APP).ok();
-                    let mut command = entry.command().map_err(LaunchError::Exec)?;
-                    command.push(keyword.clone());
-                    spawn_detached(&command, None, token.as_deref())
+                    launch_with_arguments(entry, std::slice::from_ref(keyword), token.as_deref())
                         .map(|_| ())
-                        .map_err(LaunchError::Spawn)
                 }),
             Target::Value(_) | Target::Emoji(_) | Target::Clip(_) => None,
         };

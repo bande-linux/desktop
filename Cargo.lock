@@ -3962,6 +3962,7 @@ dependencies = [
  "unbound-log",
  "unbound-toolkit",
  "unbound-volumes",
+ "unbound-wallpaper",
  "unbound-xdg",
  "xdg-desktop-portal-unbound",
 ]
@@ -4565,6 +4566,11 @@ dependencies = [
  "image",
  "rustix 1.1.6",
  "tempfile",
+ "tracing",
+ "unbound-l10n",
+ "unbound-notify",
+ "unbound-test-bus",
+ "zbus",
 ]
 
 [[package]]

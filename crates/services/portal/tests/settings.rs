@@ -299,22 +299,68 @@ fn gtk_plays_its_event_sounds_from_the_unbound_sound_theme() {
     assert!(bool::try_from(&sound["event-sounds"]).expect("b"));
 }
 
+fn gnome_changes(
+    changes: &Receiver<(String, String, OwnedValue)>,
+    count: usize,
+) -> Vec<(String, String)> {
+    let mut seen = Vec::new();
+    while seen.len() < count {
+        let (namespace, key, value) = changes.recv_timeout(WAIT).expect("SettingChanged");
+        if namespace == GNOME_INTERFACE {
+            let value = String::try_from(value.try_clone().expect("clone"))
+                .or_else(|_| bool::try_from(&value).map(|on| on.to_string()))
+                .expect("s or b");
+            seen.push((key, value));
+        }
+    }
+    seen
+}
+
+fn pairs(expected: &[(&str, &str)]) -> Vec<(String, String)> {
+    expected
+        .iter()
+        .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+        .collect()
+}
+
 #[test]
-fn switching_to_light_signals_the_gnome_color_scheme() {
+fn switching_to_light_signals_the_gnome_color_scheme_and_gtk_theme() {
     let fixture = start("appearance \"dark\"\n");
     let changes = fixture.changes();
-    let staging = fixture.path.with_extension("tmp");
-    std::fs::write(&staging, "appearance \"light\"\n").expect("write");
-    std::fs::rename(&staging, &fixture.path).expect("rename");
+    fixture.write_config("appearance \"light\"\n");
 
-    let value = loop {
-        let (namespace, key, value) = changes.recv_timeout(WAIT).expect("SettingChanged");
-        if namespace == GNOME_INTERFACE && key == "color-scheme" {
-            break value;
-        }
-        assert_ne!(namespace, GNOME_INTERFACE, "only color-scheme changes");
+    assert_eq!(
+        gnome_changes(&changes, 2),
+        pairs(&[("color-scheme", "prefer-light"), ("gtk-theme", "Adwaita")])
+    );
+}
+
+#[test]
+fn gtk_apps_get_the_unbound_fonts_theme_and_motion() {
+    let fixture = start("appearance \"dark\"\n");
+    let interface = |key: &str| fixture.string(GNOME_INTERFACE, key);
+    assert_eq!(interface("gtk-theme"), "Adwaita-dark");
+    assert_eq!(interface("font-name"), "Inter 10");
+    assert_eq!(interface("document-font-name"), "Inter 11");
+    assert_eq!(interface("monospace-font-name"), "JetBrains Mono 10");
+    let animations = || {
+        bool::try_from(&fixture.read_all(&[GNOME_INTERFACE])[GNOME_INTERFACE]["enable-animations"])
+            .expect("b")
     };
-    assert_eq!(String::try_from(value).expect("s"), "prefer-light");
+    assert!(animations());
+
+    let changes = fixture.changes();
+    fixture.write_config(
+        "appearance \"dark\"\naccessibility {\n    reduce-motion #true\n    increase-contrast #true\n}\n",
+    );
+    assert_eq!(
+        gnome_changes(&changes, 2),
+        pairs(&[
+            ("gtk-theme", "HighContrastInverse"),
+            ("enable-animations", "false")
+        ])
+    );
+    assert!(!animations());
 }
 
 fn fractions(color: Color) -> (f64, f64, f64) {

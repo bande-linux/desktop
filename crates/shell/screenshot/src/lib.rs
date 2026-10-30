@@ -22,7 +22,7 @@ use image::{ImageBuffer, ImageFormat, Rgba};
 use jiff::civil::DateTime;
 use unbound_l10n::Localizer;
 use unbound_toolkit::ScreenImage;
-use unbound_xdg::{Locale, applications, current_desktops, data_dirs};
+use unbound_xdg::{Locale, applications, current_desktops, data_dirs, find_app};
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-screenshot.ftl");
 
@@ -33,10 +33,8 @@ pub fn app_name(app_id: &str) -> Option<String> {
         return None;
     }
     let locale = Locale::from_env();
-    applications(&data_dirs(), locale.as_ref(), &current_desktops())
-        .into_iter()
-        .find(|entry| entry.app_id() == app_id)
-        .map(|entry| entry.name)
+    let entries = applications(&data_dirs(), locale.as_ref(), &current_desktops());
+    find_app(&entries, app_id).map(|entry| entry.name.clone())
 }
 
 pub fn file_stem(taken: DateTime) -> String {

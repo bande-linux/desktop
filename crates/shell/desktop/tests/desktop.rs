@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use unbound_desktop_surface::{
     Bounds, Desktop, DesktopView, Direction, Grid, Item, Kind, Layer, Layouts, Luma, MenuApp,
     Positions, Request, Selection, Slot, SortBy, WallpaperKey, command, desktop_menu, fitted_label,
-    format_layouts, items_menu, mounted_volumes, parse_layouts,
+    format_layouts, items_menu, parse_layouts,
 };
 use unbound_toolkit::ui::{Event, Key, Menu, Modifiers, Pointer, PointerButton};
 use unbound_toolkit::{
@@ -194,24 +194,6 @@ fn typing_selects_the_first_name_at_or_after_the_letters() {
     assert!(desktop.select_prefix("ca"));
     assert_eq!(desktop.selected(), vec![path("Carrot")]);
     assert!(!desktop.select_prefix("zz"));
-}
-
-#[test]
-fn removable_volumes_come_from_the_mount_table() {
-    let mountinfo = "\
-22 1 259:2 / / rw,relatime - ext4 /dev/nvme0n1p2 rw
-98 22 8:1 / /run/media/ada/My\\040Stick rw,nosuid - vfat /dev/sda1 rw
-99 22 8:2 / /run/media/bob/Other rw,nosuid - vfat /dev/sdb1 rw
-100 22 8:3 / /media/ada/Camera rw,nosuid - exfat /dev/sdc1 rw
-101 22 8:4 / /run/media/ada/deep/inside rw - ext4 /dev/sdd1 rw";
-    let roots = vec![PathBuf::from("/run/media/ada"), PathBuf::from("/media/ada")];
-    assert_eq!(
-        mounted_volumes(mountinfo, &roots),
-        vec![
-            PathBuf::from("/media/ada/Camera"),
-            PathBuf::from("/run/media/ada/My Stick"),
-        ]
-    );
 }
 
 #[test]

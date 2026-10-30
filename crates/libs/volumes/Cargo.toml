@@ -1,0 +1,13 @@
+[package]
+name = "unbound-volumes"
+description = "Removable volumes for Unbound: which are mounted, and ejecting them through UDisks"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+tracing.workspace = true
+zbus.workspace = true
+
+[lints]
+workspace = true

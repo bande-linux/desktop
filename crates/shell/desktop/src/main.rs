@@ -9,24 +9,27 @@ use accesskit::TreeUpdate;
 use unbound_config::{Config, DockEdge, config_path};
 use unbound_desktop_surface::{
     Bounds, DesktopView, Item, Kind, Layer, Layouts, Luma, MenuApp, Request, Selection,
-    WallpaperKey, command, desktop_menu, eject, items_menu, layouts_path, list, media_roots,
-    mounted_volumes, parse_layouts, save_layouts,
+    WallpaperKey, command, desktop_menu, items_menu, layouts_path, list, parse_layouts,
+    save_layouts,
 };
-use unbound_files::{Apps, Operations, Purpose};
-use unbound_fs::{Action, Answer, Change, FolderWatch, Resolution, Task, Trash};
+use unbound_fs::{
+    Action, Answer, Change, FolderWatch, Operations, Purpose, Resolution, Task, Trash,
+};
 use unbound_toolkit::{
     App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement, Point, Role, Scene,
     Scheme, Window, WindowEvent,
 };
+use unbound_volumes::{eject, media_roots, mounted_volumes};
 use unbound_wallpaper::{Choice, Inbox, Outbox, Picture, Variant, choose, follow, inbox, render};
 use unbound_xdg::{
-    DIRECTORY, DesktopEntry, OCTET_STREAM, UserDir, config_dirs, config_home, data_dirs, find_icon,
-    launch, launch_with, user_dir,
+    Apps, DIRECTORY, DesktopEntry, OCTET_STREAM, UserDir, config_dirs, config_home, data_dirs,
+    find_icon, launch, launch_with, user_dir,
 };
 
 const ICON_THEMES: [&str; 1] = ["Adwaita"];
 const SETTINGS_APP: &str = "org.unbound.Settings";
 const WALLPAPER_PANE: &str = "appearance";
+const FILES_INFO_FLAG: &str = "--info";
 
 type Loaded = (WallpaperKey, Option<(Picture, Luma)>);
 
@@ -280,6 +283,31 @@ impl Surface {
         }
     }
 
+    fn show_info(&mut self, window: &mut Window, path: PathBuf) {
+        let Some(files) = self.files_app() else {
+            tracing::warn!("no app opens folders");
+            return;
+        };
+        let token = window.activation_token(files.app_id()).ok();
+        let launched =
+            files
+                .command()
+                .map_err(|error| error.to_string())
+                .and_then(|mut command| {
+                    command.push(FILES_INFO_FLAG.to_owned());
+                    command.push(path.to_string_lossy().into_owned());
+                    unbound_xdg::spawn_detached(
+                        &command,
+                        files.working_directory.as_deref(),
+                        token.as_deref(),
+                    )
+                    .map_err(|error| error.to_string())
+                });
+        if let Err(error) = launched {
+            tracing::warn!("cannot show the info of {}: {error}", path.display());
+        }
+    }
+
     fn common_mime(&self, paths: &[PathBuf]) -> String {
         let mimes: Vec<String> = paths
             .iter()
@@ -406,6 +434,7 @@ impl Surface {
                     Err(error) => tracing::warn!("cannot make a folder: {error}"),
                 },
                 Request::ShowInFiles(path) => self.show_in_files(window, path),
+                Request::ShowInfo(path) => self.show_info(window, path),
                 Request::OpenDesktopFolder => {
                     let folder = self.desktop_dir.clone();
                     self.show_in_files(window, folder);

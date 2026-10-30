@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::str::Chars;
 use std::time::SystemTime;
 
-use unbound_fs::{Trash, TrashItem};
+use crate::trash::{Trash, TrashItem};
 
 use crate::L10N;
 
@@ -172,4 +172,15 @@ pub fn format_size(bytes: u64) -> String {
         1 => L10N.tr_args("size-gigabytes", args),
         _ => L10N.tr_args("size-terabytes", args),
     }
+}
+
+pub fn format_date(time: SystemTime) -> String {
+    jiff::Timestamp::try_from(time)
+        .map(|timestamp| {
+            timestamp
+                .to_zoned(jiff::tz::TimeZone::system())
+                .strftime("%-d %b %Y, %H:%M")
+                .to_string()
+        })
+        .unwrap_or_default()
 }

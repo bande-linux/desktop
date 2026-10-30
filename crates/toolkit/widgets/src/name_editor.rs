@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use unbound_toolkit::ui::{Key, Modifiers};
+use super::{Key, Modifiers};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NameEditor {

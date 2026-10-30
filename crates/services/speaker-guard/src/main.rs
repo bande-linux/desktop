@@ -12,6 +12,7 @@ use std::time::Instant;
 
 use card::{Card, SensePcm};
 use model::Model;
+use sense::SenseMonitor;
 use thermal::{Protection, Verdict};
 
 const MODEL_DIRECTORY: &str = "/usr/share/unbound-speaker-guard";
@@ -40,6 +41,7 @@ struct Guard {
     pcm: SensePcm,
     model: Model,
     protections: Vec<Protection>,
+    monitors: Vec<SenseMonitor>,
     last_powers: Vec<f64>,
     channels: usize,
 }
@@ -107,45 +109,46 @@ impl Guard {
             last = now;
             match read {
                 None => {
+                    self.monitors
+                        .iter_mut()
+                        .for_each(SenseMonitor::stream_paused);
                     let idle = vec![0.0; self.protections.len()];
                     self.apply(&idle, seconds)?;
                 }
                 Some(frames) => {
                     let samples = &buffer[..frames * self.channels];
-                    for (index, speaker) in self.model.speakers.iter().enumerate() {
-                        let (current, voltage) = speaker.sense.ranges(samples);
+                    let mut powers = Vec::with_capacity(self.monitors.len());
+                    for (index, monitor) in self.monitors.iter_mut().enumerate() {
+                        let m = monitor.layout.measure(samples);
                         tracing::debug!(
                             speaker = index,
                             frames,
-                            current_min = current.min,
-                            current_max = current.max,
-                            voltage_min = voltage.min,
-                            voltage_max = voltage.max,
+                            current_min = m.current.min,
+                            current_max = m.current.max,
+                            voltage_min = m.voltage.min,
+                            voltage_max = m.voltage.max,
+                            volts_rms = m.voltage_rms,
+                            amps_rms = m.current_rms,
+                            ohms = m.voltage_rms / m.current_rms.max(1e-6),
+                            mean_product_watts = m.mean_product,
+                            open_loop_watts = m.open_loop_power,
                             "sense period"
                         );
+                        powers.push(
+                            monitor
+                                .assess(&m, frames, seconds)
+                                .map_err(|fault| fault.to_string())?,
+                        );
                     }
-                    let readings = self
-                        .model
-                        .speakers
-                        .iter()
-                        .map(|s| s.sense.read(samples))
-                        .collect::<Result<Vec<_>, _>>()
-                        .map_err(|fault| fault.to_string())?;
-                    let powers: Vec<f64> = readings.iter().map(|r| r.power).collect();
                     self.apply(&powers, seconds)?;
-                    for (index, (reading, protection)) in
-                        readings.iter().zip(&self.protections).enumerate()
-                    {
+                    for (index, protection) in self.protections.iter().enumerate() {
                         tracing::debug!(
                             speaker = index,
-                            frames,
-                            volts_rms = reading.voltage_rms,
-                            amps_rms = reading.current_rms,
-                            ohms = reading.voltage_rms / reading.current_rms.max(1e-6),
-                            watts = reading.power,
+                            watts = powers.get(index).copied().unwrap_or(0.0),
                             coil_celsius = protection.temperatures.coil,
                             magnet_celsius = protection.temperatures.magnet,
                             gain_db = protection.gain_db,
+                            "protection"
                         );
                     }
                     self.card.heartbeat().map_err(|e| e.to_string())?;
@@ -220,12 +223,21 @@ fn start() -> Result<Guard, String> {
     }
     let card = Card::open(&model).map_err(|e| e.to_string())?;
     let pcm = SensePcm::open(&model, channels).map_err(|e| e.to_string())?;
+    let worst_case_power = |s: &model::Speaker| {
+        model.amplifier_sensitivity * model.amplifier_sensitivity / s.sense.dc_resistance
+    };
+    let monitors = model
+        .speakers
+        .iter()
+        .map(|s| SenseMonitor::new(s.sense.clone(), worst_case_power(s)))
+        .collect();
     let last_powers = vec![0.0; protections.len()];
     Ok(Guard {
         card,
         pcm,
         model,
         protections,
+        monitors,
         last_powers,
         channels,
     })

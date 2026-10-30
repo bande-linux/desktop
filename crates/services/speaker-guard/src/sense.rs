@@ -9,15 +9,24 @@ pub struct SenseLayout {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Reading {
-    pub power: f64,
-    pub voltage_rms: f64,
+pub struct ChannelRange {
+    pub min: i16,
+    pub max: i16,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Measurement {
+    pub current: ChannelRange,
+    pub voltage: ChannelRange,
     pub current_rms: f64,
+    pub voltage_rms: f64,
+    pub mean_product: f64,
+    pub open_loop_power: f64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Fault {
-    NegativePower(f64),
+    InvertedCurrent { product: f64, open_loop: f64 },
     Impedance(f64),
     FrozenVoltage,
     FrozenCurrent,
@@ -26,7 +35,10 @@ pub enum Fault {
 impl std::fmt::Display for Fault {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::NegativePower(watts) => write!(f, "negative sensed power {watts:.3} W"),
+            Self::InvertedCurrent { product, open_loop } => write!(
+                f,
+                "sensed V·I averages {product:.4} W against {open_loop:.4} W from V alone: the current sense is inverted"
+            ),
             Self::Impedance(ohms) => write!(f, "implausible speaker impedance {ohms:.2} ohm"),
             Self::FrozenVoltage => write!(f, "voltage sense stream is frozen"),
             Self::FrozenCurrent => write!(f, "current sense stream is frozen"),
@@ -34,87 +46,128 @@ impl std::fmt::Display for Fault {
     }
 }
 
+const STARTUP_GRACE_FRAMES: usize = 2400;
+const POLARITY_WINDOW_SECONDS: f64 = 0.5;
+const POLARITY_MIN_POWER: f64 = 0.001;
+const POLARITY_RATIO: f64 = -0.25;
 const IMPEDANCE_CHECK_CURRENT: f64 = 0.05;
 const MIN_IMPEDANCE_RATIO: f64 = 0.5;
 const MAX_IMPEDANCE_RATIO: f64 = 8.0;
-const NEGATIVE_POWER_TOLERANCE: f64 = -0.01;
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct ChannelRange {
-    pub min: i16,
-    pub max: i16,
-}
 
 impl SenseLayout {
-    pub fn ranges(&self, frames: &[i16]) -> (ChannelRange, ChannelRange) {
+    pub fn measure(&self, frames: &[i16]) -> Measurement {
+        let samples = |channel: usize| frames.iter().skip(channel).step_by(self.channels).copied();
         let range = |channel: usize| {
-            frames.iter().skip(channel).step_by(self.channels).fold(
+            samples(channel).fold(
                 ChannelRange {
                     min: i16::MAX,
                     max: i16::MIN,
                 },
-                |r, &v| ChannelRange {
+                |r, v| ChannelRange {
                     min: r.min.min(v),
                     max: r.max.max(v),
                 },
             )
         };
-        (range(self.current_channel), range(self.voltage_channel))
+        let volts = |raw: i16| f64::from(raw) / 32768.0 * self.voltage_full_scale;
+        let amps = |raw: i16| f64::from(raw) / 32768.0 * self.current_full_scale;
+        let (count, voltage_square, current_square, product) = samples(self.voltage_channel)
+            .zip(samples(self.current_channel))
+            .fold((0usize, 0.0, 0.0, 0.0), |(n, vv, ii, vi), (v, i)| {
+                (
+                    n + 1,
+                    vv + volts(v) * volts(v),
+                    ii + amps(i) * amps(i),
+                    vi + volts(v) * amps(i),
+                )
+            });
+        let count = count.max(1) as f64;
+        let voltage_rms = (voltage_square / count).sqrt();
+        Measurement {
+            current: range(self.current_channel),
+            voltage: range(self.voltage_channel),
+            current_rms: (current_square / count).sqrt(),
+            voltage_rms,
+            mean_product: product / count,
+            open_loop_power: voltage_rms * voltage_rms / self.dc_resistance,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SenseMonitor {
+    pub layout: SenseLayout,
+    pub worst_case_power: f64,
+    stream_frames: usize,
+    voltage_seen_live: bool,
+    current_seen_live: bool,
+    window_seconds: f64,
+    window_product: f64,
+    window_open_loop: f64,
+}
+
+impl SenseMonitor {
+    pub fn new(layout: SenseLayout, worst_case_power: f64) -> Self {
+        Self {
+            layout,
+            worst_case_power,
+            stream_frames: 0,
+            voltage_seen_live: false,
+            current_seen_live: false,
+            window_seconds: 0.0,
+            window_product: 0.0,
+            window_open_loop: 0.0,
+        }
     }
 
-    pub fn read(&self, frames: &[i16]) -> Result<Reading, Fault> {
-        let mut voltage_square = 0.0;
-        let mut current_square = 0.0;
-        let mut product = 0.0;
-        let mut count = 0usize;
-        let mut voltages = frames
-            .iter()
-            .skip(self.voltage_channel)
-            .step_by(self.channels);
-        let mut currents = frames
-            .iter()
-            .skip(self.current_channel)
-            .step_by(self.channels);
-        let first_voltage = voltages.clone().next().copied();
-        let first_current = currents.clone().next().copied();
-        let mut voltage_moved = false;
-        let mut current_moved = false;
-        for (raw_voltage, raw_current) in voltages.by_ref().zip(currents.by_ref()) {
-            voltage_moved |= Some(*raw_voltage) != first_voltage;
-            current_moved |= Some(*raw_current) != first_current;
-            let voltage = f64::from(*raw_voltage) / 32768.0 * self.voltage_full_scale;
-            let current = f64::from(*raw_current) / 32768.0 * self.current_full_scale;
-            voltage_square += voltage * voltage;
-            current_square += current * current;
-            product += voltage * current;
-            count += 1;
-        }
-        if count > 1 && !voltage_moved {
+    pub fn stream_paused(&mut self) {
+        *self = Self::new(self.layout.clone(), self.worst_case_power);
+    }
+
+    pub fn assess(
+        &mut self,
+        measurement: &Measurement,
+        frames: usize,
+        seconds: f64,
+    ) -> Result<f64, Fault> {
+        self.stream_frames += frames;
+        let in_grace = self.stream_frames <= STARTUP_GRACE_FRAMES;
+        let voltage_frozen = measurement.voltage.min == measurement.voltage.max;
+        let current_frozen = measurement.current.min == measurement.current.max;
+        if voltage_frozen && (self.voltage_seen_live || !in_grace) {
             return Err(Fault::FrozenVoltage);
         }
-        if count > 1 && !current_moved {
+        if current_frozen && (self.current_seen_live || !in_grace) {
             return Err(Fault::FrozenCurrent);
         }
-        let count = count.max(1) as f64;
-        let mean_product = product / count;
-        if mean_product < NEGATIVE_POWER_TOLERANCE {
-            return Err(Fault::NegativePower(mean_product));
-        }
-        let voltage_rms = (voltage_square / count).sqrt();
-        let current_rms = (current_square / count).sqrt();
-        if current_rms > IMPEDANCE_CHECK_CURRENT {
-            let impedance = voltage_rms / current_rms;
-            if !(MIN_IMPEDANCE_RATIO * self.dc_resistance
-                ..=MAX_IMPEDANCE_RATIO * self.dc_resistance)
+        self.voltage_seen_live |= !voltage_frozen;
+        self.current_seen_live |= !current_frozen;
+        if measurement.current_rms > IMPEDANCE_CHECK_CURRENT {
+            let impedance = measurement.voltage_rms / measurement.current_rms;
+            let resistance = self.layout.dc_resistance;
+            if !(MIN_IMPEDANCE_RATIO * resistance..=MAX_IMPEDANCE_RATIO * resistance)
                 .contains(&impedance)
             {
                 return Err(Fault::Impedance(impedance));
             }
         }
-        Ok(Reading {
-            power: voltage_rms * voltage_rms / self.dc_resistance,
-            voltage_rms,
-            current_rms,
+        self.window_seconds += seconds;
+        self.window_product += measurement.mean_product * seconds;
+        self.window_open_loop += measurement.open_loop_power * seconds;
+        if self.window_seconds >= POLARITY_WINDOW_SECONDS {
+            let product = self.window_product / self.window_seconds;
+            let open_loop = self.window_open_loop / self.window_seconds;
+            self.window_seconds = 0.0;
+            self.window_product = 0.0;
+            self.window_open_loop = 0.0;
+            if open_loop > POLARITY_MIN_POWER && product < POLARITY_RATIO * open_loop {
+                return Err(Fault::InvertedCurrent { product, open_loop });
+            }
+        }
+        Ok(if voltage_frozen {
+            self.worst_case_power
+        } else {
+            measurement.open_loop_power
         })
     }
 }
@@ -123,59 +176,93 @@ impl SenseLayout {
 mod tests {
     use super::*;
 
-    fn j473() -> SenseLayout {
-        SenseLayout {
+    const PERIOD: f64 = 1024.0 / 48_000.0;
+
+    fn j473() -> SenseMonitor {
+        let layout = SenseLayout {
             channels: 2,
             current_channel: 0,
             voltage_channel: 1,
             current_full_scale: 3.75,
             voltage_full_scale: 14.0,
             dc_resistance: 4.6,
-        }
+        };
+        SenseMonitor::new(layout, 15.87 * 15.87 / 4.6)
     }
 
-    fn stream(volts: f64, ohms: f64) -> Vec<i16> {
+    fn stream(volts: f64, ohms: f64, current_sign: f64) -> Vec<i16> {
         (0..1024)
             .flat_map(|n| {
                 let v = volts * (n as f64 * 0.13).sin();
-                let i = v / ohms;
-                [(i / 3.75 * 32768.0) as i16, (v / 14.0 * 32768.0) as i16]
+                let noise = ((n * 7919) % 17) as i16 - 8;
+                [
+                    (current_sign * v / ohms / 3.75 * 32768.0) as i16 + noise,
+                    (v / 14.0 * 32768.0) as i16 + noise,
+                ]
             })
             .collect()
     }
 
-    #[test]
-    fn a_dead_sense_channel_is_a_fault_not_a_cold_speaker() {
-        let layout = j473();
-        let mut dead_current = stream(4.0, 4.6);
-        dead_current.iter_mut().step_by(2).for_each(|s| *s = 0);
-        assert_eq!(layout.read(&dead_current), Err(Fault::FrozenCurrent));
-        assert_eq!(layout.read(&vec![0; 2048]), Err(Fault::FrozenVoltage));
+    fn assess(monitor: &mut SenseMonitor, frames: &[i16]) -> Result<f64, Fault> {
+        let measurement = monitor.layout.measure(frames);
+        monitor.assess(&measurement, 1024, PERIOD)
     }
 
     #[test]
-    fn implausible_impedance_or_inverted_current_is_a_fault() {
-        let layout = j473();
-        assert!(matches!(
-            layout.read(&stream(4.0, 0.5)),
-            Err(Fault::Impedance(_))
-        ));
-        let inverted: Vec<i16> = stream(4.0, 4.6)
-            .chunks(2)
-            .flat_map(|f| [f[0].saturating_neg(), f[1]])
+    fn the_silent_start_of_a_stream_is_tolerated_and_costs_worst_case_power() {
+        let mut monitor = j473();
+        let power = assess(&mut monitor, &vec![0; 2048]);
+        assert_eq!(power, Ok(monitor.worst_case_power));
+        assert!(assess(&mut monitor, &stream(0.1, 4.6, 1.0)).is_ok());
+    }
+
+    #[test]
+    fn a_channel_that_never_comes_alive_or_stops_is_a_fault() {
+        let mut monitor = j473();
+        let mut dead_current = stream(0.1, 4.6, 1.0);
+        dead_current.iter_mut().step_by(2).for_each(|s| *s = 0);
+        let results: Vec<_> = (0..4)
+            .map(|_| assess(&mut monitor, &dead_current))
             .collect();
+        assert_eq!(results.last(), Some(&Err(Fault::FrozenCurrent)));
+
+        let mut monitor = j473();
+        assert!(assess(&mut monitor, &stream(0.1, 4.6, 1.0)).is_ok());
+        assert_eq!(
+            assess(&mut monitor, &vec![0; 2048]),
+            Err(Fault::FrozenVoltage)
+        );
+    }
+
+    #[test]
+    fn an_inverted_current_sense_is_a_fault_but_a_transient_is_not() {
+        let mut monitor = j473();
+        let inverted = stream(1.0, 4.6, -1.0);
+        let fault = (0..30).find_map(|_| assess(&mut monitor, &inverted).err());
+        assert!(
+            matches!(fault, Some(Fault::InvertedCurrent { .. })),
+            "{fault:?}"
+        );
+
+        let mut monitor = j473();
+        assert!(assess(&mut monitor, &inverted).is_ok());
+        let normal = stream(1.0, 4.6, 1.0);
+        assert!((0..30).all(|_| assess(&mut monitor, &normal).is_ok()));
+    }
+
+    #[test]
+    fn implausible_impedance_is_a_fault() {
+        let mut monitor = j473();
         assert!(matches!(
-            layout.read(&inverted),
-            Err(Fault::NegativePower(_))
+            assess(&mut monitor, &stream(1.0, 0.5, 1.0)),
+            Err(Fault::Impedance(_))
         ));
     }
 
     #[test]
     fn power_never_underestimates_a_driver_above_its_dc_resistance() {
-        let reading = j473().read(&stream(4.0, 6.0));
-        assert!(
-            reading.is_ok_and(|r| r.power >= r.voltage_rms * r.current_rms),
-            "{reading:?}"
-        );
+        let monitor = j473();
+        let m = monitor.layout.measure(&stream(4.0, 6.0, 1.0));
+        assert!(m.open_loop_power >= m.voltage_rms * m.current_rms);
     }
 }

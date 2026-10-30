@@ -4134,8 +4134,10 @@ dependencies = [
  "unbound-golden",
  "unbound-l10n",
  "unbound-log",
+ "unbound-test-bus",
  "unbound-toolkit",
  "unbound-xdg",
+ "zbus",
 ]
 
 [[package]]

@@ -463,12 +463,18 @@ impl RailView {
         self.text.paragraph(text, style, None, TextAlign::Start)
     }
 
-    fn highlight(&self, slot: Slot, rect: Rect, items: &mut Vec<Item>) {
-        let alpha = if self.open == Some(slot) {
-            OPEN_ALPHA
+    fn slot_alpha(&self, slot: Slot) -> Option<u8> {
+        if self.open == Some(slot) {
+            Some(OPEN_ALPHA)
         } else if self.hovered == Some(slot) {
-            HOVER_ALPHA
+            Some(HOVER_ALPHA)
         } else {
+            None
+        }
+    }
+
+    fn highlight(&self, slot: Slot, rect: Rect, items: &mut Vec<Item>) {
+        let Some(alpha) = self.slot_alpha(slot) else {
             return;
         };
         let inset = match slot {
@@ -865,10 +871,10 @@ impl RailView {
             shape: Shape::rounded(rect, GROUP_RADIUS),
             paint: self.palette.ink.with_alpha(WELL_ALPHA).into(),
         }];
-        if self.open == Some(Slot::App) || self.hovered == Some(Slot::App) {
+        if let Some(alpha) = self.slot_alpha(Slot::App) {
             header.push(Item::Fill {
                 shape: Shape::rounded(rect, GROUP_RADIUS),
-                paint: self.palette.ink.with_alpha(HOVER_ALPHA).into(),
+                paint: self.palette.ink.with_alpha(alpha).into(),
             });
         }
         let icon_top = rect.y + 8.0;
@@ -921,10 +927,10 @@ impl RailView {
             shape: Shape::rounded(group, GROUP_RADIUS),
             paint: palette.ink.with_alpha(WELL_ALPHA).into(),
         }];
-        if self.open == Some(Slot::App) || self.hovered == Some(Slot::App) {
+        if let Some(alpha) = self.slot_alpha(Slot::App) {
             header.push(Item::Fill {
                 shape: Shape::rounded(rect, GROUP_RADIUS),
-                paint: palette.ink.with_alpha(HOVER_ALPHA).into(),
+                paint: palette.ink.with_alpha(alpha).into(),
             });
         }
         if let Some(icon) = self.app_icon.clone() {

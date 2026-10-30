@@ -26,9 +26,12 @@ const MARK_STROKE: f32 = 1.6;
 pub const SUBMENU_DELAY: Duration = Duration::from_millis(200);
 const SAFE_DELAY: Duration = Duration::from_millis(300);
 const SAFE_MARGIN: f32 = 6.0;
-const FIELD_HEIGHT: f32 = 34.0;
-const FIELD_INSET: f32 = 4.0;
-const SEARCH_WIDTH: f32 = 260.0;
+const SEARCH_LINE: f32 = ROW_HEIGHT + SEPARATOR_HEIGHT;
+const FOOTER_HEIGHT: f32 = 28.0;
+const FOOTER_FONT_SIZE: f32 = 12.0;
+const SEARCH_WIDTH: f32 = 220.0;
+const MAGNIFIER_RADIUS: f32 = 4.0;
+const MAGNIFIER_CENTRE: f32 = 14.0;
 const MAX_FOUND: usize = 12;
 const PATH_SEPARATOR: &str = " › ";
 const TYPE_SELECT_PAUSE: Duration = Duration::from_secs(1);
@@ -43,7 +46,8 @@ pub struct Menu {
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Search {
-    pub placeholder: String,
+    pub hint: String,
+    pub shortcut: String,
     pub nothing_found: String,
     pub query: String,
 }
@@ -56,10 +60,11 @@ impl Menu {
         }
     }
 
-    pub fn searchable(self, placeholder: &str, nothing_found: &str) -> Self {
+    pub fn searchable(self, hint: &str, shortcut: &str, nothing_found: &str) -> Self {
         Self {
             search: Some(Search {
-                placeholder: placeholder.to_owned(),
+                hint: hint.to_owned(),
+                shortcut: shortcut.to_owned(),
                 nothing_found: nothing_found.to_owned(),
                 query: String::new(),
             }),
@@ -112,6 +117,7 @@ fn collect_found(items: &[MenuItem], path: &[&str], query: &str, found: &mut Vec
                 title.push_str(&item.title);
                 found.push(MenuItem {
                     title,
+                    strong: false,
                     alternate: None,
                     ..item.clone()
                 });
@@ -128,6 +134,7 @@ pub struct MenuItem {
     pub shortcut: Option<String>,
     pub enabled: bool,
     pub checked: bool,
+    pub strong: bool,
     pub submenu: Option<Menu>,
     pub separator: bool,
     pub alternate: Option<Box<MenuItem>>,
@@ -141,6 +148,7 @@ impl MenuItem {
             shortcut: None,
             enabled: true,
             checked: false,
+            strong: false,
             submenu: None,
             separator: false,
             alternate: None,
@@ -177,6 +185,13 @@ impl MenuItem {
         Self { checked, ..self }
     }
 
+    pub fn strong(self) -> Self {
+        Self {
+            strong: true,
+            ..self
+        }
+    }
+
     pub fn alternate(self, alternate: MenuItem) -> Self {
         Self {
             alternate: Some(Box::new(alternate)),
@@ -202,20 +217,26 @@ pub struct MenuPanel {
     alternates: bool,
     size: Size,
     highlighted: Option<usize>,
-    field: Option<(Paragraph, bool)>,
+    search: Option<SearchLook>,
+}
+
+enum SearchLook {
+    Hint(Paragraph, ShortcutText),
+    Query(Paragraph),
 }
 
 impl MenuPanel {
     pub fn new(menu: Menu, text: &mut TextSystem, palette: &Palette) -> Self {
         let on_accent = palette.on_accent;
-        let paragraphs = |text: &mut TextSystem, content: &str, normal: Color| {
+        let paragraphs = |text: &mut TextSystem, content: &str, normal: Color, strong: bool| {
             [normal, on_accent].map(|color| {
-                text.paragraph(
-                    content,
-                    TextStyle::new(FONT_SIZE, color),
-                    None,
-                    TextAlign::Start,
-                )
+                let style = TextStyle::new(FONT_SIZE, color);
+                let style = if strong {
+                    style.weight(TextStyle::BOLD)
+                } else {
+                    style
+                };
+                text.paragraph(content, style, None, TextAlign::Start)
             })
         };
         let shortcut_texts = |text: &mut TextSystem, shortcut: &str| {
@@ -236,30 +257,34 @@ impl MenuPanel {
         let mut widest_label: f32 = 0.0;
         let mut widest_shortcut: f32 = 0.0;
         let has_submenu = menu.items.iter().any(|item| item.submenu.is_some());
-        let field = menu.search.as_ref().map(|search| {
-            let (content, color) = if search.query.is_empty() {
-                (search.placeholder.as_str(), palette.ink3)
+        let search = menu.search.as_ref().map(|search| {
+            if search.query.is_empty() {
+                let style = TextStyle::new(FOOTER_FONT_SIZE, palette.ink3);
+                SearchLook::Hint(
+                    text.paragraph(&search.hint, style, None, TextAlign::Start),
+                    ShortcutText::new(text, &search.shortcut, style),
+                )
             } else {
-                (search.query.as_str(), palette.ink)
-            };
-            (
-                text.paragraph(
-                    content,
-                    TextStyle::new(FONT_SIZE, color),
+                SearchLook::Query(text.paragraph(
+                    &search.query,
+                    TextStyle::new(FONT_SIZE, palette.ink),
                     None,
                     TextAlign::Start,
-                ),
-                !search.query.is_empty(),
-            )
+                ))
+            }
         });
-        let field_height = if field.is_some() { FIELD_HEIGHT } else { 0.0 };
-        let minimum_width = if field.is_some() {
-            SEARCH_WIDTH
-        } else {
-            MINIMUM_WIDTH
+        let (header, footer, minimum_width) = match &search {
+            Some(SearchLook::Hint(hint, shortcut)) => (
+                0.0,
+                FOOTER_HEIGHT,
+                (TEXT_START + hint.width() + SHORTCUT_GAP + shortcut.width() + TRAILING_PADDING)
+                    .max(SEARCH_WIDTH),
+            ),
+            Some(SearchLook::Query(_)) => (SEARCH_LINE, 0.0, SEARCH_WIDTH),
+            None => (0.0, 0.0, MINIMUM_WIDTH),
         };
         let rows = [&menu, &alternate].map(|menu| {
-            let mut top = VERTICAL_PADDING + field_height;
+            let mut top = VERTICAL_PADDING + header;
             menu.items
                 .iter()
                 .map(|item| {
@@ -273,8 +298,8 @@ impl MenuPanel {
                     } else {
                         palette.ink3
                     };
-                    let labels =
-                        (!item.separator).then(|| paragraphs(text, &item.title, label_color));
+                    let labels = (!item.separator)
+                        .then(|| paragraphs(text, &item.title, label_color, item.strong));
                     let shortcuts = item
                         .shortcut
                         .as_deref()
@@ -298,7 +323,7 @@ impl MenuPanel {
         });
         let top = rows[0]
             .last()
-            .map_or(VERTICAL_PADDING + field_height, |row| row.top + row.height);
+            .map_or(VERTICAL_PADDING + header, |row| row.top + row.height);
         let shortcut_space = if widest_shortcut > 0.0 {
             SHORTCUT_GAP + widest_shortcut
         } else {
@@ -312,9 +337,9 @@ impl MenuPanel {
             menus: [menu, alternate],
             rows,
             alternates: false,
-            size: Size::new(width, top + VERTICAL_PADDING),
+            size: Size::new(width, top + VERTICAL_PADDING + footer),
             highlighted: None,
-            field,
+            search,
         }
     }
 
@@ -394,32 +419,12 @@ impl MenuPanel {
             },
         ];
         let highlight_radius = Radius::concentric(MENU_RADIUS, HIGHLIGHT_INSET);
-        if let Some((field, typed)) = &self.field {
-            let well = Rect::new(
-                FIELD_INSET,
-                VERTICAL_PADDING,
-                self.size.width - 2.0 * FIELD_INSET,
-                FIELD_HEIGHT - 2.0 * FIELD_INSET,
-            );
-            items.push(Item::Fill {
-                shape: Shape::rounded(well, highlight_radius),
-                paint: palette.well.into(),
-            });
-            let x = well.x + 2.0 * FIELD_INSET;
-            let y = (well.y + (well.height - field.height()) / 2.0).round();
-            items.push(Item::Text {
-                origin: Point::new(x, y),
-                paragraph: field.clone(),
-            });
-            if *typed {
-                let caret = (x + field.width() + 1.0).round() + 0.75;
-                items.push(Item::Line {
-                    from: Point::new(caret, y + 1.0),
-                    to: Point::new(caret, y + field.height() - 1.0),
-                    width: 1.5,
-                    paint: palette.accent.into(),
-                });
+        match &self.search {
+            Some(SearchLook::Query(query)) => self.paint_query(query, palette, &mut items),
+            Some(SearchLook::Hint(hint, shortcut)) => {
+                self.paint_hint(hint, shortcut, outline, palette, &mut items);
             }
+            None => {}
         }
         for (index, (item, row)) in self
             .menu()
@@ -509,6 +514,80 @@ impl MenuPanel {
         items
     }
 
+    fn paint_query(&self, query: &Paragraph, palette: &Palette, items: &mut Vec<Item>) {
+        let centre = VERTICAL_PADDING + ROW_HEIGHT / 2.0;
+        magnifier(Point::new(MAGNIFIER_CENTRE, centre), palette.ink2, items);
+        let y = (centre - query.height() / 2.0).round();
+        items.push(Item::Text {
+            origin: Point::new(TEXT_START, y),
+            paragraph: query.clone(),
+        });
+        let caret = (TEXT_START + query.width() + 1.0).round() + 0.75;
+        items.push(Item::Line {
+            from: Point::new(caret, y + 1.0),
+            to: Point::new(caret, y + query.height() - 1.0),
+            width: 1.5,
+            paint: palette.accent.into(),
+        });
+        items.push(Item::Fill {
+            shape: Shape::rect(Rect::new(
+                0.0,
+                (VERTICAL_PADDING + ROW_HEIGHT + SEPARATOR_HEIGHT / 2.0).round() - 0.5,
+                self.size.width,
+                1.0,
+            )),
+            paint: palette.hairline.into(),
+        });
+    }
+
+    fn paint_hint(
+        &self,
+        hint: &Paragraph,
+        shortcut: &ShortcutText,
+        outline: Shape,
+        palette: &Palette,
+        items: &mut Vec<Item>,
+    ) {
+        let tray = Rect::new(
+            0.0,
+            self.size.height - FOOTER_HEIGHT,
+            self.size.width,
+            FOOTER_HEIGHT,
+        );
+        let centre = tray.y + tray.height / 2.0;
+        let mut footer = vec![
+            Item::Fill {
+                shape: Shape::rect(tray),
+                paint: palette.chassis.into(),
+            },
+            Item::Fill {
+                shape: Shape::rect(Rect::new(0.0, tray.y, tray.width, 1.0)),
+                paint: palette.hairline.into(),
+            },
+        ];
+        magnifier(
+            Point::new(MAGNIFIER_CENTRE, centre),
+            palette.ink3,
+            &mut footer,
+        );
+        footer.push(Item::Text {
+            origin: Point::new(TEXT_START, (centre - hint.height() / 2.0).round()),
+            paragraph: hint.clone(),
+        });
+        shortcut.paint(
+            Point::new(
+                (tray.width - TRAILING_PADDING - shortcut.width()).round(),
+                (centre - shortcut.height() / 2.0).round(),
+            ),
+            palette.ink3,
+            &mut footer,
+        );
+        items.push(Item::Clip {
+            shape: outline,
+            items: footer,
+        });
+    }
+
     fn access(&self, level: usize) -> Vec<(NodeId, Node)> {
         let id = |index: usize| menu_node(level, Some(index));
         let mut menu = Node::new(Role::Menu);
@@ -518,7 +597,19 @@ impl MenuPanel {
                 .map(id)
                 .collect::<Vec<_>>(),
         );
-        let mut nodes = vec![(menu_node(level, None), menu)];
+        let mut nodes = Vec::new();
+        if let Some(search) = &self.menu().search {
+            if search.query.is_empty() {
+                menu.set_description(search.hint.clone());
+            } else {
+                let mut field = Node::new(Role::SearchInput);
+                field.set_label(search.hint.clone());
+                field.set_value(search.query.clone());
+                menu.push_child(SEARCH_NODE);
+                nodes.push((SEARCH_NODE, field));
+            }
+        }
+        nodes.insert(0, (menu_node(level, None), menu));
         for (index, item) in self.menu().items.iter().enumerate() {
             if item.separator {
                 continue;
@@ -557,7 +648,34 @@ impl MenuPanel {
     }
 }
 
+fn magnifier(centre: Point, color: Color, items: &mut Vec<Item>) {
+    let lens = Point::new(centre.x - 1.0, centre.y - 1.0);
+    items.push(Item::Stroke {
+        shape: Shape::rounded(
+            Rect::new(
+                lens.x - MAGNIFIER_RADIUS,
+                lens.y - MAGNIFIER_RADIUS,
+                2.0 * MAGNIFIER_RADIUS,
+                2.0 * MAGNIFIER_RADIUS,
+            ),
+            MAGNIFIER_RADIUS,
+        ),
+        width: MARK_STROKE,
+        paint: color.into(),
+    });
+    let reach = MAGNIFIER_RADIUS * std::f32::consts::FRAC_1_SQRT_2;
+    items.push(Item::StrokePath {
+        path: Path::through(&[
+            Point::new(lens.x + reach, lens.y + reach),
+            Point::new(centre.x + 4.5, centre.y + 4.5),
+        ]),
+        width: MARK_STROKE,
+        paint: color.into(),
+    });
+}
+
 const MENU_NODES: u64 = u64::MAX - 1024;
+const SEARCH_NODE: NodeId = NodeId(MENU_NODES + 1);
 
 fn menu_node(level: usize, index: Option<usize>) -> NodeId {
     let level = level as u64 * 256;
@@ -628,8 +746,8 @@ impl MenuTracker {
     }
 
     pub fn searched(&mut self, panel: MenuPanel) {
-        let size = self.panels[0].size();
-        let mut panel = panel.at_least(size);
+        let width = self.panels[0].size().width;
+        let mut panel = panel.at_least(Size::new(width, 0.0));
         panel.highlighted = panel.step(None, true);
         self.panels = vec![panel];
         self.submenu_due = None;

@@ -529,10 +529,28 @@ impl RenderElement<VulkanRenderer> for BlurElement {
     }
 }
 
+fn behind(
+    id: Id,
+    shape: RoundedRect,
+    scale: f64,
+    alpha: f32,
+    backdrop: Option<[f32; 4]>,
+) -> OutputElement {
+    match backdrop {
+        Some(color) => OutputElement::Fill(FillElement::new(
+            id,
+            shape,
+            color.map(|channel| channel * alpha),
+        )),
+        None => OutputElement::Blur(BlurElement::new(id, shape, scale, alpha)),
+    }
+}
+
 pub(crate) fn surface_blurs(
     surface: &WlSurface,
     location: Point<i32, Logical>,
     scale: f64,
+    backdrop: Option<[f32; 4]>,
 ) -> Vec<OutputElement> {
     let Some(size) = mapped_size(surface) else {
         return Vec::new();
@@ -543,12 +561,8 @@ pub(crate) fn surface_blurs(
         .into_iter()
         .filter_map(|(id, rect)| {
             let rect = Rectangle::new(location + rect.loc, rect.size).intersection(bounds)?;
-            Some(OutputElement::Blur(BlurElement::new(
-                id,
-                rounded(rect.to_f64().to_physical(scale), radius * scale),
-                scale,
-                1.0,
-            )))
+            let shape = rounded(rect.to_f64().to_physical(scale), radius * scale);
+            Some(behind(id, shape, scale, 1.0, backdrop))
         })
         .collect()
 }
@@ -852,6 +866,7 @@ pub(crate) fn window_elements(
     shading: Shading,
     hung: bool,
     look: Option<Look>,
+    backdrop: Option<[f32; 4]>,
 ) -> (Vec<OutputElement>, Option<Drawn>) {
     let alpha = look.map_or(1.0, |look| look.alpha) as f32;
     if alpha <= 0.0 {
@@ -919,12 +934,7 @@ pub(crate) fn window_elements(
                 .to_physical(scale)
                 .intersection(area)?;
             let mapped = placement.map_area(rect);
-            Some(OutputElement::Blur(BlurElement::new(
-                id,
-                rounded(mapped, radius),
-                scale,
-                alpha,
-            )))
+            Some(behind(id, rounded(mapped, radius), scale, alpha, backdrop))
         });
     let veil = hung.then(|| {
         OutputElement::Fill(FillElement::new(

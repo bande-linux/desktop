@@ -212,12 +212,16 @@ pub struct State {
     pub(crate) snap: Option<SnapDrag>,
     pub(crate) preview: Option<Preview>,
     pub(crate) reduce_motion: bool,
+    pub(crate) zoom: crate::zoom::Zoom,
+    pub(crate) assistive: crate::assistive::Assistive,
+    pub(crate) keys: crate::access_keys::AccessKeys,
+    pub(crate) keyboard_monitor: crate::keyboard_monitor::KeyboardMonitor,
     pub(crate) needs_redraw: bool,
     pub(crate) animated_at: Option<Duration>,
     pub(crate) pointer_location: Point<f64, Logical>,
     pub(crate) cursor_shown: bool,
     pub(crate) cursor_status: CursorImageStatus,
-    cursor_theme: CursorTheme,
+    pub(crate) cursor_theme: CursorTheme,
     cursor_arrow: Cursor,
     named_cursors: HashMap<CursorIcon, Option<Cursor>>,
     cursor_scale: f64,
@@ -383,6 +387,10 @@ impl Headless {
             snap: None,
             preview: None,
             reduce_motion: false,
+            zoom: crate::zoom::Zoom::default(),
+            assistive: crate::assistive::Assistive::default(),
+            keys: crate::access_keys::AccessKeys::default(),
+            keyboard_monitor: crate::keyboard_monitor::KeyboardMonitor::default(),
             needs_redraw: false,
             animated_at: None,
             pointer_location: (center.w, center.h).into(),
@@ -626,9 +634,9 @@ impl Headless {
         {
             return self.compose_mirror(renderer, screen, source, with_cursor);
         }
-        let scale = self.state.screens[screen].scale();
+        let scale = self.state.render_scale(screen);
         let (elements, drawn, icon) = self.compose_at(renderer, screen, scale, with_cursor);
-        let origin = self.state.screens[screen].origin_in_pixels(scale);
+        let origin = self.state.view_origin_in_pixels(screen, scale);
         (relocated(elements, Point::default() - origin), drawn, icon)
     }
 
@@ -673,6 +681,7 @@ impl Headless {
         } else {
             (Vec::new(), None)
         };
+        elements.extend(self.state.flash_elements(screen, scale));
         elements.extend(self.state.source_hud_element(renderer, screen, scale));
         elements.extend(self.state.switcher_elements(renderer, screen, scale));
         elements.extend(self.state.assist_elements(renderer, screen, scale));
@@ -688,7 +697,12 @@ impl Headless {
                         1.0,
                         ElementKind::Unspecified,
                     ));
-                    elements.extend(surface_blurs(&surface, location, scale));
+                    elements.extend(surface_blurs(
+                        &surface,
+                        location,
+                        scale,
+                        self.state.backdrop(),
+                    ));
                 }
                 Placed::Window(window) => {
                     let shading = Shading {
@@ -700,8 +714,15 @@ impl Headless {
                         .client()
                         .is_some_and(|owner| self.state.watchdog.is_unresponsive(&owner.id()));
                     let presented = self.state.presented(window);
-                    let (shown, look) =
-                        window_elements(window, renderer, scale, shading, hung, presented);
+                    let (shown, look) = window_elements(
+                        window,
+                        renderer,
+                        scale,
+                        shading,
+                        hung,
+                        presented,
+                        self.state.backdrop(),
+                    );
                     elements.extend(shown);
                     elements.extend(self.state.overview_ring(window, scale));
                     if let (Some(ghost), Some(look)) = (self.state.overview_ghost(window), &look) {
@@ -1524,6 +1545,13 @@ impl SeatHandler for State {
         let client = focused.and_then(|surface| self.display_handle.get_client(surface.id()).ok());
         set_data_device_focus(&self.display_handle, seat, client.clone());
         set_primary_focus(&self.display_handle, seat, client);
+        if let Some(rect) = focused
+            .and_then(|surface| self.window_index(surface))
+            .and_then(|index| self.windows[index].geometry())
+        {
+            self.zoom
+                .follow((rect.location + rect.size.downscale(2).to_point()).to_f64());
+        }
     }
 }
 

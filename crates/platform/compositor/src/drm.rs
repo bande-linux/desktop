@@ -485,7 +485,10 @@ impl FrameOutput for DrmBackend {
         head.compositor
             .set_output_mode_source(OutputModeSource::Static {
                 size: settings.mode.size,
-                scale: settings.scale.into(),
+                scale: compositor
+                    .render_scale(output)
+                    .unwrap_or(settings.scale)
+                    .into(),
                 transform: settings.transform,
             });
         let elements = compositor.render_elements_on(&mut self.renderer, output);

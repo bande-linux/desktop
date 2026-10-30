@@ -254,7 +254,10 @@ writes a hex value, a corner radius or a font name of its own.
 - **Accessibility.** Every widget produces an AccessKit node: role, label or value, bounds,
   toggled state or numeric range, and its actions. `Ui::accessibility` returns the `TreeUpdate`
   with the focus, and `Ui::perform` carries out Focus, Click, SetValue, Increment, Decrement,
-  ReplaceSelectedText and SetTextSelection requests. The tree is published on AT-SPI through `accesskit_unix`.
+  ReplaceSelectedText and SetTextSelection requests. The tree is published on AT-SPI through `accesskit_unix`;
+  table cells carry their text as their name, so a screen reader reads them. `platform/tests/screen_reader.rs`
+  starts at-spi2-core on a private bus and checks through AT-SPI the roles, names, actions and text of a
+  window with a button, field, pop-up button, table and menu, and clicks, types and chooses through it.
 - **Input.** `wl_seat` up to version 9. Pointer events carry the button (primary, secondary,
   middle, back, forward), the click count (a press within 500 ms and 4 pt of the previous press
   of the same button counts up) and the modifiers; Ctrl+primary is a secondary click. Scrolling

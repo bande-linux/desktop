@@ -4455,11 +4455,13 @@ version = "0.1.0"
 dependencies = [
  "accesskit",
  "accesskit_unix",
+ "atspi-common",
  "image",
  "image-compare",
  "pollster",
  "raw-window-handle",
  "rustix 1.1.6",
+ "serde",
  "smithay",
  "tracing",
  "unbound-compositor",

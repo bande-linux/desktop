@@ -1295,7 +1295,7 @@ impl Table {
                 .id
                 .part(index as u64 * (self.columns.len() as u64 + 1) + column as u64 + 1);
             let mut cell_node = Node::new(Role::Cell);
-            cell_node.set_value(cell.text.clone());
+            cell_node.set_label(cell.text.clone());
             cell_node.set_column_index(column);
             cell_node.set_row_index(index);
             cells.push(cell_id);

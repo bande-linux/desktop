@@ -82,7 +82,6 @@ pub fn icon_theme(accent: Accent) -> String {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CursorSettings {
     pub theme: String,
-    pub size: i32,
 }
 
 impl CursorSettings {
@@ -90,10 +89,6 @@ impl CursorSettings {
         let var = |name: &str| std::env::var(name).ok().filter(|value| !value.is_empty());
         Self {
             theme: var("XCURSOR_THEME").unwrap_or_else(|| "default".to_owned()),
-            size: var("XCURSOR_SIZE")
-                .and_then(|size| size.parse().ok())
-                .filter(|size| *size > 0)
-                .unwrap_or(24),
         }
     }
 }
@@ -103,7 +98,11 @@ struct Look {
     scheme: ColorScheme,
     accent: Accent,
     tint: Option<Color>,
+    increase_contrast: bool,
+    reduce_transparency: bool,
     reduce_motion: bool,
+    text_size: u32,
+    cursor_size: u32,
     effects: bool,
 }
 
@@ -120,7 +119,15 @@ trait Config {
     #[zbus(property)]
     fn tinted_frame(&self) -> zbus::Result<bool>;
     #[zbus(property)]
+    fn increase_contrast(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn reduce_transparency(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
     fn reduce_motion(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn text_size(&self) -> zbus::Result<u32>;
+    #[zbus(property)]
+    fn cursor_size(&self) -> zbus::Result<u32>;
     #[zbus(property)]
     fn sound_effects(&self) -> zbus::Result<bool>;
 }
@@ -223,7 +230,11 @@ impl Reader {
                 .find(|(keyword, _)| *keyword == accent)
                 .map_or_else(Accent::default, |(_, accent)| *accent),
             tint,
+            increase_contrast: config.increase_contrast().unwrap_or(false),
+            reduce_transparency: config.reduce_transparency().unwrap_or(false),
             reduce_motion: config.reduce_motion().unwrap_or(false),
+            text_size: config.text_size().unwrap_or(100),
+            cursor_size: config.cursor_size().unwrap_or(24),
             effects: config.sound_effects().unwrap_or(true),
         };
         (look, next)
@@ -255,13 +266,20 @@ fn namespaces(look: Look, cursor: &CursorSettings) -> Namespaces {
                     "accent-color",
                     Value::from(fractions(look.accent.color(look.scheme.scheme()))),
                 ),
-                ("contrast", Value::from(0u32)),
+                ("contrast", Value::from(u32::from(look.increase_contrast))),
                 ("reduced-motion", Value::from(u32::from(look.reduce_motion))),
             ]),
         ),
         (
             UNBOUND_APPEARANCE,
-            owned(vec![("frame-tint", Value::from(tint))]),
+            owned(vec![
+                ("frame-tint", Value::from(tint)),
+                (
+                    "reduce-transparency",
+                    Value::from(u32::from(look.reduce_transparency)),
+                ),
+                ("text-size", Value::from(look.text_size)),
+            ]),
         ),
         (
             GNOME_INTERFACE,
@@ -272,7 +290,14 @@ fn namespaces(look: Look, cursor: &CursorSettings) -> Namespaces {
                 ),
                 ("icon-theme", Value::from(icon_theme(look.accent))),
                 ("cursor-theme", Value::from(cursor.theme.as_str())),
-                ("cursor-size", Value::from(cursor.size)),
+                (
+                    "cursor-size",
+                    Value::from(i32::try_from(look.cursor_size).unwrap_or(i32::MAX)),
+                ),
+                (
+                    "text-scaling-factor",
+                    Value::from(f64::from(look.text_size) / 100.0),
+                ),
             ]),
         ),
         (

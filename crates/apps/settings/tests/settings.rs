@@ -120,7 +120,7 @@ fn changing_one_idle_time_keeps_dim_before_lock_before_sleep() {
 #[test]
 fn typing_anywhere_searches_and_narrows_the_sidebar_to_ranked_panes() {
     let mut view = view();
-    assert_eq!(view.visible_panes().len(), 6);
+    assert_eq!(view.visible_panes().len(), 7);
 
     type_text(&mut view, "suspend");
 
@@ -132,7 +132,7 @@ fn typing_anywhere_searches_and_narrows_the_sidebar_to_ranked_panes() {
 
     press(&mut view, Key::Escape);
     assert_eq!(view.query(), "");
-    assert_eq!(view.visible_panes().len(), 6);
+    assert_eq!(view.visible_panes().len(), 7);
     assert!(view.highlighted_settings().is_empty());
     assert_eq!(view.selected_pane(), PaneId::LockScreen);
 }
@@ -269,6 +269,10 @@ fn changes_are_written_through_org_unbound_config() {
         (SettingId::BarNames, Value::Flag(true)),
         (SettingId::BarMenuBar, keyword("separate")),
         (SettingId::ReduceMotion, Value::Flag(true)),
+        (SettingId::Zoom, Value::Flag(true)),
+        (SettingId::IncreaseContrast, Value::Flag(true)),
+        (SettingId::CursorSize, Value::Number(48)),
+        (SettingId::StickyKeys, Value::Flag(true)),
         (SettingId::WallpaperFit, keyword("fit")),
         (
             SettingId::InputSources,
@@ -298,7 +302,13 @@ fn changes_are_written_through_org_unbound_config() {
     assert_eq!((written.bar.icon_size, written.bar.auto_hide), (52, true));
     assert!(written.bar.names);
     assert_eq!(written.bar.menu_bar, MenuBarPlacement::Separate);
-    assert!(written.reduce_motion);
+    let access = written.accessibility;
+    assert!(access.reduce_motion && access.increase_contrast && access.sticky_keys);
+    assert_eq!((access.zoom, access.cursor_size), (2.0, 48));
+    assert_eq!(
+        client.get(SettingId::Zoom).expect("zoom"),
+        Value::Flag(true)
+    );
     assert_eq!(written.wallpaper.fit, WallpaperFit::Fit);
     assert_eq!(
         written
@@ -346,4 +356,68 @@ fn every_pane_opens_by_its_keyword() {
         assert_eq!(view.selected_pane(), pane.id);
     }
     assert_eq!(PaneId::from_keyword("printers"), None);
+}
+
+fn focused_label(view: &SettingsView) -> Option<String> {
+    let tree = view.accessibility();
+    tree.nodes
+        .iter()
+        .find(|(id, _)| *id == tree.focus)
+        .and_then(|(_, node)| node.label().map(str::to_owned))
+}
+
+#[test]
+fn tab_reaches_every_accessibility_control_and_space_switches_it() {
+    let mut view = view();
+    for id in [
+        SettingId::ScreenReader,
+        SettingId::Zoom,
+        SettingId::IncreaseContrast,
+        SettingId::ReduceTransparency,
+        SettingId::ReduceMotion,
+        SettingId::FlashScreen,
+        SettingId::StickyKeys,
+        SettingId::SlowKeys,
+        SettingId::BounceKeys,
+    ] {
+        view.set_value(id, Value::Flag(false));
+    }
+    view.set_value(SettingId::CursorSize, Value::Number(24));
+    view.select_pane(PaneId::Accessibility);
+    view.scene(SIZE.0, SIZE.1);
+    let mut reached = Vec::new();
+    for _ in 0..40 {
+        press(&mut view, Key::Tab);
+        if let Some(label) = focused_label(&view)
+            && !reached.contains(&label)
+        {
+            reached.push(label);
+        }
+    }
+    for label in [
+        "Screen reader",
+        "Zoom",
+        "Increase contrast",
+        "Reduce transparency",
+        "Reduce motion",
+        "Pointer size",
+        "Flash the screen when an alert sound plays",
+        "Sticky keys",
+        "Slow keys",
+        "Bounce keys",
+    ] {
+        assert!(
+            reached.iter().any(|known| known == label),
+            "Tab never reached {label}: {reached:?}"
+        );
+    }
+    while focused_label(&view).as_deref() != Some("Sticky keys") {
+        press(&mut view, Key::Tab);
+    }
+    changes(&mut view);
+    press(&mut view, Key::Space);
+    assert_eq!(
+        changes(&mut view),
+        [(SettingId::StickyKeys, Value::Flag(true))]
+    );
 }

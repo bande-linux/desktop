@@ -47,6 +47,7 @@ pub(crate) struct Shell {
     active_apps: Vec<String>,
     volume_keys: Vec<(unbound_shell_v1::VolumeKey, bool)>,
     brightness_keys: Vec<(unbound_shell_v1::BrightnessKey, bool)>,
+    media_keys: Vec<unbound_shell_v1::MediaKey>,
     control_center_toggles: usize,
     responding: Vec<(i32, String, bool)>,
     minimized: Vec<(String, bool)>,
@@ -150,7 +151,7 @@ impl TestClient {
     }
 
     pub fn join_shell(&mut self, server: &mut Headless) {
-        let shell: UnboundShellV1 = self.bind("unbound_shell_v1", 9);
+        let shell: UnboundShellV1 = self.bind("unbound_shell_v1", 10);
         self.globals.shell.shell = Some(shell);
         let _: ExtForeignToplevelListV1 = self.bind("ext_foreign_toplevel_list_v1", 1);
         self.exchange(server);
@@ -182,6 +183,10 @@ impl TestClient {
 
     pub fn brightness_keys(&self) -> &[(unbound_shell_v1::BrightnessKey, bool)] {
         &self.globals.shell.brightness_keys
+    }
+
+    pub fn media_keys(&self) -> &[unbound_shell_v1::MediaKey] {
+        &self.globals.shell.media_keys
     }
 
     pub fn control_center_toggles(&self) -> usize {
@@ -463,6 +468,9 @@ impl Dispatch<UnboundShellV1, ()> for Globals {
                 key: WEnum::Value(key),
                 fine,
             } => globals.shell.brightness_keys.push((key, fine != 0)),
+            unbound_shell_v1::Event::MediaKey {
+                key: WEnum::Value(key),
+            } => globals.shell.media_keys.push(key),
             unbound_shell_v1::Event::ToggleControlCenter => {
                 globals.shell.control_center_toggles += 1;
             }

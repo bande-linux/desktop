@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <protocol name="unbound_shell_v1">
-  <interface name="unbound_shell_v1" version="9">
+  <interface name="unbound_shell_v1" version="10">
     <description summary="requests and events between the compositor and the shell">
       Offered only on the connections of the shell clients the compositor starts
       itself (the Dock and the launcher), never on the listening socket.
@@ -238,6 +238,22 @@
       </description>
       <arg name="app_id" type="string"/>
     </request>
+
+    <enum name="media_key" since="10">
+      <entry name="play_pause" value="0" summary="the play/pause key"/>
+      <entry name="pause" value="1" summary="the pause key"/>
+      <entry name="next" value="2" summary="the next track key"/>
+      <entry name="previous" value="3" summary="the previous track key"/>
+    </enum>
+
+    <event name="media_key" since="10">
+      <description summary="the user pressed a media key">
+        Sent for the play/pause, pause, next and previous keys, with or without
+        Super and also while the session is locked, as a Mac's media keys
+        always control what is playing.
+      </description>
+      <arg name="key" type="uint" enum="media_key"/>
+    </event>
   </interface>
 
   <interface name="unbound_app_v1" version="3">

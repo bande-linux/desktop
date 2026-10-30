@@ -12,7 +12,7 @@ use smithay::input::pointer::{AxisFrame, ButtonEvent, MotionEvent};
 use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Clock, Logical, Monotonic, Point, SERIAL_COUNTER};
-use unbound_protocols::server::unbound_shell_v1::{BrightnessKey, VolumeKey};
+use unbound_protocols::server::unbound_shell_v1::{BrightnessKey, MediaKey, VolumeKey};
 
 use crate::gesture::Gesture;
 use crate::motion::DOCK_NAMESPACE;
@@ -40,6 +40,7 @@ enum Shortcut {
     CaptureArea,
     Volume(VolumeKey, bool),
     Brightness(BrightnessKey, bool),
+    Media(MediaKey),
     HideApp,
     HideOthers,
     Workspace(bool),
@@ -65,6 +66,16 @@ fn brightness_key(keysym: u32) -> Option<BrightnessKey> {
         keysyms::KEY_XF86MonBrightnessUp => Some(BrightnessKey::DisplayUp),
         keysyms::KEY_XF86KbdBrightnessDown => Some(BrightnessKey::KeyboardDown),
         keysyms::KEY_XF86KbdBrightnessUp => Some(BrightnessKey::KeyboardUp),
+        _ => None,
+    }
+}
+
+fn media_key(keysym: u32) -> Option<MediaKey> {
+    match keysym {
+        keysyms::KEY_XF86AudioPlay => Some(MediaKey::PlayPause),
+        keysyms::KEY_XF86AudioPause => Some(MediaKey::Pause),
+        keysyms::KEY_XF86AudioNext => Some(MediaKey::Next),
+        keysyms::KEY_XF86AudioPrev => Some(MediaKey::Previous),
         _ => None,
     }
 }
@@ -172,6 +183,10 @@ impl State {
         }
         if let Shortcut::Brightness(key, fine) = shortcut {
             self.brightness_key(key, fine);
+            return;
+        }
+        if let Shortcut::Media(key) = shortcut {
+            self.media_key(key);
             return;
         }
         if shortcut == Shortcut::ShowLauncher {
@@ -290,6 +305,7 @@ impl State {
             | Shortcut::CaptureArea
             | Shortcut::Volume(..)
             | Shortcut::Brightness(..)
+            | Shortcut::Media(_)
             | Shortcut::Workspace(_)
             | Shortcut::WorkspaceAt(_)
             | Shortcut::Overview
@@ -530,6 +546,10 @@ impl Headless {
                     state.held_shortcut_keys.push(evdev_code);
                     let fine = modifiers.alt && modifiers.shift;
                     return FilterResult::Intercept(Some(Shortcut::Brightness(key, fine)));
+                }
+                if let Some(key) = media_key(keysym.modified_sym().raw()) {
+                    state.held_shortcut_keys.push(evdev_code);
+                    return FilterResult::Intercept(Some(Shortcut::Media(key)));
                 }
                 let sym = keysym.modified_sym();
                 if sym.raw() == keysyms::KEY_XF86LaunchA && !state.is_locked() {

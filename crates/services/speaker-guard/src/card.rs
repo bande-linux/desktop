@@ -110,7 +110,6 @@ struct SpeakerControls {
 pub struct Card {
     ctl: Ctl,
     unlock: Control,
-    sample_rate: Control,
     speakers: Vec<SpeakerControls>,
 }
 
@@ -128,7 +127,6 @@ impl Card {
         let ctl =
             Ctl::new(&device, false).map_err(|e| CardError::Alsa("open", device.clone(), e))?;
         let unlock = Control::locked(&ctl, "Speaker Volume Unlock".to_owned(), ElemType::Integer)?;
-        let sample_rate = Control::new(&ctl, "Speaker Sample Rate".to_owned(), ElemType::Integer)?;
         let speakers = model
             .speakers
             .iter()
@@ -173,18 +171,12 @@ impl Card {
         Ok(Self {
             ctl,
             unlock,
-            sample_rate,
             speakers,
         })
     }
 
     pub fn heartbeat(&mut self) -> Result<(), CardError> {
         self.unlock.set_integer(&self.ctl, UNLOCK_MAGIC)
-    }
-
-    pub fn sample_rate(&mut self) -> Result<u32, CardError> {
-        self.sample_rate.read(&self.ctl)?;
-        Ok(u32::try_from(self.sample_rate.integer()?).unwrap_or(0))
     }
 
     pub fn set_gain(&mut self, speaker: usize, gain_db: f64) -> Result<(), CardError> {

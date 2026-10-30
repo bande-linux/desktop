@@ -80,9 +80,10 @@ impl Guard {
 
     fn run(&mut self, stop: &AtomicBool) -> Result<(), String> {
         let mut buffer = vec![0i16; self.model.period_frames * self.channels];
-        let mut last = Instant::now();
         let mut runtime_saved = Instant::now();
         let mut persistent_saved = Instant::now();
+        self.cool_below_hard_limit(stop);
+        let mut last = Instant::now();
         self.card.heartbeat().map_err(|e| e.to_string())?;
         let gains: Vec<f64> = self.protections.iter().map(|p| p.gain_db).collect();
         for (index, gain) in gains.into_iter().enumerate() {
@@ -110,9 +111,6 @@ impl Guard {
                     self.apply(&idle, seconds)?;
                 }
                 Some(frames) => {
-                    if self.card.sample_rate().map_err(|e| e.to_string())? == 0 {
-                        return Err("sense data arrived while the speaker rate is 0".to_owned());
-                    }
                     let samples = &buffer[..frames * self.channels];
                     let powers = self
                         .model
@@ -135,6 +133,24 @@ impl Guard {
             }
         }
         Ok(())
+    }
+
+    fn cool_below_hard_limit(&mut self, stop: &AtomicBool) {
+        let wait = std::time::Duration::from_millis(u64::from(WAIT_MS));
+        while !stop.load(Ordering::Relaxed)
+            && self
+                .protections
+                .iter()
+                .any(|p| p.thermal.exceeds_hard_limit(p.temperatures))
+        {
+            std::thread::sleep(wait);
+            for protection in &mut self.protections {
+                protection.temperatures =
+                    protection
+                        .thermal
+                        .advance(protection.temperatures, 0.0, wait.as_secs_f64());
+            }
+        }
     }
 
     fn save(&self) {

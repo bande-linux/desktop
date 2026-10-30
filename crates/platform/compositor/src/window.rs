@@ -34,6 +34,8 @@ pub struct Window {
     pub(crate) drawn: Option<Drawn>,
     pub(crate) tile: Option<(Tile, Rect)>,
     pub(crate) workspace: u64,
+    pub(crate) recalled: Option<Point<i32, Logical>>,
+    pub(crate) keep_on_top: bool,
     pub(crate) announced_workspace: Option<usize>,
     pub(crate) frame: Frame,
 }
@@ -109,6 +111,8 @@ impl Window {
             drawn: None,
             tile: None,
             workspace,
+            recalled: None,
+            keep_on_top: false,
             announced_workspace: None,
             frame: Frame::default(),
         }
@@ -133,6 +137,18 @@ impl Window {
 
     pub fn is_minimized(&self) -> bool {
         self.minimized.is_some()
+    }
+
+    pub fn is_hidden(&self) -> bool {
+        self.hidden
+    }
+
+    pub fn tile(&self) -> Option<Rect> {
+        self.tile.map(|(_, rect)| rect)
+    }
+
+    pub fn app_id(&self) -> String {
+        crate::shell::toplevel_names(self.surface()).1
     }
 
     pub fn has_state(&self, state: xdg_toplevel::State) -> bool {
@@ -256,16 +272,20 @@ impl State {
         } else {
             Vec::new()
         };
-        let window = &mut self.windows[index];
-        if !window.toplevel.is_initial_configure_sent() {
-            window.toplevel.with_pending_state(|state| {
+        if !self.windows[index].toplevel.is_initial_configure_sent() {
+            self.windows[index].toplevel.with_pending_state(|state| {
                 let bar = title_bar_height(state.decoration_mode, false);
                 state.bounds = Some((area.size.w, area.size.h - bar).into());
             });
-            window.toplevel.send_configure();
+            self.recall_frame(index);
+            self.windows[index].toplevel.send_configure();
             return;
         }
         let size = crate::state::mapped_size(surface);
+        if size.is_none() && self.windows[index].size.is_some() {
+            self.remember_frame(index);
+        }
+        let window = &mut self.windows[index];
         let mapped = window.size.is_some();
         window.size = size;
         if let Some(geometry) = window.geometry() {
@@ -275,6 +295,15 @@ impl State {
                     output.location
                 } else if window.has_state(xdg_toplevel::State::Maximized) {
                     area.location
+                } else if let Some(at) = window.recalled.take() {
+                    crate::recall::clamp_into(
+                        Rect {
+                            location: at,
+                            size: geometry.size,
+                        },
+                        area,
+                    )
+                    .location
                 } else {
                     crate::cascade::cascaded(area, geometry.size, &siblings)
                 };

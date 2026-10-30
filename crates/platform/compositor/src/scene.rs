@@ -49,14 +49,15 @@ pub(crate) struct Shading {
     pub(crate) scheme: Scheme,
 }
 
-pub(crate) fn frame_shadows(
+pub(crate) fn cast_shadows(
     casting: &Casting,
     window: RoundedRect,
+    elevation: Elevation,
     shading: Shading,
     scale: f64,
     alpha: f32,
 ) -> impl Iterator<Item = OutputElement> {
-    let [key, ambient] = Elevation::Frame.shadows(shading.scheme, shading.active);
+    let [key, ambient] = elevation.shadows(shading.scheme, shading.active);
     let cast = |id: &Id, shadow: unbound_graphics::Shadow| {
         let offset = (f64::from(shadow.offset) * scale) as f32;
         OutputElement::Shadow(ShadowElement::new(
@@ -670,7 +671,14 @@ pub(crate) fn preview_elements(
         shape,
         PREVIEW_FILL.map(|channel| channel * alpha),
     )))
-    .chain(frame_shadows(&preview.shadow, shape, shading, scale, alpha))
+    .chain(cast_shadows(
+        &preview.shadow,
+        shape,
+        Elevation::Frame,
+        shading,
+        scale,
+        alpha,
+    ))
     .collect()
 }
 
@@ -813,9 +821,10 @@ impl Closing {
         let clip = rounded(shown, shaped_radius(self.drawn.area, shown, scale));
         let alpha = look.alpha as f32;
         scaled_pieces(&self.drawn.pieces, self.drawn.area, shown, clip, alpha)
-            .chain(frame_shadows(
+            .chain(cast_shadows(
                 &self.shadow,
                 clip,
+                Elevation::Frame,
                 self.drawn.shading,
                 scale,
                 alpha,
@@ -885,7 +894,16 @@ pub(crate) fn window_elements(
     let mut pieces = pieces_of(&surfaces, scale);
     pieces.extend(title_bar.clone());
     let shadow = (!fullscreen)
-        .then(|| frame_shadows(&window.shadow, clip, shading, scale, alpha))
+        .then(|| {
+            cast_shadows(
+                &window.shadow,
+                clip,
+                Elevation::Frame,
+                shading,
+                scale,
+                alpha,
+            )
+        })
         .into_iter()
         .flatten();
     let origin = window.surface_origin().to_f64();

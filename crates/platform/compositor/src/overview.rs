@@ -137,7 +137,7 @@ impl Overview {
     }
 }
 
-fn arrange(windows: &[Frame], area: Frame) -> Vec<Frame> {
+pub(crate) fn arrange(windows: &[Frame], area: Frame) -> Vec<Frame> {
     if windows.is_empty() || area.size.w <= 0.0 || area.size.h <= 0.0 {
         return vec![area; windows.len()];
     }
@@ -222,7 +222,7 @@ fn inflate(rect: Frame, by: f64) -> Frame {
     )
 }
 
-fn real_rect(window: &Window) -> Option<Frame> {
+pub(crate) fn real_rect(window: &Window) -> Option<Frame> {
     let geometry = window.geometry()?;
     Some(Rectangle::new(
         geometry.location.to_f64(),

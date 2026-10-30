@@ -188,6 +188,9 @@ pub struct State {
     pub(crate) watchdog: crate::watchdog::Watchdog,
     pub(crate) desktop: crate::gesture::ShowDesktop,
     pub(crate) overview: crate::overview::Overview,
+    pub(crate) switcher: crate::switcher::Switcher,
+    pub(crate) assist: crate::assist::Assist,
+    pub(crate) recall: crate::recall::Recall,
     pub(crate) gesture_route: Option<crate::gesture::Route>,
     pub(crate) active_app: String,
     pub(crate) active_output: String,
@@ -283,7 +286,7 @@ impl Headless {
         let center = settings.logical_size().to_f64().downscale(2.0);
         let screen = Screen::new(&handle, config, settings);
         handle.create_global::<State, UnboundShellV1, ()>(12, ());
-        handle.create_global::<State, UnboundAppV1, ()>(3, ());
+        handle.create_global::<State, UnboundAppV1, ()>(4, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
         handle.create_global::<State, smithay::reexports::wayland_protocols_wlr::output_management::v1::server::zwlr_output_manager_v1::ZwlrOutputManagerV1, ()>(crate::management::MANAGER_VERSION, ());
         State::create_capture_globals(&handle);
@@ -351,6 +354,9 @@ impl Headless {
             watchdog: crate::watchdog::Watchdog::default(),
             desktop: crate::gesture::ShowDesktop::default(),
             overview: crate::overview::Overview::default(),
+            switcher: crate::switcher::Switcher::default(),
+            assist: crate::assist::Assist::default(),
+            recall: crate::recall::Recall::default(),
             gesture_route: None,
             active_app: String::new(),
             active_output: String::new(),
@@ -574,6 +580,7 @@ impl Headless {
         screen: usize,
     ) -> Vec<ScreenElement> {
         self.state.paint_title_bars(renderer);
+        self.state.prepare_switcher(screen);
         let (elements, drawn, icon) = self.compose(renderer, screen, true);
         if self.state.pointer_screen() == screen {
             self.state.remember_drag_icon(icon);
@@ -658,6 +665,8 @@ impl Headless {
             (Vec::new(), None)
         };
         elements.extend(self.state.source_hud_element(renderer, screen, scale));
+        elements.extend(self.state.switcher_elements(renderer, screen, scale));
+        elements.extend(self.state.assist_elements(renderer, screen, scale));
         let key = self.state.key_window();
         for placed in self.state.scene(true, screen) {
             match placed {
@@ -1132,6 +1141,8 @@ impl State {
         });
         let (leaving, rest): (Vec<&Window>, Vec<&Window>) =
             rest.into_iter().partition(|window| window.is_minimized());
+        let (on_top, rest): (Vec<&Window>, Vec<&Window>) =
+            rest.into_iter().partition(|window| window.keep_on_top);
         let name = self.screens[screen].name();
         [
             layers(Layer::Overlay),
@@ -1148,6 +1159,7 @@ impl State {
                 .filter(|closing| rendered && closing.output == name)
                 .map(Placed::Closing)
                 .collect(),
+            self.window_entries(&on_top),
             self.window_entries(&rest),
             layers(Layer::Bottom),
             layers(Layer::Background),
@@ -1371,6 +1383,11 @@ impl XdgShellHandler for State {
 
     fn toplevel_destroyed(&mut self, toplevel: ToplevelSurface) {
         self.withdraw_toplevel(toplevel.wl_surface());
+        if let Some(index) = self.window_index(toplevel.wl_surface())
+            && self.windows[index].size.is_some()
+        {
+            self.remember_frame(index);
+        }
         let workspace = self.window_index(toplevel.wl_surface()).map(|index| {
             self.close_window(index);
             self.windows.remove(index).workspace
@@ -1388,6 +1405,7 @@ impl XdgShellHandler for State {
     }
 
     fn app_id_changed(&mut self, toplevel: ToplevelSurface) {
+        self.recall_late(toplevel.wl_surface());
         self.publish_toplevel(toplevel.wl_surface());
         let key = self.key_window();
         self.announce_active_app(key.as_ref());

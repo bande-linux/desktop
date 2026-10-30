@@ -218,6 +218,26 @@ impl Window {
         app.place_window(self.toplevel()?, placement);
         self.flush()
     }
+
+    pub(crate) fn can_keep_on_top(&self) -> bool {
+        self.state
+            .shell
+            .app
+            .as_ref()
+            .is_some_and(|app| app.version() >= unbound_app_v1::REQ_SET_KEEP_ON_TOP_SINCE)
+    }
+
+    pub(crate) fn set_keep_on_top(&mut self, keep: bool) -> Result<(), WindowError> {
+        let app = self
+            .state
+            .shell
+            .app
+            .as_ref()
+            .filter(|app| app.version() >= unbound_app_v1::REQ_SET_KEEP_ON_TOP_SINCE)
+            .ok_or(WindowError::Missing("unbound_app_v1 version 4"))?;
+        app.set_keep_on_top(self.toplevel()?, u32::from(keep));
+        self.flush()
+    }
 }
 
 impl Dispatch<UnboundAppV1, ()> for State {

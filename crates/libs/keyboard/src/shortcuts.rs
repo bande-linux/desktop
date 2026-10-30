@@ -39,6 +39,7 @@ pub enum Action {
     ToggleFullScreen,
     TileWindow,
     NextApp,
+    NextWindow,
     QuitApp,
     HideApp,
     HideOthers,
@@ -67,9 +68,12 @@ impl Action {
             | Self::MinimizeWindow
             | Self::ToggleFullScreen
             | Self::TileWindow => Area::Windows,
-            Self::NextApp | Self::QuitApp | Self::HideApp | Self::HideOthers | Self::ForceQuit => {
-                Area::Apps
-            }
+            Self::NextApp
+            | Self::NextWindow
+            | Self::QuitApp
+            | Self::HideApp
+            | Self::HideOthers
+            | Self::ForceQuit => Area::Apps,
             Self::PreviousWorkspace
             | Self::NextWorkspace
             | Self::WorkspaceByNumber
@@ -92,6 +96,7 @@ impl Action {
             Self::ToggleFullScreen => L10N.tr("toggle-full-screen"),
             Self::TileWindow => L10N.tr("tile-window"),
             Self::NextApp => L10N.tr("next-app"),
+            Self::NextWindow => L10N.tr("next-window"),
             Self::QuitApp => L10N.tr("quit-app"),
             Self::HideApp => L10N.tr("hide-app"),
             Self::HideOthers => L10N.tr("hide-others"),
@@ -125,12 +130,13 @@ const fn shortcut(action: Action, keys: &'static str) -> Shortcut {
     Shortcut { action, keys }
 }
 
-pub const SHORTCUTS: [Shortcut; 24] = [
+pub const SHORTCUTS: [Shortcut; 25] = [
     shortcut(Action::CloseWindow, "Super+W"),
     shortcut(Action::MinimizeWindow, "Super+M"),
     shortcut(Action::ToggleFullScreen, "Ctrl+Super+F"),
     shortcut(Action::TileWindow, "Ctrl+Super+Left"),
     shortcut(Action::NextApp, "Super+Tab"),
+    shortcut(Action::NextWindow, "Super+`"),
     shortcut(Action::QuitApp, "Super+Q"),
     shortcut(Action::HideApp, "Super+H"),
     shortcut(Action::HideOthers, "Alt+Super+H"),

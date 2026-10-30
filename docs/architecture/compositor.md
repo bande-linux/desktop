@@ -217,6 +217,17 @@ when they reach the screen is Unbound's own.
   `unbound_shell_v1.show_windows(app_id)` (v9; an empty app id opens the plain overview) for
   the Dock. With Reduce Motion the windows stay where they are and fade out while the
   overview fades in.
+- **Switcher, window memory and the other half.** `switcher.rs` holds the Super+Tab and
+  Super+` session (behaviour.md has the rules): a dwell of 150 ms counted in vblank time, then
+  a card laid out once per change (a row of tiles, shrunk uniformly to fit the display) whose
+  frame and selection well are `FillElement`s driven by `Motion` on the `quick` spring, the
+  icons and name painted on the CPU with `unbound-graphics` into memory buffers at the output
+  scale, and window thumbnails drawn from the windows' own textures as in the overview. App
+  names and icons come from desktop entries through `unbound-xdg`, cached, and reread at most
+  every 30 s while an app is unknown. `access.rs` publishes the card through AccessKit (a
+  window holding a list box whose selected option has the focus) only while it shows.
+  `recall.rs` keeps the window memory file, `assist.rs` the free-half panel, which reuses the
+  overview's `arrange` and the switcher's thumbnails.
 - **Not responding.** Whenever the user interacts with a window, and for every app when Force
   Quit opens, the compositor pings the app through `xdg_wm_base.ping` (at most once a second).
   An app that has not answered after 3 s is not responding: its windows are veiled in a soft

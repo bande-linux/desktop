@@ -92,6 +92,14 @@ fn run_headless(session: Session) -> Result<(), Box<dyn Error>> {
     serve(&mut event_loop, app, session)
 }
 
+fn window_memory() -> Option<PathBuf> {
+    std::env::var_os("XDG_STATE_HOME")
+        .map(PathBuf::from)
+        .filter(|state| state.is_absolute())
+        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/state")))
+        .map(|state| state.join("unbound/windows"))
+}
+
 fn display_config() -> Config {
     let home = std::env::var_os("HOME").map(PathBuf::from);
     let config_home = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from);
@@ -270,6 +278,9 @@ fn listen<O: 'static>(
     app.compositor.set_socket_name(socket.socket_name());
     app.compositor
         .use_cursor_theme(CursorTheme::from_environment());
+    if let Some(path) = window_memory() {
+        app.compositor.remember_windows_in(path);
+    }
     let socket_name = socket.socket_name().to_string_lossy().into_owned();
     let exported = zbus::blocking::Connection::session().and_then(|session| {
         export_session_environment(&session, &socket_name, app.compositor.cursor_theme())

@@ -1,6 +1,8 @@
+mod access;
 mod app;
 mod appearance;
 mod arrange;
+mod assist;
 mod capture;
 mod capture_shell;
 mod cascade;
@@ -31,6 +33,7 @@ mod motion;
 mod overview;
 mod pointing;
 mod popup;
+mod recall;
 mod render;
 mod scanout;
 mod scene;
@@ -38,6 +41,7 @@ mod screen;
 mod session;
 mod shell;
 mod state;
+mod switcher;
 mod sync;
 mod tile;
 mod typing;
@@ -72,3 +76,20 @@ pub use state::{Headless, OutputElement, REFRESH, Rect, ScanoutDevice};
 pub use unbound_render::{DeviceInfo, RenderError};
 pub use watchdog::UNRESPONSIVE_AFTER;
 pub use window::Window;
+
+const ENGLISH: &str = include_str!("../locales/en-US/unbound-compositor.ftl");
+
+static L10N: std::sync::LazyLock<unbound_l10n::Localizer> =
+    std::sync::LazyLock::new(|| unbound_l10n::Localizer::new(&[("en-US", ENGLISH)]));
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn every_message_id_used_in_code_is_in_the_english_file() {
+        let sources = [include_str!("switcher.rs")];
+        assert_eq!(
+            unbound_l10n::missing_ids(super::ENGLISH, &sources),
+            Vec::<&str>::new()
+        );
+    }
+}

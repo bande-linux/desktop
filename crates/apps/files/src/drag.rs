@@ -10,10 +10,12 @@ use unbound_xdg::path_from_file_uri;
 
 use crate::browser::Location;
 use crate::controls::Press;
-use crate::sidebar::Row;
-use crate::view::{FilesView, Hit, Request, contains, home};
+use crate::sidebar::{Place, PlaceKind, Row};
+use crate::view::{FilesView, Hit, Request, SIDEBAR_WIDTH, contains, home};
+use crate::views::ViewMode;
 
 const DRAG_THRESHOLD: f32 = 4.0;
+const GAP_REACH: f32 = 6.0;
 const SPRING_DELAY: Duration = Duration::from_millis(900);
 const ICON: f32 = 40.0;
 const ICON_PIXELS: u32 = 64;
@@ -27,11 +29,13 @@ const COLUMN_ICON_CENTRE: f32 = 6.0 + 6.0 + 8.0;
 pub(crate) enum Target {
     Folder(PathBuf),
     Trash,
+    Favourite(Option<PathBuf>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Spring {
     Go(Location),
+    Tab(usize),
     Open { column: usize, row: usize },
 }
 
@@ -82,7 +86,7 @@ impl FilesView {
         true
     }
 
-    fn grabbed_icon(&self, at: Point) -> Option<Point> {
+    fn grabbed_icon(&mut self, at: Point) -> Option<Point> {
         if self.table_frame().is_some_and(|frame| contains(frame, at)) {
             let row = self.table_row_at(at)?;
             let name = self.shown_table()?.cell_bounds(row, 0)?;
@@ -91,6 +95,13 @@ impl FilesView {
                 name.y + name.height / 2.0,
             ));
         }
+        let row = self.hits.iter().find_map(|(rect, hit)| match hit {
+            Hit::Row { row, .. } if contains(*rect, at) => Some(*row),
+            _ => None,
+        });
+        if self.mode == ViewMode::Icons {
+            return row.map(|row| self.grid_icon_centre(row));
+        }
         self.hits.iter().find_map(|(rect, hit)| match hit {
             Hit::Row { .. } if contains(*rect, at) => Some(Point::new(
                 rect.x + COLUMN_ICON_CENTRE,
@@ -98,6 +109,48 @@ impl FilesView {
             )),
             _ => None,
         })
+    }
+
+    pub(crate) fn reorder_moved(&mut self, index: usize, from: Point, pointer: &Pointer) -> bool {
+        let path = match self.sidebar.get(index) {
+            Some(Row::Place(Place {
+                kind: PlaceKind::Bookmark,
+                location: Location::Folder(path),
+                ..
+            })) => path.clone(),
+            _ => return false,
+        };
+        if distance(from, pointer.position) < DRAG_THRESHOLD && self.drop.is_none() {
+            return false;
+        }
+        self.drop = self
+            .sidebar_gap(pointer.position)
+            .map(|(target, highlight)| Hover {
+                target,
+                highlight,
+                spring: None,
+                action: Some(DragAction::Copy),
+            });
+        self.reordering = Some(path);
+        true
+    }
+
+    pub(crate) fn reorder_finished(&mut self) -> bool {
+        let Some(path) = self.reordering.take() else {
+            return false;
+        };
+        if let Some(Hover {
+            target: Target::Favourite(before),
+            ..
+        }) = self.drop.take()
+            && before.as_ref() != Some(&path)
+        {
+            self.requests.push(Request::AddBookmarks {
+                folders: vec![path],
+                before,
+            });
+        }
+        true
     }
 
     pub fn drag_finished(&mut self) {
@@ -162,17 +215,72 @@ impl FilesView {
     }
 
     fn table_frame(&self) -> Option<Rect> {
-        self.browser.single().then(|| self.content_frame())
+        (self.mode == ViewMode::List).then(|| self.content_frame())
     }
 
-    fn location_target(location: &Location) -> Target {
+    fn location_target(location: &Location) -> Option<Target> {
         match location {
-            Location::Folder(folder) => Target::Folder(folder.clone()),
-            Location::Trash => Target::Trash,
+            Location::Folder(folder) => Some(Target::Folder(folder.clone())),
+            Location::Trash => Some(Target::Trash),
+            Location::Recents | Location::Search(_) => None,
         }
     }
 
+    fn sidebar_gap(&self, at: Point) -> Option<(Target, Rect)> {
+        if at.x >= SIDEBAR_WIDTH {
+            return None;
+        }
+        let favourites = self
+            .sidebar
+            .iter()
+            .enumerate()
+            .skip(1)
+            .take_while(|(_, row)| matches!(row, Row::Place(_)))
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>();
+        let rows = self
+            .hits
+            .iter()
+            .filter_map(|(rect, hit)| match hit {
+                Hit::Place(index) if favourites.contains(index) => Some((*rect, *index)),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        let bookmark_from = |index: usize| {
+            self.sidebar[index..].iter().find_map(|row| match row {
+                Row::Place(Place {
+                    kind: PlaceKind::Bookmark,
+                    location: Location::Folder(path),
+                    ..
+                }) => Some(path.clone()),
+                _ => None,
+            })
+        };
+        let line = |rect: Rect, y: f32| Rect::new(rect.x, y - 1.0, rect.width, 2.0);
+        for (position, (rect, index)) in rows.iter().enumerate() {
+            if (at.y - rect.y).abs() <= GAP_REACH && position > 0 {
+                return Some((
+                    Target::Favourite(bookmark_from(*index)),
+                    line(*rect, rect.y),
+                ));
+            }
+            let bottom = rect.y + rect.height;
+            if position + 1 == rows.len()
+                && at.y >= bottom - GAP_REACH
+                && at.y <= bottom + 2.0 * GAP_REACH
+            {
+                return Some((Target::Favourite(None), line(*rect, bottom)));
+            }
+        }
+        None
+    }
+
     fn drop_target(&self, at: Point) -> Option<(Target, Rect, Option<Spring>)> {
+        let folders =
+            !self.drag_sources.is_empty() && self.drag_sources.iter().all(|source| source.is_dir());
+        if folders && let Some((target, line)) = self.sidebar_gap(at) {
+            return Some((target, line, None));
+        }
         if let Some(table) = self.table_frame().filter(|frame| contains(*frame, at)) {
             let column = &self.browser.columns()[0];
             let folder = self
@@ -185,7 +293,7 @@ impl FilesView {
                     self.table_row_bounds(row).unwrap_or(table),
                     Some(Spring::Go(Location::Folder(entry.path.clone()))),
                 ),
-                None => (Self::location_target(&column.location), table, None),
+                None => (Self::location_target(&column.location)?, table, None),
             });
         }
         let (rect, hit) = self
@@ -196,12 +304,20 @@ impl FilesView {
         match hit {
             Hit::Place(index) => match self.sidebar.get(*index) {
                 Some(Row::Place(place)) => Some((
-                    Self::location_target(&place.location),
+                    Self::location_target(&place.location)?,
                     *rect,
                     Some(Spring::Go(place.location.clone())),
                 )),
                 _ => None,
             },
+            Hit::Tab(index) | Hit::CloseTab(index) => {
+                let location = self.tab_location(*index)?;
+                Some((
+                    Self::location_target(&location)?,
+                    *rect,
+                    Some(Spring::Tab(*index)),
+                ))
+            }
             Hit::Segment(path) if path.is_dir() => Some((
                 Target::Folder(path.clone()),
                 *rect,
@@ -211,14 +327,14 @@ impl FilesView {
                 let shown = self.browser.columns().get(*column)?;
                 let entry = shown.entries.get(*row)?;
                 if entry.is_folder() && entry.trashed.is_none() {
-                    return Some((
-                        Target::Folder(entry.path.clone()),
-                        *rect,
-                        Some(Spring::Open {
+                    let spring = match self.mode {
+                        ViewMode::Columns => Spring::Open {
                             column: *column,
                             row: *row,
-                        }),
-                    ));
+                        },
+                        _ => Spring::Go(Location::Folder(entry.path.clone())),
+                    };
+                    return Some((Target::Folder(entry.path.clone()), *rect, Some(spring)));
                 }
                 self.column_target(*column)
             }
@@ -233,12 +349,14 @@ impl FilesView {
             _ => None,
         })?;
         let location = &self.browser.columns().get(column)?.location;
-        Some((Self::location_target(location), frame, None))
+        Some((Self::location_target(location)?, frame, None))
     }
 
     fn preferred(&self, target: &Target) -> Option<DragAction> {
-        let Target::Folder(folder) = target else {
-            return Some(DragAction::Move);
+        let folder = match target {
+            Target::Folder(folder) => folder,
+            Target::Trash => return Some(DragAction::Move),
+            Target::Favourite(_) => return Some(DragAction::Copy),
         };
         let sources = &self.drag_sources;
         if inside(folder, sources) {
@@ -307,6 +425,7 @@ impl FilesView {
         }
         match spring {
             Spring::Go(location) => self.go(location),
+            Spring::Tab(index) => self.select_tab(index),
             Spring::Open { column, row } => {
                 self.browser.select(column, row);
                 self.selection_changed();
@@ -316,12 +435,14 @@ impl FilesView {
 
     pub fn dropped(&mut self, at: Point, uris: &[String], action: Option<DragAction>) -> bool {
         self.drop = None;
-        self.drag_sources.clear();
         let sources = uris
             .iter()
             .filter_map(|uri| path_from_file_uri(uri))
             .collect::<Vec<_>>();
-        let Some((target, _, _)) = self.drop_target(at) else {
+        self.drag_sources = sources.clone();
+        let target = self.drop_target(at);
+        self.drag_sources.clear();
+        let Some((target, _, _)) = target else {
             return false;
         };
         if sources.is_empty() {
@@ -330,6 +451,13 @@ impl FilesView {
         let destination = match target {
             Target::Trash => {
                 self.start(Task::Trash { sources }, Purpose::Do(Action::Trash));
+                return true;
+            }
+            Target::Favourite(before) => {
+                self.requests.push(Request::AddBookmarks {
+                    folders: sources,
+                    before,
+                });
                 return true;
             }
             Target::Folder(folder) => folder,
@@ -366,6 +494,13 @@ impl FilesView {
         let Some(hover) = self.drop.as_ref().filter(|hover| hover.action.is_some()) else {
             return;
         };
+        if matches!(hover.target, Target::Favourite(_)) {
+            items.push(Item::Fill {
+                shape: Shape::rounded(hover.highlight, 1.0),
+                paint: self.palette.accent.into(),
+            });
+            return;
+        }
         let shape = Shape::rounded(hover.highlight.inset(1.0), 6.0);
         items.push(Item::Fill {
             shape,

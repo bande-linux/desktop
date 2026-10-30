@@ -8,6 +8,7 @@ pub enum UserDir {
     Music,
     Pictures,
     Videos,
+    Templates,
 }
 
 impl UserDir {
@@ -19,6 +20,7 @@ impl UserDir {
             Self::Music => "XDG_MUSIC_DIR",
             Self::Pictures => "XDG_PICTURES_DIR",
             Self::Videos => "XDG_VIDEOS_DIR",
+            Self::Templates => "XDG_TEMPLATES_DIR",
         }
     }
 
@@ -30,6 +32,7 @@ impl UserDir {
             Self::Music => "Music",
             Self::Pictures => "Pictures",
             Self::Videos => "Videos",
+            Self::Templates => "Templates",
         }
     }
 }

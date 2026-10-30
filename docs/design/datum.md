@@ -258,6 +258,17 @@ The lock-screen clock is Manrope 300 at 96 pt with `tnum`.
 
 ## 10. Iconography
 
+> **Owner's amendment (2026-10-30):** app icons are **rounded squares**, as in
+> `bar/01-desktop-left-collapsed.png`, not discs, and the bar's tool, status and tray icons follow
+> that mockup's richer, more developed style rather than the minimal outline set below. The
+> "Disc" and "Symbols" paragraphs are superseded where they conflict; the file and folder rules
+> stay. Concretely: app icons are a rounded square on a 48 grid (44 pt body, circular-arc corners
+> of radius 10, not a squircle), a rich but clean colour field (a subtle vertical gradient is
+> allowed), and a detailed, well-crafted symbol with depth through tone (not gloss); status and
+> tool icons (Wi-Fi, sound, Bluetooth, battery, tray, Trash, view modes) are drawn with the
+> detail and weight of that mockup, filled where it helps legibility, and still recolour with the
+> text colour where they are symbolic.
+
 **App icons: "Disc."** On a 48 grid, a 44 pt circle of one **flat** colour field, with no gradient, gloss or squircle. It carries one geometric symbol in `paper` (`#FCFBF9`) or `ink`, built from 2.4–2.6 strokes with round caps, and **at most one ember signal square** (3–6 pt). A 1 pt inner edge at 10 % black (22 % white on dark fields) keeps discs defined on any background. The circle gives equal optical weight in a vertical bar and is the opposite of Apple's squircle. Third-party icons are shown unmodified, *centred in a 44 pt disc of `well`* only when they are full-bleed squares (as with Android's adaptive icons). The mockup shows Files (ultramarine, folder), Terminal (ink, chevron + underscore + ember cursor), Settings (stone, **three faders**, not a gear), Monitor (teal, pulse line + amber square), Text (paper, lines + ember caret) and Capture (plum, corner brackets + ember square).
 
 **File icons: "Sheet + label."** A 30×40 white sheet, radius 3, with a hairline edge and **no dog-ear**, a content hint on top (text lines, picture, zipper) and a **coloured label band** at the bottom with the extension in JetBrains Mono 700 (PDF red, PNG moss, TXT warm grey, ZIP amber, audio plum, video rose, code teal, unknown `ink3`). Thumbnails replace the hint area for images and PDFs once thumbnailers exist (B2), and the label band stays.

@@ -7,15 +7,21 @@ use std::time::Instant;
 
 use accesskit::TreeUpdate;
 use unbound_app_menu::{AppMenu, Standard};
-use unbound_files::{Browser, FilesView, Location, Request, Row, rows, without_bookmark};
+use unbound_files::{
+    Browser, FilesView, Location, Request, Row, ViewMemory, rows, views_file, with_bookmarks,
+    without_bookmark,
+};
 use unbound_fs::Trash;
+use unbound_search::{recently_used_path, usage_path};
+use unbound_thumbnails::Thumbnails;
 use unbound_toolkit::{
     App, Appearance, DragAction, DragEvent, MenuPlacement, Rect, Role, Scene, TextSystem, Transfer,
     Window, WindowEvent,
 };
 use unbound_volumes::{eject, media_roots};
 use unbound_xdg::{
-    Apps, config_dirs, config_home, data_dirs, file_uri, launch_with, path_from_file_uri,
+    Apps, TERMINAL, UserDir, config_dirs, config_home, data_dirs, file_uri, launch_with,
+    path_from_file_uri, spawn_detached, user_dir,
 };
 
 const APP_ID: &str = "org.unbound.Files";
@@ -41,6 +47,17 @@ fn sidebar(home: &Path) -> Vec<Row> {
     )
 }
 
+fn add_bookmarks(folders: &[PathBuf], before: Option<&Path>) -> std::io::Result<()> {
+    let file = bookmarks_file().ok_or(std::io::ErrorKind::NotFound)?;
+    let text = std::fs::read_to_string(&file).unwrap_or_default();
+    if let Some(parent) = file.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let staging = file.with_extension("new");
+    std::fs::write(&staging, with_bookmarks(&text, folders, before))?;
+    std::fs::rename(staging, file)
+}
+
 fn remove_bookmark(folder: &Path) -> std::io::Result<()> {
     let file = bookmarks_file().ok_or(std::io::ErrorKind::NotFound)?;
     let text = std::fs::read_to_string(&file)?;
@@ -56,12 +73,21 @@ impl Files {
         let result = match Standard::parse(action) {
             Some(Standard::Hide | Standard::Minimize) => window.minimize(),
             Some(Standard::Zoom) => window.toggle_zoom(),
-            Some(Standard::Quit | Standard::CloseWindow) => {
+            Some(Standard::Quit) => {
                 window.close();
                 Ok(())
             }
+            Some(Standard::CloseWindow) => {
+                if !self.view.close_tab(self.view.active_tab()) {
+                    window.close();
+                }
+                return true;
+            }
             None => {
-                return menu_bar::key_event(action).is_some_and(|event| self.view.handle(&event));
+                return match menu_bar::key_event(action) {
+                    Some(event) => self.view.handle(&event),
+                    None => self.view.menu_action(action),
+                };
             }
         };
         if let Err(error) = result {
@@ -112,6 +138,14 @@ impl Files {
                     }
                 }
                 Request::Eject(volume) => eject(vec![volume]),
+                Request::NewWindow(location) => new_window(window, &location),
+                Request::OpenTerminal(folder) => open_terminal(window, &folder),
+                Request::AddBookmarks { folders, before } => {
+                    match add_bookmarks(&folders, before.as_deref()) {
+                        Ok(()) => self.view.set_sidebar(sidebar(&self.home)),
+                        Err(error) => tracing::warn!("cannot add the bookmarks: {error}"),
+                    }
+                }
                 Request::RemoveBookmark(folder) => match remove_bookmark(&folder) {
                     Ok(()) => self.view.set_sidebar(sidebar(&self.home)),
                     Err(error) => tracing::warn!("cannot remove the bookmark: {error}"),
@@ -230,6 +264,18 @@ impl App for Files {
         Some(self.view.accessibility())
     }
 
+    fn should_close(&mut self, window: &mut Window) -> bool {
+        if window.close_requested_by_button() || !self.view.close_tab(self.view.active_tab()) {
+            return true;
+        }
+        self.changed(window);
+        false
+    }
+
+    fn should_quit(&mut self, _window: &mut Window) -> bool {
+        true
+    }
+
     fn tick(&mut self, window: &mut Window, now: Instant) {
         if self.view.tick(now) {
             self.changed(window);
@@ -238,13 +284,50 @@ impl App for Files {
 }
 
 const INFO_FLAG: &str = "--info";
+const TERMINAL_APP_ID: &str = "org.unbound.Terminal";
+const TERMINAL_DIRECTORY: &str = "--working-directory";
+const TRASH_URI: &str = "trash:///";
+const RECENTS_URI: &str = "recent:///";
+
+fn open_terminal(window: &mut Window, folder: &Path) {
+    let token = window.activation_token(TERMINAL_APP_ID).ok();
+    let command = [
+        TERMINAL.to_owned(),
+        TERMINAL_DIRECTORY.to_owned(),
+        folder.to_string_lossy().into_owned(),
+    ];
+    if let Err(error) = spawn_detached(&command, None, token.as_deref()) {
+        tracing::warn!("cannot open a terminal: {error}");
+    }
+}
+
+fn new_window(window: &mut Window, location: &Location) {
+    let program = match std::env::current_exe() {
+        Ok(program) => program.to_string_lossy().into_owned(),
+        Err(error) => return tracing::warn!("cannot find the Files program: {error}"),
+    };
+    let argument = match location {
+        Location::Trash => TRASH_URI.to_owned(),
+        Location::Recents => RECENTS_URI.to_owned(),
+        Location::Folder(folder) | Location::Search(folder) => {
+            folder.to_string_lossy().into_owned()
+        }
+    };
+    let token = window.activation_token(APP_ID).ok();
+    if let Err(error) = spawn_detached(&[program, argument], None, token.as_deref()) {
+        tracing::warn!("cannot open a window: {error}");
+    }
+}
 
 fn start_location(home: &Path, argument: Option<&str>) -> Location {
     let Some(argument) = argument else {
         return Location::Folder(home.to_path_buf());
     };
-    if argument == "trash:///" || argument == "trash:" {
+    if argument == TRASH_URI || argument == "trash:" {
         return Location::Trash;
+    }
+    if argument == RECENTS_URI {
+        return Location::Recents;
     }
     let path = path_from_file_uri(argument).unwrap_or_else(|| PathBuf::from(argument));
     Location::Folder(std::path::absolute(&path).unwrap_or(path))
@@ -274,6 +357,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     let sidebar = sidebar(&home);
     let apps = Apps::load(data_dirs(), &config_dirs());
+    let thumbnails = Thumbnails::for_user(apps.data_dirs());
     let mut view = FilesView::new(
         browser,
         sidebar,
@@ -281,6 +365,18 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         Appearance::default().palette(),
         TextSystem::new(),
     )?;
+    if let Some(thumbnails) = thumbnails {
+        view.set_thumbnails(thumbnails);
+    }
+    let user_dirs = config_home()
+        .and_then(|config| std::fs::read_to_string(config.join("user-dirs.dirs")).ok());
+    view.set_templates(user_dir(&home, user_dirs.as_deref(), UserDir::Templates));
+    let state_home = std::env::var_os("XDG_STATE_HOME").map(PathBuf::from);
+    view.set_view_memory(ViewMemory::load(views_file(state_home.as_deref(), &home)));
+    let data_home = std::env::var_os("XDG_DATA_HOME").map(PathBuf::from);
+    if let Some(usage) = usage_path(state_home.as_deref(), Some(&home)) {
+        view.set_recents_sources(recently_used_path(data_home.as_deref(), &home), usage);
+    }
     if info {
         view.show_inspector();
     }

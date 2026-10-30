@@ -171,7 +171,7 @@ pub(crate) struct Preview {
 
 impl State {
     fn snap_rect(&self, snap: Snap) -> Rect {
-        let area = self.usable_area();
+        let area = self.usable_area(self.pointer_screen());
         match snap {
             Snap::Tile(tile) => tile.rect(area),
             Snap::Zoom => area,
@@ -179,7 +179,7 @@ impl State {
     }
 
     pub(crate) fn tile_window(&mut self, index: usize, tile: Tile) {
-        let target = tile.rect(self.usable_area());
+        let target = tile.rect(self.usable_area(self.screen_of(&self.windows[index])));
         let window = &mut self.windows[index];
         if window.restore.is_none()
             && window.tile.is_none()
@@ -287,7 +287,10 @@ impl State {
             let Some((their_tile, theirs)) = self.windows[neighbor].tile else {
                 continue;
             };
-            if neighbor == index || !self.present(&self.windows[neighbor]) {
+            if neighbor == index
+                || !self.present(&self.windows[neighbor])
+                || self.screen_of(&self.windows[neighbor]) != self.screen_of(&self.windows[index])
+            {
                 continue;
             }
             let mut shared = theirs;
@@ -328,7 +331,8 @@ impl State {
         time: u32,
     ) {
         let now = Duration::from_millis(u64::from(time));
-        let candidate = snap_at(pointer, self.output_rect(), self.usable_area());
+        let screen = self.pointer_screen();
+        let candidate = snap_at(pointer, self.screen_rect(screen), self.usable_area(screen));
         let drag = self.snap.get_or_insert_with(|| SnapDrag {
             surface: surface.clone(),
             candidate: None,
@@ -421,7 +425,8 @@ impl State {
             return;
         };
         preview.motion.retarget(preview.target);
-        preview.motion.advance(time, self.refresh);
+        preview.motion.advance(time, self.screens[0].refresh());
+
         if preview.target.alpha == 0.0 && preview.motion.is_settled() {
             self.preview = None;
         }

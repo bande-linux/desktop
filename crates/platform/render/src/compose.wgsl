@@ -11,7 +11,8 @@ struct Quad {
     caster: vec4<f32>,
     clip_radius: f32,
     caster_radius: f32,
-    padding: vec2<f32>,
+    orientation: f32,
+    padding: f32,
 }
 
 var<immediate> quad: Quad;
@@ -76,9 +77,27 @@ fn box_shadow(point: vec2<f32>, rect: vec4<f32>, radius: f32, sigma: f32) -> f32
     return value;
 }
 
+fn oriented(local: vec2<f32>) -> vec2<f32> {
+    switch u32(quad.orientation) {
+        case 1u: {
+            return vec2<f32>(1.0 - local.y, local.x);
+        }
+        case 2u: {
+            return vec2<f32>(1.0 - local.x, 1.0 - local.y);
+        }
+        case 3u: {
+            return vec2<f32>(local.y, 1.0 - local.x);
+        }
+        default: {
+            return local;
+        }
+    }
+}
+
 @fragment
 fn fragment(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
-    let local = (position.xy - quad.origin) / quad.size;
+    let local = oriented((position.xy - quad.origin) / quad.size);
+
     let source = quad.source_origin + local * quad.source_size;
     let dimensions = vec2<f32>(textureDimensions(surface));
     var texel: vec4<f32>;

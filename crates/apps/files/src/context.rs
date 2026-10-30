@@ -8,6 +8,7 @@ use crate::menus::{
 };
 use crate::sidebar::{PlaceKind, Row};
 use crate::view::{FilesView, Hit, Request};
+use crate::views::ViewMode;
 
 impl FilesView {
     pub(crate) fn context_click(&mut self, hit: Hit, at: Point) -> bool {
@@ -49,7 +50,7 @@ impl FilesView {
                         empty: !self.trash_full,
                     },
                     Location::Folder(_) if place.kind == PlaceKind::Volume => Place::Volume,
-                    Location::Folder(_) => Place::Folder {
+                    _ => Place::Folder {
                         removable: place.kind == PlaceKind::Bookmark,
                     },
                 });
@@ -69,7 +70,7 @@ impl FilesView {
             (Hit::Column(column), None) => *column == active,
             _ => false,
         };
-        let rect = match self.browser.single() {
+        let rect = match self.mode == ViewMode::List {
             true => selected
                 .and_then(|row| self.table_row_bounds(row))
                 .or_else(|| self.frame_of(self.table)),
@@ -125,18 +126,27 @@ impl FilesView {
         };
         items_menu(&Selection {
             count: selection.len(),
+            name: selection
+                .first()
+                .map(|entry| entry.name.clone())
+                .unwrap_or_default(),
             trashed,
-            searching: self.search.is_some(),
+            searching: self.searching.is_some(),
+            folders: !selection.is_empty()
+                && selection
+                    .iter()
+                    .all(|entry| entry.is_folder() && entry.trashed.is_none()),
             apps,
         })
     }
 
     pub(crate) fn folder_menu(&self) -> Menu {
         folder_menu(Folder {
+            templates: self.templates(),
             trash: self.browser.active_column().location == Location::Trash,
             trash_empty: !self.trash_full,
             sort: self.browser.sort().by,
-            list: self.browser.single(),
+            mode: self.mode,
             hidden_shown: self.browser.shows_hidden(),
             paste: self.clipboard_files,
         })
@@ -149,6 +159,9 @@ impl FilesView {
         let place = self.menu_place.take();
         match command {
             Command::Open => self.open(),
+            Command::OpenInNewTab => self.open_selection_in_tabs(),
+            Command::OpenInTerminal => self.open_in_terminal(),
+            Command::NewDocument(name) => self.new_document(&name),
             Command::OpenWith(id) => self.open_with(&id),
             Command::QuickLook => {
                 if self.quick_look.is_none() {
@@ -158,9 +171,10 @@ impl FilesView {
             Command::Info => self.show_inspector(),
             Command::Rename => self.start_rename(),
             Command::Duplicate => self.duplicate(),
+            Command::Compress => self.compress(),
             Command::Copy => self.copy_selection(false),
             Command::Cut => self.copy_selection(true),
-            Command::ShowInEnclosingFolder => self.close_search(),
+            Command::ShowInEnclosingFolder => self.show_in_enclosing_folder(),
             Command::Trash | Command::PutBack => self.trash_or_put_back(),
             Command::DeleteImmediately => self.confirm_delete(),
             Command::NewFolder => self.new_folder(),
@@ -175,11 +189,15 @@ impl FilesView {
                     self.selection_changed();
                 }
             }
-            Command::Columns => self.set_list(false),
-            Command::List => self.set_list(true),
+            Command::Icons => self.set_mode(ViewMode::Icons),
+            Command::Columns => self.set_mode(ViewMode::Columns),
+            Command::List => self.set_mode(ViewMode::List),
             Command::ToggleHidden => self.toggle_hidden(),
             Command::EmptyTrash => self.ask_to_empty_trash(),
-            Command::OpenPlace | Command::RemoveFromSidebar | Command::Eject => {
+            Command::OpenPlace
+            | Command::OpenPlaceInNewTab
+            | Command::RemoveFromSidebar
+            | Command::Eject => {
                 let Some(Row::Place(place)) = place.and_then(|index| self.sidebar.get(index))
                 else {
                     return false;
@@ -187,6 +205,7 @@ impl FilesView {
                 let location = place.location.clone();
                 match (command, location) {
                     (Command::OpenPlace, location) => self.go(location),
+                    (Command::OpenPlaceInNewTab, location) => self.open_tab(location),
                     (Command::Eject, Location::Folder(path)) => {
                         self.requests.push(Request::Eject(path));
                     }

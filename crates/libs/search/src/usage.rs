@@ -64,6 +64,12 @@ impl Usage {
         self.records.keys().map(String::as_str)
     }
 
+    pub fn last_used(&self, prefix: &str) -> impl Iterator<Item = (PathBuf, u64)> {
+        self.records.iter().filter_map(move |(key, record)| {
+            Some((PathBuf::from(key.strip_prefix(prefix)?), record.last))
+        })
+    }
+
     pub fn record(&mut self, key: &str, now: u64) -> io::Result<()> {
         if key.contains('\n') {
             return Ok(());

@@ -1,8 +1,8 @@
 use std::fmt;
 use std::fs;
 use std::path::Path;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Weak};
 
 use resvg::{tiny_skia, usvg};
 use vello_cpu::{PixelMetadata, Pixmap};
@@ -122,6 +122,7 @@ impl From<Color> for Paint {
 pub struct Image {
     id: u64,
     pub(crate) pixmap: Arc<Pixmap>,
+    alive: Arc<()>,
 }
 
 impl fmt::Debug for Image {
@@ -184,11 +185,16 @@ impl Image {
                 height,
                 PixelMetadata::default(),
             )),
+            alive: Arc::new(()),
         })
     }
 
     pub(crate) fn id(&self) -> u64 {
         self.id
+    }
+
+    pub(crate) fn liveness(&self) -> Weak<()> {
+        Arc::downgrade(&self.alive)
     }
 
     pub fn premultiplied_rgba(&self) -> &[u8] {

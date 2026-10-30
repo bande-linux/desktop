@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Weak;
 use vello_cpu::color::{AlphaColor, Srgb};
 use vello_cpu::kurbo::{self, Affine, BezPath, Shape as _, Stroke, StrokeOpts};
 use vello_cpu::peniko::Gradient;
@@ -85,7 +86,30 @@ fn stroke_path(shape: &Shape, width: f32) -> BezPath {
     ))
 }
 
-pub(crate) type ImageIds = HashMap<u64, ImageId>;
+#[derive(Default)]
+pub(crate) struct ImageIds(HashMap<u64, (ImageId, Weak<()>)>);
+
+impl ImageIds {
+    pub(crate) fn get(&self, image: &Image) -> Option<ImageId> {
+        self.0.get(&image.id()).map(|(id, _)| *id)
+    }
+
+    pub(crate) fn insert(&mut self, image: &Image, id: ImageId) {
+        self.0.insert(image.id(), (id, image.liveness()));
+    }
+
+    pub(crate) fn take_dropped(&mut self) -> Vec<ImageId> {
+        let mut dropped = Vec::new();
+        self.0.retain(|_, (id, alive)| {
+            let kept = alive.strong_count() > 0;
+            if !kept {
+                dropped.push(*id);
+            }
+            kept
+        });
+        dropped
+    }
+}
 
 pub(crate) fn images(items: &[Item], found: &mut Vec<Image>) {
     for item in items {
@@ -217,7 +241,7 @@ fn encode_at(
                 )));
             }
             Item::Image { rect: area, image } => {
-                let Some(id) = image_ids.get(&image.id()) else {
+                let Some(id) = image_ids.get(image) else {
                     continue;
                 };
                 let shape = Shape::rect(*area);
@@ -231,7 +255,7 @@ fn encode_at(
                     ImageQuality::High
                 };
                 canvas.set_paint(PaintType::Image(vello_cpu::Image {
-                    image: ImageSource::opaque_id(*id),
+                    image: ImageSource::opaque_id(id),
                     sampler: ImageSampler::default().with_quality(quality),
                 }));
                 canvas.set_paint_transform(

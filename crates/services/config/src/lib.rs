@@ -1,9 +1,11 @@
 mod accounts;
+mod connectors;
 mod edit;
 mod report;
 mod service;
 mod store;
 
+use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -14,10 +16,13 @@ use kdl::{KdlDocument, KdlEntry, KdlNode, KdlValue};
 use unbound_l10n::Localizer;
 
 pub use accounts::{login_picture, share_login_picture};
-pub use edit::Setting;
+pub use connectors::{DRM_CLASS, connected_displays};
+pub use edit::{Setting, migrate};
 pub use report::{EDIT_ACTION, ErrorNotifier};
-pub use service::{ArrangedDisplay, BUS_NAME, ConfigService, OBJECT_PATH, ServiceError};
-pub use store::{ConfigStore, ReloadError};
+pub use service::{
+    ArrangedDisplay, BUS_NAME, ConfigService, OBJECT_PATH, ServiceError, migrate_file,
+};
+pub use store::{ConfigStore, Loaded, ReloadError};
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-config.ftl");
 
@@ -432,6 +437,7 @@ pub struct Config {
     pub sound: Sound,
     pub wallpaper: Wallpaper,
     pub displays: BTreeMap<String, DisplaySettings>,
+    pub outputs: BTreeMap<String, DisplaySettings>,
     pub arrangements: Vec<Vec<Placement>>,
 }
 
@@ -466,6 +472,7 @@ impl Default for Config {
             sound: Sound::default(),
             wallpaper: Wallpaper::default(),
             displays: BTreeMap::new(),
+            outputs: BTreeMap::new(),
             arrangements: Vec::new(),
         }
     }
@@ -494,8 +501,16 @@ pub fn config_path(xdg_config_home: Option<&Path>, home: Option<&Path>) -> Optio
     Some(base.join("unbound").join("config.kdl"))
 }
 
+pub const RENAMED_SECTIONS: [(&str, &str); 1] = [("panel", "dock")];
+
+pub const LEGACY_DISPLAY: &str = "output";
+
 impl Config {
     pub fn parse(source: &str) -> Result<Self, ConfigError> {
+        Self::load(source).map(|(config, _)| config)
+    }
+
+    pub fn load(source: &str) -> Result<(Self, Vec<ConfigError>), ConfigError> {
         let document = KdlDocument::parse_v2(source).map_err(|error| {
             let diagnostic = error.diagnostics.first();
             let offset = diagnostic.map_or(0, |diagnostic| diagnostic.span.offset());
@@ -504,8 +519,30 @@ impl Config {
                 .unwrap_or_else(|| "invalid KDL".to_owned());
             locate(source, offset, message)
         })?;
-        Parser { source }.config(&document)
+        let parser = Parser {
+            source,
+            problems: RefCell::new(Vec::new()),
+        };
+        let config = parser.config(&document);
+        let mut problems = parser.problems.into_inner();
+        problems.sort_by_key(|problem| (problem.line, problem.column));
+        Ok((config, problems))
     }
+
+    pub fn display(&self, identity: &str, connector: &str) -> DisplaySettings {
+        self.displays
+            .get(identity)
+            .or_else(|| self.outputs.get(connector))
+            .copied()
+            .unwrap_or_default()
+    }
+}
+
+pub fn section_name(written: &str) -> &str {
+    RENAMED_SECTIONS
+        .iter()
+        .find(|(old, _)| *old == written)
+        .map_or(written, |(_, new)| new)
 }
 
 fn locate(source: &str, offset: usize, message: String) -> ConfigError {
@@ -524,6 +561,7 @@ pub fn is_wallpaper_path(path: &str) -> bool {
 
 struct Parser<'a> {
     source: &'a str,
+    problems: RefCell<Vec<ConfigError>>,
 }
 
 impl Parser<'_> {
@@ -535,47 +573,73 @@ impl Parser<'_> {
         locate(self.source, entry.span().offset(), message.into())
     }
 
-    fn config(&self, document: &KdlDocument) -> Result<Config, ConfigError> {
+    fn settle(&self, result: Result<(), ConfigError>) {
+        if let Err(problem) = result {
+            self.problems.borrow_mut().push(problem);
+        }
+    }
+
+    fn config(&self, document: &KdlDocument) -> Config {
         let mut config = Config::default();
         let mut seen = Vec::new();
         for node in document.nodes() {
-            let name = node.name().value();
-            if name != "display" && name != "arrangement" {
+            let written = node.name().value();
+            let name = section_name(written);
+            if !matches!(name, "display" | "arrangement" | LEGACY_DISPLAY) {
                 if seen.contains(&name) {
-                    return Err(self.at_node(node, format!("`{name}` is set more than once")));
+                    self.settle(Err(
+                        self.at_node(node, format!("`{written}` is set more than once"))
+                    ));
+                    continue;
                 }
                 seen.push(name);
             }
-            match name {
-                "appearance" => {
-                    config.appearance = self.keyword(
+            let result = match name {
+                "appearance" => self
+                    .keyword(
                         node,
                         &[
                             ("dark", Appearance::Dark),
                             ("light", Appearance::Light),
                             ("automatic", Appearance::Automatic),
                         ],
-                    )?
+                    )
+                    .map(|appearance| config.appearance = appearance),
+                "accessibility" => {
+                    config.reduce_motion = self.accessibility(node);
+                    Ok(())
                 }
-                "accessibility" => config.reduce_motion = self.accessibility(node)?,
-                "dock" => config.dock = self.dock(node)?,
-                "idle" => config.idle = self.idle(node, config.idle)?,
-                "keyboard" => config.keyboard = self.keyboard(node, config.keyboard.clone())?,
-                "trackpad" => config.trackpad = self.trackpad(node)?,
-                "mouse" => config.mouse = self.mouse(node)?,
-                "sound" => config.sound = self.sound(node)?,
-                "wallpaper" => config.wallpaper = self.wallpaper(node)?,
-                "display" => {
-                    let (identity, display) = self.display(node)?;
-                    if config.displays.insert(identity.clone(), display).is_some() {
-                        return Err(self.at_node(
-                            node,
-                            format!("display \"{identity}\" is configured more than once"),
-                        ));
-                    }
+                "dock" => {
+                    config.dock = self.dock(node);
+                    Ok(())
                 }
-                "arrangement" => {
-                    let placements = self.arrangement(node)?;
+                "idle" => {
+                    config.idle = self.idle(node, config.idle);
+                    Ok(())
+                }
+                "keyboard" => {
+                    self.keyboard(node, &mut config.keyboard);
+                    Ok(())
+                }
+                "trackpad" => {
+                    config.trackpad = self.trackpad(node);
+                    Ok(())
+                }
+                "mouse" => {
+                    config.mouse = self.mouse(node);
+                    Ok(())
+                }
+                "sound" => {
+                    config.sound = self.sound(node);
+                    Ok(())
+                }
+                "wallpaper" => {
+                    config.wallpaper = self.wallpaper(node);
+                    Ok(())
+                }
+                "display" => self.display(node, &mut config.displays),
+                LEGACY_DISPLAY => self.display(node, &mut config.outputs),
+                "arrangement" => self.arrangement(node).and_then(|placements| {
                     let displays: Vec<String> = placements
                         .iter()
                         .map(|placement| placement.display.clone())
@@ -586,37 +650,55 @@ impl Parser<'_> {
                         );
                     }
                     config.arrangements.push(placements);
-                }
-                _ => return Err(self.at_node(node, format!("unknown setting `{name}`"))),
-            }
+                    Ok(())
+                }),
+                _ => Err(self.at_node(node, format!("unknown setting `{written}`"))),
+            };
+            self.settle(result);
         }
-        Ok(config)
+        config
     }
 
-    fn children<'n>(&self, node: &'n KdlNode) -> Result<&'n [KdlNode], ConfigError> {
+    fn children<'n>(&self, node: &'n KdlNode) -> Vec<&'n KdlNode> {
         let name = node.name().value();
-        let children = node.children().map_or(&[][..], KdlDocument::nodes);
         let mut seen = Vec::new();
-        for child in children {
+        let mut children = Vec::new();
+        for child in node.children().map_or(&[][..], KdlDocument::nodes) {
             let child_name = child.name().value();
             if seen.contains(&child_name) {
-                return Err(self.at_node(
+                self.settle(Err(self.at_node(
                     child,
                     format!("`{name} {child_name}` is set more than once"),
-                ));
+                )));
+                continue;
             }
             seen.push(child_name);
+            children.push(child);
         }
-        Ok(children)
+        children
     }
 
-    fn no_arguments(&self, node: &KdlNode) -> Result<(), ConfigError> {
-        match node.entries().first() {
-            Some(entry) => Err(self.at_entry(
+    fn section<'n>(
+        &self,
+        node: &'n KdlNode,
+        mut apply: impl FnMut(&'n KdlNode) -> Result<(), ConfigError>,
+    ) {
+        if let Some(entry) = node.entries().first() {
+            self.settle(Err(self.at_entry(
                 entry,
                 format!("`{}` takes no arguments", node.name().value()),
-            )),
-            None => Ok(()),
+            )));
+        }
+        self.each_child(node, &mut apply);
+    }
+
+    fn each_child<'n>(
+        &self,
+        node: &'n KdlNode,
+        apply: &mut impl FnMut(&'n KdlNode) -> Result<(), ConfigError>,
+    ) {
+        for child in self.children(node) {
+            self.settle(apply(child));
         }
     }
 
@@ -666,16 +748,16 @@ impl Parser<'_> {
         )
     }
 
-    fn accessibility(&self, node: &KdlNode) -> Result<bool, ConfigError> {
-        self.no_arguments(node)?;
+    fn accessibility(&self, node: &KdlNode) -> bool {
         let mut reduce_motion = false;
-        for child in self.children(node)? {
+        self.section(node, |child| {
             match child.name().value() {
                 "reduce-motion" => reduce_motion = self.flag(child)?,
                 _ => return Err(self.unknown_child("accessibility", child)),
             }
-        }
-        Ok(reduce_motion)
+            Ok(())
+        });
+        reduce_motion
     }
 
     fn flag(&self, node: &KdlNode) -> Result<bool, ConfigError> {
@@ -688,10 +770,9 @@ impl Parser<'_> {
         })
     }
 
-    fn dock(&self, node: &KdlNode) -> Result<Dock, ConfigError> {
-        self.no_arguments(node)?;
+    fn dock(&self, node: &KdlNode) -> Dock {
         let mut dock = Dock::default();
-        for child in self.children(node)? {
+        self.section(node, |child| {
             match child.name().value() {
                 "edge" => {
                     dock.edge = self.keyword(
@@ -709,8 +790,9 @@ impl Parser<'_> {
                 "size" => dock.icon_size = self.integer_in(child, DOCK_ICON_SIZE_RANGE)?,
                 _ => return Err(self.unknown_child("dock", child)),
             }
-        }
-        Ok(dock)
+            Ok(())
+        });
+        dock
     }
 
     fn app_ids(&self, node: &KdlNode) -> Result<Vec<String>, ConfigError> {
@@ -734,11 +816,10 @@ impl Parser<'_> {
         Ok(apps)
     }
 
-    fn idle(&self, node: &KdlNode, mut idle: Idle) -> Result<Idle, ConfigError> {
-        self.no_arguments(node)?;
+    fn idle(&self, node: &KdlNode, mut idle: Idle) -> Idle {
         let mut lock_node = node;
         let mut suspend_node = node;
-        for child in self.children(node)? {
+        self.section(node, |child| {
             match child.name().value() {
                 "dim-after" => idle.dim_after = self.duration(child)?,
                 "lock-after" => {
@@ -757,25 +838,29 @@ impl Parser<'_> {
                 }
                 _ => return Err(self.unknown_child("idle", child)),
             }
-        }
+            Ok(())
+        });
         if idle.lock_after < idle.dim_after {
-            return Err(self.at_node(
+            self.settle(Err(self.at_node(
                 lock_node,
                 "`idle lock-after` must not be shorter than `idle dim-after`",
-            ));
+            )));
+            idle.lock_after = idle.dim_after;
         }
-        if matches!(idle.suspend, Suspend::After(after) if after < idle.lock_after) {
-            return Err(self.at_node(
+        if let Suspend::After(after) = idle.suspend
+            && after < idle.lock_after
+        {
+            self.settle(Err(self.at_node(
                 suspend_node,
                 "`idle suspend-after` must not be shorter than `idle lock-after`",
-            ));
+            )));
+            idle.suspend = Suspend::After(idle.lock_after);
         }
-        Ok(idle)
+        idle
     }
 
-    fn keyboard(&self, node: &KdlNode, mut keyboard: Keyboard) -> Result<Keyboard, ConfigError> {
-        self.no_arguments(node)?;
-        for child in self.children(node)? {
+    fn keyboard(&self, node: &KdlNode, keyboard: &mut Keyboard) {
+        self.section(node, |child| {
             match child.name().value() {
                 "repeat-rate" => {
                     keyboard.repeat_rate = self.integer_in(child, KEY_REPEAT_RATE_RANGE)?
@@ -794,8 +879,8 @@ impl Parser<'_> {
                 }
                 _ => return Err(self.unknown_child("keyboard", child)),
             }
-        }
-        Ok(keyboard)
+            Ok(())
+        });
     }
 
     fn input_sources(&self, node: &KdlNode) -> Result<Vec<InputSource>, ConfigError> {
@@ -829,10 +914,9 @@ impl Parser<'_> {
         Ok(sources)
     }
 
-    fn trackpad(&self, node: &KdlNode) -> Result<Trackpad, ConfigError> {
-        self.no_arguments(node)?;
+    fn trackpad(&self, node: &KdlNode) -> Trackpad {
         let mut trackpad = Trackpad::default();
-        for child in self.children(node)? {
+        self.section(node, |child| {
             match child.name().value() {
                 "tap-to-click" => trackpad.tap_to_click = self.flag(child)?,
                 "natural-scrolling" => trackpad.natural_scrolling = self.flag(child)?,
@@ -847,27 +931,27 @@ impl Parser<'_> {
                 "disable-while-typing" => trackpad.disable_while_typing = self.flag(child)?,
                 _ => return Err(self.unknown_child("trackpad", child)),
             }
-        }
-        Ok(trackpad)
+            Ok(())
+        });
+        trackpad
     }
 
-    fn mouse(&self, node: &KdlNode) -> Result<Mouse, ConfigError> {
-        self.no_arguments(node)?;
+    fn mouse(&self, node: &KdlNode) -> Mouse {
         let mut mouse = Mouse::default();
-        for child in self.children(node)? {
+        self.section(node, |child| {
             match child.name().value() {
                 "natural-scrolling" => mouse.natural_scrolling = self.flag(child)?,
                 "speed" => mouse.speed = self.number_in(child, POINTER_SPEED_RANGE)?,
                 _ => return Err(self.unknown_child("mouse", child)),
             }
-        }
-        Ok(mouse)
+            Ok(())
+        });
+        mouse
     }
 
-    fn sound(&self, node: &KdlNode) -> Result<Sound, ConfigError> {
-        self.no_arguments(node)?;
+    fn sound(&self, node: &KdlNode) -> Sound {
         let mut sound = Sound::default();
-        for child in self.children(node)? {
+        self.section(node, |child| {
             match child.name().value() {
                 "effects" => sound.effects = self.flag(child)?,
                 "volume-feedback" => sound.volume_feedback = self.flag(child)?,
@@ -878,14 +962,14 @@ impl Parser<'_> {
                 "alert-volume" => sound.alert_volume = self.number_in(child, ALERT_VOLUME_RANGE)?,
                 _ => return Err(self.unknown_child("sound", child)),
             }
-        }
-        Ok(sound)
+            Ok(())
+        });
+        sound
     }
 
-    fn wallpaper(&self, node: &KdlNode) -> Result<Wallpaper, ConfigError> {
-        self.no_arguments(node)?;
+    fn wallpaper(&self, node: &KdlNode) -> Wallpaper {
         let mut wallpaper = Wallpaper::default();
-        for child in self.children(node)? {
+        self.section(node, |child| {
             match child.name().value() {
                 "light" => wallpaper.light = Some(self.image_path(child)?),
                 "dark" => wallpaper.dark = Some(self.image_path(child)?),
@@ -897,8 +981,9 @@ impl Parser<'_> {
                 }
                 _ => return Err(self.unknown_child("wallpaper", child)),
             }
-        }
-        Ok(wallpaper)
+            Ok(())
+        });
+        wallpaper
     }
 
     fn image_path(&self, node: &KdlNode) -> Result<PathBuf, ConfigError> {
@@ -966,6 +1051,11 @@ impl Parser<'_> {
     }
 
     fn identity(&self, node: &KdlNode, entry: &KdlEntry) -> Result<String, ConfigError> {
+        let example = if node.name().value() == LEGACY_DISPLAY {
+            "connector such as \"eDP-1\""
+        } else {
+            "name such as \"Dell Inc. DELL U2720Q 7ZD5K53\""
+        };
         entry
             .value()
             .as_string()
@@ -974,18 +1064,28 @@ impl Parser<'_> {
             .ok_or_else(|| {
                 self.at_entry(
                     entry,
-                    format!(
-                        "`{}` needs the display's name such as \"Dell Inc. DELL U2720Q 7ZD5K53\"",
-                        node.name().value()
-                    ),
+                    format!("`{}` needs the display's {example}", node.name().value()),
                 )
             })
     }
 
-    fn display(&self, node: &KdlNode) -> Result<(String, DisplaySettings), ConfigError> {
+    fn display(
+        &self,
+        node: &KdlNode,
+        displays: &mut BTreeMap<String, DisplaySettings>,
+    ) -> Result<(), ConfigError> {
         let identity = self.identity(node, self.argument(node)?)?;
+        if displays.contains_key(&identity) {
+            return Err(self.at_node(
+                node,
+                format!(
+                    "{} \"{identity}\" is configured more than once",
+                    node.name().value()
+                ),
+            ));
+        }
         let mut display = DisplaySettings::default();
-        for child in self.children(node)? {
+        self.each_child(node, &mut |child| {
             match child.name().value() {
                 "resolution" => display.resolution = Some(self.resolution(child)?),
                 "scale" => display.scale = Some(self.number_in(child, SCALE_RANGE)?),
@@ -994,10 +1094,12 @@ impl Parser<'_> {
                 }
                 "rotation" => display.rotation = Some(self.rotation(child)?),
                 "variable-refresh-rate" => display.variable_refresh_rate = Some(self.flag(child)?),
-                _ => return Err(self.unknown_child("display", child)),
+                _ => return Err(self.unknown_child(node.name().value(), child)),
             }
-        }
-        Ok((identity, display))
+            Ok(())
+        });
+        displays.insert(identity, display);
+        Ok(())
     }
 
     fn resolution(&self, node: &KdlNode) -> Result<(u32, u32), ConfigError> {
@@ -1030,7 +1132,9 @@ impl Parser<'_> {
     }
 
     fn arrangement(&self, node: &KdlNode) -> Result<Vec<Placement>, ConfigError> {
-        self.no_arguments(node)?;
+        if let Some(entry) = node.entries().first() {
+            return Err(self.at_entry(entry, "`arrangement` takes no arguments"));
+        }
         let mut placements: Vec<Placement> = Vec::new();
         for child in node.children().map_or(&[][..], KdlDocument::nodes) {
             if child.name().value() != "display" {
@@ -1131,6 +1235,7 @@ mod tests {
             include_str!("lib.rs"),
             include_str!("main.rs"),
             include_str!("accounts.rs"),
+            include_str!("connectors.rs"),
             include_str!("edit.rs"),
             include_str!("report.rs"),
             include_str!("service.rs"),

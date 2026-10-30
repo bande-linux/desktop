@@ -74,12 +74,7 @@ impl OutputConfig {
     }
 
     pub fn identity(&self) -> String {
-        [&self.make, &self.model, &self.serial]
-            .into_iter()
-            .map(|part| part.trim())
-            .filter(|part| !part.is_empty())
-            .collect::<Vec<_>>()
-            .join(" ")
+        unbound_edid::identity(&self.make, &self.model, &self.serial)
     }
 
     pub fn preferred_mode(&self) -> Option<OutputMode> {

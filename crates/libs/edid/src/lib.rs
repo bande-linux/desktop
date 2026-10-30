@@ -31,10 +31,10 @@ const VENDORS: [(&str, &str); 24] = [
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Edid {
-    pub(crate) make: String,
-    pub(crate) model: String,
-    pub(crate) serial: String,
+pub struct Edid {
+    pub make: String,
+    pub model: String,
+    pub serial: String,
 }
 
 fn descriptor_text(block: &[u8], kind: u8) -> Option<String> {
@@ -53,7 +53,7 @@ fn descriptor_text(block: &[u8], kind: u8) -> Option<String> {
     })
 }
 
-pub(crate) fn parse(block: &[u8]) -> Option<Edid> {
+pub fn parse(block: &[u8]) -> Option<Edid> {
     if block.len() < 128 || block[..8] != HEADER {
         return None;
     }
@@ -76,6 +76,32 @@ pub(crate) fn parse(block: &[u8]) -> Option<Edid> {
         model,
         serial,
     })
+}
+
+pub fn identity(make: &str, model: &str, serial: &str) -> String {
+    [make, model, serial]
+        .into_iter()
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+pub fn distinct_identities(displays: &[(&str, String)]) -> Vec<String> {
+    displays
+        .iter()
+        .map(|(connector, identity)| {
+            let shared = displays
+                .iter()
+                .filter(|(_, other)| other == identity)
+                .count();
+            if shared > 1 {
+                format!("{identity} ({connector})")
+            } else {
+                identity.clone()
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -136,6 +162,24 @@ mod tests {
         assert_eq!(
             parse(&unknown).map(|edid| (edid.make, edid.serial)),
             Some(("XYZ".to_owned(), "42".to_owned()))
+        );
+    }
+
+    #[test]
+    fn identical_monitors_are_told_apart_by_their_connector() {
+        let displays = [
+            ("DP-1", identity("Dell", "DELL P2419H", "")),
+            ("DP-2", identity("Dell", "DELL P2419H", "")),
+            ("eDP-1", identity("", "eDP-1", "")),
+        ];
+
+        assert_eq!(
+            distinct_identities(&displays),
+            [
+                "Dell DELL P2419H (DP-1)",
+                "Dell DELL P2419H (DP-2)",
+                "eDP-1"
+            ]
         );
     }
 

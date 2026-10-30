@@ -12,9 +12,87 @@ use unbound_config::{
     Suspend, WallpaperFit, WallpaperVariant, config_path, login_picture, system_input_sources,
 };
 
+fn problems(source: &str) -> Vec<ConfigError> {
+    Config::load(source).expect("well-formed KDL").1
+}
+
 fn error_at(source: &str) -> (usize, usize) {
-    let ConfigError { line, column, .. } = Config::parse(source).expect_err("invalid config");
+    let ConfigError { line, column, .. } = match Config::load(source) {
+        Ok((_, problems)) => problems.into_iter().next().expect("a problem"),
+        Err(error) => error,
+    };
     (line, column)
+}
+
+const OWNERS_FILE: &str = "appearance \"dark\"
+output \"Virtual-1\" {
+    scale 1.5
+}
+dock {
+    size 45
+}
+";
+
+#[test]
+fn a_file_from_before_displays_were_named_still_applies_every_setting() {
+    let (config, problems) = Config::load(OWNERS_FILE).expect("well-formed KDL");
+
+    assert_eq!(problems, []);
+    assert_eq!(config.appearance, Appearance::Dark);
+    assert_eq!(config.dock.icon_size, 45);
+    assert_eq!(config.display("Virtual-1", "Virtual-1").scale, Some(1.5));
+    assert_eq!(
+        config
+            .display("Dell DELL U2720Q 7ZD5K53", "Virtual-1")
+            .scale,
+        Some(1.5)
+    );
+    assert_eq!(
+        config.display("Dell DELL U2720Q 7ZD5K53", "DP-1"),
+        DisplaySettings::default()
+    );
+}
+
+#[test]
+fn a_named_display_wins_over_its_old_connector_block() {
+    let config = Config::parse(
+        "output \"DP-1\" {\n    scale 2\n}\ndisplay \"Dell U2720Q\" {\n    scale 1.5\n}\n",
+    )
+    .expect("well-formed KDL");
+
+    assert_eq!(config.display("Dell U2720Q", "DP-1").scale, Some(1.5));
+    assert_eq!(config.display("LG 27UK850", "DP-1").scale, Some(2.0));
+}
+
+#[test]
+fn the_old_panel_section_is_read_as_the_dock() {
+    let (config, problems) = Config::load("panel {\n    edge \"top\"\n}\n").expect("KDL");
+
+    assert_eq!(problems, []);
+    assert_eq!(config.dock.edge, DockEdge::Top);
+    assert_eq!(error_at("dock {\n}\npanel {\n}\n"), (3, 1));
+}
+
+#[test]
+fn unknown_and_invalid_settings_are_reported_while_every_valid_one_applies() {
+    let (config, problems) = Config::load(
+        "appearance \"dark\"\ntheme \"graphite\"\ndock {\n    edge \"middle\"\n    size 64\n    sparkle #true\n}\nidle {\n    dim-after \"10m\"\n    lock-after \"5m\"\n}\nkeyboard {\n    repeat-rate 40\n}\n",
+    )
+    .expect("well-formed KDL");
+
+    assert_eq!(
+        problems
+            .iter()
+            .map(|problem| (problem.line, problem.column))
+            .collect::<Vec<_>>(),
+        [(2, 1), (4, 10), (6, 5), (10, 5)]
+    );
+    assert_eq!(config.appearance, Appearance::Dark);
+    assert_eq!(config.dock.edge, DockEdge::Left);
+    assert_eq!(config.dock.icon_size, 64);
+    assert_eq!(config.idle.dim_after, Duration::from_secs(10 * 60));
+    assert_eq!(config.idle.lock_after, Duration::from_secs(10 * 60));
+    assert_eq!(config.keyboard.repeat_rate, 40);
 }
 
 #[test]
@@ -122,11 +200,11 @@ arrangement {
 
 #[test]
 fn a_mirror_must_name_another_display_of_its_arrangement() {
-    assert!(
-        Config::parse(
+    assert_eq!(
+        problems(
             "arrangement {\n    display \"A\" main=#true\n    display \"B\" mirror=\"A\"\n}\n"
-        )
-        .is_ok()
+        ),
+        []
     );
     assert_eq!(
         error_at("arrangement {\n    display \"A\"\n    display \"B\" mirror=\"C\"\n}\n"),
@@ -192,14 +270,14 @@ fn a_value_outside_its_choices_is_reported_at_the_value() {
 
 #[test]
 fn display_scale_must_stay_within_100_to_300_percent() {
-    assert!(Config::parse("display \"A\" {\n    scale 2.5\n}\n").is_ok());
+    assert_eq!(problems("display \"A\" {\n    scale 2.5\n}\n"), []);
     assert_eq!(error_at("display \"A\" {\n    scale 3.5\n}\n"), (2, 11));
     assert_eq!(error_at("display \"A\" {\n    scale 0.75\n}\n"), (2, 11));
 }
 
 #[test]
 fn refresh_rate_must_stay_within_60_to_240_hz() {
-    assert!(Config::parse("display \"A\" {\n    refresh-rate 240\n}\n").is_ok());
+    assert_eq!(problems("display \"A\" {\n    refresh-rate 240\n}\n"), []);
     assert_eq!(
         error_at("display \"A\" {\n    refresh-rate 30\n}\n"),
         (2, 18)
@@ -292,18 +370,18 @@ fn a_setting_given_twice_is_reported_at_the_second_one() {
 fn a_valid_file_replaces_the_active_configuration() {
     let store = ConfigStore::default();
     let applied = store.apply("dock {\n    edge \"top\"\n}\n").expect("valid");
-    assert!(Arc::ptr_eq(&applied, &store.current()));
+    assert!(Arc::ptr_eq(&applied.config, &store.current()));
     assert_eq!(store.current().dock.edge, DockEdge::Top);
 }
 
 #[test]
-fn an_invalid_file_leaves_the_active_configuration_untouched() {
+fn an_unreadable_file_leaves_the_active_configuration_untouched() {
     let store = ConfigStore::default();
     store.apply("appearance \"light\"\n").expect("valid");
     let before = store.current();
 
     let error = store
-        .apply("appearance \"dark\"\ndock {\n    edge \"middle\"\n}\n")
+        .apply("appearance \"dark\"\ndock {\n    edge \"middle\n}\n")
         .expect_err("invalid");
 
     assert_eq!((error.line, error.column), (3, 10));
@@ -434,7 +512,7 @@ fn the_dock_size_auto_hide_wallpaper_fit_and_reduce_motion_are_read() {
 fn the_dock_size_stays_within_24_to_96_points_and_flags_need_a_boolean() {
     assert_eq!(error_at("dock {\n    size 23\n}\n"), (2, 10));
     assert_eq!(error_at("dock {\n    size 97\n}\n"), (2, 10));
-    assert!(Config::parse("dock {\n    size 96\n}\n").is_ok());
+    assert_eq!(problems("dock {\n    size 96\n}\n"), []);
     assert_eq!(error_at("dock {\n    auto-hide \"yes\"\n}\n"), (2, 15));
     assert_eq!(error_at("wallpaper {\n    fit \"tile\"\n}\n"), (2, 9));
 }
@@ -547,4 +625,35 @@ fn sound_settings_default_to_effects_and_feedback_on_and_reject_a_loud_alert() {
     assert_eq!(sound.alert_volume, 0.4);
     assert_eq!(error_at("sound {\n    alert-volume 2\n}\n"), (2, 18));
     assert_eq!(error_at("sound {\n    alert \"gong\"\n}\n"), (2, 11));
+}
+
+fn connector(drm: &Path, name: &str, status: &str, edid: &[u8]) {
+    let folder = drm.join(name);
+    std::fs::create_dir_all(&folder).expect("connector folder");
+    std::fs::write(folder.join("status"), status).expect("status");
+    std::fs::write(folder.join("edid"), edid).expect("edid");
+}
+
+#[test]
+fn connected_displays_are_named_as_the_compositor_names_them() {
+    let drm = tempfile::tempdir().expect("temp dir");
+    let mut dell = vec![0u8; 128];
+    dell[..8].copy_from_slice(&[0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00]);
+    dell[8..10].copy_from_slice(&[0x10, 0xac]);
+    dell[72..77].copy_from_slice(&[0, 0, 0, 0xfc, 0]);
+    dell[77..90].copy_from_slice(b"DELL P2419H\n ");
+    connector(drm.path(), "card0-Virtual-1", "connected\n", &[]);
+    connector(drm.path(), "card0-HDMI-A-1", "disconnected\n", &[]);
+    connector(drm.path(), "card1-DP-1", "connected\n", &dell);
+    connector(drm.path(), "card1-DP-2", "connected\n", &dell);
+    std::fs::create_dir_all(drm.path().join("renderD128")).expect("render node");
+
+    assert_eq!(
+        unbound_config::connected_displays(drm.path()),
+        [
+            ("DP-1".to_owned(), "Dell DELL P2419H (DP-1)".to_owned()),
+            ("DP-2".to_owned(), "Dell DELL P2419H (DP-2)".to_owned()),
+            ("Virtual-1".to_owned(), "Virtual-1".to_owned()),
+        ]
+    );
 }

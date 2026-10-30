@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use unbound_config::{
     AlertSound, Appearance, CapsLock, Config, DisplaySettings, DockEdge, InputSource, Placement,
-    Rotation, Setting, Suspend, WallpaperFit, WallpaperVariant,
+    Rotation, Setting, Suspend, WallpaperFit, WallpaperVariant, migrate,
 };
 
 fn apply(setting: Setting, source: &str) -> String {
@@ -152,11 +152,81 @@ fn a_value_that_breaks_a_rule_is_rejected() {
 }
 
 #[test]
-fn an_invalid_file_is_not_edited() {
+fn an_unreadable_file_is_not_edited() {
     let error = Setting::Appearance(Appearance::Dark)
-        .apply("appearance \"dark\"\ndock {\n    edge \"middle\"\n}\n")
+        .apply("appearance \"dark\"\ndock {\n    edge \"middle\n}\n")
         .expect_err("invalid file");
     assert_eq!((error.line, error.column), (3, 10));
+}
+
+#[test]
+fn a_file_with_a_wrong_value_is_still_edited_and_keeps_it_for_the_user() {
+    let source = "dock {\n    edge \"middle\"\n}\n";
+
+    assert_eq!(
+        apply(Setting::Appearance(Appearance::Dark), source),
+        "dock {\n    edge \"middle\"\n}\nappearance \"dark\"\n"
+    );
+    assert_eq!(
+        apply(Setting::DockEdge(DockEdge::Top), source),
+        "dock {\n    edge \"top\"\n}\n"
+    );
+}
+
+#[test]
+fn a_write_renames_the_old_panel_section_instead_of_adding_a_dock() {
+    assert_eq!(
+        apply(
+            Setting::DockEdge(DockEdge::Top),
+            "panel {\n    edge \"left\" // mine\n}\n"
+        ),
+        "dock {\n    edge \"top\" // mine\n}\n"
+    );
+}
+
+const OWNERS_FILE: &str = "appearance \"dark\"
+output \"Virtual-1\" {
+    scale 1.5
+}
+dock {
+    size 45
+}
+";
+
+#[test]
+fn the_old_connector_block_becomes_the_named_display_keeping_its_layout() {
+    let connected = [("Virtual-1".to_owned(), "Virtual-1".to_owned())];
+    assert_eq!(
+        migrate(OWNERS_FILE, &connected).expect("KDL").as_deref(),
+        Some(
+            "appearance \"dark\"\ndisplay \"Virtual-1\" {\n    scale 1.5\n}\ndock {\n    size 45\n}\n"
+        )
+    );
+
+    let commented = "// laptop\noutput \"eDP-1\" { // built in\n    scale 2 // retina\n}\n";
+    let connected = [(
+        "eDP-1".to_owned(),
+        "Apple Built-in Retina Display".to_owned(),
+    )];
+    assert_eq!(
+        migrate(commented, &connected).expect("KDL").as_deref(),
+        Some(
+            "// laptop\ndisplay \"Apple Built-in Retina Display\" { // built in\n    scale 2 // retina\n}\n"
+        )
+    );
+}
+
+#[test]
+fn an_old_connector_block_waits_for_its_display_and_yields_to_a_named_one() {
+    assert_eq!(migrate(OWNERS_FILE, &[]).expect("KDL"), None);
+    assert_eq!(migrate("appearance \"dark\"\n", &[]).expect("KDL"), None);
+
+    let both = "output \"DP-1\" {\n    scale 2\n}\ndisplay \"Dell U2720Q\" {\n    scale 1.5\n}\n";
+    let connected = [("DP-1".to_owned(), "Dell U2720Q".to_owned())];
+    assert_eq!(
+        migrate(both, &connected).expect("KDL").as_deref(),
+        Some("display \"Dell U2720Q\" {\n    scale 1.5\n}\n")
+    );
 }
 
 #[test]

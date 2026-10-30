@@ -7,7 +7,7 @@ use unbound_notify::{BUS_NAME as NOTIFICATIONS, OBJECT_PATH as NOTIFICATIONS_PAT
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::{MatchRule, message};
 
-use crate::{L10N, ReloadError};
+use crate::{ConfigError, L10N, ReloadError};
 
 pub const EDIT_ACTION: &str = "edit";
 
@@ -15,6 +15,7 @@ pub struct ErrorNotifier {
     connection: Connection,
     path: PathBuf,
     shown: Arc<Mutex<Option<u32>>>,
+    reported: Mutex<Vec<String>>,
 }
 
 fn lock(shown: &Mutex<Option<u32>>) -> MutexGuard<'_, Option<u32>> {
@@ -65,39 +66,70 @@ impl ErrorNotifier {
             connection: connection.clone(),
             path: path.to_path_buf(),
             shown,
+            reported: Mutex::new(Vec::new()),
         })
     }
 
-    pub fn report(&self, result: &Result<(), ReloadError>) {
+    pub fn report(&self, result: Result<&[ConfigError], &ReloadError>) {
         let mut shown = lock(&self.shown);
+        let mut reported = self.reported.lock().unwrap_or_else(PoisonError::into_inner);
         let file = self
             .path
             .file_name()
             .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
-        let (summary, detail) = match result {
-            Ok(()) => {
+        let file = file.as_str();
+        let (summary, body) = match result {
+            Ok([]) => {
+                reported.clear();
                 if let Some(id) = shown.take() {
                     let _ = client::close(&self.connection, id);
                 }
                 return;
             }
-            Err(ReloadError::Invalid(error)) => (
-                L10N.tr_args("has-error", [("file", file.as_str().into())]),
-                L10N.tr_args(
-                    "error-at",
-                    [
-                        ("line", error.line.into()),
-                        ("column", error.column.into()),
-                        ("message", error.message.as_str().into()),
-                    ],
-                ),
-            ),
-            Err(ReloadError::Read(error)) => (
-                L10N.tr_args("cannot-read", [("file", file.as_str().into())]),
-                L10N.tr_args("read-error", [("error", error.to_string().into())]),
-            ),
+            Ok(problems @ [first, rest @ ..]) => {
+                let messages: Vec<String> = problems
+                    .iter()
+                    .map(|problem| problem.message.clone())
+                    .collect();
+                if *reported == messages {
+                    return;
+                }
+                *reported = messages;
+                let summary = match rest {
+                    [] => L10N.tr_args("has-error", [("file", file.into())]),
+                    _ => L10N.tr_args(
+                        "has-errors",
+                        [("file", file.into()), ("count", problems.len().into())],
+                    ),
+                };
+                let mut detail = located(first);
+                if !rest.is_empty() {
+                    detail.push(' ');
+                    detail.push_str(&L10N.tr_args("more-errors", [("count", rest.len().into())]));
+                }
+                (
+                    summary,
+                    L10N.tr_args("other-settings-apply", [("detail", detail.into())]),
+                )
+            }
+            Err(error) => {
+                reported.clear();
+                let (summary, detail) = match error {
+                    ReloadError::Invalid(error) => (
+                        L10N.tr_args("has-error", [("file", file.into())]),
+                        located(error),
+                    ),
+                    ReloadError::Read(error) => (
+                        L10N.tr_args("cannot-read", [("file", file.into())]),
+                        L10N.tr_args("read-error", [("error", error.to_string().into())]),
+                    ),
+                };
+                (
+                    summary,
+                    L10N.tr_args("previous-settings-stay", [("detail", detail.into())]),
+                )
+            }
         };
-        let body = L10N.tr_args("previous-settings-stay", [("detail", detail.into())]);
         let open_in_editor = L10N.tr("open-in-editor");
         let reply = client::notify(
             &self.connection,
@@ -117,4 +149,15 @@ impl ErrorNotifier {
             Err(error) => tracing::warn!("cannot post the error notification: {error}"),
         }
     }
+}
+
+fn located(error: &ConfigError) -> String {
+    L10N.tr_args(
+        "error-at",
+        [
+            ("line", error.line.into()),
+            ("column", error.column.into()),
+            ("message", error.message.as_str().into()),
+        ],
+    )
 }

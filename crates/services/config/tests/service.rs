@@ -7,7 +7,9 @@ use std::sync::mpsc::{self, Receiver};
 use std::thread;
 use std::time::Duration;
 
-use unbound_config::{BUS_NAME, ConfigService, ConfigStore, OBJECT_PATH, ReloadError};
+use unbound_config::{
+    BUS_NAME, ConfigService, ConfigStore, Loaded, OBJECT_PATH, ReloadError, migrate_file,
+};
 use unbound_test_bus::SessionBus;
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::{DBusProxy, PropertiesProxy};
@@ -94,7 +96,7 @@ fn start(initial: &str) -> Fixture {
         &service_connection,
         &path,
         Arc::new(ConfigStore::default()),
-        move |result: Result<Arc<unbound_config::Config>, ReloadError>| {
+        move |result: Result<Loaded, ReloadError>| {
             if let Err(error) = result {
                 let _ = error_sender.send(error);
             }
@@ -178,11 +180,11 @@ fn writing_the_file_in_place_is_picked_up() {
 }
 
 #[test]
-fn an_invalid_file_changes_nothing_and_reports_where_it_is_wrong() {
+fn an_unreadable_file_changes_nothing_and_reports_where_it_is_wrong() {
     let fixture = start("dock {\n    edge \"left\"\n}\n");
     let changes = watch_changes(&fixture.client);
 
-    replace_file(&fixture.path, "dock {\n    edge \"middle\"\n}\n");
+    replace_file(&fixture.path, "dock {\n    edge \"middle\n}\n");
 
     match fixture
         .errors
@@ -255,8 +257,8 @@ fn a_value_the_schema_rejects_leaves_the_file_alone() {
 }
 
 #[test]
-fn an_invalid_file_is_not_overwritten_by_a_setting() {
-    let invalid = "dock {\n    edge \"middle\"\n}\n";
+fn an_unreadable_file_is_not_overwritten_by_a_setting() {
+    let invalid = "dock {\n    edge \"middle\n}\n";
     let fixture = start(invalid);
 
     let result = set(&fixture.client, "Appearance", Value::from("dark"));
@@ -534,5 +536,57 @@ fn input_sources_and_pointer_settings_are_writable_properties() {
     assert!(
         matches!(too_fast, Err(zbus::fdo::Error::InvalidArgs(_))),
         "{too_fast:?}"
+    );
+}
+
+#[test]
+fn the_owners_file_from_before_named_displays_is_migrated_and_fully_applied() {
+    let directory = tempfile::tempdir().expect("temp dir");
+    let path = directory.path().join("config.kdl");
+    std::fs::write(
+        &path,
+        "appearance \"dark\"\noutput \"Virtual-1\" {\n    scale 1.5\n}\ndock {\n    size 45\n}\n",
+    )
+    .expect("write");
+    let connected = [("Virtual-1".to_owned(), "Virtual-1".to_owned())];
+
+    assert!(migrate_file(&path, &connected).expect("migrate"));
+    assert!(!migrate_file(&path, &connected).expect("migrate again"));
+    let source = std::fs::read_to_string(&path).expect("read");
+    assert_eq!(
+        source,
+        "appearance \"dark\"\ndisplay \"Virtual-1\" {\n    scale 1.5\n}\ndock {\n    size 45\n}\n"
+    );
+
+    let fixture = start(&source);
+    assert_eq!(
+        String::try_from(get(&fixture.client, "Appearance")).expect("string"),
+        "dark"
+    );
+    assert_eq!(
+        u32::try_from(get(&fixture.client, "DockIconSize")).expect("u32"),
+        45
+    );
+    let displays: HashMap<String, HashMap<String, OwnedValue>> = get(&fixture.client, "Displays")
+        .try_into()
+        .expect("a{sa{sv}}");
+    assert_eq!(
+        f64::try_from(&displays["Virtual-1"]["scale"]).expect("d"),
+        1.5
+    );
+}
+
+#[test]
+fn a_file_with_an_unknown_setting_is_served_and_still_writable() {
+    let fixture = start("appearance \"dark\"\nsparkle #true\n");
+
+    assert_eq!(
+        String::try_from(get(&fixture.client, "Appearance")).expect("string"),
+        "dark"
+    );
+    set(&fixture.client, "Appearance", Value::from("light")).expect("Set");
+    assert_eq!(
+        std::fs::read_to_string(&fixture.path).expect("read"),
+        "appearance \"light\"\nsparkle #true\n"
     );
 }

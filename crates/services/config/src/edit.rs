@@ -5,8 +5,8 @@ use kdl::{KdlDocument, KdlEntry, KdlEntryFormat, KdlNode, KdlValue};
 
 use crate::{
     AlertSound, Appearance, CapsLock, Config, ConfigError, DEFAULT_DOCK_ICON_SIZE, DisplaySettings,
-    DockEdge, InputSource, Mouse, Placement, SecondaryClick, Sound, Suspend, Trackpad,
-    WallpaperFit, WallpaperVariant, same_displays,
+    DockEdge, InputSource, LEGACY_DISPLAY, Mouse, Placement, SecondaryClick, Sound, Suspend,
+    Trackpad, WallpaperFit, WallpaperVariant, same_displays, section_name,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -43,12 +43,9 @@ pub enum Setting {
 
 impl Setting {
     pub fn apply(&self, source: &str) -> Result<String, ConfigError> {
-        let config = Config::parse(source)?;
-        let mut document = KdlDocument::parse_v2(source).map_err(|_| ConfigError {
-            line: 1,
-            column: 1,
-            message: "invalid KDL".to_owned(),
-        })?;
+        let (config, before) = Config::load(source)?;
+        let mut document = document(source)?;
+        rename_sections(&mut document);
         match self {
             Self::Appearance(appearance) => set(
                 &mut document,
@@ -218,9 +215,91 @@ impl Setting {
             Self::Arrangement(placements) => set_arrangement(&mut document, &config, placements),
         }
         let edited = document.to_string();
-        Config::parse(&edited)?;
-        Ok(edited)
+        let (_, after) = Config::load(&edited)?;
+        match introduced(&before, &after) {
+            Some(problem) => Err(problem.clone()),
+            None => Ok(edited),
+        }
     }
+}
+
+fn document(source: &str) -> Result<KdlDocument, ConfigError> {
+    KdlDocument::parse_v2(source).map_err(|_| ConfigError {
+        line: 1,
+        column: 1,
+        message: "invalid KDL".to_owned(),
+    })
+}
+
+fn introduced<'a>(before: &[ConfigError], after: &'a [ConfigError]) -> Option<&'a ConfigError> {
+    let count = |problems: &[ConfigError], message: &str| {
+        problems
+            .iter()
+            .filter(|problem| problem.message == message)
+            .count()
+    };
+    after
+        .iter()
+        .find(|problem| count(after, &problem.message) > count(before, &problem.message))
+}
+
+fn rename_sections(document: &mut KdlDocument) -> bool {
+    let mut renamed = false;
+    for node in document.nodes_mut() {
+        let written = node.name().value().to_owned();
+        let name = section_name(&written);
+        if name != written {
+            node.set_name(name);
+            renamed = true;
+        }
+    }
+    renamed
+}
+
+fn first_string(node: &KdlNode) -> Option<&str> {
+    node.entries().first()?.value().as_string()
+}
+
+pub fn migrate(
+    source: &str,
+    connected: &[(String, String)],
+) -> Result<Option<String>, ConfigError> {
+    let mut document = document(source)?;
+    let mut changed = rename_sections(&mut document);
+    let mut position = 0;
+    while position < document.nodes().len() {
+        let node = &document.nodes()[position];
+        let identity = first_string(node)
+            .filter(|_| node.name().value() == LEGACY_DISPLAY)
+            .and_then(|connector| {
+                connected
+                    .iter()
+                    .find(|(known, _)| known == connector)
+                    .map(|(_, identity)| identity.clone())
+            });
+        let Some(identity) = identity else {
+            position += 1;
+            continue;
+        };
+        changed = true;
+        let configured = document.nodes().iter().any(|node| {
+            node.name().value() == "display" && first_string(node) == Some(identity.as_str())
+        });
+        if configured {
+            remove(&mut document, position);
+            continue;
+        }
+        let node = &mut document.nodes_mut()[position];
+        node.set_name("display");
+        if let Some(entry) = node.entries_mut().first_mut() {
+            let mut format = entry.format().cloned().unwrap_or_else(spaced);
+            format.value_repr = repr(&identity.as_str().into());
+            *entry = KdlEntry::new(identity.as_str());
+            entry.set_format(format);
+        }
+        position += 1;
+    }
+    Ok(changed.then(|| document.to_string()))
 }
 
 impl Appearance {

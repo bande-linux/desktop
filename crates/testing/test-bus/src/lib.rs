@@ -4,6 +4,8 @@ pub mod networkmanager;
 use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, Stdio};
 
+const CONFIG_FILE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/data/session.conf");
+
 pub struct SessionBus {
     daemon: Child,
     address: String,
@@ -12,7 +14,8 @@ pub struct SessionBus {
 impl SessionBus {
     pub fn start() -> std::io::Result<Self> {
         let mut daemon = Command::new("dbus-daemon")
-            .args(["--session", "--nofork", "--nopidfile", "--print-address=1"])
+            .arg(format!("--config-file={CONFIG_FILE}"))
+            .args(["--nofork", "--nopidfile", "--print-address=1"])
             .stdout(Stdio::piped())
             .spawn()?;
         let mut address = String::new();

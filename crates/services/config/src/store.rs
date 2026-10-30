@@ -22,6 +22,12 @@ impl fmt::Display for ReloadError {
 
 impl std::error::Error for ReloadError {}
 
+#[derive(Debug, Clone)]
+pub struct Loaded {
+    pub config: Arc<Config>,
+    pub problems: Vec<ConfigError>,
+}
+
 #[derive(Debug, Default)]
 pub struct ConfigStore {
     active: RwLock<Arc<Config>>,
@@ -38,13 +44,17 @@ impl ConfigStore {
         Arc::clone(&self.active.read().unwrap_or_else(PoisonError::into_inner))
     }
 
-    pub fn apply(&self, source: &str) -> Result<Arc<Config>, ConfigError> {
-        let shadow = Arc::new(Config::parse(source)?);
+    pub fn apply(&self, source: &str) -> Result<Loaded, ConfigError> {
+        let (config, problems) = Config::load(source)?;
+        let shadow = Arc::new(config);
         *self.active.write().unwrap_or_else(PoisonError::into_inner) = Arc::clone(&shadow);
-        Ok(shadow)
+        Ok(Loaded {
+            config: shadow,
+            problems,
+        })
     }
 
-    pub fn reload(&self, path: &Path) -> Result<Arc<Config>, ReloadError> {
+    pub fn reload(&self, path: &Path) -> Result<Loaded, ReloadError> {
         let source = std::fs::read_to_string(path).map_err(ReloadError::Read)?;
         self.apply(&source).map_err(ReloadError::Invalid)
     }

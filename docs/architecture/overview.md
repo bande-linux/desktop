@@ -155,14 +155,23 @@ All user configuration is one human-readable [KDL](https://kdl.dev) file. Every 
 control writes to it, and it can be edited by hand while the session runs.
 
 - **Design**: node-based, validated against a schema, reloaded live without restarting the
-  session. A changed file is parsed into a shadow copy; if it is valid it is swapped in
-  atomically and subscribers are told through `org.unbound.Config`; if it is not, the active
-  configuration stays as it was and the user is told the line, column and message.
+  session. A changed file is parsed into a shadow copy and swapped in atomically, and
+  subscribers are told through `org.unbound.Config`. A setting that is unknown or invalid is
+  skipped and reported with its line, column and message while every other setting applies;
+  only a file that is not KDL at all keeps the active configuration as it was.
 - **Implemented schema (`crates/services/config`)**: KDL 2.0 syntax. The file is
   `$XDG_CONFIG_HOME/unbound/config.kdl`, or `~/.config/unbound/config.kdl` when
   `XDG_CONFIG_HOME` is unset or relative. Every setting is optional; unknown settings,
-  duplicates and out-of-range values are rejected with the line and column of the offending
-  node or value.
+  duplicates and out-of-range values are reported with the line and column of the offending
+  node or value and ignored (the first of duplicates wins; an `idle` time shorter than the one
+  before it is raised to match), so one mistake never costs the rest of the file. Names from
+  earlier versions keep working: `panel { }` is read as `dock { }`, and `output "<connector>"
+  { }` applies its display settings to whatever display is on that connector until a
+  `display` block names that display. When `unbound-config` starts it rewrites them in place,
+  keeping comments and layout: `panel` becomes `dock`, and an `output` block whose connector
+  has a display connected (found in `/sys/class/drm`, named from its EDID exactly as the
+  compositor names it) becomes `display "<name>"`, or is dropped if that display already has a
+  block. Every Settings write also renames old sections first.
   ```kdl
   appearance "automatic"        // "dark" | "light" | "automatic"
   dock {
@@ -216,7 +225,7 @@ control writes to it, and it can be edited by hand while the session runs.
   ```
   The values shown for `appearance`, `dock`, `idle`, `keyboard` (except `input-sources`), `trackpad`, `mouse` and `sound` are the defaults. The
   wallpaper used is the one matching the current appearance; the desktop expands a leading `~/`.
-  A section left empty by a Settings write is removed from the file. A valid file is parsed
+  A section left empty by a Settings write is removed from the file. A readable file is parsed
   into a shadow `Config` and swapped in as one `Arc`, so readers see either the old or the new
   configuration, never a mix. `ConfigService` owns `org.unbound.Config` on the session bus and
   serves the active values as properties of interface `org.unbound.Config` at
@@ -229,14 +238,17 @@ control writes to it, and it can be edited by hand while the session runs.
   and the mirrored display's name, empty when it mirrors nothing). It watches the
   directory and reloads when the file is closed after writing or renamed into place;
   `PropertiesChanged` lists only the properties that changed. The `unbound-config` daemon runs
-  the service for the session and posts an invalid file as a notification through
-  `unbound-notify` with the line, column and message and an "Open in Editor" action
-  (`xdg-open` on the file); a later error replaces it and a valid file closes it. The
+  the service for the session and posts the file's errors as one notification through
+  `unbound-notify` with the first error's line, column and message, how many more lines have
+  errors, and an "Open in Editor" action (`xdg-open` on the file). The same set of errors is
+  posted once, even after the notification is dismissed and the file is reloaded; a different
+  set replaces it and a file without errors closes it. The
   compositor does not draw a toast of its own. The scalar properties are writable and
   `SetDisplay(s name, a{sv} settings)` replaces one display's settings (an empty dictionary
   removes it) and `SetArrangement(a(siibs))` the arrangement of the same set of displays: a
   write edits only the affected node of the file, keeping the user's comments
 
   and layout, validates the whole result, replaces the file by rename and applies it, so the
-  file stays the single source of truth. A value the schema rejects fails with `InvalidArgs`,
-  and a file that is invalid on disk is never overwritten.
+  file stays the single source of truth. A value the schema rejects fails with `InvalidArgs`;
+  errors already in the file are left for the user and do not block writes, but a file that is
+  not KDL is never overwritten.

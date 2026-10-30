@@ -14,8 +14,8 @@ use zbus::zvariant::{OwnedValue, Value};
 
 use crate::{
     AlertSound, Appearance, CapsLock, Config, ConfigStore, DisplaySettings, DockEdge, InputSource,
-    Placement, ReloadError, Rotation, SecondaryClick, Setting, Suspend, WallpaperFit,
-    WallpaperVariant, read_system_input_sources,
+    Loaded, Placement, ReloadError, Rotation, SecondaryClick, Setting, Suspend, WallpaperFit,
+    WallpaperVariant, migrate, read_system_input_sources,
 };
 
 pub type ArrangedDisplay = (String, i32, i32, bool, String);
@@ -56,6 +56,24 @@ impl From<io::Error> for ServiceError {
     }
 }
 
+fn replace(path: &Path, contents: &str) -> io::Result<()> {
+    let staging = path.with_file_name(STAGING_NAME);
+    std::fs::write(&staging, contents)?;
+    std::fs::rename(&staging, path)
+}
+
+pub fn migrate_file(path: &Path, connected: &[(String, String)]) -> io::Result<bool> {
+    let source = match std::fs::read_to_string(path) {
+        Ok(source) => source,
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(error),
+    };
+    match migrate(&source, connected) {
+        Ok(Some(migrated)) => replace(path, &migrated).map(|()| true),
+        Ok(None) | Err(_) => Ok(false),
+    }
+}
+
 pub struct ConfigService {
     _watch: FolderWatch,
     _connection: Connection,
@@ -72,7 +90,7 @@ impl ConfigService {
         connection: &Connection,
         path: &Path,
         store: Arc<ConfigStore>,
-        on_reload: impl Fn(Result<Arc<Config>, ReloadError>) + Send + 'static,
+        on_reload: impl Fn(Result<Loaded, ReloadError>) + Send + 'static,
     ) -> Result<Self, ServiceError> {
         let directory = path
             .parent()
@@ -110,14 +128,12 @@ impl ConfigService {
                 return;
             }
             let mut published = lock(&published);
-            match store.reload(&watched) {
-                Ok(config) => {
-                    publish_changes(&interface, &published, &config);
-                    on_reload(Ok(Arc::clone(&config)));
-                    *published = config;
-                }
-                Err(error) => on_reload(Err(error)),
+            let reloaded = store.reload(&watched);
+            if let Ok(loaded) = &reloaded {
+                publish_changes(&interface, &published, &loaded.config);
+                *published = Arc::clone(&loaded.config);
             }
+            on_reload(reloaded);
         })?;
         watch.watch(directory)?;
         Ok(Self {
@@ -338,14 +354,13 @@ impl ConfigInterface {
         let edited = setting
             .apply(&source)
             .map_err(|error| InvalidArgs(error.message))?;
-        let staging = self.path.with_file_name(STAGING_NAME);
-        std::fs::write(&staging, &edited)
-            .and_then(|()| std::fs::rename(&staging, &self.path))
+        replace(&self.path, &edited)
             .map_err(|error| Failed(format!("cannot write the configuration: {error}")))?;
         *published = self
             .store
             .apply(&edited)
-            .map_err(|error| Failed(error.to_string()))?;
+            .map_err(|error| Failed(error.to_string()))?
+            .config;
         Ok(())
     }
 }

@@ -44,7 +44,7 @@ fn start(initial: &str) -> Fixture {
         &connection,
         &path,
         Arc::new(ConfigStore::default()),
-        move |result| notifier.report(&result.map(drop)),
+        move |result| notifier.report(result.as_ref().map(|loaded| loaded.problems.as_slice())),
     )
     .expect("config service");
     Fixture {
@@ -106,6 +106,34 @@ fn a_new_error_replaces_the_notification_and_a_fix_closes_it() {
 
     replace_file(&fixture.path, "appearance \"dark\"\n");
     fixture.wait_for(<[Notification]>::is_empty);
+}
+
+#[test]
+fn unknown_settings_are_reported_once_while_the_rest_applies() {
+    let fixture = start(
+        "appearance \"dark\"\noutput \"Virtual-1\" {\n    scale 1.5\n}\nsparkle #true\ndock {\n    size 45\n}\n",
+    );
+
+    let shown = fixture.wait_for(|active| active.len() == 1)[0].clone();
+    assert_eq!(shown.summary, "config.kdl has an error");
+    assert_eq!(
+        shown.body,
+        "Line 5, column 1: unknown setting `sparkle`. Every other setting is in effect."
+    );
+    assert!(fixture.notifications.dismiss(shown.id).expect("dismiss"));
+    fixture.wait_for(<[Notification]>::is_empty);
+
+    replace_file(&fixture.path, "appearance \"light\"\nsparkle #true\n");
+    replace_file(
+        &fixture.path,
+        "appearance \"light\"\nsparkle #true\ntheme \"graphite\"\n",
+    );
+    let more = fixture.wait_for(|active| active.len() == 1);
+    assert_eq!(more[0].summary, "config.kdl has 2 errors");
+    assert_eq!(
+        more[0].body,
+        "Line 2, column 1: unknown setting `sparkle`. One more line has an error. Every other setting is in effect."
+    );
 }
 
 #[test]

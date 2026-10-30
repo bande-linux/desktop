@@ -109,7 +109,7 @@ fn sorted_modes(info: &connector::Info) -> Vec<Mode> {
     modes
 }
 
-fn edid_of(device: &DrmDevice, handle: connector::Handle) -> Option<crate::edid::Edid> {
+fn edid_of(device: &DrmDevice, handle: connector::Handle) -> Option<unbound_edid::Edid> {
     let properties = device.get_properties(handle).ok()?;
     properties.iter().find_map(|(property, value)| {
         let info = device.get_property(*property).ok()?;
@@ -119,7 +119,7 @@ fn edid_of(device: &DrmDevice, handle: connector::Handle) -> Option<crate::edid:
         let property::Value::Blob(blob) = info.value_type().convert_value(*value) else {
             return None;
         };
-        crate::edid::parse(&device.get_property_blob(blob).ok()?)
+        unbound_edid::parse(&device.get_property_blob(blob).ok()?)
     })
 }
 

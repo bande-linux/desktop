@@ -3807,6 +3807,7 @@ dependencies = [
  "tempfile",
  "tracing",
  "unbound-config",
+ "unbound-edid",
  "unbound-graphics",
  "unbound-greeter",
  "unbound-keyboard",
@@ -3829,6 +3830,7 @@ dependencies = [
  "tempfile",
  "tracing",
  "unbound-bus",
+ "unbound-edid",
  "unbound-l10n",
  "unbound-log",
  "unbound-notify",
@@ -3909,6 +3911,10 @@ dependencies = [
  "unbound-xdg",
  "zbus",
 ]
+
+[[package]]
+name = "unbound-edid"
+version = "0.1.0"
 
 [[package]]
 name = "unbound-files"

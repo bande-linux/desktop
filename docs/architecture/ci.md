@@ -45,7 +45,13 @@ status-check contexts:
   `cargo clippy --workspace --all-targets --locked -- -D warnings`.
 - `ci/lavapipe-test`: `cargo test --workspace`, including the compositor and toolkit render
   tests on lavapipe. D-Bus tests start a private `dbus-daemon` session bus each
-  (`crates/testing/test-bus`). The toolkit's render tests use Inter (`fonts-inter`) and Noto
+  (`crates/testing/test-bus`) from `crates/testing/test-bus/data/session.conf`, which lists no
+  service directories: a test bus never D-Bus-activates the services installed on the machine
+  (an installed `unbound-config` would read the developer's own `config.kdl` and post into the
+  test), so a test talks only to the services it starts itself. To run tests the same way on a
+  machine with a live Unbound session, wrap them in a bus from that file, which also keeps the
+  session's portal settings out of the goldens:
+  `dbus-run-session --config-file=crates/testing/test-bus/data/session.conf -- cargo test -p <package>`. The toolkit's render tests use Inter (`fonts-inter`) and Noto
   Sans CJK (`fonts-noto-cjk`) through fontconfig; their expected images are computed in the test
   from the scene (exact area coverage of shapes and of glyph outlines read with `ab_glyph`,
   Gaussian shadows by numeric integration), so they depend neither on Vello nor on the font

@@ -139,6 +139,7 @@ pub(crate) enum Placed<'a> {
     Surface(WlSurface, Point<i32, Logical>),
     Window(&'a Window),
     Closing(&'a Closing),
+    Overview,
 }
 
 type Composed = (
@@ -199,6 +200,7 @@ pub struct State {
     pub(crate) watchdog: crate::watchdog::Watchdog,
     pub(crate) desktop: crate::gesture::ShowDesktop,
     pub(crate) workspaces: crate::workspace::Workspaces,
+    pub(crate) overview: crate::overview::Overview,
     pub(crate) gesture_route: Option<crate::gesture::Route>,
     pub(crate) active_app: String,
     pub(crate) idle: crate::idle::Idle,
@@ -360,6 +362,7 @@ impl Headless {
             watchdog: crate::watchdog::Watchdog::default(),
             desktop: crate::gesture::ShowDesktop::default(),
             workspaces: crate::workspace::Workspaces::default(),
+            overview: crate::overview::Overview::default(),
             gesture_route: None,
             active_app: String::new(),
             idle: crate::idle::Idle::default(),
@@ -440,7 +443,9 @@ impl Headless {
             .state
             .windows
             .iter()
-            .filter(|window| window.size.is_none())
+            .filter(|window| {
+                window.size.is_none() || (self.state.overview.is_shown() && window.visible())
+            })
             .map(|window| window.surface().clone());
         let roots = self
             .state
@@ -570,6 +575,10 @@ impl Headless {
                     let (shown, look) =
                         window_elements(window, renderer, scale, active, hung, presented);
                     elements.extend(shown);
+                    elements.extend(self.state.overview_ring(window, scale));
+                    if let (Some(ghost), Some(look)) = (self.state.overview_ghost(window), &look) {
+                        elements.extend(look.ghost(ghost, scale));
+                    }
                     drawn.push((window.surface().clone(), look));
                     if let Some(preview) = &self.state.preview
                         && &preview.owner == window.surface()
@@ -578,6 +587,9 @@ impl Headless {
                     }
                 }
                 Placed::Closing(closing) => elements.extend(closing.render_elements(scale)),
+                Placed::Overview => {
+                    elements.extend(self.state.overview_elements(renderer, scale));
+                }
             }
         }
         tie_blurs_to_what_lies_below(&mut elements, scale);
@@ -665,7 +677,7 @@ impl Headless {
                     None,
                     ElementKind::Cursor,
                 )
-                .map(OutputElement::Cursor)
+                .map(OutputElement::Memory)
                 .into_iter()
                 .collect()
             }
@@ -921,7 +933,7 @@ impl State {
             .filter_map(|placed| match placed {
                 Placed::Surface(surface, origin) => Some((surface, origin)),
                 Placed::Window(window) => Some((window.surface().clone(), window.surface_origin())),
-                Placed::Closing(_) => None,
+                Placed::Closing(_) | Placed::Overview => None,
             })
             .collect()
     }
@@ -955,13 +967,15 @@ impl State {
                 if rendered {
                     window.rendered() && self.on_view(window)
                 } else {
-                    self.present(window) && !self.desktop.hides_windows()
+                    self.present(window)
+                        && !self.desktop.hides_windows()
+                        && !self.overview.is_shown()
                 }
             })
             .collect::<Vec<_>>();
-        let (front, rest): (Vec<&Window>, Vec<&Window>) = visible
-            .into_iter()
-            .partition(|window| self.on_full_screen_space(window));
+        let (front, rest): (Vec<&Window>, Vec<&Window>) = visible.into_iter().partition(|window| {
+            self.on_full_screen_space(window) || self.dragged_in_overview(window)
+        });
         let (leaving, rest): (Vec<&Window>, Vec<&Window>) =
             rest.into_iter().partition(|window| window.is_minimized());
         [
@@ -969,6 +983,11 @@ impl State {
             self.window_entries(&leaving),
             self.window_entries(&front),
             layers(Layer::Top),
+            if rendered && self.overview.is_shown() {
+                vec![Placed::Overview]
+            } else {
+                Vec::new()
+            },
             self.closing
                 .iter()
                 .filter(|_| rendered)
@@ -1277,7 +1296,7 @@ render_elements! {
     Closing=WindowElement<PieceElement>,
     Fill=FillElement,
     Blur=BlurElement,
-    Cursor=MemoryRenderBufferRenderElement<VulkanRenderer>,
+    Memory=MemoryRenderBufferRenderElement<VulkanRenderer>,
 }
 
 impl SeatHandler for State {

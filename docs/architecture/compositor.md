@@ -99,7 +99,8 @@ when they reach the screen is Unbound's own.
   leaves the app; pinching back or activating any window brings them back and returns the
   keyboard. A four-finger pinch from the normal state opens the launcher. The compositor also
   claims three-finger swipes: once the fingers have moved 16 units the axis locks, and a
-  horizontal swipe switches workspaces (below). Two- and four-finger swipes go to apps.
+  horizontal swipe switches workspaces, a swipe up opens the overview and a swipe down shows
+  the focused app's windows (below). Two- and four-finger swipes go to apps.
 - **Workspaces.** The output has one row of workspaces. A window opens on the active one
   (a window of another app opened while a full-screen workspace is active opens on that
   workspace's home). Workspaces are made on demand: moving a window past the last one adds
@@ -122,6 +123,31 @@ when they reach the screen is Unbound's own.
   row through `unbound_shell_v1` v9: `workspaces(count, active)` and
   `window_workspace(identifier, position)`, sent on binding and on every change. With
   Reduce Motion a switch crossfades the two workspaces in place.
+- **Overview.** `Alt+Super+Up`, the Mission Control key (`XF86LaunchA`, F3 on Apple
+  keyboards, without Super) or a three-finger swipe up (300 units for the whole way, tracked
+  1:1 and released like the other swipes) open it; the same key, `Escape`, a click on empty
+  space or a swipe down close it. There is no hot corner: the research makes corners an
+  opt-in setting, and no setting exists yet. Every window of the active workspace flies from
+  where it is to a layout without overlap (rows by original height, left to right by
+  original position, one common scale, never enlarged) under the workspace strip, and back
+  when the overview closes, with `standard`; the drawing is the window's own live buffer
+  scaled, never a copy. The strip slides down from the top: one live thumbnail per workspace
+  (wallpaper and windows, scaled from the same textures), the active one ringed, and a "+"
+  that adds a workspace. The selected window (the key window at first, then the one under
+  the pointer or reached with the arrow keys) is ringed and shows its title below it, drawn
+  with `unbound-graphics` once per title. A click on a window or `Return` focuses it, a click
+  on a thumbnail switches there and closes the overview, and dragging a window by 4 pt
+  lifts it under the pointer: dropped on a thumbnail it moves to that workspace, on the "+"
+  to a new one, elsewhere it springs back. Typing filters by title or app id (the others dim
+  to 25 % and cannot be selected), `Backspace` edits and the first `Escape` clears the
+  filter. Keys never reach the app while the overview is open, except Super shortcuts, so
+  `Alt+Super+Left/Right` and a horizontal swipe move between workspaces inside it, each
+  workspace with its own layout. Empty workspaces are kept until the overview closes. App
+  windows (App Exposé) show only one app's windows from every workspace without the strip:
+  `Alt+Super+Down` or a three-finger swipe down for the focused app, and
+  `unbound_shell_v1.show_windows(app_id)` (v9; an empty app id opens the plain overview) for
+  the Dock. With Reduce Motion the windows stay where they are and fade out while the
+  overview fades in.
 - **Not responding.** Whenever the user interacts with a window, and for every app when Force
   Quit opens, the compositor pings the app through `xdg_wm_base.ping` (at most once a second).
   An app that has not answered after 3 s is not responding: its windows are veiled in a soft
@@ -167,6 +193,6 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `zwp_pointer_constraints_v1` / `relative_pointer` | Pointer lock for games | P1 | not implemented |
 | `zwp_pointer_gestures_v1` | Trackpad gestures | P1 | implemented, v3: swipes, pinches and holds the compositor does not claim go to the client under the pointer |
 | `zwp_keyboard_shortcuts_inhibit_v1` | Keyboard passthrough for VMs and remote desktop | P2 | not implemented |
-| `unbound_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Control Center, Dock icon rectangles, apps that stopped responding; for the Dock (v7): hide, quit and force quit an app, activate one window by its foreign-toplevel identifier, minimised windows, attention requests, rounded blur for shell surfaces, Super+F3 and Super+F2 keyboard focus for the Dock and menu bar; v9: workspaces and the workspace of each window | P0 | implemented, shell clients only |
+| `unbound_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Control Center, Dock icon rectangles, apps that stopped responding; for the Dock (v7): hide, quit and force quit an app, activate one window by its foreign-toplevel identifier, minimised windows, attention requests, rounded blur for shell surfaces, Super+F3 and Super+F2 keyboard focus for the Dock and menu bar; v9: workspaces, the workspace of each window and `show_windows` for the overview and App Exposé | P0 | implemented, shell clients only |
 | `unbound_app_v1` (own, in `unbound-shell-v1.xml`) | App-level requests: `quit_requested` on Super+Q instead of closing every window; v2 `place_window` (halves, quarters, restore) for the window menu; v3 `move_to_workspace` (previous, next) for the window menu | P0 | implemented, every client |
 | `ext-background-effect-v1` | Blur behind translucent menus, sidebars, Dock and menu bar | P1 | implemented: dual-filter Kawase blur (3 passes) clipped to the window's rounded shape, below the window's own shadow, redrawn when anything beneath it changes |

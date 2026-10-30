@@ -59,7 +59,7 @@ pub(crate) enum Route {
     Desktop { was_shown: bool, scale: f64 },
     Undecided { delta: Point<f64, Logical> },
     Workspaces,
-    Claimed,
+    Overview,
 }
 
 #[derive(Debug, Clone)]
@@ -78,6 +78,10 @@ impl Tracker {
             last,
             samples: VecDeque::from([(f64::from(time), start)]),
         }
+    }
+
+    pub(crate) fn start(&self) -> f64 {
+        self.start
     }
 
     pub(crate) fn raw(&self) -> f64 {
@@ -298,7 +302,9 @@ impl State {
             self.track_workspace_swipe(delta.x, time);
             return Route::Workspaces;
         }
-        Route::Claimed
+        self.begin_overview_swipe(time, delta.y < 0.0);
+        self.track_overview_swipe(delta.y, time);
+        Route::Overview
     }
 
     fn forward(&mut self, gesture: Gesture, time: u32) {
@@ -402,6 +408,14 @@ impl State {
             }
             (Gesture::SwipeEnd { cancelled }, Some(Route::Workspaces)) => {
                 self.end_workspace_swipe(cancelled);
+                None
+            }
+            (Gesture::SwipeUpdate { delta }, Some(Route::Overview)) => {
+                self.track_overview_swipe(delta.y, time);
+                Some(Route::Overview)
+            }
+            (Gesture::SwipeEnd { cancelled }, Some(Route::Overview)) => {
+                self.end_overview_swipe(cancelled);
                 None
             }
             (Gesture::PinchUpdate { scale, .. }, Some(Route::Desktop { was_shown, .. })) => {

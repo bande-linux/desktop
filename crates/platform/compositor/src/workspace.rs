@@ -55,11 +55,15 @@ impl Workspaces {
         self.spaces[self.active].id
     }
 
+    pub(crate) fn active(&self) -> usize {
+        self.active
+    }
+
     pub(crate) fn count(&self) -> usize {
         self.spaces.len()
     }
 
-    fn shown_view(&self) -> f64 {
+    pub(crate) fn shown_view(&self) -> f64 {
         match (&self.settle, self.last) {
             (Some(settle), None) => settle.target(),
             _ => self.view,
@@ -169,12 +173,16 @@ impl State {
         let animated = window.shown_look();
         let offset = self.workspace_offset(window);
         let shift = self.desktop_shift(real);
-        if animated.is_none() && offset == 0.0 && shift == Point::default() {
+        let overview = self.overview.is_shown();
+        if animated.is_none() && offset == 0.0 && shift == Point::default() && !overview {
             return None;
         }
         let mut look = animated.unwrap_or(Look::shown(real));
         self.place_on_workspace(&mut look, offset);
         look.rect.loc += shift;
+        if overview {
+            look = self.in_overview(window, look);
+        }
         Some(look)
     }
 
@@ -203,8 +211,8 @@ impl State {
         self.focus_front_of_workspace();
     }
 
-    fn focus_front_of_workspace(&mut self) {
-        if self.exclusive_layer.is_some() {
+    pub(crate) fn focus_front_of_workspace(&mut self) {
+        if self.exclusive_layer.is_some() || self.overview.is_open() {
             return;
         }
         let front = self.frontmost(None);
@@ -299,6 +307,29 @@ impl State {
         self.tidy_workspaces();
     }
 
+    pub(crate) fn move_to_space_at(&mut self, surface: &WlSurface, position: usize) {
+        let Some(index) = self.window_index(surface) else {
+            return;
+        };
+        if self.on_full_screen_space(&self.windows[index]) {
+            return;
+        }
+        let target = match self.workspaces.id_at(position) {
+            Some(id) if !self.workspaces.is_full_screen(id) => id,
+            Some(_) => return,
+            None => self.workspaces.insert(self.workspaces.count(), None),
+        };
+        self.move_window_to_space(index, target);
+        self.refocus_on_workspace(surface);
+        self.announce_workspaces();
+    }
+
+    pub(crate) fn add_workspace(&mut self) {
+        self.workspaces.insert(self.workspaces.count(), None);
+        self.needs_redraw = true;
+        self.announce_workspaces();
+    }
+
     fn refocus_on_workspace(&mut self, moved: &WlSurface) {
         if self.focused().as_ref() == Some(moved) {
             let front = self.frontmost(None);
@@ -310,10 +341,12 @@ impl State {
         let active = self.workspaces.active_id();
         let owner = self.windows[index].surface().client();
         let shares_full_screen = self.workspaces.is_full_screen(active)
-            && self
-                .windows
-                .iter()
-                .any(|window| window.workspace == active && window.surface().client() == owner);
+            && self.windows.iter().enumerate().any(|(other, window)| {
+                other != index
+                    && window.size.is_some()
+                    && window.workspace == active
+                    && window.surface().client() == owner
+            });
         self.windows[index].workspace =
             if self.workspaces.is_full_screen(active) && !shares_full_screen {
                 self.workspaces.spaces[self.workspaces.active]
@@ -384,7 +417,7 @@ impl State {
     }
 
     pub(crate) fn tidy_workspaces(&mut self) {
-        if !self.workspaces.is_settled() {
+        if !self.workspaces.is_settled() || self.overview.is_open() {
             self.announce_workspaces();
             return;
         }

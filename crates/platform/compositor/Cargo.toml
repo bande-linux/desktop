@@ -10,6 +10,7 @@ rustix.workspace = true
 smithay = { workspace = true, features = ["backend_drm", "backend_gbm", "backend_libinput", "backend_session_libseat", "backend_udev", "desktop"] }
 tracing.workspace = true
 unbound-config.workspace = true
+unbound-graphics.workspace = true
 unbound-log.workspace = true
 unbound-protocols = { workspace = true, features = ["server"] }
 unbound-render.workspace = true

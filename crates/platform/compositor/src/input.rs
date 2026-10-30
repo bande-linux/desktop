@@ -46,6 +46,9 @@ enum Shortcut {
     Workspace(bool),
     WorkspaceAt(usize),
     CarryWindow(bool),
+    Overview,
+    AppWindows,
+    OverviewKey(u32, Option<char>),
 }
 
 fn volume_key(keysym: u32) -> Option<VolumeKey> {
@@ -96,6 +99,8 @@ fn shortcut(
         keysyms::KEY_Right if ctrl && shift => Some(Shortcut::CarryWindow(true)),
         keysyms::KEY_Left if alt => Some(Shortcut::Workspace(false)),
         keysyms::KEY_Right if alt => Some(Shortcut::Workspace(true)),
+        keysyms::KEY_Up if alt => Some(Shortcut::Overview),
+        keysyms::KEY_Down if alt => Some(Shortcut::AppWindows),
         keysyms::KEY_Left if ctrl => Some(Shortcut::Place(Direction::Left)),
         keysyms::KEY_Right if ctrl => Some(Shortcut::Place(Direction::Right)),
         keysyms::KEY_Up if ctrl => Some(Shortcut::Place(Direction::Up)),
@@ -190,6 +195,18 @@ impl State {
             self.focus_shell(namespace);
             return;
         }
+        if let Shortcut::OverviewKey(keysym, text) = shortcut {
+            self.overview_key(keysym, text);
+            return;
+        }
+        if shortcut == Shortcut::Overview {
+            self.toggle_overview(None);
+            return;
+        }
+        if shortcut == Shortcut::AppWindows {
+            self.show_app_windows();
+            return;
+        }
         if let Shortcut::Workspace(forward) = shortcut {
             self.step_workspace(forward);
             return;
@@ -275,7 +292,10 @@ impl State {
             | Shortcut::Volume(..)
             | Shortcut::Brightness(..)
             | Shortcut::Workspace(_)
-            | Shortcut::WorkspaceAt(_) => {}
+            | Shortcut::WorkspaceAt(_)
+            | Shortcut::Overview
+            | Shortcut::AppWindows
+            | Shortcut::OverviewKey(..) => {}
         }
     }
 }
@@ -404,6 +424,9 @@ impl Headless {
         state.pointer_location = location;
         state.cursor_shown = true;
         state.needs_redraw = true;
+        if state.overview.is_open() {
+            state.overview_pointer(location);
+        }
         let under = state.surface_under(location);
         let Some(pointer) = state.seat.get_pointer() else {
             return;
@@ -426,6 +449,13 @@ impl Headless {
         if !pressed && state.swallowed_button == Some(button) {
             state.swallowed_button = None;
             return;
+        }
+        if state.overview.is_open() && state.popup_grab.is_none() {
+            let under = state.surface_under(state.pointer_location);
+            if !under.is_some_and(|(surface, _)| state.is_above_windows(&surface)) {
+                state.overview_button(pressed);
+                return;
+            }
         }
         if pressed {
             let under = state.surface_under(state.pointer_location);
@@ -501,6 +531,18 @@ impl Headless {
                     state.held_shortcut_keys.push(evdev_code);
                     let fine = modifiers.alt && modifiers.shift;
                     return FilterResult::Intercept(Some(Shortcut::Brightness(key, fine)));
+                }
+                let sym = keysym.modified_sym();
+                if sym.raw() == keysyms::KEY_XF86LaunchA && !state.is_locked() {
+                    state.held_shortcut_keys.push(evdev_code);
+                    return FilterResult::Intercept(Some(Shortcut::Overview));
+                }
+                if state.overview.is_open() && !modifiers.logo {
+                    state.held_shortcut_keys.push(evdev_code);
+                    return FilterResult::Intercept(Some(Shortcut::OverviewKey(
+                        sym.raw(),
+                        sym.key_char(),
+                    )));
                 }
                 let unshifted = keysym
                     .raw_latin_sym_or_raw_current_sym()

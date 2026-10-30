@@ -271,6 +271,9 @@ impl Dispatch<UnboundShellV1, ()> for State {
                 crate::effect::set_corner_radius(&surface, radius);
                 state.needs_redraw = true;
             }
+            unbound_shell_v1::Request::ShowWindows { app_id } => {
+                state.toggle_overview(Some(app_id).filter(|app_id| !app_id.is_empty()));
+            }
             unbound_shell_v1::Request::Destroy => {
                 state.shell_resources.retain(|shell| shell != resource);
             }

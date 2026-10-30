@@ -1,1 +1,1 @@
-SUBSYSTEM=="sound", KERNEL=="pcmC*D2c", DRIVERS=="snd-soc-macaudio", ATTRS{id}=="AppleJ473", ENV{ACP_IGNORE}="1", TAG+="systemd", ENV{SYSTEMD_WANTS}="unbound-speaker-guard.service"
+SUBSYSTEM=="sound", KERNEL=="pcmC*D2c", DRIVERS=="snd-soc-macaudio", ATTRS{id}=="AppleJ473", TAG+="systemd", ENV{SYSTEMD_WANTS}="unbound-speaker-guard.service"

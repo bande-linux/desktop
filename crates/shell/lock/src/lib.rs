@@ -15,8 +15,8 @@ use unbound_toolkit::ui::{
     Animated, Context, Event, Key, SecureField, Size, Spring, Ui, Widget, WidgetId,
 };
 use unbound_toolkit::{
-    Color, Image, Item, Palette, Paragraph, Point, Rect, Scene, Shape, TextAlign, TextStyle,
-    TextSystem,
+    Appearance, Image, Item, Palette, Paragraph, Point, Rect, Scene, Scheme, Shape, TextAlign,
+    TextRole, TextStyle, TextSystem,
 };
 
 pub use backdrop::{BackdropSource, load_backdrop};
@@ -31,21 +31,24 @@ pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US
 pub const PAM_SERVICE: &str = "unbound-lock";
 pub const SHAKE_DURATION: Duration = Duration::from_millis(480);
 const SHAKE_KICK: f64 = 600.0;
-const BACKGROUND: Color = Color::hex(0x202830);
-const FOREGROUND: Color = Color::hex(0xFFFFFF);
-const DATE_SIZE: f32 = 20.0;
 const TIME_SIZE: f32 = 96.0;
-const NAME_SIZE: f32 = 15.0;
+const TIME_WEIGHT: f32 = 300.0;
 const INITIAL_SIZE: f32 = 30.0;
 const AVATAR: f32 = 72.0;
 const FIELD_WIDTH: f32 = 240.0;
 const FIELD_FONT: f32 = 15.0;
 const GAP: f32 = 12.0;
-const SOURCE_SIZE: f32 = 12.0;
-const MESSAGE_SIZE: f32 = 13.0;
 const MESSAGE_WIDTH: f32 = 360.0;
-const CAPS_LOCK: &str = "\u{21EA}";
-const CAPS_LOCK_INSET: f32 = 8.0;
+const PEER: f32 = 6.0;
+const PEER_GAP: f32 = 6.0;
+
+pub fn night(appearance: Appearance) -> Palette {
+    Appearance {
+        scheme: Scheme::Dark,
+        ..appearance
+    }
+    .palette()
+}
 
 pub fn shake_offset(elapsed: Duration) -> f32 {
     if elapsed >= SHAKE_DURATION {
@@ -67,7 +70,7 @@ pub fn clock_texts(formats: &DateFormats, now: &jiff::Zoned) -> (String, String)
 struct Model {
     input_source: Option<String>,
     message: Option<String>,
-    caps_lock: bool,
+    position: (usize, usize),
     name: String,
     initial: String,
     date: String,
@@ -89,7 +92,6 @@ struct LockView {
     paragraphs: Option<[Paragraph; 4]>,
     input_source: Option<Paragraph>,
     message: Option<Paragraph>,
-    caps_lock: Option<Paragraph>,
     frame: Rect,
 }
 
@@ -104,38 +106,44 @@ impl Widget for LockView {
 
     fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
         let model = self.model.borrow();
-        let paragraph = |text: &str, size: f32, weight: f32, cx: &mut Context| {
-            cx.text.paragraph(
-                text,
-                TextStyle::new(size, FOREGROUND).weight(weight),
-                None,
-                TextAlign::Start,
-            )
+        let palette = cx.palette;
+        let paragraph = |text: &str, style: TextStyle, cx: &mut Context| {
+            cx.text.paragraph(text, style, None, TextAlign::Start)
         };
         self.paragraphs = Some([
-            paragraph(&model.date, DATE_SIZE, TextStyle::MEDIUM, cx),
-            paragraph(&model.time, TIME_SIZE, TextStyle::SEMIBOLD, cx),
-            paragraph(&model.initial, INITIAL_SIZE, TextStyle::MEDIUM, cx),
-            paragraph(&model.name, NAME_SIZE, TextStyle::SEMIBOLD, cx),
+            paragraph(
+                &model.date,
+                TextStyle::role(TextRole::Heading, palette.ink),
+                cx,
+            ),
+            paragraph(
+                &model.time,
+                TextStyle::new(TIME_SIZE, palette.ink)
+                    .weight(TIME_WEIGHT)
+                    .tabular(),
+                cx,
+            ),
+            paragraph(
+                &model.initial,
+                TextStyle::new(INITIAL_SIZE, palette.on_accent).weight(TextStyle::BOLD),
+                cx,
+            ),
+            paragraph(
+                &model.name,
+                TextStyle::role(TextRole::WindowTitle, palette.ink),
+                cx,
+            ),
         ]);
         self.input_source = model.input_source.as_ref().map(|name| {
             let hint = L10N.tr_args("input-source", [("name", name.as_str().into())]);
-            paragraph(&hint, SOURCE_SIZE, TextStyle::MEDIUM, cx)
+            paragraph(&hint, TextStyle::role(TextRole::Callout, palette.ink2), cx)
         });
         self.message = model.message.as_ref().map(|message| {
             cx.text.paragraph(
                 message,
-                TextStyle::new(MESSAGE_SIZE, FOREGROUND).weight(TextStyle::MEDIUM),
+                TextStyle::role(TextRole::BodyStrong, palette.ink),
                 Some(MESSAGE_WIDTH),
                 TextAlign::Center,
-            )
-        });
-        self.caps_lock = model.caps_lock.then(|| {
-            cx.text.paragraph(
-                CAPS_LOCK,
-                TextStyle::new(FIELD_FONT, cx.palette.ink2).weight(TextStyle::SEMIBOLD),
-                None,
-                TextAlign::Start,
             )
         });
         drop(model);
@@ -152,7 +160,7 @@ impl Widget for LockView {
             shake_offset(model.now.saturating_duration_since(from))
         });
         drop(model);
-        let name_bottom = self.avatar().y + AVATAR + GAP + self.name_height();
+        let name_bottom = self.peers_top() + self.peers_height();
         let x = frame.x + ((frame.width - FIELD_WIDTH) / 2.0).round() + shake.round();
         for child in &mut self.children {
             child.place(
@@ -167,19 +175,26 @@ impl Widget for LockView {
     }
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
+        let backdrop = Shape::rect(self.frame);
         items.push(Item::Fill {
-            shape: Shape::rect(self.frame),
-            paint: BACKGROUND.into(),
+            shape: backdrop,
+            paint: cx.palette.chassis.into(),
         });
         let model = self.model.borrow();
         if let Some(image) = &model.backdrop {
             let (alpha, _) = model.backdrop_shown.value_at(model.now);
             items.push(Item::Opacity {
                 alpha,
-                items: vec![Item::Image {
-                    rect: self.frame,
-                    image: image.clone(),
-                }],
+                items: vec![
+                    Item::Image {
+                        rect: self.frame,
+                        image: image.clone(),
+                    },
+                    Item::Fill {
+                        shape: backdrop,
+                        paint: cx.palette.scrim.into(),
+                    },
+                ],
             });
         }
         drop(model);
@@ -213,21 +228,38 @@ impl Widget for LockView {
             origin: centred(name, centre, avatar.y + AVATAR + GAP),
             paragraph: name.clone(),
         });
+        let (current, count) = self.model.borrow().position;
+        if count > 1 {
+            let row = count as f32 * (PEER + PEER_GAP) - PEER_GAP;
+            let left = (centre - row / 2.0).round();
+            let top = self.peers_top() + GAP / 2.0;
+            for index in 0..count {
+                let square = Shape::rect(Rect::new(
+                    left + index as f32 * (PEER + PEER_GAP),
+                    top,
+                    PEER,
+                    PEER,
+                ));
+                items.push(if index == current {
+                    Item::Fill {
+                        shape: square,
+                        paint: cx.palette.ink.into(),
+                    }
+                } else {
+                    Item::Stroke {
+                        shape: Shape::rect(square.rect.inset(0.5)),
+                        width: 1.0,
+                        paint: cx.palette.ink2.into(),
+                    }
+                });
+            }
+        }
         for child in &self.children {
             child.paint(cx, items);
         }
         let Some(field) = self.children.first().map(|field| field.frame()) else {
             return;
         };
-        if let Some(caps_lock) = &self.caps_lock {
-            items.push(Item::Text {
-                origin: Point::new(
-                    (field.x + field.width - CAPS_LOCK_INSET - caps_lock.width()).round(),
-                    (field.y + (field.height - caps_lock.height()) / 2.0).round(),
-                ),
-                paragraph: caps_lock.clone(),
-            });
-        }
         let mut below = field.y + field.height + GAP;
         if let Some(message) = &self.message {
             items.push(Item::Text {
@@ -252,8 +284,14 @@ impl Widget for LockView {
             .input_source
             .as_ref()
             .map(|name| L10N.tr_args("input-source", [("name", name.as_str().into())]));
-        let caps_lock = model.caps_lock.then(|| L10N.tr("caps-lock"));
-        let label = [Some(locked), model.message.clone(), caps_lock, input_source]
+        let (current, count) = model.position;
+        let position = (count > 1).then(|| {
+            L10N.tr_args(
+                "user-position",
+                [("index", (current + 1).into()), ("count", count.into())],
+            )
+        });
+        let label = [Some(locked), position, model.message.clone(), input_source]
             .into_iter()
             .flatten()
             .collect::<Vec<_>>()
@@ -281,10 +319,19 @@ impl LockView {
         )
     }
 
-    fn name_height(&self) -> f32 {
-        self.paragraphs
+    fn peers_top(&self) -> f32 {
+        let name = self
+            .paragraphs
             .as_ref()
-            .map_or(NAME_SIZE, |[_, _, _, name]| name.height())
+            .map_or(0.0, |[_, _, _, name]| name.height());
+        self.avatar().y + AVATAR + GAP + name
+    }
+
+    fn peers_height(&self) -> f32 {
+        match self.model.borrow().position {
+            (_, 0 | 1) => 0.0,
+            _ => GAP / 2.0 + PEER,
+        }
     }
 }
 
@@ -300,14 +347,14 @@ impl LockScreen {
         user: &User,
         formats: DateFormats,
         now: &jiff::Zoned,
-        palette: Palette,
+        appearance: Appearance,
         text: TextSystem,
     ) -> Self {
         let (date, time) = clock_texts(&formats, now);
         let model: Shared = Rc::new(RefCell::new(Model {
             input_source: None,
             message: None,
-            caps_lock: false,
+            position: (0, 1),
             name: user.full_name.clone(),
             initial: user
                 .full_name
@@ -340,10 +387,9 @@ impl LockScreen {
             paragraphs: None,
             input_source: None,
             message: None,
-            caps_lock: None,
             frame: Rect::default(),
         };
-        let mut ui = Ui::new(Box::new(view), Context::new(text, palette));
+        let mut ui = Ui::new(Box::new(view), Context::new(text, night(appearance)));
         ui.perform(&ActionRequest {
             action: Action::Focus,
             target_tree: TreeId::ROOT,
@@ -358,8 +404,8 @@ impl LockScreen {
         }
     }
 
-    pub fn set_palette(&mut self, palette: Palette) {
-        self.ui.context().palette = palette;
+    pub fn set_appearance(&mut self, appearance: Appearance) {
+        self.ui.context().palette = night(appearance);
     }
 
     pub fn set_input_source(&mut self, name: Option<String>) -> bool {
@@ -370,10 +416,14 @@ impl LockScreen {
     }
 
     pub fn set_caps_lock(&mut self, on: bool) -> bool {
-        let mut model = self.model.borrow_mut();
-        let changed = model.caps_lock != on;
-        model.caps_lock = on;
+        let cx = self.ui.context();
+        let changed = cx.caps_lock != on;
+        cx.caps_lock = on;
         changed
+    }
+
+    pub fn set_position(&mut self, index: usize, count: usize) {
+        self.model.borrow_mut().position = (index, count);
     }
 
     pub fn set_message(&mut self, message: Option<String>) {

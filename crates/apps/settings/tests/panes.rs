@@ -7,7 +7,8 @@ use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId};
 use unbound_audio::{Device, Direction, Level, Snapshot};
-use unbound_config::DisplaySettings;
+use unbound_config::{DisplaySettings, Placement};
+
 use unbound_settings::{
     Answer, AudioCommand, BluetoothCommand, Command, Display, Feed, Mode, NetworkCommand, Pair,
     PaneId, PictureCommand, SettingId, SettingsView, Update, Value, bundled_pairs, feed,
@@ -388,6 +389,92 @@ fn a_display_change_keeps_its_other_settings_and_only_offers_what_the_panel_can(
             }
         )]
     );
+}
+
+fn perform(view: &mut SettingsView, target: NodeId, action: Action) {
+    view.perform(&ActionRequest {
+        action,
+        target_tree: TreeId::ROOT,
+        target_node: target,
+        data: None,
+    });
+}
+
+#[test]
+fn a_display_is_made_main_and_a_new_resolution_comes_back_unless_kept() {
+    let mut view = view();
+    let mode = |width: i32, height: i32| Mode {
+        width,
+        height,
+        millihertz: 60_000,
+    };
+    let external = Display {
+        connector: "DP-1".to_owned(),
+        identity: "Dell DELL U2720Q 7ZD5K53".to_owned(),
+        make: "Dell".to_owned(),
+        model: "DELL U2720Q".to_owned(),
+        modes: vec![mode(3840, 2160), mode(2560, 1440), mode(1280, 1024)],
+        current: Some(mode(3840, 2160)),
+        position: (1512, 0),
+        scale: 2.0,
+        rotation: 0,
+    };
+    view.set_displays(vec![display("eDP-1", &[60]), external]);
+    open(&mut view, "Displays");
+    assert!(has_text(&mut view, "Arrangement"));
+    assert!(has_text(&mut view, "DELL U2720Q"));
+
+    let uses: Vec<NodeId> = nodes(&mut view)
+        .into_iter()
+        .filter(|(_, node)| node.role() == Role::RadioGroup && node.label() == Some("Use as"))
+        .map(|(id, _)| id)
+        .collect();
+    assert_eq!(uses.len(), 2);
+    perform(&mut view, uses[1], Action::Decrement);
+    let placement = |display: &str, x: i32, main: bool| Placement {
+        display: display.to_owned(),
+        x,
+        y: 0,
+        main,
+        mirror: None,
+    };
+    assert_eq!(
+        view.take_commands(),
+        [Command::Arrangement(vec![
+            placement("Built-in display (eDP-1)", 0, false),
+            placement("Dell DELL U2720Q 7ZD5K53", 1512, true),
+        ])]
+    );
+
+    let resolution = find(&mut view, Role::RadioGroup, "Resolution").expect("resolutions");
+    assert_eq!(
+        value_of(&mut view, Role::RadioGroup, "Resolution").as_deref(),
+        Some("3840 × 2160")
+    );
+    perform(&mut view, resolution, Action::Increment);
+    let chosen = DisplaySettings {
+        resolution: Some((2560, 1440)),
+        ..DisplaySettings::default()
+    };
+    assert_eq!(
+        view.take_commands(),
+        [Command::Display(
+            "Dell DELL U2720Q 7ZD5K53".to_owned(),
+            chosen
+        )]
+    );
+    assert!(has_text(&mut view, "Keep these display settings?"));
+
+    view.tick(Instant::now() + Duration::from_secs(16));
+
+    assert_eq!(
+        view.take_commands(),
+        [Command::Display(
+            "Dell DELL U2720Q 7ZD5K53".to_owned(),
+            DisplaySettings::default()
+        )]
+    );
+    assert!(!has_text(&mut view, "Keep these display settings?"));
 }
 
 fn pair(name: &str) -> Pair {

@@ -7,7 +7,7 @@ use unbound_compositor::{Headless, OutputConfig, OutputMode, Rect, Renderer};
 use unbound_config::Config;
 use unbound_test_wayland::{
     Anchor, BLUE, GREEN, KeyboardInteractivity, Layer, LayerRequest, RED, ShmImage, TestClient,
-    roundtrip,
+    quadrants, roundtrip,
 };
 
 use wayland_client::protocol::wl_shm::Format;
@@ -400,6 +400,61 @@ fn the_desktop_and_menu_bar_run_once_per_display_and_follow_the_displays() {
     server.remove_output(SIDE);
     server.keep_session_clients_running();
     assert_eq!(server.display_clients(shell), [(MAIN.to_owned(), false)]);
+}
+
+#[test]
+fn a_rotated_display_is_laid_out_upright_and_drawn_turned() {
+    let mut server = two_displays();
+    let side = server.output_identity(SIDE).expect("side identity");
+    let source = format!("display \"{side}\" {{\n    rotation 90\n}}\n");
+    server.set_display_config(Config::parse(&source).expect("valid config"));
+    assert_eq!(server.output_rect(SIDE), Some(rect(256, 0, 240, 320)));
+    server.move_pointer_to(at(300.0, 100.0), 0);
+    let mut client = TestClient::connect(&mut server);
+    let pixels = quadrants(WINDOW.0 as usize, WINDOW.1 as usize, WINDOW.0 as usize * 4);
+    client.show_window(
+        &mut server,
+        &ShmImage {
+            width: WINDOW.0,
+            height: WINDOW.1,
+            stride: WINDOW.0 * 4,
+            format: Format::Xrgb8888,
+            bytes: &pixels,
+        },
+    );
+    let mut renderer = Renderer::new().expect("renderer");
+
+    renderer.render_output(&mut server, SIDE).expect("frame");
+    let snapshot = renderer.snapshot_output(SIDE).expect("read back");
+
+    assert_eq!(snapshot.size, (320, 240).into());
+    let bounds = |color: [u8; 3]| {
+        let points: Vec<(i32, i32)> = snapshot
+            .rgba
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .enumerate()
+            .filter(|(_, pixel)| pixel[..3] == color)
+            .map(|(at, _)| (at as i32 % 320, at as i32 / 320))
+            .collect();
+        let xs = points.iter().map(|(x, _)| *x);
+        let ys = points.iter().map(|(_, y)| *y);
+        (
+            xs.clone().min().expect("drawn"),
+            ys.clone().min().expect("drawn"),
+            xs.max().expect("drawn"),
+            ys.max().expect("drawn"),
+        )
+    };
+    let red = bounds([0xff, 0, 0]);
+    let green = bounds([0, 0xff, 0]);
+    assert_eq!(
+        (red.2 - red.0 + 1, red.3 - red.1 + 1),
+        (WINDOW.1 / 2, WINDOW.0 / 2)
+    );
+    assert_eq!(red.0, green.0);
+    assert_eq!(green.3 + 1, red.1);
 }
 
 #[test]

@@ -64,8 +64,11 @@ pub enum SettingId {
     DockEdge,
     DockIconSize,
     DockAutoHide,
+    DisplayUse,
+    DisplayResolution,
     DisplayScale,
     RefreshRate,
+    DisplayRotation,
     VariableRefreshRate,
     DimAfter,
     LockAfter,
@@ -116,6 +119,8 @@ pub enum Kind {
         high: String,
     },
     RefreshRates,
+    Resolutions,
+    DisplayUses,
     Pictures,
     List(List),
 }
@@ -128,6 +133,8 @@ impl Kind {
             | Self::Level
             | Self::Range { .. }
             | Self::RefreshRates
+            | Self::Resolutions
+            | Self::DisplayUses
             | Self::Pictures
             | Self::List(_) => &[],
         }
@@ -272,7 +279,20 @@ fn scale_choices() -> Vec<Choice> {
     choices
 }
 
+fn rotation_choices() -> Vec<Choice> {
+    std::iter::once(Choice {
+        label: L10N.tr("rotation-standard"),
+        value: Value::Number(0),
+    })
+    .chain([90, 180, 270].into_iter().map(|degrees: u32| Choice {
+        label: L10N.tr_args("degrees", [("value", degrees.into())]),
+        value: Value::Number(degrees),
+    }))
+    .collect()
+}
+
 pub const AUTOMATIC: &str = "automatic";
+
 const DOCK_SIZES: (u32, u32) = (24, 96);
 
 const SCALES: [u32; 5] = [100, 125, 150, 175, 200];
@@ -423,6 +443,18 @@ fn displays_pane() -> Pane {
             None,
             vec![
                 setting(
+                    SettingId::DisplayUse,
+                    L10N.tr("display-use"),
+                    L10N.tr("display-use-keywords"),
+                    Kind::DisplayUses,
+                ),
+                setting(
+                    SettingId::DisplayResolution,
+                    L10N.tr("display-resolution"),
+                    L10N.tr("display-resolution-keywords"),
+                    Kind::Resolutions,
+                ),
+                setting(
                     SettingId::DisplayScale,
                     L10N.tr("display-scale"),
                     L10N.tr("display-scale-keywords"),
@@ -433,6 +465,12 @@ fn displays_pane() -> Pane {
                     L10N.tr("refresh-rate"),
                     L10N.tr("refresh-rate-keywords"),
                     Kind::RefreshRates,
+                ),
+                setting(
+                    SettingId::DisplayRotation,
+                    L10N.tr("display-rotation"),
+                    L10N.tr("display-rotation-keywords"),
+                    Kind::Choices(rotation_choices()),
                 ),
                 setting(
                     SettingId::VariableRefreshRate,

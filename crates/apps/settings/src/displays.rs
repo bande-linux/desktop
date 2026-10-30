@@ -119,7 +119,10 @@ impl Dispatch<ZwlrOutputHeadV1, ()> for Heads {
                     .find(|(known, _)| *known == mode)
                     .map(|(_, mode)| *mode);
             }
+            zwlr_output_head_v1::Event::Make { make } => known.display.make = make,
+            zwlr_output_head_v1::Event::Model { model } => known.display.model = model,
             zwlr_output_head_v1::Event::Position { x, y } => known.display.position = (x, y),
+
             zwlr_output_head_v1::Event::Scale { scale } => known.display.scale = scale,
             zwlr_output_head_v1::Event::Transform { transform } => {
                 known.display.rotation = degrees(transform);

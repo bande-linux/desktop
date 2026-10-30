@@ -1,3 +1,4 @@
+mod arrangement;
 mod client;
 mod displays;
 mod follow;

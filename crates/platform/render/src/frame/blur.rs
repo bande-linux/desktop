@@ -3,7 +3,7 @@ use std::slice;
 use ash::vk;
 use smithay::utils::{Physical, Rectangle};
 
-use super::{Quad, RoundedRect, VulkanFrame, physical, scissor};
+use super::{Quad, RoundedRect, VulkanFrame, scissor};
 use crate::{
     ATTACHMENT, COLOR_LAYERS, Image, Program, Rect, RenderError, TRANSFER_SOURCE, Usage, barrier,
 };
@@ -76,13 +76,13 @@ impl VulkanFrame<'_, '_> {
             region: blur.region.translated(self.origin()),
             ..*blur
         };
+        let (_, rects) = self.placed(blur.bounds(), damage);
+        let blur = &Blur {
+            region: self.turned_shape(blur.region),
+            ..*blur
+        };
         let destination = blur.bounds();
-        let rects = self.clip(
-            damage
-                .iter()
-                .map(|rect| physical(rect).translated(destination.x, destination.y)),
-            destination,
-        );
+
         let Some(source) = destination.intersection(&self.bounds) else {
             return Ok(());
         };

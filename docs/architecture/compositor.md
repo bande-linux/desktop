@@ -79,7 +79,27 @@ when they reach the screen is Unbound's own.
   main display's row, each window keeping its relative place; when it returns, those windows
   and workspaces go back to it, at the place they had. `wlr-output-management-v1` lists the
   displays (the head description is the display's name) and applies configurations from tools
-  such as `wlr-randr`; Settings reads it.
+  such as `wlr-randr`; Settings reads it. A display can mirror another (`mirror=` in the
+  arrangement): it keeps no windows or workspaces of its own, the pointer does not enter it, and
+  it shows its source drawn again at the scale that fits it, centred. A rotated display is laid
+  out upright in points and the renderer turns every quad, clip and shadow into the framebuffer.
+  The desktop surface and the menu bar run once per
+  display (the compositor starts an instance per display with `UNBOUND_OUTPUT` naming its output,
+  and `UNBOUND_SECONDARY_DISPLAY` for every display but the main one, where the desktop shows
+  only the wallpaper and no icons); the Dock and notifications stay on the main display, and an
+  instance is started or stopped as displays come and go or the main display changes. The lock
+  screen asks for the password on the main display; while locked, every other display shows only
+  its wallpaper.
+- **Settings ▸ Displays.** An arrangement of the displays (shown when there are two or more)
+  lets the user drag a display's rectangle; on release it snaps edge to edge beside the nearest
+  display, aligning tops, bottoms or centres within 48 pt, and never onto another display; with
+  the keyboard, Space picks a display and the arrows put it on that side of the main display.
+  The main display carries a white bar for its menu bar. Each display then offers Use as (Main
+  display, Extended, Mirror), Resolution (up to four sizes of its native shape), Size of text
+  and controls, Refresh rate, Rotation and Variable refresh rate. Every change is written to
+  `config.kdl` and applied live; a new resolution or rotation shows "Keep these display
+  settings?" with Keep and Revert and comes back by itself after 15 s, as macOS does.
+
 - **Frame pacing.** Frames are paced by a vblank clock (virtual at 120 Hz in the headless
   backend; on DRM re-anchored to each page flip at the mode's refresh, advertised as the
   `wl_output` mode). A commit is latched into the frame whose deadline it arrives before: the

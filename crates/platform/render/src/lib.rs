@@ -1330,11 +1330,8 @@ impl Renderer for VulkanRenderer {
     where
         'buffer: 'frame,
     {
-        if dst_transform != Transform::Normal {
-            return Err(RenderError::UnsupportedTransform);
-        }
         self.collect_garbage();
-        VulkanFrame::begin(self, framebuffer)
+        VulkanFrame::begin(self, framebuffer, dst_transform)
     }
 
     fn wait(&mut self, sync: &SyncPoint) -> Result<(), RenderError> {

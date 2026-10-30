@@ -3,8 +3,10 @@ use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
 
 use accesskit::{Action, ActionData, ActionRequest, TreeId, TreeUpdate};
+use std::time::{Duration, Instant};
 use unbound_audio::{Direction, Snapshot};
-use unbound_config::{DisplaySettings, Placement};
+
+use unbound_config::{DisplaySettings, Placement, Rotation};
 use unbound_toolkit::ui::{Context, Event, Key, Modifiers, TextField, Ui, Widget, WidgetId};
 use unbound_toolkit::{Image, Palette, Rect, Scene, TextSystem};
 
@@ -19,6 +21,10 @@ use unbound_settings_panes::{AUTOMATIC, Pane, PaneId, SettingId, Value, panes};
 use unbound_settings_panes::{PaneHit, search};
 
 const PAGE_STEP: f32 = 240.0;
+const SECOND: Duration = Duration::from_secs(1);
+pub(crate) const USE_MAIN: &str = "main";
+pub(crate) const USE_EXTENDED: &str = "extended";
+pub(crate) const MIRROR_PREFIX: &str = "mirror:";
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Intent {
@@ -27,6 +33,8 @@ pub(crate) enum Intent {
     Query(String),
     Set(SettingId, Value),
     Display(String, SettingId, Value),
+    Arrange(String, (i32, i32)),
+    KeepDisplays(bool),
     Default(Direction, String),
     Join(Vec<u8>),
     Password(String),
@@ -69,6 +77,15 @@ fn plain(modifiers: &Modifiers) -> bool {
     !modifiers.logo && !modifiers.control && !modifiers.alt
 }
 
+pub const KEEP_DISPLAY_SETTINGS: Duration = Duration::from_secs(15);
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Keep {
+    pub(crate) identity: String,
+    pub(crate) previous: DisplaySettings,
+    pub(crate) until: Instant,
+}
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub(crate) struct Join {
     pub asking: Option<Vec<u8>>,
@@ -82,6 +99,7 @@ pub struct SettingsView {
     pub(crate) display_settings: BTreeMap<String, DisplaySettings>,
     pub(crate) arrangements: Vec<Vec<Placement>>,
     pub(crate) displays: Vec<Display>,
+    pub(crate) keep: Option<Keep>,
     pub(crate) audio: Option<Snapshot>,
     pub(crate) wifi: Option<WifiState>,
     pub(crate) join: Join,
@@ -125,6 +143,7 @@ impl SettingsView {
             display_settings: BTreeMap::new(),
             arrangements: Vec::new(),
             displays: Vec::new(),
+            keep: None,
             audio: None,
             wifi: None,
             join: Join::default(),
@@ -476,6 +495,8 @@ impl SettingsView {
                 Intent::Query(query) => self.set_query(query),
                 Intent::Set(id, value) => self.change(id, value),
                 Intent::Display(identity, id, value) => self.change_display(identity, id, value),
+                Intent::Arrange(identity, position) => self.arrange(&identity, position),
+                Intent::KeepDisplays(keep) => self.keep_displays(keep),
                 Intent::Default(direction, name) => {
                     self.commands
                         .push(Command::Audio(AudioCommand::Default(direction, name)));
@@ -668,13 +689,149 @@ impl SettingsView {
         self.message = None;
     }
 
+    pub fn deadline(&self) -> Option<Instant> {
+        let keep = self.keep.as_ref()?;
+        let left = keep.until.saturating_duration_since(Instant::now());
+        let tick = Duration::from_nanos(left.subsec_nanos().into());
+        Some(Instant::now() + if tick.is_zero() { SECOND } else { tick })
+    }
+
+    pub fn tick(&mut self, now: Instant) {
+        let Some(keep) = &self.keep else {
+            return;
+        };
+        if now >= keep.until {
+            self.keep_displays(false);
+        } else {
+            self.invalidate();
+        }
+    }
+
+    pub(crate) fn seconds_left(&self) -> u64 {
+        self.keep.as_ref().map_or(0, |keep| {
+            keep.until
+                .saturating_duration_since(Instant::now())
+                .as_secs_f64()
+                .ceil() as u64
+        })
+    }
+
+    fn keep_displays(&mut self, keep: bool) {
+        let Some(pending) = self.keep.take() else {
+            return;
+        };
+        if !keep {
+            self.display_settings
+                .insert(pending.identity.clone(), pending.previous);
+            self.commands
+                .push(Command::Display(pending.identity, pending.previous));
+        }
+        self.invalidate();
+    }
+
+    pub(crate) fn placements(&self) -> Vec<Placement> {
+        let identities: Vec<String> = self
+            .displays
+            .iter()
+            .map(|display| display.identity.clone())
+            .collect();
+        let known = self
+            .arrangements
+            .iter()
+            .find(|placements| unbound_config::same_displays(placements, &identities));
+        self.displays
+            .iter()
+            .map(|display| {
+                let mirror = known.and_then(|placements| {
+                    placements
+                        .iter()
+                        .find(|placement| placement.display == display.identity)
+                        .and_then(|placement| placement.mirror.clone())
+                });
+                Placement {
+                    display: display.identity.clone(),
+                    x: display.position.0,
+                    y: display.position.1,
+                    main: display.position == (0, 0) && mirror.is_none(),
+                    mirror,
+                }
+            })
+            .collect()
+    }
+
+    fn arrange(&mut self, identity: &str, (x, y): (i32, i32)) {
+        let mut placements = self.placements();
+        for placement in &mut placements {
+            if placement.display == identity {
+                placement.x = x;
+                placement.y = y;
+            }
+        }
+        for display in &mut self.displays {
+            if display.identity == identity {
+                display.position = (x, y);
+            }
+        }
+        self.message = None;
+        self.commands.push(Command::Arrangement(placements));
+    }
+
+    fn use_display(&mut self, identity: &str, choice: &str) {
+        let mut placements = self.placements();
+        let mirrored = choice.strip_prefix(MIRROR_PREFIX);
+        for placement in &mut placements {
+            if choice == USE_MAIN {
+                placement.main = placement.display == identity;
+            }
+            if placement.display == identity {
+                placement.mirror = mirrored.map(str::to_owned);
+                if mirrored.is_some() {
+                    placement.main = false;
+                }
+            }
+        }
+        if mirrored.is_some()
+            && !placements.iter().any(|placement| placement.main)
+            && let Some(source) = placements
+                .iter_mut()
+                .find(|placement| Some(placement.display.as_str()) == mirrored)
+        {
+            source.main = true;
+        }
+
+        self.message = None;
+        self.commands.push(Command::Arrangement(placements));
+    }
+
     fn change_display(&mut self, identity: String, id: SettingId, value: Value) {
         let mut display = self
             .display_settings
             .get(&identity)
             .copied()
             .unwrap_or_default();
+        let previous = display;
+        let mut confirm = false;
         match (id, value) {
+            (SettingId::DisplayUse, Value::Keyword(choice)) => {
+                self.use_display(&identity, &choice);
+                return;
+            }
+            (SettingId::DisplayResolution, Value::Keyword(size)) => {
+                let Some((width, height)) = size
+                    .split_once('x')
+                    .and_then(|(width, height)| Some((width.parse().ok()?, height.parse().ok()?)))
+                else {
+                    return;
+                };
+                display.resolution = Some((width, height));
+                display.refresh_rate = None;
+                confirm = true;
+            }
+            (SettingId::DisplayRotation, Value::Number(degrees)) => {
+                display.rotation = Rotation::from_degrees(degrees)
+                    .filter(|rotation| *rotation != Rotation::Upright);
+                confirm = true;
+            }
             (SettingId::DisplayScale, Value::Number(percent)) => {
                 display.scale = Some(f64::from(percent) / 100.0);
             }
@@ -688,6 +845,18 @@ impl SettingsView {
                 display.variable_refresh_rate = on.then_some(true);
             }
             _ => return,
+        }
+        if confirm && display != previous {
+            let previous = match &self.keep {
+                Some(keep) if keep.identity == identity => keep.previous,
+                _ => previous,
+            };
+            self.keep_displays(true);
+            self.keep = Some(Keep {
+                identity: identity.clone(),
+                previous,
+                until: Instant::now() + KEEP_DISPLAY_SETTINGS,
+            });
         }
         self.display_settings.insert(identity.clone(), display);
         self.message = None;

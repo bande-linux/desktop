@@ -237,6 +237,14 @@ pub trait Surfaces {
     fn accessibility(&self, _index: usize) -> Option<TreeUpdate> {
         None
     }
+
+    fn text_input_area(&self, _index: usize) -> Option<Rect> {
+        None
+    }
+
+    fn closed(&mut self) -> bool {
+        self.windows().iter().any(Window::is_closed)
+    }
 }
 
 fn deliver(app: &mut impl Surfaces) -> Result<bool, WindowError> {
@@ -257,7 +265,7 @@ fn deliver(app: &mut impl Surfaces) -> Result<bool, WindowError> {
             app.event(index, event);
         }
     }
-    Ok(app.windows().iter().any(Window::is_closed))
+    Ok(app.closed())
 }
 
 struct Readiness {
@@ -350,6 +358,8 @@ pub fn run_surfaces(app: &mut impl Surfaces) -> Result<(), WindowError> {
                     window.request_redraw();
                 }
             }
+            let area = app.text_input_area(index);
+            app.windows_mut()[index].set_text_input_area(area);
             if app.windows()[index].accessibility.wants_tree(frame_drawn)
                 && let Some(tree) = app.accessibility(index)
             {

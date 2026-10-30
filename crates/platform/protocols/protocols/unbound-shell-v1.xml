@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <protocol name="unbound_shell_v1">
-  <interface name="unbound_shell_v1" version="14">
+  <interface name="unbound_shell_v1" version="15">
     <description summary="requests and events between the compositor and the shell">
       Offered only on the connections of the shell clients the compositor starts
-      itself (the Dock and the launcher), never on the listening socket.
+      itself (the shell and the screenshot tool), never on the listening socket.
     </description>
 
     <request name="destroy" type="destructor"/>
@@ -386,6 +386,17 @@
       </description>
       <arg name="output" type="string"/>
       <arg name="full_screen" type="uint"/>
+    </event>
+
+    <event name="displays" since="15">
+      <description summary="the displays the shell draws on">
+        Sent on binding and whenever a display is connected, disconnected,
+        starts or stops mirroring another, or another display becomes the main
+        one. Names is a comma-separated list of the wl_output names of the
+        displays that show their own picture, the main display first. The
+        shell puts a desktop and a bar on each of them.
+      </description>
+      <arg name="names" type="string"/>
     </event>
   </interface>
 

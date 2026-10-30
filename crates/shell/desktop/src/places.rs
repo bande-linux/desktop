@@ -3,8 +3,8 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use unbound_files::{Apps, is_hidden};
-use unbound_xdg::DIRECTORY;
+use unbound_fs::is_hidden;
+use unbound_xdg::{Apps, DIRECTORY};
 
 use crate::model::{Item, Kind, Positions, Slot};
 

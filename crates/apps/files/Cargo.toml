@@ -6,17 +6,17 @@ edition.workspace = true
 repository.workspace = true
 
 [dependencies]
-image = { workspace = true, features = ["gif", "jpeg", "webp"] }
-jiff.workspace = true
 rustix = { workspace = true, features = ["fs"] }
 tracing.workspace = true
 unbound-fs.workspace = true
 unbound-l10n.workspace = true
 unbound-log.workspace = true
+unbound-preview.workspace = true
 unbound-toolkit.workspace = true
 unbound-xdg.workspace = true
 
 [dev-dependencies]
+image.workspace = true
 rustix = { workspace = true, features = ["process"] }
 tempfile.workspace = true
 

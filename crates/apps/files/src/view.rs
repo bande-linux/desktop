@@ -3,20 +3,19 @@ use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use unbound_fs::{Action, Answer, Change, FolderWatch, RenameError, Resolution, Task, TrashItem};
-use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer, PointerButton};
-use unbound_toolkit::{Palette, Point, Rect, TextSystem};
-use unbound_xdg::{DesktopEntry, UserDir, path_from_file_uri, user_dir};
+use unbound_fs::{
+    Action, Answer, Change, Entry, Finished, FolderWatch, Operations, Purpose, RenameError,
+    Resolution, Sort, SortBy, Task, TrashItem,
+};
+use unbound_preview::Preview;
+use unbound_toolkit::ui::{Event, Key, Modifiers, NameEditor, Pointer, PointerButton};
+use unbound_toolkit::{Image, Palette, Point, Rect, TextSystem};
+use unbound_xdg::{Apps, DesktopEntry, UserDir, path_from_file_uri, user_dir};
 
 use crate::L10N;
-use crate::apps::Apps;
 use crate::browser::{Browser, Location};
-use crate::editor::NameEditor;
 use crate::icons::Icons;
-use crate::listing::{Entry, Sort, SortBy};
 use crate::loader::{Loaded, Loader};
-use crate::operations::{Finished, Operations, Purpose};
-use crate::preview::Preview;
 use crate::sidebar::Row;
 
 pub const COLUMN_WIDTH: f32 = 240.0;
@@ -34,7 +33,7 @@ const NOTICE_TIME: Duration = Duration::from_secs(5);
 
 pub struct QuickLook {
     pub entry: Entry,
-    pub preview: Option<Preview>,
+    pub preview: Option<Preview<Image>>,
 }
 
 pub struct Info {
@@ -45,7 +44,7 @@ pub struct Info {
     pub default: Option<String>,
     pub chosen: Option<usize>,
     pub folder_size: Option<(u64, u64)>,
-    pub preview: Option<Preview>,
+    pub preview: Option<Preview<Image>>,
 }
 
 pub struct Search {

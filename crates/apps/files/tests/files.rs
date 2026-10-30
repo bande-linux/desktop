@@ -7,12 +7,12 @@ use std::time::{Duration, Instant};
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use tempfile::TempDir;
 use unbound_files::{
-    Apps, Browser, FilesView, Kind, Location, NameEditor, Preview, ROW_HEIGHT, Request, Row,
-    SIDEBAR_WIDTH, Sheet, Sort, SortBy, format_size, list, permissions, preview, rows,
+    Browser, FilesView, Location, ROW_HEIGHT, Request, Row, SIDEBAR_WIDTH, Sheet, permissions, rows,
 };
-use unbound_fs::Trash;
+use unbound_fs::{Sort, SortBy, Trash, list};
 use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer};
 use unbound_toolkit::{Item, Palette, Point, Scheme, TextSystem};
+use unbound_xdg::Apps;
 
 fn names(folder: &Path, show_hidden: bool) -> Vec<String> {
     list(folder, show_hidden, Sort::default())
@@ -134,21 +134,6 @@ fn run_until(view: &mut FilesView, done: impl Fn(&FilesView) -> bool) {
 
 fn idle(view: &FilesView) -> bool {
     view.operations().running().is_empty()
-}
-
-#[test]
-fn folders_come_first_then_names_in_finder_order() {
-    let root = TempDir::new().expect("temporary folder");
-    for name in ["file10", "File2", "beta", "Alpha", ".hidden", "file1"] {
-        fs::write(root.path().join(name), "").expect("file");
-    }
-    fs::create_dir(root.path().join("zoo")).expect("folder");
-
-    assert_eq!(
-        names(root.path(), false),
-        ["zoo", "Alpha", "beta", "file1", "File2", "file10"]
-    );
-    assert_eq!(names(root.path(), true)[1], ".hidden");
 }
 
 #[test]
@@ -334,72 +319,7 @@ fn the_sidebar_lists_existing_user_folders_bookmarks_and_the_trash() {
 }
 
 #[test]
-fn renaming_starts_with_the_name_selected_without_its_extension() {
-    let mut editor = NameEditor::new("report.final.pdf", false);
-    assert_eq!(editor.selection(), 0..12);
-
-    editor.insert("summary");
-    assert_eq!(editor.text(), "summary.pdf");
-    editor.key(Key::Backspace, Modifiers::default());
-    editor.key(Key::Right, Modifiers::default());
-    editor.key(
-        Key::Left,
-        Modifiers {
-            shift: true,
-            ..Modifiers::default()
-        },
-    );
-    editor.key(Key::Character('é'), Modifiers::default());
-    assert_eq!(editor.text(), "summarépdf");
-    assert_eq!(NameEditor::new("photos.2024", true).selection(), 0..11);
-    assert_eq!(NameEditor::new(".bashrc", false).selection(), 0..7);
-}
-
-#[test]
-fn quick_look_previews_images_text_folders_and_other_files() {
-    let place = Place::new();
-    let home = place.home();
-    image::RgbaImage::from_pixel(3, 2, image::Rgba([255, 0, 0, 255]))
-        .save(home.join("picture.png"))
-        .expect("png");
-    fs::write(home.join("data.bin"), [0u8, 1, 2, 3, 4]).expect("binary");
-    let entries = list(&home, false, Sort::default()).expect("listing");
-    let entry = |name: &str| {
-        entries
-            .iter()
-            .find(|entry| entry.name == name)
-            .expect("entry")
-    };
-
-    match preview(entry("picture.png")) {
-        Preview::Image(image) => assert_eq!((image.width(), image.height()), (3, 2)),
-        other => panic!("{other:?}"),
-    }
-    match preview(entry("notes.txt")) {
-        Preview::Text(text) => assert_eq!(text, "notes\n"),
-        other => panic!("{other:?}"),
-    }
-    assert_eq!(entry("Documents").kind, Kind::Folder);
-    assert!(matches!(
-        preview(entry("Documents")),
-        Preview::Folder { items: 2 }
-    ));
-    assert!(matches!(
-        preview(entry("data.bin")),
-        Preview::Other { size: 5 }
-    ));
-}
-
-#[test]
-fn sizes_and_permissions_read_as_in_the_finder() {
-    assert_eq!(format_size(0), "Zero bytes");
-    assert_eq!(format_size(1), "1 byte");
-    assert_eq!(format_size(999), "999 bytes");
-    assert_eq!(format_size(1_000), "1 KB");
-    assert_eq!(format_size(12_400), "12 KB");
-    assert_eq!(format_size(999_600), "1 MB");
-    assert_eq!(format_size(1_500_000), "1.5 MB");
-    assert_eq!(format_size(2_340_000_000), "2.34 GB");
+fn permissions_read_as_in_the_finder() {
     assert_eq!(permissions(0o754), "rwxr-xr--");
 }
 

@@ -78,6 +78,7 @@ unbound-monitor = { path = "crates/apps/monitor" }
 unbound-network = { path = "crates/libs/network" }
 unbound-notify = { path = "crates/services/notify" }
 unbound-polkit = { path = "crates/services/polkit" }
+unbound-preview = { path = "crates/libs/preview" }
 unbound-power = { path = "crates/services/power" }
 unbound-protocols = { path = "crates/platform/protocols" }
 unbound-render = { path = "crates/platform/render" }

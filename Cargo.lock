@@ -3619,7 +3619,6 @@ dependencies = [
  "tracing",
  "unbound-config",
  "unbound-dock",
- "unbound-files",
  "unbound-fs",
  "unbound-l10n",
  "unbound-log",
@@ -3653,13 +3652,13 @@ name = "unbound-files"
 version = "0.1.0"
 dependencies = [
  "image",
- "jiff",
  "rustix 1.1.6",
  "tempfile",
  "tracing",
  "unbound-fs",
  "unbound-l10n",
  "unbound-log",
+ "unbound-preview",
  "unbound-toolkit",
  "unbound-xdg",
 ]
@@ -3724,9 +3723,10 @@ dependencies = [
  "image-compare",
  "tempfile",
  "tracing",
- "unbound-files",
+ "unbound-fs",
  "unbound-l10n",
  "unbound-log",
+ "unbound-preview",
  "unbound-search",
  "unbound-settings",
  "unbound-spring",
@@ -3836,6 +3836,15 @@ dependencies = [
  "wayland-client",
  "wayland-protocols",
  "zbus",
+]
+
+[[package]]
+name = "unbound-preview"
+version = "0.1.0"
+dependencies = [
+ "image",
+ "tempfile",
+ "unbound-fs",
 ]
 
 [[package]]

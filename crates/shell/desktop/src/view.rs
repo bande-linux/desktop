@@ -3,8 +3,9 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
-use unbound_files::NameEditor;
-use unbound_toolkit::ui::{Animated, Event, Key, Modifiers, Pointer, PointerButton, Spring};
+use unbound_toolkit::ui::{
+    Animated, Event, Key, Modifiers, NameEditor, Pointer, PointerButton, Spring,
+};
 use unbound_toolkit::{
     Appearance, Color, Image, Item as SceneItem, Palette, Paragraph, Point, Rect, Scene, Shape,
     TextAlign, TextStyle, TextSystem,

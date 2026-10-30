@@ -10,7 +10,6 @@ accesskit.workspace = true
 tracing.workspace = true
 unbound-config.workspace = true
 unbound-dock.workspace = true
-unbound-files.workspace = true
 unbound-fs.workspace = true
 unbound-l10n.workspace = true
 unbound-log.workspace = true

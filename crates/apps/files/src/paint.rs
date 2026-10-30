@@ -1,17 +1,16 @@
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use std::time::{Instant, SystemTime};
+use std::time::Instant;
 
+use unbound_fs::{Entry, Purpose, SortBy, format_date, format_size};
+use unbound_preview::Preview;
+use unbound_toolkit::ui::NameEditor;
 use unbound_toolkit::{
     Color, Image, Item, Paragraph, Point, Rect, Scene, Shape, TextAlign, TextStyle,
 };
 
 use crate::L10N;
 use crate::browser::Location;
-use crate::editor::NameEditor;
-use crate::listing::{Entry, SortBy, format_size};
-use crate::operations::Purpose;
-use crate::preview::Preview;
 use crate::sidebar::Row;
 use crate::view::{
     COLUMN_WIDTH, FilesView, HEADER_HEIGHT, Hit, INSPECTOR_WIDTH, PATH_BAR_HEIGHT, PROGRESS_HEIGHT,
@@ -32,17 +31,6 @@ const RADIUS: f32 = 12.0;
 const PADDING: f32 = 16.0;
 const BUTTON_HEIGHT: f32 = 24.0;
 const SHEET_WIDTH: f32 = 420.0;
-
-pub fn format_date(time: SystemTime) -> String {
-    jiff::Timestamp::try_from(time)
-        .map(|timestamp| {
-            timestamp
-                .to_zoned(jiff::tz::TimeZone::system())
-                .strftime("%-d %b %Y, %H:%M")
-                .to_string()
-        })
-        .unwrap_or_default()
-}
 
 pub fn permissions(mode: u32) -> String {
     (0..9)

@@ -3,10 +3,10 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Instant;
 
-use unbound_files::{Apps, Browser, FilesView, Location, Request, rows};
+use unbound_files::{Browser, FilesView, Location, Request, rows};
 use unbound_fs::Trash;
 use unbound_toolkit::{App, Appearance, Role, Scene, TextSystem, Window, WindowEvent};
-use unbound_xdg::{config_dirs, config_home, data_dirs, launch_with, path_from_file_uri};
+use unbound_xdg::{Apps, config_dirs, config_home, data_dirs, launch_with, path_from_file_uri};
 
 const APP_ID: &str = "org.unbound.Files";
 const WINDOW_SIZE: (u32, u32) = (1040, 620);

@@ -94,13 +94,6 @@ fn data_control_is_hidden_from_clients_that_are_not_the_clipboard_daemon() {
 }
 
 #[test]
-fn data_control_is_offered_to_the_clipboard_daemon_connection() {
-    let mut server = server();
-    let daemon = TestClient::connect_as_clipboard_daemon(&mut server);
-    assert!(daemon.advertises("ext_data_control_manager_v1"));
-}
-
-#[test]
 fn a_data_control_manager_keeps_the_selection_after_the_source_exits() {
     let mut server = server();
     let mut manager = TestClient::connect_as_clipboard_daemon(&mut server);

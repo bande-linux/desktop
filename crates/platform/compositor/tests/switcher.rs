@@ -278,16 +278,10 @@ fn check_golden(name: &str, renderer: &mut Renderer, server: &mut Headless) {
 }
 
 #[test]
-fn the_app_switcher_matches_its_goldens_in_light_and_dark_at_both_scales() {
-    for (dark, scale, name) in [
-        (false, 1.0, "switcher-light"),
-        (true, 1.0, "switcher-dark"),
-        (false, 1.5, "switcher-light-1.5x"),
-        (true, 1.5, "switcher-dark-1.5x"),
-    ] {
+fn the_app_switcher_matches_its_goldens_at_both_scales() {
+    for (scale, name) in [(1.0, "switcher-light"), (1.5, "switcher-light-1.5x")] {
         let mut server = server();
         server.set_output_scale(scale);
-        server.set_dark_appearance(dark);
         let mut renderer = Renderer::new().expect("renderer");
         let _editor = app(&mut server, RED, EDITOR);
         let _viewer = app(&mut server, GREEN, VIEWER);

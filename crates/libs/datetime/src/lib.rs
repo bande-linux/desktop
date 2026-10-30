@@ -68,6 +68,14 @@ impl DateFormats {
             .unwrap_or_else(|| at.strftime("%A").to_string())
     }
 
+    pub fn long_date(&self, at: &Zoned) -> String {
+        FixedCalendarDateTimeFormatter::<Gregorian, _>::try_new(self.preferences, MDE::long())
+            .ok()
+            .zip(date_of(at))
+            .map(|(formatter, date)| formatter.format(&date).to_string())
+            .unwrap_or_else(|| at.strftime("%A %-d %B").to_string())
+    }
+
     pub fn date(&self, at: &Zoned, with_year: bool) -> String {
         let formatted = if with_year {
             FixedCalendarDateTimeFormatter::<Gregorian, _>::try_new(self.preferences, YMD::medium())

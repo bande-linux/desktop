@@ -9,6 +9,7 @@ use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionData, ActionRequest, Node, Role, TreeId, TreeUpdate};
+use unbound_datetime::DateFormats;
 use unbound_l10n::Localizer;
 use unbound_toolkit::ui::{
     Animated, Context, Event, SecureField, Size, Spring, Ui, Widget, WidgetId,
@@ -50,11 +51,8 @@ pub fn shake_offset(elapsed: Duration) -> f32 {
     SHAKE_AMPLITUDE * (1.0 - progress) * (TAU * SHAKES * progress).sin()
 }
 
-pub fn clock_texts(now: &jiff::Zoned) -> (String, String) {
-    (
-        now.strftime("%A %-d %B").to_string(),
-        now.strftime("%H:%M").to_string(),
-    )
+pub fn clock_texts(formats: &DateFormats, now: &jiff::Zoned) -> (String, String) {
+    (formats.long_date(now), now.strftime("%H:%M").to_string())
 }
 
 struct Model {
@@ -224,11 +222,18 @@ pub struct LockScreen {
     model: Shared,
     ui: Ui,
     field: WidgetId,
+    formats: DateFormats,
 }
 
 impl LockScreen {
-    pub fn new(user: &User, now: &jiff::Zoned, palette: Palette, text: TextSystem) -> Self {
-        let (date, time) = clock_texts(now);
+    pub fn new(
+        user: &User,
+        formats: DateFormats,
+        now: &jiff::Zoned,
+        palette: Palette,
+        text: TextSystem,
+    ) -> Self {
+        let (date, time) = clock_texts(&formats, now);
         let model: Shared = Rc::new(RefCell::new(Model {
             name: user.full_name.clone(),
             initial: user
@@ -273,6 +278,7 @@ impl LockScreen {
             model,
             ui,
             field: field_id,
+            formats,
         }
     }
 
@@ -281,7 +287,7 @@ impl LockScreen {
     }
 
     pub fn set_clock(&mut self, now: &jiff::Zoned) {
-        let (date, time) = clock_texts(now);
+        let (date, time) = clock_texts(&self.formats, now);
         let mut model = self.model.borrow_mut();
         model.date = date;
         model.time = time;

@@ -3950,6 +3950,7 @@ dependencies = [
  "libloading",
  "rustix 1.1.6",
  "tracing",
+ "unbound-datetime",
  "unbound-l10n",
  "unbound-log",
  "unbound-toolkit",

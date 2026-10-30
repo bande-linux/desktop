@@ -6,6 +6,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
+use unbound_datetime::DateFormats;
 use unbound_lock::{
     BackdropSource, Inbox, LockScreen, PAM_SERVICE, User, Variant, authenticate, current_user,
     load_backdrop,
@@ -155,6 +156,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut locker = Locker {
         screen: LockScreen::new(
             &user,
+            DateFormats::from_env(),
             &jiff::Zoned::now(),
             window.appearance().palette(),
             TextSystem::new(),

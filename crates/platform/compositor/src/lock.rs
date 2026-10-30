@@ -161,7 +161,7 @@ impl SessionLockHandler for State {
         let previous = lock.previous.filter(|previous| {
             self.windows
                 .iter()
-                .any(|window| window.surface() == previous && window.visible())
+                .any(|window| window.surface() == previous && self.present(window))
         });
         if let Some(layer) = &self.exclusive_layer {
             let surface = layer.surface.clone();

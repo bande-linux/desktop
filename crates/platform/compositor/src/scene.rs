@@ -746,9 +746,8 @@ pub(crate) fn window_elements(
     scale: f64,
     active: bool,
     hung: bool,
-    shift: Point<f64, Logical>,
+    look: Option<Look>,
 ) -> (Vec<OutputElement>, Option<Drawn>) {
-    let look = window.shown_look();
     let alpha = look.map_or(1.0, |look| look.alpha) as f32;
     if alpha <= 0.0 {
         return (Vec::new(), None);
@@ -768,10 +767,9 @@ pub(crate) fn window_elements(
             Kind::Unspecified,
         );
     let fullscreen = window.has_state(xdg_toplevel::State::Fullscreen);
-    let shifted = shift != Point::default();
     let Some(geometry) = window
         .geometry()
-        .filter(|_| !fullscreen || look.is_some() || shifted)
+        .filter(|_| !fullscreen || look.is_some())
     else {
         return (
             surfaces.into_iter().map(OutputElement::Surface).collect(),
@@ -780,8 +778,7 @@ pub(crate) fn window_elements(
     };
     let real = Rectangle::new(geometry.location.to_f64(), geometry.size.to_f64());
     let area = real.to_physical(scale);
-    let mut look = look.unwrap_or(Look::shown(real));
-    look.rect.loc += shift;
+    let look = look.unwrap_or(Look::shown(real));
     let shown = look.rect.to_physical(scale);
     let radius = if fullscreen {
         0.0

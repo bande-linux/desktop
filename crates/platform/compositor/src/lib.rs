@@ -28,6 +28,7 @@ mod sync;
 mod tile;
 mod watchdog;
 mod window;
+mod workspace;
 
 pub use appearance::follow_reduced_motion;
 pub use clock::{FrameClock, FrameOutput, FrameScheduler, Poll, SAFETY_MARGIN, Submission, Vblank};

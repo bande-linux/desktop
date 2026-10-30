@@ -31,7 +31,7 @@ pub use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::{
     Anchor, KeyboardInteractivity,
 };
 
-use crate::{Globals, Headless, Memory, ShmImage, TestClient};
+use crate::{Globals, Headless, Memory, ShmImage, TestClient, Workspace};
 
 #[derive(Default)]
 pub(crate) struct Shell {
@@ -55,6 +55,8 @@ pub(crate) struct Shell {
     identifiers: Vec<(ExtForeignToplevelHandleV1, String)>,
     quit_requests: usize,
     toplevels: Vec<(ExtForeignToplevelHandleV1, String, bool)>,
+    workspaces: Option<(u32, u32)>,
+    window_workspaces: Vec<(String, u32)>,
 }
 
 pub struct LayerRequest {
@@ -148,7 +150,7 @@ impl TestClient {
     }
 
     pub fn join_shell(&mut self, server: &mut Headless) {
-        let shell: UnboundShellV1 = self.bind("unbound_shell_v1", 8);
+        let shell: UnboundShellV1 = self.bind("unbound_shell_v1", 9);
         self.globals.shell.shell = Some(shell);
         let _: ExtForeignToplevelListV1 = self.bind("ext_foreign_toplevel_list_v1", 1);
         self.exchange(server);
@@ -214,6 +216,35 @@ impl TestClient {
         let app: UnboundAppV1 = self.bind("unbound_app_v1", 2);
         app.place_window(&self.windows[index].2, placement);
         self.exchange(server);
+    }
+
+    pub fn move_to_workspace(
+        &mut self,
+        server: &mut Headless,
+        index: usize,
+        workspace: Workspace,
+    ) {
+        let app: UnboundAppV1 = self.bind("unbound_app_v1", 3);
+        app.move_to_workspace(&self.windows[index].2, workspace);
+        self.exchange(server);
+    }
+
+    pub fn workspaces(&self) -> Option<(u32, u32)> {
+        self.globals.shell.workspaces
+    }
+
+    pub fn window_workspace(&self, identifier: &str) -> Option<u32> {
+        self.globals
+            .shell
+            .window_workspaces
+            .iter()
+            .rev()
+            .find(|(known, _)| known == identifier)
+            .map(|(_, workspace)| *workspace)
+    }
+
+    pub fn show_windows(&mut self, server: &mut Headless, app_id: &str) {
+        self.shell_request(server, |shell| shell.show_windows(app_id.to_owned()));
     }
 
     pub fn quit_requests(&self) -> usize {
@@ -447,6 +478,13 @@ impl Dispatch<UnboundShellV1, ()> for Globals {
             unbound_shell_v1::Event::AttentionRequested { app_id } => {
                 globals.shell.attention.push(app_id);
             }
+            unbound_shell_v1::Event::Workspaces { count, active } => {
+                globals.shell.workspaces = Some((count, active));
+            }
+            unbound_shell_v1::Event::WindowWorkspace {
+                identifier,
+                workspace,
+            } => globals.shell.window_workspaces.push((identifier, workspace)),
             unbound_shell_v1::Event::FocusShell { namespace } => {
                 globals.shell.shell_focus.push(namespace);
             }

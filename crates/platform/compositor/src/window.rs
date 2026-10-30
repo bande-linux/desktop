@@ -31,6 +31,8 @@ pub struct Window {
     pub(crate) motion: Option<Motion>,
     pub(crate) drawn: Option<Drawn>,
     pub(crate) tile: Option<(Tile, Rect)>,
+    pub(crate) workspace: u64,
+    pub(crate) announced_workspace: Option<usize>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -78,7 +80,7 @@ impl Resize {
 }
 
 impl Window {
-    pub(crate) fn new(toplevel: ToplevelSurface) -> Self {
+    pub(crate) fn new(toplevel: ToplevelSurface, workspace: u64) -> Self {
         Self {
             toplevel,
             location: Point::default(),
@@ -95,6 +97,8 @@ impl Window {
             motion: None,
             drawn: None,
             tile: None,
+            workspace,
+            announced_workspace: None,
         }
     }
 
@@ -232,6 +236,7 @@ impl State {
             }
         }
         if !mapped && size.is_some() {
+            self.assign_new_window(index);
             self.open_window(index);
         }
         let surface = surface.clone();
@@ -367,6 +372,9 @@ impl State {
                 });
                 self.windows[index].configure();
             }
+            if self.windows[index].size.is_some() {
+                self.enter_full_screen_space(index);
+            }
         }
     }
 
@@ -383,6 +391,8 @@ impl State {
         } else {
             self.place(index, xdg_toplevel::State::Fullscreen, None);
         }
+        self.leave_full_screen_space(index);
+        self.tidy_workspaces();
     }
 
     pub(crate) fn toggle_fullscreen(&mut self, surface: &WlSurface) {

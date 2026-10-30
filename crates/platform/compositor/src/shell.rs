@@ -189,6 +189,8 @@ impl State {
                     .foreign_toplevel_state
                     .new_toplevel::<State>(title, app_id);
                 self.windows[index].foreign = Some(handle);
+                self.windows[index].announced_workspace = None;
+                self.announce_workspaces();
             }
             None => {}
         }
@@ -221,6 +223,7 @@ impl GlobalDispatch<UnboundShellV1, ()> for State {
         }
         state.announce_unresponsive(&shell);
         state.announce_minimized_windows(&shell);
+        state.announce_workspaces_to(&shell);
         state.shell_resources.push(shell);
     }
 

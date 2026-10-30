@@ -80,11 +80,11 @@ fn center(renderer: &mut Renderer, server: &mut Headless) -> [u8; 3] {
 }
 
 #[test]
-fn two_and_three_finger_gestures_and_holds_reach_the_app_under_the_pointer() {
+fn two_and_four_finger_swipes_pinches_and_holds_reach_the_app_under_the_pointer() {
     let mut server = server();
     let mut client = app(&mut server);
 
-    server.gesture(Gesture::SwipeBegin { fingers: 3 }, 1);
+    server.gesture(Gesture::SwipeBegin { fingers: 4 }, 1);
     server.gesture(
         Gesture::SwipeUpdate {
             delta: (4.0, -2.0).into(),
@@ -100,7 +100,7 @@ fn two_and_three_finger_gestures_and_holds_reach_the_app_under_the_pointer() {
     assert_eq!(
         client.gestures(),
         [
-            ClientGesture::Swipe { fingers: 3 },
+            ClientGesture::Swipe { fingers: 4 },
             ClientGesture::SwipeMoved { dx: 4.0, dy: -2.0 },
             ClientGesture::SwipeEnded { cancelled: false },
             ClientGesture::Pinch { fingers: 2 },

@@ -43,6 +43,9 @@ enum Shortcut {
     Brightness(BrightnessKey, bool),
     HideApp,
     HideOthers,
+    Workspace(bool),
+    WorkspaceAt(usize),
+    CarryWindow(bool),
 }
 
 fn volume_key(keysym: u32) -> Option<VolumeKey> {
@@ -77,6 +80,9 @@ fn shortcut(
         _ => {}
     }
     match unshifted {
+        Some(digit @ keysyms::KEY_1..=keysyms::KEY_9) if alt && !ctrl => {
+            return Some(Shortcut::WorkspaceAt((digit - keysyms::KEY_1) as usize));
+        }
         Some(keysyms::KEY_h) if alt => return Some(Shortcut::HideOthers),
         Some(keysyms::KEY_h) if !ctrl => return Some(Shortcut::HideApp),
         _ => {}
@@ -86,6 +92,10 @@ fn shortcut(
         keysyms::KEY_F2 => Some(Shortcut::FocusShell(MENU_BAR_NAMESPACE)),
         keysyms::KEY_F3 => Some(Shortcut::FocusShell(DOCK_NAMESPACE)),
         keysyms::KEY_f | keysyms::KEY_F if ctrl => Some(Shortcut::ToggleFullscreen),
+        keysyms::KEY_Left if ctrl && shift => Some(Shortcut::CarryWindow(false)),
+        keysyms::KEY_Right if ctrl && shift => Some(Shortcut::CarryWindow(true)),
+        keysyms::KEY_Left if alt => Some(Shortcut::Workspace(false)),
+        keysyms::KEY_Right if alt => Some(Shortcut::Workspace(true)),
         keysyms::KEY_Left if ctrl => Some(Shortcut::Place(Direction::Left)),
         keysyms::KEY_Right if ctrl => Some(Shortcut::Place(Direction::Right)),
         keysyms::KEY_Up if ctrl => Some(Shortcut::Place(Direction::Up)),
@@ -180,6 +190,16 @@ impl State {
             self.focus_shell(namespace);
             return;
         }
+        if let Shortcut::Workspace(forward) = shortcut {
+            self.step_workspace(forward);
+            return;
+        }
+        if let Shortcut::WorkspaceAt(index) = shortcut {
+            if index < self.workspaces.count() {
+                self.switch_workspace(index);
+            }
+            return;
+        }
         if shortcut == Shortcut::ForceQuit {
             self.force_quit_requested = true;
             self.watchdog.ping_everyone();
@@ -236,6 +256,11 @@ impl State {
                     self.place_with_key(&window, direction);
                 }
             }
+            Shortcut::CarryWindow(forward) => {
+                if let Some(window) = self.toplevel_of(&focused) {
+                    self.move_to_workspace(&window, forward, true);
+                }
+            }
             Shortcut::ToggleFullscreen => {
                 if let Some(window) = self.toplevel_of(&focused) {
                     self.toggle_fullscreen(&window);
@@ -248,7 +273,9 @@ impl State {
             | Shortcut::CaptureScreen
             | Shortcut::CaptureArea
             | Shortcut::Volume(..)
-            | Shortcut::Brightness(..) => {}
+            | Shortcut::Brightness(..)
+            | Shortcut::Workspace(_)
+            | Shortcut::WorkspaceAt(_) => {}
         }
     }
 }

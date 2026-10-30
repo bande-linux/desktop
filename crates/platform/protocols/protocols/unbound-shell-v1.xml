@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <protocol name="unbound_shell_v1">
-  <interface name="unbound_shell_v1" version="8">
+  <interface name="unbound_shell_v1" version="9">
     <description summary="requests and events between the compositor and the shell">
       Offered only on the connections of the shell clients the compositor starts
       itself (the Dock and the launcher), never on the listening socket.
@@ -208,9 +208,38 @@
       <arg name="key" type="uint" enum="brightness_key"/>
       <arg name="fine" type="uint"/>
     </event>
+
+    <event name="workspaces" since="9">
+      <description summary="the row of workspaces changed">
+        Sent on binding and whenever workspaces are added, removed or another
+        one becomes active. Workspaces form one row, counted from 0 on the
+        left; a full-screen window has a workspace of its own.
+      </description>
+      <arg name="count" type="uint"/>
+      <arg name="active" type="uint"/>
+    </event>
+
+    <event name="window_workspace" since="9">
+      <description summary="a window is on a workspace">
+        Sent on binding for every window and whenever the position of the
+        workspace holding the window with this ext_foreign_toplevel_handle_v1
+        identifier changes, including when a workspace to its left goes away.
+      </description>
+      <arg name="identifier" type="string"/>
+      <arg name="workspace" type="uint"/>
+    </event>
+
+    <request name="show_windows" since="9">
+      <description summary="open the overview">
+        Opens the overview of the active workspace. With an app id it shows
+        only that app's windows on every workspace, as App Exposé does; an
+        empty app id shows every window of the active workspace.
+      </description>
+      <arg name="app_id" type="string"/>
+    </request>
   </interface>
 
-  <interface name="unbound_app_v1" version="2">
+  <interface name="unbound_app_v1" version="3">
     <description summary="requests from the desktop to a whole app">
       Offered to every client. A client that binds it takes over app-level
       requests that the compositor would otherwise express per window: while
@@ -249,6 +278,24 @@
       </description>
       <arg name="toplevel" type="object" interface="xdg_toplevel"/>
       <arg name="placement" type="uint" enum="placement"/>
+    </request>
+
+    <enum name="workspace" since="3">
+      <entry name="previous" value="0" summary="the workspace to the left"/>
+      <entry name="next" value="1" summary="the workspace to the right, a new one past the last"/>
+    </enum>
+
+    <request name="move_to_workspace" since="3">
+      <description summary="move one of the app's windows to a neighbouring workspace">
+        Moves the toplevel to the workspace beside the active one, as the
+        window menu's Move to Workspace items do: the window slides off the
+        screen and keeps its place and size there, and the keyboard goes to the
+        next window. Moving past the last workspace adds one. Previous does
+        nothing on the first workspace. Ignored for a toplevel of another client
+        and in full screen.
+      </description>
+      <arg name="toplevel" type="object" interface="xdg_toplevel"/>
+      <arg name="workspace" type="uint" enum="workspace"/>
     </request>
   </interface>
 </protocol>

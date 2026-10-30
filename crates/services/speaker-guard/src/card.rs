@@ -246,6 +246,14 @@ impl SensePcm {
         }
     }
 
+    pub fn resume(&self) -> Result<(), CardError> {
+        match self.pcm.resume() {
+            Ok(()) => Ok(()),
+            Err(error) if error.errno() == EAGAIN => Ok(()),
+            Err(_) => self.restart(),
+        }
+    }
+
     pub fn restart(&self) -> Result<(), CardError> {
         self.pcm
             .prepare()

@@ -100,11 +100,16 @@ impl Guard {
             let read = match self.pcm.read(&mut buffer, WAIT_MS) {
                 Err(error) if error.errno() == Some(EPIPE) => {
                     self.pcm.restart().map_err(|e| e.to_string())?;
+                    self.monitors
+                        .iter_mut()
+                        .for_each(SenseMonitor::stream_paused);
                     continue;
                 }
                 Err(error) if error.errno() == Some(ESTRPIPE) => {
-                    self.pcm =
-                        SensePcm::open(&self.model, self.channels).map_err(|e| e.to_string())?;
+                    self.pcm.resume().map_err(|e| e.to_string())?;
+                    self.monitors
+                        .iter_mut()
+                        .for_each(SenseMonitor::stream_paused);
                     continue;
                 }
                 Ok(Some(0)) => continue,

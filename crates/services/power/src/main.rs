@@ -31,12 +31,6 @@ fn serve() -> Result<Services, Box<dyn Error>> {
         tracing::warn!("cannot follow the power adapter: {error}");
     }
     battery::chime_when_plugged_in(&system, &session)?;
-    let logind = system.clone();
-    let inhibitions = InhibitionService::start(&session, move |application, reason| {
-        logind::inhibit(&logind, "idle", application, reason, "block")
-            .inspect_err(|error| tracing::warn!("cannot inhibit idle: {error}"))
-            .ok()
-    })?;
     let idle = Arc::new(IdleController::new(
         controller::configured_policy(&session)?,
         controller::logind_executor(
@@ -45,6 +39,17 @@ fn serve() -> Result<Services, Box<dyn Error>> {
             Backlight::find(Path::new(SYSFS_BACKLIGHT)),
         ),
     ));
+    let logind = system.clone();
+    let inhibited = Arc::clone(&idle);
+    let inhibitions = InhibitionService::start(
+        &session,
+        move |application, reason| {
+            logind::inhibit(&logind, "idle", application, reason, "block")
+                .inspect_err(|error| tracing::warn!("cannot inhibit idle: {error}"))
+                .ok()
+        },
+        move |held| inhibited.set_inhibited(held),
+    )?;
     controller::follow_config(&session, &idle)?;
     controller::follow_lock(&system, &idle)?;
     match wayland_client::Connection::connect_to_env() {

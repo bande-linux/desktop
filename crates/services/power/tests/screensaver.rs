@@ -53,6 +53,7 @@ fn start() -> Fixture {
             });
             Some(OwnedFd::from(writer))
         },
+        |_| {},
     )
     .expect("inhibition service");
     Fixture {

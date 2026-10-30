@@ -8,6 +8,7 @@ use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use unbound_graphics::{Rect, Scene};
 use unbound_widgets::{set_frame_time, take_wake};
 use wayland_client::backend::{ReadEventsGuard, WaylandError};
+use wayland_client::protocol::wl_surface::WlSurface;
 
 use crate::window::{Window, WindowError, WindowEvent};
 
@@ -247,29 +248,42 @@ pub trait Surfaces {
     }
 }
 
+fn surfaces(app: &impl Surfaces) -> Vec<WlSurface> {
+    app.windows()
+        .iter()
+        .map(|window| window.surface.clone())
+        .collect()
+}
+
+fn position(app: &impl Surfaces, surface: &WlSurface) -> Option<usize> {
+    app.windows()
+        .iter()
+        .position(|window| window.surface == *surface)
+}
+
 fn deliver(app: &mut impl Surfaces) -> Result<bool, WindowError> {
     let now = Instant::now();
-    for index in 0..app.windows().len() {
-        let Some(window) = app.windows_mut().get_mut(index) else {
-            break;
+    for surface in surfaces(app) {
+        let Some(index) = position(app, &surface) else {
+            continue;
         };
+        let window = &mut app.windows_mut()[index];
         window.dispatch_pending()?;
         window.fire_repeats(now);
         set_frame_time(window.frame_time());
-        let count = app.windows().len();
         for event in window.take_events() {
-            if let WindowEvent::Focus(focused) = event
-                && let Some(window) = app.windows_mut().get_mut(index)
-            {
-                window.accessibility.set_window_focused(focused);
+            let Some(index) = position(app, &surface) else {
+                break;
+            };
+            if let WindowEvent::Focus(focused) = event {
+                app.windows_mut()[index]
+                    .accessibility
+                    .set_window_focused(focused);
             }
             app.event(index, event);
-            if app.windows().len() < count {
-                return Ok(app.closed());
-            }
         }
     }
-    Ok(app.closed())
+    Ok(app.closed() || app.windows().is_empty())
 }
 
 struct Readiness {
@@ -403,11 +417,12 @@ pub fn run_surfaces(app: &mut impl Surfaces) -> Result<(), WindowError> {
             let Some(window) = app.windows_mut().get_mut(index) else {
                 continue;
             };
+            let surface = window.surface.clone();
             for request in window.accessibility.take_requests() {
-                let Some(window) = app.windows_mut().get_mut(index) else {
+                let Some(index) = position(app, &surface) else {
                     break;
                 };
-                if !window.perform_window_action(&request) {
+                if !app.windows_mut()[index].perform_window_action(&request) {
                     app.event(index, WindowEvent::Accessibility(request));
                 }
             }
@@ -418,11 +433,11 @@ pub fn run_surfaces(app: &mut impl Surfaces) -> Result<(), WindowError> {
                 .first()
                 .and_then(|window| window.appearance.borrow_mut().take_change());
             if let Some(appearance) = change {
-                for index in 0..app.windows().len() {
-                    let Some(window) = app.windows_mut().get_mut(index) else {
-                        break;
+                for surface in surfaces(app) {
+                    let Some(index) = position(app, &surface) else {
+                        continue;
                     };
-                    window.request_redraw();
+                    app.windows_mut()[index].request_redraw();
                     app.event(index, WindowEvent::AppearanceChanged(appearance));
                 }
             }

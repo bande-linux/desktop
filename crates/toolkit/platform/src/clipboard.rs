@@ -4,6 +4,7 @@ use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
 use rustix::pipe::{PipeFlags, pipe_with};
 use unbound_graphics::{Point, Scene};
 use wayland_client::protocol::wl_data_device::{self, WlDataDevice};
@@ -768,10 +769,9 @@ impl Dispatch<WlDataDevice, ()> for State {
                 }
             }
             wl_data_device::Event::Drop => {
-                if let Some(stale) = std::mem::replace(
-                    &mut state.clipboard.pending_drop,
-                    state.clipboard.incoming.take(),
-                ) {
+                if let Some(dropped) = state.clipboard.incoming.take()
+                    && let Some(stale) = state.clipboard.pending_drop.replace(dropped)
+                {
                     stale.offer.destroy();
                 }
             }
@@ -876,7 +876,10 @@ impl Dispatch<WlDataSource, ()> for State {
 }
 
 pub(crate) fn send(fd: OwnedFd, bytes: Vec<u8>) {
-    std::thread::spawn(move || {
+    let _ = std::thread::Builder::new().spawn(move || {
+        if let Ok(flags) = fcntl_getfl(&fd) {
+            let _ = fcntl_setfl(&fd, flags - OFlags::NONBLOCK);
+        }
         let _ = File::from(fd).write_all(&bytes);
     });
 }

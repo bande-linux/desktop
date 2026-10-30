@@ -9,10 +9,11 @@ use unbound_audio::Level;
 
 use unbound_controlcenter::media::{Command, Playback, Player};
 use unbound_controlcenter::{
-    Change, Changes, Choice, Hud, KeyboardLight, SEGMENTS, Status, clock, panel, stepped,
+    Anchor, Change, Changes, Choice, Hud, KeyboardLight, SEGMENTS, Status, clock, panel,
+    place_beside, stepped,
 };
 use unbound_toolkit::ui::Ui;
-use unbound_toolkit::{Palette, Scheme, TextSystem};
+use unbound_toolkit::{DisplayEdge, Palette, Rect, Scheme, TextSystem};
 
 fn open(status: &Status) -> (Ui, f32, Changes) {
     let changes: Changes = Rc::new(RefCell::new(Vec::new()));
@@ -331,4 +332,26 @@ fn the_microphone_switch_mutes_the_input_and_its_level_and_choice_are_shown() {
 
     click(&mut ui, microphone);
     assert_eq!(*changes.borrow(), [Change::InputMuted(true)]);
+}
+
+#[test]
+fn the_panel_opens_beside_its_bar_item_on_every_edge_and_stays_on_screen() {
+    let screen = (1920.0, 1080.0);
+    let size = (320.0, 400.0);
+    let beside = |edge, item| place_beside(Some(Anchor { edge, item }), screen, size);
+    let left = beside(DisplayEdge::Left, Rect::new(6.0, 950.0, 52.0, 58.0));
+    assert_eq!((left.x, left.y + left.height), (66.0, 1008.0));
+    let right = beside(DisplayEdge::Right, Rect::new(1862.0, 950.0, 52.0, 58.0));
+    assert_eq!(right.x + right.width, 1854.0);
+    let bottom = beside(DisplayEdge::Bottom, Rect::new(1700.0, 1026.0, 52.0, 48.0));
+    assert_eq!(
+        (bottom.x + bottom.width, bottom.y + bottom.height),
+        (1752.0, 1018.0)
+    );
+    let top = beside(DisplayEdge::Top, Rect::new(10.0, 0.0, 52.0, 24.0));
+    assert_eq!((top.x, top.y), (8.0, 32.0));
+    let high = beside(DisplayEdge::Left, Rect::new(6.0, 60.0, 52.0, 58.0));
+    assert_eq!(high.y, 8.0);
+    let unanchored = place_beside(None, screen, size);
+    assert_eq!((unanchored.x, unanchored.y), (1592.0, 8.0));
 }

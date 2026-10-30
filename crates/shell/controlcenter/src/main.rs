@@ -11,19 +11,21 @@ use unbound_audio::{Audio, Level, Meter, meter_level};
 use unbound_bluetooth::Bluetooth;
 use unbound_controlcenter::media::{self, Command, Playback, Player, Players};
 use unbound_controlcenter::{
-    Change, Changes, Choice, EDGE, HUD_DURATION, HUD_SIZE, Hud, KeyboardLight, PANEL_WIDTH,
-    SYSFS_LEDS, Status, blur_rects, card, chooser_menu, hud, material, panel, scene, stepped,
+    Anchor, Change, Changes, Choice, HUD_DURATION, HUD_SIZE, Hud, KeyboardLight, L10N, PANEL_WIDTH,
+    SYSFS_LEDS, Status, blur_rects, card, chooser_menu, hud, material, panel, place_beside, scene,
+    slide_from, stepped,
 };
 use unbound_inbox::Inbox;
 use unbound_network::NetworkManager;
 use unbound_notify::client::NotificationCenter;
 use unbound_power::backlight::{Backlight, SYSFS_BACKLIGHT};
-use unbound_power::logind::own_session;
-use unbound_toolkit::ui::{Animated, Event, Key, Pointer, Scroll, Spring, Ui};
+use unbound_power::logind::{ManagerProxyBlocking, own_session};
+use unbound_status::session::full_name;
+use unbound_toolkit::ui::{Animated, Event, Key, Menu, MenuItem, Pointer, Scroll, Spring, Ui};
 use unbound_toolkit::{
     App, BrightnessKey, Edges, Image, Item, KeyboardFocus, LayerKind, LayerOptions, MediaKey,
-    MenuPlacement, Palette, Point, Rect, Role, Scene, TextSystem, VolumeKey, Window, WindowError,
-    WindowEvent,
+    MenuPlacement, Palette, Panel, Point, Rect, Role, Scene, TextSystem, VolumeKey, Window,
+    WindowError, WindowEvent,
 };
 use unbound_xdg::{
     DesktopEntry, ICON_THEMES, current_desktops, data_dirs, find_icon, path_from_file_uri,
@@ -32,6 +34,7 @@ use unbound_xdg::{
 use zbus::blocking::Connection;
 
 const JOIN: &str = "join:";
+const SESSION: &str = "session:";
 const ARTWORK_PIXELS: u32 = 128;
 const METER_INTERVAL: Duration = Duration::from_millis(50);
 const SLIDE: f32 = 8.0;
@@ -51,6 +54,7 @@ struct ControlCenter {
     hud_text: TextSystem,
     changes: Changes,
     pointer: Point,
+    anchor: Option<Anchor>,
     audio: Option<Audio>,
     network: Option<NetworkManager>,
     bluetooth: Option<Bluetooth>,
@@ -268,12 +272,18 @@ impl ControlCenter {
                 })
                 .collect(),
             player,
+            person: Some(full_name()),
+            icon_dirs: data_dirs(),
         }
     }
 
     fn panel_rect(&self, window: &Window, height: f32) -> Rect {
-        let (width, _) = window.size();
-        Rect::new(width as f32 - EDGE - PANEL_WIDTH, EDGE, PANEL_WIDTH, height)
+        let (width, surface_height) = window.size();
+        place_beside(
+            self.anchor,
+            (width as f32, surface_height as f32),
+            (PANEL_WIDTH, height),
+        )
     }
 
     fn show_menu(&self, window: &mut Window, choices: &[(String, String, bool)]) {
@@ -399,6 +409,34 @@ impl ControlCenter {
             }
             Change::Media(command) => self.command_player(command),
             Change::RaisePlayer => self.raise_player(window),
+            Change::Lock => {
+                if let Some(system) = &self.system {
+                    report(
+                        "lock the screen",
+                        own_session(system).and_then(|session| session.lock()),
+                    );
+                }
+                self.dismiss(window);
+            }
+            Change::Power => {
+                let user = [("user", full_name().into())];
+                let items = vec![
+                    MenuItem::new(&L10N.tr("sleep"), &format!("{SESSION}sleep")),
+                    MenuItem::separator(),
+                    MenuItem::new(&L10N.tr("restart"), &format!("{SESSION}restart")),
+                    MenuItem::new(&L10N.tr("shut-down"), &format!("{SESSION}shut-down")),
+                    MenuItem::separator(),
+                    MenuItem::new(&L10N.tr_args("log-out", user), &format!("{SESSION}log-out")),
+                ];
+                report(
+                    "open the power menu",
+                    window.show_menu(Menu::new(items), MenuPlacement::AtPoint(self.pointer)),
+                );
+            }
+            Change::Settings => {
+                self.launch(window, "org.unbound.Settings", &["unbound-settings"]);
+                self.dismiss(window);
+            }
             Change::Player(bus_name) => {
                 self.players.promote(&bus_name);
                 self.load_artwork();
@@ -411,6 +449,28 @@ impl ControlCenter {
         if let (Some(player), Some(commands)) = (self.players.current(), &self.player_commands) {
             let _ = commands.send((player.bus_name.clone(), command));
         }
+    }
+
+    fn launch(&self, window: &mut Window, app_id: &str, command: &[&str]) {
+        let token = window.activation_token(app_id).ok();
+        let command: Vec<String> = command.iter().map(|part| (*part).to_owned()).collect();
+        if let Err(error) = spawn_detached(&command, None, token.as_deref()) {
+            tracing::warn!("cannot start {}: {error}", command.join(" "));
+        }
+    }
+
+    fn end_session(&mut self, window: &mut Window, keyword: &str) {
+        if keyword == "sleep" {
+            if let Some(system) = &self.system {
+                report(
+                    "sleep",
+                    ManagerProxyBlocking::new(system).and_then(|login| login.suspend(true)),
+                );
+            }
+        } else {
+            self.launch(window, "", &["unbound-bar", "--confirm", keyword]);
+        }
+        self.dismiss(window);
     }
 
     fn raise_player(&mut self, window: &mut Window) {
@@ -633,12 +693,10 @@ impl ControlCenter {
         if let Mode::Panel { ui, height } = &mut self.mode
             && let Some((menu, point)) = ui.take_menu_request()
         {
-            let (width, _) = window.size();
-            let origin = Rect::new(
-                width as f32 - EDGE - PANEL_WIDTH,
-                EDGE,
-                PANEL_WIDTH,
-                *height,
+            let origin = place_beside(
+                self.anchor,
+                (window.size().0 as f32, window.size().1 as f32),
+                (PANEL_WIDTH, *height),
             );
             report(
                 "open the menu",
@@ -668,11 +726,10 @@ impl App for ControlCenter {
                 ui,
                 height: panel_height,
             } => {
-                let rect = Rect::new(
-                    width as f32 - EDGE - PANEL_WIDTH,
-                    EDGE,
-                    PANEL_WIDTH,
-                    *panel_height,
+                let rect = place_beside(
+                    self.anchor,
+                    (width as f32, height as f32),
+                    (PANEL_WIDTH, *panel_height),
                 );
                 card(&palette, rect, &mut items);
                 shapes.push(rect);
@@ -683,7 +740,8 @@ impl App for ControlCenter {
                 });
             }
             Mode::Hud(shown_hud, _) => {
-                let origin = Point::new(width as f32 - EDGE - HUD_SIZE.0, EDGE);
+                let placed = place_beside(self.anchor, (width as f32, height as f32), HUD_SIZE);
+                let origin = Point::new(placed.x, placed.y);
                 shapes.push(Rect::new(origin.x, origin.y, HUD_SIZE.0, HUD_SIZE.1));
                 items.push(Item::Translate {
                     offset: origin,
@@ -692,11 +750,18 @@ impl App for ControlCenter {
             }
             Mode::Hidden => {}
         }
-        let lift = -SLIDE * (1.0 - shown);
+        let lift = slide_from(self.anchor, SLIDE * (1.0 - shown));
         let rects: Vec<Rect> = shapes
             .into_iter()
             .filter(|_| shown > 0.5)
-            .flat_map(|rect| blur_rects(Rect::new(rect.x, rect.y + lift, rect.width, rect.height)))
+            .flat_map(|rect| {
+                blur_rects(Rect::new(
+                    rect.x + lift.x,
+                    rect.y + lift.y,
+                    rect.width,
+                    rect.height,
+                ))
+            })
             .collect();
         if self.blur.as_ref().is_some_and(|known| *known != rects) {
             match window.set_background_blur(&rects) {
@@ -713,7 +778,7 @@ impl App for ControlCenter {
             vec![Item::Opacity {
                 alpha: shown.clamp(0.0, 1.0),
                 items: vec![Item::Translate {
-                    offset: Point::new(0.0, lift),
+                    offset: lift,
                     items,
                 }],
             }],
@@ -723,6 +788,15 @@ impl App for ControlCenter {
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
         match event {
             WindowEvent::ToggleControlCenter => self.toggle_panel(window),
+            WindowEvent::PanelAnchor {
+                panel: Panel::ControlCenter,
+                edge,
+                rect,
+                ..
+            } => {
+                self.anchor = Some(Anchor { edge, item: rect });
+                window.request_redraw();
+            }
             WindowEvent::VolumeKey { key, fine } => self.volume_key(window, key, fine),
             WindowEvent::BrightnessKey { key, fine } => self.brightness_key(window, key, fine),
             WindowEvent::Input(input) => self.input(window, &input),
@@ -737,6 +811,8 @@ impl App for ControlCenter {
             WindowEvent::MenuAction(action) => {
                 if let Some(ssid) = action.strip_prefix(JOIN).and_then(unhex) {
                     self.join(window, &ssid);
+                } else if let Some(keyword) = action.strip_prefix(SESSION) {
+                    self.end_session(window, keyword);
                 } else if let Mode::Panel { ui, .. } = &mut self.mode {
                     ui.menu_action(&action);
                     self.run_changes(window);
@@ -872,6 +948,7 @@ fn run() -> Result<(), WindowError> {
         hud_text: TextSystem::new(),
         changes: Changes::default(),
         pointer: Point::new(0.0, 0.0),
+        anchor: None,
         audio,
         network: system.as_ref().map(NetworkManager::new),
         bluetooth: system.as_ref().map(Bluetooth::new),

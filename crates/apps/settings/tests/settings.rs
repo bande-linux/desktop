@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use accesskit::{Node, Role};
 use unbound_config::{
-    Appearance, CapsLock, Config, ConfigService, ConfigStore, DockEdge, SecondaryClick, Suspend,
-    WallpaperFit,
+    Appearance, BarEdge, CapsLock, Config, ConfigService, ConfigStore, MenuBarPlacement,
+    SecondaryClick, Suspend, WallpaperFit,
 };
 use unbound_settings::{Command, Idle, PaneId, SettingId, SettingsClient, SettingsView, Value};
 use unbound_settings_panes::panes;
@@ -190,15 +190,15 @@ fn tab_reaches_a_control_and_arrows_change_it() {
 #[test]
 fn clicking_a_pane_and_then_a_choice_selects_both() {
     let mut view = view();
-    view.set_value(SettingId::DockEdge, keyword("left"));
-    let row = node(&mut view, Role::ListItem, "Dock")
+    view.set_value(SettingId::BarEdge, keyword("left"));
+    let row = node(&mut view, Role::ListItem, "Bar")
         .bounds()
         .expect("bounds");
     click(
         &mut view,
         Point::new(row.x0 as f32 + 10.0, row.y0 as f32 + 10.0),
     );
-    assert_eq!(view.selected_pane(), PaneId::Dock);
+    assert_eq!(view.selected_pane(), PaneId::Bar);
 
     let control = node(&mut view, Role::RadioGroup, "Position on screen")
         .bounds()
@@ -213,7 +213,7 @@ fn clicking_a_pane_and_then_a_choice_selects_both() {
         chosen.extend(changes(&mut view).into_iter().map(|(_, value)| value));
         x += 4.0;
     }
-    assert_eq!(chosen, ["bottom", "right", "top"].map(keyword));
+    assert_eq!(chosen, ["right", "bottom", "top"].map(keyword));
 }
 
 #[test]
@@ -261,11 +261,13 @@ fn changes_are_written_through_org_unbound_config() {
     );
     for (id, value) in [
         (SettingId::Appearance, keyword("dark")),
-        (SettingId::DockEdge, keyword("bottom")),
+        (SettingId::BarEdge, keyword("bottom")),
         (SettingId::SleepAfter, Value::Seconds(0)),
         (SettingId::KeyRepeatDelay, Value::Number(300)),
-        (SettingId::DockIconSize, Value::Number(64)),
-        (SettingId::DockAutoHide, Value::Flag(true)),
+        (SettingId::BarIconSize, Value::Number(52)),
+        (SettingId::BarAutoHide, Value::Flag(true)),
+        (SettingId::BarNames, Value::Flag(true)),
+        (SettingId::BarMenuBar, keyword("separate")),
         (SettingId::ReduceMotion, Value::Flag(true)),
         (SettingId::Zoom, Value::Flag(true)),
         (SettingId::IncreaseContrast, Value::Flag(true)),
@@ -294,10 +296,12 @@ fn changes_are_written_through_org_unbound_config() {
     let written =
         Config::parse(&std::fs::read_to_string(&path).expect("config.kdl")).expect("valid config");
     assert_eq!(written.appearance, Appearance::Dark);
-    assert_eq!(written.dock.edge, DockEdge::Bottom);
+    assert_eq!(written.bar.edge, BarEdge::Bottom);
     assert_eq!(written.idle.suspend, Suspend::Never);
     assert_eq!(written.keyboard.repeat_delay, Duration::from_millis(300));
-    assert_eq!((written.dock.icon_size, written.dock.auto_hide), (64, true));
+    assert_eq!((written.bar.icon_size, written.bar.auto_hide), (52, true));
+    assert!(written.bar.names);
+    assert_eq!(written.bar.menu_bar, MenuBarPlacement::Separate);
     let access = written.accessibility;
     assert!(access.reduce_motion && access.increase_contrast && access.sticky_keys);
     assert_eq!((access.zoom, access.cursor_size), (2.0, 48));

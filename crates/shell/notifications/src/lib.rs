@@ -11,7 +11,8 @@ use unbound_notify::{Notification, Presentation, Stack};
 use unbound_spring::rubber_band;
 use unbound_toolkit::ui::{Animated, Event, Key, Spring};
 use unbound_toolkit::{
-    Color, Item, Palette, Paragraph, Point, Rect, Scene, Shape, TextAlign, TextStyle, TextSystem,
+    Color, DisplayEdge, Item, Palette, Paragraph, Point, Rect, Scene, Shape, TextAlign, TextStyle,
+    TextSystem,
 };
 
 use card::{CLOSE_REACH, contains};
@@ -116,6 +117,7 @@ pub struct Screen {
     banners: Vec<Banner>,
     open: bool,
     center_x: Animated,
+    anchor: Option<(DisplayEdge, Rect)>,
     rows: Vec<PlacedRow>,
     expanded: HashSet<String>,
     scroll: f32,
@@ -146,6 +148,7 @@ impl Screen {
             banners: Vec::new(),
             open: false,
             center_x: Animated::new(hidden_offset(CENTER_WIDTH)),
+            anchor: None,
             rows: Vec::new(),
             expanded: HashSet::new(),
             scroll: 0.0,
@@ -459,9 +462,50 @@ impl Screen {
             .map_or(0.0, |row| row.y + row.height + CENTER_PADDING)
     }
 
+    pub fn set_anchor(&mut self, edge: DisplayEdge, item: Rect) {
+        self.anchor = Some((edge, item));
+        if !self.open {
+            self.center_x.jump_to(self.hidden_offset());
+        }
+    }
+
+    fn panel_frame(&self) -> (f32, f32, f32) {
+        let (width, height) = self.size;
+        let right_aligned = |item: Rect| {
+            (item.x + item.width - CENTER_WIDTH)
+                .clamp(MARGIN, (width - MARGIN - CENTER_WIDTH).max(MARGIN))
+        };
+        match self.anchor {
+            Some((DisplayEdge::Left, item)) => {
+                (item.x + item.width + MARGIN, MARGIN, height - 2.0 * MARGIN)
+            }
+            Some((DisplayEdge::Right, item)) => (
+                item.x - MARGIN - CENTER_WIDTH,
+                MARGIN,
+                height - 2.0 * MARGIN,
+            ),
+            Some((DisplayEdge::Bottom, item)) => {
+                (right_aligned(item), MARGIN, item.y - 2.0 * MARGIN)
+            }
+            Some((_, item)) => {
+                let top = item.y + item.height + MARGIN;
+                (right_aligned(item), top, height - top - MARGIN)
+            }
+            None => (width - MARGIN - CENTER_WIDTH, MARGIN, height - 2.0 * MARGIN),
+        }
+    }
+
+    fn hidden_offset(&self) -> f32 {
+        let (x, _, _) = self.panel_frame();
+        match self.anchor {
+            Some((DisplayEdge::Left, _)) => -(x + CENTER_WIDTH + CLOSE_REACH),
+            _ => self.size.0 - x + CLOSE_REACH,
+        }
+    }
+
     fn panel_height(&self) -> f32 {
-        self.content_height()
-            .min((self.size.1 - 2.0 * MARGIN).max(HEADER_HEIGHT))
+        let (_, _, room) = self.panel_frame();
+        self.content_height().min(room.max(HEADER_HEIGHT))
     }
 
     fn max_scroll(&self) -> f32 {
@@ -470,12 +514,8 @@ impl Screen {
 
     fn panel_rect(&self, now: Instant) -> Rect {
         let (offset, _) = self.center_x.value_at(now);
-        Rect::new(
-            self.size.0 - MARGIN - CENTER_WIDTH + offset,
-            MARGIN,
-            CENTER_WIDTH,
-            self.panel_height(),
-        )
+        let (x, y, _) = self.panel_frame();
+        Rect::new(x + offset, y, CENTER_WIDTH, self.panel_height())
     }
 
     pub fn open(&mut self, now: Instant) {
@@ -497,12 +537,9 @@ impl Screen {
         }
         self.open = false;
         self.pressed = None;
-        self.center_x.animate_at(
-            now,
-            self.reduce_motion,
-            hidden_offset(CENTER_WIDTH),
-            Spring::STANDARD,
-        );
+        let hidden = self.hidden_offset();
+        self.center_x
+            .animate_at(now, self.reduce_motion, hidden, Spring::STANDARD);
     }
 
     pub fn toggle(&mut self, now: Instant) {

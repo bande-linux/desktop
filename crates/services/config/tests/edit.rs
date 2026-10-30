@@ -4,9 +4,9 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use unbound_config::{
-    Accessibility, AlertSound, Appearance, CapsLock, ClockFormat, Config, DisplaySettings,
-    DockEdge, InputSource, LidOnPower, Placement, Rotation, Setting, Suspend, WallpaperFit,
-    WallpaperVariant, migrate,
+    Accessibility, AlertSound, Appearance, BarEdge, CapsLock, ClockFormat, Config, DisplaySettings,
+    InputSource, LidOnPower, Placement, Rotation, Setting, Suspend, WallpaperFit, WallpaperVariant,
+    migrate,
 };
 
 fn apply(setting: Setting, source: &str) -> String {
@@ -15,10 +15,10 @@ fn apply(setting: Setting, source: &str) -> String {
 
 #[test]
 fn changing_a_value_keeps_every_comment_and_line_around_it() {
-    let source = "// Unbound settings\nappearance \"dark\" // at night\n\ndock {\n    edge \"left\" // near the dock\n}\n";
+    let source = "// Unbound settings\nappearance \"dark\" // at night\n\nbar {\n    edge \"left\" // near the dock\n}\n";
     assert_eq!(
-        apply(Setting::DockEdge(DockEdge::Top), source),
-        "// Unbound settings\nappearance \"dark\" // at night\n\ndock {\n    edge \"top\" // near the dock\n}\n"
+        apply(Setting::BarEdge(BarEdge::Top), source),
+        "// Unbound settings\nappearance \"dark\" // at night\n\nbar {\n    edge \"top\" // near the dock\n}\n"
     );
 }
 
@@ -115,23 +115,23 @@ fn key_repeat_and_wallpapers_are_written_and_a_reset_wallpaper_leaves_no_trace()
 #[test]
 fn the_dock_apps_are_rewritten_in_place_keeping_comments() {
     let source =
-        "dock {\n    edge \"left\" // near\n    apps \"org.unbound.Files\" // kept apps\n}\n";
+        "bar {\n    edge \"left\" // near\n    apps \"org.unbound.Files\" // kept apps\n}\n";
     assert_eq!(
         apply(
-            Setting::DockApps(vec![
+            Setting::BarApps(vec![
                 "org.unbound.Terminal".to_owned(),
                 "org.mozilla.firefox".to_owned()
             ]),
             source
         ),
-        "dock {\n    edge \"left\" // near\n    apps \"org.unbound.Terminal\" \"org.mozilla.firefox\" // kept apps\n}\n"
+        "bar {\n    edge \"left\" // near\n    apps \"org.unbound.Terminal\" \"org.mozilla.firefox\" // kept apps\n}\n"
     );
     assert_eq!(
-        apply(Setting::DockApps(Vec::new()), ""),
-        "dock {\n    apps\n}\n"
+        apply(Setting::BarApps(Vec::new()), ""),
+        "bar {\n    apps\n}\n"
     );
     assert!(
-        Setting::DockApps(vec!["a.b".to_owned(), "a.b".to_owned()])
+        Setting::BarApps(vec!["a.b".to_owned(), "a.b".to_owned()])
             .apply("")
             .is_err()
     );
@@ -139,11 +139,11 @@ fn the_dock_apps_are_rewritten_in_place_keeping_comments() {
 
 #[test]
 fn dock_and_wallpaper_defaults_leave_no_trace() {
-    let edited = apply(Setting::DockAutoHide(true), "");
-    let edited = apply(Setting::DockIconSize(64), &edited);
-    assert_eq!(edited, "dock {\n    auto-hide #true\n    size 64\n}\n");
-    let edited = apply(Setting::DockIconSize(48), &edited);
-    assert_eq!(apply(Setting::DockAutoHide(false), &edited), "");
+    let edited = apply(Setting::BarAutoHide(true), "");
+    let edited = apply(Setting::BarIconSize(52), &edited);
+    assert_eq!(edited, "bar {\n    auto-hide #true\n    size 52\n}\n");
+    let edited = apply(Setting::BarIconSize(40), &edited);
+    assert_eq!(apply(Setting::BarAutoHide(false), &edited), "");
 
     let fitted = apply(Setting::WallpaperFit(WallpaperFit::Fit), "");
     assert_eq!(fitted, "wallpaper {\n    fit \"fit\"\n}\n");
@@ -193,33 +193,44 @@ fn a_value_that_breaks_a_rule_is_rejected() {
 #[test]
 fn an_unreadable_file_is_not_edited() {
     let error = Setting::Appearance(Appearance::Dark)
-        .apply("appearance \"dark\"\ndock {\n    edge \"middle\n}\n")
+        .apply("appearance \"dark\"\nbar {\n    edge \"middle\n}\n")
         .expect_err("invalid file");
     assert_eq!((error.line, error.column), (3, 10));
 }
 
 #[test]
 fn a_file_with_a_wrong_value_is_still_edited_and_keeps_it_for_the_user() {
-    let source = "dock {\n    edge \"middle\"\n}\n";
+    let source = "bar {\n    edge \"middle\"\n}\n";
 
     assert_eq!(
         apply(Setting::Appearance(Appearance::Dark), source),
-        "dock {\n    edge \"middle\"\n}\nappearance \"dark\"\n"
+        "bar {\n    edge \"middle\"\n}\nappearance \"dark\"\n"
     );
     assert_eq!(
-        apply(Setting::DockEdge(DockEdge::Top), source),
-        "dock {\n    edge \"top\"\n}\n"
+        apply(Setting::BarEdge(BarEdge::Top), source),
+        "bar {\n    edge \"top\"\n}\n"
     );
 }
 
 #[test]
-fn a_write_renames_the_old_panel_section_instead_of_adding_a_dock() {
+fn a_write_renames_the_old_panel_section_instead_of_adding_a_bar() {
     assert_eq!(
         apply(
-            Setting::DockEdge(DockEdge::Top),
+            Setting::BarEdge(BarEdge::Top),
             "panel {\n    edge \"left\" // mine\n}\n"
         ),
-        "dock {\n    edge \"top\" // mine\n}\n"
+        "bar {\n    edge \"top\" // mine\n}\n"
+    );
+}
+
+#[test]
+fn the_old_dock_section_moves_into_an_existing_bar_without_overriding_it() {
+    assert_eq!(
+        apply(
+            Setting::BarNames(true),
+            "dock {\n    size 48\n    edge \"right\"\n}\nbar {\n    edge \"top\"\n}\n"
+        ),
+        "bar {\n    edge \"top\"\n    size 48\n    names #true\n}\n"
     );
 }
 
@@ -227,8 +238,8 @@ const OWNERS_FILE: &str = "appearance \"dark\"
 output \"Virtual-1\" {
     scale 1.5
 }
-dock {
-    size 45
+bar {
+    size 44
 }
 ";
 
@@ -238,7 +249,7 @@ fn the_old_connector_block_becomes_the_named_display_keeping_its_layout() {
     assert_eq!(
         migrate(OWNERS_FILE, &connected).expect("KDL").as_deref(),
         Some(
-            "appearance \"dark\"\ndisplay \"Virtual-1\" {\n    scale 1.5\n}\ndock {\n    size 45\n}\n"
+            "appearance \"dark\"\ndisplay \"Virtual-1\" {\n    scale 1.5\n}\nbar {\n    size 44\n}\n"
         )
     );
 

@@ -63,6 +63,7 @@ pub enum Action {
     ShowEmojiPicker,
     FocusMenuBar,
     FocusDock,
+    SearchMenus,
     LockScreen,
     ToggleZoom,
     ZoomIn,
@@ -100,6 +101,7 @@ impl Action {
             | Self::ShowEmojiPicker
             | Self::FocusMenuBar
             | Self::FocusDock
+            | Self::SearchMenus
             | Self::LockScreen => Area::System,
         }
     }
@@ -132,6 +134,7 @@ impl Action {
             Self::ShowEmojiPicker => L10N.tr("show-emoji-picker"),
             Self::FocusMenuBar => L10N.tr("focus-menu-bar"),
             Self::FocusDock => L10N.tr("focus-dock"),
+            Self::SearchMenus => L10N.tr("search-menus"),
             Self::LockScreen => L10N.tr("lock-screen"),
             Self::ToggleZoom => L10N.tr("toggle-zoom"),
             Self::ZoomIn => L10N.tr("zoom-in"),
@@ -151,7 +154,7 @@ const fn shortcut(action: Action, keys: &'static str) -> Shortcut {
     Shortcut { action, keys }
 }
 
-pub const SHORTCUTS: [Shortcut; 31] = [
+pub const SHORTCUTS: [Shortcut; 32] = [
     shortcut(Action::CloseWindow, "Super+W"),
     shortcut(Action::MinimizeWindow, "Super+M"),
     shortcut(Action::ToggleFullScreen, "Ctrl+Super+F"),
@@ -178,6 +181,7 @@ pub const SHORTCUTS: [Shortcut; 31] = [
     shortcut(Action::ShowEmojiPicker, "Ctrl+Super+Space"),
     shortcut(Action::FocusMenuBar, "Super+F2"),
     shortcut(Action::FocusDock, "Super+F3"),
+    shortcut(Action::SearchMenus, "Shift+Super+/"),
     shortcut(Action::LockScreen, "Ctrl+Super+Q"),
     shortcut(Action::ToggleZoom, "Alt+Super+0"),
     shortcut(Action::ZoomIn, "Alt+Super+="),

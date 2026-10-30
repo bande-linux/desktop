@@ -73,7 +73,7 @@ impl Fixture {
 
 #[test]
 fn an_invalid_file_at_start_is_reported_with_its_line_and_column() {
-    let fixture = start("dock {\n    edge \"middle\"\n}\n");
+    let fixture = start("bar {\n    edge \"middle\"\n}\n");
 
     let active = fixture.wait_for(|active| active.len() == 1);
     let shown = &active[0];
@@ -92,7 +92,7 @@ fn an_invalid_file_at_start_is_reported_with_its_line_and_column() {
 #[test]
 fn a_new_error_replaces_the_notification_and_a_fix_closes_it() {
     let fixture = start("");
-    replace_file(&fixture.path, "dock {\n    edge \"middle\"\n}\n");
+    replace_file(&fixture.path, "bar {\n    edge \"middle\"\n}\n");
     let first = fixture.wait_for(|active| active.len() == 1)[0].id;
 
     replace_file(&fixture.path, "appearance \"dark\"\ntheme \"graphite\"\n");
@@ -111,7 +111,7 @@ fn a_new_error_replaces_the_notification_and_a_fix_closes_it() {
 #[test]
 fn unknown_settings_are_reported_once_while_the_rest_applies() {
     let fixture = start(
-        "appearance \"dark\"\noutput \"Virtual-1\" {\n    scale 1.5\n}\nsparkle #true\ndock {\n    size 45\n}\n",
+        "appearance \"dark\"\noutput \"Virtual-1\" {\n    scale 1.5\n}\nsparkle #true\nbar {\n    size 44\n}\n",
     );
 
     let shown = fixture.wait_for(|active| active.len() == 1)[0].clone();
@@ -138,7 +138,7 @@ fn unknown_settings_are_reported_once_while_the_rest_applies() {
 
 #[test]
 fn open_in_editor_opens_the_configuration_file() {
-    let fixture = start("dock {\n    edge \"middle\"\n}\n");
+    let fixture = start("bar {\n    edge \"middle\"\n}\n");
     let id = fixture.wait_for(|active| active.len() == 1)[0].id;
 
     assert!(

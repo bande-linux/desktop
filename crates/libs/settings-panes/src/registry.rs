@@ -11,7 +11,7 @@ pub enum PaneId {
     Appearance,
     Accessibility,
     Wallpaper,
-    Dock,
+    Bar,
     Displays,
     LockScreen,
     Keyboard,
@@ -36,7 +36,7 @@ impl PaneId {
         (Self::Appearance, "appearance"),
         (Self::Accessibility, "accessibility"),
         (Self::Wallpaper, "wallpaper"),
-        (Self::Dock, "dock"),
+        (Self::Bar, "bar"),
         (Self::Displays, "displays"),
         (Self::LockScreen, "lock-screen"),
         (Self::Keyboard, "keyboard"),
@@ -110,9 +110,11 @@ pub enum SettingId {
     BounceKeys,
     Wallpaper,
     WallpaperFit,
-    DockEdge,
-    DockIconSize,
-    DockAutoHide,
+    BarEdge,
+    BarIconSize,
+    BarNames,
+    BarAutoHide,
+    BarMenuBar,
     DisplayUse,
     DisplayResolution,
     DisplayScale,
@@ -400,7 +402,7 @@ fn rotation_choices() -> Vec<Choice> {
 
 pub const AUTOMATIC: &str = "automatic";
 
-const DOCK_SIZES: (u32, u32) = (24, 96);
+const BAR_SIZES: (u32, u32) = (32, 56);
 
 const SCALES: [u32; 5] = [100, 125, 150, 175, 200];
 
@@ -948,39 +950,54 @@ fn desktop_panes() -> Vec<Pane> {
             ],
         ),
         pane(
-            PaneId::Dock,
-            L10N.tr("dock"),
-            L10N.tr("dock-keywords"),
+            PaneId::Bar,
+            L10N.tr("bar"),
+            L10N.tr("bar-keywords"),
             vec![section(
                 None,
                 vec![
                     setting(
-                        SettingId::DockIconSize,
-                        L10N.tr("dock-size"),
-                        L10N.tr("dock-size-keywords"),
+                        SettingId::BarEdge,
+                        L10N.tr("bar-position"),
+                        L10N.tr("bar-position-keywords"),
+                        Kind::Choices(keyword_choices(vec![
+                            (L10N.tr("edge-left"), "left"),
+                            (L10N.tr("edge-right"), "right"),
+                            (L10N.tr("edge-bottom"), "bottom"),
+                            (L10N.tr("edge-top"), "top"),
+                        ])),
+                    ),
+                    setting(
+                        SettingId::BarIconSize,
+                        L10N.tr("bar-size"),
+                        L10N.tr("bar-size-keywords"),
                         Kind::Range {
-                            range: DOCK_SIZES,
+                            range: BAR_SIZES,
                             step: 4,
                             low: L10N.tr("small"),
                             high: L10N.tr("large"),
                         },
                     ),
                     setting(
-                        SettingId::DockEdge,
-                        L10N.tr("dock-position"),
-                        L10N.tr("dock-position-keywords"),
-                        Kind::Choices(keyword_choices(vec![
-                            (L10N.tr("edge-left"), "left"),
-                            (L10N.tr("edge-bottom"), "bottom"),
-                            (L10N.tr("edge-right"), "right"),
-                            (L10N.tr("edge-top"), "top"),
-                        ])),
+                        SettingId::BarNames,
+                        L10N.tr("bar-names"),
+                        L10N.tr("bar-names-keywords"),
+                        Kind::Switch,
                     ),
                     setting(
-                        SettingId::DockAutoHide,
-                        L10N.tr("dock-auto-hide"),
-                        L10N.tr("dock-auto-hide-keywords"),
+                        SettingId::BarAutoHide,
+                        L10N.tr("bar-auto-hide"),
+                        L10N.tr("bar-auto-hide-keywords"),
                         Kind::Switch,
+                    ),
+                    setting(
+                        SettingId::BarMenuBar,
+                        L10N.tr("bar-menu-bar"),
+                        L10N.tr("bar-menu-bar-keywords"),
+                        Kind::Choices(keyword_choices(vec![
+                            (L10N.tr("bar-menu-bar-in-bar"), "in-bar"),
+                            (L10N.tr("bar-menu-bar-separate"), "separate"),
+                        ])),
                     ),
                 ],
             )],

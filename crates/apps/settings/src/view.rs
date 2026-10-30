@@ -500,7 +500,7 @@ impl SettingsView {
             PaneId::Appearance
             | PaneId::Accessibility
             | PaneId::Wallpaper
-            | PaneId::Dock
+            | PaneId::Bar
             | PaneId::LockScreen
             | PaneId::Keyboard
             | PaneId::General

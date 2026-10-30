@@ -113,14 +113,21 @@ impl State {
     }
 
     pub(crate) fn refocus_pointer(&mut self) {
-        let Some(pointer) = self
-            .seat
-            .get_pointer()
-            .filter(|pointer| !pointer.is_grabbed())
-        else {
+        let Some(pointer) = self.seat.get_pointer() else {
             return;
         };
-        let under = self.surface_under(self.pointer_location);
+        let mut under = self.surface_under(self.pointer_location);
+        if pointer.is_grabbed() {
+            let Some(popup) = self
+                .popup_grab
+                .as_ref()
+                .filter(|grab| !grab.has_ended())
+                .and_then(|grab| grab.current_grab())
+            else {
+                return;
+            };
+            under = under.filter(|(surface, _)| surface.client() == popup.client());
+        }
         if pointer.current_focus() == under.as_ref().map(|(surface, _)| surface.clone()) {
             return;
         }

@@ -10,7 +10,7 @@ use crate::{Globals, Headless, TestClient};
 #[derive(Default)]
 pub(crate) struct Input {
     keyboard_focus: Option<WlSurface>,
-    pointer_focus: Option<(WlSurface, f64, f64)>,
+    pub(crate) pointer_focus: Option<(WlSurface, f64, f64)>,
     keys: Vec<(u32, bool)>,
     buttons: Vec<(u32, bool)>,
     closed: Vec<XdgToplevel>,

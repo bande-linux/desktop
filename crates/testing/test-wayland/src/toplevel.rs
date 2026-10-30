@@ -28,6 +28,7 @@ pub struct PopupRequest {
 }
 
 struct Popup {
+    surface: WlSurface,
     popup: XdgPopup,
     geometry: Option<(i32, i32, i32, i32)>,
     done: bool,
@@ -182,6 +183,7 @@ impl TestClient {
         }
         surface.commit();
         self.globals.toplevels.popups.push(Popup {
+            surface: surface.clone(),
             popup,
             geometry: None,
             done: false,
@@ -198,6 +200,14 @@ impl TestClient {
 
     pub fn popup_dismissed(&self, index: usize) -> bool {
         self.globals.toplevels.popups[index].done
+    }
+
+    pub fn pointer_on_popup(&self, index: usize) -> bool {
+        self.globals
+            .input
+            .pointer_focus
+            .as_ref()
+            .is_some_and(|(surface, _, _)| *surface == self.globals.toplevels.popups[index].surface)
     }
 }
 

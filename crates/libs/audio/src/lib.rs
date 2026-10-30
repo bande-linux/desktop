@@ -13,8 +13,6 @@ pub use level::{Level, VolumeKey, meter_level};
 use pipewire as pw;
 pub use stream::EFFECT_RATE;
 
-const REPLY_CHECK: Duration = Duration::from_millis(250);
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Direction {
     Output,
@@ -250,13 +248,7 @@ impl Audio {
         self.commands
             .send(command(done))
             .map_err(|_| Error::Disconnected)?;
-        loop {
-            match outcome.recv_timeout(REPLY_CHECK) {
-                Ok(result) => return result,
-                Err(mpsc::RecvTimeoutError::Timeout) if self.shared.lock().connected => {}
-                Err(_) => return Err(Error::Disconnected),
-            }
-        }
+        outcome.recv().map_err(|_| Error::Disconnected)?
     }
 
     pub fn set_default(&self, device: &Device) -> Result<(), Error> {

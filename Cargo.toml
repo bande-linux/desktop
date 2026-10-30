@@ -86,6 +86,7 @@ unbound-dock-model = { path = "crates/libs/dock-model" }
 unbound-edid = { path = "crates/libs/edid" }
 unbound-files = { path = "crates/apps/files" }
 unbound-fs = { path = "crates/libs/fs" }
+unbound-golden = { path = "crates/testing/golden" }
 unbound-graphics = { path = "crates/toolkit/graphics" }
 unbound-greeter = { path = "crates/shell/greeter" }
 unbound-inbox = { path = "crates/libs/inbox" }

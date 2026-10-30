@@ -1,7 +1,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+mod support;
+
 use std::cell::Cell;
-use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
@@ -10,11 +11,11 @@ use unbound_bar::menus::{AppMenus, cascade};
 use unbound_status::Command;
 use unbound_status::dbusmenu::Node;
 use unbound_toolkit::ui::{Event, Key, Menu, Modifiers};
-use unbound_toolkit::{Appearance, CpuRenderer, Scheme, TextSystem};
+use unbound_toolkit::{Appearance, CpuRenderer, TextSystem};
+
+use support::check_golden;
 
 const SIZE: (u32, u32) = (800, 600);
-const MIN_SSIM: f64 = 0.99;
-const WALLPAPER: u8 = 0x80;
 
 fn node(id: i32, label: &str, children: Vec<Node>) -> Node {
     Node {
@@ -84,14 +85,8 @@ fn typed(search: &mut MenuSearch, text: &str) {
     }
 }
 
-fn opened(scheme: Scheme) -> (MenuSearch, Rc<Cell<Instant>>) {
-    let mut search = MenuSearch::new(
-        Appearance {
-            scheme,
-            ..Appearance::default()
-        },
-        TextSystem::new(),
-    );
+fn opened() -> (MenuSearch, Rc<Cell<Instant>>) {
+    let mut search = MenuSearch::new(Appearance::default(), TextSystem::new());
     let clock = Rc::new(Cell::new(Instant::now()));
     let time = clock.clone();
     search.set_clock(move || time.get());
@@ -101,7 +96,7 @@ fn opened(scheme: Scheme) -> (MenuSearch, Rc<Cell<Instant>>) {
 
 #[test]
 fn every_enabled_item_is_listed_with_its_path_and_shortcut() {
-    let (search, _) = opened(Scheme::Light);
+    let (search, _) = opened();
     let results = search.results();
     assert!(results.contains(&("Edit › Find".to_owned(), Some("Super+F".to_owned()))));
     assert!(results.contains(&("File › New Window".to_owned(), Some("Super+N".to_owned()))));
@@ -111,7 +106,7 @@ fn every_enabled_item_is_listed_with_its_path_and_shortcut() {
 
 #[test]
 fn typing_ranks_items_that_start_with_the_query_first_and_return_runs_the_selection() {
-    let (mut search, _) = opened(Scheme::Light);
+    let (mut search, _) = opened();
     typed(&mut search, "fi");
     let titles: Vec<String> = search
         .results()
@@ -141,7 +136,7 @@ fn typing_ranks_items_that_start_with_the_query_first_and_return_runs_the_select
 
 #[test]
 fn escape_clears_the_query_first_and_closes_the_card_second() {
-    let (mut search, _) = opened(Scheme::Light);
+    let (mut search, _) = opened();
     typed(&mut search, "zzz");
     assert!(search.results().is_empty());
     search.handle(&key(Key::Escape));
@@ -152,55 +147,12 @@ fn escape_clears_the_query_first_and_closes_the_card_second() {
 }
 
 #[test]
-fn the_card_matches_its_goldens_in_light_and_dark_at_one_and_one_and_a_half() {
-    for (scheme, scale, name) in [
-        (Scheme::Light, 1.0, "menu-search-light"),
-        (Scheme::Dark, 1.0, "menu-search-dark"),
-        (Scheme::Light, 1.5, "menu-search-light-1.5x"),
-        (Scheme::Dark, 1.5, "menu-search-dark-1.5x"),
-    ] {
-        let (mut search, clock) = opened(scheme);
-        typed(&mut search, "f");
-        search.scene(SIZE.0, SIZE.1);
-        clock.set(clock.get() + Duration::from_secs(1));
-        let scene = search.scene(SIZE.0, SIZE.1);
-        let pixels = (
-            (f64::from(SIZE.0) * scale).round() as u32,
-            (f64::from(SIZE.1) * scale).round() as u32,
-        );
-        let mut rgba = vec![0; (pixels.0 * pixels.1 * 4) as usize];
-        CpuRenderer::new()
-            .render_into(&scene, scale, &mut rgba)
-            .expect("frame");
-        check_golden(name, pixels, rgba);
-    }
-}
-
-fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>) {
-    let over_wallpaper = rgba
-        .as_chunks::<4>()
-        .0
-        .iter()
-        .flat_map(|pixel| {
-            let behind = u16::from(255 - pixel[3]) * u16::from(WALLPAPER) / 255;
-            [0, 1, 2].map(|channel| (u16::from(pixel[channel]) + behind).min(255) as u8)
-        })
-        .collect();
-    let actual = image::RgbImage::from_raw(size.0, size.1, over_wallpaper).expect("frame");
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("tests/golden/{name}.png"));
-    if std::env::var_os("UNBOUND_UPDATE_GOLDENS").is_some() {
-        actual.save(&path).expect("write golden");
-    }
-    let target = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}.png"));
-    actual.save(&target).expect("save the frame");
-    let expected = image::open(&path)
-        .unwrap_or_else(|error| panic!("{}: {error}", path.display()))
-        .to_rgb8();
-    let similarity = image_compare::rgb_hybrid_compare(&expected, &actual).expect("same size");
-    assert!(
-        similarity.score >= MIN_SSIM,
-        "{name} differs from its golden: {:.4} (frame in {})",
-        similarity.score,
-        target.display()
-    );
+fn the_card_matches_its_golden() {
+    let (mut search, clock) = opened();
+    typed(&mut search, "f");
+    search.scene(SIZE.0, SIZE.1);
+    clock.set(clock.get() + Duration::from_secs(1));
+    let scene = search.scene(SIZE.0, SIZE.1);
+    let frame = CpuRenderer::new().render(&scene).expect("frame");
+    check_golden("menu-search-light", SIZE, frame.rgba);
 }

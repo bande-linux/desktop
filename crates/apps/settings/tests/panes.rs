@@ -1,11 +1,14 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+mod support;
+
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 use std::time::{Duration, Instant};
 
-use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId};
+use accesskit::{Action, ActionRequest, NodeId, Role, TreeId};
+use support::{SIZE, WAIT, click, find, has_text, nodes};
 use unbound_audio::{AppStream, Device, Direction, Level, Snapshot};
 use unbound_config::{DisplaySettings, Placement};
 use unbound_keyboard::Layouts;
@@ -20,34 +23,10 @@ use unbound_test_bus::networkmanager::FakeNetworkManager;
 use unbound_toolkit::ui::{Event, Key, Modifiers};
 use unbound_toolkit::{Palette, Scheme, TextSystem};
 
-const SIZE: (u32, u32) = (900, 600);
-const WAIT: Duration = Duration::from_secs(5);
-
 fn view() -> SettingsView {
     let mut view = SettingsView::new(Palette::for_scheme(Scheme::Light), TextSystem::new());
     view.scene(SIZE.0, SIZE.1);
     view
-}
-
-fn nodes(view: &mut SettingsView) -> Vec<(NodeId, Node)> {
-    view.scene(SIZE.0, SIZE.1);
-    view.accessibility().nodes
-}
-
-fn find(view: &mut SettingsView, role: Role, label: &str) -> Option<NodeId> {
-    nodes(view)
-        .into_iter()
-        .find(|(_, node)| {
-            node.role() == role && node.label().is_some_and(|text| text.starts_with(label))
-        })
-        .map(|(id, _)| id)
-}
-
-fn has_text(view: &mut SettingsView, text: &str) -> bool {
-    nodes(view).into_iter().any(|(_, node)| {
-        node.label().is_some_and(|label| label.contains(text))
-            || node.value().is_some_and(|value| value.contains(text))
-    })
 }
 
 fn button_in_row(view: &mut SettingsView, row: &str, button: &str) -> NodeId {
@@ -71,15 +50,6 @@ fn button_in_row(view: &mut SettingsView, row: &str, button: &str) -> NodeId {
         pending.extend_from_slice(found.children());
     }
     panic!("no {button:?} button in the {row:?} row")
-}
-
-fn click(view: &mut SettingsView, target: NodeId) {
-    view.perform(&ActionRequest {
-        action: Action::Click,
-        target_tree: TreeId::ROOT,
-        target_node: target,
-        data: None,
-    });
 }
 
 fn press(view: &mut SettingsView, key: Key) {

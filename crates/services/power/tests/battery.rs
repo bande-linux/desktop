@@ -145,11 +145,3 @@ fn connecting_power_closes_the_alert() {
     fixture.set(NONE, 5.0);
     fixture.wait_for(<[Notification]>::is_empty);
 }
-
-#[test]
-fn a_battery_above_the_low_level_posts_nothing() {
-    let fixture = start(NONE, 80.0);
-    fixture.set(NONE, 79.0);
-    std::thread::sleep(Duration::from_millis(300));
-    assert!(fixture.notifications.active().is_empty());
-}

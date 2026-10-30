@@ -7,9 +7,9 @@ use std::time::Instant;
 use accesskit::{Action, ActionRequest, TreeId};
 use unbound_fs::{Sort, SortBy, format_date, format_size};
 use unbound_toolkit::ui::{
-    Alert, Cell, ClipboardRequest, Column, Event, FreeLayout, HEADER_HEIGHT, Key, Modifiers,
-    Pointer, PointerButton, Row, SLIDER_HEIGHT, Size, Slider, Sort as TableSort, Table, TextField,
-    Toggle, Widget, WidgetId,
+    Alert, Cell, Column, Event, FreeLayout, HEADER_HEIGHT, Key, Modifiers, Pointer, PointerButton,
+    Row, SLIDER_HEIGHT, Size, Slider, Sort as TableSort, Table, TextField, Toggle, Widget,
+    WidgetId,
 };
 use unbound_toolkit::{Image, Point, Rect};
 
@@ -439,10 +439,8 @@ impl FilesView {
         if self.ui.take_emoji_picker_request() {
             self.requests.push(Request::ShowEmojiPicker);
         }
-        match self.ui.take_clipboard_request() {
-            Some(ClipboardRequest::Copy(text)) => self.requests.push(Request::CopyText(text)),
-            Some(ClipboardRequest::Paste) => self.requests.push(Request::Paste),
-            None => {}
+        if let Some(request) = self.ui.take_clipboard_request() {
+            self.requests.push(Request::Clipboard(request));
         }
         self.drain_signals();
     }

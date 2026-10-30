@@ -14,8 +14,8 @@ use unbound_preview::Preview;
 use unbound_search::{Usage, recent_files};
 use unbound_thumbnails::Thumbnails;
 use unbound_toolkit::ui::{
-    Context, Cursor, Event, FreeLayout, Key, Menu, Modifiers, Pointer, PointerButton, Scroll,
-    ScrollState, Slider, Ui, Widget, WidgetId,
+    ClipboardRequest, Context, Cursor, Event, FreeLayout, Key, Menu, Modifiers, Pointer,
+    PointerButton, Scroll, ScrollState, Slider, Ui, Widget, WidgetId,
 };
 use unbound_toolkit::{Image, Item, Palette, Point, Rect, SHEET_INSET, TextSystem};
 use unbound_volumes::mounted_volumes;
@@ -116,8 +116,7 @@ pub enum Request {
         app: Box<DesktopEntry>,
         files: Vec<PathBuf>,
     },
-    CopyText(String),
-    Paste,
+    Clipboard(ClipboardRequest),
     CopyFiles {
         paths: Vec<PathBuf>,
         cut: bool,

@@ -10,7 +10,6 @@ use unbound_settings::{
     announce_updates, feed,
 };
 use unbound_settings_panes::panes;
-use unbound_toolkit::ui::ClipboardRequest;
 use unbound_toolkit::{
     App, FrameRegions, MenuPlacement, Rect, Role, Scene, TextSystem, Window, WindowEvent,
 };
@@ -42,14 +41,10 @@ impl Settings {
         {
             tracing::warn!("cannot show the menu: {error}");
         }
-        match clipboard {
-            Some(ClipboardRequest::Copy(text)) => window.copy(&text),
-            Some(ClipboardRequest::Paste) => {
-                if let Err(error) = window.paste() {
-                    tracing::warn!("cannot paste: {error}");
-                }
-            }
-            None => {}
+        if let Some(request) = clipboard
+            && let Err(error) = window.serve_clipboard(request)
+        {
+            tracing::warn!("cannot use the clipboard: {error}");
         }
     }
 }

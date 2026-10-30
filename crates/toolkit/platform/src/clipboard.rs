@@ -15,15 +15,16 @@ use wayland_client::{Connection, Dispatch, Proxy, QueueHandle, WEnum, event_crea
 
 use wayland_protocols::wp::viewporter::client::wp_viewport::WpViewport;
 
+use crate::primary::Primary;
 use crate::window::{ShmTarget, State, Window, WindowError, WindowEvent};
 
-const TEXT_TYPES: [&str; 3] = ["text/plain;charset=utf-8", "UTF8_STRING", "text/plain"];
+pub(crate) const TEXT_TYPES: [&str; 3] = ["text/plain;charset=utf-8", "UTF8_STRING", "text/plain"];
 const URI_LIST: &str = "text/uri-list";
 const GNOME_FILES: &str = "x-special/gnome-copied-files";
 const PNG: &str = "image/png";
 const FINISH_WAIT: Duration = Duration::from_secs(2);
 
-fn own_type() -> String {
+pub(crate) fn own_type() -> String {
     format!("application/x-unbound-toolkit-{}", std::process::id())
 }
 
@@ -129,7 +130,7 @@ impl Transfer {
     }
 }
 
-pub use unbound_widgets::DragAction;
+pub use unbound_widgets::{ClipboardRequest, DragAction};
 
 fn wire(action: DragAction) -> DndAction {
     match action {
@@ -171,7 +172,7 @@ pub enum DragEvent {
     Finished(Option<DragAction>),
 }
 
-enum Purpose {
+pub(crate) enum Purpose {
     Paste {
         transfer: bool,
     },
@@ -218,6 +219,7 @@ struct Incoming {
     serial: u32,
     position: Point,
     accepted: Option<DragAction>,
+    only: bool,
     arrival: Arrival,
 }
 
@@ -230,6 +232,7 @@ pub(crate) struct Clipboard {
     incoming: Option<Incoming>,
     pending_drop: Option<Incoming>,
     readings: Vec<Reading>,
+    pub(crate) primary: Primary,
 }
 
 #[derive(Default)]
@@ -276,6 +279,16 @@ impl State {
 }
 
 impl Window {
+    pub fn serve_clipboard(&mut self, request: ClipboardRequest) -> Result<(), WindowError> {
+        match request {
+            ClipboardRequest::Copy(text) => self.copy(&text),
+            ClipboardRequest::Paste => return self.paste(),
+            ClipboardRequest::SelectPrimary(text) => self.select_primary(&text),
+            ClipboardRequest::PastePrimary => return self.paste_primary(),
+        }
+        Ok(())
+    }
+
     pub fn copy(&mut self, text: &str) {
         self.copy_transfer(Transfer::text(text));
     }
@@ -336,9 +349,18 @@ impl Window {
         mime: String,
         purpose: Purpose,
     ) -> Result<(), WindowError> {
+        self.read(mime, purpose, |mime, fd| offer.receive(mime, fd))
+    }
+
+    pub(crate) fn read(
+        &mut self,
+        mime: String,
+        purpose: Purpose,
+        receive: impl FnOnce(String, BorrowedFd),
+    ) -> Result<(), WindowError> {
         let (reader, writer) =
             pipe_with(PipeFlags::CLOEXEC | PipeFlags::NONBLOCK).map_err(io::Error::from)?;
-        offer.receive(mime.clone(), writer.as_fd());
+        receive(mime.clone(), writer.as_fd());
         drop(writer);
         self.flush()?;
         self.state.clipboard.readings.push(Reading {
@@ -432,10 +454,19 @@ impl Window {
     }
 
     pub fn accept_drag(&mut self, action: Option<DragAction>) {
+        self.answer_drag(action, false);
+    }
+
+    pub fn accept_drag_only(&mut self, action: Option<DragAction>) {
+        self.answer_drag(action, true);
+    }
+
+    fn answer_drag(&mut self, action: Option<DragAction>, only: bool) {
         let Some(incoming) = &mut self.state.clipboard.incoming else {
             return;
         };
         incoming.accepted = action;
+        incoming.only = only;
         respond(incoming);
         let _ = self.flush();
     }
@@ -634,7 +665,7 @@ impl Window {
     }
 }
 
-fn pasted(transfer: Transfer, whole: bool) -> WindowEvent {
+pub(crate) fn pasted(transfer: Transfer, whole: bool) -> WindowEvent {
     match whole {
         true => WindowEvent::PastedTransfer(transfer),
         false => WindowEvent::Pasted(transfer.text),
@@ -647,9 +678,13 @@ fn respond(incoming: &Incoming) {
     incoming.offer.accept(incoming.serial, mime);
     if incoming.offer.version() >= 3 {
         match incoming.accepted {
-            Some(action) => incoming
-                .offer
-                .set_actions(DndAction::Copy | DndAction::Move, wire(action)),
+            Some(action) => incoming.offer.set_actions(
+                match incoming.only {
+                    true => wire(action),
+                    false => DndAction::Copy | DndAction::Move,
+                },
+                wire(action),
+            ),
             None => incoming
                 .offer
                 .set_actions(DndAction::empty(), DndAction::empty()),
@@ -700,6 +735,7 @@ impl Dispatch<WlDataDevice, ()> for State {
                     serial,
                     position: Point::new(x as f32, y as f32),
                     accepted: None,
+                    only: false,
                     arrival: Arrival::Unread,
                 };
                 respond(&incoming);
@@ -833,7 +869,7 @@ impl Dispatch<WlDataSource, ()> for State {
     }
 }
 
-fn send(fd: OwnedFd, bytes: &[u8]) {
+pub(crate) fn send(fd: OwnedFd, bytes: &[u8]) {
     let mut pipe = File::from(fd);
     let _ = pipe.write_all(bytes);
 }

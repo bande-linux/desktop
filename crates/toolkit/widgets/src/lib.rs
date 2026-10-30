@@ -160,6 +160,8 @@ pub struct Context {
 pub enum ClipboardRequest {
     Copy(String),
     Paste,
+    SelectPrimary(String),
+    PastePrimary,
 }
 
 impl Context {
@@ -733,6 +735,11 @@ impl Ui {
                     self.cx.focus = Some(target);
                 }
                 let delivered = self.deliver(target, event);
+                if self.cx.clipboard == Some(ClipboardRequest::PastePrimary)
+                    && self.accepts_focus(target)
+                {
+                    self.cx.focus = Some(target);
+                }
                 if pointer.button == PointerButton::Secondary {
                     self.captured = None;
                     return self.request_menu(pointer.position) | delivered | hovered;
@@ -857,7 +864,10 @@ impl Ui {
 
     pub fn take_clipboard_request(&mut self) -> Option<ClipboardRequest> {
         let request = self.cx.clipboard.take();
-        if request == Some(ClipboardRequest::Paste) {
+        if matches!(
+            request,
+            Some(ClipboardRequest::Paste | ClipboardRequest::PastePrimary)
+        ) {
             self.awaiting_paste = true;
         }
         request

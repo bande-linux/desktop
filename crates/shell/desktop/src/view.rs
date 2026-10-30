@@ -81,8 +81,7 @@ pub enum Request {
     Paste {
         moves: bool,
     },
-    CopyText(String),
-    PasteText,
+    Clipboard(ClipboardRequest),
     Eject(Vec<PathBuf>),
     SetWallpaper(PathBuf),
     ChangeWallpaper,
@@ -566,10 +565,8 @@ impl DesktopView {
 
     fn edit(&mut self, event: &Event) -> bool {
         let handled = self.ui.handle(event);
-        match self.ui.take_clipboard_request() {
-            Some(ClipboardRequest::Copy(text)) => self.requests.push(Request::CopyText(text)),
-            Some(ClipboardRequest::Paste) => self.requests.push(Request::PasteText),
-            None => {}
+        if let Some(request) = self.ui.take_clipboard_request() {
+            self.requests.push(Request::Clipboard(request));
         }
         handled
     }

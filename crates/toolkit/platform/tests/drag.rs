@@ -1,7 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::io::Read;
-use std::ops::Range;
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::net::UnixStream;
 use std::sync::mpsc::Sender;
@@ -9,27 +8,26 @@ use std::time::{Duration, Instant};
 
 use smithay::utils::{Logical, Point, Size};
 use unbound_compositor::OutputConfig;
-use unbound_graphics::{Color, Event, Palette, PointerButton, Scene, Scheme, TextSystem};
+use unbound_graphics::{Color, Event, PointerButton, Scene};
 use unbound_test_wayland::{GREEN, ShmImage, TestClient};
 use unbound_toolkit_platform::{
-    App, DragAction, DragEvent, DragIcon, HEADER_HEIGHT, Role, SHEET_INSET, Transfer, Window,
-    WindowEvent,
+    App, DragAction, DragEvent, DragIcon, Transfer, Window, WindowEvent,
 };
-use unbound_widgets::{Context, TextField, Ui};
 use wayland_client::protocol::wl_shm::Format;
 
 #[path = "support/desktop.rs"]
 mod desktop;
+#[path = "support/note.rs"]
+mod note;
 
 use desktop::{Client, Desktop};
+use note::{BTN_LEFT, at, note, text_of};
 
 const OUTPUT: (i32, i32) = (640, 400);
 const SIDE: &str = "HEADLESS-2";
-const WINDOW: (u32, u32) = (200, 140);
 const FOLDER_ROW: f32 = 30.0;
+const COPY_ONLY_ROW: f32 = 100.0;
 const REPORT: &str = "file:///home/user/Report%20one.pdf";
-const TEXT_PREFIX: &str = "text:";
-const BTN_LEFT: u32 = 0x110;
 const KEY_ESC: u32 = 1;
 const KEY_LEFTALT: u32 = 56;
 const KEY_LEFTMETA: u32 = 125;
@@ -75,11 +73,11 @@ impl App for Shelf {
                     .expect("drag");
             }
             WindowEvent::Drag(DragEvent::Entered { position, .. } | DragEvent::Moved(position)) => {
-                let action = match position.y < FOLDER_ROW {
-                    true => DragAction::Move,
-                    false => DragAction::Copy,
-                };
-                window.accept_drag(Some(action));
+                match position.y {
+                    y if y < FOLDER_ROW => window.accept_drag(Some(DragAction::Move)),
+                    y if y < COPY_ONLY_ROW => window.accept_drag(Some(DragAction::Copy)),
+                    _ => window.accept_drag_only(Some(DragAction::Copy)),
+                }
             }
             _ => {}
         }
@@ -100,10 +98,6 @@ impl App for Shelf {
     fn finished(&self) -> bool {
         self.finished
     }
-}
-
-fn at(x: i32, y: i32) -> Point<f64, Logical> {
-    Point::from((f64::from(x), f64::from(y)))
 }
 
 fn drags(events: &[WindowEvent]) -> Vec<DragEvent> {
@@ -136,13 +130,6 @@ fn dropped(events: &[WindowEvent]) -> Option<Landed> {
     })
 }
 
-fn presses(events: &[WindowEvent]) -> usize {
-    events
-        .iter()
-        .filter(|event| matches!(event, WindowEvent::Input(Event::PointerDown(_))))
-        .count()
-}
-
 impl Desktop {
     fn open_shelf(&mut self, name: &str, source: bool) -> Client {
         self.open_named(name, move |events, commands| Shelf {
@@ -151,54 +138,6 @@ impl Desktop {
             finished: false,
             source,
         })
-    }
-
-    fn open_named<A: App>(
-        &mut self,
-        name: &str,
-        app: impl FnOnce(Sender<WindowEvent>, UnixStream) -> A + Send + 'static,
-    ) -> Client {
-        let app_id = format!("test.{name}");
-        let mut client = self.open_app(Role::toplevel(name, &app_id), false, WINDOW, app);
-        self.wait_for(
-            &mut [&mut client],
-            |events| events.contains(&WindowEvent::Focus(true)),
-            |desktop| desktop.window_of(&app_id).is_some() && desktop.mapped(),
-        );
-        client
-    }
-
-    fn window_of(&self, app_id: &str) -> Option<Point<i32, Logical>> {
-        self.server
-            .windows()
-            .iter()
-            .find(|window| window.app_id() == app_id && window.size().is_some())
-            .map(|window| window.location())
-    }
-
-    fn slide(&mut self, client: &mut Client, name: &str, by: i32) {
-        let app_id = format!("test.{name}");
-        let before = self.window_of(&app_id).expect("mapped");
-        let grip = at(before.x + 100, before.y + 14);
-        self.server.move_pointer_to(grip, 0);
-        self.server.press_button(BTN_LEFT, true, 0);
-        self.settle(&mut [&mut *client]);
-        self.server
-            .move_pointer_to(at(before.x + 100 + by, before.y + 14), 0);
-        self.server.press_button(BTN_LEFT, false, 0);
-        self.wait_for(
-            &mut [client],
-            |_| true,
-            |desktop| desktop.window_of(&app_id) == Some((before.x + by, before.y).into()),
-        );
-    }
-
-    fn content_of(&self, name: &str, x: i32, y: i32) -> Point<f64, Logical> {
-        let origin = self.window_of(&format!("test.{name}")).expect("mapped");
-        at(
-            origin.x + SHEET_INSET as i32 + x,
-            origin.y + HEADER_HEIGHT as i32 + y,
-        )
     }
 
     fn side_by_side(&mut self) -> (Client, Client) {
@@ -236,23 +175,14 @@ impl Desktop {
         );
         self.settle(&mut [&mut *source, &mut *target]);
     }
-
-    fn next_click_reaches(&mut self, client: &mut Client) {
-        assert!(!self.server.pointer_grabbed(), "a grab outlived the drag");
-        let before = presses(&client.seen);
-        self.server.press_button(BTN_LEFT, true, 0);
-        self.server.press_button(BTN_LEFT, false, 0);
-        self.wait_for(&mut [client], |events| presses(events) > before, |_| true);
-    }
 }
 
 fn drop_between_windows(
     modifier: Option<u32>,
-    onto_folder: bool,
+    y: i32,
 ) -> (Option<Option<DragAction>>, Option<Landed>) {
     let mut desktop = Desktop::sized(OUTPUT);
     let (mut source, mut target) = desktop.side_by_side();
-    let y = if onto_folder { 10 } else { 80 };
     let to = desktop.content_of("target", 50, y);
     desktop.drag_from(&mut source, &mut target, to);
     if let Some(key) = modifier {
@@ -269,7 +199,7 @@ fn drop_between_windows(
 
 #[test]
 fn a_file_dropped_on_a_folder_row_of_another_app_moves_there() {
-    let (finished, dropped) = drop_between_windows(None, true);
+    let (finished, dropped) = drop_between_windows(None, 10);
 
     let (x, y, transfer, action) = dropped.expect("a drop");
     assert_eq!((x, y), (50.0, 10.0));
@@ -280,7 +210,7 @@ fn a_file_dropped_on_a_folder_row_of_another_app_moves_there() {
 
 #[test]
 fn holding_option_while_still_over_the_folder_makes_the_drop_a_copy() {
-    let (finished, dropped) = drop_between_windows(Some(KEY_LEFTALT), true);
+    let (finished, dropped) = drop_between_windows(Some(KEY_LEFTALT), 10);
 
     assert_eq!(dropped.expect("a drop").3, Some(DragAction::Copy));
     assert_eq!(finished, Some(Some(DragAction::Copy)));
@@ -288,12 +218,20 @@ fn holding_option_while_still_over_the_folder_makes_the_drop_a_copy() {
 
 #[test]
 fn holding_super_moves_where_the_target_would_copy() {
-    let plain = drop_between_windows(None, false);
-    let with_super = drop_between_windows(Some(KEY_LEFTMETA), false);
+    let plain = drop_between_windows(None, 80);
+    let with_super = drop_between_windows(Some(KEY_LEFTMETA), 80);
 
     assert_eq!(plain.0, Some(Some(DragAction::Copy)));
     assert_eq!(with_super.1.expect("a drop").3, Some(DragAction::Move));
     assert_eq!(with_super.0, Some(Some(DragAction::Move)));
+}
+
+#[test]
+fn a_target_that_only_copies_keeps_the_drop_a_copy_with_super_held() {
+    let (finished, dropped) = drop_between_windows(Some(KEY_LEFTMETA), 110);
+
+    assert_eq!(dropped.expect("a drop").3, Some(DragAction::Copy));
+    assert_eq!(finished, Some(Some(DragAction::Copy)));
 }
 
 #[test]
@@ -399,79 +337,6 @@ fn a_target_that_never_finishes_does_not_keep_the_source_dragging() {
     assert!(dropped_at.elapsed() >= Duration::from_millis(1500));
     assert_eq!(finished(&source.seen), Some(None));
     assert!(!desktop.server.pointer_grabbed());
-}
-
-struct Note {
-    events: Sender<WindowEvent>,
-    commands: UnixStream,
-    finished: bool,
-    ui: Ui,
-}
-
-fn note(
-    text: &str,
-    selected: Range<usize>,
-) -> impl FnOnce(Sender<WindowEvent>, UnixStream) -> Note + Send + 'static {
-    let text = text.to_owned();
-    move |events, commands| {
-        let changes = events.clone();
-        let mut field = TextField::new("", &text, move |text| {
-            let _ = changes.send(WindowEvent::MenuAction(format!("{TEXT_PREFIX}{text}")));
-        });
-        field.select(selected);
-        let mut ui = Ui::new(
-            Box::new(field),
-            Context::new(TextSystem::new(), Palette::for_scheme(Scheme::Light)),
-        );
-        ui.layout(unbound_widgets::Size::new(WINDOW.0 as f32, WINDOW.1 as f32));
-        Note {
-            events,
-            commands,
-            finished: false,
-            ui,
-        }
-    }
-}
-
-impl App for Note {
-    fn scene(&mut self, window: &mut Window) -> Scene {
-        let (width, height) = window.size();
-        let (mut items, above) = self.ui.paint_layers(width, height);
-        items.extend(above);
-        Scene {
-            width,
-            height,
-            background: Color::hex(0xFFFFFF),
-            items,
-        }
-    }
-
-    fn event(&mut self, window: &mut Window, event: WindowEvent) {
-        let _ = self.events.send(event.clone());
-        window.drive(&mut self.ui, event).expect("drive the ui");
-    }
-
-    fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        vec![self.commands.as_fd()]
-    }
-
-    fn source_ready(&mut self, _window: &mut Window, _index: usize) {
-        let mut command = [0u8; 1];
-        if self.commands.read(&mut command).unwrap_or(0) == 0 {
-            self.finished = true;
-        }
-    }
-
-    fn finished(&self) -> bool {
-        self.finished
-    }
-}
-
-fn text_of(events: &[WindowEvent]) -> Option<&str> {
-    events.iter().rev().find_map(|event| match event {
-        WindowEvent::MenuAction(action) => action.strip_prefix(TEXT_PREFIX),
-        _ => None,
-    })
 }
 
 impl Desktop {

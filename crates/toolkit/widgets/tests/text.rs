@@ -701,3 +701,88 @@ fn tabbing_into_a_field_selects_its_text_so_typing_replaces_it() {
     let field = ui.widget_as::<TextField>(second_id).expect("field");
     assert_eq!(field.text(), "B");
 }
+
+#[test]
+fn a_settled_selection_becomes_the_primary_selection_once() {
+    let mut editing = Editing::field("hello brave new world");
+    let frame = editing.frame();
+    let y = frame.y + frame.height / 2.0;
+    editing.press(Key::Up, NONE);
+    let start = editing.caret().x;
+    editing.press(Key::Right, LOGO);
+    let end = editing.caret().x;
+    let brave = Point::new(start + (end - start) * 0.4, y);
+    editing.ui.take_clipboard_request();
+
+    editing.send(Event::PointerDown(Pointer::at(brave).with_count(2)));
+    assert_eq!(editing.ui.take_clipboard_request(), None);
+    editing.send(Event::PointerUp(Pointer::at(brave)));
+    assert_eq!(
+        editing.ui.take_clipboard_request(),
+        Some(ClipboardRequest::SelectPrimary("brave".to_owned()))
+    );
+    editing.send(Event::PointerMove(Pointer::at(brave)));
+    assert_eq!(editing.ui.take_clipboard_request(), None);
+
+    editing.press(
+        Key::Right,
+        Modifiers {
+            shift: true,
+            ..NONE
+        },
+    );
+    assert_eq!(
+        editing.ui.take_clipboard_request(),
+        Some(ClipboardRequest::SelectPrimary("brave ".to_owned()))
+    );
+}
+
+#[test]
+fn a_middle_click_pastes_the_primary_selection_where_it_lands_and_focuses_that_field() {
+    let first = TextField::new("First", "", |_| {});
+    let second = TextField::new("Second", "world", |_| {});
+    let (first_id, second_id) = (first.id(), second.id());
+    let mut ui = Ui::new(
+        Box::new(unbound_widgets::Stack::new(
+            unbound_widgets::Axis::Vertical,
+            8.0,
+            16.0,
+            vec![Box::new(first), Box::new(second)],
+        )),
+        Context::new(TextSystem::new(), Palette::for_scheme(Scheme::Light)),
+    );
+    ui.layout(AREA);
+    ui.perform(&request(first_id.into(), Action::Focus, None));
+    let frame = ui.widget(second_id).expect("second field").frame();
+    let start = Point::new(frame.x + 2.0, frame.y + frame.height / 2.0);
+
+    let middle = Pointer::at(start).with_button(PointerButton::Middle);
+    ui.handle(&Event::PointerDown(middle));
+    ui.handle(&Event::PointerUp(middle));
+    assert_eq!(
+        ui.take_clipboard_request(),
+        Some(ClipboardRequest::PastePrimary)
+    );
+    assert_eq!(ui.focus(), Some(second_id));
+    assert!(ui.pasted("hello "));
+    ui.layout(AREA);
+
+    let field = ui.widget_as::<TextField>(second_id).expect("second field");
+    assert_eq!(field.text(), "hello world");
+    assert_eq!(field.selection(), 6..6);
+}
+
+#[test]
+fn a_middle_click_on_a_read_only_view_pastes_nothing() {
+    let mut reading =
+        Editing::with(|_| Box::new(TextView::new("", "Release notes", |_| {}).read_only()));
+    let frame = reading.frame();
+    let inside =
+        Pointer::at(Point::new(frame.x + 10.0, frame.y + 8.0)).with_button(PointerButton::Middle);
+    reading.send(Event::PointerDown(inside));
+    reading.send(Event::PointerUp(inside));
+
+    assert_eq!(reading.ui.take_clipboard_request(), None);
+    assert!(!reading.ui.pasted("x"));
+    assert_eq!(reading.text(), "Release notes");
+}

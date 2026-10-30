@@ -548,10 +548,9 @@ impl Surface {
                         tracing::warn!("cannot paste: {error}");
                     }
                 }
-                Request::CopyText(text) => window.copy(&text),
-                Request::PasteText => {
-                    if let Err(error) = window.paste() {
-                        tracing::warn!("cannot paste: {error}");
+                Request::Clipboard(request) => {
+                    if let Err(error) = window.serve_clipboard(request) {
+                        tracing::warn!("cannot use the clipboard: {error}");
                     }
                 }
                 Request::Eject(paths) => eject(paths),

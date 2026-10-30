@@ -140,7 +140,6 @@ impl Files {
                         tracing::warn!("cannot open with {}: {error}", app.id);
                     }
                 }
-                Request::CopyText(text) => window.copy(&text),
                 Request::CopyFiles { paths, cut } => {
                     let uris = paths.iter().map(|path| file_uri(path)).collect();
                     let transfer = Transfer::uris(uris);
@@ -162,9 +161,9 @@ impl Files {
                         tracing::warn!("cannot paste: {error}");
                     }
                 }
-                Request::Paste => {
-                    if let Err(error) = window.paste() {
-                        tracing::warn!("cannot paste: {error}");
+                Request::Clipboard(request) => {
+                    if let Err(error) = window.serve_clipboard(request) {
+                        tracing::warn!("cannot use the clipboard: {error}");
                     }
                 }
                 Request::ShowMenu { menu, at } => {

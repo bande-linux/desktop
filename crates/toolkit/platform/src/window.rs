@@ -26,7 +26,7 @@ use unbound_graphics::{
 use unbound_protocols::client::unbound_shell_v1::{
     BrightnessKey, Edge as DisplayEdge, LauncherMode, MediaKey, Panel, VolumeKey,
 };
-use unbound_widgets::{ClipboardRequest, FrameTime, Menu, MenuItem, MenuOutcome, Ui};
+use unbound_widgets::{FrameTime, Menu, MenuItem, MenuOutcome, Ui};
 use wayland_client::backend::WaylandError;
 use wayland_client::protocol::wl_buffer::{self, WlBuffer};
 use wayland_client::protocol::wl_callback::{self, WlCallback};
@@ -496,6 +496,7 @@ impl Window {
             .ok_or(WindowError::Missing("wl_compositor"))?;
         state.shm.as_ref().ok_or(WindowError::Missing("wl_shm"))?;
         state.join_data_device(&handle);
+        state.join_primary_selection(&handle);
 
         let surface = compositor.create_surface(&handle, ());
         state.own_surface = Some(surface.clone());
@@ -1041,10 +1042,8 @@ impl Window {
                 if let Some((menu, at)) = ui.take_menu_request() {
                     self.show_menu(menu, MenuPlacement::AtPoint(at))?;
                 }
-                match ui.take_clipboard_request() {
-                    Some(ClipboardRequest::Copy(text)) => self.copy(&text),
-                    Some(ClipboardRequest::Paste) => self.paste()?,
-                    None => {}
+                if let Some(request) = ui.take_clipboard_request() {
+                    self.serve_clipboard(request)?;
                 }
                 if ui.take_input_method_reset() {
                     self.reset_text_input();
@@ -2243,6 +2242,9 @@ impl Dispatch<WlRegistry, ()> for State {
                 "wl_data_device_manager" => {
                     state.data_device_manager =
                         Some(registry.bind(name, version.min(3), handle, ()));
+                }
+                "zwp_primary_selection_device_manager_v1" => {
+                    state.clipboard.primary.manager = Some(registry.bind(name, 1, handle, ()));
                 }
                 "ext_background_effect_manager_v1" => {
                     state.effect.manager = Some(registry.bind(name, 1, handle, ()));

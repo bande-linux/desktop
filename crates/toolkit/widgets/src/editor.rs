@@ -8,7 +8,8 @@ use parley::{Affinity, Alignment, AlignmentOptions, Cursor, Layout, Selection as
 use unbound_graphics::{Color, Item, Paint, Paragraph, Point, Rect, Shape, TextStyle, TextSystem};
 
 use super::{
-    ClipboardRequest, Context, DragAction, Event, Key, Menu, MenuItem, Modifiers, WidgetId,
+    ClipboardRequest, Context, DragAction, Event, Key, Menu, MenuItem, Modifiers, PointerButton,
+    WidgetId,
 };
 use crate::L10N;
 
@@ -209,6 +210,7 @@ pub(crate) struct Editor {
     frame: u64,
     laid_out: usize,
     revision: u64,
+    offered: Option<(u64, Range<usize>)>,
 }
 
 fn normalized(text: &str) -> Cow<'_, str> {
@@ -253,6 +255,7 @@ impl Editor {
             frame: 0,
             laid_out: 0,
             revision: 0,
+            offered: None,
         };
         editor.set_text(text);
         editor
@@ -945,8 +948,46 @@ impl Editor {
     }
 
     pub(crate) fn handle(&mut self, cx: &mut Context, event: &Event, origin: Point) -> bool {
+        let handled = self.handle_event(cx, event, origin);
+        self.offer_primary(cx);
+        handled
+    }
+
+    fn offer_primary(&mut self, cx: &mut Context) {
+        let range = self.selection();
+        let offered = (self.revision, range.clone());
+        if range.is_empty()
+            || self.drag.is_some()
+            || cx.clipboard.is_some()
+            || self.offered.as_ref() == Some(&offered)
+        {
+            return;
+        }
+        self.offered = Some(offered);
+        cx.clipboard = Some(ClipboardRequest::SelectPrimary(self.selected_text()));
+    }
+
+    fn paste_primary(&mut self, cx: &mut Context, point: Point) -> bool {
+        if self.read_only {
+            return false;
+        }
+        if self.preedit.is_some() {
+            self.finish_composition();
+            cx.input_method_reset = true;
+        }
+        self.history.open = false;
+        let at = self.position_at(&mut cx.text, point);
+        self.go(at, false);
+        cx.clipboard = Some(ClipboardRequest::PastePrimary);
+        true
+    }
+
+    fn handle_event(&mut self, cx: &mut Context, event: &Event, origin: Point) -> bool {
         let local = |point: Point| Point::new(point.x - origin.x, point.y - origin.y);
         match event {
+            Event::PointerDown(pointer) if pointer.button == PointerButton::Middle => {
+                return self.paste_primary(cx, local(pointer.position));
+            }
             Event::PointerDown(pointer) if pointer.is_primary() => {
                 self.press(
                     cx,
@@ -1486,7 +1527,9 @@ impl Editor {
             }
             _ => return false,
         };
-        self.key(cx, key, modifiers)
+        let handled = self.key(cx, key, modifiers);
+        self.offer_primary(cx);
+        handled
     }
 
     fn place_caret_for_menu(&mut self, text: &mut TextSystem, point: Point) {

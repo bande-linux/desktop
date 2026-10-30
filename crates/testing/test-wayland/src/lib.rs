@@ -10,7 +10,7 @@ pub use shell::{Anchor, KeyboardInteractivity, Layer, LayerRequest};
 pub use toplevel::{Configured, PopupRequest};
 pub use unbound_protocols::client::unbound_app_v1::{Placement, Workspace};
 pub use unbound_protocols::client::unbound_shell_v1::{
-    BrightnessKey, LauncherMode, MediaKey, VolumeKey,
+    BrightnessKey, Edge as PanelEdge, LauncherMode, MediaKey, Panel, VolumeKey,
 };
 pub use wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment;
 pub use wayland_protocols::xdg::shell::client::xdg_toplevel::{ResizeEdge, State as ToplevelState};

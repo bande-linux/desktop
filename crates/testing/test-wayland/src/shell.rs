@@ -60,6 +60,7 @@ pub(crate) struct Shell {
     workspaces: Option<(u32, u32)>,
     window_workspaces: Vec<(String, u32)>,
     input_sources: Option<(String, u32)>,
+    panel_anchors: Vec<(unbound_shell_v1::Panel, (i32, i32, i32, i32))>,
 }
 
 pub struct LayerRequest {
@@ -153,7 +154,7 @@ impl TestClient {
     }
 
     pub fn join_shell(&mut self, server: &mut Headless) {
-        let shell: UnboundShellV1 = self.bind("unbound_shell_v1", 13);
+        let shell: UnboundShellV1 = self.bind("unbound_shell_v1", 14);
         self.globals.shell.shell = Some(shell);
         let _: ExtForeignToplevelListV1 = self.bind("ext_foreign_toplevel_list_v1", 1);
         self.exchange(server);
@@ -223,6 +224,30 @@ impl TestClient {
         let surface = &self.globals.shell.layers[layer].0;
         shell.set_icon_rect(app_id.to_owned(), surface, rect.0, rect.1, rect.2, rect.3);
         self.exchange(server);
+    }
+
+    pub fn set_panel_anchor(
+        &mut self,
+        server: &mut Headless,
+        layer: usize,
+        panel: unbound_shell_v1::Panel,
+        edge: unbound_shell_v1::Edge,
+        rect: (i32, i32, i32, i32),
+    ) {
+        let shell = self.globals.shell.shell.as_ref().expect("joined the shell");
+        let surface = &self.globals.shell.layers[layer].0;
+        shell.set_panel_anchor(surface, panel, edge, rect.0, rect.1, rect.2, rect.3);
+        self.exchange(server);
+    }
+
+    pub fn panel_anchor(&self, panel: unbound_shell_v1::Panel) -> Option<(i32, i32, i32, i32)> {
+        self.globals
+            .shell
+            .panel_anchors
+            .iter()
+            .rev()
+            .find(|(known, _)| *known == panel)
+            .map(|(_, rect)| *rect)
     }
 
     pub fn take_app_requests(&mut self, server: &mut Headless) {
@@ -541,6 +566,17 @@ impl Dispatch<UnboundShellV1, ()> for Globals {
                 .shell
                 .window_workspaces
                 .push((identifier, workspace)),
+            unbound_shell_v1::Event::PanelAnchor {
+                panel: WEnum::Value(panel),
+                x,
+                y,
+                width,
+                height,
+                ..
+            } => globals
+                .shell
+                .panel_anchors
+                .push((panel, (x, y, width, height))),
             unbound_shell_v1::Event::FocusShell { namespace } => {
                 globals.shell.shell_focus.push(namespace);
             }

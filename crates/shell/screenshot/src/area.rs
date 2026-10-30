@@ -2,18 +2,16 @@ use unbound_toolkit::ui::{Event, Key};
 
 use crate::engine::Frame;
 use unbound_toolkit::{
-    Color, Item, Paint, Point, Rect, Scene, ScreenImage, Shape, TextAlign, TextStyle, TextSystem,
+    Color, Item, Palette, Point, Radius, Rect, Scene, Scheme, ScreenImage, Shape, Spacing,
+    TextAlign, TextRole, TextStyle, TextSystem,
 };
 
-const SELECTION_FILL: Color = Color::hex(0x808080).with_alpha(0x40);
-const SELECTION_EDGE: Color = Color::hex(0xffffff).with_alpha(0xc0);
-const CROSSHAIR: Color = Color::hex(0xffffff);
-const CROSSHAIR_OUTLINE: Color = Color::hex(0x000000).with_alpha(0x80);
+const SELECTION_FILL: f32 = 0.16;
+const WINDOW_TINT: f32 = 0.3;
+const CROSSHAIR_OUTLINE: f32 = 0.5;
 const CROSSHAIR_ARM: f32 = 10.0;
 const READOUT_OFFSET: f32 = 14.0;
-const READOUT_SIZE: f32 = 12.0;
-const WINDOW_TINT: Color = Color::hex(0x3478f6).with_alpha(0x55);
-const WINDOW_RADIUS: f32 = 10.0;
+const READOUT_PADDING: f32 = Spacing::XS as f32;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Region {
@@ -124,7 +122,13 @@ impl AreaSelection {
         })
     }
 
-    pub fn scene(&self, width: u32, height: u32, text: &mut TextSystem) -> Scene {
+    pub fn scene(
+        &self,
+        width: u32,
+        height: u32,
+        palette: &Palette,
+        text: &mut TextSystem,
+    ) -> Scene {
         let mut items = Vec::new();
         if self.window_mode {
             if let Some((_, frame)) = self.hovered() {
@@ -136,9 +140,9 @@ impl AreaSelection {
                             frame.width as f32,
                             frame.height as f32,
                         ),
-                        WINDOW_RADIUS,
+                        Radius::XL,
                     ),
-                    paint: WINDOW_TINT.into(),
+                    paint: palette.accent.with_opacity(WINDOW_TINT).into(),
                 });
             }
             return Scene {
@@ -157,12 +161,12 @@ impl AreaSelection {
             );
             items.push(Item::Fill {
                 shape: Shape::rect(frame),
-                paint: SELECTION_FILL.into(),
+                paint: palette.accent.with_opacity(SELECTION_FILL).into(),
             });
             items.push(Item::Stroke {
-                shape: Shape::rect(frame),
+                shape: Shape::rect(frame.inset(0.5)),
                 width: 1.0,
-                paint: SELECTION_EDGE.into(),
+                paint: palette.accent.into(),
             });
         }
         if let Some(at) = self.pointer {
@@ -171,10 +175,21 @@ impl AreaSelection {
                 Some(region) => format!("{} × {}", region.width, region.height),
                 None => format!("{} , {}", pixel(at.x), pixel(at.y)),
             };
-            let style = TextStyle::new(READOUT_SIZE, CROSSHAIR).tabular();
+            let style = TextStyle::role(TextRole::Callout, palette.chassis).tabular();
+            let paragraph = text.paragraph(&label, style, None, TextAlign::Start);
+            let chip = Rect::new(
+                at.x + READOUT_OFFSET,
+                at.y + READOUT_OFFSET,
+                (paragraph.width() + 2.0 * Spacing::S as f32).ceil(),
+                (paragraph.height() + 2.0 * READOUT_PADDING).ceil(),
+            );
+            items.push(Item::Fill {
+                shape: Shape::rounded(chip, Radius::S),
+                paint: palette.ink.into(),
+            });
             items.push(Item::Text {
-                origin: Point::new(at.x + READOUT_OFFSET, at.y + READOUT_OFFSET),
-                paragraph: text.paragraph(&label, style, None, TextAlign::Start),
+                origin: Point::new(chip.x + Spacing::S as f32, chip.y + READOUT_PADDING),
+                paragraph,
             });
         }
         Scene {
@@ -187,6 +202,10 @@ impl AreaSelection {
 }
 
 fn crosshair(items: &mut Vec<Item>, at: Point) {
+    let light = Palette::for_scheme(Scheme::Dark).ink;
+    let dark = Palette::for_scheme(Scheme::Light)
+        .ink
+        .with_opacity(CROSSHAIR_OUTLINE);
     let arms = [
         Rect::new(at.x - CROSSHAIR_ARM, at.y - 0.5, CROSSHAIR_ARM * 2.0, 1.0),
         Rect::new(at.x - 0.5, at.y - CROSSHAIR_ARM, 1.0, CROSSHAIR_ARM * 2.0),
@@ -195,13 +214,13 @@ fn crosshair(items: &mut Vec<Item>, at: Point) {
         let outline = Rect::new(arm.x - 1.0, arm.y - 1.0, arm.width + 2.0, arm.height + 2.0);
         items.push(Item::Fill {
             shape: Shape::rect(outline),
-            paint: Paint::Solid(CROSSHAIR_OUTLINE),
+            paint: dark.into(),
         });
     }
     for arm in arms {
         items.push(Item::Fill {
             shape: Shape::rect(arm),
-            paint: Paint::Solid(CROSSHAIR),
+            paint: light.into(),
         });
     }
 }

@@ -1,12 +1,14 @@
 use unbound_toolkit::ui::{Event, Key};
-use unbound_toolkit::{Color, Item, Point, Rect, Scene, Shape, TextAlign, TextStyle, TextSystem};
+use unbound_toolkit::{
+    Color, Elevation, Item, Palette, Point, Radius, Rect, Scene, Scheme, Shape, TextAlign,
+    TextRole, TextStyle, TextSystem,
+};
 
 use crate::engine::Shot;
 
 const LOUPE_CELLS: i32 = 9;
 const LOUPE_CELL: f32 = 9.0;
 const LOUPE_OFFSET: f32 = 24.0;
-const LABEL_SIZE: f32 = 12.0;
 
 pub struct ColorPicker {
     width: u32,
@@ -92,12 +94,14 @@ impl ColorPicker {
                     });
                 }
             }
-            items.push(Item::Shadow {
-                shape: Shape::rounded(loupe, side / 2.0),
-                offset: Point::new(0.0, 2.0),
-                blur_radius: 8.0,
-                color: Color::hex(0x000000).with_alpha(90),
-            });
+            let light = Palette::for_scheme(Scheme::Light);
+            let dark = Palette::for_scheme(Scheme::Dark);
+            items.extend(Item::shadows(
+                Shape::rounded(loupe, side / 2.0),
+                Elevation::Overlay,
+                Scheme::Dark,
+                true,
+            ));
             items.push(Item::Clip {
                 shape: Shape::rounded(loupe, side / 2.0),
                 items: cells,
@@ -111,15 +115,15 @@ impl ColorPicker {
             items.push(Item::Stroke {
                 shape: Shape::rect(middle),
                 width: 1.0,
-                paint: Color::hex(0xffffff).into(),
+                paint: light.overlay.into(),
             });
             items.push(Item::Stroke {
                 shape: Shape::rounded(loupe, side / 2.0),
                 width: 2.0,
-                paint: Color::hex(0xffffff).with_alpha(0xe0).into(),
+                paint: light.overlay.into(),
             });
             if let Some([r, g, b]) = self.pixel(x, y) {
-                let style = TextStyle::new(LABEL_SIZE, Color::hex(0xffffff))
+                let style = TextStyle::role(TextRole::Callout, dark.ink)
                     .weight(TextStyle::MEDIUM)
                     .tabular();
                 let paragraph = text.paragraph(
@@ -135,8 +139,8 @@ impl ColorPicker {
                     paragraph.height() + 4.0,
                 );
                 items.push(Item::Fill {
-                    shape: Shape::rounded(label, 4.0),
-                    paint: Color::hex(0x000000).with_alpha(0xb0).into(),
+                    shape: Shape::rounded(label, Radius::S),
+                    paint: dark.chassis.into(),
                 });
                 items.push(Item::Text {
                     origin: Point::new(label.x + 6.0, label.y + 2.0),

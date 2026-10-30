@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use accesskit::{Action, ActionRequest, Node, Role};
 use unbound_toolkit::ui::{
-    BUTTON_HEIGHT, Button, Context, Event, Key, Parts, Size, Widget, WidgetId,
+    BUTTON_HEIGHT, Button, Context, Event, Key, Parts, Size, Widget, WidgetId, focus_ring_for,
 };
 use unbound_toolkit::{Image, Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle};
 
@@ -212,11 +212,11 @@ impl Widget for Grid {
                 });
             }
             if focused && index == self.current && cx.keyboard_navigation {
-                items.push(Item::Stroke {
-                    shape: Shape::rounded(well.inset(-RING * 1.5), TILE_RADIUS + RING * 1.5),
-                    width: 1.0,
-                    paint: cx.palette.accent.with_alpha(128).into(),
-                });
+                focus_ring_for(
+                    &cx.palette,
+                    Shape::rounded(well.inset(-RING), TILE_RADIUS + RING),
+                    items,
+                );
             }
             if let Some(paragraph) = &tile.paragraph {
                 items.push(Item::Text {

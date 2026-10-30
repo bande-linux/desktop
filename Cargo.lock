@@ -3922,6 +3922,7 @@ dependencies = [
  "unbound-fs",
  "unbound-l10n",
  "unbound-log",
+ "unbound-thumbnails",
  "unbound-toolkit",
  "unbound-volumes",
  "unbound-wallpaper",
@@ -4149,6 +4150,8 @@ dependencies = [
 name = "unbound-notifications"
 version = "0.1.0"
 dependencies = [
+ "image",
+ "image-compare",
  "jiff",
  "tracing",
  "unbound-datetime",
@@ -4266,6 +4269,7 @@ dependencies = [
  "accesskit",
  "blocking",
  "image",
+ "image-compare",
  "jiff",
  "pipewire",
  "rustix 1.1.6",

@@ -117,6 +117,7 @@ pub(crate) enum Placed<'a> {
     Window(&'a Window),
     Closing(&'a Closing),
     Overview(usize),
+    Backdrop(usize),
 }
 
 type Composed<E = ScreenElement> = (
@@ -742,6 +743,9 @@ impl Headless {
                 Placed::Overview(screen) => {
                     elements.extend(self.state.overview_elements(renderer, screen, scale));
                 }
+                Placed::Backdrop(screen) => {
+                    elements.extend(self.state.overview_backdrop(screen, scale));
+                }
             }
         }
         tie_blurs_to_what_lies_below(&mut elements, scale);
@@ -1115,7 +1119,7 @@ impl State {
             .filter_map(|placed| match placed {
                 Placed::Surface(surface, origin) => Some((surface, origin)),
                 Placed::Window(window) => Some((window.surface().clone(), window.surface_origin())),
-                Placed::Closing(_) | Placed::Overview(_) => None,
+                Placed::Closing(_) | Placed::Overview(_) | Placed::Backdrop(_) => None,
             })
             .collect()
     }
@@ -1191,6 +1195,11 @@ impl State {
             self.window_entries(&on_top),
             self.window_entries(&rest),
             layers(Layer::Bottom),
+            if rendered && self.overview.is_shown() {
+                vec![Placed::Backdrop(screen)]
+            } else {
+                Vec::new()
+            },
             layers(Layer::Background),
         ]
         .concat()

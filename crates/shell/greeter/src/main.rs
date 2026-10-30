@@ -15,8 +15,8 @@ use unbound_keyboard::Layouts;
 use unbound_lock::{BackdropSource, DateFormats, Inbox, LockScreen, User, Variant, load_backdrop};
 use unbound_toolkit::ui::{Event, Key};
 use unbound_toolkit::{
-    App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Palette, Role, Scene, Scheme,
-    TextSystem, Window, WindowEvent,
+    App, Appearance, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Role, Scene, TextSystem,
+    Window, WindowEvent,
 };
 
 const CLOCK_TICK: Duration = Duration::from_secs(1);
@@ -74,7 +74,7 @@ impl Greeter {
             user,
             DateFormats::from_env(),
             &jiff::Zoned::now(),
-            Palette::for_scheme(Scheme::Dark),
+            Appearance::default(),
             TextSystem::new(),
         )
     }
@@ -90,6 +90,7 @@ impl Greeter {
             (self.user + count - 1) % count
         };
         self.screen = Self::screen_for(&self.users[self.user]);
+        self.screen.set_position(self.user, count);
         self.screen.set_input_source(self.input_source.clone());
         self.screen.set_caps_lock(self.caps_lock);
         self.picture = login_picture(Path::new(LOGIN_PICTURES), self.users[self.user].uid);
@@ -326,7 +327,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .position(|user| Some(&user.login) == remembered.as_ref())
         .unwrap_or(0);
     let chosen = users.get(user).ok_or("no one can sign in")?;
-    let screen = Greeter::screen_for(chosen);
+    let mut screen = Greeter::screen_for(chosen);
+    screen.set_position(user, users.len());
     let picture = login_picture(Path::new(LOGIN_PICTURES), chosen.uid);
     let mut window = Window::open(
         Role::Layer(LayerOptions {

@@ -13,6 +13,7 @@ unbound-config.workspace = true
 unbound-fs.workspace = true
 unbound-l10n.workspace = true
 unbound-log.workspace = true
+unbound-thumbnails.workspace = true
 unbound-toolkit.workspace = true
 unbound-volumes.workspace = true
 unbound-wallpaper.workspace = true

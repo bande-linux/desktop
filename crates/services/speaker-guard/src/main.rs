@@ -135,6 +135,10 @@ impl Guard {
                     let mut powers = Vec::with_capacity(self.monitors.len());
                     for (index, monitor) in self.monitors.iter_mut().enumerate() {
                         let m = monitor.layout.measure(samples);
+                        let applied_db =
+                            self.protections[index].gain_db.min(self.model.max_gain_db);
+                        let worst_case =
+                            monitor.worst_case_power * thermal::db_to_power(applied_db);
                         tracing::debug!(
                             speaker = index,
                             frames,
@@ -151,7 +155,7 @@ impl Guard {
                         );
                         powers.push(
                             monitor
-                                .assess(&m, frames, seconds)
+                                .assess(&m, frames, seconds, worst_case)
                                 .map_err(|fault| fault.to_string())?,
                         );
                     }

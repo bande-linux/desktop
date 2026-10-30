@@ -46,7 +46,7 @@ impl std::fmt::Display for Fault {
     }
 }
 
-const STARTUP_GRACE_FRAMES: usize = 2400;
+const FROZEN_FAULT_FRAMES: usize = 24_000;
 const MIN_JUDGED_FRAMES: usize = 256;
 const POLARITY_WINDOW_SECONDS: f64 = 0.5;
 const POLARITY_MIN_POWER: f64 = 0.001;
@@ -105,9 +105,8 @@ impl SenseLayout {
 pub struct SenseMonitor {
     pub layout: SenseLayout,
     pub worst_case_power: f64,
-    stream_frames: usize,
-    voltage_seen_live: bool,
-    current_seen_live: bool,
+    voltage_frozen_frames: usize,
+    current_frozen_frames: usize,
     window_seconds: f64,
     window_product: f64,
     window_open_loop: f64,
@@ -118,9 +117,8 @@ impl SenseMonitor {
         Self {
             layout,
             worst_case_power,
-            stream_frames: 0,
-            voltage_seen_live: false,
-            current_seen_live: false,
+            voltage_frozen_frames: 0,
+            current_frozen_frames: 0,
             window_seconds: 0.0,
             window_product: 0.0,
             window_open_loop: 0.0,
@@ -136,22 +134,27 @@ impl SenseMonitor {
         measurement: &Measurement,
         frames: usize,
         seconds: f64,
+        worst_case: f64,
     ) -> Result<f64, Fault> {
-        self.stream_frames += frames;
-        let in_grace = self.stream_frames <= STARTUP_GRACE_FRAMES;
         let judged = frames >= MIN_JUDGED_FRAMES;
         let voltage_frozen = judged && measurement.voltage.min == measurement.voltage.max;
         let current_frozen = judged && measurement.current.min == measurement.current.max;
-        if voltage_frozen && (self.voltage_seen_live || !in_grace) {
+        let count = |frozen: bool, run: usize| if frozen { run + frames } else { 0 };
+        if judged {
+            self.voltage_frozen_frames = count(voltage_frozen, self.voltage_frozen_frames);
+            self.current_frozen_frames = count(current_frozen, self.current_frozen_frames);
+        }
+        if self.voltage_frozen_frames > FROZEN_FAULT_FRAMES {
             return Err(Fault::FrozenVoltage);
         }
-        if current_frozen && (self.current_seen_live || !in_grace) {
+        if self.current_frozen_frames > FROZEN_FAULT_FRAMES {
             return Err(Fault::FrozenCurrent);
         }
-        self.voltage_seen_live |= !voltage_frozen;
-        self.current_seen_live |= !current_frozen;
-        if measurement.voltage.clipped() || measurement.current.clipped() {
-            return Ok(self.worst_case_power);
+        if voltage_frozen || measurement.voltage.clipped() || measurement.current.clipped() {
+            return Ok(worst_case);
+        }
+        if current_frozen {
+            return Ok(measurement.open_loop_power);
         }
         if measurement.voltage_rms > IMPEDANCE_CHECK_VOLTAGE {
             let impedance = measurement.voltage_rms / measurement.current_rms.max(1e-6);
@@ -175,11 +178,7 @@ impl SenseMonitor {
                 return Err(Fault::InvertedCurrent { product, open_loop });
             }
         }
-        Ok(if voltage_frozen {
-            self.worst_case_power
-        } else {
-            measurement.open_loop_power
-        })
+        Ok(measurement.open_loop_power)
     }
 }
 
@@ -216,15 +215,20 @@ mod tests {
 
     fn assess(monitor: &mut SenseMonitor, frames: &[i16]) -> Result<f64, Fault> {
         let measurement = monitor.layout.measure(frames);
-        monitor.assess(&measurement, 1024, PERIOD)
+        let worst_case = monitor.worst_case_power;
+        monitor.assess(&measurement, 1024, PERIOD, worst_case)
     }
 
     #[test]
-    fn the_silent_start_of_a_stream_is_tolerated_and_costs_worst_case_power() {
+    fn a_silent_sense_period_is_tolerated_and_costs_worst_case_power() {
         let mut monitor = j473();
         let power = assess(&mut monitor, &vec![0; 2048]);
         assert_eq!(power, Ok(monitor.worst_case_power));
         assert!(assess(&mut monitor, &stream(0.1, 4.6, 1.0)).is_ok());
+        assert_eq!(
+            assess(&mut monitor, &vec![0; 2048]),
+            Ok(monitor.worst_case_power)
+        );
     }
 
     #[test]
@@ -232,17 +236,17 @@ mod tests {
         let mut monitor = j473();
         let mut dead_current = stream(0.1, 4.6, 1.0);
         dead_current.iter_mut().step_by(2).for_each(|s| *s = 0);
-        let results: Vec<_> = (0..4)
-            .map(|_| assess(&mut monitor, &dead_current))
-            .collect();
-        assert_eq!(results.last(), Some(&Err(Fault::FrozenCurrent)));
+        let half_second = 24_000 / 1024;
+        assert!((0..half_second).all(|_| assess(&mut monitor, &dead_current).is_ok()));
+        assert_eq!(
+            assess(&mut monitor, &dead_current),
+            Err(Fault::FrozenCurrent)
+        );
 
         let mut monitor = j473();
         assert!(assess(&mut monitor, &stream(0.1, 4.6, 1.0)).is_ok());
-        assert_eq!(
-            assess(&mut monitor, &vec![0; 2048]),
-            Err(Fault::FrozenVoltage)
-        );
+        let fault = (0..=half_second).find_map(|_| assess(&mut monitor, &vec![0; 2048]).err());
+        assert_eq!(fault, Some(Fault::FrozenVoltage));
     }
 
     #[test]

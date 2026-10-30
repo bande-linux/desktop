@@ -220,6 +220,7 @@ pub struct Headless {
     pub(crate) fences: smithay::reexports::calloop::EventLoop<'static, State>,
     pub(crate) state: State,
     pub(crate) session_clients: Vec<SessionClient>,
+    pub(crate) per_display_clients: Vec<std::path::PathBuf>,
     pub(crate) lock_screen: LockScreen,
     pub(crate) force_quit: ForceQuit,
     pub(crate) socket_name: Option<OsString>,
@@ -379,6 +380,7 @@ impl Headless {
             fences,
             state,
             session_clients: Vec::new(),
+            per_display_clients: Vec::new(),
             lock_screen: LockScreen::new(),
             force_quit: ForceQuit::new(),
             socket_name: None,
@@ -581,10 +583,41 @@ impl Headless {
     }
 
     fn compose(&self, renderer: &mut VulkanRenderer, screen: usize, with_cursor: bool) -> Composed {
+        if let Some(source) = self.state.screens[screen]
+            .mirror
+            .as_deref()
+            .and_then(|source| self.state.screen_named(source))
+        {
+            return self.compose_mirror(renderer, screen, source, with_cursor);
+        }
         let scale = self.state.screens[screen].scale();
         let (elements, drawn, icon) = self.compose_at(renderer, screen, scale, with_cursor);
         let origin = self.state.screens[screen].origin_in_pixels(scale);
         (relocated(elements, Point::default() - origin), drawn, icon)
+    }
+
+    fn compose_mirror(
+        &self,
+        renderer: &mut VulkanRenderer,
+        screen: usize,
+        source: usize,
+        with_cursor: bool,
+    ) -> Composed {
+        let mirror = &self.state.screens[screen];
+        let scale = mirror.scale();
+        let frame = mirror.settings.transform.transform_size(mirror.mode_size());
+        let shown = self
+            .state
+            .screen_rect(source)
+            .size
+            .to_f64()
+            .to_physical(scale)
+            .to_i32_round::<i32>();
+        let inset =
+            Point::<i32, Physical>::from(((frame.w - shown.w) / 2, (frame.h - shown.h) / 2));
+        let (elements, _, _) = self.compose_at(renderer, source, scale, with_cursor);
+        let origin = self.state.screens[source].origin_in_pixels(scale);
+        (relocated(elements, inset - origin), Vec::new(), None)
     }
 
     fn compose_at(
@@ -1015,12 +1048,19 @@ impl State {
 
     pub(crate) fn scene(&self, rendered: bool, screen: usize) -> Vec<Placed<'_>> {
         if self.is_locked() {
-            return self
-                .locked_stack(screen)
+            let locked = self.locked_stack(screen);
+            let wallpaper = if rendered && locked.is_empty() && self.lock_shown() {
+                self.placed_layers(screen, Layer::Background)
+            } else {
+                Vec::new()
+            };
+            return locked
                 .into_iter()
+                .chain(wallpaper)
                 .map(|(surface, origin)| Placed::Surface(surface, origin))
                 .collect();
         }
+
         let popups = |surface: &WlSurface, geometry_origin| {
             self.popup_surfaces(surface, geometry_origin)
                 .into_iter()

@@ -329,10 +329,12 @@ fn start_user_session<O: 'static>(
         }
         Err(error) => tracing::warn!("cannot follow the logind session: {error}"),
     }
+    for executable in [DESKTOP_SURFACE, MENU_BAR] {
+        app.compositor
+            .start_client_on_every_display(Path::new(executable));
+    }
     for (executable, role) in [
         (CLIPBOARD_DAEMON, SessionRole::ClipboardDaemon),
-        (DESKTOP_SURFACE, SessionRole::Shell),
-        (MENU_BAR, SessionRole::Shell),
         (CONTROL_CENTER, SessionRole::Shell),
         (NOTIFICATIONS, SessionRole::Shell),
         (DOCK, SessionRole::Shell),

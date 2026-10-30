@@ -189,7 +189,7 @@ impl State {
         self.screens
             .iter()
             .enumerate()
-            .filter(|(index, _)| *index != from)
+            .filter(|(index, screen)| *index != from && screen.mirror.is_none())
             .filter_map(|(index, screen)| {
                 let (x, y) = center(screen.rect());
                 let (dx, dy) = (x - cx, y - cy);
@@ -405,6 +405,43 @@ impl State {
         {
             self.make_main(main);
         }
+        for display in &arranged {
+            self.mirror_screen(&display.name, display.mirror.as_deref());
+        }
+    }
+
+    fn mirror_screen(&mut self, name: &str, source: Option<&str>) {
+        let Some(screen) = self.screen_named(name) else {
+            return;
+        };
+        let source = source.and_then(|source| self.screen_named(source));
+        let Some(source) = source else {
+            if self.screens[screen].mirror.take().is_some() {
+                self.after_screens_changed();
+            }
+            return;
+        };
+        let moved: Vec<usize> = (0..self.windows.len())
+            .filter(|index| self.screen_of(&self.windows[*index]) == screen)
+            .collect();
+        self.screens[screen].mirror = Some(self.screens[source].name());
+        for index in moved {
+            self.move_window_to_screen(index, source, None);
+        }
+        let shown = self.screen_rect(source);
+        let current = self.screens[screen].settings;
+        let frame = current.transform.transform_size(current.mode.size);
+        let scale = (f64::from(frame.w) / f64::from(shown.size.w.max(1)))
+            .min(f64::from(frame.h) / f64::from(shown.size.h.max(1)));
+        let settings = OutputSettings {
+            scale,
+            position: shown.location,
+            ..current
+        };
+        if settings != current {
+            self.screens[screen].apply(settings);
+        }
+        self.after_screens_changed();
     }
 
     fn after_screens_changed(&mut self) {

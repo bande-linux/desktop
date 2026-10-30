@@ -122,6 +122,7 @@ pub(crate) struct Screen {
     global: GlobalId,
     pub(crate) workspaces: Workspaces,
     pub(crate) redraw: bool,
+    pub(crate) mirror: Option<String>,
     pub(crate) latched_feedback: Vec<PresentationFeedbackCallback>,
     pub(crate) latched_frame_callbacks: Vec<WlCallback>,
 }
@@ -155,6 +156,7 @@ impl Screen {
             global,
             workspaces: Workspaces::default(),
             redraw: true,
+            mirror: None,
             latched_feedback: Vec::new(),
             latched_frame_callbacks: Vec::new(),
         };
@@ -235,7 +237,7 @@ impl State {
     pub(crate) fn screen_at(&self, point: Point<f64, Logical>) -> Option<usize> {
         self.screens
             .iter()
-            .position(|screen| screen.contains(point))
+            .position(|screen| screen.mirror.is_none() && screen.contains(point))
     }
 
     pub(crate) fn pointer_screen(&self) -> usize {
@@ -267,6 +269,7 @@ impl State {
         }
         self.screens
             .iter()
+            .filter(|screen| screen.mirror.is_none())
             .map(|screen| {
                 let rect = screen.rect();
                 let clamped: Point<f64, Logical> = (
@@ -290,7 +293,13 @@ impl State {
     }
 
     pub(crate) fn bounding_rect(&self) -> Rect {
-        let rects: Vec<Rect> = self.screens.iter().map(Screen::rect).collect();
+        let rects: Vec<Rect> = self
+            .screens
+            .iter()
+            .filter(|screen| screen.mirror.is_none())
+            .map(Screen::rect)
+            .collect();
+
         let left = rects.iter().map(|rect| rect.location.x).min().unwrap_or(0);
         let top = rects.iter().map(|rect| rect.location.y).min().unwrap_or(0);
         let right = rects

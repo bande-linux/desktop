@@ -57,6 +57,10 @@ impl State {
         })
     }
 
+    pub(crate) fn lock_shown(&self) -> bool {
+        self.lock_surface().is_some()
+    }
+
     fn is_lock_surface(&self, surface: &WlSurface) -> bool {
         self.lock.as_ref().is_some_and(|lock| {
             lock.surfaces

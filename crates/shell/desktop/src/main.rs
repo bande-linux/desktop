@@ -49,6 +49,7 @@ struct Surface {
     operations: Operations,
     watch: FolderWatch,
     desktop_dir: PathBuf,
+    wallpaper_only: bool,
     media: Vec<PathBuf>,
     data_dirs: Vec<PathBuf>,
     home: Option<PathBuf>,
@@ -170,6 +171,9 @@ impl Surface {
     }
 
     fn relist(&mut self) {
+        if self.wallpaper_only {
+            return;
+        }
         let mountinfo = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
         let volumes = mounted_volumes(&mountinfo, &self.media);
         let items = list(&mut self.apps, &self.desktop_dir, &volumes);
@@ -813,6 +817,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         operations: Operations::new(trash),
         watch: FolderWatch::new()?,
         desktop_dir,
+        wallpaper_only: std::env::var_os(SECONDARY_DISPLAY).is_some(),
+
         media: media_roots(&user),
         data_dirs,
         home,
@@ -848,6 +854,8 @@ fn confirm(count: &str) -> ExitCode {
         }
     }
 }
+
+const SECONDARY_DISPLAY: &str = "UNBOUND_SECONDARY_DISPLAY";
 
 fn main() -> ExitCode {
     unbound_log::init("unbound-desktop-surface");

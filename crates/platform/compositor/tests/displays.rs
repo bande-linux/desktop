@@ -5,7 +5,11 @@ use std::time::Duration;
 
 use unbound_compositor::{Headless, OutputConfig, OutputMode, Rect, Renderer};
 use unbound_config::Config;
-use unbound_test_wayland::{RED, ShmImage, TestClient, roundtrip};
+use unbound_test_wayland::{
+    Anchor, BLUE, GREEN, KeyboardInteractivity, Layer, LayerRequest, RED, ShmImage, TestClient,
+    roundtrip,
+};
+
 use wayland_client::protocol::wl_shm::Format;
 
 const MAIN: &str = "HEADLESS-1";
@@ -308,6 +312,94 @@ fn windows_move_with_their_display_when_it_is_rearranged() {
     assert_eq!(server.output_rect(SIDE), Some(rect(-320, -40, 320, 240)));
     assert_eq!(server.output_of(&server.windows()[0]), SIDE);
     assert_eq!(geometry(&server), rect(-320 + 128, -40 + 96, 64, 48));
+}
+
+#[test]
+fn a_mirroring_display_shows_its_source_scaled_to_fit_and_keeps_no_windows() {
+    let mut server = two_displays();
+    server.move_pointer_to(at(400.0, 100.0), 0);
+    let _side_app = app(&mut server);
+    server.move_pointer_to(at(100.0, 100.0), 0);
+    let _main_app = app(&mut server);
+    let mut renderer = Renderer::new().expect("renderer");
+
+    let arranged = config(
+        &server,
+        "arrangement {\n    display \"MAIN\" x=0 y=0 main=#true\n    display \"SIDE\" mirror=\"MAIN\"\n}\n",
+    );
+    server.set_display_config(arranged);
+
+    assert!(
+        server
+            .windows()
+            .iter()
+            .all(|window| server.output_of(window) == MAIN)
+    );
+    server.move_pointer_to(at(400.0, 100.0), 0);
+    assert_eq!(server.pointer_location(), at(255.0, 100.0));
+    let window = (WINDOW.0 * WINDOW.1) as f64;
+    let main = red_pixels(&mut renderer, &mut server, MAIN) as f64;
+    let side = red_pixels(&mut renderer, &mut server, SIDE) as f64;
+    assert!(main > window * 0.9);
+    assert!(side > main * 1.25 * 1.25 * 0.9, "{main} {side}");
+}
+
+#[test]
+fn while_locked_a_display_without_a_lock_surface_shows_only_its_wallpaper() {
+    let mut server = two_displays();
+    server.move_pointer_to(at(400.0, 100.0), 0);
+    let mut shell = TestClient::connect_as_shell(&mut server);
+    shell.show_named_layer(
+        &mut server,
+        &LayerRequest {
+            layer: Layer::Background,
+            anchor: Anchor::Top | Anchor::Bottom | Anchor::Left | Anchor::Right,
+            size: (0, 0),
+            exclusive_zone: -1,
+            keyboard: KeyboardInteractivity::None,
+            color: GREEN,
+        },
+        "wallpaper",
+    );
+    let _app = app(&mut server);
+    let mut lock = TestClient::connect_as_shell(&mut server);
+    lock.use_seat(&mut server);
+    lock.lock_session(&mut server);
+    lock.show_lock_surface(&mut server, BLUE);
+    let mut renderer = Renderer::new().expect("renderer");
+
+    assert_eq!(red_pixels(&mut renderer, &mut server, SIDE), 0);
+    let snapshot = renderer.snapshot_output(SIDE).expect("read back");
+    assert_eq!(snapshot.rgba[..3], [0, 0xff, 0]);
+    renderer.render_output(&mut server, MAIN).expect("frame");
+    let main = renderer.snapshot_output(MAIN).expect("read back");
+    assert_eq!(main.rgba[..3], [0, 0, 0xff]);
+}
+
+#[test]
+fn the_desktop_and_menu_bar_run_once_per_display_and_follow_the_displays() {
+    let mut server = two_displays();
+    let shell = std::path::Path::new("/bin/true");
+    server.start_client_on_every_display(shell);
+    server.keep_session_clients_running();
+    assert_eq!(
+        server.display_clients(shell),
+        [(MAIN.to_owned(), false), (SIDE.to_owned(), true)]
+    );
+
+    let arranged = config(
+        &server,
+        "arrangement {\n    display \"SIDE\" x=0 y=0 main=#true\n    display \"MAIN\" x=320 y=0\n}\n",
+    );
+    server.set_display_config(arranged);
+    server.keep_session_clients_running();
+    let mut clients = server.display_clients(shell);
+    clients.sort();
+    assert_eq!(clients, [(MAIN.to_owned(), true), (SIDE.to_owned(), false)]);
+
+    server.remove_output(SIDE);
+    server.keep_session_clients_running();
+    assert_eq!(server.display_clients(shell), [(MAIN.to_owned(), false)]);
 }
 
 #[test]

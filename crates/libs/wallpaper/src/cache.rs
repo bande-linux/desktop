@@ -69,7 +69,7 @@ fn prune(folder: &Path) -> io::Result<()> {
         })
         .filter_map(|path| Some((fs::metadata(&path).ok()?.modified().ok()?, path)))
         .collect();
-    entries.sort_by(|left, right| right.0.cmp(&left.0));
+    entries.sort_by_key(|(modified, _)| std::cmp::Reverse(*modified));
     for (_, stale) in entries.into_iter().skip(KEPT) {
         fs::remove_file(stale)?;
     }

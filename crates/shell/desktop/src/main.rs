@@ -590,16 +590,14 @@ impl App for Surface {
             }
             WindowEvent::Drag(drag) => {
                 match drag {
-                    DragEvent::Entered {
-                        position,
-                        uris: true,
-                        ..
+                    DragEvent::Entered { position, uris, .. } => {
+                        let action = self.view.drag_entered(position, &uris);
+                        window.accept_drag(action);
                     }
-                    | DragEvent::Moved(position) => {
+                    DragEvent::Moved(position) => {
                         let action = self.view.drag_moved(position);
                         window.accept_drag(action);
                     }
-                    DragEvent::Entered { .. } => window.accept_drag(None),
                     DragEvent::Left => self.view.drag_left(),
                     DragEvent::Dropped {
                         position,
@@ -687,6 +685,7 @@ impl App for Surface {
             self.relist();
         }
         self.view.tick(now);
+        self.run_requests(window);
         window.request_redraw();
     }
 

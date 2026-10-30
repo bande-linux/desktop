@@ -821,6 +821,7 @@ impl Window {
     }
 
     pub fn take_events(&mut self) -> Vec<WindowEvent> {
+        self.take_arrival();
         self.take_drop();
         self.serve_menus(Instant::now());
         let events = std::mem::take(&mut self.state.events);

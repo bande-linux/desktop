@@ -1108,9 +1108,10 @@ fn a_dragged_file_list_arrives_as_uris_where_it_is_dropped() {
     desktop.wait_for(
         &mut [&mut client],
         |events| {
-            drags(events)
-                .iter()
-                .any(|drag| matches!(drag, DragEvent::Entered { uris: true, .. }))
+            drags(events).iter().any(|drag| {
+                matches!(drag, DragEvent::Entered { uris, .. }
+                    if uris == &["file:///home/user/Report%20one.pdf"])
+            })
         },
         |_| true,
     );

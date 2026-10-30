@@ -104,7 +104,10 @@ pub enum Request {
         paths: Vec<PathBuf>,
         cut: bool,
     },
-    StartDrag(Vec<PathBuf>),
+    StartDrag {
+        paths: Vec<PathBuf>,
+        grab: Point,
+    },
     PasteFiles,
     ShowMenu {
         menu: Menu,

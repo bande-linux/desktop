@@ -408,7 +408,7 @@ impl FilesView {
         self.ui.widget_as::<Table>(self.table)
     }
 
-    fn shown_table(&self) -> Option<&Table> {
+    pub(crate) fn shown_table(&self) -> Option<&Table> {
         self.ui.widget_ref::<Table>(self.table)
     }
 

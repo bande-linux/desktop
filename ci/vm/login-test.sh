@@ -16,19 +16,20 @@ cargo_json() {
 cargo_json test --locked -p unbound-greeter --test login --no-run
 jq -r 'select(.reason == "compiler-artifact" and .target.name == "login" and .executable != null) | .executable' \
     "$share/cargo.json" > "$share/executable"
-cargo_json build --locked -p unbound-compositor -p unbound-greeter --bins
+cargo_json build --locked -p unbound-compositor -p unbound-greeter -p unbound-shell --bins
 jq -r 'select(.reason == "compiler-artifact" and .executable != null and .target.kind == ["bin"]) | .executable' \
     "$share/cargo.json" > "$share/apps"
 
 root=$share/root
 mkdir -p "$root/usr/bin" "$root/usr/lib/systemd/user" "$root/usr/lib/systemd/system/greetd.service.d" \
-    "$root/usr/share/wayland-sessions" "$root/usr/share/unbound-greeter"
-for app in unbound-compositor unbound-greeter; do
+    "$root/usr/share/wayland-sessions" "$root/usr/share/unbound-greeter" "$root/usr/share/unbound/wallpapers"
+for app in unbound-compositor unbound-greeter unbound-shell; do
     cp "$(grep "/$app\$" "$share/apps")" "$root/usr/bin/"
 done
 compositor=crates/platform/compositor/data
 greeter=crates/shell/greeter
 cp "$compositor/unbound-session" "$root/usr/bin/"
+cp data/wallpapers/*.svg "$root/usr/share/unbound/wallpapers/"
 cp "$compositor/unbound-compositor.service" "$compositor/unbound-session.target" "$root/usr/lib/systemd/user/"
 cp "$compositor/unbound.desktop" "$root/usr/share/wayland-sessions/"
 cp "$greeter/data/config.toml" "$root/usr/share/unbound-greeter/greetd-config.toml"

@@ -143,7 +143,7 @@ impl Screen {
             dates: DateFormats::from_env(),
             banners: Vec::new(),
             open: false,
-            center_x: Animated::new(hidden_offset(CENTER_WIDTH)),
+            center_x: Animated::points(hidden_offset(CENTER_WIDTH)),
             anchor: None,
             rows: Vec::new(),
             expanded: HashSet::new(),
@@ -266,12 +266,12 @@ impl Screen {
                     banner
                 }
                 None => {
-                    let mut x = Animated::new(hidden_offset(BANNER_WIDTH));
+                    let mut x = Animated::points(hidden_offset(BANNER_WIDTH));
                     x.animate_at(now, self.reduce_motion, 0.0, Spring::STANDARD);
                     Banner {
                         card,
                         x,
-                        y: Animated::new(y),
+                        y: Animated::points(y),
                         leaving: false,
                     }
                 }

@@ -9,8 +9,6 @@ use crate::state::{Headless, State};
 
 const STEP: f64 = 1.25;
 const FIRST_LEVEL: f64 = 2.0;
-const SETTLED: f64 = 0.0005;
-
 pub(crate) struct Zoom {
     level: Animation,
     last: Option<Duration>,
@@ -51,8 +49,8 @@ impl Zoom {
         self.level.target()
     }
 
-    pub(crate) fn is_animating(&self) -> bool {
-        !self.level.is_at_rest(SETTLED)
+    pub(crate) fn is_animating(&self, precision: f64) -> bool {
+        !self.level.is_at_rest(precision)
     }
 
     fn go_to(&mut self, level: f64, reduce_motion: bool) {
@@ -78,13 +76,13 @@ impl Zoom {
         }
     }
 
-    pub(crate) fn advance(&mut self, time: Duration) {
+    pub(crate) fn advance(&mut self, time: Duration, precision: f64) {
         let step = self
             .last
             .map_or(Duration::ZERO, |last| time.saturating_sub(last));
         self.last = Some(time);
         self.level.advance(step.as_secs_f64());
-        if !self.is_animating() {
+        if !self.is_animating(precision) {
             self.level = still(self.level.target());
             self.last = None;
         }
@@ -166,8 +164,9 @@ impl State {
     }
 
     pub(crate) fn animate_zoom(&mut self, time: Duration) {
-        if self.zoom.is_animating() {
-            self.zoom.advance(time);
+        let precision = self.progress_precision();
+        if self.zoom.is_animating(precision) {
+            self.zoom.advance(time, precision);
         }
     }
 }

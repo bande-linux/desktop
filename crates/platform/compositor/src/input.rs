@@ -1,7 +1,8 @@
 use std::io;
 
 use smithay::backend::input::{
-    AbsolutePositionEvent, Axis, ButtonState, Event, InputBackend, InputEvent, KeyState,
+    AbsolutePositionEvent, Axis, ButtonState, Event, GestureBeginEvent, GestureEndEvent,
+    GesturePinchUpdateEvent, GestureSwipeUpdateEvent, InputBackend, InputEvent, KeyState,
     KeyboardKeyEvent, PointerAxisEvent, PointerButtonEvent, PointerMotionEvent,
 };
 use smithay::desktop::WindowSurfaceType;
@@ -13,10 +14,13 @@ use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Clock, Logical, Monotonic, Point, SERIAL_COUNTER};
 use unbound_protocols::server::unbound_shell_v1::VolumeKey;
 
+use crate::gesture::Gesture;
+use crate::motion::DOCK_NAMESPACE;
 use crate::state::{Headless, State};
 use crate::tile::Direction;
 
 const EVDEV_OFFSET: u32 = 8;
+const MENU_BAR_NAMESPACE: &str = "menubar";
 
 const SCROLL_PER_DETENT: f64 = 15.0;
 
@@ -29,6 +33,7 @@ enum Shortcut {
     MinimizeWindow,
     LockScreen,
     ForceQuit,
+    FocusShell(&'static str),
     ToggleFullscreen,
     Place(Direction),
     CaptureScreen,
@@ -59,6 +64,8 @@ fn shortcut(
     }
     match keysym {
         keysyms::KEY_Escape if alt => Some(Shortcut::ForceQuit),
+        keysyms::KEY_F2 => Some(Shortcut::FocusShell(MENU_BAR_NAMESPACE)),
+        keysyms::KEY_F3 => Some(Shortcut::FocusShell(DOCK_NAMESPACE)),
         keysyms::KEY_f | keysyms::KEY_F if ctrl => Some(Shortcut::ToggleFullscreen),
         keysyms::KEY_Left if ctrl => Some(Shortcut::Place(Direction::Left)),
         keysyms::KEY_Right if ctrl => Some(Shortcut::Place(Direction::Right)),
@@ -131,6 +138,10 @@ impl State {
             self.lock_screen_requested = !self.is_locked();
             return;
         }
+        if let Shortcut::FocusShell(namespace) = shortcut {
+            self.focus_shell(namespace);
+            return;
+        }
         if shortcut == Shortcut::ForceQuit {
             self.force_quit_requested = true;
             self.watchdog.ping_everyone();
@@ -182,6 +193,7 @@ impl State {
             Shortcut::ShowLauncher
             | Shortcut::LockScreen
             | Shortcut::ForceQuit
+            | Shortcut::FocusShell(_)
             | Shortcut::CaptureScreen
             | Shortcut::CaptureArea
             | Shortcut::Volume(..) => {}
@@ -228,6 +240,56 @@ impl Headless {
                 }
                 self.scroll(frame);
             }
+            InputEvent::GestureSwipeBegin { event } => self.gesture(
+                Gesture::SwipeBegin {
+                    fingers: event.fingers(),
+                },
+                event.time_msec(),
+            ),
+            InputEvent::GestureSwipeUpdate { event } => self.gesture(
+                Gesture::SwipeUpdate {
+                    delta: event.delta(),
+                },
+                event.time_msec(),
+            ),
+            InputEvent::GestureSwipeEnd { event } => self.gesture(
+                Gesture::SwipeEnd {
+                    cancelled: event.cancelled(),
+                },
+                event.time_msec(),
+            ),
+            InputEvent::GesturePinchBegin { event } => self.gesture(
+                Gesture::PinchBegin {
+                    fingers: event.fingers(),
+                },
+                event.time_msec(),
+            ),
+            InputEvent::GesturePinchUpdate { event } => self.gesture(
+                Gesture::PinchUpdate {
+                    delta: event.delta(),
+                    scale: event.scale(),
+                    rotation: event.rotation(),
+                },
+                event.time_msec(),
+            ),
+            InputEvent::GesturePinchEnd { event } => self.gesture(
+                Gesture::PinchEnd {
+                    cancelled: event.cancelled(),
+                },
+                event.time_msec(),
+            ),
+            InputEvent::GestureHoldBegin { event } => self.gesture(
+                Gesture::HoldBegin {
+                    fingers: event.fingers(),
+                },
+                event.time_msec(),
+            ),
+            InputEvent::GestureHoldEnd { event } => self.gesture(
+                Gesture::HoldEnd {
+                    cancelled: event.cancelled(),
+                },
+                event.time_msec(),
+            ),
             _ => return Ok(()),
         }
         self.flush()

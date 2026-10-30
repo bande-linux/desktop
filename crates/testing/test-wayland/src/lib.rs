@@ -3,16 +3,20 @@ pub use capture::{CaptureConstraints, CaptureOutcome};
 pub use cursor::CursorShape;
 pub use decoration::DecorationMode;
 pub use fence::SwSyncTimeline;
+pub use gesture::ClientGesture;
 pub use idle::IdleEvent;
 pub use shell::{Anchor, KeyboardInteractivity, Layer, LayerRequest};
 pub use toplevel::{Configured, PopupRequest};
+pub use unbound_protocols::client::unbound_app_v1::Placement;
 pub use unbound_protocols::client::unbound_shell_v1::VolumeKey;
 pub use wayland_protocols::xdg::shell::client::xdg_toplevel::{ResizeEdge, State as ToplevelState};
 mod capture;
 mod cursor;
 mod decoration;
+mod dnd;
 mod effect;
 mod fence;
+mod gesture;
 mod idle;
 mod ime;
 mod lock;
@@ -120,6 +124,8 @@ struct Globals {
     decoration_modes: Vec<decoration::DecorationMode>,
     text_input: ime::TextInput,
     input_method: ime::InputMethod,
+    gestures: Vec<gesture::ClientGesture>,
+    dnd: dnd::Dnd,
     hung: bool,
     unanswered_pings: Vec<(XdgWmBase, u32)>,
 }

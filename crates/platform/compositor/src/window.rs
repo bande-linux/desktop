@@ -25,6 +25,7 @@ pub struct Window {
     pub(crate) acked: Option<Serial>,
     pub(crate) resize: Option<Resize>,
     pub(crate) minimized: Option<u64>,
+    pub(crate) hidden: bool,
     pub(crate) shadow: Id,
     pub(crate) veil: Id,
     pub(crate) motion: Option<Motion>,
@@ -88,6 +89,7 @@ impl Window {
             acked: None,
             resize: None,
             minimized: None,
+            hidden: false,
             shadow: Id::new(),
             veil: Id::new(),
             motion: None,
@@ -122,7 +124,7 @@ impl Window {
     }
 
     pub(crate) fn visible(&self) -> bool {
-        self.size.is_some() && self.minimized.is_none()
+        self.size.is_some() && self.minimized.is_none() && !self.hidden
     }
 
     pub(crate) fn surface(&self) -> &WlSurface {
@@ -406,6 +408,7 @@ impl State {
         }
         self.minimize_sequence += 1;
         self.windows[index].minimized = Some(self.minimize_sequence);
+        self.announce_minimized(index, true);
         self.animate_window(index, Spring::GENTLE, None);
         self.refocus_after_losing(surface);
     }
@@ -414,6 +417,7 @@ impl State {
         if let Some(index) = self.window_index(surface)
             && self.windows[index].minimized.take().is_some()
         {
+            self.announce_minimized(index, false);
             self.restore_window(index);
         }
     }

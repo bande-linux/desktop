@@ -4,9 +4,12 @@ mod capture;
 mod clock;
 mod cursor;
 mod decoration;
+mod dock;
+mod drag;
 mod drm;
 mod effect;
 mod environment;
+mod gesture;
 mod grab;
 mod idle;
 mod ime;
@@ -36,6 +39,7 @@ pub use drm::{DrmBackendError, DrmNotifiers, DrmOutput};
 pub use environment::{
     DESKTOP_NAME, export_session_environment, notify_ready, session_environment,
 };
+pub use gesture::Gesture;
 pub use logind::{SessionRequest, follow_session};
 pub use render::{BACKGROUND, FrameStats, Renderer, Snapshot};
 pub use session::{

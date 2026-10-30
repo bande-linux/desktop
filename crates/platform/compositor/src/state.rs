@@ -35,7 +35,7 @@ use smithay::reexports::wayland_server::protocol::wl_seat::WlSeat;
 use smithay::reexports::wayland_server::protocol::wl_shm::Format;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{Client, Display, DisplayHandle, Resource};
-use smithay::utils::{Logical, Physical, Point, Raw, SERIAL_COUNTER, Serial, Size};
+use smithay::utils::{Logical, Physical, Point, Raw, Rectangle, SERIAL_COUNTER, Serial, Size};
 use smithay::wayland::buffer::BufferHandler;
 use smithay::wayland::compositor::{
     CompositorClientState, CompositorHandler, CompositorState, SurfaceAttributes,
@@ -52,10 +52,7 @@ use smithay::wayland::presentation::{
     PresentationFeedbackCachedState, PresentationFeedbackCallback, PresentationState, Refresh,
 };
 use smithay::wayland::selection::SelectionHandler;
-use smithay::wayland::selection::data_device::{
-    ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler,
-    set_data_device_focus,
-};
+use smithay::wayland::selection::data_device::{DataDeviceState, set_data_device_focus};
 use smithay::wayland::selection::ext_data_control::{DataControlHandler, DataControlState};
 use smithay::wayland::selection::primary_selection::{
     PrimarySelectionHandler, PrimarySelectionState, set_primary_focus,
@@ -99,6 +96,7 @@ use crate::tile::{Preview, SnapDrag};
 use crate::window::Window;
 use smithay::wayland::cursor_shape::CursorShapeManagerState;
 use smithay::wayland::input_method::InputMethodManagerState;
+use smithay::wayland::pointer_gestures::PointerGesturesState;
 use smithay::wayland::tablet_manager::TabletSeatHandler;
 use smithay::wayland::text_input::TextInputManagerState;
 use smithay::wayland::virtual_keyboard::VirtualKeyboardManagerState;
@@ -143,7 +141,11 @@ pub(crate) enum Placed<'a> {
     Closing(&'a Closing),
 }
 
-type Composed = (Vec<OutputElement>, Vec<(WlSurface, Option<Drawn>)>);
+type Composed = (
+    Vec<OutputElement>,
+    Vec<(WlSurface, Option<Drawn>)>,
+    Option<(Vec<crate::scene::Piece>, crate::scene::Area)>,
+);
 
 pub(crate) struct ExclusiveLayer {
     pub(crate) surface: WlSurface,
@@ -171,6 +173,7 @@ pub struct State {
     _viewporter_state: ViewporterState,
     _fractional_scale_state: FractionalScaleManagerState,
     _cursor_shape_state: CursorShapeManagerState,
+    _pointer_gestures_state: PointerGesturesState,
     _decoration_state: XdgDecorationState,
     _text_input_state: TextInputManagerState,
     _input_method_state: InputMethodManagerState,
@@ -183,14 +186,19 @@ pub struct State {
     exclusive_candidates: Vec<(WlSurface, Layer)>,
     seat_state: SeatState<State>,
     pub(crate) seat: Seat<State>,
-    data_device_state: DataDeviceState,
+    pub(crate) data_device_state: DataDeviceState,
     primary_selection_state: PrimarySelectionState,
     data_control_state: DataControlState,
     pub(crate) windows: Vec<Window>,
     pub(crate) popups: PopupManager,
     pub(crate) lock_screen_requested: bool,
     pub(crate) force_quit_requested: bool,
+    pub(crate) refused_tokens: Vec<XdgActivationToken>,
+    pub(crate) drag: Option<crate::drag::Drag>,
+    pub(crate) slide_back: Option<crate::scene::SlideBack>,
     pub(crate) watchdog: crate::watchdog::Watchdog,
+    pub(crate) desktop: crate::gesture::ShowDesktop,
+    pub(crate) gesture_route: Option<crate::gesture::Route>,
     pub(crate) active_app: String,
     pub(crate) idle: crate::idle::Idle,
     _idle_inhibit_state: smithay::wayland::idle_inhibit::IdleInhibitManagerState,
@@ -288,8 +296,8 @@ impl Headless {
         output.change_current_state(Some(mode), None, None, Some((0, 0).into()));
         output.set_preferred(mode);
         output.create_global::<State>(&handle);
-        handle.create_global::<State, UnboundShellV1, ()>(6, ());
-        handle.create_global::<State, UnboundAppV1, ()>(1, ());
+        handle.create_global::<State, UnboundShellV1, ()>(7, ());
+        handle.create_global::<State, UnboundAppV1, ()>(2, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
         State::create_capture_globals(&handle);
         let state = State {
@@ -321,6 +329,7 @@ impl Headless {
             _fractional_scale_state: FractionalScaleManagerState::new::<State>(&handle),
             _decoration_state: XdgDecorationState::new::<State>(&handle),
             _cursor_shape_state: CursorShapeManagerState::new::<State>(&handle),
+            _pointer_gestures_state: PointerGesturesState::new::<State>(&handle),
             _text_input_state: TextInputManagerState::new::<State>(&handle),
             _input_method_state: InputMethodManagerState::new::<State, _>(&handle, |_| true),
             _virtual_keyboard_state: VirtualKeyboardManagerState::new::<State, _>(&handle, |_| {
@@ -344,7 +353,12 @@ impl Headless {
             popups: PopupManager::default(),
             lock_screen_requested: false,
             force_quit_requested: false,
+            refused_tokens: Vec::new(),
+            drag: None,
+            slide_back: None,
             watchdog: crate::watchdog::Watchdog::default(),
+            desktop: crate::gesture::ShowDesktop::default(),
+            gesture_route: None,
             active_app: String::new(),
             idle: crate::idle::Idle::default(),
             _idle_inhibit_state: smithay::wayland::idle_inhibit::IdleInhibitManagerState::new::<
@@ -498,7 +512,8 @@ impl Headless {
     }
 
     pub fn render_elements(&mut self, renderer: &mut VulkanRenderer) -> Vec<OutputElement> {
-        let (elements, drawn) = self.compose(renderer, true);
+        let (elements, drawn, icon) = self.compose(renderer, true);
+        self.state.remember_drag_icon(icon);
         for window in &mut self.state.windows {
             window.drawn = None;
         }
@@ -520,10 +535,13 @@ impl Headless {
 
     fn compose(&self, renderer: &mut VulkanRenderer, with_cursor: bool) -> Composed {
         let mut drawn = Vec::new();
-        let mut elements: Vec<OutputElement> = if with_cursor {
-            self.cursor_elements(renderer)
+        let (mut elements, icon): (Vec<OutputElement>, _) = if with_cursor {
+            let (dragged, icon) = self.state.drag_icon_elements(renderer);
+            let mut elements = self.cursor_elements(renderer);
+            elements.extend(dragged);
+            (elements, icon)
         } else {
-            Vec::new()
+            (Vec::new(), None)
         };
         let scale = self.state.output_scale;
         let key = self.state.key_window();
@@ -546,7 +564,17 @@ impl Headless {
                         .surface()
                         .client()
                         .is_some_and(|owner| self.state.watchdog.is_unresponsive(&owner.id()));
-                    let (shown, look) = window_elements(window, renderer, scale, active, hung);
+                    let shift = window
+                        .geometry()
+                        .map(|rect| {
+                            self.state.desktop_shift(Rectangle::new(
+                                rect.location.to_f64(),
+                                rect.size.to_f64(),
+                            ))
+                        })
+                        .unwrap_or_default();
+                    let (shown, look) =
+                        window_elements(window, renderer, scale, active, hung, shift);
                     elements.extend(shown);
                     drawn.push((window.surface().clone(), look));
                     if let Some(preview) = &self.state.preview
@@ -559,7 +587,7 @@ impl Headless {
             }
         }
         tie_blurs_to_what_lies_below(&mut elements, scale);
-        (elements, drawn)
+        (elements, drawn, icon)
     }
 
     pub fn popup_count(&self) -> usize {
@@ -727,6 +755,12 @@ impl State {
     pub(crate) fn focus(&mut self, surface: Option<WlSurface>) {
         if self.redirect_focus_while_locked(&surface) {
             return;
+        }
+        if surface
+            .as_ref()
+            .is_some_and(|surface| self.window_index(surface).is_some())
+        {
+            self.hide_desktop();
         }
         if let Some(exclusive) = &mut self.exclusive_layer
             && surface.as_ref() != Some(&exclusive.surface)
@@ -923,7 +957,7 @@ impl State {
                 if rendered {
                     window.rendered()
                 } else {
-                    window.visible()
+                    window.visible() && !self.desktop.hides_windows()
                 }
             })
             .collect::<Vec<_>>();
@@ -1061,6 +1095,9 @@ impl CompositorHandler for State {
     fn commit(&mut self, surface: &WlSurface) {
         on_commit_buffer_handler::<Self>(surface);
         crate::effect::commit_blur(surface);
+        if self.commit_drag_icon(surface) {
+            return;
+        }
         self.needs_redraw = true;
         if self.commit_lock_surface(surface)
             || self.commit_popup(surface)
@@ -1267,16 +1304,6 @@ impl SelectionHandler for State {
     type SelectionUserData = ();
 }
 
-impl DataDeviceHandler for State {
-    fn data_device_state(&self) -> &DataDeviceState {
-        &self.data_device_state
-    }
-}
-
-impl ClientDndGrabHandler for State {}
-
-impl ServerDndGrabHandler for State {}
-
 impl PrimarySelectionHandler for State {
     fn primary_selection_state(&self) -> &PrimarySelectionState {
         &self.primary_selection_state
@@ -1347,26 +1374,39 @@ impl XdgActivationHandler for State {
         &mut self.activation_state
     }
 
-    fn token_created(&mut self, _token: XdgActivationToken, data: XdgActivationTokenData) -> bool {
-        if data
+    fn token_created(&mut self, token: XdgActivationToken, data: XdgActivationTokenData) -> bool {
+        let from_shell = data
             .client_id
             .as_ref()
-            .is_some_and(|id| shell::is_shell_client(&self.display_handle, id))
-        {
-            return true;
+            .is_some_and(|id| shell::is_shell_client(&self.display_handle, id));
+        let valid = from_shell
+            || match self.focused() {
+                None => true,
+                Some(focused) => focused.client().map(|client| client.id()) == data.client_id,
+            };
+        if !valid {
+            self.refused_tokens.push(token);
         }
-        match self.focused() {
-            None => true,
-            Some(focused) => focused.client().map(|client| client.id()) == data.client_id,
-        }
+        true
     }
 
     fn request_activation(
         &mut self,
-        _token: XdgActivationToken,
+        token: XdgActivationToken,
         _token_data: XdgActivationTokenData,
         surface: WlSurface,
     ) {
+        let app_id = shell::toplevel_names(&surface).1;
+        if let Some(index) = self
+            .refused_tokens
+            .iter()
+            .position(|refused| refused == &token)
+        {
+            self.refused_tokens.remove(index);
+            self.request_attention(app_id);
+            return;
+        }
+        self.show_app(&app_id);
         self.unminimize(&surface);
         let mapped = self
             .windows

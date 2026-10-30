@@ -146,7 +146,7 @@ pub(crate) struct IconRect {
 const OPENING_SCALE: f64 = 0.95;
 const CLOSING_SCALE: f64 = 0.92;
 const DOCK_ICON_SIZE: f64 = 48.0;
-const DOCK_NAMESPACE: &str = "dock";
+pub(crate) const DOCK_NAMESPACE: &str = "dock";
 
 impl State {
     fn rect_of(window: &Window) -> Option<Rectangle<f64, Logical>> {
@@ -166,6 +166,9 @@ impl State {
 
     fn destination(&self, window: &Window) -> Option<Look> {
         let rect = Self::rect_of(window)?;
+        if window.hidden {
+            return Some(Look::hidden(rect));
+        }
         if window.minimized.is_some() {
             return Some(if self.reduce_motion {
                 Look::hidden(rect)
@@ -321,6 +324,8 @@ impl State {
             closing.motion.advance(time, refresh);
         }
         self.animate_preview(time);
+        self.animate_desktop(time);
+        self.animate_slide_back(time);
         self.closing.retain(|closing| !closing.motion.is_settled());
         if self.is_animating() {
             self.needs_redraw = true;
@@ -330,6 +335,8 @@ impl State {
     fn is_animating(&self) -> bool {
         !self.closing.is_empty()
             || self.preview.is_some()
+            || self.desktop.is_animating()
+            || self.slide_back.is_some()
             || self.windows.iter().any(|window| window.motion.is_some())
     }
 }

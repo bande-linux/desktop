@@ -74,6 +74,9 @@ writes a hex value, a corner radius or a font name of its own.
   `ink2`, the accent when selected, or `on_accent` on a selection.
 - **Elevation.** `Elevation::{Frame, Overlay}.shadows(scheme, active)` gives the key and ambient
   shadow pair (offset, σ, opacity); an inactive frame's ambient shadow is half as strong.
+  `Item::shadows(shape, elevation, scheme, active)` turns the pair into the two shadow items
+  under a shape, and `ui::focus_ring_for(palette, shape, items)` draws the focus ring around a
+  custom control.
 
 ## Goals
 

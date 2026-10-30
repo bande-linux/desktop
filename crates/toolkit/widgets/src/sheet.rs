@@ -260,7 +260,12 @@ impl Widget for Alert {
             button.place(cx, Rect::new(right, y, size.width, size.height));
             right -= BUTTON_SPACING;
         }
-        for (button, size) in self.buttons.iter_mut().zip(&self.button_sizes).take(other_count) {
+        for (button, size) in self
+            .buttons
+            .iter_mut()
+            .zip(&self.button_sizes)
+            .take(other_count)
+        {
             button.place(cx, Rect::new(left, y, size.width, size.height));
             left += size.width + BUTTON_SPACING;
         }

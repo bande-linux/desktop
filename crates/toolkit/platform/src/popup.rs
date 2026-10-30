@@ -257,10 +257,7 @@ impl Menus {
             }
             popup.shown = Some(look);
             let size = panel.size();
-            let shape = Shape::rounded(
-                Rect::new(0.0, 0.0, size.width, size.height),
-                MENU_RADIUS,
-            );
+            let shape = Shape::rounded(Rect::new(0.0, 0.0, size.width, size.height), MENU_RADIUS);
             let mut items: Vec<Item> = Elevation::Overlay
                 .shadows(palette.scheme, true)
                 .into_iter()

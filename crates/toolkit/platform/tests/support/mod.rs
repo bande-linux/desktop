@@ -185,7 +185,10 @@ pub fn shot(name: &str, prepare: fn(&mut Window) -> Option<Ui>, shot: Shot) {
         window.request_redraw();
         let _companion = companion.map(|title| {
             let mut beside = window
-                .open_beside(Role::toplevel(title, "unbound-toolkit-companion"), (240, 120))
+                .open_beside(
+                    Role::toplevel(title, "unbound-toolkit-companion"),
+                    (240, 120),
+                )
                 .expect("second window");
             beside.wait_for_gpu();
             let scene = Scene {

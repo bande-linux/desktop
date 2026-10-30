@@ -1,7 +1,5 @@
 use accesskit::{Action, ActionRequest, Node, Role, Toggled};
-use unbound_graphics::{
-    Color, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextStyle,
-};
+use unbound_graphics::{Color, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextStyle};
 
 use super::control::square_capped;
 use super::{Animated, Context, Event, Key, Size, Spring, Widget, WidgetId, contains};

@@ -113,14 +113,16 @@ impl Widget for Stepper {
     }
 
     fn measure(&mut self, cx: &mut Context, _available: Size) -> Size {
-        self.paragraph = Some(cx.text.paragraph(
-            &(self.format)(self.value),
-            TextStyle::new(FONT_SIZE, cx.palette.ink)
-                .weight(TextStyle::MEDIUM)
-                .tabular(),
-            None,
-            TextAlign::Start,
-        ));
+        self.paragraph = Some(
+            cx.text.paragraph(
+                &(self.format)(self.value),
+                TextStyle::new(FONT_SIZE, cx.palette.ink)
+                    .weight(TextStyle::MEDIUM)
+                    .tabular(),
+                None,
+                TextAlign::Start,
+            ),
+        );
         STEPPER_SIZE
     }
 

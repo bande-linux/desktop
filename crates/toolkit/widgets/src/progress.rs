@@ -18,12 +18,7 @@ const CELLS: usize = 24;
 const CELL_GAP: f32 = 2.0;
 const CELL_RADIUS: f32 = 1.0;
 
-fn paint_cells(
-    cx: &Context,
-    frame: Rect,
-    lit: impl Fn(f32) -> f32,
-    items: &mut Vec<Item>,
-) {
+fn paint_cells(cx: &Context, frame: Rect, lit: impl Fn(f32) -> f32, items: &mut Vec<Item>) {
     let width = (frame.width - CELL_GAP * (CELLS - 1) as f32) / CELLS as f32;
     for index in 0..CELLS {
         let shape = Shape::rounded(
@@ -95,7 +90,9 @@ impl ProgressBar {
         let start = eased * (CELLS as f32 - SWEEP_CELLS);
         move |cell: f32| match reduce_motion {
             true => 0.35 + 0.35 * eased,
-            false => (cell + 1.0 - start).min(start + SWEEP_CELLS - cell).min(1.0),
+            false => (cell + 1.0 - start)
+                .min(start + SWEEP_CELLS - cell)
+                .min(1.0),
         }
     }
 }

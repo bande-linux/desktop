@@ -139,12 +139,7 @@ fn controls(scheme: Scheme) -> Ui {
         Box::new(Checkbox::new("On", CheckState::On, |_| {})),
         Box::new(Checkbox::new("Off", CheckState::Off, |_| {})),
         Box::new(Checkbox::new("Mixed", CheckState::Mixed, |_| {})),
-        Box::new(RadioGroup::new(
-            "Sort",
-            &["Name", "Date"],
-            Some(0),
-            |_| {},
-        )),
+        Box::new(RadioGroup::new("Sort", &["Name", "Date"], Some(0), |_| {})),
     ]);
     let pickers = row(vec![
         Box::new(SegmentedControl::new(

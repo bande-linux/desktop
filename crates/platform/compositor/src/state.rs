@@ -236,6 +236,7 @@ pub struct State {
     pub(crate) pointing: crate::pointing::Pointing,
     pub(crate) pending_captures: Vec<crate::capture::PendingCapture>,
     pub(crate) decorations: crate::frame::Decorations,
+    pub(crate) alerts: crate::alert::Alerts,
 }
 
 pub struct Headless {
@@ -416,6 +417,7 @@ impl Headless {
             pointing: crate::pointing::Pointing::default(),
             pending_captures: Vec::new(),
             decorations: crate::frame::Decorations::default(),
+            alerts: crate::alert::Alerts::default(),
         };
         Ok(Self {
             display,
@@ -689,6 +691,7 @@ impl Headless {
             false => Vec::new(),
         };
         elements.extend(dragged);
+        elements.extend(self.state.alert_elements(renderer, screen, scale));
         elements.extend(self.state.flash_elements(screen, scale));
         elements.extend(self.state.source_hud_element(renderer, screen, scale));
         elements.extend(self.state.switcher_elements(renderer, screen, scale));

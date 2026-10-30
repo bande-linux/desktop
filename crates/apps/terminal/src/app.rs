@@ -6,18 +6,21 @@ use std::time::{Duration, Instant};
 use accesskit::{Action, Node, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
 use alacritty_terminal::term::TermMode;
 use alacritty_terminal::tty::Shell;
+use unbound_app_menu::{AppMenu, Standard};
 use unbound_term::{
     BANNER_HEIGHT, Banner, BannerAction, CellPoint, Command, DEFAULT_FONT_SIZE, GridSize, L10N,
-    Link, MouseButton, MouseKind, Notice, Painter, SearchDirection, SelectionKind, Session,
-    TAB_BAR_HEIGHT, TabBar, TabBarLayout, TabTarget, Terminal, bracketed, encode_key, is_openable,
-    mouse_report, next_font_size, reports_mouse, shortcut, wants_scroll_as_arrows,
+    Link, MenuCommand, MouseButton, MouseKind, Notice, Painter, SearchDirection, SelectionKind,
+    Session, TAB_BAR_HEIGHT, TabBar, TabBarLayout, TabTarget, Terminal, TerminalContext, bracketed,
+    encode_key, is_openable, mouse_report, next_font_size, reports_mouse, shortcut, tab_menu,
+    terminal_menu, wants_scroll_as_arrows,
 };
 use unbound_toolkit::ui::{
-    Cursor, Event, Key, Modifiers, Pointer, PointerButton, Scroll, ScrollPhase, ScrollSource,
+    Cursor, Event, Key, Menu, Modifiers, Pointer, PointerButton, Scroll, ScrollPhase, ScrollSource,
 };
-use unbound_toolkit::{App, Point, Rect, Scene, Window, WindowEvent};
+use unbound_toolkit::{App, MenuPlacement, Point, Rect, Scene, Window, WindowEvent};
 
 pub const APP_ID: &str = "org.unbound.Terminal";
+const FILES: &str = "unbound-files";
 const WINDOW_NODE: NodeId = NodeId(u64::MAX);
 const TERMINAL_NODE: NodeId = NodeId(u64::MAX - 1);
 const WRITE_RETRY: Duration = Duration::from_millis(5);
@@ -43,6 +46,8 @@ enum Gesture {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Pending {
     CloseTab(u32),
+    CloseOtherTabs(u32),
+    Quit,
 }
 
 pub struct TerminalApp {
@@ -67,10 +72,17 @@ pub struct TerminalApp {
     momentum: Option<Momentum>,
     retry_at: Option<Instant>,
     cursor: Cursor,
+    app_menu: Option<AppMenu>,
 }
 
 impl TerminalApp {
-    pub fn new(window: &Window, painter: Painter, first: Session, home: Option<PathBuf>) -> Self {
+    pub fn new(
+        window: &Window,
+        painter: Painter,
+        first: Session,
+        home: Option<PathBuf>,
+        app_menu: Option<AppMenu>,
+    ) -> Self {
         let mut app = Self {
             tabs: vec![first],
             active: 0,
@@ -93,6 +105,7 @@ impl TerminalApp {
             momentum: None,
             retry_at: None,
             cursor: Cursor::Default,
+            app_menu,
         };
         app.tabs[0].terminal.set_focus(false);
         app
@@ -271,7 +284,11 @@ impl TerminalApp {
     fn ask(&mut self, window: &mut Window, message: &str, pending: Pending) {
         self.close_banner();
         let palette = window.appearance().palette();
-        self.banner = Some(Banner::confirm(palette, message, &L10N.tr("close")));
+        let button = match pending {
+            Pending::Quit => L10N.tr("quit"),
+            Pending::CloseTab(_) | Pending::CloseOtherTabs(_) => L10N.tr("close"),
+        };
+        self.banner = Some(Banner::confirm(palette, message, &button));
         self.pending = Some(pending);
         self.banner_focused = true;
         self.focus_terminal(false);
@@ -288,7 +305,45 @@ impl TerminalApp {
                     self.close_tab(window, index);
                 }
             }
+            Some(Pending::CloseOtherTabs(keep)) => self.remove_other_tabs(window, keep),
+            Some(Pending::Quit) => window.close(),
             None => {}
+        }
+    }
+
+    fn close_other_tabs(&mut self, window: &mut Window, keep: u32) {
+        let Some(index) = self.tabs.iter().position(|tab| tab.id() == keep) else {
+            return;
+        };
+        let busy = self
+            .tabs
+            .iter()
+            .filter(|tab| tab.id() != keep && tab.running_program().is_some())
+            .count();
+        if busy == 0 {
+            return self.remove_other_tabs(window, keep);
+        }
+        self.select_tab(window, index);
+        let message = L10N.tr_args("confirm-close-other-tabs", [("count", busy.into())]);
+        self.ask(window, &message, Pending::CloseOtherTabs(keep));
+    }
+
+    fn may_quit(&mut self, window: &mut Window) -> bool {
+        let busy = self
+            .tabs
+            .iter()
+            .filter(|tab| tab.running_program().is_some())
+            .count();
+        if busy > 0 {
+            let message = L10N.tr_args("confirm-quit", [("count", busy.into())]);
+            self.ask(window, &message, Pending::Quit);
+        }
+        busy == 0
+    }
+
+    fn remove_other_tabs(&mut self, window: &mut Window, keep: u32) {
+        while let Some(index) = self.tabs.iter().position(|tab| tab.id() != keep) {
+            self.close_tab(window, index);
         }
     }
 
@@ -327,6 +382,9 @@ impl TerminalApp {
         self.momentum = None;
         if self.link.take().is_some() {
             window.request_redraw();
+        }
+        if opens_menu(key, modifiers) && !self.banner_focused {
+            return self.menu_from_keyboard(window);
         }
         let command = shortcut(key, modifiers);
         let edits_find = self.banner_focused && command == Some(Command::SelectAll);
@@ -408,6 +466,91 @@ impl TerminalApp {
             Command::FindPrevious => self.find_again(window, SearchDirection::Older),
         }
         window.request_redraw();
+    }
+
+    fn menu_action(&mut self, window: &mut Window, action: &str) {
+        let result = match Standard::parse(action) {
+            Some(Standard::Hide | Standard::Minimize) => window.minimize(),
+            Some(Standard::Zoom) => window.toggle_zoom(),
+            Some(Standard::Quit) => {
+                if self.may_quit(window) {
+                    window.close();
+                }
+                Ok(())
+            }
+            Some(Standard::CloseWindow) => {
+                window.request_close();
+                Ok(())
+            }
+            None => {
+                if let Some(command) = MenuCommand::parse(action) {
+                    self.perform_menu(window, command);
+                }
+                Ok(())
+            }
+        };
+        if let Err(error) = result {
+            tracing::warn!("cannot {action}: {error}");
+        }
+    }
+
+    fn perform_menu(&mut self, window: &mut Window, command: MenuCommand) {
+        match command {
+            MenuCommand::Run(command) => self.perform(window, command),
+            MenuCommand::OpenLink(uri) => self.open_link(window, &uri),
+            MenuCommand::CopyLink(uri) => window.copy(&uri),
+            MenuCommand::ShowInFiles => self.show_in_files(window),
+            MenuCommand::CloseTab(id) => {
+                if let Some(index) = self.tabs.iter().position(|tab| tab.id() == id) {
+                    self.request_close_tab(window, index);
+                }
+            }
+            MenuCommand::CloseOtherTabs(id) => self.close_other_tabs(window, id),
+        }
+    }
+
+    fn show_in_files(&mut self, window: &mut Window) {
+        let Some(directory) = self.session().working_directory() else {
+            return;
+        };
+        let token = window
+            .activation_token(APP_ID)
+            .map_err(|error| tracing::warn!("cannot get an activation token: {error}"))
+            .ok();
+        let command = [FILES.to_owned(), directory.to_string_lossy().into_owned()];
+        if let Err(error) = unbound_xdg::spawn_detached(&command, None, token.as_deref()) {
+            tracing::warn!("cannot show {} in Files: {error}", directory.display());
+        }
+    }
+
+    fn show_menu(&mut self, window: &mut Window, menu: Menu, at: Point) {
+        self.momentum = None;
+        if let Err(error) = window.show_menu(menu, MenuPlacement::AtPoint(at)) {
+            tracing::warn!("cannot show the menu: {error}");
+        }
+    }
+
+    fn terminal_menu(&mut self, window: &mut Window, at: Point, link: Option<Link>) {
+        let context = TerminalContext {
+            link: link.map(|link| link.uri),
+            has_selection: self.terminal().selected_text().is_some(),
+            knows_directory: self.session().working_directory().is_some(),
+            tab: self.tabs[self.active].id(),
+        };
+        self.show_menu(window, terminal_menu(&context), at);
+    }
+
+    fn menu_from_keyboard(&mut self, window: &mut Window) {
+        let origin = self.content_origin();
+        let below = match self.terminal().cursor_cell() {
+            Some((column, line)) => self.painter.metrics.below_cell(column, line),
+            None => Point::new(
+                (self.size.0 as f32 - origin.x) / 2.0,
+                (self.size.1 as f32 - origin.y) / 2.0,
+            ),
+        };
+        let at = Point::new(origin.x + below.x, origin.y + below.y);
+        self.terminal_menu(window, at, None);
     }
 
     fn find_banner(&mut self) -> Option<&mut Banner> {
@@ -628,6 +771,15 @@ impl TerminalApp {
         let at = pointer.position;
         self.momentum = None;
         if let Some(target) = self.tab_target(at) {
+            if asks_for_menu(&pointer) {
+                let tab = match target {
+                    TabTarget::Select(index) | TabTarget::Close(index) => {
+                        self.tabs.get(index).map(Session::id)
+                    }
+                    TabTarget::NewTab => None,
+                };
+                return self.show_menu(window, tab_menu(tab, self.tabs.len()), at);
+            }
             if !pointer.is_primary() {
                 return;
             }
@@ -651,6 +803,12 @@ impl TerminalApp {
             self.focus_terminal(self.focused);
         }
         let modifiers = pointer.modifiers;
+        let program_takes_mouse = !modifiers.shift && reports_mouse(self.mode());
+        if asks_for_menu(&pointer) && !program_takes_mouse {
+            let cell = self.cell_at(at);
+            let link = self.session().terminal.link_at(cell);
+            return self.terminal_menu(window, at, link);
+        }
         if modifiers.logo && pointer.is_primary() {
             let cell = self.cell_at(at);
             if let Some(link) = self.session().terminal.link_at(cell) {
@@ -661,7 +819,7 @@ impl TerminalApp {
         let Some(button) = mouse_button(pointer.button) else {
             return;
         };
-        if !modifiers.shift && reports_mouse(self.mode()) {
+        if program_takes_mouse {
             self.session().terminal.clear_selection();
             self.reported_cell = None;
             if self.report_mouse(MouseKind::Press(button), at, modifiers) {
@@ -815,6 +973,9 @@ impl TerminalApp {
 
     fn focus(&mut self, window: &mut Window, focused: bool) {
         self.focused = focused;
+        if focused && let Some(Err(error)) = self.app_menu.as_ref().map(AppMenu::claim) {
+            tracing::warn!("{error}");
+        }
         self.focus_terminal(focused && !self.banner_focused);
         window.request_redraw();
     }
@@ -912,6 +1073,7 @@ impl App for TerminalApp {
                 self.session().terminal.scroll_to_bottom();
                 self.send(&bytes);
             }
+            WindowEvent::MenuAction(action) => self.menu_action(window, &action),
             WindowEvent::Focus(focused) => self.focus(window, focused),
             WindowEvent::AppearanceChanged(appearance) => {
                 self.painter.set_appearance(appearance);
@@ -935,10 +1097,24 @@ impl App for TerminalApp {
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        self.tabs.iter().map(Session::fd).collect()
+        let mut sources = self.tabs.iter().map(Session::fd).collect::<Vec<_>>();
+        sources.extend(self.app_menu.as_ref().map(AppMenu::fd));
+        sources
     }
 
     fn source_ready(&mut self, window: &mut Window, index: usize) {
+        if index == self.tabs.len() {
+            let actions = self
+                .app_menu
+                .as_mut()
+                .map(AppMenu::take_actions)
+                .unwrap_or_default();
+            for action in actions {
+                self.menu_action(window, &action);
+            }
+            self.handle_banner_actions(window);
+            return window.request_redraw();
+        }
         let Some(tab) = self.tabs.get_mut(index) else {
             return;
         };
@@ -982,6 +1158,10 @@ impl App for TerminalApp {
         }
         self.request_close_tab(window, self.active);
         false
+    }
+
+    fn should_quit(&mut self, window: &mut Window) -> bool {
+        self.may_quit(window)
     }
 
     fn finished(&self) -> bool {
@@ -1031,6 +1211,19 @@ fn mouse_button(button: PointerButton) -> Option<MouseButton> {
         PointerButton::Middle => Some(MouseButton::Middle),
         PointerButton::Back | PointerButton::Forward => None,
     }
+}
+
+fn asks_for_menu(pointer: &Pointer) -> bool {
+    pointer.button == PointerButton::Secondary
+        || (pointer.is_primary() && pointer.modifiers.control)
+}
+
+fn opens_menu(key: Key, modifiers: Modifiers) -> bool {
+    let shift_only = Modifiers {
+        shift: true,
+        ..Modifiers::default()
+    };
+    key == Key::Menu || (key == Key::Function(10) && modifiers == shift_only)
 }
 
 fn quoted(name: &str) -> String {

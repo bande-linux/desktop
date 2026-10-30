@@ -1,21 +1,60 @@
 use std::os::fd::BorrowedFd;
 use std::process::ExitCode;
 
+use unbound_app_menu::{AppMenu, Entry, Standard, app_submenu, window_submenu};
 use unbound_settings::{Displays, Feed, L10N, PaneId, Services, SettingsView, feed};
+use unbound_settings_panes::panes;
 use unbound_toolkit::{App, Rect, Role, Scene, TextSystem, Window, WindowEvent};
 
 const APP_ID: &str = "org.unbound.Settings";
 const WINDOW_SIZE: (u32, u32) = (900, 600);
 const FEED: usize = 0;
+const PANE_ACTION: &str = "pane:";
 
 struct Settings {
     view: SettingsView,
     feed: Feed,
     displays: Option<Displays>,
     services: Services,
+    app_menu: Option<AppMenu>,
+}
+
+fn app_menus() -> Vec<Entry> {
+    let panes = panes()
+        .into_iter()
+        .map(|pane| Entry::item(&pane.name, &format!("{PANE_ACTION}{}", pane.id.keyword())))
+        .collect();
+    vec![
+        app_submenu(&L10N.tr("title"), Vec::new()),
+        Entry::submenu(&L10N.tr("menu-view"), panes),
+        window_submenu(Vec::new()),
+    ]
 }
 
 impl Settings {
+    fn menu_action(&mut self, window: &mut Window, action: &str) {
+        let result = match Standard::parse(action) {
+            Some(Standard::Hide | Standard::Minimize) => window.minimize(),
+            Some(Standard::Zoom) => window.toggle_zoom(),
+            Some(Standard::Quit | Standard::CloseWindow) => {
+                window.close();
+                Ok(())
+            }
+            None => {
+                if let Some(pane) = action
+                    .strip_prefix(PANE_ACTION)
+                    .and_then(PaneId::from_keyword)
+                {
+                    self.view.select_pane(pane);
+                }
+                Ok(())
+            }
+        };
+        if let Err(error) = result {
+            tracing::warn!("cannot {action}: {error}");
+        }
+    }
+
     fn send_commands(&mut self) {
         for command in self.view.take_commands() {
             self.services.send(command);
@@ -40,6 +79,12 @@ impl App for Settings {
             WindowEvent::AppearanceChanged(appearance) => {
                 self.view.set_palette(appearance.palette());
             }
+            WindowEvent::Focus(true) => {
+                if let Some(Err(error)) = self.app_menu.as_ref().map(AppMenu::claim) {
+                    tracing::warn!("{error}");
+                }
+                return;
+            }
             _ => return,
         }
         self.send_commands();
@@ -49,11 +94,22 @@ impl App for Settings {
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
         let mut sources = vec![self.feed.fd()];
         sources.extend(self.displays.as_ref().map(Displays::fd));
+        sources.extend(self.app_menu.as_ref().map(AppMenu::fd));
         sources
     }
 
     fn source_ready(&mut self, window: &mut Window, index: usize) {
-        if index == FEED {
+        let menu = 1 + usize::from(self.displays.is_some());
+        if index == menu {
+            let actions = self
+                .app_menu
+                .as_mut()
+                .map(AppMenu::take_actions)
+                .unwrap_or_default();
+            for action in actions {
+                self.menu_action(window, &action);
+            }
+        } else if index == FEED {
             for update in self.feed.drain() {
                 self.view.apply(update);
             }
@@ -92,11 +148,15 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(displays) = &displays {
         view.set_displays(displays.list());
     }
+    let app_menu = AppMenu::export_on(session, APP_ID, app_menus())
+        .inspect_err(|error| tracing::warn!("{error}"))
+        .ok();
     let mut settings = Settings {
         view,
         feed,
         displays,
         services,
+        app_menu,
     };
     unbound_toolkit::run(&mut window, &mut settings)?;
     Ok(())

@@ -1,0 +1,17 @@
+[package]
+name = "unbound-app-menu"
+description = "Exports an app's menus to the menu bar over com.canonical.dbusmenu"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+unbound-inbox.workspace = true
+unbound-l10n.workspace = true
+zbus.workspace = true
+
+[dev-dependencies]
+unbound-test-bus.workspace = true
+
+[lints]
+workspace = true

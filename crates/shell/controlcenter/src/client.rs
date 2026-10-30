@@ -327,11 +327,11 @@ impl ControlCenter {
             return;
         };
         if found.security.needs_password() && !found.known {
-            let token = window.activation_token("org.unbound.Settings").ok();
-            let command = ["unbound-settings".to_owned(), "wifi".to_owned()];
-            if let Err(error) = spawn_detached(&command, None, token.as_deref()) {
-                tracing::warn!("cannot open Wi-Fi settings: {error}");
-            }
+            self.launch(
+                window,
+                "org.unbound.Settings",
+                &["unbound-settings", "wifi"],
+            );
             self.dismiss(window);
             return;
         }
@@ -509,16 +509,22 @@ impl ControlCenter {
             .filter(|player| player.playback == Playback::Playing && player.length.is_some())
     }
 
-    fn rebuild(&mut self) {
-        if !matches!(self.mode, Mode::Panel { .. }) {
-            return;
-        }
-        let (fresh, fresh_height) = panel(
+    fn fresh_panel(&self) -> (Ui, f32) {
+        let (mut ui, height) = panel(
             &self.status(),
             self.palette,
             self.text.sharing_fonts(),
             &self.changes,
         );
+        ui.context().reduce_motion = self.reduce_motion;
+        (ui, height)
+    }
+
+    fn rebuild(&mut self) {
+        if !matches!(self.mode, Mode::Panel { .. }) {
+            return;
+        }
+        let (fresh, fresh_height) = self.fresh_panel();
         if let Mode::Panel { ui, height } = &mut self.mode {
             **ui = fresh;
             *height = fresh_height;
@@ -578,12 +584,7 @@ impl ControlCenter {
             self.dismiss(window);
             return;
         }
-        let (ui, height) = panel(
-            &self.status(),
-            self.palette,
-            self.text.sharing_fonts(),
-            &self.changes,
-        );
+        let (ui, height) = self.fresh_panel();
         self.mode = Mode::Panel {
             ui: Box::new(ui),
             height,

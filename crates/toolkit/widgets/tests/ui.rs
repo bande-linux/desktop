@@ -6,9 +6,10 @@ use std::rc::Rc;
 use accesskit::{Action, ActionData, ActionRequest, Node, NodeId, Role, Toggled, TreeId};
 use unbound_graphics::{Palette, Point, Rect, Scheme, TextSystem};
 use unbound_widgets::{
-    Axis, BUTTON_HEIGHT, Button, ClipboardRequest, Context, ContextMenu, Cursor, Event, Key, Label,
-    Menu, MenuItem, Modifiers, Pointer, PointerButton, SWITCH_SIZE, Scroll, SecureField, Size,
-    Slider, Stack, TEXT_FIELD_HEIGHT, TextField, Toggle, Ui, Widget, WidgetId,
+    Axis, BUTTON_HEIGHT, Button, ClipboardRequest, Context, ContextMenu, Cursor, DISCLOSURE_HEIGHT,
+    Disclosure, Event, Key, Label, Menu, MenuItem, Modifiers, Pointer, PointerButton, SWITCH_SIZE,
+    Scroll, SecureField, Size, Slider, Stack, TEXT_FIELD_HEIGHT, TextField, Toggle, Ui, Widget,
+    WidgetId,
 };
 
 const NONE: Modifiers = Modifiers {
@@ -727,4 +728,36 @@ fn a_double_click_selects_a_word_and_a_triple_click_everything() {
         .field
         .handle(&mut field.cx, &Event::PointerDown(pointer));
     assert_eq!(field.selected(), "hello brave world");
+}
+
+#[test]
+fn a_disclosure_hides_its_content_from_pointer_keyboard_and_assistive_tech_until_opened() {
+    let toggles = Rc::new(RefCell::new(Vec::new()));
+    let log = toggles.clone();
+    let field = TextField::new("Proxy", "", |_| {});
+    let field_id = field.id();
+    let disclosure = Disclosure::new("Advanced", false, field, move |open| {
+        log.borrow_mut().push(open)
+    });
+    let id = disclosure.id();
+    let mut ui = Ui::new(Box::new(disclosure), context());
+    ui.layout(AREA);
+    ui.handle(&key(Key::Tab, NONE));
+    assert_eq!(ui.focus(), None, "the hidden field takes no focus");
+    assert_eq!(node(&ui, id).is_expanded(), Some(false));
+    ui.handle(&Event::PointerDown(Pointer::at(Point::new(
+        10.0,
+        DISCLOSURE_HEIGHT / 2.0,
+    ))));
+    ui.scene(AREA.width as u32, AREA.height as u32);
+    assert_eq!(node(&ui, id).is_expanded(), Some(true));
+    ui.handle(&key(Key::Tab, NONE));
+    assert_eq!(ui.focus(), Some(field_id));
+    assert!(ui.perform(&ActionRequest {
+        action: Action::Collapse,
+        target_tree: TreeId::ROOT,
+        target_node: id.into(),
+        data: None,
+    }));
+    assert_eq!(*toggles.borrow(), [true, false]);
 }

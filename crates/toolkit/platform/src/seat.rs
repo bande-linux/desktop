@@ -515,6 +515,11 @@ impl Dispatch<WlKeyboard, ()> for State {
                 }
                 if input.update_modifiers() {
                     let modifiers = input.modifiers;
+                    if let Some(level) = input.keyboard_popup {
+                        state
+                            .popup_input
+                            .push((level, Event::ModifiersChanged(modifiers)));
+                    }
                     state
                         .events
                         .push(WindowEvent::Input(Event::ModifiersChanged(modifiers)));

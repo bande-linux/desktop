@@ -1,6 +1,7 @@
 mod animation;
 mod button;
 mod context_menu;
+mod disclosure;
 mod label;
 mod menu;
 mod name_editor;
@@ -23,6 +24,7 @@ use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId, TreeInfo, Tre
 pub use animation::Animated;
 pub use button::{BUTTON_HEIGHT, Button};
 pub use context_menu::ContextMenu;
+pub use disclosure::{DISCLOSURE_HEIGHT, Disclosure};
 pub use label::Label;
 pub use menu::{Menu, MenuItem, MenuOutcome, MenuPanel, MenuTracker};
 pub use name_editor::NameEditor;

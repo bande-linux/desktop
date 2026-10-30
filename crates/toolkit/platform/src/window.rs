@@ -22,7 +22,7 @@ use unbound_graphics::{
     RenderError, Scene, TextSystem, pixels, vulkan_instance,
 };
 use unbound_protocols::client::unbound_shell_v1::VolumeKey;
-use unbound_widgets::{ClipboardRequest, Menu, MenuOutcome, Ui};
+use unbound_widgets::{ClipboardRequest, Menu, MenuItem, MenuOutcome, Ui};
 use wayland_client::backend::WaylandError;
 use wayland_client::protocol::wl_buffer::{self, WlBuffer};
 use wayland_client::protocol::wl_callback::{self, WlCallback};
@@ -49,11 +49,13 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::{
     self, ZwlrLayerSurfaceV1,
 };
 
+use crate::L10N;
 use crate::access::Accessibility;
 use crate::appearance::AppearanceWatch;
 use crate::capture::Capture;
 use crate::chrome::{Chrome, Control, Frame, RESIZE_MARGIN, TITLE_BAR_HEIGHT, Zone};
 use crate::clipboard::Clipboard;
+use crate::clipboard::{DragEvent, Transfer};
 use crate::effect::BackgroundEffect;
 use crate::lock::{Locked, SessionLock};
 use crate::popup::{MenuPlacement, Menus, Opening, Parent};
@@ -133,10 +135,13 @@ pub enum WindowEvent {
     Input(Event),
     Focus(bool),
     CloseRequested,
+    QuitRequested,
     ToplevelChanged(ToplevelState),
     MenuAction(String),
     MenuClosed,
     Pasted(String),
+    PastedTransfer(Transfer),
+    Drag(DragEvent),
     ShowLauncher,
     CaptureScreen,
     CaptureArea,
@@ -335,7 +340,7 @@ enum ShellSurface {
 
 pub struct Window {
     gpu: Gpu,
-    cpu: CpuRenderer,
+    pub(crate) cpu: CpuRenderer,
     shm_target: ShmTarget,
     role: ShellSurface,
     pub(crate) surface: WlSurface,
@@ -349,6 +354,8 @@ pub struct Window {
     needs_redraw: bool,
     chrome: Option<Chrome>,
     menus: Option<Menus>,
+    window_menu: bool,
+    pub(crate) closed_by_button: bool,
     text: Option<TextSystem>,
     shown_frame: Option<Frame>,
     pub(crate) app_cursor: Cursor,
@@ -514,6 +521,8 @@ impl Window {
             needs_redraw: true,
             chrome,
             menus: None,
+            window_menu: false,
+            closed_by_button: false,
             text: None,
             shown_frame: None,
             app_cursor: Cursor::Default,
@@ -599,7 +608,104 @@ impl Window {
         self.state.toplevel
     }
 
-    fn toplevel(&self) -> Result<&XdgToplevel, WindowError> {
+    pub fn close_requested_by_button(&self) -> bool {
+        self.closed_by_button
+    }
+
+    pub fn toggle_full_screen(&mut self) -> Result<(), WindowError> {
+        let toplevel = self.toplevel()?;
+        if self.state.toplevel.fullscreen {
+            toplevel.unset_fullscreen();
+        } else {
+            toplevel.set_fullscreen(None);
+        }
+        self.flush()
+    }
+
+    fn open_window_menu(&mut self, at: Point) -> Result<(), WindowError> {
+        let toplevel = self.state.toplevel;
+        let place = |key: &str| MenuItem::new(&L10N.tr(key), key);
+        let mut items = vec![
+            MenuItem::new(&L10N.tr("minimize"), "minimize")
+                .enabled(!toplevel.fullscreen)
+                .shortcut("Super+M"),
+            MenuItem::new(
+                &L10N.tr(if toplevel.maximized { "unzoom" } else { "zoom" }),
+                "zoom",
+            )
+            .enabled(!toplevel.fullscreen),
+            MenuItem::new(
+                &L10N.tr(if toplevel.fullscreen {
+                    "exit-full-screen"
+                } else {
+                    "enter-full-screen"
+                }),
+                "full-screen",
+            )
+            .shortcut("Ctrl+Super+F"),
+            MenuItem::separator(),
+        ];
+        if self.can_place() {
+            items.push(
+                MenuItem::submenu(
+                    &L10N.tr("move-and-resize"),
+                    Menu::new(vec![
+                        place("place-left").shortcut("Ctrl+Super+Left"),
+                        place("place-right").shortcut("Ctrl+Super+Right"),
+                        MenuItem::separator(),
+                        place("place-top-left"),
+                        place("place-top-right"),
+                        place("place-bottom-left"),
+                        place("place-bottom-right"),
+                        MenuItem::separator(),
+                        place("place-restore").enabled(toplevel.tiled || toplevel.maximized),
+                    ]),
+                )
+                .enabled(!toplevel.fullscreen),
+            );
+        }
+        items.extend([
+            MenuItem::new(&L10N.tr("move"), "move").enabled(!toplevel.fullscreen),
+            MenuItem::separator(),
+            MenuItem::new(&L10N.tr("close"), "close").shortcut("Super+W"),
+            MenuItem::new(&L10N.tr("quit-app"), "quit").shortcut("Super+Q"),
+        ]);
+        let title = self.title_height() as f32;
+        self.show_menu(
+            Menu::new(items),
+            MenuPlacement::AtPoint(Point::new(at.x, at.y - title)),
+        )?;
+        self.window_menu = true;
+        Ok(())
+    }
+
+    fn window_menu_action(&mut self, action: &str) -> Result<(), WindowError> {
+        use unbound_protocols::client::unbound_app_v1::Placement;
+        match action {
+            "minimize" => self.minimize(),
+            "zoom" => self.toggle_zoom(),
+            "full-screen" => self.toggle_full_screen(),
+            "move" => self.start_move(),
+            "close" => {
+                self.state.events.push(WindowEvent::CloseRequested);
+                Ok(())
+            }
+            "quit" => {
+                self.state.events.push(WindowEvent::QuitRequested);
+                Ok(())
+            }
+            "place-left" => self.place(Placement::Left),
+            "place-right" => self.place(Placement::Right),
+            "place-top-left" => self.place(Placement::TopLeft),
+            "place-top-right" => self.place(Placement::TopRight),
+            "place-bottom-left" => self.place(Placement::BottomLeft),
+            "place-bottom-right" => self.place(Placement::BottomRight),
+            "place-restore" => self.place(Placement::Restore),
+            _ => Ok(()),
+        }
+    }
+
+    pub(crate) fn toplevel(&self) -> Result<&XdgToplevel, WindowError> {
         match &self.role {
             ShellSurface::Toplevel(_, toplevel) => Ok(toplevel),
             _ => Err(WindowError::Missing("a toplevel surface")),
@@ -715,6 +821,7 @@ impl Window {
     }
 
     pub fn take_events(&mut self) -> Vec<WindowEvent> {
+        self.take_drop();
         self.serve_menus(Instant::now());
         let events = std::mem::take(&mut self.state.events);
         if self.chrome.is_none() {
@@ -816,6 +923,7 @@ impl Window {
     }
 
     pub fn close_menu(&mut self) {
+        self.window_menu = false;
         if let Some(menus) = self.menus.take() {
             menus.close(&mut self.state);
             self.state.popup_input.clear();
@@ -876,6 +984,10 @@ impl Window {
         match outcome {
             MenuOutcome::Nothing => false,
             MenuOutcome::Redraw => true,
+            MenuOutcome::Activate(action) if self.window_menu => {
+                let _ = self.window_menu_action(&action);
+                true
+            }
             MenuOutcome::Activate(action) => {
                 self.state.events.push(WindowEvent::MenuAction(action));
                 true
@@ -885,8 +997,9 @@ impl Window {
                     .menus
                     .as_ref()
                     .is_some_and(|menus| menus.tracker().is_flashing());
+                let window_menu = self.window_menu;
                 self.close_menu();
-                if !activated {
+                if !activated && !window_menu {
                     self.state.events.push(WindowEvent::MenuClosed);
                 }
                 false
@@ -939,6 +1052,32 @@ impl Window {
         };
         let input = match event {
             WindowEvent::Input(input) => input,
+            WindowEvent::Drag(drag) => {
+                let shift = |point: Point| Point::new(point.x - origin.x, point.y - origin.y);
+                passed.push(WindowEvent::Drag(match drag {
+                    DragEvent::Entered {
+                        position,
+                        uris,
+                        text,
+                    } => DragEvent::Entered {
+                        position: shift(position),
+                        uris,
+                        text,
+                    },
+                    DragEvent::Moved(position) => DragEvent::Moved(shift(position)),
+                    DragEvent::Dropped {
+                        position,
+                        transfer,
+                        action,
+                    } => DragEvent::Dropped {
+                        position: shift(position),
+                        transfer,
+                        action,
+                    },
+                    other => other,
+                }));
+                return;
+            }
             WindowEvent::ToplevelChanged(_) => {
                 self.needs_redraw = true;
                 passed.push(event);
@@ -993,6 +1132,14 @@ impl Window {
                     ))));
                     return;
                 }
+                if pointer.button == PointerButton::Secondary
+                    && matches!(zone, Zone::TitleBar | Zone::Control(_))
+                {
+                    if self.open_window_menu(pointer.position).is_err() {
+                        self.needs_redraw = true;
+                    }
+                    return;
+                }
                 if pointer.button != PointerButton::Primary {
                     return;
                 }
@@ -1027,6 +1174,7 @@ impl Window {
                 }
                 let result = match control {
                     Control::Close => {
+                        self.closed_by_button = true;
                         passed.push(WindowEvent::CloseRequested);
                         Ok(())
                     }
@@ -1567,6 +1715,9 @@ impl Dispatch<WlRegistry, ()> for State {
                 }
                 "unbound_shell_v1" => {
                     state.shell.protocol = Some(registry.bind(name, version.min(7), handle, ()));
+                }
+                "unbound_app_v1" => {
+                    state.shell.app = Some(registry.bind(name, version.min(2), handle, ()));
                 }
                 "ext_output_image_capture_source_manager_v1" => {
                     state.capture.sources = Some(registry.bind(name, 1, handle, ()));

@@ -1,3 +1,16 @@
 close = Close
 minimize = Minimize
 zoom = Zoom
+unzoom = Unzoom
+enter-full-screen = Enter Full Screen
+exit-full-screen = Exit Full Screen
+move-and-resize = Move & Resize
+place-left = Left
+place-right = Right
+place-top-left = Top Left
+place-top-right = Top Right
+place-bottom-left = Bottom Left
+place-bottom-right = Bottom Right
+place-restore = Return to Previous Size
+move = Move
+quit-app = Quit

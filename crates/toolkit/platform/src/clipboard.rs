@@ -4,39 +4,225 @@ use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 use std::sync::Mutex;
 
 use rustix::pipe::{PipeFlags, pipe_with};
+use unbound_graphics::{Point, Scene};
 use wayland_client::protocol::wl_data_device::{self, WlDataDevice};
+use wayland_client::protocol::wl_data_device_manager::DndAction;
 use wayland_client::protocol::wl_data_offer::{self, WlDataOffer};
 use wayland_client::protocol::wl_data_source::{self, WlDataSource};
-use wayland_client::{Connection, Dispatch, Proxy, QueueHandle, event_created_child};
+use wayland_client::protocol::wl_surface::WlSurface;
+use wayland_client::{Connection, Dispatch, Proxy, QueueHandle, WEnum, event_created_child};
 
-use crate::window::{State, Window, WindowError, WindowEvent};
+use crate::window::{ShmTarget, State, Window, WindowError, WindowEvent};
 
 const TEXT_TYPES: [&str; 3] = ["text/plain;charset=utf-8", "UTF8_STRING", "text/plain"];
+const URI_LIST: &str = "text/uri-list";
+const GNOME_FILES: &str = "x-special/gnome-copied-files";
 
 fn own_type() -> String {
     format!("application/x-unbound-toolkit-{}", std::process::id())
 }
 
-struct Paste {
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Transfer {
+    pub text: String,
+    pub uris: Vec<String>,
+    pub cut: bool,
+}
+
+impl Transfer {
+    pub fn text(text: &str) -> Self {
+        Self {
+            text: text.to_owned(),
+            uris: Vec::new(),
+            cut: false,
+        }
+    }
+
+    pub fn uris(uris: Vec<String>) -> Self {
+        Self {
+            text: uris.join("\n"),
+            uris,
+            cut: false,
+        }
+    }
+
+    pub fn cut(self) -> Self {
+        Self { cut: true, ..self }
+    }
+
+    fn offer(&self, source: &WlDataSource) {
+        if !self.uris.is_empty() {
+            source.offer(GNOME_FILES.to_owned());
+            source.offer(URI_LIST.to_owned());
+        }
+        for mime in TEXT_TYPES {
+            source.offer(mime.to_owned());
+        }
+        source.offer(own_type());
+    }
+
+    fn bytes(&self, mime: &str) -> Vec<u8> {
+        match mime {
+            GNOME_FILES => {
+                let verb = if self.cut { "cut" } else { "copy" };
+                std::iter::once(verb)
+                    .chain(self.uris.iter().map(String::as_str))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+                    .into_bytes()
+            }
+            URI_LIST => self
+                .uris
+                .iter()
+                .map(|uri| format!("{uri}\r\n"))
+                .collect::<String>()
+                .into_bytes(),
+            _ => self.text.clone().into_bytes(),
+        }
+    }
+
+    fn parse(mime: &str, bytes: &[u8]) -> Self {
+        let text = String::from_utf8_lossy(bytes).into_owned();
+        match mime {
+            GNOME_FILES => {
+                let mut lines = text.lines();
+                let cut = lines.next() == Some("cut");
+                Self {
+                    cut,
+                    ..Self::uris(
+                        lines
+                            .filter(|line| !line.is_empty())
+                            .map(str::to_owned)
+                            .collect(),
+                    )
+                }
+            }
+            URI_LIST => Self::uris(
+                text.lines()
+                    .map(str::trim)
+                    .filter(|line| !line.is_empty() && !line.starts_with('#'))
+                    .map(str::to_owned)
+                    .collect(),
+            ),
+            _ => Self::text(&text),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DragAction {
+    Copy,
+    Move,
+}
+
+impl DragAction {
+    fn wire(self) -> DndAction {
+        match self {
+            Self::Copy => DndAction::Copy,
+            Self::Move => DndAction::Move,
+        }
+    }
+
+    fn from_wire(action: DndAction) -> Option<Self> {
+        if action.contains(DndAction::Move) {
+            Some(Self::Move)
+        } else if action.contains(DndAction::Copy) {
+            Some(Self::Copy)
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum DragEvent {
+    Entered {
+        position: Point,
+        uris: bool,
+        text: bool,
+    },
+    Moved(Point),
+    Left,
+    Dropped {
+        position: Point,
+        transfer: Transfer,
+        action: Option<DragAction>,
+    },
+    Finished(Option<DragAction>),
+}
+
+enum Purpose {
+    Paste {
+        transfer: bool,
+    },
+    Drop {
+        offer: WlDataOffer,
+        position: Point,
+        action: Option<DragAction>,
+    },
+}
+
+struct Reading {
     pipe: File,
+    mime: String,
     bytes: Vec<u8>,
+    purpose: Purpose,
+}
+
+struct Outgoing {
+    source: WlDataSource,
+    transfer: Transfer,
+    action: Option<DragAction>,
+    icon: Option<(WlSurface, ShmTarget)>,
+}
+
+struct Incoming {
+    offer: WlDataOffer,
+    serial: u32,
+    position: Point,
+    accepted: Option<DragAction>,
 }
 
 #[derive(Default)]
 pub(crate) struct Clipboard {
     device: Option<WlDataDevice>,
     selection: Option<WlDataOffer>,
-    copied: Option<(WlDataSource, String)>,
-    pastes: Vec<Paste>,
+    copied: Option<(WlDataSource, Transfer)>,
+    dragged: Option<Outgoing>,
+    incoming: Option<Incoming>,
+    pending_drop: Option<Incoming>,
+    readings: Vec<Reading>,
 }
 
-type OfferTypes = Mutex<Vec<String>>;
+#[derive(Default)]
+pub(crate) struct OfferState {
+    types: Mutex<Vec<String>>,
+    action: Mutex<Option<DragAction>>,
+}
 
 fn offered_types(offer: &WlDataOffer) -> Vec<String> {
     offer
-        .data::<OfferTypes>()
-        .and_then(|types| types.lock().ok().map(|types| types.clone()))
+        .data::<OfferState>()
+        .and_then(|state| state.types.lock().ok().map(|types| types.clone()))
         .unwrap_or_default()
+}
+
+fn offered_action(offer: &WlDataOffer) -> Option<DragAction> {
+    offer
+        .data::<OfferState>()
+        .and_then(|state| state.action.lock().ok().and_then(|action| *action))
+}
+
+fn readable_type(types: &[String], uris: bool) -> Option<String> {
+    let preferred = uris
+        .then_some([GNOME_FILES, URI_LIST])
+        .into_iter()
+        .flatten()
+        .chain(TEXT_TYPES);
+    preferred
+        .into_iter()
+        .find(|mime| types.iter().any(|offered| offered == mime))
+        .map(str::to_owned)
 }
 
 impl State {
@@ -45,10 +231,18 @@ impl State {
             self.clipboard.device = Some(manager.get_data_device(seat, handle, ()));
         }
     }
+
+    fn drag_event(&mut self, event: DragEvent) {
+        self.events.push(WindowEvent::Drag(event));
+    }
 }
 
 impl Window {
     pub fn copy(&mut self, text: &str) {
+        self.copy_transfer(Transfer::text(text));
+    }
+
+    pub fn copy_transfer(&mut self, transfer: Transfer) {
         let (Some(manager), Some(device), Some(serial)) = (
             &self.state.data_device_manager,
             &self.state.clipboard.device,
@@ -57,78 +251,231 @@ impl Window {
             return;
         };
         let source = manager.create_data_source(&self.queue.handle(), ());
-        for mime in TEXT_TYPES {
-            source.offer(mime.to_owned());
-        }
-        source.offer(own_type());
+        transfer.offer(&source);
         device.set_selection(Some(&source), serial);
-        if let Some((previous, _)) = self
-            .state
-            .clipboard
-            .copied
-            .replace((source, text.to_owned()))
-        {
+        if let Some((previous, _)) = self.state.clipboard.copied.replace((source, transfer)) {
             previous.destroy();
         }
     }
 
+    pub fn clipboard_has_uris(&self) -> bool {
+        self.state
+            .clipboard
+            .selection
+            .as_ref()
+            .is_some_and(|offer| offered_types(offer).iter().any(|mime| mime == URI_LIST))
+    }
+
     pub fn paste(&mut self) -> Result<(), WindowError> {
-        let Some(offer) = &self.state.clipboard.selection else {
+        self.paste_as(false)
+    }
+
+    pub fn paste_transfer(&mut self) -> Result<(), WindowError> {
+        self.paste_as(true)
+    }
+
+    fn paste_as(&mut self, transfer: bool) -> Result<(), WindowError> {
+        let Some(offer) = self.state.clipboard.selection.clone() else {
             return Ok(());
         };
-        let types = offered_types(offer);
+        let types = offered_types(&offer);
         if types.contains(&own_type())
-            && let Some((_, text)) = &self.state.clipboard.copied
+            && let Some((_, copied)) = &self.state.clipboard.copied
         {
-            self.state.events.push(WindowEvent::Pasted(text.clone()));
+            let event = pasted(copied.clone(), transfer);
+            self.state.events.push(event);
             return Ok(());
         }
-        let Some(mime) = TEXT_TYPES
-            .iter()
-            .find(|mime| types.iter().any(|offered| offered == *mime))
-        else {
+        let Some(mime) = readable_type(&types, transfer) else {
             return Ok(());
         };
+        self.read_offer(&offer, mime, Purpose::Paste { transfer })
+    }
+
+    fn read_offer(
+        &mut self,
+        offer: &WlDataOffer,
+        mime: String,
+        purpose: Purpose,
+    ) -> Result<(), WindowError> {
         let (reader, writer) =
             pipe_with(PipeFlags::CLOEXEC | PipeFlags::NONBLOCK).map_err(io::Error::from)?;
-        offer.receive((*mime).to_owned(), writer.as_fd());
+        offer.receive(mime.clone(), writer.as_fd());
         drop(writer);
         self.flush()?;
-        self.state.clipboard.pastes.push(Paste {
+        self.state.clipboard.readings.push(Reading {
             pipe: File::from(reader),
+            mime,
             bytes: Vec::new(),
+            purpose,
         });
         Ok(())
     }
 
-    pub(crate) fn paste_fds(&self) -> Vec<BorrowedFd<'_>> {
+    pub fn start_drag(
+        &mut self,
+        transfer: Transfer,
+        actions: &[DragAction],
+        icon: Option<Scene>,
+    ) -> Result<(), WindowError> {
+        let (Some(manager), Some(device), Some(serial)) = (
+            &self.state.data_device_manager,
+            &self.state.clipboard.device,
+            self.state.input.serial,
+        ) else {
+            return Err(WindowError::Missing("a data device"));
+        };
+        let handle = self.queue.handle();
+        let source = manager.create_data_source(&handle, ());
+        transfer.offer(&source);
+        let wire = actions
+            .iter()
+            .fold(DndAction::empty(), |all, action| all | action.wire());
+        source.set_actions(wire);
+        let icon = match (icon, &self.state.compositor, &self.state.shm) {
+            (Some(scene), Some(compositor), Some(shm)) => {
+                let surface = compositor.create_surface(&handle, ());
+                let mut target = ShmTarget::default();
+                target.present(&mut self.cpu, shm, &handle, &surface, &scene, 1.0)?;
+                Some((surface, target))
+            }
+            _ => None,
+        };
+        device.start_drag(
+            Some(&source),
+            &self.surface,
+            icon.as_ref().map(|(surface, _)| surface),
+            serial,
+        );
+        if let Some(previous) = self.state.clipboard.dragged.replace(Outgoing {
+            source,
+            transfer,
+            action: None,
+            icon,
+        }) {
+            finish_outgoing(previous);
+        }
+        self.flush()
+    }
+
+    pub fn accept_drag(&mut self, action: Option<DragAction>) {
+        let Some(incoming) = &mut self.state.clipboard.incoming else {
+            return;
+        };
+        incoming.accepted = action;
+        respond(incoming);
+        let _ = self.flush();
+    }
+
+    pub(crate) fn transfer_fds(&self) -> Vec<BorrowedFd<'_>> {
         self.state
             .clipboard
-            .pastes
+            .readings
             .iter()
-            .map(|paste| paste.pipe.as_fd())
+            .map(|reading| reading.pipe.as_fd())
             .collect()
     }
 
-    pub(crate) fn read_paste(&mut self, index: usize) {
-        let Some(paste) = self.state.clipboard.pastes.get_mut(index) else {
+    pub(crate) fn read_transfer(&mut self, index: usize) {
+        let Some(reading) = self.state.clipboard.readings.get_mut(index) else {
             return;
         };
         let mut chunk = [0u8; 4096];
         let finished = loop {
-            match paste.pipe.read(&mut chunk) {
+            match reading.pipe.read(&mut chunk) {
                 Ok(0) => break true,
-                Ok(read) => paste.bytes.extend_from_slice(&chunk[..read]),
+                Ok(read) => reading.bytes.extend_from_slice(&chunk[..read]),
                 Err(error) if error.kind() == io::ErrorKind::WouldBlock => break false,
                 Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
                 Err(_) => break true,
             }
         };
-        if finished {
-            let paste = self.state.clipboard.pastes.remove(index);
-            let text = String::from_utf8_lossy(&paste.bytes).into_owned();
-            self.state.events.push(WindowEvent::Pasted(text));
+        if !finished {
+            return;
         }
+        let reading = self.state.clipboard.readings.remove(index);
+        let transfer = Transfer::parse(&reading.mime, &reading.bytes);
+        match reading.purpose {
+            Purpose::Paste { transfer: whole } => {
+                self.state.events.push(pasted(transfer, whole));
+            }
+            Purpose::Drop {
+                offer,
+                position,
+                action,
+            } => {
+                if offer.version() >= 3 {
+                    offer.finish();
+                }
+                offer.destroy();
+                self.state.drag_event(DragEvent::Dropped {
+                    position,
+                    transfer,
+                    action,
+                });
+                let _ = self.flush();
+            }
+        }
+    }
+
+    pub(crate) fn take_drop(&mut self) {
+        let Some(incoming) = self.state.clipboard.pending_drop.take() else {
+            return;
+        };
+        let types = offered_types(&incoming.offer);
+        let action = offered_action(&incoming.offer).or(incoming.accepted);
+        let position = incoming.position;
+        let Some(mime) = readable_type(&types, true).filter(|_| incoming.accepted.is_some()) else {
+            incoming.offer.destroy();
+            self.state.drag_event(DragEvent::Left);
+            return;
+        };
+        let offer = incoming.offer.clone();
+        if self
+            .read_offer(
+                &offer,
+                mime,
+                Purpose::Drop {
+                    offer: incoming.offer,
+                    position,
+                    action,
+                },
+            )
+            .is_err()
+        {
+            self.state.drag_event(DragEvent::Left);
+        }
+    }
+}
+
+fn pasted(transfer: Transfer, whole: bool) -> WindowEvent {
+    match whole {
+        true => WindowEvent::PastedTransfer(transfer),
+        false => WindowEvent::Pasted(transfer.text),
+    }
+}
+
+fn respond(incoming: &Incoming) {
+    let types = offered_types(&incoming.offer);
+    let mime = incoming.accepted.and_then(|_| readable_type(&types, true));
+    incoming.offer.accept(incoming.serial, mime);
+    if incoming.offer.version() >= 3 {
+        match incoming.accepted {
+            Some(action) => incoming
+                .offer
+                .set_actions(DndAction::Copy | DndAction::Move, action.wire()),
+            None => incoming
+                .offer
+                .set_actions(DndAction::empty(), DndAction::empty()),
+        }
+    }
+}
+
+fn finish_outgoing(outgoing: Outgoing) {
+    outgoing.source.destroy();
+    if let Some((surface, mut target)) = outgoing.icon {
+        target.destroy();
+        surface.destroy();
     }
 }
 
@@ -141,31 +488,89 @@ impl Dispatch<WlDataDevice, ()> for State {
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
-        if let wl_data_device::Event::Selection { id } = event
-            && let Some(previous) = std::mem::replace(&mut state.clipboard.selection, id)
-        {
-            previous.destroy();
+        match event {
+            wl_data_device::Event::Selection { id } => {
+                if let Some(previous) = std::mem::replace(&mut state.clipboard.selection, id) {
+                    previous.destroy();
+                }
+            }
+            wl_data_device::Event::Enter {
+                serial,
+                x,
+                y,
+                id: Some(offer),
+                ..
+            } => {
+                let types = offered_types(&offer);
+                let position = Point::new(x as f32, y as f32);
+                let incoming = Incoming {
+                    offer,
+                    serial,
+                    position,
+                    accepted: None,
+                };
+                respond(&incoming);
+                if let Some(previous) = state.clipboard.incoming.replace(incoming) {
+                    previous.offer.destroy();
+                }
+                state.drag_event(DragEvent::Entered {
+                    position,
+                    uris: types.iter().any(|mime| mime == URI_LIST),
+                    text: TEXT_TYPES
+                        .iter()
+                        .any(|text| types.iter().any(|mime| mime == text)),
+                });
+            }
+            wl_data_device::Event::Motion { x, y, .. } => {
+                let position = Point::new(x as f32, y as f32);
+                let Some(incoming) = &mut state.clipboard.incoming else {
+                    return;
+                };
+                incoming.position = position;
+                respond(incoming);
+                state.drag_event(DragEvent::Moved(position));
+            }
+            wl_data_device::Event::Leave => {
+                if let Some(incoming) = state.clipboard.incoming.take() {
+                    incoming.offer.destroy();
+                    state.drag_event(DragEvent::Left);
+                }
+            }
+            wl_data_device::Event::Drop => {
+                state.clipboard.pending_drop = state.clipboard.incoming.take();
+            }
+            _ => {}
         }
     }
 
     event_created_child!(State, WlDataDevice, [
-        wl_data_device::EVT_DATA_OFFER_OPCODE => (WlDataOffer, OfferTypes::default()),
+        wl_data_device::EVT_DATA_OFFER_OPCODE => (WlDataOffer, OfferState::default()),
     ]);
 }
 
-impl Dispatch<WlDataOffer, OfferTypes> for State {
+impl Dispatch<WlDataOffer, OfferState> for State {
     fn event(
         _: &mut Self,
         _: &WlDataOffer,
         event: wl_data_offer::Event,
-        types: &OfferTypes,
+        offer: &OfferState,
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
-        if let wl_data_offer::Event::Offer { mime_type } = event
-            && let Ok(mut types) = types.lock()
-        {
-            types.push(mime_type);
+        match event {
+            wl_data_offer::Event::Offer { mime_type } => {
+                if let Ok(mut types) = offer.types.lock() {
+                    types.push(mime_type);
+                }
+            }
+            wl_data_offer::Event::Action {
+                dnd_action: WEnum::Value(action),
+            } => {
+                if let Ok(mut chosen) = offer.action.lock() {
+                    *chosen = DragAction::from_wire(action);
+                }
+            }
+            _ => {}
         }
     }
 }
@@ -179,25 +584,50 @@ impl Dispatch<WlDataSource, ()> for State {
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
-        match event {
-            wl_data_source::Event::Send { fd, .. } => {
-                if let Some((_, text)) = state
-                    .clipboard
+        let clipboard = &mut state.clipboard;
+        let dragged = clipboard
+            .dragged
+            .as_mut()
+            .filter(|outgoing| outgoing.source == *source);
+        match (event, dragged) {
+            (wl_data_source::Event::Send { mime_type, fd }, Some(outgoing)) => {
+                send(fd, &outgoing.transfer.bytes(&mime_type));
+            }
+            (wl_data_source::Event::Send { mime_type, fd }, None) => {
+                if let Some((_, transfer)) = clipboard
                     .copied
                     .as_ref()
                     .filter(|(copied, _)| copied == source)
                 {
-                    send(fd, text);
+                    send(fd, &transfer.bytes(&mime_type));
                 }
             }
-            wl_data_source::Event::Cancelled => {
-                if state
-                    .clipboard
+            (
+                wl_data_source::Event::Action {
+                    dnd_action: WEnum::Value(action),
+                },
+                Some(outgoing),
+            ) => outgoing.action = DragAction::from_wire(action),
+            (wl_data_source::Event::DndFinished, Some(_)) => {
+                if let Some(outgoing) = clipboard.dragged.take() {
+                    let action = outgoing.action;
+                    finish_outgoing(outgoing);
+                    state.drag_event(DragEvent::Finished(action));
+                }
+            }
+            (wl_data_source::Event::Cancelled, Some(_)) => {
+                if let Some(outgoing) = clipboard.dragged.take() {
+                    finish_outgoing(outgoing);
+                    state.drag_event(DragEvent::Finished(None));
+                }
+            }
+            (wl_data_source::Event::Cancelled, None) => {
+                if clipboard
                     .copied
                     .as_ref()
                     .is_some_and(|(copied, _)| copied == source)
                 {
-                    state.clipboard.copied = None;
+                    clipboard.copied = None;
                 }
                 source.destroy();
             }
@@ -206,7 +636,7 @@ impl Dispatch<WlDataSource, ()> for State {
     }
 }
 
-fn send(fd: OwnedFd, text: &str) {
+fn send(fd: OwnedFd, bytes: &[u8]) {
     let mut pipe = File::from(fd);
-    let _ = pipe.write_all(text.as_bytes());
+    let _ = pipe.write_all(bytes);
 }

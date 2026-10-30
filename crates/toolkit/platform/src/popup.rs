@@ -52,6 +52,7 @@ struct Popup {
 #[derive(Clone, Copy, PartialEq)]
 struct Look {
     highlighted: Option<usize>,
+    alternates: bool,
     show_highlight: bool,
     opacity: f32,
     palette: Palette,
@@ -148,6 +149,7 @@ impl Menus {
                     .pointer_release(level, local(pointer.position), now)
             }
             Event::Key { key, modifiers } => self.tracker.key(*key, *modifiers, now),
+            Event::ModifiersChanged(modifiers) => self.tracker.show_alternates(modifiers.alt),
             _ => MenuOutcome::Nothing,
         }
     }
@@ -232,6 +234,7 @@ impl Menus {
             let (show_highlight, opacity) = self.tracker.appearance(level, now);
             let look = Look {
                 highlighted: panel.highlighted(),
+                alternates: panel.shows_alternates(),
                 show_highlight,
                 opacity,
                 palette: *palette,

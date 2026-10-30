@@ -70,7 +70,7 @@ impl GpuRenderer {
             outlines: GlyphOutlines::default(),
             scene: vello_gpu::Scene::new(1, 1),
             depth: None,
-            image_ids: ImageIds::new(),
+            image_ids: ImageIds::default(),
         }
     }
 
@@ -180,13 +180,18 @@ impl GpuRenderer {
     fn upload_images(&mut self, scene: &Scene) {
         let mut images = Vec::new();
         draw::images(&scene.items, &mut images);
-        images.retain(|image| !self.image_ids.contains_key(&image.id()));
-        if images.is_empty() {
+        images.retain(|image| self.image_ids.get(image).is_none());
+        let dropped = self.image_ids.take_dropped();
+        if images.is_empty() && dropped.is_empty() {
             return;
         }
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+        for id in dropped {
+            self.renderer
+                .destroy_image(&mut self.resources, &mut encoder, id);
+        }
         for image in images {
             let id = self.renderer.upload_image(
                 &mut self.resources,
@@ -195,7 +200,7 @@ impl GpuRenderer {
                 &mut encoder,
                 &image.pixmap,
             );
-            self.image_ids.insert(image.id(), id);
+            self.image_ids.insert(&image, id);
         }
         self.queue.submit([encoder.finish()]);
     }

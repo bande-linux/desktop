@@ -43,6 +43,7 @@ pub struct MenuItem {
     pub checked: bool,
     pub submenu: Option<Menu>,
     pub separator: bool,
+    pub alternate: Option<Box<MenuItem>>,
 }
 
 impl MenuItem {
@@ -55,6 +56,7 @@ impl MenuItem {
             checked: false,
             submenu: None,
             separator: false,
+            alternate: None,
         }
     }
 
@@ -88,6 +90,13 @@ impl MenuItem {
         Self { checked, ..self }
     }
 
+    pub fn alternate(self, alternate: MenuItem) -> Self {
+        Self {
+            alternate: Some(Box::new(alternate)),
+            ..self
+        }
+    }
+
     fn selectable(&self) -> bool {
         self.enabled && !self.separator
     }
@@ -101,8 +110,9 @@ struct Row {
 }
 
 pub struct MenuPanel {
-    pub menu: Menu,
-    rows: Vec<Row>,
+    menus: [Menu; 2],
+    rows: [Vec<Row>; 2],
+    alternates: bool,
     size: Size,
     highlighted: Option<usize>,
 }
@@ -120,45 +130,61 @@ impl MenuPanel {
                 )
             })
         };
-        let mut top = VERTICAL_PADDING;
+        let alternate = Menu::new(
+            menu.items
+                .iter()
+                .map(|item| {
+                    item.alternate
+                        .as_deref()
+                        .cloned()
+                        .unwrap_or_else(|| item.clone())
+                })
+                .collect(),
+        );
         let mut widest_label: f32 = 0.0;
         let mut widest_shortcut: f32 = 0.0;
         let has_submenu = menu.items.iter().any(|item| item.submenu.is_some());
-        let rows = menu
-            .items
-            .iter()
-            .map(|item| {
-                let height = if item.separator {
-                    SEPARATOR_HEIGHT
-                } else {
-                    ROW_HEIGHT
-                };
-                let label_color = if item.enabled {
-                    palette.label_primary
-                } else {
-                    palette.label_muted
-                };
-                let labels = (!item.separator).then(|| paragraphs(text, &item.title, label_color));
-                let shortcuts = item
-                    .shortcut
-                    .as_deref()
-                    .map(|shortcut| paragraphs(text, shortcut, palette.label_muted));
-                if let Some([label, _]) = &labels {
-                    widest_label = widest_label.max(label.width());
-                }
-                if let Some([shortcut, _]) = &shortcuts {
-                    widest_shortcut = widest_shortcut.max(shortcut.width());
-                }
-                let row = Row {
-                    top,
-                    height,
-                    labels,
-                    shortcuts,
-                };
-                top += height;
-                row
-            })
-            .collect();
+        let rows = [&menu, &alternate].map(|menu| {
+            let mut top = VERTICAL_PADDING;
+            menu.items
+                .iter()
+                .map(|item| {
+                    let height = if item.separator {
+                        SEPARATOR_HEIGHT
+                    } else {
+                        ROW_HEIGHT
+                    };
+                    let label_color = if item.enabled {
+                        palette.label_primary
+                    } else {
+                        palette.label_muted
+                    };
+                    let labels =
+                        (!item.separator).then(|| paragraphs(text, &item.title, label_color));
+                    let shortcuts = item
+                        .shortcut
+                        .as_deref()
+                        .map(|shortcut| paragraphs(text, shortcut, palette.label_muted));
+                    if let Some([label, _]) = &labels {
+                        widest_label = widest_label.max(label.width());
+                    }
+                    if let Some([shortcut, _]) = &shortcuts {
+                        widest_shortcut = widest_shortcut.max(shortcut.width());
+                    }
+                    let row = Row {
+                        top,
+                        height,
+                        labels,
+                        shortcuts,
+                    };
+                    top += height;
+                    row
+                })
+                .collect::<Vec<_>>()
+        });
+        let top = rows[0]
+            .last()
+            .map_or(VERTICAL_PADDING, |row| row.top + row.height);
         let shortcut_space = if widest_shortcut > 0.0 {
             SHORTCUT_GAP + widest_shortcut
         } else {
@@ -169,11 +195,24 @@ impl MenuPanel {
             .max(MINIMUM_WIDTH)
             .ceil();
         Self {
-            menu,
+            menus: [menu, alternate],
             rows,
+            alternates: false,
             size: Size::new(width, top + VERTICAL_PADDING),
             highlighted: None,
         }
+    }
+
+    pub fn shows_alternates(&self) -> bool {
+        self.alternates
+    }
+
+    pub fn menu(&self) -> &Menu {
+        &self.menus[usize::from(self.alternates)]
+    }
+
+    fn current_rows(&self) -> &[Row] {
+        &self.rows[usize::from(self.alternates)]
     }
 
     pub fn size(&self) -> Size {
@@ -185,24 +224,26 @@ impl MenuPanel {
     }
 
     pub fn row_rect(&self, index: usize) -> Rect {
-        self.rows.get(index).map_or(Rect::default(), |row| {
-            Rect::new(0.0, row.top, self.size.width, row.height)
-        })
+        self.current_rows()
+            .get(index)
+            .map_or(Rect::default(), |row| {
+                Rect::new(0.0, row.top, self.size.width, row.height)
+            })
     }
 
     pub fn item_at(&self, point: Point) -> Option<usize> {
         if point.x < 0.0 || point.x >= self.size.width {
             return None;
         }
-        self.rows
+        self.current_rows()
             .iter()
             .position(|row| point.y >= row.top && point.y < row.top + row.height)
-            .filter(|index| self.menu.items[*index].selectable())
+            .filter(|index| self.menu().items[*index].selectable())
     }
 
     fn step(&self, from: Option<usize>, forward: bool) -> Option<usize> {
-        let count = self.menu.items.len();
-        let selectable = |index: &usize| self.menu.items[*index].selectable();
+        let count = self.menu().items.len();
+        let selectable = |index: &usize| self.menu().items[*index].selectable();
         match (from, forward) {
             (None, true) => (0..count).find(selectable),
             (None, false) => (0..count).rev().find(selectable),
@@ -227,7 +268,13 @@ impl MenuPanel {
                 paint: palette.separator_color.into(),
             },
         ];
-        for (index, (item, row)) in self.menu.items.iter().zip(&self.rows).enumerate() {
+        for (index, (item, row)) in self
+            .menu()
+            .items
+            .iter()
+            .zip(self.current_rows())
+            .enumerate()
+        {
             let rect = Rect::new(0.0, row.top, self.size.width, row.height);
             let centre = rect.y + rect.height / 2.0;
             if item.separator {
@@ -306,13 +353,13 @@ impl MenuPanel {
         let id = |index: usize| menu_node(level, Some(index));
         let mut menu = Node::new(Role::Menu);
         menu.set_children(
-            (0..self.menu.items.len())
-                .filter(|index| !self.menu.items[*index].separator)
+            (0..self.menu().items.len())
+                .filter(|index| !self.menu().items[*index].separator)
                 .map(id)
                 .collect::<Vec<_>>(),
         );
         let mut nodes = vec![(menu_node(level, None), menu)];
-        for (index, item) in self.menu.items.iter().enumerate() {
+        for (index, item) in self.menu().items.iter().enumerate() {
             if item.separator {
                 continue;
             }
@@ -406,7 +453,7 @@ impl MenuTracker {
     pub fn submenu(&self, level: usize, index: usize) -> Option<Menu> {
         self.panels
             .get(level)?
-            .menu
+            .menu()
             .items
             .get(index)?
             .submenu
@@ -422,7 +469,7 @@ impl MenuTracker {
         }
         panel.highlighted = index;
         self.submenu_due = index
-            .filter(|index| panel.menu.items[*index].submenu.is_some())
+            .filter(|index| panel.menu().items[*index].submenu.is_some())
             .map(|index| (level, index, now + SUBMENU_DELAY));
         if self.panels.len() > level + 1 {
             return MenuOutcome::CloseFrom(level + 1);
@@ -454,7 +501,7 @@ impl MenuTracker {
         };
         self.armed = true;
         match panel.item_at(point) {
-            Some(index) if panel.menu.items[index].submenu.is_some() => {
+            Some(index) if panel.menu().items[index].submenu.is_some() => {
                 self.open_submenu(level, index)
             }
             _ => MenuOutcome::Nothing,
@@ -487,7 +534,12 @@ impl MenuTracker {
         let Some(panel) = self.panels.get_mut(level) else {
             return MenuOutcome::Nothing;
         };
-        let Some(item) = panel.menu.items.get(index).filter(|item| item.selectable()) else {
+        let Some(item) = panel
+            .menu()
+            .items
+            .get(index)
+            .filter(|item| item.selectable())
+        else {
             return MenuOutcome::Nothing;
         };
         if item.submenu.is_some() {
@@ -516,7 +568,7 @@ impl MenuTracker {
                 self.highlight(level, next, now)
             }
             Key::Right => match current {
-                Some(index) if self.panels[level].menu.items[index].submenu.is_some() => {
+                Some(index) if self.panels[level].menu().items[index].submenu.is_some() => {
                     self.open_submenu(level, index)
                 }
                 _ => MenuOutcome::Nothing,
@@ -546,7 +598,7 @@ impl MenuTracker {
         self.typed_at = Some(now);
         let typed = self.typed.clone();
         let found =
-            self.panels[level].menu.items.iter().position(|item| {
+            self.panels[level].menu().items.iter().position(|item| {
                 item.selectable() && item.title.to_lowercase().starts_with(&typed)
             });
         match found {
@@ -555,8 +607,22 @@ impl MenuTracker {
         }
     }
 
+    pub fn show_alternates(&mut self, shown: bool) -> MenuOutcome {
+        let mut changed = false;
+        for panel in &mut self.panels {
+            changed |= panel.alternates != shown;
+            panel.alternates = shown;
+        }
+        match changed {
+            true => MenuOutcome::Redraw,
+            false => MenuOutcome::Nothing,
+        }
+    }
+
     pub fn opened_submenu(&mut self, panel: MenuPanel, from_keyboard: bool) {
-        self.panels.push(entered(panel, from_keyboard));
+        let mut panel = entered(panel, from_keyboard);
+        panel.alternates = self.panels.first().is_some_and(|root| root.alternates);
+        self.panels.push(panel);
     }
 
     pub fn deadline(&self) -> Option<Instant> {
@@ -613,7 +679,7 @@ impl MenuTracker {
 
     pub fn item_for_node(&self, node: NodeId) -> Option<(usize, usize)> {
         self.panels.iter().enumerate().find_map(|(level, panel)| {
-            (0..panel.menu.items.len())
+            (0..panel.menu().items.len())
                 .find(|index| menu_node(level, Some(*index)) == node)
                 .map(|index| (level, index))
         })

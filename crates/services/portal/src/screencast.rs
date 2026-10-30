@@ -102,28 +102,28 @@ impl ScreenCast {
     }
 
     fn take_sessions_streaming(&self, nodes: &[u32]) -> Vec<OwnedObjectPath> {
-        let mut sessions = lock(&self.sessions);
-        let ended: Vec<OwnedObjectPath> = sessions
-            .iter()
-            .filter(|(_, session)| {
-                session
-                    .streams
-                    .iter()
-                    .any(|stream| nodes.contains(&stream.node_id))
-            })
-            .map(|(path, _)| path.clone())
-            .collect();
-        for path in &ended {
-            if let Some(session) = sessions.remove(path) {
-                let rest: Vec<Stream> = session
-                    .streams
-                    .into_iter()
-                    .filter(|stream| !nodes.contains(&stream.node_id))
-                    .collect();
-                if !rest.is_empty() {
-                    self.backend.stop(&rest);
-                }
-            }
+        let (ended, rest): (Vec<OwnedObjectPath>, Vec<Stream>) = {
+            let mut sessions = lock(&self.sessions);
+            let ended: Vec<OwnedObjectPath> = sessions
+                .iter()
+                .filter(|(_, session)| {
+                    session
+                        .streams
+                        .iter()
+                        .any(|stream| nodes.contains(&stream.node_id))
+                })
+                .map(|(path, _)| path.clone())
+                .collect();
+            let rest = ended
+                .iter()
+                .filter_map(|path| sessions.remove(path))
+                .flat_map(|session| session.streams)
+                .filter(|stream| !nodes.contains(&stream.node_id))
+                .collect();
+            (ended, rest)
+        };
+        if !rest.is_empty() {
+            self.backend.stop(&rest);
         }
         ended
     }
@@ -341,7 +341,7 @@ struct SessionObject {
 impl SessionObject {
     async fn close(&self, #[zbus(object_server)] server: &ObjectServer) {
         let session = lock(&self.sessions).remove(&self.path);
-        if let Some(session) = session {
+        if let Some(session) = session.filter(|session| !session.streams.is_empty()) {
             self.backend.stop(&session.streams);
         }
         let _ = server.remove::<SessionObject, _>(&self.path).await;

@@ -7,7 +7,7 @@ repository.workspace = true
 
 [features]
 default = ["service"]
-service = ["dep:unbound-audio", "dep:unbound-log"]
+service = ["dep:unbound-audio", "dep:unbound-bus", "dep:unbound-log"]
 
 [[bin]]
 name = "unbound-sound"
@@ -16,6 +16,7 @@ required-features = ["service"]
 [dependencies]
 tracing.workspace = true
 unbound-audio = { workspace = true, optional = true }
+unbound-bus = { workspace = true, optional = true }
 unbound-log = { workspace = true, optional = true }
 zbus.workspace = true
 

@@ -8,6 +8,7 @@ pub mod tray;
 
 use std::sync::LazyLock;
 
+use accesskit::{Action, Node as AccessNode, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
 use unbound_l10n::Localizer;
 use unbound_toolkit::ui::Menu;
 use unbound_toolkit::{
@@ -81,7 +82,7 @@ pub struct MenuBar {
     symbols: Symbols,
     app: String,
     app_menus: Vec<String>,
-    tray: Vec<Option<Image>>,
+    tray: Vec<(String, Option<Image>)>,
     status: Status,
     clock: String,
     open: Option<Slot>,
@@ -131,8 +132,8 @@ impl MenuBar {
         self.app_menus = titles;
     }
 
-    pub fn set_tray(&mut self, icons: Vec<Option<Image>>) {
-        self.tray = icons;
+    pub fn set_tray(&mut self, items: Vec<(String, Option<Image>)>) {
+        self.tray = items;
     }
 
     pub fn status_mut(&mut self) -> &mut Status {
@@ -172,6 +173,62 @@ impl MenuBar {
             .iter()
             .find(|(_, rect)| contains(*rect, point))
             .map(|(slot, _)| *slot)
+    }
+
+    pub fn slot_of_node(&self, node: NodeId) -> Option<Slot> {
+        let index = usize::try_from(node.0.checked_sub(1)?).ok()?;
+        self.slots.get(index).map(|(slot, _)| *slot)
+    }
+
+    fn describe(&self, slot: Slot) -> String {
+        match slot {
+            Slot::System => L10N.tr("system-menu"),
+            Slot::App => self.app.clone(),
+            Slot::AppMenu(index) => self.app_menus.get(index).cloned().unwrap_or_default(),
+            Slot::Tray(index) => self
+                .tray
+                .get(index)
+                .map(|(title, _)| title.clone())
+                .unwrap_or_default(),
+            Slot::Bluetooth => L10N.tr("bluetooth"),
+            Slot::Sound => L10N.tr("sound"),
+            Slot::Wifi => L10N.tr("wifi"),
+            Slot::Battery => self.status.battery.map_or_else(String::new, |battery| {
+                L10N.tr_args(
+                    "battery-level",
+                    [("percent", battery.percent.round().into())],
+                )
+            }),
+            Slot::ControlCenter => L10N.tr("control-center"),
+            Slot::Clock => self.clock.clone(),
+        }
+    }
+
+    pub fn accessibility(&self) -> TreeUpdate {
+        let root_id = NodeId(0);
+        let mut root = AccessNode::new(Role::MenuBar);
+        root.set_label(L10N.tr("menu-bar"));
+        let mut nodes = Vec::new();
+        for (index, (slot, rect)) in self.slots.iter().enumerate() {
+            let mut node = AccessNode::new(Role::MenuItem);
+            node.set_label(self.describe(*slot));
+            node.set_bounds(accesskit::Rect {
+                x0: f64::from(rect.x),
+                y0: f64::from(rect.y),
+                x1: f64::from(rect.x + rect.width),
+                y1: f64::from(rect.y + rect.height),
+            });
+            node.add_action(Action::Click);
+            nodes.push((NodeId(index as u64 + 1), node));
+        }
+        root.set_children(nodes.iter().map(|(id, _)| *id).collect::<Vec<_>>());
+        nodes.insert(0, (root_id, root));
+        TreeUpdate {
+            nodes,
+            tree: Some(TreeInfo::new(root_id)),
+            tree_id: TreeId::ROOT,
+            focus: root_id,
+        }
     }
 
     pub fn slot_rect(&self, slot: Slot) -> Option<Rect> {
@@ -405,7 +462,7 @@ impl MenuBar {
                     }
                 }
                 Slot::Tray(index) => {
-                    if let Some(Some(image)) = self.tray.get(index).cloned() {
+                    if let Some((_, Some(image))) = self.tray.get(index).cloned() {
                         items.push(Item::Image {
                             rect: Rect::new(
                                 snap(content.x + (content.width - TRAY_ICON) / 2.0, scale),

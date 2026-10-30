@@ -101,6 +101,21 @@ fn the_system_menu_and_app_sit_left_and_status_items_then_the_clock_right() {
             Slot::Clock
         ]
     );
+    let tree = bar.accessibility();
+    let labels: Vec<String> = tree
+        .nodes
+        .iter()
+        .skip(1)
+        .filter_map(|(_, node)| node.label().map(str::to_owned))
+        .collect();
+    assert!(labels.contains(&"Battery 80%".to_owned()));
+    assert!(labels.contains(&"Control Center".to_owned()));
+    let (terminal, _) = tree
+        .nodes
+        .iter()
+        .find(|(_, node)| node.label() == Some("Terminal"))
+        .expect("the app is announced");
+    assert_eq!(bar.slot_of_node(*terminal), Some(Slot::App));
     let clock = bar.slot_rect(Slot::Clock).expect("clock");
     assert!(clock.x + clock.width <= 1280.0 && clock.x + clock.width > 1260.0);
 }

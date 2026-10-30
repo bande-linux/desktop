@@ -257,10 +257,12 @@ impl Bar {
             .tray
             .iter()
             .map(|item| {
-                self.tray_icons
+                let icon = self
+                    .tray_icons
                     .entry((format!("{}{:?}", item.id, item.icon), pixels))
                     .or_insert_with(|| tray_image(&item.icon, pixels.max(16)))
-                    .clone()
+                    .clone();
+                (item.title.clone(), icon)
             })
             .collect();
         self.bar.set_tray(icons);
@@ -341,6 +343,13 @@ impl App for Bar {
                     self.run(window, command);
                 }
             }
+            WindowEvent::Accessibility(request) => {
+                if request.action == accesskit::Action::Click
+                    && let Some(slot) = self.bar.slot_of_node(request.target_node)
+                {
+                    self.open(window, slot);
+                }
+            }
             WindowEvent::MenuClosed => {
                 if self.bar.set_open(None) {
                     window.request_redraw();
@@ -394,6 +403,10 @@ impl App for Bar {
 
     fn deadline(&self) -> Option<Instant> {
         Some(self.next_clock)
+    }
+
+    fn accessibility(&self) -> Option<accesskit::TreeUpdate> {
+        Some(self.bar.accessibility())
     }
 
     fn tick(&mut self, window: &mut Window, now: Instant) {

@@ -21,6 +21,7 @@ const PERSISTENT_STATE: &str = "/var/lib/unbound-speaker-guard/state";
 const WAIT_MS: u32 = 250;
 const RUNTIME_SAVE_SECONDS: f64 = 1.0;
 const PERSISTENT_SAVE_SECONDS: f64 = 60.0;
+const LOCK_TIMEOUT_SECONDS: f64 = 0.25;
 const EPIPE: i32 = 32;
 const ESTRPIPE: i32 = 86;
 
@@ -47,7 +48,7 @@ struct Guard {
 }
 
 impl Guard {
-    fn snapshot(&self) -> String {
+    fn snapshot(&self, saved_at: f64, clean: bool) -> String {
         let saved: Vec<state::Saved> = self
             .protections
             .iter()
@@ -58,7 +59,7 @@ impl Guard {
                 power: *power,
             })
             .collect();
-        state::encode(state::now_seconds(), &saved)
+        state::encode(saved_at, clean, &saved)
     }
 
     fn apply(&mut self, powers: &[f64], seconds: f64) -> Result<(), String> {
@@ -167,11 +168,16 @@ impl Guard {
                 }
             }
             if runtime_saved.elapsed().as_secs_f64() >= RUNTIME_SAVE_SECONDS {
-                let _ = state::write(Path::new(RUNTIME_STATE), &self.snapshot());
+                if let Some(now) = state::boot_seconds() {
+                    let _ = state::write(Path::new(RUNTIME_STATE), &self.snapshot(now, false));
+                }
                 runtime_saved = Instant::now();
             }
             if persistent_saved.elapsed().as_secs_f64() >= PERSISTENT_SAVE_SECONDS {
-                let _ = state::write(Path::new(PERSISTENT_STATE), &self.snapshot());
+                let _ = state::write(
+                    Path::new(PERSISTENT_STATE),
+                    &self.snapshot(state::now_seconds(), false),
+                );
                 persistent_saved = Instant::now();
             }
         }
@@ -179,9 +185,13 @@ impl Guard {
     }
 
     fn save(&self) {
-        let snapshot = self.snapshot();
-        for path in [RUNTIME_STATE, PERSISTENT_STATE] {
-            if let Err(error) = state::write(Path::new(path), &snapshot) {
+        let snapshots = [
+            (RUNTIME_STATE, state::boot_seconds()),
+            (PERSISTENT_STATE, Some(state::now_seconds())),
+        ];
+        for (path, now) in snapshots {
+            let Some(now) = now else { continue };
+            if let Err(error) = state::write(Path::new(path), &self.snapshot(now, true)) {
                 tracing::warn!("cannot save the speaker temperatures to {path}: {error}");
             }
         }
@@ -229,23 +239,45 @@ fn start() -> Result<Guard, String> {
             gain_db: 0.0,
         })
         .collect();
-    match state::read_newest(
-        &[Path::new(RUNTIME_STATE), Path::new(PERSISTENT_STATE)],
-        protections.len(),
-    ) {
-        Some((saved_at, saved)) => {
-            let elapsed = state::now_seconds() - saved_at;
-            for (protection, saved) in protections.iter_mut().zip(saved) {
-                state::resume(protection, saved, elapsed);
+    let worst_case_power = |s: &model::Speaker| {
+        model.amplifier_sensitivity * model.amplifier_sensitivity / s.sense.dc_resistance
+    };
+    let restored = state::read(Path::new(RUNTIME_STATE), protections.len())
+        .zip(state::boot_seconds())
+        .map(|(snapshot, now)| (snapshot, now, RUNTIME_SAVE_SECONDS))
+        .or_else(|| {
+            state::read(Path::new(PERSISTENT_STATE), protections.len())
+                .map(|snapshot| (snapshot, state::now_seconds(), PERSISTENT_SAVE_SECONDS))
+        });
+    match restored {
+        Some((snapshot, now, interval)) => {
+            let elapsed = now - snapshot.saved_at;
+            for ((protection, saved), speaker) in protections
+                .iter_mut()
+                .zip(snapshot.speakers)
+                .zip(&model.speakers)
+            {
+                let heating = if snapshot.clean {
+                    Vec::new()
+                } else {
+                    vec![
+                        state::Heating {
+                            seconds: interval,
+                            power: speaker.thermal.max_continuous_power(),
+                        },
+                        state::Heating {
+                            seconds: LOCK_TIMEOUT_SECONDS,
+                            power: worst_case_power(speaker),
+                        },
+                    ]
+                };
+                state::resume(protection, saved, elapsed, &heating);
             }
         }
         None => tracing::info!("no saved speaker temperatures, starting from the worst case"),
     }
     let card = Card::open(&model).map_err(|e| e.to_string())?;
     let pcm = SensePcm::open(&model, channels).map_err(|e| e.to_string())?;
-    let worst_case_power = |s: &model::Speaker| {
-        model.amplifier_sensitivity * model.amplifier_sensitivity / s.sense.dc_resistance
-    };
     let monitors = model
         .speakers
         .iter()

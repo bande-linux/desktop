@@ -258,16 +258,7 @@ impl Menus {
             popup.shown = Some(look);
             let size = panel.size();
             let shape = Shape::rounded(Rect::new(0.0, 0.0, size.width, size.height), MENU_RADIUS);
-            let mut items: Vec<Item> = Elevation::Overlay
-                .shadows(palette.scheme, true)
-                .into_iter()
-                .map(|shadow| Item::Shadow {
-                    shape,
-                    offset: Point::new(0.0, shadow.offset),
-                    blur_radius: shadow.blur,
-                    color: Color::BLACK.with_opacity(shadow.opacity),
-                })
-                .collect();
+            let mut items = Item::shadows(shape, Elevation::Overlay, palette.scheme, true).to_vec();
             items.extend(panel.paint(&palette, show_highlight));
             let scene = Scene {
                 width: (size.width + 2.0 * MARGIN) as u32,

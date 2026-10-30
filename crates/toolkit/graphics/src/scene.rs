@@ -8,7 +8,7 @@ use resvg::{tiny_skia, usvg};
 use vello_cpu::{PixelMetadata, Pixmap};
 
 use crate::text::Paragraph;
-use unbound_design::Color;
+use unbound_design::{Color, Elevation, Scheme};
 
 const SYMBOLIC_INK: &str = "#201E1A";
 
@@ -348,6 +348,19 @@ pub enum Item {
         rect: Rect,
         image: Image,
     },
+}
+
+impl Item {
+    pub fn shadows(shape: Shape, elevation: Elevation, scheme: Scheme, active: bool) -> [Self; 2] {
+        elevation
+            .shadows(scheme, active)
+            .map(|shadow| Self::Shadow {
+                shape,
+                offset: Point::new(0.0, shadow.offset),
+                blur_radius: shadow.blur,
+                color: Color::BLACK.with_opacity(shadow.opacity),
+            })
+    }
 }
 
 #[derive(Debug, Clone)]

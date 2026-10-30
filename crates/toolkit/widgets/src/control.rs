@@ -1,4 +1,4 @@
-use unbound_graphics::{Color, Image, Item, Path, Point, Radius, Rect, Shape};
+use unbound_graphics::{Color, Image, Item, Palette, Path, Point, Radius, Rect, Shape};
 
 use super::Context;
 
@@ -11,7 +11,11 @@ const CHEVRON_HEIGHT: f32 = 2.25;
 const GLYPH_STROKE: f32 = 1.5;
 
 pub(crate) fn focus_ring(cx: &Context, shape: Shape, items: &mut Vec<Item>) {
-    ring(cx.palette.focus, shape, items);
+    focus_ring_for(&cx.palette, shape, items);
+}
+
+pub fn focus_ring_for(palette: &Palette, shape: Shape, items: &mut Vec<Item>) {
+    ring(palette.focus, shape, items);
 }
 
 fn ring(color: Color, shape: Shape, items: &mut Vec<Item>) {

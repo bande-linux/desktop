@@ -1,16 +1,17 @@
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionData, ActionRequest, Node, Role};
-use unbound_toolkit::ui::{Context, Event, Key, Parts, Size, Widget, WidgetId};
+use unbound_toolkit::ui::{Context, Event, Key, Parts, Size, Widget, WidgetId, focus_ring_for};
 use unbound_toolkit::{
-    Image, Item, Paragraph, Path, Point, Rect, Shape, TextAlign, TextStyle, TextSystem,
+    Image, Item, Paragraph, Path, Point, Radius, Rect, Shape, TextAlign, TextRole, TextStyle,
+    TextSystem,
 };
 
 use crate::media::{Command, Playback, Player};
 use crate::{Change, Changes, L10N};
 
 const ART: f32 = 48.0;
-const ART_RADIUS: f32 = 8.0;
+const ART_RADIUS: f32 = Radius::S;
 const TEXT_GAP: f32 = 12.0;
 const BUTTON: f32 = 28.0;
 const BUTTON_GAP: f32 = 2.0;
@@ -141,7 +142,7 @@ fn music_note(center: Point) -> Path {
         .close()
 }
 
-fn fitted(text: &mut TextSystem, line: &str, style: TextStyle, width: f32) -> Paragraph {
+pub(crate) fn fitted(text: &mut TextSystem, line: &str, style: TextStyle, width: f32) -> Paragraph {
     let whole = text.paragraph(line, style, None, TextAlign::Start);
     if whole.width() <= width {
         return whole;
@@ -301,7 +302,7 @@ impl NowPlaying {
             None => {
                 items.push(Item::Fill {
                     shape,
-                    paint: cx.palette.hairline.into(),
+                    paint: cx.palette.well.into(),
                 });
                 items.push(Item::FillPath {
                     path: music_note(Point::new(rect.x + ART / 2.0, rect.y + ART / 2.0)),
@@ -328,10 +329,14 @@ impl Widget for NowPlaying {
         let styles = [
             (
                 title,
-                TextStyle::new(13.0, cx.palette.ink).weight(TextStyle::SEMIBOLD),
-                7.0,
+                TextStyle::role(TextRole::BodyStrong, cx.palette.ink),
+                6.0,
             ),
-            (subtitle, TextStyle::new(12.0, cx.palette.ink2), 26.0),
+            (
+                subtitle,
+                TextStyle::role(TextRole::Callout, cx.palette.ink2),
+                25.0,
+            ),
         ];
         let text_width =
             available.width - ART - 2.0 * TEXT_GAP - CONTROLS.len() as f32 * (BUTTON + BUTTON_GAP)
@@ -342,7 +347,7 @@ impl Widget for NowPlaying {
             .map(|(line, style, top)| (fitted(&mut cx.text, line, style, text_width), top))
             .collect();
         self.times = self.position(cx.now()).map(|(position, length)| {
-            let style = TextStyle::new(11.0, cx.palette.ink2).tabular();
+            let style = TextStyle::role(TextRole::Callout, cx.palette.ink3).tabular();
             let fraction =
                 (position.as_secs_f32() / length.as_secs_f32().max(f32::EPSILON)).min(1.0);
             (
@@ -389,14 +394,14 @@ impl Widget for NowPlaying {
             let enabled = self.enabled(control);
             if self.press == Some(Press::Control(control)) && enabled {
                 items.push(Item::Fill {
-                    shape: Shape::rounded(rect, BUTTON / 2.0),
-                    paint: cx.palette.hairline.into(),
+                    shape: Shape::rounded(rect, Radius::S),
+                    paint: cx.palette.well.into(),
                 });
             }
             let color = if enabled {
                 cx.palette.ink
             } else {
-                cx.palette.ink2.with_alpha(110)
+                cx.palette.ink3
             };
             let center = Point::new(rect.x + BUTTON / 2.0, rect.y + BUTTON / 2.0);
             for path in symbol(control, self.playing(), center) {
@@ -407,11 +412,7 @@ impl Widget for NowPlaying {
             }
         }
         if cx.is_focused(self.id) {
-            items.push(Item::Stroke {
-                shape: Shape::rounded(self.frame.inset(-3.0), ART_RADIUS + 3.0),
-                width: 3.0,
-                paint: cx.palette.accent.with_alpha(128).into(),
-            });
+            focus_ring_for(&cx.palette, Shape::rounded(self.frame, Radius::S), items);
         }
         let Some((elapsed, remaining, fraction)) = &self.times else {
             return;
@@ -419,14 +420,14 @@ impl Widget for NowPlaying {
         let track = self.track_rect();
         items.push(Item::Fill {
             shape: Shape::rounded(track, TRACK / 2.0),
-            paint: cx.palette.hairline.into(),
+            paint: cx.palette.well.into(),
         });
         items.push(Item::Fill {
             shape: Shape::rounded(
                 Rect::new(track.x, track.y, track.width * fraction, TRACK),
                 TRACK / 2.0,
             ),
-            paint: cx.palette.ink2.into(),
+            paint: cx.palette.accent.into(),
         });
         let top = self.frame.y + TIMES_TOP;
         items.push(Item::Text {

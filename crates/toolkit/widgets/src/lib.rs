@@ -40,6 +40,7 @@ pub use button::{BUTTON_HEIGHT, Button};
 pub use checkbox::{CHECKBOX_SIZE, CheckState, Checkbox};
 pub use combo_box::ComboBox;
 pub use context_menu::ContextMenu;
+pub use control::focus_ring_for;
 pub use disclosure::{DISCLOSURE_HEIGHT, Disclosure};
 pub use free_layout::FreeLayout;
 pub use label::Label;

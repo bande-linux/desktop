@@ -1,25 +1,30 @@
 use jiff::Zoned;
 use unbound_datetime::DateFormats;
 use unbound_notify::Notification;
+use unbound_toolkit::ui::focus_ring_for;
 use unbound_toolkit::{
-    Color, Image, Item, Palette, Paragraph, Point, Rect, Shape, TextAlign, TextStyle, TextSystem,
+    Color, ControlSize, Elevation, Image, Item, Palette, Paragraph, Point, Radius, Rect, Scheme,
+    Shape, Spacing, TextAlign, TextRole, TextStyle, TextSystem,
 };
 
 use crate::L10N;
 
-pub const RADIUS: f32 = 16.0;
-const PADDING: f32 = 12.0;
-const ICON: f32 = 32.0;
-const ICON_GAP: f32 = 10.0;
-const LINE_GAP: f32 = 2.0;
-const TITLE_SIZE: f32 = 13.0;
-const BODY_SIZE: f32 = 13.0;
-const SMALL_SIZE: f32 = 11.0;
-const ACTION_HEIGHT: f32 = 26.0;
-const ACTION_GAP: f32 = 6.0;
+pub const RADIUS: f32 = Radius::XL;
+const PADDING_X: f32 = Spacing::L as f32;
+const PADDING_Y: f32 = Spacing::M as f32;
+const HEADER: f32 = 18.0;
+const HEADER_GAP: f32 = Spacing::S as f32;
+const ICON: f32 = 18.0;
+const ICON_GAP: f32 = Spacing::S as f32;
+const LINE_GAP: f32 = Spacing::XXS as f32;
+const TITLE_SIZE: f32 = 13.5;
+const ACTION_HEIGHT: f32 = ControlSize::Regular.height();
+const ACTION_INSET: f32 = Spacing::S as f32;
+const ACTION_GAP: f32 = Spacing::XS as f32;
 const CLOSE_SIZE: f32 = 18.0;
 const SLIVER_STEP: f32 = 5.0;
 const SLIVER_INSET: f32 = 8.0;
+const SLIVER_SHADE: f32 = 0.03;
 const MAX_ACTIONS: usize = 3;
 pub const CLOSE_REACH: f32 = CLOSE_SIZE / 2.0 + 1.0;
 pub const DEFAULT_ACTION: &str = "default";
@@ -44,7 +49,8 @@ pub struct Card {
     width: f32,
     icon: Option<Image>,
     initial: Option<Paragraph>,
-    title: Paragraph,
+    app: Paragraph,
+    headline: Option<(f32, Paragraph)>,
     age: Paragraph,
     body: Option<(f32, Paragraph)>,
     more: Option<(f32, Paragraph)>,
@@ -116,43 +122,49 @@ impl Card {
         palette: &Palette,
         text: &mut TextSystem,
     ) -> Self {
-        let column = PADDING + ICON + ICON_GAP;
-        let text_width = width - column - PADDING;
+        let text_width = width - 2.0 * PADDING_X;
         let age = text.paragraph(
             age,
-            TextStyle::new(SMALL_SIZE, palette.ink2),
+            TextStyle::role(TextRole::Callout, palette.ink3).tabular(),
             None,
             TextAlign::Start,
         );
-        let headline = if notification.summary.is_empty() {
-            &sender.name
-        } else {
-            &notification.summary
-        };
-        let title = fitted(
+        let app = fitted(
             text,
-            headline,
-            TextStyle::new(TITLE_SIZE, palette.ink).weight(TextStyle::SEMIBOLD),
-            text_width - age.width() - ICON_GAP,
+            &sender.name,
+            TextStyle::role(TextRole::Label, palette.ink3),
+            text_width - ICON - 2.0 * ICON_GAP - age.width(),
             1,
         );
-        let mut bottom = PADDING + title.height();
+        let mut bottom = PADDING_Y + HEADER + HEADER_GAP;
+        let headline = (!notification.summary.is_empty()).then(|| {
+            let paragraph = fitted(
+                text,
+                &notification.summary,
+                TextStyle::new(TITLE_SIZE, palette.ink).weight(TextStyle::SEMIBOLD),
+                text_width,
+                1,
+            );
+            let top = bottom;
+            bottom = top + paragraph.height();
+            (top, paragraph)
+        });
         let body = (!notification.body.is_empty()).then(|| {
             let paragraph = fitted(
                 text,
                 &notification.body,
-                TextStyle::new(BODY_SIZE, palette.ink),
+                TextStyle::role(TextRole::Body, palette.ink2),
                 text_width,
                 body_lines,
             );
-            let top = bottom + LINE_GAP;
+            let top = bottom;
             bottom = top + paragraph.height();
             (top, paragraph)
         });
         let more = (count > 1).then(|| {
             let paragraph = text.paragraph(
                 &L10N.tr_args("more", [("count", (count - 1).into())]),
-                TextStyle::new(SMALL_SIZE, palette.ink2),
+                TextStyle::role(TextRole::Callout, palette.ink3),
                 Some(text_width),
                 TextAlign::Start,
             );
@@ -160,7 +172,7 @@ impl Card {
             bottom = top + paragraph.height();
             (top, paragraph)
         });
-        let mut height = bottom.max(PADDING + ICON) + PADDING;
+        let mut height = bottom + PADDING_Y;
         let shown: Vec<&(String, String)> = notification
             .actions
             .iter()
@@ -169,31 +181,33 @@ impl Card {
             .collect();
         let mut actions = Vec::new();
         if !shown.is_empty() {
-            let row = width - 2.0 * PADDING;
-            let each = (row - ACTION_GAP * (shown.len() - 1) as f32) / shown.len() as f32;
-            for (index, (key, label)) in shown.into_iter().enumerate() {
-                let rect = Rect::new(
-                    PADDING + index as f32 * (each + ACTION_GAP),
-                    height - PADDING / 2.0,
-                    each,
-                    ACTION_HEIGHT,
-                );
+            let each = (text_width + 2.0 * ACTION_INSET - ACTION_GAP * (shown.len() - 1) as f32)
+                / shown.len() as f32;
+            let mut left = PADDING_X - ACTION_INSET;
+            for (key, label) in shown {
                 let label = fitted(
                     text,
                     label,
-                    TextStyle::new(BODY_SIZE, palette.ink).weight(TextStyle::MEDIUM),
-                    each - PADDING,
+                    TextStyle::role(TextRole::BodyStrong, palette.accent_text),
+                    each - 2.0 * ACTION_INSET,
                     1,
                 );
+                let rect = Rect::new(
+                    left,
+                    height - PADDING_Y + ACTION_GAP,
+                    (label.width() + 2.0 * ACTION_INSET).ceil(),
+                    ACTION_HEIGHT,
+                );
+                left += rect.width + ACTION_GAP;
                 actions.push((key.clone(), label, rect));
             }
-            height += ACTION_HEIGHT + PADDING / 2.0;
+            height += ACTION_HEIGHT + ACTION_GAP;
         }
         let initial = sender.icon.is_none().then(|| {
             let letter = sender.name.chars().next().unwrap_or('?').to_uppercase();
             text.paragraph(
                 &letter.to_string(),
-                TextStyle::new(15.0, Color::hex(0xFFFFFF)).weight(TextStyle::SEMIBOLD),
+                TextStyle::role(TextRole::Label, palette.on_accent),
                 None,
                 TextAlign::Start,
             )
@@ -206,7 +220,8 @@ impl Card {
             width,
             icon: sender.icon,
             initial,
-            title,
+            app,
+            headline,
             age,
             body,
             more,
@@ -262,6 +277,7 @@ impl Card {
         &self,
         origin: Point,
         palette: &Palette,
+        elevated: bool,
         hovered: Option<&Part>,
         focused: bool,
         items: &mut Vec<Item>,
@@ -276,37 +292,27 @@ impl Card {
                 self.width - 2.0 * SLIVER_INSET * step,
                 RADIUS,
             );
-            card.push(Item::Fill {
-                shape: Shape::rounded(sliver, RADIUS),
-                paint: surface.mix(palette.sheet, 0.35 * step).into(),
-            });
-            card.push(Item::Stroke {
-                shape: Shape::rounded(sliver, RADIUS),
-                width: 0.5,
-                paint: palette.hairline.into(),
-            });
+            surface_with_edge(
+                palette,
+                Shape::rounded(sliver, RADIUS),
+                surface.mix(palette.ink, SLIVER_SHADE * step),
+                &mut card,
+            );
         }
         let body = Shape::rounded(Rect::new(0.0, 0.0, self.width, self.height), RADIUS);
-        card.push(Item::Shadow {
-            shape: body,
-            offset: Point::new(0.0, 4.0),
-            blur_radius: 18.0,
-            color: Color::hex(0).with_alpha(46),
-        });
-        card.push(Item::Fill {
-            shape: body,
-            paint: surface.into(),
-        });
-        card.push(Item::Stroke {
-            shape: body,
-            width: if focused { 2.0 } else { 0.5 },
-            paint: if focused {
-                palette.accent.into()
-            } else {
-                palette.hairline.into()
-            },
-        });
-        let icon = Rect::new(PADDING, PADDING, ICON, ICON);
+        if elevated {
+            card.extend(Item::shadows(
+                body,
+                Elevation::Overlay,
+                palette.scheme,
+                true,
+            ));
+        }
+        surface_with_edge(palette, body, surface, &mut card);
+        if focused {
+            focus_ring_for(palette, body, &mut card);
+        }
+        let icon = Rect::new(PADDING_X, PADDING_Y + (HEADER - ICON) / 2.0, ICON, ICON);
         match (&self.icon, &self.initial) {
             (Some(image), _) => card.push(Item::Image {
                 rect: icon,
@@ -314,7 +320,7 @@ impl Card {
             }),
             (None, Some(initial)) => {
                 card.push(Item::Fill {
-                    shape: Shape::rounded(icon, 8.0),
+                    shape: Shape::rounded(icon, Radius::XS),
                     paint: palette.accent.into(),
                 });
                 card.push(Item::Text {
@@ -327,33 +333,33 @@ impl Card {
             }
             (None, None) => {}
         }
-        let column = PADDING + ICON + ICON_GAP;
         card.push(Item::Text {
-            origin: Point::new(column, PADDING),
-            paragraph: self.title.clone(),
+            origin: Point::new(
+                icon.x + ICON + ICON_GAP,
+                (PADDING_Y + (HEADER - self.app.height()) / 2.0).round(),
+            ),
+            paragraph: self.app.clone(),
         });
         card.push(Item::Text {
             origin: Point::new(
-                (self.width - PADDING - self.age.width()).round(),
-                PADDING + (self.title.height() - self.age.height()) / 2.0,
+                (self.width - PADDING_X - self.age.width()).round(),
+                (PADDING_Y + (HEADER - self.age.height()) / 2.0).round(),
             ),
             paragraph: self.age.clone(),
         });
-        for (top, paragraph) in self.body.iter().chain(&self.more) {
+        for (top, paragraph) in self.headline.iter().chain(&self.body).chain(&self.more) {
             card.push(Item::Text {
-                origin: Point::new(column, top.round()),
+                origin: Point::new(PADDING_X, top.round()),
                 paragraph: paragraph.clone(),
             });
         }
         for (key, label, rect) in &self.actions {
-            let pressed_look = matches!(hovered, Some(Part::Action(hovered)) if hovered == key);
-            card.push(Item::Fill {
-                shape: Shape::rounded(*rect, 7.0),
-                paint: palette
-                    .ink
-                    .with_alpha(if pressed_look { 36 } else { 18 })
-                    .into(),
-            });
+            if matches!(hovered, Some(Part::Action(hovered)) if hovered == key) {
+                card.push(Item::Fill {
+                    shape: Shape::rounded(*rect, Radius::S),
+                    paint: palette.well.into(),
+                });
+            }
             card.push(Item::Text {
                 origin: Point::new(
                     (rect.x + (rect.width - label.width()) / 2.0).round(),
@@ -363,42 +369,54 @@ impl Card {
             });
         }
         if hovered.is_some() || focused {
-            let close = self.close_rect();
+            let close = Shape::rounded(self.close_rect(), CLOSE_SIZE / 2.0);
             let over = hovered == Some(&Part::Close);
-            card.push(Item::Shadow {
-                shape: Shape::rounded(close, CLOSE_SIZE / 2.0),
-                offset: Point::new(0.0, 1.0),
-                blur_radius: 4.0,
-                color: Color::hex(0).with_alpha(40),
-            });
+            card.extend(Item::shadows(
+                close,
+                Elevation::Overlay,
+                palette.scheme,
+                true,
+            ));
             card.push(Item::Fill {
-                shape: Shape::rounded(close, CLOSE_SIZE / 2.0),
-                paint: if over {
-                    palette.sheet.mix(palette.ink2, 0.25)
-                } else {
-                    palette.overlay
-                }
-                .into(),
+                shape: close,
+                paint: if over { palette.well } else { palette.overlay }.into(),
             });
             card.push(Item::Stroke {
-                shape: Shape::rounded(close, CLOSE_SIZE / 2.0),
-                width: 0.5,
+                shape: Shape::rounded(close.rect.inset(0.5), CLOSE_SIZE / 2.0 - 0.5),
+                width: 1.0,
                 paint: palette.hairline.into(),
             });
-            let center = Point::new(close.x + CLOSE_SIZE / 2.0, close.y + CLOSE_SIZE / 2.0);
+            let center = Point::new(
+                close.rect.x + CLOSE_SIZE / 2.0,
+                close.rect.y + CLOSE_SIZE / 2.0,
+            );
             let arm = 3.5;
             for (dx, dy) in [(arm, arm), (arm, -arm)] {
                 card.push(Item::Line {
                     from: Point::new(center.x - dx, center.y - dy),
                     to: Point::new(center.x + dx, center.y + dy),
                     width: 1.5,
-                    paint: palette.ink2.into(),
+                    paint: if over { palette.ink } else { palette.ink2 }.into(),
                 });
             }
         }
         items.push(Item::Translate {
             offset: origin,
             items: card,
+        });
+    }
+}
+
+fn surface_with_edge(palette: &Palette, shape: Shape, fill: Color, items: &mut Vec<Item>) {
+    items.push(Item::Fill {
+        shape,
+        paint: fill.into(),
+    });
+    if palette.scheme == Scheme::Dark {
+        items.push(Item::Stroke {
+            shape: Shape::rounded(shape.rect.inset(0.5), shape.radius - 0.5),
+            width: 1.0,
+            paint: palette.hairline.into(),
         });
     }
 }

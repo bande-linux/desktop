@@ -2,7 +2,9 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use unbound_audio::{Audio, Direction, Level};
+use std::sync::mpsc::RecvTimeoutError;
+
+use unbound_audio::{Audio, Direction, Level, Meter};
 use unbound_bluetooth::{Bluetooth, PairingPrompt, register_agent};
 use unbound_network::{JoinOutcome, NetworkManager};
 use zbus::blocking::{Connection, MessageIterator};
@@ -13,6 +15,7 @@ use crate::follow::{Updates, spawn};
 use crate::state::{Answer, BluetoothState, Joined, Question, WifiState};
 
 const SETTLE: Duration = Duration::from_millis(200);
+const METER_INTERVAL: Duration = Duration::from_millis(50);
 const ANSWER_WAIT: Duration = Duration::from_secs(60);
 const NETWORK_MANAGER: &str = "/org/freedesktop/NetworkManager";
 const BLUEZ: &str = "org.bluez";
@@ -22,6 +25,8 @@ pub enum AudioCommand {
     Volume(Direction, f32),
     Mute(Direction, bool),
     Default(Direction, String),
+    App(String, f32),
+    Listen(bool),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -49,6 +54,7 @@ fn report<E: std::fmt::Display>(updates: &Updates, result: Result<(), E>) {
 fn same_kind(a: &AudioCommand, b: &AudioCommand) -> bool {
     match (a, b) {
         (AudioCommand::Volume(a, _), AudioCommand::Volume(b, _)) => a == b,
+        (AudioCommand::App(a, _), AudioCommand::App(b, _)) => a == b,
         _ => false,
     }
 }
@@ -80,7 +86,44 @@ fn run_audio(audio: &Audio, command: AudioCommand) -> Result<(), unbound_audio::
                 .ok_or(unbound_audio::Error::NoSuchDevice)?;
             audio.set_default(device)
         }
+        AudioCommand::App(name, volume) => {
+            let snapshot = audio.snapshot();
+            let app = snapshot
+                .apps
+                .iter()
+                .find(|app| app.name == name)
+                .ok_or(unbound_audio::Error::NoSuchDevice)?;
+            audio.set_app_level(
+                app,
+                Level {
+                    volume,
+                    muted: false,
+                },
+            )
+        }
+        AudioCommand::Listen(_) => Ok(()),
     }
+}
+
+struct Listening {
+    input: String,
+    meter: Meter,
+}
+
+fn listen(audio: &Audio, listening: Option<Listening>) -> Option<Listening> {
+    let snapshot = audio.snapshot();
+    let input = snapshot.default_input()?;
+    if let Some(listening) = listening.filter(|listening| listening.input == input.name) {
+        return Some(listening);
+    }
+    let meter = audio
+        .meter(input)
+        .inspect_err(|error| tracing::warn!("no input level: {error}"))
+        .ok()?;
+    Some(Listening {
+        input: input.name.clone(),
+        meter,
+    })
 }
 
 pub fn follow_audio(updates: Updates) -> Sender<AudioCommand> {
@@ -107,14 +150,41 @@ pub fn follow_audio(updates: Updates) -> Sender<AudioCommand> {
                 }
             }
         });
-        while let Ok(first) = receiver.recv() {
-            let mut commands = vec![first];
+        let mut wanted = false;
+        let mut listening: Option<Listening> = None;
+        loop {
+            let first = if wanted {
+                match receiver.recv_timeout(METER_INTERVAL) {
+                    Ok(command) => Some(command),
+                    Err(RecvTimeoutError::Timeout) => None,
+                    Err(RecvTimeoutError::Disconnected) => break,
+                }
+            } else {
+                match receiver.recv() {
+                    Ok(command) => Some(command),
+                    Err(_) => break,
+                }
+            };
+            let mut commands: Vec<AudioCommand> = first.into_iter().collect();
             for command in receiver.try_iter() {
                 commands.retain(|queued| !same_kind(queued, &command));
                 commands.push(command);
             }
             for command in commands {
+                if let AudioCommand::Listen(on) = command {
+                    wanted = on;
+                }
                 report(&updates, run_audio(&audio, command));
+            }
+            listening = if wanted {
+                listen(&audio, listening.take())
+            } else {
+                None
+            };
+            if let Some(listening) = &listening
+                && !updates.send(Update::InputLevel(listening.meter.take_peak()))
+            {
+                break;
             }
         }
     });

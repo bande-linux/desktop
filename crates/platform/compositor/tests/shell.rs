@@ -3,8 +3,8 @@
 use smithay::utils::{Point, Size};
 use unbound_compositor::{Headless, Renderer, automatic_scale};
 use unbound_test_wayland::{
-    Anchor, BLUE, BrightnessKey, GREEN, KeyboardInteractivity, Layer, LayerRequest, RED, ShmImage,
-    TestClient, VolumeKey, roundtrip,
+    Anchor, BLUE, BrightnessKey, GREEN, KeyboardInteractivity, Layer, LayerRequest, MediaKey, RED,
+    ShmImage, TestClient, VolumeKey, roundtrip,
 };
 use wayland_client::protocol::wl_shm::Format;
 
@@ -323,6 +323,10 @@ const KEY_MUTE: u32 = 113;
 const KEY_VOLUMEUP: u32 = 115;
 const KEY_BRIGHTNESSDOWN: u32 = 224;
 const KEY_KBDILLUMUP: u32 = 230;
+const KEY_NEXTSONG: u32 = 163;
+const KEY_PLAYPAUSE: u32 = 164;
+const KEY_PREVIOUSSONG: u32 = 165;
+const KEY_PAUSECD: u32 = 201;
 
 fn launcher() -> LayerRequest {
     LayerRequest {
@@ -750,6 +754,38 @@ fn brightness_keys_go_to_the_shell_and_option_shift_makes_them_fine() {
         app.keys()
             .iter()
             .all(|(key, _)| *key != KEY_BRIGHTNESSDOWN && *key != KEY_KBDILLUMUP),
+        "the app saw {:?}",
+        app.keys()
+    );
+}
+
+#[test]
+fn media_keys_go_to_the_shell_and_not_to_the_app() {
+    let mut server = server();
+    let mut app = TestClient::connect(&mut server);
+    app.use_seat(&mut server);
+    let pixels = red(32, 32);
+    app.show_window(&mut server, &image(&pixels, 32, 32));
+    let mut shell = TestClient::connect_as_shell(&mut server);
+    shell.join_shell(&mut server);
+
+    let keys = [KEY_PLAYPAUSE, KEY_PAUSECD, KEY_NEXTSONG, KEY_PREVIOUSSONG];
+    for key in keys {
+        press(&mut server, &[key]);
+    }
+    roundtrip(&mut server, &mut [&mut app, &mut shell]);
+
+    assert_eq!(
+        shell.media_keys(),
+        [
+            MediaKey::PlayPause,
+            MediaKey::Pause,
+            MediaKey::Next,
+            MediaKey::Previous
+        ]
+    );
+    assert!(
+        app.keys().iter().all(|(key, _)| !keys.contains(key)),
         "the app saw {:?}",
         app.keys()
     );

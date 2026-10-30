@@ -85,11 +85,41 @@ impl BatteryNotifier {
                 body: &body,
                 actions: &[],
                 urgency,
+                sound: Some("battery-low"),
             },
         )?;
         *shown = Some((alert, id));
         Ok(())
     }
+}
+
+#[zbus::proxy(
+    interface = "org.freedesktop.UPower",
+    default_service = "org.freedesktop.UPower",
+    default_path = "/org/freedesktop/UPower"
+)]
+pub trait UPower {
+    #[zbus(property)]
+    fn on_battery(&self) -> zbus::Result<bool>;
+}
+
+pub fn chime_when_plugged_in(system: &Connection, session: &Connection) -> zbus::Result<()> {
+    let upower = UPowerProxyBlocking::new(system)?;
+    let changes = upower.receive_on_battery_changed();
+    let mut on_battery = upower.on_battery().unwrap_or(false);
+    let session = session.clone();
+    thread::spawn(move || {
+        for change in changes {
+            let Ok(now) = change.get() else {
+                continue;
+            };
+            if on_battery && !now {
+                unbound_sound::play(&session, "device-added");
+            }
+            on_battery = now;
+        }
+    });
+    Ok(())
 }
 
 pub fn watch(system: &Connection, notifier: Arc<BatteryNotifier>) -> zbus::Result<()> {

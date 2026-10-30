@@ -27,7 +27,7 @@ pub use clipboard::{DragAction, DragEvent, DragIcon, Transfer};
 pub use popup::MenuPlacement;
 pub use run::{App, run};
 pub use shell::AppWindow;
-pub use unbound_protocols::client::unbound_shell_v1::{BrightnessKey, VolumeKey};
+pub use unbound_protocols::client::unbound_shell_v1::{BrightnessKey, MediaKey, VolumeKey};
 pub use window::{
     ACTIVATION_TOKEN_VARIABLE, Edges, FramePath, KeyboardFocus, LayerKind, LayerOptions,
     RENDERER_VARIABLE, ResizeEdge, Role, ToplevelState, Window, WindowError, WindowEvent,

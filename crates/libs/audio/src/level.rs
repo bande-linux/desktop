@@ -1,6 +1,8 @@
 const STEPS: f32 = 16.0;
 const FINE_STEPS: f32 = 64.0;
 const SNAP: f32 = 1e-3;
+const METER_FLOOR_DB: f32 = -60.0;
+const METER_FALL: f32 = 0.82;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VolumeKey {
@@ -54,6 +56,12 @@ pub(crate) fn scaled(channels: &[f32], volume: f32) -> Vec<f32> {
     } else {
         vec![target; channels.len().max(1)]
     }
+}
+
+pub fn meter_level(peak: f32, shown: f32) -> f32 {
+    let decibels = 20.0 * peak.max(f32::MIN_POSITIVE).log10();
+    let level = (1.0 - decibels / METER_FLOOR_DB).clamp(0.0, 1.0);
+    level.max(shown * METER_FALL)
 }
 
 #[cfg(test)]
@@ -111,5 +119,14 @@ mod tests {
     fn a_new_level_keeps_the_balance_between_channels() {
         assert_eq!(scaled(&[0.5, 0.25], 0.5), [0.125, 0.0625]);
         assert_eq!(scaled(&[0.0, 0.0], 0.5), [0.125, 0.125]);
+    }
+
+    #[test]
+    fn the_input_level_reads_in_decibels_and_falls_back_smoothly() {
+        assert_eq!(meter_level(1.0, 0.0), 1.0);
+        assert_eq!(meter_level(0.0, 0.0), 0.0);
+        assert!((meter_level(10_f32.powf(-30.0 / 20.0), 0.0) - 0.5).abs() < 1e-4);
+        let falling = meter_level(0.0, 1.0);
+        assert!(falling > 0.5 && falling < 1.0, "{falling}");
     }
 }

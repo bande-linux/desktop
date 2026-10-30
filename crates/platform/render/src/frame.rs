@@ -13,6 +13,11 @@ use crate::{
     VulkanFramebuffer, VulkanRenderer, VulkanTexture, barrier, disjoint,
 };
 
+mod blur;
+
+pub use blur::Blur;
+pub(crate) use blur::BlurChain;
+
 pub(crate) const QUAD_BYTES: u32 = 112;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
@@ -70,6 +75,7 @@ pub struct VulkanFrame<'frame, 'buffer> {
     target: u64,
     format: vk::Format,
     image: vk::Image,
+    target_view: vk::ImageView,
     bounds: Rect,
     bound: Option<Program>,
     clip: Option<RoundedRect>,
@@ -135,44 +141,21 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
                 vk::AccessFlags2::COLOR_ATTACHMENT_READ | vk::AccessFlags2::COLOR_ATTACHMENT_WRITE,
             ),
         );
-        let attachment = vk::RenderingAttachmentInfo::default()
-            .image_view(view)
-            .image_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-            .load_op(vk::AttachmentLoadOp::LOAD)
-            .store_op(vk::AttachmentStoreOp::STORE);
-        unsafe {
-            device.cmd_begin_rendering(
-                commands,
-                &vk::RenderingInfo::default()
-                    .render_area(scissor(bounds))
-                    .layer_count(1)
-                    .color_attachments(slice::from_ref(&attachment)),
-            );
-            device.cmd_set_viewport(
-                commands,
-                0,
-                &[vk::Viewport {
-                    x: 0.0,
-                    y: 0.0,
-                    width: bounds.width as f32,
-                    height: bounds.height as f32,
-                    min_depth: 0.0,
-                    max_depth: 1.0,
-                }],
-            );
-        }
-        Ok(Self {
+        let frame = Self {
             renderer,
             target: framebuffer.id,
             format,
             image,
+            target_view: view,
             bounds,
             bound: None,
             clip: None,
             drawn: Vec::new(),
             finished: false,
             _framebuffer: PhantomData,
-        })
+        };
+        frame.begin_rendering(view, bounds, vk::AttachmentLoadOp::LOAD);
+        Ok(frame)
     }
 
     fn clip(&self, rects: impl IntoIterator<Item = Rect>, within: Rect) -> Vec<Rect> {
@@ -269,6 +252,32 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
     }
 
     fn draw(&mut self, quad: &Quad, rects: &[Rect]) {
+        self.draw_quad(quad, rects);
+        for &rect in rects {
+            self.painted(rect);
+        }
+    }
+
+    fn push_texture(&mut self, view: vk::ImageView) {
+        let image_info = vk::DescriptorImageInfo::default()
+            .image_view(view)
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
+        let write = vk::WriteDescriptorSet::default()
+            .dst_binding(0)
+            .descriptor_type(vk::DescriptorType::SAMPLED_IMAGE)
+            .image_info(slice::from_ref(&image_info));
+        unsafe {
+            self.renderer.push_descriptor.cmd_push_descriptor_set(
+                self.renderer.command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.renderer.pipeline_layout,
+                0,
+                slice::from_ref(&write),
+            );
+        }
+    }
+
+    fn draw_quad(&mut self, quad: &Quad, rects: &[Rect]) {
         let constants: Vec<u8> = quad
             .color
             .iter()
@@ -309,9 +318,6 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
                 device.cmd_draw(commands, 4, 1, 0, 0);
             }
         }
-        for &rect in rects {
-            self.painted(rect);
-        }
     }
 
     fn finish_frame(&mut self) -> Result<(), RenderError> {
@@ -346,6 +352,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
                 .end_command_buffer(self.renderer.command_buffer)
         }?;
         self.renderer.submit_and_wait()?;
+        self.renderer.retire_unused_blur_chains();
         let written = self.write_back(&readbacks);
         self.renderer.recycle_staging();
         if let Some(target) = self.renderer.targets.get_mut(&self.target) {
@@ -485,7 +492,7 @@ impl Frame for VulkanFrame<'_, '_> {
                 .map(|rect| physical(rect).translated(destination.x, destination.y)),
             destination,
         );
-        if color.is_opaque() {
+        if color.is_opaque() && self.clip.is_none() {
             self.fill(color, &rects);
             return Ok(());
         }
@@ -495,6 +502,7 @@ impl Frame for VulkanFrame<'_, '_> {
                 color: color.components(),
                 destination,
                 alpha: 1.0,
+                clip: self.clip.unwrap_or_default(),
                 ..Quad::default()
             },
             &rects,
@@ -538,22 +546,7 @@ impl Frame for VulkanFrame<'_, '_> {
             return Ok(());
         }
         self.bind(Program::Texture)?;
-        let image_info = vk::DescriptorImageInfo::default()
-            .image_view(view)
-            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
-        let write = vk::WriteDescriptorSet::default()
-            .dst_binding(0)
-            .descriptor_type(vk::DescriptorType::SAMPLED_IMAGE)
-            .image_info(slice::from_ref(&image_info));
-        unsafe {
-            self.renderer.push_descriptor.cmd_push_descriptor_set(
-                self.renderer.command_buffer,
-                vk::PipelineBindPoint::GRAPHICS,
-                self.renderer.pipeline_layout,
-                0,
-                slice::from_ref(&write),
-            );
-        }
+        self.push_texture(view);
         self.draw(
             &Quad {
                 destination,

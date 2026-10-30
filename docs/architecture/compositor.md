@@ -58,6 +58,35 @@ when they reach the screen is Unbound's own.
   are taken when the frame is latched and sent at its vblank (on DRM, at the page-flip event
   with its time and sequence); a superseded commit's feedback is discarded, and a render that
   overruns its vblank is presented at the next one.
+- **Window motion.** Every window state change is animated by springs on x, y, width, height
+  and opacity, sampled at the frame's vblank (`Headless::animate`, called by the scheduler
+  before it latches a frame). Opening grows from 95 % and fades in (`standard`); closing keeps
+  the last frame's textures and shrinks to 92 % while fading out (`quick`); minimising scales
+  into the app's Dock icon, reported with `unbound_shell_v1.set_icon_rect`, or toward the
+  Dock's centre (the bottom edge without a Dock), drawn above the Dock (`gentle`); restoring
+  plays it back. Zoom and full screen (`standard`, `gentle`) start at the request and stretch
+  the current buffer until the app commits its new size. Each operation only sets a new
+  destination, so a second action mid-flight turns back from the current position and
+  velocity. Input, focus and configure go to the destination at once; the input stack never
+  contains a window that is only still animating. An animation that has never been sampled
+  is drawn at its destination. Reduce Motion follows the Settings portal's
+  `org.freedesktop.appearance` `reduced-motion` key (read once at session start, then on
+  `SettingChanged`): windows and the snap preview keep their rectangles and fade with `fade`.
+- **Snapping and tiling.** Dragging a window until the pointer touches the left or right screen
+  edge previews the half, within 64 pt of a corner the quarter, and against the top of the
+  usable area zoom; the translucent rounded preview grows from the pointer (`quick`) only after
+  the pointer has rested 150 ms within 2 pt, so a fast drag past an edge never tiles. Releasing
+  over a shown preview springs the window into it. `Ctrl+Super+Left/Right` tile halves,
+  `Up/Down` on a half give its top or bottom quarter and on a quarter go back to the half,
+  `Up` zooms a free window and `Down` returns a zoomed one. Tiles get xdg-shell's tiled states
+  (for clients binding version 2) and no gaps. Dragging the edge two neighbouring tiles share
+  resizes both; dragging a tiled window away gives back its earlier size under the pointer.
+- **Not responding.** Whenever the user interacts with a window, and for every app when Force
+  Quit opens, the compositor pings the app through `xdg_wm_base.ping` (at most once a second).
+  An app that has not answered after 3 s is not responding: its windows are veiled in a soft
+  grey (24 %), the pointer over them is the theme's `wait` cursor, and shell clients get
+  `unbound_shell_v1.app_responding(pid, app_id, 0)` so Force Quit can mark it. The answer, or
+  the app's exit, lifts the veil and sends `responding 1`.
 - **Springs.** `crates/libs/spring` is the closed-form solution for under-, critically and
   overdamped springs, parameterised by angular frequency $\omega$ and damping ratio $\zeta$. A
   trajectory depends only on elapsed time, never on frame rate, and retargeting keeps position
@@ -97,4 +126,6 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `zwp_pointer_constraints_v1` / `relative_pointer` | Pointer lock for games | P1 | not implemented |
 | `zwp_pointer_gestures_v1` | Trackpad gestures | P1 | not implemented |
 | `zwp_keyboard_shortcuts_inhibit_v1` | Keyboard passthrough for VMs and remote desktop | P2 | not implemented |
-| `unbound_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Control Center | P0 | implemented, shell clients only |
+| `unbound_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Control Center, Dock icon rectangles, apps that stopped responding | P0 | implemented, shell clients only |
+| `unbound_app_v1` (own, in `unbound-shell-v1.xml`) | App-level requests: `quit_requested` on Super+Q instead of closing every window | P0 | implemented, every client |
+| `ext-background-effect-v1` | Blur behind translucent menus, sidebars, Dock and menu bar | P1 | implemented: dual-filter Kawase blur (3 passes) clipped to the window's rounded shape, below the window's own shadow, redrawn when anything beneath it changes |

@@ -24,7 +24,7 @@ use smithay::backend::renderer::{
 use smithay::reexports::rustix::mm;
 use smithay::utils::{Buffer as BufferCoords, Physical, Size, Transform};
 
-pub use frame::{RoundedRect, Shadow, VulkanFrame};
+pub use frame::{Blur, RoundedRect, Shadow, VulkanFrame};
 pub use rect::{Rect, disjoint};
 
 const SPIRV: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/compose.spv"));
@@ -279,6 +279,7 @@ pub struct VulkanRenderer {
     staging: Vec<Staging>,
     copies: Vec<PendingCopy>,
     counters: Counters,
+    blur_chains: HashMap<(i32, i32, vk::Format, u32), frame::BlurChain>,
     _entry: ash::Entry,
 }
 
@@ -297,6 +298,8 @@ enum Program {
     Texture,
     Solid,
     Shadow,
+    BlurDown,
+    BlurUp,
 }
 
 impl Program {
@@ -305,6 +308,8 @@ impl Program {
             Self::Texture => c"fragment",
             Self::Solid => c"solid",
             Self::Shadow => c"shadow",
+            Self::BlurDown => c"blur_down",
+            Self::BlurUp => c"blur_up",
         }
     }
 }
@@ -467,6 +472,7 @@ impl VulkanRenderer {
             staging: Vec::new(),
             copies: Vec::new(),
             counters: Counters::default(),
+            blur_chains: HashMap::new(),
             instance,
             device,
             _entry: entry,
@@ -544,7 +550,13 @@ impl VulkanRenderer {
             )
         }?;
         for format in TARGET_FORMATS {
-            for program in [Program::Texture, Program::Solid, Program::Shadow] {
+            for program in [
+                Program::Texture,
+                Program::Solid,
+                Program::Shadow,
+                Program::BlurDown,
+                Program::BlurUp,
+            ] {
                 let pipeline = self.create_pipeline(format, program)?;
                 self.pipelines.insert((format, program), pipeline);
             }
@@ -629,6 +641,22 @@ impl VulkanRenderer {
             .into_iter()
             .next()
             .ok_or(RenderError::Vulkan(vk::Result::ERROR_UNKNOWN))
+    }
+
+    fn retire_unused_blur_chains(&mut self) {
+        let (kept, retired): (HashMap<_, _>, HashMap<_, _>) = std::mem::take(&mut self.blur_chains)
+            .into_iter()
+            .partition(|(_, chain)| chain.used);
+        for chain in retired.values() {
+            chain
+                .levels
+                .iter()
+                .for_each(|image| self.destroy_image(image));
+        }
+        self.blur_chains = kept;
+        for chain in self.blur_chains.values_mut() {
+            chain.used = false;
+        }
     }
 
     pub fn device_info(&self) -> &DeviceInfo {
@@ -901,6 +929,12 @@ impl VulkanRenderer {
         };
         let mut kept = self.staging.swap_remove(largest);
         kept.used = 0;
+        for (_, chain) in std::mem::take(&mut self.blur_chains) {
+            chain
+                .levels
+                .iter()
+                .for_each(|image| self.destroy_image(image));
+        }
         for staging in std::mem::take(&mut self.staging) {
             self.destroy_staging(&staging);
         }

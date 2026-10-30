@@ -1,19 +1,19 @@
 use std::error::Error;
 use std::path::{Path, PathBuf};
-use std::process::ExitCode;
+use std::process::{Child, ExitCode};
 use std::time::Duration;
 
 use smithay::backend::drm::DrmEvent;
-use smithay::reexports::calloop::channel::Event;
+use smithay::reexports::calloop::channel::{self, Event};
 use smithay::reexports::calloop::generic::Generic;
 use smithay::reexports::calloop::{EventLoop, Interest, LoopHandle, Mode, PostAction};
 use smithay::utils::{Clock, Monotonic, Size};
 use smithay::wayland::socket::ListeningSocketSource;
 use unbound_compositor::{
-    CLIPBOARD_DAEMON, CONTROL_CENTER, CursorTheme, DOCK, DrmOutput, FrameClock, FrameOutput,
-    FrameScheduler, GREETER, Headless, LAUNCHER, MENU_BAR, NOTIFICATIONS, REFRESH, Renderer,
-    SCREENSHOT, SessionRequest, SessionRole, SessionUpkeep, automatic_scale,
-    export_session_environment, follow_session, notify_ready,
+    CLIPBOARD_DAEMON, CONTROL_CENTER, CursorTheme, DESKTOP_SURFACE, DOCK, DrmOutput, FrameClock,
+    FrameOutput, FrameScheduler, GREETER, Headless, LAUNCHER, MENU_BAR, NOTIFICATIONS, REFRESH,
+    REVIEW, Renderer, SCREENSHOT, SessionRequest, SessionRole, SessionUpkeep, automatic_scale,
+    export_session_environment, follow_reduced_motion, follow_session, notify_ready,
 };
 use unbound_config::{Config, config_path};
 
@@ -187,7 +187,23 @@ fn listen<O: 'static>(
 fn start_user_session<O: 'static>(
     event_loop: &mut EventLoop<'static, App<O>>,
     app: &mut App<O>,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<Option<Child>, Box<dyn Error>> {
+    let (reduce_motion, reduce_motion_changes) = channel::channel();
+    let followed = zbus::blocking::Connection::session().and_then(|connection| {
+        follow_reduced_motion(connection, move |reduce| reduce_motion.send(reduce).is_ok())
+    });
+    match followed {
+        Ok(()) => {
+            event_loop
+                .handle()
+                .insert_source(reduce_motion_changes, |event, _, app| {
+                    if let Event::Msg(reduce) = event {
+                        app.compositor.set_reduce_motion(reduce);
+                    }
+                })?;
+        }
+        Err(error) => tracing::warn!("cannot follow Reduce Motion: {error}"),
+    }
     let (lock_states, reported) = std::sync::mpsc::channel();
     match follow_session(reported) {
         Ok(requests) => {
@@ -204,6 +220,7 @@ fn start_user_session<O: 'static>(
     }
     for (executable, role) in [
         (CLIPBOARD_DAEMON, SessionRole::ClipboardDaemon),
+        (DESKTOP_SURFACE, SessionRole::Shell),
         (MENU_BAR, SessionRole::Shell),
         (CONTROL_CENTER, SessionRole::Shell),
         (NOTIFICATIONS, SessionRole::Shell),
@@ -218,7 +235,16 @@ fn start_user_session<O: 'static>(
             tracing::warn!("cannot start {executable}: {error}");
         }
     }
-    Ok(())
+    if std::env::var_os("UNBOUND_REVIEW_JOB").is_none() {
+        return Ok(None);
+    }
+    match app.compositor.spawn_shell_client(Path::new(REVIEW)) {
+        Ok(review) => Ok(Some(review)),
+        Err(error) => {
+            tracing::warn!("cannot start {REVIEW}: {error}");
+            Ok(None)
+        }
+    }
 }
 
 fn serve<O>(
@@ -231,16 +257,21 @@ where
     O::Error: Into<Box<dyn Error>>,
 {
     listen(&event_loop.handle(), &mut app)?;
-    let mut greeter = match session {
-        Session::User => {
-            start_user_session(event_loop, &mut app)?;
-            None
-        }
-        Session::Greeter => Some(app.compositor.spawn_shell_client(Path::new(GREETER))?),
+    let (mut greeter, mut review) = match session {
+        Session::User => (None, start_user_session(event_loop, &mut app)?),
+        Session::Greeter => (
+            Some(app.compositor.spawn_shell_client(Path::new(GREETER))?),
+            None,
+        ),
     };
     let mut timeout = None;
     loop {
         event_loop.dispatch(timeout, &mut app)?;
+        if let Some(child) = review.as_mut()
+            && child.try_wait()?.is_some()
+        {
+            review = None;
+        }
         let upkeep = match greeter.as_mut() {
             Some(greeter) => {
                 if greeter.try_wait()?.is_some() {
@@ -258,6 +289,7 @@ where
             output,
             scheduler,
         } = &mut app;
+        let snap_due = compositor.snap_tick(now());
         let frame = scheduler
             .poll(now, compositor, output)
             .map_err(Into::into)?;
@@ -265,11 +297,17 @@ where
         let idle_wait = compositor
             .idle_tick(now())
             .map(|at| at.saturating_sub(now()));
+        let snap_wait = snap_due.map(|at| at.saturating_sub(now()));
+        let watchdog_wait = compositor
+            .watchdog_tick(now())
+            .map(|at| at.saturating_sub(now()));
         timeout = upkeep
             .retry_in
             .into_iter()
             .chain(frame_wait)
             .chain(idle_wait)
+            .chain(snap_wait)
+            .chain(watchdog_wait)
             .min();
     }
 }

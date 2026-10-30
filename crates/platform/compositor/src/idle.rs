@@ -40,6 +40,7 @@ pub(crate) fn create_global(display: &DisplayHandle) {
 impl State {
     pub(crate) fn note_activity(&mut self) {
         self.idle.activity = true;
+        self.watchdog.note_interaction();
     }
 
     fn root_of_surface(surface: &WlSurface) -> WlSurface {

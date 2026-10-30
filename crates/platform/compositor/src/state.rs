@@ -61,7 +61,7 @@ use smithay::wayland::selection::primary_selection::{
     PrimarySelectionHandler, PrimarySelectionState, set_primary_focus,
 };
 use smithay::wayland::shell::xdg::{
-    Configure, PopupSurface, PositionerState, ToplevelSurface, XdgShellHandler, XdgShellState,
+    Configure, PopupSurface, PositionerState, ShellClient, ToplevelSurface, XdgShellHandler, XdgShellState,
 };
 use smithay::wayland::foreign_toplevel_list::ForeignToplevelListState;
 use smithay::wayland::shell::wlr_layer::{
@@ -80,15 +80,22 @@ use smithay::{
     delegate_primary_selection, delegate_seat, delegate_shm, delegate_viewporter,
     delegate_xdg_activation, delegate_xdg_shell,
 };
+use smithay::reexports::wayland_protocols::ext::background_effect::v1::server::ext_background_effect_manager_v1::ExtBackgroundEffectManagerV1;
+use unbound_protocols::server::unbound_app_v1::UnboundAppV1;
 use unbound_protocols::server::unbound_shell_v1::UnboundShellV1;
 use unbound_render::VulkanRenderer;
 
 use crate::clock::Vblank;
 use crate::cursor::{self, Cursor, CursorTheme};
 use crate::lock::Lock;
-use crate::scene::{ShadowElement, WindowElement};
-use crate::session::{LockScreen, SessionClient, SessionRole};
+use crate::motion::IconRect;
+use crate::scene::{
+    BlurElement, Closing, Drawn, FillElement, PieceElement, ShadowElement, WindowElement,
+    preview_elements, surface_blurs, tie_blurs_to_what_lies_below, window_elements,
+};
+use crate::session::{ForceQuit, LockScreen, SessionClient, SessionRole};
 use crate::shell;
+use crate::tile::{Preview, SnapDrag};
 use crate::window::Window;
 use smithay::wayland::cursor_shape::CursorShapeManagerState;
 use smithay::wayland::input_method::InputMethodManagerState;
@@ -133,7 +140,10 @@ pub fn automatic_scale(size: Size<i32, Physical>, physical_size_mm: Size<i32, Ra
 pub(crate) enum Placed<'a> {
     Surface(WlSurface, Point<i32, Logical>),
     Window(&'a Window),
+    Closing(&'a Closing),
 }
+
+type Composed = (Vec<OutputElement>, Vec<(WlSurface, Option<Drawn>)>);
 
 pub(crate) struct ExclusiveLayer {
     pub(crate) surface: WlSurface,
@@ -146,7 +156,7 @@ pub struct State {
     pub(crate) blockers: smithay::reexports::calloop::LoopHandle<'static, State>,
     pub(crate) output_size: Size<i32, Physical>,
     pub(crate) output_scale: f64,
-    refresh: Duration,
+    pub(crate) refresh: Duration,
     scanout_node: Option<DrmNode>,
     compositor_state: CompositorState,
     xdg_shell_state: XdgShellState,
@@ -167,6 +177,7 @@ pub struct State {
     _virtual_keyboard_state: VirtualKeyboardManagerState,
     pending_activation: Option<WlSurface>,
     pub(crate) shell_resources: Vec<UnboundShellV1>,
+    pub(crate) app_resources: Vec<UnboundAppV1>,
     pub(crate) foreign_toplevel_state: ForeignToplevelListState,
     pub(crate) exclusive_layer: Option<ExclusiveLayer>,
     exclusive_candidates: Vec<(WlSurface, Layer)>,
@@ -178,6 +189,8 @@ pub struct State {
     pub(crate) windows: Vec<Window>,
     pub(crate) popups: PopupManager,
     pub(crate) lock_screen_requested: bool,
+    pub(crate) force_quit_requested: bool,
+    pub(crate) watchdog: crate::watchdog::Watchdog,
     pub(crate) active_app: String,
     pub(crate) idle: crate::idle::Idle,
     _idle_inhibit_state: smithay::wayland::idle_inhibit::IdleInhibitManagerState,
@@ -187,6 +200,11 @@ pub struct State {
     pub(crate) popup_grab: Option<PopupGrab<State>>,
     pub(crate) swallowed_button: Option<u32>,
     pub(crate) minimize_sequence: u64,
+    pub(crate) closing: Vec<Closing>,
+    pub(crate) icon_rects: Vec<IconRect>,
+    pub(crate) snap: Option<SnapDrag>,
+    pub(crate) preview: Option<Preview>,
+    pub(crate) reduce_motion: bool,
     pub(crate) needs_redraw: bool,
     pub(crate) pointer_location: Point<f64, Logical>,
     pub(crate) cursor_shown: bool,
@@ -207,6 +225,7 @@ pub struct Headless {
     latched_frame_callbacks: Vec<WlCallback>,
     pub(crate) session_clients: Vec<SessionClient>,
     pub(crate) lock_screen: LockScreen,
+    pub(crate) force_quit: ForceQuit,
     pub(crate) socket_name: Option<OsString>,
 }
 
@@ -269,7 +288,9 @@ impl Headless {
         output.change_current_state(Some(mode), None, None, Some((0, 0).into()));
         output.set_preferred(mode);
         output.create_global::<State>(&handle);
-        handle.create_global::<State, UnboundShellV1, ()>(4, ());
+        handle.create_global::<State, UnboundShellV1, ()>(6, ());
+        handle.create_global::<State, UnboundAppV1, ()>(1, ());
+        handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
         State::create_capture_globals(&handle);
         let state = State {
             display_handle: handle.clone(),
@@ -307,6 +328,7 @@ impl Headless {
             }),
             pending_activation: None,
             shell_resources: Vec::new(),
+            app_resources: Vec::new(),
             foreign_toplevel_state: ForeignToplevelListState::new_with_filter::<State>(
                 &handle,
                 shell::is_shell,
@@ -321,6 +343,8 @@ impl Headless {
             windows: Vec::new(),
             popups: PopupManager::default(),
             lock_screen_requested: false,
+            force_quit_requested: false,
+            watchdog: crate::watchdog::Watchdog::default(),
             active_app: String::new(),
             idle: crate::idle::Idle::default(),
             _idle_inhibit_state: smithay::wayland::idle_inhibit::IdleInhibitManagerState::new::<
@@ -332,6 +356,11 @@ impl Headless {
             popup_grab: None,
             swallowed_button: None,
             minimize_sequence: 0,
+            closing: Vec::new(),
+            icon_rects: Vec::new(),
+            snap: None,
+            preview: None,
+            reduce_motion: false,
             needs_redraw: false,
             pointer_location: (
                 f64::from(output_size.w) / 2.0,
@@ -358,6 +387,7 @@ impl Headless {
             latched_frame_callbacks: Vec::new(),
             session_clients: Vec::new(),
             lock_screen: LockScreen::new(),
+            force_quit: ForceQuit::new(),
             socket_name: None,
         })
     }
@@ -467,8 +497,17 @@ impl Headless {
         &self.state.windows
     }
 
-    pub fn render_elements(&self, renderer: &mut VulkanRenderer) -> Vec<OutputElement> {
-        self.scene_elements(renderer, true)
+    pub fn render_elements(&mut self, renderer: &mut VulkanRenderer) -> Vec<OutputElement> {
+        let (elements, drawn) = self.compose(renderer, true);
+        for window in &mut self.state.windows {
+            window.drawn = None;
+        }
+        for (surface, drawn) in drawn {
+            if let Some(index) = self.state.window_index(&surface) {
+                self.state.windows[index].drawn = drawn;
+            }
+        }
+        elements
     }
 
     pub(crate) fn scene_elements(
@@ -476,6 +515,11 @@ impl Headless {
         renderer: &mut VulkanRenderer,
         with_cursor: bool,
     ) -> Vec<OutputElement> {
+        self.compose(renderer, with_cursor).0
+    }
+
+    fn compose(&self, renderer: &mut VulkanRenderer, with_cursor: bool) -> Composed {
+        let mut drawn = Vec::new();
         let mut elements: Vec<OutputElement> = if with_cursor {
             self.cursor_elements(renderer)
         } else {
@@ -483,7 +527,7 @@ impl Headless {
         };
         let scale = self.state.output_scale;
         let key = self.state.key_window();
-        for placed in self.state.scene() {
+        for placed in self.state.scene(true) {
             match placed {
                 Placed::Surface(surface, location) => {
                     elements.extend(render_elements_from_surface_tree(
@@ -494,14 +538,28 @@ impl Headless {
                         1.0,
                         ElementKind::Unspecified,
                     ));
+                    elements.extend(surface_blurs(&surface, location, scale));
                 }
                 Placed::Window(window) => {
                     let active = key.as_ref() == Some(window.surface());
-                    elements.extend(window.render_elements(renderer, scale, active));
+                    let hung = window
+                        .surface()
+                        .client()
+                        .is_some_and(|owner| self.state.watchdog.is_unresponsive(&owner.id()));
+                    let (shown, look) = window_elements(window, renderer, scale, active, hung);
+                    elements.extend(shown);
+                    drawn.push((window.surface().clone(), look));
+                    if let Some(preview) = &self.state.preview
+                        && &preview.owner == window.surface()
+                    {
+                        elements.extend(preview_elements(preview, scale));
+                    }
                 }
+                Placed::Closing(closing) => elements.extend(closing.render_elements(scale)),
             }
         }
-        elements
+        tie_blurs_to_what_lies_below(&mut elements, scale);
+        (elements, drawn)
     }
 
     pub fn popup_count(&self) -> usize {
@@ -531,7 +589,19 @@ impl Headless {
         }
         let scale = state.output_scale;
         let at: Point<i32, Physical> = state.pointer_location.to_physical(scale).to_i32_round();
-        match &state.cursor_status {
+        let busy = CursorImageStatus::Named(CursorIcon::Wait);
+        let over_hung_app = state
+            .seat
+            .get_pointer()
+            .and_then(|pointer| pointer.current_focus())
+            .and_then(|surface| surface.client())
+            .is_some_and(|owner| state.watchdog.is_unresponsive(&owner.id()));
+        let status = if over_hung_app {
+            &busy
+        } else {
+            &state.cursor_status
+        };
+        match status {
             CursorImageStatus::Hidden => Vec::new(),
             CursorImageStatus::Surface(surface) => {
                 let hotspot = with_states(surface, |states| {
@@ -631,7 +701,7 @@ fn shm_size(buffer: &WlBuffer) -> Option<Size<i32, Physical>> {
 }
 
 impl State {
-    fn load_named_cursor(&mut self, icon: CursorIcon) {
+    pub(crate) fn load_named_cursor(&mut self, icon: CursorIcon) {
         let theme = &self.cursor_theme;
         let scale = self.output_scale;
         self.named_cursors
@@ -814,16 +884,17 @@ impl State {
     }
 
     pub(crate) fn stack(&self) -> Vec<(WlSurface, Point<i32, Logical>)> {
-        self.scene()
+        self.scene(false)
             .into_iter()
-            .map(|placed| match placed {
-                Placed::Surface(surface, origin) => (surface, origin),
-                Placed::Window(window) => (window.surface().clone(), window.surface_origin()),
+            .filter_map(|placed| match placed {
+                Placed::Surface(surface, origin) => Some((surface, origin)),
+                Placed::Window(window) => Some((window.surface().clone(), window.surface_origin())),
+                Placed::Closing(_) => None,
             })
             .collect()
     }
 
-    pub(crate) fn scene(&self) -> Vec<Placed<'_>> {
+    pub(crate) fn scene(&self, rendered: bool) -> Vec<Placed<'_>> {
         if self.is_locked() {
             return self
                 .locked_stack()
@@ -848,17 +919,31 @@ impl State {
             .windows
             .iter()
             .rev()
-            .filter(|window| window.visible())
+            .filter(|window| {
+                if rendered {
+                    window.rendered()
+                } else {
+                    window.visible()
+                }
+            })
             .collect::<Vec<_>>();
         let fullscreen_in_front = visible
             .first()
             .is_some_and(|window| window.has_state(xdg_toplevel::State::Fullscreen));
         let (front, rest) = visible.split_at(usize::from(fullscreen_in_front));
+        let (leaving, rest): (Vec<&Window>, Vec<&Window>) =
+            rest.iter().partition(|window| window.is_minimized());
         [
             layers(Layer::Overlay),
+            self.window_entries(&leaving),
             self.window_entries(front),
             layers(Layer::Top),
-            self.window_entries(rest),
+            self.closing
+                .iter()
+                .filter(|_| rendered)
+                .map(Placed::Closing)
+                .collect(),
+            self.window_entries(&rest),
             layers(Layer::Bottom),
             layers(Layer::Background),
         ]
@@ -975,6 +1060,7 @@ impl CompositorHandler for State {
 
     fn commit(&mut self, surface: &WlSurface) {
         on_commit_buffer_handler::<Self>(surface);
+        crate::effect::commit_blur(surface);
         self.needs_redraw = true;
         if self.commit_lock_surface(surface)
             || self.commit_popup(surface)
@@ -1002,7 +1088,12 @@ impl State {
                 self.focus(Some(surface.clone()));
             }
             (false, true) => self.place_behind_frontmost(surface),
-            (true, false) => self.refocus_after_losing(surface),
+            (true, false) => {
+                if let Some(index) = self.window_index(surface) {
+                    self.close_window(index);
+                }
+                self.refocus_after_losing(surface);
+            }
             _ => {}
         }
     }
@@ -1045,6 +1136,10 @@ impl XdgShellHandler for State {
         &mut self.xdg_shell_state
     }
 
+    fn client_pong(&mut self, client: ShellClient) {
+        self.pong(&client);
+    }
+
     fn new_toplevel(&mut self, toplevel: ToplevelSurface) {
         self.windows.push(Window::new(toplevel));
     }
@@ -1052,6 +1147,7 @@ impl XdgShellHandler for State {
     fn toplevel_destroyed(&mut self, toplevel: ToplevelSurface) {
         self.withdraw_toplevel(toplevel.wl_surface());
         if let Some(index) = self.window_index(toplevel.wl_surface()) {
+            self.close_window(index);
             self.windows.remove(index);
         }
         self.needs_redraw = true;
@@ -1137,6 +1233,9 @@ render_elements! {
     Surface=WaylandSurfaceRenderElement<VulkanRenderer>,
     Window=WindowElement<WaylandSurfaceRenderElement<VulkanRenderer>>,
     Shadow=ShadowElement,
+    Closing=WindowElement<PieceElement>,
+    Fill=FillElement,
+    Blur=BlurElement,
     Cursor=MemoryRenderBufferRenderElement<VulkanRenderer>,
 }
 

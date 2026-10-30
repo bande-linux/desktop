@@ -19,7 +19,7 @@ accesskit_unix = "=0.24.1"
 ab_glyph = "=0.2.32"
 ash = "=0.38.0"
 blocking = "=1.7.0"
-image = { version = "=0.25.10", default-features = false, features = ["png"] }
+image = { version = "=0.25.10", default-features = false, features = ["jpeg", "png"] }
 jiff = "=0.2.38"
 libc = "=0.2.191"
 libloading = "=0.8.9"
@@ -86,6 +86,7 @@ unbound-render = { path = "crates/platform/render" }
 unbound-review = { path = "crates/testing/review" }
 unbound-sample = { path = "crates/testing/sample" }
 unbound-screenshot = { path = "crates/shell/screenshot" }
+unbound-search = { path = "crates/libs/search" }
 unbound-settings = { path = "crates/apps/settings" }
 unbound-spring = { path = "crates/libs/spring" }
 unbound-term = { path = "crates/apps/terminal" }
@@ -94,6 +95,7 @@ unbound-test-wayland = { path = "crates/testing/test-wayland" }
 unbound-toolkit = { path = "crates/toolkit/toolkit" }
 unbound-toolkit-platform = { path = "crates/toolkit/platform" }
 unbound-tray = { path = "crates/services/tray" }
+unbound-wallpaper = { path = "crates/libs/wallpaper" }
 unbound-widgets = { path = "crates/toolkit/widgets" }
 unbound-xdg = { path = "crates/libs/xdg" }
 xdg-desktop-portal-unbound = { path = "crates/services/portal" }

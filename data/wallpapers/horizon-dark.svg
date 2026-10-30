@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="3200" height="2000" viewBox="0 0 3200 2000">
+<defs>
+<linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0.00" stop-color="#070A16"/><stop offset="0.50" stop-color="#141834"/><stop offset="1.00" stop-color="#2B2142"/></linearGradient>
+<radialGradient id="halo" cx="2240" cy="980" r="900" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#9AA6FF" stop-opacity="0.22"/><stop offset="1" stop-color="#9AA6FF" stop-opacity="0"/></radialGradient>
+<linearGradient id="h0" x1="0" y1="0" x2="0" y2="1"><stop offset="0.00" stop-color="#1B2140"/><stop offset="1.00" stop-color="#1A1D36"/></linearGradient>
+<linearGradient id="h1" x1="0" y1="0" x2="0" y2="1"><stop offset="0.00" stop-color="#141932"/><stop offset="1.00" stop-color="#12152A"/></linearGradient>
+<linearGradient id="h2" x1="0" y1="0" x2="0" y2="1"><stop offset="0.00" stop-color="#0C1022"/><stop offset="1.00" stop-color="#0A0C1A"/></linearGradient>
+</defs>
+<rect width="3200" height="2000" fill="url(#sky)"/>
+<rect width="3200" height="2000" fill="url(#halo)"/>
+<circle cx="2240" cy="980" r="190" fill="#E7E9FF"/>
+<path d="M0 1240 C 400 1150 760 1190 1120 1130 C 1500 1070 1900 1180 2300 1140 C 2700 1100 2980 1150 3200 1110 L 3200 2000 L 0 2000 Z" fill="url(#h0)"/>
+<path d="M0 1420 C 520 1330 980 1440 1500 1370 C 2000 1300 2500 1400 3200 1320 L 3200 2000 L 0 2000 Z" fill="url(#h1)"/>
+<path d="M0 1660 C 640 1560 1240 1680 1860 1610 C 2400 1550 2820 1620 3200 1580 L 3200 2000 L 0 2000 Z" fill="url(#h2)"/>
+</svg>

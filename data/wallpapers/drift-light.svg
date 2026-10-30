@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="3200" height="2000" viewBox="0 0 3200 2000">
+<defs>
+<linearGradient id="sky" x1="0" y1="0" x2="0.35" y2="1"><stop offset="0.00" stop-color="#E4ECF7"/><stop offset="0.50" stop-color="#F1EDF3"/><stop offset="1.00" stop-color="#F8EBE3"/></linearGradient>
+<radialGradient id="glow" cx="2300" cy="560" r="1150" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FFFFFF" stop-opacity="0.85"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/></radialGradient>
+<linearGradient id="l0" x1="0" y1="0" x2="1" y2="0.4"><stop offset="0.00" stop-color="#C9D7EE"/><stop offset="1.00" stop-color="#E3D6EC"/></linearGradient>
+<linearGradient id="l1" x1="0" y1="0.2" x2="1" y2="0.8"><stop offset="0.00" stop-color="#A9BFE6"/><stop offset="0.50" stop-color="#C6B6E2"/><stop offset="1.00" stop-color="#EBC3C8"/></linearGradient>
+<linearGradient id="l2" x1="0" y1="0" x2="1" y2="1"><stop offset="0.00" stop-color="#7E9CD8"/><stop offset="0.50" stop-color="#A08DD6"/><stop offset="1.00" stop-color="#E2A3B4"/></linearGradient>
+<linearGradient id="l3" x1="0" y1="0" x2="1" y2="0.6"><stop offset="0.00" stop-color="#5A78C4"/><stop offset="0.50" stop-color="#7E6CC6"/><stop offset="1.00" stop-color="#C9839E"/></linearGradient>
+<linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity="0.35"/><stop offset="0.22" stop-color="#FFFFFF" stop-opacity="0"/></linearGradient>
+</defs>
+<rect width="3200" height="2000" fill="url(#sky)"/>
+<rect width="3200" height="2000" fill="url(#glow)"/>
+<path d="M0 1080 C 520 900 1050 1180 1620 1060 C 2180 940 2650 760 3200 880 L 3200 2000 L 0 2000 Z" fill="url(#l0)"/>
+<path d="M0 1300 C 600 1120 1100 1420 1760 1280 C 2360 1150 2760 1020 3200 1120 L 3200 2000 L 0 2000 Z" fill="url(#l1)"/>
+<path d="M0 1300 C 600 1120 1100 1420 1760 1280 C 2360 1150 2760 1020 3200 1120 L 3200 2000 L 0 2000 Z" fill="url(#sheen)"/>
+<path d="M0 1560 C 540 1400 1180 1660 1880 1520 C 2460 1400 2860 1340 3200 1400 L 3200 2000 L 0 2000 Z" fill="url(#l2)"/>
+<path d="M0 1560 C 540 1400 1180 1660 1880 1520 C 2460 1400 2860 1340 3200 1400 L 3200 2000 L 0 2000 Z" fill="url(#sheen)"/>
+<path d="M0 1800 C 700 1660 1300 1880 2000 1760 C 2560 1670 2920 1640 3200 1680 L 3200 2000 L 0 2000 Z" fill="url(#l3)"/>
+<path d="M0 1800 C 700 1660 1300 1880 2000 1760 C 2560 1670 2920 1640 3200 1680 L 3200 2000 L 0 2000 Z" fill="url(#sheen)"/>
+</svg>

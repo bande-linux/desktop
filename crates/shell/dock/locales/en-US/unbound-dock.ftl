@@ -1,1 +1,12 @@
 dock = Dock
+trash = Trash
+trash-full = contains items
+opening = opening
+running = running
+attention = needs attention
+badge = { $count } new
+progress = { $percent } % done
+menu-open = Open
+menu-keep = Keep in Dock
+menu-login = Open at Login
+menu-show = Show in Files

@@ -306,3 +306,24 @@ impl Headless {
             .map_err(|error| io::Error::other(error.error))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{CLIPBOARD_DAEMON, GREETER, LOCK_SCREEN, MONITOR, SCREENSHOT, SHELL};
+
+    #[test]
+    fn the_shipped_session_client_list_names_every_executable_the_compositor_starts() {
+        let shipped: Vec<&str> = include_str!("../data/session-clients").lines().collect();
+        assert_eq!(
+            shipped,
+            [
+                CLIPBOARD_DAEMON,
+                LOCK_SCREEN,
+                SCREENSHOT,
+                SHELL,
+                GREETER,
+                MONITOR
+            ]
+        );
+    }
+}

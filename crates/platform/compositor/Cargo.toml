@@ -50,6 +50,7 @@ assets = [
     ["data/unbound-compositor.service", "usr/lib/systemd/user/", "644"],
     ["data/unbound-session.target", "usr/lib/systemd/user/", "644"],
     ["data/unbound.desktop", "usr/share/wayland-sessions/", "644"],
+    ["data/session-clients", "usr/share/unbound-compositor/", "644"],
 ]
 
 [lints]

@@ -252,11 +252,10 @@ impl Headless {
                     .chain(
                         shown
                             .into_iter()
-                            .filter(|element| {
-                                !matches!(
-                                    element,
-                                    OutputElement::Shadow(_) | OutputElement::Blur(_)
-                                )
+                            .filter(|element| match element {
+                                OutputElement::Shadow(_) | OutputElement::Blur(_) => false,
+                                OutputElement::Fill(fill) => !fill.is_backdrop(),
+                                _ => true,
                             })
                             .map(|element| ScreenElement::new(element, Point::default())),
                     )

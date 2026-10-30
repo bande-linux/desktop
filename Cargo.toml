@@ -19,7 +19,7 @@ accesskit_unix = "=0.24.1"
 ab_glyph = "=0.2.32"
 ash = "=0.38.0"
 atspi-common = "=0.13.0"
-blocking = "=1.7.0"
+blocking = "=1.6.2"
 bzip2 = "=0.6.1"
 image = { version = "=0.25.10", default-features = false, features = ["jpeg", "png"] }
 flate2 = "=1.1.10"

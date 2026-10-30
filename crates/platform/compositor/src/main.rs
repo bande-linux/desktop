@@ -125,12 +125,18 @@ fn run_drm(device: Option<&Path>, session: Session) -> Result<(), Box<dyn Error>
         1.0 / output.refresh().as_secs_f64()
     );
     let config = output.output_config();
-    let (connector, size, physical_size_mm) =
-        (config.name.clone(), config.size, config.physical_size_mm);
+    let (connector, size, physical_size_mm) = (
+        config.name.clone(),
+        config
+            .preferred_mode()
+            .map(|mode| mode.size)
+            .unwrap_or_default(),
+        config.physical_size_mm,
+    );
     let output_scale = move || {
         configured_scale(&connector).unwrap_or_else(|| automatic_scale(size, physical_size_mm))
     };
-    let mut compositor = Headless::with_output(config)?;
+    let mut compositor = Headless::on_device(config, Some(output.scanout_device()))?;
     compositor.set_output_scale(output_scale());
     if !compositor.enable_explicit_sync(output.device_fd()) {
         tracing::warn!(

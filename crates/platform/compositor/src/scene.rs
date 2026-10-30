@@ -742,15 +742,17 @@ pub(crate) struct Closing {
     drawn: Drawn,
     shadow: Id,
     pub(crate) motion: Motion,
+    pub(crate) output: String,
 }
 
 impl Closing {
-    pub(crate) fn new(mut drawn: Drawn, motion: Motion) -> Self {
+    pub(crate) fn new(mut drawn: Drawn, motion: Motion, output: String) -> Self {
         drawn.pieces = fresh(drawn.pieces);
         Self {
             drawn,
             shadow: Id::new(),
             motion,
+            output,
         }
     }
 

@@ -33,6 +33,14 @@ impl RoundedRect {
     pub fn components(self) -> [f32; 4] {
         [self.x, self.y, self.width, self.height]
     }
+
+    pub fn translated(self, (dx, dy): (i32, i32)) -> Self {
+        Self {
+            x: self.x + dx as f32,
+            y: self.y + dy as f32,
+            ..self
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -79,6 +87,7 @@ pub struct VulkanFrame<'frame, 'buffer> {
     bounds: Rect,
     bound: Option<Program>,
     clip: Option<RoundedRect>,
+    origin: (i32, i32),
     drawn: Vec<Rect>,
     finished: bool,
     _framebuffer: PhantomData<&'frame mut VulkanFramebuffer<'buffer>>,
@@ -150,6 +159,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             bounds,
             bound: None,
             clip: None,
+            origin: (0, 0),
             drawn: Vec::new(),
             finished: false,
             _framebuffer: PhantomData,
@@ -197,7 +207,15 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
     }
 
     pub fn clip_to(&mut self, clip: Option<RoundedRect>) {
-        self.clip = clip;
+        self.clip = clip.map(|clip| clip.translated(self.origin));
+    }
+
+    pub fn move_origin(&mut self, by: (i32, i32)) {
+        self.origin = by;
+    }
+
+    pub(crate) fn origin(&self) -> (i32, i32) {
+        self.origin
     }
 
     pub fn draw_shadow(
@@ -205,6 +223,11 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         shadow: &Shadow,
         damage: &[Rectangle<i32, Physical>],
     ) -> Result<(), RenderError> {
+        let shadow = &Shadow {
+            caster: shadow.caster.translated(self.origin),
+            window: shadow.window.translated(self.origin),
+            ..*shadow
+        };
         let destination = shadow.bounds();
         let rects = self.clip(
             damage

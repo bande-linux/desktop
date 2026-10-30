@@ -1,0 +1,248 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+use smithay::utils::{Logical, Point, Size};
+use unbound_compositor::{Headless, OutputConfig, Rect, Renderer};
+use unbound_test_wayland::{RED, ShmImage, TestClient, roundtrip};
+use wayland_client::protocol::wl_shm::Format;
+
+const MAIN: &str = "HEADLESS-1";
+const SIDE: &str = "HEADLESS-2";
+const MAIN_SIZE: (i32, i32) = (256, 192);
+const SIDE_SIZE: (i32, i32) = (320, 240);
+const WINDOW: (i32, i32) = (64, 48);
+const KEY_LEFTCTRL: u32 = 29;
+const KEY_LEFTSHIFT: u32 = 42;
+const KEY_LEFTALT: u32 = 56;
+const KEY_LEFTMETA: u32 = 125;
+const KEY_UP: u32 = 103;
+const KEY_LEFT: u32 = 105;
+const KEY_RIGHT: u32 = 106;
+const BTN_LEFT: u32 = 0x110;
+
+fn side_display() -> OutputConfig {
+    OutputConfig::virtual_display(SIDE, Size::from(SIDE_SIZE))
+}
+
+fn two_displays() -> Headless {
+    let mut server = Headless::new(Size::from(MAIN_SIZE)).expect("headless compositor");
+    server.add_output(side_display());
+    server
+}
+
+fn at(x: f64, y: f64) -> Point<f64, Logical> {
+    (x, y).into()
+}
+
+fn rect(x: i32, y: i32, w: i32, h: i32) -> Rect {
+    Rect {
+        location: (x, y).into(),
+        size: (w, h).into(),
+    }
+}
+
+fn app(server: &mut Headless) -> TestClient {
+    let mut client = TestClient::connect(server);
+    client.use_seat(server);
+    let pixels = RED.repeat((WINDOW.0 * WINDOW.1) as usize);
+    client.show_window(
+        server,
+        &ShmImage {
+            width: WINDOW.0,
+            height: WINDOW.1,
+            stride: WINDOW.0 * 4,
+            format: Format::Xrgb8888,
+            bytes: &pixels,
+        },
+    );
+    client
+}
+
+fn chord(server: &mut Headless, modifiers: &[u32], key: u32) {
+    for modifier in modifiers {
+        server.key(*modifier, true, 0);
+    }
+    server.key(key, true, 0);
+    server.key(key, false, 0);
+    for modifier in modifiers.iter().rev() {
+        server.key(*modifier, false, 0);
+    }
+}
+
+fn geometry(server: &Headless) -> Rect {
+    server.windows()[0].geometry().expect("mapped")
+}
+
+fn red_pixels(renderer: &mut Renderer, server: &mut Headless, output: &str) -> usize {
+    renderer.render_output(server, output).expect("frame");
+    let snapshot = renderer.snapshot_output(output).expect("read back");
+    snapshot
+        .rgba
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .filter(|pixel| pixel[..3] == [0xff, 0, 0])
+        .count()
+}
+
+#[test]
+fn a_new_display_is_placed_to_the_right_of_the_main_one() {
+    let server = two_displays();
+
+    assert_eq!(server.outputs(), [MAIN, SIDE]);
+    assert_eq!(server.output_rect(SIDE), Some(rect(256, 0, 320, 240)));
+}
+
+#[test]
+fn the_pointer_crosses_between_displays_but_never_leaves_them() {
+    let mut server = two_displays();
+
+    server.move_pointer_to(at(300.0, 100.0), 0);
+    assert_eq!(server.pointer_location(), at(300.0, 100.0));
+    server.move_pointer_to(at(300.0, 230.0), 0);
+    assert_eq!(server.pointer_location(), at(300.0, 230.0));
+    server.move_pointer_to(at(100.0, 230.0), 0);
+    assert_eq!(server.pointer_location(), at(100.0, 191.0));
+}
+
+#[test]
+fn a_window_opens_centred_on_the_display_with_the_pointer() {
+    let mut server = two_displays();
+    server.move_pointer_to(at(400.0, 100.0), 0);
+
+    let _app = app(&mut server);
+
+    assert_eq!(server.output_of(&server.windows()[0]), SIDE);
+    assert_eq!(geometry(&server), rect(256 + 128, 96, 64, 48));
+}
+
+#[test]
+fn each_display_draws_only_its_own_windows() {
+    let mut server = two_displays();
+    server.move_pointer_to(at(400.0, 100.0), 0);
+    let _app = app(&mut server);
+    let mut renderer = Renderer::new().expect("renderer");
+
+    assert!(red_pixels(&mut renderer, &mut server, SIDE) > (WINDOW.0 * WINDOW.1) as usize * 9 / 10);
+
+    assert_eq!(red_pixels(&mut renderer, &mut server, MAIN), 0);
+}
+
+#[test]
+fn a_shortcut_moves_the_focused_window_to_the_neighbouring_display_keeping_its_place() {
+    let mut server = two_displays();
+    let mut app = app(&mut server);
+    assert_eq!(geometry(&server), rect(96, 72, 64, 48));
+
+    chord(
+        &mut server,
+        &[KEY_LEFTALT, KEY_LEFTMETA, KEY_LEFTSHIFT],
+        KEY_RIGHT,
+    );
+    roundtrip(&mut server, &mut [&mut app]);
+
+    assert_eq!(server.output_of(&server.windows()[0]), SIDE);
+    assert_eq!(geometry(&server), rect(256 + 128, 96, 64, 48));
+    assert!(app.keyboard_focus_on(0));
+
+    chord(
+        &mut server,
+        &[KEY_LEFTALT, KEY_LEFTMETA, KEY_LEFTSHIFT],
+        KEY_LEFT,
+    );
+
+    assert_eq!(server.output_of(&server.windows()[0]), MAIN);
+    assert_eq!(geometry(&server), rect(96, 72, 64, 48));
+}
+
+#[test]
+fn dragging_a_window_onto_another_display_moves_it_there() {
+    let mut server = two_displays();
+    let mut app = app(&mut server);
+    server.move_pointer_to(at(100.0, 80.0), 0);
+    server.press_button(BTN_LEFT, true, 0);
+    roundtrip(&mut server, &mut [&mut app]);
+    app.request_move(&mut server, 0);
+
+    server.move_pointer_to(at(300.0, 80.0), 10);
+    server.press_button(BTN_LEFT, false, 20);
+    roundtrip(&mut server, &mut [&mut app]);
+
+    assert_eq!(server.output_of(&server.windows()[0]), SIDE);
+    assert_eq!(geometry(&server).location, (296, 72).into());
+}
+
+#[test]
+fn windows_of_an_unplugged_display_come_over_and_go_back_when_it_returns() {
+    let mut server = two_displays();
+    server.move_pointer_to(at(300.0, 20.0), 0);
+    let mut app = app(&mut server);
+    assert_eq!(geometry(&server), rect(384, 96, 64, 48));
+
+    server.remove_output(SIDE);
+    roundtrip(&mut server, &mut [&mut app]);
+
+    assert_eq!(server.outputs(), [MAIN]);
+    assert_eq!(server.output_of(&server.windows()[0]), MAIN);
+    let moved = geometry(&server);
+    assert_eq!(moved.size, WINDOW.into());
+    assert!(moved.location.x >= 0 && moved.location.x + WINDOW.0 <= MAIN_SIZE.0);
+    assert!(moved.location.y >= 0 && moved.location.y + WINDOW.1 <= MAIN_SIZE.1);
+
+    server.add_output(side_display());
+    roundtrip(&mut server, &mut [&mut app]);
+
+    assert_eq!(server.output_of(&server.windows()[0]), SIDE);
+    assert_eq!(geometry(&server), rect(384, 96, 64, 48));
+}
+
+#[test]
+fn each_display_has_its_own_row_of_workspaces() {
+    let mut server = two_displays();
+    server.move_pointer_to(at(400.0, 100.0), 0);
+    let mut app = app(&mut server);
+
+    chord(
+        &mut server,
+        &[KEY_LEFTCTRL, KEY_LEFTMETA, KEY_LEFTSHIFT],
+        KEY_RIGHT,
+    );
+    roundtrip(&mut server, &mut [&mut app]);
+
+    assert_eq!(server.workspace_count_on(SIDE), Some(2));
+    assert_eq!(server.active_workspace_on(SIDE), Some(1));
+    assert_eq!(server.workspace_count_on(MAIN), Some(1));
+    assert_eq!(server.active_workspace_on(MAIN), Some(0));
+}
+
+#[test]
+fn a_window_is_told_the_scale_of_the_display_it_is_on() {
+    let mut server = two_displays();
+    let mut settings = server.output_settings(SIDE).expect("side display");
+    settings.scale = 2.0;
+    server.configure_output(SIDE, settings);
+    assert_eq!(server.output_rect(SIDE), Some(rect(256, 0, 160, 120)));
+    let mut app = app(&mut server);
+    assert_eq!(app.preferred_scale(&mut server, 0), Some(120));
+
+    chord(
+        &mut server,
+        &[KEY_LEFTALT, KEY_LEFTMETA, KEY_LEFTSHIFT],
+        KEY_RIGHT,
+    );
+
+    assert_eq!(app.preferred_scale(&mut server, 0), Some(240));
+}
+
+#[test]
+fn zoom_fills_the_display_the_window_is_on() {
+    let mut server = two_displays();
+    server.move_pointer_to(at(400.0, 100.0), 0);
+    let mut app = app(&mut server);
+
+    chord(&mut server, &[KEY_LEFTCTRL, KEY_LEFTMETA], KEY_UP);
+    roundtrip(&mut server, &mut [&mut app]);
+    app.fill_configured_size(&mut server, 0, RED);
+    roundtrip(&mut server, &mut [&mut app]);
+
+    assert_eq!(geometry(&server), rect(256, 0, 320, 240));
+}

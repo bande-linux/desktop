@@ -158,7 +158,7 @@ pub(crate) struct IconRect {
     rect: Rectangle<i32, Logical>,
 }
 
-const OPENING_SCALE: f64 = 0.95;
+pub(crate) const OPENING_SCALE: f64 = 0.95;
 const CLOSING_SCALE: f64 = 0.92;
 const DOCK_ICON_SIZE: f64 = 48.0;
 pub(crate) const DOCK_NAMESPACE: &str = "dock";
@@ -233,16 +233,23 @@ impl State {
             let center = icon.loc + icon.size.downscale(2.0).to_point();
             return Rectangle::new(center - size.downscale(2.0).to_point(), size);
         }
-        let map = layer_map_for_output(&self.output);
-        let dock = map
-            .layers()
-            .find(|layer| layer.namespace() == DOCK_NAMESPACE)
-            .and_then(|layer| map.layer_geometry(layer));
+        let dock = self.screens.iter().find_map(|screen| {
+            let map = layer_map_for_output(&screen.output);
+            map.layers()
+                .find(|layer| layer.namespace() == DOCK_NAMESPACE)
+                .and_then(|layer| map.layer_geometry(layer))
+                .map(|geometry| (screen.settings.position + geometry.loc, geometry.size))
+        });
         let center: Point<f64, Logical> = match dock {
-            Some(dock) => (dock.loc + dock.size.downscale(2).to_point()).to_f64(),
+            Some((at, size)) => (at + size.downscale(2).to_point()).to_f64(),
             None => {
-                let output = self.logical_output_size().to_f64();
-                (output.w / 2.0, output.h).into()
+                let output = self.screen_rect(self.screen_of(window));
+                let origin = output.location.to_f64();
+                (
+                    origin.x + f64::from(output.size.w) / 2.0,
+                    origin.y + f64::from(output.size.h),
+                )
+                    .into()
             }
         };
         let factor = (DOCK_ICON_SIZE / rect.size.w.max(rect.size.h).max(1.0)).min(1.0);
@@ -298,6 +305,7 @@ impl State {
     }
 
     pub(crate) fn close_window(&mut self, index: usize) {
+        let output = self.screens[self.screen_of(&self.windows[index])].name();
         let window = &mut self.windows[index];
         window.motion = None;
         let Some(drawn) = window.drawn.take() else {
@@ -310,12 +318,12 @@ impl State {
             (Look::hidden(from.rect).scaled(CLOSING_SCALE), Spring::QUICK)
         };
         self.closing
-            .push(Closing::new(drawn, Motion::new(spring, from, to)));
+            .push(Closing::new(drawn, Motion::new(spring, from, to), output));
         self.needs_redraw = true;
     }
 
     fn animate(&mut self, time: Duration) {
-        let (refresh, reduce) = (self.refresh, self.reduce_motion);
+        let (refresh, reduce) = (self.main_screen().refresh(), self.reduce_motion);
         for index in 0..self.windows.len() {
             if self.windows[index].motion.is_none() {
                 continue;
@@ -354,7 +362,7 @@ impl State {
             || self.preview.is_some()
             || self.desktop.is_animating()
             || self.slide_back.is_some()
-            || self.workspaces.is_animating()
+            || self.workspaces_animating()
             || self.overview.is_animating()
             || self.windows.iter().any(|window| window.motion.is_some())
     }
@@ -362,6 +370,10 @@ impl State {
 
 impl Headless {
     pub fn animate(&mut self, time: Duration) {
+        if self.state.animated_at.is_some_and(|at| time <= at) {
+            return;
+        }
+        self.state.animated_at = Some(time);
         self.state.animate(time);
     }
 

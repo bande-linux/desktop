@@ -28,7 +28,8 @@ use unbound_render::VulkanRenderer;
 use crate::clock::{FrameOutput, Submission, Vblank};
 use crate::render::background;
 use crate::scanout::ScanoutExporter;
-use crate::state::{Headless, OutputConfig, REFRESH, ScanoutDevice};
+use crate::screen::{OutputConfig, OutputMode};
+use crate::state::{Headless, REFRESH, ScanoutDevice};
 
 pub type DrmBackendError = Box<dyn Error>;
 
@@ -246,14 +247,21 @@ impl DrmOutput {
     pub fn output_config(&self) -> OutputConfig {
         OutputConfig {
             name: self.connector.clone(),
+            make: String::new(),
             model: self.renderer.device_info().name.clone(),
-            size: self.size,
+            serial: String::new(),
             physical_size_mm: self.physical_size_mm,
-            refresh: self.refresh,
-            scanout: Some(ScanoutDevice {
-                node: self.node,
-                feedback: self.feedback.clone(),
-            }),
+            modes: vec![OutputMode {
+                size: self.size,
+                refresh: self.refresh,
+            }],
+        }
+    }
+
+    pub fn scanout_device(&self) -> ScanoutDevice {
+        ScanoutDevice {
+            node: self.node,
+            feedback: self.feedback.clone(),
         }
     }
 
@@ -315,21 +323,28 @@ impl DrmOutput {
 impl FrameOutput for DrmOutput {
     type Error = DrmBackendError;
 
-    fn submit(&mut self, compositor: &mut Headless) -> Result<Submission, DrmBackendError> {
+    fn submit(
+        &mut self,
+        compositor: &mut Headless,
+        output: &str,
+    ) -> Result<Submission, DrmBackendError> {
+        let Some(settings) = compositor.output_settings(output) else {
+            return Ok(Submission::AtVblank);
+        };
         self.compositor
             .set_output_mode_source(OutputModeSource::Static {
                 size: self.size,
-                scale: compositor.output_scale().into(),
-                transform: Transform::Normal,
+                scale: settings.scale.into(),
+                transform: settings.transform,
             });
-        let elements = compositor.render_elements(&mut self.renderer);
+        let elements = compositor.render_elements_on(&mut self.renderer, output);
         let frame = self.compositor.render_frame(
             &mut self.renderer,
             &elements,
             background(),
             FrameFlags::DEFAULT | FrameFlags::ALLOW_PRIMARY_PLANE_SCANOUT_ANY,
         )?;
-        compositor.copy_captures(&mut self.renderer);
+        compositor.copy_captures(&mut self.renderer, output);
         self.scanned_out = matches!(frame.primary_element, PrimaryPlaneElement::Element(_));
         if frame.is_empty {
             return Ok(Submission::AtVblank);

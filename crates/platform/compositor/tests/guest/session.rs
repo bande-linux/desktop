@@ -59,7 +59,7 @@ impl Session {
     }
 
     pub fn output_size(&self) -> (usize, usize) {
-        let size = self.output.output_config().size;
+        let size = self.shared.server.output_size();
         (size.w as usize, size.h as usize)
     }
 
@@ -82,7 +82,11 @@ impl Session {
     }
 
     pub fn present(&mut self) -> Scanout {
-        let submission = self.output.submit(&mut self.shared.server).expect("frame");
+        let main = self.shared.server.main_output();
+        let submission = self
+            .output
+            .submit(&mut self.shared.server, &main)
+            .expect("frame");
         assert_eq!(submission, Submission::AwaitingFlip);
         self.shared.flip = None;
         self.dispatch_until("a page flip", |session| session.shared.flip.is_some());

@@ -72,6 +72,10 @@ impl VulkanFrame<'_, '_> {
         blur: &Blur,
         damage: &[Rectangle<i32, Physical>],
     ) -> Result<(), RenderError> {
+        let blur = &Blur {
+            region: blur.region.translated(self.origin()),
+            ..*blur
+        };
         let destination = blur.bounds();
         let rects = self.clip(
             damage

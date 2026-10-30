@@ -22,13 +22,14 @@ impl State {
 
     pub(crate) fn focusable_layer_of(&self, surface: &WlSurface) -> Option<WlSurface> {
         let root = self.root_of(surface)?;
-        let map = layer_map_for_output(&self.output);
+        let map = layer_map_for_output(&self.screens[self.layer_screen(&root)?].output);
         let layer = map.layer_for_surface(&root, WindowSurfaceType::TOPLEVEL)?;
+
         (layer.cached_state().keyboard_interactivity == KeyboardInteractivity::OnDemand)
             .then_some(root)
     }
 
-    fn root_of(&self, surface: &WlSurface) -> Option<WlSurface> {
+    pub(crate) fn root_of(&self, surface: &WlSurface) -> Option<WlSurface> {
         let mut root = surface.clone();
         loop {
             while let Some(parent) = get_parent(&root) {
@@ -74,18 +75,15 @@ impl State {
         positioner: PositionerState,
     ) -> Rectangle<i32, Logical> {
         let kind = PopupKind::Xdg(popup.clone());
-        let Some(origin) = find_popup_root_surface(&kind)
-            .ok()
-            .and_then(|root| self.geometry_origin(&root))
-        else {
+        let Some((origin, output)) = find_popup_root_surface(&kind).ok().and_then(|root| {
+            let origin = self.geometry_origin(&root)?;
+            Some((origin, self.screen_rect(self.screen_of_surface(&root))))
+        }) else {
             return positioner.get_geometry();
         };
         let parent = get_popup_toplevel_coords(&kind);
-        let size = self.output_rect().size;
-        let target = Rectangle::new(
-            (-origin.x - parent.x, -origin.y - parent.y).into(),
-            (size.w, size.h).into(),
-        );
+        let target = Rectangle::new(output.location - origin - parent, output.size);
+
         positioner.get_unconstrained_geometry(target)
     }
 

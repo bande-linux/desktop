@@ -45,6 +45,7 @@ enum Shortcut {
     Workspace(bool),
     WorkspaceAt(usize),
     CarryWindow(bool),
+    MoveToDisplay(i32, i32),
     Overview,
     AppWindows,
     OverviewKey(u32, Option<char>),
@@ -96,6 +97,10 @@ fn shortcut(
         keysyms::KEY_f | keysyms::KEY_F if ctrl => Some(Shortcut::ToggleFullscreen),
         keysyms::KEY_Left if ctrl && shift => Some(Shortcut::CarryWindow(false)),
         keysyms::KEY_Right if ctrl && shift => Some(Shortcut::CarryWindow(true)),
+        keysyms::KEY_Left if alt && shift => Some(Shortcut::MoveToDisplay(-1, 0)),
+        keysyms::KEY_Right if alt && shift => Some(Shortcut::MoveToDisplay(1, 0)),
+        keysyms::KEY_Up if alt && shift => Some(Shortcut::MoveToDisplay(0, -1)),
+        keysyms::KEY_Down if alt && shift => Some(Shortcut::MoveToDisplay(0, 1)),
         keysyms::KEY_Left if alt => Some(Shortcut::Workspace(false)),
         keysyms::KEY_Right if alt => Some(Shortcut::Workspace(true)),
         keysyms::KEY_Up if alt => Some(Shortcut::Overview),
@@ -119,11 +124,14 @@ impl State {
         &self,
         location: Point<f64, Logical>,
     ) -> Option<(WlSurface, Point<f64, Logical>)> {
-        self.stack().into_iter().find_map(|(surface, origin)| {
-            let origin: Point<i32, Logical> = (origin.x, origin.y).into();
-            under_from_surface_tree(&surface, location, origin, WindowSurfaceType::ALL)
-                .map(|(surface, at)| (surface, at.to_f64()))
-        })
+        let screen = self.screen_at(location)?;
+        self.stack(screen)
+            .into_iter()
+            .find_map(|(surface, origin)| {
+                let origin: Point<i32, Logical> = (origin.x, origin.y).into();
+                under_from_surface_tree(&surface, location, origin, WindowSurfaceType::ALL)
+                    .map(|(surface, at)| (surface, at.to_f64()))
+            })
     }
 
     pub(crate) fn refocus_pointer(&mut self) {
@@ -211,8 +219,9 @@ impl State {
             return;
         }
         if let Shortcut::WorkspaceAt(index) = shortcut {
-            if index < self.workspaces.count() {
-                self.switch_workspace(index);
+            let screen = self.pointer_screen();
+            if index < self.screens[screen].workspaces.count() {
+                self.switch_workspace(screen, index);
             }
             return;
         }
@@ -277,6 +286,11 @@ impl State {
                     self.move_to_workspace(&window, forward, true);
                 }
             }
+            Shortcut::MoveToDisplay(dx, dy) => {
+                if let Some(window) = self.toplevel_of(&focused) {
+                    self.move_to_screen_beside(&window, (dx, dy));
+                }
+            }
             Shortcut::ToggleFullscreen => {
                 if let Some(window) = self.toplevel_of(&focused) {
                     self.toggle_fullscreen(&window);
@@ -317,7 +331,8 @@ impl Headless {
                 self.move_pointer_to(location, event.time_msec());
             }
             InputEvent::PointerMotionAbsolute { event } => {
-                let location = event.position_transformed(self.logical_output_size());
+                let bounds = self.state.bounding_rect();
+                let location = event.position_transformed(bounds.size) + bounds.location.to_f64();
                 self.move_pointer_to(location, event.time_msec());
             }
             InputEvent::PointerButton { event } => {
@@ -413,16 +428,16 @@ impl Headless {
 
     pub fn move_pointer_to(&mut self, location: Point<f64, Logical>, time: u32) {
         self.state.note_activity();
-        let size = self.logical_output_size();
-        let location: Point<f64, Logical> = (
-            location.x.clamp(0.0, f64::from(size.w - 1)),
-            location.y.clamp(0.0, f64::from(size.h - 1)),
-        )
-            .into();
         let state = &mut self.state;
+        let location = state.nearest_on_screens(location);
+        let entered = state.screen_at(location) != state.screen_at(state.pointer_location);
         state.pointer_location = location;
         state.cursor_shown = true;
         state.needs_redraw = true;
+        if entered {
+            state.reload_cursor();
+        }
+
         if state.overview.is_open() {
             state.overview_pointer(location);
         }

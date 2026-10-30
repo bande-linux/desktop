@@ -76,9 +76,8 @@ pub use pointing::PointerSettings;
 pub use render::{BACKGROUND, FrameStats, Renderer, Snapshot};
 pub use screen::{OutputConfig, OutputMode, OutputSettings, automatic_scale};
 pub use session::{
-    BAR, CLIPBOARD_DAEMON, CONTROL_CENTER, DESKTOP_SURFACE, GREETER, LAUNCHER, LOCK_SCREEN,
-    MONITOR, NOTIFICATIONS, REVIEW, SCREENSHOT, SESSION_CLIENT_RESTART_THROTTLE, SessionRole,
-    SessionUpkeep,
+    CLIPBOARD_DAEMON, GREETER, LOCK_SCREEN, MONITOR, REVIEW, SCREENSHOT,
+    SESSION_CLIENT_RESTART_THROTTLE, SHELL, SessionRole, SessionUpkeep,
 };
 pub use state::{Headless, OutputElement, REFRESH, Rect, ScanoutDevice};
 pub use unbound_render::{DeviceInfo, RenderError};

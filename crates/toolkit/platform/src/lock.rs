@@ -18,6 +18,7 @@ pub(crate) struct SessionLock {
     pub(crate) manager: Option<ExtSessionLockManagerV1>,
     pub(crate) output: Option<WlOutput>,
     pub(crate) named: Vec<(WlOutput, String)>,
+    pub(crate) wanted_name: Option<String>,
     locked: bool,
     refused: bool,
 }
@@ -32,10 +33,10 @@ pub(crate) fn wanted_output() -> Option<String> {
 
 impl SessionLock {
     pub(crate) fn wanted(&self) -> Option<WlOutput> {
-        let wanted = wanted_output()?;
+        let wanted = self.wanted_name.as_ref()?;
         self.named
             .iter()
-            .find(|(_, name)| *name == wanted)
+            .find(|(_, name)| name == wanted)
             .map(|(output, _)| output.clone())
     }
 }

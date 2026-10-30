@@ -7,7 +7,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use smithay::utils::{Point, Size};
-use unbound_compositor::{FrameClock, FrameScheduler, Headless, REFRESH, Renderer};
+use unbound_compositor::{FrameClock, FrameScheduler, Headless, REFRESH, Renderer, SessionRole};
 
 const OUTPUT: (i32, i32) = (2928, 1818);
 const SETTLE: Duration = Duration::from_secs(4);
@@ -119,7 +119,9 @@ fn measure(
         epoch: Instant::now(),
     };
     let (client_end, server_end) = UnixStream::pair()?;
-    session.server.insert_client(server_end)?;
+    session
+        .server
+        .insert_session_client(server_end, SessionRole::Shell)?;
     let mut child = Command::new(client)
         .env("WAYLAND_SOCKET", "0")
         .env_remove("WAYLAND_DISPLAY")

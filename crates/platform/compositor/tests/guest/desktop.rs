@@ -163,7 +163,7 @@ fn the_launcher_opens_a_terminal_that_takes_typing() {
     let _desktop = start_desktop();
 
     wait_for("the Dock", STARTUP, || {
-        running("unbound-bar")
+        running("unbound-shell")
             && current_scanout().is_some_and(|scanout| pixel(&scanout, 32, 200) != BACKGROUND)
     });
     thread::sleep(Duration::from_secs(1));
@@ -267,7 +267,7 @@ fn page_pixels(scanout: &Scanout) -> usize {
 fn firefox_runs_on_wayland_and_opens_a_context_menu() {
     let mut keyboard = VirtualDevice::keyboard_and_mouse();
     let desktop = start_desktop();
-    wait_for("the Dock", STARTUP, || running("unbound-bar"));
+    wait_for("the Dock", STARTUP, || running("unbound-shell"));
     fs::create_dir_all(PROFILE).expect("profile directory");
     fs::write(format!("{PROFILE}/user.js"), FIRST_RUN_OFF).expect("profile preferences");
     fs::write(PAGE, "<body style='margin:0;background:#ff00ff'></body>").expect("test page");
@@ -390,7 +390,7 @@ fn ctrl_super_q_locks_and_the_password_unlocks() {
     let _desktop = start_desktop_with(&[("DBUS_SYSTEM_BUS_ADDRESS", bus.address())]);
     let icon = (32, 33);
     wait_for("the Dock", STARTUP, || {
-        running("unbound-bar")
+        running("unbound-shell")
             && current_scanout().is_some_and(|scanout| pixel(&scanout, icon.0, 200) != BACKGROUND)
     });
     thread::sleep(Duration::from_secs(1));
@@ -464,7 +464,7 @@ fn super_shift_3_saves_the_screen_to_the_desktop() {
     let _desktop = start_desktop();
     let icon = (32, 33);
     wait_for("the panel and the screenshot tool", STARTUP, || {
-        running("unbound-bar")
+        running("unbound-shell")
             && running("unbound-screenshot")
             && current_scanout().is_some_and(|scanout| pixel(&scanout, icon.0, 200) != BACKGROUND)
     });
@@ -539,7 +539,7 @@ fn super_shift_4_saves_a_dragged_out_area_to_the_desktop() {
     let _desktop = start_desktop();
     let icon = (32, 33);
     wait_for("the panel and the screenshot tool", STARTUP, || {
-        running("unbound-bar")
+        running("unbound-shell")
             && running("unbound-screenshot")
             && current_scanout().is_some_and(|scanout| pixel(&scanout, icon.0, 200) != BACKGROUND)
     });
@@ -663,7 +663,7 @@ fn files_drills_into_a_folder_and_quick_looks_a_picture() {
     let mut keyboard = VirtualDevice::keyboard_and_mouse();
     let desktop = start_desktop();
     wait_for("the Dock", STARTUP, || {
-        running("unbound-bar")
+        running("unbound-shell")
             && current_scanout().is_some_and(|scanout| pixel(&scanout, 32, 200) != BACKGROUND)
     });
     let without_files = scanout();
@@ -685,7 +685,7 @@ fn files_drills_into_a_folder_and_quick_looks_a_picture() {
             .collect::<Vec<_>>()
     };
     wait_for("the bar to name Files", STARTUP, || {
-        running("unbound-bar") && bar_header(&scanout()) != bar_header(&without_files)
+        running("unbound-shell") && bar_header(&scanout()) != bar_header(&without_files)
     });
     thread::sleep(Duration::from_secs(1));
 
@@ -817,7 +817,10 @@ fn the_greeter_takes_a_password_typed_in_the_system_layout_after_a_refusal_and_h
     });
     thread::sleep(Duration::from_secs(1));
     scanout().save("m24-greeter");
-    assert!(!running("unbound-bar"), "the greeter session has no panel");
+    assert!(
+        !running("unbound-shell"),
+        "the greeter session has no panel"
+    );
 
     keyboard.type_text("fel\n");
     cancel_seen

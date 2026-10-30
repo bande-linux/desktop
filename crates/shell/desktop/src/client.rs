@@ -2,17 +2,17 @@ use std::collections::{HashMap, HashSet};
 use std::io::Read;
 use std::os::fd::{AsFd, BorrowedFd};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdout, Command, ExitCode, Stdio};
+use std::process::{Child, ChildStdout, Command, Stdio};
 use std::thread;
 use std::time::{Instant, SystemTime};
 
-use accesskit::TreeUpdate;
-use unbound_config::{BarEdge, Config, config_path};
-use unbound_desktop_surface::{
+use crate::{
     Artwork, Bounds, CONFIRM_DELETE_FLAG, DesktopView, Item, Kind, Layer, Layouts, Luma, MenuApp,
     Request, Selection, WallpaperKey, command, confirm_delete, desktop_menu, items_menu,
     layouts_path, list, parse_layouts, save_layouts,
 };
+use accesskit::TreeUpdate;
+use unbound_config::{BarEdge, Config};
 use unbound_fs::{
     Action, Answer, Change, FolderWatch, Operations, Purpose, Resolution, Task, Trash,
 };
@@ -20,7 +20,7 @@ use unbound_thumbnails::{Request as ThumbnailRequest, ThumbnailSize, Thumbnails}
 use unbound_toolkit::ui::frame_time;
 use unbound_toolkit::{
     App, DragAction, DragEvent, Edges, Image, KeyboardFocus, LayerKind, LayerOptions,
-    MenuPlacement, Point, Role, Scene, Scheme, Transfer, Window, WindowEvent,
+    MenuPlacement, Point, Role, Scene, Scheme, TextSystem, Transfer, Window, WindowEvent,
 };
 use unbound_volumes::{eject, media_roots, mounted_volumes};
 use unbound_wallpaper::{Choice, Inbox, Outbox, Picture, Variant, choose, follow, inbox, render};
@@ -44,7 +44,7 @@ struct Confirming {
     paths: Vec<PathBuf>,
 }
 
-struct Surface {
+pub struct DesktopSurface {
     view: DesktopView,
     paste_moves: bool,
     apps: Apps,
@@ -72,7 +72,7 @@ struct Surface {
     confirming: Option<Confirming>,
 }
 
-impl Surface {
+impl DesktopSurface {
     fn variant(&self) -> Variant {
         match self.scheme {
             Scheme::Light => Variant::Light,
@@ -254,7 +254,7 @@ impl Surface {
 
     fn icon_pixels(&self) -> u32 {
         let scale = self.viewport.map_or(1.0, |(_, scale)| scale);
-        (f64::from(unbound_desktop_surface::ICON_SIZE) * scale).ceil() as u32
+        (f64::from(crate::ICON_SIZE) * scale).ceil() as u32
     }
 
     fn watch_folders(&mut self) {
@@ -680,7 +680,7 @@ impl Surface {
     }
 }
 
-impl App for Surface {
+impl App for DesktopSurface {
     fn scene(&mut self, window: &mut Window) -> Scene {
         self.follow_viewport(window);
         self.view.scene(frame_time().presentation)
@@ -856,103 +856,77 @@ fn desktop_folder(home: &Path) -> PathBuf {
     folder
 }
 
-fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let home = std::env::var_os("HOME").map(PathBuf::from);
-    let config_home_dir = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from);
-    let config = config_path(config_home_dir.as_deref(), home.as_deref())
-        .and_then(|path| std::fs::read_to_string(path).ok())
-        .and_then(|source| Config::parse(&source).ok())
-        .unwrap_or_default();
-    let bar_edge = config.bar.edge;
-    let combined_bar = config.bar.menu_bar.combines(config.bar.edge);
-    let desktop_dir = desktop_folder(home.as_deref().unwrap_or(Path::new("/")));
-    let user = std::env::var("USER").unwrap_or_default();
-    let trash = Trash::for_user().ok_or("no home folder for the Trash")?;
-    let layouts_file = layouts_path();
-    let layouts: Layouts = layouts_file
-        .as_ref()
-        .and_then(|path| std::fs::read_to_string(path).ok())
-        .map(|text| parse_layouts(&text))
-        .unwrap_or_default();
-    let mut window = Window::open(
-        Role::Layer(LayerOptions {
-            layer: LayerKind::Background,
-            anchor: Edges::ALL,
-            exclusive_zone: -1,
-            keyboard: KeyboardFocus::OnDemand,
-            namespace: "desktop".to_owned(),
-        }),
-        (0, 0),
-    )?;
-    let (choices, choice_sender) = inbox()?;
-    follow(choice_sender);
-    let (loaded, loader) = inbox()?;
-    let appearance = window.appearance();
-    let data_dirs = data_dirs();
-    let thumbnails = Thumbnails::for_user(&data_dirs);
-    let mut surface = Surface {
-        view: DesktopView::new(appearance, layouts),
-        paste_moves: false,
-        apps: Apps::load(data_dirs.clone(), &config_dirs()),
-        operations: Operations::new(trash),
-        watch: FolderWatch::new()?,
-        desktop_dir,
-        wallpaper_only: std::env::var_os(SECONDARY_DISPLAY).is_some(),
+pub fn role() -> Role {
+    Role::Layer(LayerOptions {
+        layer: LayerKind::Background,
+        anchor: Edges::ALL,
+        exclusive_zone: -1,
+        keyboard: KeyboardFocus::OnDemand,
+        namespace: "desktop".to_owned(),
+    })
+}
 
-        media: media_roots(&user),
-        data_dirs,
-        home,
-        icons: HashMap::new(),
-        thumbnails,
-        pictures: HashMap::new(),
-        layouts_file,
-        bar_edge,
-        combined_bar,
-        choice: None,
-        choices,
-        loaded,
-        loader,
-        pending: HashSet::new(),
-        wallpapers: HashMap::new(),
-        scheme: appearance.scheme,
-        viewport: None,
-        confirming: None,
-    };
-    let folder = surface.desktop_dir.clone();
-    surface.view.set_folder(folder);
-    unbound_toolkit::run(&mut window, &mut surface)?;
+impl DesktopSurface {
+    pub fn new(
+        window: &Window,
+        main: bool,
+        config: &Config,
+        text: TextSystem,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let home = std::env::var_os("HOME").map(PathBuf::from);
+        let bar_edge = config.bar.edge;
+        let combined_bar = config.bar.menu_bar.combines(config.bar.edge);
+        let desktop_dir = desktop_folder(home.as_deref().unwrap_or(Path::new("/")));
+        let user = std::env::var("USER").unwrap_or_default();
+        let trash = Trash::for_user().ok_or("no home folder for the Trash")?;
+        let layouts_file = layouts_path();
+        let layouts: Layouts = layouts_file
+            .as_ref()
+            .and_then(|path| std::fs::read_to_string(path).ok())
+            .map(|text| parse_layouts(&text))
+            .unwrap_or_default();
+        let (choices, choice_sender) = inbox()?;
+        follow(choice_sender);
+        let (loaded, loader) = inbox()?;
+        let appearance = window.appearance();
+        let data_dirs = data_dirs();
+        let thumbnails = Thumbnails::for_user(&data_dirs);
+        let mut surface = DesktopSurface {
+            view: DesktopView::new(appearance, layouts, text),
+            paste_moves: false,
+            apps: Apps::load(data_dirs.clone(), &config_dirs()),
+            operations: Operations::new(trash),
+            watch: FolderWatch::new()?,
+            desktop_dir,
+            wallpaper_only: !main,
+            media: media_roots(&user),
+            data_dirs,
+            home,
+            icons: HashMap::new(),
+            thumbnails,
+            pictures: HashMap::new(),
+            layouts_file,
+            bar_edge,
+            combined_bar,
+            choice: None,
+            choices,
+            loaded,
+            loader,
+            pending: HashSet::new(),
+            wallpapers: HashMap::new(),
+            scheme: appearance.scheme,
+            viewport: None,
+            confirming: None,
+        };
+        let folder = surface.desktop_dir.clone();
+        surface.view.set_folder(folder);
+        Ok(surface)
+    }
+}
+
+pub fn confirm(count: &str) -> Result<(), Box<dyn std::error::Error>> {
+    if confirm_delete(count.parse().unwrap_or(1))? {
+        println!("{CONFIRMED}");
+    }
     Ok(())
-}
-
-fn confirm(count: &str) -> ExitCode {
-    match confirm_delete(count.parse().unwrap_or(1)) {
-        Ok(true) => {
-            println!("{CONFIRMED}");
-            ExitCode::SUCCESS
-        }
-        Ok(false) => ExitCode::SUCCESS,
-        Err(error) => {
-            tracing::error!("{error}");
-            ExitCode::FAILURE
-        }
-    }
-}
-
-const SECONDARY_DISPLAY: &str = "UNBOUND_SECONDARY_DISPLAY";
-
-fn main() -> ExitCode {
-    unbound_log::init("unbound-desktop-surface");
-    let arguments = std::env::args().collect::<Vec<_>>();
-    if let [_, flag, count] = arguments.as_slice()
-        && flag == CONFIRM_DELETE_FLAG
-    {
-        return confirm(count);
-    }
-    match run() {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(error) => {
-            tracing::error!("{error}");
-            ExitCode::FAILURE
-        }
-    }
 }

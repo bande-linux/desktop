@@ -241,6 +241,7 @@ fn view_with_items(scheme: Scheme) -> DesktopView {
             ..Appearance::default()
         },
         Layouts::new(),
+        TextSystem::new(),
     );
     view.set_viewport(
         SCREEN,

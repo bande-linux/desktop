@@ -1,10 +1,10 @@
 use std::os::fd::BorrowedFd;
 use std::time::Instant;
 
+use crate::L10N;
+use crate::menubar::StatusView;
+use crate::rail::{EXPANDED_WIDTH, RailView, bar_width, owns_node, surface_size};
 use accesskit::{Node, NodeId, Role as AccessRole, TreeInfo, TreeUpdate};
-use unbound_bar::L10N;
-use unbound_bar::menubar::StatusView;
-use unbound_bar::rail::{EXPANDED_WIDTH, RailView, bar_width, owns_node, surface_size};
 use unbound_toolkit::ui::{Cursor, Event};
 use unbound_toolkit::{
     App, Edges, Item, KeyboardFocus, LayerKind, LayerOptions, Point, Rect, Role, Scene, Shape,

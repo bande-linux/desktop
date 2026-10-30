@@ -1,4 +1,5 @@
 mod backdrop;
+mod client;
 mod confirm;
 mod menus;
 mod model;
@@ -10,6 +11,7 @@ use std::sync::LazyLock;
 use unbound_l10n::Localizer;
 
 pub use backdrop::{Key as WallpaperKey, Layer, Luma};
+pub use client::{DesktopSurface, confirm, role};
 pub use confirm::{CONFIRM_DELETE_FLAG, confirm_delete};
 pub use menus::{App as MenuApp, Command, Selection, command, desktop_menu, items_menu};
 pub use model::{
@@ -33,7 +35,7 @@ mod tests {
             include_str!("view.rs"),
             include_str!("confirm.rs"),
             include_str!("menus.rs"),
-            include_str!("main.rs"),
+            include_str!("client.rs"),
         ];
         assert_eq!(
             unbound_l10n::missing_ids(super::ENGLISH, &sources),

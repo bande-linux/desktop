@@ -23,14 +23,10 @@ pub enum SessionRole {
     Shell,
 }
 
-pub const BAR: &str = "/usr/bin/unbound-bar";
 pub const CLIPBOARD_DAEMON: &str = "/usr/bin/unbound-clipboard";
-pub const DESKTOP_SURFACE: &str = "/usr/bin/unbound-desktop-surface";
-pub const LAUNCHER: &str = "/usr/bin/unbound-launcher";
 pub const LOCK_SCREEN: &str = "/usr/bin/unbound-lock";
 pub const SCREENSHOT: &str = "/usr/bin/unbound-screenshot";
-pub const CONTROL_CENTER: &str = "/usr/bin/unbound-controlcenter";
-pub const NOTIFICATIONS: &str = "/usr/bin/unbound-notifications";
+pub const SHELL: &str = "/usr/bin/unbound-shell";
 pub const GREETER: &str = "/usr/bin/unbound-greeter";
 pub const REVIEW: &str = "/usr/bin/unbound-review";
 pub const MONITOR: &str = "/usr/bin/unbound-monitor";
@@ -43,11 +39,9 @@ pub(crate) struct SessionClient {
     role: SessionRole,
     child: Option<Child>,
     last_restart: Option<Instant>,
-    display: Option<(String, bool)>,
 }
 
 pub const OUTPUT_VARIABLE: &str = "UNBOUND_OUTPUT";
-pub const SECONDARY_VARIABLE: &str = "UNBOUND_SECONDARY_DISPLAY";
 
 pub(crate) struct LockScreen {
     executable: PathBuf,
@@ -109,68 +103,12 @@ impl Headless {
             role,
             child: Some(child),
             last_restart: None,
-            display: None,
         });
         Ok(())
     }
 
-    pub fn start_client_on_every_display(&mut self, executable: &Path) {
-        self.per_display_clients.push(executable.to_path_buf());
-        self.follow_displays();
-    }
-
-    pub fn display_clients(&self, executable: &Path) -> Vec<(String, bool)> {
-        self.session_clients
-            .iter()
-            .filter(|client| client.executable == executable)
-            .filter_map(|client| client.display.clone())
-            .collect()
-    }
-
-    fn follow_displays(&mut self) {
-        let wanted: Vec<(PathBuf, String, bool)> = self
-            .per_display_clients
-            .iter()
-            .flat_map(|executable| {
-                self.state
-                    .screens
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, screen)| screen.mirror.is_none())
-                    .map(move |(index, screen)| (executable.clone(), screen.name(), index != 0))
-            })
-            .collect();
-        self.session_clients.retain_mut(|client| {
-            let Some((output, secondary)) = &client.display else {
-                return true;
-            };
-            let keep = wanted.iter().any(|(executable, name, wanted_secondary)| {
-                *executable == client.executable && name == output && wanted_secondary == secondary
-            });
-            if !keep && let Some(mut child) = client.child.take() {
-                let _ = child.kill();
-                let _ = child.wait();
-            }
-            keep
-        });
-        for (executable, output, secondary) in wanted {
-            let known = self.session_clients.iter().any(|client| {
-                client.executable == executable
-                    && client
-                        .display
-                        .as_ref()
-                        .is_some_and(|(name, _)| *name == output)
-            });
-            if !known {
-                self.session_clients.push(SessionClient {
-                    executable,
-                    role: SessionRole::Shell,
-                    child: None,
-                    last_restart: None,
-                    display: Some((output, secondary)),
-                });
-            }
-        }
+    pub fn shell_displays(&self) -> Vec<String> {
+        self.state.shown_displays()
     }
 
     pub fn spawn_shell_client(&mut self, executable: &Path) -> io::Result<Child> {
@@ -282,7 +220,7 @@ impl Headless {
         self.keep_lock_screen(&mut upkeep);
         self.keep_force_quit(&mut upkeep);
         self.keep_screen_reader();
-        self.follow_displays();
+        self.state.announce_displays();
         for index in 0..self.session_clients.len() {
             let client = &mut self.session_clients[index];
             if let Some(child) = client.child.as_mut() {
@@ -304,15 +242,8 @@ impl Headless {
             }
             client.last_restart = Some(Instant::now());
             let (executable, role) = (client.executable.clone(), client.role);
-            let mut command = Command::new(&executable);
-            if let Some((output, secondary)) = &client.display {
-                command.env(OUTPUT_VARIABLE, output);
-                if *secondary {
-                    command.env(SECONDARY_VARIABLE, "1");
-                }
-            }
             match self
-                .spawn_session_command(command, role)
+                .spawn_session_command(Command::new(&executable), role)
                 .map(|(child, _)| child)
             {
                 Ok(child) => self.session_clients[index].child = Some(child),

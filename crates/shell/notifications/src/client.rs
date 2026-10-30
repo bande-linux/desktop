@@ -1,18 +1,17 @@
 use std::collections::HashMap;
 use std::os::fd::BorrowedFd;
 use std::path::Path;
-use std::process::ExitCode;
 use std::sync::mpsc::{self, Receiver};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use crate::{Request, Screen, Sender};
 use unbound_inbox::{Inbox, Outbox};
-use unbound_notifications::{Request, Screen, Sender};
 use unbound_notify::Presentation;
 use unbound_notify::client::NotificationCenter;
 use unbound_toolkit::{
     App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Panel, Rect, Role, Scene,
-    TextSystem, Window, WindowError, WindowEvent,
+    TextSystem, Window, WindowEvent,
 };
 use unbound_xdg::{
     DesktopEntry, Locale, applications, current_desktops, data_dirs, find_icon, launch,
@@ -21,8 +20,6 @@ use zbus::blocking::Connection;
 
 const ICON_PIXELS: u32 = 64;
 const AGE_REFRESH: Duration = Duration::from_secs(30);
-pub const SCREEN_NAME: &str = "org.unbound.NotificationScreen";
-pub const SCREEN_PATH: &str = "/org/unbound/NotificationScreen";
 
 enum Message {
     Presentation(Presentation),
@@ -40,7 +37,7 @@ enum Outgoing {
     Call(Request),
 }
 
-struct Notifications {
+pub struct Notifications {
     screen: Screen,
     inbox: Inbox<Message>,
     outgoing: mpsc::Sender<Outgoing>,
@@ -241,17 +238,6 @@ impl App for Notifications {
     }
 }
 
-struct ScreenService {
-    outbox: Outbox<Message>,
-}
-
-#[zbus::interface(name = "org.unbound.NotificationScreen")]
-impl ScreenService {
-    fn toggle(&self) {
-        self.outbox.send(Message::Toggle);
-    }
-}
-
 fn follow(connection: &Connection, outbox: &Outbox<Message>) -> zbus::Result<()> {
     let center = NotificationCenter::new(connection)?;
     let changes = center.receive_presentation_changed()?;
@@ -299,74 +285,68 @@ fn serve(connection: &Connection, outgoing: &Receiver<Outgoing>, outbox: &Outbox
     }
 }
 
-fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let entries = applications(
-        &data_dirs(),
-        Locale::from_env().as_ref(),
-        &current_desktops(),
-    );
-    let inbox = Inbox::new()?;
-    let connection = Connection::session()?;
-    connection.object_server().at(
-        SCREEN_PATH,
-        ScreenService {
-            outbox: inbox.outbox(),
-        },
-    )?;
-    connection.request_name(SCREEN_NAME)?;
-    let following = (connection.clone(), inbox.outbox());
-    thread::spawn(move || {
-        while let Err(error) = follow(&following.0, &following.1) {
-            tracing::warn!("cannot follow the notifications: {error}");
-            thread::sleep(Duration::from_secs(2));
-        }
-    });
-    let (outgoing, requests) = mpsc::channel();
-    let serving = (connection.clone(), inbox.outbox());
-    thread::spawn(move || serve(&serving.0, &requests, &serving.1));
-
-    let mut window = Window::open(
-        Role::Layer(LayerOptions {
-            layer: LayerKind::Top,
-            anchor: Edges::ALL,
-            exclusive_zone: 0,
-            keyboard: KeyboardFocus::None,
-            namespace: "notifications".to_owned(),
-        }),
-        (0, 0),
-    )?;
-    window.hide()?;
-    let appearance = window.appearance();
-    let mut screen = Screen::new(
-        appearance.palette(),
-        TextSystem::new(),
-        Box::new(sender_lookup(entries.clone())),
-    );
-    screen.set_appearance(
-        appearance.palette(),
-        appearance.reduce_motion,
-        Instant::now(),
-    );
-    let mut notifications = Notifications {
-        screen,
-        inbox,
-        outgoing,
-        entries,
-        region: None,
-        keyboard: None,
-        hide_pending: false,
-        next_refresh: None,
-    };
-    unbound_toolkit::run(&mut window, &mut notifications).map_err(|error: WindowError| error.into())
+pub fn role() -> Role {
+    Role::Layer(LayerOptions {
+        layer: LayerKind::Top,
+        anchor: Edges::ALL,
+        exclusive_zone: 0,
+        keyboard: KeyboardFocus::None,
+        namespace: "notifications".to_owned(),
+    })
 }
 
-fn main() -> ExitCode {
-    unbound_log::init("unbound-notifications");
-    match run() {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(error) => {
-            tracing::error!("{error}");
-            ExitCode::FAILURE
+impl Notifications {
+    pub fn new(
+        window: &mut Window,
+        text: TextSystem,
+        session: Option<&Connection>,
+    ) -> std::io::Result<Self> {
+        let entries = applications(
+            &data_dirs(),
+            Locale::from_env().as_ref(),
+            &current_desktops(),
+        );
+        let inbox = Inbox::new()?;
+        let (outgoing, requests) = mpsc::channel();
+        if let Some(connection) = session {
+            let following = (connection.clone(), inbox.outbox());
+            thread::spawn(move || {
+                while let Err(error) = follow(&following.0, &following.1) {
+                    tracing::warn!("cannot follow the notifications: {error}");
+                    thread::sleep(Duration::from_secs(2));
+                }
+            });
+            let serving = (connection.clone(), inbox.outbox());
+            thread::spawn(move || serve(&serving.0, &requests, &serving.1));
+        }
+        report("hide the notifications", window.hide());
+        let appearance = window.appearance();
+        let mut screen = Screen::new(
+            appearance.palette(),
+            text,
+            Box::new(sender_lookup(entries.clone())),
+        );
+        screen.set_appearance(
+            appearance.palette(),
+            appearance.reduce_motion,
+            Instant::now(),
+        );
+        Ok(Self {
+            screen,
+            inbox,
+            outgoing,
+            entries,
+            region: None,
+            keyboard: None,
+            hide_pending: false,
+            next_refresh: None,
+        })
+    }
+
+    pub fn toggle(&self) -> impl Fn() + 'static {
+        let outbox = self.inbox.outbox();
+        move || {
+            outbox.send(Message::Toggle);
         }
     }
 }

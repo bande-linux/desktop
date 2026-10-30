@@ -150,6 +150,7 @@ pub struct State {
     pub(crate) output_serial: u32,
     pub(crate) announced_workspaces: (usize, usize),
     pub(crate) announced_full_screen: Vec<(String, bool)>,
+    pub(crate) announced_displays: Vec<String>,
     pub(crate) panel_anchors: Vec<crate::shell::PanelAnchor>,
     scanout_node: Option<DrmNode>,
     compositor_state: CompositorState,
@@ -243,7 +244,6 @@ pub struct Headless {
     pub(crate) fences: smithay::reexports::calloop::EventLoop<'static, State>,
     pub(crate) state: State,
     pub(crate) session_clients: Vec<SessionClient>,
-    pub(crate) per_display_clients: Vec<std::path::PathBuf>,
     pub(crate) lock_screen: LockScreen,
     pub(crate) force_quit: ForceQuit,
     pub(crate) socket_name: Option<OsString>,
@@ -298,7 +298,7 @@ impl Headless {
         };
         let center = settings.logical_size().to_f64().downscale(2.0);
         let screen = Screen::new(&handle, config, settings);
-        handle.create_global::<State, UnboundShellV1, ()>(14, ());
+        handle.create_global::<State, UnboundShellV1, ()>(15, ());
         handle.create_global::<State, UnboundAppV1, ()>(5, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
         handle.create_global::<State, smithay::reexports::wayland_protocols_wlr::output_management::v1::server::zwlr_output_manager_v1::ZwlrOutputManagerV1, ()>(crate::management::MANAGER_VERSION, ());
@@ -315,6 +315,7 @@ impl Headless {
             output_serial: 0,
             announced_workspaces: (1, 0),
             announced_full_screen: Vec::new(),
+            announced_displays: Vec::new(),
             panel_anchors: Vec::new(),
             scanout_node: scanout.as_ref().map(|scanout| scanout.node),
             compositor_state: CompositorState::new::<State>(&handle),
@@ -423,7 +424,6 @@ impl Headless {
             fences,
             state,
             session_clients: Vec::new(),
-            per_display_clients: Vec::new(),
             lock_screen: LockScreen::new(),
             force_quit: ForceQuit::new(),
             socket_name: None,

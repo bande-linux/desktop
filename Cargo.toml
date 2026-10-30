@@ -94,6 +94,7 @@ unbound-test-wayland = { path = "crates/testing/test-wayland" }
 unbound-toolkit = { path = "crates/toolkit/toolkit" }
 unbound-toolkit-platform = { path = "crates/toolkit/platform" }
 unbound-tray = { path = "crates/services/tray" }
+unbound-volumes = { path = "crates/libs/volumes" }
 unbound-wallpaper = { path = "crates/libs/wallpaper" }
 unbound-widgets = { path = "crates/toolkit/widgets" }
 unbound-xdg = { path = "crates/libs/xdg" }

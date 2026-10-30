@@ -8,6 +8,7 @@ use unbound_fs::Trash;
 use unbound_toolkit::{
     App, Appearance, MenuPlacement, Role, Scene, TextSystem, Window, WindowEvent,
 };
+use unbound_volumes::{eject, media_roots};
 use unbound_xdg::{Apps, config_dirs, config_home, data_dirs, launch_with, path_from_file_uri};
 
 const APP_ID: &str = "org.unbound.Files";
@@ -61,6 +62,7 @@ impl Files {
                         tracing::warn!("cannot show the menu: {error}");
                     }
                 }
+                Request::Eject(volume) => eject(vec![volume]),
                 Request::RemoveBookmark(folder) => match remove_bookmark(&folder) {
                     Ok(()) => self.view.set_sidebar(sidebar(&self.home)),
                     Err(error) => tracing::warn!("cannot remove the bookmark: {error}"),
@@ -156,13 +158,14 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     let sidebar = sidebar(&home);
     let apps = Apps::load(data_dirs(), &config_dirs());
-    let view = FilesView::new(
+    let mut view = FilesView::new(
         browser,
         sidebar,
         apps,
         Appearance::default().palette(),
         TextSystem::new(),
     )?;
+    view.set_media(media_roots(&std::env::var("USER").unwrap_or_default()));
     let title = view.title();
     let mut window = Window::open(Role::toplevel(&title, APP_ID), WINDOW_SIZE)?;
     let mut files = Files { view, title, home };

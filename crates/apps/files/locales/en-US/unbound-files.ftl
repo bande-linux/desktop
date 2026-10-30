@@ -98,3 +98,4 @@ menu-show-hidden-files = Show Hidden Files
 menu-hide-hidden-files = Hide Hidden Files
 menu-empty-trash = Empty Trash…
 menu-remove-from-sidebar = Remove from Sidebar
+menu-eject = Eject

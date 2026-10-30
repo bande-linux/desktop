@@ -13,7 +13,7 @@ use unbound_l10n::Localizer;
 
 pub use browser::{Browser, Column, Location};
 pub use paint::permissions;
-pub use sidebar::{Place, Row, rows, without_bookmark};
+pub use sidebar::{Place, PlaceKind, Row, rows, with_volumes, without_bookmark};
 pub use view::{
     COLUMN_WIDTH, FilesView, Hit, Info, QuickLook, ROW_HEIGHT, Rename, Request, SIDEBAR_WIDTH,
     Sheet,

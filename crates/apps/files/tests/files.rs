@@ -8,7 +8,7 @@ use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use tempfile::TempDir;
 use unbound_files::{
     Browser, FilesView, Location, ROW_HEIGHT, Request, Row, SIDEBAR_WIDTH, Sheet, permissions,
-    rows, without_bookmark,
+    rows, with_volumes, without_bookmark,
 };
 use unbound_fs::{Sort, SortBy, Trash, list};
 use unbound_toolkit::ui::{Event, Key, Menu, Modifiers, Pointer, PointerButton};
@@ -801,4 +801,26 @@ fn a_bookmark_is_removed_from_the_sidebar_but_not_from_the_disk() {
         "file:///srv/share Share\n"
     );
     assert!(reports.is_dir());
+}
+
+#[test]
+fn mounted_volumes_are_listed_under_locations_before_the_trash() {
+    let home = PathBuf::from("/home/ada");
+    let favourites = rows(&home, None, None);
+    let stick = PathBuf::from("/run/media/ada/Stick");
+
+    let shown = with_volumes(&favourites, std::slice::from_ref(&stick));
+    let names = |rows: &[Row]| {
+        rows.iter()
+            .map(|row| match row {
+                Row::Place(place) => place.name.clone(),
+                Row::Heading(title) => title.clone(),
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        names(&shown),
+        ["Favourites", "ada", "Locations", "Stick", "Trash"]
+    );
+    assert_eq!(with_volumes(&shown, &[]), favourites);
 }

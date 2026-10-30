@@ -3624,9 +3624,9 @@ dependencies = [
  "unbound-log",
  "unbound-menubar",
  "unbound-toolkit",
+ "unbound-volumes",
  "unbound-wallpaper",
  "unbound-xdg",
- "zbus",
 ]
 
 [[package]]
@@ -3660,6 +3660,7 @@ dependencies = [
  "unbound-log",
  "unbound-preview",
  "unbound-toolkit",
+ "unbound-volumes",
  "unbound-xdg",
 ]
 
@@ -4023,6 +4024,14 @@ dependencies = [
  "tracing",
  "unbound-log",
  "unbound-test-bus",
+ "zbus",
+]
+
+[[package]]
+name = "unbound-volumes"
+version = "0.1.0"
+dependencies = [
+ "tracing",
  "zbus",
 ]
 

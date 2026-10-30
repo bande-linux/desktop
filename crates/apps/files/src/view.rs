@@ -10,13 +10,14 @@ use unbound_fs::{
 use unbound_preview::Preview;
 use unbound_toolkit::ui::{Event, Key, Menu, Modifiers, NameEditor, Pointer, PointerButton};
 use unbound_toolkit::{Image, Palette, Point, Rect, TextSystem};
+use unbound_volumes::mounted_volumes;
 use unbound_xdg::{Apps, DesktopEntry, UserDir, path_from_file_uri, user_dir};
 
 use crate::L10N;
 use crate::browser::{Browser, Location};
 use crate::icons::Icons;
 use crate::loader::{Loaded, Loader};
-use crate::sidebar::Row;
+use crate::sidebar::{Place, PlaceKind, Row, with_volumes};
 
 pub const COLUMN_WIDTH: f32 = 240.0;
 pub const ROW_HEIGHT: f32 = 24.0;
@@ -84,6 +85,7 @@ pub enum SheetButton {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Hit {
     Place(usize),
+    Eject(usize),
     Row { column: usize, row: usize },
     Column(usize),
     Segment(PathBuf),
@@ -110,6 +112,7 @@ pub enum Request {
         at: Point,
     },
     RemoveBookmark(PathBuf),
+    Eject(PathBuf),
 }
 
 pub struct FilesView {
@@ -132,6 +135,8 @@ pub struct FilesView {
     pub(crate) hover: Option<Hit>,
     pub(crate) search: Option<Search>,
     pub(crate) menu_place: Option<usize>,
+    media: Vec<PathBuf>,
+    favourites: Vec<Row>,
     watch: FolderWatch,
     loader: Loader,
     pub(crate) requests: Vec<Request>,
@@ -200,6 +205,8 @@ impl FilesView {
             hover: None,
             search: None,
             menu_place: None,
+            media: Vec::new(),
+            favourites: Vec::new(),
             watch: FolderWatch::new()?,
             loader: Loader::new()?,
             requests: Vec::new(),
@@ -208,14 +215,80 @@ impl FilesView {
             typed: (String::new(), None),
             paste_moves: None,
         };
-        view.watch.watch(&view.browser.watched());
+        view.favourites = view.sidebar.clone();
+        view.watch.watch(&view.watched());
         view.trash_full = !view.browser.trash().is_empty();
         Ok(view)
     }
 
     pub fn set_sidebar(&mut self, sidebar: Vec<Row>) {
-        self.sidebar = sidebar;
+        self.sidebar = with_volumes(&sidebar, &self.volumes());
+        self.favourites = sidebar;
         self.menu_place = None;
+    }
+
+    pub fn set_media(&mut self, roots: Vec<PathBuf>) {
+        self.media = roots;
+        self.refresh_volumes();
+        self.watch.watch(&self.watched());
+    }
+
+    fn volumes(&self) -> Vec<PathBuf> {
+        self.sidebar
+            .iter()
+            .filter_map(|row| match row {
+                Row::Place(Place {
+                    kind: PlaceKind::Volume,
+                    location: Location::Folder(path),
+                    ..
+                }) => Some(path.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn refresh_volumes(&mut self) {
+        let mountinfo = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
+        let volumes = mounted_volumes(&mountinfo, &self.media);
+        let previous = self.volumes();
+        if volumes == previous {
+            return;
+        }
+        self.sidebar = with_volumes(&self.favourites, &volumes);
+        self.menu_place = None;
+        let gone = previous.iter().any(|volume| {
+            !volumes.contains(volume)
+                && matches!(self.browser.root(), Location::Folder(path) if path.starts_with(volume))
+        });
+        if gone {
+            self.go(Location::Folder(home()));
+        }
+    }
+
+    fn watched(&self) -> Vec<PathBuf> {
+        let mut folders = self.browser.watched();
+        folders.extend(
+            self.media
+                .iter()
+                .flat_map(|root| [Some(root.as_path()), root.parent()])
+                .flatten()
+                .filter(|folder| folder.is_dir())
+                .map(Path::to_path_buf),
+        );
+        folders
+    }
+
+    pub(crate) fn eject_current(&mut self) {
+        let Some(folder) = self.browser.current_folder() else {
+            return;
+        };
+        if let Some(volume) = self
+            .volumes()
+            .into_iter()
+            .find(|volume| folder.starts_with(volume))
+        {
+            self.requests.push(Request::Eject(volume));
+        }
     }
 
     pub fn set_palette(&mut self, palette: Palette) {
@@ -333,6 +406,12 @@ impl FilesView {
     }
 
     pub fn refresh(&mut self, changed: &[PathBuf]) {
+        if changed
+            .iter()
+            .any(|path| self.media.iter().any(|root| root.starts_with(path)))
+        {
+            self.refresh_volumes();
+        }
         let editing = self.rename.as_ref().map(|rename| rename.path.clone());
         self.trash_full = !self.browser.trash().is_empty();
         self.browser.refresh(changed);
@@ -393,7 +472,7 @@ impl FilesView {
         {
             self.search = None;
         }
-        self.watch.watch(&self.browser.watched());
+        self.watch.watch(&self.watched());
         self.loader.forget_pending();
         let entry = self.browser.selected().cloned();
         if self.quick_look.is_some() {
@@ -639,6 +718,13 @@ impl FilesView {
                     self.selection_changed();
                 }
             }
+            Hit::Eject(index) => {
+                if let Some(Row::Place(place)) = self.sidebar.get(index)
+                    && let Location::Folder(path) = &place.location
+                {
+                    self.requests.push(Request::Eject(path.clone()));
+                }
+            }
             Hit::CancelJob(index) => self.operations.cancel(index),
             Hit::Sheet(button) => self.press(button),
             Hit::ApplyToAll => {
@@ -685,7 +771,11 @@ impl FilesView {
                 let hover = self.hit(pointer.position).filter(|hit| {
                     matches!(
                         hit,
-                        Hit::Place(_) | Hit::Segment(_) | Hit::CancelJob(_) | Hit::Header(_)
+                        Hit::Place(_)
+                            | Hit::Eject(_)
+                            | Hit::Segment(_)
+                            | Hit::CancelJob(_)
+                            | Hit::Header(_)
                     )
                 });
                 let changed = hover != self.hover;
@@ -968,6 +1058,7 @@ impl FilesView {
                 self.go(Location::Folder(user_folder(UserDir::Desktop)));
             }
             Key::Character('d' | 'D') if command => self.duplicate(),
+            Key::Character('e' | 'E') if command => self.eject_current(),
             Key::Character('h' | 'H') if command && shift => {
                 self.go(Location::Folder(home()));
             }

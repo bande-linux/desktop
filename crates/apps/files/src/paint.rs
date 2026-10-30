@@ -11,7 +11,7 @@ use unbound_toolkit::{
 
 use crate::L10N;
 use crate::browser::Location;
-use crate::sidebar::Row;
+use crate::sidebar::{PlaceKind, Row};
 use crate::view::{
     COLUMN_WIDTH, FilesView, HEADER_HEIGHT, Hit, INSPECTOR_WIDTH, PATH_BAR_HEIGHT, PROGRESS_HEIGHT,
     ROW_HEIGHT, SEARCH_HEIGHT, SIDEBAR_WIDTH, Sheet, SheetButton,
@@ -180,6 +180,21 @@ impl FilesView {
                         items: vec![text],
                     });
                     self.hits.push((rect, Hit::Place(index)));
+                    if place.kind == PlaceKind::Volume {
+                        let button = Rect::new(
+                            rect.x + rect.width - ICON_SIZE - 6.0,
+                            y + 5.0,
+                            ICON_SIZE,
+                            ICON_SIZE,
+                        );
+                        if let Some(image) = self.icons.first(&["media-eject"], ICON_PIXELS) {
+                            items.push(Item::Image {
+                                rect: button,
+                                image,
+                            });
+                        }
+                        self.hits.push((button.inset(-4.0), Hit::Eject(index)));
+                    }
                     y += SIDEBAR_ROW;
                 }
             }

@@ -25,11 +25,12 @@ pub enum Command {
     EmptyTrash,
     OpenPlace,
     RemoveFromSidebar,
+    Eject,
 }
 
 const OPEN_WITH: &str = "open-with:";
 
-const ACTIONS: [(&str, Command); 21] = [
+const ACTIONS: [(&str, Command); 22] = [
     ("open", Command::Open),
     ("quick-look", Command::QuickLook),
     ("info", Command::Info),
@@ -51,6 +52,7 @@ const ACTIONS: [(&str, Command); 21] = [
     ("empty-trash", Command::EmptyTrash),
     ("open-place", Command::OpenPlace),
     ("remove-from-sidebar", Command::RemoveFromSidebar),
+    ("eject", Command::Eject),
 ];
 
 const SORTS: [(SortBy, &str); 3] = [
@@ -205,6 +207,7 @@ pub fn folder_menu(folder: Folder) -> Menu {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Place {
     Folder { removable: bool },
+    Volume,
     Trash { empty: bool },
 }
 
@@ -219,6 +222,10 @@ pub fn place_menu(place: Place) -> Menu {
             ));
         }
         Place::Folder { removable: false } => {}
+        Place::Volume => {
+            items.push(MenuItem::separator());
+            items.push(item("menu-eject", &Command::Eject).shortcut("Super+E"));
+        }
         Place::Trash { empty } => {
             items.push(MenuItem::separator());
             items.push(item("menu-empty-trash", &Command::EmptyTrash).enabled(!empty));

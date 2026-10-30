@@ -6,7 +6,7 @@ use crate::browser::Location;
 use crate::menus::{
     App, Command, Folder, Place, Selection, command, folder_menu, items_menu, place_menu,
 };
-use crate::sidebar::Row;
+use crate::sidebar::{PlaceKind, Row};
 use crate::view::{FilesView, Hit, Request};
 
 impl FilesView {
@@ -40,8 +40,9 @@ impl FilesView {
                     Location::Trash => Place::Trash {
                         empty: !self.trash_full,
                     },
+                    Location::Folder(_) if place.kind == PlaceKind::Volume => Place::Volume,
                     Location::Folder(_) => Place::Folder {
-                        removable: place.bookmark,
+                        removable: place.kind == PlaceKind::Bookmark,
                     },
                 });
                 self.menu_place = Some(index);
@@ -165,16 +166,21 @@ impl FilesView {
             Command::List => self.set_list(true),
             Command::ToggleHidden => self.toggle_hidden(),
             Command::EmptyTrash => self.ask_to_empty_trash(),
-            Command::OpenPlace | Command::RemoveFromSidebar => {
+            Command::OpenPlace | Command::RemoveFromSidebar | Command::Eject => {
                 let Some(Row::Place(place)) = place.and_then(|index| self.sidebar.get(index))
                 else {
                     return false;
                 };
                 let location = place.location.clone();
-                if command == Command::OpenPlace {
-                    self.go(location);
-                } else if let Location::Folder(path) = location {
-                    self.requests.push(Request::RemoveBookmark(path));
+                match (command, location) {
+                    (Command::OpenPlace, location) => self.go(location),
+                    (Command::Eject, Location::Folder(path)) => {
+                        self.requests.push(Request::Eject(path));
+                    }
+                    (_, Location::Folder(path)) => {
+                        self.requests.push(Request::RemoveBookmark(path));
+                    }
+                    _ => {}
                 }
             }
         }

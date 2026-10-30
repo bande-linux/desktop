@@ -36,6 +36,8 @@ const BATTERY_SLOT: f32 = 38.0;
 const BATTERY_WIDTH: f32 = 23.0;
 const BATTERY_HEIGHT: f32 = 11.5;
 const HIGHLIGHT_INSET: f32 = 2.0;
+const TRANSLUCENT_ALPHA: u8 = 176;
+const OPAQUE_ALPHA: u8 = 240;
 const LOW: Color = Color::hex(0xFF453A);
 const CHARGING: Color = Color::hex(0x30D158);
 
@@ -84,6 +86,7 @@ pub struct MenuBar {
     clock: String,
     open: Option<Slot>,
     slots: Vec<(Slot, Rect)>,
+    translucent: bool,
 }
 
 fn snap(value: f32, scale: f64) -> f32 {
@@ -110,6 +113,7 @@ impl MenuBar {
             clock,
             open: None,
             slots: Vec::new(),
+            translucent: false,
         }
     }
 
@@ -137,6 +141,10 @@ impl MenuBar {
 
     pub fn status(&self) -> &Status {
         &self.status
+    }
+
+    pub fn set_translucent(&mut self, translucent: bool) {
+        self.translucent = translucent;
     }
 
     pub fn set_palette(&mut self, palette: Palette) {
@@ -319,7 +327,15 @@ impl MenuBar {
         let mut items = vec![
             Item::Fill {
                 shape: Shape::rect(bar),
-                paint: self.palette.surface_elevated.with_alpha(232).into(),
+                paint: self
+                    .palette
+                    .surface_elevated
+                    .with_alpha(if self.translucent {
+                        TRANSLUCENT_ALPHA
+                    } else {
+                        OPAQUE_ALPHA
+                    })
+                    .into(),
             },
             Item::Fill {
                 shape: Shape::rect(Rect::new(0.0, bar.height - 1.0, bar.width, 1.0)),

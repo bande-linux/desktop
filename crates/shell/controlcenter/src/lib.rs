@@ -26,6 +26,7 @@ const PADDING: f32 = 16.0;
 const SPACING: f32 = 12.0;
 const LABEL_HEIGHT: f32 = 16.0;
 const RADIUS: f32 = 14.0;
+const BLUR_BANDS: usize = 5;
 const SEGMENT_GAP: f32 = 2.0;
 const SEGMENT_HEIGHT: f32 = 6.0;
 const TITLE_SIZE: f32 = 13.0;
@@ -166,6 +167,19 @@ pub fn volume_segments(level: Level) -> usize {
     filled_segments(level.volume)
 }
 
+pub fn blur_rects(rect: Rect) -> Vec<Rect> {
+    Shape::rounded(rect, RADIUS).bands(BLUR_BANDS)
+}
+
+pub fn material(palette: Palette, translucent: bool) -> Palette {
+    Palette {
+        surface_elevated: palette
+            .surface_elevated
+            .with_alpha(if translucent { 214 } else { 248 }),
+        ..palette
+    }
+}
+
 pub fn card(palette: &Palette, rect: Rect, items: &mut Vec<Item>) {
     let shape = Shape::rounded(rect, RADIUS);
     items.push(Item::Shadow {
@@ -176,7 +190,7 @@ pub fn card(palette: &Palette, rect: Rect, items: &mut Vec<Item>) {
     });
     items.push(Item::Fill {
         shape,
-        paint: palette.surface_elevated.with_alpha(248).into(),
+        paint: palette.surface_elevated.into(),
     });
     items.push(Item::Stroke {
         shape,

@@ -49,6 +49,7 @@ struct Notifications {
     keyboard: Option<bool>,
     hide_pending: bool,
     next_refresh: Option<Instant>,
+    blur: Option<Vec<Rect>>,
 }
 
 fn report<E: std::fmt::Display>(what: &str, result: Result<(), E>) {
@@ -167,6 +168,17 @@ impl App for Notifications {
         self.screen.settle(now);
         if !self.screen.visible(now) && !self.screen.animating(now) {
             self.hide_pending = true;
+        }
+        let rects = self.screen.blur_rects(now);
+        if self.blur.as_ref().is_some_and(|known| *known != rects) {
+            match window.set_background_blur(&rects) {
+                Ok(()) => self.blur = Some(rects),
+                Err(error) => {
+                    tracing::info!("notifications are not blurred: {error}");
+                    self.blur = None;
+                    self.screen.set_translucent(false);
+                }
+            }
         }
         self.screen.scene(now)
     }
@@ -345,7 +357,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         keyboard: None,
         hide_pending: false,
         next_refresh: None,
+        blur: Some(vec![Rect::default()]),
     };
+    notifications.screen.set_translucent(true);
     unbound_toolkit::run(&mut window, &mut notifications).map_err(|error: WindowError| error.into())
 }
 

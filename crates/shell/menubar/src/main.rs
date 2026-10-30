@@ -33,6 +33,7 @@ const SCROLL_STEP: f32 = 1.0 / 16.0;
 const SETTINGS: &str = "org.unbound.Settings";
 const MONITOR: &str = "org.unbound.ActivityMonitor";
 const BRING_TO_FRONT: &str = "bring-to-front";
+const BLUR_WIDTH: f32 = 16384.0;
 
 struct Bar {
     bar: MenuBar,
@@ -457,6 +458,15 @@ fn run_bar() -> Result<(), Box<dyn std::error::Error>> {
         }),
         (0, HEIGHT),
     )?;
+    let blurred = window
+        .set_background_blur(&[unbound_toolkit::Rect::new(
+            0.0,
+            0.0,
+            BLUR_WIDTH,
+            HEIGHT as f32,
+        )])
+        .inspect_err(|error| tracing::info!("the menu bar is not blurred: {error}"))
+        .is_ok();
     let mut bar = Bar {
         bar: MenuBar::new(
             window.appearance().palette(),
@@ -475,6 +485,7 @@ fn run_bar() -> Result<(), Box<dyn std::error::Error>> {
         user: user_name(),
         next_clock: Instant::now() + CLOCK_TICK,
     };
+    bar.bar.set_translucent(blurred);
     unbound_toolkit::run(&mut window, &mut bar)?;
     Ok(())
 }

@@ -33,6 +33,9 @@ const GROUP_HEIGHT: f32 = 28.0;
 const TITLE_SIZE: f32 = 15.0;
 const SMALL_SIZE: f32 = 12.0;
 const DRAG_SLOP: f32 = 4.0;
+const BLUR_BANDS: usize = 5;
+const CARD_ALPHA: u8 = 214;
+const PANEL_ALPHA: u8 = 190;
 const DISMISS_FRACTION: f32 = 0.35;
 const FLICK_SPEED: f32 = 600.0;
 
@@ -118,6 +121,7 @@ pub struct Screen {
     pressed: Option<Target>,
     drag: Option<Drag>,
     holding: bool,
+    translucent: bool,
     size: (f32, f32),
     requests: Vec<Request>,
 }
@@ -146,6 +150,7 @@ impl Screen {
             pressed: None,
             drag: None,
             holding: false,
+            translucent: false,
             size: (0.0, 0.0),
             requests: Vec::new(),
         }
@@ -155,6 +160,34 @@ impl Screen {
         self.palette = palette;
         self.reduce_motion = reduce_motion;
         self.rebuild(now);
+    }
+
+    pub fn set_translucent(&mut self, translucent: bool) {
+        self.translucent = translucent;
+    }
+
+    fn material(&self) -> Palette {
+        let mut palette = self.palette;
+        if self.translucent {
+            palette.surface_elevated = palette.surface_elevated.with_alpha(CARD_ALPHA);
+            palette.surface_background = palette.surface_background.with_alpha(PANEL_ALPHA);
+        }
+        palette
+    }
+
+    pub fn blur_rects(&self, now: Instant) -> Vec<Rect> {
+        let mut rects = Vec::new();
+        if self.banners_visible() {
+            for banner in &self.banners {
+                let origin = self.banner_origin(banner, now);
+                let card = Rect::new(origin.x, origin.y, BANNER_WIDTH, banner.card.height);
+                rects.extend(Shape::rounded(card, card::RADIUS).bands(BLUR_BANDS));
+            }
+        }
+        if self.center_visible(now) {
+            rects.extend(Shape::rounded(self.panel_rect(now), CENTER_RADIUS).bands(BLUR_BANDS));
+        }
+        rects
     }
 
     pub fn set_size(&mut self, width: u32, height: u32) {
@@ -899,7 +932,7 @@ impl Screen {
                 let mut card = Vec::new();
                 banner
                     .card
-                    .paint(origin, &self.palette, part, false, &mut card);
+                    .paint(origin, &self.material(), part, false, &mut card);
                 items.push(Item::Opacity {
                     alpha: fade,
                     items: card,
@@ -918,7 +951,7 @@ impl Screen {
     }
 
     fn paint_center(&self, now: Instant, items: &mut Vec<Item>) {
-        let palette = self.palette;
+        let palette = self.material();
         let panel = self.panel_rect(now);
         let shape = Shape::rounded(panel, CENTER_RADIUS);
         items.push(Item::Shadow {
@@ -929,7 +962,7 @@ impl Screen {
         });
         items.push(Item::Fill {
             shape,
-            paint: palette.surface_background.with_alpha(246).into(),
+            paint: palette.surface_background.into(),
         });
         items.push(Item::Stroke {
             shape,

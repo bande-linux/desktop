@@ -6,8 +6,8 @@ use accesskit::TreeUpdate;
 use unbound_audio::{Audio, Level};
 use unbound_bluetooth::Bluetooth;
 use unbound_controlcenter::{
-    Change, Changes, EDGE, HUD_DURATION, HUD_SIZE, PANEL_WIDTH, Status, card, chooser_menu, panel,
-    scene, volume_hud,
+    Change, Changes, EDGE, HUD_DURATION, HUD_SIZE, PANEL_WIDTH, Status, blur_rects, card,
+    chooser_menu, material, panel, scene, volume_hud,
 };
 use unbound_network::NetworkManager;
 use unbound_notify::client::NotificationCenter;
@@ -47,6 +47,7 @@ struct ControlCenter {
     system: Option<Connection>,
     session: Option<Connection>,
     backlight: Option<Backlight>,
+    blur: Option<Vec<Rect>>,
 }
 
 fn report<E: std::fmt::Display>(what: &str, result: Result<(), E>) {
@@ -424,6 +425,8 @@ impl App for ControlCenter {
         let now = Instant::now();
         let (shown, _) = self.shown.value_at(now);
         let mut items = Vec::new();
+        let palette = material(self.palette, self.blur.is_some());
+        let mut shapes = Vec::new();
         match &mut self.mode {
             Mode::Panel {
                 ui,
@@ -435,7 +438,8 @@ impl App for ControlCenter {
                     PANEL_WIDTH,
                     *panel_height,
                 );
-                card(&self.palette, rect, &mut items);
+                card(&palette, rect, &mut items);
+                shapes.push(rect);
                 let content = ui.scene(PANEL_WIDTH as u32, *panel_height as u32);
                 items.push(Item::Translate {
                     offset: Point::new(rect.x, rect.y),
@@ -443,12 +447,29 @@ impl App for ControlCenter {
                 });
             }
             Mode::Volume(_) => {
+                let origin = Point::new(width as f32 - EDGE - HUD_SIZE.0, EDGE);
+                shapes.push(Rect::new(origin.x, origin.y, HUD_SIZE.0, HUD_SIZE.1));
                 items.push(Item::Translate {
-                    offset: Point::new(width as f32 - EDGE - HUD_SIZE.0, EDGE),
-                    items: volume_hud(self.level, &self.palette, &mut self.hud_text),
+                    offset: origin,
+                    items: volume_hud(self.level, &palette, &mut self.hud_text),
                 });
             }
             Mode::Hidden => {}
+        }
+        let lift = -SLIDE * (1.0 - shown);
+        let rects: Vec<Rect> = shapes
+            .into_iter()
+            .filter(|_| shown > 0.5)
+            .flat_map(|rect| blur_rects(Rect::new(rect.x, rect.y + lift, rect.width, rect.height)))
+            .collect();
+        if self.blur.as_ref().is_some_and(|known| *known != rects) {
+            match window.set_background_blur(&rects) {
+                Ok(()) => self.blur = Some(rects),
+                Err(error) => {
+                    tracing::info!("Control Center is not blurred: {error}");
+                    self.blur = None;
+                }
+            }
         }
         scene(
             width,
@@ -456,7 +477,7 @@ impl App for ControlCenter {
             vec![Item::Opacity {
                 alpha: shown.clamp(0.0, 1.0),
                 items: vec![Item::Translate {
-                    offset: Point::new(0.0, -SLIDE * (1.0 - shown)),
+                    offset: Point::new(0.0, lift),
                     items,
                 }],
             }],
@@ -574,6 +595,7 @@ fn run() -> Result<(), WindowError> {
         network: system.as_ref().map(NetworkManager::new),
         bluetooth: system.as_ref().map(Bluetooth::new),
         backlight: Backlight::find(Path::new(SYSFS_BACKLIGHT)),
+        blur: Some(vec![Rect::default()]),
         system,
         session,
     };

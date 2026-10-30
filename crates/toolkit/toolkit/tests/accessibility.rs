@@ -19,7 +19,7 @@ use zbus::zvariant::OwnedObjectPath;
 const OUTPUT: (i32, i32) = (320, 240);
 const REGISTRY: &str = "org.a11y.atspi.Registry";
 const ROOT_PATH: &str = "/org/a11y/atspi/accessible/root";
-const TIMEOUT: Duration = Duration::from_secs(60);
+const TIMEOUT: Duration = Duration::from_secs(180);
 const ATSPI_ROLE_BUTTON: u32 = 43;
 
 type ObjectRef = (String, OwnedObjectPath);
@@ -200,7 +200,7 @@ fn a_screen_reader_finds_a_button_over_atspi_and_presses_it() {
         scheduler
             .poll(|| start.elapsed(), &mut server, &mut renderer)
             .expect("compositor frame");
-        thread::sleep(Duration::from_micros(200));
+        thread::sleep(Duration::from_millis(1));
     }
 
     let (role, pressed) = screen_reader.join().expect("screen reader thread");

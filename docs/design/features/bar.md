@@ -13,7 +13,7 @@ its menus, the apps, Trash, workspaces, tray, Control Center, clock and notifica
 wide by default and can be pinned open to 248 pt, where everything gets its name (a sidebar). The
 same model is drawn horizontally at the bottom or top. People who want the classic split keep a
 separate top menu bar with one switch. App menus live behind the active app's header as one
-cascading menu with a search field at the top, the same search also opens with `Shift+Super+/` from
+cascading menu that filters as soon as you type (no visible field), the same search also opens with `Shift+Super+/` from
 anywhere, and in the expanded bar the menu titles are listed as rows.
 
 ## 2. Prior art: what worked and what failed
@@ -111,13 +111,39 @@ Three approaches were drawn (`03-app-menu-alternatives.png`):
 **A. Cascade from the app header (recommended as the primary path).** The header is the active
 app. A click (or `Super+F2`) opens **one** menu beside the bar, top-aligned with the header:
 
-1. A search field ("Search menus"), focused only when opened from the keyboard; typing filters.
-2. The app row in bold (`Files ›`: About Files, Settings…, Services later, Hide Files `Super+H`,
+1. The app row in bold (`Files ›`: About Files, Settings…, Services later, Hide Files `Super+H`,
    Hide Others, Show All, Quit Files `Super+Q`) — the macOS app menu, kept because it gives
    every app, even one that exports nothing, a complete menu.
-3. Each top-level menu as a row with `›` (File, Edit, View, Go, Window, Help). Hover or Right
+2. Each top-level menu as a row with `›` (File, Edit, View, Go, Window, Help). Hover or Right
    opens its submenu to the side; a submenu safe-triangle (pointer moving diagonally toward the
    open submenu does not switch rows, as macOS and Amazon's mega-menu do) keeps it calm.
+3. A quiet **footer tray** (`chassis`, hairline on top, 12 pt `ink3`): a magnifier, "Type to
+   search" and the `Shift+Super+/` shortcut. It is a caption, not a row: it cannot be highlighted
+   and is skipped by the arrow keys.
+
+**Search in the cascade (decided 2026-10-30, after the owner's review of the first build).** The
+first build put a "Search menus" field on top of the cascade. It cost a row on every open, pushed
+the app's own menus down, looked like an empty row when nothing was typed, and was only useful
+from the keyboard anyway. Now there is no field: typing any character while the cascade is open
+turns its top into a compact **search line** (magnifier in `ink2`, the typed text in `ink`, the
+1.5 pt accent caret, a hairline under it) and the rows become every enabled item of every menu
+whose name contains the text, shown with its path ("Edit › Find") and shortcut, the first one
+highlighted so Return runs it. Backspace to empty or Escape returns to the normal cascade; a
+second Escape closes it. The footer disappears while searching. Screen readers hear the hint as
+the menu's description and, while searching, a search input with the typed text; focus moves to
+the first result as it would in any menu. The panel keeps its width while the list changes and
+its height follows the results. Alternatives drawn in light and dark (in the review report, not
+in the repo): **A** the field on top (the first build), **B** a "Search Menus… `Shift+Super+/`"
+row at the bottom, **C** the footer tray (chosen). B reads cleanly but is a row that does what
+typing already does, and clicking it still asks for the keyboard; C teaches both the gesture and
+the global shortcut without adding a target. Goldens: `crates/shell/bar/tests/golden/cascade-*`.
+
+**Header states.** At rest the header is a `well` group (radius 8) with the 24 pt icon and the
+bold caption; hover adds 7 % `ink`, and from press until the cascade closes it holds 12 % `ink`,
+so the header reads as the open menu's owner. The cascade appears on press, without delay, top-
+aligned with the header 6 pt beside the bar. Clicking the bar never changes the active app: the
+compositor keeps the key window while a shell surface (the bar or its menus) holds the keyboard,
+so the header, its icon and the cascade's contents stay those of the app you were using.
 
 Why: one stable target at a fixed place right under the corner, near every window's top-left
 controls; works at any width and on every edge (on a right-edge bar it cascades leftwards, at
@@ -127,7 +153,9 @@ menu, made modern with search.
 
 **B. Menu titles as rows in the expanded bar** — not an alternative but how A looks when the bar is
 pinned open: the menu titles are listed under the app name, each row opening its submenu
-directly (macOS's one-click reach to "Edit"). Collapsed bars cannot show them.
+directly (macOS's one-click reach to "Edit"). Collapsed bars cannot show them. The header row
+still opens the same cascade (and `Super+F2` the same), so typing to search works identically in
+both widths; the rows are the one-click shortcut into a single menu.
 
 **C. Menu search (HUD), `Shift+Super+/`.** A centred card like the launcher, listing every enabled item
 of the active app's menus by name, with its path ("Edit › Find") and shortcut; Return runs it,

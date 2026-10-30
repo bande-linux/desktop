@@ -21,7 +21,7 @@ fn titles(menu: &Menu) -> Vec<String> {
 }
 
 #[test]
-fn an_exporting_app_gets_its_app_row_then_each_menu_as_a_row_and_a_search_field() {
+fn an_exporting_app_gets_its_bold_app_row_then_each_menu_as_a_row_and_type_to_search() {
     let root = node(
         0,
         "",
@@ -45,6 +45,7 @@ fn an_exporting_app_gets_its_app_row_then_each_menu_as_a_row_and_a_search_field(
 
     assert_eq!(titles(&menu), ["Files", "File", "Edit"]);
     assert!(menu.items.iter().all(|item| item.submenu.is_some()));
+    assert!(menu.items[0].strong);
     let app_row = menu.items[0].submenu.as_ref().expect("the app row");
     assert_eq!(titles(app_row), ["About Files"]);
     let copy = &menu.items[2].submenu.as_ref().expect("Edit").items[0];
@@ -55,8 +56,9 @@ fn an_exporting_app_gets_its_app_row_then_each_menu_as_a_row_and_a_search_field(
             id: 30
         })
     );
-    let search = menu.search.as_ref().expect("a search field");
-    assert_eq!(search.placeholder, "Search menus");
+    let search = menu.search.as_ref().expect("type to search");
+    assert_eq!(search.hint, "Type to search");
+    assert_eq!(search.shortcut, "Shift+Super+/");
     assert!(search.query.is_empty());
 }
 

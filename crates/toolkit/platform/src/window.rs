@@ -1240,7 +1240,9 @@ impl Window {
                         text: self.text.get_or_insert_with(TextSystem::new),
                         palette,
                     };
-                    menus.search(opening, menu);
+                    if let Err(error) = menus.search(opening, menu) {
+                        tracing::warn!(%error, "cannot resize the searched menu");
+                    }
                 }
                 true
             }

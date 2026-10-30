@@ -30,7 +30,7 @@ fn app_menus() -> Menu {
             )]),
         ),
     ])
-    .searchable("Search menus", "No Results")
+    .searchable("Type to search", "Shift+Super+/", "No Results")
 }
 
 fn tracker(menu: Menu, text: &mut TextSystem) -> MenuTracker {
@@ -78,7 +78,7 @@ fn typing_in_a_searchable_menu_lists_every_enabled_item_with_its_path_and_enter_
         tracker.panels()[0].menu().items[0].shortcut.as_deref(),
         Some("Super+F")
     );
-    assert!(tracker.panels()[0].size().height >= size.height);
+    assert!(tracker.panels()[0].size().width >= size.width);
     assert_eq!(
         tracker.key(Key::Enter, Modifiers::default(), now),
         MenuOutcome::Activate("find".to_owned())

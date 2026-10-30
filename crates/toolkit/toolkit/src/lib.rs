@@ -1,3 +1,6 @@
+mod alert;
+
+pub use alert::ask;
 pub use unbound_graphics::{
     Appearance, Color, ControlSize, CpuRenderer, Elevation, GlyphRun, GpuRenderer, Image, Item,
     Paint, Palette, Paragraph, Path, Point, PositionedGlyph, Radius, Rect, RenderError, Scene,

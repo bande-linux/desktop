@@ -1,6 +1,9 @@
+use std::cell::Cell;
+use std::ffi::OsString;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::rc::Rc;
 use std::time::Instant;
 
 use accesskit::TreeUpdate;
@@ -8,15 +11,22 @@ use unbound_file_chooser::{
     Chooser, ChooserView, Finished, Icons, L10N, initial_folder, remember, remembered_folder,
 };
 use unbound_files::{rows, sidebar_file, with_volumes};
-use unbound_toolkit::{App, Role, Scene, TextSystem, Window, WindowEvent};
+use unbound_toolkit::ui::Alert;
+use unbound_toolkit::{App, Image, Role, Scene, TextSystem, Window, WindowEvent};
 use unbound_volumes::{media_roots, mounted_volumes};
-use unbound_xdg::{MimeDatabase, UserDir, config_home, data_dirs, user_dir};
-use xdg_desktop_portal_unbound::dialog_process::{CANCELLED, CHOSEN, encode, parse};
+use unbound_wallpaper::Fit;
+use unbound_xdg::{
+    Locale, MimeDatabase, UserDir, app_name, applications, config_home, current_desktops,
+    data_dirs, user_dir,
+};
+use xdg_desktop_portal_unbound::dialog_process::{CANCELLED, CHOSEN, SET_WALLPAPER, encode, parse};
 use xdg_desktop_portal_unbound::file_chooser::{Dialog, Mode, Selection};
 
 const APP_ID: &str = "org.unbound.FileChooser";
 const WINDOW_SIZE: (u32, u32) = (820, 520);
 const UNAVAILABLE: u8 = 2;
+const PREVIEW_SIZE: f64 = 36.0;
+const SET: &str = "set";
 
 struct FileDialog {
     view: ChooserView,
@@ -201,9 +211,56 @@ fn run(dialog: Dialog) -> ExitCode {
     }
 }
 
+fn confirm_wallpaper(picture: &Path, app_id: &str) -> ExitCode {
+    let entries = applications(
+        &data_dirs(),
+        Locale::from_env().as_ref(),
+        &current_desktops(),
+    );
+    let app = app_name(&entries, app_id);
+    let name = picture
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let confirmed = Rc::new(Cell::new(false));
+    let chosen = confirmed.clone();
+    let asked = unbound_toolkit::ask("wallpaper-confirmation", |window| {
+        let pixels = (PREVIEW_SIZE * window.scale().max(2.0)).ceil() as u32;
+        let alert = Alert::new(
+            &L10N.tr_args("wallpaper-title", [("picture", name.into())]),
+            &L10N.tr_args("wallpaper-message", [("app", app.into())]),
+            move |action| chosen.set(action == SET),
+        )
+        .cancel(&L10N.tr("button-cancel"), "cancel")
+        .primary(&L10N.tr("button-set-wallpaper"), SET);
+        let preview = unbound_wallpaper::render(picture, Fit::Fill, pixels, pixels)
+            .ok()
+            .and_then(|picture| Image::from_rgba(picture.width, picture.height, picture.rgba));
+        match preview {
+            Some(preview) => alert.icon(preview),
+            None => alert,
+        }
+    });
+    match asked {
+        Ok(()) if confirmed.get() => ExitCode::from(CHOSEN),
+        Ok(()) => ExitCode::from(CANCELLED),
+        Err(error) => {
+            tracing::error!("{error}");
+            ExitCode::from(UNAVAILABLE)
+        }
+    }
+}
+
 fn main() -> ExitCode {
     unbound_log::init("unbound-file-chooser");
-    match parse(std::env::args_os().skip(1)) {
+    let arguments: Vec<OsString> = std::env::args_os().skip(1).collect();
+    if let [flag, picture, app_flag, app_id] = arguments.as_slice()
+        && flag == SET_WALLPAPER
+        && app_flag == "--app-id"
+    {
+        return confirm_wallpaper(Path::new(picture), &app_id.to_string_lossy());
+    }
+    match parse(arguments) {
         Ok(dialog) => run(dialog),
         Err(error) => {
             tracing::error!("{}", error.0);

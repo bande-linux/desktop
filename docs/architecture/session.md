@@ -13,7 +13,7 @@ graph LR
         T1_CLIP[Clipboard and selection<br/>wl_data_device, zwp_primary_selection, ext-data-control-v1]
         T1_LOCK[Screen lock and idle<br/>ext-session-lock-v1, ext-idle-notify-v1, idle-inhibit-v1]
         T1_NOTIF[Notification daemon<br/>org.freedesktop.Notifications with actions]
-        T1_PORTAL[XDG portal backend<br/>xdg-desktop-portal-unbound: Settings, FileChooser, Screenshot, ScreenCast]
+        T1_PORTAL[XDG portal backend<br/>xdg-desktop-portal-unbound: Settings, FileChooser, Screenshot, ScreenCast, Wallpaper]
         T1_POLKIT[Polkit agent<br/>org.freedesktop.PolicyKit1 authentication agent]
         T1_AUDIO[Audio and media keys<br/>PipeWire, WirePlumber per-device memory, volume OSD]
         T1_POWER[Power management<br/>UPower battery, logind lid and sleep inhibitors]
@@ -82,6 +82,15 @@ graph LR
   `unbound-screenshot`.
 - `org.freedesktop.impl.portal.Settings`: colour scheme and accent colour for sandboxed and
   toolkit apps.
+- `org.freedesktop.impl.portal.Wallpaper`: "Set as Background" in other apps. A local picture
+  is copied to `$XDG_DATA_HOME/backgrounds/<seconds>-<name>` (a picture from the document
+  portal or a download folder may not last) and written to `org.unbound.Config` as both the
+  light and the dark wallpaper, as Settings ▸ Wallpaper's Add Picture does; `set-on` is not
+  told apart, since the lock screen shows the desktop picture. When the app asks for a preview
+  the frontend skips its own Access dialog, so the preview is the user's consent:
+  `unbound-file-chooser --set-wallpaper <picture> --app-id <id>` asks "Use “name” as your
+  desktop picture?" with the picture as the alert's image, Cancel and Set Desktop Picture; any
+  answer but Set is a cancel. Non-file URIs and missing files fail with response 2.
 - `org.freedesktop.impl.portal.FileChooser`: the Unbound Open and Save dialogs. The portal
   runs `/usr/libexec/unbound-file-chooser` (`crates/apps/file-chooser`) per request with the
   dialog as arguments; it answers on standard output with the chosen paths and filter and
@@ -179,7 +188,14 @@ graph LR
   theming engine. Without it Qt 6.8 reads `color-scheme` but keeps a light palette (checked
   with FeatherPad: light without the plugin, dark with it). The same plugin sends Qt's Open
   and Save dialogs through the portal. libadwaita and GTK 4 apps read `color-scheme` and
-  `accent-color` from the Settings portal themselves. Qt apps run natively on Wayland through
+  `accent-color` from the Settings portal themselves. GTK 3 reads its settings from GSettings
+  unless `GTK_USE_PORTAL=1` (`gdk_should_use_portal`), so `unbound-session` sets it: GTK 3 then
+  takes `gtk-theme` (Adwaita, Adwaita-dark, or HighContrast under Increase Contrast),
+  `font-name` (Inter 10), `document-font-name`, `monospace-font-name` (JetBrains Mono 10),
+  `enable-animations` (off under Reduce Motion), the cursor and the text size from the portal's
+  `org.gnome.desktop.interface`, and sends its native Open and Save dialogs to our chooser. A
+  key the portal leaves out falls to GTK's built-in default, not to GSettings, so the portal
+  serves every key above. Qt apps run natively on Wayland through
   `qt6-wayland`, which Qt's own packages recommend. The backend lives in
   `/usr/libexec` and is started by D-Bus activation through its user unit, as Debian's portal
   backends are. `ci/portal` installs the packages into Debian 13 with its `xdg-desktop-portal`
@@ -282,7 +298,7 @@ graph LR
     mounted when it appears, including drives present at login, as macOS mounts external
     volumes; a drive removed while still mounted posts "Disk Not Ejected Properly", as macOS
     does. Encrypted volumes and the eject control wait for the UI.
-- **Theme propagation**: GTK 3 and 4 (`settings.ini`, `dconf`), Qt (`QT_QPA_PLATFORMTHEME`) and
+- **Theme propagation**: GTK 3 and 4 (the Settings portal, with `GTK_USE_PORTAL=1` for GTK 3), Qt (`QT_QPA_PLATFORMTHEME`) and
   cursor themes (`XCURSOR_THEME`, `XCURSOR_SIZE`) follow the desktop's appearance.
 - **Emulated input**: `libei` for remote desktop and virtual input devices.
 

@@ -7,6 +7,12 @@ pub struct WifiState {
     pub networks: Vec<Network>,
 }
 
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct NetworkState {
+    pub ethernet: Option<unbound_network::Ethernet>,
+    pub vpns: Vec<unbound_network::Vpn>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct BluetoothState {
     pub powered: bool,

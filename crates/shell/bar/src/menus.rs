@@ -43,7 +43,7 @@ pub fn system_menu(user: &str) -> Menu {
     ])
 }
 
-pub fn battery_menu(battery: &Battery) -> Menu {
+pub fn battery_menu(battery: &Battery, percentage_shown: bool) -> Menu {
     let percent = [("percent", battery.percent.round().into())];
     let mut items = vec![note(&L10N.tr_args("battery-level", percent))];
     let estimate = match battery.power {
@@ -71,6 +71,14 @@ pub fn battery_menu(battery: &Battery) -> Menu {
     } else {
         L10N.tr("power-source-battery")
     }));
+    items.push(MenuItem::separator());
+    items.push(
+        item(
+            &L10N.tr("show-battery-percentage"),
+            &Command::ShowBatteryPercentage(!percentage_shown),
+        )
+        .checked(percentage_shown),
+    );
     Menu::new(items)
 }
 

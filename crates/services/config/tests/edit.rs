@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use unbound_config::{
-    AlertSound, Appearance, CapsLock, Config, DisplaySettings, DockEdge, InputSource, Placement,
-    Rotation, Setting, Suspend, WallpaperFit, WallpaperVariant, migrate,
+    AlertSound, Appearance, CapsLock, ClockFormat, Config, DisplaySettings, DockEdge, InputSource,
+    LidOnPower, Placement, Rotation, Setting, Suspend, WallpaperFit, WallpaperVariant, migrate,
 };
 
 fn apply(setting: Setting, source: &str) -> String {
@@ -27,6 +27,24 @@ fn a_setting_missing_from_the_file_is_appended() {
         apply(Setting::Appearance(Appearance::Light), ""),
         "appearance \"light\"\n"
     );
+}
+
+#[test]
+fn the_clock_format_is_written_and_automatic_leaves_no_trace() {
+    let edited = apply(
+        Setting::Clock(ClockFormat::TwentyFourHour),
+        "appearance \"dark\"\n",
+    );
+    assert_eq!(edited, "appearance \"dark\"\nclock \"24-hour\"\n");
+    assert_eq!(
+        Config::parse(&edited).expect("valid").clock,
+        ClockFormat::TwentyFourHour
+    );
+    assert_eq!(
+        apply(Setting::Clock(ClockFormat::Automatic), &edited),
+        "appearance \"dark\"\n"
+    );
+    assert_eq!(Config::load("clock \"25-hour\"").expect("KDL").1.len(), 1);
 }
 
 #[test]
@@ -369,6 +387,32 @@ fn pointer_settings_equal_to_the_defaults_leave_no_trace() {
         &apply(Setting::TrackpadSpeed(0.0), &tapless),
     );
     assert_eq!(reset, "");
+}
+
+#[test]
+fn power_settings_live_in_one_section_and_defaults_leave_no_trace() {
+    let edited = apply(Setting::LowPowerOnBattery(true), "");
+    let edited = apply(Setting::LidOnPower(LidOnPower::KeepRunning), &edited);
+    let edited = apply(Setting::ShowBatteryPercentage(true), &edited);
+    let power = Config::parse(&edited).expect("valid").power;
+    assert!(power.low_power_on_battery && power.show_battery_percentage);
+    assert_eq!(power.lid_on_power, LidOnPower::KeepRunning);
+    assert!(edited.contains("lid-on-power \"keep-running\""));
+    let edited = apply(Setting::LowPowerOnBattery(false), &edited);
+    let edited = apply(Setting::LidOnPower(LidOnPower::Sleep), &edited);
+    let edited = apply(Setting::ShowBatteryPercentage(false), &edited);
+    assert_eq!(
+        Config::parse(&edited).expect("valid").power,
+        Default::default()
+    );
+    assert!(!edited.contains("low-power") && !edited.contains("lid"));
+    assert_eq!(
+        Config::load("power { lid-on-power \"explode\" }")
+            .expect("KDL")
+            .1
+            .len(),
+        1
+    );
 }
 
 #[test]

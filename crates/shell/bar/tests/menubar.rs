@@ -195,13 +195,18 @@ fn the_battery_menu_tells_the_time_left_and_the_power_source() {
             remaining: Some(Duration::from_secs(3 * 3600 + 25 * 60)),
         },
     };
-    let shown: Vec<String> = titles(&battery_menu(&on_battery))
+    let shown: Vec<String> = titles(&battery_menu(&on_battery, false))
         .into_iter()
         .map(|item| item.0)
         .collect();
     assert_eq!(
         shown,
-        ["Battery 64%", "3:25 remaining", "Power Source: Battery"]
+        [
+            "Battery 64%",
+            "3:25 remaining",
+            "Power Source: Battery",
+            "Show Percentage"
+        ]
     );
 
     let charging = battery_of(1, 50.0, 0, 1800);
@@ -211,7 +216,19 @@ fn the_battery_menu_tells_the_time_left_and_the_power_source() {
             until_full: Some(Duration::from_secs(1800))
         }
     );
-    assert_eq!(titles(&battery_menu(&charging))[1].0, "0:30 until full");
+    assert_eq!(
+        titles(&battery_menu(&charging, true))[1].0,
+        "0:30 until full"
+    );
+    let menu = battery_menu(&charging, true);
+    assert!(
+        titles(&menu)[3].2,
+        "the percentage item is checked while shown"
+    );
+    assert_eq!(
+        action_of(&menu, "Show Percentage"),
+        "battery-percentage:off"
+    );
     assert_eq!(battery_of(4, 100.0, 0, 0).power, Power::Full);
     assert_eq!(
         battery_of(2, 30.0, 0, 0).power,

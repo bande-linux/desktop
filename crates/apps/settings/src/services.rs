@@ -6,13 +6,13 @@ use std::sync::mpsc::RecvTimeoutError;
 
 use unbound_audio::{Audio, Direction, Level, Meter};
 use unbound_bluetooth::{Bluetooth, PairingPrompt, register_agent};
-use unbound_network::{JoinOutcome, NetworkManager};
+use unbound_network::{JoinOutcome, ManualIpv4, NetworkManager};
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::{MatchRule, message};
 
 use crate::follow::Update;
 use crate::follow::{Updates, spawn};
-use crate::state::{Answer, BluetoothState, Joined, Question, WifiState};
+use crate::state::{Answer, BluetoothState, Joined, NetworkState, Question, WifiState};
 
 const SETTLE: Duration = Duration::from_millis(200);
 const METER_INTERVAL: Duration = Duration::from_millis(50);
@@ -34,6 +34,9 @@ pub enum NetworkCommand {
     Power(bool),
     Scan,
     Join(unbound_network::Network, Option<String>),
+    ConfigureEthernet(Option<ManualIpv4>),
+    ConnectVpn(String),
+    DisconnectVpn(String),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -213,16 +216,17 @@ fn follow_state(
     name: &str,
     updates: Updates,
     changed: Receiver<()>,
-    read: impl Fn() -> Update + Send + 'static,
+    read: impl Fn() -> Vec<Update> + Send + 'static,
 ) {
     spawn(name, move || {
-        if !updates.send(read()) {
+        let publish = || read().into_iter().all(|update| updates.send(update));
+        if !publish() {
             return;
         }
         while changed.recv().is_ok() {
             std::thread::sleep(SETTLE);
             changed.try_iter().count();
-            if !updates.send(read()) {
+            if !publish() {
                 break;
             }
         }
@@ -240,6 +244,13 @@ fn read_wifi(network: &NetworkManager) -> Option<WifiState> {
         Vec::new()
     };
     Some(WifiState { enabled, networks })
+}
+
+fn read_network(network: &NetworkManager) -> NetworkState {
+    NetworkState {
+        ethernet: network.ethernet().ok().flatten(),
+        vpns: network.vpns().unwrap_or_default(),
+    }
 }
 
 fn rule(build: impl FnOnce() -> zbus::Result<MatchRule<'static>>) -> Option<MatchRule<'static>> {
@@ -260,7 +271,10 @@ pub fn follow_network(system: &Connection, updates: Updates) -> Sender<NetworkCo
     }
     let reader = NetworkManager::new(system);
     follow_state("network", updates.clone(), changes, move || {
-        Update::Wifi(read_wifi(&reader))
+        vec![
+            Update::Wifi(read_wifi(&reader)),
+            Update::Network(read_network(&reader)),
+        ]
     });
     let (sender, receiver) = mpsc::channel();
     let network = NetworkManager::new(system);
@@ -268,6 +282,13 @@ pub fn follow_network(system: &Connection, updates: Updates) -> Sender<NetworkCo
         for command in receiver {
             match command {
                 NetworkCommand::Power(on) => report(&updates, network.set_wifi_enabled(on)),
+                NetworkCommand::ConfigureEthernet(manual) => {
+                    report(&updates, network.configure_ethernet(manual.as_ref()));
+                }
+                NetworkCommand::ConnectVpn(path) => report(&updates, network.connect_vpn(&path)),
+                NetworkCommand::DisconnectVpn(path) => {
+                    report(&updates, network.disconnect_vpn(&path));
+                }
                 NetworkCommand::Scan => {
                     if let Err(error) = network.scan() {
                         tracing::debug!("scan not started: {error}");
@@ -366,7 +387,7 @@ pub fn follow_bluetooth(
     }
     let reader = Bluetooth::new(system);
     follow_state("bluetooth", updates.clone(), changes, move || {
-        Update::Bluetooth(read_bluetooth(&reader))
+        vec![Update::Bluetooth(read_bluetooth(&reader))]
     });
     let (answer, answers) = mpsc::channel();
     let prompt = Arc::new(Prompt {

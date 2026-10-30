@@ -16,14 +16,15 @@ use zbus::object_server::SignalEmitter;
 use zbus::zvariant::OwnedValue;
 
 pub use center::{
-    BANNER_DURATION, BANNER_LINGER, Center, CloseReason, HiddenBanner, Invoked, Notification,
-    Presentation, Stack, Timeout, Urgency,
+    App, AppRule, BANNER_DURATION, BANNER_LINGER, Banners, Center, CloseReason, HiddenBanner,
+    Invoked, Notification, Presentation, Stack, Timeout, Urgency,
 };
 pub use wire::{WireNotification, WirePresentation, WireStack};
 
 pub const BUS_NAME: &str = "org.freedesktop.Notifications";
 pub const OBJECT_PATH: &str = "/org/freedesktop/Notifications";
 pub const SPEC_VERSION: &str = "1.2";
+const APPS_FILE: &str = "notification-apps";
 
 struct State {
     center: Center,
@@ -46,6 +47,7 @@ struct Shared {
     state: Mutex<State>,
     deadline_changed: Condvar,
     do_not_disturb_file: Option<PathBuf>,
+    apps_file: Option<PathBuf>,
 }
 
 pub fn do_not_disturb_path(xdg_state_home: Option<&Path>, home: Option<&Path>) -> Option<PathBuf> {
@@ -54,6 +56,49 @@ pub fn do_not_disturb_path(xdg_state_home: Option<&Path>, home: Option<&Path>) -
         None => home?.join(".local").join("state"),
     };
     Some(base.join("unbound").join("do-not-disturb"))
+}
+
+pub type WireApp = (String, String, bool, String, bool);
+
+fn wire_app(app: &App) -> WireApp {
+    (
+        app.group.clone(),
+        app.name.clone(),
+        app.rule.allow,
+        app.rule.banners.keyword().to_owned(),
+        app.rule.in_center,
+    )
+}
+
+pub fn write_apps<'a>(apps: impl IntoIterator<Item = &'a App>) -> String {
+    apps.into_iter()
+        .map(|app| {
+            let (group, name, allow, banners, center) = wire_app(app);
+            format!("{group}\t{name}\t{allow}\t{banners}\t{center}\n")
+        })
+        .collect()
+}
+
+pub fn read_apps(text: &str) -> Vec<App> {
+    text.lines()
+        .filter_map(|line| {
+            let mut fields = line.split('\t');
+            let group = fields.next().filter(|group| !group.is_empty())?.to_owned();
+            let name = fields.next()?.to_owned();
+            let allow = fields.next()?.parse().ok()?;
+            let banners = Banners::parse(fields.next()?)?;
+            let in_center = fields.next()?.parse().ok()?;
+            Some(App {
+                group,
+                name,
+                rule: AppRule {
+                    allow,
+                    banners,
+                    in_center,
+                },
+            })
+        })
+        .collect()
 }
 
 fn remember_do_not_disturb(file: &Path, enabled: bool) -> io::Result<()> {
@@ -85,6 +130,22 @@ impl Shared {
         state.present();
         self.deadline_changed.notify_all();
         result
+    }
+
+    fn remember_apps(&self, center: &Center) {
+        let Some(file) = &self.apps_file else {
+            return;
+        };
+        let written = file
+            .parent()
+            .map_or(Ok(()), fs::create_dir_all)
+            .and_then(|()| fs::write(file, write_apps(center.apps())));
+        if let Err(error) = written {
+            tracing::warn!(
+                "cannot remember notification apps in {}: {error}",
+                file.display()
+            );
+        }
     }
 
     fn set_do_not_disturb(&self, enabled: bool) {
@@ -168,6 +229,14 @@ impl NotificationServer {
     fn launch(connection: &Connection, do_not_disturb_file: Option<PathBuf>) -> zbus::Result<Self> {
         let mut center = Center::default();
         center.set_do_not_disturb(do_not_disturb_file.as_deref().is_some_and(Path::exists));
+        let apps_file = do_not_disturb_file
+            .as_deref()
+            .map(|file| file.with_file_name(APPS_FILE));
+        if let Some(file) = &apps_file {
+            for app in read_apps(&fs::read_to_string(file).unwrap_or_default()) {
+                center.remember(app);
+            }
+        }
         let (presentations, presented) = mpsc::channel();
         let shared = Arc::new(Shared {
             state: Mutex::new(State {
@@ -178,6 +247,7 @@ impl NotificationServer {
             }),
             deadline_changed: Condvar::new(),
             do_not_disturb_file,
+            apps_file,
         });
         connection.object_server().at(
             OBJECT_PATH,
@@ -202,6 +272,10 @@ impl NotificationServer {
             connection: connection.clone(),
             shared,
         })
+    }
+
+    pub fn apps(&self) -> Vec<App> {
+        self.shared.lock().center.apps().cloned().collect()
     }
 
     pub fn active(&self) -> Vec<Notification> {
@@ -359,7 +433,8 @@ impl Notifications {
             resident: hint(&hints, "resident").unwrap_or(false),
             transient: hint(&hints, "transient").unwrap_or(false),
         };
-        let (id, audible) = self.shared.update(|center| {
+        let (id, audible, new_app) = self.shared.update(|center| {
+            let known = center.apps().count();
             let fresh = replaces_id == 0 || center.get(replaces_id).is_none();
             let shown = !center.do_not_disturb() || notification.urgency == Urgency::Critical;
             let id = center.post(
@@ -367,8 +442,16 @@ impl Notifications {
                 Timeout::from_milliseconds(expire_timeout),
                 Instant::now(),
             );
-            (id, fresh && shown && !silent)
+            let delivered = center.get(id).is_some();
+            (
+                id,
+                fresh && shown && !silent && delivered,
+                center.apps().count() != known,
+            )
         });
+        if new_app {
+            self.shared.remember_apps(&self.shared.lock().center);
+        }
         if audible {
             let _ = self
                 .sounds
@@ -436,6 +519,33 @@ impl NotificationCenter {
     #[zbus(property)]
     fn set_do_not_disturb(&mut self, enabled: bool) {
         self.shared.set_do_not_disturb(enabled);
+    }
+
+    fn get_apps(&self) -> Vec<WireApp> {
+        self.shared.lock().center.apps().map(wire_app).collect()
+    }
+
+    fn set_app_rule(
+        &self,
+        group: String,
+        allow: bool,
+        banners: String,
+        in_center: bool,
+    ) -> zbus::fdo::Result<()> {
+        let banners = Banners::parse(&banners).ok_or_else(|| {
+            zbus::fdo::Error::InvalidArgs(format!("unknown banner style {banners:?}"))
+        })?;
+        let rule = AppRule {
+            allow,
+            banners,
+            in_center,
+        };
+        let known = self.shared.update(|center| center.set_rule(&group, rule));
+        if !known {
+            return Err(zbus::fdo::Error::InvalidArgs(format!("no app {group:?}")));
+        }
+        self.shared.remember_apps(&self.shared.lock().center);
+        Ok(())
     }
 
     fn get_presentation(&self) -> WirePresentation {

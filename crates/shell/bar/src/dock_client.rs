@@ -14,7 +14,6 @@ use unbound_bar::dock::{
 use unbound_bar::rail::surface_size as rail_surface_size;
 use unbound_config::{Dock as DockConfig, DockEdge};
 use unbound_dock_model::arrange;
-use unbound_dock_model::autostart::{autostart_dir, opens_at_login, set_open_at_login};
 use unbound_dock_model::bus::{self, BusEvent};
 use unbound_fs::{FolderWatch, Trash};
 use unbound_inbox::Inbox;
@@ -24,8 +23,8 @@ use unbound_toolkit::{
     MenuPlacement, Point, Rect, Role, Scene, TextSystem, Window, WindowEvent,
 };
 use unbound_xdg::{
-    DesktopEntry, ICON_THEMES, Locale, applications, current_desktops, data_dirs, find_icon,
-    path_from_file_uri,
+    DesktopEntry, ICON_THEMES, Locale, applications, autostart_dir, current_desktops, data_dirs,
+    find_icon, opens_at_login, path_from_file_uri, set_open_at_login,
 };
 use zbus::blocking::Connection;
 

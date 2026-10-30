@@ -20,6 +20,7 @@ pub enum Command {
     HideOthers,
     ShowAll,
     SelectInputSource(usize),
+    ShowBatteryPercentage(bool),
     QuitApp,
     AppAction(String),
     ShowWindow(String),
@@ -67,6 +68,7 @@ impl Command {
             Self::HideOthers => "hide-others".to_owned(),
             Self::ShowAll => "show-all".to_owned(),
             Self::SelectInputSource(index) => format!("input-source:{index}"),
+            Self::ShowBatteryPercentage(on) => format!("battery-percentage:{}", switch(*on)),
         }
     }
 
@@ -100,6 +102,7 @@ impl Command {
             "hide-others" => Self::HideOthers,
             "show-all" => Self::ShowAll,
             "input-source" => Self::SelectInputSource(argument.parse().ok()?),
+            "battery-percentage" => Self::ShowBatteryPercentage(on()?),
             "item" => {
                 let (item, id) = argument.rsplit_once('|')?;
                 Self::Item {

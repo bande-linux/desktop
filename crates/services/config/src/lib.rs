@@ -46,6 +46,26 @@ pub enum Appearance {
     Automatic,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ClockFormat {
+    #[default]
+    Automatic,
+    TwelveHour,
+    TwentyFourHour,
+}
+
+impl ClockFormat {
+    pub const ALL: [Self; 3] = [Self::Automatic, Self::TwelveHour, Self::TwentyFourHour];
+
+    pub fn keyword(self) -> &'static str {
+        match self {
+            Self::Automatic => "automatic",
+            Self::TwelveHour => "12-hour",
+            Self::TwentyFourHour => "24-hour",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DockEdge {
     Left,
@@ -325,6 +345,24 @@ pub struct Mouse {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LidOnPower {
+    #[default]
+    Sleep,
+    KeepRunning,
+}
+
+impl LidOnPower {
+    pub const ALL: [Self; 2] = [Self::Sleep, Self::KeepRunning];
+
+    pub fn keyword(self) -> &'static str {
+        match self {
+            Self::Sleep => "sleep",
+            Self::KeepRunning => "keep-running",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum AlertSound {
     #[default]
     Mallet,
@@ -344,6 +382,13 @@ impl AlertSound {
             Self::Tick => "tick",
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Power {
+    pub show_battery_percentage: bool,
+    pub low_power_on_battery: bool,
+    pub lid_on_power: LidOnPower,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -440,6 +485,7 @@ impl Default for Dock {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
     pub appearance: Appearance,
+    pub clock: ClockFormat,
     pub reduce_motion: bool,
     pub dock: Dock,
     pub bar: Bar,
@@ -447,6 +493,7 @@ pub struct Config {
     pub keyboard: Keyboard,
     pub trackpad: Trackpad,
     pub mouse: Mouse,
+    pub power: Power,
     pub sound: Sound,
     pub wallpaper: Wallpaper,
     pub displays: BTreeMap<String, DisplaySettings>,
@@ -467,6 +514,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             appearance: Appearance::Automatic,
+            clock: ClockFormat::Automatic,
             reduce_motion: false,
             dock: Dock::default(),
             bar: Bar::default(),
@@ -483,6 +531,7 @@ impl Default for Config {
             },
             trackpad: Trackpad::default(),
             mouse: Mouse::default(),
+            power: Power::default(),
             sound: Sound::default(),
             wallpaper: Wallpaper::default(),
             displays: BTreeMap::new(),
@@ -623,6 +672,12 @@ impl Parser<'_> {
                     config.reduce_motion = self.accessibility(node);
                     Ok(())
                 }
+                "clock" => self
+                    .keyword(
+                        node,
+                        &ClockFormat::ALL.map(|format| (format.keyword(), format)),
+                    )
+                    .map(|clock| config.clock = clock),
                 "dock" => {
                     config.dock = self.dock(node);
                     Ok(())
@@ -645,6 +700,10 @@ impl Parser<'_> {
                 }
                 "mouse" => {
                     config.mouse = self.mouse(node);
+                    Ok(())
+                }
+                "power" => {
+                    config.power = self.power(node);
                     Ok(())
                 }
                 "sound" => {
@@ -972,6 +1031,25 @@ impl Parser<'_> {
             Ok(())
         });
         trackpad
+    }
+
+    fn power(&self, node: &KdlNode) -> Power {
+        let mut power = Power::default();
+        self.section(node, |child| {
+            match child.name().value() {
+                "show-battery-percentage" => power.show_battery_percentage = self.flag(child)?,
+                "low-power-on-battery" => power.low_power_on_battery = self.flag(child)?,
+                "lid-on-power" => {
+                    power.lid_on_power = self.keyword(
+                        child,
+                        &LidOnPower::ALL.map(|choice| (choice.keyword(), choice)),
+                    )?
+                }
+                _ => return Err(self.unknown_child("power", child)),
+            }
+            Ok(())
+        });
+        power
     }
 
     fn mouse(&self, node: &KdlNode) -> Mouse {

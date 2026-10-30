@@ -5,7 +5,9 @@ use std::path::PathBuf;
 use unbound_audio::{Device, Direction, Level, Snapshot};
 use unbound_keyboard::Layouts;
 use unbound_settings::{
-    Display, Mode, Pair, PointingDevices, SettingId, SettingsView, Update, Value, thumbnail,
+    About, App, AppNotifications, BatteryState, Category, Charge, Display, LoginItems, Mode,
+    Package, Pair, PaneId, PointingDevices, SettingId, SettingsView, SoftwareState, Storage,
+    TimeState, Update, Value, thumbnail,
 };
 use unbound_toolkit::ui::{Event, Key, Modifiers};
 use unbound_toolkit::{CpuRenderer, Palette, Scheme, TextSystem};
@@ -14,7 +16,11 @@ const SIZE: (u32, u32) = (900, 600);
 const MIN_SSIM: f64 = 0.99;
 
 fn check_golden(name: &str, rgba: Vec<u8>) {
-    let actual = image::RgbaImage::from_raw(SIZE.0, SIZE.1, rgba).expect("frame");
+    check_golden_sized(name, SIZE, rgba);
+}
+
+fn check_golden_sized(name: &str, size: (u32, u32), rgba: Vec<u8>) {
+    let actual = image::RgbaImage::from_raw(size.0, size.1, rgba).expect("frame");
     let actual = image::DynamicImage::ImageRgba8(actual).to_rgb8();
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("tests/golden/{name}.png"));
     if std::env::var_os("UNBOUND_UPDATE_GOLDENS").is_some() {
@@ -268,4 +274,250 @@ fn the_trackpad_and_mouse_pane_matches_its_golden() {
     let scene = view.scene(SIZE.0, SIZE.1);
     let frame = CpuRenderer::new().render(&scene).expect("frame");
     check_golden("trackpad-mouse-dark", frame.rgba);
+}
+
+fn check_in_both_schemes_and_scales(name: &str, build: impl Fn(Scheme) -> SettingsView) {
+    for (scheme, suffix) in [(Scheme::Light, "light"), (Scheme::Dark, "dark")] {
+        let mut view = build(scheme);
+        let scene = view.scene(SIZE.0, SIZE.1);
+        for (scale, density) in [(1.0, ""), (1.5, "@1.5x")] {
+            let pixels = (
+                (f64::from(SIZE.0) * scale).round() as u32,
+                (f64::from(SIZE.1) * scale).round() as u32,
+            );
+            let mut rgba = vec![0; pixels.0 as usize * pixels.1 as usize * 4];
+            CpuRenderer::new()
+                .render_into(&scene, scale, &mut rgba)
+                .expect("frame");
+            check_golden_sized(&format!("{name}-{suffix}{density}"), pixels, rgba);
+        }
+    }
+}
+
+fn general(scheme: Scheme, pane: PaneId) -> SettingsView {
+    let mut view = SettingsView::new(Palette::for_scheme(scheme), TextSystem::new());
+    view.apply(Update::About(About {
+        name: "Studio".to_owned(),
+        model: "Apple MacBook Pro (14-inch, M1 Pro, 2021)".to_owned(),
+        chip: "Apple M1 Pro".to_owned(),
+        memory: 16_000_000_000,
+        capacity: 494_000_000_000,
+        available: 210_000_000_000,
+        unbound: "0.1.0".to_owned(),
+        system: "Debian 13.7 (trixie)".to_owned(),
+        serial: Some("C02XL0GHJGH5".to_owned()),
+    }));
+    view.select_pane(pane);
+    view
+}
+
+#[test]
+fn the_about_pane_matches_its_goldens() {
+    check_in_both_schemes_and_scales("about", |scheme| general(scheme, PaneId::About));
+}
+
+#[test]
+fn the_storage_pane_matches_its_goldens() {
+    let home = std::env::home_dir().expect("home");
+    check_in_both_schemes_and_scales("storage", |scheme| {
+        let mut view = general(scheme, PaneId::Storage);
+        view.apply(Update::Storage(Storage {
+            capacity: 494_000_000_000,
+            available: 210_000_000_000,
+            categories: Some(vec![
+                (Category::Apps, 21_000_000_000),
+                (Category::Documents, 182_000_000_000),
+                (Category::Trash, 4_100_000_000),
+                (Category::System, 76_900_000_000),
+            ]),
+            largest: vec![
+                (home.join("Movies/Holiday.mov"), 9_800_000_000),
+                (home.join("Downloads/debian-13.iso"), 3_900_000_000),
+                (home.join("Music/Live at the Barbican.flac"), 1_200_000_000),
+            ],
+            trash_items: 12,
+        }));
+        view
+    });
+}
+
+#[test]
+fn the_general_pane_matches_its_goldens() {
+    check_in_both_schemes_and_scales("general", |scheme| general(scheme, PaneId::General));
+}
+
+#[test]
+fn the_date_and_time_pane_matches_its_goldens() {
+    check_in_both_schemes_and_scales("date-time", |scheme| {
+        let mut view = general(scheme, PaneId::DateTime);
+        view.apply(Update::Time(Some(TimeState {
+            automatic: true,
+            can_automatic: true,
+            zone: "Asia/Tokyo".to_owned(),
+            zones: Vec::new(),
+        })));
+        view.set_value(SettingId::Clock24Hour, Value::Flag(true));
+        view
+    });
+}
+
+#[test]
+fn the_login_items_pane_matches_its_goldens() {
+    check_in_both_schemes_and_scales("login-items", |scheme| {
+        let mut view = general(scheme, PaneId::LoginItems);
+        let app = |id: &str, name: &str| App {
+            id: id.to_owned(),
+            name: name.to_owned(),
+        };
+        view.apply(Update::Login(LoginItems {
+            items: vec![
+                app("org.mozilla.firefox.desktop", "Firefox"),
+                app("org.unbound.Terminal.desktop", "Terminal"),
+            ],
+            apps: Vec::new(),
+        }));
+        view
+    });
+}
+
+#[test]
+fn the_battery_pane_matches_its_goldens() {
+    check_in_both_schemes_and_scales("battery", |scheme| {
+        let mut view = SettingsView::new(Palette::for_scheme(scheme), TextSystem::new());
+        let history = (0..=48u32)
+            .map(|step| {
+                let level = if step < 30 {
+                    95.0 - f64::from(step) * 2.0
+                } else {
+                    35.0 + f64::from(step - 30) * 3.0
+                };
+                (1_000_000 + step * 1800, level)
+            })
+            .collect();
+        view.apply(Update::Battery(Some(BatteryState {
+            percent: 89.0,
+            charge: Charge::Charging { minutes: Some(25) },
+            history,
+            profiles: ["power-saver", "balanced", "performance"]
+                .map(str::to_owned)
+                .to_vec(),
+            profile: Some("balanced".to_owned()),
+        })));
+        view.set_value(SettingId::LowPowerOnBattery, Value::Flag(true));
+        view.set_value(SettingId::LidOnPower, Value::Keyword("sleep".to_owned()));
+        view.select_pane(PaneId::Battery);
+        view
+    });
+}
+
+#[test]
+fn the_notifications_pane_matches_its_goldens() {
+    check_in_both_schemes_and_scales("notifications", |scheme| {
+        let mut view = SettingsView::new(Palette::for_scheme(scheme), TextSystem::new());
+        view.set_value(SettingId::DoNotDisturb, Value::Flag(false));
+        let app = |group: &str, name: &str, allow: bool, banners: &str, in_center: bool| {
+            AppNotifications {
+                group: group.to_owned(),
+                name: name.to_owned(),
+                allow,
+                banners: banners.to_owned(),
+                in_center,
+            }
+        };
+        view.apply(Update::NotificationApps(vec![
+            app("org.example.Chat", "Chat", true, "persistent", true),
+            app("org.mozilla.firefox", "Firefox", false, "temporary", true),
+            app("Mail", "Mail", true, "temporary", false),
+        ]));
+        view.select_pane(PaneId::Notifications);
+        view.scene(SIZE.0, SIZE.1);
+        let chat = view
+            .accessibility()
+            .nodes
+            .into_iter()
+            .find(|(_, node)| node.label().is_some_and(|label| label.starts_with("Chat,")))
+            .map(|(id, _)| id)
+            .expect("Chat row");
+        view.perform(&accesskit::ActionRequest {
+            action: accesskit::Action::Click,
+            target_tree: accesskit::TreeId::ROOT,
+            target_node: chat,
+            data: None,
+        });
+        view
+    });
+}
+
+#[test]
+fn the_software_update_pane_matches_its_goldens() {
+    check_in_both_schemes_and_scales("software-update", |scheme| {
+        let mut view = general(scheme, PaneId::SoftwareUpdate);
+        let package = |name: &str, version: &str, size: u64| Package {
+            id: format!("{name};{version};arm64;debian"),
+            name: name.to_owned(),
+            version: version.to_owned(),
+            summary: String::new(),
+            size,
+        };
+        view.apply(Update::Software(SoftwareState::Available(vec![
+            package("firefox-esr", "128.4.0esr-1~deb13u1", 70_400_000),
+            package("libc6", "2.41-12", 3_100_000),
+            package("linux-image-asahi", "6.12.9-1", 121_000_000),
+        ])));
+        view
+    });
+}
+
+#[test]
+fn the_network_pane_matches_its_goldens() {
+    check_in_both_schemes_and_scales("network", |scheme| {
+        let mut view = SettingsView::new(Palette::for_scheme(scheme), TextSystem::new());
+        view.apply(Update::Network(unbound_settings::NetworkState {
+            ethernet: Some(unbound_network::Ethernet {
+                interface: "end0".to_owned(),
+                cable: true,
+                managed: true,
+                connected: true,
+                address: Some("192.168.1.20/24".to_owned()),
+                router: Some("192.168.1.1".to_owned()),
+                dns: vec!["1.1.1.1".to_owned(), "9.9.9.9".to_owned()],
+                manual: true,
+            }),
+            vpns: vec![
+                unbound_network::Vpn {
+                    path: "/a".to_owned(),
+                    name: "Home WireGuard".to_owned(),
+                    state: unbound_network::VpnState::Connected,
+                },
+                unbound_network::Vpn {
+                    path: "/b".to_owned(),
+                    name: "Office".to_owned(),
+                    state: unbound_network::VpnState::Off,
+                },
+            ],
+        }));
+        view.select_pane(PaneId::Network);
+        view
+    });
+}
+
+#[test]
+fn the_language_and_region_pane_matches_its_goldens() {
+    check_in_both_schemes_and_scales("language-region", |scheme| {
+        let mut view = general(scheme, PaneId::LanguageRegion);
+        let locale = |code: &str, name: &str| unbound_settings::InstalledLocale {
+            code: code.to_owned(),
+            name: name.to_owned(),
+        };
+        view.apply(Update::Locale(Some(unbound_settings::LocaleState {
+            installed: vec![
+                locale("en_GB.UTF-8", "British English (United Kingdom)"),
+                locale("de_DE.UTF-8", "German (Germany)"),
+                locale("sv_SE.UTF-8", "Swedish (Sweden)"),
+            ],
+            language: "en_GB.UTF-8".to_owned(),
+            region: Some("sv_SE.UTF-8".to_owned()),
+        })));
+        view
+    });
 }

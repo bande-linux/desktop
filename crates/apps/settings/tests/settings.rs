@@ -54,8 +54,9 @@ fn node(view: &mut SettingsView, role: Role, label: &str) -> Node {
 fn changes(view: &mut SettingsView) -> Vec<(SettingId, Value)> {
     view.take_commands()
         .into_iter()
-        .map(|command| match command {
-            Command::Set(id, value) => (id, value),
+        .filter_map(|command| match command {
+            Command::Set(id, value) => Some((id, value)),
+            Command::Storage(_) | Command::Login(_) => None,
             other => panic!("unexpected {other:?}"),
         })
         .collect()
@@ -119,7 +120,7 @@ fn changing_one_idle_time_keeps_dim_before_lock_before_sleep() {
 #[test]
 fn typing_anywhere_searches_and_narrows_the_sidebar_to_ranked_panes() {
     let mut view = view();
-    assert_eq!(view.visible_panes().len(), 5);
+    assert_eq!(view.visible_panes().len(), 6);
 
     type_text(&mut view, "suspend");
 
@@ -131,7 +132,7 @@ fn typing_anywhere_searches_and_narrows_the_sidebar_to_ranked_panes() {
 
     press(&mut view, Key::Escape);
     assert_eq!(view.query(), "");
-    assert_eq!(view.visible_panes().len(), 5);
+    assert_eq!(view.visible_panes().len(), 6);
     assert!(view.highlighted_settings().is_empty());
     assert_eq!(view.selected_pane(), PaneId::LockScreen);
 }
@@ -340,5 +341,5 @@ fn every_pane_opens_by_its_keyword() {
         view.select_pane(pane.id);
         assert_eq!(view.selected_pane(), pane.id);
     }
-    assert_eq!(PaneId::from_keyword("network"), None);
+    assert_eq!(PaneId::from_keyword("printers"), None);
 }

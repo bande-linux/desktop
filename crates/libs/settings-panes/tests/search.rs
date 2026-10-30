@@ -38,3 +38,41 @@ fn a_word_start_outranks_a_match_inside_a_word() {
     let lock = hits[0].best().expect("best");
     assert_eq!(lock.setting, SettingId::LockAfter);
 }
+
+#[test]
+fn every_setting_has_search_keywords_and_general_pages_belong_to_general() {
+    for pane in panes() {
+        assert!(!pane.keywords.is_empty(), "{:?} has no keywords", pane.id);
+        for setting in pane.settings() {
+            assert!(
+                !setting.keywords.is_empty(),
+                "{:?} has no keywords",
+                setting.id
+            );
+        }
+    }
+    let panes = panes();
+    let best = |query: &str| {
+        let hits = search(&panes, query);
+        let hit = hits.first().expect("a hit");
+        (hit.pane, hit.best().map(|setting| setting.setting))
+    };
+    assert_eq!(
+        best("hostname"),
+        (PaneId::About, Some(SettingId::ComputerName))
+    );
+    assert_eq!(
+        best("serial number"),
+        (PaneId::About, Some(SettingId::AboutThisComputer))
+    );
+    assert_eq!(
+        best("empty trash"),
+        (PaneId::Storage, Some(SettingId::StorageUsage))
+    );
+    assert_eq!(
+        best("free up space"),
+        (PaneId::Storage, Some(SettingId::LargeFiles))
+    );
+    assert_eq!(PaneId::About.parent(), Some(PaneId::General));
+    assert_eq!(PaneId::General.parent(), None);
+}

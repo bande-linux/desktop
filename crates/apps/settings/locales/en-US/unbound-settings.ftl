@@ -58,3 +58,121 @@ switch-sources-hint = ⌥⌘Space switches between sources
 input-sources-full = Up to { $count } input sources can be used
 search-layouts = Search layouts
 no-layouts = No keyboard layout matches
+back-to = ‹ { $pane }
+back-tooltip = Go back (Super+[)
+available-of = { $available } available of { $capacity }
+about-model = Model
+about-chip = Chip
+about-memory = Memory
+about-storage = Storage
+about-unbound = Unbound
+about-system = System
+about-serial = Serial number
+calculating = Calculating…
+startup-disk = Startup disk
+storage-apps = Apps
+storage-documents = Documents
+storage-trash = Trash
+storage-system = System
+storage-category = { $category } { $size }
+trash-empty = Empty
+trash-items = { $count ->
+    [one] 1 item
+   *[other] { $count } items
+}
+empty-trash-ellipsis = Empty Trash…
+empty-trash = Empty Trash
+empty-trash-question = Erase { $count ->
+    [one] the item
+   *[other] all { $count } items
+} in the Trash?
+empty-trash-warning = This cannot be undone.
+no-large-files = No large files in your home folder
+show-in-files = Show in Files
+date-and-time = Date and time
+manual-time-placeholder = YYYY-MM-DD HH:MM
+manual-time-hint = Press Return to set the clock
+manual-time-invalid = Type the date and time as year-month-day hours:minutes, such as 2026-10-30 14:05.
+change-ellipsis = Change…
+search-zones = Search cities
+choose-time-zone = Choose a time zone
+zone-hint = Type the name of a city near you
+no-zones = No time zone matches
+no-login-items = No apps open when you log in
+remove-login-item-tooltip = Stop opening this app when you log in
+add-login-item = Add App…
+login-items-hint = These apps open each time you log in
+search-apps = Search apps
+no-apps = No app matches
+duration-minutes = { $minutes } min
+duration-hours-minutes = { $hours } h { $minutes } min
+battery-percent = { $percent }%
+battery-charged = Charged
+battery-charging = Charging
+battery-until-full = Charging, { $time } until full
+battery-remaining = On battery, { $time } left
+battery-on-battery = On battery
+battery-history = Battery level over the last 24 hours
+hours-ago-24 = 24 hours ago
+hours-ago-12 = 12 hours ago
+now = Now
+notifications-off = Off
+banners-temporary = Temporary
+banners-persistent = Persistent
+banners-off = None
+banners-and-center = { $banners } banners, Notification Center
+allow-notifications = Allow notifications
+banner-style = Banner style
+show-in-center = Show in Notification Center
+no-notification-apps = Apps appear here after they send a notification
+banners-only = { $banners } banners
+center-only = Notification Center only
+checking-updates = Checking for updates…
+up-to-date = Your computer is up to date
+check-now = Check Now
+download-size = { $size } to download
+install-now = Install Now
+updates-available = { $count ->
+    [one] 1 update is available
+   *[other] { $count } updates are available
+}
+more-updates = and { $count } more
+installing-updates = Installing updates…
+installing-hint = You can keep working while updates install
+updates-installed = Updates are installed
+restart-to-finish = Restart to finish installing them
+restart-now = Restart Now
+updates-failed = Could not check for updates
+try-again = Try Again
+updates-notification = Software updates are available
+updates-notification-body = { $count ->
+    [one] 1 update is ready to install.
+   *[other] { $count } updates are ready to install.
+}
+show-updates = Show Updates
+manual-address-invalid = Type an address such as 192.168.1.20/24, and the router and DNS servers as addresses such as 192.168.1.1.
+ip-address = IP address
+ip-address-placeholder = 192.168.1.20/24
+router = Router
+router-placeholder = 192.168.1.1
+dns-servers = DNS servers
+dns-placeholder = 1.1.1.1, 9.9.9.9
+no-ethernet = No Ethernet port
+ethernet-unmanaged = Set up by the system, outside NetworkManager
+cable-unplugged = Cable unplugged
+connected-as = Connected as { $address }
+router-is = Router { $address }
+dns-is = DNS { $servers }
+ipv4-automatic = Automatically
+ipv4-manual = Manually
+configure-ipv4 = Configure IPv4
+import-vpn = Import Configuration…
+import-vpn-hint = Add a WireGuard (.conf) or OpenVPN (.ovpn) file
+import-vpn-title = Import a VPN Configuration
+vpn-files = VPN configurations
+no-locales = No languages are installed
+locale-next-login = Changes take effect the next time you log in
+same-as-language = Same as language
+formats-preview = Dates and times look like
+language = Language
+region = Region

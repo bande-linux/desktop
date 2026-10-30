@@ -3920,7 +3920,6 @@ dependencies = [
 name = "unbound-dock-model"
 version = "0.1.0"
 dependencies = [
- "tempfile",
  "tracing",
  "unbound-config",
  "unbound-inbox",
@@ -4271,6 +4270,8 @@ dependencies = [
  "accesskit",
  "image",
  "image-compare",
+ "jiff",
+ "rustix 1.1.6",
  "tempfile",
  "tracing",
  "unbound-app-menu",
@@ -4278,10 +4279,13 @@ dependencies = [
  "unbound-bluetooth",
  "unbound-compositor",
  "unbound-config",
+ "unbound-datetime",
+ "unbound-fs",
  "unbound-keyboard",
  "unbound-l10n",
  "unbound-log",
  "unbound-network",
+ "unbound-notify",
  "unbound-settings-panes",
  "unbound-sound",
  "unbound-test-bus",

@@ -365,6 +365,34 @@ fn every_status_cell_is_a_named_button() {
 }
 
 #[test]
+fn the_battery_percentage_is_drawn_inside_the_battery_cell_only_when_asked() {
+    let mut rail = Rail::new(Scheme::Light, HEIGHT, apps(1.0));
+    let plain = rail.frame(1.0);
+    assert!(!rail.view.battery_percentage());
+    assert!(rail.view.set_battery_percentage(true));
+    let with_percent = rail.frame(1.0);
+    let cell = rail.view.slot_rect(Slot::Battery).expect("battery cell");
+    let width = rail.size().0 as usize;
+    let changed: Vec<Point> = plain
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(with_percent.as_chunks::<4>().0)
+        .enumerate()
+        .filter(|(_, (before, after))| before != after)
+        .map(|(index, _)| Point::new((index % width) as f32, (index / width) as f32))
+        .collect();
+    assert!(!changed.is_empty());
+    assert!(changed.iter().all(|point| {
+        point.x >= cell.x
+            && point.x < cell.x + cell.width
+            && point.y >= cell.y
+            && point.y < cell.y + cell.height
+    }));
+    assert!(!rail.view.set_battery_percentage(true));
+}
+
+#[test]
 fn the_header_names_the_active_app_under_the_mark_and_dims_on_other_displays() {
     let mut rail = Rail::new(Scheme::Light, HEIGHT, apps(1.0));
     rail.frame(1.0);

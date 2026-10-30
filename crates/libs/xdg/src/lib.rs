@@ -1,4 +1,5 @@
 mod apps;
+mod autostart;
 mod dirs;
 mod entry;
 mod icon;
@@ -8,6 +9,7 @@ mod mimeapps;
 mod uri;
 
 pub use apps::Apps;
+pub use autostart::{autostart_dir, opens_at_login, set_open_at_login};
 pub use dirs::{UserDir, user_dir};
 pub use entry::{
     CURRENT_DESKTOP, DesktopAction, DesktopEntry, Locale, applications, current_desktops,

@@ -11,7 +11,7 @@ use unbound_bar::menus::{
     system_menu, wifi_menu,
 };
 use unbound_datetime::DateFormats;
-use unbound_inbox::Inbox;
+use unbound_inbox::{Inbox, Outbox};
 use unbound_keyboard::Layouts;
 use unbound_status::dbusmenu::{APP_MENU_PATH, Node};
 use unbound_status::devices::{Control, SoundControl, run_controls, run_sound};
@@ -148,6 +148,18 @@ impl<V: StatusView> MenuBarClient<V> {
                 );
             }
             Command::AppAction(id) => self.run_app_action(window, &id),
+            Command::ShowBatteryPercentage(shown) => {
+                self.bar.set_battery_percentage(shown);
+                thread::spawn(move || {
+                    let written = Connection::session().and_then(|session| {
+                        config(&session)?.set_property("ShowBatteryPercentage", shown)?;
+                        Ok(())
+                    });
+                    if let Err(error) = written {
+                        tracing::warn!("cannot save the battery percentage setting: {error}");
+                    }
+                });
+            }
             Command::SelectInputSource(index) => {
                 report("switch the input source", window.select_input_source(index));
             }
@@ -288,7 +300,10 @@ impl<V: StatusView> MenuBarClient<V> {
         let status = self.bar.status().clone();
         let local = match slot {
             Slot::System => Some(system_menu(&self.user)),
-            Slot::Battery => status.battery.as_ref().map(battery_menu),
+            Slot::Battery => status
+                .battery
+                .as_ref()
+                .map(|battery| battery_menu(battery, self.bar.battery_percentage())),
             Slot::Wifi => {
                 self.control(Control::Scan);
                 status.wifi.as_ref().map(wifi_menu)
@@ -561,6 +576,13 @@ impl<V: StatusView> App for MenuBarClient<V> {
                 Update::Unread(unread) => {
                     self.bar.set_unread(unread);
                 }
+                Update::BatteryPercentage(shown) => {
+                    self.bar.set_battery_percentage(shown);
+                }
+                Update::ClockFormat(format) => {
+                    self.dates = DateFormats::from_env().with_clock_format(&format);
+                    self.bar.set_time(&jiff::Zoned::now(), &self.dates);
+                }
                 Update::AppMenuChanged => {
                     if !self.app_id.is_empty() {
                         let _ = self.errands.send(Errand::AppMenu(self.app_id.clone()));
@@ -667,6 +689,12 @@ impl<V: StatusView> MenuBarClient<V> {
                     tracing::info!("cannot follow unread notifications: {error}");
                 }
             });
+            let (config, outbox) = (session.clone(), inbox.outbox());
+            thread::spawn(move || {
+                if let Err(error) = follow_config(&config, &outbox) {
+                    tracing::warn!("the bar does not follow its settings: {error}");
+                }
+            });
             let (session, outbox) = (session.clone(), inbox.outbox());
             thread::spawn(move || run_errands(&session, &errand_queue, &outbox));
         }
@@ -691,6 +719,43 @@ impl<V: StatusView> MenuBarClient<V> {
             next_clock: Instant::now() + CLOCK_TICK,
         })
     }
+}
+
+fn config(session: &Connection) -> zbus::Result<zbus::blocking::Proxy<'static>> {
+    zbus::blocking::Proxy::new(
+        session,
+        "org.unbound.Config",
+        "/org/unbound/Config",
+        "org.unbound.Config",
+    )
+}
+
+fn follow_config(session: &Connection, outbox: &Outbox<Update>) -> zbus::Result<()> {
+    let config = config(session)?;
+    let percentage = config.receive_property_changed::<bool>("ShowBatteryPercentage");
+    let changes = config.receive_property_changed::<String>("ClockFormat");
+    outbox.send(Update::BatteryPercentage(
+        config.get_property("ShowBatteryPercentage")?,
+    ));
+    outbox.send(Update::ClockFormat(config.get_property("ClockFormat")?));
+    let percentages = outbox.clone();
+    thread::spawn(move || {
+        for change in percentage {
+            if let Ok(shown) = change.get()
+                && !percentages.send(Update::BatteryPercentage(shown))
+            {
+                break;
+            }
+        }
+    });
+    for change in changes {
+        if let Ok(format) = change.get()
+            && !outbox.send(Update::ClockFormat(format))
+        {
+            break;
+        }
+    }
+    Ok(())
 }
 
 fn user_name() -> String {

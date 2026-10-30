@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use std::path::Path;
 
+use unbound_power::adapter;
 use unbound_power::backlight::{Backlight, SYSFS_BACKLIGHT};
 use unbound_power::battery::{self, BatteryNotifier};
 use unbound_power::controller::{self, IdleController};
@@ -26,6 +27,9 @@ fn serve() -> Result<Services, Box<dyn Error>> {
     let session = Connection::session()?;
     let guard = SleepGuard::start(&system, LOCK_WAIT)?;
     battery::watch(&system, Arc::new(BatteryNotifier::new(&session)))?;
+    if let Err(error) = adapter::follow(&system, &session) {
+        tracing::warn!("cannot follow the power adapter: {error}");
+    }
     battery::chime_when_plugged_in(&system, &session)?;
     let logind = system.clone();
     let inhibitions = InhibitionService::start(&session, move |application, reason| {

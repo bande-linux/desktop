@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use unbound_config::{ArrangedDisplay, DisplaySettings, Placement, Rotation};
-
+use unbound_datetime::DateFormats;
 use zbus::blocking::Connection;
 use zbus::proxy::CacheProperties;
 use zbus::zvariant::OwnedValue;
@@ -18,6 +18,18 @@ pub trait Config {
     fn appearance(&self) -> zbus::Result<String>;
     #[zbus(property)]
     fn set_appearance(&self, value: &str) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn clock_format(&self) -> zbus::Result<String>;
+    #[zbus(property)]
+    fn set_clock_format(&self, value: &str) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn low_power_on_battery(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_low_power_on_battery(&self, on: bool) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn lid_on_power(&self) -> zbus::Result<String>;
+    #[zbus(property)]
+    fn set_lid_on_power(&self, value: &str) -> zbus::Result<()>;
     #[zbus(property)]
     fn reduce_motion(&self) -> zbus::Result<bool>;
     #[zbus(property)]
@@ -169,8 +181,11 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 25] = [
+pub const CONFIG_SETTINGS: [SettingId; 28] = [
     SettingId::Appearance,
+    SettingId::Clock24Hour,
+    SettingId::LowPowerOnBattery,
+    SettingId::LidOnPower,
     SettingId::ReduceMotion,
     SettingId::Wallpaper,
     SettingId::WallpaperFit,
@@ -295,6 +310,13 @@ impl SettingsClient {
             SettingId::DoNotDisturb => Value::Flag(self.notifications.do_not_disturb()?),
             SettingId::Appearance => Value::Keyword(self.config.appearance()?),
             SettingId::ReduceMotion => Value::Flag(self.config.reduce_motion()?),
+            SettingId::LowPowerOnBattery => Value::Flag(self.config.low_power_on_battery()?),
+            SettingId::LidOnPower => Value::Keyword(self.config.lid_on_power()?),
+            SettingId::Clock24Hour => Value::Flag(match self.config.clock_format()?.as_str() {
+                "24-hour" => true,
+                "12-hour" => false,
+                _ => DateFormats::from_env().uses_24_hour_clock(),
+            }),
             SettingId::Wallpaper => Value::Pictures {
                 light: self.config.wallpaper_light()?,
                 dark: self.config.wallpaper_dark()?,
@@ -351,6 +373,19 @@ impl SettingsClient {
         match (id, value) {
             (SettingId::Appearance, Value::Keyword(keyword)) => self.config.set_appearance(keyword),
             (SettingId::DockEdge, Value::Keyword(keyword)) => self.config.set_dock_edge(keyword),
+            (SettingId::Clock24Hour, Value::Flag(twenty_four_hour)) => {
+                self.config.set_clock_format(if *twenty_four_hour {
+                    "24-hour"
+                } else {
+                    "12-hour"
+                })
+            }
+            (SettingId::LowPowerOnBattery, Value::Flag(on)) => {
+                self.config.set_low_power_on_battery(*on)
+            }
+            (SettingId::LidOnPower, Value::Keyword(keyword)) => {
+                self.config.set_lid_on_power(keyword)
+            }
             (SettingId::ReduceMotion, Value::Flag(reduce)) => {
                 self.config.set_reduce_motion(*reduce)
             }

@@ -41,6 +41,7 @@ const TRAY_SHOWN: usize = 3;
 const TIME_SIZE: f32 = 15.0;
 const DAY_SIZE: f32 = 11.0;
 const BADGE_SIZE: f32 = 10.0;
+const PERCENT_SIZE: f32 = 8.0;
 const UNREAD_DOT: f32 = 7.0;
 const HOVER_ALPHA: u8 = 18;
 const OPEN_ALPHA: u8 = 30;
@@ -79,6 +80,7 @@ pub struct RailView {
     status: Status,
     clock: Clock,
     unread: bool,
+    battery_percentage: bool,
     workspaces: (usize, usize),
     open: Option<Slot>,
     hovered: Option<Slot>,
@@ -171,6 +173,7 @@ impl RailView {
                 day: String::new(),
             },
             unread: false,
+            battery_percentage: false,
             workspaces: (1, 0),
             open: None,
             hovered: None,
@@ -407,8 +410,42 @@ impl RailView {
                         .find(|(known, _)| *known == slot)
                         .and_then(|(_, name)| name.clone())
                         .or_else(|| placeholder.take());
+                    let percent = self
+                        .status
+                        .battery
+                        .filter(|_| slot == Slot::Battery && self.battery_percentage)
+                        .map(|battery| {
+                            let text = L10N.tr_args(
+                                "battery-percent",
+                                [("percent", battery.percent.round().into())],
+                            );
+                            self.paragraph(
+                                &text,
+                                TextStyle::new(PERCENT_SIZE, ink)
+                                    .weight(TextStyle::SEMIBOLD)
+                                    .tabular(),
+                            )
+                        });
+                    let glyph_rect = match &percent {
+                        Some(label) => Rect::new(
+                            rect.x,
+                            rect.y + (rect.height - GLYPH - label.height()) / 2.0,
+                            rect.width,
+                            GLYPH,
+                        ),
+                        None => rect,
+                    };
                     if let Some(image) = name.and_then(|name| self.glyph(&name, ink, scale)) {
-                        Self::place_image(rect, image, GLYPH, scale, &mut items);
+                        Self::place_image(glyph_rect, image, GLYPH, scale, &mut items);
+                    }
+                    if let Some(label) = percent {
+                        items.push(Item::Text {
+                            origin: Point::new(
+                                snap(rect.x + (rect.width - label.width()) / 2.0, scale),
+                                snap(glyph_rect.y + GLYPH, scale),
+                            ),
+                            paragraph: label,
+                        });
                     }
                 }
                 Slot::Tray(index) => {
@@ -738,6 +775,16 @@ impl StatusView for RailView {
         let changed = self.unread != unread;
         self.unread = unread;
         changed
+    }
+
+    fn set_battery_percentage(&mut self, shown: bool) -> bool {
+        let changed = self.battery_percentage != shown;
+        self.battery_percentage = shown;
+        changed
+    }
+
+    fn battery_percentage(&self) -> bool {
+        self.battery_percentage
     }
 
     fn set_workspaces(&mut self, count: usize, active: usize) -> bool {

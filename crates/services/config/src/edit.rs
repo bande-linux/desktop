@@ -4,14 +4,19 @@ use std::time::Duration;
 use kdl::{KdlDocument, KdlEntry, KdlEntryFormat, KdlNode, KdlValue};
 
 use crate::{
-    AlertSound, Appearance, CapsLock, Config, ConfigError, DEFAULT_DOCK_ICON_SIZE, DisplaySettings,
-    DockEdge, InputSource, LEGACY_DISPLAY, Mouse, Placement, SecondaryClick, Sound, Suspend,
-    Trackpad, WallpaperFit, WallpaperVariant, same_displays, section_name,
+    AlertSound, Appearance, CapsLock, ClockFormat, Config, ConfigError, DEFAULT_DOCK_ICON_SIZE,
+    DisplaySettings, DockEdge, InputSource, LEGACY_DISPLAY, LidOnPower, Mouse, Placement,
+    SecondaryClick, Sound, Suspend, Trackpad, WallpaperFit, WallpaperVariant, same_displays,
+    section_name,
 };
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Setting {
     Appearance(Appearance),
+    Clock(ClockFormat),
+    ShowBatteryPercentage(bool),
+    LowPowerOnBattery(bool),
+    LidOnPower(LidOnPower),
     ReduceMotion(bool),
     DockEdge(DockEdge),
     DockApps(Vec<String>),
@@ -52,6 +57,30 @@ impl Setting {
                 None,
                 "appearance",
                 Some(appearance.keyword().into()),
+            ),
+            Self::Clock(format) => set(
+                &mut document,
+                None,
+                "clock",
+                (*format != ClockFormat::Automatic).then(|| format.keyword().into()),
+            ),
+            Self::ShowBatteryPercentage(on) => set(
+                &mut document,
+                Some("power"),
+                "show-battery-percentage",
+                on.then_some(KdlValue::Bool(true)),
+            ),
+            Self::LowPowerOnBattery(on) => set(
+                &mut document,
+                Some("power"),
+                "low-power-on-battery",
+                on.then_some(KdlValue::Bool(true)),
+            ),
+            Self::LidOnPower(action) => set(
+                &mut document,
+                Some("power"),
+                "lid-on-power",
+                (*action != LidOnPower::Sleep).then(|| action.keyword().into()),
             ),
             Self::ReduceMotion(reduce) => set(
                 &mut document,

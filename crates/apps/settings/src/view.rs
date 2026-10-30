@@ -1,27 +1,39 @@
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, HashMap};
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use accesskit::{Action, ActionData, ActionRequest, TreeId, TreeUpdate};
 use std::time::{Duration, Instant};
 use unbound_audio::{Direction, Snapshot, meter_level};
 use unbound_config::{DisplaySettings, MAX_INPUT_SOURCES, Placement, Rotation};
-use unbound_toolkit::ui::{Context, Event, Key, Modifiers, SearchField, Ui, Widget, WidgetId};
+use unbound_toolkit::ui::{
+    Context, Event, Key, Modifiers, PointerButton, SearchField, Ui, Widget, WidgetId,
+};
 use unbound_toolkit::{Image, Palette, Rect, Scene, TextSystem};
 
 use crate::L10N;
+use crate::about::{About, AboutCommand};
+use crate::battery::{BatteryCommand, BatteryState};
 use crate::follow::{Command, Update};
 use crate::idle::Idle;
+use crate::locale::{LocaleCommand, LocaleState};
+use crate::login::{LoginCommand, LoginItems, login_matches};
+use crate::notifications::{AppNotifications, NotificationCommand};
 use crate::pictures::{Pair, PictureCommand};
 use crate::pointing::PointingDevices;
 use crate::services::{AudioCommand, BluetoothCommand, NetworkCommand};
-use crate::state::{Answer, BluetoothState, Display, Joined, Question, WifiState};
+use crate::software::{SoftwareCommand, SoftwareState};
+use crate::state::{Answer, BluetoothState, Display, Joined, NetworkState, Question, WifiState};
+use crate::storage::{Storage, StorageCommand};
+use crate::time::{TimeCommand, TimeState, parse_manual, zone_matches};
 use crate::widgets::{Column, Root};
 use unbound_keyboard::Layouts;
 use unbound_settings_panes::{AUTOMATIC, Pane, PaneId, SettingId, Value, panes};
 use unbound_settings_panes::{PaneHit, search};
 
 const PAGE_STEP: f32 = 240.0;
+const PICK_RESULTS: usize = 8;
 const SECOND: Duration = Duration::from_secs(1);
 pub(crate) const USE_MAIN: &str = "main";
 pub(crate) const USE_EXTENDED: &str = "extended";
@@ -51,6 +63,37 @@ pub(crate) enum Intent {
     AddSource(String),
     RemoveSource(usize),
     MoveSource(usize, bool),
+    Back,
+    Draft(SettingId, String),
+    AskEmptyTrash(bool),
+    EmptyTrash,
+    Reveal(PathBuf),
+    Pick(Option<Picker>),
+    PickQuery(String),
+    Picked(String),
+    RemoveLoginItem(String),
+    ExpandApp(Option<String>),
+    SetAppRule(AppNotifications),
+    Software(SoftwareCommand),
+    Network(NetworkCommand),
+    ManualIpv4(bool),
+    ImportVpn,
+    Locale(LocaleCommand),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Picker {
+    Zone,
+    LoginApp,
+}
+
+impl Picker {
+    fn setting(self) -> SettingId {
+        match self {
+            Self::Zone => SettingId::TimeZone,
+            Self::LoginApp => SettingId::LoginItems,
+        }
+    }
 }
 
 pub(crate) type Intents = Rc<RefCell<Vec<Intent>>>;
@@ -62,6 +105,8 @@ pub(crate) enum Anchor {
     Item(String),
     Password,
     SourceSearch,
+    Picker,
+    Back,
 }
 
 pub(crate) fn intent<T>(
@@ -123,6 +168,20 @@ pub struct SettingsView {
     pub(crate) layouts: Option<Layouts>,
     pub(crate) adding_source: Option<String>,
     pub(crate) pointing: PointingDevices,
+    pub(crate) about: Option<About>,
+    pub(crate) storage: Option<Storage>,
+    pub(crate) drafts: HashMap<SettingId, String>,
+    pub(crate) confirming_empty_trash: bool,
+    pub(crate) time: Option<TimeState>,
+    pub(crate) picking: Option<(Picker, String)>,
+    pub(crate) login: Option<LoginItems>,
+    pub(crate) battery: Option<BatteryState>,
+    pub(crate) notification_apps: Option<Vec<AppNotifications>>,
+    pub(crate) expanded_app: Option<String>,
+    pub(crate) software: SoftwareState,
+    pub(crate) network: Option<NetworkState>,
+    pub(crate) manual_ipv4: bool,
+    pub(crate) locale: Option<LocaleState>,
     ui: Ui,
     root: WidgetId,
     search: WidgetId,
@@ -171,6 +230,20 @@ impl SettingsView {
             layouts: None,
             adding_source: None,
             pointing: PointingDevices::default(),
+            about: None,
+            storage: None,
+            drafts: HashMap::new(),
+            confirming_empty_trash: false,
+            time: None,
+            picking: None,
+            login: None,
+            battery: None,
+            notification_apps: None,
+            expanded_app: None,
+            software: SoftwareState::Unknown,
+            network: None,
+            manual_ipv4: false,
+            locale: None,
             ui: Ui::new(Box::new(root), cx),
             root: root_id,
             search,
@@ -295,6 +368,57 @@ impl SettingsView {
                 let image = Image::from_rgba(picture.width, picture.height, picture.rgba);
                 self.thumbnails.insert(pair, image);
             }
+            Update::About(about) => {
+                if !self.drafts.contains_key(&SettingId::ComputerName) {
+                    self.values
+                        .insert(SettingId::ComputerName, Value::Text(about.name.clone()));
+                }
+                self.about = Some(about);
+            }
+            Update::Time(time) => {
+                if let Some(time) = &time {
+                    self.values
+                        .insert(SettingId::AutomaticTime, Value::Flag(time.automatic));
+                }
+                self.time = time;
+            }
+            Update::Login(login) => self.login = Some(login),
+            Update::NotificationApps(apps) => self.notification_apps = Some(apps),
+            Update::Software(state) => self.software = state,
+            Update::Locale(locale) => self.locale = locale,
+            Update::Network(network) => {
+                if let Some(ethernet) = network.ethernet.as_ref() {
+                    self.manual_ipv4 |= ethernet.manual;
+                    for (id, value) in [
+                        (SettingId::EthernetAddress, ethernet.address.clone()),
+                        (SettingId::EthernetRouter, ethernet.router.clone()),
+                        (SettingId::EthernetDns, Some(ethernet.dns.join(", "))),
+                    ] {
+                        self.values
+                            .entry(id)
+                            .or_insert(Value::Text(value.unwrap_or_default()));
+                    }
+                }
+                self.network = Some(network);
+            }
+            Update::Battery(battery) => {
+                match battery.as_ref().and_then(|battery| battery.profile.clone()) {
+                    Some(profile) => {
+                        self.values
+                            .insert(SettingId::PowerMode, Value::Keyword(profile));
+                    }
+                    None => {
+                        self.values.remove(&SettingId::PowerMode);
+                    }
+                }
+                self.battery = battery;
+            }
+            Update::Storage(storage) => {
+                if storage.trash_items == 0 {
+                    self.confirming_empty_trash = false;
+                }
+                self.storage = Some(storage);
+            }
             Update::Failed(error) => {
                 self.busy.clear();
                 self.message = Some(L10N.tr_args("not-changed", [("error", error.into())]));
@@ -367,14 +491,23 @@ impl SettingsView {
         match pane {
             PaneId::Wifi => self.wifi.is_some(),
             PaneId::Bluetooth => self.bluetooth.is_some(),
+            PaneId::Network => self.network.is_some(),
             PaneId::Notifications => self.values.contains_key(&SettingId::DoNotDisturb),
             PaneId::Sound => self.audio.is_some(),
             PaneId::Displays => !self.displays.is_empty(),
+            PaneId::About => self.about.is_some(),
+            PaneId::Battery => self.battery.is_some(),
             PaneId::Appearance
             | PaneId::Wallpaper
             | PaneId::Dock
             | PaneId::LockScreen
-            | PaneId::Keyboard => true,
+            | PaneId::Keyboard
+            | PaneId::General
+            | PaneId::Storage
+            | PaneId::DateTime
+            | PaneId::LoginItems
+            | PaneId::SoftwareUpdate => true,
+            PaneId::LanguageRegion => self.locale.is_some(),
             PaneId::TrackpadMouse => self.pointing.trackpad || self.pointing.mouse,
         }
     }
@@ -384,7 +517,7 @@ impl SettingsView {
             self.panes
                 .iter()
                 .map(|pane| pane.id)
-                .filter(|pane| self.available(*pane))
+                .filter(|pane| pane.parent().is_none() && self.available(*pane))
                 .collect()
         } else {
             self.hits.iter().map(|hit| hit.pane).collect()
@@ -413,15 +546,38 @@ impl SettingsView {
         })
     }
 
-    fn source_search_focused(&self) -> bool {
+    fn anchor_focused(&self, wanted: &Anchor) -> bool {
         let focus = self.ui.focus();
         self.anchors
             .iter()
-            .any(|(anchor, id)| *anchor == Anchor::SourceSearch && Some(*id) == focus)
+            .any(|(anchor, id)| anchor == wanted && Some(*id) == focus)
+    }
+
+    pub(crate) fn pick_results(&self) -> Vec<String> {
+        match (&self.picking, &self.time) {
+            (Some((Picker::Zone, query)), Some(time)) => {
+                zone_matches(&time.zones, query, PICK_RESULTS)
+            }
+            (Some((Picker::LoginApp, query)), _) => self
+                .login
+                .as_ref()
+                .map(|login| login_matches(login, query, PICK_RESULTS))
+                .unwrap_or_default(),
+            _ => Vec::new(),
+        }
     }
 
     pub fn search_focused(&self) -> bool {
         self.ui.focus() == Some(self.search)
+    }
+
+    fn shown_in(&self, visible: &[PaneId]) -> bool {
+        visible.contains(&self.pane)
+            || (self.available(self.pane)
+                && self
+                    .pane
+                    .parent()
+                    .is_some_and(|parent| visible.contains(&parent)))
     }
 
     pub(crate) fn hit(&self, pane: PaneId) -> Option<&PaneHit> {
@@ -433,7 +589,7 @@ impl SettingsView {
             self.hits = self.search_hits(&self.query.clone());
         }
         let visible = self.visible_panes();
-        if !visible.contains(&self.pane)
+        if !self.shown_in(&visible)
             && let Some(&first) = visible.first()
         {
             self.select_pane(first);
@@ -454,12 +610,71 @@ impl SettingsView {
             Event::PointerUp(_) => self.pressed = false,
             _ => {}
         }
+        let editing = self
+            .focused_setting()
+            .filter(|setting| self.drafts.contains_key(setting));
         let handled = match event {
+            Event::Key {
+                key: Key::Enter, ..
+            } if editing.is_some() => {
+                self.commit_drafts();
+                true
+            }
+            Event::Key {
+                key: Key::Escape,
+                modifiers,
+            } if plain(modifiers) && editing.is_some() => {
+                self.drafts.clear();
+                self.invalidate();
+                true
+            }
+            Event::Key {
+                key: Key::Character('['),
+                modifiers,
+            } if modifiers.logo && self.pane.parent().is_some() => {
+                self.intents.borrow_mut().push(Intent::Back);
+                true
+            }
+            Event::Key {
+                key: Key::Left,
+                modifiers,
+            } if modifiers.alt && self.pane.parent().is_some() => {
+                self.intents.borrow_mut().push(Intent::Back);
+                true
+            }
+            Event::PointerDown(pointer)
+                if pointer.button == PointerButton::Back && self.pane.parent().is_some() =>
+            {
+                self.intents.borrow_mut().push(Intent::Back);
+                true
+            }
+            Event::Key {
+                key: Key::Escape,
+                modifiers,
+            } if plain(modifiers) && self.confirming_empty_trash => {
+                self.intents.borrow_mut().push(Intent::AskEmptyTrash(false));
+                true
+            }
             Event::Key {
                 key: Key::Escape,
                 modifiers,
             } if plain(modifiers) && self.join.asking.is_some() => {
                 self.intents.borrow_mut().push(Intent::CancelJoin);
+                true
+            }
+            Event::Key {
+                key: Key::Escape,
+                modifiers,
+            } if plain(modifiers) && self.picking.is_some() => {
+                self.intents.borrow_mut().push(Intent::Pick(None));
+                true
+            }
+            Event::Key {
+                key: Key::Enter, ..
+            } if self.anchor_focused(&Anchor::Picker) => {
+                if let Some(first) = self.pick_results().into_iter().next() {
+                    self.intents.borrow_mut().push(Intent::Picked(first));
+                }
                 true
             }
             Event::Key {
@@ -500,7 +715,7 @@ impl SettingsView {
             }
             Event::Key {
                 key: Key::Enter, ..
-            } if self.source_search_focused() => {
+            } if self.anchor_focused(&Anchor::SourceSearch) => {
                 let query = self.adding_source.clone().unwrap_or_default();
                 let added = self.input_sources();
                 if let Some((code, _)) = self.source_matches(&query, &added).into_iter().next() {
@@ -535,6 +750,10 @@ impl SettingsView {
 
     fn settle(&mut self) {
         self.process_intents();
+        let focused = self.focused_setting();
+        if self.drafts.keys().any(|setting| Some(*setting) != focused) {
+            self.commit_drafts();
+        }
         if self.stale && !self.pressed {
             self.rebuild();
         }
@@ -569,9 +788,100 @@ impl SettingsView {
     fn process_intents(&mut self) {
         let intents = std::mem::take(&mut *self.intents.borrow_mut());
         for intent in intents {
+            if let Intent::Draft(id, text) = intent {
+                self.drafts.insert(id, text);
+                continue;
+            }
             self.stale = true;
             match intent {
-                Intent::SelectPane(pane) => self.select_pane(pane),
+                Intent::Draft(..) => {}
+                Intent::Back => {
+                    if let Some(parent) = self.pane.parent() {
+                        self.focus_next = Some(Anchor::Item(self.pane.keyword().to_owned()));
+                        self.select_pane(parent);
+                    }
+                }
+                Intent::AskEmptyTrash(asking) => {
+                    self.confirming_empty_trash = asking;
+                    self.focus_next = Some(Anchor::Item(
+                        if asking { "empty-trash" } else { "trash" }.to_owned(),
+                    ));
+                }
+                Intent::EmptyTrash => {
+                    self.confirming_empty_trash = false;
+                    self.commands
+                        .push(Command::Storage(StorageCommand::EmptyTrash));
+                }
+                Intent::Reveal(path) => self.commands.push(Command::Reveal(path)),
+                Intent::ExpandApp(group) => {
+                    self.focus_next = group
+                        .clone()
+                        .or_else(|| self.expanded_app.clone())
+                        .map(|group| Anchor::Item(format!("app:{group}")));
+                    self.expanded_app = group;
+                }
+                Intent::Software(command) => self.commands.push(Command::Software(command)),
+                Intent::Network(command) => self.commands.push(Command::Network(command)),
+                Intent::ImportVpn => self.commands.push(Command::ImportVpn),
+                Intent::Locale(command) => {
+                    if let Some(locale) = &mut self.locale {
+                        match &command {
+                            LocaleCommand::Language(language) => {
+                                language.clone_into(&mut locale.language)
+                            }
+                            LocaleCommand::Region(region) => locale.region.clone_from(region),
+                        }
+                    }
+                    self.commands.push(Command::Locale(command));
+                }
+                Intent::ManualIpv4(manual) => {
+                    self.manual_ipv4 = manual;
+                    if !manual {
+                        self.commands
+                            .push(Command::Network(NetworkCommand::ConfigureEthernet(None)));
+                    }
+                }
+                Intent::SetAppRule(app) => {
+                    if let Some(apps) = &mut self.notification_apps
+                        && let Some(known) = apps.iter_mut().find(|known| known.group == app.group)
+                    {
+                        known.clone_from(&app);
+                    }
+                    self.commands
+                        .push(Command::Notifications(NotificationCommand::Set(app)));
+                }
+                Intent::RemoveLoginItem(id) => {
+                    self.focus_next = Some(Anchor::Setting(SettingId::LoginItems, None));
+                    self.commands.push(Command::Login(LoginCommand::Remove(id)));
+                }
+                Intent::Pick(picker) => {
+                    self.focus_next = Some(match (picker, &self.picking) {
+                        (Some(_), _) => Anchor::Picker,
+                        (None, Some((open, _))) => Anchor::Setting(open.setting(), None),
+                        (None, None) => continue,
+                    });
+                    self.picking = picker.map(|picker| (picker, String::new()));
+                }
+                Intent::PickQuery(query) => {
+                    if let Some((_, picking)) = &mut self.picking {
+                        *picking = query;
+                        self.focus_next = Some(Anchor::Picker);
+                    }
+                }
+                Intent::Picked(key) => {
+                    let Some((picker, _)) = self.picking.take() else {
+                        continue;
+                    };
+                    self.focus_next = Some(Anchor::Setting(picker.setting(), None));
+                    self.message = None;
+                    self.picked(picker, key);
+                }
+                Intent::SelectPane(pane) => {
+                    if pane.parent() == Some(self.pane) {
+                        self.focus_next = Some(Anchor::Back);
+                    }
+                    self.select_pane(pane);
+                }
                 Intent::StepPane(step) => self.step_pane(step),
                 Intent::Query(query) => self.set_query(query),
                 Intent::Set(id, value) => self.change(id, value),
@@ -657,6 +967,18 @@ impl SettingsView {
         }
     }
 
+    fn picked(&mut self, picker: Picker, key: String) {
+        match picker {
+            Picker::Zone => {
+                if let Some(time) = &mut self.time {
+                    time.zone = key.clone();
+                }
+                self.commands.push(Command::Time(TimeCommand::Zone(key)));
+            }
+            Picker::LoginApp => self.commands.push(Command::Login(LoginCommand::Add(key))),
+        }
+    }
+
     fn device_command(
         &mut self,
         address: String,
@@ -723,6 +1045,16 @@ impl SettingsView {
             PaneId::Bluetooth => self
                 .commands
                 .push(Command::Bluetooth(BluetoothCommand::Discover(true))),
+            PaneId::Storage => self
+                .commands
+                .push(Command::Storage(StorageCommand::Measure)),
+            PaneId::LoginItems => self.commands.push(Command::Login(LoginCommand::Refresh)),
+            PaneId::Notifications => self
+                .commands
+                .push(Command::Notifications(NotificationCommand::Refresh)),
+            PaneId::SoftwareUpdate if self.software == SoftwareState::Unknown => self
+                .commands
+                .push(Command::Software(SoftwareCommand::Check)),
             PaneId::Sound => self
                 .commands
                 .push(Command::Audio(AudioCommand::Listen(true))),
@@ -730,13 +1062,19 @@ impl SettingsView {
         }
         self.pane = pane;
         self.adding_source = None;
+        self.confirming_empty_trash = false;
+        self.picking = None;
+        self.expanded_app = None;
         self.scroll.set(0.0);
-        self.stale = true;
+        self.invalidate();
     }
 
     fn step_pane(&mut self, step: isize) {
         let visible = self.visible_panes();
-        let Some(at) = visible.iter().position(|pane| *pane == self.pane) else {
+        let Some(at) = visible
+            .iter()
+            .position(|pane| *pane == self.pane || Some(*pane) == self.pane.parent())
+        else {
             return;
         };
         if let Some(&pane) = at
@@ -765,7 +1103,7 @@ impl SettingsView {
         self.query = query;
         let visible = self.visible_panes();
         if let Some(&first) = visible.first()
-            && (!visible.contains(&self.pane) || !self.hits.is_empty())
+            && (!self.shown_in(&visible) || !self.hits.is_empty())
         {
             self.select_pane(first);
         }
@@ -801,11 +1139,71 @@ impl SettingsView {
             (SettingId::BluetoothPower, Value::Flag(on)) => {
                 Command::Bluetooth(BluetoothCommand::Power(on))
             }
+            (SettingId::PowerMode, Value::Keyword(profile)) => {
+                Command::Battery(BatteryCommand::Profile(profile))
+            }
+            (SettingId::AutomaticTime, Value::Flag(on)) => {
+                Command::Time(TimeCommand::Automatic(on))
+            }
+            (SettingId::ComputerName, Value::Text(name)) => {
+                Command::About(AboutCommand::Rename(name))
+            }
             (id, value) => Command::Set(id, value),
         }
     }
 
+    fn commit_drafts(&mut self) {
+        for (id, text) in std::mem::take(&mut self.drafts) {
+            let text = text.trim().to_owned();
+            if !text.is_empty() {
+                self.change(id, Value::Text(text));
+            }
+        }
+        self.invalidate();
+    }
+
     fn change(&mut self, id: SettingId, value: Value) {
+        if matches!(
+            id,
+            SettingId::EthernetAddress | SettingId::EthernetRouter | SettingId::EthernetDns
+        ) {
+            self.values.insert(id, value);
+            let text = |id| match self.values.get(&id) {
+                Some(Value::Text(text)) => text.clone(),
+                _ => String::new(),
+            };
+            let manual = unbound_network::parse_manual(
+                &text(SettingId::EthernetAddress),
+                &text(SettingId::EthernetRouter),
+                &text(SettingId::EthernetDns),
+            );
+            self.message = match manual {
+                Some(manual) => {
+                    self.commands
+                        .push(Command::Network(NetworkCommand::ConfigureEthernet(Some(
+                            manual,
+                        ))));
+                    None
+                }
+                None => Some(L10N.tr("manual-address-invalid")),
+            };
+            return;
+        }
+        if let (SettingId::DateAndTime, Value::Text(text)) = (id, &value) {
+            let zone = self
+                .time
+                .as_ref()
+                .map(|time| time.zone.clone())
+                .unwrap_or_default();
+            self.message = match parse_manual(text, &zone) {
+                Some(at) => {
+                    self.commands.push(Command::Time(TimeCommand::Set(at)));
+                    None
+                }
+                None => Some(L10N.tr("manual-time-invalid")),
+            };
+            return;
+        }
         if self.values.get(&id) == Some(&value) {
             return;
         }
@@ -1020,7 +1418,12 @@ impl SettingsView {
             children[Root::PANES] = sidebar;
             children[Root::CONTENT] = content;
         }
-        let typing_source = focused == Some(Anchor::SourceSearch);
+        let typed = match &focused {
+            Some(Anchor::SourceSearch) => Some(self.adding_source.clone().unwrap_or_default()),
+            Some(Anchor::Picker) => self.picking.as_ref().map(|(_, query)| query.clone()),
+            Some(Anchor::Setting(setting, _)) => self.drafts.get(setting).cloned(),
+            _ => None,
+        };
         let target = focused.and_then(|anchor| {
             self.anchors
                 .iter()
@@ -1032,16 +1435,18 @@ impl SettingsView {
         });
         if let Some(target) = target {
             self.ui.perform(&request(Action::Focus, target, None));
-            if typing_source {
-                let query = self.adding_source.clone().unwrap_or_default();
+            if let Some(text) = typed {
                 self.ui.perform(&request(
                     Action::SetValue,
                     target,
-                    Some(ActionData::Value(query.into())),
+                    Some(ActionData::Value(text.into())),
                 ));
-                self.intents
-                    .borrow_mut()
-                    .retain(|intent| !matches!(intent, Intent::SourceQuery(_)));
+                self.intents.borrow_mut().retain(|intent| {
+                    !matches!(
+                        intent,
+                        Intent::SourceQuery(_) | Intent::PickQuery(_) | Intent::Draft(..)
+                    )
+                });
             }
         }
         self.stale = false;

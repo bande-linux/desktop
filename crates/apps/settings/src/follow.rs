@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::io::{self, Read, Write};
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::net::UnixStream;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
@@ -10,12 +11,22 @@ use unbound_config::{BUS_NAME, DisplaySettings, OBJECT_PATH, Placement};
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
+use crate::L10N;
+use crate::about::{About, AboutCommand, follow_about};
+use crate::battery::{BatteryCommand, BatteryState, follow_battery};
 use crate::client::{CONFIG_SETTINGS, SettingsClient};
-use crate::pictures::{Pair, PictureCommand, follow_pictures};
+use crate::locale::{LocaleCommand, LocaleState, follow_locale};
+use crate::login::{LoginCommand, LoginItems, follow_login_items};
+use crate::notifications::{AppNotifications, NotificationCommand, follow_app_notifications};
+use crate::pictures::{Pair, PictureCommand, choose_file, follow_pictures};
 use crate::services::{
     AudioCommand, BluetoothCommand, NetworkCommand, follow_audio, follow_bluetooth, follow_network,
 };
-use crate::state::{Answer, BluetoothState, Joined, Question, WifiState};
+use crate::software::{SoftwareCommand, SoftwareState, follow_software};
+use crate::state::{Answer, BluetoothState, Joined, NetworkState, Question, WifiState};
+use crate::storage::{Storage, StorageCommand, follow_storage};
+use crate::time::{TimeCommand, TimeState, follow_time};
+use unbound_network::import_vpn;
 use unbound_settings_panes::{SettingId, Value};
 
 const NOTIFICATIONS: &str = "org.freedesktop.Notifications";
@@ -28,11 +39,20 @@ pub enum Update {
     Arrangements(Vec<Vec<Placement>>),
     Audio(Option<unbound_audio::Snapshot>),
     Wifi(Option<WifiState>),
+    Network(NetworkState),
     Joined(Vec<u8>, Joined),
     Bluetooth(Option<BluetoothState>),
     Pairing(Option<Question>),
     Pictures(Vec<(String, Pair)>),
     Thumbnail(Pair, unbound_wallpaper::Picture),
+    About(About),
+    Storage(Storage),
+    Time(Option<TimeState>),
+    Login(LoginItems),
+    Battery(Option<BatteryState>),
+    NotificationApps(Vec<AppNotifications>),
+    Software(SoftwareState),
+    Locale(Option<LocaleState>),
     InputLevel(f32),
     Failed(String),
 }
@@ -47,6 +67,16 @@ pub enum Command {
     Bluetooth(BluetoothCommand),
     Answer(Answer),
     Picture(PictureCommand),
+    About(AboutCommand),
+    Storage(StorageCommand),
+    Time(TimeCommand),
+    Login(LoginCommand),
+    Battery(BatteryCommand),
+    Notifications(NotificationCommand),
+    Software(SoftwareCommand),
+    Locale(LocaleCommand),
+    Reveal(PathBuf),
+    ImportVpn,
 }
 
 pub struct Feed {
@@ -221,11 +251,21 @@ pub fn worker(session: &Connection, updates: Updates) -> Sender<Command> {
 }
 
 pub struct Services {
+    connection: Connection,
+    updates: Updates,
     session: Sender<Command>,
     audio: Sender<AudioCommand>,
     network: Option<Sender<NetworkCommand>>,
     bluetooth: Option<(Sender<BluetoothCommand>, Sender<Answer>)>,
     pictures: Sender<PictureCommand>,
+    about: Option<Sender<AboutCommand>>,
+    storage: Sender<StorageCommand>,
+    time: Option<Sender<TimeCommand>>,
+    login: Sender<LoginCommand>,
+    battery: Option<Sender<BatteryCommand>>,
+    notifications: Sender<NotificationCommand>,
+    software: Option<Sender<SoftwareCommand>>,
+    locale: Option<Sender<LocaleCommand>>,
 }
 
 impl Services {
@@ -233,11 +273,21 @@ impl Services {
         follow_config(session, updates.clone());
         follow_notifications(session, updates.clone());
         Self {
+            connection: session.clone(),
+            updates: updates.clone(),
             session: worker(session, updates.clone()),
             audio: follow_audio(updates.clone()),
             network: system.map(|system| follow_network(system, updates.clone())),
             bluetooth: system.map(|system| follow_bluetooth(system, updates.clone())),
             pictures: follow_pictures(session, unbound_xdg::data_dirs(), updates.clone()),
+            about: system.map(|system| follow_about(system, updates.clone())),
+            storage: follow_storage(updates.clone()),
+            time: system.map(|system| follow_time(system, updates.clone())),
+            login: follow_login_items(updates.clone()),
+            battery: system.map(|system| follow_battery(system, updates.clone())),
+            notifications: follow_app_notifications(session, updates.clone()),
+            software: system.map(|system| follow_software(system, updates.clone())),
+            locale: system.map(|system| follow_locale(system, updates.clone())),
         }
     }
 
@@ -261,6 +311,52 @@ impl Services {
                 .as_ref()
                 .is_some_and(|(_, answers)| answers.send(answer).is_ok()),
             Command::Picture(command) => self.pictures.send(command).is_ok(),
+            Command::About(command) => self
+                .about
+                .as_ref()
+                .is_some_and(|about| about.send(command).is_ok()),
+            Command::Storage(command) => self.storage.send(command).is_ok(),
+            Command::Time(command) => self
+                .time
+                .as_ref()
+                .is_some_and(|time| time.send(command).is_ok()),
+            Command::Login(command) => self.login.send(command).is_ok(),
+            Command::Notifications(command) => self.notifications.send(command).is_ok(),
+            Command::Locale(command) => self
+                .locale
+                .as_ref()
+                .is_some_and(|locale| locale.send(command).is_ok()),
+            Command::Software(command) => self
+                .software
+                .as_ref()
+                .is_some_and(|software| software.send(command).is_ok()),
+            Command::Battery(command) => self
+                .battery
+                .as_ref()
+                .is_some_and(|battery| battery.send(command).is_ok()),
+            Command::Reveal(_) => false,
+            Command::ImportVpn => {
+                let (session, updates) = (self.connection.clone(), self.updates.clone());
+                spawn("import-vpn", move || {
+                    let chosen = choose_file(
+                        &session,
+                        &L10N.tr("import-vpn-title"),
+                        (
+                            L10N.tr("vpn-files"),
+                            vec![(0, "*.conf".to_owned()), (0, "*.ovpn".to_owned())],
+                        ),
+                    );
+                    let imported = match chosen {
+                        Ok(Some(file)) => import_vpn(&file).map_err(|error| error.to_string()),
+                        Ok(None) => Ok(()),
+                        Err(error) => Err(error.to_string()),
+                    };
+                    if let Err(error) = imported {
+                        updates.send(Update::Failed(error));
+                    }
+                });
+                true
+            }
         };
         if !sent {
             tracing::warn!("a settings service is not running");

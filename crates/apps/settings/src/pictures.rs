@@ -110,29 +110,23 @@ fn request_path(connection: &Connection, token: &str) -> Option<OwnedObjectPath>
     OwnedObjectPath::try_from(format!("{PORTAL_PATH}/request/{sender}/{token}")).ok()
 }
 
-fn choose_picture(session: &Connection) -> zbus::Result<Option<PathBuf>> {
+pub(crate) fn choose_file(
+    session: &Connection,
+    title: &str,
+    filter: (String, Vec<(u32, String)>),
+) -> zbus::Result<Option<PathBuf>> {
     let token = format!("unbound_settings_{}", std::process::id());
     let path = request_path(session, &token).ok_or(zbus::Error::Unsupported)?;
     let request = Proxy::new(session, PORTAL, path, REQUEST)?;
     let mut responses = request.receive_signal("Response")?;
     let chooser = Proxy::new(session, PORTAL, PORTAL_PATH, FILE_CHOOSER)?;
-    let filter = (
-        L10N.tr("pictures"),
-        IMAGE_TYPES
-            .iter()
-            .map(|mime| (1u32, (*mime).to_owned()))
-            .collect::<Vec<_>>(),
-    );
     let options: HashMap<&str, Value<'_>> = HashMap::from([
         ("handle_token", Value::from(token.as_str())),
         ("modal", Value::from(true)),
         ("filters", Value::from(vec![filter.clone()])),
         ("current_filter", Value::from(filter)),
     ]);
-    let _: OwnedObjectPath = chooser.call(
-        "OpenFile",
-        &("", L10N.tr("choose-picture").as_str(), options),
-    )?;
+    let _: OwnedObjectPath = chooser.call("OpenFile", &("", title, options))?;
     let Some(response) = responses.next() else {
         return Ok(None);
     };
@@ -149,6 +143,17 @@ fn choose_picture(session: &Connection) -> zbus::Result<Option<PathBuf>> {
     Ok(uris
         .first()
         .and_then(|uri| unbound_xdg::path_from_file_uri(uri)))
+}
+
+fn choose_picture(session: &Connection) -> zbus::Result<Option<PathBuf>> {
+    let filter = (
+        L10N.tr("pictures"),
+        IMAGE_TYPES
+            .iter()
+            .map(|mime| (1u32, (*mime).to_owned()))
+            .collect::<Vec<_>>(),
+    );
+    choose_file(session, &L10N.tr("choose-picture"), filter)
 }
 
 pub fn follow_pictures(

@@ -1,6 +1,6 @@
 [package]
 name = "unbound-dock-model"
-description = "The apps kept in the bar, their order, badges and progress, and opening at login"
+description = "The apps kept in the bar, their order, badges and progress"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
@@ -10,9 +10,6 @@ tracing.workspace = true
 unbound-config.workspace = true
 unbound-inbox.workspace = true
 zbus.workspace = true
-
-[dev-dependencies]
-tempfile.workspace = true
 
 [lints]
 workspace = true

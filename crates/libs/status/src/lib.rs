@@ -27,6 +27,8 @@ pub enum Update {
     Menu { menu: String, root: Node },
     AppMenu { app: String, root: Option<Node> },
     AppMenuChanged,
+    ClockFormat(String),
+    BatteryPercentage(bool),
     Unread(bool),
 }
 

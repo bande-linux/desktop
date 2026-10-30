@@ -1,4 +1,3 @@
-pub mod autostart;
 pub mod bus;
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]

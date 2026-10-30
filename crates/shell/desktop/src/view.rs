@@ -945,11 +945,24 @@ impl DesktopView {
             _ => None,
         };
         match (self.target(at), own) {
-            (Target::Folder(folder), _) => self.requests.push(Request::Transfer {
-                sources,
-                folder,
-                copy,
-            }),
+            (Target::Folder(folder), _) => {
+                let sources: Vec<PathBuf> = sources
+                    .into_iter()
+                    .filter(|source| {
+                        copy || self
+                            .desktop
+                            .item(source)
+                            .is_none_or(|item| item.kind != Kind::Volume)
+                    })
+                    .collect();
+                if !sources.is_empty() {
+                    self.requests.push(Request::Transfer {
+                        sources,
+                        folder,
+                        copy,
+                    });
+                }
+            }
             (Target::Desktop, Some(_)) if copy => self.on_files(sources, Request::Duplicate),
             (Target::Desktop, Some(from)) => {
                 let grid = self.desktop.grid();

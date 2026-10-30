@@ -3918,6 +3918,7 @@ dependencies = [
  "unbound-bar",
  "unbound-config",
  "unbound-fs",
+ "unbound-inbox",
  "unbound-l10n",
  "unbound-thumbnails",
  "unbound-toolkit",
@@ -4096,6 +4097,7 @@ dependencies = [
  "rustix 1.1.6",
  "tracing",
  "unbound-datetime",
+ "unbound-inbox",
  "unbound-keyboard",
  "unbound-l10n",
  "unbound-log",
@@ -4521,6 +4523,7 @@ dependencies = [
  "resvg",
  "tempfile",
  "tracing",
+ "unbound-inbox",
  "zbus",
 ]
 

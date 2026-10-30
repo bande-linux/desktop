@@ -221,7 +221,8 @@ impl DesktopSurface {
         if done.is_empty() {
             return;
         }
-        for thumbnailed in done {
+        let size = ThumbnailSize::for_pixels(self.icon_pixels());
+        for thumbnailed in done.into_iter().filter(|done| done.size == size) {
             let picture = thumbnailed
                 .picture
                 .and_then(|picture| Image::from_rgba(picture.width, picture.height, picture.rgba));
@@ -247,7 +248,9 @@ impl DesktopSurface {
                 let artwork = self.artwork(&item, pixels, &mut wanted);
                 (item, artwork)
             })
-            .collect();
+            .collect::<Vec<_>>();
+        let present: HashSet<&PathBuf> = with_icons.iter().map(|(item, _)| &item.path).collect();
+        self.pictures.retain(|path, _| present.contains(path));
         if let Some(thumbnails) = self.thumbnails.as_ref().filter(|_| !wanted.is_empty()) {
             thumbnails.want(wanted);
         }
@@ -320,6 +323,7 @@ impl DesktopSurface {
         );
         if relist {
             self.icons.clear();
+            self.pictures.clear();
             self.relist();
         }
         self.save_layouts();
@@ -782,7 +786,6 @@ impl App for DesktopSurface {
             }
             2 => {
                 for (key, rendered) in self.loaded.drain() {
-                    self.pending.remove(&key);
                     let layer = rendered.and_then(|(picture, luma)| {
                         Image::from_rgba(picture.width, picture.height, picture.rgba).map(|image| {
                             Layer {
@@ -793,6 +796,7 @@ impl App for DesktopSurface {
                         })
                     });
                     if let Some(layer) = layer {
+                        self.pending.remove(&key);
                         self.wallpapers.insert(key, layer);
                     }
                 }

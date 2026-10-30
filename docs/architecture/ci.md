@@ -2,15 +2,14 @@
 
 ## Runners
 
-All CI runs on the organization's self-hosted runners: Docker containers on two Apple Silicon
-Macs, the M4 Mac mini and the laptop, four on each (setup:
-[`unbound-linux/runners`](https://github.com/unbound-linux/runners)). Three per Mac carry the
-labels `self-hosted, Linux, ARM64, unbound` and run builds and tests; workflows select them with
-`runs-on: [self-hosted, unbound]`. The fourth carries `unbound-kvm`, has `/dev/kvm` and runs the
-jobs that boot a KVM guest (`runs-on: [self-hosted, unbound-kvm]`). GitHub gives each job to any
-free runner with matching labels, so pushing a branch is how it is tested; with the laptop off,
-everything runs on the mini. Builds and tests run natively on arm64, the architecture Unbound
-targets.
+All CI runs on the organization's self-hosted runners, Docker containers on Apple Silicon (setup:
+[`unbound-linux/runners`](https://github.com/unbound-linux/runners)). `unbound-runner-1` and
+`unbound-runner-2` carry the labels `self-hosted, Linux, ARM64, unbound` and run builds and
+tests (`runs-on: [self-hosted, unbound]`); `unbound-runner-kvm` carries `unbound-kvm`, has
+`/dev/kvm` and runs the jobs that boot a KVM guest (`runs-on: [self-hosted, unbound-kvm]`). Each
+runner takes one job at a time, and cargo is capped at two jobs (`CARGO_BUILD_JOBS: '2'`) so a
+link never runs a runner out of memory. Builds and tests run natively on arm64, the architecture
+Unbound targets.
 
 The Rust toolchain is pinned in `rust-toolchain.toml`, dependencies are pinned to exact versions,
 and `Cargo.lock` is committed. Jobs install system packages with `apt-get` on the runner image
@@ -38,8 +37,18 @@ the `ci-builder` image below exists.
 
 ## Workflow (`.github/workflows/ci.yml`)
 
-Runs on every push to any branch, on pull requests and on manual dispatch. Job names are the
-status-check contexts:
+Which jobs run depends on the event, so the three runners spend their time where it matters:
+
+- **Full run** (every job below): pushes to `main`, pushes to branches named `ci/**`, pull
+  requests and manual dispatch (`gh workflow run ci.yml --ref <branch>`).
+- **Quick run** (`ci/lint` only): pushes to any other branch. Push work branches freely; for
+  the full run a branch needs before it merges, open a pull request, push it to `ci/<topic>`
+  as well, or dispatch the workflow on it.
+
+Runs are grouped by event and ref: a newer push to a branch cancels that branch's run in
+progress, while a `main` run is never cancelled mid-publish (the next one waits for it).
+
+Job names are the status-check contexts:
 
 - `ci/lint`: `cargo fmt --all --check` and
   `cargo clippy --workspace --all-targets --locked -- -D warnings`.
@@ -83,7 +92,7 @@ status-check contexts:
 - `ci/portal`: after `ci/deb`, installs the `unbound-config` and `xdg-desktop-portal-unbound`
   packages with Debian 13's `xdg-desktop-portal` in a container and checks the colour scheme
   the frontend reports follows `config.kdl`.
-- `ci/perf` (on `main`, and on a branch commit whose message contains `[perf]`): takes the
+- `ci/perf` (on `main`, and in a full run of a commit whose message contains `[perf]`): takes the
   release `unbound-compositor` that `ci/deb` packages, with `unbound-bench` and `unbound-sample`
   built alongside it, and measures frame times (also while the overview opens and closes over
   20 windows, when nothing but a window title may be uploaded), compositor start time and idle
@@ -93,6 +102,9 @@ status-check contexts:
   summary and `perf.json` and `perf-toolkit.json` are uploaded.
 - `ci/publish` (on `main`, and on a manually dispatched tag): when every job above is green,
   starts the publish of the packages in `unbound-linux/apt` (the testing channel).
+- `ci/alert` (on pushes to `main`): when a job failed or timed out, opens the issue "CI is red
+  on main" with links to the failing jobs, or comments on it if it is already open; when a
+  later run passes, comments with the green run and closes it (`ci/red-main.sh`).
 
 `.github/workflows/release.yml` (`release/promote`) runs on a version tag: it finds the green
 `main` build of the tagged commit and starts the release publish in `unbound-linux/apt`.
@@ -102,13 +114,30 @@ Mac over debug USB; they are not part of the workflow.
 
 ## Compilation cache
 
-Jobs build through `sccache` (`RUSTC_WRAPPER: sccache`). Each runner keeps the cache in a
-Docker volume that persists between jobs:
+Every job that compiles first runs `ci/target-dir.sh`, which links the workspace's `target` to
+a directory that persists on the runner, `/cache/target/<runner>/<toolchain>`. The runners keep
+their workspace between jobs and `actions/checkout` rewrites only the files a commit changed,
+so cargo rebuilds just the changed crates and their dependents, and dependencies compile once
+per toolchain. All jobs on a runner share the directory: cargo keeps each profile (`dev`,
+`test`, `dist`) and feature set apart and locks the directory while it builds. The script
+empties it when the toolchain in `rust-toolchain.toml` changes, when it grows past 60 GiB or
+when less than 20 GiB stay free, and it removes `target/debian` and `target/tmp` so no package
+or frame from an earlier run is checked or uploaded again.
+
+Behind it, `sccache` (`RUSTC_WRAPPER: sccache`) caches single compilations in a Docker volume
+per runner, which helps after the target directory was emptied:
 
 ```env
 SCCACHE_DIR=/cache/sccache
 SCCACHE_CACHE_SIZE=50G
 ```
+
+Each job builds on its own runner rather than downloading another job's build: test binaries
+with debug information run to gigabytes, moving them through GitHub's artifact store costs
+about as much as an incremental build, and it would make `ci/lavapipe-test` and `ci/vm` wait
+for each other instead of running side by side. Only small outputs travel as artifacts: the
+`.deb` files (`ci/deb` to `ci/deb-install` and `ci/portal`) and the release binaries
+`ci/perf` measures.
 
 ## Planned infrastructure
 

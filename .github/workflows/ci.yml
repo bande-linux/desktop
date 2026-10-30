@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
@@ -24,6 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: rustup toolchain install
+      - run: ci/target-dir.sh
       - name: Install build dependencies
         run: ci/apt-install.sh pkg-config libxkbcommon-dev libgbm-dev libinput-dev libseat-dev libudev-dev libpipewire-0.3-dev libclang-dev
       - run: cargo fmt --all --check
@@ -45,11 +46,13 @@ jobs:
 
   test:
     name: ci/lavapipe-test
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/ci/')
     runs-on: [self-hosted, unbound]
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
       - run: rustup toolchain install
+      - run: ci/target-dir.sh
       - name: Install build and test dependencies
         run: ci/apt-install.sh pkg-config libxkbcommon-dev libgbm-dev libinput-dev libseat-dev libudev-dev libpipewire-0.3-dev libclang-dev libvulkan1 mesa-vulkan-drivers dbus-daemon at-spi2-core libfontconfig1 libwayland-client0
       - name: Install Debian 13's fonts, which the goldens are rendered with
@@ -66,6 +69,7 @@ jobs:
 
   deb:
     name: ci/deb
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/ci/')
     runs-on: [self-hosted, unbound]
     timeout-minutes: 90
     env:
@@ -75,6 +79,7 @@ jobs:
         with:
           fetch-depth: 0
       - run: rustup toolchain install
+      - run: ci/target-dir.sh
       - name: Install build and smoke-test dependencies
         run: ci/apt-install.sh pkg-config libxkbcommon-dev libgbm-dev libinput-dev libseat-dev libudev-dev libvulkan1 mesa-vulkan-drivers dbus-daemon dbus-bin
       - name: Install cargo-deb
@@ -273,6 +278,7 @@ jobs:
 
   deb-all:
     name: ci/deb-all
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/ci/')
     runs-on: [self-hosted, unbound]
     timeout-minutes: 15
     steps:
@@ -339,11 +345,13 @@ jobs:
 
   vm:
     name: ci/vm
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/ci/')
     runs-on: [self-hosted, unbound-kvm]
     timeout-minutes: 150
     steps:
       - uses: actions/checkout@v7
       - run: rustup toolchain install
+      - run: ci/target-dir.sh
       - name: Install build and guest dependencies
         run: ci/apt-install.sh pkg-config libxkbcommon-dev libgbm-dev libinput-dev libseat-dev libudev-dev libpipewire-0.3-dev libclang-dev jq e2fsprogs qemu-system-arm
       - name: Build or reuse the guest kernel and root image
@@ -364,11 +372,13 @@ jobs:
 
   polkit:
     name: ci/polkit
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/ci/')
     runs-on: [self-hosted, unbound]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - run: rustup toolchain install
+      - run: ci/target-dir.sh
       - name: Build the polkitd test
         run: |
           cargo test --package unbound-polkit --test polkitd --locked --no-run --message-format=json \
@@ -471,3 +481,20 @@ jobs:
             curl -fsS -X POST -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' \
               https://api.github.com/repos/unbound-linux/apt/actions/workflows/publish.yml/dispatches --data @-
           echo "Started publishing run $RUN_ID${TAG:+ as $TAG}"
+
+  alert:
+    name: ci/alert
+    needs: [lint, test, deb, deb-all, deb-install, vm, polkit, portal, perf, publish]
+    if: always() && !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, unbound]
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Open, update or close the "CI is red on main" issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ci/red-main.sh

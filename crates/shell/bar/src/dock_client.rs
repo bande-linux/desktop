@@ -919,7 +919,7 @@ impl App for Dock {
             let full = !trash.trash.is_empty();
             self.state.borrow_mut().set_trash_full(full);
         }
-        window.request_redraw();
+        self.run_actions(window);
     }
 
     fn animating(&self) -> bool {

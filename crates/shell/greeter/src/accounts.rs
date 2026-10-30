@@ -1,32 +1,31 @@
+use std::fs::{File, OpenOptions};
+use std::os::fd::AsRawFd;
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 
-use zbus::blocking::{Connection, Proxy};
-use zbus::zvariant::OwnedObjectPath;
+use unbound_config::{LOGIN_PICTURE_LIMIT, login_picture_file};
 
-const ACCOUNTS: &str = "org.freedesktop.Accounts";
-const ACCOUNTS_PATH: &str = "/org/freedesktop/Accounts";
-const USER: &str = "org.freedesktop.Accounts.User";
 const LAST_USER: &str = "unbound-greeter/last-user";
 
-fn background_file(system: &Connection, login: &str) -> zbus::Result<String> {
-    let accounts = Proxy::new(system, ACCOUNTS, ACCOUNTS_PATH, ACCOUNTS)?;
-    let user: OwnedObjectPath = accounts.call("FindUserByName", &(login,))?;
-    Proxy::new(system, ACCOUNTS, user, USER)?.get_property("BackgroundFile")
+pub fn login_picture(folder: &Path, uid: u32) -> Option<File> {
+    let path = login_picture_file(folder, uid);
+    let file = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(&path)
+        .inspect_err(|error| tracing::info!("no wallpaper shared by {uid}: {error}"))
+        .ok()?;
+    let metadata = file.metadata().ok()?;
+    let trusted =
+        metadata.is_file() && metadata.uid() == uid && metadata.len() <= LOGIN_PICTURE_LIMIT;
+    if !trusted {
+        tracing::warn!("{} is not a picture {uid} shared", path.display());
+    }
+    trusted.then_some(file)
 }
 
-pub fn login_picture(login: &str) -> Option<PathBuf> {
-    let system = Connection::system()
-        .inspect_err(|error| tracing::info!("no system bus for wallpapers: {error}"))
-        .ok()?;
-    let picture = background_file(&system, login)
-        .inspect_err(|error| tracing::info!("no wallpaper shared by {login}: {error}"))
-        .ok()
-        .filter(|path| !path.is_empty())
-        .map(PathBuf::from)?;
-    std::fs::File::open(&picture)
-        .inspect_err(|error| tracing::info!("{}: {error}", picture.display()))
-        .ok()
-        .map(|_| picture)
+pub fn opened_path(file: &File) -> PathBuf {
+    PathBuf::from(format!("/proc/self/fd/{}", file.as_raw_fd()))
 }
 
 pub fn last_user_file(state_home: Option<&Path>, home: Option<&Path>) -> Option<PathBuf> {

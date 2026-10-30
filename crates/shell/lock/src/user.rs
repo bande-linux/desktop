@@ -3,6 +3,7 @@ use std::io;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct User {
+    pub uid: u32,
     pub login: String,
     pub full_name: String,
 }
@@ -55,5 +56,9 @@ pub fn current() -> io::Result<User> {
     };
     let login = text(entry.pw_name);
     let full_name = display_name(&login, &text(entry.pw_gecos));
-    Ok(User { login, full_name })
+    Ok(User {
+        uid,
+        login,
+        full_name,
+    })
 }

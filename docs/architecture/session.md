@@ -286,12 +286,17 @@ The login window shows the wallpaper of the person it offers,
 starting with whoever signed in last (remembered in the greeter user's
 `$XDG_STATE_HOME/unbound-greeter/last-user`, on Debian under `/var/lib/greetd`, the home that
 greetd's package creates owned by `_greetd`, so no state directory of our own is
-needed): `unbound-config` hands the dark picture to
-AccountsService (`SetBackgroundFile`, which a user may do for their own account without a
-password) whenever the wallpaper changes, and the greeter reads `BackgroundFile` from it, as the
-macOS login window shows the user's desktop picture. Pictures inside a home folder that the
-greeter user cannot read (Debian creates homes as 0700) fall back to the default; showing them
-needs a privileged copy, which is not done. Also not done: a user picker (Up/Down switches users
+needed), as the macOS login window shows the user's desktop picture. Debian's
+AccountsService lacks Ubuntu's `SetBackgroundFile`, and Debian creates homes as 0700, so
+`unbound-config` copies the dark picture (at most 64 MiB) whenever the wallpaper changes into
+`/var/lib/unbound-greeter/pictures/<uid>`, and removes it when the person returns to the
+default. The package creates that folder as `root:_greetd` with mode 3733: everyone may create
+files in it but no one may list it, the sticky bit keeps people from replacing or deleting each
+other's files, and the setgid bit gives every file the `_greetd` group, so a copy written with
+mode 0640 is readable by its owner and the login window alone. The greeter opens
+`<uid>` without following links and uses it only if it is a regular file owned by that uid
+and within the size limit, then decodes it through `/proc/self/fd`, so the file it checked is
+the file it shows; anything else falls back to the bundled default. Also not done: a user picker (Up/Down switches users
 for now), choosing among several sessions, a visible (non-secret) field for PAM's visible
 prompts (they are answered in the secure field), and power and accessibility menus.
 

@@ -1,5 +1,5 @@
-mod accounts;
 mod edit;
+mod login_picture;
 mod report;
 mod service;
 mod store;
@@ -13,8 +13,11 @@ use std::time::Duration;
 use kdl::{KdlDocument, KdlEntry, KdlNode, KdlValue};
 use unbound_l10n::Localizer;
 
-pub use accounts::{login_picture, share_login_picture};
 pub use edit::Setting;
+pub use login_picture::{
+    LOGIN_PICTURE_LIMIT, LOGIN_PICTURES, copy_login_picture, login_picture, login_picture_file,
+    share_login_picture,
+};
 pub use report::{EDIT_ACTION, ErrorNotifier};
 pub use service::{ArrangedDisplay, BUS_NAME, ConfigService, OBJECT_PATH, ServiceError};
 pub use store::{ConfigStore, ReloadError};
@@ -1130,7 +1133,7 @@ mod tests {
         let sources = [
             include_str!("lib.rs"),
             include_str!("main.rs"),
-            include_str!("accounts.rs"),
+            include_str!("login_picture.rs"),
             include_str!("edit.rs"),
             include_str!("report.rs"),
             include_str!("service.rs"),

@@ -3972,16 +3972,17 @@ version = "0.1.0"
 dependencies = [
  "accesskit",
  "jiff",
+ "libc",
  "serde",
  "serde_json",
  "tempfile",
  "tracing",
+ "unbound-config",
  "unbound-keyboard",
  "unbound-l10n",
  "unbound-lock",
  "unbound-log",
  "unbound-toolkit",
- "zbus",
 ]
 
 [[package]]

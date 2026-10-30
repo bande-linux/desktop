@@ -2,7 +2,7 @@
 
 use unbound_greeter::{
     AuthMessageType, ErrorType, Login, Rejection, Request, Response, Step, last_user_file,
-    login_users, read_message, remember_user, remembered_user, write_message,
+    login_picture, login_users, read_message, remember_user, remembered_user, write_message,
 };
 
 fn password_prompt() -> Response {
@@ -203,4 +203,22 @@ fn the_login_window_remembers_who_signed_in_last_in_its_state_folder() {
     assert_eq!(remembered_user(&file), None);
     remember_user(&file, "ada").expect("remember");
     assert_eq!(remembered_user(&file).as_deref(), Some("ada"));
+}
+
+#[test]
+fn the_login_window_trusts_only_a_picture_its_owner_shared_as_a_plain_file() {
+    use std::os::unix::fs::MetadataExt;
+
+    let folder = tempfile::tempdir().expect("folder");
+    let uid = folder.path().metadata().expect("folder").uid();
+    std::fs::write(folder.path().join(uid.to_string()), b"picture").expect("picture");
+    std::os::unix::fs::symlink(
+        folder.path().join(uid.to_string()),
+        folder.path().join((uid + 1).to_string()),
+    )
+    .expect("link");
+
+    assert!(login_picture(folder.path(), uid).is_some());
+    assert!(login_picture(folder.path(), uid + 1).is_none());
+    assert!(login_picture(folder.path(), uid + 2).is_none());
 }

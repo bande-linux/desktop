@@ -9,7 +9,8 @@ use std::time::Duration;
 use unbound_config::{
     AlertSound, Appearance, CapsLock, Config, ConfigError, ConfigStore, DEFAULT_DOCK_APPS,
     DisplaySettings, DockEdge, InputSource, Placement, ReloadError, Rotation, SecondaryClick,
-    Suspend, WallpaperFit, WallpaperVariant, config_path, login_picture, system_input_sources,
+    Suspend, WallpaperFit, WallpaperVariant, config_path, copy_login_picture, login_picture,
+    login_picture_file, system_input_sources,
 };
 
 fn error_at(source: &str) -> (usize, usize) {
@@ -458,6 +459,34 @@ fn the_login_window_gets_the_dark_wallpaper_with_the_home_folder_spelled_out() {
         Some(PathBuf::from("/a.png"))
     );
     assert_eq!(login_picture(&wallpaper(""), Some(home)), None);
+}
+
+#[test]
+fn the_login_picture_is_copied_for_the_login_window_alone_and_withdrawn_with_the_wallpaper() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let folder = tempfile::tempdir().expect("folder");
+    let home = tempfile::tempdir().expect("home");
+    let picture = home.path().join("dark.png");
+    std::fs::write(&picture, b"first").expect("picture");
+    let shared = login_picture_file(folder.path(), 1000);
+
+    copy_login_picture(folder.path(), 1000, Some(&picture)).expect("copied");
+    assert_eq!(std::fs::read(&shared).expect("shared"), b"first");
+    let mode = std::fs::metadata(&shared)
+        .expect("metadata")
+        .permissions()
+        .mode();
+    assert_eq!(mode & 0o777, 0o640);
+
+    std::fs::write(&picture, b"second").expect("picture");
+    copy_login_picture(folder.path(), 1000, Some(&picture)).expect("replaced");
+    assert_eq!(std::fs::read(&shared).expect("shared"), b"second");
+    assert_eq!(std::fs::read_dir(folder.path()).expect("folder").count(), 1);
+
+    copy_login_picture(folder.path(), 1000, None).expect("withdrawn");
+    assert!(!shared.exists());
+    copy_login_picture(folder.path(), 1000, None).expect("nothing to withdraw");
 }
 
 fn source(layout: &str, variant: Option<&str>) -> InputSource {

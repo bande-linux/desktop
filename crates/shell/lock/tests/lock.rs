@@ -23,6 +23,7 @@ fn morning() -> jiff::Zoned {
 
 fn ada() -> User {
     User {
+        uid: 1000,
         login: "ada".to_owned(),
         full_name: "Ada Lovelace".to_owned(),
     }

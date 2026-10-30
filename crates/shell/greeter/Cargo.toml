@@ -8,15 +8,16 @@ repository.workspace = true
 [dependencies]
 accesskit.workspace = true
 jiff.workspace = true
+libc.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
+unbound-config.workspace = true
 unbound-keyboard.workspace = true
 unbound-l10n.workspace = true
 unbound-lock.workspace = true
 unbound-log.workspace = true
 unbound-toolkit.workspace = true
-zbus.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
@@ -25,7 +26,6 @@ tempfile.workspace = true
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
 depends = "$auto, fonts-inter, greetd, unbound-compositor"
-recommends = "accountsservice"
 extended-description = """\
 The login window of the Unbound desktop: greetd runs it as its greeter \
 inside unbound-compositor --greeter, and it lists the people who can \

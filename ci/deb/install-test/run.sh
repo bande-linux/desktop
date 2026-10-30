@@ -46,9 +46,28 @@ test -x "$(sed -n 's/^command = "\([^ ]*\).*/\1/p' "$greetd_config")"
 [ "$(readlink "$display_manager")" = /usr/lib/systemd/system/greetd.service ]
 grep -qx /usr/sbin/greetd /etc/X11/default-display-manager
 grep -q 'agreety' /etc/greetd/config.toml
+
+echo "== a person's wallpaper reaches the login window and no one else"
+pictures=/var/lib/unbound-greeter/pictures
+[ "$(stat -c '%a %U %G' "$pictures")" = "3733 root _greetd" ]
+useradd --create-home ada
+useradd --create-home alan
+runuser -u ada -- sh -c "umask 077; echo picture > $pictures/\$(id -u); chmod 640 $pictures/\$(id -u)"
+[ "$(runuser -u _greetd -- cat "$pictures/$(id -u ada)")" = picture ]
+refused() {
+    if "$@" > /dev/null 2>&1; then
+        echo "allowed: $*"
+        exit 1
+    fi
+}
+refused runuser -u alan -- cat "$pictures/$(id -u ada)"
+refused runuser -u alan -- ls "$pictures"
+refused runuser -u alan -- rm -f "$pictures/$(id -u ada)"
+test -e "$pictures/$(id -u ada)"
 dpkg --purge --force-depends unbound-greeter > /dev/null 2>&1
 test ! -e /etc/X11/default-display-manager
 test ! -e /usr/lib/systemd/system/greetd.service.d/unbound.conf
+test ! -e "$pictures"
 ln -sfn /usr/lib/systemd/system/gdm3.service "$display_manager"
 echo /usr/sbin/gdm3 > /etc/X11/default-display-manager
 apt-get install -y -q --no-install-recommends unbound-greeter < /dev/null > /dev/null

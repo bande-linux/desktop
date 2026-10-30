@@ -7,3 +7,6 @@ fi
 if [ "$1" = "purge" ] && [ -z "$DPKG_ROOT" ] && [ "$(cat "$DEFAULT_DISPLAY_MANAGER" 2>/dev/null || true)" = /usr/sbin/greetd ]; then
 	rm -f "$DEFAULT_DISPLAY_MANAGER"
 fi
+if [ "$1" = "purge" ]; then
+	rm -rf /var/lib/unbound-greeter
+fi

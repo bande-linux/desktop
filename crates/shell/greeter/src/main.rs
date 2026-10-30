@@ -1,12 +1,14 @@
+use std::fs::File;
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::net::UnixStream;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
+use unbound_config::LOGIN_PICTURES;
 use unbound_greeter::{
-    L10N, Login, Rejection, Request, Step, last_user_file, login_picture, login_users,
+    L10N, Login, Rejection, Request, Step, last_user_file, login_picture, login_users, opened_path,
     read_message, remember_user, remembered_user, write_message,
 };
 use unbound_keyboard::Layouts;
@@ -58,7 +60,7 @@ struct Greeter {
     caps_lock: bool,
     next_clock: Instant,
     backdrop: Option<Inbox<Image>>,
-    picture: Option<Option<PathBuf>>,
+    picture: Option<File>,
     wallpaper: Option<Image>,
     last_user: Option<PathBuf>,
     layouts: Layouts,
@@ -90,11 +92,8 @@ impl Greeter {
         self.screen = Self::screen_for(&self.users[self.user]);
         self.screen.set_input_source(self.input_source.clone());
         self.screen.set_caps_lock(self.caps_lock);
-        let picture = login_picture(&self.users[self.user].login);
-        if self.picture.as_ref() != Some(&picture) {
-            self.picture = Some(picture);
-            self.backdrop = None;
-        }
+        self.picture = login_picture(Path::new(LOGIN_PICTURES), self.users[self.user].uid);
+        self.backdrop = None;
         if let Some(wallpaper) = &self.wallpaper {
             self.screen
                 .set_backdrop(wallpaper.clone(), Instant::now() - Duration::from_secs(1));
@@ -209,7 +208,7 @@ impl App for Greeter {
     fn scene(&mut self, window: &mut Window) -> Scene {
         let (width, height) = window.size();
         if self.backdrop.is_none() && width > 0 && height > 0 {
-            let picture = self.picture.clone().flatten();
+            let picture = self.picture.as_ref().map(opened_path);
             match load_backdrop(
                 BackdropSource::Picture(picture),
                 Variant::Dark,
@@ -328,7 +327,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or(0);
     let chosen = users.get(user).ok_or("no one can sign in")?;
     let screen = Greeter::screen_for(chosen);
-    let picture = login_picture(&chosen.login);
+    let picture = login_picture(Path::new(LOGIN_PICTURES), chosen.uid);
     let mut window = Window::open(
         Role::Layer(LayerOptions {
             layer: LayerKind::Overlay,
@@ -347,7 +346,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         caps_lock: false,
         next_clock: Instant::now() + CLOCK_TICK,
         backdrop: None,
-        picture: Some(picture),
+        picture,
         wallpaper: None,
         last_user,
         layouts: Layouts::load(),

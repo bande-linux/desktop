@@ -25,6 +25,7 @@ const CLOSE_SIZE: f32 = 18.0;
 const SLIVER_STEP: f32 = 5.0;
 const SLIVER_INSET: f32 = 8.0;
 const SLIVER_SHADE: f32 = 0.03;
+const HOVER_INK: f32 = 0.08;
 const MAX_ACTIONS: usize = 3;
 pub const CLOSE_REACH: f32 = CLOSE_SIZE / 2.0 + 1.0;
 pub const DEFAULT_ACTION: &str = "default";
@@ -357,7 +358,7 @@ impl Card {
             if matches!(hovered, Some(Part::Action(hovered)) if hovered == key) {
                 card.push(Item::Fill {
                     shape: Shape::rounded(*rect, Radius::S),
-                    paint: palette.well.into(),
+                    paint: surface.mix(palette.ink, HOVER_INK).into(),
                 });
             }
             card.push(Item::Text {
@@ -379,7 +380,12 @@ impl Card {
             ));
             card.push(Item::Fill {
                 shape: close,
-                paint: if over { palette.well } else { palette.overlay }.into(),
+                paint: if over {
+                    surface.mix(palette.ink, HOVER_INK)
+                } else {
+                    surface
+                }
+                .into(),
             });
             card.push(Item::Stroke {
                 shape: Shape::rounded(close.rect.inset(0.5), CLOSE_SIZE / 2.0 - 0.5),

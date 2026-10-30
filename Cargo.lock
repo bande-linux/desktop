@@ -4247,6 +4247,7 @@ dependencies = [
  "accesskit",
  "blocking",
  "image",
+ "image-compare",
  "jiff",
  "pipewire",
  "rustix 1.1.6",

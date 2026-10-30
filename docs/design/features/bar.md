@@ -13,7 +13,7 @@ its menus, the apps, Trash, workspaces, tray, Control Center, clock and notifica
 wide by default and can be pinned open to 248 pt, where everything gets its name (a sidebar). The
 same model is drawn horizontally at the bottom or top. People who want the classic split keep a
 separate top menu bar with one switch. App menus live behind the active app's header as one
-cascading menu with a search field at the top, the same search also opens with `Super+/` from
+cascading menu with a search field at the top, the same search also opens with `Shift+Super+/` from
 anywhere, and in the expanded bar the menu titles are listed as rows.
 
 ## 2. Prior art: what worked and what failed
@@ -129,11 +129,11 @@ menu, made modern with search.
 pinned open: the menu titles are listed under the app name, each row opening its submenu
 directly (macOS's one-click reach to "Edit"). Collapsed bars cannot show them.
 
-**C. Menu search (HUD), `Super+/`.** A centred card like the launcher, listing every enabled item
+**C. Menu search (HUD), `Shift+Super+/`.** A centred card like the launcher, listing every enabled item
 of the active app's menus by name, with its path ("Edit › Find") and shortcut; Return runs it,
 `Super+Return` reveals it in the cascade (teaches where it lives, as macOS Help search points at
 the item). It is the same search as the field in A. Rejected **as the only path** (Unity's HUD
-lesson: invisible features are not discovered); adopted as the power layer. No compositor binding for `Super+/` was found in `crates/platform/compositor/src`, so it appears free; `Super+?` (`Shift+Super+/`) is the macOS Help search chord and
+lesson: invisible features are not discovered); adopted as the power layer. No compositor binding for `Shift+Super+/` was found in `crates/platform/compositor/src`, so it appears free; `Super+?` (`Shift+Super+/`) is the macOS Help search chord and
 should alias it.
 
 Rejected: **menus inside the Dock icon's right-click menu** (mixes "things about the app's
@@ -206,7 +206,7 @@ mirrored.
 - **Right click everywhere.** Every region has a menu (table in 3.1); the bar background menu
   has Show Names, Automatically Hide, Position ▸ (Left, Bottom, Right, Top), Bar Settings….
 - **Keyboard.** `Super+F2`: app menu open with the first title selected (macOS Ctrl+F2 analogue,
-  as today). `Super+F3`: the apps (today). `Super+/`: menu search. Inside the bar, Up/Down move
+  as today). `Super+F3`: the apps (today). `Shift+Super+/`: menu search. Inside the bar, Up/Down move
   within a region, Tab/Shift+Tab move between regions (launcher → header → apps → Trash →
   workspaces → tray → Control Center → clock), Return/Space activate, Menu or Shift+F10 the context
   menu, Escape returns the keyboard to the active app. Every item is an AccessKit node with role,
@@ -279,7 +279,7 @@ bar {
 
 | Need | Change |
 |---|---|
-| Keyboard targets | `focus_shell` keeps namespaces; the bar answers both "dock" (`Super+F3`) and "menubar" (`Super+F2`); add namespace "menu-search" for `Super+/` (compositor binding) |
+| Keyboard targets | `focus_shell` keeps namespaces; the bar answers both "dock" (`Super+F3`) and "menubar" (`Super+F2`); add namespace "menu-search" for `Shift+Super+/` (compositor binding) |
 | Panels beside items | new request `set_panel_anchor(surface, kind, x, y, w, h)` (kind: control_center, notifications) relayed to those clients, so Control Center and Notification Center open next to the item on any edge; or carry it in `toggle_control_center` as args |
 | Full screen | new event `fullscreen(output, state)` so the bar switches to reveal-on-push; the compositor must stack the bar's overlay reveal strip above full-screen windows |
 | Per-display active app | `active_app` gains the output of the key window (since 10) so inactive bars dim the header |
@@ -305,7 +305,7 @@ bar {
    with unread dot, Trash and workspaces in the bottom group. Goldens light/dark at 1× and 1.5×.
 3. **App header + cascade menu** (A) with submenu safe-triangle, keyboard (`Super+F2`), right-click
    menus; fall-back content for apps without dbusmenu.
-4. **Menu search** in the cascade and `Super+/` card (needs compositor binding).
+4. **Menu search** in the cascade and `Shift+Super+/` card (needs compositor binding).
 5. **Combined mode on by default** on the left; Settings pane (5 controls); config migration.
 6. **Expanded mode** (names, inline menu rows, active app's window rows), drag-to-resize edge.
 7. **Horizontal layouts** (bottom/top) with inline menu titles and their collapse order.
@@ -320,7 +320,7 @@ bar {
 ## 6. Trade-offs and risks
 
 - **One more click to reach a menu** in the collapsed bar (header → Edit → item) versus macOS's
-  strip. Mitigated by search (`Super+/`), shortcuts shown everywhere, and inline titles when
+  strip. Mitigated by search (`Shift+Super+/`), shortcuts shown everywhere, and inline titles when
   expanded or horizontal.
 - **The Dock spec said the Dock is "not a clock or tray"**. The combined bar deliberately
   reverses that; the separate-menu-bar setting preserves the old split.
@@ -353,7 +353,7 @@ All in `../bar/` (SVG source + PNG):
 |---|---|
 | `01-desktop-left-collapsed` | 1920×1080, 64 pt bar: mark, Files header, apps with badges, Trash, workspaces, tray, Control Center button, clock with unread dot |
 | `02-desktop-left-expanded` | 1920×1080, 248 pt pinned bar: search field, app menus as rows, apps with names and window rows, desktops, status row, full date |
-| `03-app-menu-alternatives` | A cascade from the header (recommended), B rows in the expanded bar, C menu search `Super+/` |
+| `03-app-menu-alternatives` | A cascade from the header (recommended), B rows in the expanded bar, C menu search `Shift+Super+/` |
 | `04-desktop-bottom` | Horizontal 56 pt bar at the bottom with inline menu titles |
 | `05-status-detail` | The bottom group collapsed (annotated) and expanded |
 | `06-small-1366x768` | Small screen: smaller cells, "+5" overflow, tray "•••", Control Center open from the status button with user/lock/power row |

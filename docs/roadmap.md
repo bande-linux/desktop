@@ -48,7 +48,7 @@ fonts) so it restyles for free.
 | E1 | One bar process | `unbound-bar` hosts today's Dock and menu bar surfaces with no visual change; shared models move to `crates/libs`; the compositor starts one client | multiple displays on main |
 | E2 | Vertical bar | Bottom group: Trash, workspaces, tray grid with overflow, the Control Center button (2×2), clock with unread dot; launcher mark at the top corner (click: launcher, right-click: system menu) | E1 |
 | E3 | App header and cascade | Active app header; one cascade menu with "Search menus", the app row and each menu as a row; `Super+F2`; right-click everywhere; fallback content for apps without menus | E2 |
-| E4 | Menu search | `Super+/` card that finds any menu item with its path and shortcut | E3 |
+| E4 | Menu search | `Shift+Super+/` card that finds any menu item with its path and shortcut | E3 |
 | E5 | Default and settings | Combined left bar is the default for new installs; Settings ▸ Bar: position, size, show names, auto-hide, separate menu bar; config migration from `dock {}` | E3 |
 | E6 | Expanded, horizontal, panels | Pinned expanded mode with names and window rows; bottom/top layouts with inline menu titles; Control Center and Notification Center open beside their item on any edge; full-screen reveal; per display | E5 |
 | E7 | One shell process | Desktop surface, notifications, Control Center and launcher hosted in the bar's process (one Wayland connection, one GPU device, one font database); lock screen and greeter stay separate | E5 |

@@ -9,8 +9,8 @@ use accesskit::{
 };
 use unbound_graphics::{Item, Palette, Point, Rect, Scheme, TextSystem};
 use unbound_widgets::{
-    ClipboardRequest, Context, Event, Key, Modifiers, Pointer, PointerButton, Size, TextField,
-    TextView, Ui, Widget, WidgetId,
+    ClipboardRequest, Context, Event, Key, Modifiers, Pointer, PointerButton, SearchField, Size,
+    TextField, TextView, Ui, Widget, WidgetId,
 };
 
 const NONE: Modifiers = Modifiers {
@@ -90,6 +90,9 @@ impl Editing {
     }
 
     fn text(&mut self) -> String {
+        if let Some(search) = self.ui.widget_as::<SearchField>(self.id) {
+            return search.text();
+        }
         match self.ui.widget_as::<TextField>(self.id) {
             Some(field) => field.text(),
             None => self.ui.widget_as::<TextView>(self.id).expect("view").text(),
@@ -557,4 +560,58 @@ fn typing_in_a_hundred_thousand_line_text_view_stays_instant() {
         "17 keystrokes with layout and paint took {elapsed:?}"
     );
     assert!(editing.text().ends_with("dogtyping at the end"));
+}
+
+#[test]
+fn a_search_field_searches_as_you_type_and_escape_or_the_clear_button_empties_it() {
+    let mut editing = Editing::with(|log| {
+        Box::new(SearchField::new("Search", "", move |text| {
+            log.borrow_mut().push(text.to_owned())
+        }))
+    });
+    editing.type_text("tax");
+    assert_eq!(*editing.changes.borrow(), ["t", "ta", "tax"]);
+    assert!(editing.press(Key::Escape, NONE));
+    assert_eq!(editing.text(), "");
+    assert_eq!(
+        editing.changes.borrow().last().map(String::as_str),
+        Some("")
+    );
+    assert!(
+        !editing.press(Key::Escape, NONE),
+        "Escape in an empty search field goes on to the window"
+    );
+    editing.press(Key::Character('z'), LOGO);
+    assert_eq!(editing.text(), "tax", "clearing can be undone");
+
+    let frame = editing.frame();
+    let clear = Point::new(frame.x + frame.width - 15.0, frame.y + frame.height / 2.0);
+    editing.send(Event::PointerDown(Pointer::at(clear)));
+    assert_eq!(editing.text(), "tax", "the clear button acts on release");
+    editing.send(Event::PointerUp(Pointer::at(clear)));
+    assert_eq!(editing.text(), "");
+}
+
+#[test]
+fn a_search_field_is_a_search_input_with_a_clear_button_for_assistive_technology() {
+    let mut editing = Editing::with(|_| Box::new(SearchField::new("Search", "report", |_| {})));
+    let tree = editing.ui.accessibility();
+    let node = |id: NodeId| {
+        tree.nodes
+            .iter()
+            .find(|(node, _)| *node == id)
+            .map(|(_, node)| node.clone())
+            .expect("node")
+    };
+    let field = node(editing.id.into());
+    assert_eq!(field.role(), Role::SearchInput);
+    let clear = field
+        .children()
+        .iter()
+        .copied()
+        .find(|child| node(*child).role() == Role::Button)
+        .expect("a clear button");
+    assert_eq!(node(clear).label(), Some("Clear"));
+    assert!(editing.ui.perform(&request(clear, Action::Click, None)));
+    assert_eq!(editing.text(), "");
 }

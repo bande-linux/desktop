@@ -12,12 +12,14 @@ const RADIUS: f32 = 5.0;
 const PADDING: f32 = 6.0;
 const CARET_ROOM: f32 = 1.0;
 const IN_PLACE_RADIUS: f32 = 4.0;
+const SEARCH_RADIUS: f32 = 7.0;
 const WHOLE_LINE: Range<f32> = 0.0..f32::MAX;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Border {
     Field,
     InPlace,
+    Search,
     None,
 }
 
@@ -63,8 +65,27 @@ impl TextField {
         }
     }
 
+    pub(crate) fn search(self, leading: f32, trailing: f32) -> Self {
+        Self {
+            border: Border::Search,
+            leading,
+            trailing,
+            ..self
+        }
+    }
+
+    pub(crate) fn clear(&mut self) {
+        let revision = self.editor.revision();
+        self.editor.clear();
+        self.changed(revision);
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.editor.is_empty()
+    }
+
     fn height(&self) -> f32 {
-        if self.border == Border::Field {
+        if matches!(self.border, Border::Field | Border::Search) {
             TEXT_FIELD_HEIGHT
         } else {
             (self.editor.font_size() * 1.5).ceil()
@@ -199,6 +220,16 @@ impl Widget for TextField {
                     width: 1.5,
                     paint: cx.palette.accent_color.into(),
                 });
+            }
+            Border::Search => {
+                let shape = Shape::rounded(self.frame, SEARCH_RADIUS);
+                items.push(Item::Fill {
+                    shape,
+                    paint: cx.palette.label_muted.with_alpha(36).into(),
+                });
+                if focused {
+                    super::focus_ring(cx, shape, items);
+                }
             }
             Border::None => {}
         }

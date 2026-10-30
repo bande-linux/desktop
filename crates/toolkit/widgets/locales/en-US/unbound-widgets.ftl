@@ -4,3 +4,4 @@ cut = Cut
 copy = Copy
 paste = Paste
 select-all = Select All
+clear-search = Clear

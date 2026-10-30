@@ -437,6 +437,14 @@ impl Editor {
         }
     }
 
+    pub(crate) fn clear(&mut self) {
+        self.preedit = None;
+        self.history.open = false;
+        let end = self.end();
+        self.replace(Position::default(), end, "", EditKind::Replacing);
+        self.history.open = false;
+    }
+
     pub(crate) fn undo(&mut self) -> bool {
         if self.preedit.is_some() {
             return false;

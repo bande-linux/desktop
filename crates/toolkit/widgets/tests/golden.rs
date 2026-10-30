@@ -4,7 +4,9 @@ use std::path::PathBuf;
 
 use accesskit::{Action, ActionRequest, TreeId};
 use unbound_graphics::{CpuRenderer, Palette, Scheme, TextSystem, pixels};
-use unbound_widgets::{Axis, Context, Event, Stack, TextField, TextView, Ui, Widget, WidgetId};
+use unbound_widgets::{
+    Axis, Context, Event, SearchField, Stack, TextField, TextView, Ui, Widget, WidgetId,
+};
 
 const MIN_SSIM: f64 = 0.99;
 const SCALES: [(f64, &str); 2] = [(1.0, "1x"), (1.5, "1.5x")];
@@ -61,7 +63,8 @@ fn shoot(name: &str, size: (u32, u32), build: fn(Scheme) -> Ui) {
 }
 
 fn text_editing(scheme: Scheme) -> Ui {
-    let empty = TextField::new("Search", "", |_| {});
+    let empty = SearchField::new("Search", "", |_| {});
+    let searching = SearchField::new("Search", "invoice", |_| {});
     let mut selected = TextField::new("Name", "Quarterly report", |_| {});
     selected.select(10..16);
     let composing = TextField::new("Name", "Tokyo ", |_| {});
@@ -79,6 +82,7 @@ fn text_editing(scheme: Scheme) -> Ui {
         16.0,
         vec![
             Box::new(empty),
+            Box::new(searching),
             Box::new(selected),
             Box::new(composing),
             Box::new(notes),
@@ -88,7 +92,7 @@ fn text_editing(scheme: Scheme) -> Ui {
         Box::new(stack),
         Context::new(TextSystem::new(), Palette::for_scheme(scheme)),
     );
-    ui.layout(unbound_widgets::Size::new(320.0, 220.0));
+    ui.layout(unbound_widgets::Size::new(320.0, 254.0));
     focus(&mut ui, composing_id);
     ui.handle(&Event::Preedit {
         text: "とうきょう".to_owned(),
@@ -100,5 +104,5 @@ fn text_editing(scheme: Scheme) -> Ui {
 
 #[test]
 fn text_fields_and_views_match_their_goldens() {
-    shoot("text-editing", (320, 220), text_editing);
+    shoot("text-editing", (320, 254), text_editing);
 }

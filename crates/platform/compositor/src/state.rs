@@ -892,6 +892,7 @@ impl ClientData for ClientState {
 }
 
 const MONOTONIC: u32 = 1;
+const ACTIVATION_TOKEN_LIFETIME: Duration = Duration::from_secs(60);
 
 const DMABUF_FOURCCS: [Fourcc; 2] = [Fourcc::Argb8888, Fourcc::Xrgb8888];
 
@@ -1702,6 +1703,11 @@ impl XdgActivationHandler for State {
                 None => true,
                 Some(focused) => focused.client().map(|client| client.id()) == data.client_id,
             };
+        self.activation_state
+            .retain_tokens(|_, data| data.timestamp.elapsed() < ACTIVATION_TOKEN_LIFETIME);
+        let known = &self.activation_state;
+        self.refused_tokens
+            .retain(|refused| known.data_for_token(refused).is_some());
         if !valid {
             self.refused_tokens.push(token);
         }
@@ -1715,6 +1721,7 @@ impl XdgActivationHandler for State {
         surface: WlSurface,
     ) {
         let app_id = shell::toplevel_names(&surface).1;
+        self.activation_state.remove_token(&token);
         if let Some(index) = self
             .refused_tokens
             .iter()

@@ -32,6 +32,7 @@ pub enum Update {
     Pairing(Option<Question>),
     Pictures(Vec<(String, Pair)>),
     Thumbnail(Pair, unbound_wallpaper::Picture),
+    InputLevel(f32),
     Failed(String),
 }
 

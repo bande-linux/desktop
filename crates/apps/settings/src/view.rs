@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
 
 use accesskit::{Action, ActionData, ActionRequest, TreeId, TreeUpdate};
-use unbound_audio::{Direction, Snapshot};
+use unbound_audio::{Direction, Snapshot, meter_level};
 use unbound_config::{MAX_INPUT_SOURCES, Output};
 use unbound_toolkit::ui::{Context, Event, Key, Modifiers, SearchField, Ui, Widget, WidgetId};
 use unbound_toolkit::{Image, Palette, Rect, Scene, TextSystem};
@@ -30,6 +30,7 @@ pub(crate) enum Intent {
     Set(SettingId, Value),
     Display(String, SettingId, Value),
     Default(Direction, String),
+    AppVolume(String, f32),
     Join(Vec<u8>),
     Password(String),
     CancelJoin,
@@ -90,6 +91,7 @@ pub struct SettingsView {
     pub(crate) outputs: BTreeMap<String, Output>,
     pub(crate) displays: Vec<Display>,
     pub(crate) audio: Option<Snapshot>,
+    pub(crate) input_level: Rc<Cell<f32>>,
     pub(crate) wifi: Option<WifiState>,
     pub(crate) join: Join,
     pub(crate) bluetooth: Option<BluetoothState>,
@@ -135,6 +137,7 @@ impl SettingsView {
             outputs: BTreeMap::new(),
             displays: Vec::new(),
             audio: None,
+            input_level: Rc::default(),
             wifi: None,
             join: Join::default(),
             bluetooth: None,
@@ -227,6 +230,11 @@ impl SettingsView {
 
     pub fn apply(&mut self, update: Update) {
         match update {
+            Update::InputLevel(peak) => {
+                self.input_level
+                    .set(meter_level(peak, self.input_level.get()));
+                return;
+            }
             Update::Values(values) => {
                 for (id, value) in values {
                     self.values.insert(id, value);
@@ -551,6 +559,10 @@ impl SettingsView {
                     self.commands
                         .push(Command::Audio(AudioCommand::Default(direction, name)));
                 }
+                Intent::AppVolume(name, volume) => {
+                    self.commands
+                        .push(Command::Audio(AudioCommand::App(name, volume)));
+                }
                 Intent::Join(ssid) => self.start_join(ssid, None),
                 Intent::Password(password) => {
                     if let Some(ssid) = self.join.asking.clone() {
@@ -679,11 +691,18 @@ impl SettingsView {
             self.commands
                 .push(Command::Bluetooth(BluetoothCommand::Discover(false)));
         }
+        if self.pane == PaneId::Sound {
+            self.commands
+                .push(Command::Audio(AudioCommand::Listen(false)));
+        }
         match pane {
             PaneId::Wifi => self.commands.push(Command::Network(NetworkCommand::Scan)),
             PaneId::Bluetooth => self
                 .commands
                 .push(Command::Bluetooth(BluetoothCommand::Discover(true))),
+            PaneId::Sound => self
+                .commands
+                .push(Command::Audio(AudioCommand::Listen(true))),
             _ => {}
         }
         self.pane = pane;

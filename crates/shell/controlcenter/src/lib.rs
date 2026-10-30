@@ -255,15 +255,6 @@ pub fn panel(status: &Status, palette: Palette, text: TextSystem, changes: &Chan
     (ui, height.ceil())
 }
 
-const METER_FLOOR_DB: f32 = -60.0;
-const METER_FALL: f32 = 0.82;
-
-pub fn meter_level(peak: f32, shown: f32) -> f32 {
-    let decibels = 20.0 * peak.max(f32::MIN_POSITIVE).log10();
-    let level = (1.0 - decibels / METER_FLOOR_DB).clamp(0.0, 1.0);
-    level.max(shown * METER_FALL)
-}
-
 pub fn chooser_menu(choices: &[(String, String, bool)]) -> Menu {
     Menu::new(
         choices

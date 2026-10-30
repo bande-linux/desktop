@@ -83,7 +83,7 @@ impl Sound {
             "device-removed" | "power-unplug" => Some(Self::DeviceRemoved),
             "battery-low" | "battery-caution" => Some(Self::BatteryLow),
             "audio-volume-change" => Some(Self::VolumeChange),
-            _ => None,
+            _ => Alert::from_keyword(name.strip_prefix("alert-")?).map(Self::Alert),
         }
     }
 

@@ -106,6 +106,22 @@ pub trait Config {
     #[zbus(property)]
     fn set_mouse_speed(&self, speed: f64) -> zbus::Result<()>;
     #[zbus(property)]
+    fn alert_sound(&self) -> zbus::Result<String>;
+    #[zbus(property)]
+    fn set_alert_sound(&self, value: &str) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn alert_volume(&self) -> zbus::Result<f64>;
+    #[zbus(property)]
+    fn set_alert_volume(&self, volume: f64) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn sound_effects(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_sound_effects(&self, on: bool) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn volume_feedback(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_volume_feedback(&self, on: bool) -> zbus::Result<()>;
+    #[zbus(property)]
     fn outputs(&self) -> zbus::Result<HashMap<String, HashMap<String, OwnedValue>>>;
     fn set_output(
         &self,
@@ -141,7 +157,7 @@ fn output(settings: &HashMap<String, OwnedValue>) -> Output {
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 21] = [
+pub const CONFIG_SETTINGS: [SettingId; 25] = [
     SettingId::Appearance,
     SettingId::ReduceMotion,
     SettingId::Wallpaper,
@@ -163,6 +179,10 @@ pub const CONFIG_SETTINGS: [SettingId; 21] = [
     SettingId::TrackpadDisableWhileTyping,
     SettingId::MouseNaturalScrolling,
     SettingId::MouseSpeed,
+    SettingId::AlertSound,
+    SettingId::AlertVolume,
+    SettingId::SoundEffects,
+    SettingId::VolumeFeedback,
 ];
 
 pub fn speed_stop(speed: f64) -> u32 {
@@ -251,6 +271,10 @@ impl SettingsClient {
             }
             SettingId::MouseNaturalScrolling => Value::Flag(self.config.mouse_natural_scrolling()?),
             SettingId::MouseSpeed => Value::Number(speed_stop(self.config.mouse_speed()?)),
+            SettingId::AlertSound => Value::Keyword(self.config.alert_sound()?),
+            SettingId::AlertVolume => Value::Fraction(self.config.alert_volume()? as f32),
+            SettingId::SoundEffects => Value::Flag(self.config.sound_effects()?),
+            SettingId::VolumeFeedback => Value::Flag(self.config.volume_feedback()?),
             _ => return Err(zbus::Error::Unsupported),
         })
     }
@@ -309,6 +333,19 @@ impl SettingsClient {
                 self.config.set_input_sources(codes.clone())
             }
             (SettingId::CapsLock, Value::Keyword(keyword)) => self.config.set_caps_lock(keyword),
+            (SettingId::AlertSound, Value::Keyword(keyword)) => {
+                self.config.set_alert_sound(keyword)?;
+                unbound_sound::play(
+                    self.config.inner().connection(),
+                    &format!("alert-{keyword}"),
+                );
+                Ok(())
+            }
+            (SettingId::AlertVolume, Value::Fraction(volume)) => {
+                self.config.set_alert_volume(f64::from(*volume))
+            }
+            (SettingId::SoundEffects, Value::Flag(on)) => self.config.set_sound_effects(*on),
+            (SettingId::VolumeFeedback, Value::Flag(on)) => self.config.set_volume_feedback(*on),
             (SettingId::TrackpadTapToClick, Value::Flag(on)) => {
                 self.config.set_trackpad_tap_to_click(*on)
             }

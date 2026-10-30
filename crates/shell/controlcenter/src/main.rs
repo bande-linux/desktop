@@ -7,13 +7,12 @@ use std::sync::mpsc::{self, Sender};
 use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
-use unbound_audio::{Audio, Level, Meter};
+use unbound_audio::{Audio, Level, Meter, meter_level};
 use unbound_bluetooth::Bluetooth;
 use unbound_controlcenter::media::{self, Command, Playback, Player, Players};
 use unbound_controlcenter::{
     Change, Changes, Choice, EDGE, HUD_DURATION, HUD_SIZE, Hud, KeyboardLight, PANEL_WIDTH,
-    SYSFS_LEDS, Status, blur_rects, card, chooser_menu, hud, material, meter_level, panel, scene,
-    stepped,
+    SYSFS_LEDS, Status, blur_rects, card, chooser_menu, hud, material, panel, scene, stepped,
 };
 use unbound_inbox::Inbox;
 use unbound_network::NetworkManager;

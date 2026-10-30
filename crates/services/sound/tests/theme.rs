@@ -103,6 +103,11 @@ fn freedesktop_names_and_their_aliases_find_their_sound_and_the_chosen_alert() {
         Sound::from_name("power-plug", Alert::Mallet),
         Some(Sound::DeviceAdded)
     );
+    assert_eq!(
+        Sound::from_name("alert-low", Alert::Mallet),
+        Some(Sound::Alert(Alert::Low))
+    );
+    assert_eq!(Sound::from_name("alert-gong", Alert::Mallet), None);
     assert_eq!(Sound::from_name("window-close", Alert::Mallet), None);
 }
 

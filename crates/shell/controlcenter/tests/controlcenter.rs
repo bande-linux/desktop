@@ -9,8 +9,7 @@ use unbound_audio::Level;
 
 use unbound_controlcenter::media::{Command, Playback, Player};
 use unbound_controlcenter::{
-    Change, Changes, Choice, Hud, KeyboardLight, SEGMENTS, Status, clock, meter_level, panel,
-    stepped,
+    Change, Changes, Choice, Hud, KeyboardLight, SEGMENTS, Status, clock, panel, stepped,
 };
 use unbound_toolkit::ui::Ui;
 use unbound_toolkit::{Palette, Scheme, TextSystem};
@@ -332,13 +331,4 @@ fn the_microphone_switch_mutes_the_input_and_its_level_and_choice_are_shown() {
 
     click(&mut ui, microphone);
     assert_eq!(*changes.borrow(), [Change::InputMuted(true)]);
-}
-
-#[test]
-fn the_input_level_reads_in_decibels_and_falls_back_smoothly() {
-    assert_eq!(meter_level(1.0, 0.0), 1.0);
-    assert_eq!(meter_level(0.0, 0.0), 0.0);
-    assert!((meter_level(10_f32.powf(-30.0 / 20.0), 0.0) - 0.5).abs() < 1e-4);
-    let falling = meter_level(0.0, 1.0);
-    assert!(falling > 0.5 && falling < 1.0, "{falling}");
 }

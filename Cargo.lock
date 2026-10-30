@@ -4188,6 +4188,7 @@ dependencies = [
  "unbound-log",
  "unbound-network",
  "unbound-settings-panes",
+ "unbound-sound",
  "unbound-test-bus",
  "unbound-toolkit",
  "unbound-wallpaper",

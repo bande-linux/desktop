@@ -9,7 +9,7 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use graph::{Command, Shared, State};
-pub use level::{Level, VolumeKey};
+pub use level::{Level, VolumeKey, meter_level};
 use pipewire as pw;
 pub use stream::EFFECT_RATE;
 

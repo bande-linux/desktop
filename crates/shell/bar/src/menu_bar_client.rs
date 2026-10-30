@@ -644,9 +644,7 @@ impl<V: StatusView> App for MenuBarClient<V> {
                         MenuBarPlacement::from_keyword(&menu_bar).unwrap_or(self.layout.0),
                         BarEdge::from_keyword(&edge).unwrap_or(self.layout.1),
                     );
-                    if wanted.0 != self.layout.0
-                        || (wanted.0 == MenuBarPlacement::InBar && wanted.1 != self.layout.1)
-                    {
+                    if wanted.0.combines(wanted.1) != self.layout.0.combines(self.layout.1) {
                         self.restart.set(true);
                     }
                 }

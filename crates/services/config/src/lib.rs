@@ -120,6 +120,10 @@ impl MenuBarPlacement {
             .into_iter()
             .find(|placement| placement.keyword() == keyword)
     }
+
+    pub fn combines(self, edge: BarEdge) -> bool {
+        self == Self::InBar && edge == BarEdge::Left
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

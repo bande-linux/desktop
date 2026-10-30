@@ -5,7 +5,6 @@ use accesskit::{Node, NodeId, Role as AccessRole, TreeInfo, TreeUpdate};
 use unbound_bar::L10N;
 use unbound_bar::menubar::StatusView;
 use unbound_bar::rail::{RailView, bar_width, owns_node, surface_size};
-use unbound_config::BarEdge;
 use unbound_toolkit::ui::Event;
 use unbound_toolkit::{
     App, Edges, Item, KeyboardFocus, LayerKind, LayerOptions, Point, Rect, Role, Scene, Shape,
@@ -21,7 +20,7 @@ const ROOT: NodeId = NodeId(1 << 41);
 const HIDDEN_SHADOW: f32 = 8.0;
 const UNREAD_SLIVER: (f32, f32) = (2.0, 24.0);
 
-pub fn combined_role(_edge: BarEdge, icon_size: f32) -> (Role, (u32, u32)) {
+pub fn combined_role(icon_size: f32) -> (Role, (u32, u32)) {
     (
         Role::Layer(LayerOptions {
             layer: LayerKind::Top,

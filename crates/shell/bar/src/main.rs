@@ -12,7 +12,7 @@ use std::time::Instant;
 use accesskit::TreeUpdate;
 use unbound_bar::dock::surface_size;
 use unbound_bar::rail::RailView;
-use unbound_config::{Config, MenuBarPlacement, config_path};
+use unbound_config::{Config, config_path};
 use unbound_status::session::Ending;
 use unbound_toolkit::{App, Role, Scene, Surfaces, TextSystem, Window, WindowError, WindowEvent};
 use unbound_xdg::data_dirs;
@@ -154,9 +154,9 @@ fn build(
     let icon_size = bar.icon_size as f32;
     let mut windows = Vec::new();
     let mut parts: Vec<Box<dyn App>> = Vec::new();
-    let status = match bar.menu_bar {
-        MenuBarPlacement::InBar => {
-            let (role, size) = combined_role(bar.edge, icon_size);
+    let status = match bar.menu_bar.combines(bar.edge) {
+        true => {
+            let (role, size) = combined_role(icon_size);
             let mut window = open(role, size)?;
             window.share_fonts(text);
             let dock = Dock::new(&window, bar, text.sharing_fonts(), session, homes)?;
@@ -172,7 +172,7 @@ fn build(
             parts.push(Box::new(CombinedClient::new(dock, status)));
             shared
         }
-        MenuBarPlacement::Separate => {
+        false => {
             let mut window = open(menu_bar_role(), MENU_BAR_SIZE)?;
             window.share_fonts(text);
             let client =

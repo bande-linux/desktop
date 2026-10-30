@@ -711,3 +711,10 @@ fn connected_displays_are_named_as_the_compositor_names_them() {
         ]
     );
 }
+
+#[test]
+fn only_the_left_edge_combines_the_menus_into_the_bar_for_now() {
+    assert!(MenuBarPlacement::InBar.combines(BarEdge::Left));
+    assert!(!MenuBarPlacement::InBar.combines(BarEdge::Bottom));
+    assert!(!MenuBarPlacement::Separate.combines(BarEdge::Left));
+}

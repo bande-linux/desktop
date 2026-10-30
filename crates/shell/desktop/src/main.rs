@@ -7,7 +7,7 @@ use std::thread;
 use std::time::Instant;
 
 use accesskit::TreeUpdate;
-use unbound_config::{BarEdge, Config, MenuBarPlacement, config_path};
+use unbound_config::{BarEdge, Config, config_path};
 use unbound_desktop_surface::{
     Bounds, CONFIRM_DELETE_FLAG, DesktopView, Item, Kind, Layer, Layouts, Luma, MenuApp, Request,
     Selection, WallpaperKey, command, confirm_delete, desktop_menu, items_menu, layouts_path, list,
@@ -225,10 +225,7 @@ impl Surface {
         let dock = unbound_bar::dock::exclusive_zone(unbound_bar::dock::ICON_SIZE);
         let bar = unbound_bar::rail::bar_width(unbound_bar::dock::ICON_SIZE);
         let (left, right, bottom, top) = match (self.bar_edge, self.combined_bar) {
-            (BarEdge::Left, true) => (bar, 0.0, 0.0, 0.0),
-            (BarEdge::Right, true) => (0.0, bar, 0.0, 0.0),
-            (BarEdge::Bottom, true) => (0.0, 0.0, bar, 0.0),
-            (BarEdge::Top, true) => (0.0, 0.0, 0.0, bar),
+            (_, true) => (bar, 0.0, 0.0, 0.0),
             (BarEdge::Left, false) => (dock, 0.0, 0.0, top),
             (BarEdge::Right, false) => (0.0, dock, 0.0, top),
             (BarEdge::Bottom, false) => (0.0, 0.0, dock, top),
@@ -790,7 +787,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .and_then(|source| Config::parse(&source).ok())
         .unwrap_or_default();
     let bar_edge = config.bar.edge;
-    let combined_bar = config.bar.menu_bar == MenuBarPlacement::InBar;
+    let combined_bar = config.bar.menu_bar.combines(config.bar.edge);
     let desktop_dir = desktop_folder(home.as_deref().unwrap_or(Path::new("/")));
     let user = std::env::var("USER").unwrap_or_default();
     let trash = Trash::for_user().ok_or("no home folder for the Trash")?;

@@ -58,6 +58,7 @@ pub(crate) struct Shell {
     identifiers: Vec<(ExtForeignToplevelHandleV1, String)>,
     quit_requests: usize,
     toplevels: Vec<(ExtForeignToplevelHandleV1, String, bool)>,
+    toplevel_updates: usize,
     workspaces: Option<(u32, u32)>,
     window_workspaces: Vec<(String, u32)>,
     input_sources: Option<(String, u32)>,
@@ -391,6 +392,10 @@ impl TestClient {
         self.shell_request(server, |shell| shell.activate_app(app_id.to_owned()));
     }
 
+    pub fn toplevel_updates(&self) -> usize {
+        self.globals.shell.toplevel_updates
+    }
+
     pub fn running_app_ids(&self) -> Vec<String> {
         self.globals
             .shell
@@ -652,6 +657,9 @@ impl Dispatch<ExtForeignToplevelHandleV1, ()> for Globals {
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
+        if let ext_foreign_toplevel_handle_v1::Event::Done = &event {
+            globals.shell.toplevel_updates += 1;
+        }
         if let ext_foreign_toplevel_handle_v1::Event::Identifier { identifier } = &event {
             globals
                 .shell

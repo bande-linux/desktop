@@ -3774,14 +3774,18 @@ dependencies = [
 name = "unbound-bench"
 version = "0.1.0"
 dependencies = [
+ "rustix 1.1.6",
  "smithay",
  "tempfile",
  "tracing",
  "unbound-compositor",
+ "unbound-files",
+ "unbound-fs",
  "unbound-log",
  "unbound-sample",
  "unbound-test-wayland",
  "unbound-toolkit",
+ "unbound-xdg",
  "wayland-client",
 ]
 

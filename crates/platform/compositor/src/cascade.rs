@@ -1,7 +1,9 @@
 use smithay::reexports::wayland_server::Resource;
 use smithay::utils::{Logical, Point, Size};
 
+use crate::shell::toplevel_names;
 use crate::state::{Rect, State, centered};
+use crate::window::Window;
 
 const CASCADE_STEP: i32 = 28;
 
@@ -36,13 +38,15 @@ pub(crate) fn cascaded(
 
 impl State {
     pub(crate) fn sibling_locations(&self, index: usize) -> Vec<Point<i32, Logical>> {
-        let owner = self.windows[index].surface().client();
+        let app = |window: &Window| {
+            let app_id = toplevel_names(window.surface()).1;
+            (app_id.is_empty().then(|| window.surface().client()), app_id)
+        };
+        let own = app(&self.windows[index]);
         self.windows
             .iter()
             .enumerate()
-            .filter(|(other, window)| {
-                *other != index && self.present(window) && window.surface().client() == owner
-            })
+            .filter(|(other, window)| *other != index && self.present(window) && app(window) == own)
             .map(|(_, window)| window.location)
             .collect()
     }

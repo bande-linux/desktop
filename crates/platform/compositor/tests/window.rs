@@ -483,8 +483,6 @@ fn super_m_minimizes_the_key_window() {
 
 #[test]
 fn an_apps_next_window_cascades_from_its_frontmost_one_and_other_apps_stay_centred() {
-    let mut server = server();
-    let mut editor = app(&mut server, RED);
     let pixels = BLUE.repeat((WINDOW.0 * WINDOW.1) as usize);
     let image = ShmImage {
         width: WINDOW.0,
@@ -493,8 +491,14 @@ fn an_apps_next_window_cascades_from_its_frontmost_one_and_other_apps_stay_centr
         format: Format::Xrgb8888,
         bytes: &pixels,
     };
-    editor.show_window(&mut server, &image);
-    let _other = app(&mut server, WHITE);
+    let mut server = server();
+    let mut first = TestClient::connect(&mut server);
+    first.show_window_of(&mut server, &image, "org.example.Terminal");
+    first.show_window_of(&mut server, &image, "org.example.Terminal");
+    let mut second_process = TestClient::connect(&mut server);
+    second_process.show_window_of(&mut server, &image, "org.example.Terminal");
+    let mut other = TestClient::connect(&mut server);
+    other.show_window_of(&mut server, &image, "org.example.Editor");
 
     let locations: Vec<(i32, i32)> = server
         .windows()
@@ -503,6 +507,11 @@ fn an_apps_next_window_cascades_from_its_frontmost_one_and_other_apps_stay_centr
         .collect();
     assert_eq!(
         locations,
-        [CENTERED, (CENTERED.0 + 28, CENTERED.1 + 28), CENTERED]
+        [
+            CENTERED,
+            (CENTERED.0 + 28, CENTERED.1 + 28),
+            (CENTERED.0 + 56, CENTERED.1 + 56),
+            CENTERED
+        ]
     );
 }

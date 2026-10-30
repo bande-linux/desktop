@@ -5,9 +5,13 @@ use std::time::Duration;
 
 use unbound_menubar::dbusmenu::{Node, menu, tree, without_mnemonics};
 use unbound_menubar::devices::battery_of;
-use unbound_menubar::menus::{Command, battery_menu, bluetooth_menu, sound_menu, system_menu};
+use unbound_menubar::menus::{
+    Command, battery_menu, bluetooth_menu, input_source_menu, sound_menu, system_menu,
+};
 use unbound_menubar::session::{Ending, facts};
-use unbound_menubar::status::{Battery, Bluetooth, Gadget, Output, Power, Sound};
+use unbound_menubar::status::{
+    Battery, Bluetooth, Gadget, InputSource, InputSources, Output, Power, Sound,
+};
 use unbound_menubar::tray::{TrayIcon, pixmap_rgba, split};
 use unbound_menubar::{MenuBar, Slot, app_name};
 use unbound_toolkit::ui::{Menu, MenuItem};
@@ -150,6 +154,7 @@ fn every_command_survives_its_trip_through_a_menu_action() {
         Command::HideApp,
         Command::HideOthers,
         Command::ShowAll,
+        Command::SelectInputSource(2),
     ] {
         assert_eq!(Command::parse(&command.action()), Some(command));
     }
@@ -464,5 +469,60 @@ fn about_this_computer_names_the_system_chip_and_memory() {
     assert_eq!(
         Ending::from_keyword(Ending::ShutDown.keyword()),
         Some(Ending::ShutDown)
+    );
+}
+
+fn sources(active: usize, shorts: &[(&str, &str)]) -> InputSources {
+    InputSources {
+        sources: shorts
+            .iter()
+            .map(|(name, short)| InputSource {
+                name: (*name).to_owned(),
+                short: (*short).to_owned(),
+            })
+            .collect(),
+        active,
+    }
+}
+
+#[test]
+fn the_input_source_item_appears_only_with_more_than_one_source() {
+    let mut bar = bar();
+    bar.status_mut().input_sources = sources(0, &[("Swedish", "SV")]);
+    bar.scene(1280, 24, 1.0);
+    assert_eq!(bar.slot_rect(Slot::InputSource), None);
+
+    bar.status_mut().input_sources = sources(1, &[("Swedish", "SV"), ("English (US)", "EN")]);
+    bar.scene(1280, 24, 1.0);
+    let badge = bar.slot_rect(Slot::InputSource).expect("shown");
+    let control_center = bar.slot_rect(Slot::ControlCenter).expect("control center");
+    assert!(badge.x + badge.width <= control_center.x);
+    let labels: Vec<String> = bar
+        .accessibility()
+        .nodes
+        .iter()
+        .filter_map(|(_, node)| node.label().map(str::to_owned))
+        .collect();
+    assert!(labels.contains(&"Input source: English (US)".to_owned()));
+}
+
+#[test]
+fn the_input_source_menu_checks_the_active_source_and_opens_keyboard_settings() {
+    let menu = input_source_menu(&sources(1, &[("Swedish", "SV"), ("German", "DE")]));
+    assert_eq!(
+        titles(&menu),
+        [
+            ("Swedish".to_owned(), true, false),
+            ("German".to_owned(), true, true),
+            ("Open Keyboard Settings…".to_owned(), true, false),
+        ]
+    );
+    assert_eq!(
+        Command::parse(action_of(&menu, "Swedish")),
+        Some(Command::SelectInputSource(0))
+    );
+    assert_eq!(
+        Command::parse(action_of(&menu, "Open Keyboard Settings…")),
+        Some(Command::Settings(Some("keyboard".to_owned())))
     );
 }

@@ -580,3 +580,77 @@ impl Headless {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use smithay::input::keyboard::keysyms;
+    use unbound_keyboard::{Action, SHORTCUTS};
+
+    use super::{Shortcut, shortcut};
+    use crate::motion::DOCK_NAMESPACE;
+    use crate::state::MENU_BAR_NAMESPACE;
+    use crate::tile::Direction;
+
+    fn keysym(key: &str) -> u32 {
+        match key {
+            "Space" => keysyms::KEY_space,
+            "Tab" => keysyms::KEY_Tab,
+            "Escape" => keysyms::KEY_Escape,
+            "Left" => keysyms::KEY_Left,
+            "Right" => keysyms::KEY_Right,
+            "Up" => keysyms::KEY_Up,
+            "Down" => keysyms::KEY_Down,
+            "F2" => keysyms::KEY_F2,
+            "F3" => keysyms::KEY_F3,
+            single => single
+                .chars()
+                .next()
+                .map_or(0, |character| character.to_ascii_lowercase() as u32),
+        }
+    }
+
+    fn expected(action: Action) -> Shortcut {
+        match action {
+            Action::CloseWindow => Shortcut::CloseWindow,
+            Action::MinimizeWindow => Shortcut::MinimizeWindow,
+            Action::ToggleFullScreen => Shortcut::ToggleFullscreen,
+            Action::TileWindow => Shortcut::Place(Direction::Left),
+            Action::NextApp => Shortcut::NextApp,
+            Action::QuitApp => Shortcut::QuitApp,
+            Action::HideApp => Shortcut::HideApp,
+            Action::HideOthers => Shortcut::HideOthers,
+            Action::ForceQuit => Shortcut::ForceQuit,
+            Action::PreviousWorkspace => Shortcut::Workspace(false),
+            Action::NextWorkspace => Shortcut::Workspace(true),
+            Action::WorkspaceByNumber => Shortcut::WorkspaceAt(0),
+            Action::CarryWindowLeft => Shortcut::CarryWindow(false),
+            Action::CarryWindowRight => Shortcut::CarryWindow(true),
+            Action::Overview => Shortcut::Overview,
+            Action::AppWindows => Shortcut::AppWindows,
+            Action::NextInputSource => Shortcut::InputSource { backwards: false },
+            Action::PreviousInputSource => Shortcut::InputSource { backwards: true },
+            Action::CaptureScreen => Shortcut::CaptureScreen,
+            Action::CaptureArea => Shortcut::CaptureArea,
+            Action::ShowLauncher => Shortcut::ShowLauncher,
+            Action::FocusMenuBar => Shortcut::FocusShell(MENU_BAR_NAMESPACE),
+            Action::FocusDock => Shortcut::FocusShell(DOCK_NAMESPACE),
+            Action::LockScreen => Shortcut::LockScreen,
+        }
+    }
+
+    #[test]
+    fn every_shortcut_listed_in_settings_runs_its_action() {
+        for listed in SHORTCUTS {
+            let parts: Vec<&str> = listed.keys.split('+').collect();
+            let held = |name: &str| parts.contains(&name);
+            assert!(held("Super"), "{} lacks Super", listed.keys);
+            let key = keysym(parts.last().copied().unwrap_or_default());
+            assert_eq!(
+                shortcut(key, Some(key), held("Ctrl"), held("Alt"), held("Shift")),
+                Some(expected(listed.action)),
+                "{}",
+                listed.keys
+            );
+        }
+    }
+}

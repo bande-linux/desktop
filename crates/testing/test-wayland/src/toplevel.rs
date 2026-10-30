@@ -26,7 +26,7 @@ pub struct PopupRequest {
     pub parent: usize,
     pub anchor_rect: (i32, i32, i32, i32),
     pub size: (i32, i32),
-    pub flip_x: bool,
+    pub adjustment: ConstraintAdjustment,
     pub grab: bool,
     pub color: [u8; 4],
 }
@@ -207,9 +207,7 @@ impl TestClient {
         positioner.set_size(request.size.0, request.size.1);
         positioner.set_anchor(Anchor::BottomRight);
         positioner.set_gravity(Gravity::BottomRight);
-        if request.flip_x {
-            positioner.set_constraint_adjustment(ConstraintAdjustment::FlipX);
-        }
+        positioner.set_constraint_adjustment(request.adjustment);
         let popup = xdg_surface.get_popup(parent, &positioner, &qh, ());
         if let Some(layer) = layer {
             layer.get_popup(&popup);

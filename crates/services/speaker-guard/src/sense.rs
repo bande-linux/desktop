@@ -55,6 +55,12 @@ const IMPEDANCE_CHECK_VOLTAGE: f64 = 0.2;
 const MIN_IMPEDANCE_RATIO: f64 = 0.8;
 const MAX_IMPEDANCE_RATIO: f64 = 8.0;
 
+impl ChannelRange {
+    fn clipped(&self) -> bool {
+        self.min <= -i16::MAX || self.max == i16::MAX
+    }
+}
+
 impl SenseLayout {
     pub fn measure(&self, frames: &[i16]) -> Measurement {
         let samples = |channel: usize| frames.iter().skip(channel).step_by(self.channels).copied();
@@ -144,6 +150,9 @@ impl SenseMonitor {
         }
         self.voltage_seen_live |= !voltage_frozen;
         self.current_seen_live |= !current_frozen;
+        if measurement.voltage.clipped() || measurement.current.clipped() {
+            return Ok(self.worst_case_power);
+        }
         if measurement.voltage_rms > IMPEDANCE_CHECK_VOLTAGE {
             let impedance = measurement.voltage_rms / measurement.current_rms.max(1e-6);
             let resistance = self.layout.dc_resistance;
@@ -263,6 +272,14 @@ mod tests {
             assess(&mut monitor, &swapped),
             Err(Fault::Impedance(_))
         ));
+    }
+
+    #[test]
+    fn a_clipped_sense_period_costs_worst_case_power() {
+        let mut monitor = j473();
+        let mut clipped = stream(1.0, 4.6, 1.0);
+        clipped[1] = i16::MAX;
+        assert_eq!(assess(&mut monitor, &clipped), Ok(monitor.worst_case_power));
     }
 
     #[test]

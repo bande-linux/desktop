@@ -82,15 +82,6 @@ def screenshot():
     return tile(*hue_field(320, 0.54, 0.16), body)
 
 
-def web():
-    white = PAPER
-    body = (circle(24, 24, 12.5, white, 'opacity="0.2"')
-            + circle(24, 24, 12.5, 'none', f'stroke="{white}" stroke-width="2.2"')
-            + '<ellipse cx="24" cy="24" rx="5.4" ry="12.5" fill="none" stroke="#FCFBF9" stroke-width="1.8"/>'
-            + stroke('M11.5 24h25M13.6 17.5h20.8M13.6 30.5h20.8', white, 1.6))
-    return tile(tone(55, 0.78, 0.15), tone(38, 0.62, 0.19), body)
-
-
 def text_editor():
     lines = tone(65, 0.42, 0.09)
     body = rect(12, 10, 24, 28, 3, PAPER, 'opacity="0.95"')
@@ -165,8 +156,6 @@ ICONS = {
     'org.unbound.Launcher': launcher,
     'org.unbound.About': about,
     'org.unbound.Screenshot': screenshot,
-    'firefox-esr': web,
-    'firefox': web,
     'org.gnome.TextEditor': text_editor,
     'org.gnome.Loupe': image_viewer,
     'org.gnome.Papers': document_viewer,

@@ -202,7 +202,6 @@ fn every_app_we_ship_or_recommend_has_an_icon_in_the_theme() {
     assert_eq!(names.len(), 4);
     names.extend(
         [
-            "firefox-esr",
             "org.gnome.TextEditor",
             "org.gnome.Loupe",
             "org.gnome.Papers",

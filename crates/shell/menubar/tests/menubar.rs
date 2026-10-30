@@ -9,7 +9,7 @@ use unbound_menubar::menus::{Command, battery_menu, bluetooth_menu, sound_menu, 
 use unbound_menubar::session::{Ending, facts};
 use unbound_menubar::status::{Battery, Bluetooth, Gadget, Output, Power, Sound};
 use unbound_menubar::tray::{TrayIcon, pixmap_rgba, split};
-use unbound_menubar::{MenuBar, Slot, app_name, clock_text};
+use unbound_menubar::{MenuBar, Slot, app_name};
 use unbound_toolkit::ui::{Menu, MenuItem};
 use unbound_toolkit::{Item, Palette, Point, Scheme, TextSystem};
 use zbus::zvariant::{OwnedValue, Structure, Value};
@@ -37,12 +37,6 @@ fn action_of<'a>(menu: &'a Menu, title: &str) -> &'a str {
         .find(|item| item.title == title)
         .unwrap_or_else(|| panic!("no {title} in {menu:?}"))
         .action
-}
-
-#[test]
-fn the_clock_reads_like_the_macos_menu_bar() {
-    let now: jiff::Zoned = "2026-10-29T09:05:00+02:00[+02:00]".parse().expect("time");
-    assert_eq!(clock_text(&now), "Thu 29 Oct 09:05");
 }
 
 #[test]

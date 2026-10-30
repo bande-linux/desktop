@@ -8,6 +8,7 @@ use std::sync::mpsc::{self, Sender};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use unbound_datetime::DateFormats;
 use unbound_inbox::Inbox;
 use unbound_menubar::dbusmenu::{APP_MENU_PATH, Node};
 use unbound_menubar::devices::{Control, SoundControl, end_session, run_controls, run_sound};
@@ -16,7 +17,7 @@ use unbound_menubar::menus::{
 };
 use unbound_menubar::session::{COUNTDOWN, Ending, facts};
 use unbound_menubar::tray::{Errand, TrayIcon, TrayItem, host, run_errands};
-use unbound_menubar::{HEIGHT, L10N, MenuBar, Slot, Update, app_name, clock_text};
+use unbound_menubar::{HEIGHT, L10N, MenuBar, Slot, Update, app_name};
 use unbound_toolkit::ui::{
     Axis, Button, Event, Key, Label, Menu, MenuItem, PointerButton, Stack, Ui, Widget,
 };
@@ -53,6 +54,7 @@ struct Bar {
     app_id: String,
     app_root: Option<Node>,
     user: String,
+    dates: DateFormats,
     next_clock: Instant,
 }
 
@@ -433,7 +435,7 @@ impl App for Bar {
 
     fn tick(&mut self, window: &mut Window, now: Instant) {
         self.next_clock = now + CLOCK_TICK;
-        if self.bar.set_clock(clock_text(&jiff::Zoned::now())) {
+        if self.bar.set_clock(self.dates.clock(&jiff::Zoned::now())) {
             window.request_redraw();
         }
     }
@@ -497,11 +499,12 @@ fn run_bar() -> Result<(), Box<dyn std::error::Error>> {
         .set_background_blur(&[Rect::new(0.0, 0.0, BLUR_WIDTH, HEIGHT as f32)])
         .inspect_err(|error| tracing::info!("the menu bar is not blurred: {error}"))
         .is_ok();
+    let dates = DateFormats::from_env();
     let mut bar = Bar {
         bar: MenuBar::new(
             window.appearance().palette(),
             TextSystem::new(),
-            clock_text(&jiff::Zoned::now()),
+            dates.clock(&jiff::Zoned::now()),
         ),
         names,
         inbox,
@@ -513,6 +516,7 @@ fn run_bar() -> Result<(), Box<dyn std::error::Error>> {
         app_id: String::new(),
         app_root: None,
         user: user_name(),
+        dates,
         next_clock: Instant::now() + CLOCK_TICK,
     };
     bar.bar.set_translucent(blurred);

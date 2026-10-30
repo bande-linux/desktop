@@ -12,6 +12,7 @@ tracing.workspace = true
 unbound-app-menu.workspace = true
 unbound-audio.workspace = true
 unbound-bluetooth.workspace = true
+unbound-datetime.workspace = true
 unbound-inbox.workspace = true
 unbound-l10n.workspace = true
 unbound-log.workspace = true

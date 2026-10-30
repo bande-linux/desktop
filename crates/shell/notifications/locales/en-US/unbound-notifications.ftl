@@ -5,6 +5,7 @@ no-notifications = No Notifications
 do-not-disturb-on = Do Not Disturb is on. Notifications arrive here silently.
 age-now = now
 age-minutes = { $count } min ago
+age-yesterday = Yesterday
 age-hours = { $count ->
     [one] 1 hour ago
    *[other] { $count } hours ago

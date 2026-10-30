@@ -42,10 +42,6 @@ const OPAQUE_ALPHA: u8 = 240;
 const LOW: Color = Color::hex(0xFF453A);
 const CHARGING: Color = Color::hex(0x30D158);
 
-pub fn clock_text(now: &jiff::Zoned) -> String {
-    now.strftime("%a %-d %b %H:%M").to_string()
-}
-
 pub fn app_name<'a>(app_id: &'a str, names: &'a [(String, String)]) -> &'a str {
     names
         .iter()

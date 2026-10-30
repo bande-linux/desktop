@@ -760,4 +760,27 @@ fn a_disclosure_hides_its_content_from_pointer_keyboard_and_assistive_tech_until
         data: None,
     }));
     assert_eq!(*toggles.borrow(), [true, false]);
+    assert_eq!(ui.focus(), None, "the hidden field gives up focus");
+}
+
+#[test]
+fn collapsing_a_disclosure_around_the_focus_moves_focus_to_the_disclosure() {
+    let field = TextField::new("Proxy", "", |_| {});
+    let field_id = field.id();
+    let disclosure = Disclosure::new("Advanced", true, field, |_| {});
+    let id = disclosure.id();
+    let mut cx = context();
+    cx.keyboard_navigation = true;
+    let mut ui = Ui::new(Box::new(disclosure), cx);
+    ui.layout(AREA);
+    ui.handle(&key(Key::Tab, NONE));
+    ui.handle(&key(Key::Tab, NONE));
+    assert_eq!(ui.focus(), Some(field_id));
+    ui.perform(&ActionRequest {
+        action: Action::Collapse,
+        target_tree: TreeId::ROOT,
+        target_node: id.into(),
+        data: None,
+    });
+    assert_eq!(ui.focus(), Some(id));
 }

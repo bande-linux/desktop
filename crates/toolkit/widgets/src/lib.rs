@@ -756,12 +756,35 @@ impl Ui {
     }
 
     fn deliver(&mut self, target: WidgetId, event: &Event) -> bool {
+        let focus_path = self.focus_path();
         let Some(widget) = lookup_in(&mut self.root, &mut self.sheet, target) else {
             return false;
         };
         let handled = widget.handle(&mut self.cx, event);
         self.dismiss_finished_sheet();
+        self.keep_focus_reachable(focus_path);
         handled
+    }
+
+    fn focus_path(&self) -> Vec<WidgetId> {
+        let mut path = Vec::new();
+        if let Some(focus) = self.cx.focus {
+            path_to(self.active(), focus, &mut path);
+        }
+        path
+    }
+
+    fn keep_focus_reachable(&mut self, before: Vec<WidgetId>) {
+        let Some(focus) = self.cx.focus else {
+            return;
+        };
+        if before.last() != Some(&focus) || self.lookup(focus).is_some() {
+            return;
+        }
+        self.cx.focus = before
+            .into_iter()
+            .rev()
+            .find(|id| self.lookup(*id).is_some() && self.accepts_focus(*id));
     }
 
     fn move_focus(&mut self, forward: bool) {
@@ -862,11 +885,13 @@ impl Ui {
             }
             return accepts;
         }
+        let focus_path = self.focus_path();
         let Some(widget) = lookup_in(&mut self.root, &mut self.sheet, target) else {
             return false;
         };
         let performed = widget.perform(&mut self.cx, request);
         self.dismiss_finished_sheet();
+        self.keep_focus_reachable(focus_path);
         performed
     }
 }

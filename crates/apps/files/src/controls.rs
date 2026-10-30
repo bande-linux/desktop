@@ -7,13 +7,13 @@ use std::time::Instant;
 use accesskit::{Action, ActionRequest, TreeId};
 use unbound_fs::{Sort, SortBy, format_date, format_size};
 use unbound_toolkit::ui::{
-    Alert, Cell, ClipboardRequest, Column, Event, HEADER_HEIGHT, Key, Modifiers, Pointer,
-    PointerButton, Row, Size, Sort as TableSort, Table, TextField, Toggle, Widget, WidgetId,
+    Alert, Cell, ClipboardRequest, Column, Event, FreeLayout, HEADER_HEIGHT, Key, Modifiers,
+    Pointer, PointerButton, Row, Size, Sort as TableSort, Table, TextField, Toggle, Widget,
+    WidgetId,
 };
 use unbound_toolkit::{Image, Point, Rect};
 
 use crate::L10N;
-use crate::host::Host;
 use crate::prompt::{Kind, Prompt};
 use crate::view::{
     COLUMN_WIDTH, FilesView, ROW_HEIGHT, Rename, Request, SEARCH_HEIGHT, SLOW_CLICK_RENAME, Search,
@@ -119,8 +119,8 @@ fn request(action: Action, target: accesskit::NodeId) -> ActionRequest {
 }
 
 impl FilesView {
-    fn host_mut(&mut self) -> Option<&mut Host> {
-        self.ui.widget_as::<Host>(self.host)
+    fn host_mut(&mut self) -> Option<&mut FreeLayout> {
+        self.ui.widget_as::<FreeLayout>(self.host)
     }
 
     pub(crate) fn frame_of(&mut self, id: WidgetId) -> Option<Rect> {
@@ -132,17 +132,16 @@ impl FilesView {
     }
 
     pub(crate) fn focus_content(&mut self) {
-        let target = match self.browser.single() {
-            true => self.table,
-            false => self.host,
-        };
-        self.focus(target);
+        match self.browser.single() {
+            true => self.focus(self.table),
+            false => self.ui.clear_focus(),
+        }
     }
 
-    fn insert(&mut self, widget: impl Widget + 'static, framed: bool) -> WidgetId {
+    fn insert(&mut self, widget: impl Widget + 'static) -> WidgetId {
         let id = widget.id();
         if let Some(host) = self.host_mut() {
-            host.insert(Box::new(widget), Rect::default(), framed);
+            host.insert(widget, Rect::default());
         }
         self.layout_controls();
         id
@@ -583,9 +582,9 @@ impl FilesView {
         };
         let (path, name, folder) = (entry.path.clone(), entry.name.clone(), entry.is_folder());
         self.cancel_rename();
-        let mut field = TextField::new("", &name, |_| {}).borderless(NAME_SIZE);
+        let mut field = TextField::new("", &name, |_| {}).in_place(NAME_SIZE);
         field.select(0..stem_end(&name, folder));
-        let field = self.insert(field, true);
+        let field = self.insert(field);
         self.rename = Some(Rename { path, field });
         self.focus(field);
         self.ui
@@ -625,7 +624,7 @@ impl FilesView {
             send(Signal::Search(text.to_owned()));
         });
         let column = self.browser.active();
-        let field = self.insert(field, false);
+        let field = self.insert(field);
         self.search = Some(Search { column, field });
         self.layout_controls();
         self.focus(field);

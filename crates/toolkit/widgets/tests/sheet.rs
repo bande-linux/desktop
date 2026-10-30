@@ -142,3 +142,19 @@ fn the_window_behind_a_sheet_ignores_clicks_tab_and_assistive_actions() {
     assert_eq!(alert.1.label(), Some("Delete “Report”?"));
     assert!(alert.1.is_modal());
 }
+
+#[test]
+fn a_dialog_floats_in_the_upper_middle_instead_of_hanging_from_the_top() {
+    let mut window = Window::new();
+    let alert = Alert::new("Delete?", "", |_| {}).primary("Delete", "delete");
+    let id = alert.id();
+    window.ui.present_dialog(alert);
+    window.settle();
+    let frame = window.ui.widget(id).expect("dialog").frame();
+    assert!(frame.y > 0.0, "it does not touch the top: {frame:?}");
+    let above = frame.y;
+    let below = AREA.height - frame.y - frame.height;
+    assert!(above < below, "it sits above the middle: {frame:?}");
+    window.key(Key::Enter);
+    assert!(!window.ui.has_sheet());
+}

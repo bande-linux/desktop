@@ -101,8 +101,7 @@ impl FilesView {
         self.size = (width as f32, height as f32);
         self.hits.clear();
         self.layout_controls();
-        let mut controls = self.ui.scene(width, height).items;
-        let sheet = controls.split_off(self.painted.get().min(controls.len()));
+        let (controls, sheet) = self.ui.paint_layers(width, height);
         let mut items = Vec::new();
         self.paint_sidebar(&mut items);
         self.paint_columns(&mut items);

@@ -2,6 +2,7 @@ mod animation;
 mod button;
 mod context_menu;
 mod disclosure;
+mod free_layout;
 mod label;
 mod menu;
 mod scroll;
@@ -24,6 +25,7 @@ pub use animation::Animated;
 pub use button::{BUTTON_HEIGHT, Button};
 pub use context_menu::ContextMenu;
 pub use disclosure::{DISCLOSURE_HEIGHT, Disclosure};
+pub use free_layout::FreeLayout;
 pub use label::Label;
 pub use menu::{Menu, MenuItem, MenuOutcome, MenuPanel, MenuTracker};
 pub use scroll::{ScrollState, ScrollView};
@@ -138,6 +140,7 @@ impl Context {
 }
 
 const FOCUS_RING: f32 = 3.0;
+const DIALOG_RISE: f32 = 12.0;
 
 fn focus_ring(cx: &Context, shape: Shape, items: &mut Vec<Item>) {
     items.push(Item::Stroke {
@@ -400,6 +403,10 @@ impl Ui {
         self.cx.focus
     }
 
+    pub fn clear_focus(&mut self) {
+        self.cx.focus = None;
+    }
+
     pub fn widget(&mut self, id: WidgetId) -> Option<&mut dyn Widget> {
         self.lookup_mut(id)
     }
@@ -432,16 +439,25 @@ impl Ui {
     }
 
     pub fn present_sheet(&mut self, sheet: impl Widget + 'static) {
+        self.present(Box::new(sheet), false);
+    }
+
+    pub fn present_dialog(&mut self, dialog: impl Widget + 'static) {
+        self.present(Box::new(dialog), true);
+    }
+
+    fn present(&mut self, widget: Box<dyn Widget>, floating: bool) {
         self.cx.now = (self.clock)();
         self.captured = None;
         let previous_focus = self.cx.focus.take();
         let mut shown = Animated::new(0.0);
         shown.animate_to(&self.cx, 1.0, Spring::QUICK);
         self.sheet = Some(Sheet {
-            widget: Box::new(sheet),
+            widget,
             shown,
             closing: false,
             previous_focus,
+            floating,
         });
         let mut order = Vec::new();
         focus_order(self.active(), &self.cx, &mut order);
@@ -480,11 +496,17 @@ impl Ui {
         if let Some(sheet) = &mut self.sheet {
             let measured = sheet.widget.measure(&mut self.cx, size);
             let shown = sheet.shown.value(&self.cx);
+            let y = match sheet.floating {
+                true => {
+                    ((size.height - measured.height) / 3.0).round() - DIALOG_RISE * (1.0 - shown)
+                }
+                false => -measured.height * (1.0 - shown),
+            };
             sheet.widget.place(
                 &mut self.cx,
                 Rect::new(
                     ((size.width - measured.width) / 2.0).round(),
-                    -measured.height * (1.0 - shown),
+                    y,
                     measured.width,
                     measured.height,
                 ),
@@ -507,11 +529,23 @@ impl Ui {
     }
 
     pub fn scene(&mut self, width: u32, height: u32) -> Scene {
+        let (mut items, sheet) = self.paint_layers(width, height);
+        items.extend(sheet);
+        Scene {
+            width,
+            height,
+            background: self.cx.palette.surface_background,
+            items,
+        }
+    }
+
+    pub fn paint_layers(&mut self, width: u32, height: u32) -> (Vec<Item>, Vec<Item>) {
         self.cx.now = (self.clock)();
         self.cx.animating.set(false);
         self.layout(Size::new(width as f32, height as f32));
         let mut items = Vec::new();
         self.root.paint(&self.cx, &mut items);
+        let mut above = Vec::new();
         if let Some(sheet) = &self.sheet {
             let shown = sheet.shown.value(&self.cx);
             if sheet.closing && shown <= 0.001 {
@@ -521,16 +555,11 @@ impl Ui {
                     &self.cx,
                     shown,
                     Size::new(width as f32, height as f32),
-                    &mut items,
+                    &mut above,
                 );
             }
         }
-        Scene {
-            width,
-            height,
-            background: self.cx.palette.surface_background,
-            items,
-        }
+        (items, above)
     }
 
     pub fn handle(&mut self, event: &Event) -> bool {

@@ -1,5 +1,5 @@
 mod backdrop;
-mod editor;
+mod confirm;
 mod menus;
 mod model;
 mod places;
@@ -10,6 +10,7 @@ use std::sync::LazyLock;
 use unbound_l10n::Localizer;
 
 pub use backdrop::{Key as WallpaperKey, Layer, Luma, placeholder};
+pub use confirm::{CONFIRM_DELETE_FLAG, confirm_delete};
 pub use menus::{App as MenuApp, Command, Selection, command, desktop_menu, items_menu};
 pub use model::{
     Bounds, CELL_HEIGHT, CELL_WIDTH, Desktop, Direction, GRID_PADDING, Grid, ICON_SIZE, Item, Kind,
@@ -30,6 +31,7 @@ mod tests {
     fn every_message_id_used_in_code_is_in_the_english_file() {
         let sources = [
             include_str!("view.rs"),
+            include_str!("confirm.rs"),
             include_str!("menus.rs"),
             include_str!("main.rs"),
         ];

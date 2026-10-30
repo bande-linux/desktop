@@ -7,9 +7,9 @@ use accesskit::{Action, ActionData, ActionRequest, Node, NodeId, Role, Toggled, 
 use unbound_graphics::{Palette, Point, Rect, Scheme, TextSystem};
 use unbound_widgets::{
     Axis, BUTTON_HEIGHT, Button, ClipboardRequest, Context, ContextMenu, Cursor, DISCLOSURE_HEIGHT,
-    Disclosure, Event, Key, Label, Menu, MenuItem, Modifiers, Pointer, PointerButton, SWITCH_SIZE,
-    Scroll, SecureField, Size, Slider, Stack, TEXT_FIELD_HEIGHT, TextField, Toggle, Ui, Widget,
-    WidgetId,
+    Disclosure, Event, FreeLayout, Key, Label, Menu, MenuItem, Modifiers, Pointer, PointerButton,
+    SWITCH_SIZE, Scroll, SecureField, Size, Slider, Stack, TEXT_FIELD_HEIGHT, TextField, Toggle,
+    Ui, Widget, WidgetId,
 };
 
 const NONE: Modifiers = Modifiers {
@@ -783,4 +783,36 @@ fn collapsing_a_disclosure_around_the_focus_moves_focus_to_the_disclosure() {
         data: None,
     });
     assert_eq!(ui.focus(), Some(id));
+}
+
+#[test]
+fn a_free_layout_places_children_where_asked_and_hides_empty_ones_from_the_pointer() {
+    let clicks = Rc::new(RefCell::new(Vec::new()));
+    let (first, second) = (clicks.clone(), clicks.clone());
+    let mut layout = FreeLayout::new();
+    let shown = layout.insert(
+        Button::new("Shown", move || first.borrow_mut().push("shown")),
+        Rect::new(40.0, 30.0, 100.0, BUTTON_HEIGHT),
+    );
+    let hidden = layout.insert(
+        Button::new("Hidden", move || second.borrow_mut().push("hidden")),
+        Rect::default(),
+    );
+    let layout_id = layout.id();
+    let mut ui = Ui::new(Box::new(layout), context());
+    ui.layout(AREA);
+    let frame = ui.widget(shown).expect("shown").frame();
+    assert_eq!((frame.x, frame.y, frame.width), (40.0, 30.0, 100.0));
+    for at in [centre(frame), Point::new(0.0, 0.0)] {
+        ui.handle(&Event::PointerDown(Pointer::at(at)));
+        ui.handle(&Event::PointerUp(Pointer::at(at)));
+    }
+    assert_eq!(*clicks.borrow(), ["shown"]);
+    let layout = ui.widget_as::<FreeLayout>(layout_id).expect("layout");
+    layout.set_frame(hidden, Rect::new(0.0, 0.0, 30.0, BUTTON_HEIGHT));
+    assert!(layout.remove(shown).is_some());
+    ui.layout(AREA);
+    ui.handle(&Event::PointerDown(Pointer::at(Point::new(5.0, 5.0))));
+    ui.handle(&Event::PointerUp(Pointer::at(Point::new(5.0, 5.0))));
+    assert_eq!(*clicks.borrow(), ["shown", "hidden"]);
 }

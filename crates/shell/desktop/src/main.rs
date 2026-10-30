@@ -1,16 +1,17 @@
 use std::collections::{HashMap, HashSet};
-use std::os::fd::BorrowedFd;
+use std::io::Read;
+use std::os::fd::{AsFd, BorrowedFd};
 use std::path::{Path, PathBuf};
-use std::process::ExitCode;
+use std::process::{Child, ChildStdout, Command, ExitCode, Stdio};
 use std::thread;
 use std::time::Instant;
 
 use accesskit::TreeUpdate;
 use unbound_config::{Config, DockEdge, config_path};
 use unbound_desktop_surface::{
-    Bounds, DesktopView, Item, Kind, Layer, Layouts, Luma, MenuApp, Request, Selection,
-    WallpaperKey, command, desktop_menu, items_menu, layouts_path, list, parse_layouts,
-    save_layouts,
+    Bounds, CONFIRM_DELETE_FLAG, DesktopView, Item, Kind, Layer, Layouts, Luma, MenuApp, Request,
+    Selection, WallpaperKey, command, confirm_delete, desktop_menu, items_menu, layouts_path, list,
+    parse_layouts, save_layouts,
 };
 use unbound_fs::{
     Action, Answer, Change, FolderWatch, Operations, Purpose, Resolution, Task, Trash,
@@ -33,6 +34,14 @@ const FILES_INFO_FLAG: &str = "--info";
 
 type Loaded = (WallpaperKey, Option<(Picture, Luma)>);
 
+const CONFIRMED: &str = "delete";
+
+struct Confirming {
+    child: Child,
+    answer: ChildStdout,
+    paths: Vec<PathBuf>,
+}
+
 struct Surface {
     view: DesktopView,
     paste_moves: bool,
@@ -54,6 +63,7 @@ struct Surface {
     wallpapers: HashMap<WallpaperKey, Layer>,
     scheme: Scheme,
     viewport: Option<((u32, u32), f64)>,
+    confirming: Option<Confirming>,
 }
 
 impl Surface {
@@ -396,12 +406,7 @@ impl Surface {
             match request {
                 Request::Open(paths) => self.open(window, paths),
                 Request::Trash(sources) => self.start(Task::Trash { sources }, Action::Trash),
-                Request::Delete(sources) => {
-                    let task = Task::Delete { sources };
-                    if let Err(error) = self.operations.start(task, Purpose::Erase) {
-                        tracing::warn!("cannot delete: {error}");
-                    }
-                }
+                Request::ConfirmDelete(paths) => self.confirm_delete(paths),
                 Request::Duplicate(sources) => {
                     self.start(Task::Duplicate { sources }, Action::Duplicate)
                 }
@@ -499,6 +504,53 @@ impl Surface {
         }
         self.save_layouts();
         window.request_redraw();
+    }
+
+    fn confirm_delete(&mut self, paths: Vec<PathBuf>) {
+        if self.confirming.is_some() {
+            return;
+        }
+        let spawned = std::env::current_exe().and_then(|program| {
+            Command::new(program)
+                .arg(CONFIRM_DELETE_FLAG)
+                .arg(paths.len().to_string())
+                .stdout(Stdio::piped())
+                .spawn()
+        });
+        match spawned {
+            Ok(mut child) => match child.stdout.take() {
+                Some(answer) => {
+                    self.confirming = Some(Confirming {
+                        child,
+                        answer,
+                        paths,
+                    })
+                }
+                None => tracing::warn!("cannot hear the delete confirmation"),
+            },
+            Err(error) => tracing::warn!("cannot ask to delete: {error}"),
+        }
+    }
+
+    fn confirmed(&mut self) {
+        let Some(mut confirming) = self.confirming.take() else {
+            return;
+        };
+        let mut answer = String::new();
+        if let Err(error) = confirming.answer.read_to_string(&mut answer) {
+            tracing::warn!("cannot read the delete confirmation: {error}");
+        }
+        if let Err(error) = confirming.child.wait() {
+            tracing::warn!("cannot finish the delete confirmation: {error}");
+        }
+        if answer.trim() == CONFIRMED {
+            let task = Task::Delete {
+                sources: confirming.paths,
+            };
+            if let Err(error) = self.operations.start(task, Purpose::Erase) {
+                tracing::warn!("cannot delete: {error}");
+            }
+        }
     }
 
     fn paste_files(&mut self, transfer: &Transfer) {
@@ -636,6 +688,11 @@ impl App for Surface {
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
         let mut sources = vec![self.watch.fd(), self.choices.fd(), self.loaded.fd()];
         sources.extend(self.operations.fds());
+        sources.extend(
+            self.confirming
+                .as_ref()
+                .map(|confirming| confirming.answer.as_fd()),
+        );
         sources
     }
 
@@ -666,6 +723,7 @@ impl App for Surface {
                 }
                 self.refresh_wallpaper(window);
             }
+            index if index - 3 == self.operations.fds().len() => self.confirmed(),
             index => {
                 self.poll_operation(index - 3);
                 window.request_redraw();
@@ -769,6 +827,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         wallpapers: HashMap::new(),
         scheme: appearance.scheme,
         viewport: None,
+        confirming: None,
     };
     let folder = surface.desktop_dir.clone();
     surface.view.set_folder(folder);
@@ -776,8 +835,28 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+fn confirm(count: &str) -> ExitCode {
+    match confirm_delete(count.parse().unwrap_or(1)) {
+        Ok(true) => {
+            println!("{CONFIRMED}");
+            ExitCode::SUCCESS
+        }
+        Ok(false) => ExitCode::SUCCESS,
+        Err(error) => {
+            tracing::error!("{error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
 fn main() -> ExitCode {
     unbound_log::init("unbound-desktop-surface");
+    let arguments = std::env::args().collect::<Vec<_>>();
+    if let [_, flag, count] = arguments.as_slice()
+        && flag == CONFIRM_DELETE_FLAG
+    {
+        return confirm(count);
+    }
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {

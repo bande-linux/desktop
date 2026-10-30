@@ -123,6 +123,12 @@ fn edid_of(device: &DrmDevice, handle: connector::Handle) -> Option<unbound_edid
     })
 }
 
+fn shows_another_display(known: &OutputConfig, edid: Option<unbound_edid::Edid>) -> bool {
+    edid.is_some_and(|edid| {
+        edid.make != known.make || edid.model != known.model || edid.serial != known.serial
+    })
+}
+
 fn head_config(device: &DrmDevice, info: &connector::Info, modes: &[Mode]) -> OutputConfig {
     let edid = edid_of(device, info.handle());
     let name = connector_name(info);
@@ -311,9 +317,13 @@ impl DrmBackend {
         let mut changes = HeadChanges::default();
         let mut index = 0;
         while index < self.heads.len() {
+            let head = &self.heads[index];
             let still = present
                 .iter()
-                .any(|info| info.handle() == self.heads[index].connector);
+                .find(|info| info.handle() == head.connector)
+                .is_some_and(|info| {
+                    !shows_another_display(&head.config, edid_of(&self.device, info.handle()))
+                });
             if still {
                 index += 1;
                 continue;
@@ -523,5 +533,40 @@ impl FrameOutput for DrmBackend {
         }
         head.compositor.queue_frame(())?;
         Ok(Submission::AwaitingFlip)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use smithay::utils::Size;
+    use unbound_edid::Edid;
+
+    use super::shows_another_display;
+    use crate::screen::OutputConfig;
+
+    fn display(serial: &str) -> Edid {
+        Edid {
+            make: "DEL".to_owned(),
+            model: "U2723QE".to_owned(),
+            serial: serial.to_owned(),
+        }
+    }
+
+    fn known(edid: &Edid) -> OutputConfig {
+        OutputConfig {
+            make: edid.make.clone(),
+            model: edid.model.clone(),
+            serial: edid.serial.clone(),
+            ..OutputConfig::virtual_display("DP-1", Size::from((3840, 2160)))
+        }
+    }
+
+    #[test]
+    fn a_connector_shows_another_display_only_when_its_edid_names_another() {
+        let desk = known(&display("A1"));
+
+        assert!(!shows_another_display(&desk, Some(display("A1"))));
+        assert!(shows_another_display(&desk, Some(display("B2"))));
+        assert!(!shows_another_display(&desk, None));
     }
 }

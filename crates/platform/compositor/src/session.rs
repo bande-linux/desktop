@@ -31,6 +31,7 @@ pub const LOCK_SCREEN: &str = "/usr/bin/unbound-lock";
 pub const SCREENSHOT: &str = "/usr/bin/unbound-screenshot";
 pub const MENU_BAR: &str = "/usr/bin/unbound-menubar";
 pub const CONTROL_CENTER: &str = "/usr/bin/unbound-controlcenter";
+pub const NOTIFICATIONS: &str = "/usr/bin/unbound-notifications";
 pub const GREETER: &str = "/usr/bin/unbound-greeter";
 pub const REVIEW: &str = "/usr/bin/unbound-review";
 pub const MONITOR: &str = "/usr/bin/unbound-monitor";

@@ -1,10 +1,12 @@
 mod center;
 pub mod client;
+mod wire;
 
 use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::thread;
 use std::time::Instant;
@@ -14,20 +16,19 @@ use zbus::object_server::SignalEmitter;
 use zbus::zvariant::OwnedValue;
 
 pub use center::{
-    BANNER_DURATION, Center, CloseReason, Invoked, Notification, Presentation, Stack, Timeout,
-    Urgency,
+    BANNER_DURATION, BANNER_LINGER, Center, CloseReason, HiddenBanner, Invoked, Notification,
+    Presentation, Stack, Timeout, Urgency,
 };
+pub use wire::{WireNotification, WirePresentation, WireStack};
 
 pub const BUS_NAME: &str = "org.freedesktop.Notifications";
 pub const OBJECT_PATH: &str = "/org/freedesktop/Notifications";
 pub const SPEC_VERSION: &str = "1.2";
 
-type Presenter = Box<dyn FnMut(&Presentation) + Send>;
-
 struct State {
     center: Center,
     presented: Presentation,
-    presenter: Presenter,
+    presentations: Sender<Presentation>,
     stopped: bool,
 }
 
@@ -35,7 +36,7 @@ impl State {
     fn present(&mut self) {
         let presentation = self.center.presentation();
         if presentation != self.presented {
-            (self.presenter)(&presentation);
+            let _ = self.presentations.send(presentation.clone());
             self.presented = presentation;
         }
     }
@@ -68,6 +69,11 @@ fn remember_do_not_disturb(file: &Path, enabled: bool) -> io::Result<()> {
     fs::write(file, b"")
 }
 
+enum Outcome {
+    Invoked { closed: bool },
+    Closed(Vec<u32>),
+}
+
 impl Shared {
     fn lock(&self) -> MutexGuard<'_, State> {
         self.state.lock().unwrap_or_else(PoisonError::into_inner)
@@ -92,6 +98,54 @@ impl Shared {
             );
         }
     }
+
+    fn activate(&self, id: u32, action_key: &str) -> Outcome {
+        self.update(|center| {
+            if let Some(Invoked { closed }) = center.invoke(id, action_key) {
+                return Outcome::Invoked { closed };
+            }
+            let resident = center.get(id).is_some_and(|found| found.resident);
+            if resident {
+                center.hide_banner(id);
+                Outcome::Closed(Vec::new())
+            } else {
+                Outcome::Closed(Vec::from_iter(center.close(id).then_some(id)))
+            }
+        })
+    }
+}
+
+async fn emit_closed(emitter: &SignalEmitter<'_>, ids: &[u32], reason: CloseReason) {
+    for id in ids {
+        if let Err(error) = Notifications::notification_closed(emitter, *id, reason as u32).await {
+            tracing::warn!("cannot announce that notification {id} closed: {error}");
+        }
+    }
+}
+
+async fn announce(
+    emitter: &SignalEmitter<'_>,
+    id: u32,
+    action_key: &str,
+    activation_token: &str,
+    outcome: &Outcome,
+) -> bool {
+    match outcome {
+        Outcome::Invoked { closed } => {
+            if !activation_token.is_empty() {
+                let _ = Notifications::activation_token(emitter, id, activation_token).await;
+            }
+            let _ = Notifications::action_invoked(emitter, id, action_key).await;
+            if *closed {
+                emit_closed(emitter, &[id], CloseReason::Dismissed).await;
+            }
+            true
+        }
+        Outcome::Closed(ids) => {
+            emit_closed(emitter, ids, CloseReason::Dismissed).await;
+            false
+        }
+    }
 }
 
 pub struct NotificationServer {
@@ -101,35 +155,25 @@ pub struct NotificationServer {
 
 impl NotificationServer {
     pub fn start(connection: &Connection) -> zbus::Result<Self> {
-        Self::launch(connection, Box::new(|_| {}), None)
+        Self::launch(connection, None)
     }
 
     pub fn start_remembering(
         connection: &Connection,
         do_not_disturb_file: PathBuf,
     ) -> zbus::Result<Self> {
-        Self::launch(connection, Box::new(|_| {}), Some(do_not_disturb_file))
+        Self::launch(connection, Some(do_not_disturb_file))
     }
 
-    pub fn start_presenting(
-        connection: &Connection,
-        presenter: impl FnMut(&Presentation) + Send + 'static,
-    ) -> zbus::Result<Self> {
-        Self::launch(connection, Box::new(presenter), None)
-    }
-
-    fn launch(
-        connection: &Connection,
-        presenter: Presenter,
-        do_not_disturb_file: Option<PathBuf>,
-    ) -> zbus::Result<Self> {
+    fn launch(connection: &Connection, do_not_disturb_file: Option<PathBuf>) -> zbus::Result<Self> {
         let mut center = Center::default();
         center.set_do_not_disturb(do_not_disturb_file.as_deref().is_some_and(Path::exists));
+        let (presentations, presented) = mpsc::channel();
         let shared = Arc::new(Shared {
             state: Mutex::new(State {
+                presented: center.presentation(),
                 center,
-                presented: Presentation::default(),
-                presenter,
+                presentations,
                 stopped: false,
             }),
             deadline_changed: Condvar::new(),
@@ -151,6 +195,8 @@ impl NotificationServer {
         let timer = Arc::clone(&shared);
         let timer_connection = connection.clone();
         thread::spawn(move || expire(&timer, &timer_connection));
+        let publisher = connection.clone();
+        thread::spawn(move || publish(&presented, &publisher));
         Ok(Self {
             connection: connection.clone(),
             shared,
@@ -164,16 +210,10 @@ impl NotificationServer {
     pub fn dismiss(&self, id: u32) -> zbus::Result<bool> {
         let closed = self.shared.update(|center| center.close(id));
         if closed {
-            emit_closed(&self.connection, id, CloseReason::Dismissed)?;
+            let emitter = SignalEmitter::new(self.connection.inner(), OBJECT_PATH)?;
+            zbus::block_on(emit_closed(&emitter, &[id], CloseReason::Dismissed));
         }
         Ok(closed)
-    }
-
-    pub fn clear(&self, group: &str) -> zbus::Result<()> {
-        for id in self.shared.update(|center| center.clear(group)) {
-            emit_closed(&self.connection, id, CloseReason::Dismissed)?;
-        }
-        Ok(())
     }
 
     pub fn invoke_action(&self, id: u32, action_key: &str) -> zbus::Result<bool> {
@@ -182,24 +222,14 @@ impl NotificationServer {
             return Ok(false);
         };
         let emitter = SignalEmitter::new(self.connection.inner(), OBJECT_PATH)?;
-        zbus::block_on(Notifications::action_invoked(&emitter, id, action_key))?;
-        if closed {
-            emit_closed(&self.connection, id, CloseReason::Dismissed)?;
-        }
+        zbus::block_on(announce(
+            &emitter,
+            id,
+            action_key,
+            "",
+            &Outcome::Invoked { closed },
+        ));
         Ok(true)
-    }
-
-    pub fn set_do_not_disturb(&self, enabled: bool) -> zbus::Result<()> {
-        self.shared.set_do_not_disturb(enabled);
-        let interface = self
-            .connection
-            .object_server()
-            .interface::<_, NotificationCenter>(OBJECT_PATH)?;
-        zbus::block_on(
-            interface
-                .get()
-                .do_not_disturb_changed(interface.signal_emitter()),
-        )
     }
 }
 
@@ -207,6 +237,22 @@ impl Drop for NotificationServer {
     fn drop(&mut self) {
         self.shared.lock().stopped = true;
         self.shared.deadline_changed.notify_all();
+    }
+}
+
+fn publish(presented: &Receiver<Presentation>, connection: &Connection) {
+    let Ok(emitter) = SignalEmitter::new(connection.inner(), OBJECT_PATH) else {
+        return;
+    };
+    while let Ok(mut presentation) = presented.recv() {
+        while let Ok(newer) = presented.try_recv() {
+            presentation = newer;
+        }
+        let wire = presentation.to_wire();
+        if let Err(error) = zbus::block_on(NotificationCenter::presentation_changed(&emitter, wire))
+        {
+            tracing::warn!("cannot publish the notifications on screen: {error}");
+        }
     }
 }
 
@@ -220,8 +266,8 @@ fn expire(shared: &Shared, connection: &Connection) {
         state.present();
         if !expired.is_empty() {
             drop(state);
-            for id in expired {
-                let _ = emit_closed(connection, id, CloseReason::Expired);
+            if let Ok(emitter) = SignalEmitter::new(connection.inner(), OBJECT_PATH) {
+                zbus::block_on(emit_closed(&emitter, &expired, CloseReason::Expired));
             }
             state = shared.lock();
             continue;
@@ -241,15 +287,6 @@ fn expire(shared: &Shared, connection: &Connection) {
                 .unwrap_or_else(PoisonError::into_inner),
         };
     }
-}
-
-fn emit_closed(connection: &Connection, id: u32, reason: CloseReason) -> zbus::Result<()> {
-    let emitter = SignalEmitter::new(connection.inner(), OBJECT_PATH)?;
-    zbus::block_on(Notifications::notification_closed(
-        &emitter,
-        id,
-        reason as u32,
-    ))
 }
 
 fn hint<'a, T: TryFrom<&'a OwnedValue>>(
@@ -283,11 +320,6 @@ impl Notifications {
         hints: HashMap<String, OwnedValue>,
         expire_timeout: i32,
     ) -> u32 {
-        let urgency = match hint::<u8>(&hints, "urgency") {
-            Some(0) => Urgency::Low,
-            Some(2) => Urgency::Critical,
-            _ => Urgency::Normal,
-        };
         let notification = Notification {
             id: replaces_id,
             app_name,
@@ -300,7 +332,7 @@ impl Notifications {
                 .iter()
                 .map(|[key, label]| (key.clone(), label.clone()))
                 .collect(),
-            urgency,
+            urgency: wire::urgency_of(hint::<u8>(&hints, "urgency")),
             desktop_entry: hint::<&str>(&hints, "desktop-entry")
                 .filter(|entry| !entry.is_empty())
                 .map(str::to_owned),
@@ -350,6 +382,13 @@ impl Notifications {
         id: u32,
         action_key: &str,
     ) -> zbus::Result<()>;
+
+    #[zbus(signal)]
+    async fn activation_token(
+        emitter: &SignalEmitter<'_>,
+        id: u32,
+        activation_token: &str,
+    ) -> zbus::Result<()>;
 }
 
 struct NotificationCenter {
@@ -367,4 +406,54 @@ impl NotificationCenter {
     fn set_do_not_disturb(&mut self, enabled: bool) {
         self.shared.set_do_not_disturb(enabled);
     }
+
+    fn get_presentation(&self) -> WirePresentation {
+        self.shared.lock().center.presentation().to_wire()
+    }
+
+    async fn activate(
+        &self,
+        id: u32,
+        action_key: String,
+        activation_token: String,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+    ) -> bool {
+        let outcome = self.shared.activate(id, &action_key);
+        announce(&emitter, id, &action_key, &activation_token, &outcome).await
+    }
+
+    async fn dismiss(&self, id: u32, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) {
+        if self.shared.update(|center| center.close(id)) {
+            emit_closed(&emitter, &[id], CloseReason::Dismissed).await;
+        }
+    }
+
+    async fn hide_banner(&self, id: u32, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) {
+        if let Some(HiddenBanner { closed: true }) =
+            self.shared.update(|center| center.hide_banner(id))
+        {
+            emit_closed(&emitter, &[id], CloseReason::Dismissed).await;
+        }
+    }
+
+    async fn clear(&self, group: String, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) {
+        let cleared = self.shared.update(|center| center.clear(&group));
+        emit_closed(&emitter, &cleared, CloseReason::Dismissed).await;
+    }
+
+    async fn clear_all(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) {
+        let cleared = self.shared.update(Center::clear_all);
+        emit_closed(&emitter, &cleared, CloseReason::Dismissed).await;
+    }
+
+    fn hold_banners(&self, held: bool) {
+        self.shared
+            .update(|center| center.hold_banners(held, Instant::now()));
+    }
+
+    #[zbus(signal)]
+    async fn presentation_changed(
+        emitter: &SignalEmitter<'_>,
+        presentation: WirePresentation,
+    ) -> zbus::Result<()>;
 }

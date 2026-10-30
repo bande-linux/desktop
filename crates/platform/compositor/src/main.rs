@@ -11,8 +11,8 @@ use smithay::utils::{Clock, Monotonic, Size};
 use smithay::wayland::socket::ListeningSocketSource;
 use unbound_compositor::{
     CLIPBOARD_DAEMON, CONTROL_CENTER, CursorTheme, DESKTOP_SURFACE, DOCK, DrmOutput, FrameClock,
-    FrameOutput, FrameScheduler, GREETER, Headless, LAUNCHER, MENU_BAR, REFRESH, REVIEW, Renderer,
-    SCREENSHOT, SessionRequest, SessionRole, SessionUpkeep, automatic_scale,
+    FrameOutput, FrameScheduler, GREETER, Headless, LAUNCHER, MENU_BAR, NOTIFICATIONS, REFRESH,
+    REVIEW, Renderer, SCREENSHOT, SessionRequest, SessionRole, SessionUpkeep, automatic_scale,
     export_session_environment, follow_reduced_motion, follow_session, notify_ready,
 };
 use unbound_config::{Config, config_path};
@@ -223,6 +223,7 @@ fn start_user_session<O: 'static>(
         (DESKTOP_SURFACE, SessionRole::Shell),
         (MENU_BAR, SessionRole::Shell),
         (CONTROL_CENTER, SessionRole::Shell),
+        (NOTIFICATIONS, SessionRole::Shell),
         (DOCK, SessionRole::Shell),
         (LAUNCHER, SessionRole::Shell),
         (SCREENSHOT, SessionRole::Shell),

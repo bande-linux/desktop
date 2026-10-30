@@ -7,7 +7,7 @@ packages=(
     unbound-compositor unbound-notify unbound-clipboard unbound-config unbound-power
     xdg-desktop-portal-unbound unbound-tray unbound-automount
     unbound-desktop-surface unbound-dock unbound-launcher unbound-term unbound-lock unbound-screenshot unbound-files
-    unbound-settings unbound-greeter unbound-menubar unbound-controlcenter
+    unbound-settings unbound-greeter unbound-menubar unbound-controlcenter unbound-notifications
 )
 screenshot=/usr/bin/unbound-screenshot
 runtime="${XDG_RUNTIME_DIR:?needs a user session}/unbound-review"

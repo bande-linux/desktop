@@ -371,24 +371,7 @@ impl<V: StatusView> MenuBarClient<V> {
             Slot::Sound => status.sound.as_ref().map(sound_menu),
             Slot::Bluetooth => status.bluetooth.as_ref().map(bluetooth_menu),
             Slot::InputSource => Some(input_source_menu(&status.input_sources)),
-            Slot::TrayMore => {
-                let mut items: Vec<MenuItem> = self
-                    .tray
-                    .iter()
-                    .enumerate()
-                    .skip(self.bar.shown_tray_items())
-                    .map(|(index, item)| MenuItem::new(&item.title, &format!("{TRAY_ITEM}{index}")))
-                    .collect();
-                if status.input_sources.current().is_some()
-                    && self.bar.slot_rect(Slot::InputSource).is_none()
-                {
-                    if !items.is_empty() {
-                        items.push(MenuItem::separator());
-                    }
-                    items.extend(input_source_menu(&status.input_sources).items);
-                }
-                Some(Menu::new(items))
-            }
+            Slot::TrayMore => Some(self.more_menu(&status.input_sources)),
             Slot::App if self.app_root.is_none() => Some(Menu::new(vec![MenuItem::new(
                 self.bar.app(),
                 BRING_TO_FRONT,
@@ -405,7 +388,7 @@ impl<V: StatusView> MenuBarClient<V> {
             return;
         }
         match slot {
-            Slot::ControlCenter => {
+            Slot::ControlCenter | Slot::Wifi | Slot::Sound | Slot::Bluetooth | Slot::Battery => {
                 report("open Control Center", window.toggle_control_center());
             }
             Slot::Clock => (self.notification_center)(),
@@ -428,6 +411,27 @@ impl<V: StatusView> MenuBarClient<V> {
             }
             _ => {}
         }
+    }
+
+    fn more_menu(&self, sources: &InputSources) -> Menu {
+        let mut items = Vec::new();
+        for slot in self.bar.hidden_tray() {
+            match slot {
+                Slot::Tray(index) => items.extend(
+                    self.tray
+                        .get(index)
+                        .map(|item| MenuItem::new(&item.title, &format!("{TRAY_ITEM}{index}"))),
+                ),
+                Slot::InputSource => {
+                    if !items.is_empty() {
+                        items.push(MenuItem::separator());
+                    }
+                    items.extend(input_source_menu(sources).items);
+                }
+                _ => {}
+            }
+        }
+        Menu::new(items)
     }
 
     fn open_tray(&mut self, window: &mut Window, index: usize, anchor: Rect, secondary: bool) {

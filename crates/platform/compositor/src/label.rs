@@ -5,8 +5,16 @@ use unbound_graphics::{
     Color, CpuRenderer, Item, Paint, Point, Rect, Scene, Shape, TextAlign, TextStyle, TextSystem,
 };
 
-const TEXT_SIZE: f32 = 12.0;
-const PADDING: (f32, f32) = (10.0, 4.0);
+pub(crate) const TITLE: LabelStyle = LabelStyle {
+    text_size: 12.0,
+    padding: (10.0, 4.0),
+};
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct LabelStyle {
+    pub(crate) text_size: f32,
+    pub(crate) padding: (f32, f32),
+}
 const TEXT: Color = Color::hex(0xffffff);
 const BACKGROUND: Color = Color::hex(0x1c1c1e).with_alpha(0xd0);
 
@@ -24,14 +32,20 @@ pub(crate) struct Labels {
 }
 
 impl Labels {
-    pub(crate) fn render(&mut self, text: &str, max_width: f64, scale: f64) -> Option<Label> {
-        let style = TextStyle::new(TEXT_SIZE, TEXT).weight(TextStyle::SEMIBOLD);
-        let room = (max_width as f32 - 2.0 * PADDING.0).max(TEXT_SIZE);
+    pub(crate) fn render(
+        &mut self,
+        text: &str,
+        LabelStyle { text_size, padding }: LabelStyle,
+        max_width: f64,
+        scale: f64,
+    ) -> Option<Label> {
+        let style = TextStyle::new(text_size, TEXT).weight(TextStyle::SEMIBOLD);
+        let room = (max_width as f32 - 2.0 * padding.0).max(text_size);
         let paragraph = self
             .text
             .paragraph(text, style, Some(room), TextAlign::Start);
-        let width = (paragraph.width().min(room) + 2.0 * PADDING.0).ceil();
-        let height = (paragraph.height().min(TEXT_SIZE * 1.6) + 2.0 * PADDING.1).ceil();
+        let width = (paragraph.width().min(room) + 2.0 * padding.0).ceil();
+        let height = (paragraph.height().min(text_size * 1.6) + 2.0 * padding.1).ceil();
         let scene = Scene {
             width: width as u32,
             height: height as u32,
@@ -42,7 +56,7 @@ impl Labels {
                     paint: Paint::Solid(BACKGROUND),
                 },
                 Item::Text {
-                    origin: Point::new(PADDING.0, PADDING.1),
+                    origin: Point::new(padding.0, padding.1),
                     paragraph,
                 },
             ],

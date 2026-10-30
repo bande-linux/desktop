@@ -3,17 +3,20 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, ExitCode};
 use std::time::Duration;
 
-use smithay::backend::drm::DrmEvent;
+use smithay::backend::drm::{DrmEvent, DrmEventMetadata};
+use smithay::backend::udev::{UdevBackend, UdevEvent};
 use smithay::reexports::calloop::channel::{self, Event};
 use smithay::reexports::calloop::generic::Generic;
 use smithay::reexports::calloop::{EventLoop, Interest, LoopHandle, Mode, PostAction};
+use smithay::reexports::drm::control::crtc;
 use smithay::utils::{Clock, Monotonic, Size};
 use smithay::wayland::socket::ListeningSocketSource;
 use unbound_compositor::{
-    CLIPBOARD_DAEMON, CONTROL_CENTER, CursorTheme, DESKTOP_SURFACE, DOCK, DrmOutput, FrameClock,
-    FrameOutput, FrameScheduler, GREETER, Headless, LAUNCHER, MENU_BAR, NOTIFICATIONS, REFRESH,
-    REVIEW, Renderer, SCREENSHOT, SessionRequest, SessionRole, SessionUpkeep, automatic_scale,
-    export_session_environment, follow_appearance, follow_session, notify_ready,
+    CLIPBOARD_DAEMON, CONTROL_CENTER, CursorTheme, DESKTOP_SURFACE, DOCK, DrmBackend, FrameClock,
+    FrameOutput, FrameScheduler, GREETER, Headless, InputSettings, LAUNCHER, MENU_BAR,
+    NOTIFICATIONS, REFRESH, REVIEW, Renderer, SCREENSHOT, SessionRequest, SessionRole,
+    SessionUpkeep, export_session_environment, follow_appearance, follow_input_settings,
+    follow_session, notify_ready,
 };
 use unbound_config::{BUS_NAME, Config, OBJECT_PATH, config_path};
 use zbus::blocking::fdo::PropertiesProxy;
@@ -28,7 +31,7 @@ enum Backend {
 struct App<O> {
     compositor: Headless,
     output: O,
-    scheduler: FrameScheduler,
+    schedulers: Vec<FrameScheduler>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -84,20 +87,21 @@ fn run_headless(session: Session) -> Result<(), Box<dyn Error>> {
     let app = App {
         compositor,
         output: renderer,
-        scheduler: FrameScheduler::new(FrameClock::new(now(), REFRESH)),
+        schedulers: vec![FrameScheduler::new(FrameClock::new(now(), REFRESH))],
     };
     serve(&mut event_loop, app, session)
 }
 
-fn configured_scale(connector: &str) -> Option<f64> {
+fn display_config() -> Config {
     let home = std::env::var_os("HOME").map(PathBuf::from);
     let config_home = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from);
-    let source =
-        std::fs::read_to_string(config_path(config_home.as_deref(), home.as_deref())?).ok()?;
-    Config::parse(&source).ok()?.outputs.get(connector)?.scale
+    config_path(config_home.as_deref(), home.as_deref())
+        .and_then(|path| std::fs::read_to_string(path).ok())
+        .and_then(|source| Config::parse(&source).ok())
+        .unwrap_or_default()
 }
 
-fn follow_output_settings(publish: channel::Sender<()>) -> zbus::Result<()> {
+fn follow_display_settings(publish: channel::Sender<()>) -> zbus::Result<()> {
     let connection = zbus::blocking::Connection::session()?;
     let properties = PropertiesProxy::builder(&connection)
         .destination(BUS_NAME)?
@@ -106,10 +110,11 @@ fn follow_output_settings(publish: channel::Sender<()>) -> zbus::Result<()> {
     let changes = properties.receive_properties_changed()?;
     std::thread::spawn(move || {
         for change in changes {
-            let outputs_changed = change
-                .args()
-                .is_ok_and(|args| args.changed_properties().contains_key("Outputs"));
-            if outputs_changed && publish.send(()).is_err() {
+            let displays_changed = change.args().is_ok_and(|args| {
+                let changed = args.changed_properties();
+                changed.contains_key("Displays") || changed.contains_key("Arrangements")
+            });
+            if displays_changed && publish.send(()).is_err() {
                 return;
             }
         }
@@ -117,28 +122,98 @@ fn follow_output_settings(publish: channel::Sender<()>) -> zbus::Result<()> {
     Ok(())
 }
 
+fn sync_heads(app: &mut App<DrmBackend>) {
+    let outputs = app.compositor.outputs();
+    for name in &outputs {
+        if let Some(settings) = app.compositor.output_settings(name)
+            && let Err(error) = app.output.use_mode(name, settings.mode)
+        {
+            tracing::warn!("cannot change the mode of {name}: {error}");
+        }
+    }
+    app.schedulers.retain(|scheduler| {
+        scheduler
+            .output()
+            .is_some_and(|output| outputs.iter().any(|name| name == output))
+    });
+    for name in &outputs {
+        let refresh = app.output.refresh(name).unwrap_or(REFRESH);
+        let current = app
+            .schedulers
+            .iter()
+            .position(|scheduler| scheduler.output() == Some(name));
+        match current {
+            Some(index) if app.schedulers[index].clock().refresh() == refresh => continue,
+            Some(index) => {
+                app.schedulers[index] =
+                    FrameScheduler::for_output(FrameClock::new(now(), refresh), name);
+            }
+            None => app.schedulers.push(FrameScheduler::for_output(
+                FrameClock::new(now(), refresh),
+                name,
+            )),
+        }
+        tracing::info!("driving {name} at {:.2} Hz", 1.0 / refresh.as_secs_f64());
+    }
+}
+
+fn hotplug(app: &mut App<DrmBackend>) {
+    match app.output.rescan() {
+        Ok(changes) => {
+            for name in &changes.disconnected {
+                tracing::info!("{name} was disconnected");
+                app.compositor.remove_output(name);
+            }
+            for output in changes.connected {
+                tracing::info!("{} was connected", output.name);
+                app.compositor.add_output(output);
+            }
+            sync_heads(app);
+        }
+        Err(error) => tracing::warn!("cannot look for displays: {error}"),
+    }
+}
+
+fn page_flipped(app: &mut App<DrmBackend>, crtc: crtc::Handle, metadata: Option<DrmEventMetadata>) {
+    let flipped = app.output.flipped(crtc, metadata).and_then(|flipped| {
+        let Some((name, vblank)) = flipped else {
+            return Ok(());
+        };
+        let App {
+            compositor,
+            schedulers,
+            ..
+        } = app;
+        match schedulers
+            .iter_mut()
+            .find(|scheduler| scheduler.output() == Some(name.as_str()))
+        {
+            Some(scheduler) => Ok(scheduler.flipped(vblank, compositor)?),
+            None => Ok(()),
+        }
+    });
+    if let Err(error) = flipped {
+        tracing::warn!("cannot complete the page flip: {error}");
+    }
+}
+
 fn run_drm(device: Option<&Path>, session: Session) -> Result<(), Box<dyn Error>> {
-    let (mut output, notifiers) = DrmOutput::open(device)?;
-    tracing::info!(
-        "driving {} at {:.2} Hz",
-        output.path().display(),
-        1.0 / output.refresh().as_secs_f64()
-    );
-    let config = output.output_config();
-    let (connector, size, physical_size_mm) =
-        (config.name.clone(), config.size, config.physical_size_mm);
-    let output_scale = move || {
-        configured_scale(&connector).unwrap_or_else(|| automatic_scale(size, physical_size_mm))
-    };
-    let mut compositor = Headless::with_output(config)?;
-    compositor.set_output_scale(output_scale());
-    if !compositor.enable_explicit_sync(output.device_fd()) {
+    let (backend, notifiers) = DrmBackend::open(device)?;
+    tracing::info!("driving {}", backend.path().display());
+    let mut outputs = backend.outputs().into_iter();
+    let first = outputs.next().ok_or("no display is connected")?;
+    let mut compositor = Headless::on_device(first, Some(backend.scanout_device()))?;
+    for output in outputs {
+        compositor.add_output(output);
+    }
+    compositor.set_display_config(display_config());
+    if !compositor.enable_explicit_sync(backend.device_fd()) {
         tracing::warn!(
             "{} has no syncobj eventfd; explicit sync is off",
-            output.path().display()
+            backend.path().display()
         );
     }
-    let mut event_loop: EventLoop<App<DrmOutput>> = EventLoop::try_new()?;
+    let mut event_loop: EventLoop<App<DrmBackend>> = EventLoop::try_new()?;
     let handle = event_loop.handle();
     handle.insert_source(notifiers.session, |event, _, app| {
         if let Err(error) = app.output.session_changed(event) {
@@ -146,44 +221,46 @@ fn run_drm(device: Option<&Path>, session: Session) -> Result<(), Box<dyn Error>
         }
     })?;
     handle.insert_source(notifiers.device, |event, metadata, app| match event {
-        DrmEvent::VBlank(_) => {
-            let flipped = app
-                .output
-                .flipped(*metadata)
-                .and_then(|vblank| Ok(app.scheduler.flipped(vblank, &mut app.compositor)?));
-            if let Err(error) = flipped {
-                tracing::warn!("cannot complete the page flip: {error}");
-            }
-        }
+        DrmEvent::VBlank(crtc) => page_flipped(app, crtc, *metadata),
         DrmEvent::Error(error) => tracing::warn!("DRM error: {error}"),
     })?;
+    match UdevBackend::new(backend.seat()) {
+        Ok(udev) => {
+            handle.insert_source(udev, |event, _, app| {
+                if let UdevEvent::Changed { .. } = event {
+                    hotplug(app);
+                }
+            })?;
+        }
+        Err(error) => tracing::warn!("cannot watch for displays being plugged in: {error}"),
+    }
     let (settings, settings_changes) = channel::channel();
-    match follow_output_settings(settings) {
+    match follow_display_settings(settings) {
         Ok(()) => {
-            handle.insert_source(settings_changes, move |event, _, app| {
-                let scale = output_scale();
-                if matches!(event, Event::Msg(())) && scale != app.compositor.output_scale() {
-                    app.compositor.set_output_scale(scale);
+            handle.insert_source(settings_changes, |event, _, app| {
+                if matches!(event, Event::Msg(())) {
+                    app.compositor.set_display_config(display_config());
+                    sync_heads(app);
                 }
             })?;
         }
         Err(error) => tracing::warn!("cannot follow the display settings: {error}"),
     }
-    let input = output.input_backend()?;
+    let mut app = App {
+        compositor,
+        output: backend,
+        schedulers: Vec::new(),
+    };
+    let input = app.output.input_backend()?;
     handle.insert_source(input, |event, _, app| {
+        app.compositor.track_libinput_device(&event);
         if let Err(error) = app.compositor.handle_input(event) {
             tracing::warn!("cannot deliver input: {error}");
         }
     })?;
-    let refresh = output.refresh();
-    let app = App {
-        compositor,
-        output,
-        scheduler: FrameScheduler::new(FrameClock::new(now(), refresh)),
-    };
+    sync_heads(&mut app);
     serve(&mut event_loop, app, session)
 }
-
 fn listen<O: 'static>(
     handle: &LoopHandle<'static, App<O>>,
     app: &mut App<O>,
@@ -241,6 +318,25 @@ fn start_user_session<O: 'static>(
         }
         Err(error) => tracing::warn!("cannot follow the appearance: {error}"),
     }
+    app.compositor.apply_input_settings(InputSettings::read());
+    let (input_settings, input_settings_changes) = channel::channel();
+    let followed = zbus::blocking::Connection::session().and_then(|connection| {
+        follow_input_settings(&connection, move |settings| {
+            input_settings.send(settings).is_ok()
+        })
+    });
+    match followed {
+        Ok(()) => {
+            event_loop
+                .handle()
+                .insert_source(input_settings_changes, |event, _, app| {
+                    if let Event::Msg(settings) = event {
+                        app.compositor.apply_input_settings(settings);
+                    }
+                })?;
+        }
+        Err(error) => tracing::warn!("cannot follow the keyboard and pointer settings: {error}"),
+    }
     let (lock_states, reported) = std::sync::mpsc::channel();
     match follow_session(reported) {
         Ok(requests) => {
@@ -255,10 +351,12 @@ fn start_user_session<O: 'static>(
         }
         Err(error) => tracing::warn!("cannot follow the logind session: {error}"),
     }
+    for executable in [DESKTOP_SURFACE, MENU_BAR] {
+        app.compositor
+            .start_client_on_every_display(Path::new(executable));
+    }
     for (executable, role) in [
         (CLIPBOARD_DAEMON, SessionRole::ClipboardDaemon),
-        (DESKTOP_SURFACE, SessionRole::Shell),
-        (MENU_BAR, SessionRole::Shell),
         (CONTROL_CENTER, SessionRole::Shell),
         (NOTIFICATIONS, SessionRole::Shell),
         (DOCK, SessionRole::Shell),
@@ -296,10 +394,13 @@ where
     listen(&event_loop.handle(), &mut app)?;
     let (mut greeter, mut review) = match session {
         Session::User => (None, start_user_session(event_loop, &mut app)?),
-        Session::Greeter => (
-            Some(app.compositor.spawn_shell_client(Path::new(GREETER))?),
-            None,
-        ),
+        Session::Greeter => {
+            app.compositor.apply_input_settings(InputSettings::system());
+            (
+                Some(app.compositor.spawn_shell_client(Path::new(GREETER))?),
+                None,
+            )
+        }
     };
     let mut timeout = None;
     loop {
@@ -324,13 +425,17 @@ where
         let App {
             compositor,
             output,
-            scheduler,
+            schedulers,
         } = &mut app;
         let snap_due = compositor.snap_tick(now());
-        let frame = scheduler
-            .poll(now, compositor, output)
-            .map_err(Into::into)?;
-        let frame_wait = frame.wake_at.map(|at| at.saturating_sub(now()));
+        let mut frame_wake = None;
+        for scheduler in schedulers.iter_mut() {
+            let frame = scheduler
+                .poll(now, compositor, output)
+                .map_err(Into::into)?;
+            frame_wake = frame_wake.into_iter().chain(frame.wake_at).min();
+        }
+        let frame_wait = frame_wake.map(|at: Duration| at.saturating_sub(now()));
         let idle_wait = compositor
             .idle_tick(now())
             .map(|at| at.saturating_sub(now()));

@@ -7,8 +7,9 @@ use std::thread;
 use std::time::Duration;
 
 use unbound_config::{
-    Appearance, Config, ConfigError, ConfigStore, DEFAULT_DOCK_APPS, DockEdge, Output, ReloadError,
-    Suspend, WallpaperFit, WallpaperVariant, config_path, login_picture,
+    Appearance, CapsLock, Config, ConfigError, ConfigStore, DEFAULT_DOCK_APPS, DisplaySettings,
+    DockEdge, InputSource, Placement, ReloadError, Rotation, SecondaryClick, Suspend, WallpaperFit,
+    WallpaperVariant, config_path, login_picture, system_input_sources,
 };
 
 fn error_at(source: &str) -> (usize, usize) {
@@ -23,7 +24,8 @@ fn an_empty_file_gives_the_plan_defaults() {
     assert_eq!(config.dock.apps, DEFAULT_DOCK_APPS);
     assert_eq!(config.idle.dim_after, Duration::from_secs(5 * 60));
     assert_eq!(config.idle.lock_after, Duration::from_secs(10 * 60));
-    assert!(config.outputs.is_empty());
+    assert!(config.displays.is_empty());
+    assert!(config.arrangements.is_empty());
 }
 
 #[test]
@@ -39,13 +41,22 @@ idle {
     dim-after "90s"
     lock-after "1h"
 }
-output "eDP-1" {
+display "BOE NE135A1M 0" {
+    resolution 2256 1504
     scale 1.5
     refresh-rate 120
+    rotation 90
     variable-refresh-rate #true
 }
-output "HDMI-A-1" {
+display "Dell Inc. DELL U2720Q 7ZD5K53" {
     scale 1
+}
+arrangement {
+    display "BOE NE135A1M 0" x=0 y=0 main=#true
+    display "Dell Inc. DELL U2720Q 7ZD5K53" x=1504 y=-300
+}
+arrangement {
+    display "BOE NE135A1M 0"
 }
 "#,
     )
@@ -60,20 +71,72 @@ output "HDMI-A-1" {
     assert_eq!(config.idle.dim_after, Duration::from_secs(90));
     assert_eq!(config.idle.lock_after, Duration::from_secs(3600));
     assert_eq!(
-        config.outputs.get("eDP-1"),
-        Some(&Output {
+        config.displays.get("BOE NE135A1M 0"),
+        Some(&DisplaySettings {
+            resolution: Some((2256, 1504)),
             scale: Some(1.5),
             refresh_rate: Some(120.0),
+            rotation: Some(Rotation::Quarter),
             variable_refresh_rate: Some(true),
         })
     );
     assert_eq!(
-        config.outputs.get("HDMI-A-1"),
-        Some(&Output {
+        config.displays.get("Dell Inc. DELL U2720Q 7ZD5K53"),
+        Some(&DisplaySettings {
             scale: Some(1.0),
-            ..Output::default()
+            ..DisplaySettings::default()
         })
     );
+    let both = [
+        "Dell Inc. DELL U2720Q 7ZD5K53".to_owned(),
+        "BOE NE135A1M 0".to_owned(),
+    ];
+    assert_eq!(
+        config.arrangement(&both),
+        Some(
+            &[
+                Placement {
+                    display: "BOE NE135A1M 0".to_owned(),
+                    x: 0,
+                    y: 0,
+                    main: true,
+                    mirror: None,
+                },
+                Placement {
+                    display: "Dell Inc. DELL U2720Q 7ZD5K53".to_owned(),
+                    x: 1504,
+                    y: -300,
+                    main: false,
+                    mirror: None,
+                },
+            ][..]
+        )
+    );
+    assert_eq!(
+        config
+            .arrangement(&["BOE NE135A1M 0".to_owned()])
+            .map(<[Placement]>::len),
+        Some(1)
+    );
+}
+
+#[test]
+fn a_mirror_must_name_another_display_of_its_arrangement() {
+    assert!(
+        Config::parse(
+            "arrangement {\n    display \"A\" main=#true\n    display \"B\" mirror=\"A\"\n}\n"
+        )
+        .is_ok()
+    );
+    assert_eq!(
+        error_at("arrangement {\n    display \"A\"\n    display \"B\" mirror=\"C\"\n}\n"),
+        (1, 1)
+    );
+    assert_eq!(
+        error_at("arrangement {\n    display \"A\" main=#true\n    display \"B\" main=#true\n}\n"),
+        (1, 1)
+    );
+    assert_eq!(error_at("display \"A\" {\n    rotation 45\n}\n"), (2, 14));
 }
 
 #[test]
@@ -128,21 +191,21 @@ fn a_value_outside_its_choices_is_reported_at_the_value() {
 }
 
 #[test]
-fn display_scale_must_stay_within_100_to_200_percent() {
-    assert!(Config::parse("output \"eDP-1\" {\n    scale 2.0\n}\n").is_ok());
-    assert_eq!(error_at("output \"eDP-1\" {\n    scale 2.5\n}\n"), (2, 11));
-    assert_eq!(error_at("output \"eDP-1\" {\n    scale 0.75\n}\n"), (2, 11));
+fn display_scale_must_stay_within_100_to_300_percent() {
+    assert!(Config::parse("display \"A\" {\n    scale 2.5\n}\n").is_ok());
+    assert_eq!(error_at("display \"A\" {\n    scale 3.5\n}\n"), (2, 11));
+    assert_eq!(error_at("display \"A\" {\n    scale 0.75\n}\n"), (2, 11));
 }
 
 #[test]
 fn refresh_rate_must_stay_within_60_to_240_hz() {
-    assert!(Config::parse("output \"DP-1\" {\n    refresh-rate 240\n}\n").is_ok());
+    assert!(Config::parse("display \"A\" {\n    refresh-rate 240\n}\n").is_ok());
     assert_eq!(
-        error_at("output \"DP-1\" {\n    refresh-rate 30\n}\n"),
+        error_at("display \"A\" {\n    refresh-rate 30\n}\n"),
         (2, 18)
     );
     assert_eq!(
-        error_at("output \"DP-1\" {\n    refresh-rate 360\n}\n"),
+        error_at("display \"A\" {\n    refresh-rate 360\n}\n"),
         (2, 18)
     );
 }
@@ -222,10 +285,7 @@ fn a_setting_given_twice_is_reported_at_the_second_one() {
         error_at("appearance \"dark\"\nappearance \"light\"\n"),
         (2, 1)
     );
-    assert_eq!(
-        error_at("output \"eDP-1\" {\n}\noutput \"eDP-1\" {\n}\n"),
-        (3, 1)
-    );
+    assert_eq!(error_at("display \"A\" {\n}\ndisplay \"A\" {\n}\n"), (3, 1));
 }
 
 #[test]
@@ -398,4 +458,76 @@ fn the_login_window_gets_the_dark_wallpaper_with_the_home_folder_spelled_out() {
         Some(PathBuf::from("/a.png"))
     );
     assert_eq!(login_picture(&wallpaper(""), Some(home)), None);
+}
+
+fn source(layout: &str, variant: Option<&str>) -> InputSource {
+    InputSource {
+        layout: layout.to_owned(),
+        variant: variant.map(str::to_owned),
+    }
+}
+
+#[test]
+fn input_sources_are_xkb_layouts_with_an_optional_variant() {
+    let keyboard = Config::parse(
+        "keyboard {\n    input-sources \"us\" \"de(nodeadkeys)\"\n    caps-lock \"escape\"\n}\n",
+    )
+    .expect("valid")
+    .keyboard;
+    assert_eq!(
+        keyboard.input_sources,
+        [source("us", None), source("de", Some("nodeadkeys"))]
+    );
+    assert_eq!(keyboard.caps_lock, CapsLock::Escape);
+    assert_eq!(keyboard.caps_lock.xkb_option(), Some("caps:escape"));
+    assert_eq!(source("de", Some("nodeadkeys")).code(), "de(nodeadkeys)");
+}
+
+#[test]
+fn input_sources_must_be_distinct_layouts_and_at_most_four() {
+    for (line, column, sources) in [
+        (2, 24, "\"us\" \"us\""),
+        (2, 19, "\"de(\""),
+        (2, 19, "\"us,se\""),
+        (2, 39, "\"us\" \"se\" \"de\" \"fr\" \"fi\""),
+    ] {
+        let config = format!("keyboard {{\n    input-sources {sources}\n}}\n");
+        assert_eq!(error_at(&config), (line, column), "{sources}");
+    }
+}
+
+#[test]
+fn without_input_sources_the_system_keyboard_layouts_are_used() {
+    let keyboard = Config::parse("").expect("empty").keyboard;
+    let system = system_input_sources(
+        "# KEYBOARD CONFIGURATION FILE\nXKBMODEL=\"pc105\"\nXKBLAYOUT=\"se,us,ru\"\nXKBVARIANT=\",dvorak,\"\nXKBOPTIONS=\"\"\n",
+    );
+    assert_eq!(
+        keyboard.input_sources_or(|| system.clone()),
+        [
+            source("se", None),
+            source("us", Some("dvorak")),
+            source("ru", None)
+        ]
+    );
+    assert_eq!(system_input_sources(""), [source("us", None)]);
+}
+
+#[test]
+fn trackpad_and_mouse_settings_are_read_with_mac_like_defaults() {
+    let defaults = Config::parse("").expect("empty");
+    assert!(defaults.trackpad.tap_to_click);
+    assert!(defaults.trackpad.natural_scrolling);
+    assert!(!defaults.mouse.natural_scrolling);
+    let config = Config::parse(
+        "trackpad {\n    tap-to-click #false\n    speed 0.5\n    secondary-click \"corner\"\n    disable-while-typing #false\n}\nmouse {\n    natural-scrolling #true\n    speed -1\n}\n",
+    )
+    .expect("valid");
+    assert!(!config.trackpad.tap_to_click);
+    assert_eq!(config.trackpad.speed, 0.5);
+    assert_eq!(config.trackpad.secondary_click, SecondaryClick::Corner);
+    assert!(!config.trackpad.disable_while_typing);
+    assert!(config.mouse.natural_scrolling);
+    assert_eq!(config.mouse.speed, -1.0);
+    assert_eq!(error_at("mouse {\n    speed 2\n}\n"), (2, 11));
 }

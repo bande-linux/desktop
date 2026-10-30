@@ -5,7 +5,6 @@ use std::time::Duration;
 use smithay::backend::allocator::Fourcc;
 use smithay::backend::renderer::damage::OutputDamageTracker;
 use smithay::backend::renderer::element::RenderElement;
-use smithay::backend::renderer::element::utils::{Relocate, RelocateRenderElement};
 use smithay::backend::renderer::{Bind, Color32F, Offscreen};
 use smithay::reexports::wayland_protocols::ext::image_capture_source::v1::server::{
     ext_foreign_toplevel_image_capture_source_manager_v1::{
@@ -21,16 +20,16 @@ use smithay::reexports::wayland_protocols::ext::image_copy_capture::v1::server::
     ext_image_copy_capture_session_v1::{self, ExtImageCopyCaptureSessionV1},
 };
 use smithay::reexports::wayland_server::protocol::wl_buffer::WlBuffer;
-use smithay::reexports::wayland_server::protocol::wl_output::Transform as WlTransform;
 use smithay::reexports::wayland_server::protocol::wl_shm::Format;
 use smithay::reexports::wayland_server::{
     Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource, WEnum,
 };
-use smithay::utils::{Clock, Monotonic, Physical, Rectangle, Size, Transform};
+use smithay::utils::{Clock, Monotonic, Physical, Point, Rectangle, Size, Transform};
 use smithay::wayland::foreign_toplevel_list::ForeignToplevelHandle;
 use smithay::wayland::shm::with_buffer_contents_mut;
 use unbound_render::{RenderError, VulkanRenderer};
 
+use crate::element::ScreenElement;
 use crate::motion::Look;
 use crate::render::{background, rendering_error};
 use crate::scene::window_elements;
@@ -43,7 +42,7 @@ const BYTES_PER_PIXEL: usize = 4;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Target {
-    Output,
+    Output(String),
     Window(String),
     Nothing,
 }
@@ -94,29 +93,43 @@ impl State {
         })
     }
 
-    fn window_area(&self, window: &Window) -> Option<Rectangle<i32, Physical>> {
+    fn window_area(&self, window: &Window) -> Option<(Rectangle<i32, Physical>, f64)> {
         let geometry = window.geometry()?;
+        let scale = self.screens[self.screen_of(window)].scale();
         let area = Rectangle::new(geometry.location.to_f64(), geometry.size.to_f64())
-            .to_physical(self.output_scale)
+            .to_physical(scale)
             .to_i32_round::<i32>();
-        (area.size.w > 0 && area.size.h > 0).then_some(area)
+        (area.size.w > 0 && area.size.h > 0).then_some((area, scale))
     }
 
     fn capture_size(&self, target: &Target) -> Option<Size<i32, Physical>> {
         match target {
-            Target::Output => Some(self.output_size),
+            Target::Output(name) => self
+                .screen_named(name)
+                .map(|screen| self.screens[screen].mode_size()),
             Target::Window(identifier) => self
                 .captured_window(identifier)
                 .and_then(|window| self.window_area(window))
-                .map(|area| area.size),
+                .map(|(area, _)| area.size),
             Target::Nothing => None,
         }
     }
 }
 
 impl Headless {
-    pub(crate) fn copy_captures(&mut self, renderer: &mut VulkanRenderer) {
-        let pending = std::mem::take(&mut self.state.pending_captures);
+    pub(crate) fn copy_captures(&mut self, renderer: &mut VulkanRenderer, output: &str) {
+        let (pending, others): (Vec<PendingCapture>, Vec<PendingCapture>) =
+            std::mem::take(&mut self.state.pending_captures)
+                .into_iter()
+                .partition(|capture| {
+                    capture.session.data::<SessionData>().is_none_or(|session| {
+                        match &session.target {
+                            Target::Output(name) => name == output,
+                            Target::Window(_) | Target::Nothing => true,
+                        }
+                    })
+                });
+        self.state.pending_captures = others;
         let mut images: Vec<((Target, bool), Image)> = Vec::new();
         let mut withheld = Vec::new();
         for capture in pending {
@@ -148,7 +161,7 @@ impl Headless {
             let index = match images.iter().position(|(cached, _)| cached == &key) {
                 Some(index) => index,
                 None => {
-                    let image = self.capture_image(renderer, &key.0, key.1, size);
+                    let image = self.capture_image(renderer, &key.0, key.1);
                     images.push((key, image));
                     images.len() - 1
                 }
@@ -160,9 +173,18 @@ impl Headless {
             match outcome {
                 Ok(()) => {
                     session.delivered.store(true, Ordering::Relaxed);
+                    let transform = match &session.target {
+                        Target::Output(name) => self
+                            .state
+                            .screen_named(name)
+                            .map_or(Transform::Normal, |screen| {
+                                self.state.screens[screen].settings.transform
+                            }),
+                        _ => Transform::Normal,
+                    };
                     let now = Duration::from(Clock::<Monotonic>::new().now());
                     let seconds = now.as_secs();
-                    capture.frame.transform(WlTransform::Normal);
+                    capture.frame.transform(transform.into());
                     capture.frame.damage(0, 0, size.w, size.h);
                     capture.frame.presentation_time(
                         (seconds >> 32) as u32,
@@ -182,20 +204,25 @@ impl Headless {
         renderer: &mut VulkanRenderer,
         target: &Target,
         paint_cursors: bool,
-        size: Size<i32, Physical>,
     ) -> Image {
-        let scale = self.output_scale();
         match target {
-            Target::Output => {
-                let elements = self.scene_elements(renderer, paint_cursors);
-                render_image(renderer, size, scale, &elements, background())
+            Target::Output(name) => {
+                let screen = self
+                    .state
+                    .screen_named(name)
+                    .ok_or(RenderError::NothingRendered)?;
+                let shown = &self.state.screens[screen];
+                let (size, scale, transform) =
+                    (shown.mode_size(), shown.scale(), shown.settings.transform);
+                let elements = self.scene_elements(renderer, screen, paint_cursors);
+                render_image(renderer, size, scale, transform, &elements, background())
             }
             Target::Window(identifier) => {
                 let window = self
                     .state
                     .captured_window(identifier)
                     .ok_or(RenderError::NothingRendered)?;
-                let (Some(area), Some(geometry)) =
+                let (Some((area, scale)), Some(geometry)) =
                     (self.state.window_area(window), window.geometry())
                 else {
                     return Err(RenderError::NothingRendered);
@@ -205,19 +232,13 @@ impl Headless {
                 let (shown, _) =
                     window_elements(window, renderer, scale, active, false, Some(at_origin));
                 let cursor = match paint_cursors {
-                    true => self.cursor_elements(renderer),
+                    true => self.cursor_elements(renderer, scale),
                     false => Vec::new(),
                 };
-                let to_origin = |element| {
-                    RelocateRenderElement::from_element(
-                        element,
-                        (-area.loc.x, -area.loc.y),
-                        Relocate::Relative,
-                    )
-                };
-                let elements: Vec<_> = cursor
+                let to_origin = Point::from((-area.loc.x, -area.loc.y));
+                let elements: Vec<ScreenElement> = cursor
                     .into_iter()
-                    .map(to_origin)
+                    .map(|element| ScreenElement::new(element, to_origin))
                     .chain(
                         shown
                             .into_iter()
@@ -227,16 +248,17 @@ impl Headless {
                                     OutputElement::Shadow(_) | OutputElement::Blur(_)
                                 )
                             })
-                            .map(|element| {
-                                RelocateRenderElement::from_element(
-                                    element,
-                                    (0, 0),
-                                    Relocate::Relative,
-                                )
-                            }),
+                            .map(|element| ScreenElement::new(element, Point::default())),
                     )
                     .collect();
-                render_image(renderer, size, scale, &elements, Color32F::TRANSPARENT)
+                render_image(
+                    renderer,
+                    area.size,
+                    scale,
+                    Transform::Normal,
+                    &elements,
+                    Color32F::TRANSPARENT,
+                )
             }
             Target::Nothing => Err(RenderError::NothingRendered),
         }
@@ -247,11 +269,12 @@ fn render_image<E: RenderElement<VulkanRenderer>>(
     renderer: &mut VulkanRenderer,
     size: Size<i32, Physical>,
     scale: f64,
+    transform: Transform,
     elements: &[E],
     clear: Color32F,
 ) -> Image {
     let mut target = renderer.create_buffer(Fourcc::Argb8888, Size::from((size.w, size.h)))?;
-    let mut damage = OutputDamageTracker::new(size, scale, Transform::Normal);
+    let mut damage = OutputDamageTracker::new(size, scale, transform);
     {
         let mut framebuffer = renderer.bind(&mut target)?;
         damage
@@ -337,10 +360,11 @@ impl Dispatch<ExtOutputImageCaptureSourceManagerV1, ()> for State {
             output,
         } = request
         {
-            let target = match state.output.owns(&output) {
-                true => Target::Output,
-                false => Target::Nothing,
-            };
+            let target = state
+                .screens
+                .iter()
+                .find(|screen| screen.output.owns(&output))
+                .map_or(Target::Nothing, |screen| Target::Output(screen.name()));
             data_init.init(source, SourceData { target });
         }
     }

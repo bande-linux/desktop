@@ -1,7 +1,7 @@
 use unbound_toolkit::ui::{Menu, MenuItem};
 
 use crate::L10N;
-use crate::status::{Battery, Bluetooth, Power, Sound, Wifi, hours_and_minutes};
+use crate::status::{Battery, Bluetooth, InputSources, Power, Sound, Wifi, hours_and_minutes};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
@@ -24,6 +24,7 @@ pub enum Command {
     HideApp,
     HideOthers,
     ShowAll,
+    SelectInputSource(usize),
 }
 
 fn hex(bytes: &[u8]) -> String {
@@ -64,6 +65,7 @@ impl Command {
             Self::HideApp => "hide-app".to_owned(),
             Self::HideOthers => "hide-others".to_owned(),
             Self::ShowAll => "show-all".to_owned(),
+            Self::SelectInputSource(index) => format!("input-source:{index}"),
         }
     }
 
@@ -93,6 +95,7 @@ impl Command {
             "hide-app" => Self::HideApp,
             "hide-others" => Self::HideOthers,
             "show-all" => Self::ShowAll,
+            "input-source" => Self::SelectInputSource(argument.parse().ok()?),
             "item" => {
                 let (item, id) = argument.rsplit_once('|')?;
                 Self::Item {
@@ -247,5 +250,19 @@ pub fn bluetooth_menu(bluetooth: &Bluetooth) -> Menu {
     }
     items.push(MenuItem::separator());
     items.push(settings("bluetooth"));
+    Menu::new(items)
+}
+
+pub fn input_source_menu(input: &InputSources) -> Menu {
+    let mut items: Vec<MenuItem> = input
+        .sources
+        .iter()
+        .enumerate()
+        .map(|(index, source)| {
+            item(&source.name, &Command::SelectInputSource(index)).checked(index == input.active)
+        })
+        .collect();
+    items.push(MenuItem::separator());
+    items.push(settings("keyboard"));
     Menu::new(items)
 }

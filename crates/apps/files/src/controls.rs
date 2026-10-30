@@ -8,24 +8,39 @@ use accesskit::{Action, ActionRequest, TreeId};
 use unbound_fs::{Sort, SortBy, format_date, format_size};
 use unbound_toolkit::ui::{
     Alert, Cell, ClipboardRequest, Column, Event, FreeLayout, HEADER_HEIGHT, Key, Modifiers,
-    Pointer, PointerButton, Row, SearchField, Size, Sort as TableSort, Table, TextField, Toggle,
-    Widget, WidgetId,
+    Pointer, PointerButton, Row, SLIDER_HEIGHT, Size, Slider, Sort as TableSort, Table, TextField,
+    Toggle, Widget, WidgetId,
 };
 use unbound_toolkit::{Image, Point, Rect};
 
 use crate::L10N;
+use crate::browser::Location;
 use crate::prompt::{Kind, Prompt};
 use crate::view::{
-    COLUMN_WIDTH, FilesView, ROW_HEIGHT, Rename, Request, SEARCH_HEIGHT, SLOW_CLICK_RENAME, Search,
+    COLUMN_WIDTH, FilesView, PATH_BAR_HEIGHT, ROW_HEIGHT, Rename, Request, SLOW_CLICK_RENAME,
     Sheet, contains,
 };
+use crate::views::{ICON_SIZES, ViewMode};
 
 const NAME_SIZE: f32 = 13.0;
-const TABLE_SORTS: [SortBy; 3] = [SortBy::Name, SortBy::Modified, SortBy::Size];
+const TABLE_SORTS: [Option<SortBy>; 4] = [
+    Some(SortBy::Name),
+    Some(SortBy::Modified),
+    Some(SortBy::Size),
+    None,
+];
+const FOUND_SORTS: [Option<SortBy>; 5] = [
+    Some(SortBy::Name),
+    None,
+    Some(SortBy::Modified),
+    Some(SortBy::Size),
+    None,
+];
 const ROW_INSET: f32 = 6.0;
 const NAME_INSET: f32 = 28.0;
 const TABLE_TEXT_INSET: f32 = 6.0 + 16.0 + 6.0;
 const FIELD_INSET: f32 = 3.0;
+pub(crate) const SLIDER_WIDTH: f32 = 96.0;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Signal {
@@ -37,6 +52,9 @@ pub(crate) enum Signal {
     GoTo(String),
     ApplyToAll(bool),
     Drag(Point),
+    IconSize(f64),
+    View(usize),
+    Scope(bool),
 }
 
 pub(crate) type Signals = Rc<RefCell<Vec<Signal>>>;
@@ -53,9 +71,14 @@ pub(crate) enum Press {
         collapse: Option<PathBuf>,
     },
     Dragging,
+    Band,
+    Place {
+        index: usize,
+        at: Point,
+    },
 }
 
-fn sender(signals: &Signals) -> impl Fn(Signal) + 'static {
+pub(crate) fn sender(signals: &Signals) -> impl Fn(Signal) + 'static {
     let signals = signals.clone();
     move |signal| signals.borrow_mut().push(signal)
 }
@@ -67,16 +90,51 @@ pub(crate) fn table(signals: &Signals) -> Table {
         sender(signals),
         sender(signals),
     );
-    Table::new(vec![
-        Column::new(&L10N.tr("column-name"), 280.0),
-        Column::new(&L10N.tr("column-modified"), 170.0),
-        Column::new(&L10N.tr("column-size"), 80.0).numeric(),
-        Column::new(&L10N.tr("column-kind"), 160.0).unsortable(),
-    ])
-    .on_selection(move |keys| selection(Signal::Selection(keys.to_vec())))
-    .on_activate(move |_| activate(Signal::Activate))
-    .on_sort(move |order| sort(Signal::Sort(order)))
-    .on_drag(move |_, at| drag(Signal::Drag(at)))
+    Table::new(table_columns(false))
+        .on_selection(move |keys| selection(Signal::Selection(keys.to_vec())))
+        .on_activate(move |_| activate(Signal::Activate))
+        .on_sort(move |order| sort(Signal::Sort(order)))
+        .on_drag(move |_, at| drag(Signal::Drag(at)))
+}
+
+fn table_columns(found: bool) -> Vec<Column> {
+    let name = L10N.tr("column-name");
+    let modified = L10N.tr("column-modified");
+    let size = L10N.tr("column-size");
+    let kind = L10N.tr("column-kind");
+    match found {
+        false => vec![
+            Column::new(&name, 280.0),
+            Column::new(&modified, 170.0),
+            Column::new(&size, 80.0).numeric(),
+            Column::new(&kind, 160.0).unsortable(),
+        ],
+        true => vec![
+            Column::new(&name, 200.0).flexible(),
+            Column::new(&L10N.tr("column-where"), 170.0).unsortable(),
+            Column::new(&modified, 150.0),
+            Column::new(&size, 70.0).numeric(),
+            Column::new(&kind, 120.0).unsortable(),
+        ],
+    }
+}
+
+fn table_sorts(found: bool) -> &'static [Option<SortBy>] {
+    match found {
+        true => &FOUND_SORTS,
+        false => &TABLE_SORTS,
+    }
+}
+
+fn shown_folder(folder: &Path, scope: &Path) -> String {
+    let base = scope.parent().unwrap_or(scope);
+    folder
+        .strip_prefix(base)
+        .unwrap_or(folder)
+        .iter()
+        .map(|part| part.to_string_lossy().into_owned())
+        .collect::<Vec<_>>()
+        .join(" \u{203A} ")
 }
 
 pub(crate) fn key_of(path: &Path) -> String {
@@ -127,18 +185,18 @@ impl FilesView {
         self.host_mut().and_then(|host| host.frame_of(id))
     }
 
-    fn focus(&mut self, id: WidgetId) {
+    pub(crate) fn focus(&mut self, id: WidgetId) {
         self.ui.perform(&request(Action::Focus, id.into()));
     }
 
     pub(crate) fn focus_content(&mut self) {
-        match self.browser.single() {
+        match self.mode == ViewMode::List {
             true => self.focus(self.table),
             false => self.ui.clear_focus(),
         }
     }
 
-    fn insert(&mut self, widget: impl Widget + 'static) -> WidgetId {
+    pub(crate) fn insert(&mut self, widget: impl Widget + 'static) -> WidgetId {
         let id = widget.id();
         if let Some(host) = self.host_mut() {
             host.insert(widget, Rect::default());
@@ -147,16 +205,42 @@ impl FilesView {
         id
     }
 
-    fn remove(&mut self, id: WidgetId) {
+    pub(crate) fn remove(&mut self, id: WidgetId) {
         if let Some(host) = self.host_mut() {
             host.remove(id);
         }
     }
 
     fn search_focused(&self) -> bool {
-        self.search
-            .as_ref()
-            .is_some_and(|search| self.ui.focus() == Some(search.field))
+        self.ui.focus() == Some(self.search_field)
+    }
+
+    pub(crate) fn replace_widget(
+        &mut self,
+        old: WidgetId,
+        widget: impl Widget + 'static,
+    ) -> WidgetId {
+        let focused = self.ui.focus() == Some(old);
+        self.remove(old);
+        let id = self.insert(widget);
+        if focused {
+            self.focus(id);
+        }
+        id
+    }
+
+    fn controls(&self) -> Vec<WidgetId> {
+        [
+            Some(self.search_field),
+            Some(self.view_control),
+            self.size_slider,
+            self.searching
+                .as_ref()
+                .map(|searching| searching.scope_control),
+        ]
+        .into_iter()
+        .flatten()
+        .collect()
     }
 
     pub(crate) fn route(&mut self, event: &Event) -> bool {
@@ -169,6 +253,8 @@ impl FilesView {
             Event::PointerMove(pointer) | Event::PointerEnter(pointer) => match self.press {
                 Some(Press::Ui | Press::Table { .. }) => self.ui.handle(event),
                 Some(Press::Item { at, .. }) => self.maybe_drag(at, pointer),
+                Some(Press::Band) => self.band_moved(pointer),
+                Some(Press::Place { index, at }) => self.reorder_moved(index, at, pointer),
                 Some(_) => false,
                 None => self.ui.handle(event) | self.files_hover(pointer),
             },
@@ -192,7 +278,7 @@ impl FilesView {
         if self.search_focused() {
             return self.search_key(key, modifiers);
         }
-        if self.browser.single()
+        if self.mode == ViewMode::List
             && table_key(key, modifiers)
             && self.ui.handle(&Event::Key { key, modifiers })
         {
@@ -201,15 +287,17 @@ impl FilesView {
         if self.key(key, modifiers) {
             return true;
         }
-        self.browser.single() && key != Key::Tab && self.ui.handle(&Event::Key { key, modifiers })
+        self.mode == ViewMode::List
+            && key != Key::Tab
+            && self.ui.handle(&Event::Key { key, modifiers })
     }
 
     fn over_control(&mut self, at: Point) -> bool {
         let ids = [Some(self.table)]
             .into_iter()
-            .chain([self.search.as_ref().map(|search| search.field)])
             .chain([self.rename.as_ref().map(|rename| rename.field)])
             .flatten()
+            .chain(self.controls())
             .collect::<Vec<_>>();
         ids.into_iter()
             .filter_map(|id| self.frame_of(id))
@@ -232,11 +320,12 @@ impl FilesView {
             }
             self.commit_rename();
         }
-        if let Some(field) = self.search.as_ref().map(|search| search.field)
-            && self
-                .frame_of(field)
-                .is_some_and(|frame| contains(frame, at))
-        {
+        let on_control = self
+            .controls()
+            .into_iter()
+            .filter_map(|id| self.frame_of(id))
+            .any(|frame| contains(frame, at));
+        if on_control {
             self.press = Some(Press::Ui);
             return self.ui.handle(event);
         }
@@ -318,6 +407,8 @@ impl FilesView {
                 }
                 true
             }
+            Some(Press::Band) => self.end_band(),
+            Some(Press::Place { .. }) => self.reorder_finished(),
             Some(Press::Files | Press::Dragging) => false,
             _ => self.ui.handle(event),
         }
@@ -359,7 +450,10 @@ impl FilesView {
                     Signal::Selection(keys) => self.table_selected(&keys),
                     Signal::Activate => self.open(),
                     Signal::Sort(order) => self.table_sorted(order),
-                    Signal::Search(text) => self.apply_search(&text),
+                    Signal::Search(text) => self.search_changed(&text),
+                    Signal::View(index) => self.view_chosen(index),
+                    Signal::Scope(everywhere) => self.set_scope(everywhere),
+                    Signal::IconSize(size) => self.set_icon_size(size.round() as u32),
                     Signal::GoTo(text) => {
                         if let Some(Sheet::GoTo(typed)) = &mut self.sheet {
                             *typed = text;
@@ -380,7 +474,7 @@ impl FilesView {
     }
 
     fn table_selected(&mut self, keys: &[String]) {
-        if !self.browser.single() {
+        if self.mode != ViewMode::List {
             return;
         }
         let rows = keys
@@ -393,7 +487,8 @@ impl FilesView {
     }
 
     fn table_sorted(&mut self, order: TableSort) {
-        let Some(by) = TABLE_SORTS.get(order.column).copied() else {
+        let found = self.browser.searching();
+        let Some(by) = table_sorts(found).get(order.column).copied().flatten() else {
             return;
         };
         self.browser.set_sort(Sort {
@@ -412,6 +507,10 @@ impl FilesView {
     }
 
     fn table_contents(&mut self) -> (Vec<Row>, HashMap<String, usize>) {
+        let scope = match self.browser.root() {
+            Location::Search(scope) => Some(scope.clone()),
+            _ => None,
+        };
         let entries = std::mem::take(&mut self.browser.columns_mut()[0].entries);
         let mut types: HashMap<String, (Option<Image>, String)> = HashMap::new();
         let mut keys = HashMap::with_capacity(entries.len());
@@ -435,15 +534,21 @@ impl FilesView {
                 true => "\u{2014}".to_owned(),
                 false => format_size(entry.size),
             };
-            rows.push(Row::new(
-                key,
-                vec![
-                    Cell::new(entry.name.clone()).icon(icon),
-                    Cell::new(entry.modified.map(format_date).unwrap_or_default()).muted(),
-                    Cell::new(size).muted(),
-                    Cell::new(kind).muted(),
-                ],
-            ));
+            let mut cells = vec![
+                Cell::new(entry.name.clone()).icon(icon),
+                Cell::new(entry.modified.map(format_date).unwrap_or_default()).muted(),
+                Cell::new(size).muted(),
+                Cell::new(kind).muted(),
+            ];
+            if let Some(scope) = &scope {
+                let folder = entry
+                    .path
+                    .parent()
+                    .map(|folder| shown_folder(folder, scope))
+                    .unwrap_or_default();
+                cells.insert(1, Cell::new(folder).muted());
+            }
+            rows.push(Row::new(key, cells));
         }
         self.browser.columns_mut()[0].entries = entries;
         (rows, keys)
@@ -451,8 +556,16 @@ impl FilesView {
 
     pub(crate) fn sync_table(&mut self) {
         self.layout_controls();
-        if !self.browser.single() {
+        if self.mode != ViewMode::List {
             return;
+        }
+        let found = self.browser.searching();
+        if found != self.table_found {
+            self.table_found = found;
+            self.table_revision = None;
+            if let Some(table) = self.table() {
+                table.set_columns(table_columns(found));
+            }
         }
         let revision = self.browser.columns()[0].revision;
         if self.table_revision != Some(revision) {
@@ -473,9 +586,10 @@ impl FilesView {
             .map(|entry| key_of(&entry.path))
             .collect::<Vec<_>>();
         let cursor = column.selected;
-        let shown = TABLE_SORTS
+        let shown = table_sorts(found)
             .iter()
-            .position(|by| *by == sort.by)
+            .position(|by| *by == Some(sort.by))
+            .filter(|_| *self.browser.root() != Location::Recents)
             .map(|column| TableSort {
                 column,
                 ascending: !sort.descending,
@@ -504,7 +618,14 @@ impl FilesView {
 
     fn rename_frame(&mut self, path: &Path) -> Rect {
         let content = self.content_frame();
-        if self.browser.single() {
+        if self.mode == ViewMode::Icons {
+            let row = self.browser.columns()[0]
+                .entries
+                .iter()
+                .position(|entry| entry.path == path);
+            return row.map_or_else(Rect::default, |row| self.grid_rename_frame(row));
+        }
+        if self.mode == ViewMode::List {
             let row = self.browser.columns()[0]
                 .entries
                 .iter()
@@ -548,26 +669,32 @@ impl FilesView {
 
     pub(crate) fn layout_controls(&mut self) {
         let content = self.content_frame();
-        let table = match self.browser.single() {
+        let table = match self.mode == ViewMode::List {
             true => content,
             false => Rect::default(),
         };
-        let search = self.search.as_ref().map(|search| {
-            let width = (content.width - 20.0).min(360.0);
-            (
-                search.field,
-                Rect::new(content.x + 10.0, 7.0, width, SEARCH_HEIGHT - 14.0),
-            )
-        });
+        let search = self.toolbar_frames().into_iter().chain(self.scope_frame());
         let rename = self
             .rename
             .as_ref()
             .map(|rename| (rename.field, rename.path.clone()));
         let rename = rename.map(|(field, path)| (field, self.rename_frame(&path)));
+        let slider = self.size_slider.map(|slider| {
+            let bar_y = self.size.1 - PATH_BAR_HEIGHT;
+            (
+                slider,
+                Rect::new(
+                    content.x + content.width - SLIDER_WIDTH - 14.0,
+                    bar_y + ((PATH_BAR_HEIGHT - SLIDER_HEIGHT) / 2.0).round(),
+                    SLIDER_WIDTH,
+                    SLIDER_HEIGHT,
+                ),
+            )
+        });
         let table_id = self.table;
         if let Some(host) = self.host_mut() {
             host.set_frame(table_id, table);
-            for (id, frame) in search.into_iter().chain(rename) {
+            for (id, frame) in search.into_iter().chain(rename).chain(slider) {
                 host.set_frame(id, frame);
             }
         }
@@ -613,30 +740,22 @@ impl FilesView {
         }
     }
 
-    pub(crate) fn open_search(&mut self) {
-        self.commit_rename();
-        if let Some(field) = self.search.as_ref().map(|search| search.field) {
-            self.focus(field);
+    pub(crate) fn refresh_size_slider(&mut self) {
+        if let Some(slider) = self.size_slider.take() {
+            self.remove(slider);
+        }
+        if self.mode != ViewMode::Icons || !self.status_bar {
             return;
         }
         let send = sender(&self.signals);
-        let field = SearchField::new(&L10N.tr("search-placeholder"), "", move |text| {
-            send(Signal::Search(text.to_owned()));
-        });
-        let column = self.browser.active();
-        let field = self.insert(field);
-        self.search = Some(Search { column, field });
-        self.layout_controls();
-        self.focus(field);
-    }
-
-    pub(crate) fn close_search(&mut self) {
-        if let Some(search) = self.search.take() {
-            self.remove(search.field);
-            self.browser.set_filter(search.column, "");
-            self.selection_changed();
-            self.focus_content();
-        }
+        let slider = Slider::new(
+            &L10N.tr("icon-size"),
+            f64::from(self.icon_size),
+            (f64::from(ICON_SIZES.0), f64::from(ICON_SIZES.1)),
+            8.0,
+            move |size| send(Signal::IconSize(size)),
+        );
+        self.size_slider = Some(self.insert(slider));
     }
 
     fn choice(&self) -> impl Fn(&str) + 'static {

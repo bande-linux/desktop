@@ -14,7 +14,7 @@ use unbound_render::VulkanRenderer;
 use unbound_spring::{Animation, Spring, State as Phase};
 
 use crate::gesture::Tracker;
-use crate::label::{Label, Labels};
+use crate::label::{Label, Labels, TITLE};
 use crate::motion::{Look, Motion};
 use crate::scene::{CORNER_RADIUS, FillElement, Piece, fresh, pieces_of, rounded, scaled_pieces};
 use crate::shell::toplevel_names;
@@ -57,8 +57,8 @@ struct Slot {
 #[derive(Debug, Clone, PartialEq)]
 enum Hit {
     Window(WlSurface),
-    Space(usize),
-    Add,
+    Space(usize, usize),
+    Add(usize),
     Nothing,
 }
 
@@ -87,7 +87,7 @@ pub(crate) struct Overview {
     pointer: Point<f64, Logical>,
     returning: Option<(WlSurface, Motion)>,
     slots: Vec<Slot>,
-    ids: Vec<Id>,
+    ids: Vec<Vec<Id>>,
 }
 
 impl Overview {
@@ -231,21 +231,22 @@ fn real_rect(window: &Window) -> Option<Frame> {
 }
 
 impl State {
-    fn thumbnail_scale(&self) -> f64 {
-        let output = f64::from(self.logical_output_size().h).max(1.0);
-        f64::from(self.usable_area().size.h) * STRIP_SHARE / output
+    fn thumbnail_scale(&self, screen: usize) -> f64 {
+        let output = f64::from(self.screen_rect(screen).size.h).max(1.0);
+        f64::from(self.usable_area(screen).size.h) * STRIP_SHARE / output
     }
 
-    fn strip(&self) -> (Vec<Frame>, Frame) {
-        let scale = self.thumbnail_scale();
-        let size = self.logical_output_size().to_f64().upscale(scale);
-        let area = self.usable_area();
-        let count = self.workspaces.count() as f64;
+    fn strip(&self, screen: usize) -> (Vec<Frame>, Frame) {
+        let scale = self.thumbnail_scale(screen);
+        let size = self.screen_rect(screen).size.to_f64().upscale(scale);
+        let area = self.usable_area(screen);
+        let workspaces = &self.screens[screen].workspaces;
+        let count = workspaces.count() as f64;
         let add = Rectangle::new(Point::default(), (size.w * ADD_SHARE, size.h).into());
         let total = count * (size.w + THUMB_GAP) + add.size.w;
         let left = f64::from(area.location.x) + (f64::from(area.size.w) - total) / 2.0;
         let top = f64::from(area.location.y) + STRIP_PAD;
-        let thumbnails = (0..self.workspaces.count())
+        let thumbnails = (0..workspaces.count())
             .map(|index| {
                 Rectangle::new(
                     (left + index as f64 * (size.w + THUMB_GAP), top).into(),
@@ -257,12 +258,12 @@ impl State {
         (thumbnails, add)
     }
 
-    fn layout_area(&self) -> Frame {
-        let area = self.usable_area();
+    fn layout_area(&self, screen: usize) -> Frame {
+        let area = self.usable_area(screen);
         let top = if self.overview.app.is_some() {
             f64::from(area.location.y)
         } else {
-            let (thumbnails, _) = self.strip();
+            let (thumbnails, _) = self.strip(screen);
             thumbnails
                 .first()
                 .map_or(f64::from(area.location.y), |thumbnail| {
@@ -301,35 +302,43 @@ impl State {
             self.overview.slots.clear();
             return;
         }
-        let area = self.layout_area();
         let shown = |window: &&Window| window.visible() && real_rect(window).is_some();
-        let slots = match &self.overview.app {
-            Some(app_id) => {
-                let windows = self
-                    .windows
-                    .iter()
-                    .filter(shown)
-                    .filter(|window| &toplevel_names(window.surface()).1 == app_id)
-                    .collect();
-                self.arranged(windows, self.workspaces.active_id(), area)
-            }
-            None => (0..self.workspaces.count())
-                .filter_map(|index| self.workspaces.id_at(index))
-                .flat_map(|space| {
+        let mut slots = Vec::new();
+        for screen in 0..self.screens.len() {
+            let area = self.layout_area(screen);
+            let workspaces = &self.screens[screen].workspaces;
+            let on_screen = |window: &&Window| self.screen_of(window) == screen;
+            match &self.overview.app {
+                Some(app_id) => {
                     let windows = self
                         .windows
                         .iter()
                         .filter(shown)
-                        .filter(|window| window.workspace == space)
+                        .filter(on_screen)
+                        .filter(|window| &toplevel_names(window.surface()).1 == app_id)
                         .collect();
-                    self.arranged(windows, space, area)
-                })
-                .collect(),
-        };
+                    slots.extend(self.arranged(windows, workspaces.active_id(), area));
+                }
+                None => {
+                    for space in workspaces.ids() {
+                        let windows = self
+                            .windows
+                            .iter()
+                            .filter(shown)
+                            .filter(|window| window.workspace == space)
+                            .collect();
+                        slots.extend(self.arranged(windows, space, area));
+                    }
+                }
+            }
+        }
         self.overview.slots = slots;
-        let wanted = 2 * self.workspaces.count() + 6;
-        if self.overview.ids.len() < wanted {
-            self.overview.ids.resize_with(wanted, Id::new);
+        self.overview.ids.resize_with(self.screens.len(), Vec::new);
+        for (screen, ids) in self.overview.ids.iter_mut().enumerate() {
+            let wanted = 2 * self.screens[screen].workspaces.count() + 6;
+            if ids.len() < wanted {
+                ids.resize_with(wanted, Id::new);
+            }
         }
         let selectable = |surface: &WlSurface| self.selectable(surface);
         if !self.overview.selected.as_ref().is_some_and(selectable) {
@@ -359,7 +368,9 @@ impl State {
         };
         let (title, app_id) = toplevel_names(&surface);
         let text = if title.is_empty() { app_id } else { title };
-        let scale = self.output_scale;
+        let scale = self.window_index(&surface).map_or(1.0, |index| {
+            self.screens[self.screen_of(&self.windows[index])].scale()
+        });
         if self.overview.title.as_ref().is_some_and(|(known, label)| {
             known == &surface && label.text == text && label.scale == scale
         }) {
@@ -370,17 +381,26 @@ impl State {
             .overview
             .labels
             .get_or_insert_with(Labels::default)
-            .render(&text, width, scale);
+            .render(&text, TITLE, width, scale);
         self.overview.title = label.map(|label| (surface, label));
     }
 
-    fn title_element(&self, renderer: &mut VulkanRenderer, scale: f64) -> Option<OutputElement> {
+    fn title_element(
+        &self,
+        renderer: &mut VulkanRenderer,
+        screen: usize,
+        scale: f64,
+    ) -> Option<OutputElement> {
         let (surface, label) = self.overview.title.as_ref()?;
         let index = self.window_index(surface)?;
+        if self.screen_of(&self.windows[index]) != screen {
+            return None;
+        }
         let rect = self.presented(&self.windows[index])?.rect;
-        let output = self.logical_output_size().to_f64();
+        let output = self.screen_rect(screen);
+        let bottom = f64::from(output.location.y + output.size.h);
         let x = rect.loc.x + (rect.size.w - label.size.w) / 2.0;
-        let y = (rect.loc.y + rect.size.h + TITLE_GAP).min(output.h - label.size.h);
+        let y = (rect.loc.y + rect.size.h + TITLE_GAP).min(bottom - label.size.h);
         let location = Point::<f64, Logical>::from((x, y))
             .to_physical(scale)
             .to_i32_round::<i32>()
@@ -408,23 +428,27 @@ impl State {
     }
 
     fn selectable(&self, surface: &WlSurface) -> bool {
-        self.overview
-            .slots
-            .iter()
-            .any(|slot| &slot.surface == surface && slot.space == self.workspaces.active_id())
-            && self.matches_filter(surface)
+        self.overview.slots.iter().any(|slot| {
+            &slot.surface == surface
+                && slot.space
+                    == self.screens[self.screen_of_workspace(slot.space)]
+                        .workspaces
+                        .active_id()
+        }) && self.matches_filter(surface)
     }
 
     fn slot_offset(&self, slot: &Slot) -> f64 {
-        self.workspaces
+        let workspaces = &self.screens[self.screen_of_workspace(slot.space)].workspaces;
+        workspaces
             .index_of(slot.space)
-            .map_or(0.0, |index| index as f64 - self.workspaces.shown_view())
+            .map_or(0.0, |index| index as f64 - workspaces.shown_view())
     }
 
     fn slot_on_screen(&self, slot: &Slot) -> Frame {
         let mut look = Look::shown(slot.rect);
         if !self.reduce_motion {
-            self.place_on_workspace(&mut look, self.slot_offset(slot));
+            let screen = self.screen_of_workspace(slot.space);
+            self.place_on_workspace(&mut look, self.slot_offset(slot), screen);
         }
         look.rect
     }
@@ -436,7 +460,8 @@ impl State {
             return look;
         };
         let mut target = Look::shown(slot.rect);
-        self.place_on_workspace(&mut target, self.slot_offset(slot));
+        let screen = self.screen_of_workspace(slot.space);
+        self.place_on_workspace(&mut target, self.slot_offset(slot), screen);
         if let Some((surface, motion)) = &self.overview.returning
             && surface == window.surface()
             && let Some(returning) = motion.shown()
@@ -468,7 +493,11 @@ impl State {
         }
         self.overview.slot(window.surface())?;
         let mut look = Look::shown(real_rect(window)?);
-        self.place_on_workspace(&mut look, self.workspace_offset(window));
+        self.place_on_workspace(
+            &mut look,
+            self.workspace_offset(window),
+            self.screen_of(window),
+        );
         look.alpha *= 1.0 - progress;
         Some(look)
     }
@@ -485,7 +514,11 @@ impl State {
         let rect = inflate(shown.rect, RING);
         let alpha = (self.overview.progress * shown.alpha) as f32;
         Some(OutputElement::Fill(FillElement::new(
-            self.overview.ids.first()?.clone(),
+            self.overview
+                .ids
+                .get(self.screen_of(window))?
+                .first()?
+                .clone(),
             rounded(
                 rect.to_physical(scale),
                 (CORNER_RADIUS * shrink + RING) * scale,
@@ -498,11 +531,11 @@ impl State {
         self.overview.dragged() == Some(window.surface())
     }
 
-    fn strip_shift(&self) -> f64 {
+    fn strip_shift(&self, screen: usize) -> f64 {
         if self.reduce_motion {
             return 0.0;
         }
-        let (thumbnails, _) = self.strip();
+        let (thumbnails, _) = self.strip(screen);
         let reach = thumbnails
             .first()
             .map_or(0.0, |thumbnail| thumbnail.loc.y + thumbnail.size.h);
@@ -512,24 +545,26 @@ impl State {
     pub(crate) fn overview_elements(
         &self,
         renderer: &mut VulkanRenderer,
+        screen: usize,
         scale: f64,
     ) -> Vec<OutputElement> {
         let progress = self.overview.progress;
         if progress <= 0.0 {
             return Vec::new();
         }
-        let title = self.title_element(renderer, scale);
+        let title = self.title_element(renderer, screen, scale);
         if self.overview.app.is_some() {
             return title.into_iter().collect();
         }
         let alpha = progress as f32;
-        let shift = Point::from((0.0, self.strip_shift()));
-        let (thumbnails, add) = self.strip();
-        let factor = self.thumbnail_scale();
-        let output = self.output_rect();
-        let output = Rectangle::new(output.location.to_f64(), output.size.to_f64());
+        let shift = Point::from((0.0, self.strip_shift(screen)));
+        let (thumbnails, add) = self.strip(screen);
+        let factor = self.thumbnail_scale(screen);
+        let output = self.screen_rect(screen);
+        let origin = output.location.to_f64();
+        let output = Rectangle::new(origin, output.size.to_f64());
         let wallpaper: Vec<Piece> = self
-            .placed_layers(Layer::Background)
+            .placed_layers(screen, Layer::Background)
             .into_iter()
             .flat_map(|(surface, at)| {
                 let surfaces: Vec<WaylandSurfaceRenderElement<VulkanRenderer>> =
@@ -548,8 +583,12 @@ impl State {
             (Some(Press { dragging: true, .. }), Some(hovered)) => Some(hovered),
             _ => None,
         };
-        let ids = &self.overview.ids;
-        let id = |index: usize| ids.get(index).cloned().unwrap_or_else(Id::new);
+        let ids = self.overview.ids.get(screen);
+        let id = |index: usize| {
+            ids.and_then(|ids| ids.get(index))
+                .cloned()
+                .unwrap_or_else(Id::new)
+        };
         let mut elements: Vec<OutputElement> = title.into_iter().collect();
         let plus = Rectangle::new(add.loc + shift, add.size);
         let center = plus.loc + plus.size.downscale(2.0).to_point();
@@ -573,7 +612,7 @@ impl State {
                 PLUS_FILL.map(|channel| channel * alpha),
             )));
         }
-        let add_fill = if target == Some(&Hit::Add) {
+        let add_fill = if target == Some(&Hit::Add(screen)) {
             TARGET_FILL
         } else {
             ADD_FILL
@@ -589,11 +628,12 @@ impl State {
             let radius = CORNER_RADIUS * factor * scale;
             let map = |rect: Frame| {
                 Rectangle::new(
-                    thumbnail.loc + rect.loc.upscale(factor),
+                    thumbnail.loc + (rect.loc - origin).upscale(factor),
                     rect.size.upscale(factor),
                 )
             };
-            let space = self.workspaces.id_at(index);
+            let workspaces = &self.screens[screen].workspaces;
+            let space = workspaces.id_at(index);
             for window in self
                 .windows
                 .iter()
@@ -617,8 +657,10 @@ impl State {
                         Kind::Unspecified,
                     );
                 let small = map(rect).to_physical(scale);
+                let mut pieces = pieces_of(&surfaces, scale);
+                pieces.extend(window.title_bar_piece(scale));
                 elements.extend(scaled_pieces(
-                    &fresh(pieces_of(&surfaces, scale)),
+                    &fresh(pieces),
                     rect.to_physical(scale),
                     small,
                     rounded(small, CORNER_RADIUS * factor * scale),
@@ -637,9 +679,9 @@ impl State {
                 rounded(shown, radius),
                 THUMB_FILL.map(|channel| channel * alpha),
             )));
-            let ring = if target == Some(&Hit::Space(index)) {
+            let ring = if target == Some(&Hit::Space(screen, index)) {
                 Some(TARGET_FILL)
-            } else if index == self.workspaces.active() {
+            } else if index == workspaces.active() {
                 Some(RING_FILL)
             } else {
                 None
@@ -680,9 +722,11 @@ impl State {
     }
 
     pub(crate) fn is_above_windows(&self, surface: &WlSurface) -> bool {
-        layer_map_for_output(&self.output)
-            .layer_for_surface(surface, WindowSurfaceType::ALL)
-            .is_some_and(|layer| matches!(layer.layer(), Layer::Top | Layer::Overlay))
+        self.screens.iter().any(|screen| {
+            layer_map_for_output(&screen.output)
+                .layer_for_surface(surface, WindowSurfaceType::ALL)
+                .is_some_and(|layer| matches!(layer.layer(), Layer::Top | Layer::Overlay))
+        })
     }
 
     pub(crate) fn open_overview(&mut self, app: Option<String>) {
@@ -709,7 +753,7 @@ impl State {
                 .and_then(|surface| self.window_index(&surface))
                 .is_some_and(|index| self.present(&self.windows[index]));
             if !keeps_focus {
-                self.focus_front_of_workspace();
+                self.focus_front_of_workspace(self.pointer_screen());
             }
         }
         self.needs_redraw = true;
@@ -741,7 +785,7 @@ impl State {
     }
 
     pub(crate) fn animate_overview(&mut self, time: Duration) {
-        let refresh = self.refresh;
+        let refresh = self.main_screen().refresh();
         if let Some((_, motion)) = &mut self.overview.returning {
             motion.advance(time, refresh);
             if motion.is_settled() {
@@ -820,13 +864,15 @@ impl State {
     }
 
     fn hit(&self, at: Point<f64, Logical>) -> Hit {
-        if self.overview.app.is_none() {
-            let (thumbnails, add) = self.strip();
+        if self.overview.app.is_none()
+            && let Some(screen) = self.screen_at(at)
+        {
+            let (thumbnails, add) = self.strip(screen);
             if let Some(index) = thumbnails.iter().position(|rect| rect.contains(at)) {
-                return Hit::Space(index);
+                return Hit::Space(screen, index);
             }
             if add.contains(at) {
-                return Hit::Add;
+                return Hit::Add(screen);
             }
         }
         let dragged = self.overview.dragged();
@@ -877,12 +923,12 @@ impl State {
             (Hit::Window(surface), false) if released == Hit::Window(surface.clone()) => {
                 self.pick(surface);
             }
-            (Hit::Space(index), _) if released == Hit::Space(index) => {
+            (Hit::Space(screen, index), _) if released == Hit::Space(screen, index) => {
                 self.close_overview();
-                self.switch_workspace(index);
+                self.switch_workspace(screen, index);
             }
-            (Hit::Add, _) if released == Hit::Add => {
-                self.add_workspace();
+            (Hit::Add(screen), _) if released == Hit::Add(screen) => {
+                self.add_workspace(screen);
                 self.relayout_overview();
             }
             (Hit::Nothing, _) if released == Hit::Nothing => self.close_overview(),
@@ -898,9 +944,22 @@ impl State {
         at: Point<f64, Logical>,
         grabbed: Point<f64, Logical>,
     ) {
+        let dropped_on = self.screen_at(at);
+        let home = self
+            .window_index(&surface)
+            .map(|index| self.screen_of(&self.windows[index]));
         match target {
-            Hit::Space(index) => self.move_to_space_at(&surface, index),
-            Hit::Add => self.move_to_space_at(&surface, self.workspaces.count()),
+            Hit::Space(screen, index) => self.move_to_space_at(&surface, screen, index),
+            Hit::Add(screen) => {
+                let count = self.screens[screen].workspaces.count();
+                self.move_to_space_at(&surface, screen, count);
+            }
+            _ if dropped_on.is_some() && dropped_on != home => {
+                if let Some(screen) = dropped_on {
+                    let active = self.screens[screen].workspaces.active();
+                    self.move_to_space_at(&surface, screen, active);
+                }
+            }
             _ => {
                 let Some(slot) = self.overview.slot(&surface).cloned() else {
                     return;

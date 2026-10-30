@@ -11,10 +11,11 @@ use crate::state::{State, mapped_size};
 
 pub(crate) struct Lock {
     owner: Option<ClientId>,
-    surface: Option<LockSurface>,
+    surfaces: Vec<(String, LockSurface)>,
     previous: Option<WlSurface>,
     confirmation: Option<SessionLocker>,
-    blank_latched: bool,
+    blank_latched: Vec<String>,
+    blank_presented: Vec<String>,
 }
 
 impl Lock {
@@ -39,29 +40,51 @@ impl State {
             .is_some_and(|lock| !lock.owner_alive(&self.display_handle))
     }
 
-    fn lock_surface(&self) -> Option<&WlSurface> {
+    fn lock_surface_on(&self, screen: usize) -> Option<&WlSurface> {
+        let name = self.screens[screen].name();
         self.lock
             .as_ref()?
-            .surface
-            .as_ref()
-            .filter(|surface| surface.alive())
-            .map(LockSurface::wl_surface)
+            .surfaces
+            .iter()
+            .find(|(output, surface)| *output == name && surface.alive())
+            .map(|(_, surface)| surface.wl_surface())
     }
 
-    pub(crate) fn locked_stack(&self) -> Vec<(WlSurface, Point<i32, Logical>)> {
-        self.lock_surface()
+    fn lock_surface(&self) -> Option<&WlSurface> {
+        let mapped = |surface: &&WlSurface| mapped_size(surface).is_some();
+        self.lock_surface_on(0).filter(mapped).or_else(|| {
+            (1..self.screens.len()).find_map(|screen| self.lock_surface_on(screen).filter(mapped))
+        })
+    }
+
+    pub(crate) fn lock_shown(&self) -> bool {
+        self.lock_surface().is_some()
+    }
+
+    fn is_lock_surface(&self, surface: &WlSurface) -> bool {
+        self.lock.as_ref().is_some_and(|lock| {
+            lock.surfaces
+                .iter()
+                .any(|(_, known)| known.wl_surface() == surface)
+        })
+    }
+
+    pub(crate) fn locked_stack(&self, screen: usize) -> Vec<(WlSurface, Point<i32, Logical>)> {
+        self.lock_surface_on(screen)
             .filter(|surface| mapped_size(surface).is_some())
-            .map(|surface| (surface.clone(), Point::default()))
+            .map(|surface| (surface.clone(), self.screens[screen].settings.position))
             .into_iter()
             .collect()
     }
 
     pub(crate) fn redirect_focus_while_locked(&mut self, surface: &Option<WlSurface>) -> bool {
-        let lock_surface = self.lock_surface().cloned();
+        let is_lock_surface = surface
+            .as_ref()
+            .is_some_and(|surface| self.is_lock_surface(surface));
         let Some(lock) = &mut self.lock else {
             return false;
         };
-        if surface.is_some() && *surface == lock_surface {
+        if is_lock_surface {
             return false;
         }
         if surface.is_some() {
@@ -71,13 +94,32 @@ impl State {
     }
 
     pub(crate) fn commit_lock_surface(&mut self, surface: &WlSurface) -> bool {
-        if self.lock_surface() != Some(surface) {
+        if !self.is_lock_surface(surface) {
             return false;
         }
-        if mapped_size(surface).is_some() && self.focused().as_ref() != Some(surface) {
+        let focused_lock = self.focused().is_some_and(|focused| {
+            self.is_lock_surface(&focused) && mapped_size(&focused).is_some()
+        });
+        if !focused_lock && self.lock_surface() == Some(surface) {
             self.set_keyboard_focus(Some(surface.clone()));
         }
         true
+    }
+
+    pub(crate) fn resize_lock_surfaces(&mut self) {
+        let Some(lock) = &self.lock else {
+            return;
+        };
+        for (output, surface) in &lock.surfaces {
+            let Some(screen) = self.screen_named(output) else {
+                continue;
+            };
+            let size = self.screen_rect(screen).size;
+            surface.with_pending_state(|state| {
+                state.size = Some((size.w.unsigned_abs(), size.h.unsigned_abs()).into());
+            });
+            surface.send_configure();
+        }
     }
 
     fn set_keyboard_focus(&mut self, surface: Option<WlSurface>) {
@@ -87,17 +129,26 @@ impl State {
         self.sync_activated();
     }
 
-    pub(crate) fn latch_lock(&mut self) {
+    pub(crate) fn latch_lock(&mut self, screen: usize) {
+        let name = self.screens[screen].name();
         if let Some(lock) = &mut self.lock
             && lock.confirmation.is_some()
+            && !lock.blank_latched.contains(&name)
         {
-            lock.blank_latched = true;
+            lock.blank_latched.push(name);
         }
     }
 
-    pub(crate) fn confirm_lock(&mut self) {
-        if let Some(lock) = &mut self.lock
-            && lock.blank_latched
+    pub(crate) fn confirm_lock(&mut self, screen: usize) {
+        let name = self.screens[screen].name();
+        let names: Vec<String> = self.screens.iter().map(|screen| screen.name()).collect();
+        let Some(lock) = &mut self.lock else {
+            return;
+        };
+        if lock.blank_latched.contains(&name) && !lock.blank_presented.contains(&name) {
+            lock.blank_presented.push(name);
+        }
+        if names.iter().all(|name| lock.blank_presented.contains(name))
             && let Some(confirmation) = lock.confirmation.take()
         {
             confirmation.lock();
@@ -134,9 +185,10 @@ impl SessionLockHandler for State {
                 return;
             }
             lock.owner = owner;
-            lock.surface = None;
+            lock.surfaces.clear();
             lock.confirmation = Some(confirmation);
-            lock.blank_latched = false;
+            lock.blank_latched.clear();
+            lock.blank_presented.clear();
             return;
         }
         self.release_grabs();
@@ -144,10 +196,11 @@ impl SessionLockHandler for State {
         let previous = self.key_window();
         self.lock = Some(Lock {
             owner,
-            surface: None,
+            surfaces: Vec::new(),
             previous,
             confirmation: Some(confirmation),
-            blank_latched: false,
+            blank_latched: Vec::new(),
+            blank_presented: Vec::new(),
         });
         self.set_keyboard_focus(None);
         self.needs_redraw = true;
@@ -175,7 +228,7 @@ impl SessionLockHandler for State {
         }
     }
 
-    fn new_surface(&mut self, surface: LockSurface, _output: WlOutput) {
+    fn new_surface(&mut self, surface: LockSurface, output: WlOutput) {
         let client = surface.wl_surface().client().map(|client| client.id());
         let Some(lock) = &self.lock else {
             return;
@@ -183,13 +236,22 @@ impl SessionLockHandler for State {
         if client.is_none() || client != lock.owner {
             return;
         }
-        let size = self.logical_output_size();
+        let Some(screen) = self
+            .screens
+            .iter()
+            .position(|screen| screen.output.owns(&output))
+        else {
+            return;
+        };
+        let size = self.screen_rect(screen).size;
         surface.with_pending_state(|state| {
             state.size = Some((size.w.unsigned_abs(), size.h.unsigned_abs()).into());
         });
         surface.send_configure();
+        let name = self.screens[screen].name();
         if let Some(lock) = &mut self.lock {
-            lock.surface = Some(surface);
+            lock.surfaces.retain(|(output, _)| *output != name);
+            lock.surfaces.push((name, surface));
         }
     }
 }

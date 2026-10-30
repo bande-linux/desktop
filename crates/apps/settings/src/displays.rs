@@ -1,94 +1,169 @@
 use std::os::fd::{AsFd, BorrowedFd};
 
 use wayland_client::globals::{GlobalListContents, registry_queue_init};
-use wayland_client::protocol::wl_output::{self, WlOutput};
+use wayland_client::protocol::wl_output::Transform;
 use wayland_client::protocol::wl_registry::{self, WlRegistry};
-use wayland_client::{Connection, Dispatch, EventQueue, QueueHandle, WEnum};
+use wayland_client::{
+    Connection, Dispatch, EventQueue, Proxy, QueueHandle, WEnum, event_created_child,
+};
+use wayland_protocols_wlr::output_management::v1::client::{
+    zwlr_output_head_v1::{self, ZwlrOutputHeadV1},
+    zwlr_output_manager_v1::{self, ZwlrOutputManagerV1},
+    zwlr_output_mode_v1::{self, ZwlrOutputModeV1},
+};
 
 use crate::state::{Display, Mode};
 
-const OUTPUT_VERSION: u32 = 4;
-const OUTPUT: &str = "wl_output";
+const MANAGER_VERSION: u32 = 4;
+const MANAGER: &str = "zwlr_output_manager_v1";
+
+struct Head {
+    head: ZwlrOutputHeadV1,
+    display: Display,
+    modes: Vec<(ZwlrOutputModeV1, Mode)>,
+}
 
 #[derive(Default)]
-struct Outputs {
-    outputs: Vec<(u32, WlOutput, Display, bool)>,
+struct Heads {
+    heads: Vec<Head>,
     changed: bool,
 }
 
-impl Outputs {
-    fn bind(&mut self, registry: &WlRegistry, name: u32, version: u32, queue: &QueueHandle<Self>) {
-        let output = registry.bind(name, version.min(OUTPUT_VERSION), queue, name);
-        self.outputs.push((name, output, Display::default(), false));
+impl Heads {
+    fn head(&mut self, head: &ZwlrOutputHeadV1) -> Option<&mut Head> {
+        self.heads.iter_mut().find(|known| known.head == *head)
     }
 
-    fn entry(&mut self, name: u32) -> Option<&mut (u32, WlOutput, Display, bool)> {
-        self.outputs.iter_mut().find(|(global, ..)| *global == name)
+    fn mode(&mut self, mode: &ZwlrOutputModeV1) -> Option<&mut Mode> {
+        self.heads
+            .iter_mut()
+            .flat_map(|head| head.modes.iter_mut())
+            .find(|(known, _)| known == mode)
+            .map(|(_, mode)| mode)
     }
 }
 
-impl Dispatch<WlRegistry, GlobalListContents> for Outputs {
+fn degrees(transform: WEnum<Transform>) -> u32 {
+    match transform {
+        WEnum::Value(Transform::_90 | Transform::Flipped90) => 90,
+        WEnum::Value(Transform::_180 | Transform::Flipped180) => 180,
+        WEnum::Value(Transform::_270 | Transform::Flipped270) => 270,
+        _ => 0,
+    }
+}
+
+impl Dispatch<WlRegistry, GlobalListContents> for Heads {
     fn event(
-        state: &mut Self,
-        registry: &WlRegistry,
-        event: wl_registry::Event,
+        _: &mut Self,
+        _: &WlRegistry,
+        _: wl_registry::Event,
         _: &GlobalListContents,
         _: &Connection,
-        queue: &QueueHandle<Self>,
+        _: &QueueHandle<Self>,
+    ) {
+    }
+}
+
+impl Dispatch<ZwlrOutputManagerV1, ()> for Heads {
+    fn event(
+        state: &mut Self,
+        _: &ZwlrOutputManagerV1,
+        event: zwlr_output_manager_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
     ) {
         match event {
-            wl_registry::Event::Global {
-                name,
-                interface,
-                version,
-            } if interface == OUTPUT => state.bind(registry, name, version, queue),
-            wl_registry::Event::GlobalRemove { name } => {
-                let before = state.outputs.len();
-                state.outputs.retain(|(global, ..)| *global != name);
-                state.changed |= state.outputs.len() != before;
+            zwlr_output_manager_v1::Event::Head { head } => state.heads.push(Head {
+                head,
+                display: Display::default(),
+                modes: Vec::new(),
+            }),
+            zwlr_output_manager_v1::Event::Done { .. } => state.changed = true,
+            _ => {}
+        }
+    }
+
+    event_created_child!(Heads, ZwlrOutputManagerV1, [
+        zwlr_output_manager_v1::EVT_HEAD_OPCODE => (ZwlrOutputHeadV1, ()),
+    ]);
+}
+
+impl Dispatch<ZwlrOutputHeadV1, ()> for Heads {
+    fn event(
+        state: &mut Self,
+        head: &ZwlrOutputHeadV1,
+        event: zwlr_output_head_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        if let zwlr_output_head_v1::Event::Finished = event {
+            state.heads.retain(|known| known.head != *head);
+            head.release();
+            return;
+        }
+        let Some(known) = state.head(head) else {
+            return;
+        };
+        match event {
+            zwlr_output_head_v1::Event::Name { name } => known.display.connector = name,
+            zwlr_output_head_v1::Event::Description { description } => {
+                known.display.identity = description;
+            }
+            zwlr_output_head_v1::Event::Mode { mode } => known.modes.push((mode, Mode::default())),
+            zwlr_output_head_v1::Event::CurrentMode { mode } => {
+                known.display.current = known
+                    .modes
+                    .iter()
+                    .find(|(known, _)| *known == mode)
+                    .map(|(_, mode)| *mode);
+            }
+            zwlr_output_head_v1::Event::Make { make } => known.display.make = make,
+            zwlr_output_head_v1::Event::Model { model } => known.display.model = model,
+            zwlr_output_head_v1::Event::Position { x, y } => known.display.position = (x, y),
+
+            zwlr_output_head_v1::Event::Scale { scale } => known.display.scale = scale,
+            zwlr_output_head_v1::Event::Transform { transform } => {
+                known.display.rotation = degrees(transform);
             }
             _ => {}
         }
     }
+
+    event_created_child!(Heads, ZwlrOutputHeadV1, [
+        zwlr_output_head_v1::EVT_MODE_OPCODE => (ZwlrOutputModeV1, ()),
+    ]);
 }
 
-impl Dispatch<WlOutput, u32> for Outputs {
+impl Dispatch<ZwlrOutputModeV1, ()> for Heads {
     fn event(
         state: &mut Self,
-        _: &WlOutput,
-        event: wl_output::Event,
-        name: &u32,
+        mode: &ZwlrOutputModeV1,
+        event: zwlr_output_mode_v1::Event,
+        _: &(),
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
-        let Some((_, _, display, ready)) = state.entry(*name) else {
-            return;
-        };
         match event {
-            wl_output::Event::Name { name } => display.connector = name,
-            wl_output::Event::Description { description } => display.description = description,
-            wl_output::Event::Mode {
-                flags,
-                width,
-                height,
-                refresh,
-            } => {
-                let mode = Mode {
-                    width,
-                    height,
-                    millihertz: refresh,
-                };
-                if !display.modes.contains(&mode) {
-                    display.modes.push(mode);
-                }
-                if matches!(flags, WEnum::Value(flags) if flags.contains(wl_output::Mode::Current))
-                {
-                    display.current = Some(mode);
+            zwlr_output_mode_v1::Event::Size { width, height } => {
+                if let Some(known) = state.mode(mode) {
+                    known.width = width;
+                    known.height = height;
                 }
             }
-            wl_output::Event::Done => {
-                *ready = true;
-                state.changed = true;
+            zwlr_output_mode_v1::Event::Refresh { refresh } => {
+                if let Some(known) = state.mode(mode) {
+                    known.millihertz = refresh;
+                }
+            }
+            zwlr_output_mode_v1::Event::Finished => {
+                for head in &mut state.heads {
+                    head.modes.retain(|(known, _)| known != mode);
+                }
+                if mode.version() >= zwlr_output_mode_v1::REQ_RELEASE_SINCE {
+                    mode.release();
+                }
             }
             _ => {}
         }
@@ -97,8 +172,8 @@ impl Dispatch<WlOutput, u32> for Outputs {
 
 pub struct Displays {
     connection: Connection,
-    queue: EventQueue<Outputs>,
-    outputs: Outputs,
+    queue: EventQueue<Heads>,
+    heads: Heads,
 }
 
 impl Displays {
@@ -110,21 +185,21 @@ impl Displays {
     }
 
     pub fn on(connection: Connection) -> Option<Self> {
-        let (globals, mut queue) = registry_queue_init::<Outputs>(&connection)
+        let (globals, mut queue) = registry_queue_init::<Heads>(&connection)
             .inspect_err(|error| tracing::warn!("cannot list the displays: {error}"))
             .ok()?;
-        let mut outputs = Outputs::default();
         let handle = queue.handle();
-        globals.contents().with_list(|list| {
-            for global in list.iter().filter(|global| global.interface == OUTPUT) {
-                outputs.bind(globals.registry(), global.name, global.version, &handle);
-            }
-        });
-        queue.roundtrip(&mut outputs).ok()?;
+        let _manager: ZwlrOutputManagerV1 = globals
+            .bind(&handle, 1..=MANAGER_VERSION, ())
+            .inspect_err(|error| tracing::warn!("cannot bind {MANAGER}: {error}"))
+            .ok()?;
+        let mut heads = Heads::default();
+        queue.roundtrip(&mut heads).ok()?;
+        queue.roundtrip(&mut heads).ok()?;
         Some(Self {
             connection,
             queue,
-            outputs,
+            heads,
         })
     }
 
@@ -134,13 +209,16 @@ impl Displays {
 
     pub fn list(&self) -> Vec<Display> {
         let mut displays: Vec<Display> = self
-            .outputs
-            .outputs
+            .heads
+            .heads
             .iter()
-            .filter(|(_, _, display, ready)| *ready && !display.connector.is_empty())
-            .map(|(_, _, display, _)| display.clone())
+            .filter(|head| !head.display.connector.is_empty())
+            .map(|head| Display {
+                modes: head.modes.iter().map(|(_, mode)| *mode).collect(),
+                ..head.display.clone()
+            })
             .collect();
-        displays.sort_by(|a, b| a.connector.cmp(&b.connector));
+        displays.sort_by_key(|display| display.position);
         displays
     }
 
@@ -150,10 +228,10 @@ impl Displays {
         {
             tracing::debug!("display events not read: {error}");
         }
-        if let Err(error) = self.queue.dispatch_pending(&mut self.outputs) {
+        if let Err(error) = self.queue.dispatch_pending(&mut self.heads) {
             tracing::warn!("display events failed: {error}");
         }
         let _ = self.connection.flush();
-        std::mem::take(&mut self.outputs.changed).then(|| self.list())
+        std::mem::take(&mut self.heads.changed).then(|| self.list())
     }
 }

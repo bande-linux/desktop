@@ -19,28 +19,36 @@ accesskit_unix = "=0.24.1"
 ab_glyph = "=0.2.32"
 ash = "=0.38.0"
 blocking = "=1.7.0"
+bzip2 = "=0.6.1"
 image = { version = "=0.25.10", default-features = false, features = ["jpeg", "png"] }
+flate2 = "=1.1.10"
 icu_calendar = "=2.4.0"
 icu_datetime = "=2.4.0"
 icu_locale_core = "=2.4.0"
 jiff = "=0.2.38"
 libc = "=0.2.191"
 libloading = "=0.8.9"
+lzma-rust2 = { version = "=0.24.0", default-features = false, features = ["std", "xz"] }
+md-5 = "=0.10.6"
 kdl = { version = "=6.7.1", default-features = false, features = ["span"] }
 image-compare = "=0.5.0"
 pollster = "=1.0.1"
 raw-window-handle = "=0.6.2"
 resvg = { version = "=0.49.0", default-features = false }
+roxmltree = "=0.21.2"
 serde = { version = "=1.0.229", features = ["derive"] }
+ruzstd = "=0.9.1"
 rustix = { version = "=1.1.6", features = ["event", "param", "process"] }
 skrifa = "=0.44.0"
 smithay = { version = "=0.7.0", default-features = false, features = ["wayland_frontend"] }
+tar = "=0.4.46"
 tempfile = "=3.27.0"
 naga = { version = "=30.0.1", features = ["wgsl-in", "spv-out"] }
 notify = "=8.2.0"
 fontique = { version = "=0.12.0", features = ["fontconfig-dlopen"] }
 parley = { version = "=0.12.0", features = ["complex-scripts"] }
 pipewire = "=0.10.1"
+png = "=0.18.1"
 serde_json = "=1.0.154"
 zbus = "=5.19.0"
 tracing = "=0.1.44"
@@ -58,6 +66,7 @@ wayland-protocols-wlr = { version = "=0.3.12", features = ["client"] }
 wayland-scanner = "=0.31.11"
 wayland-server = "=0.31.14"
 xkbcommon = "=0.8.0"
+zip = { version = "=9.1.3", default-features = false, features = ["deflate-flate2"] }
 wgpu = { version = "=30.0.1", default-features = false, features = ["std", "parking_lot", "vulkan", "wgsl"] }
 unbound-app-menu = { path = "crates/libs/app-menu" }
 unbound-audio = { path = "crates/libs/audio" }
@@ -75,6 +84,7 @@ unbound-fs = { path = "crates/libs/fs" }
 unbound-graphics = { path = "crates/toolkit/graphics" }
 unbound-greeter = { path = "crates/shell/greeter" }
 unbound-inbox = { path = "crates/libs/inbox" }
+unbound-keyboard = { path = "crates/libs/keyboard" }
 unbound-l10n = { path = "crates/libs/l10n" }
 unbound-launcher = { path = "crates/shell/launcher" }
 unbound-lock = { path = "crates/shell/lock" }
@@ -99,6 +109,7 @@ unbound-spring = { path = "crates/libs/spring" }
 unbound-term = { path = "crates/apps/terminal" }
 unbound-test-bus = { path = "crates/testing/test-bus" }
 unbound-test-wayland = { path = "crates/testing/test-wayland" }
+unbound-thumbnails = { path = "crates/libs/thumbnails" }
 unbound-toolkit = { path = "crates/toolkit/toolkit" }
 unbound-toolkit-platform = { path = "crates/toolkit/platform" }
 unbound-tray = { path = "crates/services/tray" }

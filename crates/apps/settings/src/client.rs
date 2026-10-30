@@ -1,11 +1,12 @@
 use std::collections::{BTreeMap, HashMap};
 
-use unbound_config::Output;
+use unbound_config::{ArrangedDisplay, DisplaySettings, Placement, Rotation};
+
 use zbus::blocking::Connection;
 use zbus::proxy::CacheProperties;
 use zbus::zvariant::OwnedValue;
 
-use unbound_settings_panes::{SettingId, Value, WITH_DISPLAY};
+use unbound_settings_panes::{POINTER_SPEEDS, SettingId, Value, WITH_DISPLAY};
 
 #[zbus::proxy(
     interface = "org.unbound.Config",
@@ -70,12 +71,51 @@ pub trait Config {
     #[zbus(property)]
     fn set_key_repeat_delay(&self, milliseconds: u32) -> zbus::Result<()>;
     #[zbus(property)]
-    fn outputs(&self) -> zbus::Result<HashMap<String, HashMap<String, OwnedValue>>>;
-    fn set_output(
+    fn input_sources(&self) -> zbus::Result<Vec<String>>;
+    #[zbus(property)]
+    fn set_input_sources(&self, codes: Vec<String>) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn caps_lock(&self) -> zbus::Result<String>;
+    #[zbus(property)]
+    fn set_caps_lock(&self, value: &str) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn trackpad_tap_to_click(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_trackpad_tap_to_click(&self, on: bool) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn trackpad_natural_scrolling(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_trackpad_natural_scrolling(&self, on: bool) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn trackpad_speed(&self) -> zbus::Result<f64>;
+    #[zbus(property)]
+    fn set_trackpad_speed(&self, speed: f64) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn trackpad_secondary_click(&self) -> zbus::Result<String>;
+    #[zbus(property)]
+    fn set_trackpad_secondary_click(&self, value: &str) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn trackpad_disable_while_typing(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_trackpad_disable_while_typing(&self, on: bool) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn mouse_natural_scrolling(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_mouse_natural_scrolling(&self, on: bool) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn mouse_speed(&self) -> zbus::Result<f64>;
+    #[zbus(property)]
+    fn set_mouse_speed(&self, speed: f64) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn displays(&self) -> zbus::Result<HashMap<String, HashMap<String, OwnedValue>>>;
+    fn set_display(
         &self,
-        connector: &str,
+        identity: &str,
         settings: HashMap<&str, zbus::zvariant::Value<'_>>,
     ) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn arrangements(&self) -> zbus::Result<Vec<Vec<ArrangedDisplay>>>;
+    fn set_arrangement(&self, displays: Vec<ArrangedDisplay>) -> zbus::Result<()>;
 }
 
 #[zbus::proxy(
@@ -90,22 +130,30 @@ pub trait NotificationCenter {
     fn set_do_not_disturb(&self, enabled: bool) -> zbus::Result<()>;
 }
 
-fn output(settings: &HashMap<String, OwnedValue>) -> Output {
+fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
     let number = |key: &str| {
         settings
             .get(key)
             .and_then(|value| f64::try_from(value).ok())
     };
-    Output {
+    DisplaySettings {
+        resolution: settings
+            .get("resolution")
+            .and_then(|value| value.try_clone().ok())
+            .and_then(|value| <(u32, u32)>::try_from(value).ok()),
         scale: number("scale"),
         refresh_rate: number("refresh-rate"),
+        rotation: settings
+            .get("rotation")
+            .and_then(|value| u32::try_from(value).ok())
+            .and_then(Rotation::from_degrees),
         variable_refresh_rate: settings
             .get("variable-refresh-rate")
             .and_then(|value| bool::try_from(value).ok()),
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 12] = [
+pub const CONFIG_SETTINGS: [SettingId; 21] = [
     SettingId::Appearance,
     SettingId::ReduceMotion,
     SettingId::Wallpaper,
@@ -118,7 +166,26 @@ pub const CONFIG_SETTINGS: [SettingId; 12] = [
     SettingId::SleepAfter,
     SettingId::KeyRepeatRate,
     SettingId::KeyRepeatDelay,
+    SettingId::InputSources,
+    SettingId::CapsLock,
+    SettingId::TrackpadTapToClick,
+    SettingId::TrackpadNaturalScrolling,
+    SettingId::TrackpadSpeed,
+    SettingId::TrackpadSecondaryClick,
+    SettingId::TrackpadDisableWhileTyping,
+    SettingId::MouseNaturalScrolling,
+    SettingId::MouseSpeed,
 ];
+
+pub fn speed_stop(speed: f64) -> u32 {
+    let stops = f64::from(POINTER_SPEEDS);
+    ((speed.clamp(-1.0, 1.0) + 1.0) / 2.0 * stops).round() as u32
+}
+
+pub fn stop_speed(stop: u32) -> f64 {
+    let stops = f64::from(POINTER_SPEEDS);
+    f64::from(stop.min(POINTER_SPEEDS)) / stops * 2.0 - 1.0
+}
 
 pub struct SettingsClient {
     config: ConfigProxyBlocking<'static>,
@@ -137,27 +204,70 @@ impl SettingsClient {
         })
     }
 
-    pub fn outputs(&self) -> zbus::Result<BTreeMap<String, Output>> {
+    pub fn displays(&self) -> zbus::Result<BTreeMap<String, DisplaySettings>> {
         Ok(self
             .config
-            .outputs()?
+            .displays()?
             .iter()
-            .map(|(connector, settings)| (connector.clone(), output(settings)))
+            .map(|(identity, settings)| (identity.clone(), display_settings(settings)))
             .collect())
     }
 
-    pub fn set_output(&self, connector: &str, output: &Output) -> zbus::Result<()> {
+    pub fn set_display(&self, identity: &str, display: &DisplaySettings) -> zbus::Result<()> {
         let mut settings = HashMap::new();
-        if let Some(scale) = output.scale {
+        if let Some(resolution) = display.resolution {
+            settings.insert("resolution", resolution.into());
+        }
+        if let Some(scale) = display.scale {
             settings.insert("scale", scale.into());
         }
-        if let Some(rate) = output.refresh_rate {
+        if let Some(rate) = display.refresh_rate {
             settings.insert("refresh-rate", rate.into());
         }
-        if let Some(enabled) = output.variable_refresh_rate {
+        if let Some(rotation) = display.rotation {
+            settings.insert("rotation", rotation.degrees().into());
+        }
+        if let Some(enabled) = display.variable_refresh_rate {
             settings.insert("variable-refresh-rate", enabled.into());
         }
-        self.config.set_output(connector, settings)
+        self.config.set_display(identity, settings)
+    }
+
+    pub fn arrangements(&self) -> zbus::Result<Vec<Vec<Placement>>> {
+        Ok(self
+            .config
+            .arrangements()?
+            .into_iter()
+            .map(|arranged| {
+                arranged
+                    .into_iter()
+                    .map(|(display, x, y, main, mirror)| Placement {
+                        display,
+                        x,
+                        y,
+                        main,
+                        mirror: (!mirror.is_empty()).then_some(mirror),
+                    })
+                    .collect()
+            })
+            .collect())
+    }
+
+    pub fn set_arrangement(&self, placements: &[Placement]) -> zbus::Result<()> {
+        self.config.set_arrangement(
+            placements
+                .iter()
+                .map(|placement| {
+                    (
+                        placement.display.clone(),
+                        placement.x,
+                        placement.y,
+                        placement.main,
+                        placement.mirror.clone().unwrap_or_default(),
+                    )
+                })
+                .collect(),
+        )
     }
 
     pub fn get(&self, id: SettingId) -> zbus::Result<Value> {
@@ -181,6 +291,21 @@ impl SettingsClient {
             SettingId::SleepAfter => Value::Seconds(self.config.idle_suspend_after()?),
             SettingId::KeyRepeatRate => Value::Number(self.config.key_repeat_rate()?),
             SettingId::KeyRepeatDelay => Value::Number(self.config.key_repeat_delay()?),
+            SettingId::InputSources => Value::Codes(self.config.input_sources()?),
+            SettingId::CapsLock => Value::Keyword(self.config.caps_lock()?),
+            SettingId::TrackpadTapToClick => Value::Flag(self.config.trackpad_tap_to_click()?),
+            SettingId::TrackpadNaturalScrolling => {
+                Value::Flag(self.config.trackpad_natural_scrolling()?)
+            }
+            SettingId::TrackpadSpeed => Value::Number(speed_stop(self.config.trackpad_speed()?)),
+            SettingId::TrackpadSecondaryClick => {
+                Value::Keyword(self.config.trackpad_secondary_click()?)
+            }
+            SettingId::TrackpadDisableWhileTyping => {
+                Value::Flag(self.config.trackpad_disable_while_typing()?)
+            }
+            SettingId::MouseNaturalScrolling => Value::Flag(self.config.mouse_natural_scrolling()?),
+            SettingId::MouseSpeed => Value::Number(speed_stop(self.config.mouse_speed()?)),
             _ => return Err(zbus::Error::Unsupported),
         })
     }
@@ -234,6 +359,31 @@ impl SettingsClient {
             }
             (SettingId::KeyRepeatDelay, Value::Number(milliseconds)) => {
                 self.config.set_key_repeat_delay(*milliseconds)
+            }
+            (SettingId::InputSources, Value::Codes(codes)) => {
+                self.config.set_input_sources(codes.clone())
+            }
+            (SettingId::CapsLock, Value::Keyword(keyword)) => self.config.set_caps_lock(keyword),
+            (SettingId::TrackpadTapToClick, Value::Flag(on)) => {
+                self.config.set_trackpad_tap_to_click(*on)
+            }
+            (SettingId::TrackpadNaturalScrolling, Value::Flag(on)) => {
+                self.config.set_trackpad_natural_scrolling(*on)
+            }
+            (SettingId::TrackpadSpeed, Value::Number(stop)) => {
+                self.config.set_trackpad_speed(stop_speed(*stop))
+            }
+            (SettingId::TrackpadSecondaryClick, Value::Keyword(keyword)) => {
+                self.config.set_trackpad_secondary_click(keyword)
+            }
+            (SettingId::TrackpadDisableWhileTyping, Value::Flag(on)) => {
+                self.config.set_trackpad_disable_while_typing(*on)
+            }
+            (SettingId::MouseNaturalScrolling, Value::Flag(on)) => {
+                self.config.set_mouse_natural_scrolling(*on)
+            }
+            (SettingId::MouseSpeed, Value::Number(stop)) => {
+                self.config.set_mouse_speed(stop_speed(*stop))
             }
             (SettingId::DoNotDisturb, Value::Flag(enabled)) => {
                 self.notifications.set_do_not_disturb(*enabled)

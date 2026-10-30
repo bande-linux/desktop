@@ -87,7 +87,11 @@ pub enum Submission {
 pub trait FrameOutput {
     type Error: From<io::Error>;
 
-    fn submit(&mut self, compositor: &mut Headless) -> Result<Submission, Self::Error>;
+    fn submit(
+        &mut self,
+        compositor: &mut Headless,
+        output: &str,
+    ) -> Result<Submission, Self::Error>;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -108,6 +112,7 @@ pub struct FrameScheduler {
     clock: FrameClock,
     phase: Phase,
     wanted: bool,
+    output: Option<String>,
 }
 
 impl FrameScheduler {
@@ -116,7 +121,19 @@ impl FrameScheduler {
             clock,
             phase: Phase::Idle,
             wanted: false,
+            output: None,
         }
+    }
+
+    pub fn for_output(clock: FrameClock, output: &str) -> Self {
+        Self {
+            output: Some(output.to_owned()),
+            ..Self::new(clock)
+        }
+    }
+
+    pub fn output(&self) -> Option<&str> {
+        self.output.as_deref()
     }
 
     pub fn clock(&self) -> &FrameClock {
@@ -130,7 +147,11 @@ impl FrameScheduler {
         output: &mut O,
     ) -> Result<Poll, O::Error> {
         let mut now = clock();
-        self.wanted |= compositor.take_redraw();
+        let name = self
+            .output
+            .clone()
+            .unwrap_or_else(|| compositor.main_output());
+        self.wanted |= compositor.take_redraw_on(&name);
         let mut presented = None;
         loop {
             match self.phase {
@@ -151,12 +172,12 @@ impl FrameScheduler {
                     });
                 }
                 Phase::Waiting(vblank) => {
-                    compositor.take_redraw();
+                    compositor.take_redraw_on(&name);
                     self.wanted = false;
                     compositor.animate(vblank.time);
-                    compositor.latch();
+                    compositor.latch_on(&name);
                     let deadline = self.clock.deadline(vblank);
-                    let submission = output.submit(compositor)?;
+                    let submission = output.submit(compositor, &name)?;
                     now = clock();
                     self.clock.record_render(now.saturating_sub(deadline));
                     self.phase = match submission {
@@ -178,9 +199,9 @@ impl FrameScheduler {
                     });
                 }
                 Phase::Rendered(vblank) => {
-                    compositor.present(vblank)?;
+                    compositor.present_on(&name, vblank)?;
                     presented = Some(vblank);
-                    self.wanted |= compositor.take_redraw();
+                    self.wanted |= compositor.take_redraw_on(&name);
                     self.phase = Phase::Idle;
                 }
             }
@@ -188,7 +209,11 @@ impl FrameScheduler {
     }
 
     pub fn flipped(&mut self, vblank: Vblank, compositor: &mut Headless) -> io::Result<()> {
-        compositor.present(vblank)?;
+        let name = self
+            .output
+            .clone()
+            .unwrap_or_else(|| compositor.main_output());
+        compositor.present_on(&name, vblank)?;
         self.clock.anchor(vblank.time);
         self.phase = Phase::Idle;
         Ok(())

@@ -12,10 +12,11 @@ pub enum PaneId {
     Displays,
     LockScreen,
     Keyboard,
+    TrackpadMouse,
 }
 
 impl PaneId {
-    const KEYWORDS: [(Self, &'static str); 10] = [
+    const KEYWORDS: [(Self, &'static str); 11] = [
         (Self::Wifi, "wifi"),
         (Self::Bluetooth, "bluetooth"),
         (Self::Notifications, "notifications"),
@@ -26,6 +27,7 @@ impl PaneId {
         (Self::Displays, "displays"),
         (Self::LockScreen, "lock-screen"),
         (Self::Keyboard, "keyboard"),
+        (Self::TrackpadMouse, "trackpad-mouse"),
     ];
 
     pub fn keyword(self) -> &'static str {
@@ -64,14 +66,27 @@ pub enum SettingId {
     DockEdge,
     DockIconSize,
     DockAutoHide,
+    DisplayUse,
+    DisplayResolution,
     DisplayScale,
     RefreshRate,
+    DisplayRotation,
     VariableRefreshRate,
     DimAfter,
     LockAfter,
     SleepAfter,
     KeyRepeatRate,
     KeyRepeatDelay,
+    InputSources,
+    CapsLock,
+    Shortcuts,
+    TrackpadTapToClick,
+    TrackpadNaturalScrolling,
+    TrackpadSpeed,
+    TrackpadSecondaryClick,
+    TrackpadDisableWhileTyping,
+    MouseNaturalScrolling,
+    MouseSpeed,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -82,6 +97,7 @@ pub enum Value {
     Flag(bool),
     Fraction(f32),
     Pictures { light: String, dark: String },
+    Codes(Vec<String>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -91,6 +107,8 @@ pub enum List {
     NearbyDevices,
     OutputDevices,
     InputDevices,
+    InputSources,
+    Shortcuts,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -102,6 +120,7 @@ pub struct Choice {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Kind {
     Choices(Vec<Choice>),
+    Menu(Vec<Choice>),
     Stops {
         stops: Vec<Choice>,
         low: String,
@@ -116,6 +135,8 @@ pub enum Kind {
         high: String,
     },
     RefreshRates,
+    Resolutions,
+    DisplayUses,
     Pictures,
     List(List),
 }
@@ -123,11 +144,15 @@ pub enum Kind {
 impl Kind {
     pub fn choices(&self) -> &[Choice] {
         match self {
-            Self::Choices(choices) | Self::Stops { stops: choices, .. } => choices,
+            Self::Choices(choices) | Self::Menu(choices) | Self::Stops { stops: choices, .. } => {
+                choices
+            }
             Self::Switch
             | Self::Level
             | Self::Range { .. }
             | Self::RefreshRates
+            | Self::Resolutions
+            | Self::DisplayUses
             | Self::Pictures
             | Self::List(_) => &[],
         }
@@ -262,6 +287,7 @@ pub const LOCK_CHOICES: [u64; 5] = [60, 300, 600, 1200, 3600];
 pub const SLEEP_CHOICES: [u64; 4] = [1800, 3600, 10800, 0];
 const REPEAT_RATES: [u32; 9] = [2, 5, 10, 15, 20, 25, 30, 45, 60];
 const REPEAT_DELAYS: [u32; 8] = [2000, 1500, 1000, 800, 600, 450, 300, 200];
+pub const POINTER_SPEEDS: u32 = 10;
 
 fn scale_choices() -> Vec<Choice> {
     let mut choices = keyword_choices(vec![(L10N.tr("scale-automatic"), AUTOMATIC)]);
@@ -272,7 +298,20 @@ fn scale_choices() -> Vec<Choice> {
     choices
 }
 
+fn rotation_choices() -> Vec<Choice> {
+    std::iter::once(Choice {
+        label: L10N.tr("rotation-standard"),
+        value: Value::Number(0),
+    })
+    .chain([90, 180, 270].into_iter().map(|degrees: u32| Choice {
+        label: L10N.tr_args("degrees", [("value", degrees.into())]),
+        value: Value::Number(degrees),
+    }))
+    .collect()
+}
+
 pub const AUTOMATIC: &str = "automatic";
+
 const DOCK_SIZES: (u32, u32) = (24, 96);
 
 const SCALES: [u32; 5] = [100, 125, 150, 175, 200];
@@ -423,6 +462,18 @@ fn displays_pane() -> Pane {
             None,
             vec![
                 setting(
+                    SettingId::DisplayUse,
+                    L10N.tr("display-use"),
+                    L10N.tr("display-use-keywords"),
+                    Kind::DisplayUses,
+                ),
+                setting(
+                    SettingId::DisplayResolution,
+                    L10N.tr("display-resolution"),
+                    L10N.tr("display-resolution-keywords"),
+                    Kind::Resolutions,
+                ),
+                setting(
                     SettingId::DisplayScale,
                     L10N.tr("display-scale"),
                     L10N.tr("display-scale-keywords"),
@@ -433,6 +484,12 @@ fn displays_pane() -> Pane {
                     L10N.tr("refresh-rate"),
                     L10N.tr("refresh-rate-keywords"),
                     Kind::RefreshRates,
+                ),
+                setting(
+                    SettingId::DisplayRotation,
+                    L10N.tr("display-rotation"),
+                    L10N.tr("display-rotation-keywords"),
+                    Kind::Choices(rotation_choices()),
                 ),
                 setting(
                     SettingId::VariableRefreshRate,
@@ -448,6 +505,8 @@ fn displays_pane() -> Pane {
 pub fn panes() -> Vec<Pane> {
     let mut panes = connectivity_panes();
     panes.extend(desktop_panes());
+    panes.push(keyboard_pane());
+    panes.push(trackpad_mouse_pane());
     panes
 }
 
@@ -577,11 +636,42 @@ fn desktop_panes() -> Vec<Pane> {
                 ],
             )],
         ),
-        pane(
-            PaneId::Keyboard,
-            L10N.tr("keyboard"),
-            L10N.tr("keyboard-keywords"),
-            vec![section(
+    ]
+}
+
+pub fn pointer_speed_choices() -> Vec<Choice> {
+    numbers(&(0..=POINTER_SPEEDS).collect::<Vec<_>>())
+}
+
+fn speed(id: SettingId, keywords: String) -> Setting {
+    setting(
+        id,
+        L10N.tr("pointer-speed"),
+        keywords,
+        Kind::Stops {
+            stops: pointer_speed_choices(),
+            low: L10N.tr("slow"),
+            high: L10N.tr("fast"),
+        },
+    )
+}
+
+fn keyboard_pane() -> Pane {
+    pane(
+        PaneId::Keyboard,
+        L10N.tr("keyboard"),
+        L10N.tr("keyboard-keywords"),
+        vec![
+            section(
+                Some(L10N.tr("input-sources")),
+                vec![setting(
+                    SettingId::InputSources,
+                    L10N.tr("input-sources"),
+                    L10N.tr("input-sources-keywords"),
+                    Kind::List(List::InputSources),
+                )],
+            ),
+            section(
                 Some(L10N.tr("key-repeat")),
                 vec![
                     setting(
@@ -605,7 +695,86 @@ fn desktop_panes() -> Vec<Pane> {
                         },
                     ),
                 ],
-            )],
-        ),
-    ]
+            ),
+            section(
+                Some(L10N.tr("modifier-keys")),
+                vec![setting(
+                    SettingId::CapsLock,
+                    L10N.tr("caps-lock"),
+                    L10N.tr("caps-lock-keywords"),
+                    Kind::Menu(keyword_choices(vec![
+                        (L10N.tr("caps-lock-caps-lock"), "caps-lock"),
+                        (L10N.tr("caps-lock-escape"), "escape"),
+                        (L10N.tr("caps-lock-control"), "control"),
+                        (L10N.tr("caps-lock-compose"), "compose"),
+                        (L10N.tr("caps-lock-off"), "off"),
+                    ])),
+                )],
+            ),
+            section(
+                Some(L10N.tr("shortcuts")),
+                vec![setting(
+                    SettingId::Shortcuts,
+                    L10N.tr("shortcuts"),
+                    L10N.tr("shortcuts-keywords"),
+                    Kind::List(List::Shortcuts),
+                )],
+            ),
+        ],
+    )
+}
+
+fn trackpad_mouse_pane() -> Pane {
+    pane(
+        PaneId::TrackpadMouse,
+        L10N.tr("trackpad-mouse"),
+        L10N.tr("trackpad-mouse-keywords"),
+        vec![
+            section(
+                Some(L10N.tr("trackpad")),
+                vec![
+                    setting(
+                        SettingId::TrackpadTapToClick,
+                        L10N.tr("tap-to-click"),
+                        L10N.tr("tap-to-click-keywords"),
+                        Kind::Switch,
+                    ),
+                    setting(
+                        SettingId::TrackpadSecondaryClick,
+                        L10N.tr("secondary-click"),
+                        L10N.tr("secondary-click-keywords"),
+                        Kind::Choices(keyword_choices(vec![
+                            (L10N.tr("secondary-click-two-fingers"), "two-fingers"),
+                            (L10N.tr("secondary-click-corner"), "corner"),
+                        ])),
+                    ),
+                    setting(
+                        SettingId::TrackpadNaturalScrolling,
+                        L10N.tr("natural-scrolling"),
+                        L10N.tr("natural-scrolling-keywords"),
+                        Kind::Switch,
+                    ),
+                    speed(SettingId::TrackpadSpeed, L10N.tr("trackpad-speed-keywords")),
+                    setting(
+                        SettingId::TrackpadDisableWhileTyping,
+                        L10N.tr("disable-while-typing"),
+                        L10N.tr("disable-while-typing-keywords"),
+                        Kind::Switch,
+                    ),
+                ],
+            ),
+            section(
+                Some(L10N.tr("mouse")),
+                vec![
+                    setting(
+                        SettingId::MouseNaturalScrolling,
+                        L10N.tr("natural-scrolling"),
+                        L10N.tr("mouse-natural-scrolling-keywords"),
+                        Kind::Switch,
+                    ),
+                    speed(SettingId::MouseSpeed, L10N.tr("mouse-speed-keywords")),
+                ],
+            ),
+        ],
+    )
 }

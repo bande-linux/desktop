@@ -31,8 +31,16 @@ pub struct FileResults {
     pub hits: Vec<FileHit>,
 }
 
+#[derive(Debug, Clone)]
+struct Asked {
+    generation: u64,
+    text: String,
+    within: Option<PathBuf>,
+    limit: usize,
+}
+
 enum Command {
-    Query { generation: u64, text: String },
+    Query(Asked),
     Boosts(HashMap<PathBuf, u32>),
     Changed(Vec<PathBuf>),
 }
@@ -70,6 +78,7 @@ impl FileIndex {
                     results: sender,
                     signal,
                     pending: None,
+                    answered: None,
                 };
                 worker.run();
             })?;
@@ -81,10 +90,21 @@ impl FileIndex {
     }
 
     pub fn query(&self, generation: u64, text: &str) {
-        let _ = self.commands.send(Command::Query {
+        let _ = self.commands.send(Command::Query(Asked {
             generation,
             text: text.to_owned(),
-        });
+            within: None,
+            limit: MAX_HITS,
+        }));
+    }
+
+    pub fn query_within(&self, generation: u64, text: &str, within: &Path, limit: usize) {
+        let _ = self.commands.send(Command::Query(Asked {
+            generation,
+            text: text.to_owned(),
+            within: Some(within.to_path_buf()),
+            limit,
+        }));
     }
 
     pub fn set_boosts(&self, boosts: HashMap<PathBuf, u32>) {
@@ -115,7 +135,8 @@ struct Worker {
     commands: Receiver<Command>,
     results: Sender<FileResults>,
     signal: UnixStream,
-    pending: Option<(u64, String)>,
+    pending: Option<Asked>,
+    answered: Option<Asked>,
 }
 
 fn skipped(name: &str) -> bool {
@@ -138,6 +159,7 @@ impl Worker {
                 return;
             }
         }
+        self.pending = self.pending.take().or(self.answered.take());
         if !self.drain() {
             return;
         }
@@ -157,8 +179,10 @@ impl Worker {
                 Err(TryRecvError::Disconnected) => return false,
             }
         }
-        if let Some((generation, text)) = self.pending.take() {
-            let hits = self.search(&text);
+        if let Some(asked) = self.pending.take() {
+            let hits = self.search(&asked);
+            let generation = asked.generation;
+            self.answered = Some(asked);
             if self.results.send(FileResults { generation, hits }).is_err() {
                 return false;
             }
@@ -169,7 +193,7 @@ impl Worker {
 
     fn apply(&mut self, command: Command) {
         match command {
-            Command::Query { generation, text } => self.pending = Some((generation, text)),
+            Command::Query(asked) => self.pending = Some(asked),
             Command::Boosts(boosts) => self.boosts = boosts,
             Command::Changed(paths) => {
                 for path in paths {
@@ -286,19 +310,28 @@ impl Worker {
         }
     }
 
-    fn search(&self, text: &str) -> Vec<FileHit> {
-        let Some(query) = Query::new(text) else {
+    fn search(&self, asked: &Asked) -> Vec<FileHit> {
+        let Some(query) = Query::new(&asked.text) else {
             return Vec::new();
         };
-        let mut best = BinaryHeap::with_capacity(MAX_HITS + 1);
-        for (path, entry) in &self.entries {
+        let mut best = BinaryHeap::with_capacity(asked.limit + 1);
+        let entries: Box<dyn Iterator<Item = (&PathBuf, &Entry)>> = match &asked.within {
+            Some(within) => Box::new(
+                self.entries
+                    .range(within.clone()..)
+                    .take_while(move |(path, _)| path.starts_with(within))
+                    .filter(move |(path, _)| *path != within),
+            ),
+            None => Box::new(self.entries.iter()),
+        };
+        for (path, entry) in entries {
             let Some(score) = query.score(&entry.folded) else {
                 continue;
             };
             let score = score + self.boosts.get(path).copied().unwrap_or(0);
             let depth = path.components().count();
             best.push(Reverse((score, Reverse(depth), Reverse(path))));
-            if best.len() > MAX_HITS {
+            if best.len() > asked.limit {
                 best.pop();
             }
         }

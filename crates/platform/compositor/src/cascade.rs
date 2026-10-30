@@ -43,10 +43,16 @@ impl State {
             (app_id.is_empty().then(|| window.surface().client()), app_id)
         };
         let own = app(&self.windows[index]);
+        let screen = self.screen_of(&self.windows[index]);
         self.windows
             .iter()
             .enumerate()
-            .filter(|(other, window)| *other != index && self.present(window) && app(window) == own)
+            .filter(|(other, window)| {
+                *other != index
+                    && self.present(window)
+                    && self.screen_of(window) == screen
+                    && app(window) == own
+            })
             .map(|(_, window)| window.location)
             .collect()
     }

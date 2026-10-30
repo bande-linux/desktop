@@ -3,7 +3,7 @@
 use std::os::unix::net::UnixStream;
 use std::time::Duration;
 
-use unbound_compositor::{Headless, OutputConfig};
+use unbound_compositor::{Headless, OutputConfig, OutputMode};
 use unbound_settings::Displays;
 use wayland_client::Connection;
 
@@ -11,11 +11,14 @@ use wayland_client::Connection;
 fn the_displays_pane_lists_each_output_by_connector_with_its_modes() {
     let mut server = Headless::with_output(OutputConfig {
         name: "eDP-1".to_owned(),
+        make: "Apple".to_owned(),
         model: "Built-in Retina Display".to_owned(),
-        size: (3024, 1964).into(),
+        serial: String::new(),
         physical_size_mm: (302, 196).into(),
-        refresh: Duration::from_nanos(1_000_000_000 / 120),
-        scanout: None,
+        modes: vec![OutputMode {
+            size: (3024, 1964).into(),
+            refresh: Duration::from_nanos(1_000_000_000 / 120),
+        }],
     })
     .expect("headless compositor");
     let (client, server_end) = UnixStream::pair().expect("socket pair");
@@ -40,5 +43,6 @@ fn the_displays_pane_lists_each_output_by_connector_with_its_modes() {
         Some((3024, 1964, 120))
     );
     assert_eq!(display.refresh_rates(), [120]);
-    assert!(!display.description.is_empty());
+    assert_eq!(display.identity, "Apple Built-in Retina Display");
+    assert_eq!(display.position, (0, 0));
 }

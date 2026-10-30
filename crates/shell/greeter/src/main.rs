@@ -10,6 +10,7 @@ use accesskit::TreeUpdate;
 use unbound_greeter::{
     Outcome, last_user_file, log_in, login_picture, login_users, remember_user, remembered_user,
 };
+use unbound_keyboard::Layouts;
 use unbound_lock::{BackdropSource, DateFormats, Inbox, LockScreen, User, Variant, load_backdrop};
 use unbound_toolkit::ui::{Event, Key};
 use unbound_toolkit::{
@@ -33,6 +34,8 @@ struct Greeter {
     picture: Option<Option<PathBuf>>,
     wallpaper: Option<Image>,
     last_user: Option<PathBuf>,
+    layouts: Layouts,
+    input_source: Option<String>,
     started: bool,
 }
 
@@ -58,6 +61,7 @@ impl Greeter {
             (self.user + count - 1) % count
         };
         self.screen = Self::screen_for(&self.users[self.user]);
+        self.screen.set_input_source(self.input_source.clone());
         let picture = login_picture(&self.users[self.user].login);
         if self.picture.as_ref() != Some(&picture) {
             self.picture = Some(picture);
@@ -125,6 +129,13 @@ impl App for Greeter {
             }) => self.switch_user(key == Key::Down),
             WindowEvent::Input(input) => self.screen.handle(&input),
             WindowEvent::Accessibility(request) => self.screen.perform(&request),
+            WindowEvent::InputSources { sources, active } => {
+                self.input_source = sources
+                    .get(active)
+                    .filter(|_| sources.len() > 1)
+                    .map(|code| self.layouts.name(code));
+                self.screen.set_input_source(self.input_source.clone())
+            }
             _ => false,
         };
         if changed {
@@ -234,6 +245,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         picture: Some(picture),
         wallpaper: None,
         last_user,
+        layouts: Layouts::load(),
+        input_source: None,
         started: false,
     };
     unbound_toolkit::run(&mut window, &mut greeter)?;

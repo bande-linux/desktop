@@ -5,7 +5,8 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 use unbound_search::{
-    EXACT, FileIndex, FileResults, PREFIX, Query, Usage, calculate, fold, usage_path,
+    EXACT, FILE_KEY, FileIndex, FileResults, PREFIX, Query, Usage, calculate, fold, recent_files,
+    usage_path,
 };
 
 fn score(query: &str, candidate: &str) -> Option<u32> {
@@ -191,6 +192,18 @@ fn the_index_finds_files_and_folders_but_not_hidden_or_cached_ones() {
     let results = wait_for(&mut index, 2, "tax", |results| !results.hits.is_empty());
     assert_eq!(names(&results), ["Taxes"]);
     assert!(results.hits[0].folder);
+
+    let taxes = root.join("Documents/Taxes");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let within = loop {
+        index.query_within(3, "report", &taxes, 500);
+        std::thread::sleep(Duration::from_millis(20));
+        if let Some(results) = index.take().filter(|results| results.generation == 3) {
+            break results;
+        }
+        assert!(Instant::now() < deadline, "no results within the folder");
+    };
+    assert_eq!(names(&within), ["report 2024.pdf"]);
 }
 
 #[test]
@@ -258,4 +271,47 @@ fn searching_a_large_index_is_fast() {
         elapsed < Duration::from_millis(150),
         "{elapsed:?} for 20,100 entries"
     );
+}
+
+#[test]
+fn recents_merge_the_shared_list_with_launcher_use_newest_first() {
+    let home = tempfile::tempdir().unwrap();
+    let root = home.path();
+    for name in ["report.pdf", "photo & sea.png", "notes.txt"] {
+        fs::write(root.join(name), "").unwrap();
+    }
+    fs::create_dir(root.join("Folder")).unwrap();
+    let uri = |name: &str| unbound_xdg::file_uri(&root.join(name)).replace('&', "&amp;");
+    let bookmark = |name: &str, day: u32| {
+        format!(
+            "<bookmark href=\"{}\" added=\"2026-01-0{day}T10:00:00Z\" modified=\"2026-01-0{day}T10:00:00.5Z\" visited=\"2026-01-01T10:00:00Z\">\n</bookmark>\n",
+            uri(name)
+        )
+    };
+    let xbel = format!(
+        "<xbel>\n{}{}{}{}</xbel>\n",
+        bookmark("report.pdf", 2),
+        bookmark("photo & sea.png", 3),
+        bookmark("gone.txt", 9),
+        bookmark("Folder", 8),
+    );
+    let mut usage = Usage::default();
+    let notes = root.join("notes.txt");
+    usage
+        .record(&format!("{FILE_KEY}{}", notes.display()), 1_767_900_000)
+        .unwrap();
+    usage
+        .record(
+            &format!("{FILE_KEY}{}", root.join("report.pdf").display()),
+            1_000,
+        )
+        .unwrap();
+    usage
+        .record("app:org.unbound.Files", 1_800_000_000)
+        .unwrap();
+    assert_eq!(
+        recent_files(Some(&xbel), &usage, 10),
+        [notes, root.join("photo & sea.png"), root.join("report.pdf")]
+    );
+    assert_eq!(recent_files(Some(&xbel), &usage, 1).len(), 1);
 }

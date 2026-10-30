@@ -2,12 +2,14 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use unbound_fs::{Entry, Sort, Trash, list, list_trash};
+use unbound_fs::{Entry, Sort, Trash, list, list_trash, sort};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Location {
     Folder(PathBuf),
     Trash,
+    Recents,
+    Search(PathBuf),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -17,7 +19,6 @@ pub struct Column {
     pub selected: Option<usize>,
     pub marked: Vec<usize>,
     pub anchor: Option<usize>,
-    pub filter: String,
     pub revision: u64,
 }
 
@@ -35,14 +36,13 @@ impl Column {
             selected: None,
             marked: Vec::new(),
             anchor: None,
-            filter: String::new(),
         }
     }
 
     pub fn folder(&self) -> Option<&Path> {
         match &self.location {
             Location::Folder(folder) => Some(folder),
-            Location::Trash => None,
+            _ => None,
         }
     }
 
@@ -84,20 +84,25 @@ pub struct Browser {
     forward: Vec<Location>,
     sort: Sort,
     single: bool,
+    found: Vec<PathBuf>,
+    recents: Vec<PathBuf>,
 }
 
-fn read(location: &Location, show_hidden: bool, trash: &Trash, sort: Sort) -> Vec<Entry> {
-    match location {
-        Location::Folder(folder) => list(folder, show_hidden, sort).unwrap_or_default(),
-        Location::Trash => list_trash(trash, sort),
-    }
+fn entries(paths: &[PathBuf]) -> Vec<Entry> {
+    paths
+        .iter()
+        .filter(|path| path.symlink_metadata().is_ok())
+        .filter_map(|path| {
+            let name = path.file_name()?.to_string_lossy().into_owned();
+            Some(Entry::read(path.clone(), name))
+        })
+        .collect()
 }
 
 impl Browser {
     pub fn open(location: Location, trash: Trash) -> Self {
-        let entries = read(&location, false, &trash, Sort::default());
-        Self {
-            columns: vec![Column::new(location, entries)],
+        let mut browser = Self {
+            columns: Vec::new(),
             active: 0,
             show_hidden: false,
             trash,
@@ -105,7 +110,54 @@ impl Browser {
             forward: Vec::new(),
             sort: Sort::default(),
             single: false,
+            found: Vec::new(),
+            recents: Vec::new(),
+        };
+        browser.show(location);
+        browser
+    }
+
+    fn read(&self, location: &Location) -> Vec<Entry> {
+        match location {
+            Location::Folder(folder) => {
+                list(folder, self.show_hidden, self.sort).unwrap_or_default()
+            }
+            Location::Trash => list_trash(&self.trash, self.sort),
+            Location::Recents => entries(&self.recents),
+            Location::Search(_) => {
+                let mut found = entries(&self.found);
+                sort(&mut found, self.sort);
+                found
+            }
         }
+    }
+
+    pub fn can_go_back(&self) -> bool {
+        !self.back.is_empty()
+    }
+
+    pub fn can_go_forward(&self) -> bool {
+        !self.forward.is_empty()
+    }
+
+    pub fn searching(&self) -> bool {
+        matches!(self.root(), Location::Search(_))
+    }
+
+    pub fn set_found(&mut self, found: Vec<PathBuf>) {
+        self.found = found;
+        self.reload_where(|location| matches!(location, Location::Search(_)));
+    }
+
+    pub fn set_recents(&mut self, recents: Vec<PathBuf>) {
+        if recents != self.recents {
+            self.recents = recents;
+            self.reload_where(|location| *location == Location::Recents);
+        }
+    }
+
+    pub fn replace(&mut self, location: Location) {
+        self.show(location);
     }
 
     pub fn trash(&self) -> &Trash {
@@ -168,7 +220,7 @@ impl Browser {
     pub fn current_folder(&self) -> Option<PathBuf> {
         match self.current_location() {
             Location::Folder(folder) => Some(folder),
-            Location::Trash => None,
+            _ => None,
         }
     }
 
@@ -186,7 +238,7 @@ impl Browser {
     }
 
     fn show(&mut self, location: Location) {
-        let entries = read(&location, self.show_hidden, &self.trash, self.sort);
+        let entries = self.read(&location);
         self.columns = vec![Column::new(location, entries)];
         self.active = 0;
     }
@@ -259,7 +311,7 @@ impl Browser {
         };
         if let Some(folder) = child {
             let location = Location::Folder(folder);
-            let entries = read(&location, self.show_hidden, &self.trash, self.sort);
+            let entries = self.read(&location);
             self.columns.push(Column::new(location, entries));
         }
     }
@@ -355,21 +407,6 @@ impl Browser {
         self.open_child(self.active);
     }
 
-    pub fn set_filter(&mut self, column: usize, filter: &str) {
-        let Some(shown) = self.columns.get_mut(column) else {
-            return;
-        };
-        if shown.filter == filter {
-            return;
-        }
-        shown.filter = filter.to_owned();
-        self.reload_column(column);
-        let shown = &mut self.columns[column];
-        if shown.selected.is_none() && !shown.entries.is_empty() && !filter.is_empty() {
-            self.select(column, 0);
-        }
-    }
-
     pub fn focus_column(&mut self, column: usize) {
         if column >= self.columns.len() {
             return;
@@ -447,7 +484,7 @@ impl Browser {
             return true;
         }
         let location = Location::Folder(parent.to_path_buf());
-        let entries = read(&location, self.show_hidden, &self.trash, self.sort);
+        let entries = self.read(&location);
         let mut columns = vec![Column::new(location, entries)];
         columns.append(&mut self.columns);
         self.columns = columns;
@@ -472,6 +509,7 @@ impl Browser {
             .flat_map(|column| match &column.location {
                 Location::Folder(folder) => vec![folder.clone()],
                 Location::Trash => self.trash_info_dirs(),
+                Location::Recents | Location::Search(_) => Vec::new(),
             })
             .collect()
     }
@@ -493,11 +531,7 @@ impl Browser {
             .and_then(|row| column.entries.get(row))
             .map(|entry| entry.path.clone());
         let previous_row = column.selected;
-        let mut entries = read(&column.location, self.show_hidden, &self.trash, self.sort);
-        let filter = column.filter.to_lowercase();
-        if !filter.is_empty() {
-            entries.retain(|entry| entry.name.to_lowercase().contains(&filter));
-        }
+        let entries = self.read(&column.location);
         let rows = entries
             .iter()
             .enumerate()
@@ -571,6 +605,7 @@ impl Browser {
         self.reload_where(|location| match location {
             Location::Folder(folder) => changed.contains(folder),
             Location::Trash => trash_changed,
+            Location::Recents | Location::Search(_) => true,
         });
     }
 

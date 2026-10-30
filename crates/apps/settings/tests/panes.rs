@@ -7,11 +7,12 @@ use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId};
 use unbound_audio::{Device, Direction, Level, Snapshot};
-use unbound_config::Output;
+use unbound_config::{DisplaySettings, Placement};
+use unbound_keyboard::Layouts;
 use unbound_settings::{
     Answer, AudioCommand, BluetoothCommand, Command, Display, Feed, Mode, NetworkCommand, Pair,
-    PaneId, PictureCommand, SettingId, SettingsView, Update, Value, bundled_pairs, feed,
-    follow_bluetooth, follow_network,
+    PaneId, PictureCommand, PointingDevices, SettingId, SettingsView, Update, Value, bundled_pairs,
+    feed, follow_bluetooth, follow_network,
 };
 use unbound_test_bus::SessionBus;
 use unbound_test_bus::bluez::{FakeBluez, PHONE};
@@ -329,9 +330,11 @@ fn display(connector: &str, rates: &[i32]) -> Display {
         .collect();
     Display {
         connector: connector.to_owned(),
-        description: format!("Built-in display ({connector})"),
+        identity: format!("Built-in display ({connector})"),
         current: modes.first().copied(),
         modes,
+        scale: 1.0,
+        ..Display::default()
     }
 }
 
@@ -342,12 +345,12 @@ fn a_display_change_keeps_its_other_settings_and_only_offers_what_the_panel_can(
         display("eDP-1", &[120, 60, 24]),
         display("HDMI-A-1", &[60]),
     ]);
-    view.apply(Update::Outputs(BTreeMap::from([(
-        "eDP-1".to_owned(),
-        Output {
-            scale: None,
+    view.apply(Update::Displays(BTreeMap::from([(
+        "Built-in display (eDP-1)".to_owned(),
+        DisplaySettings {
             refresh_rate: Some(120.0),
             variable_refresh_rate: Some(true),
+            ..DisplaySettings::default()
         },
     )])));
     open(&mut view, "Displays");
@@ -376,15 +379,102 @@ fn a_display_change_keeps_its_other_settings_and_only_offers_what_the_panel_can(
     });
     assert_eq!(
         view.take_commands(),
-        [Command::Output(
-            "eDP-1".to_owned(),
-            Output {
+        [Command::Display(
+            "Built-in display (eDP-1)".to_owned(),
+            DisplaySettings {
                 scale: Some(1.0),
                 refresh_rate: Some(120.0),
                 variable_refresh_rate: Some(true),
+                ..DisplaySettings::default()
             }
         )]
     );
+}
+
+fn perform(view: &mut SettingsView, target: NodeId, action: Action) {
+    view.perform(&ActionRequest {
+        action,
+        target_tree: TreeId::ROOT,
+        target_node: target,
+        data: None,
+    });
+}
+
+#[test]
+fn a_display_is_made_main_and_a_new_resolution_comes_back_unless_kept() {
+    let mut view = view();
+    let mode = |width: i32, height: i32| Mode {
+        width,
+        height,
+        millihertz: 60_000,
+    };
+    let external = Display {
+        connector: "DP-1".to_owned(),
+        identity: "Dell DELL U2720Q 7ZD5K53".to_owned(),
+        make: "Dell".to_owned(),
+        model: "DELL U2720Q".to_owned(),
+        modes: vec![mode(3840, 2160), mode(2560, 1440), mode(1280, 1024)],
+        current: Some(mode(3840, 2160)),
+        position: (1512, 0),
+        scale: 2.0,
+        rotation: 0,
+    };
+    view.set_displays(vec![display("eDP-1", &[60]), external]);
+    open(&mut view, "Displays");
+    assert!(has_text(&mut view, "Arrangement"));
+    assert!(has_text(&mut view, "DELL U2720Q"));
+
+    let uses: Vec<NodeId> = nodes(&mut view)
+        .into_iter()
+        .filter(|(_, node)| node.role() == Role::RadioGroup && node.label() == Some("Use as"))
+        .map(|(id, _)| id)
+        .collect();
+    assert_eq!(uses.len(), 2);
+    perform(&mut view, uses[1], Action::Decrement);
+    let placement = |display: &str, x: i32, main: bool| Placement {
+        display: display.to_owned(),
+        x,
+        y: 0,
+        main,
+        mirror: None,
+    };
+    assert_eq!(
+        view.take_commands(),
+        [Command::Arrangement(vec![
+            placement("Built-in display (eDP-1)", 0, false),
+            placement("Dell DELL U2720Q 7ZD5K53", 1512, true),
+        ])]
+    );
+
+    let resolution = find(&mut view, Role::RadioGroup, "Resolution").expect("resolutions");
+    assert_eq!(
+        value_of(&mut view, Role::RadioGroup, "Resolution").as_deref(),
+        Some("3840 × 2160")
+    );
+    perform(&mut view, resolution, Action::Increment);
+    let chosen = DisplaySettings {
+        resolution: Some((2560, 1440)),
+        ..DisplaySettings::default()
+    };
+    assert_eq!(
+        view.take_commands(),
+        [Command::Display(
+            "Dell DELL U2720Q 7ZD5K53".to_owned(),
+            chosen
+        )]
+    );
+    assert!(has_text(&mut view, "Keep these display settings?"));
+
+    view.tick(Instant::now() + Duration::from_secs(16));
+
+    assert_eq!(
+        view.take_commands(),
+        [Command::Display(
+            "Dell DELL U2720Q 7ZD5K53".to_owned(),
+            DisplaySettings::default()
+        )]
+    );
+    assert!(!has_text(&mut view, "Keep these display settings?"));
 }
 
 fn pair(name: &str) -> Pair {
@@ -511,4 +601,115 @@ fn the_dock_pane_has_a_size_slider_a_position_and_auto_hide() {
         [Command::Set(SettingId::DockIconSize, Value::Number(52))]
     );
     assert!(find(&mut view, Role::Switch, "Automatically hide").is_some());
+}
+
+const RULES: &str = r#"<xkbConfigRegistry><layoutList>
+<layout><configItem><name>se</name><shortDescription>sv</shortDescription><description>Swedish</description></configItem></layout>
+<layout><configItem><name>us</name><shortDescription>en</shortDescription><description>English (US)</description></configItem>
+<variantList><variant><configItem><name>dvorak</name><description>English (Dvorak)</description></configItem></variant></variantList></layout>
+<layout><configItem><name>de</name><shortDescription>de</shortDescription><description>German</description></configItem></layout>
+</layoutList></xkbConfigRegistry>"#;
+
+fn keyboard_view(codes: &[&str]) -> SettingsView {
+    let mut view = view();
+    view.set_layouts(Layouts::parse(RULES));
+    view.apply(Update::Values(vec![(
+        SettingId::InputSources,
+        Value::Codes(codes.iter().map(|code| (*code).to_owned()).collect()),
+    )]));
+    open(&mut view, "Keyboard");
+    view
+}
+
+fn codes(codes: &[&str]) -> Command {
+    Command::Set(
+        SettingId::InputSources,
+        Value::Codes(codes.iter().map(|code| (*code).to_owned()).collect()),
+    )
+}
+
+#[test]
+fn input_sources_are_reordered_and_removed_but_never_emptied() {
+    let mut view = keyboard_view(&["se", "us"]);
+    assert!(has_text(&mut view, "English (US)"));
+
+    let down = button_in_row(&mut view, "Swedish", "↓");
+    click(&mut view, down);
+    assert_eq!(view.take_commands(), [codes(&["us", "se"])]);
+
+    let remove = button_in_row(&mut view, "Swedish", "Remove");
+    click(&mut view, remove);
+    assert_eq!(view.take_commands(), [codes(&["us"])]);
+    assert!(find(&mut view, Role::Button, "Remove").is_none());
+}
+
+#[test]
+fn a_layout_is_added_by_searching_its_name_and_pressing_return() {
+    let mut view = keyboard_view(&["se"]);
+    let add = find(&mut view, Role::Button, "Add Input Source…").expect("add button");
+    click(&mut view, add);
+    for character in "germ".chars() {
+        press(&mut view, Key::Character(character));
+    }
+    assert_eq!(view.adding_source(), Some("germ"));
+    assert!(has_text(&mut view, "German"));
+    assert!(!has_text(&mut view, "English (Dvorak)"));
+    assert_eq!(view.adding_source(), Some("germ"));
+
+    press(&mut view, Key::Enter);
+    assert_eq!(view.take_commands(), [codes(&["se", "de"])]);
+    assert_eq!(view.adding_source(), None);
+}
+
+#[test]
+fn escape_stops_adding_a_layout_and_a_full_list_offers_no_more() {
+    let mut view = keyboard_view(&["se"]);
+    let add = find(&mut view, Role::Button, "Add Input Source…").expect("add button");
+    click(&mut view, add);
+    press(&mut view, Key::Escape);
+    assert_eq!(view.adding_source(), None);
+    assert!(view.take_commands().is_empty());
+
+    let mut full = keyboard_view(&["se", "us", "de", "us(dvorak)"]);
+    assert!(find(&mut full, Role::Button, "Add Input Source…").is_none());
+}
+
+#[test]
+fn the_keyboard_pane_lists_the_desktop_shortcuts_with_key_symbols() {
+    let mut view = keyboard_view(&["se"]);
+    assert!(has_text(&mut view, "⌥⌘Space"));
+    assert!(has_text(&mut view, "Lock Screen"));
+}
+
+#[test]
+fn trackpad_settings_appear_only_with_a_trackpad_and_mouse_settings_only_with_a_mouse() {
+    let mut view = view();
+    view.apply(Update::Values(vec![
+        (SettingId::TrackpadTapToClick, Value::Flag(true)),
+        (SettingId::MouseNaturalScrolling, Value::Flag(false)),
+        (SettingId::MouseSpeed, Value::Number(5)),
+    ]));
+    assert!(find(&mut view, Role::ListItem, "Trackpad & Mouse").is_none());
+
+    view.set_pointing_devices(PointingDevices {
+        trackpad: false,
+        mouse: true,
+    });
+    open(&mut view, "Trackpad & Mouse");
+    assert!(find(&mut view, Role::Switch, "Tap to click").is_none());
+    let natural = find(&mut view, Role::Switch, "Natural scrolling").expect("mouse scrolling");
+    click(&mut view, natural);
+    assert_eq!(
+        view.take_commands(),
+        [Command::Set(
+            SettingId::MouseNaturalScrolling,
+            Value::Flag(true)
+        )]
+    );
+
+    view.set_pointing_devices(PointingDevices {
+        trackpad: true,
+        mouse: true,
+    });
+    assert!(find(&mut view, Role::Switch, "Tap to click").is_some());
 }

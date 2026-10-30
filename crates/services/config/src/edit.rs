@@ -4,8 +4,9 @@ use std::time::Duration;
 use kdl::{KdlDocument, KdlEntry, KdlEntryFormat, KdlNode, KdlValue};
 
 use crate::{
-    Appearance, Config, ConfigError, DEFAULT_DOCK_ICON_SIZE, DockEdge, Output, Suspend,
-    WallpaperFit, WallpaperVariant,
+    Appearance, CapsLock, Config, ConfigError, DEFAULT_DOCK_ICON_SIZE, DisplaySettings, DockEdge,
+    InputSource, Mouse, Placement, SecondaryClick, Suspend, Trackpad, WallpaperFit,
+    WallpaperVariant, same_displays,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -21,14 +22,24 @@ pub enum Setting {
     IdleSuspend(Suspend),
     KeyRepeatRate(u32),
     KeyRepeatDelay(Duration),
+    InputSources(Vec<InputSource>),
+    CapsLock(CapsLock),
+    TrackpadTapToClick(bool),
+    TrackpadNaturalScrolling(bool),
+    TrackpadSpeed(f64),
+    TrackpadSecondaryClick(SecondaryClick),
+    TrackpadDisableWhileTyping(bool),
+    MouseNaturalScrolling(bool),
+    MouseSpeed(f64),
     Wallpaper(WallpaperVariant, Option<PathBuf>),
     WallpaperFit(WallpaperFit),
-    Output(String, Output),
+    Display(String, DisplaySettings),
+    Arrangement(Vec<Placement>),
 }
 
 impl Setting {
     pub fn apply(&self, source: &str) -> Result<String, ConfigError> {
-        Config::parse(source)?;
+        let config = Config::parse(source)?;
         let mut document = KdlDocument::parse_v2(source).map_err(|_| ConfigError {
             line: 1,
             column: 1,
@@ -107,6 +118,61 @@ impl Setting {
                     delay.as_millis().try_into().unwrap_or(i128::MAX),
                 )),
             ),
+            Self::InputSources(sources) => set_values(
+                &mut document,
+                Some("keyboard"),
+                "input-sources",
+                (!sources.is_empty())
+                    .then(|| sources.iter().map(|source| source.code().into()).collect()),
+            ),
+            Self::CapsLock(caps_lock) => set(
+                &mut document,
+                Some("keyboard"),
+                "caps-lock",
+                (*caps_lock != CapsLock::default()).then(|| caps_lock.keyword().into()),
+            ),
+            Self::TrackpadTapToClick(on) => set(
+                &mut document,
+                Some("trackpad"),
+                "tap-to-click",
+                (*on != Trackpad::default().tap_to_click).then_some(KdlValue::Bool(*on)),
+            ),
+            Self::TrackpadNaturalScrolling(on) => set(
+                &mut document,
+                Some("trackpad"),
+                "natural-scrolling",
+                (*on != Trackpad::default().natural_scrolling).then_some(KdlValue::Bool(*on)),
+            ),
+            Self::TrackpadSpeed(speed) => set(
+                &mut document,
+                Some("trackpad"),
+                "speed",
+                (*speed != Trackpad::default().speed).then(|| number(*speed)),
+            ),
+            Self::TrackpadSecondaryClick(click) => set(
+                &mut document,
+                Some("trackpad"),
+                "secondary-click",
+                (*click != SecondaryClick::default()).then(|| click.keyword().into()),
+            ),
+            Self::TrackpadDisableWhileTyping(on) => set(
+                &mut document,
+                Some("trackpad"),
+                "disable-while-typing",
+                (*on != Trackpad::default().disable_while_typing).then_some(KdlValue::Bool(*on)),
+            ),
+            Self::MouseNaturalScrolling(on) => set(
+                &mut document,
+                Some("mouse"),
+                "natural-scrolling",
+                (*on != Mouse::default().natural_scrolling).then_some(KdlValue::Bool(*on)),
+            ),
+            Self::MouseSpeed(speed) => set(
+                &mut document,
+                Some("mouse"),
+                "speed",
+                (*speed != Mouse::default().speed).then(|| number(*speed)),
+            ),
             Self::Wallpaper(variant, path) => set(
                 &mut document,
                 Some("wallpaper"),
@@ -120,7 +186,8 @@ impl Setting {
                 "fit",
                 (*fit != WallpaperFit::Fill).then(|| fit.keyword().into()),
             ),
-            Self::Output(connector, output) => set_output(&mut document, connector, output),
+            Self::Display(identity, display) => set_display(&mut document, identity, display),
+            Self::Arrangement(placements) => set_arrangement(&mut document, &config, placements),
         }
         let edited = document.to_string();
         Config::parse(&edited)?;
@@ -166,47 +233,113 @@ fn number(value: f64) -> KdlValue {
     }
 }
 
-fn set_output(document: &mut KdlDocument, connector: &str, output: &Output) {
+fn set_display(document: &mut KdlDocument, identity: &str, display: &DisplaySettings) {
+    let pixels = |value: u32| KdlValue::Integer(value.into());
     let settings = [
-        ("scale", output.scale.map(number)),
-        ("refresh-rate", output.refresh_rate.map(number)),
+        (
+            "resolution",
+            display
+                .resolution
+                .map(|(width, height)| vec![pixels(width), pixels(height)]),
+        ),
+        (
+            "refresh-rate",
+            display.refresh_rate.map(|rate| vec![number(rate)]),
+        ),
+        ("scale", display.scale.map(|scale| vec![number(scale)])),
+        (
+            "rotation",
+            display
+                .rotation
+                .map(|rotation| vec![pixels(rotation.degrees())]),
+        ),
         (
             "variable-refresh-rate",
-            output.variable_refresh_rate.map(KdlValue::Bool),
+            display
+                .variable_refresh_rate
+                .map(|enabled| vec![KdlValue::Bool(enabled)]),
         ),
     ];
     let position = document.nodes().iter().position(|node| {
-        node.name().value() == "output"
+        node.name().value() == "display"
             && node
                 .entries()
                 .first()
                 .and_then(|entry| entry.value().as_string())
-                == Some(connector)
+                == Some(identity)
     });
     match position {
-        Some(position) if *output == Output::default() => {
+        Some(position) if *display == DisplaySettings::default() => {
             remove(document, position);
         }
         Some(position) => {
             let children = document.nodes_mut()[position].ensure_children();
-            for (name, value) in settings {
-                set_child(children, name, value.map(|value| vec![value]), CHILD_INDENT);
+            for (name, values) in settings {
+                set_child(children, name, values, CHILD_INDENT);
             }
         }
-        None if *output == Output::default() => {}
+        None if *display == DisplaySettings::default() => {}
         None => {
             let body: String = settings
                 .into_iter()
-                .filter_map(|(name, value)| {
-                    Some(format!("{CHILD_INDENT}{name} {}\n", repr(&value?)))
+                .filter_map(|(name, values)| {
+                    Some(format!("{CHILD_INDENT}{}\n", line(name, &values?)))
                 })
                 .collect();
             append(
                 document,
-                &format!("output {} {{\n{body}}}\n", repr(&connector.into())),
+                &format!("display {} {{\n{body}}}\n", repr(&identity.into())),
                 "",
             );
         }
+    }
+}
+
+fn arrangement_text(placements: &[Placement]) -> String {
+    let body: String = placements
+        .iter()
+        .map(|placement| {
+            let mut text = format!(
+                "{CHILD_INDENT}display {} x={} y={}",
+                repr(&placement.display.as_str().into()),
+                placement.x,
+                placement.y
+            );
+            if placement.main {
+                text.push_str(" main=#true");
+            }
+            if let Some(mirror) = &placement.mirror {
+                text.push_str(&format!(" mirror={}", repr(&mirror.as_str().into())));
+            }
+            text + "\n"
+        })
+        .collect();
+    format!("arrangement {{\n{body}}}\n")
+}
+
+fn set_arrangement(document: &mut KdlDocument, config: &Config, placements: &[Placement]) {
+    let displays: Vec<String> = placements
+        .iter()
+        .map(|placement| placement.display.clone())
+        .collect();
+    let known = config
+        .arrangements
+        .iter()
+        .position(|arranged| same_displays(arranged, &displays))
+        .and_then(|nth| {
+            document
+                .nodes()
+                .iter()
+                .enumerate()
+                .filter(|(_, node)| node.name().value() == "arrangement")
+                .nth(nth)
+                .map(|(position, _)| position)
+        });
+    if let Some(position) = known {
+        remove(document, position);
+    }
+    if !placements.is_empty() {
+        append(document, &arrangement_text(placements), "");
     }
 }
 

@@ -4,7 +4,8 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use unbound_config::{
-    Appearance, Config, DockEdge, Output, Setting, Suspend, WallpaperFit, WallpaperVariant,
+    Appearance, CapsLock, Config, DisplaySettings, DockEdge, InputSource, Placement, Rotation,
+    Setting, Suspend, WallpaperFit, WallpaperVariant,
 };
 
 fn apply(setting: Setting, source: &str) -> String {
@@ -159,44 +160,83 @@ fn an_invalid_file_is_not_edited() {
 }
 
 #[test]
-fn an_output_is_added_changed_and_removed_by_connector() {
+fn a_display_is_added_changed_and_removed_by_its_name() {
     let added = apply(
-        Setting::Output(
-            "HDMI-A-1".to_owned(),
-            Output {
+        Setting::Display(
+            "Dell U2720Q".to_owned(),
+            DisplaySettings {
+                resolution: Some((3840, 2160)),
                 scale: Some(1.5),
                 refresh_rate: Some(120.0),
-                variable_refresh_rate: None,
+                ..DisplaySettings::default()
             },
         ),
-        "output \"eDP-1\" {\n    scale 2.0\n}\n",
+        "display \"BOE\" {\n    scale 2.0\n}\n",
     );
     assert_eq!(
         added,
-        "output \"eDP-1\" {\n    scale 2.0\n}\noutput \"HDMI-A-1\" {\n    scale 1.5\n    refresh-rate 120\n}\n"
+        "display \"BOE\" {\n    scale 2.0\n}\ndisplay \"Dell U2720Q\" {\n    resolution 3840 2160\n    refresh-rate 120\n    scale 1.5\n}\n"
     );
 
     let changed = apply(
-        Setting::Output(
-            "HDMI-A-1".to_owned(),
-            Output {
-                scale: None,
+        Setting::Display(
+            "Dell U2720Q".to_owned(),
+            DisplaySettings {
                 refresh_rate: Some(60.0),
+                rotation: Some(Rotation::Quarter),
                 variable_refresh_rate: Some(true),
+                ..DisplaySettings::default()
             },
         ),
         &added,
     );
     assert_eq!(
         changed,
-        "output \"eDP-1\" {\n    scale 2.0\n}\noutput \"HDMI-A-1\" {\n    refresh-rate 60\n    variable-refresh-rate #true\n}\n"
+        "display \"BOE\" {\n    scale 2.0\n}\ndisplay \"Dell U2720Q\" {\n    refresh-rate 60\n    rotation 90\n    variable-refresh-rate #true\n}\n"
     );
 
     let removed = apply(
-        Setting::Output("HDMI-A-1".to_owned(), Output::default()),
+        Setting::Display("Dell U2720Q".to_owned(), DisplaySettings::default()),
         &changed,
     );
-    assert_eq!(removed, "output \"eDP-1\" {\n    scale 2.0\n}\n");
+    assert_eq!(removed, "display \"BOE\" {\n    scale 2.0\n}\n");
+}
+
+#[test]
+fn an_arrangement_replaces_the_one_for_the_same_displays() {
+    let placement = |display: &str, x: i32, main: bool| Placement {
+        display: display.to_owned(),
+        x,
+        y: 0,
+        main,
+        mirror: None,
+    };
+    let laptop = apply(
+        Setting::Arrangement(vec![placement("BOE", 0, true)]),
+        "appearance \"dark\"\n",
+    );
+    let both = apply(
+        Setting::Arrangement(vec![
+            placement("BOE", 0, true),
+            placement("Dell", 1504, false),
+        ]),
+        &laptop,
+    );
+    let moved = apply(
+        Setting::Arrangement(vec![
+            placement("Dell", -2560, true),
+            Placement {
+                mirror: Some("Dell".to_owned()),
+                ..placement("BOE", 0, false)
+            },
+        ]),
+        &both,
+    );
+
+    assert_eq!(
+        moved,
+        "appearance \"dark\"\narrangement {\n    display \"BOE\" x=0 y=0 main=#true\n}\narrangement {\n    display \"Dell\" x=-2560 y=0 main=#true\n    display \"BOE\" x=0 y=0 mirror=\"Dell\"\n}\n"
+    );
 }
 
 #[test]
@@ -219,4 +259,44 @@ fn suspend_after_is_written_as_a_duration_or_never_or_left_to_follow_the_display
         ),
         "idle {\n    dim-after \"1m\"\n}\n"
     );
+}
+
+#[test]
+fn input_sources_are_written_as_codes_and_defaults_leave_no_trace() {
+    let sources = vec![
+        InputSource::parse("se").expect("layout"),
+        InputSource::parse("de(nodeadkeys)").expect("layout"),
+    ];
+    let written = apply(Setting::InputSources(sources.clone()), "");
+    assert_eq!(
+        written,
+        "keyboard {\n    input-sources \"se\" \"de(nodeadkeys)\"\n}\n"
+    );
+    assert_eq!(
+        Config::parse(&written)
+            .expect("valid")
+            .keyboard
+            .input_sources,
+        sources
+    );
+    let escape = apply(Setting::CapsLock(CapsLock::Escape), &written);
+    assert!(escape.contains("caps-lock \"escape\""), "{escape}");
+    let restored = apply(Setting::CapsLock(CapsLock::CapsLock), &escape);
+    assert_eq!(apply(Setting::InputSources(Vec::new()), &restored), "");
+}
+
+#[test]
+fn pointer_settings_equal_to_the_defaults_leave_no_trace() {
+    let slower = apply(Setting::TrackpadSpeed(-0.25), "");
+    assert_eq!(slower, "trackpad {\n    speed -0.25\n}\n");
+    let tapless = apply(Setting::TrackpadTapToClick(false), &slower);
+    assert!(tapless.contains("tap-to-click #false"), "{tapless}");
+    let natural = apply(Setting::MouseNaturalScrolling(true), "");
+    assert_eq!(natural, "mouse {\n    natural-scrolling #true\n}\n");
+    assert_eq!(apply(Setting::MouseNaturalScrolling(false), &natural), "");
+    let reset = apply(
+        Setting::TrackpadTapToClick(true),
+        &apply(Setting::TrackpadSpeed(0.0), &tapless),
+    );
+    assert_eq!(reset, "");
 }

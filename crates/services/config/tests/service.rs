@@ -271,7 +271,7 @@ fn an_invalid_file_is_not_overwritten_by_a_setting() {
 }
 
 #[test]
-fn set_output_writes_the_connector_and_publishes_outputs() {
+fn set_display_writes_the_display_and_publishes_displays() {
     let fixture = start("");
     let changes = watch_changes(&fixture.client);
     let scale = Value::from(1.25f64);
@@ -283,30 +283,65 @@ fn set_output_writes_the_connector_and_publishes_outputs() {
             Some(BUS_NAME),
             OBJECT_PATH,
             Some(INTERFACE),
-            "SetOutput",
+            "SetDisplay",
             &(
-                "eDP-1",
+                "BOE NE135A1M 0",
                 HashMap::from([("scale", &scale), ("variable-refresh-rate", &vrr)]),
             ),
         )
-        .expect("SetOutput");
+        .expect("SetDisplay");
 
     let changed = changes
         .recv_timeout(SIGNAL_WAIT)
         .expect("PropertiesChanged");
     assert_eq!(
         changed.keys().map(String::as_str).collect::<Vec<_>>(),
-        ["Outputs"]
+        ["Displays"]
     );
-    let outputs: HashMap<String, HashMap<String, OwnedValue>> = get(&fixture.client, "Outputs")
+    let displays: HashMap<String, HashMap<String, OwnedValue>> = get(&fixture.client, "Displays")
         .try_into()
         .expect("a{sa{sv}}");
-    assert_eq!(f64::try_from(&outputs["eDP-1"]["scale"]).expect("d"), 1.25);
-    assert!(bool::try_from(&outputs["eDP-1"]["variable-refresh-rate"]).expect("b"));
+    let display = &displays["BOE NE135A1M 0"];
+    assert_eq!(f64::try_from(&display["scale"]).expect("d"), 1.25);
+    assert!(bool::try_from(&display["variable-refresh-rate"]).expect("b"));
     let written =
         unbound_config::Config::parse(&std::fs::read_to_string(&fixture.path).expect("read"))
             .expect("valid file");
-    assert_eq!(written.outputs["eDP-1"].scale, Some(1.25));
+    assert_eq!(written.displays["BOE NE135A1M 0"].scale, Some(1.25));
+}
+
+#[test]
+fn set_arrangement_writes_the_arrangement_and_publishes_arrangements() {
+    let fixture = start("");
+    let changes = watch_changes(&fixture.client);
+    let arranged = vec![
+        ("BOE".to_owned(), 0, 0, true, String::new()),
+        ("Dell".to_owned(), 1504, -300, false, String::new()),
+    ];
+
+    fixture
+        .client
+        .call_method(
+            Some(BUS_NAME),
+            OBJECT_PATH,
+            Some(INTERFACE),
+            "SetArrangement",
+            &(arranged.clone(),),
+        )
+        .expect("SetArrangement");
+
+    let changed = changes
+        .recv_timeout(SIGNAL_WAIT)
+        .expect("PropertiesChanged");
+    assert_eq!(
+        changed.keys().map(String::as_str).collect::<Vec<_>>(),
+        ["Arrangements"]
+    );
+    let arrangements: Vec<Vec<unbound_config::ArrangedDisplay>> =
+        get(&fixture.client, "Arrangements")
+            .try_into()
+            .expect("aa(siibs)");
+    assert_eq!(arrangements, [arranged]);
 }
 
 #[test]
@@ -456,5 +491,48 @@ fn sleep_can_be_returned_to_following_the_display() {
         !std::fs::read_to_string(&fixture.path)
             .expect("read")
             .contains("suspend-after")
+    );
+}
+
+#[test]
+fn input_sources_and_pointer_settings_are_writable_properties() {
+    let fixture = start("");
+    let codes = |fixture: &Fixture| {
+        Vec::<String>::try_from(get(&fixture.client, "InputSources")).expect("strings")
+    };
+    assert!(!codes(&fixture).is_empty());
+    set(
+        &fixture.client,
+        "InputSources",
+        Value::from(vec!["se", "us(dvorak)"]),
+    )
+    .expect("Set");
+    assert_eq!(codes(&fixture), ["se", "us(dvorak)"]);
+    for invalid in [Value::from(Vec::<&str>::new()), Value::from(vec!["us,se"])] {
+        let rejected = set(&fixture.client, "InputSources", invalid);
+        assert!(
+            matches!(rejected, Err(zbus::fdo::Error::InvalidArgs(_))),
+            "{rejected:?}"
+        );
+    }
+    set(&fixture.client, "TrackpadSpeed", Value::from(0.5)).expect("Set");
+    set(
+        &fixture.client,
+        "TrackpadSecondaryClick",
+        Value::from("corner"),
+    )
+    .expect("Set");
+    assert_eq!(
+        f64::try_from(get(&fixture.client, "TrackpadSpeed")).expect("double"),
+        0.5
+    );
+    assert_eq!(
+        String::try_from(get(&fixture.client, "TrackpadSecondaryClick")).expect("string"),
+        "corner"
+    );
+    let too_fast = set(&fixture.client, "MouseSpeed", Value::from(3.0));
+    assert!(
+        matches!(too_fast, Err(zbus::fdo::Error::InvalidArgs(_))),
+        "{too_fast:?}"
     );
 }

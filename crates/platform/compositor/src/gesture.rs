@@ -178,22 +178,27 @@ impl ShowDesktop {
     }
 }
 
-fn shift_for(rect: Rectangle<f64, Logical>, width: f64) -> f64 {
-    if rect.loc.x + rect.size.w / 2.0 < width / 2.0 {
-        SLIVER - (rect.loc.x + rect.size.w)
+fn shift_for(rect: Rectangle<f64, Logical>, left: f64, width: f64) -> f64 {
+    if rect.loc.x + rect.size.w / 2.0 < left + width / 2.0 {
+        left + SLIVER - (rect.loc.x + rect.size.w)
     } else {
-        width - SLIVER - rect.loc.x
+        left + width - SLIVER - rect.loc.x
     }
 }
 
 impl State {
-    pub(crate) fn desktop_shift(&self, rect: Rectangle<f64, Logical>) -> Point<f64, Logical> {
+    pub(crate) fn desktop_shift(
+        &self,
+        rect: Rectangle<f64, Logical>,
+        screen: usize,
+    ) -> Point<f64, Logical> {
         let progress = self.desktop.progress;
         if progress == 0.0 {
             return Point::default();
         }
-        let width = f64::from(self.logical_output_size().w);
-        (shift_for(rect, width) * progress, 0.0).into()
+        let output = self.screen_rect(screen);
+        let (left, width) = (f64::from(output.location.x), f64::from(output.size.w));
+        (shift_for(rect, left, width) * progress, 0.0).into()
     }
 
     fn release_spring(&self, velocity: f64) -> Spring {
@@ -217,7 +222,8 @@ impl State {
     }
 
     pub(crate) fn animate_desktop(&mut self, time: Duration) {
-        let refresh = self.refresh;
+        let refresh = self.main_screen().refresh();
+
         let desktop = &mut self.desktop;
         let Some(settle) = desktop.settle.as_mut() else {
             return;

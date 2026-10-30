@@ -90,7 +90,15 @@ pub fn rows(home: &Path, user_dirs: Option<&str>, bookmarks: Option<&str>) -> Ve
             favourites.push(place);
         }
     }
-    let mut rows = vec![Row::Heading(L10N.tr("sidebar-favourites"))];
+    let mut rows = vec![
+        Row::Heading(L10N.tr("sidebar-favourites")),
+        Row::Place(Place {
+            name: L10N.tr("recents"),
+            location: Location::Recents,
+            icon: "document-open-recent",
+            kind: PlaceKind::Standard,
+        }),
+    ];
     rows.extend(favourites.into_iter().map(Row::Place));
     rows.push(Row::Heading(L10N.tr("sidebar-locations")));
     rows.push(Row::Place(Place {

@@ -5,6 +5,7 @@ use unbound_toolkit::{Color, Item, Point, Rect, Shape, TextAlign, TextStyle};
 
 use crate::L10N;
 use crate::browser::{Browser, Location};
+use crate::toolbar::TOOLBAR_HEIGHT;
 use crate::view::{FilesView, Hit, SIDEBAR_WIDTH};
 use crate::views::ViewMode;
 
@@ -27,6 +28,14 @@ pub(crate) struct Tab {
 pub(crate) fn location_title(location: &Location) -> String {
     match location {
         Location::Trash => L10N.tr("trash"),
+        Location::Recents => L10N.tr("recents"),
+        Location::Search(folder) => L10N.tr_args(
+            "search-title",
+            [(
+                "folder",
+                location_title(&Location::Folder(folder.clone())).into(),
+            )],
+        ),
         Location::Folder(folder) => folder.file_name().map_or_else(
             || folder.display().to_string(),
             |name| name.to_string_lossy().into_owned(),
@@ -68,7 +77,7 @@ impl FilesView {
 
     fn leave_tab(&mut self) {
         self.commit_rename();
-        self.close_search();
+        self.end_search();
         self.quick_look = None;
         self.band = None;
         self.table_revision = None;
@@ -176,14 +185,19 @@ impl FilesView {
             .map(|index| {
                 let left = (index as f32 * width).round();
                 let right = ((index + 1) as f32 * width).round();
-                Rect::new(SIDEBAR_WIDTH + left, 0.0, right - left, TAB_BAR_HEIGHT)
+                Rect::new(
+                    SIDEBAR_WIDTH + left,
+                    TOOLBAR_HEIGHT,
+                    right - left,
+                    TAB_BAR_HEIGHT,
+                )
             })
             .collect();
         (
             tabs,
             Rect::new(
                 SIDEBAR_WIDTH + available,
-                0.0,
+                TOOLBAR_HEIGHT,
                 NEW_TAB_WIDTH,
                 TAB_BAR_HEIGHT,
             ),
@@ -216,13 +230,18 @@ impl FilesView {
         let palette = self.palette;
         let (tabs, new_tab) = self.tab_rects();
         let content = self.content_frame();
-        let bar = Rect::new(content.x, 0.0, content.width, TAB_BAR_HEIGHT);
+        let bar = Rect::new(content.x, TOOLBAR_HEIGHT, content.width, TAB_BAR_HEIGHT);
         items.push(Item::Fill {
             shape: Shape::rect(bar),
             paint: palette.surface_elevated.into(),
         });
         items.push(Item::Fill {
-            shape: Shape::rect(Rect::new(bar.x, TAB_BAR_HEIGHT - 1.0, bar.width, 1.0)),
+            shape: Shape::rect(Rect::new(
+                bar.x,
+                bar.y + TAB_BAR_HEIGHT - 1.0,
+                bar.width,
+                1.0,
+            )),
             paint: palette.separator_color.into(),
         });
         let titles = self.tab_titles();
@@ -239,7 +258,7 @@ impl FilesView {
                 });
             } else if hovered {
                 items.push(Item::Fill {
-                    shape: Shape::rect(Rect::new(tab.x, 0.0, tab.width, TAB_BAR_HEIGHT - 1.0)),
+                    shape: Shape::rect(Rect::new(tab.x, tab.y, tab.width, TAB_BAR_HEIGHT - 1.0)),
                     paint: palette.label_muted.with_alpha(24).into(),
                 });
             }
@@ -247,7 +266,7 @@ impl FilesView {
                 items.push(Item::Fill {
                     shape: Shape::rect(Rect::new(
                         tab.x + tab.width - 1.0,
-                        0.0,
+                        tab.y,
                         1.0,
                         TAB_BAR_HEIGHT,
                     )),
@@ -260,7 +279,7 @@ impl FilesView {
             };
             let label = Rect::new(
                 tab.x + LABEL_INSET,
-                0.0,
+                tab.y,
                 (tab.width - 2.0 * LABEL_INSET).max(0.0),
                 TAB_BAR_HEIGHT,
             );
@@ -268,7 +287,7 @@ impl FilesView {
             self.hits.push((*tab, Hit::Tab(index)));
             let close = Rect::new(
                 tab.x + CLOSE_INSET,
-                (TAB_BAR_HEIGHT - CLOSE_SIZE) / 2.0,
+                tab.y + (TAB_BAR_HEIGHT - CLOSE_SIZE) / 2.0,
                 CLOSE_SIZE,
                 CLOSE_SIZE,
             );
@@ -287,7 +306,7 @@ impl FilesView {
             items.push(Item::Fill {
                 shape: Shape::rect(Rect::new(
                     new_tab.x,
-                    0.0,
+                    new_tab.y,
                     new_tab.width,
                     TAB_BAR_HEIGHT - 1.0,
                 )),

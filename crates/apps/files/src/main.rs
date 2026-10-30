@@ -11,6 +11,7 @@ use unbound_files::{
     Browser, FilesView, Location, Request, Row, ViewMemory, rows, views_file, without_bookmark,
 };
 use unbound_fs::Trash;
+use unbound_search::{recently_used_path, usage_path};
 use unbound_thumbnails::Thumbnails;
 use unbound_toolkit::{
     App, Appearance, DragAction, DragEvent, MenuPlacement, Rect, Role, Scene, TextSystem, Transfer,
@@ -261,6 +262,8 @@ impl App for Files {
 }
 
 const INFO_FLAG: &str = "--info";
+const TRASH_URI: &str = "trash:///";
+const RECENTS_URI: &str = "recent:///";
 
 fn new_window(window: &mut Window, location: &Location) {
     let program = match std::env::current_exe() {
@@ -268,8 +271,11 @@ fn new_window(window: &mut Window, location: &Location) {
         Err(error) => return tracing::warn!("cannot find the Files program: {error}"),
     };
     let argument = match location {
-        Location::Trash => "trash:///".to_owned(),
-        Location::Folder(folder) => folder.to_string_lossy().into_owned(),
+        Location::Trash => TRASH_URI.to_owned(),
+        Location::Recents => RECENTS_URI.to_owned(),
+        Location::Folder(folder) | Location::Search(folder) => {
+            folder.to_string_lossy().into_owned()
+        }
     };
     let token = window.activation_token(APP_ID).ok();
     if let Err(error) = spawn_detached(&[program, argument], None, token.as_deref()) {
@@ -281,8 +287,11 @@ fn start_location(home: &Path, argument: Option<&str>) -> Location {
     let Some(argument) = argument else {
         return Location::Folder(home.to_path_buf());
     };
-    if argument == "trash:///" || argument == "trash:" {
+    if argument == TRASH_URI || argument == "trash:" {
         return Location::Trash;
+    }
+    if argument == RECENTS_URI {
+        return Location::Recents;
     }
     let path = path_from_file_uri(argument).unwrap_or_else(|| PathBuf::from(argument));
     Location::Folder(std::path::absolute(&path).unwrap_or(path))
@@ -325,6 +334,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     let state_home = std::env::var_os("XDG_STATE_HOME").map(PathBuf::from);
     view.set_view_memory(ViewMemory::load(views_file(state_home.as_deref(), &home)));
+    let data_home = std::env::var_os("XDG_DATA_HOME").map(PathBuf::from);
+    if let Some(usage) = usage_path(state_home.as_deref(), Some(&home)) {
+        view.set_recents_sources(recently_used_path(data_home.as_deref(), &home), usage);
+    }
     if info {
         view.show_inspector();
     }

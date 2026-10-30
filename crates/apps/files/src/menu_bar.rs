@@ -74,6 +74,7 @@ pub fn app_menus() -> Vec<Entry> {
                 shortcut("menu-documents", "Shift+Super+O"),
                 shortcut("menu-downloads", "Alt+Super+L"),
                 shortcut("menu-home", "Shift+Super+H"),
+                shortcut("recents", "Shift+Super+F"),
                 Entry::separator(),
                 shortcut("menu-go-to-folder", "Shift+Super+G"),
             ],

@@ -12,9 +12,10 @@ use unbound_toolkit::{
 use crate::L10N;
 use crate::browser::Location;
 use crate::sidebar::{PlaceKind, Row};
+use crate::toolbar::TOOLBAR_HEIGHT;
 use crate::view::{
     COLUMN_WIDTH, FilesView, Hit, INSPECTOR_WIDTH, PATH_BAR_HEIGHT, PROGRESS_HEIGHT, QuickLook,
-    ROW_HEIGHT, SEARCH_HEIGHT, SIDEBAR_WIDTH,
+    ROW_HEIGHT, SIDEBAR_WIDTH,
 };
 use crate::views::ViewMode;
 
@@ -107,8 +108,9 @@ impl FilesView {
         let mut items = Vec::new();
         self.paint_sidebar(&mut items);
         self.paint_columns(&mut items);
-        self.paint_search(&mut items);
+        self.paint_scope_bar(&mut items);
         self.paint_tab_bar(&mut items);
+        self.paint_toolbar(&mut items);
         self.paint_path_bar(&mut items);
         items.extend(controls);
         self.paint_drop(&mut items);
@@ -330,25 +332,6 @@ impl FilesView {
         self.paint_column_scrollbar(index, frame, items);
         items.push(self.fill(
             Rect::new(x + COLUMN_WIDTH - 1.0, content.y, 1.0, content.height),
-            0.0,
-            self.palette.separator_color,
-        ));
-    }
-
-    fn paint_search(&mut self, items: &mut Vec<Item>) {
-        if self.search.is_none() {
-            return;
-        }
-        let content = self.content_frame();
-        let bar = Rect::new(
-            content.x,
-            content.y - SEARCH_HEIGHT,
-            content.width,
-            SEARCH_HEIGHT,
-        );
-        items.push(self.fill(bar, 0.0, self.palette.surface_background));
-        items.push(self.fill(
-            Rect::new(bar.x, bar.y + bar.height - 1.0, bar.width, 1.0),
             0.0,
             self.palette.separator_color,
         ));
@@ -615,9 +598,9 @@ impl FilesView {
     fn paint_inspector(&mut self, items: &mut Vec<Item>) {
         let area = Rect::new(
             self.size.0 - INSPECTOR_WIDTH,
-            0.0,
+            TOOLBAR_HEIGHT,
             INSPECTOR_WIDTH,
-            self.size.1,
+            self.size.1 - TOOLBAR_HEIGHT,
         );
         items.push(self.fill(area, 0.0, self.palette.surface_elevated));
         items.push(self.fill(

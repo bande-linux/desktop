@@ -3865,6 +3865,7 @@ dependencies = [
  "unbound-l10n",
  "unbound-log",
  "unbound-preview",
+ "unbound-search",
  "unbound-thumbnails",
  "unbound-toolkit",
  "unbound-volumes",
@@ -4154,9 +4155,11 @@ dependencies = [
 name = "unbound-search"
 version = "0.1.0"
 dependencies = [
+ "jiff",
  "notify",
  "tempfile",
  "tracing",
+ "unbound-xdg",
 ]
 
 [[package]]

@@ -42,7 +42,7 @@ impl FilesView {
                         empty: !self.trash_full,
                     },
                     Location::Folder(_) if place.kind == PlaceKind::Volume => Place::Volume,
-                    Location::Folder(_) => Place::Folder {
+                    _ => Place::Folder {
                         removable: place.kind == PlaceKind::Bookmark,
                     },
                 });
@@ -118,7 +118,7 @@ impl FilesView {
         items_menu(&Selection {
             count: selection.len(),
             trashed,
-            searching: self.search.is_some(),
+            searching: self.searching.is_some(),
             folders: !selection.is_empty()
                 && selection
                     .iter()
@@ -157,7 +157,7 @@ impl FilesView {
             Command::Duplicate => self.duplicate(),
             Command::Copy => self.copy_selection(false),
             Command::Cut => self.copy_selection(true),
-            Command::ShowInEnclosingFolder => self.close_search(),
+            Command::ShowInEnclosingFolder => self.show_in_enclosing_folder(),
             Command::Trash | Command::PutBack => self.trash_or_put_back(),
             Command::DeleteImmediately => self.confirm_delete(),
             Command::NewFolder => self.new_folder(),

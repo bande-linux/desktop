@@ -8,7 +8,8 @@ use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use tempfile::TempDir;
 use unbound_files::{
     Browser, FilesView, Location, PATH_BAR_HEIGHT, ROW_HEIGHT, Request, Row, SIDEBAR_WIDTH, Sheet,
-    TAB_BAR_HEIGHT, ViewMemory, ViewMode, permissions, rows, with_volumes, without_bookmark,
+    TAB_BAR_HEIGHT, TOOLBAR_HEIGHT, ViewMemory, ViewMode, permissions, rows, with_volumes,
+    without_bookmark,
 };
 use unbound_fs::{Sort, SortBy, Trash, list};
 use unbound_thumbnails::{Cache, Thumbnailers, Thumbnails};
@@ -310,6 +311,7 @@ fn the_sidebar_lists_existing_user_folders_bookmarks_and_the_trash() {
     assert_eq!(
         places,
         [
+            ("Recents", Location::Recents),
             ("home", Location::Folder(home.clone())),
             ("Documents", Location::Folder(home.join("Documents"))),
             ("Bilder", Location::Folder(home.join("Bilder"))),
@@ -600,7 +602,10 @@ fn go_to_folder_accepts_relative_paths_and_reveals_files() {
 }
 
 fn click_row(view: &mut FilesView, row: usize, count: u8, modifiers: Modifiers) {
-    let at = Point::new(SIDEBAR_WIDTH + 60.0, 6.0 + ROW_HEIGHT * (row as f32 + 0.5));
+    let at = Point::new(
+        SIDEBAR_WIDTH + 60.0,
+        TOOLBAR_HEIGHT + 6.0 + ROW_HEIGHT * (row as f32 + 0.5),
+    );
     view.handle(&Event::PointerDown(
         Pointer::at(at).with_count(count).with_modifiers(modifiers),
     ));
@@ -650,34 +655,85 @@ fn clicks_select_extend_toggle_and_open() {
     );
 }
 
+fn type_text(view: &mut FilesView, text: &str) {
+    for character in text.chars() {
+        view.handle(&press(Key::Character(character)));
+    }
+}
+
+fn shown(view: &FilesView) -> Vec<String> {
+    view.browser().columns()[0]
+        .entries
+        .iter()
+        .map(|entry| entry.name.clone())
+        .collect()
+}
+
 #[test]
-fn filtering_narrows_the_folder_and_escape_restores_it() {
+fn searching_finds_names_below_the_folder_and_escape_returns() {
     let place = Place::new();
+    fs::write(place.home().join("Documents/Reports/q3 report.txt"), "q3").expect("file");
     let mut view = place.view();
-    let shown = |view: &FilesView| {
-        view.browser().columns()[0]
-            .entries
-            .iter()
-            .map(|entry| entry.name.clone())
-            .collect::<Vec<_>>()
-    };
+    view.handle(&press(Key::Down));
 
     view.handle(&command(Key::Character('f'), false));
-    view.handle(&press(Key::Character('N')));
-    view.handle(&press(Key::Character('o')));
+    type_text(&mut view, "report");
+    run_until(&mut view, |view| shown(view).len() == 2);
+    assert_eq!(shown(&view), ["Reports", "q3 report.txt"]);
+    assert_eq!(view.searching(), Some("report"));
+    assert_eq!(view.mode(), ViewMode::List);
+    assert_eq!(view.title(), "Searching “home”");
 
-    assert_eq!(shown(&view), ["notes.txt"]);
+    view.handle(&press(Key::Down));
+    view.handle(&press(Key::Down));
     assert_eq!(
-        view.browser().selected().map(|entry| entry.name.as_str()),
-        Some("notes.txt")
+        selected_name(view.browser()).as_deref(),
+        Some("q3 report.txt")
     );
+    assert!(view.menu_action("show-in-enclosing-folder"));
+    assert_eq!(view.searching(), None);
+    assert_eq!(
+        view.browser().active_folder(),
+        Some(place.home().join("Documents/Reports").as_path())
+    );
+    assert_eq!(
+        selected_name(view.browser()).as_deref(),
+        Some("q3 report.txt")
+    );
+
+    view.handle(&command(Key::Character('f'), false));
+    type_text(&mut view, "q3");
+    run_until(&mut view, |view| shown(view) == ["q3 report.txt"]);
     view.handle(&press(Key::Escape));
-    assert!(view.search().is_none());
-    assert_eq!(shown(&view), ["Documents", "Empty", "notes.txt"]);
+    assert_eq!(view.searching(), None);
+    assert_eq!(view.mode(), ViewMode::Columns);
     assert_eq!(
-        view.browser().selected().map(|entry| entry.name.as_str()),
-        Some("notes.txt")
+        view.browser().active_folder(),
+        Some(place.home().join("Documents/Reports").as_path())
     );
+}
+
+#[test]
+fn recents_list_recently_used_files_newest_first() {
+    let place = Place::new();
+    let notes = place.home().join("notes.txt");
+    let first = place.home().join("Documents/a.txt");
+    let xbel = place.root.path().join("recently-used.xbel");
+    fs::write(
+        &xbel,
+        format!(
+            "<xbel><bookmark href=\"{}\" visited=\"2026-02-01T08:00:00Z\"/><bookmark href=\"{}\" visited=\"2026-03-01T08:00:00Z\"/></xbel>",
+            file_uri(&notes),
+            file_uri(&first)
+        ),
+    )
+    .expect("recents");
+    let mut view = place.view();
+    view.set_recents_sources(xbel, place.root.path().join("usage"));
+    view.handle(&command(Key::Character('f'), true));
+    assert_eq!(view.browser().root(), &Location::Recents);
+    assert_eq!(view.title(), "Recents");
+    assert_eq!(shown(&view), ["a.txt", "notes.txt"]);
 }
 
 fn right_click(view: &mut FilesView, at: Point) -> Menu {
@@ -705,7 +761,10 @@ fn right_clicking_an_item_selects_it_and_its_menu_acts_on_it() {
 
     let menu = right_click(
         &mut view,
-        Point::new(SIDEBAR_WIDTH + 60.0, 6.0 + ROW_HEIGHT * 2.5),
+        Point::new(
+            SIDEBAR_WIDTH + 60.0,
+            TOOLBAR_HEIGHT + 6.0 + ROW_HEIGHT * 2.5,
+        ),
     );
 
     assert_eq!(selected_name(view.browser()).as_deref(), Some("notes.txt"));
@@ -749,7 +808,10 @@ fn right_clicking_an_item_selects_it_and_its_menu_acts_on_it() {
 
     right_click(
         &mut view,
-        Point::new(SIDEBAR_WIDTH + 60.0, 6.0 + ROW_HEIGHT * 2.5),
+        Point::new(
+            SIDEBAR_WIDTH + 60.0,
+            TOOLBAR_HEIGHT + 6.0 + ROW_HEIGHT * 2.5,
+        ),
     );
     assert!(view.menu_action("info"));
     assert_eq!(
@@ -788,7 +850,10 @@ fn the_trash_menus_put_back_and_ask_before_emptying() {
 
     let item = right_click(
         &mut view,
-        Point::new(SIDEBAR_WIDTH + 60.0, 6.0 + ROW_HEIGHT * 0.5),
+        Point::new(
+            SIDEBAR_WIDTH + 60.0,
+            TOOLBAR_HEIGHT + 6.0 + ROW_HEIGHT * 0.5,
+        ),
     );
     assert_eq!(titles(&item)[..2], ["Put Back", "Delete Immediately…"]);
     assert!(view.menu_action("put-back"));
@@ -838,7 +903,7 @@ fn a_bookmark_is_removed_from_the_sidebar_but_not_from_the_disk() {
     view.set_sidebar(rows(&place.home(), None, Some(&bookmarks)));
     view.scene(1000, 600);
 
-    let menu = right_click(&mut view, Point::new(40.0, 38.0 + 26.0 * 2.5));
+    let menu = right_click(&mut view, Point::new(40.0, 38.0 + 26.0 * 3.5));
     assert_eq!(
         titles(&menu),
         ["Open", "Open in New Tab", "Remove from Sidebar"]
@@ -872,7 +937,14 @@ fn mounted_volumes_are_listed_under_locations_before_the_trash() {
     };
     assert_eq!(
         names(&shown),
-        ["Favourites", "ada", "Locations", "Stick", "Trash"]
+        [
+            "Favourites",
+            "Recents",
+            "ada",
+            "Locations",
+            "Stick",
+            "Trash"
+        ]
     );
     assert_eq!(with_volumes(&shown, &[]), favourites);
 }
@@ -884,7 +956,12 @@ fn the_list_view_selects_by_click_sorts_by_header_and_opens_on_double_click() {
     let mut view = place.view();
     view.handle(&command(Key::Character('2'), false));
     view.scene(1000, 600);
-    let row = |index: f32| Point::new(SIDEBAR_WIDTH + 60.0, 26.0 + ROW_HEIGHT * (index + 0.5));
+    let row = |index: f32| {
+        Point::new(
+            SIDEBAR_WIDTH + 60.0,
+            TOOLBAR_HEIGHT + 26.0 + ROW_HEIGHT * (index + 0.5),
+        )
+    };
     let click = |view: &mut FilesView, at: Point, count: u8| {
         view.handle(&Event::PointerDown(Pointer::at(at).with_count(count)));
         view.handle(&Event::PointerUp(Pointer::at(at)));
@@ -894,7 +971,11 @@ fn the_list_view_selects_by_click_sorts_by_header_and_opens_on_double_click() {
     click(&mut view, row(2.0), 1);
     assert_eq!(selected_name(view.browser()).as_deref(), Some("big.txt"));
 
-    click(&mut view, Point::new(SIDEBAR_WIDTH + 470.0, 10.0), 1);
+    click(
+        &mut view,
+        Point::new(SIDEBAR_WIDTH + 470.0, TOOLBAR_HEIGHT + 10.0),
+        1,
+    );
     assert_eq!(
         view.browser().sort(),
         Sort {
@@ -917,7 +998,12 @@ fn the_list_view_selects_by_click_sorts_by_header_and_opens_on_double_click() {
 fn dragging_a_selection_starts_a_drag_and_dropping_on_a_folder_moves_it_there() {
     let place = Place::new();
     let mut view = place.view();
-    let row = |index: f32| Point::new(SIDEBAR_WIDTH + 60.0, 6.0 + ROW_HEIGHT * (index + 0.5));
+    let row = |index: f32| {
+        Point::new(
+            SIDEBAR_WIDTH + 60.0,
+            TOOLBAR_HEIGHT + 6.0 + ROW_HEIGHT * (index + 0.5),
+        )
+    };
     click_row(&mut view, 1, 1, Modifiers::default());
     view.handle(&Event::PointerUp(Pointer::at(row(1.0))));
     click_row(
@@ -963,7 +1049,12 @@ fn dragging_a_group_of_rows_in_the_list_view_drags_all_of_them() {
     let mut view = place.view();
     view.handle(&command(Key::Character('2'), false));
     view.scene(1000, 600);
-    let row = |index: f32| Point::new(SIDEBAR_WIDTH + 60.0, 26.0 + ROW_HEIGHT * (index + 0.5));
+    let row = |index: f32| {
+        Point::new(
+            SIDEBAR_WIDTH + 60.0,
+            TOOLBAR_HEIGHT + 26.0 + ROW_HEIGHT * (index + 0.5),
+        )
+    };
     let shift = Modifiers {
         shift: true,
         ..Modifiers::default()
@@ -1070,21 +1161,21 @@ fn dragging_on_empty_space_in_the_icon_view_selects_the_icons_it_touches() {
 
     view.handle(&Event::PointerDown(Pointer::at(Point::new(
         SIDEBAR_WIDTH + 4.0,
-        4.0,
+        TOOLBAR_HEIGHT + 4.0,
     ))));
     view.handle(&Event::PointerMove(Pointer::at(Point::new(
         SIDEBAR_WIDTH + 200.0,
-        60.0,
+        TOOLBAR_HEIGHT + 60.0,
     ))));
     assert_eq!(names_of(view.browser().selection()), ["Documents", "Empty"]);
     view.handle(&Event::PointerMove(Pointer::at(Point::new(
         SIDEBAR_WIDTH + 100.0,
-        60.0,
+        TOOLBAR_HEIGHT + 60.0,
     ))));
     assert_eq!(names_of(view.browser().selection()), ["Documents"]);
     view.handle(&Event::PointerUp(Pointer::at(Point::new(
         SIDEBAR_WIDTH + 100.0,
-        60.0,
+        TOOLBAR_HEIGHT + 60.0,
     ))));
 
     view.handle(&Event::PointerDown(
@@ -1265,7 +1356,7 @@ fn the_list_view_with_tabs_matches_its_golden() {
         view.scene(GOLDEN_SIZE.0, GOLDEN_SIZE.1);
         view.handle(&Event::PointerMove(Pointer::at(Point::new(
             SIDEBAR_WIDTH + 100.0,
-            TAB_BAR_HEIGHT / 2.0,
+            TOOLBAR_HEIGHT + TAB_BAR_HEIGHT / 2.0,
         ))));
         shoot("tabs-list", scheme, &mut view);
     }
@@ -1296,7 +1387,7 @@ fn tabs_keep_their_own_folders_and_close_back_to_one() {
     view.handle(&Event::PointerDown(
         Pointer::at(Point::new(
             SIDEBAR_WIDTH + 100.0,
-            TAB_BAR_HEIGHT + 6.0 + ROW_HEIGHT * 0.5,
+            TAB_BAR_HEIGHT + TOOLBAR_HEIGHT + 6.0 + ROW_HEIGHT * 0.5,
         ))
         .with_button(PointerButton::Middle),
     ));
@@ -1323,7 +1414,10 @@ fn files_dropped_on_a_tab_move_into_its_folder_and_hovering_springs_it_open() {
     assert_eq!(
         titles(&right_click(
             &mut view,
-            Point::new(SIDEBAR_WIDTH + 60.0, 6.0 + ROW_HEIGHT * 0.5)
+            Point::new(
+                SIDEBAR_WIDTH + 60.0,
+                TOOLBAR_HEIGHT + 6.0 + ROW_HEIGHT * 0.5
+            )
         ))[..2],
         ["Open", "Open in New Tab"]
     );
@@ -1333,8 +1427,8 @@ fn files_dropped_on_a_tab_move_into_its_folder_and_hovering_springs_it_open() {
 
     let notes = place.home().join("notes.txt");
     let uris = [file_uri(&notes)];
-    let over_documents = Point::new(SIDEBAR_WIDTH + 600.0, TAB_BAR_HEIGHT / 2.0);
-    let over_home = Point::new(SIDEBAR_WIDTH + 200.0, TAB_BAR_HEIGHT / 2.0);
+    let over_documents = Point::new(SIDEBAR_WIDTH + 600.0, TOOLBAR_HEIGHT + TAB_BAR_HEIGHT / 2.0);
+    let over_home = Point::new(SIDEBAR_WIDTH + 200.0, TOOLBAR_HEIGHT + TAB_BAR_HEIGHT / 2.0);
     assert_eq!(
         view.drag_entered(over_documents, &uris),
         Some(DragAction::Move)
@@ -1352,4 +1446,34 @@ fn files_dropped_on_a_tab_move_into_its_folder_and_hovering_springs_it_open() {
     view.drag_moved(over_documents);
     view.tick(Instant::now() + Duration::from_secs(2));
     assert_eq!(view.active_tab(), 1);
+}
+
+fn date_everything(folder: &Path) {
+    let noon = std::time::UNIX_EPOCH + Duration::from_secs(1_773_489_600);
+    for entry in fs::read_dir(folder).expect("folder") {
+        let path = entry.expect("entry").path();
+        if path.is_dir() {
+            date_everything(&path);
+        }
+        fs::File::open(&path)
+            .and_then(|file| file.set_modified(noon))
+            .expect("set the date");
+    }
+}
+
+#[test]
+fn search_results_match_their_golden() {
+    let place = Place::new();
+    fs::write(place.home().join("Documents/Reports/q3 report.txt"), "q3").expect("file");
+    fs::write(place.home().join("Report card.txt"), "card").expect("file");
+    date_everything(&place.home());
+    for scheme in [Scheme::Light, Scheme::Dark] {
+        let mut view = place.themed_view(scheme);
+        view.scene(GOLDEN_SIZE.0, GOLDEN_SIZE.1);
+        view.handle(&command(Key::Character('f'), false));
+        type_text(&mut view, "report");
+        run_until(&mut view, |view| shown(view).len() == 3);
+        view.handle(&press(Key::Down));
+        shoot("search", scheme, &mut view);
+    }
 }

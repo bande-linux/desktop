@@ -12,7 +12,7 @@ use unbound_l10n::Localizer;
 
 pub use listing::{
     Entry, Kind, Sort, SortBy, finder_order, format_date, format_size, is_hidden, list, list_trash,
-    same_volume,
+    same_volume, sort,
 };
 pub use naming::{duplicate_name, keep_both_name, untitled_folder};
 pub use operations::{Finished, Operations, Purpose, Running};

@@ -174,10 +174,11 @@ impl FilesView {
         (self.mode == ViewMode::List).then(|| self.content_frame())
     }
 
-    fn location_target(location: &Location) -> Target {
+    fn location_target(location: &Location) -> Option<Target> {
         match location {
-            Location::Folder(folder) => Target::Folder(folder.clone()),
-            Location::Trash => Target::Trash,
+            Location::Folder(folder) => Some(Target::Folder(folder.clone())),
+            Location::Trash => Some(Target::Trash),
+            Location::Recents | Location::Search(_) => None,
         }
     }
 
@@ -194,7 +195,7 @@ impl FilesView {
                     self.table_row_bounds(row).unwrap_or(table),
                     Some(Spring::Go(Location::Folder(entry.path.clone()))),
                 ),
-                None => (Self::location_target(&column.location), table, None),
+                None => (Self::location_target(&column.location)?, table, None),
             });
         }
         let (rect, hit) = self
@@ -205,7 +206,7 @@ impl FilesView {
         match hit {
             Hit::Place(index) => match self.sidebar.get(*index) {
                 Some(Row::Place(place)) => Some((
-                    Self::location_target(&place.location),
+                    Self::location_target(&place.location)?,
                     *rect,
                     Some(Spring::Go(place.location.clone())),
                 )),
@@ -214,7 +215,7 @@ impl FilesView {
             Hit::Tab(index) | Hit::CloseTab(index) => {
                 let location = self.tab_location(*index)?;
                 Some((
-                    Self::location_target(&location),
+                    Self::location_target(&location)?,
                     *rect,
                     Some(Spring::Tab(*index)),
                 ))
@@ -250,7 +251,7 @@ impl FilesView {
             _ => None,
         })?;
         let location = &self.browser.columns().get(column)?.location;
-        Some((Self::location_target(location), frame, None))
+        Some((Self::location_target(location)?, frame, None))
     }
 
     fn preferred(&self, target: &Target) -> Option<DragAction> {

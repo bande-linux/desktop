@@ -2,7 +2,9 @@
 
 use smithay::utils::Size;
 use unbound_compositor::Headless;
-use unbound_test_wayland::{ShmImage, TestClient, quadrants, roundtrip};
+use unbound_test_wayland::{
+    SeparateApp, ShmImage, TestClient, act_as_separate_app, quadrants, roundtrip, roundtrip_until,
+};
 use wayland_client::protocol::wl_shm::Format;
 
 fn server() -> Headless {
@@ -85,9 +87,10 @@ fn quitting_the_focused_app_focuses_the_frontmost_remaining_window() {
     assert!(!other.has_keyboard_focus());
 
     drop(editor);
-    roundtrip(&mut server, &mut [&mut other]);
 
-    assert_eq!(other.focused_window(), Some(0));
+    roundtrip_until(&mut server, &mut [&mut other], |apps| {
+        apps[0].focused_window() == Some(0)
+    });
 }
 
 #[test]
@@ -103,9 +106,10 @@ fn an_app_that_closes_its_last_window_and_then_quits_hands_focus_to_the_next_app
     roundtrip(&mut server, &mut [&mut other, &mut editor]);
     assert!(!other.has_keyboard_focus());
     drop(editor);
-    roundtrip(&mut server, &mut [&mut other]);
 
-    assert_eq!(other.focused_window(), Some(0));
+    roundtrip_until(&mut server, &mut [&mut other], |apps| {
+        apps[0].focused_window() == Some(0)
+    });
 }
 
 #[test]
@@ -133,6 +137,9 @@ fn type_a_key(server: &mut Headless) {
 
 #[test]
 fn an_app_opening_unasked_while_you_type_opens_behind_and_asks_for_attention() {
+    if act_as_separate_app() {
+        return;
+    }
     let mut server = server();
     let mut dock = TestClient::connect_as_shell(&mut server);
     dock.use_seat(&mut server);
@@ -140,16 +147,33 @@ fn an_app_opening_unasked_while_you_type_opens_behind_and_asks_for_attention() {
     let mut terminal = app(&mut server);
     open_window(&mut server, &mut terminal, 2);
     roundtrip(&mut server, &mut [&mut dock, &mut terminal]);
+    let mut intruder = SeparateApp::launch(
+        &mut server,
+        "an_app_opening_unasked_while_you_type_opens_behind_and_asks_for_attention",
+    );
     type_a_key(&mut server);
 
-    let mut intruder = app(&mut server);
-    open_window(&mut server, &mut intruder, 4);
-    roundtrip(&mut server, &mut [&mut dock, &mut terminal, &mut intruder]);
+    intruder.show_window(&mut server, 4);
+    roundtrip(&mut server, &mut [&mut dock, &mut terminal]);
 
     assert!(terminal.has_keyboard_focus());
-    assert!(!intruder.has_keyboard_focus());
     assert_eq!(stacking_by_side(&server), vec![4, 2]);
     assert_eq!(dock.attention_requests().len(), 1);
+}
+
+#[test]
+fn the_app_you_type_into_brings_its_new_window_forward() {
+    let mut server = server();
+    let mut files = app(&mut server);
+    open_window(&mut server, &mut files, 2);
+    roundtrip(&mut server, &mut [&mut files]);
+    type_a_key(&mut server);
+
+    open_window(&mut server, &mut files, 4);
+    roundtrip(&mut server, &mut [&mut files]);
+
+    assert_eq!(files.focused_window(), Some(1));
+    assert_eq!(stacking_by_side(&server), vec![2, 4]);
 }
 
 #[test]

@@ -8,6 +8,7 @@ repository.workspace = true
 [dependencies]
 tracing.workspace = true
 unbound-log.workspace = true
+unbound-sound.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]

@@ -109,6 +109,7 @@ impl ErrorNotifier {
                 body: &body,
                 actions: &[(EDIT_ACTION, &open_in_editor)],
                 urgency: Urgency::Normal,
+                sound: None,
             },
         );
         match reply {

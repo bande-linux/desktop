@@ -16,6 +16,7 @@ unbound-log.workspace = true
 unbound-network.workspace = true
 unbound-notify.workspace = true
 unbound-power.workspace = true
+unbound-sound.workspace = true
 unbound-toolkit.workspace = true
 unbound-xdg.workspace = true
 zbus.workspace = true

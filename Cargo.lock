@@ -3791,6 +3791,7 @@ dependencies = [
  "unbound-network",
  "unbound-notify",
  "unbound-power",
+ "unbound-sound",
  "unbound-test-bus",
  "unbound-toolkit",
  "unbound-xdg",
@@ -3840,6 +3841,7 @@ dependencies = [
  "unbound-fs",
  "unbound-l10n",
  "unbound-log",
+ "unbound-sound",
  "unbound-toolkit",
  "unbound-xdg",
  "zbus",
@@ -4054,6 +4056,7 @@ dependencies = [
  "tempfile",
  "tracing",
  "unbound-log",
+ "unbound-sound",
  "unbound-test-bus",
  "zbus",
 ]
@@ -4082,6 +4085,7 @@ dependencies = [
  "unbound-l10n",
  "unbound-log",
  "unbound-notify",
+ "unbound-sound",
  "unbound-test-bus",
  "wayland-client",
  "wayland-protocols",
@@ -4150,8 +4154,10 @@ dependencies = [
  "tracing",
  "unbound-l10n",
  "unbound-log",
+ "unbound-sound",
  "unbound-toolkit",
  "unbound-xdg",
+ "zbus",
 ]
 
 [[package]]

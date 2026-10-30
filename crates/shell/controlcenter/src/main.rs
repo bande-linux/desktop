@@ -481,7 +481,14 @@ impl ControlCenter {
             return;
         };
         match audio.press(key, fine) {
-            Ok(level) => self.show_hud(window, Hud::Volume(level)),
+            Ok(level) => {
+                if !level.muted
+                    && let Some(session) = &self.session
+                {
+                    unbound_sound::play(session, "audio-volume-change");
+                }
+                self.show_hud(window, Hud::Volume(level));
+            }
             Err(error) => tracing::warn!("cannot change the volume: {error}"),
         }
     }

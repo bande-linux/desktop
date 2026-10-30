@@ -4,8 +4,9 @@ use std::time::Duration;
 use kdl::{KdlDocument, KdlEntry, KdlEntryFormat, KdlNode, KdlValue};
 
 use crate::{
-    Appearance, CapsLock, Config, ConfigError, DEFAULT_DOCK_ICON_SIZE, DockEdge, InputSource,
-    Mouse, Output, SecondaryClick, Suspend, Trackpad, WallpaperFit, WallpaperVariant,
+    Appearance, CapsLock, Config, ConfigError, DEFAULT_DOCK_ICON_SIZE, DisplaySettings, DockEdge,
+    InputSource, Mouse, Placement, SecondaryClick, Suspend, Trackpad, WallpaperFit,
+    WallpaperVariant, same_displays,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -32,12 +33,13 @@ pub enum Setting {
     MouseSpeed(f64),
     Wallpaper(WallpaperVariant, Option<PathBuf>),
     WallpaperFit(WallpaperFit),
-    Output(String, Output),
+    Display(String, DisplaySettings),
+    Arrangement(Vec<Placement>),
 }
 
 impl Setting {
     pub fn apply(&self, source: &str) -> Result<String, ConfigError> {
-        Config::parse(source)?;
+        let config = Config::parse(source)?;
         let mut document = KdlDocument::parse_v2(source).map_err(|_| ConfigError {
             line: 1,
             column: 1,
@@ -184,7 +186,8 @@ impl Setting {
                 "fit",
                 (*fit != WallpaperFit::Fill).then(|| fit.keyword().into()),
             ),
-            Self::Output(connector, output) => set_output(&mut document, connector, output),
+            Self::Display(identity, display) => set_display(&mut document, identity, display),
+            Self::Arrangement(placements) => set_arrangement(&mut document, &config, placements),
         }
         let edited = document.to_string();
         Config::parse(&edited)?;
@@ -230,47 +233,113 @@ fn number(value: f64) -> KdlValue {
     }
 }
 
-fn set_output(document: &mut KdlDocument, connector: &str, output: &Output) {
+fn set_display(document: &mut KdlDocument, identity: &str, display: &DisplaySettings) {
+    let pixels = |value: u32| KdlValue::Integer(value.into());
     let settings = [
-        ("scale", output.scale.map(number)),
-        ("refresh-rate", output.refresh_rate.map(number)),
+        (
+            "resolution",
+            display
+                .resolution
+                .map(|(width, height)| vec![pixels(width), pixels(height)]),
+        ),
+        (
+            "refresh-rate",
+            display.refresh_rate.map(|rate| vec![number(rate)]),
+        ),
+        ("scale", display.scale.map(|scale| vec![number(scale)])),
+        (
+            "rotation",
+            display
+                .rotation
+                .map(|rotation| vec![pixels(rotation.degrees())]),
+        ),
         (
             "variable-refresh-rate",
-            output.variable_refresh_rate.map(KdlValue::Bool),
+            display
+                .variable_refresh_rate
+                .map(|enabled| vec![KdlValue::Bool(enabled)]),
         ),
     ];
     let position = document.nodes().iter().position(|node| {
-        node.name().value() == "output"
+        node.name().value() == "display"
             && node
                 .entries()
                 .first()
                 .and_then(|entry| entry.value().as_string())
-                == Some(connector)
+                == Some(identity)
     });
     match position {
-        Some(position) if *output == Output::default() => {
+        Some(position) if *display == DisplaySettings::default() => {
             remove(document, position);
         }
         Some(position) => {
             let children = document.nodes_mut()[position].ensure_children();
-            for (name, value) in settings {
-                set_child(children, name, value.map(|value| vec![value]), CHILD_INDENT);
+            for (name, values) in settings {
+                set_child(children, name, values, CHILD_INDENT);
             }
         }
-        None if *output == Output::default() => {}
+        None if *display == DisplaySettings::default() => {}
         None => {
             let body: String = settings
                 .into_iter()
-                .filter_map(|(name, value)| {
-                    Some(format!("{CHILD_INDENT}{name} {}\n", repr(&value?)))
+                .filter_map(|(name, values)| {
+                    Some(format!("{CHILD_INDENT}{}\n", line(name, &values?)))
                 })
                 .collect();
             append(
                 document,
-                &format!("output {} {{\n{body}}}\n", repr(&connector.into())),
+                &format!("display {} {{\n{body}}}\n", repr(&identity.into())),
                 "",
             );
         }
+    }
+}
+
+fn arrangement_text(placements: &[Placement]) -> String {
+    let body: String = placements
+        .iter()
+        .map(|placement| {
+            let mut text = format!(
+                "{CHILD_INDENT}display {} x={} y={}",
+                repr(&placement.display.as_str().into()),
+                placement.x,
+                placement.y
+            );
+            if placement.main {
+                text.push_str(" main=#true");
+            }
+            if let Some(mirror) = &placement.mirror {
+                text.push_str(&format!(" mirror={}", repr(&mirror.as_str().into())));
+            }
+            text + "\n"
+        })
+        .collect();
+    format!("arrangement {{\n{body}}}\n")
+}
+
+fn set_arrangement(document: &mut KdlDocument, config: &Config, placements: &[Placement]) {
+    let displays: Vec<String> = placements
+        .iter()
+        .map(|placement| placement.display.clone())
+        .collect();
+    let known = config
+        .arrangements
+        .iter()
+        .position(|arranged| same_displays(arranged, &displays))
+        .and_then(|nth| {
+            document
+                .nodes()
+                .iter()
+                .enumerate()
+                .filter(|(_, node)| node.name().value() == "arrangement")
+                .nth(nth)
+                .map(|(position, _)| position)
+        });
+    if let Some(position) = known {
+        remove(document, position);
+    }
+    if !placements.is_empty() {
+        append(document, &arrangement_text(placements), "");
     }
 }
 

@@ -459,9 +459,12 @@ impl Window {
                     LayerKind::Top => zwlr_layer_shell_v1::Layer::Top,
                     LayerKind::Overlay => zwlr_layer_shell_v1::Layer::Overlay,
                 };
+                if crate::lock::wanted_output().is_some() {
+                    queue.roundtrip(&mut state)?;
+                }
                 let layer_surface = layer_shell.get_layer_surface(
                     &surface,
-                    None,
+                    state.lock.wanted().as_ref(),
                     layer,
                     options.namespace,
                     &handle,
@@ -1736,8 +1739,14 @@ impl Dispatch<WlRegistry, ()> for State {
                 "ext_session_lock_manager_v1" => {
                     state.lock.manager = Some(registry.bind(name, 1, handle, ()));
                 }
-                "wl_output" if state.lock.output.is_none() => {
-                    state.lock.output = Some(registry.bind(name, 1, handle, ()));
+                "wl_output" => {
+                    if state.lock.output.is_none() {
+                        state.lock.output = Some(registry.bind(name, 1, handle, ()));
+                    }
+                    if version >= 4 && crate::lock::wanted_output().is_some() {
+                        let _: wayland_client::protocol::wl_output::WlOutput =
+                            registry.bind(name, 4, handle, crate::lock::NamedOutput);
+                    }
                 }
                 "unbound_shell_v1" => {
                     state.shell.protocol = Some(registry.bind(name, version.min(10), handle, ()));

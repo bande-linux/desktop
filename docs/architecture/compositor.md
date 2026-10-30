@@ -43,7 +43,8 @@ when they reach the screen is Unbound's own.
   same 28 pt height, traffic lights, centred semibold title, colours of the light or dark
   palette (followed from the portal's `color-scheme`) and active, inactive and hover states,
   drawn by `unbound_graphics::TitleBar`, which `unbound-toolkit-platform` draws its own with.
-  It is rasterised on the CPU at the output scale whenever its look changes and becomes part
+  It is rasterised on the CPU at its display's scale whenever its look changes (and stretched
+  to fit while it is drawn on another display mid-drag or in a mirror) and becomes part
   of the window: inside its rounded clip and shadow, in the opening, closing and overview
   animations. The window's geometry includes the bar, so placement, zoom and tiling size the
   app to what is left below it. Dragging the bar moves the window (with snapping), a double
@@ -58,11 +59,64 @@ when they reach the screen is Unbound's own.
   `VK_EXT_image_drm_format_modifier`. Explicit sync (`linux-drm-syncobj-v1`) is built; its guest
   tests do not pass yet (`NOTES/backlog.md`).
 - **DRM backend.** `unbound-compositor` opens the first card with a connected connector (or
-  `--drm-device`) through a libseat session, takes the connector's preferred mode, and renders
-  into GBM buffers that the renderer binds as dma-bufs (copied out from its own image, so
-  lavapipe and `kms_swrast` work); `--headless` keeps the offscreen output for CI and the bench.
-  A fullscreen opaque dma-buf window is put on the primary plane without composition. Tested on
-  vkms in the `ci/vm` guest by reading the CRTC's framebuffer back.
+  `--drm-device`) through a libseat session and drives every connected connector on its own
+  CRTC, each with its own `DrmCompositor`, frame clock and scheduler; it renders into GBM
+  buffers that the renderer binds as dma-bufs (copied out from its own image, so lavapipe and
+  `kms_swrast` work); `--headless` keeps the offscreen output for CI and the bench. udev change
+  events rescan the connectors, so plugging a display in or out takes effect without restarting
+  the session. A display is named by its EDID (maker from the PNP id, model and serial from the
+  descriptors, falling back to the product code and serial number; two displays with the same
+  name are told apart by their connector). A fullscreen opaque dma-buf window is put on the
+  primary plane without composition. Tested on vkms in the `ci/vm` guest by reading the CRTC's
+  framebuffer back.
+- **Displays.** Every output lives in one logical coordinate space in points. Its mode, scale
+  (fractional too), rotation and place come from `display` and `arrangement` in `config.kdl`
+  (followed live through `org.unbound.Config`): the arrangement remembered for exactly the
+  connected set, else the largest remembered subset with the rest placed to the right; a
+  display nobody configured gets its preferred mode at its highest refresh rate, the automatic
+  scale for its pixel density and a place to the right of the others, top-aligned with the main
+  display. The main display sits at the origin; it is the remembered one, else the one that was
+  main before. Each output keeps its own layer surfaces (`wlr-layer-shell` surfaces without an
+  output go to the main display, except the launcher, the screenshot palette, Control Center
+  and confirmations, which open on the display with the pointer), its own lock surface and its
+  own row of workspaces. A window belongs to one display (through its workspace) and is drawn
+  only there, except while it is dragged across an edge; it is told the display through
+  `wl_surface.enter`/`leave` and its scale through `wp_fractional_scale_v1`, so it redraws
+  sharp when it moves to a display of another scale. The pointer moves across the displays at
+  their own scales and never leaves them (it stops at an edge without a neighbour); a new
+  window opens on the display with the pointer, cascading only from its app's windows shown on
+  that display, maximising, full screen, tiling and snapping
+  use the window's display, and dragging a window until the pointer crosses onto another
+  display moves it there. `Alt+Super+Shift+Left/Right/Up/Down` move the focused window to the
+  neighbouring display in that direction keeping its relative place (shrunk only when it does
+  not fit), which it reaches with the opening spring; a window with our title bar keeps it
+  across displays and the app is sized to what is left below it. When a display's scale or
+  resolution changes the pointer keeps its relative place on it. When a display goes away its shown
+  workspace's windows join the main display's shown workspace and its other workspaces join the
+  main display's row, each window keeping its relative place; when it returns, those windows
+  and workspaces go back to it, at the place they had. `wlr-output-management-v1` lists the
+  displays (the head description is the display's name) and applies configurations from tools
+  such as `wlr-randr`; Settings reads it. A display can mirror another (`mirror=` in the
+  arrangement): it keeps no windows or workspaces of its own, the pointer does not enter it, and
+  it shows its source drawn again at the scale that fits it, centred. A rotated display is laid
+  out upright in points and the renderer turns every quad, clip and shadow into the framebuffer.
+  The desktop surface and the menu bar run once per
+  display (the compositor starts an instance per display with `UNBOUND_OUTPUT` naming its output,
+  and `UNBOUND_SECONDARY_DISPLAY` for every display but the main one, where the desktop shows
+  only the wallpaper and no icons); the Dock and notifications stay on the main display, and an
+  instance is started or stopped as displays come and go or the main display changes. The lock
+  screen asks for the password on the main display; while locked, every other display shows only
+  its wallpaper.
+- **Settings ▸ Displays.** An arrangement of the displays (shown when there are two or more)
+  lets the user drag a display's rectangle; on release it snaps edge to edge beside the nearest
+  display, aligning tops, bottoms or centres within 48 pt, and never onto another display; with
+  the keyboard, Space picks a display and the arrows put it on that side of the main display.
+  The main display carries a white bar for its menu bar. Each display then offers Use as (Main
+  display, Extended, Mirror), Resolution (up to four sizes of its native shape), Size of text
+  and controls, Refresh rate, Rotation and Variable refresh rate. Every change is written to
+  `config.kdl` and applied live; a new resolution or rotation shows "Keep these display
+  settings?" with Keep and Revert and comes back by itself after 15 s, as macOS does.
+
 - **Frame pacing.** Frames are paced by a vblank clock (virtual at 120 Hz in the headless
   backend; on DRM re-anchored to each page flip at the mode's refresh, advertised as the
   `wl_output` mode). A commit is latched into the frame whose deadline it arrives before: the
@@ -114,7 +168,7 @@ when they reach the screen is Unbound's own.
   claims three-finger swipes: once the fingers have moved 16 units the axis locks, and a
   horizontal swipe switches workspaces, a swipe up opens the overview and a swipe down shows
   the focused app's windows (below). Two- and four-finger swipes go to apps.
-- **Workspaces.** The output has one row of workspaces. A window opens on the active one
+- **Workspaces.** Each display has its own row of workspaces (macOS's "Displays have separate Spaces"); swipes and switching shortcuts act on the display with the pointer, the overview opens on every display with that display's windows and strip (a window dropped on another display moves there), and shell clients learn the row of the display with the key window. A window opens on the active one
   (a window of another app opened while a full-screen workspace is active opens on that
   workspace's home). Workspaces are made on demand: moving a window past the last one adds
   one, and so does going full screen, which gives the window a workspace of its own right
@@ -202,7 +256,7 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `ext-foreign-toplevel-list-v1` | Window list for the Dock | P0 | implemented, shell clients only |
 | `zwp_text_input_v3` / `input_method_v2` / `virtual_keyboard_v1` | Input methods (CJK) | P0 | implemented |
 | `zxdg_decoration_manager_v1` | Decoration negotiation (server-side unless the client asks for client-side) | P1 | implemented |
-| `wlr-output-management-v1` | Display arrangement and hotplug configuration | P1 | not implemented |
+| `wlr-output-management-v1` | Display arrangement and hotplug configuration | P1 | implemented (v4; enabled heads only, no custom modes) |
 | `ext-image-capture-source-v1` / `ext-image-copy-capture-v1` | Screen capture for screenshots and the portal | P1 | implemented (output sources) |
 | `wp_cursor_shape_v1` | Cursor shapes from the theme | P1 | implemented |
 | `zwp_pointer_constraints_v1` / `relative_pointer` | Pointer lock for games | P1 | not implemented |

@@ -143,9 +143,8 @@ pub fn follow_audio(updates: Updates) -> Sender<AudioCommand> {
         let feed = updates.clone();
         spawn("audio-follow", move || {
             let mut generation = None;
-            while let Some(snapshot) = watched.wait_until(Duration::from_secs(3600), |snapshot| {
-                Some(snapshot.generation) != generation
-            }) {
+            loop {
+                let snapshot = watched.changed_since(generation);
                 generation = Some(snapshot.generation);
                 let connected = snapshot.connected;
                 if !feed.send(Update::Audio(Some(snapshot))) || !connected {

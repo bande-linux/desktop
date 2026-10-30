@@ -102,15 +102,19 @@ pub fn follow_login_items(updates: Updates) -> Sender<LoginCommand> {
         else {
             return;
         };
+        let load = || {
+            applications(
+                &data_dirs(),
+                Locale::from_env().as_ref(),
+                &current_desktops(),
+            )
+        };
         let mut apps: Option<Vec<DesktopEntry>> = None;
         for command in receiver {
-            let apps = apps.get_or_insert_with(|| {
-                applications(
-                    &data_dirs(),
-                    Locale::from_env().as_ref(),
-                    &current_desktops(),
-                )
-            });
+            if command == LoginCommand::Refresh {
+                apps = None;
+            }
+            let apps = apps.get_or_insert_with(load);
             if let Err(error) = run(&dir, apps, command) {
                 updates.send(Update::Failed(error.to_string()));
             }

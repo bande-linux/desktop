@@ -16,8 +16,8 @@ use unbound_fs::{
     Action, Answer, Change, FolderWatch, Operations, Purpose, Resolution, Task, Trash,
 };
 use unbound_toolkit::{
-    App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement, Point, Role, Scene,
-    Scheme, Transfer, Window, WindowEvent,
+    App, DragAction, DragEvent, Edges, Image, KeyboardFocus, LayerKind, LayerOptions,
+    MenuPlacement, Point, Role, Scene, Scheme, Transfer, Window, WindowEvent,
 };
 use unbound_volumes::{eject, media_roots, mounted_volumes};
 use unbound_wallpaper::{Choice, Inbox, Outbox, Picture, Variant, choose, follow, inbox, render};
@@ -459,6 +459,16 @@ impl Surface {
                     }
                 }
                 Request::Copy(paths) => window.copy_transfer(file_transfer(&paths)),
+                Request::StartDrag(paths) => {
+                    let icon = self.view.drag_icon();
+                    let actions = [DragAction::Copy, DragAction::Move];
+                    if let Err(error) =
+                        window.start_drag(file_transfer(&paths), &actions, Some(icon))
+                    {
+                        tracing::warn!("cannot start dragging: {error}");
+                        self.view.drag_finished();
+                    }
+                }
                 Request::Cut(paths) => window.copy_transfer(file_transfer(&paths).cut()),
                 Request::Paste { moves } => {
                     self.paste_moves = moves;
@@ -575,6 +585,31 @@ impl App for Surface {
             WindowEvent::MenuAction(action) => {
                 if let Some(command) = command(&action) {
                     self.view.run_command(command, Instant::now());
+                }
+                self.run_requests(window);
+            }
+            WindowEvent::Drag(drag) => {
+                match drag {
+                    DragEvent::Entered {
+                        position,
+                        uris: true,
+                        ..
+                    }
+                    | DragEvent::Moved(position) => {
+                        let action = self.view.drag_moved(position);
+                        window.accept_drag(action);
+                    }
+                    DragEvent::Entered { .. } => window.accept_drag(None),
+                    DragEvent::Left => self.view.drag_left(),
+                    DragEvent::Dropped {
+                        position,
+                        transfer,
+                        action,
+                    } => {
+                        self.view
+                            .dropped(position, &transfer.uris, action, Instant::now());
+                    }
+                    DragEvent::Finished(_) => self.view.drag_finished(),
                 }
                 self.run_requests(window);
             }
@@ -736,6 +771,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         scheme: appearance.scheme,
         viewport: None,
     };
+    let folder = surface.desktop_dir.clone();
+    surface.view.set_folder(folder);
     unbound_toolkit::run(&mut window, &mut surface)?;
     Ok(())
 }

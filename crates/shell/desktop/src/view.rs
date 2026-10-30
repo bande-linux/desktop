@@ -5,13 +5,14 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
+use unbound_fs::same_volume;
 use unbound_toolkit::ui::{
     Alert, Animated, ClipboardRequest, Context, Event, Key, Modifiers, Pointer, PointerButton,
     Size, Spring, TextField, Ui, Widget, WidgetId,
 };
 use unbound_toolkit::{
-    Appearance, Color, Image, Item as SceneItem, Palette, Paragraph, Point, Rect, Scene, Shape,
-    TextAlign, TextStyle, TextSystem,
+    Appearance, Color, DragAction, Image, Item as SceneItem, Palette, Paragraph, Point, Rect,
+    Scene, Shape, TextAlign, TextStyle, TextSystem,
 };
 
 use crate::L10N;
@@ -19,10 +20,11 @@ use crate::backdrop::{Backdrop, Layer, placeholder};
 use crate::editor::{Anchor, Inset};
 use crate::menus::Command;
 use crate::model::{
-    Bounds, Desktop, Direction, Grid, Item, Kind, LABEL_WIDTH, Positions, SortBy, icon_bounds,
-    label_bounds,
+    Bounds, Desktop, Direction, Grid, Item, Kind, LABEL_WIDTH, Positions, Slot, SortBy,
+    icon_bounds, label_bounds,
 };
 use crate::places::Layouts;
+use unbound_xdg::path_from_file_uri;
 
 const LABEL_SIZE: f32 = 12.0;
 const LABEL_LINES: usize = 2;
@@ -49,6 +51,7 @@ pub enum Request {
     },
     NewFolder,
     Duplicate(Vec<PathBuf>),
+    StartDrag(Vec<PathBuf>),
     Transfer {
         sources: Vec<PathBuf>,
         folder: PathBuf,
@@ -95,10 +98,14 @@ enum Gesture {
     },
     Drag {
         from: Point,
-        to: Point,
         paths: Vec<PathBuf>,
-        copy: bool,
     },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum Target {
+    Folder(PathBuf),
+    Desktop,
 }
 
 struct Rename {
@@ -133,6 +140,9 @@ pub struct DesktopView {
     anchor: WidgetId,
     editing: bool,
     deleting: Option<(Vec<PathBuf>, Rc<Cell<bool>>)>,
+    folder: PathBuf,
+    drop: Option<(Target, Option<DragAction>)>,
+    arriving: Option<(Vec<String>, Slot)>,
     appearance: Appearance,
     focused: bool,
     size: (f32, f32),
@@ -213,6 +223,9 @@ impl DesktopView {
             anchor: anchor_id,
             editing: false,
             deleting: None,
+            folder: PathBuf::new(),
+            drop: None,
+            arriving: None,
             appearance,
             focused: false,
             size: (1.0, 1.0),
@@ -297,6 +310,16 @@ impl DesktopView {
             && self.desktop.item(&rename.path).is_none()
         {
             self.cancel_rename();
+        }
+        if let Some((names, slot)) = self.arriving.take() {
+            let (arrived, waiting): (Vec<String>, Vec<String>) = names
+                .into_iter()
+                .partition(|name| self.desktop.item(&self.folder.join(name)).is_some());
+            let paths: Vec<PathBuf> = arrived.iter().map(|name| self.folder.join(name)).collect();
+            self.desktop.place_at(&paths, slot);
+            if !waiting.is_empty() {
+                self.arriving = Some((waiting, slot));
+            }
         }
         self.retarget(now);
         self.populated = true;
@@ -548,12 +571,9 @@ impl DesktopView {
                 self.edit(event)
             }
             Event::PointerMove(pointer) => self.pointer_move(pointer),
-            Event::PointerUp(pointer) => self.pointer_up(pointer, now),
+            Event::PointerUp(pointer) => self.pointer_up(pointer),
             Event::ModifiersChanged(modifiers) => {
                 self.modifiers = *modifiers;
-                if let Gesture::Drag { copy, .. } = &mut self.gesture {
-                    *copy = modifiers.alt;
-                }
                 true
             }
             Event::Key { key, modifiers } => self.key(*key, *modifiers, now),
@@ -652,12 +672,12 @@ impl DesktopView {
                 if hit.is_none() || distance(*from, at) < DRAG_THRESHOLD {
                     return false;
                 }
+                let paths = self.desktop.selected();
                 self.gesture = Gesture::Drag {
                     from: *from,
-                    to: at,
-                    paths: self.desktop.selected(),
-                    copy: pointer.modifiers.alt,
+                    paths: paths.clone(),
                 };
+                self.requests.push(Request::StartDrag(paths));
                 true
             }
             Gesture::Band { from, to, keep } => {
@@ -667,15 +687,11 @@ impl DesktopView {
                 self.desktop.select_in(area, &keep);
                 true
             }
-            Gesture::Drag { to, copy, .. } => {
-                *to = at;
-                *copy = pointer.modifiers.alt;
-                true
-            }
+            Gesture::Drag { .. } => false,
         }
     }
 
-    fn pointer_up(&mut self, pointer: &Pointer, now: Instant) -> bool {
+    fn pointer_up(&mut self, pointer: &Pointer) -> bool {
         if !pointer.is_primary() {
             return false;
         }
@@ -696,46 +712,161 @@ impl DesktopView {
                 true
             }
             Gesture::Pressed { hit: None, .. } | Gesture::Band { .. } => true,
-            Gesture::Drag {
-                from, to, paths, ..
-            } => {
-                self.drop_items(from, to, paths, pointer.modifiers.alt, now);
-                true
-            }
+            Gesture::Drag { .. } => false,
         }
     }
 
-    fn drop_items(
-        &mut self,
-        from: Point,
-        to: Point,
-        paths: Vec<PathBuf>,
-        copy: bool,
-        now: Instant,
-    ) {
-        let target = self
-            .desktop
-            .hit(to.x, to.y)
+    pub fn set_folder(&mut self, folder: PathBuf) {
+        self.folder = folder;
+    }
+
+    pub fn drag_icon(&mut self) -> Scene {
+        let Gesture::Drag { from, paths } = self.gesture.clone() else {
+            return Scene {
+                width: 1,
+                height: 1,
+                background: Color::hex(0).with_alpha(0),
+                items: Vec::new(),
+            };
+        };
+        let palette = self.appearance.palette();
+        let grid = self.desktop.grid();
+        let cells: Vec<(Item, Bounds)> = paths
+            .iter()
+            .filter_map(|path| {
+                let item = self.desktop.item(path)?.clone();
+                let cell = grid.cell(self.desktop.slot_of(path)?);
+                Some((item, cell))
+            })
+            .collect();
+        let left = cells.iter().map(|(_, cell)| cell.x).fold(from.x, f32::min);
+        let top = cells.iter().map(|(_, cell)| cell.y).fold(from.y, f32::min);
+        let right = cells
+            .iter()
+            .map(|(_, cell)| cell.x + cell.width)
+            .fold(from.x, f32::max);
+        let bottom = cells
+            .iter()
+            .map(|(_, cell)| cell.y + cell.height)
+            .fold(from.y, f32::max);
+        let mut items = Vec::new();
+        for (item, cell) in cells {
+            self.paint_item(&item, cell, 1.0, palette, &mut items);
+        }
+        Scene {
+            width: (right - left).ceil().max(1.0) as u32,
+            height: (bottom - top).ceil().max(1.0) as u32,
+            background: Color::hex(0).with_alpha(0),
+            items: vec![SceneItem::Translate {
+                offset: Point::new(-left, -top),
+                items: vec![SceneItem::Opacity { alpha: 0.75, items }],
+            }],
+        }
+    }
+
+    fn dragged(&self) -> &[PathBuf] {
+        match &self.gesture {
+            Gesture::Drag { paths, .. } => paths,
+            _ => &[],
+        }
+    }
+
+    fn target(&self, at: Point) -> Target {
+        self.desktop
+            .hit(at.x, at.y)
             .filter(|item| matches!(item.kind, Kind::Folder | Kind::Volume))
-            .filter(|item| !paths.contains(&item.path))
-            .map(|item| item.path.clone());
-        if let Some(folder) = target {
-            self.requests.push(Request::Transfer {
-                sources: paths,
+            .filter(|item| !self.dragged().contains(&item.path))
+            .map_or(Target::Desktop, |item| Target::Folder(item.path.clone()))
+    }
+
+    pub fn drag_moved(&mut self, at: Point) -> Option<DragAction> {
+        let target = self.target(at);
+        let dragged = self.dragged();
+        let action = match &target {
+            Target::Desktop => Some(DragAction::Move),
+            Target::Folder(folder) => {
+                let reference = dragged.first().unwrap_or(&self.folder);
+                match same_volume(reference, folder) {
+                    true => Some(DragAction::Move),
+                    false => Some(DragAction::Copy),
+                }
+            }
+        };
+        self.drop = Some((target, action));
+        action
+    }
+
+    pub fn drag_left(&mut self) {
+        self.drop = None;
+    }
+
+    pub fn drag_finished(&mut self) {
+        self.drop = None;
+        if matches!(self.gesture, Gesture::Drag { .. }) {
+            self.gesture = Gesture::Idle;
+        }
+    }
+
+    pub fn dropped(
+        &mut self,
+        at: Point,
+        uris: &[String],
+        action: Option<DragAction>,
+        now: Instant,
+    ) -> bool {
+        self.drop = None;
+        let sources: Vec<PathBuf> = uris
+            .iter()
+            .filter_map(|uri| path_from_file_uri(uri))
+            .collect();
+        if sources.is_empty() {
+            return false;
+        }
+        let copy = action == Some(DragAction::Copy);
+        let own = match &self.gesture {
+            Gesture::Drag { from, paths } if *paths == sources => Some(*from),
+            _ => None,
+        };
+        match (self.target(at), own) {
+            (Target::Folder(folder), _) => self.requests.push(Request::Transfer {
+                sources,
                 folder,
                 copy,
-            });
-            return;
+            }),
+            (Target::Desktop, Some(_)) if copy => self.requests.push(Request::Duplicate(sources)),
+            (Target::Desktop, Some(from)) => {
+                let grid = self.desktop.grid();
+                let (start, end) = (grid.slot_at(from.x, from.y), grid.slot_at(at.x, at.y));
+                let by = (
+                    i64::from(end.column) - i64::from(start.column),
+                    i64::from(end.row) - i64::from(start.row),
+                );
+                self.desktop.move_items(&sources, by);
+                self.retarget(now);
+                self.remember();
+            }
+            (Target::Desktop, None) => {
+                let here = sources
+                    .iter()
+                    .all(|source| source.parent() == Some(self.folder.as_path()));
+                if here {
+                    return false;
+                }
+                let names = sources
+                    .iter()
+                    .filter_map(|source| source.file_name())
+                    .map(|name| name.to_string_lossy().into_owned())
+                    .collect();
+                self.arriving = Some((names, self.desktop.grid().slot_at(at.x, at.y)));
+                let folder = self.folder.clone();
+                self.requests.push(Request::Transfer {
+                    sources,
+                    folder,
+                    copy,
+                });
+            }
         }
-        let grid = self.desktop.grid();
-        let (start, end) = (grid.slot_at(from.x, from.y), grid.slot_at(to.x, to.y));
-        let by = (
-            i64::from(end.column) - i64::from(start.column),
-            i64::from(end.row) - i64::from(start.row),
-        );
-        self.desktop.move_items(&paths, by);
-        self.retarget(now);
-        self.remember();
+        true
     }
 
     fn type_select(&mut self, text: &str, now: Instant) {
@@ -1042,10 +1173,9 @@ impl DesktopView {
         self.backdrop
             .paint(Rect::new(0.0, 0.0, width, height), now, &mut items);
         let mut animating = self.backdrop.is_fading(now);
-        let dragging: Option<(Vec<PathBuf>, Point)> = match &self.gesture {
-            Gesture::Drag {
-                from, to, paths, ..
-            } => Some((paths.clone(), Point::new(to.x - from.x, to.y - from.y))),
+        let dragging = self.dragged().to_vec();
+        let target = match &self.drop {
+            Some((Target::Folder(folder), Some(_))) => Some(folder.clone()),
             _ => None,
         };
         let entries: Vec<(Item, Bounds, f32)> = self
@@ -1066,23 +1196,28 @@ impl DesktopView {
                 (item.clone(), cell, shown)
             })
             .collect();
-        let mut lifted = Vec::new();
         for (item, cell, shown) in &entries {
-            match &dragging {
-                Some((paths, _)) if paths.contains(&item.path) => {
-                    self.paint_item(item, *cell, *shown, palette, &mut lifted);
-                }
-                _ => self.paint_item(item, *cell, *shown, palette, &mut items),
+            if target.as_ref() == Some(&item.path) {
+                let icon = icon_bounds(*cell);
+                let well = Bounds::new(
+                    icon.x - 5.0,
+                    icon.y - 5.0,
+                    icon.width + 10.0,
+                    icon.height + 10.0,
+                );
+                items.push(fill(well, 9.0, palette.accent_color.with_alpha(90)));
             }
-        }
-        if let Some((_, offset)) = dragging {
-            items.push(SceneItem::Opacity {
-                alpha: 0.75,
-                items: vec![SceneItem::Translate {
-                    offset,
-                    items: lifted,
-                }],
-            });
+            match dragging.contains(&item.path) {
+                true => {
+                    let mut lifted = Vec::new();
+                    self.paint_item(item, *cell, *shown, palette, &mut lifted);
+                    items.push(SceneItem::Opacity {
+                        alpha: 0.4,
+                        items: lifted,
+                    });
+                }
+                false => self.paint_item(item, *cell, *shown, palette, &mut items),
+            }
         }
         if let Gesture::Band { from, to, .. } = &self.gesture {
             let band = Bounds::spanning((from.x, from.y), (to.x, to.y));

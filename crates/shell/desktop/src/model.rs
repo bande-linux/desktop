@@ -379,6 +379,26 @@ impl Desktop {
         }
     }
 
+    pub fn place_at(&mut self, paths: &[PathBuf], at: Slot) {
+        let placing: Vec<usize> = paths.iter().filter_map(|path| self.index(path)).collect();
+        if placing.is_empty() {
+            return;
+        }
+        self.sort = SortBy::None;
+        let mut taken: BTreeSet<Slot> = (0..self.items.len())
+            .filter(|index| !placing.contains(index))
+            .map(|index| self.slots[index])
+            .collect();
+        for index in placing {
+            let slot = match taken.contains(&at) {
+                true => self.nearest_free(at, &taken),
+                false => at,
+            };
+            taken.insert(slot);
+            self.slots[index] = slot;
+        }
+    }
+
     fn nearest_free(&self, from: Slot, taken: &BTreeSet<Slot>) -> Slot {
         self.grid
             .slots()

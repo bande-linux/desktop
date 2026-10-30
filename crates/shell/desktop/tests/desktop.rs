@@ -11,9 +11,11 @@ use unbound_desktop_surface::{
 };
 use unbound_toolkit::ui::{Event, Key, Menu, Modifiers, Pointer, PointerButton};
 use unbound_toolkit::{
-    Appearance, Color, CpuRenderer, Image, Point, Scheme, TextAlign, TextStyle, TextSystem,
+    Appearance, Color, CpuRenderer, DragAction, Image, Point, Scheme, TextAlign, TextStyle,
+    TextSystem,
 };
 use unbound_wallpaper::{Fit, render};
+use unbound_xdg::file_uri;
 
 const SCREEN: (f32, f32) = (720.0, 480.0);
 const MIN_SSIM: f64 = 0.99;
@@ -438,21 +440,28 @@ fn renaming_in_place_confirms_with_return_and_cancels_with_escape() {
 }
 
 #[test]
-fn dragging_moves_icons_on_the_grid_or_into_a_folder() {
+fn dragging_moves_icons_on_the_grid_into_folders_and_brings_files_in() {
     let mut view = view_with_items(Scheme::Light);
+    view.set_folder(PathBuf::from("/home/ada/Desktop"));
     let notes = at(&view, "Notes.txt");
     let grid = view.desktop().grid();
     let target = grid.cell(slot(3, 2));
     let drop = Point::new(target.x + target.width / 2.0, target.y + 30.0);
-    let pointer = Pointer::at(notes);
+    let uri = |name: &str| file_uri(&path(name));
     let now = Instant::now();
-    view.handle(&Event::PointerDown(pointer), now);
+    view.handle(&Event::PointerDown(Pointer::at(notes)), now);
     view.handle(
         &Event::PointerMove(Pointer::at(Point::new(notes.x - 20.0, notes.y))),
         now,
     );
-    view.handle(&Event::PointerMove(Pointer::at(drop)), now);
-    view.handle(&Event::PointerUp(Pointer::at(drop)), now);
+    assert_eq!(
+        view.take_requests(),
+        vec![Request::StartDrag(vec![path("Notes.txt")])]
+    );
+    assert!(view.drag_icon().width > 1);
+    assert_eq!(view.drag_moved(drop), Some(DragAction::Move));
+    assert!(view.dropped(drop, &[uri("Notes.txt")], Some(DragAction::Move), now));
+    view.drag_finished();
     assert_eq!(view.desktop().slot_of(&path("Notes.txt")), Some(slot(3, 2)));
     assert_eq!(
         view.take_changed_layouts()
@@ -460,18 +469,14 @@ fn dragging_moves_icons_on_the_grid_or_into_a_folder() {
             .and_then(|positions| positions.get("Notes.txt").copied()),
         Some(slot(3, 2))
     );
+
     let notes = at(&view, "Notes.txt");
     let projects = at(&view, "Projects");
     view.handle(&Event::PointerDown(Pointer::at(notes)), now);
     view.handle(&Event::PointerMove(Pointer::at(projects)), now);
-    let alt = Modifiers {
-        alt: true,
-        ..Modifiers::default()
-    };
-    view.handle(
-        &Event::PointerUp(Pointer::at(projects).with_modifiers(alt)),
-        now,
-    );
+    view.take_requests();
+    assert!(view.dropped(projects, &[uri("Notes.txt")], Some(DragAction::Copy), now));
+    view.drag_finished();
     assert_eq!(
         view.take_requests(),
         vec![Request::Transfer {
@@ -480,6 +485,18 @@ fn dragging_moves_icons_on_the_grid_or_into_a_folder() {
             copy: true,
         }]
     );
+
+    let report = file_uri(Path::new("/home/ada/Documents/Report.pdf"));
+    assert!(view.dropped(drop, &[report], Some(DragAction::Move), now));
+    assert_eq!(
+        view.take_requests(),
+        vec![Request::Transfer {
+            sources: vec![PathBuf::from("/home/ada/Documents/Report.pdf")],
+            folder: PathBuf::from("/home/ada/Desktop"),
+            copy: false,
+        }]
+    );
+
     let secondary = Pointer::at(projects).with_button(PointerButton::Secondary);
     view.handle(&Event::PointerDown(secondary), now);
     assert_eq!(view.desktop().selected(), vec![path("Projects")]);

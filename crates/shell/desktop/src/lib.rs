@@ -1,5 +1,4 @@
 mod backdrop;
-mod eject;
 mod menus;
 mod model;
 mod places;
@@ -10,15 +9,13 @@ use std::sync::LazyLock;
 use unbound_l10n::Localizer;
 
 pub use backdrop::{Key as WallpaperKey, Layer, Luma, placeholder};
-pub use eject::eject;
 pub use menus::{App as MenuApp, Command, Selection, command, desktop_menu, items_menu};
 pub use model::{
     Bounds, CELL_HEIGHT, CELL_WIDTH, Desktop, Direction, GRID_PADDING, Grid, ICON_SIZE, Item, Kind,
     Positions, Slot, SortBy, icon_bounds, label_bounds,
 };
 pub use places::{
-    Layouts, format_layouts, layouts_path, list, media_roots, mounted_volumes, parse_layouts,
-    read_item, save_layouts,
+    Layouts, format_layouts, layouts_path, list, parse_layouts, read_item, save_layouts,
 };
 pub use view::{DesktopView, Request, fitted_label};
 

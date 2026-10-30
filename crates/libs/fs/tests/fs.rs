@@ -9,7 +9,8 @@ use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use tempfile::TempDir;
 use unbound_fs::{
     Action, Answer, Change, FolderWatch, History, Job, Outcome, RenameError, Report, Resolution,
-    Task, Trash, TrashDir, duplicate_name, keep_both_name, new_folder, rename, untitled_folder,
+    Sort, Task, Trash, TrashDir, duplicate_name, format_size, keep_both_name, list, new_folder,
+    rename, untitled_folder,
 };
 
 struct Place {
@@ -50,6 +51,14 @@ impl Place {
             }
         }
     }
+}
+
+fn names(folder: &Path, show_hidden: bool) -> Vec<String> {
+    list(folder, show_hidden, Sort::default())
+        .expect("listing")
+        .into_iter()
+        .map(|entry| entry.name)
+        .collect()
 }
 
 fn read(path: &Path) -> String {
@@ -485,4 +494,31 @@ fn watched_folders_report_bursts_of_changes_once() {
     assert_eq!(watch.take_changed(deadline), [folder]);
     assert_eq!(watch.deadline(), None);
     assert!(watch.take_changed(deadline).is_empty());
+}
+
+#[test]
+fn folders_come_first_then_names_in_finder_order() {
+    let root = TempDir::new().expect("temporary folder");
+    for name in ["file10", "File2", "beta", "Alpha", ".hidden", "file1"] {
+        fs::write(root.path().join(name), "").expect("file");
+    }
+    fs::create_dir(root.path().join("zoo")).expect("folder");
+
+    assert_eq!(
+        names(root.path(), false),
+        ["zoo", "Alpha", "beta", "file1", "File2", "file10"]
+    );
+    assert_eq!(names(root.path(), true)[1], ".hidden");
+}
+
+#[test]
+fn sizes_read_as_in_the_finder() {
+    assert_eq!(format_size(0), "Zero bytes");
+    assert_eq!(format_size(1), "1 byte");
+    assert_eq!(format_size(999), "999 bytes");
+    assert_eq!(format_size(1_000), "1 KB");
+    assert_eq!(format_size(12_400), "12 KB");
+    assert_eq!(format_size(999_600), "1 MB");
+    assert_eq!(format_size(1_500_000), "1.5 MB");
+    assert_eq!(format_size(2_340_000_000), "2.34 GB");
 }

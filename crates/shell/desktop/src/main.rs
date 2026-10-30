@@ -9,19 +9,21 @@ use accesskit::TreeUpdate;
 use unbound_config::{Config, DockEdge, config_path};
 use unbound_desktop_surface::{
     Bounds, DesktopView, Item, Kind, Layer, Layouts, Luma, MenuApp, Request, Selection,
-    WallpaperKey, command, desktop_menu, eject, items_menu, layouts_path, list, media_roots,
-    mounted_volumes, parse_layouts, save_layouts,
+    WallpaperKey, command, desktop_menu, items_menu, layouts_path, list, parse_layouts,
+    save_layouts,
 };
-use unbound_files::{Apps, Operations, Purpose};
-use unbound_fs::{Action, Answer, Change, FolderWatch, Resolution, Task, Trash};
+use unbound_fs::{
+    Action, Answer, Change, FolderWatch, Operations, Purpose, Resolution, Task, Trash,
+};
 use unbound_toolkit::{
     App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement, Point, Role, Scene,
     Scheme, Window, WindowEvent,
 };
+use unbound_volumes::{eject, media_roots, mounted_volumes};
 use unbound_wallpaper::{Choice, Inbox, Outbox, Picture, Variant, choose, follow, inbox, render};
 use unbound_xdg::{
-    DIRECTORY, DesktopEntry, OCTET_STREAM, UserDir, config_dirs, config_home, data_dirs, find_icon,
-    launch, launch_with, user_dir,
+    Apps, DIRECTORY, DesktopEntry, OCTET_STREAM, UserDir, config_dirs, config_home, data_dirs,
+    find_icon, launch, launch_with, user_dir,
 };
 
 const ICON_THEMES: [&str; 1] = ["Adwaita"];

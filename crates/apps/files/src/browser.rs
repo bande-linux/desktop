@@ -1,8 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use unbound_fs::Trash;
-
-use crate::listing::{Entry, Sort, list, list_trash};
+use unbound_fs::{Entry, Sort, Trash, list, list_trash};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Location {

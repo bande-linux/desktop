@@ -80,6 +80,7 @@ unbound-network = { path = "crates/libs/network" }
 unbound-notifications = { path = "crates/shell/notifications" }
 unbound-notify = { path = "crates/services/notify" }
 unbound-polkit = { path = "crates/services/polkit" }
+unbound-preview = { path = "crates/libs/preview" }
 unbound-power = { path = "crates/services/power" }
 unbound-protocols = { path = "crates/platform/protocols" }
 unbound-render = { path = "crates/platform/render" }
@@ -95,6 +96,7 @@ unbound-test-wayland = { path = "crates/testing/test-wayland" }
 unbound-toolkit = { path = "crates/toolkit/toolkit" }
 unbound-toolkit-platform = { path = "crates/toolkit/platform" }
 unbound-tray = { path = "crates/services/tray" }
+unbound-volumes = { path = "crates/libs/volumes" }
 unbound-wallpaper = { path = "crates/libs/wallpaper" }
 unbound-widgets = { path = "crates/toolkit/widgets" }
 unbound-xdg = { path = "crates/libs/xdg" }

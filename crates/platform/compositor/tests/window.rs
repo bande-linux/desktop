@@ -480,3 +480,29 @@ fn super_m_minimizes_the_key_window() {
     assert_ne!(pixel(&mut renderer, &mut server, 110, 80), rgb(RED));
     assert!(!editor.keyboard_focus_on(0));
 }
+
+#[test]
+fn an_apps_next_window_cascades_from_its_frontmost_one_and_other_apps_stay_centred() {
+    let mut server = server();
+    let mut editor = app(&mut server, RED);
+    let pixels = BLUE.repeat((WINDOW.0 * WINDOW.1) as usize);
+    let image = ShmImage {
+        width: WINDOW.0,
+        height: WINDOW.1,
+        stride: WINDOW.0 * 4,
+        format: Format::Xrgb8888,
+        bytes: &pixels,
+    };
+    editor.show_window(&mut server, &image);
+    let _other = app(&mut server, WHITE);
+
+    let locations: Vec<(i32, i32)> = server
+        .windows()
+        .iter()
+        .map(|window| (window.location().x, window.location().y))
+        .collect();
+    assert_eq!(
+        locations,
+        [CENTERED, (CENTERED.0 + 28, CENTERED.1 + 28), CENTERED]
+    );
+}

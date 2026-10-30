@@ -231,6 +231,11 @@ impl FrameScheduler {
         }
     }
 
+    pub fn resume(&mut self) {
+        self.phase = Phase::Idle;
+        self.wanted = true;
+    }
+
     pub fn flipped(&mut self, vblank: Vblank, compositor: &mut Headless) -> io::Result<()> {
         let name = self
             .output

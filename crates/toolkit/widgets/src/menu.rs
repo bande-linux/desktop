@@ -8,7 +8,7 @@ use unbound_graphics::{
 
 use super::control::square_capped;
 use super::shortcut::ShortcutText;
-use super::{Animated, Key, Modifiers, Size, Spring};
+use super::{Key, Modifiers, Size};
 
 pub(crate) const ROW_HEIGHT: f32 = 28.0;
 const SEPARATOR_HEIGHT: f32 = 9.0;
@@ -36,13 +36,7 @@ const MAX_FOUND: usize = 12;
 const PATH_SEPARATOR: &str = " › ";
 const TYPE_SELECT_PAUSE: Duration = Duration::from_secs(1);
 const FLASH_STEP: Duration = Duration::from_millis(50);
-const FADE_LIMIT: Duration = Duration::from_millis(500);
-
-fn fade_after(chosen: Instant) -> Animated {
-    let mut fade = Animated::new(1.0);
-    fade.animate_at(chosen + 2 * FLASH_STEP, false, 0.0, Spring::FADE);
-    fade
-}
+const FLASH: Duration = Duration::from_millis(100);
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Menu {
@@ -1018,7 +1012,7 @@ impl MenuTracker {
 
     pub fn deadline(&self) -> Option<Instant> {
         let submenu = self.submenu_due.map(|(_, _, at)| at);
-        let flash = self.flash.map(|(_, at)| at + 2 * FLASH_STEP + FADE_LIMIT);
+        let flash = self.flash.map(|(_, at)| at + FLASH);
         let settle = self.settle.map(|(_, _, at)| at);
         submenu.into_iter().chain(flash).chain(settle).min()
     }
@@ -1046,22 +1040,17 @@ impl MenuTracker {
     }
 
     pub fn is_finished(&self, now: Instant) -> bool {
-        self.flash.is_some_and(|(_, at)| {
-            now >= at + 2 * FLASH_STEP + FADE_LIMIT || fade_after(at).value_at(now) == (0.0, false)
-        })
+        self.flash.is_some_and(|(_, at)| now >= at + FLASH)
     }
 
     pub fn is_flashing(&self) -> bool {
         self.flash.is_some()
     }
 
-    pub fn appearance(&self, level: usize, now: Instant) -> (bool, f32) {
-        let Some((flashed, at)) = self.flash else {
-            return (true, 1.0);
-        };
-        let elapsed = now.saturating_duration_since(at);
-        let blink_off = elapsed < FLASH_STEP && level == flashed;
-        (!blink_off, fade_after(at).value_at(now).0.clamp(0.0, 1.0))
+    pub fn shows_highlight(&self, level: usize, now: Instant) -> bool {
+        self.flash.is_none_or(|(flashed, at)| {
+            level != flashed || now.saturating_duration_since(at) >= FLASH_STEP
+        })
     }
 
     pub fn access(&self) -> (Vec<(NodeId, Node)>, Vec<NodeId>, Option<NodeId>) {

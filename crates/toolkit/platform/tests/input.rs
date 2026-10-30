@@ -967,6 +967,51 @@ fn escape_or_a_click_outside_closes_a_menu_without_a_choice() {
 }
 
 #[test]
+fn a_key_typed_right_after_choosing_an_item_reaches_the_window() {
+    let mut desktop = Desktop::new();
+    let mut client = pointed_window(&mut desktop, "menu chosen then typed");
+    open_menu(&mut desktop, &mut client);
+    desktop.server.press_button(BTN_RIGHT, false, 0);
+    desktop.settle(&mut [&mut client]);
+    desktop.type_keys(&[KEY_DOWN]);
+    desktop.type_keys(&[KEY_ENTER]);
+    desktop.type_keys(&[KEY_D]);
+    desktop.wait_for(
+        &mut [&mut client],
+        |events| {
+            typed(events)
+                .iter()
+                .any(|(key, _)| *key == Key::Character('d'))
+        },
+        |_| true,
+    );
+    assert_eq!(
+        menu_events(&client.seen),
+        [WindowEvent::MenuAction("open".to_owned())]
+    );
+}
+
+#[test]
+fn a_closed_menu_lets_go_of_the_keyboard_while_it_fades_out() {
+    let mut desktop = Desktop::new();
+    let mut client = pointed_window(&mut desktop, "menu fade");
+    open_menu(&mut desktop, &mut client);
+    desktop.server.press_button(BTN_RIGHT, false, 0);
+    desktop.settle(&mut [&mut client]);
+    desktop.type_keys(&[KEY_ESC]);
+    desktop.wait_for(
+        &mut [&mut client],
+        |events| menu_events(events) == [WindowEvent::MenuClosed],
+        |desktop| !desktop.server.keyboard_grabbed() && desktop.server.popup_count() == 1,
+    );
+    desktop.wait_for(
+        &mut [&mut client],
+        |_| true,
+        |desktop| desktop.server.popup_count() == 0,
+    );
+}
+
+#[test]
 fn a_click_just_beside_a_menu_closes_it_and_only_the_next_click_reaches_the_window() {
     let mut desktop = Desktop::sized((800, 600));
     let mut client = pointed_window(&mut desktop, "menu own window");

@@ -786,3 +786,56 @@ fn a_middle_click_on_a_read_only_view_pastes_nothing() {
     assert!(!reading.ui.pasted("x"));
     assert_eq!(reading.text(), "Release notes");
 }
+
+#[test]
+fn a_caret_at_the_end_of_a_paragraph_is_published() {
+    let mut editing = Editing::view("one\ntwo");
+    editing
+        .ui
+        .widget_as::<TextView>(editing.id)
+        .unwrap()
+        .select(3..3);
+    editing.ui.layout(AREA);
+    let tree = editing.ui.accessibility();
+    let view = tree
+        .nodes
+        .iter()
+        .find(|(node, _)| *node == NodeId::from(editing.id))
+        .map(|(_, node)| node.clone())
+        .unwrap();
+    assert!(view.text_selection().is_some(), "caret at end of line one");
+}
+
+#[test]
+fn a_right_click_while_composing_commits_the_composition_in_place() {
+    let mut editing = Editing::field("ab");
+    editing.send(Event::Preedit {
+        text: "にほんご".to_owned(),
+        cursor: Some((12, 12)),
+    });
+    let frame = editing.frame();
+    editing.send(Event::PointerDown(
+        Pointer::at(Point::new(frame.x + 60.0, frame.y + 8.0))
+            .with_button(PointerButton::Secondary),
+    ));
+    editing.items();
+    assert_eq!(editing.text(), "abにほんご");
+}
+
+#[test]
+fn leaving_the_window_during_a_drag_ends_it() {
+    let mut editing = Editing::field("hello world again");
+    let frame = editing.frame();
+    let y = frame.y + frame.height / 2.0;
+    editing.send(Event::PointerDown(Pointer::at(Point::new(
+        frame.x + 12.0,
+        y,
+    ))));
+    editing.send(Event::PointerLeave);
+    editing.send(Event::PointerMove(Pointer::at(Point::new(
+        frame.x + 100.0,
+        y,
+    ))));
+    let selection = editing.selection();
+    assert!(selection.is_empty(), "{selection:?}");
+}

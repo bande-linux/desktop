@@ -1,8 +1,11 @@
+mod menu_bar;
+
 use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Instant;
 
+use unbound_app_menu::{AppMenu, Standard};
 use unbound_files::{Browser, FilesView, Location, Request, Row, rows, without_bookmark};
 use unbound_fs::Trash;
 use unbound_toolkit::{
@@ -18,6 +21,7 @@ struct Files {
     view: FilesView,
     title: String,
     home: PathBuf,
+    app_menu: Option<AppMenu>,
 }
 
 fn bookmarks_file() -> Option<PathBuf> {
@@ -42,6 +46,24 @@ fn remove_bookmark(folder: &Path) -> std::io::Result<()> {
 }
 
 impl Files {
+    fn menu_bar_action(&mut self, window: &mut Window, action: &str) -> bool {
+        let result = match Standard::parse(action) {
+            Some(Standard::Hide | Standard::Minimize) => window.minimize(),
+            Some(Standard::Zoom) => window.toggle_zoom(),
+            Some(Standard::Quit | Standard::CloseWindow) => {
+                window.close();
+                Ok(())
+            }
+            None => {
+                return menu_bar::key_event(action).is_some_and(|event| self.view.handle(&event));
+            }
+        };
+        if let Err(error) = result {
+            tracing::warn!("cannot {action}: {error}");
+        }
+        false
+    }
+
     fn changed(&mut self, window: &mut Window) {
         for request in self.view.take_requests() {
             match request {
@@ -93,6 +115,12 @@ impl App for Files {
             WindowEvent::Input(input) => self.view.handle(&input),
             WindowEvent::Pasted(text) => self.view.pasted(&text),
             WindowEvent::MenuAction(action) => self.view.menu_action(&action),
+            WindowEvent::Focus(true) => {
+                if let Some(Err(error)) = self.app_menu.as_ref().map(AppMenu::claim) {
+                    tracing::warn!("{error}");
+                }
+                false
+            }
             WindowEvent::MenuClosed => {
                 self.view.menu_closed();
                 false
@@ -105,11 +133,26 @@ impl App for Files {
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        self.view.fds()
+        let mut sources = self.view.fds();
+        sources.extend(self.app_menu.as_ref().map(AppMenu::fd));
+        sources
     }
 
     fn source_ready(&mut self, window: &mut Window, index: usize) {
-        if self.view.source_ready(index) {
+        if index == self.view.fds().len() {
+            let actions = self
+                .app_menu
+                .as_mut()
+                .map(AppMenu::take_actions)
+                .unwrap_or_default();
+            let mut changed = false;
+            for action in actions {
+                changed |= self.menu_bar_action(window, &action);
+            }
+            if changed {
+                self.changed(window);
+            }
+        } else if self.view.source_ready(index) {
             self.changed(window);
         }
     }
@@ -175,7 +218,15 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     view.set_media(media_roots(&std::env::var("USER").unwrap_or_default()));
     let title = view.title();
     let mut window = Window::open(Role::toplevel(&title, APP_ID), WINDOW_SIZE)?;
-    let mut files = Files { view, title, home };
+    let app_menu = AppMenu::export(APP_ID, menu_bar::app_menus())
+        .inspect_err(|error| tracing::warn!("{error}"))
+        .ok();
+    let mut files = Files {
+        view,
+        title,
+        home,
+        app_menu,
+    };
     unbound_toolkit::run(&mut window, &mut files)?;
     Ok(())
 }

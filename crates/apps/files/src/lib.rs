@@ -30,6 +30,7 @@ mod tests {
         let sources = [
             include_str!("lib.rs"),
             include_str!("main.rs"),
+            include_str!("menu_bar.rs"),
             include_str!("menus.rs"),
             include_str!("browser.rs"),
             include_str!("paint.rs"),

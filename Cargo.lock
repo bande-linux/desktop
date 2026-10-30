@@ -3494,6 +3494,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "unbound-app-menu"
+version = "0.1.0"
+dependencies = [
+ "unbound-inbox",
+ "unbound-l10n",
+ "unbound-test-bus",
+ "zbus",
+]
+
+[[package]]
 name = "unbound-audio"
 version = "0.1.0"
 dependencies = [
@@ -3658,6 +3668,7 @@ dependencies = [
  "rustix 1.1.6",
  "tempfile",
  "tracing",
+ "unbound-app-menu",
  "unbound-fs",
  "unbound-l10n",
  "unbound-log",
@@ -3803,6 +3814,7 @@ dependencies = [
  "rustix 1.1.6",
  "tempfile",
  "tracing",
+ "unbound-app-menu",
  "unbound-l10n",
  "unbound-log",
  "unbound-toolkit",
@@ -3957,6 +3969,7 @@ dependencies = [
  "image-compare",
  "tempfile",
  "tracing",
+ "unbound-app-menu",
  "unbound-audio",
  "unbound-bluetooth",
  "unbound-compositor",
@@ -3993,6 +4006,7 @@ dependencies = [
  "image",
  "image-compare",
  "tracing",
+ "unbound-app-menu",
  "unbound-l10n",
  "unbound-log",
  "unbound-toolkit",

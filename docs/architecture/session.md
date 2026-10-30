@@ -149,7 +149,10 @@ graph LR
     owns its app id as bus name and exports `com.canonical.dbusmenu` at `/org/unbound/MenuBar`;
     the first top-level submenu is shown under the bold app name and the others become the
     menu titles beside it. The menu bar asks for the menu when the app becomes active, and only
-    when the name has an owner, so it never starts an app by D-Bus activation.
+    when the name has an owner, so it never starts an app by D-Bus activation. Toolkit apps
+    export their menus through `crates/libs/app-menu` (`unbound-app-menu`), which also builds
+    the standard app and Window menus; the window that gains focus claims the name, so the menu
+    bar talks to the process the user is working in.
 - **Network and Bluetooth**: NetworkManager (`org.freedesktop.NetworkManager`) and BlueZ
   (`org.bluez`) for Wi-Fi selection and Bluetooth pairing in Control Center and Settings, through
   `crates/libs/network` and `crates/libs/bluetooth`.

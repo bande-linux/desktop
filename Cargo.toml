@@ -56,6 +56,7 @@ wayland-scanner = "=0.31.11"
 wayland-server = "=0.31.14"
 xkbcommon = "=0.8.0"
 wgpu = { version = "=30.0.1", default-features = false, features = ["std", "parking_lot", "vulkan", "wgsl"] }
+unbound-app-menu = { path = "crates/libs/app-menu" }
 unbound-audio = { path = "crates/libs/audio" }
 unbound-automount = { path = "crates/services/automount" }
 unbound-bench = { path = "crates/testing/bench" }

@@ -453,7 +453,7 @@ impl DrmBackend {
                         .resume()
                         .map_err(|()| "libinput cannot resume its devices")?;
                 }
-                self.device.activate(true)?;
+                self.device.activate(false)?;
                 for head in &mut self.heads {
                     head.compositor.reset_state()?;
                 }

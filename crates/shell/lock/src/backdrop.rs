@@ -6,10 +6,10 @@ use unbound_toolkit::Image;
 use unbound_wallpaper::{Choice, Inbox, Variant, backdrop, inbox, read};
 use unbound_xdg::data_dirs;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BackdropSource {
     Session,
-    Default,
+    Picture(Option<PathBuf>),
 }
 
 pub fn load_backdrop(
@@ -25,7 +25,11 @@ pub fn load_backdrop(
                 BackdropSource::Session => zbus::blocking::Connection::session()
                     .map(|session| read(&session))
                     .unwrap_or_default(),
-                BackdropSource::Default => Choice::default(),
+                BackdropSource::Picture(path) => Choice {
+                    light: path.clone(),
+                    dark: path,
+                    ..Choice::default()
+                },
             };
             let home = std::env::var_os("HOME").map(PathBuf::from);
             let picture = choice

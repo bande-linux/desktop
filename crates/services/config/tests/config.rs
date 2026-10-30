@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use unbound_config::{
     Appearance, Config, ConfigError, ConfigStore, DEFAULT_DOCK_APPS, DockEdge, Output, ReloadError,
-    Suspend, WallpaperFit, WallpaperVariant, config_path,
+    Suspend, WallpaperFit, WallpaperVariant, config_path, login_picture,
 };
 
 fn error_at(source: &str) -> (usize, usize) {
@@ -377,4 +377,25 @@ fn the_dock_size_stays_within_24_to_96_points_and_flags_need_a_boolean() {
     assert!(Config::parse("dock {\n    size 96\n}\n").is_ok());
     assert_eq!(error_at("dock {\n    auto-hide \"yes\"\n}\n"), (2, 15));
     assert_eq!(error_at("wallpaper {\n    fit \"tile\"\n}\n"), (2, 9));
+}
+
+#[test]
+fn the_login_window_gets_the_dark_wallpaper_with_the_home_folder_spelled_out() {
+    let home = Path::new("/home/me");
+    let wallpaper = |source: &str| Config::parse(source).expect("valid").wallpaper;
+    assert_eq!(
+        login_picture(
+            &wallpaper("wallpaper {\n    light \"/a.png\"\n    dark \"~/b.png\"\n}\n"),
+            Some(home)
+        ),
+        Some(PathBuf::from("/home/me/b.png"))
+    );
+    assert_eq!(
+        login_picture(
+            &wallpaper("wallpaper {\n    light \"/a.png\"\n}\n"),
+            Some(home)
+        ),
+        Some(PathBuf::from("/a.png"))
+    );
+    assert_eq!(login_picture(&wallpaper(""), Some(home)), None);
 }

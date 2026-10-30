@@ -1,3 +1,4 @@
+mod accounts;
 mod edit;
 mod report;
 mod service;
@@ -12,6 +13,7 @@ use std::time::Duration;
 use kdl::{KdlDocument, KdlEntry, KdlNode, KdlValue};
 use unbound_l10n::Localizer;
 
+pub use accounts::{login_picture, share_login_picture};
 pub use edit::Setting;
 pub use report::{EDIT_ACTION, ErrorNotifier};
 pub use service::{BUS_NAME, ConfigService, OBJECT_PATH, ServiceError};
@@ -623,6 +625,7 @@ mod tests {
         let sources = [
             include_str!("lib.rs"),
             include_str!("main.rs"),
+            include_str!("accounts.rs"),
             include_str!("edit.rs"),
             include_str!("report.rs"),
             include_str!("service.rs"),

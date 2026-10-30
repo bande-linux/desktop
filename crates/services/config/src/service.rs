@@ -70,7 +70,7 @@ impl ConfigService {
         connection: &Connection,
         path: &Path,
         store: Arc<ConfigStore>,
-        on_reload: impl Fn(Result<(), ReloadError>) + Send + 'static,
+        on_reload: impl Fn(Result<Arc<Config>, ReloadError>) + Send + 'static,
     ) -> Result<Self, ServiceError> {
         let directory = path
             .parent()
@@ -82,7 +82,7 @@ impl ConfigService {
         std::fs::create_dir_all(directory).map_err(|error| ServiceError::Watch(error.into()))?;
 
         if path.exists() {
-            on_reload(store.reload(path).map(drop));
+            on_reload(store.reload(path));
         }
         let published = Arc::new(Mutex::new(store.current()));
 
@@ -118,8 +118,8 @@ impl ConfigService {
                 match store.reload(&watched) {
                     Ok(config) => {
                         publish_changes(&interface, &published, &config);
+                        on_reload(Ok(Arc::clone(&config)));
                         *published = config;
-                        on_reload(Ok(()));
                     }
                     Err(error) => on_reload(Err(error)),
                 }

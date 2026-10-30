@@ -3703,10 +3703,12 @@ dependencies = [
  "jiff",
  "serde",
  "serde_json",
+ "tempfile",
  "tracing",
  "unbound-lock",
  "unbound-log",
  "unbound-toolkit",
+ "zbus",
 ]
 
 [[package]]

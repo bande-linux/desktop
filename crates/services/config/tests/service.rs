@@ -94,7 +94,7 @@ fn start(initial: &str) -> Fixture {
         &service_connection,
         &path,
         Arc::new(ConfigStore::default()),
-        move |result: Result<(), ReloadError>| {
+        move |result: Result<Arc<unbound_config::Config>, ReloadError>| {
             if let Err(error) = result {
                 let _ = error_sender.send(error);
             }

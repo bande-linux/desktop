@@ -114,6 +114,32 @@ fn input_devices_held_by(pid: u32) -> Vec<PathBuf> {
     devices
 }
 
+const SETTLED: Duration = Duration::from_secs(2);
+
+fn wait_for_shell() -> Scanout {
+    let mut unchanged_since: Option<(Scanout, Instant)> = None;
+    wait_for(
+        "the shell to settle on the desktop and the bar",
+        STARTUP,
+        || {
+            let Some(now) = current_scanout() else {
+                return false;
+            };
+            let drawn = running("unbound-shell")
+                && pixel(&now, 32, 200) != BACKGROUND
+                && pixel(&now, now.width / 2, now.height / 2) != BACKGROUND;
+            match &unchanged_since {
+                Some((shown, since)) if drawn && shown.rgb == now.rgb => since.elapsed() >= SETTLED,
+                _ => {
+                    unchanged_since = drawn.then(|| (now, Instant::now()));
+                    false
+                }
+            }
+        },
+    );
+    scanout()
+}
+
 fn start_desktop() -> Desktop {
     start_desktop_with(&[])
 }
@@ -125,6 +151,7 @@ fn start_desktop_with(environment: &[(&str, &str)]) -> Desktop {
 fn start_desktop_with_arguments(arguments: &[&str], environment: &[(&str, &str)]) -> Desktop {
     fs::create_dir_all(RUNTIME_DIR).expect("runtime directory");
     fs::set_permissions(RUNTIME_DIR, fs::Permissions::from_mode(0o700)).expect("permissions");
+    let left_over = current_scanout().map(|scanout| scanout.rgb);
     let mut child = Command::new(COMPOSITOR)
         .args(arguments)
         .env("XDG_RUNTIME_DIR", RUNTIME_DIR)
@@ -149,6 +176,11 @@ fn start_desktop_with_arguments(arguments: &[&str], environment: &[(&str, &str)]
     wait_for("the compositor to open every input device", STARTUP, || {
         input_devices_held_by(compositor) == input_devices()
     });
+    if let Some(left_over) = left_over {
+        wait_for("the compositor's first frame", STARTUP, || {
+            current_scanout().is_some_and(|scanout| scanout.rgb != left_over)
+        });
+    }
     Desktop {
         compositor: child,
         display,
@@ -162,12 +194,7 @@ fn the_launcher_opens_a_terminal_that_takes_typing() {
     let mut keyboard = VirtualDevice::keyboard_and_mouse();
     let _desktop = start_desktop();
 
-    wait_for("the Dock", STARTUP, || {
-        running("unbound-shell")
-            && current_scanout().is_some_and(|scanout| pixel(&scanout, 32, 200) != BACKGROUND)
-    });
-    thread::sleep(Duration::from_secs(1));
-    let desktop = scanout();
+    let desktop = wait_for_shell();
     desktop.save("m14-desktop-panel");
     let (center_x, card_y) = (desktop.width / 2, desktop.height * 24 / 100 + 20);
     let before = pixel(&desktop, center_x, card_y);
@@ -267,7 +294,7 @@ fn page_pixels(scanout: &Scanout) -> usize {
 fn firefox_runs_on_wayland_and_opens_a_context_menu() {
     let mut keyboard = VirtualDevice::keyboard_and_mouse();
     let desktop = start_desktop();
-    wait_for("the Dock", STARTUP, || running("unbound-shell"));
+    wait_for_shell();
     fs::create_dir_all(PROFILE).expect("profile directory");
     fs::write(format!("{PROFILE}/user.js"), FIRST_RUN_OFF).expect("profile preferences");
     fs::write(PAGE, "<body style='margin:0;background:#ff00ff'></body>").expect("test page");
@@ -388,12 +415,7 @@ fn ctrl_super_q_locks_and_the_password_unlocks() {
     let (_logind, locked_hint) = fake_logind(&bus);
     let mut keyboard = VirtualDevice::keyboard_and_mouse();
     let _desktop = start_desktop_with(&[("DBUS_SYSTEM_BUS_ADDRESS", bus.address())]);
-    let icon = (32, 33);
-    wait_for("the Dock", STARTUP, || {
-        running("unbound-shell")
-            && current_scanout().is_some_and(|scanout| pixel(&scanout, icon.0, 200) != BACKGROUND)
-    });
-    thread::sleep(Duration::from_secs(1));
+    wait_for_shell();
 
     keyboard.chord(&[KEY_LEFTCTRL, KEY_LEFTMETA], KEY_Q);
     wait_for("the session to lock", STARTUP, || {
@@ -462,14 +484,10 @@ fn super_shift_3_saves_the_screen_to_the_desktop() {
     let _ = fs::remove_dir_all(desktop_folder);
     let mut keyboard = VirtualDevice::keyboard_and_mouse();
     let _desktop = start_desktop();
-    let icon = (32, 33);
-    wait_for("the panel and the screenshot tool", STARTUP, || {
-        running("unbound-shell")
-            && running("unbound-screenshot")
-            && current_scanout().is_some_and(|scanout| pixel(&scanout, icon.0, 200) != BACKGROUND)
+    wait_for("the screenshot tool", STARTUP, || {
+        running("unbound-screenshot")
     });
-    thread::sleep(Duration::from_secs(1));
-    let screen = scanout();
+    let screen = wait_for_shell();
 
     keyboard.chord(&[KEY_LEFTMETA, KEY_LEFTSHIFT], KEY_3);
     wait_for("a saved screenshot", STARTUP, || {
@@ -537,12 +555,10 @@ fn super_shift_4_saves_a_dragged_out_area_to_the_desktop() {
     let _ = fs::remove_dir_all(desktop_folder);
     let mut mouse = VirtualDevice::keyboard_and_mouse();
     let _desktop = start_desktop();
-    let icon = (32, 33);
-    wait_for("the panel and the screenshot tool", STARTUP, || {
-        running("unbound-shell")
-            && running("unbound-screenshot")
-            && current_scanout().is_some_and(|scanout| pixel(&scanout, icon.0, 200) != BACKGROUND)
+    wait_for("the screenshot tool", STARTUP, || {
+        running("unbound-screenshot")
     });
+    wait_for_shell();
     for _ in 0..20 {
         mouse.frame(&[(EV_REL, REL_X, -200), (EV_REL, REL_Y, -200)]);
     }
@@ -662,11 +678,7 @@ fn files_drills_into_a_folder_and_quick_looks_a_picture() {
         .expect("png");
     let mut keyboard = VirtualDevice::keyboard_and_mouse();
     let desktop = start_desktop();
-    wait_for("the Dock", STARTUP, || {
-        running("unbound-shell")
-            && current_scanout().is_some_and(|scanout| pixel(&scanout, 32, 200) != BACKGROUND)
-    });
-    let without_files = scanout();
+    let without_files = wait_for_shell();
     let mut files = Command::new(FILES)
         .arg(home)
         .env("WAYLAND_DISPLAY", &desktop.display)

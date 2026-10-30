@@ -22,6 +22,7 @@ zbus.workspace = true
 
 [dev-dependencies]
 image-compare.workspace = true
+rustix = { workspace = true, features = ["time"] }
 tempfile.workspace = true
 
 [lints]

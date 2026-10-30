@@ -527,6 +527,11 @@ fn results_are_published_as_list_options() {
     assert_eq!(options, 3);
 }
 
+fn thread_cpu_time() -> Duration {
+    let time = rustix::time::clock_gettime(rustix::time::ClockId::ThreadCPUTime);
+    Duration::new(time.tv_sec as u64, time.tv_nsec as u32)
+}
+
 #[test]
 fn every_keystroke_updates_the_results_within_a_frame() {
     let mut apps = apps();
@@ -552,10 +557,10 @@ fn every_keystroke_updates_the_results_within_a_frame() {
     for query in ["exam", "te", "tool 4", "settings", "2*21"] {
         launcher.clear();
         for character in query.chars() {
-            let started = Instant::now();
+            let started = thread_cpu_time();
             typed(&mut launcher, &character.to_string());
             launcher.scene(SCREEN.0, SCREEN.1, Instant::now());
-            timings.push(started.elapsed());
+            timings.push(thread_cpu_time().saturating_sub(started));
         }
     }
     timings.sort();

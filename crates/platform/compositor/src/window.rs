@@ -250,6 +250,11 @@ impl State {
         let Some(index) = self.window_index(surface) else {
             return;
         };
+        let siblings = if self.windows[index].size.is_none() {
+            self.sibling_locations(index)
+        } else {
+            Vec::new()
+        };
         let window = &mut self.windows[index];
         if !window.toplevel.is_initial_configure_sent() {
             window.toplevel.with_pending_state(|state| {
@@ -270,7 +275,7 @@ impl State {
                 } else if window.has_state(xdg_toplevel::State::Maximized) {
                     area.location
                 } else {
-                    crate::state::centered(area, geometry.size)
+                    crate::cascade::cascaded(area, geometry.size, &siblings)
                 };
                 window.pending_location = None;
             } else if let Some((serial, at)) = window.pending_location

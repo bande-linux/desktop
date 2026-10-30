@@ -226,6 +226,14 @@ impl State {
             return;
         }
         let Some(focused) = self.focused() else {
+            if shortcut == Shortcut::QuitApp
+                && let Some((app, app_id)) = self.windowless_app.clone()
+            {
+                self.quit_app(Some(app));
+                if !app_id.is_empty() {
+                    self.quit_app_named(&app_id);
+                }
+            }
             return;
         };
         let owner = focused.client();
@@ -239,7 +247,14 @@ impl State {
                     window.toplevel.send_close();
                 }
             }
-            Shortcut::QuitApp => self.quit_app(owner),
+            Shortcut::QuitApp => {
+                let app_id = toplevel_names(&focused).1;
+                if app_id.is_empty() {
+                    self.quit_app(owner);
+                } else {
+                    self.quit_app_named(&app_id);
+                }
+            }
             Shortcut::HideApp => self.hide_app(&toplevel_names(&focused).1),
             Shortcut::HideOthers => {
                 let keep = toplevel_names(&focused).1;
@@ -574,7 +589,12 @@ impl Headless {
                         state.held_shortcut_keys.push(evdev_code);
                         FilterResult::Intercept(Some(shortcut))
                     }
-                    None => FilterResult::Forward,
+                    None => {
+                        if !keysym.modified_sym().is_modifier_key() {
+                            state.note_typing();
+                        }
+                        FilterResult::Forward
+                    }
                 }
             },
         );

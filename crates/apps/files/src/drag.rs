@@ -228,7 +228,7 @@ impl FilesView {
     }
 
     fn column_target(&self, column: usize) -> Option<(Target, Rect, Option<Spring>)> {
-        let frame = self.hits.iter().find_map(|(rect, hit)| match hit {
+        let frame = self.hits.iter().rev().find_map(|(rect, hit)| match hit {
             Hit::Column(index) if *index == column => Some(*rect),
             _ => None,
         })?;

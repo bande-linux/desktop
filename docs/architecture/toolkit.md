@@ -80,16 +80,43 @@ and live on `SettingChanged`, and delivers `WindowEvent::AppearanceChanged`. App
   to measure.
 - **Widgets.** `ui` holds the widget tree: `Stack` (rows and columns with spacing and padding; a
   column stretches its children across, a row centres them), `Label`, `Button`, `Toggle`,
-  `Slider`, `TextField` and `SecureField`, laid out, painted into a `Scene` and driven by `Ui`.
+  `Checkbox` (on, off, mixed), `RadioGroup`, `SegmentedControl` (its selection slides on a
+  spring), `PopUpButton` (a menu with the current choice over the button), `ComboBox`,
+  `Stepper` (repeats while held), `Slider`, `ProgressBar` (determinate or indeterminate),
+  `Spinner`, `TextField`, `SearchField` (magnifier, clear button, Escape clears, reports every
+  change), `TextView` and `SecureField`, laid out, painted into a `Scene` and driven by `Ui`.
   Sizes follow macOS's regular controls: push buttons and text fields 22 px high, switches
   38×22 px (`NSSwitch`), a 3 px focus ring in the accent colour. Buttons and switches act on
   release inside, as in AppKit. Tab moves focus between text fields only unless
-  `keyboard_navigation` is set, as macOS's Keyboard navigation setting (off by default) does.
-  Text fields edit with Parley's `PlainEditor` and the bindings of the
-  [keyboard model](overview.md#keyboard-model) with Super as Command: Super+Left/Right to the
-  line ends, Alt+Left/Right by word, Shift extending, Up/Down to the ends of a single-line field
-  (as `NSTextField`), Alt+Backspace and Super+Backspace deleting a word and to the line start,
-  Super+A selecting all.
+  `keyboard_navigation` is set, as macOS's Keyboard navigation setting (off by default) does;
+  tabbing into a field selects its text. A widget opens a menu of its own (a pop-up button's
+  choices) with `Context::show_menu`; the choice comes back to it through `menu_action`.
+- **Tooltips.** A widget that returns `Widget::tooltip` (buttons and pop-up buttons through
+  `.tooltip(...)`) shows it after the pointer rests on it for `TOOLTIP_DELAY`, or after Tab
+  moves focus to it. It fades in under the pointer inside the window, a click or key hides it
+  until the pointer leaves, and moving to a neighbour while one is shown shows the next at
+  once. `Ui::deadline` tells the window when to draw it; `Window::drive` wakes for it. The text
+  is also the node's accessible description.
+- **Text.** `TextField`, `SearchField`, `ComboBox` and `TextView` share one editor
+  (`editor.rs`). The document is a list of paragraphs, each laid out by Parley on its own and
+  only when visible or under the caret, with estimated heights for the rest, so a 100,000-line
+  `TextView` types without delay. Movement uses Parley's cursors, so arrows move visually
+  through mixed left-to-right and right-to-left text and each paragraph takes its own
+  direction. Bindings follow the [keyboard model](overview.md#keyboard-model) with Super as
+  Command: Super+Left/Right and Home/End to the line ends, Super+Up/Down to the document ends,
+  Alt+Left/Right by word, Alt+Up/Down by paragraph, Up/Down by line keeping the column (to the
+  ends of a single-line field, as `NSTextField`), Page Up/Down by a page, Shift extending,
+  Alt+Backspace/Delete and Super+Backspace deleting a word and to the line start, Super+A,
+  Super+X/C/V. Super+Z and Shift+Super+Z undo and redo; typing undoes a word at a time, and
+  deleting, pasting, cutting and composing each undo as one step. Double click selects a word,
+  triple click a paragraph, and dragging after either extends by that unit; dragging past the
+  edge scrolls. The context menu offers Undo, Redo, Cut, Copy, Paste and Select All. Input
+  method text being composed is shown underlined in place (the clause being converted thicker)
+  without entering the value, the candidate window is placed through `set_cursor_rectangle`
+  under it, and a click while composing keeps the text and resets the input method. Text is
+  published to screen readers as text runs with the caret and selection, which they can also
+  set. `TextView` wraps, scrolls with a `ScrollState`, keeps the caret in view and can be
+  read-only.
 - **Animation.** `ui::Animated` holds a value that springs to its target with a preset from
   `unbound-spring` (`Spring::QUICK`, `STANDARD`, `GENTLE`, `FADE`, ...). A new target retargets
   from the current position and velocity, so a reversed action never jumps or queues. Values
@@ -101,8 +128,8 @@ and live on `SettingChanged`, and delivers `WindowEvent::AppearanceChanged`. App
   track; the window controls' symbols fade in.
 - **Accessibility.** Every widget produces an AccessKit node: role, label or value, bounds,
   toggled state or numeric range, and its actions. `Ui::accessibility` returns the `TreeUpdate`
-  with the focus, and `Ui::perform` carries out Focus, Click, SetValue, Increment, Decrement and
-  ReplaceSelectedText requests. The tree is published on AT-SPI through `accesskit_unix`.
+  with the focus, and `Ui::perform` carries out Focus, Click, SetValue, Increment, Decrement,
+  ReplaceSelectedText and SetTextSelection requests. The tree is published on AT-SPI through `accesskit_unix`.
 - **Input.** `wl_seat` up to version 9. Pointer events carry the button (primary, secondary,
   middle, back, forward), the click count (a press within 500 ms and 4 pt of the previous press
   of the same button counts up) and the modifiers; Ctrl+primary is a secondary click. Scrolling
@@ -113,7 +140,6 @@ and live on `SettingChanged`, and delivers `WindowEvent::AppearanceChanged`. App
   outwards, and reports the hovered widget's cursor, which `Window::set_cursor` shows through
   `wp_cursor_shape_v1`. A close request (close button, Super+W) asks `App::should_close`, so an
   app can keep its window open, ask first or close a tab instead; `Window::close` closes it.
-  Text fields select a word on double click and everything on triple click.
 
 Since `wayland-backend` is built with `client_system`, every Wayland client in a workspace
 build, `unbound-test-wayland` included, goes through libwayland.

@@ -6,7 +6,8 @@ use std::time::{Duration, Instant};
 
 use tempfile::TempDir;
 use unbound_xdg::{
-    DesktopEntry, ExecError, Locale, TERMINAL, UserDir, applications, find_icon, launch, user_dir,
+    DesktopEntry, ExecError, ICON_THEMES, Locale, TERMINAL, UserDir, applications, find_icon,
+    launch, user_dir,
 };
 
 fn desktops() -> Vec<String> {
@@ -249,6 +250,40 @@ fn icons_are_found_by_size_through_inherited_themes() {
         Some(data.path().join("pixmaps/legacy.svg"))
     );
     assert_eq!(find_icon("missing", 48, &["Fancy"], &dirs), None);
+}
+
+#[test]
+fn the_unbound_theme_draws_documents_and_the_trash_and_adwaita_the_rest() {
+    let system = TempDir::new().expect("data dir");
+    let adwaita = system.path().join("icons/Adwaita");
+    write(
+        &adwaita.join("index.theme"),
+        &HICOLOR
+            .replace("48x48/apps,scalable/apps", "scalable/apps")
+            .replace("Name=Hicolor", "Name=Adwaita"),
+    );
+    for name in ["folder", "user-trash", "text-x-generic"] {
+        write(&adwaita.join(format!("scalable/apps/{name}.svg")), SQUARE);
+    }
+    let shipped = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../data");
+    let dirs = vec![system.path().to_path_buf(), shipped.clone()];
+    let ours = shipped.join("icons/Unbound/scalable");
+
+    for (name, kind) in [
+        ("user-trash", "places"),
+        ("user-trash-full", "places"),
+        ("text-x-generic", "mimetypes"),
+        ("application-x-generic", "mimetypes"),
+    ] {
+        assert_eq!(
+            find_icon(name, 32, &ICON_THEMES, &dirs),
+            Some(ours.join(format!("{kind}/{name}.svg")))
+        );
+    }
+    assert_eq!(
+        find_icon("folder", 32, &ICON_THEMES, &dirs),
+        Some(adwaita.join("scalable/apps/folder.svg"))
+    );
 }
 
 #[test]

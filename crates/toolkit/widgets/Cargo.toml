@@ -9,7 +9,12 @@ repository.workspace = true
 accesskit.workspace = true
 parley.workspace = true
 unbound-graphics.workspace = true
+unbound-l10n.workspace = true
 unbound-spring.workspace = true
+
+[dev-dependencies]
+image.workspace = true
+image-compare.workspace = true
 
 [lints]
 workspace = true

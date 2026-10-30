@@ -2,9 +2,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use unbound_toolkit::Image;
-use unbound_xdg::find_icon;
-
-const THEMES: [&str; 1] = ["Adwaita"];
+use unbound_xdg::{ICON_THEMES, find_icon};
 
 pub struct Icons {
     data_dirs: Vec<PathBuf>,
@@ -24,7 +22,7 @@ impl Icons {
         self.loaded
             .entry((name.to_owned(), pixels))
             .or_insert_with(|| {
-                find_icon(name, pixels, &THEMES, data_dirs)
+                find_icon(name, pixels, &ICON_THEMES, data_dirs)
                     .and_then(|path| Image::load(&path, pixels))
             })
             .clone()

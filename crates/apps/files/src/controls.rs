@@ -8,8 +8,8 @@ use accesskit::{Action, ActionRequest, TreeId};
 use unbound_fs::{Sort, SortBy, format_date, format_size};
 use unbound_toolkit::ui::{
     Alert, Cell, ClipboardRequest, Column, Event, FreeLayout, HEADER_HEIGHT, Key, Modifiers,
-    Pointer, PointerButton, Row, Size, Sort as TableSort, Table, TextField, Toggle, Widget,
-    WidgetId,
+    Pointer, PointerButton, Row, SearchField, Size, Sort as TableSort, Table, TextField, Toggle,
+    Widget, WidgetId,
 };
 use unbound_toolkit::{Image, Point, Rect};
 
@@ -620,7 +620,7 @@ impl FilesView {
             return;
         }
         let send = sender(&self.signals);
-        let field = TextField::new(&L10N.tr("search-placeholder"), "", move |text| {
+        let field = SearchField::new(&L10N.tr("search-placeholder"), "", move |text| {
             send(Signal::Search(text.to_owned()));
         });
         let column = self.browser.active();

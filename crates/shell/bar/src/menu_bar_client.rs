@@ -340,6 +340,10 @@ impl<V: StatusView> MenuBarClient<V> {
     }
 
     fn open(&mut self, window: &mut Window, slot: Slot) {
+        if slot == Slot::Launcher {
+            report("open the launcher", window.show_launcher());
+            return;
+        }
         let Some(anchor) = self.bar.slot_rect(slot) else {
             return;
         };
@@ -416,7 +420,6 @@ impl<V: StatusView> MenuBarClient<V> {
                 }
             }
             Slot::Tray(index) => self.open_tray(window, index, anchor, false),
-            Slot::Launcher => report("open the launcher", window.show_launcher()),
             Slot::Workspace(index) if index == self.workspaces.1 => {
                 report("show the windows", window.show_windows(""));
             }
@@ -575,8 +578,10 @@ impl<V: StatusView> App for MenuBarClient<V> {
                 }
             }
             WindowEvent::Accessibility(request) => {
-                if request.action == accesskit::Action::Click
-                    && let Some(slot) = self.bar.slot_of_node(request.target_node)
+                if matches!(
+                    request.action,
+                    accesskit::Action::Click | accesskit::Action::ShowContextMenu
+                ) && let Some(slot) = self.bar.slot_of_node(request.target_node, request.action)
                 {
                     self.open(window, slot);
                 }

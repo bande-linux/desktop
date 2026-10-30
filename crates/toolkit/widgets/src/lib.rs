@@ -71,7 +71,7 @@ const ENGLISH: &str = include_str!("../locales/en-US/unbound-widgets.ftl");
 
 static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
-use control::focus_ring;
+pub use control::focus_ring;
 use unbound_graphics::{Appearance, Item, Palette, Point, Rect, Scene, TextSystem};
 pub use unbound_graphics::{
     Cursor, Event, Key, Modifiers, Pointer, PointerButton, Scroll, ScrollPhase, ScrollSource,

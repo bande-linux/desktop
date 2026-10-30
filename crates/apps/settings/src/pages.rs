@@ -3,11 +3,11 @@ use std::rc::Rc;
 use unbound_audio::Direction;
 use unbound_config::MAX_INPUT_SOURCES;
 use unbound_keyboard::shortcuts_in;
-use unbound_toolkit::Spacing;
 use unbound_toolkit::ui::{
-    Axis, Button, Label, LevelIndicator, PopUpButton, SearchField, SecureField, SegmentedControl,
+    Axis, Button, LevelIndicator, PopUpButton, SearchField, SecureField, SegmentedControl,
     Shortcut, Slider, Stack, TextField, Toggle, Widget, WidgetId,
 };
+use unbound_toolkit::{Spacing, TextRole};
 
 use crate::L10N;
 use crate::arrangement::{Area, Arrangement, Screen};
@@ -105,15 +105,10 @@ impl SettingsView {
             .filter_map(|id| {
                 let pane = self.panes.iter().find(|pane| pane.id == id)?;
                 let selected = id == self.pane || self.pane.parent() == Some(id);
-                let tone = if selected {
-                    Tone::OnAccent
-                } else {
-                    Tone::Primary
-                };
                 let highlights = self.hit(id).map(|hit| hit.name.clone()).unwrap_or_default();
                 let mut select = intent(&self.intents, Intent::SelectPane);
                 let row = SidebarRow::new(
-                    Text::new(&pane.name, tone).highlighted(highlights),
+                    Text::new(&pane.name, Tone::Primary).highlighted(highlights),
                     selected,
                     move || select(id),
                     intent(&self.intents, Intent::StepPane),
@@ -749,9 +744,7 @@ impl SettingsView {
     fn shortcut_cards(&mut self) -> Widgets {
         let mut page = Vec::new();
         for area in unbound_keyboard::Area::ALL {
-            page.push(boxed(Caption::new(
-                Text::new(&area.title(), Tone::Muted).caption(),
-            )));
+            page.push(boxed(Caption::new(Text::label(&area.title()))));
             let rows = shortcuts_in(area)
                 .map(|shortcut| {
                     boxed(Row::new(
@@ -1032,9 +1025,7 @@ impl SettingsView {
         page.extend(self.arrangement_card().into_iter().flatten());
         for display in self.displays.clone() {
             let title = display.name();
-            page.push(boxed(Caption::new(
-                Text::new(&title, Tone::Muted).caption().semibold(),
-            )));
+            page.push(boxed(Caption::new(Text::label(&title))));
             let rows: Widgets = section
                 .settings
                 .iter()
@@ -1059,7 +1050,9 @@ impl SettingsView {
             .and_then(|parent| self.back_button(parent))
             .into_iter()
             .collect();
-        page.push(boxed(Label::heading(&pane.name)));
+        page.push(boxed(Caption::new(
+            Text::new(&pane.name, Tone::Primary).role(TextRole::Title),
+        )));
         if pane.id == PaneId::General {
             page.push(boxed(Card::new(self.general_rows())));
         }
@@ -1082,9 +1075,7 @@ impl SettingsView {
                 .any(|setting| setting.kind == Kind::List(List::Shortcuts))
             {
                 if let Some(title) = &section.title {
-                    page.push(boxed(Caption::new(
-                        Text::new(title, Tone::Muted).caption().semibold(),
-                    )));
+                    page.push(boxed(Caption::new(Text::label(title))));
                 }
                 page.extend(self.shortcut_cards());
                 continue;
@@ -1120,10 +1111,7 @@ impl SettingsView {
                     .map(|hit| hit.label)
                     .unwrap_or_default();
                 page.push(boxed(Caption::new(
-                    Text::new(title, Tone::Muted)
-                        .caption()
-                        .semibold()
-                        .highlighted(highlights),
+                    Text::label(title).highlighted(highlights),
                 )));
             }
             page.push(boxed(Card::new(rows)));

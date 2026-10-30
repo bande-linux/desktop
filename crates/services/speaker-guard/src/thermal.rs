@@ -84,8 +84,9 @@ impl Protection {
         }
         let unattenuated = applied_power / db_to_power(self.gain_db);
         let target = self.target_db(unattenuated);
-        let at_current = unattenuated * db_to_power(self.gain_db);
-        let predicted = self.thermal.advance(self.temperatures, at_current, seconds);
+        let predicted = self
+            .thermal
+            .advance(self.temperatures, applied_power, seconds);
         let time_constant = if target >= self.gain_db {
             self.limiter.release
         } else if predicted.coil > self.thermal.limit {

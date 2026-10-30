@@ -101,6 +101,10 @@ graph LR
 - PipeWire and WirePlumber, with per-device volume memory (headphone volume is restored when
   they are plugged in) and media keys with an on-screen level. `crates/libs/audio` is the
   client library; the compositor forwards volume keys to the shell over `unbound_shell_v1`.
+- The display and keyboard brightness keys go the same way (`brightness_key`, also while
+  locked): Control Center moves the display backlight or the `kbd_backlight` LED one of 16
+  steps (a quarter step with Option and Shift) through logind's `Session.SetBrightness` and
+  shows the level in the same HUD as the volume, a quarter step filling a quarter segment.
 
 ### Accessibility
 

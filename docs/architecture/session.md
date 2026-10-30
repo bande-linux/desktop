@@ -247,8 +247,29 @@ Unbound uses `greetd` for the privileged part of login and keeps its own UI unpr
 
 Implemented in `crates/shell/greeter`: greetd's IPC (create a session, answer the secret
 prompt, acknowledge information, start, cancel after a refusal) inside
-`unbound-compositor --greeter`, which runs only the greeter and exits with it; the package
-ships a greetd configuration. The login window shows the wallpaper of the person it offers,
+`unbound-compositor --greeter`, which runs only the greeter and exits with it.
+
+**Installation.** `/etc/greetd/config.toml` is greetd's conffile and stays untouched. The
+`unbound-greeter` package ships its configuration as
+`/usr/share/unbound-greeter/greetd-config.toml` and a drop-in,
+`/usr/lib/systemd/system/greetd.service.d/unbound.conf`, that starts greetd with
+`--config` pointing at it. greetd's own package makes `greetd.service` the
+`display-manager.service` when no other display manager holds that link; `unbound-greeter`
+does the same on its first installation (never on upgrades, never over an existing link) and
+then records `/usr/sbin/greetd` in `/etc/X11/default-display-manager` if that file is absent,
+which it removes again on purge. An existing GDM, SDDM or LightDM therefore stays in charge.
+To override:
+
+- another greetd configuration: copy the drop-in to
+  `/etc/systemd/system/greetd.service.d/unbound.conf` and change its `--config`, or mask it with
+  `ln -s /dev/null /etc/systemd/system/greetd.service.d/unbound.conf` to go back to
+  `/etc/greetd/config.toml`;
+- another display manager: `systemctl enable --force gdm3` (or `dpkg-reconfigure gdm3`).
+
+Either takes effect after `systemctl daemon-reload` and a restart of the display manager,
+which ends the sessions it started.
+
+The login window shows the wallpaper of the person it offers,
 starting with whoever signed in last (remembered in the greeter user's
 `$XDG_STATE_HOME/unbound-greeter/last-user`, on Debian under `/var/lib/greetd`, the home that
 greetd's package creates owned by `_greetd`, so no state directory of our own is
@@ -258,8 +279,8 @@ password) whenever the wallpaper changes, and the greeter reads `BackgroundFile`
 macOS login window shows the user's desktop picture. Pictures inside a home folder that the
 greeter user cannot read (Debian creates homes as 0700) fall back to the default; showing them
 needs a privileged copy, which is not done. Also not done: a user picker (Up/Down switches users
-for now), a second secret prompt, power and accessibility menus, an `unbound-session` wrapper
-(greetd starts `unbound-compositor` directly), and installing the greetd configuration.
+for now), a second secret prompt, power and accessibility menus, and an `unbound-session`
+wrapper (greetd starts `unbound-compositor` directly).
 
 
 ## Crash reporting and supervision

@@ -29,10 +29,13 @@ extended-description = """\
 The login window of the Unbound desktop: greetd runs it as its greeter \
 inside unbound-compositor --greeter, and it lists the people who can \
 sign in, asks for the chosen person's password and has greetd start \
-their Unbound session."""
+their Unbound session. It becomes greetd's greeter through a drop-in for \
+greetd.service, and the display manager on systems that have none."""
+maintainer-scripts = "debian/"
 assets = [
     ["target/release/unbound-greeter", "usr/bin/", "755"],
     ["data/config.toml", "usr/share/unbound-greeter/greetd-config.toml", "644"],
+    ["data/greetd.service.conf", "usr/lib/systemd/system/greetd.service.d/unbound.conf", "644"],
 ]
 
 [lints]

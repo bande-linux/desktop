@@ -291,6 +291,7 @@ pub struct Ui {
     menu_request: Option<(Menu, Point)>,
     awaiting_paste: bool,
     sheet: Option<Sheet>,
+    sheet_top: f32,
     tooltips: Tooltips,
 }
 
@@ -441,6 +442,7 @@ impl Ui {
             menu_request: None,
             awaiting_paste: false,
             sheet: None,
+            sheet_top: 0.0,
             tooltips: Tooltips::default(),
         }
     }
@@ -521,6 +523,10 @@ impl Ui {
             .or(primary.filter(|id| self.accepts_focus(*id)));
     }
 
+    pub fn set_sheet_top(&mut self, top: f32) {
+        self.sheet_top = top;
+    }
+
     pub fn has_sheet(&self) -> bool {
         self.sheet.as_ref().is_some_and(|sheet| !sheet.closing)
     }
@@ -550,7 +556,7 @@ impl Ui {
                 true => {
                     ((size.height - measured.height) / 3.0).round() - DIALOG_RISE * (1.0 - shown)
                 }
-                false => -measured.height * (1.0 - shown),
+                false => self.sheet_top - measured.height * (1.0 - shown),
             };
             sheet.widget.place(
                 &mut self.cx,
@@ -605,6 +611,7 @@ impl Ui {
                     &self.cx,
                     shown,
                     Size::new(width as f32, height as f32),
+                    self.sheet_top,
                     &mut above,
                 );
             }

@@ -1,8 +1,9 @@
 use accesskit::{Action, ActionRequest, Node, Role, Toggled};
 use unbound_graphics::{
-    Color, ControlSize, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextStyle,
+    Color, ControlSize, Image, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextStyle,
 };
 
+use super::control::Symbol;
 use super::{Animated, Context, Event, Key, Parts, Size, Spring, Widget, WidgetId, contains};
 
 pub const SEGMENTED_HEIGHT: f32 = ControlSize::Regular.height();
@@ -10,11 +11,14 @@ const PADDING: f32 = 14.0;
 const INSET: f32 = 2.0;
 const FONT_SIZE: f32 = 13.0;
 const CHIP_SHADOW: f32 = 0.14;
+const SYMBOL_SEGMENT: f32 = 32.0;
+const SYMBOL_SIZE: f32 = 16.0;
 
 struct Segment {
     title: String,
     plain: Option<Paragraph>,
     selected: Option<Paragraph>,
+    symbol: Option<(Symbol, Symbol)>,
     width: f32,
 }
 
@@ -44,6 +48,7 @@ impl SegmentedControl {
                     title: title.as_ref().to_owned(),
                     plain: None,
                     selected: None,
+                    symbol: None,
                     width: 0.0,
                 })
                 .collect(),
@@ -52,6 +57,20 @@ impl SegmentedControl {
             pill: None,
             frame: Rect::default(),
         }
+    }
+
+    pub fn symbols(
+        label: &str,
+        choices: Vec<(Image, String)>,
+        selected: Option<usize>,
+        on_select: impl FnMut(usize) + 'static,
+    ) -> Self {
+        let titles: Vec<&str> = choices.iter().map(|(_, title)| title.as_str()).collect();
+        let mut control = Self::new(label, &titles, selected, on_select);
+        for (segment, (image, _)) in control.segments.iter_mut().zip(choices) {
+            segment.symbol = Some((Symbol::new(image.clone()), Symbol::new(image)));
+        }
+        control
     }
 
     pub fn selected(&self) -> Option<usize> {
@@ -116,6 +135,12 @@ impl Widget for SegmentedControl {
 
     fn measure(&mut self, cx: &mut Context, _available: Size) -> Size {
         for segment in &mut self.segments {
+            if let Some((plain, selected)) = &mut segment.symbol {
+                plain.tint(cx.palette.ink2);
+                selected.tint(cx.palette.ink);
+                segment.width = SYMBOL_SEGMENT;
+                continue;
+            }
             let style = TextStyle::new(FONT_SIZE, cx.palette.ink2);
             let plain = cx
                 .text
@@ -168,7 +193,18 @@ impl Widget for SegmentedControl {
                 segment.y + ((segment.height - paragraph.height()) / 2.0).round(),
             )
         };
+        let symbol_rect = |segment: Rect| {
+            Rect::new(
+                (segment.x + (segment.width - SYMBOL_SIZE) / 2.0).round(),
+                (segment.y + (segment.height - SYMBOL_SIZE) / 2.0).round(),
+                SYMBOL_SIZE,
+                SYMBOL_SIZE,
+            )
+        };
         for (index, segment) in self.segments.iter().enumerate() {
+            if let Some((plain, _)) = &segment.symbol {
+                plain.paint(symbol_rect(self.segment(index)), items);
+            }
             if let Some(paragraph) = &segment.plain {
                 items.push(Item::Text {
                     origin: centred(paragraph, self.segment(index)),
@@ -191,6 +227,9 @@ impl Widget for SegmentedControl {
             paint: cx.palette.raised.into(),
         }];
         for (index, segment) in self.segments.iter().enumerate() {
+            if let Some((_, symbol)) = &segment.symbol {
+                symbol.paint(symbol_rect(self.segment(index)), &mut selected);
+            }
             if let Some(paragraph) = &segment.selected {
                 selected.push(Item::Text {
                     origin: centred(paragraph, self.segment(index)),

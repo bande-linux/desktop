@@ -7,12 +7,15 @@ use smithay::backend::renderer::element::memory::MemoryRenderBufferRenderElement
 use smithay::utils::{Logical, Point};
 use unbound_render::VulkanRenderer;
 
-use crate::label::{Label, LabelStyle, Labels};
+use unbound_graphics::TextRole;
+
+use crate::label::{Label, LabelStyle, Labels, Look};
 use crate::state::{Headless, OutputElement, State};
 
 const ALERT_STYLE: LabelStyle = LabelStyle {
-    text_size: 15.0,
+    role: TextRole::BodyStrong,
     padding: (18.0, 8.0),
+    look: Look::Card,
 };
 const ALERT_MARGIN: f64 = 24.0;
 const ALERT_GAP: f64 = 8.0;
@@ -52,15 +55,18 @@ impl State {
         let messages = &self.alerts.messages;
         let mut rendered = self.alerts.rendered.borrow_mut();
         let current = rendered.len() == messages.len()
-            && rendered
-                .iter()
-                .zip(messages)
-                .all(|(label, message)| label.text == *message && label.scale == scale);
+            && rendered.iter().zip(messages).all(|(label, message)| {
+                label.text == *message
+                    && label.scale == scale
+                    && label.scheme == self.decorations.scheme
+            });
         if !current {
             let mut labels = self.alerts.labels.borrow_mut();
             *rendered = messages
                 .iter()
-                .filter_map(|message| labels.render(message, ALERT_STYLE, width, scale))
+                .filter_map(|message| {
+                    labels.render(message, ALERT_STYLE, width, self.decorations.scheme, scale)
+                })
                 .collect();
         }
         let mut top = f64::from(output.location.y) + ALERT_MARGIN;

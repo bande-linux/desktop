@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <protocol name="unbound_shell_v1">
-  <interface name="unbound_shell_v1" version="9">
+  <interface name="unbound_shell_v1" version="10">
     <description summary="requests and events between the compositor and the shell">
       Offered only on the connections of the shell clients the compositor starts
       itself (the Dock and the launcher), never on the listening socket.
@@ -237,6 +237,27 @@
         for what is already shown closes it.
       </description>
       <arg name="app_id" type="string"/>
+    </request>
+
+    <event name="input_sources" since="10">
+      <description summary="the keyboard input sources or the active one changed">
+        Sent on binding and whenever the list of input sources or the active
+        one changes. Sources is a comma-separated list of xkb layouts, each
+        optionally followed by its variant in parentheses, such as
+        "se,de(nodeadkeys)", in the order the user arranged them; active
+        counts from 0.
+      </description>
+      <arg name="sources" type="string"/>
+      <arg name="active" type="uint"/>
+    </event>
+
+    <request name="select_input_source" since="10">
+      <description summary="make an input source active">
+        Makes the input source at this position of the list sent with
+        input_sources active for the whole session. An index past the end is
+        ignored.
+      </description>
+      <arg name="index" type="uint"/>
     </request>
   </interface>
 

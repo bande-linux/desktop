@@ -48,6 +48,7 @@ enum Shortcut {
     Overview,
     AppWindows,
     OverviewKey(u32, Option<char>),
+    InputSource { backwards: bool },
 }
 
 fn volume_key(keysym: u32) -> Option<VolumeKey> {
@@ -109,6 +110,7 @@ fn shortcut(
         keysyms::KEY_w | keysyms::KEY_W => Some(Shortcut::CloseWindow),
         keysyms::KEY_q | keysyms::KEY_Q => Some(Shortcut::QuitApp),
         keysyms::KEY_Tab | keysyms::KEY_ISO_Left_Tab => Some(Shortcut::NextApp),
+        keysyms::KEY_space if alt && !ctrl => Some(Shortcut::InputSource { backwards: shift }),
         keysyms::KEY_space => Some(Shortcut::ShowLauncher),
         _ => None,
     }
@@ -176,6 +178,10 @@ impl State {
         }
         if shortcut == Shortcut::ShowLauncher {
             self.show_launcher();
+            return;
+        }
+        if let Shortcut::InputSource { backwards } = shortcut {
+            self.next_input_source(backwards);
             return;
         }
         if shortcut == Shortcut::CaptureScreen {
@@ -294,7 +300,8 @@ impl State {
             | Shortcut::WorkspaceAt(_)
             | Shortcut::Overview
             | Shortcut::AppWindows
-            | Shortcut::OverviewKey(..) => {}
+            | Shortcut::OverviewKey(..)
+            | Shortcut::InputSource { .. } => {}
         }
     }
 }
@@ -513,6 +520,9 @@ impl Headless {
             SERIAL_COUNTER.next_serial(),
             time,
             |state, modifiers, keysym| {
+                if !(modifiers.logo && modifiers.alt) {
+                    state.input_sources.end_cycle();
+                }
                 if !pressed {
                     return if state.held_shortcut_keys.contains(&evdev_code) {
                         state.held_shortcut_keys.retain(|held| *held != evdev_code);
@@ -553,8 +563,10 @@ impl Headless {
                     modifiers.alt,
                     modifiers.shift,
                 )
-                .filter(|_| modifiers.logo && !state.is_locked())
-                {
+                .filter(|shortcut| {
+                    modifiers.logo
+                        && (!state.is_locked() || matches!(shortcut, Shortcut::InputSource { .. }))
+                }) {
                     Some(shortcut) => {
                         state.held_shortcut_keys.push(evdev_code);
                         FilterResult::Intercept(Some(shortcut))

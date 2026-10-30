@@ -343,6 +343,7 @@ impl State {
         self.animate_slide_back(time);
         self.animate_workspaces(time);
         self.animate_overview(time);
+        self.animate_source_hud(time);
         self.closing.retain(|closing| !closing.motion.is_settled());
         if self.is_animating() {
             self.needs_redraw = true;
@@ -356,6 +357,7 @@ impl State {
             || self.slide_back.is_some()
             || self.workspaces.is_animating()
             || self.overview.is_animating()
+            || self.input_sources.is_animating()
             || self.windows.iter().any(|window| window.motion.is_some())
     }
 }

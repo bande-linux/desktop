@@ -228,6 +228,8 @@ pub struct State {
     named_cursors: HashMap<CursorIcon, Option<Cursor>>,
     pub(crate) held_shortcut_keys: Vec<u32>,
     pub(crate) input_devices: usize,
+    pub(crate) input_sources: crate::keymap::InputSources,
+    pub(crate) pointing: crate::pointing::Pointing,
     pub(crate) pending_captures: Vec<crate::capture::PendingCapture>,
 }
 
@@ -302,7 +304,7 @@ impl Headless {
         output.change_current_state(Some(mode), None, None, Some((0, 0).into()));
         output.set_preferred(mode);
         output.create_global::<State>(&handle);
-        handle.create_global::<State, UnboundShellV1, ()>(9, ());
+        handle.create_global::<State, UnboundShellV1, ()>(10, ());
         handle.create_global::<State, UnboundAppV1, ()>(3, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
         State::create_capture_globals(&handle);
@@ -400,6 +402,8 @@ impl Headless {
             named_cursors: HashMap::new(),
             held_shortcut_keys: Vec::new(),
             input_devices: 0,
+            input_sources: crate::keymap::InputSources::default(),
+            pointing: crate::pointing::Pointing::default(),
             pending_captures: Vec::new(),
         };
         Ok(Self {
@@ -555,6 +559,7 @@ impl Headless {
         } else {
             (Vec::new(), None)
         };
+        elements.extend(self.state.source_hud_element(renderer));
         let scale = self.state.output_scale;
         let key = self.state.key_window();
         for placed in self.state.scene(true) {

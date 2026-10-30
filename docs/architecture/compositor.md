@@ -165,7 +165,12 @@ when they reach the screen is Unbound's own.
   pointer, offset by the icon's attach offset, below the pointer. Holding Option (Alt) makes a
   drop a copy and Super a move, when source and destination offer it; otherwise the
   destination's preferred action wins. The choice is made when the destination sets its
-  actions, so toolkits should set them again on motion for modifier changes to apply mid-drag.
+  actions; pressing or releasing Option or Super mid-drag sends the destination a motion at the
+  same place, so a destination that sets its actions again on motion (ours and GTK do) gets the
+  new action without the pointer moving. The icon is drawn on every display it overlaps, and
+  the pointer shows what a drop would do: `copy` for a copy, `move` (the arrow in most themes)
+  for a move, `no-drop` where nothing accepts. A drag whose source dies ends at once; when the
+  surface under the drag dies the drag moves on to what is now under the pointer.
   A drop nobody accepts slides the icon back to where the drag began with `standard` (with
   Reduce Motion it fades where it was dropped), from the last drawn frame of the icon, so it
   survives the client destroying the icon.

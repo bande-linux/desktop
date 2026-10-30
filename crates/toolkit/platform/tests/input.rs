@@ -3,23 +3,27 @@
 use std::io::Read;
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::net::UnixStream;
-use std::sync::mpsc::{self, Receiver, Sender};
-use std::thread::{self, JoinHandle};
+use std::sync::mpsc::Sender;
+use std::thread;
 use std::time::{Duration, Instant};
 
 use smithay::backend::input::{Axis, AxisSource};
 use smithay::input::pointer::AxisFrame;
-use smithay::utils::{Point, Size};
-use unbound_compositor::{FrameClock, FrameScheduler, Headless, REFRESH, Renderer, SessionRole};
+use smithay::utils::Point;
 use unbound_graphics::{
     Color, Event, Key, Modifiers, Palette, Pointer, PointerButton, Rect, Scene, Scheme,
     ScrollPhase, ScrollSource, TextSystem,
 };
 use unbound_toolkit_platform::{
-    App, DragAction, DragEvent, Edges, FrameRegions, HEADER_HEIGHT, Header, KeyboardFocus,
-    LayerKind, LayerOptions, MenuPlacement, Role, SHEET_INSET, Transfer, Window, WindowEvent,
+    App, Edges, FrameRegions, HEADER_HEIGHT, Header, KeyboardFocus, LayerKind, LayerOptions,
+    MenuPlacement, Role, SHEET_INSET, Transfer, Window, WindowEvent,
 };
 use unbound_widgets::{Context, ContextMenu, Label, Menu, MenuItem, Ui};
+
+#[path = "support/desktop.rs"]
+mod desktop;
+
+use desktop::{Client, Desktop};
 
 const OUTPUT: (i32, i32) = (320, 240);
 const WINDOW: (u32, u32) = (120, 80);
@@ -65,7 +69,6 @@ struct Forwarder {
     finished: bool,
     refuse_close: bool,
     ui: Option<Ui>,
-    drags: bool,
 }
 
 fn menu_ui(events: Sender<WindowEvent>) -> Ui {
@@ -99,21 +102,6 @@ impl App for Forwarder {
             },
             None => event,
         };
-        if self.drags
-            && let WindowEvent::Input(Event::PointerDown(pointer)) = &event
-            && pointer.button == PointerButton::Primary
-        {
-            window
-                .start_drag(
-                    Transfer::uris(vec!["file:///home/user/Report%20one.pdf".to_owned()]),
-                    &[DragAction::Copy, DragAction::Move],
-                    None,
-                )
-                .expect("drag");
-        }
-        if let WindowEvent::Drag(DragEvent::Entered { .. } | DragEvent::Moved(_)) = &event {
-            window.accept_drag(Some(DragAction::Copy));
-        }
         if let WindowEvent::Input(Event::PointerDown(pointer)) = &event
             && pointer.button == PointerButton::Secondary
         {
@@ -149,7 +137,6 @@ impl App for Forwarder {
             b's' => window.show().expect("show"),
             b'b' => thread::sleep(BUSY),
             b'u' => self.ui = Some(menu_ui(self.events.clone())),
-            b'g' => self.drags = true,
             b'H' => {
                 window.set_frame_regions(FrameRegions::default());
                 window.set_header(Header {
@@ -181,30 +168,10 @@ impl App for Forwarder {
     }
 }
 
-struct Client {
-    events: Receiver<WindowEvent>,
-    commands: UnixStream,
-    thread: Option<JoinHandle<()>>,
-    seen: Vec<WindowEvent>,
-}
-
 impl Client {
     fn send(&mut self, command: u8) {
         std::io::Write::write_all(&mut self.commands, &[command]).expect("command");
     }
-}
-
-impl Drop for Client {
-    fn drop(&mut self) {
-        let _ = self.commands.shutdown(std::net::Shutdown::Both);
-    }
-}
-
-struct Desktop {
-    server: Headless,
-    renderer: Renderer,
-    scheduler: FrameScheduler,
-    start: Instant,
 }
 
 impl Desktop {
@@ -212,100 +179,14 @@ impl Desktop {
         Self::sized(OUTPUT)
     }
 
-    fn sized(output: (i32, i32)) -> Self {
-        Self {
-            server: Headless::new(Size::from(output)).expect("headless compositor"),
-            renderer: Renderer::new().expect("Vulkan renderer"),
-            scheduler: FrameScheduler::new(FrameClock::new(Duration::ZERO, REFRESH)),
-            start: Instant::now(),
-        }
-    }
-
     fn open(&mut self, role: Role, as_shell: bool) -> Client {
-        let (client_end, server_end) = UnixStream::pair().expect("socket pair");
-        if as_shell {
-            self.server
-                .insert_session_client(server_end, SessionRole::Shell)
-                .expect("insert shell client");
-        } else {
-            self.server
-                .insert_client(server_end)
-                .expect("insert client");
-        }
-        let (events, received) = mpsc::channel();
-        let (commands, app_commands) = UnixStream::pair().expect("command pipe");
-        let thread = thread::spawn(move || {
-            let mut window = Window::open_on(client_end, role, WINDOW).expect("window");
-            let mut app = Forwarder {
-                events,
-                commands: app_commands,
-                finished: false,
-                refuse_close: false,
-                ui: None,
-                drags: false,
-            };
-            unbound_toolkit_platform::run(&mut window, &mut app).expect("run loop");
-        });
-        Client {
-            events: received,
+        self.open_app(role, as_shell, WINDOW, |events, commands| Forwarder {
+            events,
             commands,
-            thread: Some(thread),
-            seen: Vec::new(),
-        }
-    }
-
-    fn pump(&mut self) {
-        self.server.dispatch().expect("server dispatch");
-        let start = self.start;
-        self.scheduler
-            .poll(|| start.elapsed(), &mut self.server, &mut self.renderer)
-            .expect("compositor frame");
-        thread::sleep(Duration::from_micros(200));
-    }
-
-    fn wait_for(
-        &mut self,
-        clients: &mut [&mut Client],
-        mut until_event: impl FnMut(&[WindowEvent]) -> bool,
-        mut until_desktop: impl FnMut(&Self) -> bool,
-    ) {
-        let deadline = Instant::now() + Duration::from_secs(20);
-        loop {
-            self.pump();
-            for client in clients.iter_mut() {
-                client.seen.extend(client.events.try_iter());
-                assert!(
-                    client
-                        .thread
-                        .as_ref()
-                        .is_some_and(|thread| !thread.is_finished()),
-                    "the client stopped"
-                );
-            }
-            let events_done = clients.iter().any(|client| until_event(&client.seen));
-            if events_done && until_desktop(self) {
-                return;
-            }
-            assert!(
-                Instant::now() < deadline,
-                "timed out with {} popups after {:?}",
-                self.server.popup_count(),
-                clients
-                    .iter()
-                    .map(|client| &client.seen)
-                    .collect::<Vec<_>>()
-            );
-        }
-    }
-
-    fn settle(&mut self, clients: &mut [&mut Client]) {
-        let until = Instant::now() + Duration::from_millis(100);
-        while Instant::now() < until {
-            self.pump();
-            for client in clients.iter_mut() {
-                client.seen.extend(client.events.try_iter());
-            }
-        }
+            finished: false,
+            refuse_close: false,
+            ui: None,
+        })
     }
 
     fn click(&mut self, button: u32) {
@@ -323,11 +204,6 @@ impl Desktop {
             Point::from((f64::from(origin.x + x), f64::from(origin.y + y))),
             0,
         );
-    }
-
-    fn mapped(&self) -> bool {
-        let windows = self.server.windows();
-        !windows.is_empty() && windows.iter().all(|window| window.size().is_some())
     }
 
     fn type_keys(&mut self, keys: &[u32]) {
@@ -1230,67 +1106,6 @@ fn clicking_an_on_demand_background_layer_gives_it_the_keyboard_until_a_window_i
         |_| true,
     );
     assert!(typed(&app.seen).is_empty());
-}
-
-fn drags(events: &[WindowEvent]) -> Vec<DragEvent> {
-    events
-        .iter()
-        .filter_map(|event| match event {
-            WindowEvent::Drag(drag) => Some(drag.clone()),
-            _ => None,
-        })
-        .collect()
-}
-
-#[test]
-fn a_dragged_file_list_arrives_as_uris_where_it_is_dropped() {
-    let mut desktop = Desktop::new();
-    let mut client = pointed_window(&mut desktop, "drag");
-    client.send(b'g');
-    desktop.settle(&mut [&mut client]);
-    desktop.server.press_button(BTN_LEFT, true, 0);
-    desktop.settle(&mut [&mut client]);
-    desktop.point_into_content(80, 60);
-    desktop.wait_for(
-        &mut [&mut client],
-        |events| {
-            drags(events).iter().any(|drag| {
-                matches!(drag, DragEvent::Entered { uris, .. }
-                    if uris == &["file:///home/user/Report%20one.pdf"])
-            })
-        },
-        |_| true,
-    );
-    desktop.settle(&mut [&mut client]);
-    desktop.server.press_button(BTN_LEFT, false, 0);
-    desktop.wait_for(
-        &mut [&mut client],
-        |events| {
-            drags(events)
-                .iter()
-                .any(|drag| matches!(drag, DragEvent::Finished(_)))
-        },
-        |_| true,
-    );
-    let dropped = drags(&client.seen)
-        .into_iter()
-        .find_map(|drag| match drag {
-            DragEvent::Dropped {
-                position,
-                transfer,
-                action,
-            } => Some((position, transfer, action)),
-            _ => None,
-        })
-        .expect("a drop");
-    assert_eq!(
-        (dropped.0.x, dropped.0.y),
-        (80.0, 60.0),
-        "drops land in content coordinates"
-    );
-    assert_eq!(dropped.1.uris, ["file:///home/user/Report%20one.pdf"]);
-    assert_eq!(dropped.2, Some(DragAction::Copy));
-    assert!(drags(&client.seen).contains(&DragEvent::Finished(Some(DragAction::Copy))));
 }
 
 #[test]

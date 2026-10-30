@@ -60,9 +60,15 @@ pub type Changes = Rc<RefCell<Vec<Change>>>;
 
 fn toggle(label: &str, on: bool, changes: &Changes, change: fn(bool) -> Change) -> Box<dyn Widget> {
     let changes = Rc::clone(changes);
-    Box::new(Toggle::new(label, on, move |on| {
+    let switch = Toggle::new(label, on, move |on| {
         changes.borrow_mut().push(change(on));
-    }))
+    });
+    Box::new(Stack::new(
+        Axis::Horizontal,
+        SPACING,
+        0.0,
+        vec![Box::new(switch), Box::new(Label::new(label))],
+    ))
 }
 
 fn chooser(title: &str, changes: &Changes, change: Change) -> Box<dyn Widget> {

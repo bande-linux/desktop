@@ -66,6 +66,26 @@ fn only_the_controls_this_computer_has_are_shown() {
 }
 
 #[test]
+fn every_switch_is_named_on_screen_beside_it() {
+    let (ui, _, _) = open(&Status {
+        wifi: Some(false),
+        bluetooth: Some(false),
+        ..Status::default()
+    });
+    let shown: Vec<String> = ui
+        .accessibility()
+        .nodes
+        .into_iter()
+        .filter(|(_, node)| node.role() == Role::Label)
+        .filter_map(|(_, node)| node.value().map(str::to_owned))
+        .collect();
+
+    for name in ["Wi-Fi", "Bluetooth", "Do Not Disturb"] {
+        assert!(shown.iter().any(|text| text == name), "{name} in {shown:?}");
+    }
+}
+
+#[test]
 fn the_panel_grows_with_its_controls() {
     let (_, small, _) = open(&Status::default());
     let (_, large, _) = open(&Status {

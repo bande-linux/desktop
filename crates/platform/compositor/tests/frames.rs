@@ -4,7 +4,8 @@ use std::time::Duration;
 
 use smithay::utils::Size;
 use unbound_compositor::{
-    FrameClock, FrameScheduler, Headless, REFRESH, Renderer, SAFETY_MARGIN, Vblank,
+    FrameClock, FrameOutput, FrameScheduler, Headless, REFRESH, RenderError, Renderer,
+    SAFETY_MARGIN, Submission, Vblank,
 };
 use unbound_test_wayland::{Presented, RED, ShmImage, TestClient};
 use wayland_client::protocol::wl_shm::Format;
@@ -140,6 +141,47 @@ fn nothing_is_composed_while_no_client_commits() {
         .expect("frame");
 
     assert_eq!(poll.wake_at, None);
+}
+
+struct Away;
+
+impl FrameOutput for Away {
+    type Error = RenderError;
+
+    fn submit(&mut self, _: &mut Headless, _: &str) -> Result<Submission, RenderError> {
+        Ok(Submission::Paused)
+    }
+}
+
+#[test]
+fn an_output_away_from_the_session_keeps_clients_from_drawing_until_it_resumes() {
+    let (mut session, last) = Session::with_a_window();
+    let frames_before = session.client.frames_done();
+    let mut now = last.time;
+
+    for _ in 0..3 {
+        session.commit_with_feedback();
+        session.client.request_frame(&mut session.server);
+        let poll = loop {
+            let poll = session
+                .scheduler
+                .poll(|| now, &mut session.server, &mut Away)
+                .expect("frame");
+            match poll.wake_at {
+                Some(wake_at) => now = wake_at,
+                None => break poll,
+            }
+        };
+        session.client.exchange(&mut session.server);
+        assert_eq!(poll.presented, None);
+        now += REFRESH;
+    }
+    assert_eq!(session.client.frames_done(), frames_before);
+    assert!(session.client.presented().is_empty());
+
+    session.scheduler.resume();
+    session.run_from(now);
+    assert!(session.client.frames_done() > frames_before);
 }
 
 fn milliseconds(count: u64) -> Duration {

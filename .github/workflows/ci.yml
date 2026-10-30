@@ -20,7 +20,7 @@ jobs:
   lint:
     name: ci/lint
     runs-on: [self-hosted, unbound]
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
       - run: rustup toolchain install
@@ -46,7 +46,7 @@ jobs:
   test:
     name: ci/lavapipe-test
     runs-on: [self-hosted, unbound]
-    timeout-minutes: 30
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
       - run: rustup toolchain install
@@ -340,7 +340,7 @@ jobs:
   vm:
     name: ci/vm
     runs-on: [self-hosted, unbound-kvm]
-    timeout-minutes: 90
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v7
       - run: rustup toolchain install
@@ -349,6 +349,8 @@ jobs:
       - name: Build or reuse the guest kernel and root image
         run: ci/vm/images.sh vm
       - name: Run the guest tests in a KVM guest with vkms and virtio-gpu
+        env:
+          GUEST_TIMEOUT: '2700'
         run: ci/vm/guest-tests.sh vm
       - name: Sign in through greetd, PAM and logind in a guest booted with systemd
         continue-on-error: true

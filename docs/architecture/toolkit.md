@@ -149,8 +149,11 @@ writes a hex value, a corner radius or a font name of its own.
     for third-party apps (`compositor/src/frame.rs`) draw the same header and pill from
     `title_bar.rs`, 40 pt high, and redraw when Alt is pressed or released so the zoom glyph
     follows it. Goldens: `platform/tests/golden/window-frame-*.png`, including an inactive
-    window behind a second one. `UNBOUND_RENDERER=cpu` keeps a window on
-  `CpuRenderer`. `crates/testing/sample` is a settings card on the toolkit that `ci/perf` starts
+    window behind a second one. When the only Vulkan device renders on the CPU (lavapipe or
+  llvmpipe, as in VMs) every window stays on `CpuRenderer` and presents `wl_shm` buffers with
+  only the changed regions damaged; `UNBOUND_RENDERER=gpu` or `=cpu` overrides the choice. A
+  window whose background is opaque declares its window rectangle as its opaque region, so
+  the compositor shades nothing beneath it. `crates/testing/sample` is a settings card on the toolkit that `ci/perf` starts
   to measure.
 - **Widgets.** `ui` holds the widget tree: `Stack` (rows and columns with spacing and padding; a
   column stretches its children across, a row centres them), `Label`, `Shortcut`, the controls

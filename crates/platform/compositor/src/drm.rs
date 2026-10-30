@@ -448,14 +448,16 @@ impl DrmBackend {
                 self.device.pause();
             }
             SessionEvent::ActivateSession => {
+                self.device.activate(false)?;
+                for head in &mut self.heads {
+                    if let Err(error) = head.compositor.reset_state() {
+                        tracing::warn!("cannot reset {}: {error}", head.config.name);
+                    }
+                }
                 if let Some(libinput) = self.libinput.as_mut() {
                     libinput
                         .resume()
                         .map_err(|()| "libinput cannot resume its devices")?;
-                }
-                self.device.activate(false)?;
-                for head in &mut self.heads {
-                    head.compositor.reset_state()?;
                 }
             }
         }

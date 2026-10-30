@@ -918,7 +918,10 @@ impl DockState {
     }
 
     fn beyond_dock(&self, point: Point) -> bool {
-        self.depth_of(point) > SCREEN_GAP + thickness(self.icon_size) + self.icon_size
+        let dock = self
+            .rail
+            .map_or(SCREEN_GAP + thickness(self.icon_size), |rail| rail.width);
+        self.depth_of(point) > dock + self.icon_size
     }
 
     fn press_at(&mut self, key: &Key, point: Point) {
@@ -1312,7 +1315,7 @@ impl DockState {
             }
             let length = slot.cell_length(icon, RAIL_PADDING);
             let shown_length = length * slot.presence.value_at(now).0.max(0.0);
-            slot.hidden = overflowing && offset + length > rail.top + limit;
+            slot.hidden = overflowing && (more_at.is_some() || offset + length > rail.top + limit);
             if slot.hidden {
                 more_at.get_or_insert(offset);
                 if let Some(app) = slot.app.as_ref().filter(|_| !slot.leaving) {

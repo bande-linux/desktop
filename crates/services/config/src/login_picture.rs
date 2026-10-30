@@ -2,6 +2,8 @@ use std::fs::{File, OpenOptions, Permissions};
 use std::io;
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, PoisonError};
 use std::thread;
 
 use crate::{Wallpaper, WallpaperVariant};
@@ -9,6 +11,9 @@ use crate::{Wallpaper, WallpaperVariant};
 pub const LOGIN_PICTURES: &str = "/var/lib/unbound-greeter/pictures";
 pub const LOGIN_PICTURE_LIMIT: u64 = 64 << 20;
 const SHARED_MODE: u32 = 0o640;
+
+static LATEST_SHARE: AtomicU64 = AtomicU64::new(0);
+static SHARING: Mutex<()> = Mutex::new(());
 
 pub fn login_picture(wallpaper: &Wallpaper, home: Option<&Path>) -> Option<PathBuf> {
     let path = wallpaper
@@ -59,9 +64,14 @@ pub fn copy_login_picture(folder: &Path, uid: u32, picture: Option<&Path>) -> io
 
 pub fn share_login_picture(wallpaper: &Wallpaper) {
     let picture = login_picture(wallpaper, std::env::home_dir().as_deref());
+    let share = LATEST_SHARE.fetch_add(1, Ordering::SeqCst) + 1;
     let shared = thread::Builder::new()
         .name("login-picture".to_owned())
         .spawn(move || {
+            let _sharing = SHARING.lock().unwrap_or_else(PoisonError::into_inner);
+            if LATEST_SHARE.load(Ordering::SeqCst) != share {
+                return;
+            }
             let copied = std::fs::metadata("/proc/self").and_then(|process| {
                 copy_login_picture(Path::new(LOGIN_PICTURES), process.uid(), picture.as_deref())
             });

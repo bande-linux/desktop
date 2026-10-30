@@ -439,7 +439,10 @@ impl State {
         let moved: Vec<usize> = (0..self.windows.len())
             .filter(|index| self.screen_of(&self.windows[*index]) == screen)
             .collect();
-        self.screens[screen].mirror = Some(self.screens[source].name());
+        let mirror = Some(self.screens[source].name());
+        let remirrored = self.screens[screen].mirror != mirror;
+        self.screens[screen].mirror = mirror;
+        let mut changed = remirrored || !moved.is_empty();
         for index in moved {
             self.move_window_to_screen(index, source, None);
         }
@@ -455,11 +458,16 @@ impl State {
         };
         if settings != current {
             self.screens[screen].apply(settings);
+            changed = true;
         }
-        self.after_screens_changed();
+        if changed {
+            self.after_screens_changed();
+        }
     }
 
     fn after_screens_changed(&mut self) {
+        self.end_switcher();
+        self.dismiss_assist();
         self.announce_outputs();
         self.pointer_location = self.nearest_on_screens(self.pointer_location);
         self.sync_surface_outputs();

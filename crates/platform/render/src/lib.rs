@@ -941,12 +941,6 @@ impl VulkanRenderer {
         };
         let mut kept = self.staging.swap_remove(largest);
         kept.used = 0;
-        for (_, chain) in std::mem::take(&mut self.blur_chains) {
-            chain
-                .levels
-                .iter()
-                .for_each(|image| self.destroy_image(image));
-        }
         for staging in std::mem::take(&mut self.staging) {
             self.destroy_staging(&staging);
         }
@@ -1434,6 +1428,12 @@ impl Drop for VulkanRenderer {
         }
         for staging in std::mem::take(&mut self.staging) {
             self.destroy_staging(&staging);
+        }
+        for (_, chain) in std::mem::take(&mut self.blur_chains) {
+            chain
+                .levels
+                .iter()
+                .for_each(|image| self.destroy_image(image));
         }
         for (_, imported) in std::mem::take(&mut self.imports) {
             self.destroy_imported(&imported);

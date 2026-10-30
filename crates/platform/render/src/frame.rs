@@ -512,6 +512,12 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             return Ok(());
         }
         dma_buf_sync(export, DMA_BUF_SYNC_START)?;
+        let copied = self.copy_readbacks(export, readbacks);
+        dma_buf_sync(export, DMA_BUF_SYNC_END)?;
+        copied
+    }
+
+    fn copy_readbacks(&self, export: &Export, readbacks: &[Readback]) -> Result<(), RenderError> {
         for readback in readbacks {
             let rect = readback.rect;
             let row_bytes = rect.width.unsigned_abs() as usize * BYTES_PER_PIXEL;
@@ -532,7 +538,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
                 }
             }
         }
-        dma_buf_sync(export, DMA_BUF_SYNC_END)
+        Ok(())
     }
 }
 

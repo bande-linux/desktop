@@ -70,7 +70,7 @@ pub trait StatusView {
     fn open(&self) -> Option<Slot>;
     fn slot_at(&self, point: Point, button: PointerButton) -> Option<Slot>;
     fn slot_rect(&self, slot: Slot) -> Option<Rect>;
-    fn slot_of_node(&self, node: NodeId) -> Option<Slot>;
+    fn slot_of_node(&self, node: NodeId, action: Action) -> Option<Slot>;
     fn menu_placement(&self, anchor: Rect) -> MenuPlacement;
     fn edge(&self) -> DisplayEdge;
     fn slides_between_menus(&self) -> bool;
@@ -143,7 +143,7 @@ impl StatusView for MenuBar {
         MenuBar::slot_rect(self, slot)
     }
 
-    fn slot_of_node(&self, node: NodeId) -> Option<Slot> {
+    fn slot_of_node(&self, node: NodeId, _action: Action) -> Option<Slot> {
         MenuBar::slot_of_node(self, node)
     }
 

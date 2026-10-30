@@ -1008,6 +1008,7 @@ impl RailView {
 
     fn describe(&self, slot: Slot) -> String {
         match slot {
+            Slot::System if self.expanded => L10N.tr("system-menu"),
             Slot::System | Slot::Launcher => L10N.tr("launcher"),
             Slot::App => L10N.tr_args("app-menus", [("app", self.app.clone().into())]),
             Slot::Tray(index) => self
@@ -1149,9 +1150,12 @@ impl StatusView for RailView {
             .map(|(_, rect)| *rect)
     }
 
-    fn slot_of_node(&self, node: NodeId) -> Option<Slot> {
+    fn slot_of_node(&self, node: NodeId, action: Action) -> Option<Slot> {
         let index = usize::try_from(node.0.checked_sub(NODE_BASE)?).ok()?;
-        self.slots.get(index).map(|(slot, _)| *slot)
+        self.slots.get(index).map(|(slot, _)| match slot {
+            Slot::System if action == Action::Click && !self.expanded => Slot::Launcher,
+            slot => *slot,
+        })
     }
 
     fn edge(&self) -> DisplayEdge {
@@ -1241,6 +1245,9 @@ impl StatusView for RailView {
                 y1: f64::from(rect.y + rect.height),
             });
             node.add_action(Action::Click);
+            if *slot == Slot::System && !self.expanded {
+                node.add_action(Action::ShowContextMenu);
+            }
             nodes.push((NodeId(NODE_BASE + index as u64), node));
         }
         root.set_children(nodes.iter().map(|(id, _)| *id).collect::<Vec<_>>());

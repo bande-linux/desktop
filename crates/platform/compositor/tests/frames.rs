@@ -245,7 +245,7 @@ fn a_flip_lost_while_the_session_was_paused_does_not_stop_frames_after_it_resume
     let mut server = Headless::new(Size::from((64, 64))).expect("headless compositor");
     let mut output = FlipNeverCompletes { submits: 0 };
     let mut scheduler = FrameScheduler::new(FrameClock::new(Duration::ZERO, REFRESH));
-    scheduler.restart();
+    scheduler.resume();
     submit_once(&mut scheduler, &mut server, &mut output);
 
     let waiting = scheduler
@@ -253,7 +253,7 @@ fn a_flip_lost_while_the_session_was_paused_does_not_stop_frames_after_it_resume
         .expect("frame");
     assert_eq!(waiting.wake_at, None);
 
-    scheduler.restart();
+    scheduler.resume();
     submit_once(&mut scheduler, &mut server, &mut output);
     assert_eq!(output.submits, 2);
 }

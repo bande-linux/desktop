@@ -231,7 +231,7 @@ impl FrameScheduler {
         }
     }
 
-    pub fn restart(&mut self) {
+    pub fn resume(&mut self) {
         self.phase = Phase::Idle;
         self.wanted = true;
     }

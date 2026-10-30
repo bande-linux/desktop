@@ -1,5 +1,6 @@
 mod access;
 mod access_keys;
+mod alert;
 mod app;
 mod appearance;
 mod arrange;

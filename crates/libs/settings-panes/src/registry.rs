@@ -97,6 +97,8 @@ pub enum SettingId {
     VolumeFeedback,
     Appearance,
     ReduceMotion,
+    Accent,
+    TintedFrame,
     Wallpaper,
     WallpaperFit,
     BarEdge,
@@ -214,6 +216,7 @@ pub enum Kind {
     Resolutions,
     DisplayUses,
     Pictures,
+    Swatches(Vec<Choice>),
     Text,
     List(List),
 }
@@ -221,9 +224,10 @@ pub enum Kind {
 impl Kind {
     pub fn choices(&self) -> &[Choice] {
         match self {
-            Self::Choices(choices) | Self::Menu(choices) | Self::Stops { stops: choices, .. } => {
-                choices
-            }
+            Self::Choices(choices)
+            | Self::Menu(choices)
+            | Self::Swatches(choices)
+            | Self::Stops { stops: choices, .. } => choices,
             Self::Switch
             | Self::Level
             | Self::Range { .. }
@@ -907,6 +911,32 @@ fn desktop_panes() -> Vec<Pane> {
                             (L10N.tr("appearance-automatic"), "automatic"),
                         ])),
                     )],
+                ),
+                section(
+                    None,
+                    vec![
+                        setting(
+                            SettingId::Accent,
+                            L10N.tr("accent"),
+                            L10N.tr("accent-keywords"),
+                            Kind::Swatches(keyword_choices(vec![
+                                (L10N.tr("accent-ultramarine"), "ultramarine"),
+                                (L10N.tr("accent-teal"), "teal"),
+                                (L10N.tr("accent-moss"), "moss"),
+                                (L10N.tr("accent-amber"), "amber"),
+                                (L10N.tr("accent-ember"), "ember"),
+                                (L10N.tr("accent-rose"), "rose"),
+                                (L10N.tr("accent-plum"), "plum"),
+                                (L10N.tr("accent-graphite"), "graphite"),
+                            ])),
+                        ),
+                        setting(
+                            SettingId::TintedFrame,
+                            L10N.tr("tinted-frame"),
+                            L10N.tr("tinted-frame-keywords"),
+                            Kind::Switch,
+                        ),
+                    ],
                 ),
                 section(
                     Some(L10N.tr("motion")),

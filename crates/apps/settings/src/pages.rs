@@ -1,13 +1,13 @@
 use std::rc::Rc;
 
 use unbound_audio::Direction;
-use unbound_config::MAX_INPUT_SOURCES;
+use unbound_config::{ACCENTS, MAX_INPUT_SOURCES};
 use unbound_keyboard::shortcuts_in;
 use unbound_toolkit::ui::{
     Axis, Button, LevelIndicator, PopUpButton, SearchField, SecureField, SegmentedControl,
     Shortcut, Slider, Stack, TextField, Toggle, Widget, WidgetId,
 };
-use unbound_toolkit::{Spacing, TextRole};
+use unbound_toolkit::{Scheme, Spacing, TextRole};
 
 use crate::L10N;
 use crate::arrangement::{Area, Arrangement, Screen};
@@ -18,8 +18,8 @@ use crate::view::{
     Anchor, Intent, Intents, MIRROR_PREFIX, SettingsView, USE_EXTENDED, USE_MAIN, intent,
 };
 use crate::widgets::{
-    Caption, Captioned, Card, Check, Column, Row, Scroll, SidebarRow, Signal, Text, Thumbnail,
-    Thumbnails, Tone,
+    Caption, Captioned, Card, Check, Column, Row, Scroll, SidebarRow, Signal, Swatch, Swatches,
+    Text, Thumbnail, Thumbnails, Tone,
 };
 use unbound_config::Placement;
 use unbound_settings_panes::SettingHit;
@@ -177,6 +177,40 @@ impl SettingsView {
                 boxed(SegmentedControl::new(
                     &setting.label,
                     &labels,
+                    selected,
+                    move |index| {
+                        if let Some(value) = values.get(index) {
+                            set(value.clone());
+                        }
+                    },
+                ))
+            }
+            Kind::Swatches(choices) => {
+                let selected = value
+                    .as_ref()
+                    .and_then(|value| setting.kind.position(value));
+                let values: Vec<Value> =
+                    choices.iter().map(|choice| choice.value.clone()).collect();
+                let swatches = choices
+                    .iter()
+                    .filter_map(|choice| {
+                        let Value::Keyword(keyword) = &choice.value else {
+                            return None;
+                        };
+                        let accent = ACCENTS
+                            .iter()
+                            .find(|(candidate, _)| candidate == keyword)
+                            .map(|(_, accent)| *accent)?;
+                        Some(Swatch {
+                            label: choice.label.clone(),
+                            light: accent.color(Scheme::Light),
+                            dark: accent.color(Scheme::Dark),
+                        })
+                    })
+                    .collect();
+                boxed(Swatches::new(
+                    &setting.label,
+                    swatches,
                     selected,
                     move |index| {
                         if let Some(value) = values.get(index) {

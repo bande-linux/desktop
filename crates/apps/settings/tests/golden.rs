@@ -329,6 +329,24 @@ fn general(scheme: Scheme, pane: PaneId) -> SettingsView {
 }
 
 #[test]
+fn the_appearance_pane_matches_its_goldens() {
+    check_in_both_schemes_and_scales("appearance", |scheme| {
+        let mut view = SettingsView::new(Palette::for_scheme(scheme), TextSystem::new());
+        view.apply(Update::Values(vec![
+            (
+                SettingId::Appearance,
+                Value::Keyword("automatic".to_owned()),
+            ),
+            (SettingId::Accent, Value::Keyword("teal".to_owned())),
+            (SettingId::TintedFrame, Value::Flag(false)),
+            (SettingId::ReduceMotion, Value::Flag(false)),
+        ]));
+        view.select_pane(PaneId::Appearance);
+        view
+    });
+}
+
+#[test]
 fn the_about_pane_matches_its_goldens() {
     check_in_both_schemes_and_scales("about", |scheme| general(scheme, PaneId::About));
 }

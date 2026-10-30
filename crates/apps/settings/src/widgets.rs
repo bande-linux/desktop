@@ -5,8 +5,8 @@ use std::rc::Rc;
 use accesskit::{Action, ActionRequest, Node, Role};
 use unbound_toolkit::ui::{Context, Event, Key, Size, Widget, WidgetId, focus_ring};
 use unbound_toolkit::{
-    Color, Image, Item, Paragraph, Point, Radius, Rect, SHEET_INSET, Shape, Spacing, TextAlign,
-    TextRole, TextStyle,
+    Color, Image, Item, Paragraph, Point, Radius, Rect, SHEET_INSET, Scheme, Shape, Spacing,
+    TextAlign, TextRole, TextStyle,
 };
 
 pub const SIDEBAR_WIDTH: f32 = 220.0;
@@ -1309,6 +1309,171 @@ impl Widget for Thumbnails {
             } => self.step(1),
             Event::Key { key: Key::Up, .. } => self.step(-columns),
             Event::Key { key: Key::Down, .. } => self.step(columns),
+            _ => return false,
+        }
+        true
+    }
+
+    fn perform(&mut self, _cx: &mut Context, request: &ActionRequest) -> bool {
+        match request.action {
+            Action::Increment => self.step(1),
+            Action::Decrement => self.step(-1),
+            _ => return false,
+        }
+        true
+    }
+
+    fn accepts_focus(&self, cx: &Context) -> bool {
+        cx.keyboard_navigation
+    }
+}
+
+const SWATCH_SIZE: f32 = 22.0;
+const SWATCH_GAP: f32 = 12.0;
+const SWATCH_RING: f32 = 2.0;
+const SWATCH_RING_GAP: f32 = 2.0;
+
+pub struct Swatch {
+    pub label: String,
+    pub light: Color,
+    pub dark: Color,
+}
+
+pub struct Swatches {
+    id: WidgetId,
+    label: String,
+    swatches: Vec<Swatch>,
+    selected: Option<usize>,
+    on_select: Box<dyn FnMut(usize)>,
+    frame: Rect,
+}
+
+impl Swatches {
+    pub fn new(
+        label: &str,
+        swatches: Vec<Swatch>,
+        selected: Option<usize>,
+        on_select: impl FnMut(usize) + 'static,
+    ) -> Self {
+        Self {
+            id: WidgetId::next(),
+            label: label.to_owned(),
+            swatches,
+            selected,
+            on_select: Box::new(on_select),
+            frame: Rect::default(),
+        }
+    }
+
+    fn select(&mut self, index: usize) {
+        if index < self.swatches.len() && self.selected != Some(index) {
+            self.selected = Some(index);
+            (self.on_select)(index);
+        }
+    }
+
+    fn step(&mut self, by: isize) {
+        if let Some(next) = self.selected.unwrap_or(0).checked_add_signed(by) {
+            self.select(next);
+        }
+    }
+
+    fn swatch(&self, index: usize) -> Rect {
+        let margin = SWATCH_RING + SWATCH_RING_GAP;
+        Rect::new(
+            self.frame.x + margin + index as f32 * (SWATCH_SIZE + SWATCH_GAP),
+            self.frame.y + (self.frame.height - SWATCH_SIZE) / 2.0,
+            SWATCH_SIZE,
+            SWATCH_SIZE,
+        )
+    }
+}
+
+impl Widget for Swatches {
+    fn id(&self) -> WidgetId {
+        self.id
+    }
+
+    fn measure(&mut self, _cx: &mut Context, _available: Size) -> Size {
+        let count = self.swatches.len() as f32;
+        let margin = 2.0 * (SWATCH_RING + SWATCH_RING_GAP);
+        Size::new(
+            count * SWATCH_SIZE + (count - 1.0).max(0.0) * SWATCH_GAP + margin,
+            SWATCH_SIZE + margin,
+        )
+    }
+
+    fn place(&mut self, _cx: &mut Context, frame: Rect) {
+        self.frame = frame;
+    }
+
+    fn frame(&self) -> Rect {
+        self.frame
+    }
+
+    fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
+        for (index, swatch) in self.swatches.iter().enumerate() {
+            let rect = self.swatch(index);
+            let color = match cx.palette.scheme {
+                Scheme::Light => swatch.light,
+                Scheme::Dark => swatch.dark,
+            };
+            items.push(Item::Fill {
+                shape: Shape::rounded(rect, SWATCH_SIZE / 2.0),
+                paint: color.into(),
+            });
+            items.push(Item::Stroke {
+                shape: Shape::rounded(rect.inset(0.5), SWATCH_SIZE / 2.0 - 0.5),
+                width: 1.0,
+                paint: cx.palette.ink.with_alpha(28).into(),
+            });
+            if self.selected == Some(index) {
+                let ring = rect.inset(-(SWATCH_RING_GAP + SWATCH_RING / 2.0));
+                items.push(Item::Stroke {
+                    shape: Shape::rounded(ring, ring.width / 2.0),
+                    width: SWATCH_RING,
+                    paint: color.into(),
+                });
+                if cx.is_focused(self.id) {
+                    let outer = rect.inset(-(SWATCH_RING_GAP + SWATCH_RING));
+                    focus_ring(cx, Shape::rounded(outer, outer.width / 2.0), items);
+                }
+            }
+        }
+    }
+
+    fn access(&self, _cx: &Context) -> Node {
+        let mut node = Node::new(Role::RadioGroup);
+        node.set_label(self.label.clone());
+        if let Some(swatch) = self.selected.and_then(|index| self.swatches.get(index)) {
+            node.set_value(swatch.label.clone());
+        }
+        node.add_action(Action::Increment);
+        node.add_action(Action::Decrement);
+        node
+    }
+
+    fn handle(&mut self, _cx: &mut Context, event: &Event) -> bool {
+        match event {
+            Event::PointerDown(pointer) if pointer.is_primary() => {
+                match (0..self.swatches.len()).find(|index| {
+                    contains(
+                        self.swatch(*index).inset(-SWATCH_GAP / 2.0),
+                        pointer.position,
+                    )
+                }) {
+                    Some(index) => self.select(index),
+                    None => return false,
+                }
+            }
+            Event::Key {
+                key: Key::Left | Key::Up,
+                ..
+            } => self.step(-1),
+            Event::Key {
+                key: Key::Right | Key::Down,
+                ..
+            } => self.step(1),
             _ => return false,
         }
         true

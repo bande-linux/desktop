@@ -1,8 +1,11 @@
+use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
 use std::thread;
 
 use xdg_desktop_portal_unbound::capture::{ScreenshotService, ScreenshotTool};
+use xdg_desktop_portal_unbound::dialog_process::{DIALOG_PROGRAM, DialogProcess};
+use xdg_desktop_portal_unbound::file_chooser::FileChooser;
 use xdg_desktop_portal_unbound::screencast::{ScreenCast, close_sessions_streaming};
 use xdg_desktop_portal_unbound::screenshot::Screenshot;
 use xdg_desktop_portal_unbound::settings::{CursorSettings, Settings};
@@ -32,16 +35,33 @@ fn serve() -> zbus::Result<Connection> {
     let connection = Connection::session()?;
     let tool_connection = Connection::session()?;
     let tool = Arc::new(ScreenshotTool::new(tool_connection.clone()));
-    Settings::serve(&connection, CursorSettings::from_environment())?;
+    Settings::serve(
+        &connection,
+        CursorSettings::from_environment(),
+        config_home(),
+    )?;
     connection
         .object_server()
         .at(OBJECT_PATH, ScreenCast::new(tool.clone()))?;
     connection
         .object_server()
         .at(OBJECT_PATH, Screenshot { ui: tool })?;
+    connection.object_server().at(
+        OBJECT_PATH,
+        FileChooser::new(Arc::new(DialogProcess {
+            program: PathBuf::from(DIALOG_PROGRAM),
+        })),
+    )?;
     close_sessions_when_sharing_ends(&connection, &tool_connection)?;
     connection.request_name(BUS_NAME)?;
     Ok(connection)
+}
+
+fn config_home() -> Option<PathBuf> {
+    std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
 }
 
 fn main() -> ExitCode {

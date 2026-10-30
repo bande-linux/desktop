@@ -1,4 +1,4 @@
-use unbound_design::{Accent, Color, Contrast, Palette, Scheme, apca, wcag};
+use unbound_design::{Accent, Appearance, Color, Contrast, Palette, Scheme, apca, wcag};
 
 fn every_palette() -> impl Iterator<Item = (String, Palette)> {
     [Scheme::Light, Scheme::Dark]
@@ -82,6 +82,50 @@ fn text_roles_stay_legible_on_every_surface_in_every_palette() {
                     "{name}: {role} on {surface:?} is {ratio:.2}:1, Lc {lc:.0}"
                 );
             }
+        }
+    }
+}
+
+#[test]
+fn a_wallpaper_tint_shifts_only_the_frame_and_keeps_its_text_legible() {
+    for scheme in [Scheme::Light, Scheme::Dark] {
+        for tint in [
+            Color::hex(0xFF0000),
+            Color::hex(0x0000FF),
+            Color::BLACK,
+            Color::WHITE,
+        ] {
+            let plain = Appearance {
+                scheme,
+                ..Appearance::default()
+            }
+            .palette();
+            let tinted = Appearance {
+                scheme,
+                frame_tint: Some(tint),
+                ..Appearance::default()
+            }
+            .palette();
+            assert_eq!(
+                Palette {
+                    chassis: plain.chassis,
+                    ..tinted
+                },
+                plain
+            );
+            let moved = |from: u8, to: u8| i32::from(to) - i32::from(from);
+            for (before, after, toward) in [
+                (plain.chassis.r, tinted.chassis.r, tint.r),
+                (plain.chassis.g, tinted.chassis.g, tint.g),
+                (plain.chassis.b, tinted.chassis.b, tint.b),
+            ] {
+                assert!(moved(before, after).abs() <= 16);
+                assert!(moved(before, after) * moved(before, toward) >= 0);
+            }
+            assert!(
+                wcag(tinted.ink2, tinted.chassis) >= 4.5,
+                "{scheme:?} {tint:?}"
+            );
         }
     }
 }

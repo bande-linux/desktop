@@ -3860,6 +3860,7 @@ dependencies = [
  "tempfile",
  "tracing",
  "unbound-bus",
+ "unbound-design",
  "unbound-edid",
  "unbound-l10n",
  "unbound-log",
@@ -3940,6 +3941,25 @@ dependencies = [
 [[package]]
 name = "unbound-edid"
 version = "0.1.0"
+
+[[package]]
+name = "unbound-file-chooser"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "image",
+ "image-compare",
+ "tempfile",
+ "tracing",
+ "unbound-files",
+ "unbound-fs",
+ "unbound-l10n",
+ "unbound-log",
+ "unbound-toolkit",
+ "unbound-volumes",
+ "unbound-xdg",
+ "xdg-desktop-portal-unbound",
+]
 
 [[package]]
 name = "unbound-files"
@@ -5385,13 +5405,16 @@ name = "xdg-desktop-portal-unbound"
 version = "0.1.0"
 dependencies = [
  "blocking",
+ "jiff",
+ "rustix 1.1.6",
  "tempfile",
  "tracing",
  "unbound-bus",
  "unbound-config",
- "unbound-graphics",
+ "unbound-design",
  "unbound-log",
  "unbound-test-bus",
+ "unbound-wallpaper",
  "zbus",
 ]
 

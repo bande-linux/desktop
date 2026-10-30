@@ -13,10 +13,10 @@ use zbus::object_server::SignalEmitter;
 use zbus::zvariant::{OwnedValue, Value};
 
 use crate::{
-    AlertSound, Appearance, BarEdge, CapsLock, ClockFormat, Config, ConfigStore, DisplaySettings,
-    InputSource, LidOnPower, Loaded, MenuBarPlacement, Placement, ReloadError, Rotation,
-    SecondaryClick, Setting, Suspend, WallpaperFit, WallpaperVariant, migrate,
-    read_system_input_sources,
+    ACCENTS, AlertSound, Appearance, BarEdge, CapsLock, ClockFormat, Config, ConfigStore,
+    DisplaySettings, InputSource, LidOnPower, Loaded, MenuBarPlacement, Placement, ReloadError,
+    Rotation, SecondaryClick, Setting, Suspend, WallpaperFit, WallpaperVariant, accent_keyword,
+    migrate, read_system_input_sources,
 };
 
 pub type ArrangedDisplay = (String, i32, i32, bool, String);
@@ -154,6 +154,12 @@ fn publish_changes(
     zbus::block_on(async {
         if before.appearance != after.appearance {
             let _ = guard.appearance_changed(emitter).await;
+        }
+        if before.accent != after.accent {
+            let _ = guard.accent_changed(emitter).await;
+        }
+        if before.tinted_frame != after.tinted_frame {
+            let _ = guard.tinted_frame_changed(emitter).await;
         }
         if before.clock != after.clock {
             let _ = guard.clock_format_changed(emitter).await;
@@ -399,6 +405,27 @@ impl ConfigInterface {
             &value,
         )?;
         self.write(&Setting::Appearance(appearance))
+    }
+
+    #[zbus(property)]
+    fn accent(&self) -> String {
+        accent_keyword(self.store.current().accent).to_owned()
+    }
+
+    #[zbus(property)]
+    fn set_accent(&self, value: String) -> zbus::fdo::Result<()> {
+        let accent = keyword(&ACCENTS.map(|(_, accent)| accent), accent_keyword, &value)?;
+        self.write(&Setting::Accent(accent))
+    }
+
+    #[zbus(property)]
+    fn tinted_frame(&self) -> bool {
+        self.store.current().tinted_frame
+    }
+
+    #[zbus(property)]
+    fn set_tinted_frame(&self, tinted: bool) -> zbus::fdo::Result<()> {
+        self.write(&Setting::TintedFrame(tinted))
     }
 
     #[zbus(property)]

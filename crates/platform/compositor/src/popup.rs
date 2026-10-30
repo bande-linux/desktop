@@ -12,7 +12,8 @@ use smithay::wayland::compositor::get_parent;
 use smithay::wayland::shell::wlr_layer::KeyboardInteractivity;
 use smithay::wayland::shell::xdg::{PopupSurface, PositionerState};
 
-use crate::state::State;
+use crate::motion::{BAR_NAMESPACE, DOCK_NAMESPACE};
+use crate::state::{MENU_BAR_NAMESPACE, State};
 
 impl State {
     pub(crate) fn toplevel_of(&self, surface: &WlSurface) -> Option<WlSurface> {
@@ -158,23 +159,52 @@ impl State {
         self.popup_grab = Some(grab);
     }
 
+    pub(crate) fn reachable_beside_menu(&self, surface: &WlSurface) -> bool {
+        let Some(popup) = self
+            .popup_grab
+            .as_ref()
+            .and_then(|grab| grab.current_grab())
+        else {
+            return true;
+        };
+        if popup.client() != surface.client() {
+            return false;
+        }
+        let mut top = surface.clone();
+        while let Some(parent) = get_parent(&top) {
+            top = parent;
+        }
+        self.popups.find_popup(&top).is_some()
+            || self
+                .root_of(surface)
+                .is_some_and(|root| self.is_panel(&root))
+    }
+
+    fn is_panel(&self, surface: &WlSurface) -> bool {
+        self.screens.iter().any(|screen| {
+            layer_map_for_output(&screen.output)
+                .layer_for_surface(surface, WindowSurfaceType::TOPLEVEL)
+                .is_some_and(|layer| {
+                    [MENU_BAR_NAMESPACE, BAR_NAMESPACE, DOCK_NAMESPACE].contains(&layer.namespace())
+                })
+        })
+    }
+
     pub(crate) fn dismisses_popups(&mut self, under: Option<&WlSurface>) -> bool {
-        let Some(grab) = &mut self.popup_grab else {
+        let Some(grab) = &self.popup_grab else {
             return false;
         };
         if grab.has_ended() {
             self.popup_grab = None;
             return false;
         }
-        let inside = under.is_some_and(|surface| {
-            grab.current_grab()
-                .is_some_and(|popup| popup.client() == surface.client())
-        });
-        if inside {
+        if under.is_some_and(|surface| self.reachable_beside_menu(surface)) {
             return false;
         }
+        let Some(mut grab) = self.popup_grab.take() else {
+            return false;
+        };
         let root = grab.ungrab(PopupUngrabStrategy::All);
-        self.popup_grab = None;
         if let Some(pointer) = self.seat.get_pointer() {
             pointer.unset_grab(self, smithay::utils::SERIAL_COUNTER.next_serial(), 0);
         }

@@ -176,17 +176,12 @@ impl State {
             self.popup_grab = None;
             pointer.unset_grab(self, SERIAL_COUNTER.next_serial(), time);
         }
-        let mut under = self.surface_under(self.pointer_location);
-        if pointer.is_grabbed() {
-            let Some(popup) = self
-                .popup_grab
-                .as_ref()
-                .and_then(|grab| grab.current_grab())
-            else {
-                return;
-            };
-            under = under.filter(|(surface, _)| surface.client() == popup.client());
+        if pointer.is_grabbed() && self.popup_grab.is_none() {
+            return;
         }
+        let under = self
+            .surface_under(self.pointer_location)
+            .filter(|(surface, _)| self.reachable_beside_menu(surface));
         if pointer.current_focus() == under.as_ref().map(|(surface, _)| surface.clone()) {
             return;
         }
@@ -513,7 +508,9 @@ impl Headless {
         if state.assist.is_open() {
             state.assist_pointer(location);
         }
-        let under = state.surface_under(location);
+        let under = state
+            .surface_under(location)
+            .filter(|(surface, _)| state.reachable_beside_menu(surface));
         let Some(pointer) = state.seat.get_pointer() else {
             return;
         };

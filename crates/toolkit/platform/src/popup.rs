@@ -176,6 +176,7 @@ impl Menus {
         let Some(menu) = self.tracker.submenu(level, index) else {
             return Ok(());
         };
+        self.close_from(opening.state, level + 1);
         let Some(parent) = self.popups.get(level) else {
             return Ok(());
         };
@@ -346,6 +347,15 @@ fn create(
         whole(size.0).max(1),
         whole(size.1).max(1),
     );
+    let panel = compositor.create_region(handle, ());
+    panel.add(
+        whole(MARGIN),
+        whole(MARGIN),
+        whole(size.0).max(1),
+        whole(size.1).max(1),
+    );
+    surface.set_input_region(Some(&panel));
+    panel.destroy();
     if let (Some(seat), Some(serial)) = (&state.seat, state.input.serial) {
         popup.grab(seat, serial);
     }

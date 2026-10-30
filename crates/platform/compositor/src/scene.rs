@@ -68,6 +68,23 @@ impl Placement {
         self.map_area(rect.to_f64()).to_i32_round()
     }
 
+    fn map_inward(&self, rect: Rectangle<i32, Physical>) -> Option<Rectangle<i32, Physical>> {
+        if self.is_fixed() {
+            return Some(rect);
+        }
+        let mapped = self.map_area(rect.to_f64());
+        let left = mapped.loc.x.ceil();
+        let top = mapped.loc.y.ceil();
+        let right = (mapped.loc.x + mapped.size.w).floor();
+        let bottom = (mapped.loc.y + mapped.size.h).floor();
+        (right > left && bottom > top).then(|| {
+            Rectangle::new(
+                (left as i32, top as i32).into(),
+                ((right - left) as i32, (bottom - top) as i32).into(),
+            )
+        })
+    }
+
     fn map_area(&self, rect: Area) -> Area {
         let factor = self.factor();
         let relative = rect.loc - self.from.loc;
@@ -197,14 +214,23 @@ impl<E: Element> Element for WindowElement<E> {
     }
 
     fn opaque_regions(&self, scale: Scale<f64>) -> OpaqueRegions<i32, Physical> {
-        if !self.placement.is_fixed() {
-            return OpaqueRegions::default();
-        }
-        let origin = self.inner.geometry(scale).loc;
+        let inner = self.inner.geometry(scale).loc;
+        let origin = self.geometry(scale).loc;
+        let opaque = self
+            .inner
+            .opaque_regions(scale)
+            .into_iter()
+            .filter_map(|rect| {
+                let placed = self
+                    .placement
+                    .map_inward(Rectangle::new(rect.loc + inner, rect.size))?;
+                Some(Rectangle::new(placed.loc - origin, placed.size))
+            })
+            .collect::<Vec<_>>();
         let corners = uncovered_pixels(&self.clip)
             .into_iter()
             .map(|rect| Rectangle::new(rect.loc - origin, rect.size));
-        Rectangle::subtract_rects_many(self.inner.opaque_regions(scale), corners)
+        Rectangle::subtract_rects_many(opaque, corners)
             .into_iter()
             .collect()
     }

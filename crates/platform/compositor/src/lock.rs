@@ -140,6 +140,7 @@ impl SessionLockHandler for State {
             return;
         }
         self.release_grabs();
+        self.close_overview();
         let previous = self.key_window();
         self.lock = Some(Lock {
             owner,

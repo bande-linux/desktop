@@ -759,6 +759,7 @@ impl State {
                     self.overview.app = None;
                     self.overview.filter.clear();
                     self.tidy_workspaces();
+                    self.refocus_pointer();
                 }
             }
             self.needs_redraw = true;

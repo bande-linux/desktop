@@ -75,8 +75,9 @@ status-check contexts:
   the frontend reports follows `config.kdl`.
 - `ci/perf` (on `main`, and on a branch commit whose message contains `[perf]`): takes the
   release `unbound-compositor` that `ci/deb` packages, with `unbound-bench` and `unbound-sample`
-  built alongside it, and measures frame times, compositor start time and idle memory on
-  lavapipe, for the compositor and for the toolkit sample; it gates the exact work counts and
+  built alongside it, and measures frame times (also while the overview opens and closes over
+  20 windows, when nothing but a window title may be uploaded), compositor start time and idle
+  memory on lavapipe, for the compositor and for the toolkit sample; it gates the exact work counts and
   idle memory and reports the wall-clock numbers against the budgets in
   [`../decisions/0001-rendering.md`](../decisions/0001-rendering.md); the tables go to the job
   summary and `perf.json` and `perf-toolkit.json` are uploaded.

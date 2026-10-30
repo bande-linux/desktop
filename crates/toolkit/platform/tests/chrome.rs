@@ -112,6 +112,7 @@ fn menus_tables_and_alerts_match_their_goldens_in_both_schemes_at_1x_and_1_5x() 
             let suffix = format!("{scheme}-{scale_name}");
             let shot_at = |title, pointer, popups| Shot {
                 title,
+                companion: None,
                 scale,
                 dark,
                 pointer,

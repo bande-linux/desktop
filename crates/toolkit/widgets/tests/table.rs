@@ -2,9 +2,10 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, NodeId, Role, TreeId};
-use unbound_graphics::{Palette, Point, Scheme, TextSystem};
+use unbound_graphics::{Color, Item, Paint, Palette, Point, Scheme, TextSystem};
 use unbound_widgets::{
     Cell, ClipboardRequest, Column, Context, Event, HEADER_HEIGHT, Key, Menu, MenuItem, Modifiers,
     Pointer, PointerButton, ROW_HEIGHT, Row, Size, Sort, Table, Ui, Widget, WidgetId,
@@ -536,4 +537,41 @@ fn a_flexible_column_takes_the_spare_width_and_its_divider_follows_the_pointer()
     assert_eq!((size.x, size.width), (180.0, 140.0));
     let kind = fixture.table().cell_bounds(0, 2).expect("kind cell");
     assert_eq!((kind.x, kind.width), (320.0, 80.0));
+}
+
+fn selection_top(items: &[Item], accent: Color) -> Option<f32> {
+    items.iter().find_map(|item| match item {
+        Item::Fill {
+            shape,
+            paint: Paint::Solid(color),
+        } if *color == accent => Some(shape.rect.y),
+        Item::Clip { items, .. } => selection_top(items, accent),
+        _ => None,
+    })
+}
+
+#[test]
+fn the_selection_glides_to_the_next_row_instead_of_jumping() {
+    let mut fixture = Fixture::new(&NAMES);
+    let clock = Rc::new(std::cell::Cell::new(Instant::now()));
+    let time = clock.clone();
+    fixture.ui.set_clock(move || time.get());
+    fixture.click(0, NONE, 1);
+    let accent = Palette::for_scheme(Scheme::Light).accent;
+    let top = |fixture: &mut Fixture| {
+        let scene = fixture.ui.scene(AREA.width as u32, AREA.height as u32);
+        selection_top(&scene.items, accent).expect("a focused selection")
+    };
+    let start = top(&mut fixture);
+    fixture.key(Key::Down, NONE);
+    clock.set(clock.get() + Duration::from_millis(40));
+    let gliding = top(&mut fixture);
+    assert!(fixture.ui.is_animating());
+    assert!(
+        start < gliding && gliding < start + ROW_HEIGHT,
+        "the block is on its way: {start} < {gliding} < {}",
+        start + ROW_HEIGHT
+    );
+    clock.set(clock.get() + Duration::from_secs(1));
+    assert!((top(&mut fixture) - (start + ROW_HEIGHT)).abs() < 0.01);
 }

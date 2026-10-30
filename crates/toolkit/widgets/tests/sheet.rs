@@ -158,3 +158,54 @@ fn a_dialog_floats_in_the_upper_middle_instead_of_hanging_from_the_top() {
     window.key(Key::Enter);
     assert!(!window.ui.has_sheet());
 }
+
+fn quit_alert(width: f32) -> Vec<(String, accesskit::Rect)> {
+    let mut ui = Ui::new(
+        Box::new(Stack::new(Axis::Vertical, 0.0, 0.0, Vec::new())),
+        Context::new(TextSystem::new(), Palette::for_scheme(Scheme::Light)),
+    );
+    ui.present_dialog(
+        Alert::new("Quit Terminal?", "Two processes are still running.", |_| {})
+            .other("Don’t Quit", "keep")
+            .cancel("Cancel", "cancel")
+            .primary("Quit", "quit"),
+    );
+    ui.scene(width as u32, 400);
+    ui.accessibility()
+        .nodes
+        .into_iter()
+        .filter(|(_, node)| node.role() == Role::Button)
+        .filter_map(|(_, node)| Some((node.label()?.to_owned(), node.bounds()?)))
+        .collect()
+}
+
+fn bounds_of(buttons: &[(String, accesskit::Rect)], label: &str) -> accesskit::Rect {
+    buttons
+        .iter()
+        .find(|(title, _)| title == label)
+        .map(|(_, bounds)| *bounds)
+        .expect("button")
+}
+
+#[test]
+fn alert_buttons_sit_in_the_footer_with_alternatives_apart_and_stack_when_narrow() {
+    let wide = quit_alert(480.0);
+    let keep = bounds_of(&wide, "Don’t Quit");
+    let cancel = bounds_of(&wide, "Cancel");
+    let quit = bounds_of(&wide, "Quit");
+    assert_eq!(keep.y0, quit.y0);
+    assert!(keep.x1 < cancel.x0 && cancel.x1 < quit.x0);
+    assert!(
+        cancel.x0 - keep.x1 > 2.0 * (quit.x0 - cancel.x1),
+        "the alternative stands apart"
+    );
+    let narrow = quit_alert(260.0);
+    let keep = bounds_of(&narrow, "Don’t Quit");
+    let cancel = bounds_of(&narrow, "Cancel");
+    let quit = bounds_of(&narrow, "Quit");
+    assert_eq!((keep.x0, keep.x1), (quit.x0, quit.x1));
+    assert!(
+        quit.y1 < cancel.y0 && cancel.y1 < keep.y0,
+        "the default is on top"
+    );
+}

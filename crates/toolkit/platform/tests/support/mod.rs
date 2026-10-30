@@ -138,6 +138,7 @@ impl App for Still {
 
 pub struct Shot {
     pub title: &'static str,
+    pub companion: Option<&'static str>,
     pub scale: f64,
     pub dark: bool,
     pub pointer: (i32, i32),
@@ -155,6 +156,7 @@ pub fn shot(name: &str, prepare: fn(&mut Window) -> Option<Ui>, shot: Shot) {
     DARK.store(shot.dark, Ordering::SeqCst);
     let pointer = shot.pointer;
     let title = shot.title;
+    let companion = shot.companion;
     let (client_end, server_end) = UnixStream::pair().expect("socket pair");
     server.insert_client(server_end).expect("insert client");
     let (drawn, on_screen) = mpsc::channel();
@@ -181,6 +183,23 @@ pub fn shot(name: &str, prepare: fn(&mut Window) -> Option<Ui>, shot: Shot) {
         still.frames_at_rest = 0;
         still.at_rest.store(false, Ordering::SeqCst);
         window.request_redraw();
+        let _companion = companion.map(|title| {
+            let mut beside = window
+                .open_beside(Role::toplevel(title, "unbound-toolkit-companion"), (240, 120))
+                .expect("second window");
+            beside.wait_for_gpu();
+            let scene = Scene {
+                width: 240,
+                height: 120,
+                background: beside.appearance().palette().sheet,
+                items: Vec::new(),
+            };
+            for _ in 0..3 {
+                beside.draw(&scene).expect("second window's frame");
+                beside.wait_for_frame().expect("second window shown");
+            }
+            beside
+        });
         drawn.send(()).expect("report the frame");
         run(&mut window, &mut still).expect("run loop");
     });

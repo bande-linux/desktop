@@ -19,6 +19,7 @@ fn the_window_frame_matches_its_goldens_in_both_schemes_at_1x_and_1_5x() {
                     |_| None,
                     Shot {
                         title: "Documents",
+                        companion: None,
                         scale,
                         dark,
                         pointer,
@@ -38,11 +39,26 @@ fn the_window_frame_matches_its_goldens_in_both_schemes_at_1x_and_1_5x() {
             },
             Shot {
                 title: "Documents",
+                companion: None,
                 scale: 1.0,
                 dark,
                 pointer: AWAY,
                 popups: 0,
             },
         );
+        for (scale, scale_name) in SCALES {
+            shot(
+                &format!("window-frame-inactive-{scheme}-{scale_name}"),
+                |_| None,
+                Shot {
+                    title: "Documents",
+                    companion: Some("Downloads"),
+                    scale,
+                    dark,
+                    pointer: AWAY,
+                    popups: 0,
+                },
+            );
+        }
     }
 }

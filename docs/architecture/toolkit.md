@@ -147,22 +147,67 @@ writes a hex value, a corner radius or a font name of its own.
     `chassis` for the app to draw on, and the toolkit paints the sheet in the rest. The header
     and its buttons are published to screen readers above the app's tree. Server-side frames
     for third-party apps (`compositor/src/frame.rs`) draw the same header and pill from
-    `title_bar.rs`, 40 pt high. `UNBOUND_RENDERER=cpu` keeps a window on
+    `title_bar.rs`, 40 pt high, and redraw when Alt is pressed or released so the zoom glyph
+    follows it. Goldens: `platform/tests/golden/window-frame-*.png`, including an inactive
+    window behind a second one. `UNBOUND_RENDERER=cpu` keeps a window on
   `CpuRenderer`. `crates/testing/sample` is a settings card on the toolkit that `ci/perf` starts
   to measure.
 - **Widgets.** `ui` holds the widget tree: `Stack` (rows and columns with spacing and padding; a
-  column stretches its children across, a row centres them), `Label`, `Button`, `Toggle`,
-  `Checkbox` (on, off, mixed), `RadioGroup`, `SegmentedControl` (its selection slides on a
-  spring), `PopUpButton` (a menu with the current choice over the button), `ComboBox`,
-  `Stepper` (repeats while held), `Slider`, `ProgressBar` (determinate or indeterminate),
-  `Spinner`, `TextField`, `SearchField` (magnifier, clear button, Escape clears, reports every
-  change), `TextView` and `SecureField`, laid out, painted into a `Scene` and driven by `Ui`.
-  Sizes follow macOS's regular controls: push buttons and text fields 22 px high, switches
-  38×22 px (`NSSwitch`), a 3 px focus ring in the accent colour. Buttons and switches act on
-  release inside, as in AppKit. Tab moves focus between text fields only unless
-  `keyboard_navigation` is set, as macOS's Keyboard navigation setting (off by default) does;
-  tabbing into a field selects its text. A widget opens a menu of its own (a pop-up button's
-  choices) with `Context::show_menu`; the choice comes back to it through `menu_action`.
+  column stretches its children across, a row centres them), `Label`, `Shortcut`, the controls
+  below, `Table`, `ScrollView`, `Disclosure` and `FreeLayout`, laid out, painted into a `Scene`
+  and driven by `Ui`. Buttons and switches act on release inside, as in AppKit. Tab moves focus
+  between text fields only unless `keyboard_navigation` is set, as macOS's Keyboard navigation
+  setting (off by default) does; tabbing into a field selects its text. A widget opens a menu
+  of its own (a pop-up button's choices) with `Context::show_menu`; the choice comes back to it
+  through `menu_action`.
+- **Controls** (Datum §9, golden `widgets/tests/golden/controls-*.png`). Regular controls are
+  28 pt high (`ControlSize::Regular`), radius 6 (`Radius::S`). Focus is a 2 pt `focus` ring at a
+  1 pt gap (radius + 3); fields instead turn their outline into a 1.5 pt accent line and add the
+  ring at 35 %. Text and glyphs on the accent use `on_accent`, on danger `on_danger` (dark ink
+  on the light accents of dark mode).
+
+  | Control | Look and API |
+  |---|---|
+  | `Button::new(title, action)` | secondary: `well` fill, `ink` 13/500, 8 % ink on hover, 16 % pressed |
+  | `.primary()` | accent fill, `on_accent` 13/600, Return; press mixes 15 % black |
+  | `.cancel()` | secondary look, Escape |
+  | `.quiet()` | `accent_text` 600, `well` fill on hover only |
+  | `.destructive()` | danger fill, `on_danger` text; only for the destructive verb |
+  | `Button::symbol(image, label, action)` | 28×28 icon button: a symbolic `Image` tinted `ink2` (`ink` on hover), `well` on hover; `label` is its tooltip and accessible name |
+  | `TextField`, `TextView`, `SecureField` | `field` fill (`overlay` light, `well` dark), 1 pt `edge` outline, placeholder `ink3`, 1.5 pt accent caret, selection `accent_soft` (`well` when unfocused); `SecureField` shows a Caps Lock sign while focused with Caps Lock on (`Context::caps_lock`, set by `Window::drive`) |
+  | `SearchField` | `well` fill, radius 8, no outline, magnifier `ink3`, clear button |
+  | `ComboBox` | a text field with a single down chevron |
+  | `Toggle` (switch) | 36×20 pill, `edge` off, accent on, white 15 pt knob with a small shadow |
+  | `Checkbox` | 16 pt, radius 4, 1.5 pt `ink3` outline; on: accent with a square-capped check |
+  | `RadioGroup` | 16 pt circles; on: accent with a 5 pt square centre |
+  | `SegmentedControl` | `well` track radius 8, a raised chip radius 6 (`raised`: `overlay` light, `edge` dark) that glides on `quick`; selected label 600 `ink`; `set_selected(cx, index)` from code |
+  | `PopUpButton` | `well` fill, single down chevron, the menu opens with the current choice over the button |
+  | `Stepper` | one 96 pt `well` capsule: − value + (tabular figures); `.format(fn)` formats the value |
+  | `Slider` | 4 pt `well` track, accent fill, a 7×20 white fader knob with an `edge` outline; `.ticks(n)` adds `ink3` tick marks and detents the knob settles on (`interactive` spring); `set_value(cx, value)` from code |
+  | `ProgressBar`, `LevelIndicator` | 24 cells with 2 pt gaps, radius 1, accent on `well`; indeterminate: a 4-cell block gliding back and forth (pulsing with Reduce Motion) |
+  | `Spinner` | 12 `ink2` spokes |
+  | `Disclosure` | chevron that turns, content fades in |
+  | Tooltip | `ink` fill with `chassis` text 12/500, radius 6, no arrow |
+  | `Shortcut::new("Alt+Super+K")` | key symbols in `ink2`, with the Super glyph (a 9.5 pt rounded square with a 3 pt square inside) instead of ⌘; `shortcut_keys` splits a shortcut into modifier symbols, Super and key |
+
+- **Menus** (golden `platform/tests/golden/menu-submenu-*.png`). Opaque `overlay`, radius 10
+  (`MENU_RADIUS`) with the Datum overlay shadow pair and no blur; 4 pt inset, 28 pt rows, 9 pt
+  separators in `hairline`, the highlight accent radius 6 with `on_accent` text, disabled items
+  `ink3`, the shortcut column right-aligned in `ink3` with the Super glyph, square-capped
+  checkmarks, submenu chevrons. Searchable menus (`Menu::searchable`) have a `well` search
+  field; Alt swaps items for their `alternate`.
+- **Alerts and sheets** (golden `platform/tests/golden/alert-*.png`). `Alert` is a card of radius
+  14: the body on `overlay` with an optional 36 pt icon (`.icon(image)`), a Manrope `Heading`
+  and the message in `ink2`; a footer tray on `chassis` holds the buttons: default at the right
+  (`.primary` or `.destructive`), cancel left of it, alternatives (`.other`) as quiet buttons at
+  the far left. When they do not fit side by side they stack, default on top. The parent dims
+  with `scrim` (18 % light, 40 % dark); `Ui::present_sheet` drops the card from under the header,
+  `Ui::present_dialog` centres it.
+- **Tables** (golden `platform/tests/golden/table-*.png`). Rows 32, header 28 with `Label`-style
+  tracked capitals in `ink3` (`ink2` for the sorted column) over a `hairline` underline, no
+  stripes and no column separators. Contiguous selected rows form one block of radius 6 inset
+  4 × 1: accent with `on_accent` text while focused, `well` otherwise. A single selected run
+  glides to its new rows on `quick`. Scroll bars are a 6 pt `ink3` knob that fades.
 - **Tooltips.** A widget that returns `Widget::tooltip` (buttons and pop-up buttons through
   `.tooltip(...)`) shows it after the pointer rests on it for `TOOLTIP_DELAY`, or after Tab
   moves focus to it. It fades in under the pointer inside the window, a click or key hides it

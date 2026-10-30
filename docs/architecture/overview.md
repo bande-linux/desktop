@@ -24,6 +24,7 @@ The architecture is split by subject:
 | [`behaviour.md`](behaviour.md) | recorded behaviour decisions and their macOS precedents |
 | [`ci.md`](ci.md) | CI runners, jobs and the verification funnel |
 | [`packaging.md`](packaging.md) | Debian packages and the meta-package |
+| [`performance.md`](performance.md) | measured memory, CPU and size of the shell, and how to measure them |
 
 ## Component map
 

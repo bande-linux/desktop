@@ -7,12 +7,13 @@ fn main() -> ExitCode {
     unbound_log::init("unbound-automount");
     let started = Connection::system().and_then(|system| {
         let session = Connection::session()?;
-        Automounter::start(&system, &session)
+        Ok((Automounter::start(&system, &session)?, session))
     });
     match started {
-        Ok(_automounter) => loop {
-            std::thread::park();
-        },
+        Ok((_automounter, session)) => {
+            unbound_bus::serve_until_closed(&session);
+            ExitCode::SUCCESS
+        }
         Err(error) => {
             tracing::error!("{error}");
             ExitCode::FAILURE

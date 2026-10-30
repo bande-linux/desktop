@@ -1,0 +1,15 @@
+[package]
+name = "unbound-bus"
+description = "D-Bus service lifetime for Unbound daemons: serve until the bus goes away"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+zbus.workspace = true
+
+[dev-dependencies]
+unbound-test-bus.workspace = true
+
+[lints]
+workspace = true

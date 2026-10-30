@@ -130,8 +130,11 @@ pub(crate) fn encode(
     image_ids: &ImageIds,
     items: &[Item],
     scale: f64,
+    origin: (u32, u32),
 ) {
-    encode_at(canvas, outlines, image_ids, items, Affine::scale(scale));
+    let base =
+        Affine::translate((-f64::from(origin.0), -f64::from(origin.1))) * Affine::scale(scale);
+    encode_at(canvas, outlines, image_ids, items, base);
 }
 
 fn bezier(path: &Path) -> BezPath {

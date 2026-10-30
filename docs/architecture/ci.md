@@ -50,7 +50,7 @@ status-check contexts:
   from the scene (exact area coverage of shapes and of glyph outlines read with `ab_glyph`,
   Gaussian shadows by numeric integration), so they depend neither on Vello nor on the font
   version, and both renderers must match them.
-- `ci/deb`: `cargo deb` for every packaged crate (compositor, session services, portal backend,
+- `ci/deb`: `cargo deb --profile dist` for every packaged crate (compositor, session services, portal backend,
   shell clients and apps), then checks each package's architecture and version, the D-Bus
   activation files, the user units, the portal backend's registration and the login session,
   starts the packaged settings service on a private bus to read a property, starts the packaged

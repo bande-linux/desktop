@@ -298,7 +298,7 @@ impl Menus {
             }
             popup
                 .target
-                .present(cpu, shm, handle, &popup.surface, &scene, scale)?;
+                .present(cpu, shm, handle, &popup.surface, &scene, scale, None)?;
         }
         Ok(())
     }

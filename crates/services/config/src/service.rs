@@ -1,13 +1,12 @@
 use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fmt;
-use std::io::ErrorKind;
+use std::io::{self, ErrorKind};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
-use notify::event::{AccessKind, AccessMode, ModifyKind};
-use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use unbound_watch::{Changes, FolderWatch};
 use zbus::blocking::Connection;
 use zbus::fdo::Error::{Failed, InvalidArgs};
 use zbus::object_server::SignalEmitter;
@@ -29,7 +28,7 @@ const STAGING_NAME: &str = ".config.kdl.new";
 #[derive(Debug)]
 pub enum ServiceError {
     Bus(zbus::Error),
-    Watch(notify::Error),
+    Watch(io::Error),
     Path(PathBuf),
 }
 
@@ -51,14 +50,14 @@ impl From<zbus::Error> for ServiceError {
     }
 }
 
-impl From<notify::Error> for ServiceError {
-    fn from(error: notify::Error) -> Self {
+impl From<io::Error> for ServiceError {
+    fn from(error: io::Error) -> Self {
         Self::Watch(error)
     }
 }
 
 pub struct ConfigService {
-    _watcher: RecommendedWatcher,
+    _watch: FolderWatch,
     _connection: Connection,
 }
 
@@ -82,7 +81,7 @@ impl ConfigService {
             .file_name()
             .ok_or_else(|| ServiceError::Path(path.to_path_buf()))?
             .to_owned();
-        std::fs::create_dir_all(directory).map_err(|error| ServiceError::Watch(error.into()))?;
+        std::fs::create_dir_all(directory)?;
 
         if path.exists() {
             on_reload(store.reload(path));
@@ -103,33 +102,26 @@ impl ConfigService {
             .interface::<_, ConfigInterface>(OBJECT_PATH)?;
 
         let watched = path.to_path_buf();
-        let mut watcher =
-            notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
-                let Ok(event) = event else { return };
-                let relevant = matches!(
-                    event.kind,
-                    EventKind::Access(AccessKind::Close(AccessMode::Write))
-                        | EventKind::Modify(ModifyKind::Name(_))
-                ) && event
-                    .paths
-                    .iter()
-                    .any(|changed| changed.file_name() == Some(file_name.as_os_str()));
-                if !relevant {
-                    return;
+        let watch = FolderWatch::spawn(Changes::Saved, move |paths| {
+            if !paths
+                .iter()
+                .any(|changed| changed.file_name() == Some(file_name.as_os_str()))
+            {
+                return;
+            }
+            let mut published = lock(&published);
+            match store.reload(&watched) {
+                Ok(config) => {
+                    publish_changes(&interface, &published, &config);
+                    on_reload(Ok(Arc::clone(&config)));
+                    *published = config;
                 }
-                let mut published = lock(&published);
-                match store.reload(&watched) {
-                    Ok(config) => {
-                        publish_changes(&interface, &published, &config);
-                        on_reload(Ok(Arc::clone(&config)));
-                        *published = config;
-                    }
-                    Err(error) => on_reload(Err(error)),
-                }
-            })?;
-        watcher.watch(directory, RecursiveMode::NonRecursive)?;
+                Err(error) => on_reload(Err(error)),
+            }
+        })?;
+        watch.watch(directory)?;
         Ok(Self {
-            _watcher: watcher,
+            _watch: watch,
             _connection: connection.clone(),
         })
     }

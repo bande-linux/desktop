@@ -6,6 +6,10 @@ something is its own binary package, built with `cargo deb` from the crate's
 `packaging/`. Every package of one build carries the same version, derived from git by
 `ci/deb/version.sh`. How CI builds, checks and publishes them is in [ci.md](ci.md).
 
+Packages are built with the `dist` profile (`cargo deb --profile dist`): fat LTO, one codegen
+unit, `panic = "abort"` and stripped symbols. Development and test builds keep the default
+profiles. Sizes are tracked in [performance.md](performance.md).
+
 ## Packages
 
 - **Per crate** (`cargo deb`, arm64): `unbound-compositor`, the session services

@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 
 use smithay::utils::Size;
 use unbound_compositor::{FrameClock, FrameScheduler, Headless, REFRESH, Renderer, SessionRole};
-use unbound_graphics::{Color, Scene};
+use unbound_graphics::{Color, Item, Point, Scene, TextAlign, TextStyle, TextSystem};
 use unbound_toolkit_platform::{FramePath, Role, TITLE_BAR_HEIGHT, Window};
 
 const OUTPUT: (i32, i32) = (320, 240);
@@ -223,4 +223,72 @@ fn on_a_2x_output_a_window_keeps_its_size_in_points_and_fills_twice_the_pixels()
     }
     assert!(verified, "the frame was drawn and verified");
     client.join().expect("client thread");
+}
+
+#[test]
+fn windows_sharing_the_gpu_resize_while_others_draw_and_stay_on_the_gpu() {
+    const WINDOWS: usize = 4;
+    const FRAMES: u32 = 30;
+    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let clients: Vec<_> = (0..WINDOWS)
+        .map(|index| {
+            let (client_end, server_end) = UnixStream::pair().expect("socket pair");
+            server.insert_client(server_end).expect("insert client");
+            thread::spawn(move || {
+                let mut window = Window::open_on(
+                    client_end,
+                    Role::toplevel("toolkit test", "unbound-toolkit-test"),
+                    WINDOW,
+                )
+                .expect("window");
+                window.wait_for_gpu();
+                let mut text = TextSystem::new();
+                (0..FRAMES)
+                    .map(|frame| {
+                        let grown = (frame + index as u32) % 2 * 24;
+                        let label = text.paragraph(
+                            &format!("Window {index}, frame {frame}"),
+                            TextStyle::new(10.0 + frame as f32, BLUE),
+                            None,
+                            TextAlign::Start,
+                        );
+                        let scene = Scene {
+                            width: WINDOW.0 + grown,
+                            height: WINDOW.1 + grown,
+                            background: RED,
+                            items: vec![Item::Text {
+                                origin: Point::new(8.0, 8.0),
+                                paragraph: label,
+                            }],
+                        };
+                        let path = window.draw(&scene).expect("frame");
+                        window.wait_for_frame().expect("frame callback");
+                        path
+                    })
+                    .collect::<Vec<_>>()
+            })
+        })
+        .collect();
+
+    let mut renderer = Renderer::new().expect("Vulkan renderer");
+    let mut scheduler = FrameScheduler::new(FrameClock::new(Duration::ZERO, REFRESH));
+    let start = Instant::now();
+    while !clients.iter().all(thread::JoinHandle::is_finished) {
+        assert!(
+            start.elapsed() < Duration::from_secs(120),
+            "a client stalled"
+        );
+        server.dispatch().expect("server dispatch");
+        scheduler
+            .poll(|| start.elapsed(), &mut server, &mut renderer)
+            .expect("compositor frame");
+        thread::sleep(Duration::from_micros(200));
+    }
+    for client in clients {
+        let paths = client.join().expect("client thread");
+        assert!(
+            paths.iter().all(|path| *path == FramePath::Gpu),
+            "{paths:?}"
+        );
+    }
 }

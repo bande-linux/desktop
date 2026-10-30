@@ -12,6 +12,7 @@ parley.workspace = true
 pollster.workspace = true
 resvg.workspace = true
 skrifa.workspace = true
+tracing.workspace = true
 vello_cpu.workspace = true
 vello_gpu.workspace = true
 wgpu.workspace = true

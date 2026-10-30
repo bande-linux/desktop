@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex, PoisonError, Weak, mpsc};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak, mpsc};
 
 use vello_cpu::Glyph;
 
@@ -26,6 +26,7 @@ pub struct GpuDevice {
     adapter: wgpu::Adapter,
     device: wgpu::Device,
     queue: wgpu::Queue,
+    submission: Mutex<()>,
 }
 
 static SHARED: Mutex<Weak<GpuDevice>> = Mutex::new(Weak::new());
@@ -73,20 +74,38 @@ impl GpuDevice {
         let (device, queue) =
             pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default()))
                 .map_err(RenderError::Device)?;
+        device.on_uncaptured_error(Arc::new(|error| tracing::error!(%error, "GPU error")));
         Ok(Self {
             instance,
             adapter,
             device,
             queue,
+            submission: Mutex::new(()),
         })
+    }
+
+    pub fn configure(
+        &self,
+        surface: &wgpu::Surface<'static>,
+        config: &wgpu::SurfaceConfiguration,
+    ) -> Result<(), RenderError> {
+        let _submitting = self.submitting();
+        let scope = self.device.push_error_scope(wgpu::ErrorFilter::Validation);
+        surface.configure(&self.device, config);
+        match pollster::block_on(scope.pop()) {
+            Some(error) => Err(RenderError::Gpu(error.to_string())),
+            None => Ok(()),
+        }
+    }
+
+    fn submitting(&self) -> MutexGuard<'_, ()> {
+        self.submission
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
     }
 
     pub fn adapter(&self) -> &wgpu::Adapter {
         &self.adapter
-    }
-
-    pub fn device(&self) -> &wgpu::Device {
-        &self.device
     }
 }
 
@@ -189,15 +208,13 @@ impl GpuRenderer {
         self.gpu.adapter.get_info()
     }
 
-    pub fn device(&self) -> &wgpu::Device {
-        &self.gpu.device
-    }
-
     pub fn atlas_size(&self) -> (u16, u16) {
         self.atlas
     }
 
     pub fn render(&mut self, scene: &Scene) -> Result<Snapshot, RenderError> {
+        let gpu = Arc::clone(&self.gpu);
+        let _submitting = gpu.submitting();
         let target = self.gpu.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("toolkit target"),
             size: wgpu::Extent3d {
@@ -233,6 +250,8 @@ impl GpuRenderer {
             | wgpu::CurrentSurfaceTexture::Suboptimal(output) => output,
             other => return Err(RenderError::Gpu(format!("no surface texture: {other:?}"))),
         };
+        let gpu = Arc::clone(&self.gpu);
+        let _submitting = gpu.submitting();
         let size = output.texture.size();
         let kept = self
             .frame

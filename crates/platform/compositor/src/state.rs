@@ -36,7 +36,7 @@ use smithay::reexports::wayland_server::protocol::wl_seat::WlSeat;
 use smithay::reexports::wayland_server::protocol::wl_shm::Format;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{Client, Display, DisplayHandle, Resource};
-use smithay::utils::{Logical, Physical, Point, Raw, Rectangle, SERIAL_COUNTER, Serial, Size};
+use smithay::utils::{Logical, Physical, Point, Raw, SERIAL_COUNTER, Serial, Size};
 use smithay::wayland::buffer::BufferHandler;
 use smithay::wayland::compositor::{
     CompositorClientState, CompositorHandler, CompositorState, SurfaceAttributes,
@@ -141,6 +141,7 @@ pub(crate) enum Placed<'a> {
     Surface(WlSurface, Point<i32, Logical>),
     Window(&'a Window),
     Closing(&'a Closing),
+    Overview,
 }
 
 type Composed = (
@@ -201,6 +202,8 @@ pub struct State {
     pub(crate) slide_back: Option<crate::scene::SlideBack>,
     pub(crate) watchdog: crate::watchdog::Watchdog,
     pub(crate) desktop: crate::gesture::ShowDesktop,
+    pub(crate) workspaces: crate::workspace::Workspaces,
+    pub(crate) overview: crate::overview::Overview,
     pub(crate) gesture_route: Option<crate::gesture::Route>,
     pub(crate) active_app: String,
     pub(crate) idle: crate::idle::Idle,
@@ -300,8 +303,8 @@ impl Headless {
         output.change_current_state(Some(mode), None, None, Some((0, 0).into()));
         output.set_preferred(mode);
         output.create_global::<State>(&handle);
-        handle.create_global::<State, UnboundShellV1, ()>(8, ());
-        handle.create_global::<State, UnboundAppV1, ()>(2, ());
+        handle.create_global::<State, UnboundShellV1, ()>(9, ());
+        handle.create_global::<State, UnboundAppV1, ()>(3, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
         State::create_capture_globals(&handle);
         let state = State {
@@ -363,6 +366,8 @@ impl Headless {
             slide_back: None,
             watchdog: crate::watchdog::Watchdog::default(),
             desktop: crate::gesture::ShowDesktop::default(),
+            workspaces: crate::workspace::Workspaces::default(),
+            overview: crate::overview::Overview::default(),
             gesture_route: None,
             active_app: String::new(),
             idle: crate::idle::Idle::default(),
@@ -445,7 +450,9 @@ impl Headless {
             .state
             .windows
             .iter()
-            .filter(|window| window.size.is_none())
+            .filter(|window| {
+                window.size.is_none() || (self.state.overview.is_shown() && window.visible())
+            })
             .map(|window| window.surface().clone());
         let roots = self
             .state
@@ -571,18 +578,14 @@ impl Headless {
                         .surface()
                         .client()
                         .is_some_and(|owner| self.state.watchdog.is_unresponsive(&owner.id()));
-                    let shift = window
-                        .geometry()
-                        .map(|rect| {
-                            self.state.desktop_shift(Rectangle::new(
-                                rect.location.to_f64(),
-                                rect.size.to_f64(),
-                            ))
-                        })
-                        .unwrap_or_default();
+                    let presented = self.state.presented(window);
                     let (shown, look) =
-                        window_elements(window, renderer, scale, active, hung, shift);
+                        window_elements(window, renderer, scale, active, hung, presented);
                     elements.extend(shown);
+                    elements.extend(self.state.overview_ring(window, scale));
+                    if let (Some(ghost), Some(look)) = (self.state.overview_ghost(window), &look) {
+                        elements.extend(look.ghost(ghost, scale));
+                    }
                     drawn.push((window.surface().clone(), look));
                     if let Some(preview) = &self.state.preview
                         && &preview.owner == window.surface()
@@ -591,6 +594,9 @@ impl Headless {
                     }
                 }
                 Placed::Closing(closing) => elements.extend(closing.render_elements(scale)),
+                Placed::Overview => {
+                    elements.extend(self.state.overview_elements(renderer, scale));
+                }
             }
         }
         tie_blurs_to_what_lies_below(&mut elements, scale);
@@ -678,7 +684,7 @@ impl Headless {
                     None,
                     ElementKind::Cursor,
                 )
-                .map(OutputElement::Cursor)
+                .map(OutputElement::Memory)
                 .into_iter()
                 .collect()
             }
@@ -772,11 +778,11 @@ impl State {
         }
         self.windowless_app = None;
         self.typed_at = None;
-        if surface
-            .as_ref()
-            .is_some_and(|surface| self.window_index(surface).is_some())
+        if let Some(surface) = &surface
+            && self.window_index(surface).is_some()
         {
             self.hide_desktop();
+            self.show_workspace_of(surface);
         }
         if let Some(exclusive) = &mut self.exclusive_layer
             && surface.as_ref() != Some(&exclusive.surface)
@@ -815,7 +821,7 @@ impl State {
         self.windows
             .iter()
             .rev()
-            .filter(|window| window.visible())
+            .filter(|window| self.present(window))
             .map(|window| window.toplevel.wl_surface())
             .find(|surface| {
                 surface
@@ -969,7 +975,7 @@ impl State {
             .filter_map(|placed| match placed {
                 Placed::Surface(surface, origin) => Some((surface, origin)),
                 Placed::Window(window) => Some((window.surface().clone(), window.surface_origin())),
-                Placed::Closing(_) => None,
+                Placed::Closing(_) | Placed::Overview => None,
             })
             .collect()
     }
@@ -1001,23 +1007,29 @@ impl State {
             .rev()
             .filter(|window| {
                 if rendered {
-                    window.rendered()
+                    window.rendered() && self.on_view(window)
                 } else {
-                    window.visible() && !self.desktop.hides_windows()
+                    self.present(window)
+                        && !self.desktop.hides_windows()
+                        && !self.overview.is_shown()
                 }
             })
             .collect::<Vec<_>>();
-        let fullscreen_in_front = visible
-            .first()
-            .is_some_and(|window| window.has_state(xdg_toplevel::State::Fullscreen));
-        let (front, rest) = visible.split_at(usize::from(fullscreen_in_front));
+        let (front, rest): (Vec<&Window>, Vec<&Window>) = visible.into_iter().partition(|window| {
+            self.on_full_screen_space(window) || self.dragged_in_overview(window)
+        });
         let (leaving, rest): (Vec<&Window>, Vec<&Window>) =
-            rest.iter().partition(|window| window.is_minimized());
+            rest.into_iter().partition(|window| window.is_minimized());
         [
             layers(Layer::Overlay),
             self.window_entries(&leaving),
-            self.window_entries(front),
+            self.window_entries(&front),
             layers(Layer::Top),
+            if rendered && self.overview.is_shown() {
+                vec![Placed::Overview]
+            } else {
+                Vec::new()
+            },
             self.closing
                 .iter()
                 .filter(|_| rendered)
@@ -1115,7 +1127,7 @@ impl State {
         let previous = layer.previous.filter(|previous| {
             self.windows
                 .iter()
-                .any(|window| window.surface() == previous && window.visible())
+                .any(|window| window.surface() == previous && self.present(window))
         });
         let next = previous.or_else(|| self.frontmost(None));
         self.focus(next);
@@ -1184,6 +1196,9 @@ impl State {
                     self.close_window(index);
                 }
                 self.refocus_after_losing(surface);
+                if let Some(index) = self.window_index(surface) {
+                    self.window_left_workspace(self.windows[index].workspace);
+                }
             }
             _ => {}
         }
@@ -1232,17 +1247,21 @@ impl XdgShellHandler for State {
     }
 
     fn new_toplevel(&mut self, toplevel: ToplevelSurface) {
-        self.windows.push(Window::new(toplevel));
+        let workspace = self.workspaces.active_id();
+        self.windows.push(Window::new(toplevel, workspace));
     }
 
     fn toplevel_destroyed(&mut self, toplevel: ToplevelSurface) {
         self.withdraw_toplevel(toplevel.wl_surface());
-        if let Some(index) = self.window_index(toplevel.wl_surface()) {
+        let workspace = self.window_index(toplevel.wl_surface()).map(|index| {
             self.close_window(index);
-            self.windows.remove(index);
-        }
+            self.windows.remove(index).workspace
+        });
         self.needs_redraw = true;
         self.refocus_after_losing(toplevel.wl_surface());
+        if let Some(workspace) = workspace {
+            self.window_left_workspace(workspace);
+        }
     }
 
     fn title_changed(&mut self, toplevel: ToplevelSurface) {
@@ -1327,7 +1346,7 @@ render_elements! {
     Closing=WindowElement<PieceElement>,
     Fill=FillElement,
     Blur=BlurElement,
-    Cursor=MemoryRenderBufferRenderElement<VulkanRenderer>,
+    Memory=MemoryRenderBufferRenderElement<VulkanRenderer>,
 }
 
 impl SeatHandler for State {

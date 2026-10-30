@@ -194,6 +194,8 @@ impl State {
                     .foreign_toplevel_state
                     .new_toplevel::<State>(title, app_id);
                 self.windows[index].foreign = Some(handle);
+                self.windows[index].announced_workspace = None;
+                self.announce_workspaces();
             }
             None => {}
         }
@@ -226,6 +228,7 @@ impl GlobalDispatch<UnboundShellV1, ()> for State {
         }
         state.announce_unresponsive(&shell);
         state.announce_minimized_windows(&shell);
+        state.announce_workspaces_to(&shell);
         state.shell_resources.push(shell);
     }
 
@@ -272,6 +275,9 @@ impl Dispatch<UnboundShellV1, ()> for State {
             unbound_shell_v1::Request::SetCornerRadius { surface, radius } => {
                 crate::effect::set_corner_radius(&surface, radius);
                 state.needs_redraw = true;
+            }
+            unbound_shell_v1::Request::ShowWindows { app_id } => {
+                state.toggle_overview(Some(app_id).filter(|app_id| !app_id.is_empty()));
             }
             unbound_shell_v1::Request::Destroy => {
                 state.shell_resources.retain(|shell| shell != resource);

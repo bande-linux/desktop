@@ -3745,6 +3745,7 @@ dependencies = [
  "tempfile",
  "tracing",
  "unbound-config",
+ "unbound-graphics",
  "unbound-greeter",
  "unbound-log",
  "unbound-protocols",

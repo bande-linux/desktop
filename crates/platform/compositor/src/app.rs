@@ -55,6 +55,23 @@ impl Dispatch<UnboundAppV1, ()> for State {
             } if toplevel.client() == resource.client() => {
                 state.place_window(&toplevel, placement);
             }
+            unbound_app_v1::Request::MoveToWorkspace {
+                toplevel,
+                workspace: WEnum::Value(workspace),
+            } if toplevel.client() == resource.client() => {
+                if let Some(surface) = state
+                    .windows
+                    .iter()
+                    .find(|window| window.toplevel.xdg_toplevel() == &toplevel)
+                    .map(|window| window.surface().clone())
+                {
+                    state.move_to_workspace(
+                        &surface,
+                        workspace == unbound_app_v1::Workspace::Next,
+                        false,
+                    );
+                }
+            }
             unbound_app_v1::Request::Destroy => {
                 state.app_resources.retain(|app| app != resource);
             }

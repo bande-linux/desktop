@@ -41,7 +41,7 @@ impl State {
             .iter()
             .enumerate()
             .filter(|(other, window)| {
-                *other != index && window.visible() && window.surface().client() == owner
+                *other != index && self.present(window) && window.surface().client() == owner
             })
             .map(|(_, window)| window.location)
             .collect()

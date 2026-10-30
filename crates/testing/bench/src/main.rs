@@ -19,6 +19,12 @@ const FRAMES: usize = 240;
 const IDLE_SETTLE: Duration = Duration::from_secs(1);
 const STARTS: usize = 5;
 const PRESENTATIONS: u32 = 120;
+const OVERVIEW_WINDOWS: usize = 20;
+const OVERVIEW_TOGGLE_EVERY: usize = 60;
+const TITLE_LABEL_BYTES: f64 = 64.0 * 1024.0;
+const KEY_LEFTALT: u32 = 56;
+const KEY_LEFTMETA: u32 = 125;
+const KEY_UP: u32 = 103;
 
 const REFRESH_120HZ_MS: f64 = 1000.0 / 120.0;
 const REFRESH_60HZ_MS: f64 = 1000.0 / 60.0;
@@ -65,6 +71,7 @@ fn run() -> Result<bool, Box<dyn Error>> {
 
     let (typical, typical_work) = frame_times(Repaint::OneWindowPatch)?;
     let (full, _) = frame_times(Repaint::EveryWindow)?;
+    let (overview, overview_work) = overview_frames()?;
     let damaged_pixels = (TYPICAL_DAMAGE * TYPICAL_DAMAGE) as f64;
     let (latencies, late) = presentation_latency()?;
     let mut starts = Vec::with_capacity(STARTS);
@@ -124,6 +131,27 @@ fn run() -> Result<bool, Box<dyn Error>> {
             value: percentile(&full, 0.99),
             budget: REFRESH_60HZ_MS,
             enforced: false,
+        },
+        Metric {
+            name: "overview_frame_p50",
+            unit: "ms",
+            value: percentile(&overview, 0.50),
+            budget: REFRESH_120HZ_MS,
+            enforced: false,
+        },
+        Metric {
+            name: "overview_frame_p99",
+            unit: "ms",
+            value: percentile(&overview, 0.99),
+            budget: REFRESH_120HZ_MS,
+            enforced: false,
+        },
+        Metric {
+            name: "overview_uploaded",
+            unit: "B",
+            value: overview_work.uploaded_bytes as f64,
+            budget: TITLE_LABEL_BYTES,
+            enforced: true,
         },
         Metric {
             name: "commit_to_present_p50",
@@ -248,6 +276,56 @@ fn frame_times(repaint: Repaint) -> Result<(Vec<Duration>, FrameStats), Box<dyn 
         }
         times.push(composed.elapsed());
         client.exchange(&mut server);
+    }
+    Ok((times, most))
+}
+
+fn overview_frames() -> Result<(Vec<Duration>, FrameStats), Box<dyn Error>> {
+    let mut renderer = Renderer::new()?;
+    let mut server = Headless::new(Size::from(OUTPUT))?;
+    let mut client = TestClient::connect(&mut server);
+    client.use_seat(&mut server);
+    let stride = WINDOW_WIDTH * 4;
+    let pixels = quadrants(WINDOW_WIDTH, WINDOW_HEIGHT, stride);
+    let image = ShmImage {
+        width: WINDOW_WIDTH as i32,
+        height: WINDOW_HEIGHT as i32,
+        stride: stride as i32,
+        format: Format::Xrgb8888,
+        bytes: &pixels,
+    };
+    for _ in 0..OVERVIEW_WINDOWS {
+        client.show_window(&mut server, &image);
+    }
+    let mut at = Duration::ZERO;
+    while {
+        at += REFRESH;
+        server.animate(at);
+        server.is_animating()
+    } {}
+    renderer.render(&mut server)?;
+
+    let mut times = Vec::with_capacity(FRAMES);
+    let mut most = FrameStats::default();
+    for frame in 0..FRAMES {
+        if frame % OVERVIEW_TOGGLE_EVERY == 0 {
+            for (key, pressed) in [
+                (KEY_LEFTALT, true),
+                (KEY_LEFTMETA, true),
+                (KEY_UP, true),
+                (KEY_UP, false),
+                (KEY_LEFTMETA, false),
+                (KEY_LEFTALT, false),
+            ] {
+                server.key(key, pressed, 0);
+            }
+        }
+        let composed = Instant::now();
+        at += REFRESH;
+        server.animate(at);
+        let stats = renderer.render(&mut server)?;
+        times.push(composed.elapsed());
+        most.uploaded_bytes = most.uploaded_bytes.max(stats.uploaded_bytes);
     }
     Ok((times, most))
 }

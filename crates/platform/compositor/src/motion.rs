@@ -61,6 +61,7 @@ impl Look {
 
 #[derive(Debug, Clone)]
 pub(crate) struct Motion {
+    spring: Spring,
     channels: [Animation; 5],
     last: Option<Duration>,
 }
@@ -69,6 +70,7 @@ impl Motion {
     pub(crate) fn new(spring: Spring, from: Look, to: Look) -> Self {
         let (from, to) = (from.values(), to.values());
         Self {
+            spring,
             channels: std::array::from_fn(|index| {
                 Animation::new(
                     spring,
@@ -101,6 +103,19 @@ impl Motion {
                 channel.retarget(target);
             }
         }
+    }
+
+    pub(crate) fn translate(&mut self, dx: f64) {
+        let channel = &mut self.channels[0];
+        let state = channel.state();
+        *channel = Animation::new(
+            self.spring,
+            Phase {
+                position: state.position + dx,
+                velocity: state.velocity,
+            },
+            channel.target(),
+        );
     }
 
     pub(crate) fn advance(&mut self, time: Duration, refresh: Duration) {
@@ -326,6 +341,8 @@ impl State {
         self.animate_preview(time);
         self.animate_desktop(time);
         self.animate_slide_back(time);
+        self.animate_workspaces(time);
+        self.animate_overview(time);
         self.closing.retain(|closing| !closing.motion.is_settled());
         if self.is_animating() {
             self.needs_redraw = true;
@@ -337,6 +354,8 @@ impl State {
             || self.preview.is_some()
             || self.desktop.is_animating()
             || self.slide_back.is_some()
+            || self.workspaces.is_animating()
+            || self.overview.is_animating()
             || self.windows.iter().any(|window| window.motion.is_some())
     }
 }

@@ -140,6 +140,7 @@ impl SessionLockHandler for State {
             return;
         }
         self.release_grabs();
+        self.close_overview();
         let previous = self.key_window();
         self.lock = Some(Lock {
             owner,
@@ -161,7 +162,7 @@ impl SessionLockHandler for State {
         let previous = lock.previous.filter(|previous| {
             self.windows
                 .iter()
-                .any(|window| window.surface() == previous && window.visible())
+                .any(|window| window.surface() == previous && self.present(window))
         });
         if let Some(layer) = &self.exclusive_layer {
             let surface = layer.surface.clone();

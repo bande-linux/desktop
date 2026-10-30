@@ -68,6 +68,23 @@ impl Placement {
         self.map_area(rect.to_f64()).to_i32_round()
     }
 
+    fn map_inward(&self, rect: Rectangle<i32, Physical>) -> Option<Rectangle<i32, Physical>> {
+        if self.is_fixed() {
+            return Some(rect);
+        }
+        let mapped = self.map_area(rect.to_f64());
+        let left = mapped.loc.x.ceil();
+        let top = mapped.loc.y.ceil();
+        let right = (mapped.loc.x + mapped.size.w).floor();
+        let bottom = (mapped.loc.y + mapped.size.h).floor();
+        (right > left && bottom > top).then(|| {
+            Rectangle::new(
+                (left as i32, top as i32).into(),
+                ((right - left) as i32, (bottom - top) as i32).into(),
+            )
+        })
+    }
+
     fn map_area(&self, rect: Area) -> Area {
         let factor = self.factor();
         let relative = rect.loc - self.from.loc;
@@ -197,14 +214,23 @@ impl<E: Element> Element for WindowElement<E> {
     }
 
     fn opaque_regions(&self, scale: Scale<f64>) -> OpaqueRegions<i32, Physical> {
-        if !self.placement.is_fixed() {
-            return OpaqueRegions::default();
-        }
-        let origin = self.inner.geometry(scale).loc;
+        let inner = self.inner.geometry(scale).loc;
+        let origin = self.geometry(scale).loc;
+        let opaque = self
+            .inner
+            .opaque_regions(scale)
+            .into_iter()
+            .filter_map(|rect| {
+                let placed = self
+                    .placement
+                    .map_inward(Rectangle::new(rect.loc + inner, rect.size))?;
+                Some(Rectangle::new(placed.loc - origin, placed.size))
+            })
+            .collect::<Vec<_>>();
         let corners = uncovered_pixels(&self.clip)
             .into_iter()
             .map(|rect| Rectangle::new(rect.loc - origin, rect.size));
-        Rectangle::subtract_rects_many(self.inner.opaque_regions(scale), corners)
+        Rectangle::subtract_rects_many(opaque, corners)
             .into_iter()
             .collect()
     }
@@ -515,7 +541,7 @@ pub struct FillElement {
 }
 
 impl FillElement {
-    fn new(id: Id, shape: RoundedRect, color: [f32; 4]) -> Self {
+    pub(crate) fn new(id: Id, shape: RoundedRect, color: [f32; 4]) -> Self {
         let mut hasher = DefaultHasher::new();
         for value in [shape.components(), color, [shape.radius, 0.0, 0.0, 0.0]].concat() {
             value.to_bits().hash(&mut hasher);
@@ -610,6 +636,21 @@ pub(crate) struct Drawn {
     active: bool,
 }
 
+impl Drawn {
+    pub(crate) fn ghost(&self, look: Look, scale: f64) -> Vec<OutputElement> {
+        let shown = look.rect.to_physical(scale);
+        let clip = rounded(shown, shaped_radius(self.area, shown, scale));
+        scaled_pieces(
+            &fresh(self.pieces.clone()),
+            self.area,
+            shown,
+            clip,
+            look.alpha as f32,
+        )
+        .collect()
+    }
+}
+
 pub(crate) fn pieces_of(
     surfaces: &[WaylandSurfaceRenderElement<VulkanRenderer>],
     scale: f64,
@@ -628,6 +669,33 @@ pub(crate) fn pieces_of(
         .collect()
 }
 
+pub(crate) fn scaled_pieces(
+    pieces: &[Piece],
+    area: Area,
+    shown: Area,
+    clip: RoundedRect,
+    alpha: f32,
+) -> impl Iterator<Item = OutputElement> + '_ {
+    let placement = Placement {
+        from: area,
+        to: shown,
+    };
+    pieces.iter().map(move |piece| {
+        OutputElement::Closing(WindowElement::new(
+            PieceElement::new(piece.clone(), alpha),
+            placement,
+            clip,
+        ))
+    })
+}
+
+pub(crate) fn fresh(mut pieces: Vec<Piece>) -> Vec<Piece> {
+    for piece in &mut pieces {
+        piece.id = Id::new();
+    }
+    pieces
+}
+
 pub(crate) fn area_of(pieces: &[Piece]) -> Option<Area> {
     pieces
         .iter()
@@ -643,12 +711,9 @@ pub(crate) struct SlideBack {
 }
 
 impl SlideBack {
-    pub(crate) fn new(mut pieces: Vec<Piece>, area: Area, motion: Motion) -> Self {
-        for piece in &mut pieces {
-            piece.id = Id::new();
-        }
+    pub(crate) fn new(pieces: Vec<Piece>, area: Area, motion: Motion) -> Self {
         Self {
-            pieces,
+            pieces: fresh(pieces),
             area,
             motion,
         }
@@ -662,21 +727,14 @@ impl SlideBack {
             return Vec::new();
         }
         let shown = look.rect.to_physical(scale);
-        let placement = Placement {
-            from: self.area,
-            to: shown,
-        };
-        let alpha = look.alpha as f32;
-        self.pieces
-            .iter()
-            .map(|piece| {
-                OutputElement::Closing(WindowElement::new(
-                    PieceElement::new(piece.clone(), alpha),
-                    placement,
-                    rounded(shown, 0.0),
-                ))
-            })
-            .collect()
+        scaled_pieces(
+            &self.pieces,
+            self.area,
+            shown,
+            rounded(shown, 0.0),
+            look.alpha as f32,
+        )
+        .collect()
     }
 }
 
@@ -688,9 +746,7 @@ pub(crate) struct Closing {
 
 impl Closing {
     pub(crate) fn new(mut drawn: Drawn, motion: Motion) -> Self {
-        for piece in &mut drawn.pieces {
-            piece.id = Id::new();
-        }
+        drawn.pieces = fresh(drawn.pieces);
         Self {
             drawn,
             shadow: Id::new(),
@@ -707,21 +763,8 @@ impl Closing {
         }
         let shown = look.rect.to_physical(scale);
         let clip = rounded(shown, shaped_radius(self.drawn.area, shown, scale));
-        let placement = Placement {
-            from: self.drawn.area,
-            to: shown,
-        };
         let alpha = look.alpha as f32;
-        self.drawn
-            .pieces
-            .iter()
-            .map(|piece| {
-                OutputElement::Closing(WindowElement::new(
-                    PieceElement::new(piece.clone(), alpha),
-                    placement,
-                    clip,
-                ))
-            })
+        scaled_pieces(&self.drawn.pieces, self.drawn.area, shown, clip, alpha)
             .chain([OutputElement::Shadow(ShadowElement::new(
                 self.shadow.clone(),
                 clip,
@@ -733,7 +776,7 @@ impl Closing {
     }
 }
 
-fn shaped_radius(area: Area, shown: Area, scale: f64) -> f64 {
+pub(crate) fn shaped_radius(area: Area, shown: Area, scale: f64) -> f64 {
     let shrink = (shown.size.w / area.size.w.max(1.0))
         .min(shown.size.h / area.size.h.max(1.0))
         .min(1.0);
@@ -746,9 +789,8 @@ pub(crate) fn window_elements(
     scale: f64,
     active: bool,
     hung: bool,
-    shift: Point<f64, Logical>,
+    look: Option<Look>,
 ) -> (Vec<OutputElement>, Option<Drawn>) {
-    let look = window.shown_look();
     let alpha = look.map_or(1.0, |look| look.alpha) as f32;
     if alpha <= 0.0 {
         return (Vec::new(), None);
@@ -768,11 +810,7 @@ pub(crate) fn window_elements(
             Kind::Unspecified,
         );
     let fullscreen = window.has_state(xdg_toplevel::State::Fullscreen);
-    let shifted = shift != Point::default();
-    let Some(geometry) = window
-        .geometry()
-        .filter(|_| !fullscreen || look.is_some() || shifted)
-    else {
+    let Some(geometry) = window.geometry().filter(|_| !fullscreen || look.is_some()) else {
         return (
             surfaces.into_iter().map(OutputElement::Surface).collect(),
             None,
@@ -780,8 +818,7 @@ pub(crate) fn window_elements(
     };
     let real = Rectangle::new(geometry.location.to_f64(), geometry.size.to_f64());
     let area = real.to_physical(scale);
-    let mut look = look.unwrap_or(Look::shown(real));
-    look.rect.loc += shift;
+    let look = look.unwrap_or(Look::shown(real));
     let shown = look.rect.to_physical(scale);
     let radius = if fullscreen {
         0.0

@@ -13,6 +13,8 @@ use unbound_spring::{Animation, Decay, Spring, State as Phase, rubber_band};
 use crate::state::{Headless, State};
 
 const DESKTOP_FINGERS: u32 = 4;
+const SPACE_FINGERS: u32 = 3;
+const AXIS_LOCK: f64 = 16.0;
 const SPREAD_FOR_DESKTOP: f64 = 0.6;
 const PINCH_FOR_LAUNCHER: f64 = 0.8;
 const VELOCITY_WINDOW_MS: f64 = 100.0;
@@ -55,27 +57,43 @@ pub enum Gesture {
 pub(crate) enum Route {
     Client,
     Desktop { was_shown: bool, scale: f64 },
+    Undecided { delta: Point<f64, Logical> },
+    Workspaces,
+    Overview,
 }
 
 #[derive(Debug, Clone)]
-struct Tracker {
+pub(crate) struct Tracker {
     start: f64,
     raw: f64,
+    last: f64,
     samples: VecDeque<(f64, f64)>,
 }
 
 impl Tracker {
-    fn new(start: f64, time: u32) -> Self {
+    pub(crate) fn new(start: f64, time: u32, last: f64) -> Self {
         Self {
             start,
             raw: start,
+            last,
             samples: VecDeque::from([(f64::from(time), start)]),
         }
     }
 
-    fn track(&mut self, raw: f64, time: u32) {
+    pub(crate) fn start(&self) -> f64 {
+        self.start
+    }
+
+    pub(crate) fn raw(&self) -> f64 {
+        self.raw
+    }
+
+    pub(crate) fn track(&mut self, raw: f64, time: u32) {
         let now = f64::from(time);
         self.raw = raw;
+        if self.samples.back().is_some_and(|(at, _)| *at == now) {
+            self.samples.pop_back();
+        }
         self.samples.push_back((now, raw));
         while self
             .samples
@@ -86,8 +104,8 @@ impl Tracker {
         }
     }
 
-    fn position(&self) -> f64 {
-        let inside = self.raw.clamp(0.0, 1.0);
+    pub(crate) fn position(&self) -> f64 {
+        let inside = self.raw.clamp(0.0, self.last);
         inside + rubber_band(self.raw - inside, 1.0)
     }
 
@@ -114,14 +132,14 @@ impl Tracker {
         covariance / variance * 1000.0
     }
 
-    fn release(&self) -> (f64, f64) {
+    pub(crate) fn release(&self) -> (f64, f64) {
         let velocity = self.velocity();
         let projected = Decay::NORMAL.project(Phase {
             position: self.position(),
             velocity,
         });
-        let lowest = (self.start - 1.0).max(0.0);
-        let highest = (self.start + 1.0).min(1.0);
+        let lowest = (self.start.round() - 1.0).max(0.0);
+        let highest = (self.start.round() + 1.0).min(self.last);
         (projected.round().clamp(lowest, highest), velocity)
     }
 }
@@ -221,7 +239,7 @@ impl State {
         let was_shown = self.desktop.target != 0.0;
         self.desktop.settle = None;
         self.desktop.last = None;
-        self.desktop.tracker = Some(Tracker::new(self.desktop.progress, time));
+        self.desktop.tracker = Some(Tracker::new(self.desktop.progress, time, 1.0));
         self.refocus_pointer();
         Route::Desktop {
             was_shown,
@@ -273,6 +291,20 @@ impl State {
             .get_keyboard()
             .and_then(|keyboard| keyboard.current_focus());
         self.focus(None);
+    }
+
+    fn decide_swipe(&mut self, delta: Point<f64, Logical>, time: u32) -> Route {
+        if delta.x.hypot(delta.y) < AXIS_LOCK {
+            return Route::Undecided { delta };
+        }
+        if delta.x.abs() >= delta.y.abs() {
+            self.begin_workspace_swipe(time);
+            self.track_workspace_swipe(delta.x, time);
+            return Route::Workspaces;
+        }
+        self.begin_overview_swipe(time, delta.y < 0.0);
+        self.track_overview_swipe(delta.y, time);
+        Route::Overview
     }
 
     fn forward(&mut self, gesture: Gesture, time: u32) {
@@ -356,10 +388,36 @@ impl State {
             {
                 Some(self.begin_desktop(time))
             }
+            (Gesture::SwipeBegin { fingers }, _)
+                if fingers == SPACE_FINGERS && !self.is_locked() =>
+            {
+                Some(Route::Undecided {
+                    delta: Point::default(),
+                })
+            }
             (
                 Gesture::SwipeBegin { .. } | Gesture::PinchBegin { .. } | Gesture::HoldBegin { .. },
                 _,
             ) => Some(Route::Client),
+            (Gesture::SwipeUpdate { delta }, Some(Route::Undecided { delta: before })) => {
+                Some(self.decide_swipe(before + delta, time))
+            }
+            (Gesture::SwipeUpdate { delta }, Some(Route::Workspaces)) => {
+                self.track_workspace_swipe(delta.x, time);
+                Some(Route::Workspaces)
+            }
+            (Gesture::SwipeEnd { cancelled }, Some(Route::Workspaces)) => {
+                self.end_workspace_swipe(cancelled);
+                None
+            }
+            (Gesture::SwipeUpdate { delta }, Some(Route::Overview)) => {
+                self.track_overview_swipe(delta.y, time);
+                Some(Route::Overview)
+            }
+            (Gesture::SwipeEnd { cancelled }, Some(Route::Overview)) => {
+                self.end_overview_swipe(cancelled);
+                None
+            }
             (Gesture::PinchUpdate { scale, .. }, Some(Route::Desktop { was_shown, .. })) => {
                 self.track_desktop(scale, time);
                 Some(Route::Desktop { was_shown, scale })

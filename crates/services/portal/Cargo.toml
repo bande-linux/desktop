@@ -8,6 +8,7 @@ repository.workspace = true
 [dependencies]
 blocking = "=1.7.0"
 jiff.workspace = true
+rustix.workspace = true
 tracing.workspace = true
 unbound-bus.workspace = true
 unbound-config.workspace = true

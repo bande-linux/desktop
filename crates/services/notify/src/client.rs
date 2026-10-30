@@ -16,6 +16,7 @@ pub struct Request<'a> {
     pub body: &'a str,
     pub actions: &'a [(&'a str, &'a str)],
     pub urgency: Urgency,
+    pub sound: Option<&'a str>,
 }
 
 pub fn notify(connection: &Connection, request: &Request<'_>) -> zbus::Result<u32> {
@@ -25,7 +26,10 @@ pub fn notify(connection: &Connection, request: &Request<'_>) -> zbus::Result<u3
         .flat_map(|(key, label)| [*key, *label])
         .collect();
     let urgency = Value::from(crate::wire::urgency_code(request.urgency));
-    let hints = HashMap::from([("urgency", urgency)]);
+    let mut hints = HashMap::from([("urgency", urgency)]);
+    if let Some(sound) = request.sound {
+        hints.insert("sound-name", Value::from(sound));
+    }
     connection
         .call_method(
             Some(BUS_NAME),

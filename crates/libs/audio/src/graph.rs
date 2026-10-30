@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::rc::Rc;
+use std::sync::atomic::AtomicU32;
 use std::sync::mpsc;
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 
@@ -19,6 +20,7 @@ use spa::pod::{Object, Pod, Property, Value, ValueArray};
 use spa::sys;
 use spa::utils::dict::DictRef;
 
+use crate::stream::{self, INTERNAL_PREFIX, Running};
 use crate::{Direction, Error, level};
 
 const DEFAULT_OUTPUT: &str = "default.audio.sink";
@@ -40,6 +42,18 @@ pub(crate) enum Command {
         muted: Option<bool>,
         done: Reply,
     },
+    Play {
+        samples: Arc<[f32]>,
+        gain: f32,
+        done: Reply,
+    },
+    Meter {
+        id: u64,
+        device: String,
+        peak: Arc<AtomicU32>,
+        done: Reply,
+    },
+    Stop(u64),
     Quit,
 }
 
@@ -50,7 +64,14 @@ pub(crate) struct NodeState {
     pub direction: Option<Direction>,
     pub channels: Vec<f32>,
     pub muted: bool,
+    pub app: Option<App>,
     device: Option<(u32, i32)>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct App {
+    pub name: String,
+    pub icon: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -109,10 +130,17 @@ struct Bound {
     metadata: Option<(u32, Metadata, MetadataListener)>,
 }
 
-fn direction_of(media_class: Option<&str>) -> Option<Direction> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    Device(Direction),
+    AppStream,
+}
+
+fn kind_of(media_class: Option<&str>) -> Option<Kind> {
     match media_class? {
-        "Audio/Sink" => Some(Direction::Output),
-        "Audio/Source" | "Audio/Source/Virtual" => Some(Direction::Input),
+        "Audio/Sink" => Some(Kind::Device(Direction::Output)),
+        "Audio/Source" | "Audio/Source/Virtual" => Some(Kind::Device(Direction::Input)),
+        "Stream/Output/Audio" => Some(Kind::AppStream),
         _ => None,
     }
 }
@@ -182,14 +210,25 @@ struct Graph {
     shared: Arc<Shared>,
     registry: RegistryRc,
     bound: RefCell<Bound>,
+    core: pw::core::CoreRc,
+    running: RefCell<HashMap<u64, Running>>,
+    next_effect: std::cell::Cell<u64>,
+    commands: pw::channel::Sender<Command>,
 }
 
 impl Graph {
     fn add(self: &Rc<Self>, global: &GlobalObject<&DictRef>) {
         let props = global.props;
         let result = match global.type_ {
-            ObjectType::Node => match direction_of(props.and_then(|p| p.get("media.class"))) {
-                Some(direction) => self.add_node(global, direction),
+            ObjectType::Node
+                if props
+                    .and_then(|p| p.get("node.name"))
+                    .is_some_and(|name| name.starts_with(INTERNAL_PREFIX)) =>
+            {
+                Ok(())
+            }
+            ObjectType::Node => match kind_of(props.and_then(|p| p.get("media.class"))) {
+                Some(kind) => self.add_node(global, kind),
                 None => Ok(()),
             },
             ObjectType::Device
@@ -209,11 +248,7 @@ impl Graph {
         }
     }
 
-    fn add_node(
-        &self,
-        global: &GlobalObject<&DictRef>,
-        direction: Direction,
-    ) -> Result<(), pw::Error> {
+    fn add_node(&self, global: &GlobalObject<&DictRef>, kind: Kind) -> Result<(), pw::Error> {
         let id = global.id;
         let node: Node = self.registry.bind(global)?;
         let info_shared = Arc::clone(&self.shared);
@@ -240,9 +275,25 @@ impl Graph {
                     .get("node.description")
                     .or_else(|| props.get("node.nick"))
                     .map_or_else(|| name.clone(), str::to_owned);
+                let app = (kind == Kind::AppStream).then(|| App {
+                    name: props
+                        .get("application.name")
+                        .or_else(|| props.get("application.process.binary"))
+                        .unwrap_or(description.as_str())
+                        .to_owned(),
+                    icon: props
+                        .get("application.icon-name")
+                        .or_else(|| props.get("application.id"))
+                        .or_else(|| props.get("pipewire.access.portal.app_id"))
+                        .map(str::to_owned),
+                });
                 info_shared.update(|state| {
                     let node = state.nodes.entry(id).or_default();
-                    node.direction = Some(direction);
+                    node.direction = match kind {
+                        Kind::Device(direction) => Some(direction),
+                        Kind::AppStream => None,
+                    };
+                    node.app = app;
                     node.device = device;
                     node.name = name;
                     node.description = description;
@@ -363,6 +414,23 @@ impl Graph {
         }
     }
 
+    fn play(&self, samples: Arc<[f32]>, gain: f32) -> Result<(), Error> {
+        let id = self.next_effect.get();
+        self.next_effect.set(id + 1);
+        let commands = self.commands.clone();
+        let running = stream::play(&self.core, samples, gain, move || {
+            let _ = commands.send(Command::Stop(id));
+        })?;
+        self.running.borrow_mut().insert(id, running);
+        Ok(())
+    }
+
+    fn meter(&self, id: u64, device: &str, peak: Arc<AtomicU32>) -> Result<(), Error> {
+        let running = stream::meter(&self.core, device, peak)?;
+        self.running.borrow_mut().insert(id, running);
+        Ok(())
+    }
+
     fn set_default(&self, direction: Direction, name: &str) -> Result<(), Error> {
         let bound = self.bound.borrow();
         let (_, metadata, _) = bound.metadata.as_ref().ok_or(Error::NoSessionManager)?;
@@ -441,9 +509,10 @@ impl Graph {
 pub(crate) fn run(
     shared: Arc<Shared>,
     commands: pw::channel::Receiver<Command>,
+    sender: pw::channel::Sender<Command>,
     ready: mpsc::Sender<Result<(), Error>>,
 ) {
-    if let Err(error) = serve(&shared, commands, &ready) {
+    if let Err(error) = serve(&shared, commands, sender, &ready) {
         let _ = ready.send(Err(error));
     }
     shared.update(|state| {
@@ -455,6 +524,7 @@ pub(crate) fn run(
 fn serve(
     shared: &Arc<Shared>,
     commands: pw::channel::Receiver<Command>,
+    sender: pw::channel::Sender<Command>,
     ready: &mpsc::Sender<Result<(), Error>>,
 ) -> Result<(), Error> {
     pw::init();
@@ -465,6 +535,10 @@ fn serve(
         shared: Arc::clone(shared),
         registry: core.get_registry_rc()?,
         bound: RefCell::default(),
+        core: core.clone(),
+        running: RefCell::default(),
+        next_effect: std::cell::Cell::new(1 << 32),
+        commands: sender,
     });
 
     let added = Rc::clone(&graph);
@@ -535,6 +609,21 @@ fn serve(
                 muted,
                 done,
             } => (command_graph.set_level(id, volume, muted), done),
+            Command::Play {
+                samples,
+                gain,
+                done,
+            } => (command_graph.play(samples, gain), done),
+            Command::Meter {
+                id,
+                device,
+                peak,
+                done,
+            } => (command_graph.meter(id, &device, peak), done),
+            Command::Stop(id) => {
+                command_graph.running.borrow_mut().remove(&id);
+                return;
+            }
         };
         match outcome.and_then(|()| command_core.sync(0).map_err(Error::from)) {
             Ok(seq) => pending.borrow_mut().push((seq, done)),

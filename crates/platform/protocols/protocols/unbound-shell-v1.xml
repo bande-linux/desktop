@@ -260,6 +260,22 @@
       <arg name="index" type="uint"/>
     </request>
 
+    <enum name="media_key" since="11">
+      <entry name="play_pause" value="0" summary="the play/pause key"/>
+      <entry name="pause" value="1" summary="the pause key"/>
+      <entry name="next" value="2" summary="the next track key"/>
+      <entry name="previous" value="3" summary="the previous track key"/>
+    </enum>
+
+    <event name="media_key" since="11">
+      <description summary="the user pressed a media key">
+        Sent for the play/pause, pause, next and previous keys, with or without
+        Super and also while the session is locked, as a Mac's media keys
+        always control what is playing.
+      </description>
+      <arg name="key" type="uint" enum="media_key"/>
+    </event>
+
     <request name="show_launcher" since="12">
       <description summary="open the launcher">
         Sent by the bar when its Unbound mark is clicked. The compositor sends

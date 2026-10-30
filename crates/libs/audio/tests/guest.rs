@@ -4,8 +4,10 @@ use std::path::Path;
 use std::process::{Child, Command};
 use std::time::{Duration, Instant};
 
+use std::sync::Arc;
 use tempfile::TempDir;
-use unbound_audio::{Audio, Device, Level, Snapshot, VolumeKey};
+
+use unbound_audio::{Audio, Device, EFFECT_RATE, Level, Snapshot, VolumeKey};
 use unbound_test_bus::SessionBus;
 
 const WAIT: Duration = Duration::from_secs(10);
@@ -217,4 +219,109 @@ fn the_mute_key_silences_the_default_output_and_a_volume_key_brings_it_back() {
     session.level_of("speakers", level(0.5, true));
     audio.press(VolumeKey::Up, true).expect("up");
     session.level_of("speakers", level(33.0 / 64.0, false));
+}
+
+fn nodes_named(name: &str) -> usize {
+    let dump = Command::new("pw-dump").output().expect("pw-dump");
+    String::from_utf8_lossy(&dump.stdout)
+        .matches(&format!("\"node.name\": \"{name}\""))
+        .count()
+}
+
+fn eventually(what: &str, ready: impl Fn() -> bool) {
+    let deadline = Instant::now() + WAIT;
+    while !ready() {
+        assert!(Instant::now() < deadline, "never: {what}");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+fn silence_wav(path: &Path, seconds: u32) {
+    let samples = seconds * 8000;
+    let mut wav = Vec::new();
+    wav.extend_from_slice(b"RIFF");
+    wav.extend_from_slice(&(36 + samples * 2).to_le_bytes());
+    wav.extend_from_slice(b"WAVEfmt ");
+    wav.extend_from_slice(&16_u32.to_le_bytes());
+    wav.extend_from_slice(&1_u16.to_le_bytes());
+    wav.extend_from_slice(&1_u16.to_le_bytes());
+    wav.extend_from_slice(&8000_u32.to_le_bytes());
+    wav.extend_from_slice(&16000_u32.to_le_bytes());
+    wav.extend_from_slice(&2_u16.to_le_bytes());
+    wav.extend_from_slice(&16_u16.to_le_bytes());
+    wav.extend_from_slice(b"data");
+    wav.extend_from_slice(&(samples * 2).to_le_bytes());
+    wav.resize(wav.len() + (samples * 2) as usize, 0);
+    std::fs::write(path, wav).expect("wav");
+}
+
+#[test]
+#[ignore = "needs pipewire and wireplumber; ci/vm runs it in the guest"]
+fn an_app_playing_sound_is_listed_by_name_and_its_volume_can_be_set() {
+    let session = Session::start();
+    let file = session._home.path().join("silence.wav");
+    silence_wav(&file, 30);
+    let mut player = Command::new("pw-play")
+        .args([
+            "-P",
+            "{ application.name = \"Radio\" application.icon-name = \"radio\" }",
+        ])
+        .arg(&file)
+        .spawn()
+        .expect("pw-play");
+
+    let snapshot = session.until(|snapshot| snapshot.apps.iter().any(|app| app.name == "Radio"));
+    let radio = snapshot
+        .apps
+        .iter()
+        .find(|app| app.name == "Radio")
+        .cloned()
+        .expect("radio");
+    assert_eq!(radio.icon.as_deref(), Some("radio"));
+    session
+        .audio()
+        .set_app_level(&radio, level(0.5, true))
+        .expect("app level");
+    session.until(|snapshot| {
+        snapshot.apps.iter().any(|app| {
+            app.name == "Radio" && (app.level.volume - 0.5).abs() < 1e-3 && app.level.muted
+        })
+    });
+
+    let _ = player.kill();
+    let _ = player.wait();
+    session.until(|snapshot| snapshot.apps.is_empty());
+}
+
+#[test]
+#[ignore = "needs pipewire and wireplumber; ci/vm runs it in the guest"]
+fn a_sound_effect_plays_without_being_listed_as_an_app_and_then_goes_away() {
+    let session = Session::start();
+    let samples: Arc<[f32]> = vec![0.0; EFFECT_RATE as usize * 2].into();
+    session.audio().play(samples, 0.5).expect("play");
+    eventually("the effect plays", || {
+        nodes_named("unbound-sound-effect") == 1
+    });
+    assert!(session.audio().snapshot().apps.is_empty());
+    eventually("the effect ends", || {
+        nodes_named("unbound-sound-effect") == 0
+    });
+}
+
+#[test]
+#[ignore = "needs pipewire and wireplumber; ci/vm runs it in the guest"]
+fn a_level_meter_listens_while_it_is_kept() {
+    let session = Session::start();
+    let meter = session
+        .audio()
+        .meter(&session.device("microphone"))
+        .expect("meter");
+    eventually("the meter listens", || {
+        nodes_named("unbound-level-meter") == 1
+    });
+    assert_eq!(meter.take_peak(), 0.0);
+    drop(meter);
+    eventually("the meter stops", || {
+        nodes_named("unbound-level-meter") == 0
+    });
 }

@@ -99,6 +99,7 @@ pub struct Dock {
     autostart: Option<PathBuf>,
     bus: Inbox<BusEvent>,
     trash: Option<TrashWatch>,
+    session: Option<Connection>,
 }
 
 impl Dock {
@@ -415,9 +416,13 @@ impl Dock {
             return;
         };
         let trash = trash.trash.clone();
+        let session = self.session.clone();
         let emptied = thread::Builder::new()
             .name("empty-trash".to_owned())
             .spawn(move || {
+                if let Some(session) = session {
+                    unbound_sound::play(&session, "trash-empty");
+                }
                 if let Err(error) = trash.empty() {
                     tracing::warn!("cannot empty the Trash: {error}");
                 }
@@ -981,6 +986,7 @@ impl Dock {
             autostart: autostart_dir(config_home, home),
             bus: inbox,
             trash: TrashWatch::start(),
+            session: session.cloned(),
         };
         dock.load_trash_icons();
         dock.sync();

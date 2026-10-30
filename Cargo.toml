@@ -105,6 +105,7 @@ unbound-screenshot = { path = "crates/shell/screenshot" }
 unbound-search = { path = "crates/libs/search" }
 unbound-settings = { path = "crates/apps/settings" }
 unbound-settings-panes = { path = "crates/libs/settings-panes" }
+unbound-sound = { path = "crates/services/sound", default-features = false }
 unbound-spring = { path = "crates/libs/spring" }
 unbound-status = { path = "crates/libs/status" }
 unbound-term = { path = "crates/apps/terminal" }

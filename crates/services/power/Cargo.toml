@@ -12,6 +12,7 @@ unbound-bus.workspace = true
 unbound-l10n.workspace = true
 unbound-log.workspace = true
 unbound-notify.workspace = true
+unbound-sound.workspace = true
 wayland-client.workspace = true
 wayland-protocols.workspace = true
 zbus.workspace = true

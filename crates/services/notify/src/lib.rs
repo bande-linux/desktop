@@ -183,6 +183,7 @@ impl NotificationServer {
             OBJECT_PATH,
             Notifications {
                 shared: Arc::clone(&shared),
+                sounds: Mutex::new(sounds(connection)),
             },
         )?;
         connection.object_server().at(
@@ -296,14 +297,28 @@ fn hint<'a, T: TryFrom<&'a OwnedValue>>(
     hints.get(name).and_then(|value| T::try_from(value).ok())
 }
 
+const MESSAGE_SOUND: &str = "message-new-instant";
+
+fn sounds(connection: &Connection) -> Sender<String> {
+    let (sender, names) = mpsc::channel::<String>();
+    let connection = connection.clone();
+    thread::spawn(move || {
+        for name in names {
+            unbound_sound::play(&connection, &name);
+        }
+    });
+    sender
+}
+
 struct Notifications {
     shared: Arc<Shared>,
+    sounds: Mutex<Sender<String>>,
 }
 
 #[zbus::interface(name = "org.freedesktop.Notifications")]
 impl Notifications {
     fn get_capabilities(&self) -> Vec<String> {
-        ["actions", "body", "persistence"]
+        ["actions", "body", "persistence", "sound"]
             .map(str::to_owned)
             .to_vec()
     }
@@ -320,6 +335,11 @@ impl Notifications {
         hints: HashMap<String, OwnedValue>,
         expire_timeout: i32,
     ) -> u32 {
+        let sound = hint::<&str>(&hints, "sound-name")
+            .filter(|name| !name.is_empty())
+            .unwrap_or(MESSAGE_SOUND)
+            .to_owned();
+        let silent = hint(&hints, "suppress-sound").unwrap_or(false);
         let notification = Notification {
             id: replaces_id,
             app_name,
@@ -339,13 +359,24 @@ impl Notifications {
             resident: hint(&hints, "resident").unwrap_or(false),
             transient: hint(&hints, "transient").unwrap_or(false),
         };
-        self.shared.update(|center| {
-            center.post(
+        let (id, audible) = self.shared.update(|center| {
+            let fresh = replaces_id == 0 || center.get(replaces_id).is_none();
+            let shown = !center.do_not_disturb() || notification.urgency == Urgency::Critical;
+            let id = center.post(
                 notification,
                 Timeout::from_milliseconds(expire_timeout),
                 Instant::now(),
-            )
-        })
+            );
+            (id, fresh && shown && !silent)
+        });
+        if audible {
+            let _ = self
+                .sounds
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .send(sound);
+        }
+        id
     }
 
     async fn close_notification(

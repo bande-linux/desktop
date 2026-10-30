@@ -23,13 +23,12 @@ pub enum SessionRole {
     Shell,
 }
 
+pub const BAR: &str = "/usr/bin/unbound-bar";
 pub const CLIPBOARD_DAEMON: &str = "/usr/bin/unbound-clipboard";
 pub const DESKTOP_SURFACE: &str = "/usr/bin/unbound-desktop-surface";
-pub const DOCK: &str = "/usr/bin/unbound-dock";
 pub const LAUNCHER: &str = "/usr/bin/unbound-launcher";
 pub const LOCK_SCREEN: &str = "/usr/bin/unbound-lock";
 pub const SCREENSHOT: &str = "/usr/bin/unbound-screenshot";
-pub const MENU_BAR: &str = "/usr/bin/unbound-menubar";
 pub const CONTROL_CENTER: &str = "/usr/bin/unbound-controlcenter";
 pub const NOTIFICATIONS: &str = "/usr/bin/unbound-notifications";
 pub const GREETER: &str = "/usr/bin/unbound-greeter";

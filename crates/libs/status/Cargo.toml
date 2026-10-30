@@ -1,0 +1,19 @@
+[package]
+name = "unbound-status"
+description = "Battery, Wi-Fi, sound, Bluetooth, status notifier items, app menus and session endings for the bar"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+tracing.workspace = true
+unbound-app-menu.workspace = true
+unbound-audio.workspace = true
+unbound-bluetooth.workspace = true
+unbound-inbox.workspace = true
+unbound-l10n.workspace = true
+unbound-network.workspace = true
+zbus.workspace = true
+
+[lints]
+workspace = true

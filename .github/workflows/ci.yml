@@ -96,7 +96,7 @@ jobs:
         run: |
           for package in unbound-compositor unbound-notify unbound-clipboard unbound-config unbound-power \
               xdg-desktop-portal-unbound unbound-tray unbound-automount \
-              unbound-desktop-surface unbound-dock unbound-launcher unbound-term unbound-lock unbound-screenshot unbound-files unbound-settings unbound-greeter unbound-menubar unbound-controlcenter unbound-notifications unbound-monitor; do
+              unbound-desktop-surface unbound-bar unbound-launcher unbound-term unbound-lock unbound-screenshot unbound-files unbound-settings unbound-greeter unbound-controlcenter unbound-notifications unbound-monitor; do
             cargo deb --package "$package" --locked --deb-version "$DEB_VERSION"
           done
       - name: Build the benchmarks for ci/perf against the packaged release build
@@ -141,7 +141,7 @@ jobs:
             | grep -qw 'unbound-clipboard'
       - name: Check the shell's packages
         run: |
-          for package in unbound-desktop-surface unbound-dock unbound-launcher unbound-term unbound-lock unbound-screenshot unbound-files unbound-settings unbound-menubar unbound-controlcenter unbound-notifications; do
+          for package in unbound-desktop-surface unbound-bar unbound-launcher unbound-term unbound-lock unbound-screenshot unbound-files unbound-settings unbound-controlcenter unbound-notifications; do
             dpkg-deb --field target/debian/unbound-compositor_*.deb Recommends | grep -q "$package"
             dpkg-deb --contents target/debian/"$package"_*.deb | grep -q " ./usr/bin/$package\$"
           done

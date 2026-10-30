@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::ffi::c_void;
 use std::fmt;
 use std::fs::File;
@@ -6,6 +7,7 @@ use std::os::fd::AsFd;
 use std::os::unix::fs::FileExt;
 use std::os::unix::net::UnixStream;
 use std::ptr::NonNull;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
@@ -296,6 +298,7 @@ pub(crate) struct State {
     pub(crate) toplevel: ToplevelState,
     frame_pending: bool,
     pub(crate) events: Vec<WindowEvent>,
+    pub(crate) own_surface: Option<WlSurface>,
     pub(crate) popup_surfaces: Vec<WlSurface>,
     pub(crate) popup_configured: Vec<bool>,
     pub(crate) popup_input: Vec<(usize, Event)>,
@@ -371,7 +374,7 @@ pub struct Window {
     shown_frame: Option<Frame>,
     pub(crate) app_cursor: Cursor,
     pub(crate) accessibility: Accessibility,
-    pub(crate) appearance: AppearanceWatch,
+    pub(crate) appearance: Rc<RefCell<AppearanceWatch>>,
 }
 
 fn anchor_of(edges: Edges) -> zwlr_layer_surface_v1::Anchor {
@@ -403,6 +406,7 @@ impl Window {
             Connection::connect_to_env().map_err(WindowError::Connect)?,
             role,
             size,
+            None,
         )
     }
 
@@ -411,11 +415,30 @@ impl Window {
             Connection::from_socket(stream).map_err(WindowError::Connect)?,
             role,
             size,
+            None,
         )
     }
 
-    fn on(connection: Connection, role: Role, size: (u32, u32)) -> Result<Self, WindowError> {
-        let mut appearance = AppearanceWatch::start()?;
+    pub fn open_beside(&self, role: Role, size: (u32, u32)) -> Result<Self, WindowError> {
+        Self::on(
+            self.connection.clone(),
+            role,
+            size,
+            Some(self.appearance.clone()),
+        )
+    }
+
+    fn on(
+        connection: Connection,
+        role: Role,
+        size: (u32, u32),
+        shared_appearance: Option<Rc<RefCell<AppearanceWatch>>>,
+    ) -> Result<Self, WindowError> {
+        let fresh = shared_appearance.is_none();
+        let appearance = match shared_appearance {
+            Some(appearance) => appearance,
+            None => Rc::new(RefCell::new(AppearanceWatch::start()?)),
+        };
         let mut queue = connection.new_event_queue();
         let handle = queue.handle();
         connection.display().get_registry(&handle, ());
@@ -429,6 +452,7 @@ impl Window {
         state.join_data_device(&handle);
 
         let surface = compositor.create_surface(&handle, ());
+        state.own_surface = Some(surface.clone());
         state.join_text_input(&surface, &handle);
         let surface_scale = state.scaling.follow(&surface, &handle);
         if surface_scale.is_some() {
@@ -515,10 +539,11 @@ impl Window {
         let size = state
             .suggested_size
             .unwrap_or((size.0, size.1.saturating_add(title)));
-        appearance.wait_for_first_reading();
-        state
-            .events
-            .push(WindowEvent::AppearanceChanged(appearance.current()));
+        if fresh {
+            appearance.borrow_mut().wait_for_first_reading();
+        }
+        let current = appearance.borrow().current();
+        state.events.push(WindowEvent::AppearanceChanged(current));
         Ok(Self {
             gpu,
             cpu: CpuRenderer::new(),
@@ -603,8 +628,12 @@ impl Window {
         }
     }
 
+    pub fn share_fonts(&mut self, text: &TextSystem) {
+        self.text = Some(text.sharing_fonts());
+    }
+
     pub fn appearance(&self) -> Appearance {
-        self.appearance.current()
+        self.appearance.borrow().current()
     }
 
     pub fn is_closed(&self) -> bool {
@@ -874,7 +903,7 @@ impl Window {
             state: &mut self.state,
             handle: &handle,
             text: self.text.get_or_insert_with(TextSystem::new),
-            palette: self.appearance.current().palette(),
+            palette: self.appearance.borrow().current().palette(),
         };
         let menus = Menus::open(opening, menu, parent, placement)?;
         self.menus = Some(menus);
@@ -952,7 +981,7 @@ impl Window {
     }
 
     fn draw_menus(&mut self, now: Instant) -> Result<(), WindowError> {
-        let palette = self.appearance.current().palette();
+        let palette = self.appearance.borrow().current().palette();
         let scale = self.scale();
         let handle = self.queue.handle();
         if let Some(menus) = &mut self.menus {
@@ -1041,7 +1070,7 @@ impl Window {
             }
             MenuOutcome::OpenSubmenu { level, index } => {
                 let handle = self.queue.handle();
-                let palette = self.appearance.current().palette();
+                let palette = self.appearance.borrow().current().palette();
                 if let Some(menus) = &mut self.menus {
                     let opening = Opening {
                         state: &mut self.state,
@@ -1074,7 +1103,7 @@ impl Window {
             ..pointer
         };
         let now = Instant::now();
-        let reduce_motion = self.appearance.current().reduce_motion;
+        let reduce_motion = self.appearance.borrow().current().reduce_motion;
         let Some(chrome) = self.chrome.as_mut() else {
             passed.push(event);
             return;
@@ -1296,7 +1325,7 @@ impl Window {
     }
 
     fn framed(&mut self, frame: &Frame, scene: &Scene) -> Scene {
-        let appearance = self.appearance.current();
+        let appearance = self.appearance.borrow().current();
         let active = self.state.toplevel.activated;
         match &mut self.chrome {
             Some(chrome) => chrome.frame_scene(

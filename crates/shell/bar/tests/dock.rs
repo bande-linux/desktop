@@ -7,13 +7,12 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use accesskit::Role;
-use unbound_config::DockEdge;
-use unbound_dock::autostart::{autostart_dir, opens_at_login, set_open_at_login};
-use unbound_dock::bus::{app_id_from_uri, launcher_update};
-use unbound_dock::{
-    DockAction, DockApp, DockState, ICON_SIZE, LauncherUpdate, MenuTarget, Shared, arrange,
-    dock_ui, scene, surface_size,
+use unbound_bar::dock::{
+    DockAction, DockApp, DockState, ICON_SIZE, MenuTarget, Shared, dock_ui, scene, surface_size,
 };
+use unbound_config::DockEdge;
+use unbound_dock_model::LauncherUpdate;
+use unbound_dock_model::bus::launcher_update;
 use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer, PointerButton, Ui};
 use unbound_toolkit::{Appearance, CpuRenderer, Image, Palette, Point, Rect, Scheme, TextSystem};
 use zbus::zvariant::{OwnedValue, Value};
@@ -329,20 +328,6 @@ fn dragging_a_running_app_into_the_kept_group_keeps_it() {
 }
 
 #[test]
-fn kept_apps_that_are_not_installed_keep_their_place_when_the_dock_is_rearranged() {
-    let kept = ["a", "gone", "b", "c"].map(str::to_owned);
-    let shown = ["c", "a", "b"].map(str::to_owned);
-    assert_eq!(
-        arrange(&kept, &shown, |app_id| app_id == "gone"),
-        ["c", "a", "gone", "b"]
-    );
-    assert_eq!(
-        arrange(&kept, &["b".to_owned()], |app_id| app_id == "gone"),
-        ["gone", "b"]
-    );
-}
-
-#[test]
 fn moving_the_dock_to_another_edge_slides_it_in_there() {
     let mut harness = Harness::new(DockEdge::Left, Scheme::Light);
     let now = harness.clock.get();
@@ -430,10 +415,6 @@ fn neighbours_slide_into_the_gap_a_quitting_app_leaves() {
 
 #[test]
 fn badges_follow_launcher_entry_updates_as_kde_reads_them() {
-    assert_eq!(
-        app_id_from_uri("application://org.mozilla.firefox.desktop").as_deref(),
-        Some("org.mozilla.firefox")
-    );
     let harness = Harness::new(DockEdge::Left, Scheme::Light);
     let now = harness.clock.get();
     let update = |pairs: &[(&str, Value<'static>)]| {
@@ -510,24 +491,6 @@ fn right_click_or_holding_an_icon_opens_its_menu_beside_the_dock_without_opening
         harness.state.borrow_mut().take_actions(),
         [menu.clone(), menu]
     );
-}
-
-#[test]
-fn open_at_login_copies_the_desktop_entry_into_autostart_and_removes_it_again() {
-    let home = tempfile::tempdir().expect("home");
-    let dir = autostart_dir(None, Some(home.path())).expect("autostart folder");
-    let entry = home.path().join("org.example.Editor.desktop");
-    std::fs::write(&entry, "[Desktop Entry]\nName=Editor\nExec=editor\n").expect("entry");
-    let id = "org.example.Editor.desktop";
-
-    assert!(!opens_at_login(&dir, id));
-    set_open_at_login(&dir, id, &entry, true).expect("open at login");
-    assert!(opens_at_login(&dir, id));
-    std::fs::write(dir.join(id), "[Desktop Entry]\nHidden=true\n").expect("hidden");
-    assert!(!opens_at_login(&dir, id));
-    set_open_at_login(&dir, id, &entry, false).expect("stop opening at login");
-    assert!(!dir.join(id).exists());
-    set_open_at_login(&dir, id, &entry, false).expect("already off");
 }
 
 #[test]

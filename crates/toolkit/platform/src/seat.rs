@@ -90,6 +90,8 @@ pub(crate) struct Input {
     repeat_delay: Duration,
     repeat: Option<Repeat>,
     pub(crate) serial: Option<u32>,
+    pointer_elsewhere: bool,
+    keyboard_elsewhere: bool,
 }
 
 pub(crate) fn key_for(keysym: Keysym) -> Option<Key> {
@@ -264,6 +266,11 @@ impl State {
         }
     }
 
+    pub(crate) fn is_foreign(&self, surface: &WlSurface) -> bool {
+        self.own_surface.as_ref().is_some_and(|own| own != surface)
+            && self.popup_level(surface).is_none()
+    }
+
     fn popup_level(&self, surface: &WlSurface) -> Option<usize> {
         self.popup_surfaces
             .iter()
@@ -374,6 +381,15 @@ impl Dispatch<WlPointer, ()> for State {
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
+        if let wl_pointer::Event::Enter { surface, .. } = &event {
+            state.input.pointer_elsewhere = state.is_foreign(surface);
+        }
+        if state.input.pointer_elsewhere {
+            if matches!(event, wl_pointer::Event::Leave { .. }) {
+                state.input.pointer_elsewhere = false;
+            }
+            return;
+        }
         let input = &mut state.input;
         match event {
             wl_pointer::Event::Enter {
@@ -453,6 +469,24 @@ impl Dispatch<WlKeyboard, ()> for State {
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
+        match &event {
+            wl_keyboard::Event::Enter { surface, .. } => {
+                state.input.keyboard_elsewhere = state.is_foreign(surface);
+            }
+            wl_keyboard::Event::Leave { .. } if state.input.keyboard_elsewhere => {
+                state.input.keyboard_elsewhere = false;
+                return;
+            }
+            _ => {}
+        }
+        if state.input.keyboard_elsewhere
+            && matches!(
+                event,
+                wl_keyboard::Event::Enter { .. } | wl_keyboard::Event::Key { .. }
+            )
+        {
+            return;
+        }
         let input = &mut state.input;
         match event {
             wl_keyboard::Event::Keymap {

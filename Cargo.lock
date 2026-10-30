@@ -3849,6 +3849,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "unbound-bar"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "image",
+ "image-compare",
+ "jiff",
+ "tracing",
+ "unbound-config",
+ "unbound-datetime",
+ "unbound-dock-model",
+ "unbound-fs",
+ "unbound-inbox",
+ "unbound-keyboard",
+ "unbound-l10n",
+ "unbound-log",
+ "unbound-status",
+ "unbound-toolkit",
+ "unbound-xdg",
+ "zbus",
+]
+
+[[package]]
 name = "unbound-bench"
 version = "0.1.0"
 dependencies = [
@@ -3965,12 +3988,11 @@ dependencies = [
  "image",
  "image-compare",
  "tracing",
+ "unbound-bar",
  "unbound-config",
- "unbound-dock",
  "unbound-fs",
  "unbound-l10n",
  "unbound-log",
- "unbound-menubar",
  "unbound-toolkit",
  "unbound-volumes",
  "unbound-wallpaper",
@@ -3978,20 +4000,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "unbound-dock"
+name = "unbound-dock-model"
 version = "0.1.0"
 dependencies = [
- "accesskit",
- "image",
- "image-compare",
  "tempfile",
  "tracing",
  "unbound-config",
- "unbound-fs",
- "unbound-l10n",
- "unbound-log",
- "unbound-toolkit",
- "unbound-xdg",
+ "unbound-inbox",
  "zbus",
 ]
 
@@ -4142,27 +4157,6 @@ dependencies = [
  "rustix 1.1.6",
  "tracing-journald",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "unbound-menubar"
-version = "0.1.0"
-dependencies = [
- "accesskit",
- "jiff",
- "tracing",
- "unbound-app-menu",
- "unbound-audio",
- "unbound-bluetooth",
- "unbound-datetime",
- "unbound-inbox",
- "unbound-keyboard",
- "unbound-l10n",
- "unbound-log",
- "unbound-network",
- "unbound-toolkit",
- "unbound-xdg",
- "zbus",
 ]
 
 [[package]]
@@ -4363,6 +4357,20 @@ dependencies = [
 [[package]]
 name = "unbound-spring"
 version = "0.1.0"
+
+[[package]]
+name = "unbound-status"
+version = "0.1.0"
+dependencies = [
+ "tracing",
+ "unbound-app-menu",
+ "unbound-audio",
+ "unbound-bluetooth",
+ "unbound-inbox",
+ "unbound-l10n",
+ "unbound-network",
+ "zbus",
+]
 
 [[package]]
 name = "unbound-term"

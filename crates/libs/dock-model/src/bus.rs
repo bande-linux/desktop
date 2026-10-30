@@ -1,10 +1,9 @@
 use std::collections::HashMap;
-use std::io::Write;
-use std::os::unix::net::UnixStream;
 use std::sync::mpsc::{self, Sender};
 use std::thread;
 
 use unbound_config::{BUS_NAME, DockEdge, OBJECT_PATH};
+use unbound_inbox::Outbox;
 use zbus::blocking::fdo::PropertiesProxy;
 use zbus::blocking::{Connection, MessageIterator, Proxy};
 use zbus::zvariant::OwnedValue;
@@ -22,22 +21,6 @@ pub enum BusEvent {
     AutoHide(bool),
     IconSize(u32),
     Launcher(String, LauncherUpdate),
-}
-
-#[derive(Clone)]
-struct Outbox {
-    events: Sender<BusEvent>,
-    wake: std::sync::Arc<UnixStream>,
-}
-
-impl Outbox {
-    fn send(&self, event: BusEvent) -> bool {
-        if self.events.send(event).is_err() {
-            return false;
-        }
-        let _ = (&*self.wake).write(&[1]);
-        true
-    }
 }
 
 pub fn app_id_from_uri(uri: &str) -> Option<String> {
@@ -73,7 +56,7 @@ fn spawn(name: &str, work: impl FnOnce() + Send + 'static) {
     }
 }
 
-fn follow_launcher_entries(session: Connection, outbox: Outbox) {
+fn follow_launcher_entries(session: Connection, outbox: Outbox<BusEvent>) {
     spawn("launcher-entries", move || {
         let rule = MatchRule::builder()
             .msg_type(message::Type::Signal)
@@ -138,7 +121,7 @@ fn dock_settings(config: &Proxy<'_>) -> zbus::Result<Vec<BusEvent>> {
     Ok(events)
 }
 
-fn follow_dock_apps(session: Connection, outbox: Outbox) {
+fn follow_dock_apps(session: Connection, outbox: Outbox<BusEvent>) {
     spawn("dock-apps", move || {
         let follow = || -> zbus::Result<()> {
             let config = Proxy::new(&session, BUS_NAME, OBJECT_PATH, CONFIG_INTERFACE)?;
@@ -179,11 +162,10 @@ fn follow_dock_apps(session: Connection, outbox: Outbox) {
     });
 }
 
-pub fn keep_writer() -> Sender<Vec<String>> {
+pub fn keep_writer(session: Connection) -> Sender<Vec<String>> {
     let (sender, receiver) = mpsc::channel::<Vec<String>>();
     spawn("dock-keep", move || {
-        let config = Connection::session()
-            .and_then(|session| Proxy::new(&session, BUS_NAME, OBJECT_PATH, CONFIG_INTERFACE));
+        let config = Proxy::new(&session, BUS_NAME, OBJECT_PATH, CONFIG_INTERFACE);
         let config = match config {
             Ok(config) => config,
             Err(error) => {
@@ -201,18 +183,7 @@ pub fn keep_writer() -> Sender<Vec<String>> {
     sender
 }
 
-pub fn follow(events: Sender<BusEvent>, wake: UnixStream) {
-    let session = match Connection::session() {
-        Ok(session) => session,
-        Err(error) => {
-            tracing::warn!("no session bus: {error}");
-            return;
-        }
-    };
-    let outbox = Outbox {
-        events,
-        wake: std::sync::Arc::new(wake),
-    };
+pub fn follow(session: &Connection, outbox: Outbox<BusEvent>) {
     follow_launcher_entries(session.clone(), outbox.clone());
-    follow_dock_apps(session, outbox);
+    follow_dock_apps(session.clone(), outbox);
 }

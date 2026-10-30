@@ -14,7 +14,7 @@ Depends: unbound-compositor (= ${binary:Version}),
          unbound-notify (= ${binary:Version}),
          unbound-clipboard (= ${binary:Version}),
          unbound-desktop-surface (= ${binary:Version}),
-         unbound-dock (= ${binary:Version}),
+         unbound-bar (= ${binary:Version}),
          unbound-launcher (= ${binary:Version}),
          unbound-lock (= ${binary:Version}),
          xdg-desktop-portal-unbound (= ${binary:Version}),
@@ -52,3 +52,19 @@ Description: Unbound desktop environment
  It recommends a browser, text editor, image viewer, PDF viewer, calculator
  and video player, and opens files in them by default, and an unlocked
  keyring for the passwords browsers and editors keep.
+
+Package: unbound-dock
+Architecture: all
+Section: oldlibs
+Depends: unbound-bar (= ${binary:Version}), ${misc:Depends}
+Description: transitional package for unbound-bar
+ The Unbound Dock is now drawn by unbound-bar, which hosts the Dock and the
+ menu bar in one process. This package can be removed safely.
+
+Package: unbound-menubar
+Architecture: all
+Section: oldlibs
+Depends: unbound-bar (= ${binary:Version}), ${misc:Depends}
+Description: transitional package for unbound-bar
+ The Unbound menu bar is now drawn by unbound-bar, which hosts the Dock and
+ the menu bar in one process. This package can be removed safely.

@@ -1,30 +1,13 @@
-pub mod dbusmenu;
-pub mod devices;
-pub mod menus;
-pub mod session;
-pub mod status;
-mod symbols;
-pub mod tray;
-
-use std::sync::LazyLock;
-
 use accesskit::{Action, Node as AccessNode, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
-use unbound_l10n::Localizer;
-use unbound_toolkit::ui::Menu;
 use unbound_toolkit::{
     Color, Image, Item, Palette, Paragraph, Point, Rect, Scene, Shape, TextAlign, TextStyle,
     TextSystem,
 };
 
-use crate::dbusmenu::Node;
-use crate::status::{Battery, Status, speaker_waves, wifi_bars};
-pub use crate::symbols::Symbol;
-use crate::symbols::{Symbols, natural_size};
-use crate::tray::TrayItem;
+use unbound_status::status::{Battery, Status, speaker_waves, wifi_bars};
 
-const ENGLISH: &str = include_str!("../locales/en-US/unbound-menubar.ftl");
-
-pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+use crate::L10N;
+use crate::symbols::{Symbol, Symbols, natural_size};
 
 pub const HEIGHT: u32 = 24;
 const EDGE: f32 = 8.0;
@@ -52,16 +35,6 @@ pub fn app_name<'a>(app_id: &'a str, names: &'a [(String, String)]) -> &'a str {
         .iter()
         .find(|(id, _)| id == app_id)
         .map_or(app_id, |(_, name)| name.as_str())
-}
-
-#[derive(Debug, Clone)]
-pub enum Update {
-    Devices(devices::Devices),
-    Sound(Option<status::Sound>),
-    Tray(Vec<TrayItem>),
-    Menu { menu: Menu, anchor: Rect },
-    AppMenu { app: String, root: Option<Node> },
-    AppMenuChanged,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -547,22 +520,5 @@ impl MenuBar {
             background: Color::TRANSPARENT,
             items,
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn every_message_id_used_in_code_is_in_the_english_file() {
-        let sources = [
-            include_str!("lib.rs"),
-            include_str!("menus.rs"),
-            include_str!("session.rs"),
-            include_str!("main.rs"),
-        ];
-        assert_eq!(
-            unbound_l10n::missing_ids(super::ENGLISH, &sources),
-            Vec::<&str>::new()
-        );
     }
 }

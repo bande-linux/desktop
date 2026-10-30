@@ -9,10 +9,9 @@ use zbus::blocking::Connection;
 use zbus::proxy::CacheProperties;
 use zbus::zvariant::OwnedObjectPath;
 
-use crate::Update;
-use crate::menus::Command;
 use crate::session::Ending;
 use crate::status::{Battery, Bluetooth, Gadget, Output, Power, Sound, Wifi};
+use crate::{Command, Update};
 
 const REFRESH: Duration = Duration::from_secs(3);
 const SOUND_POLL: Duration = Duration::from_millis(200);

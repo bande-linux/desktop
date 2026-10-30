@@ -32,7 +32,7 @@ them into role directories; the grouping below is that target.
 | :--- | :--- |
 | Platform | `unbound-compositor` (the Wayland compositor), `unbound-render` (its Vulkan renderer), `unbound-protocols` (private Wayland protocols for the shell) |
 | Toolkit | `unbound-toolkit` (tokens, Vello drawing, Parley text, Wayland windows, widgets, AccessKit) |
-| Shell | `unbound-dock` (the Dock), `unbound-menubar`, `unbound-launcher`, `unbound-controlcenter`, `unbound-notifications`, `unbound-screenshot`, `unbound-lock`, `unbound-greeter` |
+| Shell | `unbound-bar` (the Dock and the menu bar), `unbound-launcher`, `unbound-controlcenter`, `unbound-notifications`, `unbound-screenshot`, `unbound-lock`, `unbound-greeter` |
 | Apps | `unbound-files`, `unbound-settings`, `unbound-term` |
 | Services | `unbound-config`, `unbound-notify`, `unbound-power`, `unbound-clipboard`, `unbound-tray`, `unbound-automount`, `xdg-desktop-portal-unbound`, `unbound-polkit` |
 | Libraries | `unbound-spring` (damped springs), `unbound-xdg` (desktop entries, icons, launching), `unbound-audio` (PipeWire), `unbound-network` (NetworkManager), `unbound-bluetooth` (BlueZ) |

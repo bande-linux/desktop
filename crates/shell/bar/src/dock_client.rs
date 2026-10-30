@@ -1,31 +1,32 @@
 use std::collections::HashMap;
-use std::io::Read;
-use std::os::fd::{AsFd, BorrowedFd};
-use std::os::unix::net::UnixStream;
-use std::path::PathBuf;
-use std::process::ExitCode;
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::os::fd::BorrowedFd;
+use std::path::{Path, PathBuf};
+use std::sync::mpsc::Sender;
 use std::thread;
 use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
-use unbound_config::{Config, DockEdge, config_path};
-use unbound_dock::autostart::{autostart_dir, opens_at_login, set_open_at_login};
-use unbound_dock::bus::{self, BusEvent};
-use unbound_dock::{
-    DockAction, DockApp, DockState, L10N, MenuTarget, Shared, arrange, dock_ui, exclusive_zone,
-    scene, surface_size,
+use unbound_bar::L10N;
+use unbound_bar::dock::{
+    DockAction, DockApp, DockState, MenuTarget, Shared, dock_ui, exclusive_zone, scene,
+    surface_size,
 };
+use unbound_config::{Dock as DockConfig, DockEdge};
+use unbound_dock_model::arrange;
+use unbound_dock_model::autostart::{autostart_dir, opens_at_login, set_open_at_login};
+use unbound_dock_model::bus::{self, BusEvent};
 use unbound_fs::{FolderWatch, Trash};
+use unbound_inbox::Inbox;
 use unbound_toolkit::ui::{Event, Menu, MenuItem, Ui};
 use unbound_toolkit::{
     App, DragAction, DragEvent, Edges, Image, KeyboardFocus, LayerKind, LayerOptions,
-    MenuPlacement, Point, Rect, Role, Scene, TextSystem, Window, WindowError, WindowEvent,
+    MenuPlacement, Point, Rect, Role, Scene, TextSystem, Window, WindowEvent,
 };
 use unbound_xdg::{
     DesktopEntry, ICON_THEMES, Locale, applications, current_desktops, data_dirs, find_icon,
     path_from_file_uri,
 };
+use zbus::blocking::Connection;
 
 const FILES: &str = "org.unbound.Files";
 const TRASH_URI: &str = "trash:///";
@@ -74,7 +75,7 @@ impl TrashWatch {
     }
 }
 
-struct Dock {
+pub struct Dock {
     state: Shared,
     ui: Ui,
     entries: Vec<DesktopEntry>,
@@ -92,10 +93,9 @@ struct Dock {
     active: Option<String>,
     release_at: Option<Instant>,
     unresponsive: Vec<String>,
-    keep: Sender<Vec<String>>,
+    keep: Option<Sender<Vec<String>>>,
     autostart: Option<PathBuf>,
-    bus: Receiver<BusEvent>,
-    wake: UnixStream,
+    bus: Inbox<BusEvent>,
     trash: Option<TrashWatch>,
 }
 
@@ -366,7 +366,11 @@ impl Dock {
         }
         self.kept = kept.clone();
         self.sync();
-        if self.keep.send(kept).is_err() {
+        if self
+            .keep
+            .as_ref()
+            .is_none_or(|keep| keep.send(kept).is_err())
+        {
             tracing::warn!("the Dock cannot save the apps kept in it");
         }
     }
@@ -696,10 +700,8 @@ impl Dock {
     }
 
     fn receive(&mut self, window: &mut Window) {
-        let mut drained = [0; 64];
-        let _ = self.wake.read(&mut drained);
         let now = Instant::now();
-        for event in self.bus.try_iter().collect::<Vec<_>>() {
+        for event in self.bus.drain() {
             match event {
                 BusEvent::IconSize(size) => self.resize(window, size as f32),
                 BusEvent::AutoHide(auto_hide) => {
@@ -827,7 +829,7 @@ impl App for Dock {
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        let mut sources = vec![self.wake.as_fd()];
+        let mut sources = vec![self.bus.fd()];
         sources.extend(self.trash.as_ref().map(|trash| trash.watch.fd()));
         sources
     }
@@ -878,7 +880,7 @@ impl App for Dock {
     }
 }
 
-fn anchor(edge: DockEdge) -> Edges {
+pub fn anchor(edge: DockEdge) -> Edges {
     Edges {
         left: edge != DockEdge::Right,
         right: edge != DockEdge::Left,
@@ -887,82 +889,68 @@ fn anchor(edge: DockEdge) -> Edges {
     }
 }
 
-fn read_config(config_home: Option<&PathBuf>, home: Option<&PathBuf>) -> Config {
-    config_path(
-        config_home.map(PathBuf::as_path),
-        home.map(PathBuf::as_path),
-    )
-    .and_then(|path| std::fs::read_to_string(path).ok())
-    .and_then(|source| Config::parse(&source).ok())
-    .unwrap_or_default()
+pub fn dock_role(edge: DockEdge, icon_size: f32) -> Role {
+    Role::Layer(LayerOptions {
+        layer: LayerKind::Top,
+        anchor: anchor(edge),
+        exclusive_zone: exclusive_zone(icon_size).round() as i32,
+        keyboard: KeyboardFocus::OnDemand,
+        namespace: DOCK_NAMESPACE.to_owned(),
+    })
 }
 
-fn run() -> Result<(), WindowError> {
-    let home = std::env::var_os("HOME").map(PathBuf::from);
-    let config_home = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from);
-    let config = read_config(config_home.as_ref(), home.as_ref());
-    let edge = config.dock.edge;
-    let icon_size = config.dock.icon_size as f32;
-    let mut window = Window::open(
-        Role::Layer(LayerOptions {
-            layer: LayerKind::Top,
-            anchor: anchor(edge),
-            exclusive_zone: exclusive_zone(icon_size).round() as i32,
-            keyboard: KeyboardFocus::OnDemand,
-            namespace: DOCK_NAMESPACE.to_owned(),
-        }),
-        surface_size(edge, icon_size, (1, 1)),
-    )?;
-    let (events, bus) = mpsc::channel();
-    let (wake, wake_sender) = UnixStream::pair()?;
-    wake.set_nonblocking(true)?;
-    bus::follow(events, wake_sender);
-    let appearance = window.appearance();
-    let state = DockState::new(edge, icon_size);
-    state.borrow_mut().set_appearance(appearance);
-    state
-        .borrow_mut()
-        .set_auto_hide(config.dock.auto_hide, Instant::now());
-    let mut ui = dock_ui(state.clone(), appearance.palette(), TextSystem::new());
-    ui.set_appearance(appearance);
-    let locale = Locale::from_env();
-    let mut dock = Dock {
-        state,
-        ui,
-        entries: applications(&data_dirs(), locale.as_ref(), &current_desktops()),
-        kept: config.dock.apps,
-        running: window.running_apps(),
-        icons: HashMap::new(),
-        icon_scale: window.scale(),
-        reported: HashMap::new(),
-        input: None,
-        zone: exclusive_zone(icon_size).round() as i32,
-        blur: Some(Vec::new()),
-        corner: None,
-
-        menu: None,
-        confirming: false,
-        active: None,
-        release_at: None,
-        unresponsive: Vec::new(),
-        keep: bus::keep_writer(),
-        autostart: autostart_dir(config_home.as_deref(), home.as_deref()),
-        bus,
-        wake,
-        trash: TrashWatch::start(),
-    };
-    dock.load_trash_icons();
-    dock.sync();
-    unbound_toolkit::run(&mut window, &mut dock)
-}
-
-fn main() -> ExitCode {
-    unbound_log::init("unbound-dock");
-    match run() {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(error) => {
-            tracing::error!("{error}");
-            ExitCode::FAILURE
+impl Dock {
+    pub fn new(
+        window: &Window,
+        config: &DockConfig,
+        text: TextSystem,
+        session: Option<&Connection>,
+        home: (Option<&Path>, Option<&Path>),
+    ) -> std::io::Result<Self> {
+        let edge = config.edge;
+        let icon_size = config.icon_size as f32;
+        let inbox = Inbox::new()?;
+        if let Some(session) = session {
+            bus::follow(session, inbox.outbox());
         }
+        let appearance = window.appearance();
+        let state = DockState::new(edge, icon_size);
+        state.borrow_mut().set_appearance(appearance);
+        state
+            .borrow_mut()
+            .set_auto_hide(config.auto_hide, Instant::now());
+        let mut ui = dock_ui(state.clone(), appearance.palette(), text);
+        ui.set_appearance(appearance);
+        let (config_home, home) = home;
+        let mut dock = Self {
+            state,
+            ui,
+            entries: applications(
+                &data_dirs(),
+                Locale::from_env().as_ref(),
+                &current_desktops(),
+            ),
+            kept: config.apps.clone(),
+            running: window.running_apps(),
+            icons: HashMap::new(),
+            icon_scale: window.scale(),
+            reported: HashMap::new(),
+            input: None,
+            zone: exclusive_zone(icon_size).round() as i32,
+            blur: Some(Vec::new()),
+            corner: None,
+            menu: None,
+            confirming: false,
+            active: None,
+            release_at: None,
+            unresponsive: Vec::new(),
+            keep: session.map(|session| bus::keep_writer(session.clone())),
+            autostart: autostart_dir(config_home, home),
+            bus: inbox,
+            trash: TrashWatch::start(),
+        };
+        dock.load_trash_icons();
+        dock.sync();
+        Ok(dock)
     }
 }

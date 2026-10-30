@@ -25,7 +25,7 @@ cargo_json build --workspace --locked --bins
 jq -r 'select(.reason == "compiler-artifact" and .executable != null and .target.kind == ["bin"]) | .executable' \
     "$share/cargo.json" > "$share/apps"
 mkdir -p "$share/usr/bin" "$share/usr/share/applications" "$share/usr/share/icons/hicolor/scalable/apps"
-for app in unbound-compositor unbound-clipboard unbound-dock unbound-launcher unbound-term unbound-lock unbound-screenshot unbound-files unbound-greeter unbound-menubar; do
+for app in unbound-compositor unbound-clipboard unbound-bar unbound-launcher unbound-term unbound-lock unbound-screenshot unbound-files unbound-greeter; do
     cp "$(grep "/$app\$" "$share/apps")" "$share/usr/bin/"
 done
 mkdir -p "$share/etc/pam.d"

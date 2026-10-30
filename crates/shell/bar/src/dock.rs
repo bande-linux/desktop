@@ -2,28 +2,21 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::f32::consts::TAU;
 use std::rc::Rc;
-use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Node, Role};
 use unbound_config::{DEFAULT_DOCK_ICON_SIZE, DOCK_ICON_SIZE_RANGE, DockEdge};
-use unbound_l10n::Localizer;
+use unbound_dock_model::{LauncherEntry, LauncherUpdate};
 use unbound_toolkit::ui::{
     Animated, Context, Cursor, Event, Key as KeyboardKey, Modifiers, PointerButton, Size, Spring,
     Ui, Widget, WidgetId,
 };
 
+use crate::L10N;
 use unbound_toolkit::{
     Appearance, Color, Image, Item, Paint, Palette, Paragraph, Point, Rect, Scene, Scheme, Shape,
     Stop, TextAlign, TextStyle, TextSystem,
 };
-
-const ENGLISH: &str = include_str!("../locales/en-US/unbound-dock.ftl");
-
-pub mod autostart;
-pub mod bus;
-
-pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
 pub const ICON_SIZE: f32 = DEFAULT_DOCK_ICON_SIZE as f32;
 const CELL_PADDING: f32 = 5.0;
@@ -66,43 +59,6 @@ pub struct DockApp {
     pub running: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub struct LauncherUpdate {
-    pub count: Option<i64>,
-    pub count_visible: Option<bool>,
-    pub progress: Option<f64>,
-    pub progress_visible: Option<bool>,
-    pub urgent: Option<bool>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-struct LauncherEntry {
-    count: i64,
-    count_visible: bool,
-    progress: f64,
-    progress_visible: bool,
-    urgent: bool,
-}
-
-impl LauncherEntry {
-    fn merge(&mut self, update: LauncherUpdate) {
-        self.count = update.count.unwrap_or(self.count);
-        self.count_visible = update.count_visible.unwrap_or(self.count_visible);
-        self.progress = update.progress.unwrap_or(self.progress);
-        self.progress_visible = update.progress_visible.unwrap_or(self.progress_visible);
-        self.urgent = update.urgent.unwrap_or(self.urgent);
-    }
-
-    fn badge(&self) -> Option<i64> {
-        (self.count_visible && self.count > 0).then_some(self.count)
-    }
-
-    fn progress(&self) -> Option<f64> {
-        self.progress_visible
-            .then_some(self.progress.clamp(0.0, 1.0))
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MenuTarget {
     App(String),
@@ -117,21 +73,6 @@ pub enum DockAction {
     Menu { target: MenuTarget, at: Point },
     Keep(Vec<String>),
     ReleaseKeyboard,
-}
-
-pub fn arrange(kept: &[String], shown: &[String], hidden: impl Fn(&str) -> bool) -> Vec<String> {
-    let mut arranged = shown.to_vec();
-    for (index, app_id) in kept.iter().enumerate() {
-        if !hidden(app_id) || arranged.contains(app_id) {
-            continue;
-        }
-        let after = kept[..index]
-            .iter()
-            .rev()
-            .find_map(|before| arranged.iter().position(|known| known == before));
-        arranged.insert(after.map_or(0, |position| position + 1), app_id.clone());
-    }
-    arranged
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -2165,16 +2106,4 @@ pub fn scene(ui: &mut Ui, size: (u32, u32)) -> Scene {
     let mut scene = ui.scene(size.0, size.1);
     scene.background = Color::hex(0x000000).with_alpha(0);
     scene
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn every_message_id_used_in_code_is_in_the_english_file() {
-        let sources = [include_str!("lib.rs"), include_str!("main.rs")];
-        assert_eq!(
-            unbound_l10n::missing_ids(super::ENGLISH, &sources),
-            Vec::<&str>::new()
-        );
-    }
 }

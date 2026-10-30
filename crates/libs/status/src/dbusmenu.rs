@@ -1,10 +1,9 @@
 use std::collections::HashMap;
 
 use unbound_app_menu::{SHELL_ACTION_PROPERTY, ShellAction, VERSION_PROPERTY};
-use unbound_toolkit::ui::{Menu, MenuItem};
 use zbus::zvariant::{OwnedValue, Value};
 
-use crate::menus::Command;
+use crate::Command;
 
 pub use unbound_app_menu::MENU_PATH as APP_MENU_PATH;
 
@@ -124,7 +123,7 @@ fn node(id: i32, properties: &HashMap<String, OwnedValue>, children: Vec<Node>) 
     }
 }
 
-fn command(node: &Node, item: &str) -> Command {
+pub fn command(node: &Node, item: &str) -> Command {
     match node.shell_action {
         Some(ShellAction::About) => Command::AboutApp(node.version.clone().unwrap_or_default()),
         Some(ShellAction::Hide) => Command::HideApp,
@@ -144,31 +143,6 @@ pub fn tree((id, properties, children): Layout) -> Node {
         children
             .iter()
             .filter_map(|child| node_of_value(child))
-            .collect(),
-    )
-}
-
-pub fn menu(node: &Node, item: &str) -> Menu {
-    Menu::new(
-        node.children
-            .iter()
-            .filter(|child| child.visible)
-            .map(|child| {
-                if child.separator {
-                    return MenuItem::separator();
-                }
-                if child.children.is_empty() {
-                    let entry = MenuItem::new(&child.label, &command(child, item).action())
-                        .enabled(child.enabled)
-                        .checked(child.checked);
-                    match &child.shortcut {
-                        Some(shortcut) => entry.shortcut(shortcut),
-                        None => entry,
-                    }
-                } else {
-                    MenuItem::submenu(&child.label, menu(child, item)).enabled(child.enabled)
-                }
-            })
             .collect(),
     )
 }

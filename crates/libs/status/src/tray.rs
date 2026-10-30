@@ -2,8 +2,6 @@ use std::process;
 use std::sync::mpsc::Receiver;
 
 use unbound_inbox::Outbox;
-use unbound_toolkit::Rect;
-use unbound_toolkit::ui::Menu;
 use zbus::blocking::fdo::DBusProxy;
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::fdo::RequestNameFlags;
@@ -13,7 +11,7 @@ use zbus::zvariant::{OwnedObjectPath, Value};
 use zbus::{MatchRule, message};
 
 use crate::Update;
-use crate::dbusmenu::{APP_MENU_PATH, DBusMenu, menu, tree};
+use crate::dbusmenu::{APP_MENU_PATH, DBusMenu, Node, tree};
 
 const ITEM_INTERFACE: &str = "org.kde.StatusNotifierItem";
 const WATCHER_INTERFACE: &str = "org.kde.StatusNotifierWatcher";
@@ -233,20 +231,9 @@ pub fn host(connection: &Connection, outbox: &Outbox<Update>) -> zbus::Result<()
 
 #[derive(Debug, Clone)]
 pub enum Errand {
-    ShowMenu {
-        menu: String,
-        parent: i32,
-        anchor: Rect,
-    },
-    Clicked {
-        menu: String,
-        id: i32,
-    },
-    Activate {
-        item: String,
-        x: i32,
-        y: i32,
-    },
+    ShowMenu { menu: String, parent: i32 },
+    Clicked { menu: String, id: i32 },
+    Activate { item: String, x: i32, y: i32 },
     AppMenu(String),
     ToggleNotificationCenter,
 }
@@ -260,22 +247,18 @@ fn dbus_menu<'a>(connection: &Connection, key: &'a str) -> zbus::Result<DBusMenu
         .build()
 }
 
-fn layout(connection: &Connection, key: &str, parent: i32) -> zbus::Result<Menu> {
+fn layout(connection: &Connection, key: &str, parent: i32) -> zbus::Result<Node> {
     let proxy = dbus_menu(connection, key)?;
     let _ = proxy.about_to_show(parent);
     let (_, root) = proxy.get_layout(parent, -1, &[])?;
-    Ok(menu(&tree(root), key))
+    Ok(tree(root))
 }
 
 pub fn run_errands(connection: &Connection, errands: &Receiver<Errand>, outbox: &Outbox<Update>) {
     for errand in errands {
         let result = match errand {
-            Errand::ShowMenu {
-                menu,
-                parent,
-                anchor,
-            } => layout(connection, &menu, parent).map(|menu| {
-                outbox.send(Update::Menu { menu, anchor });
+            Errand::ShowMenu { menu, parent } => layout(connection, &menu, parent).map(|root| {
+                outbox.send(Update::Menu { menu, root });
             }),
             Errand::Clicked { menu, id } => dbus_menu(connection, &menu)
                 .and_then(|proxy| proxy.event(id, "clicked", &Value::from(""), 0)),

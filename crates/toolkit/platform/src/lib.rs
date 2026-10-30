@@ -25,7 +25,7 @@ pub use capture::ScreenImage;
 pub use chrome::TITLE_BAR_HEIGHT;
 pub use clipboard::{DragAction, DragEvent, DragIcon, Transfer};
 pub use popup::MenuPlacement;
-pub use run::{App, run};
+pub use run::{App, Surfaces, run, run_surfaces};
 pub use shell::AppWindow;
 pub use unbound_protocols::client::unbound_shell_v1::{BrightnessKey, VolumeKey};
 pub use window::{

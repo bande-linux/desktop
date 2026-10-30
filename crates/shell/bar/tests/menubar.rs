@@ -3,17 +3,18 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use unbound_menubar::dbusmenu::{Node, menu, tree, without_mnemonics};
-use unbound_menubar::devices::battery_of;
-use unbound_menubar::menus::{
-    Command, battery_menu, bluetooth_menu, input_source_menu, sound_menu, system_menu,
+use unbound_bar::menubar::{MenuBar, Slot, app_name};
+use unbound_bar::menus::{
+    app_menu, battery_menu, bluetooth_menu, input_source_menu, sound_menu, system_menu,
 };
-use unbound_menubar::session::{Ending, facts};
-use unbound_menubar::status::{
+use unbound_status::Command;
+use unbound_status::dbusmenu::{Node, tree, without_mnemonics};
+use unbound_status::devices::battery_of;
+use unbound_status::session::{Ending, facts};
+use unbound_status::status::{
     Battery, Bluetooth, Gadget, InputSource, InputSources, Output, Power, Sound,
 };
-use unbound_menubar::tray::{TrayIcon, pixmap_rgba, split};
-use unbound_menubar::{MenuBar, Slot, app_name};
+use unbound_status::tray::{TrayIcon, pixmap_rgba, split};
 use unbound_toolkit::ui::{Menu, MenuItem};
 use unbound_toolkit::{Item, Palette, Point, Scheme, TextSystem};
 use zbus::zvariant::{OwnedValue, Structure, Value};
@@ -341,7 +342,7 @@ fn a_dbusmenu_layout_becomes_a_menu_without_mnemonics_or_hidden_items() {
             .collect(),
     );
     let node: Node = tree(root);
-    let converted = menu(&node, ":1.9/MenuBar");
+    let converted = app_menu(&node, ":1.9/MenuBar");
 
     assert_eq!(converted.items.len(), 4);
     assert_eq!(
@@ -406,7 +407,7 @@ fn an_app_menu_shows_shortcuts_and_leaves_about_and_hiding_to_the_menu_bar() {
             .map(|entry| OwnedValue::try_from(Value::Value(Box::new(entry))).expect("owned"))
             .collect(),
     );
-    let converted = menu(&tree(root), ":1.9/org/unbound/MenuBar");
+    let converted = app_menu(&tree(root), ":1.9/org/unbound/MenuBar");
 
     let actions: Vec<_> = converted
         .items

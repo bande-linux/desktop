@@ -29,3 +29,7 @@ deny = Deny
 allow = Allow
 no-sound-devices = No devices
 hertz = { $value } Hz
+add-picture = Add Picture…
+own-picture = Your own picture
+pictures = Pictures
+choose-picture = Choose a Wallpaper

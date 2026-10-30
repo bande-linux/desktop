@@ -7,10 +7,13 @@ use unbound_toolkit::ui::{
 };
 
 use crate::L10N;
+use crate::follow::Command;
+use crate::pictures::{Pair, PictureCommand, expand};
 use crate::state::{Answer, Display, Question};
 use crate::view::{Anchor, Intent, Intents, SettingsView, intent};
 use crate::widgets::{
-    Caption, Captioned, Card, Check, Column, Row, Scroll, Segmented, SidebarRow, Signal, Text, Tone,
+    Caption, Captioned, Card, Check, Column, Row, Scroll, Segmented, SidebarRow, Signal, Text,
+    Thumbnail, Thumbnails, Tone,
 };
 use unbound_settings_panes::SettingHit;
 use unbound_settings_panes::{AUTOMATIC, Kind, List, PaneId, Section, Setting, SettingId, Value};
@@ -33,6 +36,14 @@ fn submit(intents: &Intents, make: fn(String) -> Intent) -> impl FnMut(&str) + '
 
 fn muted_row(text: &str) -> Box<dyn Widget> {
     boxed(Row::new(Text::new(text, Tone::Muted), None))
+}
+
+fn picture_name(name: &str) -> String {
+    let mut characters = name.chars();
+    characters
+        .next()
+        .map(|first| first.to_uppercase().chain(characters).collect())
+        .unwrap_or_default()
 }
 
 fn display_value(
@@ -159,6 +170,25 @@ impl SettingsView {
                     set(Value::Flag(on))
                 }))
             }
+            Kind::Range {
+                range,
+                step,
+                low,
+                high,
+            } => {
+                let Some(Value::Number(number)) = value else {
+                    return None;
+                };
+                let slider = Slider::new(
+                    &setting.label,
+                    f64::from(number),
+                    (f64::from(range.0), f64::from(range.1)),
+                    f64::from(*step),
+                    move |number| set(Value::Number(number.round() as u32)),
+                );
+                let focus = slider.id();
+                return Some((boxed(Captioned::new(boxed(slider), low, high)), focus));
+            }
             Kind::Level => {
                 let Some(Value::Fraction(level)) = value else {
                     return None;
@@ -197,7 +227,7 @@ impl SettingsView {
                     },
                 ))
             }
-            Kind::List(_) => return None,
+            Kind::List(_) | Kind::Pictures => return None,
         };
         let focus = control.id();
         Some((control, focus))
@@ -387,6 +417,78 @@ impl SettingsView {
         }
     }
 
+    fn picture_rows(&mut self, setting: &Setting) -> Widgets {
+        let (light, dark) = match self.values.get(&SettingId::Wallpaper) {
+            Some(Value::Pictures { light, dark }) => (light.clone(), dark.clone()),
+            _ => (String::new(), String::new()),
+        };
+        let mut choices: Vec<(String, Pair)> = self
+            .pictures
+            .iter()
+            .map(|(name, pair)| (picture_name(name), pair.clone()))
+            .collect();
+        let mut selected = if light.is_empty() {
+            self.pictures
+                .iter()
+                .position(|(name, _)| name == unbound_wallpaper::DEFAULT_WALLPAPER)
+        } else {
+            self.pictures
+                .iter()
+                .position(|(_, pair)| pair.light.to_string_lossy() == light)
+        };
+        let home = std::env::home_dir();
+        let dark = if dark.is_empty() { &light } else { &dark };
+        if selected.is_none()
+            && let (Some(light), Some(dark)) = (
+                expand(&light, home.as_deref()),
+                expand(dark, home.as_deref()),
+            )
+        {
+            let label = light
+                .file_stem()
+                .map(|stem| stem.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            choices.insert(0, (label, Pair { light, dark }));
+            selected = Some(0);
+        }
+        for (_, pair) in &choices {
+            let bundled = self.pictures.iter().any(|(_, known)| known == pair);
+            if !bundled && !self.thumbnails.contains_key(pair) {
+                self.thumbnails.insert(pair.clone(), None);
+                self.commands
+                    .push(Command::Picture(PictureCommand::Thumbnail(pair.clone())));
+            }
+        }
+        let tiles = choices
+            .iter()
+            .map(|(label, pair)| Thumbnail {
+                label: label.clone(),
+                image: self.thumbnails.get(pair).cloned().flatten(),
+            })
+            .collect();
+        let pairs: Vec<Pair> = choices.into_iter().map(|(_, pair)| pair).collect();
+        let mut set = self.setting_intent(SettingId::Wallpaper, None);
+        let grid = Thumbnails::new(&setting.label, tiles, selected, move |index| {
+            if let Some(pair) = pairs.get(index) {
+                set(Value::Pictures {
+                    light: pair.light.to_string_lossy().into_owned(),
+                    dark: pair.dark.to_string_lossy().into_owned(),
+                });
+            }
+        });
+        self.anchors
+            .push((Anchor::Setting(setting.id, None), grid.id()));
+        let mut choose = intent(&self.intents, |()| Intent::ChoosePicture);
+        let add = Button::new(&L10N.tr("add-picture"), move || choose(()));
+        vec![
+            boxed(grid),
+            boxed(Row::new(
+                Text::new(&L10N.tr("own-picture"), Tone::Primary),
+                Some(boxed(add)),
+            )),
+        ]
+    }
+
     fn section_shown(&self, section: &Section) -> bool {
         section.settings.iter().all(|setting| match setting.id {
             SettingId::Networks => self.wifi.as_ref().is_some_and(|wifi| wifi.enabled),
@@ -526,9 +628,14 @@ impl SettingsView {
                     Kind::List(list) => Some((list, setting.id)),
                     _ => None,
                 });
-            let rows: Widgets = match list {
-                Some((list, _)) => self.list_rows(list),
-                None => section
+            let pictures = section
+                .settings
+                .iter()
+                .find(|setting| setting.kind == Kind::Pictures);
+            let rows: Widgets = match (list, pictures) {
+                (Some((list, _)), _) => self.list_rows(list),
+                (None, Some(setting)) => self.picture_rows(setting),
+                (None, None) => section
                     .settings
                     .iter()
                     .filter_map(|setting| {

@@ -47,8 +47,7 @@ appearance-mode-keywords = dark mode, light mode, night, theme
 appearance-light = Light
 appearance-dark = Dark
 appearance-automatic = Auto
-desktop-and-dock = Desktop & Dock
-desktop-and-dock-keywords = dock, desktop
+dock-keywords = dock, launcher, taskbar, favourites, favorites
 dock = Dock
 dock-position = Position on screen
 dock-position-keywords = panel, taskbar, edge, left, right, bottom, top
@@ -84,3 +83,19 @@ hours = { $count ->
     [one] { $count } hour
    *[other] { $count } hours
 }
+motion = Motion
+reduce-motion = Reduce motion
+reduce-motion-keywords = accessibility, animation, animations, movement, motion sickness
+wallpaper = Wallpaper
+wallpaper-keywords = background, desktop picture, picture, photo, image
+wallpaper-picture-keywords = background, picture, add picture
+wallpaper-fit = Picture size
+wallpaper-fit-keywords = fill, fit, scale, stretch, crop
+wallpaper-fill = Fill screen
+wallpaper-fit-whole = Fit to screen
+dock-size = Size
+dock-size-keywords = icon size, bigger, smaller, large, small
+dock-auto-hide = Automatically hide and show the Dock
+dock-auto-hide-keywords = autohide, hide, show, reveal
+small = Small
+large = Large

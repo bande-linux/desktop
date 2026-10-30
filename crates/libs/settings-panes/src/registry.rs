@@ -7,6 +7,7 @@ pub enum PaneId {
     Notifications,
     Sound,
     Appearance,
+    Wallpaper,
     Dock,
     Displays,
     LockScreen,
@@ -14,12 +15,13 @@ pub enum PaneId {
 }
 
 impl PaneId {
-    const KEYWORDS: [(Self, &'static str); 9] = [
+    const KEYWORDS: [(Self, &'static str); 10] = [
         (Self::Wifi, "wifi"),
         (Self::Bluetooth, "bluetooth"),
         (Self::Notifications, "notifications"),
         (Self::Sound, "sound"),
         (Self::Appearance, "appearance"),
+        (Self::Wallpaper, "wallpaper"),
         (Self::Dock, "dock"),
         (Self::Displays, "displays"),
         (Self::LockScreen, "lock-screen"),
@@ -56,7 +58,12 @@ pub enum SettingId {
     InputMuted,
     InputDevice,
     Appearance,
+    ReduceMotion,
+    Wallpaper,
+    WallpaperFit,
     DockEdge,
+    DockIconSize,
+    DockAutoHide,
     DisplayScale,
     RefreshRate,
     VariableRefreshRate,
@@ -74,6 +81,7 @@ pub enum Value {
     Number(u32),
     Flag(bool),
     Fraction(f32),
+    Pictures { light: String, dark: String },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -101,7 +109,14 @@ pub enum Kind {
     },
     Switch,
     Level,
+    Range {
+        range: (u32, u32),
+        step: u32,
+        low: String,
+        high: String,
+    },
     RefreshRates,
+    Pictures,
     List(List),
 }
 
@@ -109,7 +124,12 @@ impl Kind {
     pub fn choices(&self) -> &[Choice] {
         match self {
             Self::Choices(choices) | Self::Stops { stops: choices, .. } => choices,
-            Self::Switch | Self::Level | Self::RefreshRates | Self::List(_) => &[],
+            Self::Switch
+            | Self::Level
+            | Self::Range { .. }
+            | Self::RefreshRates
+            | Self::Pictures
+            | Self::List(_) => &[],
         }
     }
 
@@ -253,6 +273,8 @@ fn scale_choices() -> Vec<Choice> {
 }
 
 pub const AUTOMATIC: &str = "automatic";
+const DOCK_SIZES: (u32, u32) = (24, 96);
+
 const SCALES: [u32; 5] = [100, 125, 150, 175, 200];
 
 fn connectivity_panes() -> Vec<Pane> {
@@ -435,37 +457,95 @@ fn desktop_panes() -> Vec<Pane> {
             PaneId::Appearance,
             L10N.tr("appearance"),
             L10N.tr("appearance-keywords"),
-            vec![section(
-                None,
-                vec![setting(
-                    SettingId::Appearance,
-                    L10N.tr("appearance-mode"),
-                    L10N.tr("appearance-mode-keywords"),
-                    Kind::Choices(keyword_choices(vec![
-                        (L10N.tr("appearance-light"), "light"),
-                        (L10N.tr("appearance-dark"), "dark"),
-                        (L10N.tr("appearance-automatic"), "automatic"),
-                    ])),
-                )],
-            )],
+            vec![
+                section(
+                    None,
+                    vec![setting(
+                        SettingId::Appearance,
+                        L10N.tr("appearance-mode"),
+                        L10N.tr("appearance-mode-keywords"),
+                        Kind::Choices(keyword_choices(vec![
+                            (L10N.tr("appearance-light"), "light"),
+                            (L10N.tr("appearance-dark"), "dark"),
+                            (L10N.tr("appearance-automatic"), "automatic"),
+                        ])),
+                    )],
+                ),
+                section(
+                    Some(L10N.tr("motion")),
+                    vec![setting(
+                        SettingId::ReduceMotion,
+                        L10N.tr("reduce-motion"),
+                        L10N.tr("reduce-motion-keywords"),
+                        Kind::Switch,
+                    )],
+                ),
+            ],
+        ),
+        pane(
+            PaneId::Wallpaper,
+            L10N.tr("wallpaper"),
+            L10N.tr("wallpaper-keywords"),
+            vec![
+                section(
+                    None,
+                    vec![setting(
+                        SettingId::Wallpaper,
+                        L10N.tr("wallpaper"),
+                        L10N.tr("wallpaper-picture-keywords"),
+                        Kind::Pictures,
+                    )],
+                ),
+                section(
+                    None,
+                    vec![setting(
+                        SettingId::WallpaperFit,
+                        L10N.tr("wallpaper-fit"),
+                        L10N.tr("wallpaper-fit-keywords"),
+                        Kind::Choices(keyword_choices(vec![
+                            (L10N.tr("wallpaper-fill"), "fill"),
+                            (L10N.tr("wallpaper-fit-whole"), "fit"),
+                        ])),
+                    )],
+                ),
+            ],
         ),
         pane(
             PaneId::Dock,
-            L10N.tr("desktop-and-dock"),
-            L10N.tr("desktop-and-dock-keywords"),
+            L10N.tr("dock"),
+            L10N.tr("dock-keywords"),
             vec![section(
-                Some(L10N.tr("dock")),
-                vec![setting(
-                    SettingId::DockEdge,
-                    L10N.tr("dock-position"),
-                    L10N.tr("dock-position-keywords"),
-                    Kind::Choices(keyword_choices(vec![
-                        (L10N.tr("edge-left"), "left"),
-                        (L10N.tr("edge-bottom"), "bottom"),
-                        (L10N.tr("edge-right"), "right"),
-                        (L10N.tr("edge-top"), "top"),
-                    ])),
-                )],
+                None,
+                vec![
+                    setting(
+                        SettingId::DockIconSize,
+                        L10N.tr("dock-size"),
+                        L10N.tr("dock-size-keywords"),
+                        Kind::Range {
+                            range: DOCK_SIZES,
+                            step: 4,
+                            low: L10N.tr("small"),
+                            high: L10N.tr("large"),
+                        },
+                    ),
+                    setting(
+                        SettingId::DockEdge,
+                        L10N.tr("dock-position"),
+                        L10N.tr("dock-position-keywords"),
+                        Kind::Choices(keyword_choices(vec![
+                            (L10N.tr("edge-left"), "left"),
+                            (L10N.tr("edge-bottom"), "bottom"),
+                            (L10N.tr("edge-right"), "right"),
+                            (L10N.tr("edge-top"), "top"),
+                        ])),
+                    ),
+                    setting(
+                        SettingId::DockAutoHide,
+                        L10N.tr("dock-auto-hide"),
+                        L10N.tr("dock-auto-hide-keywords"),
+                        Kind::Switch,
+                    ),
+                ],
             )],
         ),
         displays_pane(),

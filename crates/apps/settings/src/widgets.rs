@@ -4,7 +4,9 @@ use std::rc::Rc;
 
 use accesskit::{Action, ActionRequest, Node, Role};
 use unbound_toolkit::ui::{Context, Event, Key, Size, Widget, WidgetId};
-use unbound_toolkit::{Color, Item, Paragraph, Point, Rect, Shape, Spacing, TextAlign, TextStyle};
+use unbound_toolkit::{
+    Color, Image, Item, Paragraph, Point, Rect, Shape, Spacing, TextAlign, TextStyle,
+};
 
 pub const SIDEBAR_WIDTH: f32 = 220.0;
 const MARGIN: f32 = Spacing::M as f32;
@@ -1292,5 +1294,199 @@ impl Widget for Check {
 
     fn access(&self, _cx: &Context) -> Node {
         Node::new(Role::Image)
+    }
+}
+
+const THUMBNAIL: Size = Size::new(144.0, 90.0);
+const THUMBNAIL_GAP: f32 = Spacing::M as f32;
+const THUMBNAIL_RADIUS: f32 = 8.0;
+const THUMBNAIL_LABEL_GAP: f32 = 6.0;
+
+pub struct Thumbnail {
+    pub label: String,
+    pub image: Option<Image>,
+}
+
+pub struct Thumbnails {
+    id: WidgetId,
+    label: String,
+    tiles: Vec<(Option<Image>, Text)>,
+    selected: Option<usize>,
+    on_select: Box<dyn FnMut(usize)>,
+    columns: usize,
+    row_height: f32,
+    frame: Rect,
+}
+
+impl Thumbnails {
+    pub fn new(
+        label: &str,
+        tiles: Vec<Thumbnail>,
+        selected: Option<usize>,
+        on_select: impl FnMut(usize) + 'static,
+    ) -> Self {
+        Self {
+            id: WidgetId::next(),
+            label: label.to_owned(),
+            tiles: tiles
+                .into_iter()
+                .map(|tile| (tile.image, Text::new(&tile.label, Tone::Muted).caption()))
+                .collect(),
+            selected,
+            on_select: Box::new(on_select),
+            columns: 1,
+            row_height: THUMBNAIL.height,
+            frame: Rect::default(),
+        }
+    }
+
+    fn select(&mut self, index: usize) {
+        if index < self.tiles.len() && self.selected != Some(index) {
+            self.selected = Some(index);
+            (self.on_select)(index);
+        }
+    }
+
+    fn tile(&self, index: usize) -> Rect {
+        let column = index % self.columns;
+        let row = index / self.columns;
+        Rect::new(
+            self.frame.x + ROW_PADDING + column as f32 * (THUMBNAIL.width + THUMBNAIL_GAP),
+            self.frame.y + ROW_PADDING + row as f32 * (self.row_height + THUMBNAIL_GAP),
+            THUMBNAIL.width,
+            THUMBNAIL.height,
+        )
+    }
+
+    fn step(&mut self, by: isize) {
+        let current = self.selected.unwrap_or(0);
+        if let Some(next) = current.checked_add_signed(by) {
+            self.select(next);
+        }
+    }
+}
+
+impl Widget for Thumbnails {
+    fn id(&self) -> WidgetId {
+        self.id
+    }
+
+    fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
+        let label = self
+            .tiles
+            .iter_mut()
+            .map(|(_, text)| text.measure(cx).height)
+            .fold(0.0, f32::max);
+        self.row_height = THUMBNAIL.height + THUMBNAIL_LABEL_GAP + label;
+        let room = available.width - 2.0 * ROW_PADDING + THUMBNAIL_GAP;
+        self.columns = ((room / (THUMBNAIL.width + THUMBNAIL_GAP)).floor() as usize).max(1);
+        let rows = self.tiles.len().div_ceil(self.columns).max(1);
+        Size::new(
+            available.width,
+            2.0 * ROW_PADDING + rows as f32 * self.row_height + (rows - 1) as f32 * THUMBNAIL_GAP,
+        )
+    }
+
+    fn place(&mut self, _cx: &mut Context, frame: Rect) {
+        self.frame = frame;
+    }
+
+    fn frame(&self) -> Rect {
+        self.frame
+    }
+
+    fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
+        for (index, (image, label)) in self.tiles.iter().enumerate() {
+            let rect = self.tile(index);
+            let shape = Shape::rounded(rect, THUMBNAIL_RADIUS);
+            let picture = match image {
+                Some(image) => Item::Image {
+                    rect,
+                    image: image.clone(),
+                },
+                None => Item::Fill {
+                    shape,
+                    paint: cx.palette.label_muted.with_alpha(36).into(),
+                },
+            };
+            items.push(Item::Clip {
+                shape,
+                items: vec![picture],
+            });
+            items.push(Item::Stroke {
+                shape: Shape::rounded(rect.inset(0.5), THUMBNAIL_RADIUS - 0.5),
+                width: 1.0,
+                paint: cx.palette.separator_color.into(),
+            });
+            if self.selected == Some(index) {
+                items.push(Item::Stroke {
+                    shape: Shape::rounded(rect.inset(-3.0), THUMBNAIL_RADIUS + 3.0),
+                    width: 3.0,
+                    paint: cx.palette.accent_color.into(),
+                });
+                if cx.is_focused(self.id) {
+                    focus_ring(
+                        cx,
+                        Shape::rounded(rect.inset(-6.0), THUMBNAIL_RADIUS + 6.0),
+                        items,
+                    );
+                }
+            }
+            let size = label.size();
+            label.paint(
+                cx,
+                Point::new(
+                    rect.x + (rect.width - size.width) / 2.0,
+                    rect.y + rect.height + THUMBNAIL_LABEL_GAP,
+                ),
+                items,
+            );
+        }
+    }
+
+    fn access(&self, _cx: &Context) -> Node {
+        let mut node = Node::new(Role::RadioGroup);
+        node.set_label(self.label.clone());
+        if let Some((_, label)) = self.selected.and_then(|index| self.tiles.get(index)) {
+            node.set_value(label.as_str().to_owned());
+        }
+        node.add_action(Action::Increment);
+        node.add_action(Action::Decrement);
+        node
+    }
+
+    fn handle(&mut self, _cx: &mut Context, event: &Event) -> bool {
+        let columns = self.columns as isize;
+        match event {
+            Event::PointerDown(pointer) if pointer.is_primary() => {
+                match (0..self.tiles.len())
+                    .find(|index| contains(self.tile(*index), pointer.position))
+                {
+                    Some(index) => self.select(index),
+                    None => return false,
+                }
+            }
+            Event::Key { key: Key::Left, .. } => self.step(-1),
+            Event::Key {
+                key: Key::Right, ..
+            } => self.step(1),
+            Event::Key { key: Key::Up, .. } => self.step(-columns),
+            Event::Key { key: Key::Down, .. } => self.step(columns),
+            _ => return false,
+        }
+        true
+    }
+
+    fn perform(&mut self, _cx: &mut Context, request: &ActionRequest) -> bool {
+        match request.action {
+            Action::Increment => self.step(1),
+            Action::Decrement => self.step(-1),
+            _ => return false,
+        }
+        true
+    }
+
+    fn accepts_focus(&self, cx: &Context) -> bool {
+        cx.keyboard_navigation
     }
 }

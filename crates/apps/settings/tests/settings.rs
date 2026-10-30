@@ -4,7 +4,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use accesskit::{Node, Role};
-use unbound_config::{Appearance, Config, ConfigService, ConfigStore, DockEdge, Suspend};
+use unbound_config::{
+    Appearance, Config, ConfigService, ConfigStore, DockEdge, Suspend, WallpaperFit,
+};
 use unbound_settings::{Command, Idle, PaneId, SettingId, SettingsClient, SettingsView, Value};
 use unbound_settings_panes::panes;
 use unbound_test_bus::SessionBus;
@@ -260,6 +262,17 @@ fn changes_are_written_through_org_unbound_config() {
         (SettingId::DockEdge, keyword("bottom")),
         (SettingId::SleepAfter, Value::Seconds(0)),
         (SettingId::KeyRepeatDelay, Value::Number(300)),
+        (SettingId::DockIconSize, Value::Number(64)),
+        (SettingId::DockAutoHide, Value::Flag(true)),
+        (SettingId::ReduceMotion, Value::Flag(true)),
+        (SettingId::WallpaperFit, keyword("fit")),
+        (
+            SettingId::Wallpaper,
+            Value::Pictures {
+                light: "/usr/share/unbound/wallpapers/aurora-light.svg".to_owned(),
+                dark: "/usr/share/unbound/wallpapers/aurora-dark.svg".to_owned(),
+            },
+        ),
     ] {
         client.set(id, &value).expect("set");
     }
@@ -270,6 +283,15 @@ fn changes_are_written_through_org_unbound_config() {
     assert_eq!(written.dock.edge, DockEdge::Bottom);
     assert_eq!(written.idle.suspend, Suspend::Never);
     assert_eq!(written.keyboard.repeat_delay, Duration::from_millis(300));
+    assert_eq!((written.dock.icon_size, written.dock.auto_hide), (64, true));
+    assert!(written.reduce_motion);
+    assert_eq!(written.wallpaper.fit, WallpaperFit::Fit);
+    assert_eq!(
+        written.wallpaper.dark.as_deref(),
+        Some(std::path::Path::new(
+            "/usr/share/unbound/wallpapers/aurora-dark.svg"
+        ))
+    );
 
     client
         .set(SettingId::SleepAfter, &keyword("with-display"))
@@ -278,7 +300,7 @@ fn changes_are_written_through_org_unbound_config() {
         client.get(SettingId::SleepAfter).expect("sleep"),
         keyword("with-display")
     );
-    assert_eq!(client.read(&unbound_settings::CONFIG_SETTINGS).len(), 7);
+    assert_eq!(client.read(&unbound_settings::CONFIG_SETTINGS).len(), 12);
 }
 
 #[test]

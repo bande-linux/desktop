@@ -3954,6 +3954,8 @@ dependencies = [
  "unbound-settings-panes",
  "unbound-test-bus",
  "unbound-toolkit",
+ "unbound-wallpaper",
+ "unbound-xdg",
  "wayland-client",
  "zbus",
 ]

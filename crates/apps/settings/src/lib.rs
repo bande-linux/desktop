@@ -3,6 +3,7 @@ mod displays;
 mod follow;
 mod idle;
 mod pages;
+mod pictures;
 mod services;
 mod state;
 mod view;
@@ -16,6 +17,7 @@ pub use client::{CONFIG_SETTINGS, SettingsClient};
 pub use displays::Displays;
 pub use follow::{Command, Feed, Services, Update, Updates, feed, follow_config, worker};
 pub use idle::Idle;
+pub use pictures::{Pair, PictureCommand, bundled_pairs, thumbnail};
 pub use services::{
     AudioCommand, BluetoothCommand, NetworkCommand, follow_bluetooth, follow_network,
 };
@@ -37,6 +39,7 @@ mod tests {
             include_str!("client.rs"),
             include_str!("follow.rs"),
             include_str!("pages.rs"),
+            include_str!("pictures.rs"),
             include_str!("view.rs"),
         ];
         assert_eq!(

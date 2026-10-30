@@ -6,11 +6,12 @@ use accesskit::{Action, ActionData, ActionRequest, TreeId, TreeUpdate};
 use unbound_audio::{Direction, Snapshot};
 use unbound_config::Output;
 use unbound_toolkit::ui::{Context, Event, Key, Modifiers, TextField, Ui, Widget, WidgetId};
-use unbound_toolkit::{Palette, Rect, Scene, TextSystem};
+use unbound_toolkit::{Image, Palette, Rect, Scene, TextSystem};
 
 use crate::L10N;
 use crate::follow::{Command, Update};
 use crate::idle::Idle;
+use crate::pictures::{Pair, PictureCommand};
 use crate::services::{AudioCommand, BluetoothCommand, NetworkCommand};
 use crate::state::{Answer, BluetoothState, Display, Joined, Question, WifiState};
 use crate::widgets::{Column, Root};
@@ -34,6 +35,7 @@ pub(crate) enum Intent {
     Disconnect(String),
     Pair(String),
     Answer(Answer),
+    ChoosePicture,
 }
 
 pub(crate) type Intents = Rc<RefCell<Vec<Intent>>>;
@@ -85,6 +87,8 @@ pub struct SettingsView {
     pub(crate) bluetooth: Option<BluetoothState>,
     pub(crate) busy: Vec<String>,
     pub(crate) pairing: Option<Question>,
+    pub(crate) pictures: Vec<(String, Pair)>,
+    pub(crate) thumbnails: HashMap<Pair, Option<Image>>,
     pub(crate) query: String,
     pub(crate) hits: Vec<PaneHit>,
     pub(crate) pane: PaneId,
@@ -93,7 +97,7 @@ pub struct SettingsView {
     search: WidgetId,
     pub(crate) anchors: Vec<(Anchor, WidgetId)>,
     pub(crate) intents: Intents,
-    commands: Vec<Command>,
+    pub(crate) commands: Vec<Command>,
     pub(crate) message: Option<String>,
     pressed: bool,
     stale: bool,
@@ -125,6 +129,8 @@ impl SettingsView {
             bluetooth: None,
             busy: Vec::new(),
             pairing: None,
+            pictures: Vec::new(),
+            thumbnails: HashMap::new(),
             query: String::new(),
             hits: Vec::new(),
             pane: PaneId::Appearance,
@@ -206,6 +212,11 @@ impl SettingsView {
                 }
                 self.pairing = question;
             }
+            Update::Pictures(pictures) => self.pictures = pictures,
+            Update::Thumbnail(pair, picture) => {
+                let image = Image::from_rgba(picture.width, picture.height, picture.rgba);
+                self.thumbnails.insert(pair, image);
+            }
             Update::Failed(error) => {
                 self.busy.clear();
                 self.message = Some(L10N.tr_args("not-changed", [("error", error.into())]));
@@ -281,7 +292,11 @@ impl SettingsView {
             PaneId::Notifications => self.values.contains_key(&SettingId::DoNotDisturb),
             PaneId::Sound => self.audio.is_some(),
             PaneId::Displays => !self.displays.is_empty(),
-            PaneId::Appearance | PaneId::Dock | PaneId::LockScreen | PaneId::Keyboard => true,
+            PaneId::Appearance
+            | PaneId::Wallpaper
+            | PaneId::Dock
+            | PaneId::LockScreen
+            | PaneId::Keyboard => true,
         }
     }
 
@@ -477,6 +492,9 @@ impl SettingsView {
                 Intent::Answer(answer) => {
                     self.pairing = None;
                     self.commands.push(Command::Answer(answer));
+                }
+                Intent::ChoosePicture => {
+                    self.commands.push(Command::Picture(PictureCommand::Choose));
                 }
             }
         }

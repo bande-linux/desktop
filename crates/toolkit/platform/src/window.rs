@@ -1511,6 +1511,9 @@ impl Window {
         let path = match &mut self.gpu {
             Gpu::Ready(gpu) => {
                 gpu.present(scene, scale, damage.as_deref())?;
+                if self.shm_target.is_holding() {
+                    self.shm_target.destroy();
+                }
                 FramePath::Gpu
             }
             Gpu::Starting(_) | Gpu::Released | Gpu::Unavailable => {

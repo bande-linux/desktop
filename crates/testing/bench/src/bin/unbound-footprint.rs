@@ -40,10 +40,14 @@ fn main() -> ExitCode {
 
 fn run() -> Result<(), Box<dyn Error>> {
     let mut hover = None;
+    let mut settle = SETTLE;
     let mut clients = Vec::new();
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
-        if arg == "--hover" {
+        if arg == "--settle" {
+            let seconds: u64 = args.next().ok_or("--settle needs seconds")?.parse()?;
+            settle = Duration::from_secs(seconds);
+        } else if arg == "--hover" {
             let value = args.next().ok_or("--hover needs x1,y1,x2,y2")?;
             let numbers = value
                 .split(',')
@@ -61,12 +65,14 @@ fn run() -> Result<(), Box<dyn Error>> {
         }
     }
     if clients.is_empty() {
-        return Err("usage: unbound-footprint [--hover x1,y1,x2,y2] <client>...".into());
+        return Err(
+            "usage: unbound-footprint [--settle seconds] [--hover x1,y1,x2,y2] <client>...".into(),
+        );
     }
     println!("| Client | RSS+swap MiB | Device memory MiB | Threads | CPU per hover change ms |");
     println!("| :--- | ---: | ---: | ---: | ---: |");
     for (client, hover) in clients {
-        let footprint = measure(&client, hover.as_ref())?;
+        let footprint = measure(&client, hover.as_ref(), settle)?;
         println!(
             "| {client} | {:.1} | {:.1} | {} | {} |",
             footprint.resident_mib,
@@ -101,7 +107,11 @@ impl Session {
     }
 }
 
-fn measure(client: &str, hover: Option<&Hover>) -> Result<Footprint, Box<dyn Error>> {
+fn measure(
+    client: &str,
+    hover: Option<&Hover>,
+    settle: Duration,
+) -> Result<Footprint, Box<dyn Error>> {
     let mut session = Session {
         server: Headless::new(Size::from(OUTPUT))?,
         renderer: Renderer::new()?,
@@ -116,7 +126,7 @@ fn measure(client: &str, hover: Option<&Hover>) -> Result<Footprint, Box<dyn Err
         .stdin(Stdio::from(OwnedFd::from(client_end)))
         .stdout(Stdio::null())
         .spawn()?;
-    let result = observe(&mut session, &mut child, hover);
+    let result = observe(&mut session, &mut child, hover, settle);
     child.kill()?;
     child.wait()?;
     result
@@ -126,8 +136,9 @@ fn observe(
     session: &mut Session,
     child: &mut Child,
     hover: Option<&Hover>,
+    settle: Duration,
 ) -> Result<Footprint, Box<dyn Error>> {
-    session.run_for(SETTLE)?;
+    session.run_for(settle)?;
     if let Some(status) = child.try_wait()? {
         return Err(format!("the client exited with {status}").into());
     }

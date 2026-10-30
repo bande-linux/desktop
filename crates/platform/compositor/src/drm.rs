@@ -448,7 +448,7 @@ impl DrmBackend {
                 self.device.pause();
             }
             SessionEvent::ActivateSession => {
-                self.device.activate(true)?;
+                self.device.activate(false)?;
                 for head in &mut self.heads {
                     if let Err(error) = head.compositor.reset_state() {
                         tracing::warn!("cannot reset {}: {error}", head.config.name);

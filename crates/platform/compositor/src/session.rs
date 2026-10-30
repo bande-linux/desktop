@@ -283,12 +283,14 @@ impl Headless {
                     .map_err(io::Error::from)
             });
         }
+        let executable = PathBuf::from(command.get_program());
         let mut child = command.spawn()?;
         if let Err(error) = self.wake_when_exited(&child) {
             let _ = child.kill();
             let _ = child.wait();
             return Err(error);
         }
+        self.state.clear_alert(&executable);
         Ok((child, client))
     }
 
@@ -302,5 +304,26 @@ impl Headless {
             )
             .map(drop)
             .map_err(|error| io::Error::other(error.error))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CLIPBOARD_DAEMON, GREETER, LOCK_SCREEN, MONITOR, SCREENSHOT, SHELL};
+
+    #[test]
+    fn the_shipped_session_client_list_names_every_executable_the_compositor_starts() {
+        let shipped: Vec<&str> = include_str!("../data/session-clients").lines().collect();
+        assert_eq!(
+            shipped,
+            [
+                CLIPBOARD_DAEMON,
+                LOCK_SCREEN,
+                SCREENSHOT,
+                SHELL,
+                GREETER,
+                MONITOR
+            ]
+        );
     }
 }

@@ -4,7 +4,8 @@ use std::time::Duration;
 
 use smithay::utils::Size;
 use unbound_compositor::{
-    FrameClock, FrameScheduler, Headless, REFRESH, Renderer, SAFETY_MARGIN, Vblank,
+    FrameClock, FrameOutput, FrameScheduler, Headless, REFRESH, Renderer, SAFETY_MARGIN,
+    Submission, Vblank,
 };
 use unbound_test_wayland::{Presented, RED, ShmImage, TestClient};
 use wayland_client::protocol::wl_shm::Format;
@@ -208,4 +209,51 @@ fn a_wake_up_too_late_to_render_in_time_draws_at_once_for_the_next_vblank() {
     let (next, _, presented) = late_wake_up(milliseconds(3) + MICROSECOND);
 
     assert_eq!(presented.sequence, next.sequence + 1);
+}
+
+struct FlipNeverCompletes {
+    submits: usize,
+}
+
+impl FrameOutput for FlipNeverCompletes {
+    type Error = std::io::Error;
+
+    fn submit(&mut self, _: &mut Headless, _: &str) -> Result<Submission, Self::Error> {
+        self.submits += 1;
+        Ok(Submission::AwaitingFlip)
+    }
+}
+
+fn submit_once(
+    scheduler: &mut FrameScheduler,
+    server: &mut Headless,
+    output: &mut FlipNeverCompletes,
+) {
+    let before = output.submits;
+    let mut now = Duration::ZERO;
+    loop {
+        let poll = scheduler.poll(|| now, server, output).expect("frame");
+        if output.submits != before {
+            return;
+        }
+        now = poll.wake_at.expect("a frame is due");
+    }
+}
+
+#[test]
+fn a_flip_lost_while_the_session_was_paused_does_not_stop_frames_after_it_resumes() {
+    let mut server = Headless::new(Size::from((64, 64))).expect("headless compositor");
+    let mut output = FlipNeverCompletes { submits: 0 };
+    let mut scheduler = FrameScheduler::new(FrameClock::new(Duration::ZERO, REFRESH));
+    scheduler.resume();
+    submit_once(&mut scheduler, &mut server, &mut output);
+
+    let waiting = scheduler
+        .poll(|| Duration::ZERO, &mut server, &mut output)
+        .expect("frame");
+    assert_eq!(waiting.wake_at, None);
+
+    scheduler.resume();
+    submit_once(&mut scheduler, &mut server, &mut output);
+    assert_eq!(output.submits, 2);
 }

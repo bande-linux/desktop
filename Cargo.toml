@@ -70,6 +70,7 @@ unbound-compositor = { path = "crates/platform/compositor" }
 unbound-config = { path = "crates/services/config" }
 unbound-datetime = { path = "crates/libs/datetime" }
 unbound-controlcenter = { path = "crates/shell/controlcenter" }
+unbound-design = { path = "crates/toolkit/design" }
 unbound-dock = { path = "crates/shell/dock" }
 unbound-files = { path = "crates/apps/files" }
 unbound-fs = { path = "crates/libs/fs" }

@@ -22,7 +22,7 @@ const ENGLISH: &str = include_str!("../locales/en-US/unbound-toolkit-platform.ft
 static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
 pub use capture::ScreenImage;
-pub use chrome::TITLE_BAR_HEIGHT;
+pub use chrome::{FrameRegions, HEADER_HEIGHT, SHEET_INSET};
 pub use clipboard::{DragAction, DragEvent, DragIcon, Transfer};
 pub use popup::MenuPlacement;
 pub use run::{App, run};

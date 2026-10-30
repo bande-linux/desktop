@@ -13,24 +13,24 @@ fn shapes(palette: &Palette) -> Scene {
     Scene {
         width: 240,
         height: 160,
-        background: palette.surface_background,
+        background: palette.sheet,
         items: vec![
             Item::Fill {
                 shape: Shape::rect(Rect::new(8.0, 8.0, 64.0, 40.0)),
-                paint: palette.accent_color.into(),
+                paint: palette.accent.into(),
             },
             Item::Fill {
                 shape: Shape::rect(Rect::new(80.25, 8.5, 63.5, 39.75)),
-                paint: palette.label_primary.into(),
+                paint: palette.ink.into(),
             },
             Item::Fill {
                 shape: Shape::rounded(Rect::new(152.0, 8.0, 80.0, 40.0), 10.0),
-                paint: palette.surface_elevated.into(),
+                paint: palette.overlay.into(),
             },
             Item::Stroke {
                 shape: Shape::rounded(Rect::new(152.5, 8.5, 79.0, 39.0), 9.5),
                 width: 1.0,
-                paint: palette.separator_color.into(),
+                paint: palette.hairline.into(),
             },
             Item::Fill {
                 shape: Shape::rounded(Rect::new(8.0, 64.0, 224.0, 32.0), 16.0),
@@ -40,26 +40,26 @@ fn shapes(palette: &Palette) -> Scene {
                     stops: vec![
                         Stop {
                             offset: 0.0,
-                            color: palette.accent_color,
+                            color: palette.accent,
                         },
                         Stop {
                             offset: 1.0,
-                            color: palette.surface_elevated,
+                            color: palette.overlay,
                         },
                     ],
                 },
             },
             Item::Fill {
                 shape: Shape::rounded(Rect::new(20.3, 108.7, 30.0, 30.0), 15.0),
-                paint: palette.label_muted.into(),
+                paint: palette.ink2.into(),
             },
             Item::Fill {
                 shape: Shape::rect(Rect::new(64.0, 112.0, 160.0, 1.0)),
-                paint: palette.separator_color.into(),
+                paint: palette.hairline.into(),
             },
             Item::Fill {
                 shape: Shape::rect(Rect::new(64.0, 120.0, 160.0, 24.0)),
-                paint: palette.accent_color.with_alpha(128).into(),
+                paint: palette.accent.with_alpha(128).into(),
             },
         ],
     }
@@ -70,7 +70,7 @@ fn shadow(palette: &Palette) -> Scene {
     Scene {
         width: 240,
         height: 180,
-        background: palette.surface_background,
+        background: palette.sheet,
         items: vec![
             Item::Shadow {
                 shape: card,
@@ -80,7 +80,7 @@ fn shadow(palette: &Palette) -> Scene {
             },
             Item::Fill {
                 shape: card,
-                paint: palette.surface_elevated.into(),
+                paint: palette.overlay.into(),
             },
         ],
     }
@@ -95,13 +95,13 @@ fn settings_card(palette: &Palette, text: &mut TextSystem) -> Scene {
     );
     let title = text.paragraph(
         "Unbound Settings",
-        TextStyle::new(20.0, palette.label_primary).weight(TextStyle::SEMIBOLD),
+        TextStyle::new(20.0, palette.ink).weight(TextStyle::SEMIBOLD),
         None,
         TextAlign::Start,
     );
     let body = text.paragraph(
         "Displays, Sound & Network: AVA Wo",
-        TextStyle::new(13.0, palette.label_muted),
+        TextStyle::new(13.0, palette.ink2),
         Some(320.0 - 2.0 * content),
         TextAlign::Start,
     );
@@ -114,7 +114,7 @@ fn settings_card(palette: &Palette, text: &mut TextSystem) -> Scene {
     Scene {
         width: 320,
         height: 200,
-        background: palette.surface_background,
+        background: palette.sheet,
         items: vec![
             Item::Shadow {
                 shape: card,
@@ -124,7 +124,7 @@ fn settings_card(palette: &Palette, text: &mut TextSystem) -> Scene {
             },
             Item::Fill {
                 shape: card,
-                paint: palette.surface_elevated.into(),
+                paint: palette.overlay.into(),
             },
             Item::Text {
                 origin: Point::new(content, 30.0),
@@ -132,7 +132,7 @@ fn settings_card(palette: &Palette, text: &mut TextSystem) -> Scene {
             },
             Item::Fill {
                 shape: Shape::rect(Rect::new(inset, 68.0, 320.0 - 2.0 * inset, 1.0)),
-                paint: palette.separator_color.into(),
+                paint: palette.hairline.into(),
             },
             Item::Text {
                 origin: Point::new(content + 0.4, 84.0),
@@ -140,7 +140,7 @@ fn settings_card(palette: &Palette, text: &mut TextSystem) -> Scene {
             },
             Item::Fill {
                 shape: Shape::rounded(Rect::new(content, 128.0, 96.0, 32.0), 6.0),
-                paint: palette.accent_color.into(),
+                paint: palette.accent.into(),
             },
             Item::Text {
                 origin: Point::new(content, 136.0),
@@ -163,7 +163,7 @@ fn icon(palette: &Palette) -> Scene {
     Scene {
         width: 96,
         height: 64,
-        background: palette.surface_background,
+        background: palette.sheet,
         items: vec![Item::Image {
             rect: Rect::new(20.0, 12.0, width as f32, height as f32),
             image: Image::from_rgba(width, height, rgba).expect("icon pixels"),

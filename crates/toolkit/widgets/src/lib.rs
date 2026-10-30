@@ -186,7 +186,7 @@ fn focus_ring(cx: &Context, shape: Shape, items: &mut Vec<Item>) {
             shape.radius + FOCUS_RING / 2.0,
         ),
         width: FOCUS_RING,
-        paint: cx.palette.accent_color.with_alpha(128).into(),
+        paint: cx.palette.accent.with_alpha(128).into(),
     });
 }
 
@@ -584,7 +584,7 @@ impl Ui {
         Scene {
             width,
             height,
-            background: self.cx.palette.surface_background,
+            background: self.cx.palette.sheet,
             items,
         }
     }

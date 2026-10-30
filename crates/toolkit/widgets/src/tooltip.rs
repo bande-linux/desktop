@@ -113,7 +113,7 @@ impl Tooltips {
             (now.saturating_duration_since(shown).as_secs_f32() / FADE.as_secs_f32()).min(1.0);
         let paragraph = system.paragraph(
             text,
-            TextStyle::new(FONT_SIZE, palette.label_primary),
+            TextStyle::new(FONT_SIZE, palette.ink),
             Some(MAX_WIDTH),
             TextAlign::Start,
         );
@@ -141,12 +141,12 @@ impl Tooltips {
                 },
                 Item::Fill {
                     shape,
-                    paint: palette.surface_elevated.into(),
+                    paint: palette.overlay.into(),
                 },
                 Item::Stroke {
                     shape: Shape::rounded(frame.inset(0.5), RADIUS - 0.5),
                     width: 1.0,
-                    paint: palette.separator_color.into(),
+                    paint: palette.hairline.into(),
                 },
                 Item::Text {
                     origin: Point::new(frame.x + HORIZONTAL_PADDING, frame.y + VERTICAL_PADDING),

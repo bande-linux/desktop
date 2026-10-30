@@ -208,14 +208,14 @@ impl MenuPanel {
                         ROW_HEIGHT
                     };
                     let label_color = if item.enabled {
-                        palette.label_primary
+                        palette.ink
                     } else {
-                        palette.label_muted
+                        palette.ink2
                     };
                     let labels =
                         (!item.separator).then(|| paragraphs(text, &item.title, label_color));
                     let shortcuts = item.shortcut.as_deref().map(|shortcut| {
-                        paragraphs(text, &shortcut_symbols(shortcut), palette.label_muted)
+                        paragraphs(text, &shortcut_symbols(shortcut), palette.ink2)
                     });
                     if let Some([label, _]) = &labels {
                         widest_label = widest_label.max(label.width());
@@ -312,12 +312,12 @@ impl MenuPanel {
         let mut items = vec![
             Item::Fill {
                 shape: outline,
-                paint: palette.surface_elevated.into(),
+                paint: palette.overlay.into(),
             },
             Item::Stroke {
                 shape: Shape::rounded(outline.rect.inset(0.25), RADIUS - 0.25),
                 width: 0.5,
-                paint: palette.separator_color.into(),
+                paint: palette.hairline.into(),
             },
         ];
         for (index, (item, row)) in self
@@ -337,7 +337,7 @@ impl MenuPanel {
                         self.size.width - HIGHLIGHT_INSET * 4.0,
                         1.0,
                     )),
-                    paint: palette.separator_color.into(),
+                    paint: palette.hairline.into(),
                 });
                 continue;
             }
@@ -353,16 +353,16 @@ impl MenuPanel {
                         ),
                         4.0,
                     ),
-                    paint: palette.accent_color.into(),
+                    paint: palette.accent.into(),
                 });
             }
             let variant = usize::from(lit);
             let mark = if lit {
                 Color::hex(0xFFFFFF)
             } else if item.enabled {
-                palette.label_primary
+                palette.ink
             } else {
-                palette.label_muted
+                palette.ink2
             };
             if let Some(labels) = &row.labels {
                 let label = &labels[variant];

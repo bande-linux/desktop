@@ -101,7 +101,7 @@ impl Widget for Slider {
         let track = Rect::new(start, track_y, length, TRACK_HEIGHT);
         items.push(Item::Fill {
             shape: Shape::rounded(track, TRACK_HEIGHT / 2.0),
-            paint: cx.palette.separator_color.into(),
+            paint: cx.palette.hairline.into(),
         });
         let filled = length * self.fraction() as f32;
         items.push(Item::Fill {
@@ -109,7 +109,7 @@ impl Widget for Slider {
                 Rect::new(start, track_y, filled, TRACK_HEIGHT),
                 TRACK_HEIGHT / 2.0,
             ),
-            paint: cx.palette.accent_color.into(),
+            paint: cx.palette.accent.into(),
         });
         let knob = Shape::rounded(
             Rect::new(
@@ -127,7 +127,7 @@ impl Widget for Slider {
         items.push(Item::Stroke {
             shape: Shape::rounded(knob.rect.inset(0.5), knob.radius - 0.5),
             width: 1.0,
-            paint: cx.palette.separator_color.into(),
+            paint: cx.palette.hairline.into(),
         });
         if cx.is_focused(self.id) {
             super::focus_ring(cx, knob, items);

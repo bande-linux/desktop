@@ -63,11 +63,7 @@ impl Widget for Toggle {
         let progress = self.knob.value(cx);
         items.push(Item::Fill {
             shape: track,
-            paint: cx
-                .palette
-                .separator_color
-                .mix(cx.palette.accent_color, progress)
-                .into(),
+            paint: cx.palette.hairline.mix(cx.palette.accent, progress).into(),
         });
         let diameter = self.frame.height - 2.0 * KNOB_INSET;
         let travel = self.frame.width - 2.0 * KNOB_INSET - diameter;

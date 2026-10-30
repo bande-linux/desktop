@@ -89,7 +89,7 @@ impl Widget for PopUpButton {
             .map(|choice| {
                 cx.text.paragraph(
                     choice,
-                    TextStyle::new(FONT_SIZE, cx.palette.label_primary),
+                    TextStyle::new(FONT_SIZE, cx.palette.ink),
                     None,
                     TextAlign::Start,
                 )
@@ -116,12 +116,12 @@ impl Widget for PopUpButton {
         let shape = Shape::rounded(self.frame, RADIUS);
         items.push(Item::Fill {
             shape,
-            paint: cx.palette.surface_elevated.into(),
+            paint: cx.palette.overlay.into(),
         });
         items.push(Item::Stroke {
             shape: Shape::rounded(self.frame.inset(0.5), RADIUS - 0.5),
             width: 1.0,
-            paint: cx.palette.separator_color.into(),
+            paint: cx.palette.hairline.into(),
         });
         if cx.is_focused(self.id) {
             super::focus_ring(cx, shape, items);
@@ -162,7 +162,7 @@ impl Widget for PopUpButton {
             items.push(Item::StrokePath {
                 path,
                 width: 1.5,
-                paint: cx.palette.label_primary.into(),
+                paint: cx.palette.ink.into(),
             });
         }
     }

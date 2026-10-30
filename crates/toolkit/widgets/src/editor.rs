@@ -4,10 +4,8 @@ use std::ops::Range;
 use accesskit::{
     Action, ActionData, ActionRequest, Node, NodeId, Role, TextPosition, TextSelection,
 };
-use parley::{
-    Affinity, Alignment, AlignmentOptions, Cursor, Layout, Selection as Span, StyleProperty,
-};
-use unbound_graphics::{Color, Item, Paint, Paragraph, Point, Rect, Shape, TextSystem, families};
+use parley::{Affinity, Alignment, AlignmentOptions, Cursor, Layout, Selection as Span};
+use unbound_graphics::{Color, Item, Paint, Paragraph, Point, Rect, Shape, TextStyle, TextSystem};
 
 use super::{ClipboardRequest, Context, Event, Key, Menu, MenuItem, Modifiers, WidgetId};
 use crate::L10N;
@@ -548,9 +546,7 @@ impl Editor {
         let content = self.layout_text(paragraph);
         let (fonts, layouts) = text.contexts();
         let mut builder = layouts.ranged_builder(fonts, &content, 1.0, true);
-        builder.push_default(StyleProperty::FontFamily(families(self.font_size)));
-        builder.push_default(StyleProperty::FontSize(self.font_size));
-        builder.push_default(StyleProperty::Brush(self.color));
+        TextStyle::new(self.font_size, self.color).apply(&mut builder);
         let mut layout: Layout<Color> = builder.build(&content);
         layout.break_all_lines(self.width);
         layout.align(Alignment::Start, AlignmentOptions::default());
@@ -1384,8 +1380,8 @@ impl Editor {
     ) {
         let (start, end) = (self.selection.start(), self.selection.end());
         let selection_color = match (focused, self.multi_line) {
-            (true, _) => cx.palette.accent_color.with_alpha(80),
-            (false, true) => cx.palette.label_muted.with_alpha(56),
+            (true, _) => cx.palette.accent.with_alpha(80),
+            (false, true) => cx.palette.ink2.with_alpha(56),
             (false, false) => Color::TRANSPARENT,
         };
         for paragraph in self.visible(&visible) {
@@ -1454,7 +1450,7 @@ impl Editor {
                                 rect.width,
                                 thickness,
                             )),
-                            paint: cx.palette.label_primary.into(),
+                            paint: cx.palette.ink.into(),
                         });
                     });
                 };
@@ -1495,7 +1491,7 @@ impl Editor {
                     CARET_WIDTH,
                     caret.height,
                 )),
-                paint: cx.palette.label_primary.into(),
+                paint: cx.palette.ink.into(),
             });
         }
     }

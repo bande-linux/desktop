@@ -121,7 +121,7 @@ fn calculation_badge(cx: &mut Context, rect: Rect, selected: bool, items: &mut V
     let fill = if selected {
         SELECTED_LABEL.with_alpha(56)
     } else {
-        cx.palette.accent_color
+        cx.palette.accent
     };
     items.push(Item::Fill {
         shape: Shape::rounded(rect, (rect.width * 0.22).round()),
@@ -158,7 +158,7 @@ fn icon_items(
         }),
         (_, None) => items.push(Item::Fill {
             shape: Shape::rounded(rect, (rect.width * 0.22).round()),
-            paint: cx.palette.label_muted.with_alpha(90).into(),
+            paint: cx.palette.ink2.with_alpha(90).into(),
         }),
     }
 }
@@ -190,12 +190,12 @@ impl Row {
         if selected {
             self.items.push(Item::Fill {
                 shape: Shape::rounded(self.frame, ROW_RADIUS),
-                paint: cx.palette.accent_color.into(),
+                paint: cx.palette.accent.into(),
             });
         } else if hovered {
             self.items.push(Item::Fill {
                 shape: Shape::rounded(self.frame, ROW_RADIUS),
-                paint: cx.palette.label_primary.with_alpha(16).into(),
+                paint: cx.palette.ink.with_alpha(16).into(),
             });
         }
         let icon = Rect::new(
@@ -208,7 +208,7 @@ impl Row {
         let color = if selected {
             SELECTED_LABEL
         } else {
-            cx.palette.label_primary
+            cx.palette.ink
         };
         let x = icon.x + icon.width + 10.0;
         let title = fitted(
@@ -374,8 +374,8 @@ impl PreviewPane {
         lines: &[(String, String)],
         items: &mut Vec<Item>,
     ) {
-        let label_style = TextStyle::new(PREVIEW_TEXT_SIZE, cx.palette.label_muted);
-        let value_style = TextStyle::new(PREVIEW_TEXT_SIZE, cx.palette.label_primary);
+        let label_style = TextStyle::new(PREVIEW_TEXT_SIZE, cx.palette.ink2);
+        let value_style = TextStyle::new(PREVIEW_TEXT_SIZE, cx.palette.ink);
         let value_x = frame.x + PREVIEW_PADDING + INFO_LABEL_WIDTH;
         let value_width = frame.x + frame.width - PREVIEW_PADDING - value_x;
         for (label, value) in lines {
@@ -430,13 +430,13 @@ impl PreviewPane {
                 let shown = text.lines().take(lines).collect::<Vec<_>>().join("\n");
                 let paragraph = cx.text.paragraph(
                     &shown,
-                    TextStyle::new(CODE_SIZE, cx.palette.label_primary).monospace(),
+                    TextStyle::new(CODE_SIZE, cx.palette.ink).monospace(),
                     None,
                     TextAlign::Start,
                 );
                 items.push(Item::Fill {
                     shape,
-                    paint: cx.palette.surface_background.into(),
+                    paint: cx.palette.sheet.into(),
                 });
                 items.push(Item::Clip {
                     shape,
@@ -469,8 +469,8 @@ impl PreviewPane {
         };
         let inner = frame.width - 2.0 * PREVIEW_PADDING;
         let mut y = frame.y + PREVIEW_PADDING;
-        let primary = cx.palette.label_primary;
-        let muted = cx.palette.label_muted;
+        let primary = cx.palette.ink;
+        let muted = cx.palette.ink2;
         let loaded = state.preview.as_ref().filter(
             |loaded| matches!(&hit.target, Target::Path(path) if *path == loaded.entry.path),
         );
@@ -546,11 +546,7 @@ impl PreviewPane {
                 Kind::Folder | Kind::Document => L10N.tr("hint-file"),
             }
         };
-        let color = if key.copied {
-            cx.palette.accent_color
-        } else {
-            muted
-        };
+        let color = if key.copied { cx.palette.accent } else { muted };
         let hint = fitted(cx, &hint, TextStyle::new(HINT_SIZE, color), inner);
         let bottom = frame.y + frame.height - PREVIEW_PADDING + 4.0 - hint.height();
         self.items.push(centered(&hint, frame, bottom.max(y)));
@@ -715,7 +711,7 @@ impl Widget for Card {
         if self.empty {
             let message = cx.text.paragraph(
                 &L10N.tr("no-results"),
-                TextStyle::new(PREVIEW_TITLE_SIZE, cx.palette.label_muted),
+                TextStyle::new(PREVIEW_TITLE_SIZE, cx.palette.ink2),
                 None,
                 TextAlign::Start,
             );
@@ -727,7 +723,7 @@ impl Widget for Card {
             ));
         }
         let heading_style =
-            TextStyle::new(HEADING_SIZE, cx.palette.label_muted).weight(TextStyle::SEMIBOLD);
+            TextStyle::new(HEADING_SIZE, cx.palette.ink2).weight(TextStyle::SEMIBOLD);
         let mut y = top + PADDING;
         let mut next_heading = headings.iter().peekable();
         for (position, child) in self.children[FIRST_ROW..].iter_mut().enumerate() {
@@ -778,12 +774,12 @@ impl Widget for Card {
         });
         items.push(Item::Fill {
             shape,
-            paint: cx.palette.surface_elevated.into(),
+            paint: cx.palette.overlay.into(),
         });
         items.push(Item::Stroke {
             shape: Shape::rounded(self.frame.inset(0.5), CARD_RADIUS - 0.5),
             width: 1.0,
-            paint: cx.palette.separator_color.into(),
+            paint: cx.palette.hairline.into(),
         });
         let glyph = Rect::new(
             self.frame.x + 20.0,
@@ -795,19 +791,19 @@ impl Widget for Card {
         items.push(Item::Stroke {
             shape: Shape::rounded(lens, 7.0),
             width: 2.0,
-            paint: cx.palette.label_muted.into(),
+            paint: cx.palette.ink2.into(),
         });
         items.push(Item::Line {
             from: Point::new(glyph.x + 13.0, glyph.y + 13.0),
             to: Point::new(glyph.x + 19.0, glyph.y + 19.0),
             width: 2.2,
-            paint: cx.palette.label_muted.into(),
+            paint: cx.palette.ink2.into(),
         });
         if self.frame.height > FIELD_ROW {
             let top = self.frame.y + FIELD_ROW;
             items.push(Item::Fill {
                 shape: Shape::rect(Rect::new(self.frame.x, top, self.frame.width, 1.0)),
-                paint: cx.palette.separator_color.into(),
+                paint: cx.palette.hairline.into(),
             });
             if !self.empty {
                 items.push(Item::Fill {
@@ -817,7 +813,7 @@ impl Widget for Card {
                         1.0,
                         self.frame.y + self.frame.height - top - 1.0,
                     )),
-                    paint: cx.palette.separator_color.into(),
+                    paint: cx.palette.hairline.into(),
                 });
             }
         }

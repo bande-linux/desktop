@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use smithay::utils::Size;
 use unbound_compositor::{FrameClock, FrameScheduler, Headless, REFRESH, Renderer};
-use unbound_graphics::{Appearance, Color, Scene, Scheme};
+use unbound_graphics::{Accent, Appearance, Contrast, Scene, Scheme};
 use unbound_test_bus::SessionBus;
 use unbound_toolkit_platform::{App, Role, Window, WindowEvent};
 use zbus::zvariant::{OwnedValue, Value};
@@ -48,7 +48,7 @@ impl App for Follower {
         Scene {
             width,
             height,
-            background: window.appearance().palette().surface_background,
+            background: window.appearance().palette().sheet,
             items: Vec::new(),
         }
     }
@@ -66,7 +66,7 @@ impl App for Follower {
 }
 
 #[test]
-fn the_window_follows_the_portal_colour_scheme_accent_and_reduced_motion() {
+fn the_window_follows_the_portal_colour_scheme_accent_contrast_and_reduced_motion() {
     let bus = SessionBus::start().expect("private session bus");
     unsafe {
         std::env::set_var("DBUS_SESSION_BUS_ADDRESS", bus.address());
@@ -138,18 +138,19 @@ fn the_window_follows_the_portal_colour_scheme_accent_and_reduced_motion() {
         thread::sleep(Duration::from_millis(1));
     }
 
-    let accent = Some(Color::hex(0xCC3366));
     let dark = Appearance {
         scheme: Scheme::Dark,
-        accent,
-        reduce_motion: false,
+        accent: Accent::Rose,
+        ..Appearance::default()
     };
     let dark_reduced = Appearance {
         scheme: Scheme::Dark,
-        accent: None,
+        contrast: Contrast::Increased,
         reduce_motion: true,
+        ..Appearance::default()
     };
     let light = Appearance {
+        contrast: Contrast::Increased,
         reduce_motion: true,
         ..Appearance::default()
     };
@@ -157,5 +158,4 @@ fn the_window_follows_the_portal_colour_scheme_accent_and_reduced_motion() {
         app.join().expect("app thread"),
         [(dark, dark), (dark_reduced, dark_reduced), (light, light)]
     );
-    assert_eq!(dark.palette().accent_color, Color::hex(0xCC3366));
 }

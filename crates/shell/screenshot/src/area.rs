@@ -1,7 +1,6 @@
 use unbound_toolkit::ui::{Event, Key};
 use unbound_toolkit::{
     Color, Item, Paint, Point, Rect, Scene, ScreenImage, Shape, TextAlign, TextStyle, TextSystem,
-    Typeface,
 };
 
 const SELECTION_FILL: Color = Color::hex(0x808080).with_alpha(0x40);
@@ -108,13 +107,7 @@ impl AreaSelection {
                 Some(region) => format!("{} × {}", region.width, region.height),
                 None => format!("{} , {}", pixel(at.x), pixel(at.y)),
             };
-            let style = TextStyle {
-                size: READOUT_SIZE,
-                weight: TextStyle::REGULAR,
-                color: CROSSHAIR,
-                typeface: Typeface::Interface,
-                tabular: true,
-            };
+            let style = TextStyle::new(READOUT_SIZE, CROSSHAIR).tabular();
             items.push(Item::Text {
                 origin: Point::new(at.x + READOUT_OFFSET, at.y + READOUT_OFFSET),
                 paragraph: text.paragraph(&label, style, None, TextAlign::Start),

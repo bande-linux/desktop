@@ -131,7 +131,7 @@ impl FilesView {
             let badge = Rect::new(size - BADGE, 0.0, BADGE, BADGE);
             items.push(Item::Fill {
                 shape: Shape::rounded(badge, BADGE / 2.0),
-                paint: self.palette.accent_color.into(),
+                paint: self.palette.accent.into(),
             });
             let label = self.text().paragraph(
                 &count.to_string(),
@@ -369,12 +369,12 @@ impl FilesView {
         let shape = Shape::rounded(hover.highlight.inset(1.0), 6.0);
         items.push(Item::Fill {
             shape,
-            paint: self.palette.accent_color.with_alpha(40).into(),
+            paint: self.palette.accent.with_alpha(40).into(),
         });
         items.push(Item::Stroke {
             shape,
             width: 2.0,
-            paint: self.palette.accent_color.into(),
+            paint: self.palette.accent.into(),
         });
     }
 }

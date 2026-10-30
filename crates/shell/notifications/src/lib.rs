@@ -173,8 +173,8 @@ impl Screen {
     fn material(&self) -> Palette {
         let mut palette = self.palette;
         if self.translucent {
-            palette.surface_elevated = palette.surface_elevated.with_alpha(CARD_ALPHA);
-            palette.surface_background = palette.surface_background.with_alpha(PANEL_ALPHA);
+            palette.overlay = palette.overlay.with_alpha(CARD_ALPHA);
+            palette.sheet = palette.sheet.with_alpha(PANEL_ALPHA);
         }
         palette
     }
@@ -337,7 +337,7 @@ impl Screen {
         let mut rows = Vec::new();
         let title = self.text.paragraph(
             &L10N.tr("notification-center"),
-            TextStyle::new(TITLE_SIZE, palette.label_primary).weight(TextStyle::SEMIBOLD),
+            TextStyle::new(TITLE_SIZE, palette.ink).weight(TextStyle::SEMIBOLD),
             None,
             TextAlign::Start,
         );
@@ -346,7 +346,7 @@ impl Screen {
         let clear_all = (!stacks.is_empty()).then(|| {
             let label = self.text.paragraph(
                 &L10N.tr("clear-all"),
-                TextStyle::new(SMALL_SIZE, palette.label_primary).weight(TextStyle::MEDIUM),
+                TextStyle::new(SMALL_SIZE, palette.ink).weight(TextStyle::MEDIUM),
                 None,
                 TextAlign::Start,
             );
@@ -357,7 +357,7 @@ impl Screen {
         let status = self.presentation.do_not_disturb.then(|| {
             self.text.paragraph(
                 &L10N.tr("do-not-disturb-on"),
-                TextStyle::new(SMALL_SIZE, palette.label_muted),
+                TextStyle::new(SMALL_SIZE, palette.ink2),
                 Some(inner),
                 TextAlign::Start,
             )
@@ -377,7 +377,7 @@ impl Screen {
         if stacks.is_empty() {
             let empty = self.text.paragraph(
                 &L10N.tr("no-notifications"),
-                TextStyle::new(13.0, palette.label_muted),
+                TextStyle::new(13.0, palette.ink2),
                 Some(inner),
                 TextAlign::Center,
             );
@@ -395,13 +395,13 @@ impl Screen {
                 let name = (self.senders)(&stack.notifications[0], &stack.group).name;
                 let name = self.text.paragraph(
                     &name,
-                    TextStyle::new(13.0, palette.label_primary).weight(TextStyle::SEMIBOLD),
+                    TextStyle::new(13.0, palette.ink).weight(TextStyle::SEMIBOLD),
                     Some(inner / 2.0),
                     TextAlign::Start,
                 );
                 let label = self.text.paragraph(
                     &L10N.tr("show-less"),
-                    TextStyle::new(SMALL_SIZE, palette.label_primary).weight(TextStyle::MEDIUM),
+                    TextStyle::new(SMALL_SIZE, palette.ink).weight(TextStyle::MEDIUM),
                     None,
                     TextAlign::Start,
                 );
@@ -968,12 +968,12 @@ impl Screen {
         });
         items.push(Item::Fill {
             shape,
-            paint: palette.surface_background.into(),
+            paint: palette.sheet.into(),
         });
         items.push(Item::Stroke {
             shape,
             width: 0.5,
-            paint: palette.separator_color.into(),
+            paint: palette.hairline.into(),
         });
         let focused = self.focus.and_then(|at| self.targets().get(at).cloned());
         let hovered = self
@@ -1082,16 +1082,13 @@ fn pill(
 ) {
     items.push(Item::Fill {
         shape: Shape::rounded(rect, rect.height / 2.0),
-        paint: palette
-            .label_primary
-            .with_alpha(if hovered { 34 } else { 16 })
-            .into(),
+        paint: palette.ink.with_alpha(if hovered { 34 } else { 16 }).into(),
     });
     if focused {
         items.push(Item::Stroke {
             shape: Shape::rounded(rect, rect.height / 2.0),
             width: 2.0,
-            paint: palette.accent_color.into(),
+            paint: palette.accent.into(),
         });
     }
     items.push(Item::Text {
@@ -1107,16 +1104,13 @@ fn round_close(items: &mut Vec<Item>, palette: &Palette, rect: Rect, hovered: bo
     let shape = Shape::rounded(rect, rect.height / 2.0);
     items.push(Item::Fill {
         shape,
-        paint: palette
-            .label_primary
-            .with_alpha(if hovered { 34 } else { 16 })
-            .into(),
+        paint: palette.ink.with_alpha(if hovered { 34 } else { 16 }).into(),
     });
     if focused {
         items.push(Item::Stroke {
             shape,
             width: 2.0,
-            paint: palette.accent_color.into(),
+            paint: palette.accent.into(),
         });
     }
     let center = Point::new(rect.x + rect.width / 2.0, rect.y + rect.height / 2.0);
@@ -1126,7 +1120,7 @@ fn round_close(items: &mut Vec<Item>, palette: &Palette, rect: Rect, hovered: bo
             from: Point::new(center.x - dx, center.y - dy),
             to: Point::new(center.x + dx, center.y + dy),
             width: 1.5,
-            paint: palette.label_primary.into(),
+            paint: palette.ink.into(),
         });
     }
 }

@@ -95,7 +95,7 @@ impl Widget for RadioGroup {
         for choice in &mut self.choices {
             let paragraph = cx.text.paragraph(
                 &choice.title,
-                TextStyle::new(FONT_SIZE, cx.palette.label_primary),
+                TextStyle::new(FONT_SIZE, cx.palette.ink),
                 None,
                 TextAlign::Start,
             );

@@ -39,7 +39,7 @@ impl Widget for Label {
     }
 
     fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
-        let style = TextStyle::new(self.size, cx.palette.label_primary).weight(self.weight);
+        let style = TextStyle::new(self.size, cx.palette.ink).weight(self.weight);
         let paragraph =
             cx.text
                 .paragraph(&self.text, style, Some(available.width), TextAlign::Start);

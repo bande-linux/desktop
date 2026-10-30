@@ -119,7 +119,7 @@ impl FilesView {
         Scene {
             width,
             height,
-            background: self.palette.surface_background,
+            background: self.palette.sheet,
             items,
         }
     }
@@ -129,12 +129,12 @@ impl FilesView {
         items.push(self.fill(
             Rect::new(0.0, 0.0, SIDEBAR_WIDTH, height),
             0.0,
-            self.palette.surface_elevated,
+            self.palette.overlay,
         ));
         items.push(self.fill(
             Rect::new(SIDEBAR_WIDTH - 1.0, 0.0, 1.0, height),
             0.0,
-            self.palette.separator_color,
+            self.palette.hairline,
         ));
         let root = self.browser.root().clone();
         let trash_full = self.trash_full;
@@ -143,7 +143,7 @@ impl FilesView {
             match row {
                 Row::Heading(title) => {
                     y += 6.0;
-                    let muted = self.palette.label_muted;
+                    let muted = self.palette.ink2;
                     let paragraph = self.paragraph(title, SMALL_SIZE, muted, TextStyle::SEMIBOLD);
                     items.push(Item::Text {
                         origin: Point::new(14.0, y + 4.0),
@@ -154,9 +154,9 @@ impl FilesView {
                 Row::Place(place) => {
                     let rect = Rect::new(8.0, y, SIDEBAR_WIDTH - 16.0, SIDEBAR_ROW);
                     if place.location == root {
-                        items.push(self.fill(rect, 6.0, self.palette.label_muted.with_alpha(40)));
+                        items.push(self.fill(rect, 6.0, self.palette.ink2.with_alpha(40)));
                     } else if self.hover == Some(Hit::Place(index)) {
-                        items.push(self.fill(rect, 6.0, self.palette.label_muted.with_alpha(18)));
+                        items.push(self.fill(rect, 6.0, self.palette.ink2.with_alpha(18)));
                     }
                     let icon = match (&place.location, trash_full) {
                         (Location::Trash, true) => "user-trash-full",
@@ -168,7 +168,7 @@ impl FilesView {
                             image,
                         });
                     }
-                    let primary = self.palette.label_primary;
+                    let primary = self.palette.ink;
                     let text = self.line(
                         &place.name,
                         NAME_SIZE,
@@ -247,16 +247,16 @@ impl FilesView {
             let color = if marked && active {
                 Color::hex(0xFFFFFF)
             } else {
-                self.palette.label_primary
+                self.palette.ink
             };
             if marked {
                 rows.push(self.fill(
                     row,
                     5.0,
                     if active {
-                        self.palette.accent_color
+                        self.palette.accent
                     } else {
-                        self.palette.label_muted.with_alpha(56)
+                        self.palette.ink2.with_alpha(56)
                     },
                 ));
             }
@@ -286,7 +286,7 @@ impl FilesView {
             }
         }
         if column.entries.is_empty() {
-            let muted = self.palette.label_muted;
+            let muted = self.palette.ink2;
             let empty = self.text().paragraph(
                 &L10N.tr("empty-folder"),
                 TextStyle::new(NAME_SIZE, muted),
@@ -306,7 +306,7 @@ impl FilesView {
         items.push(self.fill(
             Rect::new(x + COLUMN_WIDTH - 1.0, content.y, 1.0, content.height),
             0.0,
-            self.palette.separator_color,
+            self.palette.hairline,
         ));
     }
 
@@ -316,11 +316,11 @@ impl FilesView {
         }
         let content = self.content_frame();
         let bar = Rect::new(content.x, 0.0, content.width, SEARCH_HEIGHT);
-        items.push(self.fill(bar, 0.0, self.palette.surface_background));
+        items.push(self.fill(bar, 0.0, self.palette.sheet));
         items.push(self.fill(
             Rect::new(bar.x, bar.height - 1.0, bar.width, 1.0),
             0.0,
-            self.palette.separator_color,
+            self.palette.hairline,
         ));
     }
 
@@ -339,14 +339,14 @@ impl FilesView {
             content.width,
             PATH_BAR_HEIGHT,
         );
-        items.push(self.fill(bar, 0.0, self.palette.surface_elevated));
+        items.push(self.fill(bar, 0.0, self.palette.overlay));
         items.push(self.fill(
             Rect::new(bar.x, bar.y, bar.width, 1.0),
             0.0,
-            self.palette.separator_color,
+            self.palette.hairline,
         ));
         let status = self.status_text();
-        let muted = self.palette.label_muted;
+        let muted = self.palette.ink2;
         let status_paragraph = self.label(&status, SMALL_SIZE, muted);
         let status_x = bar.x + bar.width - status_paragraph.width() - 12.0;
         items.push(Item::Text {
@@ -409,7 +409,7 @@ impl FilesView {
                     image,
                 });
             }
-            let primary = self.palette.label_primary;
+            let primary = self.palette.ink;
             let paragraph = self.label(&name, SMALL_SIZE + 1.0, primary);
             let width = paragraph.width();
             row.push(Item::Text {
@@ -423,10 +423,7 @@ impl FilesView {
                 let area = Rect::new(x - 4.0, bar.y + 3.0, width + 28.0, PATH_BAR_HEIGHT - 6.0);
                 let hit = Hit::Segment(path);
                 if self.hover.as_ref() == Some(&hit) {
-                    row.insert(
-                        0,
-                        self.fill(area, 5.0, self.palette.label_muted.with_alpha(30)),
-                    );
+                    row.insert(0, self.fill(area, 5.0, self.palette.ink2.with_alpha(30)));
                 }
                 self.hits.push((area, hit));
             }
@@ -519,14 +516,14 @@ impl FilesView {
             .collect::<Vec<_>>();
         for (index, label, detail, fraction) in jobs {
             let area = Rect::new(content.x, y, content.width, PROGRESS_HEIGHT);
-            items.push(self.fill(area, 0.0, self.palette.surface_elevated));
+            items.push(self.fill(area, 0.0, self.palette.overlay));
             items.push(self.fill(
                 Rect::new(area.x, area.y, area.width, 1.0),
                 0.0,
-                self.palette.separator_color,
+                self.palette.hairline,
             ));
-            let primary = self.palette.label_primary;
-            let muted = self.palette.label_muted;
+            let primary = self.palette.ink;
+            let muted = self.palette.ink2;
             items.push(self.line(
                 &label,
                 SMALL_SIZE + 1.0,
@@ -543,7 +540,7 @@ impl FilesView {
                 });
             }
             let track = Rect::new(area.x + 14.0, y + 28.0, area.width - 58.0, 6.0);
-            items.push(self.fill(track, 3.0, self.palette.separator_color));
+            items.push(self.fill(track, 3.0, self.palette.hairline));
             items.push(self.fill(
                 Rect::new(
                     track.x,
@@ -552,19 +549,15 @@ impl FilesView {
                     track.height,
                 ),
                 3.0,
-                self.palette.accent_color,
+                self.palette.accent,
             ));
             let cancel = Rect::new(area.x + area.width - 34.0, y + 17.0, 22.0, 22.0);
             let hovered = self.hover == Some(Hit::CancelJob(index));
-            items.push(
-                self.fill(
-                    cancel,
-                    11.0,
-                    self.palette
-                        .label_muted
-                        .with_alpha(if hovered { 90 } else { 50 }),
-                ),
-            );
+            items.push(self.fill(
+                cancel,
+                11.0,
+                self.palette.ink2.with_alpha(if hovered { 90 } else { 50 }),
+            ));
             items.push(self.line(
                 "\u{00D7}",
                 NAME_SIZE + 2.0,
@@ -586,11 +579,11 @@ impl FilesView {
             self.size.1,
         );
         self.hits.push((area, Hit::Inspector));
-        items.push(self.fill(area, 0.0, self.palette.surface_elevated));
+        items.push(self.fill(area, 0.0, self.palette.overlay));
         items.push(self.fill(
             Rect::new(area.x, 0.0, 1.0, area.height),
             0.0,
-            self.palette.separator_color,
+            self.palette.hairline,
         ));
         let Some(info) = self.info.take() else {
             return;
@@ -598,8 +591,8 @@ impl FilesView {
         let mut content = Vec::new();
         let inner = area.inset(PADDING);
         let mut y = inner.y;
-        let primary = self.palette.label_primary;
-        let muted = self.palette.label_muted;
+        let primary = self.palette.ink;
+        let muted = self.palette.ink2;
         let preview_area = Rect::new(inner.x, y, inner.width, 150.0);
         match (&info.preview, info.entries.as_slice()) {
             (Some(Preview::Image(image)), [_]) => content.push(Item::Image {
@@ -751,7 +744,7 @@ impl FilesView {
                 let row = Rect::new(inner.x, y, inner.width, 24.0);
                 let chosen = info.chosen == Some(index);
                 if chosen {
-                    content.push(self.fill(row, 5.0, self.palette.accent_color.with_alpha(40)));
+                    content.push(self.fill(row, 5.0, self.palette.accent.with_alpha(40)));
                 }
                 let name = if info.default.as_deref() == Some(app.id.as_str()) {
                     L10N.tr_args("default-app", [("app", app.name.clone().into())])
@@ -790,7 +783,7 @@ impl FilesView {
         let color = if default {
             Color::hex(0xFFFFFF)
         } else {
-            self.palette.label_primary
+            self.palette.ink
         };
         let paragraph = self.label(title, NAME_SIZE, color);
         let rect = Rect::new(
@@ -800,9 +793,9 @@ impl FilesView {
             BUTTON_HEIGHT,
         );
         let fill = if default {
-            self.palette.accent_color
+            self.palette.accent
         } else {
-            self.palette.label_muted.with_alpha(40)
+            self.palette.ink2.with_alpha(40)
         };
         items.push(self.fill(rect, 6.0, fill));
         items.push(Item::Text {
@@ -870,7 +863,7 @@ impl FilesView {
         });
         items.push(Item::Fill {
             shape,
-            paint: self.palette.surface_elevated.into(),
+            paint: self.palette.overlay.into(),
         });
         shape
     }
@@ -881,7 +874,7 @@ impl FilesView {
         };
         let panel = self.quick_look_frame();
         let shape = self.panel(panel, items);
-        let primary = self.palette.label_primary;
+        let primary = self.palette.ink;
         let title = self.text().paragraph(
             &quick_look.entry.name,
             TextStyle::new(NAME_SIZE, primary).weight(TextStyle::SEMIBOLD),
@@ -962,8 +955,8 @@ impl FilesView {
         items: &mut Vec<Item>,
     ) {
         let icon = self.entry_icon(entry, LARGE_ICON_PIXELS);
-        let primary = self.palette.label_primary;
-        let muted = self.palette.label_muted;
+        let primary = self.palette.ink;
+        let muted = self.palette.ink2;
         let kind = self.text().paragraph(
             kind,
             TextStyle::new(NAME_SIZE + 4.0, primary).weight(TextStyle::MEDIUM),

@@ -189,7 +189,7 @@ fn closing_a_window_repaints_only_the_area_it_covered() {
     client.close_window(&mut server, 0);
     let (stats, snapshot) = render(&mut renderer, &mut server);
 
-    let active_shadow_reach = 3 * 14;
+    let active_shadow_reach = 3 * 16;
     let shadow_side = 32 + 2 * active_shadow_reach;
     assert_eq!(stats.repainted_pixels, shadow_side * shadow_side);
     assert_eq!(pixel(&snapshot, origin.x, origin.y), background());
@@ -231,11 +231,11 @@ fn an_opaque_window_hides_the_window_below_it() {
     let mut below = TestClient::connect(&mut server);
     let mut above = TestClient::connect(&mut server);
     let red = solid(RED, 16);
-    let green = solid(GREEN, 96);
+    let green = solid(GREEN, 160);
     let mut lone_client = TestClient::connect(&mut alone);
-    lone_client.show_window(&mut alone, &image(&green, 96, Format::Xrgb8888));
+    lone_client.show_window(&mut alone, &image(&green, 160, Format::Xrgb8888));
     below.show_window(&mut server, &image(&red, 16, Format::Xrgb8888));
-    above.show_window(&mut server, &image(&green, 96, Format::Xrgb8888));
+    above.show_window(&mut server, &image(&green, 160, Format::Xrgb8888));
     let mut renderer = Renderer::new().expect("Vulkan renderer");
 
     let (stats, snapshot) = render(&mut renderer, &mut server);

@@ -13,7 +13,7 @@ use unbound_spring::Spring;
 
 use crate::frame::Frame;
 use crate::motion::{Look, Motion};
-use crate::scene::Drawn;
+use crate::scene::{Casting, Drawn};
 use crate::state::{Rect, State};
 use crate::tile::{TILED, Tile};
 
@@ -28,7 +28,7 @@ pub struct Window {
     pub(crate) resize: Option<Resize>,
     pub(crate) minimized: Option<u64>,
     pub(crate) hidden: bool,
-    pub(crate) shadow: Id,
+    pub(crate) shadow: Casting,
     pub(crate) veil: Id,
     pub(crate) motion: Option<Motion>,
     pub(crate) drawn: Option<Drawn>,
@@ -52,7 +52,7 @@ const RIGHT: u32 = 8;
 
 fn title_bar_height(mode: Option<DecorationMode>, fullscreen: bool) -> i32 {
     if mode == Some(DecorationMode::ServerSide) && !fullscreen {
-        unbound_graphics::TITLE_BAR_HEIGHT as i32
+        unbound_graphics::FRAME_HEADER_HEIGHT as i32
     } else {
         0
     }
@@ -103,7 +103,7 @@ impl Window {
             resize: None,
             minimized: None,
             hidden: false,
-            shadow: Id::new(),
+            shadow: Casting::new(),
             veil: Id::new(),
             motion: None,
             drawn: None,

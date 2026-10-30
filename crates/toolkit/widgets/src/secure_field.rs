@@ -55,13 +55,13 @@ impl Widget for SecureField {
         let bullets: String = std::iter::repeat_n(BULLET, self.secret.chars().count()).collect();
         self.bullets = Some(cx.text.paragraph(
             &bullets,
-            TextStyle::new(self.font_size, cx.palette.label_primary),
+            TextStyle::new(self.font_size, cx.palette.ink),
             None,
             TextAlign::Start,
         ));
         self.placeholder_paragraph = Some(cx.text.paragraph(
             &self.placeholder,
-            TextStyle::new(self.font_size, cx.palette.label_muted),
+            TextStyle::new(self.font_size, cx.palette.ink2),
             None,
             TextAlign::Start,
         ));
@@ -80,12 +80,12 @@ impl Widget for SecureField {
         let shape = Shape::rounded(self.frame, RADIUS);
         items.push(Item::Fill {
             shape,
-            paint: cx.palette.surface_elevated.into(),
+            paint: cx.palette.overlay.into(),
         });
         items.push(Item::Stroke {
             shape: Shape::rounded(self.frame.inset(0.5), RADIUS - 0.5),
             width: 1.0,
-            paint: cx.palette.separator_color.into(),
+            paint: cx.palette.hairline.into(),
         });
         let focused = cx.is_focused(self.id);
         if focused {
@@ -113,7 +113,7 @@ impl Widget for SecureField {
             let height = shown.map_or(self.font_size, Paragraph::height);
             content.push(Item::Fill {
                 shape: Shape::rect(Rect::new(origin.x + advance, origin.y, CARET_WIDTH, height)),
-                paint: cx.palette.label_primary.into(),
+                paint: cx.palette.ink.into(),
             });
         }
         items.push(Item::Clip {

@@ -15,31 +15,89 @@ use crate::effect::{blur_rects, corner_radius};
 use crate::motion::{Look, Motion};
 use crate::state::OutputElement;
 use crate::state::mapped_size;
-use crate::tile::Preview;
+use crate::tile::{Preview, TILED};
 use crate::window::Window;
+use unbound_graphics::{Elevation, Palette, Radius, Scheme};
 use unbound_render::{
     Blur, RenderError, RoundedRect, Shadow, VulkanFrame, VulkanRenderer, VulkanTexture,
 };
 
-pub(crate) const CORNER_RADIUS: f64 = 12.0;
+pub(crate) const CORNER_RADIUS: f64 = Radius::XL as f64;
+const EDGE_OPACITY: f32 = 0.55;
+const EDGE_SOFTNESS: f32 = 0.35;
 
-struct ShadowStyle {
-    blur: f64,
-    offset: f64,
-    opacity: f32,
+#[derive(Debug, Clone)]
+pub(crate) struct Casting {
+    edge: Id,
+    key: Id,
+    ambient: Id,
 }
 
-const ACTIVE_SHADOW: ShadowStyle = ShadowStyle {
-    blur: 14.0,
-    offset: 10.0,
-    opacity: 0.42,
-};
+impl Casting {
+    pub(crate) fn new() -> Self {
+        Self {
+            edge: Id::new(),
+            key: Id::new(),
+            ambient: Id::new(),
+        }
+    }
+}
 
-const INACTIVE_SHADOW: ShadowStyle = ShadowStyle {
-    blur: 7.0,
-    offset: 4.0,
-    opacity: 0.22,
-};
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Shading {
+    pub(crate) active: bool,
+    pub(crate) scheme: Scheme,
+}
+
+pub(crate) fn frame_shadows(
+    casting: &Casting,
+    window: RoundedRect,
+    shading: Shading,
+    scale: f64,
+    alpha: f32,
+) -> impl Iterator<Item = OutputElement> {
+    let [key, ambient] = Elevation::Frame.shadows(shading.scheme, shading.active);
+    let cast = |id: &Id, shadow: unbound_graphics::Shadow| {
+        let offset = (f64::from(shadow.offset) * scale) as f32;
+        OutputElement::Shadow(ShadowElement::new(
+            id.clone(),
+            Shadow {
+                caster: RoundedRect {
+                    y: window.y + offset,
+                    ..window
+                },
+                window,
+                blur: (f64::from(shadow.blur) * scale) as f32,
+                color: [0.0, 0.0, 0.0, shadow.opacity * alpha],
+            },
+        ))
+    };
+    let edge = Palette::for_scheme(shading.scheme).edge;
+    let opacity = EDGE_OPACITY * alpha;
+    let channel = |value: u8| f32::from(value) / 255.0 * opacity;
+    let line = scale.max(1.0).round() as f32;
+    let ring = OutputElement::Shadow(ShadowElement::new(
+        casting.edge.clone(),
+        Shadow {
+            caster: RoundedRect {
+                x: window.x - line,
+                y: window.y - line,
+                width: window.width + 2.0 * line,
+                height: window.height + 2.0 * line,
+                radius: window.radius + line,
+            },
+            window,
+            blur: EDGE_SOFTNESS,
+            color: [channel(edge.r), channel(edge.g), channel(edge.b), opacity],
+        },
+    ));
+    [
+        ring,
+        cast(&casting.key, key),
+        cast(&casting.ambient, ambient),
+    ]
+    .into_iter()
+}
 
 pub(crate) type Area = Rectangle<f64, Physical>;
 
@@ -267,26 +325,13 @@ pub struct ShadowElement {
 }
 
 impl ShadowElement {
-    pub(crate) fn new(id: Id, window: RoundedRect, active: bool, scale: f64, alpha: f32) -> Self {
-        let style = if active {
-            &ACTIVE_SHADOW
-        } else {
-            &INACTIVE_SHADOW
-        };
-        let shadow = Shadow {
-            caster: RoundedRect {
-                y: window.y + (style.offset * scale) as f32,
-                ..window
-            },
-            window,
-            blur: (style.blur * scale) as f32,
-            color: [0.0, 0.0, 0.0, style.opacity * alpha],
-        };
+    fn new(id: Id, shadow: Shadow) -> Self {
         let mut hasher = DefaultHasher::new();
         for value in [
             shadow.caster.components(),
             shadow.window.components(),
-            [shadow.blur, shadow.window.radius, shadow.color[3], 0.0],
+            [shadow.blur, shadow.window.radius, 0.0, 0.0],
+            shadow.color,
         ]
         .concat()
         {
@@ -603,7 +648,11 @@ impl RenderElement<VulkanRenderer> for FillElement {
     }
 }
 
-pub(crate) fn preview_elements(preview: &Preview, scale: f64) -> Vec<OutputElement> {
+pub(crate) fn preview_elements(
+    preview: &Preview,
+    scale: f64,
+    scheme: Scheme,
+) -> Vec<OutputElement> {
     let Some(look) = preview.motion.shown() else {
         return Vec::new();
     };
@@ -612,20 +661,17 @@ pub(crate) fn preview_elements(preview: &Preview, scale: f64) -> Vec<OutputEleme
     }
     let alpha = look.alpha as f32;
     let shape = rounded(look.rect.to_physical(scale), CORNER_RADIUS * scale);
-    vec![
-        OutputElement::Fill(FillElement::new(
-            preview.fill.clone(),
-            shape,
-            PREVIEW_FILL.map(|channel| channel * alpha),
-        )),
-        OutputElement::Shadow(ShadowElement::new(
-            preview.shadow.clone(),
-            shape,
-            false,
-            scale,
-            alpha,
-        )),
-    ]
+    let shading = Shading {
+        active: false,
+        scheme,
+    };
+    std::iter::once(OutputElement::Fill(FillElement::new(
+        preview.fill.clone(),
+        shape,
+        PREVIEW_FILL.map(|channel| channel * alpha),
+    )))
+    .chain(frame_shadows(&preview.shadow, shape, shading, scale, alpha))
+    .collect()
 }
 
 #[derive(Debug, Clone)]
@@ -633,7 +679,7 @@ pub(crate) struct Drawn {
     pieces: Vec<Piece>,
     area: Area,
     pub(crate) look: Look,
-    active: bool,
+    shading: Shading,
 }
 
 impl Drawn {
@@ -740,7 +786,7 @@ impl SlideBack {
 
 pub(crate) struct Closing {
     drawn: Drawn,
-    shadow: Id,
+    shadow: Casting,
     pub(crate) motion: Motion,
 }
 
@@ -749,7 +795,7 @@ impl Closing {
         drawn.pieces = fresh(drawn.pieces);
         Self {
             drawn,
-            shadow: Id::new(),
+            shadow: Casting::new(),
             motion,
         }
     }
@@ -765,13 +811,13 @@ impl Closing {
         let clip = rounded(shown, shaped_radius(self.drawn.area, shown, scale));
         let alpha = look.alpha as f32;
         scaled_pieces(&self.drawn.pieces, self.drawn.area, shown, clip, alpha)
-            .chain([OutputElement::Shadow(ShadowElement::new(
-                self.shadow.clone(),
+            .chain(frame_shadows(
+                &self.shadow,
                 clip,
-                self.drawn.active,
+                self.drawn.shading,
                 scale,
                 alpha,
-            ))])
+            ))
             .collect()
     }
 }
@@ -787,7 +833,7 @@ pub(crate) fn window_elements(
     window: &Window,
     renderer: &mut VulkanRenderer,
     scale: f64,
-    active: bool,
+    shading: Shading,
     hung: bool,
     look: Option<Look>,
 ) -> (Vec<OutputElement>, Option<Drawn>) {
@@ -820,7 +866,10 @@ pub(crate) fn window_elements(
     let area = real.to_physical(scale);
     let look = look.unwrap_or(Look::shown(real));
     let shown = look.rect.to_physical(scale);
-    let radius = if fullscreen {
+    let squared = fullscreen
+        || window.has_state(xdg_toplevel::State::Maximized)
+        || TILED.into_iter().any(|state| window.has_state(state));
+    let radius = if squared {
         0.0
     } else {
         shaped_radius(area, shown, scale)
@@ -833,15 +882,10 @@ pub(crate) fn window_elements(
     let title_bar = window.title_bar_piece(scale);
     let mut pieces = pieces_of(&surfaces, scale);
     pieces.extend(title_bar.clone());
-    let shadow = (!fullscreen).then(|| {
-        OutputElement::Shadow(ShadowElement::new(
-            window.shadow.clone(),
-            clip,
-            active,
-            scale,
-            alpha,
-        ))
-    });
+    let shadow = (!fullscreen)
+        .then(|| frame_shadows(&window.shadow, clip, shading, scale, alpha))
+        .into_iter()
+        .flatten();
     let origin = window.surface_origin().to_f64();
     let blurs = blur_rects(window.surface())
         .into_iter()
@@ -887,7 +931,7 @@ pub(crate) fn window_elements(
             pieces,
             area,
             look,
-            active,
+            shading,
         }),
     )
 }

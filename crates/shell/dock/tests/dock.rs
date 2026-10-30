@@ -62,8 +62,7 @@ impl Harness {
         let state = DockState::new(edge, ICON_SIZE);
         let appearance = Appearance {
             scheme,
-            accent: None,
-            reduce_motion: false,
+            ..Appearance::default()
         };
         state.borrow_mut().set_appearance(appearance);
         let clock = Rc::new(Cell::new(Instant::now()));

@@ -1,7 +1,7 @@
 use accesskit::{Action, Affine, Node, NodeId, Role, TreeUpdate};
 use unbound_graphics::{
-    Color, Item, Palette, Paragraph, Point, Rect, Scene, Scheme, Shape, TextAlign, TextStyle,
-    TextSystem, TitleBar, title_style, window_controls_area,
+    Color, Item, Palette, Paragraph, Point, Radius, Rect, Scene, Scheme, Shape, TextAlign,
+    TextStyle, TextSystem, TitleBar, title_style, window_controls_area,
 };
 
 use std::time::Instant;
@@ -11,8 +11,9 @@ use unbound_widgets::{Animated, Spring};
 use crate::L10N;
 use crate::window::ResizeEdge;
 
+pub use unbound_graphics::HEADER_HEIGHT;
 pub(crate) use unbound_graphics::RESIZE_MARGIN;
-pub use unbound_graphics::TITLE_BAR_HEIGHT;
+pub const SHEET_INSET: u32 = 6;
 pub(crate) use unbound_graphics::WindowControl as Control;
 const RESIZE_BAND: f32 = RESIZE_MARGIN as f32;
 const CORNER_REACH: f32 = unbound_graphics::RESIZE_CORNER;
@@ -60,10 +61,18 @@ pub(crate) enum Zone {
     Content,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct FrameRegions {
+    pub sidebar: f32,
+    pub toolbar: f32,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct Frame {
     pub(crate) margin: f32,
     pub(crate) title: f32,
+    pub(crate) inset: f32,
+    pub(crate) regions: Option<FrameRegions>,
     pub(crate) width: f32,
     pub(crate) height: f32,
 }
@@ -73,8 +82,52 @@ impl Frame {
         Rect::new(self.margin, self.margin, self.width, self.height)
     }
 
+    fn sheet(&self) -> Rect {
+        let regions = self.regions.unwrap_or_default();
+        let left = regions.sidebar.max(self.inset);
+        let top = self.title + regions.toolbar;
+        Rect::new(
+            left,
+            top,
+            (self.width - left - self.inset).max(0.0),
+            (self.height - top - self.inset).max(0.0),
+        )
+    }
+
+    fn sheet_radius(&self) -> f32 {
+        if self.inset > 0.0 {
+            Radius::concentric(Radius::XL, self.inset)
+        } else {
+            0.0
+        }
+    }
+
+    fn content(&self) -> Rect {
+        match self.regions {
+            Some(_) => Rect::new(0.0, self.title, self.width, self.height - self.title),
+            None => self.sheet(),
+        }
+    }
+
     pub(crate) fn content_origin(&self) -> Point {
-        Point::new(self.margin, self.margin + self.title)
+        let content = self.content();
+        Point::new(self.margin + content.x, self.margin + content.y)
+    }
+
+    pub(crate) fn content_size(&self) -> (u32, u32) {
+        let content = self.content();
+        (
+            content.width.max(0.0).round() as u32,
+            content.height.max(0.0).round() as u32,
+        )
+    }
+
+    pub(crate) fn chrome_size(&self) -> (u32, u32) {
+        let (width, height) = self.content_size();
+        (
+            (self.width.round() as u32).saturating_sub(width),
+            (self.height.round() as u32).saturating_sub(height),
+        )
     }
 
     pub(crate) fn zone_at(&self, point: Point) -> Zone {
@@ -84,11 +137,15 @@ impl Frame {
             && point.x < window.x + window.width
             && point.y < window.y + window.height;
         if inside {
-            if point.y >= window.y + self.title {
-                return Zone::Content;
-            }
             let local = Point::new(point.x - window.x, point.y - window.y);
-            return Control::at(local, self.title).map_or(Zone::TitleBar, Zone::Control);
+            if local.y < self.title {
+                return Control::at(local, self.title).map_or(Zone::TitleBar, Zone::Control);
+            }
+            return if contains(self.content(), local) {
+                Zone::Content
+            } else {
+                Zone::TitleBar
+            };
         }
         if self.margin == 0.0 || !contains(window.inset(-RESIZE_BAND), point) {
             return Zone::Outside;
@@ -136,8 +193,11 @@ pub(crate) struct Chrome {
     pub(crate) title: String,
     text: Option<TextSystem>,
     title_paragraph: Option<(String, Color, Paragraph)>,
-    hovered_group: bool,
-    glyphs: Animated,
+    hovered: Option<Option<Control>>,
+    hover: Animated,
+    close_hover: Animated,
+    pub(crate) alternate: bool,
+    pub(crate) regions: Option<FrameRegions>,
     pub(crate) animating: bool,
     pub(crate) pressed: Option<Control>,
     pub(crate) pressed_inside: bool,
@@ -159,7 +219,11 @@ impl Chrome {
         };
         let content = std::mem::replace(&mut info.root, WINDOW_NODE);
         if let Some((_, node)) = tree.nodes.iter_mut().find(|(id, _)| *id == content) {
-            node.set_transform(Affine::translate((0.0, f64::from(frame.title))));
+            let content = frame.content();
+            node.set_transform(Affine::translate((
+                f64::from(content.x),
+                f64::from(content.y),
+            )));
         }
         let mut window = Node::new(Role::Window);
         window.set_label(self.title.clone());
@@ -188,18 +252,24 @@ impl Chrome {
         now: Instant,
         reduce_motion: bool,
     ) -> bool {
-        let group = point.is_some_and(|point| {
-            contains(
-                window_controls_area(frame.title),
-                Point::new(point.x - frame.margin, point.y - frame.margin),
-            )
-        });
-        let changed = group != self.hovered_group;
-        self.hovered_group = group;
-        let shown = if group { 1.0 } else { 0.0 };
-        self.glyphs
-            .animate_at(now, reduce_motion, shown, Spring::FADE);
-        changed
+        let hovered = point
+            .map(|point| Point::new(point.x - frame.margin, point.y - frame.margin))
+            .filter(|local| contains(window_controls_area(frame.title), *local))
+            .map(|local| Control::at(local, frame.title));
+        if hovered == self.hovered {
+            return false;
+        }
+        self.hovered = hovered;
+        let level = |on: bool| if on { 1.0 } else { 0.0 };
+        self.hover
+            .animate_at(now, reduce_motion, level(hovered.is_some()), Spring::FADE);
+        self.close_hover.animate_at(
+            now,
+            reduce_motion,
+            level(hovered == Some(Some(Control::Close))),
+            Spring::FADE,
+        );
+        true
     }
 
     fn title(&mut self, style: TextStyle) -> Paragraph {
@@ -222,26 +292,46 @@ impl Chrome {
         content: &Scene,
         palette: &Palette,
         scheme: Scheme,
-        active: bool,
+        look: Look,
         now: Instant,
     ) -> Scene {
-        let mut items = vec![
-            Item::Fill {
-                shape: Shape::rect(Rect::new(
-                    0.0,
-                    frame.title,
-                    frame.width,
-                    frame.height - frame.title,
-                )),
-                paint: content.background.into(),
-            },
-            Item::Translate {
-                offset: Point::new(0.0, frame.title),
-                items: content.items.clone(),
-            },
-        ];
+        let mut items = vec![Item::Fill {
+            shape: Shape::rect(Rect::new(0.0, 0.0, frame.width, frame.height)),
+            paint: palette.chassis.into(),
+        }];
         if frame.title > 0.0 {
-            self.title_bar(frame, palette, scheme, active, now, &mut items);
+            self.title_bar(frame, palette, look, now, &mut items);
+        }
+        let sheet = frame.sheet();
+        let radius = frame.sheet_radius();
+        items.push(Item::Fill {
+            shape: Shape::rounded(sheet, radius),
+            paint: content.background.into(),
+        });
+        let placed = frame.content();
+        let local = Rect::new(
+            sheet.x - placed.x,
+            sheet.y - placed.y,
+            sheet.width,
+            sheet.height,
+        );
+        let drawn = match frame.regions {
+            Some(_) => content.items.clone(),
+            None => vec![Item::Clip {
+                shape: Shape::rounded(local, radius),
+                items: content.items.clone(),
+            }],
+        };
+        items.push(Item::Translate {
+            offset: Point::new(placed.x, placed.y),
+            items: drawn,
+        });
+        if scheme == Scheme::Dark && frame.inset > 0.0 {
+            items.push(Item::Stroke {
+                shape: Shape::rounded(sheet.inset(0.5), radius - 0.5),
+                width: 1.0,
+                paint: palette.hairline.into(),
+            });
         }
         Scene {
             width: (frame.width + 2.0 * frame.margin) as u32,
@@ -258,26 +348,34 @@ impl Chrome {
         &mut self,
         frame: &Frame,
         palette: &Palette,
-        scheme: Scheme,
-        active: bool,
+        look: Look,
         now: Instant,
         items: &mut Vec<Item>,
     ) {
-        let title = self.title(title_style(palette, active));
-        let (shown, moving) = self.glyphs.value_at(now);
-        self.animating = moving;
+        let title = self.title(title_style(palette, look.active));
+        let (hover, hovering) = self.hover.value_at(now);
+        let (close_hover, closing) = self.close_hover.value_at(now);
+        self.animating = hovering || closing;
         items.extend(
             TitleBar {
                 width: frame.width,
                 height: frame.title,
                 title,
                 palette,
-                scheme,
-                active,
-                glyphs: shown,
+                active: look.active,
+                hover,
+                close_hover,
                 pressed: self.pressed.filter(|_| self.pressed_inside),
+                zoomed: look.zoomed,
+                alternate: self.alternate && look.active,
             }
             .items(),
         );
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Look {
+    pub(crate) active: bool,
+    pub(crate) zoomed: bool,
 }

@@ -115,14 +115,14 @@ impl Widget for Prompt {
         let text_width = width - 2.0 * PADDING;
         let title = cx.text.paragraph(
             &self.title,
-            TextStyle::new(13.0, cx.palette.label_primary).weight(TextStyle::SEMIBOLD),
+            TextStyle::new(13.0, cx.palette.ink).weight(TextStyle::SEMIBOLD),
             Some(text_width),
             TextAlign::Start,
         );
         let message = (!self.message.is_empty()).then(|| {
             cx.text.paragraph(
                 &self.message,
-                TextStyle::new(12.0, cx.palette.label_muted),
+                TextStyle::new(12.0, cx.palette.ink2),
                 Some(text_width),
                 TextAlign::Start,
             )
@@ -130,7 +130,7 @@ impl Widget for Prompt {
         self.toggle_text = self.toggle_label.as_ref().map(|label| {
             cx.text.paragraph(
                 label,
-                TextStyle::new(13.0, cx.palette.label_primary),
+                TextStyle::new(13.0, cx.palette.ink),
                 None,
                 TextAlign::Start,
             )

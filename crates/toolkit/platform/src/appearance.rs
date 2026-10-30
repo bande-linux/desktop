@@ -6,7 +6,7 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread;
 use std::time::Duration;
 
-use unbound_graphics::{Appearance, Color, Scheme};
+use unbound_graphics::{Accent, Appearance, Color, Contrast, Scheme};
 use zbus::blocking::{Connection, Proxy};
 use zbus::zvariant::OwnedValue;
 
@@ -16,6 +16,7 @@ const SETTINGS: &str = "org.freedesktop.portal.Settings";
 const NAMESPACE: &str = "org.freedesktop.appearance";
 const PREFER_DARK: u32 = 1;
 const REDUCE: u32 = 1;
+const HIGH_CONTRAST: u32 = 1;
 const FIRST_READING: Duration = Duration::from_millis(500);
 
 pub(crate) struct AppearanceWatch {
@@ -99,7 +100,15 @@ fn apply(appearance: &mut Appearance, key: &str, value: OwnedValue) -> bool {
                 _ => Scheme::Light,
             };
         }
-        "accent-color" => appearance.accent = accent(value),
+        "accent-color" => {
+            appearance.accent = accent(value).map_or_else(Accent::default, Accent::nearest);
+        }
+        "contrast" => {
+            appearance.contrast = match u32::try_from(&value) {
+                Ok(HIGH_CONTRAST) => Contrast::Increased,
+                _ => Contrast::Standard,
+            };
+        }
         "reduced-motion" => appearance.reduce_motion = u32::try_from(&value) == Ok(REDUCE),
         _ => {}
     }

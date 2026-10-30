@@ -53,7 +53,7 @@ jobs:
         run: ci/apt-install.sh pkg-config libxkbcommon-dev libgbm-dev libinput-dev libseat-dev libudev-dev libpipewire-0.3-dev libclang-dev libvulkan1 mesa-vulkan-drivers fonts-dejavu-core dbus-daemon
       - name: Install the toolkit's fonts, fontconfig and libwayland-client
         run: |
-          ci/apt-install.sh fonts-inter fonts-noto-cjk libfontconfig1 libwayland-client0
+          ci/apt-install.sh fonts-inter fonts-manrope fonts-jetbrains-mono fonts-noto-cjk libfontconfig1 libwayland-client0
       - name: Install kill for the clipboard daemon's restart test
         run: ci/apt-install.sh procps
       - run: cargo test --workspace --locked -- --show-output
@@ -404,7 +404,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Install the runtime dependencies
-        run: ci/apt-install.sh libvulkan1 mesa-vulkan-drivers fonts-inter libfontconfig1 libwayland-client0
+        run: ci/apt-install.sh libvulkan1 mesa-vulkan-drivers fonts-inter fonts-manrope fonts-jetbrains-mono libfontconfig1 libwayland-client0
       - uses: actions/download-artifact@v7
         with:
           name: perf-binaries

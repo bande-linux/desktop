@@ -8,7 +8,7 @@ use resvg::{tiny_skia, usvg};
 use vello_cpu::{PixelMetadata, Pixmap};
 
 use crate::text::Paragraph;
-use crate::tokens::Color;
+use unbound_design::Color;
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Point {

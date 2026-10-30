@@ -345,7 +345,7 @@ impl ScrollState {
         }
         let (offset, _) = self.offset_at(cx.now());
         let knob = self.knob(frame, offset);
-        let color = cx.palette.label_primary;
+        let color = cx.palette.ink;
         items.push(Item::Fill {
             shape: Shape::rounded(knob, SCROLLBAR_WIDTH / 2.0),
             paint: color.with_alpha((alpha * 110.0) as u8).into(),

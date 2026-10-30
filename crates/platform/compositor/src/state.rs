@@ -88,7 +88,7 @@ use crate::cursor::{self, Cursor, CursorTheme};
 use crate::lock::Lock;
 use crate::motion::IconRect;
 use crate::scene::{
-    BlurElement, Closing, Drawn, FillElement, PieceElement, ShadowElement, WindowElement,
+    BlurElement, Closing, Drawn, FillElement, PieceElement, Shading, ShadowElement, WindowElement,
     preview_elements, surface_blurs, tie_blurs_to_what_lies_below, window_elements,
 };
 use crate::session::{ForceQuit, LockScreen, SessionClient, SessionRole};
@@ -581,14 +581,17 @@ impl Headless {
                     elements.extend(surface_blurs(&surface, location, scale));
                 }
                 Placed::Window(window) => {
-                    let active = key.as_ref() == Some(window.surface());
+                    let shading = Shading {
+                        active: key.as_ref() == Some(window.surface()),
+                        scheme: self.state.decorations.scheme,
+                    };
                     let hung = window
                         .surface()
                         .client()
                         .is_some_and(|owner| self.state.watchdog.is_unresponsive(&owner.id()));
                     let presented = self.state.presented(window);
                     let (shown, look) =
-                        window_elements(window, renderer, scale, active, hung, presented);
+                        window_elements(window, renderer, scale, shading, hung, presented);
                     elements.extend(shown);
                     elements.extend(self.state.overview_ring(window, scale));
                     if let (Some(ghost), Some(look)) = (self.state.overview_ghost(window), &look) {
@@ -598,7 +601,11 @@ impl Headless {
                     if let Some(preview) = &self.state.preview
                         && &preview.owner == window.surface()
                     {
-                        elements.extend(preview_elements(preview, scale));
+                        elements.extend(preview_elements(
+                            preview,
+                            scale,
+                            self.state.decorations.scheme,
+                        ));
                     }
                 }
                 Placed::Closing(closing) => elements.extend(closing.render_elements(scale)),

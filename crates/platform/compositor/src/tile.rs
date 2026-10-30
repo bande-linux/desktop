@@ -8,6 +8,7 @@ use unbound_protocols::server::unbound_app_v1;
 use unbound_spring::Spring;
 
 use crate::motion::{Look, Motion};
+use crate::scene::Casting;
 use crate::state::{Headless, Rect, State};
 
 pub(crate) const REST: Duration = Duration::from_millis(150);
@@ -165,7 +166,7 @@ pub(crate) struct Preview {
     pub(crate) motion: Motion,
     pub(crate) target: Look,
     pub(crate) fill: Id,
-    pub(crate) shadow: Id,
+    pub(crate) shadow: Casting,
 }
 
 impl State {
@@ -385,7 +386,7 @@ impl State {
             motion,
             target,
             fill: Id::new(),
-            shadow: Id::new(),
+            shadow: Casting::new(),
         });
         self.needs_redraw = true;
         None

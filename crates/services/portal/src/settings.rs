@@ -39,7 +39,7 @@ impl ColorScheme {
             Self::PreferDark => Scheme::Dark,
             Self::PreferLight | Self::NoPreference => Scheme::Light,
         };
-        let accent = Palette::for_scheme(scheme).accent_color;
+        let accent = Palette::for_scheme(scheme).accent;
         let channel = |value: u8| f64::from(value) / 255.0;
         (channel(accent.r), channel(accent.g), channel(accent.b))
     }

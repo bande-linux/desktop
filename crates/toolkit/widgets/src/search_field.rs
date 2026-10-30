@@ -81,8 +81,8 @@ impl SearchField {
 
     fn paint_clear(&self, cx: &Context, button: Rect, items: &mut Vec<Item>) {
         let fill = match self.clear_pressed {
-            true => cx.palette.label_primary.with_alpha(160),
-            false => cx.palette.label_muted.with_alpha(150),
+            true => cx.palette.ink.with_alpha(160),
+            false => cx.palette.ink2.with_alpha(150),
         };
         items.push(Item::Fill {
             shape: Shape::rounded(button, CLEAR_DIAMETER / 2.0),
@@ -100,7 +100,7 @@ impl SearchField {
         items.push(Item::StrokePath {
             path: cross,
             width: STROKE,
-            paint: cx.palette.surface_elevated.into(),
+            paint: cx.palette.overlay.into(),
         });
     }
 }
@@ -124,7 +124,7 @@ impl Widget for SearchField {
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
         self.field.paint(cx, items);
-        self.paint_lens(cx.palette.label_muted, items);
+        self.paint_lens(cx.palette.ink2, items);
         if let Some(button) = self.clear_button() {
             self.paint_clear(cx, button, items);
         }

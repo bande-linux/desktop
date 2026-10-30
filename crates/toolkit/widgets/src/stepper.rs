@@ -129,7 +129,7 @@ impl Widget for Stepper {
         let shape = Shape::rounded(self.frame, RADIUS);
         items.push(Item::Fill {
             shape,
-            paint: cx.palette.surface_elevated.into(),
+            paint: cx.palette.overlay.into(),
         });
         if let Some(press) = self.press.as_ref().filter(|press| press.inside) {
             items.push(Item::Clip {
@@ -143,7 +143,7 @@ impl Widget for Stepper {
         items.push(Item::Stroke {
             shape: Shape::rounded(self.frame.inset(0.5), RADIUS - 0.5),
             width: 1.0,
-            paint: cx.palette.separator_color.into(),
+            paint: cx.palette.hairline.into(),
         });
         let middle = self.frame.y + (self.frame.height / 2.0).round();
         items.push(Item::Fill {
@@ -153,7 +153,7 @@ impl Widget for Stepper {
                 self.frame.width - 6.0,
                 1.0,
             )),
-            paint: cx.palette.separator_color.into(),
+            paint: cx.palette.hairline.into(),
         });
         let x = self.frame.x + self.frame.width / 2.0;
         for (half, limit) in [(Half::Up, self.range.1), (Half::Down, self.range.0)] {
@@ -164,8 +164,8 @@ impl Widget for Stepper {
                 Half::Down => (centre + CHEVRON_HEIGHT / 2.0, centre - CHEVRON_HEIGHT / 2.0),
             };
             let color = match self.value == limit {
-                true => cx.palette.label_muted.with_alpha(110),
-                false => cx.palette.label_primary,
+                true => cx.palette.ink2.with_alpha(110),
+                false => cx.palette.ink,
             };
             items.push(Item::StrokePath {
                 path: Path::new()

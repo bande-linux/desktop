@@ -58,11 +58,7 @@ impl ProgressBar {
             let alpha = 0.35 + 0.35 * (1.0 - (phase * TAU).cos()) / 2.0;
             items.push(Item::Fill {
                 shape: Shape::rounded(track, track.height / 2.0),
-                paint: cx
-                    .palette
-                    .accent_color
-                    .with_alpha((alpha * 255.0) as u8)
-                    .into(),
+                paint: cx.palette.accent.with_alpha((alpha * 255.0) as u8).into(),
             });
             return;
         }
@@ -76,7 +72,7 @@ impl ProgressBar {
                     Rect::new(x, track.y, width, track.height),
                     track.height / 2.0,
                 ),
-                paint: cx.palette.accent_color.into(),
+                paint: cx.palette.accent.into(),
             }],
         });
     }
@@ -106,7 +102,7 @@ impl Widget for ProgressBar {
         let radius = self.frame.height / 2.0;
         items.push(Item::Fill {
             shape: Shape::rounded(self.frame, radius),
-            paint: cx.palette.separator_color.into(),
+            paint: cx.palette.hairline.into(),
         });
         if self.value.is_none() {
             self.sweep(cx, self.frame, items);
@@ -124,7 +120,7 @@ impl Widget for ProgressBar {
                     ),
                     radius,
                 ),
-                paint: cx.palette.accent_color.into(),
+                paint: cx.palette.accent.into(),
             });
         }
     }
@@ -200,11 +196,7 @@ impl Widget for Spinner {
                 from: Point::new(centre.x + cos * inner, centre.y + sin * inner),
                 to: Point::new(centre.x + cos * outer, centre.y + sin * outer),
                 width: self.frame.width * 0.1,
-                paint: cx
-                    .palette
-                    .label_muted
-                    .with_alpha((alpha * 255.0) as u8)
-                    .into(),
+                paint: cx.palette.ink2.with_alpha((alpha * 255.0) as u8).into(),
             });
         }
     }

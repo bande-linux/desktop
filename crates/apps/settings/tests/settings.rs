@@ -118,7 +118,7 @@ fn changing_one_idle_time_keeps_dim_before_lock_before_sleep() {
 #[test]
 fn typing_anywhere_searches_and_narrows_the_sidebar_to_ranked_panes() {
     let mut view = view();
-    assert_eq!(view.visible_panes().len(), 4);
+    assert_eq!(view.visible_panes().len(), 5);
 
     type_text(&mut view, "suspend");
 
@@ -130,7 +130,7 @@ fn typing_anywhere_searches_and_narrows_the_sidebar_to_ranked_panes() {
 
     press(&mut view, Key::Escape);
     assert_eq!(view.query(), "");
-    assert_eq!(view.visible_panes().len(), 4);
+    assert_eq!(view.visible_panes().len(), 5);
     assert!(view.highlighted_settings().is_empty());
     assert_eq!(view.selected_pane(), PaneId::LockScreen);
 }
@@ -189,7 +189,7 @@ fn tab_reaches_a_control_and_arrows_change_it() {
 fn clicking_a_pane_and_then_a_choice_selects_both() {
     let mut view = view();
     view.set_value(SettingId::DockEdge, keyword("left"));
-    let row = node(&mut view, Role::ListItem, "Desktop & Dock")
+    let row = node(&mut view, Role::ListItem, "Dock")
         .bounds()
         .expect("bounds");
     click(

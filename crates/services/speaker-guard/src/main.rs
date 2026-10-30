@@ -86,6 +86,8 @@ impl Guard {
         let mut buffer = vec![0i16; self.model.period_frames * self.channels];
         let mut runtime_saved = Instant::now();
         let mut persistent_saved = Instant::now();
+        let mut runtime_failed = false;
+        let mut persistent_failed = false;
         let wait = Duration::from_millis(u64::from(WAIT_MS));
         if !cooled_below_hard_limit(&mut self.protections, stop, wait, std::thread::sleep) {
             return Ok(());
@@ -185,16 +187,20 @@ impl Guard {
                 }
             }
             if runtime_saved.elapsed().as_secs_f64() >= RUNTIME_SAVE_SECONDS {
-                if let Some(now) = state::boot_seconds() {
-                    let _ = state::write(Path::new(RUNTIME_STATE), &self.snapshot(now, false));
-                }
+                let result = state::boot_seconds()
+                    .ok_or_else(|| std::io::Error::other("cannot read /proc/uptime"))
+                    .and_then(|now| {
+                        state::write(Path::new(RUNTIME_STATE), &self.snapshot(now, false))
+                    });
+                report_save(RUNTIME_STATE, result, &mut runtime_failed);
                 runtime_saved = Instant::now();
             }
             if persistent_saved.elapsed().as_secs_f64() >= PERSISTENT_SAVE_SECONDS {
-                let _ = state::write(
+                let result = state::write(
                     Path::new(PERSISTENT_STATE),
                     &self.snapshot(state::now_seconds(), false),
                 );
+                report_save(PERSISTENT_STATE, result, &mut persistent_failed);
                 persistent_saved = Instant::now();
             }
         }
@@ -212,6 +218,20 @@ impl Guard {
                 tracing::warn!("cannot save the speaker temperatures to {path}: {error}");
             }
         }
+    }
+}
+
+fn report_save(path: &str, result: std::io::Result<()>, failed: &mut bool) {
+    match result {
+        Err(error) if !*failed => {
+            tracing::warn!("cannot save the speaker temperatures to {path}: {error}");
+            *failed = true;
+        }
+        Ok(()) if *failed => {
+            tracing::info!("saving the speaker temperatures to {path} works again");
+            *failed = false;
+        }
+        _ => {}
     }
 }
 

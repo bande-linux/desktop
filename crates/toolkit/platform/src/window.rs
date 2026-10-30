@@ -535,7 +535,7 @@ impl Window {
         self.state.suggested_size.unwrap_or(self.size)
     }
 
-    fn title_height(&self) -> u32 {
+    pub(crate) fn title_height(&self) -> u32 {
         match &self.chrome {
             Some(_) if !self.state.toplevel.fullscreen => TITLE_BAR_HEIGHT,
             _ => 0,
@@ -1201,7 +1201,7 @@ impl Window {
         let region = compositor.create_region(&self.queue.handle(), ());
         region.add(
             area.x.floor() as i32,
-            area.y.floor() as i32,
+            (area.y + self.title_height() as f32).floor() as i32,
             area.width.ceil() as i32,
             area.height.ceil() as i32,
         );

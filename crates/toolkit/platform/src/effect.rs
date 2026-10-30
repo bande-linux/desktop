@@ -13,6 +13,7 @@ pub(crate) struct BackgroundEffect {
 
 impl Window {
     pub fn set_background_blur(&mut self, rects: &[Rect]) -> Result<(), WindowError> {
+        let title = self.title_height() as f32;
         let effect = &mut self.state.effect;
         let manager = effect
             .manager
@@ -31,7 +32,7 @@ impl Window {
         for rect in rects {
             region.add(
                 rect.x.round() as i32,
-                rect.y.round() as i32,
+                (rect.y + title).round() as i32,
                 rect.width.round() as i32,
                 rect.height.round() as i32,
             );

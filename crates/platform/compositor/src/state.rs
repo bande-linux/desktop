@@ -771,6 +771,7 @@ impl State {
             return;
         }
         self.windowless_app = None;
+        self.typed_at = None;
         if surface
             .as_ref()
             .is_some_and(|surface| self.window_index(surface).is_some())

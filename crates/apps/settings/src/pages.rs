@@ -3,7 +3,7 @@ use std::rc::Rc;
 use unbound_audio::Direction;
 use unbound_toolkit::Spacing;
 use unbound_toolkit::ui::{
-    Axis, Button, Label, SecureField, Slider, Stack, Toggle, Widget, WidgetId,
+    Axis, Button, Label, SecureField, SegmentedControl, Slider, Stack, Toggle, Widget, WidgetId,
 };
 
 use crate::L10N;
@@ -12,8 +12,8 @@ use crate::pictures::{Pair, PictureCommand, expand};
 use crate::state::{Answer, Display, Question};
 use crate::view::{Anchor, Intent, Intents, SettingsView, intent};
 use crate::widgets::{
-    Caption, Captioned, Card, Check, Column, Row, Scroll, Segmented, SidebarRow, Signal, Text,
-    Thumbnail, Thumbnails, Tone,
+    Caption, Captioned, Card, Check, Column, Row, Scroll, SidebarRow, Signal, Text, Thumbnail,
+    Thumbnails, Tone,
 };
 use unbound_settings_panes::SettingHit;
 use unbound_settings_panes::{AUTOMATIC, Kind, List, PaneId, Section, Setting, SettingId, Value};
@@ -132,7 +132,7 @@ impl SettingsView {
                     choices.iter().map(|choice| choice.label.clone()).collect();
                 let values: Vec<Value> =
                     choices.iter().map(|choice| choice.value.clone()).collect();
-                boxed(Segmented::new(
+                boxed(SegmentedControl::new(
                     &setting.label,
                     &labels,
                     selected,
@@ -216,7 +216,7 @@ impl SettingsView {
                     }
                     _ => None,
                 };
-                boxed(Segmented::new(
+                boxed(SegmentedControl::new(
                     &setting.label,
                     &labels,
                     selected,

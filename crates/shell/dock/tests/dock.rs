@@ -14,7 +14,7 @@ use unbound_dock::{
     DockAction, DockApp, DockState, ICON_SIZE, LauncherUpdate, MenuTarget, Shared, arrange,
     dock_ui, scene, surface_size,
 };
-use unbound_toolkit::ui::{Event, Pointer, PointerButton, Ui};
+use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer, PointerButton, Ui};
 use unbound_toolkit::{Appearance, CpuRenderer, Image, Palette, Point, Rect, Scheme, TextSystem};
 use zbus::zvariant::{OwnedValue, Value};
 
@@ -570,7 +570,7 @@ fn the_blur_behind_the_dock_stays_inside_its_rounded_corners() {
         let cy = y.clamp(panel.y + radius, panel.y + panel.height - radius);
         (x - cx).powi(2) + (y - cy).powi(2) <= radius * radius + 0.01
     };
-    let rects = state.blur_rects();
+    let rects = state.blur_rects(false);
     for rect in &rects {
         for (x, y) in [
             (rect.x, rect.y),
@@ -598,4 +598,51 @@ fn the_icon_size_setting_resizes_the_dock_within_sensible_bounds() {
 
     harness.state.borrow_mut().set_icon_size(400.0);
     assert_eq!(harness.state.borrow().icon_size(), 96.0);
+}
+
+#[test]
+fn super_f3_lets_the_keyboard_walk_the_dock_open_apps_and_menus_and_give_the_keyboard_back() {
+    let harness = Harness::new(DockEdge::Left, Scheme::Light);
+    let now = harness.clock.get();
+    let plain = Modifiers::default();
+    let mut state = harness.state.borrow_mut();
+    state.start_navigation(Some("org.unbound.Terminal"), now);
+    assert!(state.is_navigating());
+    assert!(state.navigate(Key::Down, plain, now));
+    assert!(state.navigate(Key::Enter, plain, now));
+    assert_eq!(
+        state.take_actions(),
+        [
+            DockAction::Open("org.example.Editor".to_owned()),
+            DockAction::ReleaseKeyboard
+        ]
+    );
+    assert!(state.navigate(Key::End, plain, now));
+    assert!(state.navigate(Key::Enter, plain, now));
+    assert!(state.navigate(Key::Up, plain, now));
+    assert!(state.navigate(
+        Key::Function(10),
+        Modifiers {
+            shift: true,
+            ..plain
+        },
+        now
+    ));
+    assert!(state.navigate(Key::Escape, plain, now));
+    let actions = state.take_actions();
+    assert_eq!(
+        actions[..2],
+        [DockAction::OpenTrash, DockAction::ReleaseKeyboard]
+    );
+    assert!(matches!(
+        &actions[2],
+        DockAction::Menu {
+            target: MenuTarget::App(app_id),
+            ..
+        } if app_id == "org.example.Editor"
+    ));
+    assert_eq!(actions[3], DockAction::ReleaseKeyboard);
+    state.end_navigation(now);
+    assert!(!state.is_navigating());
+    assert!(!state.navigate(Key::Down, plain, now));
 }

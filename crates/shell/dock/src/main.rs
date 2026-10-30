@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
 use unbound_config::{Config, DockEdge, config_path};
@@ -17,7 +17,7 @@ use unbound_dock::{
     scene, surface_size,
 };
 use unbound_fs::{FolderWatch, Trash};
-use unbound_toolkit::ui::{Menu, MenuItem, Ui};
+use unbound_toolkit::ui::{Event, Menu, MenuItem, Ui};
 use unbound_toolkit::{
     App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement, Point, Rect, Role,
     Scene, TextSystem, Window, WindowError, WindowEvent,
@@ -34,6 +34,13 @@ const MENU_SHOW: &str = "show";
 const MENU_EMPTY_TRASH: &str = "empty-trash";
 const MENU_CONFIRM_EMPTY: &str = "confirm-empty-trash";
 const MENU_CANCEL: &str = "cancel";
+const DOCK_NAMESPACE: &str = "dock";
+const KEYBOARD_GRACE: Duration = Duration::from_millis(60);
+
+const MENU_HIDE: &str = "hide";
+const MENU_QUIT: &str = "quit";
+const MENU_FORCE_QUIT: &str = "force-quit";
+const MENU_WINDOW: &str = "window:";
 
 struct TrashWatch {
     trash: Trash,
@@ -76,8 +83,12 @@ struct Dock {
     input: Option<Rect>,
     zone: i32,
     blur: Option<Vec<Rect>>,
+    corner: Option<(u32, bool)>,
     menu: Option<MenuTarget>,
     confirming: bool,
+    active: Option<String>,
+    release_at: Option<Instant>,
+    unresponsive: Vec<String>,
     keep: Sender<Vec<String>>,
     autostart: Option<PathBuf>,
     bus: Receiver<BusEvent>,
@@ -168,6 +179,7 @@ impl Dock {
                 DockAction::OpenTrash => self.open_in_files(window, TRASH_URI),
                 DockAction::ShowInFiles(app_id) => self.show_in_files(window, &app_id),
                 DockAction::Menu { target, at } => self.show_menu(window, target, at),
+                DockAction::ReleaseKeyboard => self.release_keyboard(window),
                 DockAction::Keep(shown) => {
                     let kept = arrange(&self.kept, &shown, |app_id| self.hidden(app_id));
                     self.set_kept(kept);
@@ -206,6 +218,22 @@ impl Dock {
             return;
         };
         self.open_in_files(window, &folder);
+    }
+
+    fn release_keyboard(&mut self, window: &mut Window) {
+        self.release_at = None;
+        self.state.borrow_mut().end_navigation(Instant::now());
+        let Some(active) = self.active.clone() else {
+            return;
+        };
+        if let Err(error) = window.activate_app(&active) {
+            tracing::debug!("cannot give the keyboard back to {active}: {error}");
+        }
+    }
+
+    fn app_name(&self, app_id: &str) -> String {
+        self.entry(app_id)
+            .map_or_else(|| app_id.to_owned(), |entry| entry.name.clone())
     }
 
     fn opens_at_login(&self, app_id: &str) -> bool {
@@ -292,7 +320,28 @@ impl Dock {
                 let installed = self.entry(app_id).is_some();
                 let running = self.running.iter().any(|running| running == app_id);
                 let mut items = Vec::new();
-                if !running {
+                if running {
+                    let windows = window.app_windows(app_id);
+                    for shown in &windows {
+                        let title = if shown.title.is_empty() {
+                            self.app_name(app_id)
+                        } else {
+                            shown.title.clone()
+                        };
+                        let title = if shown.minimized {
+                            L10N.tr_args("menu-minimized-window", [("title", title.into())])
+                        } else {
+                            title
+                        };
+                        items.push(MenuItem::new(
+                            &title,
+                            &format!("{MENU_WINDOW}{}", shown.identifier),
+                        ));
+                    }
+                    if !windows.is_empty() {
+                        items.push(MenuItem::separator());
+                    }
+                } else {
                     items.push(MenuItem::new(&L10N.tr("menu-open"), MENU_OPEN).enabled(installed));
                     items.push(MenuItem::separator());
                 }
@@ -306,6 +355,15 @@ impl Dock {
                         .enabled(installed && self.autostart.is_some()),
                 );
                 items.push(MenuItem::new(&L10N.tr("menu-show"), MENU_SHOW).enabled(installed));
+                if running {
+                    items.push(MenuItem::separator());
+                    items.push(MenuItem::new(&L10N.tr("menu-hide"), MENU_HIDE));
+                    items.push(if self.unresponsive.contains(app_id) {
+                        MenuItem::new(&L10N.tr("menu-force-quit"), MENU_FORCE_QUIT)
+                    } else {
+                        MenuItem::new(&L10N.tr("menu-quit"), MENU_QUIT)
+                    });
+                }
                 items
             }
         };
@@ -320,6 +378,10 @@ impl Dock {
 
     fn menu_action(&mut self, window: &mut Window, action: &str) {
         self.state.borrow_mut().set_menu_open(false, Instant::now());
+        if !self.state.borrow().is_navigating() {
+            self.release_at = Some(Instant::now() + KEYBOARD_GRACE);
+        }
+
         let Some(target) = self.menu.take() else {
             return;
         };
@@ -344,6 +406,27 @@ impl Dock {
             }
             (MenuTarget::App(app_id), MENU_OPEN) => self.open(window, &app_id),
             (MenuTarget::App(app_id), MENU_SHOW) => self.show_in_files(window, &app_id),
+            (MenuTarget::App(app_id), MENU_HIDE) => {
+                if let Err(error) = window.hide_app(&app_id) {
+                    tracing::warn!("cannot hide {app_id}: {error}");
+                }
+            }
+            (MenuTarget::App(app_id), MENU_QUIT) => {
+                if let Err(error) = window.quit_app(&app_id) {
+                    tracing::warn!("cannot quit {app_id}: {error}");
+                }
+            }
+            (MenuTarget::App(app_id), MENU_FORCE_QUIT) => {
+                if let Err(error) = window.force_quit_app(&app_id) {
+                    tracing::warn!("cannot force {app_id} to quit: {error}");
+                }
+            }
+            (MenuTarget::App(_), action) if action.starts_with(MENU_WINDOW) => {
+                let identifier = &action[MENU_WINDOW.len()..];
+                if let Err(error) = window.activate_window(identifier) {
+                    tracing::warn!("cannot bring the window forward: {error}");
+                }
+            }
             (MenuTarget::App(app_id), MENU_LOGIN) => {
                 let open = !self.opens_at_login(&app_id);
                 if let (Some(dir), Some(entry)) = (&self.autostart, self.entry(&app_id))
@@ -382,7 +465,20 @@ impl Dock {
     }
 
     fn report(&mut self, window: &mut Window) {
-        let blur = self.state.borrow().blur_rects();
+        let radius = self.state.borrow().panel_radius() as u32;
+        if self.corner.is_none_or(|(known, _)| known != radius) {
+            let rounded = match window.set_corner_radius(radius) {
+                Ok(()) => true,
+                Err(error) => {
+                    tracing::debug!("the compositor does not round the blur: {error}");
+                    false
+                }
+            };
+            self.corner = Some((radius, rounded));
+            self.blur = Some(Vec::new());
+        }
+        let rounded = self.corner.is_some_and(|(_, rounded)| rounded);
+        let blur = self.state.borrow().blur_rects(rounded);
         if self.blur.as_ref().is_some_and(|known| *known != blur) {
             let blurred = match window.set_background_blur(&blur) {
                 Ok(()) => true,
@@ -507,6 +603,34 @@ impl App for Dock {
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
         match event {
+            WindowEvent::Input(Event::Key { key, modifiers })
+                if self.state.borrow().is_navigating() =>
+            {
+                self.state
+                    .borrow_mut()
+                    .navigate(key, modifiers, Instant::now());
+                self.run_actions(window);
+            }
+            WindowEvent::FocusShell(namespace) if namespace == DOCK_NAMESPACE => {
+                self.release_at = None;
+                let active = self.active.clone();
+                self.state
+                    .borrow_mut()
+                    .start_navigation(active.as_deref(), Instant::now());
+                window.request_redraw();
+            }
+            WindowEvent::Focus(true) => {
+                if !self.state.borrow().is_navigating() && self.menu.is_none() {
+                    self.release_at = Some(Instant::now() + KEYBOARD_GRACE);
+                }
+            }
+            WindowEvent::Focus(false) => {
+                self.release_at = None;
+                if self.menu.is_none() {
+                    self.state.borrow_mut().end_navigation(Instant::now());
+                    window.request_redraw();
+                }
+            }
             WindowEvent::Input(input) => {
                 if self.ui.handle(&input) {
                     window.request_redraw();
@@ -522,6 +646,8 @@ impl App for Dock {
             }
             WindowEvent::AppsChanged => {
                 self.running = window.running_apps();
+                let running = &self.running;
+                self.unresponsive.retain(|app_id| running.contains(app_id));
                 self.sync();
                 window.request_redraw();
             }
@@ -532,11 +658,29 @@ impl App for Dock {
             WindowEvent::MenuClosed => {
                 self.menu = None;
                 self.confirming = false;
+                if !self.state.borrow().is_navigating() {
+                    self.release_at = Some(Instant::now() + KEYBOARD_GRACE);
+                }
                 self.state.borrow_mut().set_menu_open(false, Instant::now());
                 window.request_redraw();
             }
             WindowEvent::ActiveApp(app_id) => {
                 self.state.borrow_mut().activated(&app_id);
+                self.active = (!app_id.is_empty()).then_some(app_id);
+                window.request_redraw();
+            }
+            WindowEvent::AppResponding {
+                app_id, responding, ..
+            } => {
+                self.unresponsive.retain(|known| *known != app_id);
+                if !responding {
+                    self.unresponsive.push(app_id);
+                }
+            }
+            WindowEvent::AttentionRequested(app_id) => {
+                self.state
+                    .borrow_mut()
+                    .request_attention(&app_id, Instant::now());
                 window.request_redraw();
             }
             WindowEvent::AppearanceChanged(appearance) => {
@@ -567,13 +711,19 @@ impl App for Dock {
 
     fn deadline(&self) -> Option<Instant> {
         let watch = self.trash.as_ref().and_then(|trash| trash.watch.deadline());
-        [self.state.borrow().deadline(), watch]
+        [self.state.borrow().deadline(), watch, self.release_at]
             .into_iter()
             .flatten()
             .min()
     }
 
     fn tick(&mut self, window: &mut Window, now: Instant) {
+        if self.release_at.is_some_and(|at| now >= at) {
+            self.release_at = None;
+            if self.menu.is_none() && !self.state.borrow().is_navigating() {
+                self.release_keyboard(window);
+            }
+        }
         self.state.borrow_mut().tick(now);
         if let Some(trash) = &mut self.trash
             && !trash.watch.take_changed(now).is_empty()
@@ -624,8 +774,8 @@ fn run() -> Result<(), WindowError> {
             layer: LayerKind::Top,
             anchor: anchor(edge),
             exclusive_zone: exclusive_zone(icon_size).round() as i32,
-            keyboard: KeyboardFocus::None,
-            namespace: "dock".to_owned(),
+            keyboard: KeyboardFocus::OnDemand,
+            namespace: DOCK_NAMESPACE.to_owned(),
         }),
         surface_size(edge, icon_size, (1, 1)),
     )?;
@@ -654,8 +804,13 @@ fn run() -> Result<(), WindowError> {
         input: None,
         zone: exclusive_zone(icon_size).round() as i32,
         blur: Some(Vec::new()),
+        corner: None,
+
         menu: None,
         confirming: false,
+        active: None,
+        release_at: None,
+        unresponsive: Vec::new(),
         keep: bus::keep_writer(),
         autostart: autostart_dir(config_home.as_deref(), home.as_deref()),
         bus,

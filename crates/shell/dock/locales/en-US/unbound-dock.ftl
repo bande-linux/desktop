@@ -19,3 +19,7 @@ empty-trash-question = { $count ->
    *[other] Permanently erase the { $count } items in the Trash?
 }
 empty-trash-warning = You can’t undo this.
+menu-minimized-window = ◇ { $title }
+menu-hide = Hide
+menu-quit = Quit
+menu-force-quit = Force Quit

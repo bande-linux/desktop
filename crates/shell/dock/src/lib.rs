@@ -9,8 +9,10 @@ use accesskit::{Action, ActionRequest, Node, Role};
 use unbound_config::{DEFAULT_DOCK_ICON_SIZE, DOCK_ICON_SIZE_RANGE, DockEdge};
 use unbound_l10n::Localizer;
 use unbound_toolkit::ui::{
-    Animated, Context, Cursor, Event, PointerButton, Size, Spring, Ui, Widget, WidgetId,
+    Animated, Context, Cursor, Event, Key as KeyboardKey, Modifiers, PointerButton, Size, Spring,
+    Ui, Widget, WidgetId,
 };
+
 use unbound_toolkit::{
     Appearance, Color, Image, Item, Paint, Palette, Paragraph, Point, Rect, Scene, Scheme, Shape,
     Stop, TextAlign, TextStyle, TextSystem,
@@ -112,6 +114,7 @@ pub enum DockAction {
     ShowInFiles(String),
     Menu { target: MenuTarget, at: Point },
     Keep(Vec<String>),
+    ReleaseKeyboard,
 }
 
 pub fn arrange(kept: &[String], shown: &[String], hidden: impl Fn(&str) -> bool) -> Vec<String> {
@@ -256,6 +259,7 @@ pub struct DockState {
     hide_at: Option<Instant>,
     pointer_inside: bool,
     menu_open: bool,
+    selected: Option<Key>,
 }
 
 pub type Shared = Rc<RefCell<DockState>>;
@@ -340,6 +344,7 @@ impl DockState {
             hide_at: None,
             pointer_inside: false,
             menu_open: false,
+            selected: None,
         };
         state.slots.push(Slot::new(Key::RunningSeparator, 0.0));
         state.slots.push(Slot::new(Key::TrashSeparator, 1.0));
@@ -699,9 +704,98 @@ impl DockState {
     fn pointer_left(&mut self, now: Instant) {
         self.pointer_inside = false;
         self.reveal_at = None;
-        if self.auto_hide && !self.menu_open && self.is_shown() {
+        if self.auto_hide && !self.menu_open && self.selected.is_none() && self.is_shown() {
             self.hide_at = Some(now + HIDE_DELAY);
         }
+    }
+
+    pub fn is_navigating(&self) -> bool {
+        self.selected.is_some()
+    }
+
+    fn reachable(&self) -> Vec<Key> {
+        self.slots
+            .iter()
+            .filter(|slot| !slot.leaving && !slot.key.is_separator())
+            .map(|slot| slot.key.clone())
+            .collect()
+    }
+
+    pub fn start_navigation(&mut self, active: Option<&str>, now: Instant) {
+        let reachable = self.reachable();
+        let chosen = active
+            .map(|app_id| Key::App(app_id.to_owned()))
+            .filter(|key| reachable.contains(key))
+            .or_else(|| reachable.first().cloned());
+        let Some(chosen) = chosen else {
+            return;
+        };
+        self.hide_at = None;
+        self.reveal_at = None;
+        self.slide(true, now);
+        self.select(chosen, now);
+    }
+
+    pub fn end_navigation(&mut self, now: Instant) {
+        if self.selected.take().is_none() {
+            return;
+        }
+        self.hide_label(now);
+        if self.auto_hide && !self.pointer_inside && !self.menu_open {
+            self.hide_at = Some(now + HIDE_DELAY);
+        }
+    }
+
+    fn select(&mut self, key: Key, now: Instant) {
+        self.selected = Some(key.clone());
+        self.show_label(key, now);
+    }
+
+    pub fn navigate(&mut self, key: KeyboardKey, modifiers: Modifiers, now: Instant) -> bool {
+        let Some(selected) = self.selected.clone() else {
+            return false;
+        };
+        let reachable = self.reachable();
+        let at = reachable
+            .iter()
+            .position(|known| *known == selected)
+            .unwrap_or(0);
+        let (back, forward) = if vertical(self.edge) {
+            (KeyboardKey::Up, KeyboardKey::Down)
+        } else {
+            (KeyboardKey::Left, KeyboardKey::Right)
+        };
+        match key {
+            _ if key == back => {
+                if let Some(previous) = at.checked_sub(1).and_then(|at| reachable.get(at)) {
+                    self.select(previous.clone(), now);
+                }
+            }
+            _ if key == forward => {
+                if let Some(next) = reachable.get(at + 1) {
+                    self.select(next.clone(), now);
+                }
+            }
+            KeyboardKey::Home => {
+                if let Some(first) = reachable.first() {
+                    self.select(first.clone(), now);
+                }
+            }
+            KeyboardKey::End => {
+                if let Some(last) = reachable.last() {
+                    self.select(last.clone(), now);
+                }
+            }
+            KeyboardKey::Enter | KeyboardKey::Space => {
+                self.activate(&selected);
+                self.actions.push(DockAction::ReleaseKeyboard);
+            }
+            KeyboardKey::Menu => self.open_menu(&selected),
+            KeyboardKey::Function(10) if modifiers.shift => self.open_menu(&selected),
+            KeyboardKey::Escape => self.actions.push(DockAction::ReleaseKeyboard),
+            _ => return false,
+        }
+        true
     }
 
     pub fn icon_rects(&self) -> Vec<(String, Rect)> {
@@ -1337,9 +1431,26 @@ impl DockState {
             }
         }
         self.paint_ghost(cx, items);
+        self.paint_selection(cx, items);
         items.extend(on_top);
         self.paint_remove_label(cx, items);
         self.paint_label(cx, items);
+    }
+
+    fn paint_selection(&self, cx: &Context, items: &mut Vec<Item>) {
+        let Some(slot) = self
+            .selected
+            .as_ref()
+            .and_then(|key| self.slots.iter().find(|slot| &slot.key == key))
+        else {
+            return;
+        };
+        let ring = self.icon_rect(self.painted_cell(slot, cx)).inset(-4.0);
+        items.push(Item::Stroke {
+            shape: Shape::rounded(ring, ring.width * 0.27),
+            width: 3.0,
+            paint: cx.palette.accent_color.with_alpha(200).into(),
+        });
     }
 
     fn paint_ghost(&self, cx: &Context, items: &mut Vec<Item>) {
@@ -1415,7 +1526,7 @@ impl DockState {
         });
     }
 
-    fn panel_radius(&self) -> f32 {
+    pub fn panel_radius(&self) -> f32 {
         (thickness(self.icon_size) * 0.3).round()
     }
 
@@ -1423,8 +1534,12 @@ impl DockState {
         self.blurred = blurred;
     }
 
-    pub fn blur_rects(&self) -> Vec<Rect> {
-        Shape::rounded(self.panel, self.panel_radius()).bands(BLUR_BANDS)
+    pub fn blur_rects(&self, rounded_behind: bool) -> Vec<Rect> {
+        if rounded_behind {
+            vec![self.panel]
+        } else {
+            Shape::rounded(self.panel, self.panel_radius()).bands(BLUR_BANDS)
+        }
     }
 
     fn paint_panel(&self, items: &mut Vec<Item>) {

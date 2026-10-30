@@ -686,12 +686,7 @@ impl ChooserView {
         ];
         let name = match self.chooser.dialog().mode {
             Mode::Save { .. } => {
-                let intents = Rc::clone(&self.intents);
-                let field = TextField::new(
-                    &L10N.tr("name-placeholder"),
-                    &self.chooser.name,
-                    move |text: &str| push(&intents, Intent::Name(text.to_owned())),
-                );
+                let field = self.name_field();
                 self.focus = field.id();
                 children.push(Box::new(Label::new(&L10N.tr("save-as"))));
                 children.push(Box::new(field));
@@ -712,14 +707,44 @@ impl ChooserView {
             layout.slots = slots;
         }
         self.ui.set_focus(self.focus);
+        self.select_stem(self.focus);
+        self.selected.clear();
+    }
+
+    fn name_field(&self) -> TextField {
+        let intents = Rc::clone(&self.intents);
+        TextField::new(
+            &L10N.tr("name-placeholder"),
+            &self.chooser.name,
+            move |text: &str| push(&intents, Intent::Name(text.to_owned())),
+        )
+    }
+
+    fn select_stem(&mut self, field: WidgetId) {
         let stem = match self.chooser.name.rfind(".") {
             Some(dot) if dot > 0 => dot,
             _ => self.chooser.name.len(),
         };
-        if let Some(field) = self.ui.widget_as::<TextField>(self.focus) {
+        if let Some(field) = self.ui.widget_as::<TextField>(field) {
             field.select(0..stem);
         }
-        self.selected.clear();
+    }
+
+    fn show_name(&mut self) {
+        let field = self.name_field();
+        let id = field.id();
+        let Some(layout) = self.ui.widget_as::<Layout>(self.layout) else {
+            return;
+        };
+        let Some(slot) = layout
+            .slots
+            .name
+            .and_then(|(_, name)| layout.children.get_mut(name))
+        else {
+            return;
+        };
+        *slot = Box::new(field);
+        self.select_stem(id);
     }
 
     fn go(&mut self, folder: PathBuf) {
@@ -781,20 +806,18 @@ impl ChooserView {
                 match intent {
                     Intent::Go(folder) => self.go(folder),
                     Intent::Select(keys) => {
-                        self.selected = keys.iter().map(PathBuf::from).collect();
+                        self.selected = self.paths(&keys);
                         if let (Mode::Save { .. }, [only]) =
                             (&self.chooser.dialog().mode, self.selected.as_slice())
                             && !only.is_dir()
                             && let Some(name) = only.file_name()
                         {
                             self.chooser.name = name.to_string_lossy().into_owned();
-                            let selected = self.selected.clone();
-                            self.rebuild();
-                            self.select(&selected);
+                            self.show_name();
                         }
                     }
                     Intent::Activate(keys) => {
-                        self.selected = keys.iter().map(PathBuf::from).collect();
+                        self.selected = self.paths(&keys);
                         match self.selected.as_slice() {
                             [only] if only.is_dir() => self.go(only.clone()),
                             _ => self.accept(),
@@ -830,6 +853,21 @@ impl ChooserView {
                 }
             }
         }
+    }
+
+    fn paths(&self, keys: &[String]) -> Vec<PathBuf> {
+        let entries = self.chooser.entries();
+        let by_key: HashMap<_, _> = entries
+            .iter()
+            .map(|entry| (entry.path.to_string_lossy(), &entry.path))
+            .collect();
+        keys.iter()
+            .map(|key| {
+                by_key
+                    .get(key.as_str())
+                    .map_or_else(|| PathBuf::from(key), |path| (*path).clone())
+            })
+            .collect()
     }
 
     fn select(&mut self, paths: &[PathBuf]) {

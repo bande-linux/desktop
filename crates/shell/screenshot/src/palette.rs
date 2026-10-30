@@ -114,10 +114,6 @@ impl Palette {
         )
     }
 
-    pub fn mode(&self) -> Mode {
-        self.mode
-    }
-
     fn label(&self, segment: Segment) -> String {
         match segment {
             Segment::Close => L10N.tr("close"),

@@ -3916,6 +3916,7 @@ dependencies = [
  "unbound-config",
  "unbound-fs",
  "unbound-golden",
+ "unbound-inbox",
  "unbound-l10n",
  "unbound-thumbnails",
  "unbound-toolkit",
@@ -4100,6 +4101,7 @@ dependencies = [
  "tracing",
  "unbound-datetime",
  "unbound-golden",
+ "unbound-inbox",
  "unbound-keyboard",
  "unbound-l10n",
  "unbound-log",
@@ -4520,6 +4522,7 @@ dependencies = [
  "resvg",
  "tempfile",
  "tracing",
+ "unbound-inbox",
  "zbus",
 ]
 
@@ -5434,6 +5437,7 @@ dependencies = [
  "unbound-log",
  "unbound-test-bus",
  "unbound-wallpaper",
+ "unbound-xdg",
  "zbus",
 ]
 

@@ -60,22 +60,24 @@ struct Greeter {
     caps_lock: bool,
     next_clock: Instant,
     backdrop: Option<Inbox<Image>>,
+    backdrop_requested: bool,
     picture: Option<File>,
     wallpaper: Option<Image>,
     last_user: Option<PathBuf>,
     layouts: Layouts,
     input_source: Option<String>,
     started: bool,
+    text: TextSystem,
 }
 
 impl Greeter {
-    fn screen_for(user: &User) -> LockScreen {
+    fn screen_for(user: &User, text: TextSystem) -> LockScreen {
         LockScreen::new(
             user,
             DateFormats::from_env(),
             &jiff::Zoned::now(),
             Appearance::default(),
-            TextSystem::new(),
+            text,
         )
     }
 
@@ -89,12 +91,13 @@ impl Greeter {
         } else {
             (self.user + count - 1) % count
         };
-        self.screen = Self::screen_for(&self.users[self.user]);
+        self.screen = Self::screen_for(&self.users[self.user], self.text.sharing_fonts());
         self.screen.set_position(self.user, count);
         self.screen.set_input_source(self.input_source.clone());
         self.screen.set_caps_lock(self.caps_lock);
         self.picture = login_picture(Path::new(LOGIN_PICTURES), self.users[self.user].uid);
         self.backdrop = None;
+        self.backdrop_requested = false;
         if let Some(wallpaper) = &self.wallpaper {
             self.screen
                 .set_backdrop(wallpaper.clone(), Instant::now() - Duration::from_secs(1));
@@ -208,7 +211,8 @@ impl Greeter {
 impl App for Greeter {
     fn scene(&mut self, window: &mut Window) -> Scene {
         let (width, height) = window.size();
-        if self.backdrop.is_none() && width > 0 && height > 0 {
+        if !self.backdrop_requested && width > 0 && height > 0 {
+            self.backdrop_requested = true;
             let picture = self.picture.as_ref().map(opened_path);
             match load_backdrop(
                 BackdropSource::Picture(picture),
@@ -274,13 +278,20 @@ impl App for Greeter {
     }
 
     fn source_ready(&mut self, window: &mut Window, index: usize) {
-        let backdrop = self.backdrop.as_ref().filter(|_| index == 0);
-        if let Some(image) = backdrop.and_then(|inbox| inbox.drain().pop()) {
-            self.screen
-                .set_backdrop(image.clone(), frame_time().on_screen());
-            self.wallpaper = Some(image);
-        } else if backdrop.is_none() {
-            self.converse();
+        let backdrop = if index == 0 {
+            self.backdrop.take()
+        } else {
+            None
+        };
+        match backdrop {
+            Some(inbox) => {
+                if let Some(image) = inbox.drain().pop() {
+                    self.screen
+                        .set_backdrop(image.clone(), frame_time().on_screen());
+                    self.wallpaper = Some(image);
+                }
+            }
+            None => self.converse(),
         }
         window.request_redraw();
     }
@@ -324,7 +335,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .position(|user| Some(&user.login) == remembered.as_ref())
         .unwrap_or(0);
     let chosen = users.get(user).ok_or("no one can sign in")?;
-    let mut screen = Greeter::screen_for(chosen);
+    let text = TextSystem::new();
+    let mut screen = Greeter::screen_for(chosen, text.sharing_fonts());
     screen.set_position(user, users.len());
     let picture = login_picture(Path::new(LOGIN_PICTURES), chosen.uid);
     let mut window = Window::open(
@@ -345,12 +357,14 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         caps_lock: false,
         next_clock: Instant::now() + CLOCK_TICK,
         backdrop: None,
+        backdrop_requested: false,
         picture,
         wallpaper: None,
         last_user,
         layouts: Layouts::load(),
         input_source: None,
         started: false,
+        text,
     };
     unbound_toolkit::run(&mut window, &mut greeter)?;
     Ok(())

@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use unbound_toolkit::ui::{Animated, Event, Spring};
@@ -64,10 +64,6 @@ impl Thumbnail {
             pressed: None,
             leaving: false,
         }
-    }
-
-    pub fn path(&self) -> &Path {
-        &self.path
     }
 
     fn size(&self) -> (f32, f32) {

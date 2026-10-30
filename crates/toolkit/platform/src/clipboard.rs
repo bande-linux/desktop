@@ -4,6 +4,7 @@ use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
 use rustix::pipe::{PipeFlags, pipe_with};
 use unbound_graphics::{Point, Scene};
 use wayland_client::protocol::wl_data_device::{self, WlDataDevice};
@@ -660,6 +661,7 @@ impl Window {
             )
             .is_err()
         {
+            offer.destroy();
             self.state.drag_event(DragEvent::Left);
         }
     }
@@ -767,7 +769,11 @@ impl Dispatch<WlDataDevice, ()> for State {
                 }
             }
             wl_data_device::Event::Drop => {
-                state.clipboard.pending_drop = state.clipboard.incoming.take();
+                if let Some(dropped) = state.clipboard.incoming.take()
+                    && let Some(stale) = state.clipboard.pending_drop.replace(dropped)
+                {
+                    stale.offer.destroy();
+                }
             }
             _ => {}
         }
@@ -821,7 +827,7 @@ impl Dispatch<WlDataSource, ()> for State {
             .filter(|outgoing| outgoing.source == *source);
         match (event, dragged) {
             (wl_data_source::Event::Send { mime_type, fd }, Some(outgoing)) => {
-                send(fd, &outgoing.transfer.bytes(&mime_type));
+                send(fd, outgoing.transfer.bytes(&mime_type));
             }
             (wl_data_source::Event::Send { mime_type, fd }, None) => {
                 if let Some((_, transfer)) = clipboard
@@ -829,7 +835,7 @@ impl Dispatch<WlDataSource, ()> for State {
                     .as_ref()
                     .filter(|(copied, _)| copied == source)
                 {
-                    send(fd, &transfer.bytes(&mime_type));
+                    send(fd, transfer.bytes(&mime_type));
                 }
             }
             (
@@ -869,7 +875,11 @@ impl Dispatch<WlDataSource, ()> for State {
     }
 }
 
-pub(crate) fn send(fd: OwnedFd, bytes: &[u8]) {
-    let mut pipe = File::from(fd);
-    let _ = pipe.write_all(bytes);
+pub(crate) fn send(fd: OwnedFd, bytes: Vec<u8>) {
+    let _ = std::thread::Builder::new().spawn(move || {
+        if let Ok(flags) = fcntl_getfl(&fd) {
+            let _ = fcntl_setfl(&fd, flags - OFlags::NONBLOCK);
+        }
+        let _ = File::from(fd).write_all(&bytes);
+    });
 }

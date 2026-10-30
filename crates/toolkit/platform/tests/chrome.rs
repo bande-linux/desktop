@@ -44,6 +44,18 @@ fn show_menu(window: &mut Window) -> Option<Ui> {
     None
 }
 
+fn show_long_menu(window: &mut Window) -> Option<Ui> {
+    let menu = Menu::new(
+        (1..=30)
+            .map(|index| MenuItem::new(&format!("Network {index}"), "join").checked(index == 3))
+            .collect(),
+    );
+    window
+        .show_menu(menu, MenuPlacement::AtPoint(Point::new(30.0, 10.0)))
+        .expect("menu");
+    None
+}
+
 fn processes(window: &mut Window) -> Option<Ui> {
     let names = [
         ("Files", "1.2", "84.3 MB", "unbound"),
@@ -134,7 +146,7 @@ fn the_window_frame_menus_tables_and_alerts_match_their_goldens() {
         title: "Monitor",
         ..documents(false, pointer)
     };
-    let shots: [(&str, Prepare, Shot); 8] = [
+    let shots: [(&str, Prepare, Shot); 9] = [
         ("window-frame-rest-light-1x", bare, documents(false, AWAY)),
         ("window-frame-rest-dark-1x", bare, documents(true, AWAY)),
         (
@@ -161,6 +173,15 @@ fn the_window_frame_menus_tables_and_alerts_match_their_goldens() {
             Shot {
                 popups: 2,
                 ..documents(false, content(60, SORT_BY))
+            },
+        ),
+        (
+            "menu-long-light-1x",
+            show_long_menu,
+            Shot {
+                title: "Networks",
+                popups: 1,
+                ..documents(false, content(60, 60))
             },
         ),
         ("table-light-1x", processes, monitor(content(100, 60))),

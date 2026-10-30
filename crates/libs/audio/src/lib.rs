@@ -6,7 +6,6 @@ use std::fmt;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, mpsc};
 use std::thread::JoinHandle;
-use std::time::{Duration, Instant};
 
 use graph::{Command, Shared, State};
 pub use level::{Level, VolumeKey, meter_level};
@@ -208,27 +207,6 @@ impl Audio {
 
     pub fn snapshot(&self) -> Snapshot {
         Snapshot::of(&self.shared.lock())
-    }
-
-    pub fn wait_until(
-        &self,
-        timeout: Duration,
-        ready: impl Fn(&Snapshot) -> bool,
-    ) -> Option<Snapshot> {
-        let deadline = Instant::now() + timeout;
-        let mut state = self.shared.lock();
-        loop {
-            let snapshot = Snapshot::of(&state);
-            if ready(&snapshot) {
-                return Some(snapshot);
-            }
-            let left = deadline.checked_duration_since(Instant::now())?;
-            state = self
-                .shared
-                .changed
-                .wait_timeout(state, left)
-                .map_or_else(|poisoned| poisoned.into_inner().0, |(state, _)| state);
-        }
     }
 
     pub fn changed_since(&self, generation: Option<u64>) -> Snapshot {

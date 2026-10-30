@@ -170,14 +170,22 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
             return;
         };
         for command in receiver {
-            let (language, region) = locale
-                .locale()
-                .map(|current| parse_assignments(&current))
-                .unwrap_or_default();
-            let wanted = match command {
+            let current = match locale.locale() {
+                Ok(current) => current,
+                Err(error) => {
+                    updates.send(Update::Failed(error.to_string()));
+                    continue;
+                }
+            };
+            let (language, region) = parse_assignments(&current);
+            let mut wanted = match command {
                 LocaleCommand::Language(language) => assignments(&language, region.as_deref()),
                 LocaleCommand::Region(region) => assignments(&language, region.as_deref()),
             };
+            wanted.extend(current.into_iter().filter(|assignment| {
+                let name = assignment.split_once('=').map_or("", |(name, _)| name);
+                name != "LANG" && name != "LANGUAGE" && !REGION_CATEGORIES.contains(&name)
+            }));
             if let Err(error) = locale.set_locale(wanted, true) {
                 updates.send(Update::Failed(error.to_string()));
             }

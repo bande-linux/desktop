@@ -348,8 +348,8 @@
         Tells the compositor where the bar shows the item that opens this
         panel, as a rectangle in the surface coordinates of the given surface,
         and on which display edge the bar lies. The compositor relays it to
-        every shell client as panel_anchor in the coordinates of that
-        surface's display, so the panel opens beside its item.
+        every shell client as panel_anchor in the coordinates of the usable
+        area of that surface's display, so the panel opens beside its item.
       </description>
       <arg name="surface" type="object" interface="wl_surface"/>
       <arg name="panel" type="uint" enum="panel"/>
@@ -362,10 +362,14 @@
 
     <event name="panel_anchor" since="14">
       <description summary="where the item that opens a panel is">
-        Sent on binding for every known anchor and whenever the bar reports a
-        new one, with the item's rectangle in the coordinates of the display
-        named by output and the edge the bar lies on. Control Center and the
-        Notification Center open beside it, away from that edge.
+        Sent on binding for every known anchor, whenever the bar reports a
+        new one and whenever the usable area of its display moves, with the
+        item's rectangle in the coordinates of the usable area of the display
+        named by output (the area left beside the exclusive zones of bars,
+        where a layer surface with an exclusive zone of 0 is placed) and the
+        edge the bar lies on. An item inside a bar therefore has a negative
+        coordinate on the bar's side. Control Center and the Notification
+        Center open beside it, away from that edge.
       </description>
       <arg name="panel" type="uint" enum="panel"/>
       <arg name="output" type="string"/>

@@ -145,7 +145,7 @@ impl Dispatch<ZwpPrimarySelectionSourceV1, ()> for State {
         match event {
             zwp_primary_selection_source_v1::Event::Send { fd, .. } => {
                 if let Some((_, text)) = ours {
-                    send(fd, text.as_bytes());
+                    send(fd, text.clone().into_bytes());
                 }
             }
             zwp_primary_selection_source_v1::Event::Cancelled => {

@@ -81,8 +81,9 @@ impl Renderer {
         };
         let scale = compositor.render_scale(name).unwrap_or(settings.scale);
         let (size, transform) = (settings.mode.size, settings.transform);
+        let current = compositor.outputs();
         self.outputs
-            .retain(|known, _| compositor.outputs().iter().any(|output| output == known));
+            .retain(|known, _| current.iter().any(|output| output == known));
         let output = match self.outputs.remove(name) {
             Some(output)
                 if output.size == size

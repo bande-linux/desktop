@@ -645,9 +645,15 @@ impl Browser {
         self.columns.truncate(index + 1);
         self.reload_column(index);
         let column = &mut self.columns[index];
+        let positions = column
+            .entries
+            .iter()
+            .enumerate()
+            .map(|(row, entry)| (&entry.path, row))
+            .collect::<HashMap<_, _>>();
         let rows = paths
             .iter()
-            .filter_map(|path| column.entries.iter().position(|entry| entry.path == *path))
+            .filter_map(|path| positions.get(path).copied())
             .collect::<Vec<_>>();
         let Some(last) = rows.last().copied() else {
             return;

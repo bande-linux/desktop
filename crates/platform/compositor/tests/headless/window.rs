@@ -1,8 +1,8 @@
 use crate::support::*;
 use unbound_compositor::{Headless, Rect, Renderer};
 use unbound_test_wayland::{
-    Anchor, BLUE, GREEN, KeyboardInteractivity, Layer, LayerRequest, PopupRequest, RED, ResizeEdge,
-    TestClient, ToplevelState, roundtrip,
+    Anchor, BLUE, ConstraintAdjustment, GREEN, KeyboardInteractivity, Layer, LayerRequest,
+    PopupRequest, RED, ResizeEdge, TestClient, ToplevelState, roundtrip,
 };
 
 const WINDOW: (i32, i32) = (64, 48);
@@ -259,7 +259,7 @@ fn menu(parent: usize, anchor_rect: (i32, i32, i32, i32), size: (i32, i32)) -> P
         parent,
         anchor_rect,
         size,
-        flip_x: false,
+        adjustment: ConstraintAdjustment::empty(),
         grab: false,
         color: WHITE,
     }
@@ -287,7 +287,7 @@ fn a_popup_that_would_leave_the_screen_flips_to_the_other_side_of_its_anchor() {
     let mut editor = app(&mut server, RED);
 
     let request = PopupRequest {
-        flip_x: true,
+        adjustment: ConstraintAdjustment::FlipX,
         ..menu(0, (60, 10, 1, 1), (120, 20))
     };
     let popup = editor.open_popup(&mut server, &request);

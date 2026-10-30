@@ -3,7 +3,7 @@ use smithay::utils::{Point, Size};
 use unbound_compositor::{Headless, Renderer, automatic_scale};
 use unbound_test_wayland::{
     Anchor, BLUE, BrightnessKey, GREEN, KeyboardInteractivity, LauncherMode, Layer, LayerRequest,
-    MediaKey, RED, TestClient, VolumeKey, roundtrip,
+    MediaKey, Panel, PanelEdge, RED, TestClient, VolumeKey, roundtrip,
 };
 
 fn panel(layer: Layer, anchor: Anchor, size: (u32, u32), exclusive_zone: i32) -> LayerRequest {
@@ -47,6 +47,37 @@ fn a_panel_reserves_its_exclusive_zone_and_windows_are_centred_in_the_rest() {
         assert_eq!(size, reserved, "{anchor:?}");
         assert_eq!(server.windows()[0].location(), Point::from(centred));
     }
+}
+
+#[test]
+fn panels_hear_where_their_bar_item_is_in_the_area_beside_the_bar() {
+    let mut server = server();
+    let mut bar = TestClient::connect_as_shell(&mut server);
+    bar.join_shell(&mut server);
+    bar.show_named_layer(
+        &mut server,
+        &panel(
+            Layer::Top,
+            Anchor::Left | Anchor::Top | Anchor::Bottom,
+            (40, 0),
+            40,
+        ),
+        "bar",
+    );
+    let mut center = TestClient::connect_as_shell(&mut server);
+    center.join_shell(&mut server);
+    let item = (6, 150, 28, 28);
+
+    bar.set_panel_anchor(&mut server, 0, Panel::ControlCenter, PanelEdge::Left, item);
+    roundtrip(&mut server, &mut [&mut bar, &mut center]);
+    assert_eq!(
+        center.panel_anchor(Panel::ControlCenter),
+        Some((6 - 40, 150, 28, 28))
+    );
+
+    bar.close_layer(&mut server, 0);
+    roundtrip(&mut server, &mut [&mut bar, &mut center]);
+    assert_eq!(center.panel_anchor(Panel::ControlCenter), Some(item));
 }
 
 #[test]

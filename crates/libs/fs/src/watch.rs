@@ -14,7 +14,7 @@ const BUFFER: usize = 16 * 1024;
 #[derive(Debug)]
 pub struct FolderWatch {
     fd: OwnedFd,
-    watches: HashMap<i32, PathBuf>,
+    watches: HashMap<i32, Vec<PathBuf>>,
     changed: BTreeSet<PathBuf>,
     due: Option<Instant>,
 }
@@ -34,10 +34,13 @@ impl FolderWatch {
     }
 
     pub fn watch(&mut self, folders: &[PathBuf]) {
+        for paths in self.watches.values_mut() {
+            paths.retain(|path| folders.contains(path));
+        }
         let stale = self
             .watches
             .iter()
-            .filter(|(_, folder)| !folders.contains(folder))
+            .filter(|(_, paths)| paths.is_empty())
             .map(|(wd, _)| *wd)
             .collect::<Vec<_>>();
         for wd in stale {
@@ -54,11 +57,11 @@ impl FolderWatch {
             | WatchFlags::MOVE_SELF
             | WatchFlags::ONLYDIR;
         for folder in folders {
-            if self.watches.values().any(|known| known == folder) {
+            if self.watches.values().flatten().any(|known| known == folder) {
                 continue;
             }
             if let Ok(wd) = inotify::add_watch(&self.fd, folder.as_path(), flags) {
-                self.watches.insert(wd, folder.clone());
+                self.watches.entry(wd).or_default().push(folder.clone());
             }
         }
     }
@@ -86,12 +89,14 @@ impl FolderWatch {
             }
         }
         if overflowed {
-            self.changed.extend(self.watches.values().cloned());
+            self.changed
+                .extend(self.watches.values().flatten().cloned());
         }
         self.changed.extend(
             changed
                 .iter()
                 .filter_map(|wd| self.watches.get(wd))
+                .flatten()
                 .cloned(),
         );
         for wd in forgotten {

@@ -76,6 +76,27 @@ fn a_current_filter_the_app_did_not_list_is_offered_too() {
 }
 
 #[test]
+fn choosing_a_current_filter_the_app_did_not_list_reaches_the_app() {
+    let mut dialog = dialog(Mode::Open {
+        multiple: false,
+        directory: false,
+    });
+    let text = Filter {
+        name: "Text".to_owned(),
+        patterns: vec![Pattern::MimeType("text/plain".to_owned())],
+    };
+    dialog.current_filter = Some(text.clone());
+    let shown = parse(arguments(&dialog)).expect("parsed");
+    let selection = Selection {
+        paths: vec![PathBuf::from("/home/anna/notes.txt")],
+        choices: Vec::new(),
+        filter: Some(text),
+        writable: true,
+    };
+    assert_eq!(decode(&encode(&selection, &shown), &dialog), selection);
+}
+
+#[test]
 fn the_answer_carries_paths_the_filter_and_the_initial_choices() {
     let mut dialog = dialog(Mode::Open {
         multiple: true,

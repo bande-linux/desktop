@@ -226,6 +226,10 @@ fn run_drm(device: Option<&Path>, session: Session) -> Result<(), Box<dyn Error>
         if let Err(error) = app.output.session_changed(event) {
             tracing::warn!("cannot follow the session: {error}");
         }
+        if app.output.session_active() {
+            hotplug(app);
+            app.schedulers.iter_mut().for_each(FrameScheduler::resume);
+        }
     })?;
     handle.insert_source(notifiers.device, |event, metadata, app| match event {
         DrmEvent::VBlank(crtc) => page_flipped(app, crtc, *metadata),

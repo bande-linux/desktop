@@ -781,10 +781,7 @@ impl Editor {
     }
 
     fn press(&mut self, cx: &mut Context, point: Point, count: u8, extend: bool) {
-        if self.preedit.is_some() {
-            self.finish_composition();
-            cx.input_method_reset = true;
-        }
+        self.end_composition(cx);
         self.history.open = false;
         self.goal_x = None;
         self.carry = None;
@@ -954,13 +951,11 @@ impl Editor {
     }
 
     fn offer_primary(&mut self, cx: &mut Context) {
-        let range = self.selection();
-        let offered = (self.revision, range.clone());
-        if range.is_empty()
-            || self.drag.is_some()
-            || cx.clipboard.is_some()
-            || self.offered.as_ref() == Some(&offered)
-        {
+        if self.selection.is_collapsed() || self.drag.is_some() || cx.clipboard.is_some() {
+            return;
+        }
+        let offered = (self.revision, self.selection());
+        if self.offered.as_ref() == Some(&offered) {
             return;
         }
         self.offered = Some(offered);
@@ -971,10 +966,7 @@ impl Editor {
         if self.read_only {
             return false;
         }
-        if self.preedit.is_some() {
-            self.finish_composition();
-            cx.input_method_reset = true;
-        }
+        self.end_composition(cx);
         self.history.open = false;
         let at = self.position_at(&mut cx.text, point);
         self.go(at, false);
@@ -998,7 +990,16 @@ impl Editor {
                 self.drag_point = Some(pointer.position);
             }
             Event::PointerDown(pointer) => {
+                self.end_composition(cx);
                 self.place_caret_for_menu(&mut cx.text, local(pointer.position));
+            }
+            Event::PointerLeave => {
+                self.drag = None;
+                self.drag_point = None;
+                if matches!(self.carry, Some(Carry::Pending(_))) {
+                    self.carry = None;
+                }
+                return false;
             }
             Event::PointerMove(pointer) if matches!(self.carry, Some(Carry::Pending(_))) => {
                 return self.carry_to(cx, local(pointer.position));
@@ -1436,6 +1437,13 @@ impl Editor {
         true
     }
 
+    fn end_composition(&mut self, cx: &mut Context) {
+        if self.preedit.is_some() {
+            self.finish_composition();
+            cx.input_method_reset = true;
+        }
+    }
+
     fn finish_composition(&mut self) {
         if let Some(preedit) = self.preedit.take() {
             self.invalidate_paragraph(self.selection.focus.paragraph);
@@ -1692,9 +1700,9 @@ impl Editor {
             let top = self.top(paragraph);
             let layout = text.layout();
             let count = layout.len();
+            let length = self.layout_text(paragraph).len();
             for (index, line) in layout.lines().enumerate() {
                 let metrics = line.metrics();
-                let length = self.layout_text(paragraph).len();
                 let range = line.text_range();
                 runs.push(TextRun {
                     paragraph,
@@ -1721,8 +1729,7 @@ impl Editor {
             let index = self.layout_index(position);
             let (number, run) = runs.iter().enumerate().find(|(_, run)| {
                 run.paragraph == position.paragraph
-                    && run.range.start <= index
-                    && (index < run.range.end || (index == run.range.end && !run.newline))
+                    && (run.range.start..=run.range.end).contains(&index)
             })?;
             let text = self.layout_text(run.paragraph);
             let character_index = text[run.range.start..index.min(run.range.end)]

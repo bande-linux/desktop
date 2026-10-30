@@ -13,6 +13,7 @@ const DEFAULT_ITEM_PATH: &str = "/StatusNotifierItem";
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Item {
     owner: String,
+    service: String,
     id: String,
 }
 
@@ -56,13 +57,14 @@ impl Watcher {
                 let gone = arguments.name().as_str().to_owned();
                 let (items, hosts) = {
                     let mut registry = lock(&registry);
+                    let held = |item: &Item| item.owner == gone || item.service == gone;
                     let items: Vec<String> = registry
                         .items
                         .iter()
-                        .filter(|item| item.owner == gone)
+                        .filter(|item| held(item))
                         .map(|item| item.id.clone())
                         .collect();
-                    registry.items.retain(|item| item.owner != gone);
+                    registry.items.retain(|item| !held(item));
                     let had_host = registry.hosts.contains(&gone);
                     registry.hosts.retain(|host| *host != gone);
                     (items, had_host && registry.hosts.is_empty())
@@ -126,10 +128,10 @@ impl StatusNotifierWatcher {
         #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
     ) -> zbus::fdo::Result<()> {
         let caller = sender(&header)?;
-        let owner = if service.starts_with('/') {
-            caller.clone()
+        let (owner, name) = if service.starts_with('/') {
+            (caller.clone(), caller.clone())
         } else {
-            zbus::fdo::DBusProxy::new(connection)
+            let owner = zbus::fdo::DBusProxy::new(connection)
                 .await?
                 .get_name_owner(
                     zbus::names::BusName::try_from(service.as_str()).map_err(|_| {
@@ -139,7 +141,8 @@ impl StatusNotifierWatcher {
                     })?,
                 )
                 .await?
-                .to_string()
+                .to_string();
+            (owner, service.clone())
         };
         let id = item_id(&service, &caller);
         let added = {
@@ -148,6 +151,7 @@ impl StatusNotifierWatcher {
             if !known {
                 registry.items.push(Item {
                     owner,
+                    service: name,
                     id: id.clone(),
                 });
             }

@@ -45,6 +45,7 @@ pub(crate) fn arrow() -> MemoryRenderBuffer {
 const XCURSOR_MAGIC: &[u8; 4] = b"Xcur";
 const XCURSOR_IMAGE: u32 = 0xfffd_0002;
 const XCURSOR_IMAGE_HEADER: usize = 36;
+const XCURSOR_TOC_ENTRY: usize = 12;
 const XCURSOR_MAX_SIDE: u32 = 0x7fff;
 const THEME_INHERITANCE_DEPTH: usize = 16;
 pub const DEFAULT_CURSOR_THEME: &str = "default";
@@ -204,9 +205,9 @@ fn parse_xcursor(bytes: &[u8]) -> Vec<XcursorImage> {
     let (Some(header), Some(entries)) = (word(bytes, 4), word(bytes, 12)) else {
         return Vec::new();
     };
-    (0..entries as usize)
+    (0..(entries as usize).min(bytes.len() / XCURSOR_TOC_ENTRY))
         .filter_map(|entry| {
-            let at = (header as usize).checked_add(entry.checked_mul(12)?)?;
+            let at = (header as usize).checked_add(entry.checked_mul(XCURSOR_TOC_ENTRY)?)?;
             (word(bytes, at)? == XCURSOR_IMAGE).then_some(())?;
             parse_image(bytes, word(bytes, at + 8)? as usize)
         })

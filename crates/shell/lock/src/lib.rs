@@ -21,7 +21,8 @@ use unbound_toolkit::{
 
 pub use backdrop::{BackdropSource, load_backdrop};
 pub use pam::{AuthError, authenticate};
-pub use unbound_wallpaper::{Inbox, Variant};
+pub use unbound_inbox::Inbox;
+pub use unbound_wallpaper::Variant;
 pub use user::{User, current as current_user, display_name};
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-lock.ftl");
@@ -64,7 +65,7 @@ pub fn shake_offset(elapsed: Duration) -> f32 {
 }
 
 pub fn clock_texts(formats: &DateFormats, now: &jiff::Zoned) -> (String, String) {
-    (formats.long_date(now), now.strftime("%H:%M").to_string())
+    (formats.long_date(now), formats.time(now).0)
 }
 
 struct Model {

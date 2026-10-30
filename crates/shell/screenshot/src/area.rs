@@ -50,10 +50,6 @@ impl AreaSelection {
         }
     }
 
-    pub fn is_window_mode(&self) -> bool {
-        self.window_mode
-    }
-
     fn hovered(&self) -> Option<&(String, Frame)> {
         let at = self.pointer?;
         self.windows.iter().find(|(_, frame)| {

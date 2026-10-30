@@ -15,6 +15,7 @@ unbound-config.workspace = true
 unbound-design.workspace = true
 unbound-log.workspace = true
 unbound-wallpaper.workspace = true
+unbound-xdg.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]

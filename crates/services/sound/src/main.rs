@@ -69,7 +69,11 @@ impl SoundService {
 
     fn output(&self, sound: Sound, gain: f32) -> Result<(), unbound_audio::Error> {
         let mut audio = locked(&self.audio);
-        if audio.is_none() {
+        if audio
+            .as_ref()
+            .is_none_or(|connected| !connected.snapshot().connected)
+        {
+            *audio = None;
             *audio = Some(Audio::connect()?);
         }
         let Some(connected) = audio.as_ref() else {

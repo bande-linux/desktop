@@ -276,6 +276,15 @@ impl TestClient {
         self.shell_request(server, |shell| shell.set_corner_radius(&surface, radius));
     }
 
+    pub(crate) fn toplevel_handle(&self, app_id: &str) -> Option<ExtForeignToplevelHandleV1> {
+        self.globals
+            .shell
+            .toplevels
+            .iter()
+            .find(|(_, known, closed)| known == app_id && !closed)
+            .map(|(handle, _, _)| handle.clone())
+    }
+
     pub fn window_identifiers(&self, app_id: &str) -> Vec<String> {
         let shell = &self.globals.shell;
         shell

@@ -184,6 +184,8 @@ pub struct State {
     pending_activation: Option<WlSurface>,
     pub(crate) windowless_app: Option<(Client, String)>,
     pub(crate) shell_resources: Vec<UnboundShellV1>,
+    pub(crate) capture_resources:
+        Vec<unbound_protocols::server::unbound_capture_v1::UnboundCaptureV1>,
     pub(crate) app_resources: Vec<UnboundAppV1>,
     pub(crate) foreign_toplevel_state: ForeignToplevelListState,
     pub(crate) exclusive_layer: Option<ExclusiveLayer>,
@@ -307,6 +309,7 @@ impl Headless {
         handle.create_global::<State, UnboundAppV1, ()>(3, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
         State::create_capture_globals(&handle);
+        State::create_capture_shell_global(&handle);
         let state = State {
             display_handle: handle.clone(),
             syncobj_state: None,
@@ -345,6 +348,7 @@ impl Headless {
             pending_activation: None,
             windowless_app: None,
             shell_resources: Vec::new(),
+            capture_resources: Vec::new(),
             app_resources: Vec::new(),
             foreign_toplevel_state: ForeignToplevelListState::new_with_filter::<State>(
                 &handle,
@@ -628,7 +632,7 @@ impl Headless {
         self.state.usable_area()
     }
 
-    fn cursor_elements(&self, renderer: &mut VulkanRenderer) -> Vec<OutputElement> {
+    pub(crate) fn cursor_elements(&self, renderer: &mut VulkanRenderer) -> Vec<OutputElement> {
         let state = &self.state;
         if !state.cursor_shown {
             return Vec::new();

@@ -1,6 +1,7 @@
 mod app;
 mod appearance;
 mod capture;
+mod capture_shell;
 mod clock;
 mod cursor;
 mod decoration;

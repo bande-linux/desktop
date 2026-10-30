@@ -3,9 +3,14 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 
 use smithay::backend::allocator::Fourcc;
-use smithay::backend::renderer::Offscreen;
 use smithay::backend::renderer::damage::OutputDamageTracker;
+use smithay::backend::renderer::element::RenderElement;
+use smithay::backend::renderer::element::utils::{Relocate, RelocateRenderElement};
+use smithay::backend::renderer::{Bind, Color32F, Offscreen};
 use smithay::reexports::wayland_protocols::ext::image_capture_source::v1::server::{
+    ext_foreign_toplevel_image_capture_source_manager_v1::{
+        self, ExtForeignToplevelImageCaptureSourceManagerV1,
+    },
     ext_image_capture_source_v1::{self, ExtImageCaptureSourceV1},
     ext_output_image_capture_source_manager_v1::{self, ExtOutputImageCaptureSourceManagerV1},
 };
@@ -21,31 +26,44 @@ use smithay::reexports::wayland_server::protocol::wl_shm::Format;
 use smithay::reexports::wayland_server::{
     Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource, WEnum,
 };
-use smithay::utils::{Clock, Monotonic, Size, Transform};
+use smithay::utils::{Clock, Monotonic, Physical, Rectangle, Size, Transform};
+use smithay::wayland::foreign_toplevel_list::ForeignToplevelHandle;
 use smithay::wayland::shm::with_buffer_contents_mut;
 use unbound_render::{RenderError, VulkanRenderer};
 
+use crate::motion::Look;
 use crate::render::{background, rendering_error};
+use crate::scene::window_elements;
 use crate::shell::is_shell;
-use crate::state::{Headless, State};
+use crate::state::{Headless, OutputElement, State};
+use crate::window::Window;
 
 const SHM_FORMATS: [Format; 2] = [Format::Argb8888, Format::Xrgb8888];
 const BYTES_PER_PIXEL: usize = 4;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Target {
+    Output,
+    Window(String),
+    Nothing,
+}
+
 pub(crate) struct PendingCapture {
     frame: ExtImageCopyCaptureFrameV1,
     buffer: WlBuffer,
-    paint_cursors: bool,
+    session: ExtImageCopyCaptureSessionV1,
 }
 
 pub(crate) struct SourceData {
-    shows_output: bool,
+    target: Target,
 }
 
 pub(crate) struct SessionData {
-    live: bool,
+    target: Target,
     paint_cursors: bool,
     frames: AtomicUsize,
+    announced: Mutex<Option<Size<i32, Physical>>>,
+    delivered: AtomicBool,
 }
 
 pub(crate) struct CursorSessionData {
@@ -58,37 +76,90 @@ pub(crate) struct FrameData {
     captured: AtomicBool,
 }
 
+type Image = Result<Vec<u8>, RenderError>;
+
 impl State {
     pub(crate) fn create_capture_globals(display: &DisplayHandle) {
         display.create_global::<State, ExtOutputImageCaptureSourceManagerV1, ()>(1, ());
+        display.create_global::<State, ExtForeignToplevelImageCaptureSourceManagerV1, ()>(1, ());
         display.create_global::<State, ExtImageCopyCaptureManagerV1, ()>(1, ());
+    }
+
+    fn captured_window(&self, identifier: &str) -> Option<&Window> {
+        self.windows.iter().find(|window| {
+            window
+                .foreign
+                .as_ref()
+                .is_some_and(|handle| handle.identifier() == identifier)
+        })
+    }
+
+    fn window_area(&self, window: &Window) -> Option<Rectangle<i32, Physical>> {
+        let geometry = window.geometry()?;
+        let area = Rectangle::new(geometry.location.to_f64(), geometry.size.to_f64())
+            .to_physical(self.output_scale)
+            .to_i32_round::<i32>();
+        (area.size.w > 0 && area.size.h > 0).then_some(area)
+    }
+
+    fn capture_size(&self, target: &Target) -> Option<Size<i32, Physical>> {
+        match target {
+            Target::Output => Some(self.output_size),
+            Target::Window(identifier) => self
+                .captured_window(identifier)
+                .and_then(|window| self.window_area(window))
+                .map(|area| area.size),
+            Target::Nothing => None,
+        }
     }
 }
 
 impl Headless {
     pub(crate) fn copy_captures(&mut self, renderer: &mut VulkanRenderer) {
         let pending = std::mem::take(&mut self.state.pending_captures);
-        if pending.is_empty() {
-            return;
-        }
-        let mut without_cursor = None;
-        let mut with_cursor = None;
+        let mut images: Vec<((Target, bool), Image)> = Vec::new();
+        let mut withheld = Vec::new();
         for capture in pending {
-            let image = if capture.paint_cursors {
-                &mut with_cursor
-            } else {
-                &mut without_cursor
+            let Some(session) = capture.session.data::<SessionData>() else {
+                capture.frame.failed(FailureReason::Unknown);
+                continue;
             };
-            if image.is_none() {
-                *image = Some(self.capture_image(renderer, capture.paint_cursors));
+            if matches!(session.target, Target::Window(_)) && self.state.is_locked() {
+                withheld.push(capture);
+                continue;
             }
-            let outcome = match image {
-                Some(Ok(pixels)) => write_into(&capture.buffer, self.output_size(), pixels),
-                _ => Err(FailureReason::Unknown),
+            let Some(size) = self.state.capture_size(&session.target) else {
+                capture.frame.failed(FailureReason::Stopped);
+                capture.session.stopped();
+                continue;
+            };
+            if session
+                .announced
+                .lock()
+                .ok()
+                .and_then(|announced| *announced)
+                != Some(size)
+            {
+                announce(&capture.session, session, size);
+                capture.frame.failed(FailureReason::BufferConstraints);
+                continue;
+            }
+            let key = (session.target.clone(), session.paint_cursors);
+            let index = match images.iter().position(|(cached, _)| cached == &key) {
+                Some(index) => index,
+                None => {
+                    let image = self.capture_image(renderer, &key.0, key.1, size);
+                    images.push((key, image));
+                    images.len() - 1
+                }
+            };
+            let outcome = match &images[index].1 {
+                Ok(pixels) => write_into(&capture.buffer, size, pixels),
+                Err(_) => Err(FailureReason::Unknown),
             };
             match outcome {
                 Ok(()) => {
-                    let size = self.output_size();
+                    session.delivered.store(true, Ordering::Relaxed);
                     let now = Duration::from(Clock::<Monotonic>::new().now());
                     let seconds = now.as_secs();
                     capture.frame.transform(WlTransform::Normal);
@@ -103,30 +174,107 @@ impl Headless {
                 Err(reason) => capture.frame.failed(reason),
             }
         }
+        self.state.pending_captures.extend(withheld);
     }
 
     fn capture_image(
         &self,
         renderer: &mut VulkanRenderer,
+        target: &Target,
         paint_cursors: bool,
-    ) -> Result<Vec<u8>, RenderError> {
-        let size = self.output_size();
-        let elements = self.scene_elements(renderer, paint_cursors);
-        let mut target = renderer.create_buffer(Fourcc::Argb8888, Size::from((size.w, size.h)))?;
-        let mut damage = OutputDamageTracker::new(size, self.output_scale(), Transform::Normal);
-        {
-            let mut framebuffer = smithay::backend::renderer::Bind::bind(renderer, &mut target)?;
-            damage
-                .render_output(renderer, &mut framebuffer, 0, &elements, background())
-                .map_err(rendering_error)?;
+        size: Size<i32, Physical>,
+    ) -> Image {
+        let scale = self.output_scale();
+        match target {
+            Target::Output => {
+                let elements = self.scene_elements(renderer, paint_cursors);
+                render_image(renderer, size, scale, &elements, background())
+            }
+            Target::Window(identifier) => {
+                let window = self
+                    .state
+                    .captured_window(identifier)
+                    .ok_or(RenderError::NothingRendered)?;
+                let (Some(area), Some(geometry)) =
+                    (self.state.window_area(window), window.geometry())
+                else {
+                    return Err(RenderError::NothingRendered);
+                };
+                let active = self.state.key_window().as_ref() == Some(window.surface());
+                let at_origin = Look::shown(Rectangle::from_size(geometry.size.to_f64()));
+                let (shown, _) =
+                    window_elements(window, renderer, scale, active, false, Some(at_origin));
+                let cursor = match paint_cursors {
+                    true => self.cursor_elements(renderer),
+                    false => Vec::new(),
+                };
+                let to_origin = |element| {
+                    RelocateRenderElement::from_element(
+                        element,
+                        (-area.loc.x, -area.loc.y),
+                        Relocate::Relative,
+                    )
+                };
+                let elements: Vec<_> = cursor
+                    .into_iter()
+                    .map(to_origin)
+                    .chain(
+                        shown
+                            .into_iter()
+                            .filter(|element| {
+                                !matches!(
+                                    element,
+                                    OutputElement::Shadow(_) | OutputElement::Blur(_)
+                                )
+                            })
+                            .map(|element| {
+                                RelocateRenderElement::from_element(
+                                    element,
+                                    (0, 0),
+                                    Relocate::Relative,
+                                )
+                            }),
+                    )
+                    .collect();
+                render_image(renderer, size, scale, &elements, Color32F::TRANSPARENT)
+            }
+            Target::Nothing => Err(RenderError::NothingRendered),
         }
-        renderer.read_target(&target)
     }
+}
+
+fn render_image<E: RenderElement<VulkanRenderer>>(
+    renderer: &mut VulkanRenderer,
+    size: Size<i32, Physical>,
+    scale: f64,
+    elements: &[E],
+    clear: Color32F,
+) -> Image {
+    let mut target = renderer.create_buffer(Fourcc::Argb8888, Size::from((size.w, size.h)))?;
+    let mut damage = OutputDamageTracker::new(size, scale, Transform::Normal);
+    {
+        let mut framebuffer = renderer.bind(&mut target)?;
+        damage
+            .render_output(renderer, &mut framebuffer, 0, elements, clear)
+            .map_err(rendering_error)?;
+    }
+    renderer.read_target(&target)
+}
+
+fn announce(session: &ExtImageCopyCaptureSessionV1, data: &SessionData, size: Size<i32, Physical>) {
+    if let Ok(mut announced) = data.announced.lock() {
+        *announced = Some(size);
+    }
+    session.buffer_size(size.w.unsigned_abs(), size.h.unsigned_abs());
+    for format in SHM_FORMATS {
+        session.shm_format(format);
+    }
+    session.done();
 }
 
 fn write_into(
     buffer: &WlBuffer,
-    size: Size<i32, smithay::utils::Physical>,
+    size: Size<i32, Physical>,
     pixels: &[u8],
 ) -> Result<(), FailureReason> {
     with_buffer_contents_mut(buffer, |memory, length, data| {
@@ -189,8 +337,53 @@ impl Dispatch<ExtOutputImageCaptureSourceManagerV1, ()> for State {
             output,
         } = request
         {
-            let shows_output = state.output.owns(&output);
-            data_init.init(source, SourceData { shows_output });
+            let target = match state.output.owns(&output) {
+                true => Target::Output,
+                false => Target::Nothing,
+            };
+            data_init.init(source, SourceData { target });
+        }
+    }
+}
+
+impl GlobalDispatch<ExtForeignToplevelImageCaptureSourceManagerV1, ()> for State {
+    fn bind(
+        _state: &mut Self,
+        _display: &DisplayHandle,
+        _client: &Client,
+        resource: New<ExtForeignToplevelImageCaptureSourceManagerV1>,
+        _global_data: &(),
+        data_init: &mut DataInit<'_, Self>,
+    ) {
+        data_init.init(resource, ());
+    }
+
+    fn can_view(client: Client, _global_data: &()) -> bool {
+        is_shell(&client)
+    }
+}
+
+impl Dispatch<ExtForeignToplevelImageCaptureSourceManagerV1, ()> for State {
+    fn request(
+        _state: &mut Self,
+        _client: &Client,
+        _resource: &ExtForeignToplevelImageCaptureSourceManagerV1,
+        request: ext_foreign_toplevel_image_capture_source_manager_v1::Request,
+        _data: &(),
+        _display: &DisplayHandle,
+        data_init: &mut DataInit<'_, Self>,
+    ) {
+        if let ext_foreign_toplevel_image_capture_source_manager_v1::Request::CreateSource {
+            source,
+            toplevel_handle,
+        } = request
+        {
+            let target = ForeignToplevelHandle::from_resource(&toplevel_handle)
+                .filter(|handle| !handle.is_closed())
+                .map_or(Target::Nothing, |handle| {
+                    Target::Window(handle.identifier())
+                });
+            data_init.init(source, SourceData { target });
         }
     }
 }
@@ -228,28 +421,23 @@ impl GlobalDispatch<ExtImageCopyCaptureManagerV1, ()> for State {
 fn start_session(
     state: &State,
     session: New<ExtImageCopyCaptureSessionV1>,
-    live: bool,
+    target: Target,
     paint_cursors: bool,
     data_init: &mut DataInit<'_, State>,
 ) {
-    let session = data_init.init(
-        session,
-        SessionData {
-            live,
-            paint_cursors,
-            frames: AtomicUsize::new(0),
-        },
-    );
-    if !live {
-        session.stopped();
-        return;
+    let size = state.capture_size(&target);
+    let data = SessionData {
+        target,
+        paint_cursors,
+        frames: AtomicUsize::new(0),
+        announced: Mutex::new(None),
+        delivered: AtomicBool::new(false),
+    };
+    let session = data_init.init(session, data);
+    match (size, session.data::<SessionData>()) {
+        (Some(size), Some(data)) => announce(&session, data, size),
+        _ => session.stopped(),
     }
-    let size = state.output_size;
-    session.buffer_size(size.w.unsigned_abs(), size.h.unsigned_abs());
-    for format in SHM_FORMATS {
-        session.shm_format(format);
-    }
-    session.done();
 }
 
 impl Dispatch<ExtImageCopyCaptureManagerV1, ()> for State {
@@ -275,11 +463,11 @@ impl Dispatch<ExtImageCopyCaptureManagerV1, ()> for State {
                     );
                     return;
                 };
-                let live = source
+                let target = source
                     .data::<SourceData>()
-                    .is_some_and(|source| source.shows_output);
+                    .map_or(Target::Nothing, |source| source.target.clone());
                 let paint_cursors = options.contains(Options::PaintCursors);
-                start_session(state, session, live, paint_cursors, data_init);
+                start_session(state, session, target, paint_cursors, data_init);
             }
             ext_image_copy_capture_manager_v1::Request::CreatePointerCursorSession {
                 session,
@@ -317,7 +505,7 @@ impl Dispatch<ExtImageCopyCaptureCursorSessionV1, CursorSessionData> for State {
                 );
                 return;
             }
-            start_session(state, session, false, false, data_init);
+            start_session(state, session, Target::Nothing, false, data_init);
         }
     }
 }
@@ -407,15 +595,17 @@ impl Dispatch<ExtImageCopyCaptureFrameV1, FrameData> for State {
                 let Some(session) = data.session.data::<SessionData>() else {
                     return resource.failed(FailureReason::Unknown);
                 };
-                if !session.live {
+                if state.capture_size(&session.target).is_none() {
                     return resource.failed(FailureReason::Stopped);
+                }
+                if !session.delivered.load(Ordering::Relaxed) {
+                    state.needs_redraw = true;
                 }
                 state.pending_captures.push(PendingCapture {
                     frame: resource.clone(),
                     buffer,
-                    paint_cursors: session.paint_cursors,
+                    session: data.session.clone(),
                 });
-                state.needs_redraw = true;
             }
             _ => {}
         }

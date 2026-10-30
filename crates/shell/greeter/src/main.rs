@@ -13,7 +13,7 @@ use unbound_greeter::{
 };
 use unbound_keyboard::Layouts;
 use unbound_lock::{BackdropSource, DateFormats, Inbox, LockScreen, User, Variant, load_backdrop};
-use unbound_toolkit::ui::{Event, Key};
+use unbound_toolkit::ui::{Event, Key, frame_time};
 use unbound_toolkit::{
     App, Appearance, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Role, Scene, TextSystem,
     Window, WindowEvent,
@@ -123,7 +123,7 @@ impl Greeter {
         tracing::warn!("greetd: {error}");
         self.conversation = None;
         self.screen.ask(None);
-        self.screen.reject(Instant::now());
+        self.screen.reject(frame_time().on_screen());
         self.screen.set_message(Some(L10N.tr("unavailable")));
     }
 
@@ -168,7 +168,7 @@ impl Greeter {
             None => self.screen.ask(None),
             Some(rejection) => {
                 self.screen.ask(None);
-                self.screen.reject(Instant::now());
+                self.screen.reject(frame_time().on_screen());
                 match rejection {
                     Rejection::WrongPassword => {
                         self.screen.set_message(Some(L10N.tr("wrong-password")));
@@ -219,7 +219,7 @@ impl App for Greeter {
                 Err(error) => tracing::warn!("cannot load the wallpaper: {error}"),
             }
         }
-        self.screen.advance(Instant::now());
+        self.screen.advance(frame_time().presentation);
         self.screen.scene(width, height)
     }
 
@@ -276,7 +276,8 @@ impl App for Greeter {
     fn source_ready(&mut self, window: &mut Window, index: usize) {
         let backdrop = self.backdrop.as_ref().filter(|_| index == 0);
         if let Some(image) = backdrop.and_then(|inbox| inbox.drain().pop()) {
-            self.screen.set_backdrop(image.clone(), Instant::now());
+            self.screen
+                .set_backdrop(image.clone(), frame_time().on_screen());
             self.wallpaper = Some(image);
         } else if backdrop.is_none() {
             self.converse();
@@ -285,15 +286,11 @@ impl App for Greeter {
     }
 
     fn deadline(&self) -> Option<Instant> {
-        let now = Instant::now();
-        let fading = self
-            .screen
-            .is_fading(now)
-            .then(|| now + Duration::from_millis(8));
-        [Some(self.next_clock), self.screen.shaking_until(), fading]
-            .into_iter()
-            .flatten()
-            .min()
+        Some(self.next_clock)
+    }
+
+    fn animating(&self) -> bool {
+        self.screen.is_animating()
     }
 
     fn tick(&mut self, window: &mut Window, now: Instant) {

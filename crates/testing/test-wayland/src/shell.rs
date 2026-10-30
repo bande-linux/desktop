@@ -230,6 +230,12 @@ impl TestClient {
         self.exchange(server);
     }
 
+    pub fn keep_on_top(&mut self, server: &mut Headless, index: usize, keep: bool) {
+        let app: UnboundAppV1 = self.bind("unbound_app_v1", 4);
+        app.set_keep_on_top(&self.windows[index].2, u32::from(keep));
+        self.exchange(server);
+    }
+
     pub fn workspaces(&self) -> Option<(u32, u32)> {
         self.globals.shell.workspaces
     }

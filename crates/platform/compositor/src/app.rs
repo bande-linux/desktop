@@ -55,6 +55,19 @@ impl Dispatch<UnboundAppV1, ()> for State {
             } if toplevel.client() == resource.client() => {
                 state.place_window(&toplevel, placement);
             }
+            unbound_app_v1::Request::SetKeepOnTop { toplevel, keep }
+                if toplevel.client() == resource.client() =>
+            {
+                if let Some(window) = state
+                    .windows
+                    .iter_mut()
+                    .find(|window| window.toplevel.xdg_toplevel() == &toplevel)
+                {
+                    window.keep_on_top = keep != 0;
+                    state.needs_redraw = true;
+                    state.refocus_pointer();
+                }
+            }
             unbound_app_v1::Request::MoveToWorkspace {
                 toplevel,
                 workspace: WEnum::Value(workspace),

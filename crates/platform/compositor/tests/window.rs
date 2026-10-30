@@ -515,3 +515,25 @@ fn an_apps_next_window_cascades_from_its_frontmost_one_and_other_apps_stay_centr
         ]
     );
 }
+
+#[test]
+fn a_window_kept_on_top_stays_in_front_of_a_newer_window_until_released() {
+    let mut server = server();
+    let mut renderer = Renderer::new().expect("renderer");
+    let mut editor = app(&mut server, RED);
+    editor.keep_on_top(&mut server, 0, true);
+    let mut viewer = app(&mut server, BLUE);
+    roundtrip(&mut server, &mut [&mut editor, &mut viewer]);
+    let middle = (CENTERED.0 + WINDOW.0 / 2, CENTERED.1 + WINDOW.1 / 2);
+
+    let kept = pixel(&mut renderer, &mut server, middle.0, middle.1);
+    server.move_pointer_to(at(middle.0, middle.1), 1);
+    roundtrip(&mut server, &mut [&mut editor, &mut viewer]);
+    let pointed = editor.pointer_focus().is_some() && viewer.pointer_focus().is_none();
+    editor.keep_on_top(&mut server, 0, false);
+    let released = pixel(&mut renderer, &mut server, middle.0 - 8, middle.1 - 8);
+
+    assert_eq!(kept, rgb(RED));
+    assert!(pointed);
+    assert_eq!(released, rgb(BLUE));
+}

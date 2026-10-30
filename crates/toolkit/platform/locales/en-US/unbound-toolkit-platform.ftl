@@ -12,5 +12,6 @@ place-top-right = Top Right
 place-bottom-left = Bottom Left
 place-bottom-right = Bottom Right
 place-restore = Return to Previous Size
+keep-on-top = Keep on Top
 move = Move
 quit-app = Quit

@@ -277,7 +277,7 @@
     </event>
   </interface>
 
-  <interface name="unbound_app_v1" version="3">
+  <interface name="unbound_app_v1" version="4">
     <description summary="requests from the desktop to a whole app">
       Offered to every client. A client that binds it takes over app-level
       requests that the compositor would otherwise express per window: while
@@ -334,6 +334,20 @@
       </description>
       <arg name="toplevel" type="object" interface="xdg_toplevel"/>
       <arg name="workspace" type="uint" enum="workspace"/>
+    </request>
+
+    <request name="set_keep_on_top" since="4">
+      <description summary="keep one of the app's windows above the others">
+        Sets or clears the window menu's Keep on Top toggle for the toplevel.
+        While set, the window stays in front of every window without it on
+        its workspace, even when another window is focused, and still below
+        the menu bar, the Dock and other shell surfaces. Windows that keep on
+        top stack among themselves by focus as usual. The state lasts until
+        it is cleared or the window closes. Ignored for a toplevel of another
+        client.
+      </description>
+      <arg name="toplevel" type="object" interface="xdg_toplevel"/>
+      <arg name="keep" type="uint" summary="1 to keep the window on top, 0 to stop"/>
     </request>
   </interface>
 </protocol>

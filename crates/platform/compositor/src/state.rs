@@ -283,7 +283,7 @@ impl Headless {
         let center = settings.logical_size().to_f64().downscale(2.0);
         let screen = Screen::new(&handle, config, settings);
         handle.create_global::<State, UnboundShellV1, ()>(11, ());
-        handle.create_global::<State, UnboundAppV1, ()>(3, ());
+        handle.create_global::<State, UnboundAppV1, ()>(4, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
         handle.create_global::<State, smithay::reexports::wayland_protocols_wlr::output_management::v1::server::zwlr_output_manager_v1::ZwlrOutputManagerV1, ()>(crate::management::MANAGER_VERSION, ());
         State::create_capture_globals(&handle);
@@ -1124,6 +1124,8 @@ impl State {
         });
         let (leaving, rest): (Vec<&Window>, Vec<&Window>) =
             rest.into_iter().partition(|window| window.is_minimized());
+        let (on_top, rest): (Vec<&Window>, Vec<&Window>) =
+            rest.into_iter().partition(|window| window.keep_on_top);
         let name = self.screens[screen].name();
         [
             layers(Layer::Overlay),
@@ -1140,6 +1142,7 @@ impl State {
                 .filter(|closing| rendered && closing.output == name)
                 .map(Placed::Closing)
                 .collect(),
+            self.window_entries(&on_top),
             self.window_entries(&rest),
             layers(Layer::Bottom),
             layers(Layer::Background),

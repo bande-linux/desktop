@@ -374,6 +374,7 @@ pub struct Window {
     menus: Option<Menus>,
     ui_deadline: Option<Instant>,
     window_menu: bool,
+    keep_on_top: bool,
     pub(crate) closed_by_button: bool,
     text: Option<TextSystem>,
     shown_frame: Option<Frame>,
@@ -548,6 +549,7 @@ impl Window {
             menus: None,
             ui_deadline: None,
             window_menu: false,
+            keep_on_top: false,
             closed_by_button: false,
             text: None,
             shown_frame: None,
@@ -690,6 +692,13 @@ impl Window {
                 .enabled(!toplevel.fullscreen),
             );
         }
+        if self.can_keep_on_top() {
+            items.push(
+                MenuItem::new(&L10N.tr("keep-on-top"), "keep-on-top")
+                    .checked(self.keep_on_top)
+                    .enabled(!toplevel.fullscreen),
+            );
+        }
         items.extend([
             MenuItem::new(&L10N.tr("move"), "move").enabled(!toplevel.fullscreen),
             MenuItem::separator(),
@@ -727,6 +736,12 @@ impl Window {
             "place-bottom-left" => self.place(Placement::BottomLeft),
             "place-bottom-right" => self.place(Placement::BottomRight),
             "place-restore" => self.place(Placement::Restore),
+            "keep-on-top" => {
+                let keep = !self.keep_on_top;
+                self.set_keep_on_top(keep)?;
+                self.keep_on_top = keep;
+                Ok(())
+            }
             _ => Ok(()),
         }
     }
@@ -1906,7 +1921,7 @@ impl Dispatch<WlRegistry, ()> for State {
                     state.shell.protocol = Some(registry.bind(name, version.min(11), handle, ()));
                 }
                 "unbound_app_v1" => {
-                    state.shell.app = Some(registry.bind(name, version.min(2), handle, ()));
+                    state.shell.app = Some(registry.bind(name, version.min(4), handle, ()));
                 }
                 "ext_output_image_capture_source_manager_v1" => {
                     state.capture.sources = Some(registry.bind(name, 1, handle, ()));

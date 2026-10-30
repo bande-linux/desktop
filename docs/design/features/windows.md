@@ -12,8 +12,8 @@ workspaces, the overview) are one modifier, one right-click or one shortcut away
 Current state (`docs/parity.md`, `NOTES/backlog.md` M15, M26): the compositor has xdg
 move and resize grabs, zoom into the area outside exclusive zones, full screen
 (`Ctrl+Super+F`), minimize, `Super+W`, `Super+Q` and `Super+Tab` without an overlay. None of
-these is animated. Title bars are client-side (`xdg-decoration` answers `client_side`, as
-AppKit draws its own) and the toolkit does not draw one yet. There is no snapping, no
+these is animated. Title bars are client-side for our toolkit and GTK, and drawn by the
+compositor in the same style for apps that ask for server-side decorations (Qt, foot, SDL). There is no snapping, no
 overview and no workspaces.
 
 ## Reference survey

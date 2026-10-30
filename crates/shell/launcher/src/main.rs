@@ -21,11 +21,10 @@ use unbound_toolkit::{
     TextSystem, Window, WindowError, WindowEvent,
 };
 use unbound_xdg::{
-    Apps, DIRECTORY, DesktopEntry, LaunchError, Locale, applications, config_dirs,
+    Apps, DIRECTORY, DesktopEntry, ICON_THEMES, LaunchError, Locale, applications, config_dirs,
     current_desktops, data_dirs, find_icon, launch, launch_with, spawn_detached,
 };
 
-const ICON_THEMES: [&str; 1] = ["Adwaita"];
 const FALLBACK_DOCUMENT: &str = "application-x-generic";
 const SETTINGS_APP: &str = "org.unbound.Settings";
 

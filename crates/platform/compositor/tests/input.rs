@@ -193,6 +193,47 @@ fn super_q_asks_every_window_of_the_focused_app_to_close() {
 }
 
 #[test]
+fn super_q_quits_every_process_of_the_focused_app() {
+    let mut server = server();
+    let pixels = solid(32);
+    let mut other = TestClient::connect(&mut server);
+    other.use_seat(&mut server);
+    other.show_window_of(&mut server, &image(&pixels, 32), "org.example.Editor");
+    let mut first = TestClient::connect(&mut server);
+    first.use_seat(&mut server);
+    first.show_window_of(&mut server, &image(&pixels, 32), "org.example.Terminal");
+    let mut second = TestClient::connect(&mut server);
+    second.use_seat(&mut server);
+    second.show_window_of(&mut server, &image(&pixels, 32), "org.example.Terminal");
+    roundtrip(&mut server, &mut [&mut other, &mut first, &mut second]);
+
+    chord(&mut server, KEY_Q);
+    roundtrip(&mut server, &mut [&mut other, &mut first, &mut second]);
+
+    assert!(first.close_requested(0));
+    assert!(second.close_requested(0));
+    assert!(!other.close_requested(0));
+}
+
+#[test]
+fn super_q_quits_the_active_app_after_it_closed_its_last_window() {
+    let mut server = server();
+    let mut other = client_with_window(&mut server, 128);
+    other.take_app_requests(&mut server);
+    let mut app = client_with_window(&mut server, 32);
+    app.take_app_requests(&mut server);
+    roundtrip(&mut server, &mut [&mut other, &mut app]);
+    app.close_window(&mut server, 0);
+    roundtrip(&mut server, &mut [&mut other, &mut app]);
+
+    chord(&mut server, KEY_Q);
+    roundtrip(&mut server, &mut [&mut other, &mut app]);
+
+    assert_eq!(app.quit_requests(), 1);
+    assert_eq!(other.quit_requests(), 0);
+}
+
+#[test]
 fn super_q_asks_an_app_that_takes_app_requests_to_quit_once_and_closes_nothing() {
     let mut server = server();
     let mut other = client_with_window(&mut server, 128);

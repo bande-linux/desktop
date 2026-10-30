@@ -199,6 +199,7 @@ pub fn folder_menu(folder: Folder) -> Menu {
                 .enabled(folder.paste),
         ]
     };
+    items.push(item("menu-get-info", &Command::Info).shortcut("Super+I"));
     let sorts = SORTS
         .iter()
         .map(|(by, message)| item(message, &Command::Sort(*by)).checked(*by == folder.sort))

@@ -89,8 +89,19 @@ graph LR
   validation, PipeWire streams, `persist_mode` with restore data that skips the picker, closing
   stops the streams) are implemented over `FileChooserUi`, `ScreenshotUi` and
   `ScreenCastBackend` traits, which the toolkit and the compositor's capture will implement.
-  Until then the package registers only `Settings` and prefers the GTK backend for everything
-  else (`unbound-portals.conf`, picked when `XDG_CURRENT_DESKTOP=Unbound`). The backend lives in
+  No UI or PipeWire producer implements them yet, so the package registers only `Settings`;
+  `unbound-portals.conf` (picked when `XDG_CURRENT_DESKTOP=Unbound`) sends Open and Save
+  dialogs to the GTK backend, secrets to GNOME Keyring, and everything else to GTK. Screenshot
+  and ScreenCast have no backend in an Unbound session (the GTK backend has neither, and the
+  wlr backend needs `wlr-screencopy`), so browser screen sharing does not work yet.
+- Qt apps follow dark mode through Qt's own portal platform theme: `unbound-session` sets
+  `QT_QPA_PLATFORMTHEME=xdgdesktopportal` (unless already set) and `unbound-desktop`
+  recommends `qt6-xdgdesktopportal-platformtheme`, a 66 kB plugin from Qt itself rather than a
+  theming engine. Without it Qt 6.8 reads `color-scheme` but keeps a light palette (checked
+  with FeatherPad: light without the plugin, dark with it). The same plugin sends Qt's Open
+  and Save dialogs through the portal. libadwaita and GTK 4 apps read `color-scheme` and
+  `accent-color` from the Settings portal themselves. Qt apps run natively on Wayland through
+  `qt6-wayland`, which Qt's own packages recommend. The backend lives in
   `/usr/libexec` and is started by D-Bus activation through its user unit, as Debian's portal
   backends are. `ci/portal` installs the packages into Debian 13 with its `xdg-desktop-portal`
   and reads `color-scheme` through `org.freedesktop.portal.Settings` before and after switching
@@ -111,6 +122,17 @@ graph LR
 - Every toolkit widget produces an AccessKit node, published on AT-SPI2 for screen readers
   ([toolkit](toolkit.md)).
 
+### Keyring
+
+- Browsers, editors and GTK apps keep passwords through the Secret Service. `unbound-desktop`
+  recommends `gnome-keyring` and `libpam-gnome-keyring`: Debian's `/etc/pam.d/greetd` already
+  has `pam_gnome_keyring` in its `auth` and `session` stacks (as optional), so signing in
+  through `unbound-greeter` unlocks the login keyring with the password just typed, and
+  `gnome-keyring-daemon.socket` starts the daemon (secrets and PKCS#11 components) in the user
+  manager. Verified on the development VM: after a greetd login the `login` collection is
+  unlocked and `secret-tool store --collection=login` then `secret-tool lookup` round-trips
+  without a prompt.
+
 ### Session startup
 
 - Before starting any shell client, the compositor exports its environment to systemd user
@@ -119,6 +141,9 @@ graph LR
   systemctl --user import-environment WAYLAND_DISPLAY XDG_SESSION_TYPE XDG_CURRENT_DESKTOP
   dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_SESSION_TYPE XDG_CURRENT_DESKTOP
   ```
+- `unbound-session` also sets `ELECTRON_OZONE_PLATFORM_HINT=auto` (unless already set), so
+  Electron apps that do not yet default to Wayland run natively instead of failing for want of
+  an X server, and `QT_QPA_PLATFORMTHEME` as described under the portal.
 - Services bound to `graphical-session.target` start then: PipeWire, WirePlumber,
   `unbound-config`, `unbound-power`, `unbound-tray`, `unbound-automount`. `unbound-notify` and
   the portal backend are started by D-Bus activation, and `unbound-clipboard` and the shell

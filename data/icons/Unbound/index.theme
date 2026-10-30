@@ -1,0 +1,19 @@
+[Icon Theme]
+Name=Unbound
+Comment=The Unbound desktop's own icons over Adwaita
+Inherits=Adwaita,hicolor
+Directories=scalable/mimetypes,scalable/places
+
+[scalable/mimetypes]
+Context=MimeTypes
+Size=128
+MinSize=8
+MaxSize=512
+Type=Scalable
+
+[scalable/places]
+Context=Places
+Size=128
+MinSize=8
+MaxSize=512
+Type=Scalable

@@ -13,7 +13,7 @@ pub use entry::{
     CURRENT_DESKTOP, DesktopAction, DesktopEntry, Locale, applications, current_desktops,
     data_dirs, find_executable, handlers,
 };
-pub use icon::{FALLBACK_THEME, find_icon};
+pub use icon::{FALLBACK_THEME, ICON_THEMES, find_icon};
 pub use launch::{
     ACTIVATION_TOKEN, ExecError, LaunchError, TERMINAL, launch, launch_action, launch_with,
     spawn_detached,

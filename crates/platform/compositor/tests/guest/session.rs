@@ -5,7 +5,8 @@ use std::time::{Duration, Instant};
 use smithay::backend::drm::{DrmEvent, DrmEventMetadata};
 use smithay::backend::session::libseat::LibSeatSessionNotifier;
 use smithay::reexports::calloop::EventLoop;
-use unbound_compositor::{DrmNotifiers, DrmOutput, FrameOutput, Headless, Submission};
+use smithay::reexports::drm::control::crtc;
+use unbound_compositor::{DrmBackend, DrmNotifiers, FrameOutput, Headless, Submission};
 use unbound_test_wayland::TestClient;
 
 use crate::card::{Card, Scanout, card_path};
@@ -14,12 +15,12 @@ const FLIP_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub struct Shared {
     pub server: Headless,
-    flip: Option<Option<DrmEventMetadata>>,
+    flip: Option<(crtc::Handle, Option<DrmEventMetadata>)>,
 }
 
 pub struct Session {
     pub card: Card,
-    pub output: DrmOutput,
+    pub output: DrmBackend,
     pub shared: Shared,
     pub client: TestClient,
     pub events: EventLoop<'static, Shared>,
@@ -34,15 +35,21 @@ impl Session {
     pub fn on(driver: &str) -> Self {
         let path = card_path(driver);
         let (output, DrmNotifiers { session, device }) =
-            DrmOutput::open(Some(&path)).expect("the compositor takes the card through libseat");
-        let mut server = Headless::with_output(output.output_config()).expect("compositor state");
+            DrmBackend::open(Some(&path)).expect("the compositor takes the card through libseat");
+        let first = output
+            .outputs()
+            .into_iter()
+            .next()
+            .expect("a connected display");
+        let mut server =
+            Headless::on_device(first, Some(output.scanout_device())).expect("compositor state");
         let client = TestClient::connect(&mut server);
         let events = EventLoop::try_new().expect("event loop");
         events
             .handle()
             .insert_source(device, |event, metadata, shared: &mut Shared| {
-                if let DrmEvent::VBlank(_) = event {
-                    shared.flip = Some(*metadata);
+                if let DrmEvent::VBlank(crtc) = event {
+                    shared.flip = Some((crtc, *metadata));
                 }
             })
             .expect("DRM events");
@@ -90,8 +97,11 @@ impl Session {
         assert_eq!(submission, Submission::AwaitingFlip);
         self.shared.flip = None;
         self.dispatch_until("a page flip", |session| session.shared.flip.is_some());
-        let metadata = self.shared.flip.take().flatten();
-        self.output.flipped(metadata).expect("frame completion");
+        let (crtc, metadata) = self.shared.flip.take().expect("a page flip");
+        self.output
+            .flipped(crtc, metadata)
+            .expect("frame completion");
+
         self.card.scanout()
     }
 }

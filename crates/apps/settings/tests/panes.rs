@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId};
 use unbound_audio::{Device, Direction, Level, Snapshot};
-use unbound_config::Output;
+use unbound_config::DisplaySettings;
 use unbound_settings::{
     Answer, AudioCommand, BluetoothCommand, Command, Display, Feed, Mode, NetworkCommand, Pair,
     PaneId, PictureCommand, SettingId, SettingsView, Update, Value, bundled_pairs, feed,
@@ -329,9 +329,11 @@ fn display(connector: &str, rates: &[i32]) -> Display {
         .collect();
     Display {
         connector: connector.to_owned(),
-        description: format!("Built-in display ({connector})"),
+        identity: format!("Built-in display ({connector})"),
         current: modes.first().copied(),
         modes,
+        scale: 1.0,
+        ..Display::default()
     }
 }
 
@@ -342,12 +344,12 @@ fn a_display_change_keeps_its_other_settings_and_only_offers_what_the_panel_can(
         display("eDP-1", &[120, 60, 24]),
         display("HDMI-A-1", &[60]),
     ]);
-    view.apply(Update::Outputs(BTreeMap::from([(
-        "eDP-1".to_owned(),
-        Output {
-            scale: None,
+    view.apply(Update::Displays(BTreeMap::from([(
+        "Built-in display (eDP-1)".to_owned(),
+        DisplaySettings {
             refresh_rate: Some(120.0),
             variable_refresh_rate: Some(true),
+            ..DisplaySettings::default()
         },
     )])));
     open(&mut view, "Displays");
@@ -376,12 +378,13 @@ fn a_display_change_keeps_its_other_settings_and_only_offers_what_the_panel_can(
     });
     assert_eq!(
         view.take_commands(),
-        [Command::Output(
-            "eDP-1".to_owned(),
-            Output {
+        [Command::Display(
+            "Built-in display (eDP-1)".to_owned(),
+            DisplaySettings {
                 scale: Some(1.0),
                 refresh_rate: Some(120.0),
                 variable_refresh_rate: Some(true),
+                ..DisplaySettings::default()
             }
         )]
     );

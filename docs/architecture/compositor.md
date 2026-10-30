@@ -45,11 +45,41 @@ when they reach the screen is Unbound's own.
   `VK_EXT_image_drm_format_modifier`. Explicit sync (`linux-drm-syncobj-v1`) is built; its guest
   tests do not pass yet (`NOTES/backlog.md`).
 - **DRM backend.** `unbound-compositor` opens the first card with a connected connector (or
-  `--drm-device`) through a libseat session, takes the connector's preferred mode, and renders
-  into GBM buffers that the renderer binds as dma-bufs (copied out from its own image, so
-  lavapipe and `kms_swrast` work); `--headless` keeps the offscreen output for CI and the bench.
-  A fullscreen opaque dma-buf window is put on the primary plane without composition. Tested on
-  vkms in the `ci/vm` guest by reading the CRTC's framebuffer back.
+  `--drm-device`) through a libseat session and drives every connected connector on its own
+  CRTC, each with its own `DrmCompositor`, frame clock and scheduler; it renders into GBM
+  buffers that the renderer binds as dma-bufs (copied out from its own image, so lavapipe and
+  `kms_swrast` work); `--headless` keeps the offscreen output for CI and the bench. udev change
+  events rescan the connectors, so plugging a display in or out takes effect without restarting
+  the session. A display is named by its EDID (maker from the PNP id, model and serial from the
+  descriptors, falling back to the product code and serial number; two displays with the same
+  name are told apart by their connector). A fullscreen opaque dma-buf window is put on the
+  primary plane without composition. Tested on vkms in the `ci/vm` guest by reading the CRTC's
+  framebuffer back.
+- **Displays.** Every output lives in one logical coordinate space in points. Its mode, scale
+  (fractional too), rotation and place come from `display` and `arrangement` in `config.kdl`
+  (followed live through `org.unbound.Config`): the arrangement remembered for exactly the
+  connected set, else the largest remembered subset with the rest placed to the right; a
+  display nobody configured gets its preferred mode at its highest refresh rate, the automatic
+  scale for its pixel density and a place to the right of the others, top-aligned with the main
+  display. The main display sits at the origin; it is the remembered one, else the one that was
+  main before. Each output keeps its own layer surfaces (`wlr-layer-shell` surfaces without an
+  output go to the main display, except the launcher, the screenshot palette, Control Center
+  and confirmations, which open on the display with the pointer), its own lock surface and its
+  own row of workspaces. A window belongs to one display (through its workspace) and is drawn
+  only there, except while it is dragged across an edge; it is told the display through
+  `wl_surface.enter`/`leave` and its scale through `wp_fractional_scale_v1`, so it redraws
+  sharp when it moves to a display of another scale. The pointer moves across the displays at
+  their own scales and never leaves them (it stops at an edge without a neighbour); a new
+  window opens on the display with the pointer, maximising, full screen, tiling and snapping
+  use the window's display, and dragging a window until the pointer crosses onto another
+  display moves it there. `Alt+Super+Shift+Left/Right/Up/Down` move the focused window to the
+  neighbouring display in that direction keeping its relative place (shrunk only when it does
+  not fit), which it reaches with the opening spring. When a display goes away its shown
+  workspace's windows join the main display's shown workspace and its other workspaces join the
+  main display's row, each window keeping its relative place; when it returns, those windows
+  and workspaces go back to it, at the place they had. `wlr-output-management-v1` lists the
+  displays (the head description is the display's name) and applies configurations from tools
+  such as `wlr-randr`; Settings reads it.
 - **Frame pacing.** Frames are paced by a vblank clock (virtual at 120 Hz in the headless
   backend; on DRM re-anchored to each page flip at the mode's refresh, advertised as the
   `wl_output` mode). A commit is latched into the frame whose deadline it arrives before: the
@@ -101,7 +131,7 @@ when they reach the screen is Unbound's own.
   claims three-finger swipes: once the fingers have moved 16 units the axis locks, and a
   horizontal swipe switches workspaces, a swipe up opens the overview and a swipe down shows
   the focused app's windows (below). Two- and four-finger swipes go to apps.
-- **Workspaces.** The output has one row of workspaces. A window opens on the active one
+- **Workspaces.** Each display has its own row of workspaces (macOS's "Displays have separate Spaces"); swipes and switching shortcuts act on the display with the pointer, the overview opens on every display with that display's windows and strip (a window dropped on another display moves there), and shell clients learn the row of the display with the key window. A window opens on the active one
   (a window of another app opened while a full-screen workspace is active opens on that
   workspace's home). Workspaces are made on demand: moving a window past the last one adds
   one, and so does going full screen, which gives the window a workspace of its own right
@@ -189,7 +219,8 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `ext-foreign-toplevel-list-v1` | Window list for the Dock | P0 | implemented, shell clients only |
 | `zwp_text_input_v3` / `input_method_v2` / `virtual_keyboard_v1` | Input methods (CJK) | P0 | implemented |
 | `zxdg_decoration_manager_v1` | Decoration negotiation (answers client-side) | P1 | implemented |
-| `wlr-output-management-v1` | Display arrangement and hotplug configuration | P1 | not implemented |
+| `wlr-output-management-v1` | Display arrangement and hotplug configuration | P1 | implemented (v4; enabled heads only, no custom modes) |
+
 | `ext-image-capture-source-v1` / `ext-image-copy-capture-v1` | Screen capture for screenshots and the portal | P1 | implemented (output sources) |
 | `wp_cursor_shape_v1` | Cursor shapes from the theme | P1 | implemented |
 | `zwp_pointer_constraints_v1` / `relative_pointer` | Pointer lock for games | P1 | not implemented |

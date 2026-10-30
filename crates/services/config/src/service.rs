@@ -14,9 +14,11 @@ use zbus::object_server::SignalEmitter;
 use zbus::zvariant::{OwnedValue, Value};
 
 use crate::{
-    Appearance, Config, ConfigStore, DockEdge, Output, ReloadError, Setting, Suspend, WallpaperFit,
-    WallpaperVariant,
+    Appearance, Config, ConfigStore, DisplaySettings, DockEdge, Placement, ReloadError, Rotation,
+    Setting, Suspend, WallpaperFit, WallpaperVariant,
 };
+
+pub type ArrangedDisplay = (String, i32, i32, bool, String);
 
 pub const BUS_NAME: &str = "org.unbound.Config";
 pub const OBJECT_PATH: &str = "/org/unbound/Config";
@@ -187,8 +189,11 @@ fn publish_changes(
         if before.wallpaper.fit != after.wallpaper.fit {
             let _ = guard.wallpaper_fit_changed(emitter).await;
         }
-        if before.outputs != after.outputs {
-            let _ = guard.outputs_changed(emitter).await;
+        if before.displays != after.displays {
+            let _ = guard.displays_changed(emitter).await;
+        }
+        if before.arrangements != after.arrangements {
+            let _ = guard.arrangements_changed(emitter).await;
         }
     });
 }
@@ -211,22 +216,56 @@ fn keyword<T: Copy>(
         })
 }
 
-fn output_settings(settings: &HashMap<String, OwnedValue>) -> zbus::fdo::Result<Output> {
-    let mut output = Output::default();
+fn display_settings(settings: &HashMap<String, OwnedValue>) -> zbus::fdo::Result<DisplaySettings> {
+    let mut display = DisplaySettings::default();
     for (key, value) in settings {
         let mismatch = || InvalidArgs(format!("`{key}` has the wrong type"));
         match key.as_str() {
-            "scale" => output.scale = Some(f64::try_from(value).map_err(|_| mismatch())?),
+            "resolution" => {
+                display.resolution = Some(
+                    <(u32, u32)>::try_from(value.try_clone().map_err(|_| mismatch())?)
+                        .map_err(|_| mismatch())?,
+                )
+            }
+            "scale" => display.scale = Some(f64::try_from(value).map_err(|_| mismatch())?),
             "refresh-rate" => {
-                output.refresh_rate = Some(f64::try_from(value).map_err(|_| mismatch())?)
+                display.refresh_rate = Some(f64::try_from(value).map_err(|_| mismatch())?)
+            }
+            "rotation" => {
+                display.rotation = Some(
+                    u32::try_from(value)
+                        .ok()
+                        .and_then(Rotation::from_degrees)
+                        .ok_or_else(mismatch)?,
+                )
             }
             "variable-refresh-rate" => {
-                output.variable_refresh_rate = Some(bool::try_from(value).map_err(|_| mismatch())?)
+                display.variable_refresh_rate = Some(bool::try_from(value).map_err(|_| mismatch())?)
             }
-            _ => return Err(InvalidArgs(format!("unknown output setting `{key}`"))),
+            _ => return Err(InvalidArgs(format!("unknown display setting `{key}`"))),
         }
     }
-    Ok(output)
+    Ok(display)
+}
+
+fn placement((display, x, y, main, mirror): ArrangedDisplay) -> Placement {
+    Placement {
+        display,
+        x,
+        y,
+        main,
+        mirror: (!mirror.is_empty()).then_some(mirror),
+    }
+}
+
+fn arranged(placement: &Placement) -> ArrangedDisplay {
+    (
+        placement.display.clone(),
+        placement.x,
+        placement.y,
+        placement.main,
+        placement.mirror.clone().unwrap_or_default(),
+    )
 }
 
 struct ConfigInterface {
@@ -494,22 +533,32 @@ impl ConfigInterface {
     }
 
     #[zbus(property)]
-    fn outputs(&self) -> HashMap<String, HashMap<String, OwnedValue>> {
+    fn displays(&self) -> HashMap<String, HashMap<String, OwnedValue>> {
         let owned = |value: Value<'_>| OwnedValue::try_from(value).ok();
         self.store
             .current()
-            .outputs
+            .displays
             .iter()
-            .map(|(connector, output)| {
+            .map(|(identity, display)| {
                 let settings = [
-                    ("scale", output.scale.and_then(|scale| owned(scale.into()))),
+                    (
+                        "resolution",
+                        display.resolution.and_then(|size| owned(size.into())),
+                    ),
+                    ("scale", display.scale.and_then(|scale| owned(scale.into()))),
                     (
                         "refresh-rate",
-                        output.refresh_rate.and_then(|rate| owned(rate.into())),
+                        display.refresh_rate.and_then(|rate| owned(rate.into())),
+                    ),
+                    (
+                        "rotation",
+                        display
+                            .rotation
+                            .and_then(|rotation| owned(rotation.degrees().into())),
                     ),
                     (
                         "variable-refresh-rate",
-                        output
+                        display
                             .variable_refresh_rate
                             .and_then(|enabled| owned(enabled.into())),
                     ),
@@ -517,21 +566,45 @@ impl ConfigInterface {
                 .into_iter()
                 .filter_map(|(key, value)| Some((key.to_owned(), value?)))
                 .collect();
-                (connector.clone(), settings)
+                (identity.clone(), settings)
             })
             .collect()
     }
 
-    async fn set_output(
+    async fn set_display(
         &self,
-        connector: String,
+        identity: String,
         settings: HashMap<String, OwnedValue>,
         #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
     ) -> zbus::fdo::Result<()> {
         let before = self.store.current();
-        self.write(&Setting::Output(connector, output_settings(&settings)?))?;
-        if before.outputs != self.store.current().outputs {
-            self.outputs_changed(&emitter).await?;
+        self.write(&Setting::Display(identity, display_settings(&settings)?))?;
+        if before.displays != self.store.current().displays {
+            self.displays_changed(&emitter).await?;
+        }
+        Ok(())
+    }
+
+    #[zbus(property)]
+    fn arrangements(&self) -> Vec<Vec<ArrangedDisplay>> {
+        self.store
+            .current()
+            .arrangements
+            .iter()
+            .map(|placements| placements.iter().map(arranged).collect())
+            .collect()
+    }
+
+    async fn set_arrangement(
+        &self,
+        displays: Vec<ArrangedDisplay>,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+    ) -> zbus::fdo::Result<()> {
+        let before = self.store.current();
+        let placements = displays.into_iter().map(placement).collect();
+        self.write(&Setting::Arrangement(placements))?;
+        if before.arrangements != self.store.current().arrangements {
+            self.arrangements_changed(&emitter).await?;
         }
         Ok(())
     }

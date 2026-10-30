@@ -36,7 +36,7 @@ pub enum Answer {
     Pin(String),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Mode {
     pub width: i32,
     pub height: i32,
@@ -49,12 +49,15 @@ impl Mode {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Display {
     pub connector: String,
-    pub description: String,
+    pub identity: String,
     pub modes: Vec<Mode>,
     pub current: Option<Mode>,
+    pub position: (i32, i32),
+    pub scale: f64,
+    pub rotation: u32,
 }
 
 pub const REFRESH_RANGE: (u32, u32) = (60, 240);

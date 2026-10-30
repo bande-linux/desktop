@@ -1,5 +1,6 @@
 mod app;
 mod appearance;
+mod arrange;
 mod capture;
 mod clock;
 mod cursor;
@@ -8,6 +9,7 @@ mod displays;
 mod dock;
 mod drag;
 mod drm;
+mod edid;
 mod element;
 
 mod effect;
@@ -20,6 +22,7 @@ mod input;
 mod label;
 mod lock;
 mod logind;
+mod management;
 mod motion;
 mod overview;
 mod popup;
@@ -42,7 +45,7 @@ pub use cursor::{
     ARROW_FILL, ARROW_HEIGHT, ARROW_OUTLINE, ARROW_WIDTH, CursorTheme, DEFAULT_CURSOR_SIZE,
     DEFAULT_CURSOR_THEME,
 };
-pub use drm::{DrmBackendError, DrmNotifiers, DrmOutput};
+pub use drm::{DrmBackend, DrmBackendError, DrmNotifiers, HeadChanges};
 pub use element::ScreenElement;
 pub use environment::{
     DESKTOP_NAME, export_session_environment, notify_ready, session_environment,

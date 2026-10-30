@@ -1,7 +1,10 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use smithay::utils::{Logical, Point, Size};
-use unbound_compositor::{Headless, OutputConfig, Rect, Renderer};
+use std::time::Duration;
+
+use unbound_compositor::{Headless, OutputConfig, OutputMode, Rect, Renderer};
+use unbound_config::Config;
 use unbound_test_wayland::{RED, ShmImage, TestClient, roundtrip};
 use wayland_client::protocol::wl_shm::Format;
 
@@ -231,6 +234,80 @@ fn a_window_is_told_the_scale_of_the_display_it_is_on() {
     );
 
     assert_eq!(app.preferred_scale(&mut server, 0), Some(240));
+}
+
+fn config(server: &Headless, arrangement: &str) -> Config {
+    let main = server.output_identity(MAIN).expect("main identity");
+    let side = server.output_identity(SIDE).expect("side identity");
+    let source = arrangement.replace("MAIN", &main).replace("SIDE", &side);
+    Config::parse(&source).expect("valid config")
+}
+
+#[test]
+fn a_remembered_arrangement_places_the_displays_and_names_the_main_one() {
+    let mut server = two_displays();
+
+    let arranged = config(
+        &server,
+        "arrangement {\n    display \"SIDE\" x=0 y=0 main=#true\n    display \"MAIN\" x=320 y=48\n}\n",
+    );
+    server.set_display_config(arranged);
+
+    assert_eq!(server.main_output(), SIDE);
+    assert_eq!(server.output_rect(SIDE), Some(rect(0, 0, 320, 240)));
+    assert_eq!(server.output_rect(MAIN), Some(rect(320, 48, 256, 192)));
+}
+
+#[test]
+fn a_display_unknown_to_the_remembered_arrangement_goes_to_the_right() {
+    let mut server = Headless::new(Size::from(MAIN_SIZE)).expect("headless compositor");
+    let main = server.output_identity(MAIN).expect("main identity");
+    let source = format!("arrangement {{\n    display \"{main}\" x=0 y=0 main=#true\n}}\n");
+    server.set_display_config(Config::parse(&source).expect("valid config"));
+
+    server.add_output(side_display());
+
+    assert_eq!(server.output_rect(SIDE), Some(rect(256, 0, 320, 240)));
+}
+
+#[test]
+fn display_settings_pick_the_resolution_refresh_and_scale() {
+    let mut server = Headless::new(Size::from(MAIN_SIZE)).expect("headless compositor");
+    let mode = |width: i32, height: i32, hertz: u64| OutputMode {
+        size: (width, height).into(),
+        refresh: Duration::from_nanos(1_000_000_000 / hertz),
+    };
+    server.add_output(OutputConfig {
+        modes: vec![mode(640, 480, 60), mode(320, 240, 120), mode(320, 240, 60)],
+        ..side_display()
+    });
+    let side = server.output_identity(SIDE).expect("side identity");
+    let source = format!(
+        "display \"{side}\" {{\n    resolution 320 240\n    refresh-rate 60\n    scale 2\n}}\n"
+    );
+
+    server.set_display_config(Config::parse(&source).expect("valid config"));
+
+    let settings = server.output_settings(SIDE).expect("side display");
+    assert_eq!(settings.mode, mode(320, 240, 60));
+    assert_eq!(server.output_rect(SIDE), Some(rect(256, 0, 160, 120)));
+}
+
+#[test]
+fn windows_move_with_their_display_when_it_is_rearranged() {
+    let mut server = two_displays();
+    server.move_pointer_to(at(400.0, 100.0), 0);
+    let _app = app(&mut server);
+
+    let arranged = config(
+        &server,
+        "arrangement {\n    display \"MAIN\" x=0 y=0 main=#true\n    display \"SIDE\" x=-320 y=-40\n}\n",
+    );
+    server.set_display_config(arranged);
+
+    assert_eq!(server.output_rect(SIDE), Some(rect(-320, -40, 320, 240)));
+    assert_eq!(server.output_of(&server.windows()[0]), SIDE);
+    assert_eq!(geometry(&server), rect(-320 + 128, -40 + 96, 64, 48));
 }
 
 #[test]

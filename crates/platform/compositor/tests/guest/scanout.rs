@@ -76,7 +76,11 @@ fn a_composed_window_is_scanned_out() {
     let scanout = session.present();
     scanout.save("composed-window");
 
-    assert!(!session.output.scanned_out_directly());
+    assert!(
+        !session
+            .output
+            .scanned_out_directly(&session.shared.server.main_output())
+    );
     assert_eq!((scanout.width, scanout.height), (width, height));
     let left = (width - window_width) / 2;
     let top = (height - window_height) / 2;
@@ -117,7 +121,11 @@ fn a_fullscreen_opaque_dmabuf_window_is_scanned_out_directly() {
     let scanout = session.present();
     scanout.save("direct-scanout");
 
-    assert!(session.output.scanned_out_directly());
+    assert!(
+        session
+            .output
+            .scanned_out_directly(&session.shared.server.main_output())
+    );
     assert_matches(&scanout, |x, y| rgb(quadrant_color(x, y, width, height)));
 }
 

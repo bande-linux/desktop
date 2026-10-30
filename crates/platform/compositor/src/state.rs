@@ -142,6 +142,9 @@ pub struct State {
     pub(crate) blockers: smithay::reexports::calloop::LoopHandle<'static, State>,
     pub(crate) screens: Vec<Screen>,
     pub(crate) departed: Vec<crate::displays::Departed>,
+    pub(crate) display_config: unbound_config::Config,
+    pub(crate) output_managers: Vec<crate::management::Manager>,
+    pub(crate) output_serial: u32,
     pub(crate) announced_workspaces: (usize, usize),
     scanout_node: Option<DrmNode>,
     compositor_state: CompositorState,
@@ -274,6 +277,7 @@ impl Headless {
         handle.create_global::<State, UnboundShellV1, ()>(9, ());
         handle.create_global::<State, UnboundAppV1, ()>(3, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
+        handle.create_global::<State, smithay::reexports::wayland_protocols_wlr::output_management::v1::server::zwlr_output_manager_v1::ZwlrOutputManagerV1, ()>(crate::management::MANAGER_VERSION, ());
         State::create_capture_globals(&handle);
         let state = State {
             display_handle: handle.clone(),
@@ -281,6 +285,9 @@ impl Headless {
             blockers: fences.handle(),
             screens: vec![screen],
             departed: Vec::new(),
+            display_config: unbound_config::Config::default(),
+            output_managers: Vec::new(),
+            output_serial: 0,
             announced_workspaces: (1, 0),
             scanout_node: scanout.as_ref().map(|scanout| scanout.node),
             compositor_state: CompositorState::new::<State>(&handle),

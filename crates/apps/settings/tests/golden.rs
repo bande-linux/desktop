@@ -133,10 +133,13 @@ fn the_displays_pane_matches_its_golden_in_dark() {
         .collect();
     view.set_displays(vec![Display {
         connector: "eDP-1".to_owned(),
-        description: "Built-in Retina Display".to_owned(),
+        identity: "Built-in Retina Display".to_owned(),
         current: modes.first().copied(),
         modes,
+        scale: 2.0,
+        ..Display::default()
     }]);
+
     open(&mut view, "displays");
     let scene = view.scene(SIZE.0, SIZE.1);
     let frame = CpuRenderer::new().render(&scene).expect("frame");

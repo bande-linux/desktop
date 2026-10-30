@@ -4170,6 +4170,7 @@ dependencies = [
  "unbound-wallpaper",
  "unbound-xdg",
  "wayland-client",
+ "wayland-protocols-wlr",
  "zbus",
 ]
 

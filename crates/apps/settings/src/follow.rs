@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
-use unbound_config::{BUS_NAME, OBJECT_PATH, Output};
+use unbound_config::{BUS_NAME, DisplaySettings, OBJECT_PATH, Placement};
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
@@ -24,7 +24,8 @@ const NOTIFICATIONS_PATH: &str = "/org/freedesktop/Notifications";
 #[derive(Debug, Clone, PartialEq)]
 pub enum Update {
     Values(Vec<(SettingId, Value)>),
-    Outputs(BTreeMap<String, Output>),
+    Displays(BTreeMap<String, DisplaySettings>),
+    Arrangements(Vec<Vec<Placement>>),
     Audio(Option<unbound_audio::Snapshot>),
     Wifi(Option<WifiState>),
     Joined(Vec<u8>, Joined),
@@ -38,7 +39,8 @@ pub enum Update {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Command {
     Set(SettingId, Value),
-    Output(String, Output),
+    Display(String, DisplaySettings),
+    Arrangement(Vec<Placement>),
     Audio(AudioCommand),
     Network(NetworkCommand),
     Bluetooth(BluetoothCommand),
@@ -133,9 +135,14 @@ fn follow_properties(
 pub fn follow_config(session: &Connection, updates: Updates) {
     follow_properties(session, BUS_NAME, OBJECT_PATH, updates, |client| {
         let mut read = vec![Update::Values(client.read(&CONFIG_SETTINGS))];
-        match client.outputs() {
-            Ok(outputs) => read.push(Update::Outputs(outputs)),
-            Err(error) => tracing::warn!("cannot read the display settings: {error}"),
+        match (client.displays(), client.arrangements()) {
+            (Ok(displays), Ok(arrangements)) => {
+                read.push(Update::Displays(displays));
+                read.push(Update::Arrangements(arrangements));
+            }
+            (Err(error), _) | (_, Err(error)) => {
+                tracing::warn!("cannot read the display settings: {error}")
+            }
         }
         read
     });
@@ -154,7 +161,16 @@ pub fn follow_notifications(session: &Connection, updates: Updates) {
 fn replaces(queued: &Command, command: &Command) -> bool {
     match (queued, command) {
         (Command::Set(queued, _), Command::Set(id, _)) => queued == id,
-        (Command::Output(queued, _), Command::Output(connector, _)) => queued == connector,
+        (Command::Display(queued, _), Command::Display(identity, _)) => queued == identity,
+        (Command::Arrangement(queued), Command::Arrangement(placements)) => {
+            unbound_config::same_displays(
+                queued,
+                &placements
+                    .iter()
+                    .map(|placement| placement.display.clone())
+                    .collect::<Vec<_>>(),
+            )
+        }
         _ => false,
     }
 }
@@ -179,16 +195,22 @@ pub fn worker(session: &Connection, updates: Updates) -> Sender<Command> {
             for command in commands {
                 let (result, restore) = match &command {
                     Command::Set(id, value) => (client.set(*id, value), vec![*id]),
-                    Command::Output(connector, output) => {
-                        (client.set_output(connector, output), Vec::new())
+                    Command::Display(identity, display) => {
+                        (client.set_display(identity, display), Vec::new())
+                    }
+                    Command::Arrangement(placements) => {
+                        (client.set_arrangement(placements), Vec::new())
                     }
                     _ => (Ok(()), Vec::new()),
                 };
                 if let Err(error) = result {
                     updates.send(Update::Failed(error.to_string()));
                     updates.send(Update::Values(client.read(&restore)));
-                    if let Ok(outputs) = client.outputs() {
-                        updates.send(Update::Outputs(outputs));
+                    if let Ok(displays) = client.displays() {
+                        updates.send(Update::Displays(displays));
+                    }
+                    if let Ok(arrangements) = client.arrangements() {
+                        updates.send(Update::Arrangements(arrangements));
                     }
                 }
             }
@@ -220,7 +242,10 @@ impl Services {
 
     pub fn send(&self, command: Command) {
         let sent = match command {
-            Command::Set(..) | Command::Output(..) => self.session.send(command).is_ok(),
+            Command::Set(..) | Command::Display(..) | Command::Arrangement(..) => {
+                self.session.send(command).is_ok()
+            }
+
             Command::Audio(command) => self.audio.send(command).is_ok(),
             Command::Network(command) => self
                 .network

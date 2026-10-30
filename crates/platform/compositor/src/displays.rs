@@ -386,7 +386,29 @@ impl State {
         self.after_screens_changed();
     }
 
+    pub(crate) fn arrange_screens(&mut self) {
+        let heads: Vec<OutputConfig> = self
+            .screens
+            .iter()
+            .map(|screen| screen.config.clone())
+            .collect();
+        let main = self.main_screen().name();
+        let arranged = crate::arrange::arrange(&heads, &main, &self.display_config);
+        for display in &arranged {
+            if let Some(screen) = self.screen_named(&display.name) {
+                self.configure_screen(screen, display.settings);
+            }
+        }
+        if let Some(main) = arranged
+            .first()
+            .and_then(|display| self.screen_named(&display.name))
+        {
+            self.make_main(main);
+        }
+    }
+
     fn after_screens_changed(&mut self) {
+        self.announce_outputs();
         self.pointer_location = self.nearest_on_screens(self.pointer_location);
         self.sync_surface_outputs();
         self.resize_lock_surfaces();
@@ -441,12 +463,30 @@ impl Headless {
             .unwrap_or(0);
         settings.position = (right, main.location.y).into();
         self.state.add_screen(config, settings);
+        self.state.arrange_screens();
     }
 
     pub fn remove_output(&mut self, output: &str) {
         if let Some(screen) = self.state.screen_named(output) {
             self.state.remove_screen(screen);
+            self.state.arrange_screens();
         }
+    }
+
+    pub fn set_display_config(&mut self, config: unbound_config::Config) {
+        self.state.display_config = config;
+        self.state.arrange_screens();
+    }
+
+    pub fn output_identity(&self, output: &str) -> Option<String> {
+        let heads: Vec<OutputConfig> = self
+            .state
+            .screens
+            .iter()
+            .map(|screen| screen.config.clone())
+            .collect();
+        let index = self.state.screen_named(output)?;
+        crate::arrange::identities(&heads).into_iter().nth(index)
     }
 
     pub fn configure_output(&mut self, output: &str, settings: OutputSettings) {

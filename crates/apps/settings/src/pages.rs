@@ -48,7 +48,7 @@ fn picture_name(name: &str) -> String {
 
 fn display_value(
     display: &Display,
-    output: Option<unbound_config::Output>,
+    output: Option<unbound_config::DisplaySettings>,
     id: SettingId,
 ) -> Option<Value> {
     let output = output.unwrap_or_default();
@@ -103,9 +103,9 @@ impl SettingsView {
         id: SettingId,
         scope: Option<&Display>,
     ) -> impl FnMut(Value) + 'static {
-        let connector = scope.map(|display| display.connector.clone());
-        intent(&self.intents, move |value| match &connector {
-            Some(connector) => Intent::Display(connector.clone(), id, value),
+        let identity = scope.map(|display| display.identity.clone());
+        intent(&self.intents, move |value| match &identity {
+            Some(identity) => Intent::Display(identity.clone(), id, value),
             None => Intent::Set(id, value),
         })
     }
@@ -117,9 +117,11 @@ impl SettingsView {
     ) -> Option<(Box<dyn Widget>, WidgetId)> {
         let id = setting.id;
         let value = match scope {
-            Some(display) => {
-                display_value(display, self.outputs.get(&display.connector).copied(), id)
-            }
+            Some(display) => display_value(
+                display,
+                self.display_settings.get(&display.identity).copied(),
+                id,
+            ),
             None => self.values.get(&id).cloned(),
         };
         let mut set = self.setting_intent(id, scope);
@@ -581,11 +583,12 @@ impl SettingsView {
     ) -> Widgets {
         let mut page = Vec::new();
         for display in self.displays.clone() {
-            let title = if display.description.is_empty() {
+            let title = if display.identity.is_empty() {
                 display.connector.clone()
             } else {
-                display.description.clone()
+                display.identity.clone()
             };
+
             page.push(boxed(Caption::new(
                 Text::new(&title, Tone::Muted).caption().semibold(),
             )));

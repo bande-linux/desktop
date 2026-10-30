@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use accesskit::{Action, ActionData, ActionRequest, TreeId, TreeUpdate};
 use unbound_audio::{Direction, Snapshot};
-use unbound_config::Output;
+use unbound_config::{DisplaySettings, Placement};
 use unbound_toolkit::ui::{Context, Event, Key, Modifiers, TextField, Ui, Widget, WidgetId};
 use unbound_toolkit::{Image, Palette, Rect, Scene, TextSystem};
 
@@ -79,7 +79,8 @@ pub(crate) struct Join {
 pub struct SettingsView {
     pub(crate) panes: Vec<Pane>,
     pub(crate) values: HashMap<SettingId, Value>,
-    pub(crate) outputs: BTreeMap<String, Output>,
+    pub(crate) display_settings: BTreeMap<String, DisplaySettings>,
+    pub(crate) arrangements: Vec<Vec<Placement>>,
     pub(crate) displays: Vec<Display>,
     pub(crate) audio: Option<Snapshot>,
     pub(crate) wifi: Option<WifiState>,
@@ -121,7 +122,8 @@ impl SettingsView {
         let mut view = Self {
             panes: panes(),
             values: HashMap::new(),
-            outputs: BTreeMap::new(),
+            display_settings: BTreeMap::new(),
+            arrangements: Vec::new(),
             displays: Vec::new(),
             audio: None,
             wifi: None,
@@ -183,7 +185,8 @@ impl SettingsView {
                     self.values.insert(id, value);
                 }
             }
-            Update::Outputs(outputs) => self.outputs = outputs,
+            Update::Displays(displays) => self.display_settings = displays,
+            Update::Arrangements(arrangements) => self.arrangements = arrangements,
             Update::Audio(snapshot) => self.apply_audio(snapshot),
             Update::Wifi(wifi) => {
                 if let Some(wifi) = &wifi {
@@ -472,7 +475,7 @@ impl SettingsView {
                 Intent::StepPane(step) => self.step_pane(step),
                 Intent::Query(query) => self.set_query(query),
                 Intent::Set(id, value) => self.change(id, value),
-                Intent::Display(connector, id, value) => self.change_display(connector, id, value),
+                Intent::Display(identity, id, value) => self.change_display(identity, id, value),
                 Intent::Default(direction, name) => {
                     self.commands
                         .push(Command::Audio(AudioCommand::Default(direction, name)));
@@ -665,26 +668,30 @@ impl SettingsView {
         self.message = None;
     }
 
-    fn change_display(&mut self, connector: String, id: SettingId, value: Value) {
-        let mut output = self.outputs.get(&connector).copied().unwrap_or_default();
+    fn change_display(&mut self, identity: String, id: SettingId, value: Value) {
+        let mut display = self
+            .display_settings
+            .get(&identity)
+            .copied()
+            .unwrap_or_default();
         match (id, value) {
             (SettingId::DisplayScale, Value::Number(percent)) => {
-                output.scale = Some(f64::from(percent) / 100.0);
+                display.scale = Some(f64::from(percent) / 100.0);
             }
             (SettingId::DisplayScale, Value::Keyword(keyword)) if keyword == AUTOMATIC => {
-                output.scale = None;
+                display.scale = None;
             }
             (SettingId::RefreshRate, Value::Number(hertz)) => {
-                output.refresh_rate = Some(f64::from(hertz));
+                display.refresh_rate = Some(f64::from(hertz));
             }
             (SettingId::VariableRefreshRate, Value::Flag(on)) => {
-                output.variable_refresh_rate = on.then_some(true);
+                display.variable_refresh_rate = on.then_some(true);
             }
             _ => return,
         }
-        self.outputs.insert(connector.clone(), output);
+        self.display_settings.insert(identity.clone(), display);
         self.message = None;
-        self.commands.push(Command::Output(connector, output));
+        self.commands.push(Command::Display(identity, display));
     }
 
     fn rebuild(&mut self) {

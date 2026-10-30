@@ -43,5 +43,6 @@ fn the_displays_pane_lists_each_output_by_connector_with_its_modes() {
         Some((3024, 1964, 120))
     );
     assert_eq!(display.refresh_rates(), [120]);
-    assert!(!display.description.is_empty());
+    assert_eq!(display.identity, "Apple Built-in Retina Display");
+    assert_eq!(display.position, (0, 0));
 }

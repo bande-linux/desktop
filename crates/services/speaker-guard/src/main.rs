@@ -66,7 +66,7 @@ impl Guard {
             match protection.update(*power, seconds) {
                 Verdict::Gain(gain_db) => self
                     .card
-                    .set_gain(index, gain_db)
+                    .set_gain(index, gain_db.min(self.model.max_gain_db))
                     .map_err(|e| e.to_string())?,
                 Verdict::HardLimit(t) => {
                     return Err(format!(
@@ -89,7 +89,9 @@ impl Guard {
         self.card.heartbeat().map_err(|e| e.to_string())?;
         let gains: Vec<f64> = self.protections.iter().map(|p| p.gain_db).collect();
         for (index, gain) in gains.into_iter().enumerate() {
-            self.card.set_gain(index, gain).map_err(|e| e.to_string())?;
+            self.card
+                .set_gain(index, gain.min(self.model.max_gain_db))
+                .map_err(|e| e.to_string())?;
         }
         while !stop.load(Ordering::Relaxed) {
             let read = match self.pcm.read(&mut buffer, WAIT_MS) {

@@ -3,6 +3,7 @@ sense-device 2
 sense-channels 2
 period-frames 1024
 amplifier-sensitivity 15.87
+max-gain -20.0
 current-full-scale 3.75
 voltage-full-scale 14.0
 

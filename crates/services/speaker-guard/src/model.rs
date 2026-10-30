@@ -11,6 +11,7 @@ pub struct Model {
     pub sense_device: u32,
     pub period_frames: usize,
     pub amplifier_sensitivity: f64,
+    pub max_gain_db: f64,
     pub speakers: Vec<Speaker>,
 }
 
@@ -135,17 +136,44 @@ impl Model {
         if speakers.is_empty() {
             return Err(ModelError::Missing("speaker".to_owned()));
         }
+        let max_gain_db = number(&document, "max-gain")?;
+        if !(-100.0..=0.0).contains(&max_gain_db) {
+            return Err(ModelError::Invalid("max-gain".to_owned()));
+        }
         Ok(Self {
             card: text(&document, "card")?,
             sense_device: u32::try_from(count(&document, "sense-device")?)
                 .map_err(|_| ModelError::Invalid("sense-device".to_owned()))?,
             period_frames: count(&document, "period-frames")?,
             amplifier_sensitivity: number(&document, "amplifier-sensitivity")?,
+            max_gain_db,
             speakers,
         })
     }
 
     pub fn load(path: &Path) -> Result<Self, ModelError> {
         Self::parse(&std::fs::read_to_string(path).map_err(ModelError::Read)?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const J473: &str = include_str!("../data/j473.kdl");
+
+    #[test]
+    fn the_shipped_j473_model_parses_and_caps_the_gain_until_the_sense_scale_is_validated() {
+        let model = Model::parse(J473).unwrap();
+        assert_eq!(model.speakers.len(), 1);
+        assert_eq!(model.max_gain_db, -20.0);
+    }
+
+    #[test]
+    fn a_max_gain_above_zero_is_rejected() {
+        let source = J473.replace("max-gain -20.0", "max-gain 3.0");
+        assert!(matches!(Model::parse(&source), Err(ModelError::Invalid(_))));
+        let source = J473.replace("max-gain -20.0\n", "");
+        assert!(matches!(Model::parse(&source), Err(ModelError::Missing(_))));
     }
 }

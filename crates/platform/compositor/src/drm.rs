@@ -401,6 +401,9 @@ impl DrmBackend {
 
     pub fn leave_on_screen(mut self) {
         self.device.pause();
+        for head in self.heads.drain(..) {
+            std::mem::forget(head.compositor);
+        }
     }
 
     pub fn session_active(&self) -> bool {

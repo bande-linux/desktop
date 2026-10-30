@@ -182,16 +182,22 @@ impl GpuRenderer {
         draw::images(&scene.items, &mut images);
         images.retain(|image| self.image_ids.get(image).is_none());
         let dropped = self.image_ids.take_dropped();
-        if images.is_empty() && dropped.is_empty() {
+        if !dropped.is_empty() {
+            let mut clearing = self
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+            for id in dropped {
+                self.renderer
+                    .destroy_image(&mut self.resources, &mut clearing, id);
+            }
+            self.queue.submit([clearing.finish()]);
+        }
+        if images.is_empty() {
             return;
         }
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
-        for id in dropped {
-            self.renderer
-                .destroy_image(&mut self.resources, &mut encoder, id);
-        }
         for image in images {
             let id = self.renderer.upload_image(
                 &mut self.resources,

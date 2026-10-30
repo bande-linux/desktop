@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use rustix::ioctl::{IntegerSetter, NoArg, Opcode, Setter, ioctl, opcode};
 
 use crate::keys::{Chord, KEY_LEFTSHIFT, KEY_MAX, character_key};
-use crate::scenario::{Button, Direction, Point};
+use crate::scenario::{Button, Direction, MAX_FINGERS, Pinch, Point};
 
 const EV_SYN: u16 = 0;
 const EV_KEY: u16 = 1;
@@ -14,6 +14,19 @@ const EV_REL: u16 = 2;
 const EV_ABS: u16 = 3;
 const ABS_X: u16 = 0;
 const ABS_Y: u16 = 1;
+const ABS_MT_SLOT: u16 = 0x2f;
+const ABS_MT_POSITION_X: u16 = 0x35;
+const ABS_MT_POSITION_Y: u16 = 0x36;
+const ABS_MT_TRACKING_ID: u16 = 0x39;
+const INPUT_PROP_POINTER: u16 = 0;
+const INPUT_PROP_BUTTONPAD: u16 = 2;
+const BTN_TOUCH: u16 = 0x14a;
+const BTN_TOOL_FINGERS: [u16; 5] = [0x145, 0x14d, 0x14e, 0x14f, 0x148];
+const TOUCHPAD_SIZE: (i32, i32) = (4000, 2600);
+const TOUCHPAD_UNITS_PER_MM: i32 = 40;
+const PINCH_RADII: (f64, f64) = (300.0, 1100.0);
+const PINCH_DURATION: Duration = Duration::from_millis(500);
+const TOUCH_STEP: Duration = Duration::from_millis(10);
 const REL_HWHEEL: u16 = 6;
 const REL_WHEEL: u16 = 8;
 const REL_WHEEL_HI_RES: u16 = 11;
@@ -66,6 +79,7 @@ const UI_SET_EVBIT: Opcode = opcode::write::<i32>(b'U', 100);
 const UI_SET_KEYBIT: Opcode = opcode::write::<i32>(b'U', 101);
 const UI_SET_RELBIT: Opcode = opcode::write::<i32>(b'U', 102);
 const UI_SET_ABSBIT: Opcode = opcode::write::<i32>(b'U', 103);
+const UI_SET_PROPBIT: Opcode = opcode::write::<i32>(b'U', 110);
 
 struct Device(File);
 
@@ -107,6 +121,23 @@ impl Device {
         };
         unsafe { ioctl(&self.0, Setter::<UI_DEV_SETUP, UinputSetup>::new(setup)) }?;
         unsafe { ioctl(&self.0, NoArg::<UI_DEV_CREATE>::new()) }?;
+        Ok(())
+    }
+
+    fn axis(&self, code: u16, maximum: i32, resolution: i32) -> io::Result<()> {
+        self.enable::<UI_SET_ABSBIT>(code)?;
+        let setup = AbsSetup {
+            code,
+            info: AbsInfo {
+                value: 0,
+                minimum: 0,
+                maximum,
+                fuzz: 0,
+                flat: 0,
+                resolution,
+            },
+        };
+        unsafe { ioctl(&self.0, Setter::<UI_ABS_SETUP, AbsSetup>::new(setup)) }?;
         Ok(())
     }
 
@@ -198,19 +229,7 @@ impl Pointer {
             device.enable::<UI_SET_RELBIT>(axis)?;
         }
         for axis in [ABS_X, ABS_Y] {
-            device.enable::<UI_SET_ABSBIT>(axis)?;
-            let setup = AbsSetup {
-                code: axis,
-                info: AbsInfo {
-                    value: 0,
-                    minimum: 0,
-                    maximum: ABS_RANGE - 1,
-                    fuzz: 0,
-                    flat: 0,
-                    resolution: 0,
-                },
-            };
-            unsafe { ioctl(&device.0, Setter::<UI_ABS_SETUP, AbsSetup>::new(setup)) }?;
+            device.axis(axis, ABS_RANGE - 1, 0)?;
         }
         device.create("unbound-review pointer")?;
         Ok(Self {
@@ -302,6 +321,107 @@ impl Pointer {
             thread::sleep(SCROLL_GAP);
         }
         Ok(())
+    }
+}
+
+pub struct Touchpad(Device);
+
+impl Touchpad {
+    pub fn new() -> io::Result<Self> {
+        let device = Device::open()?;
+        for kind in [EV_KEY, EV_ABS] {
+            device.enable::<UI_SET_EVBIT>(kind)?;
+        }
+        for key in [BTN_LEFT, BTN_TOUCH].into_iter().chain(BTN_TOOL_FINGERS) {
+            device.enable::<UI_SET_KEYBIT>(key)?;
+        }
+        for property in [INPUT_PROP_POINTER, INPUT_PROP_BUTTONPAD] {
+            device.enable::<UI_SET_PROPBIT>(property)?;
+        }
+        let (width, height) = TOUCHPAD_SIZE;
+        device.axis(ABS_X, width, TOUCHPAD_UNITS_PER_MM)?;
+        device.axis(ABS_Y, height, TOUCHPAD_UNITS_PER_MM)?;
+        device.axis(ABS_MT_POSITION_X, width, TOUCHPAD_UNITS_PER_MM)?;
+        device.axis(ABS_MT_POSITION_Y, height, TOUCHPAD_UNITS_PER_MM)?;
+        device.axis(ABS_MT_SLOT, MAX_FINGERS as i32 - 1, 0)?;
+        device.axis(ABS_MT_TRACKING_ID, 0xffff, 0)?;
+        device.create("unbound-review touchpad")?;
+        Ok(Self(device))
+    }
+
+    pub fn pinch(&mut self, pinch: Pinch, fingers: u32) -> io::Result<()> {
+        let fingers = fingers.clamp(2, MAX_FINGERS) as usize;
+        let (from, to) = match pinch {
+            Pinch::Out => PINCH_RADII,
+            Pinch::In => (PINCH_RADII.1, PINCH_RADII.0),
+        };
+        let tool = BTN_TOOL_FINGERS[fingers - 1];
+        self.touch(
+            fingers,
+            from,
+            |slot| {
+                vec![
+                    (EV_ABS, ABS_MT_SLOT, slot),
+                    (EV_ABS, ABS_MT_TRACKING_ID, slot + 1),
+                ]
+            },
+            &[(EV_KEY, BTN_TOUCH, 1), (EV_KEY, tool, 1)],
+        )?;
+        let started = Instant::now();
+        loop {
+            thread::sleep(TOUCH_STEP);
+            let progress =
+                (started.elapsed().as_secs_f64() / PINCH_DURATION.as_secs_f64()).min(1.0);
+            let radius = from + (to - from) * ease_in_out(progress);
+            self.touch(
+                fingers,
+                radius,
+                |slot| vec![(EV_ABS, ABS_MT_SLOT, slot)],
+                &[],
+            )?;
+            if progress >= 1.0 {
+                break;
+            }
+        }
+        let mut lift: Vec<_> = (0..fingers as i32)
+            .flat_map(|slot| {
+                [
+                    (EV_ABS, ABS_MT_SLOT, slot),
+                    (EV_ABS, ABS_MT_TRACKING_ID, -1),
+                ]
+            })
+            .collect();
+        lift.extend([(EV_KEY, BTN_TOUCH, 0), (EV_KEY, tool, 0)]);
+        self.0.emit(&lift)
+    }
+
+    fn touch(
+        &mut self,
+        fingers: usize,
+        radius: f64,
+        start: impl Fn(i32) -> Vec<(u16, u16, i32)>,
+        after: &[(u16, u16, i32)],
+    ) -> io::Result<()> {
+        let centre = (
+            f64::from(TOUCHPAD_SIZE.0) / 2.0,
+            f64::from(TOUCHPAD_SIZE.1) / 2.0,
+        );
+        let mut events = Vec::new();
+        for slot in 0..fingers {
+            let angle = std::f64::consts::TAU * slot as f64 / fingers as f64;
+            let x = (centre.0 + radius * angle.cos()) as i32;
+            let y = (centre.1 + radius * 0.6 * angle.sin()) as i32;
+            events.extend(start(slot as i32));
+            events.extend([
+                (EV_ABS, ABS_MT_POSITION_X, x),
+                (EV_ABS, ABS_MT_POSITION_Y, y),
+            ]);
+            if slot == 0 {
+                events.extend([(EV_ABS, ABS_X, x), (EV_ABS, ABS_Y, y)]);
+            }
+        }
+        events.extend_from_slice(after);
+        self.0.emit(&events)
     }
 }
 

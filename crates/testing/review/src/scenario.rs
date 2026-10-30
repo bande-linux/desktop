@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use crate::keys::{Chord, character_key, chord};
 
+pub const MAX_FINGERS: u32 = 5;
 const DEFAULT_WINDOW_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -18,6 +19,12 @@ pub enum Direction {
     Down,
     Left,
     Right,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Pinch {
+    In,
+    Out,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,6 +50,10 @@ pub enum Step {
     Scroll {
         direction: Direction,
         detents: u32,
+    },
+    Pinch {
+        pinch: Pinch,
+        fingers: u32,
     },
     Wait(Duration),
     WaitForWindow {
@@ -265,6 +276,18 @@ fn parse_step(text: &str) -> Result<Step, String> {
             };
             Step::Scroll { direction, detents }
         }
+        "pinch" => {
+            let pinch = match arguments.word("in or out")?.as_str() {
+                "in" => Pinch::In,
+                "out" => Pinch::Out,
+                other => return Err(format!("expected in or out, found {other}")),
+            };
+            let fingers = arguments.number("a number of fingers")?;
+            if !(2..=MAX_FINGERS).contains(&fingers) {
+                return Err(format!("a pinch takes 2 to {MAX_FINGERS} fingers"));
+            }
+            Step::Pinch { pinch, fingers }
+        }
         "wait" => Step::Wait(duration(&arguments.word("a duration")?)?),
         "wait-for-window" => {
             let app_id = arguments.text()?;
@@ -321,6 +344,7 @@ click 10 20
 double-click
 drag 100 100 to 600 400
 scroll down 5
+pinch out 4
 wait 500ms
 wait 1.5s
 wait-for-window \"org.unbound.Terminal\"
@@ -330,7 +354,7 @@ note \"Nothing happens yet\"
 ";
         let lines = parse(scenario).unwrap();
 
-        assert_eq!(lines.len(), 14);
+        assert_eq!(lines.len(), 15);
         assert_eq!(lines[0].number, 2);
         assert_eq!(lines[0].source, "key super+space");
         assert_eq!(
@@ -380,24 +404,31 @@ note \"Nothing happens yet\"
                 detents: 5
             }
         );
-        assert_eq!(lines[8].step, Step::Wait(Duration::from_millis(500)));
-        assert_eq!(lines[9].step, Step::Wait(Duration::from_millis(1500)));
         assert_eq!(
-            lines[10].step,
+            lines[8].step,
+            Step::Pinch {
+                pinch: Pinch::Out,
+                fingers: 4
+            }
+        );
+        assert_eq!(lines[9].step, Step::Wait(Duration::from_millis(500)));
+        assert_eq!(lines[10].step, Step::Wait(Duration::from_millis(1500)));
+        assert_eq!(
+            lines[11].step,
             Step::WaitForWindow {
                 app_id: "org.unbound.Terminal".to_owned(),
                 timeout: DEFAULT_WINDOW_TIMEOUT
             }
         );
         assert_eq!(
-            lines[11].step,
+            lines[12].step,
             Step::WaitForWindow {
                 app_id: "org.unbound.Files".to_owned(),
                 timeout: Duration::from_secs(3)
             }
         );
-        assert_eq!(lines[12].step, Step::Shot("launcher open".to_owned()));
-        assert_eq!(lines[13].step, Step::Note("Nothing happens yet".to_owned()));
+        assert_eq!(lines[13].step, Step::Shot("launcher open".to_owned()));
+        assert_eq!(lines[14].step, Step::Note("Nothing happens yet".to_owned()));
     }
 
     #[test]
@@ -436,6 +467,8 @@ note \"Nothing happens yet\"
         assert!(step("key hyper+x").is_err());
         assert!(step("shot \"a\" \"b\"").is_err());
         assert!(step("fly away").is_err());
+        assert!(step("pinch sideways 4").is_err());
+        assert!(step("pinch out 9").is_err());
         assert!(step("type \"café\"").is_err());
     }
 }

@@ -119,10 +119,12 @@ pub fn run(window: &mut Window, app: &mut impl App) -> Result<(), WindowError> {
             continue;
         };
 
+        let window_deadline = window.deadline();
+        let app_deadline = app.deadline();
         let deadline = earliest([
             window.state.input.repeat_deadline(),
-            window.deadline(),
-            app.deadline(),
+            window_deadline,
+            app_deadline,
         ]);
         let (wayland_ready, accessibility_ready, appearance_ready, pastes_ready, sources_ready) = {
             let connection = guard.connection_fd();
@@ -189,10 +191,10 @@ pub fn run(window: &mut Window, app: &mut impl App) -> Result<(), WindowError> {
             app.source_ready(window, index);
         }
         let now = Instant::now();
-        if window.deadline().is_some_and(|deadline| deadline <= now) {
+        if window_deadline.is_some_and(|deadline| deadline <= now) {
             window.tick(now);
         }
-        if app.deadline().is_some_and(|deadline| deadline <= now) {
+        if app_deadline.is_some_and(|deadline| deadline <= now) {
             app.tick(window, now);
         }
     }

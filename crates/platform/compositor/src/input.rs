@@ -17,11 +17,10 @@ use unbound_protocols::server::unbound_shell_v1::{BrightnessKey, VolumeKey};
 use crate::gesture::Gesture;
 use crate::motion::DOCK_NAMESPACE;
 use crate::shell::toplevel_names;
-use crate::state::{Headless, State};
+use crate::state::{Headless, MENU_BAR_NAMESPACE, State};
 use crate::tile::Direction;
 
 const EVDEV_OFFSET: u32 = 8;
-const MENU_BAR_NAMESPACE: &str = "menubar";
 
 const SCROLL_PER_DETENT: f64 = 15.0;
 

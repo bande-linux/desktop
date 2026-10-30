@@ -4,10 +4,10 @@ use std::time::Duration;
 use kdl::{KdlDocument, KdlEntry, KdlEntryFormat, KdlNode, KdlValue};
 
 use crate::{
-    AlertSound, Appearance, CapsLock, ClockFormat, Config, ConfigError, DEFAULT_DOCK_ICON_SIZE,
-    DisplaySettings, DockEdge, InputSource, LEGACY_DISPLAY, LidOnPower, Mouse, Placement,
-    SecondaryClick, Sound, Suspend, Trackpad, WallpaperFit, WallpaperVariant, same_displays,
-    section_name,
+    Accessibility, AlertSound, Appearance, CapsLock, ClockFormat, Config, ConfigError,
+    DEFAULT_DOCK_ICON_SIZE, DisplaySettings, DockEdge, InputSource, LEGACY_DISPLAY, LidOnPower,
+    Mouse, Placement, SecondaryClick, Sound, Suspend, Trackpad, WallpaperFit, WallpaperVariant,
+    same_displays, section_name,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -17,7 +17,7 @@ pub enum Setting {
     ShowBatteryPercentage(bool),
     LowPowerOnBattery(bool),
     LidOnPower(LidOnPower),
-    ReduceMotion(bool),
+    Accessibility(Accessibility),
     DockEdge(DockEdge),
     DockApps(Vec<String>),
     DockAutoHide(bool),
@@ -82,12 +82,7 @@ impl Setting {
                 "lid-on-power",
                 (*action != LidOnPower::Sleep).then(|| action.keyword().into()),
             ),
-            Self::ReduceMotion(reduce) => set(
-                &mut document,
-                Some("accessibility"),
-                "reduce-motion",
-                reduce.then_some(KdlValue::Bool(true)),
-            ),
+            Self::Accessibility(access) => set_accessibility(&mut document, access),
             Self::DockEdge(edge) => set(
                 &mut document,
                 Some("dock"),
@@ -358,6 +353,46 @@ fn duration(after: Duration) -> String {
         _ if seconds.is_multiple_of(3600) => format!("{}h", seconds / 3600),
         _ if seconds.is_multiple_of(60) => format!("{}m", seconds / 60),
         _ => format!("{seconds}s"),
+    }
+}
+
+fn set_accessibility(document: &mut KdlDocument, access: &Accessibility) {
+    let standard = Accessibility::default();
+    let flags = [
+        ("screen-reader", access.screen_reader),
+        ("increase-contrast", access.increase_contrast),
+        ("reduce-transparency", access.reduce_transparency),
+        ("reduce-motion", access.reduce_motion),
+        ("flash-screen", access.flash_screen),
+        ("sticky-keys", access.sticky_keys),
+        ("slow-keys", access.slow_keys),
+        ("bounce-keys", access.bounce_keys),
+    ];
+    for (name, on) in flags {
+        set(
+            document,
+            Some("accessibility"),
+            name,
+            on.then_some(KdlValue::Bool(true)),
+        );
+    }
+    set(
+        document,
+        Some("accessibility"),
+        "zoom",
+        (access.zoom != standard.zoom).then(|| number(access.zoom)),
+    );
+    let sizes = [
+        ("text-size", access.text_size, standard.text_size),
+        ("cursor-size", access.cursor_size, standard.cursor_size),
+    ];
+    for (name, size, default) in sizes {
+        set(
+            document,
+            Some("accessibility"),
+            name,
+            (size != default).then_some(KdlValue::Integer(size.into())),
+        );
     }
 }
 

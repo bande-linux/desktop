@@ -5,7 +5,7 @@ use std::thread;
 use xdg_desktop_portal_unbound::capture::{ScreenshotService, ScreenshotTool};
 use xdg_desktop_portal_unbound::screencast::{ScreenCast, close_sessions_streaming};
 use xdg_desktop_portal_unbound::screenshot::Screenshot;
-use xdg_desktop_portal_unbound::settings::{CursorSettings, Settings};
+use xdg_desktop_portal_unbound::settings::{Settings, cursor_theme_from_environment};
 use xdg_desktop_portal_unbound::{BUS_NAME, OBJECT_PATH};
 use zbus::blocking::Connection;
 
@@ -32,7 +32,7 @@ fn serve() -> zbus::Result<Connection> {
     let connection = Connection::session()?;
     let tool_connection = Connection::session()?;
     let tool = Arc::new(ScreenshotTool::new(tool_connection.clone()));
-    Settings::serve(&connection, CursorSettings::from_environment())?;
+    Settings::serve(&connection, cursor_theme_from_environment())?;
     connection
         .object_server()
         .at(OBJECT_PATH, ScreenCast::new(tool.clone()))?;

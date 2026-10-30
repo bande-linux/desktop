@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use unbound_audio::Audio;
 use unbound_sound::{Alert, BUS_NAME, OBJECT_PATH, Policy, Sound, write_theme};
 use zbus::blocking::Connection;
+use zbus::object_server::SignalEmitter;
 
 #[zbus::proxy(
     interface = "org.unbound.Config",
@@ -91,12 +92,15 @@ impl SoundService {
 
 #[zbus::interface(name = "org.unbound.Sound")]
 impl SoundService {
-    fn play(&self, name: &str) {
+    async fn play(&self, name: &str, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) {
         let policy = self.policy();
         let Some(sound) = Sound::from_name(name, policy.alert) else {
             tracing::debug!("no sound is called {name}");
             return;
         };
+        if matches!(sound, Sound::Alert(_)) {
+            let _ = Self::alert_played(&emitter).await;
+        }
         let Some(gain) = policy.gain(sound) else {
             return;
         };
@@ -104,6 +108,9 @@ impl SoundService {
             tracing::warn!("cannot play {name}: {error}");
         }
     }
+
+    #[zbus(signal)]
+    async fn alert_played(emitter: &SignalEmitter<'_>) -> zbus::Result<()>;
 }
 
 fn serve() -> Result<Connection, Box<dyn Error>> {

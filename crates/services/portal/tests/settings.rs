@@ -11,7 +11,7 @@ use std::time::Duration;
 use common::Portal;
 use unbound_config::{ConfigService, ConfigStore};
 use unbound_graphics::{Palette, Scheme};
-use xdg_desktop_portal_unbound::settings::{CursorSettings, Settings};
+use xdg_desktop_portal_unbound::settings::Settings;
 use zbus::blocking::MessageIterator;
 use zbus::zvariant::OwnedValue;
 use zbus::{MatchRule, message};
@@ -40,14 +40,7 @@ fn start(config: &str) -> Fixture {
             ConfigService::start(connection, &path, Arc::new(ConfigStore::default()), |_| {})
                 .expect("config service"),
         );
-        Settings::serve(
-            connection,
-            CursorSettings {
-                theme: "Adwaita".to_owned(),
-                size: 32,
-            },
-        )
-        .expect("settings");
+        Settings::serve(connection, "Adwaita".to_owned()).expect("settings");
     });
     Fixture {
         portal,
@@ -225,8 +218,32 @@ fn the_interface_is_version_2() {
 }
 
 #[test]
+fn the_display_accommodations_are_served_to_gtk_qt_and_the_toolkit() {
+    let fixture = start(
+        "accessibility {\n    increase-contrast #true\n    reduce-transparency #true\n    text-size 150\n}\n",
+    );
+    let all = fixture.read_all(&[]);
+    assert_eq!(u32::try_from(&all[APPEARANCE]["contrast"]).expect("u"), 1);
+    let unbound = &all["org.unbound.appearance"];
+    assert_eq!(
+        u32::try_from(&unbound["reduce-transparency"]).expect("u"),
+        1
+    );
+    assert_eq!(u32::try_from(&unbound["text-size"]).expect("u"), 150);
+    assert_eq!(
+        f64::try_from(&all[GNOME_INTERFACE]["text-scaling-factor"]).expect("d"),
+        1.5
+    );
+    let standard = start("").read_all(&[APPEARANCE]);
+    assert_eq!(
+        u32::try_from(&standard[APPEARANCE]["contrast"]).expect("u"),
+        0
+    );
+}
+
+#[test]
 fn gtk_reads_the_color_scheme_and_cursor_from_the_gnome_interface_namespace() {
-    let fixture = start("appearance \"dark\"\n");
+    let fixture = start("appearance \"dark\"\naccessibility {\n    cursor-size 48\n}\n");
     let all = fixture.read_all(&["org.gnome.desktop.interface"]);
     let interface = &all[GNOME_INTERFACE];
 
@@ -238,7 +255,7 @@ fn gtk_reads_the_color_scheme_and_cursor_from_the_gnome_interface_namespace() {
         String::try_from(interface["cursor-theme"].try_clone().expect("clone")).expect("s"),
         "Adwaita"
     );
-    assert_eq!(i32::try_from(&interface["cursor-size"]).expect("i"), 32);
+    assert_eq!(i32::try_from(&interface["cursor-size"]).expect("i"), 48);
 }
 
 #[test]

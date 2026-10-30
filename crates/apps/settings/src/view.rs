@@ -498,6 +498,7 @@ impl SettingsView {
             PaneId::About => self.about.is_some(),
             PaneId::Battery => self.battery.is_some(),
             PaneId::Appearance
+            | PaneId::Accessibility
             | PaneId::Wallpaper
             | PaneId::Dock
             | PaneId::LockScreen

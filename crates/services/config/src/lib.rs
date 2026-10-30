@@ -40,6 +40,10 @@ pub const DEFAULT_DOCK_ICON_SIZE: u32 = 48;
 pub const MAX_INPUT_SOURCES: usize = 4;
 pub const POINTER_SPEED_RANGE: (f64, f64) = (-1.0, 1.0);
 pub const ALERT_VOLUME_RANGE: (f64, f64) = (0.0, 1.0);
+pub const ZOOM_RANGE: (f64, f64) = (1.0, 16.0);
+pub const TEXT_SIZE_RANGE: (u32, u32) = (100, 200);
+pub const CURSOR_SIZE_RANGE: (u32, u32) = (24, 128);
+pub const DEFAULT_CURSOR_SIZE: u32 = 24;
 pub const SYSTEM_KEYBOARD: &str = "/etc/default/keyboard";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -485,11 +489,44 @@ impl Default for Dock {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Accessibility {
+    pub screen_reader: bool,
+    pub zoom: f64,
+    pub increase_contrast: bool,
+    pub reduce_transparency: bool,
+    pub reduce_motion: bool,
+    pub text_size: u32,
+    pub cursor_size: u32,
+    pub flash_screen: bool,
+    pub sticky_keys: bool,
+    pub slow_keys: bool,
+    pub bounce_keys: bool,
+}
+
+impl Default for Accessibility {
+    fn default() -> Self {
+        Self {
+            screen_reader: false,
+            zoom: 1.0,
+            increase_contrast: false,
+            reduce_transparency: false,
+            reduce_motion: false,
+            text_size: 100,
+            cursor_size: DEFAULT_CURSOR_SIZE,
+            flash_screen: false,
+            sticky_keys: false,
+            slow_keys: false,
+            bounce_keys: false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
     pub appearance: Appearance,
     pub clock: ClockFormat,
-    pub reduce_motion: bool,
+    pub accessibility: Accessibility,
     pub dock: Dock,
     pub bar: Bar,
     pub idle: Idle,
@@ -518,7 +555,7 @@ impl Default for Config {
         Self {
             appearance: Appearance::Automatic,
             clock: ClockFormat::Automatic,
-            reduce_motion: false,
+            accessibility: Accessibility::default(),
             dock: Dock::default(),
             bar: Bar::default(),
             idle: Idle {
@@ -672,7 +709,7 @@ impl Parser<'_> {
                     )
                     .map(|appearance| config.appearance = appearance),
                 "accessibility" => {
-                    config.reduce_motion = self.accessibility(node);
+                    config.accessibility = self.accessibility(node);
                     Ok(())
                 }
                 "clock" => self
@@ -828,16 +865,26 @@ impl Parser<'_> {
         )
     }
 
-    fn accessibility(&self, node: &KdlNode) -> bool {
-        let mut reduce_motion = false;
+    fn accessibility(&self, node: &KdlNode) -> Accessibility {
+        let mut access = Accessibility::default();
         self.section(node, |child| {
             match child.name().value() {
-                "reduce-motion" => reduce_motion = self.flag(child)?,
+                "screen-reader" => access.screen_reader = self.flag(child)?,
+                "zoom" => access.zoom = self.number_in(child, ZOOM_RANGE)?,
+                "increase-contrast" => access.increase_contrast = self.flag(child)?,
+                "reduce-transparency" => access.reduce_transparency = self.flag(child)?,
+                "reduce-motion" => access.reduce_motion = self.flag(child)?,
+                "text-size" => access.text_size = self.integer_in(child, TEXT_SIZE_RANGE)?,
+                "cursor-size" => access.cursor_size = self.integer_in(child, CURSOR_SIZE_RANGE)?,
+                "flash-screen" => access.flash_screen = self.flag(child)?,
+                "sticky-keys" => access.sticky_keys = self.flag(child)?,
+                "slow-keys" => access.slow_keys = self.flag(child)?,
+                "bounce-keys" => access.bounce_keys = self.flag(child)?,
                 _ => return Err(self.unknown_child("accessibility", child)),
             }
             Ok(())
         });
-        reduce_motion
+        access
     }
 
     fn flag(&self, node: &KdlNode) -> Result<bool, ConfigError> {

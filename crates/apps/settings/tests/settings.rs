@@ -120,7 +120,7 @@ fn changing_one_idle_time_keeps_dim_before_lock_before_sleep() {
 #[test]
 fn typing_anywhere_searches_and_narrows_the_sidebar_to_ranked_panes() {
     let mut view = view();
-    assert_eq!(view.visible_panes().len(), 6);
+    assert_eq!(view.visible_panes().len(), 7);
 
     type_text(&mut view, "suspend");
 
@@ -132,7 +132,7 @@ fn typing_anywhere_searches_and_narrows_the_sidebar_to_ranked_panes() {
 
     press(&mut view, Key::Escape);
     assert_eq!(view.query(), "");
-    assert_eq!(view.visible_panes().len(), 6);
+    assert_eq!(view.visible_panes().len(), 7);
     assert!(view.highlighted_settings().is_empty());
     assert_eq!(view.selected_pane(), PaneId::LockScreen);
 }
@@ -267,6 +267,10 @@ fn changes_are_written_through_org_unbound_config() {
         (SettingId::DockIconSize, Value::Number(64)),
         (SettingId::DockAutoHide, Value::Flag(true)),
         (SettingId::ReduceMotion, Value::Flag(true)),
+        (SettingId::Zoom, Value::Flag(true)),
+        (SettingId::IncreaseContrast, Value::Flag(true)),
+        (SettingId::CursorSize, Value::Number(48)),
+        (SettingId::StickyKeys, Value::Flag(true)),
         (SettingId::WallpaperFit, keyword("fit")),
         (
             SettingId::InputSources,
@@ -294,7 +298,13 @@ fn changes_are_written_through_org_unbound_config() {
     assert_eq!(written.idle.suspend, Suspend::Never);
     assert_eq!(written.keyboard.repeat_delay, Duration::from_millis(300));
     assert_eq!((written.dock.icon_size, written.dock.auto_hide), (64, true));
-    assert!(written.reduce_motion);
+    let access = written.accessibility;
+    assert!(access.reduce_motion && access.increase_contrast && access.sticky_keys);
+    assert_eq!((access.zoom, access.cursor_size), (2.0, 48));
+    assert_eq!(
+        client.get(SettingId::Zoom).expect("zoom"),
+        Value::Flag(true)
+    );
     assert_eq!(written.wallpaper.fit, WallpaperFit::Fit);
     assert_eq!(
         written

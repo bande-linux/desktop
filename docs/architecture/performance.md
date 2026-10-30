@@ -26,7 +26,9 @@ checked by `ci/perf`; this page tracks memory, CPU per interaction and size.
   (on a folder of 400 files) and the terminal from its own directory, and replays typical
   actions one refresh apart: the pointer moving over Files, dragging Files by its title bar,
   typing 60 characters into the terminal, scrolling the file list, opening and closing the
-  launcher and the overview twice. For each it prints the compositor's frame time (p50, p99),
+  launcher, the overview and a context menu of Files twice, and showing two notification
+  banners that expire after 1.5 s (it starts `unbound-notify` and `unbound-notifications` for
+  this and sends them with `gdbus`). For each it prints the compositor's frame time (p50, p99),
   its CPU time per frame (including lavapipe's threads), the clients' CPU time per frame, the
   cores kept busy and the pixels repainted per frame. Arguments filter the actions by name;
   `--frames` lists every frame, `--full-effects` keeps blur on a CPU renderer, `--snapshots
@@ -34,7 +36,8 @@ checked by `ci/perf`; this page tracks memory, CPU per interaction and size.
 
   ```sh
   cargo build --release -p unbound-bench -p unbound-desktop-surface -p unbound-bar \
-      -p unbound-launcher -p unbound-files -p unbound-term
+      -p unbound-launcher -p unbound-files -p unbound-term -p unbound-notify \
+      -p unbound-notifications
   dbus-run-session --config-file=crates/testing/test-bus/data/session.conf -- \
       env -u WAYLAND_DISPLAY target/release/unbound-session-bench
   ```
@@ -55,6 +58,44 @@ checked by `ci/perf`; this page tracks memory, CPU per interaction and size.
 All numbers below are from the development VM: 10 cores, lavapipe (Mesa 25.0.7, Vulkan on the
 CPU), so GPU memory shows up as process memory. On Apple Silicon GPU memory is also system
 memory, so the device-memory savings carry over.
+
+## 2026-10-30: menus, launcher and banners in motion
+
+Frames per action with `unbound-session-bench launcher menu notification`, `main` at `bef5145`
+against `desktop/motion-polish`, run back to back twice, load average 4 to 5 (lavapipe, CPU
+clients). "Frames" counts every composed frame of the action, which runs twice.
+
+| Action (twice) | Frames before | after | Frame p50 before | after | Repainted Mpx per frame before | after |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Opening and closing the launcher | 8 | 16 | 14–17 ms | 16–18 ms | 3.99 | 3.9–4.1 |
+| Opening and closing a context menu | 6–7 | 43–51 | 10–11 ms | 1.7–2.6 ms | 3.0–3.6 | 0.64–0.72 |
+| Two notification banners in and out | 237–243 | 155–161 | 0.7–0.8 ms | 0.9 ms | 0.14 | 0.18 |
+
+- **The launcher is as big as its card.** Its layer surface is the card plus 48 pt for the
+  shadow (816 × 617 pt instead of the whole display), anchored to the top edge with the card's
+  old position as margin. The dimmed backdrop is drawn by the compositor:
+  `unbound_shell_v1.set_scrim` (version 15) dims and, on a GPU, blurs the display behind a
+  mapped layer surface, and a press on the scrim reaches nothing below it and is sent to the
+  surface's client as `scrim_pressed`, which closes the launcher. Each launcher frame now
+  uploads 4.5 MB instead of 21.3 MB and shades 13.3 Mpx instead of 17.5. Changing the dimming
+  still repaints the display, so opening and closing keep a full repaint; an undimmed launcher
+  would not.
+- **The launcher's appear animation ran for one frame.** It asked for the next frame from
+  inside `scene`, which drawing then cleared, so the fade jumped from its first frame to the
+  end; it now answers `App::animating`, which is why it draws twice as many frames. The
+  scrim's opacity follows the card's fade (`fade`), the card rises 8 pt with `quick`.
+- **Menus fade and slide in, and fade out.** A menu and each submenu appear with a `fade` of
+  their opacity and a 3 pt `quick` slide away from their anchor (fade only with Reduce
+  Motion), driven by the popup's frame callbacks. The menu is rendered once; each animation
+  frame only shifts and fades those pixels, about 0.2 Mpx a frame. Closing hands the picture to
+  a popup without a grab, so the keyboard and pointer are free from the first frame of the
+  fade, and a key typed during the chosen item's blink reaches the window. The one frame per
+  open and close that repaints the whole display (3 to 5 Mpx, before and after) is not the
+  menu's; its cause is still to be found in the compositor.
+- **Banners stop when the motion is invisible.** Notification banner and Notification Center
+  positions, the Dock's reorder shift and its label now settle at 0.05 pt instead of 1/512 of
+  a point: 240 → 158 frames for two banners. The compositor's zoom settles at a quarter of a
+  physical pixel of the largest display and the accessibility flash at 1/512 of opacity.
 
 ## 2026-10-30: idle wake-ups to zero
 
@@ -175,11 +216,9 @@ scrolling 1.58 → 0.20 Mpx.
 
 What remains VM-bound:
 
-- **Opening the launcher**: the launcher is a full-screen translucent surface, so its first
-  frame uploads 21 MB and shades 12 Mpx (28–59 ms for that one frame; the frames after it
-  take 1 ms). Closing it repaints the screen once (13 ms). A launcher surface the size of its
-  panel, with any dimming drawn by the compositor, would remove both; that is the launcher's
-  change to make.
+- **Opening the launcher**: the launcher was a full-screen translucent surface, so its first
+  frame uploaded 21 MB and shaded 12 Mpx. It is now the size of its card with the dimming drawn
+  by the compositor (see "menus, launcher and banners in motion" above).
 - **The overview** moves every window every frame (3 Mpx a frame): 12 ms p50, 30–42 ms p99.
 - **Dragging** repaints the window at its old and new place each frame (1.6 Mpx): 5–6 ms p50
   when cores are free, more when other builds hold them.

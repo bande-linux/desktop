@@ -108,6 +108,27 @@ fn speaker(node: &KdlNode, document: &KdlDocument) -> Result<Speaker, ModelError
     };
     let sense = &speaker.sense;
     let thermal = &speaker.thermal;
+    let limiter = &speaker.limiter;
+    let positive = [
+        sense.current_full_scale,
+        sense.voltage_full_scale,
+        sense.dc_resistance,
+        thermal.coil_resistance,
+        thermal.magnet_resistance,
+        thermal.coil_time_constant,
+        thermal.magnet_time_constant,
+        limiter.release,
+        limiter.max_reduction_db,
+    ];
+    let non_negative = [thermal.headroom, limiter.attack];
+    if !positive.iter().all(|v| v.is_finite() && *v > 0.0)
+        || !non_negative.iter().all(|v| v.is_finite() && *v >= 0.0)
+        || !thermal.ambient.is_finite()
+        || !thermal.limit.is_finite()
+        || limiter.max_reduction_db > 100.0
+    {
+        return Err(ModelError::Invalid("speaker parameters".to_owned()));
+    }
     if sense.current_channel >= sense.channels
         || sense.voltage_channel >= sense.channels
         || sense.current_channel == sense.voltage_channel
@@ -137,6 +158,14 @@ impl Model {
             return Err(ModelError::Missing("speaker".to_owned()));
         }
         let max_gain_db = number(&document, "max-gain")?;
+        let amplifier_sensitivity = number(&document, "amplifier-sensitivity")?;
+        if !(amplifier_sensitivity.is_finite() && amplifier_sensitivity > 0.0) {
+            return Err(ModelError::Invalid("amplifier-sensitivity".to_owned()));
+        }
+        let period_frames = count(&document, "period-frames")?;
+        if period_frames == 0 {
+            return Err(ModelError::Invalid("period-frames".to_owned()));
+        }
         if !(-100.0..=0.0).contains(&max_gain_db) {
             return Err(ModelError::Invalid("max-gain".to_owned()));
         }
@@ -144,8 +173,8 @@ impl Model {
             card: text(&document, "card")?,
             sense_device: u32::try_from(count(&document, "sense-device")?)
                 .map_err(|_| ModelError::Invalid("sense-device".to_owned()))?,
-            period_frames: count(&document, "period-frames")?,
-            amplifier_sensitivity: number(&document, "amplifier-sensitivity")?,
+            period_frames,
+            amplifier_sensitivity,
             max_gain_db,
             speakers,
         })
@@ -167,6 +196,28 @@ mod tests {
         let model = Model::parse(J473).unwrap();
         assert_eq!(model.speakers.len(), 1);
         assert_eq!(model.max_gain_db, -20.0);
+    }
+
+    #[test]
+    fn parameters_that_would_disable_the_thermal_limit_are_rejected() {
+        for (from, to) in [
+            ("max-reduction 20.0", "max-reduction -20.0"),
+            ("amplifier-sensitivity 15.87", "amplifier-sensitivity 0.0"),
+            (
+                "coil-thermal-resistance 40.0",
+                "coil-thermal-resistance 0.0",
+            ),
+            ("voltage-full-scale 14.0", "voltage-full-scale 0.0"),
+            ("hard-limit-headroom 40.0", "hard-limit-headroom -1.0"),
+            ("period-frames 1024", "period-frames 0"),
+        ] {
+            let source = J473.replace(from, to);
+            assert_ne!(source, J473, "{from}");
+            assert!(
+                matches!(Model::parse(&source), Err(ModelError::Invalid(_))),
+                "{to}"
+            );
+        }
     }
 
     #[test]

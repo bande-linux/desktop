@@ -117,6 +117,56 @@ fn localized_names_are_matched_from_the_most_to_the_least_specific_locale() {
 }
 
 #[test]
+fn desktop_actions_are_listed_in_order_localised_and_run_with_their_own_exec() {
+    let text = "[Desktop Entry]\nType=Application\nName=Browser\nIcon=browser\n\
+                Exec=browser %u\nActions=private;new-window;broken;missing;\n\n\
+                [Desktop Action new-window]\nName=New Window\nName[de]=Neues Fenster\n\
+                Exec=browser --new-window\n\n\
+                [Desktop Action private]\nName=New Private Window\nIcon=private\n\
+                Exec=browser --private --title=%c\n\n\
+                [Desktop Action broken]\nName=No Command\n";
+    let entry = DesktopEntry::parse(
+        "browser.desktop",
+        Path::new("browser.desktop"),
+        text,
+        Locale::parse("de_DE.UTF-8").as_ref(),
+        &desktops(),
+    )
+    .expect("shown");
+
+    let actions: Vec<(&str, &str, Option<&str>)> = entry
+        .actions
+        .iter()
+        .map(|action| {
+            (
+                action.id.as_str(),
+                action.name.as_str(),
+                action.icon.as_deref(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        actions,
+        [
+            ("private", "New Private Window", Some("private")),
+            ("new-window", "Neues Fenster", None),
+        ]
+    );
+    assert_eq!(
+        entry.action_command(&entry.actions[0]),
+        Ok(vec![
+            "browser".to_owned(),
+            "--private".to_owned(),
+            "--title=Browser".to_owned()
+        ])
+    );
+    assert_eq!(
+        entry.action_command(&entry.actions[1]),
+        Ok(vec!["browser".to_owned(), "--new-window".to_owned()])
+    );
+}
+
+#[test]
 fn hidden_entries_and_entries_for_other_desktops_are_not_listed() {
     let base = "[Desktop Entry]\nType=Application\nName=A\nExec=a\n";
     assert!(entry(&format!("{base}NoDisplay=true\n")).is_none());

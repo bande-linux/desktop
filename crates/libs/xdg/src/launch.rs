@@ -6,7 +6,7 @@ use std::process::{Command, Stdio};
 use std::slice;
 use std::thread;
 
-use crate::entry::DesktopEntry;
+use crate::entry::{DesktopAction, DesktopEntry};
 use crate::uri::file_uri;
 
 pub const TERMINAL: &str = "unbound-term";
@@ -103,6 +103,10 @@ fn file_argument(code: &str, file: &Path) -> String {
 impl DesktopEntry {
     pub fn command(&self) -> Result<Vec<String>, ExecError> {
         self.expand(&split(&self.exec)?, &[])
+    }
+
+    pub fn action_command(&self, action: &DesktopAction) -> Result<Vec<String>, ExecError> {
+        self.expand(&split(&action.exec)?, &[])
     }
 
     pub fn commands_for(&self, files: &[PathBuf]) -> Result<Vec<Vec<String>>, ExecError> {
@@ -213,6 +217,20 @@ pub fn launch_with(
 
 pub fn launch(entry: &DesktopEntry, activation_token: Option<&str>) -> Result<u32, LaunchError> {
     let command = entry.command().map_err(LaunchError::Exec)?;
+    spawn_detached(
+        &command,
+        entry.working_directory.as_deref(),
+        activation_token,
+    )
+    .map_err(LaunchError::Spawn)
+}
+
+pub fn launch_action(
+    entry: &DesktopEntry,
+    action: &DesktopAction,
+    activation_token: Option<&str>,
+) -> Result<u32, LaunchError> {
+    let command = entry.action_command(action).map_err(LaunchError::Exec)?;
     spawn_detached(
         &command,
         entry.working_directory.as_deref(),

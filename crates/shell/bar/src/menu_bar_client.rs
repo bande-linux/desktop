@@ -18,14 +18,15 @@ use unbound_inbox::{Inbox, Outbox};
 use unbound_keyboard::Layouts;
 use unbound_status::dbusmenu::{APP_MENU_PATH, Node};
 use unbound_status::devices::{Control, SoundControl, run_controls, run_sound};
+use unbound_status::session::full_name;
 use unbound_status::status::{InputSource, InputSources};
 use unbound_status::tray::{Errand, TrayIcon, TrayItem, host, run_errands};
 use unbound_status::unread::follow_unread;
 use unbound_status::{Command, Update};
 use unbound_toolkit::ui::{Event, Menu, MenuItem, PointerButton};
 use unbound_toolkit::{
-    App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Rect, Role, Scene, TextSystem,
-    Window, WindowEvent,
+    App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Panel, Rect, Role, Scene,
+    TextSystem, Window, WindowEvent,
 };
 use unbound_xdg::{
     DesktopEntry, ICON_THEMES, Locale, applications, current_desktops, data_dirs, find_icon,
@@ -47,6 +48,7 @@ const MENU_BAR_NAMESPACE: &str = "menubar";
 const OUTPUT_VARIABLE: &str = "UNBOUND_OUTPUT";
 const HEADER_ICON: f32 = 24.0;
 const CONFIG_INTERFACE: &str = "org.unbound.Config";
+const SECONDARY_DISPLAY: &str = "UNBOUND_SECONDARY_DISPLAY";
 
 pub type Restart = Rc<Cell<bool>>;
 
@@ -55,6 +57,8 @@ pub struct MenuBarClient<V> {
     handoff: SharedHandoff,
     layout: (MenuBarPlacement, BarEdge),
     restart: Restart,
+    workspaces: (usize, usize),
+    anchors: Vec<(Panel, Rect)>,
     names: Vec<(String, String)>,
     entries: Vec<DesktopEntry>,
     inbox: Inbox<Update>,
@@ -108,6 +112,34 @@ impl<V: StatusView> MenuBarClient<V> {
 
     pub fn restart(&self) -> Restart {
         self.restart.clone()
+    }
+
+    fn report_anchors(&mut self, window: &mut Window) {
+        if std::env::var_os(SECONDARY_DISPLAY).is_some() {
+            return;
+        }
+        let edge = self.bar.edge();
+        for (panel, slot) in [
+            (Panel::ControlCenter, Slot::ControlCenter),
+            (Panel::NotificationCenter, Slot::Clock),
+        ] {
+            let Some(rect) = self.bar.slot_rect(slot) else {
+                continue;
+            };
+            if self.anchors.contains(&(panel, rect)) {
+                continue;
+            }
+            match window.set_panel_anchor(panel, edge, rect) {
+                Ok(()) => {
+                    self.anchors.retain(|(known, _)| *known != panel);
+                    self.anchors.push((panel, rect));
+                }
+                Err(error) => {
+                    tracing::debug!("cannot place the panels beside the bar: {error}");
+                    return;
+                }
+            }
+        }
     }
 
     fn publish_menu(&mut self, window: &Window) {
@@ -377,7 +409,12 @@ impl<V: StatusView> MenuBarClient<V> {
             }
             Slot::Tray(index) => self.open_tray(window, index, anchor, false),
             Slot::Launcher => report("open the launcher", window.show_launcher()),
-            Slot::Workspace(_) => report("show the windows", window.show_windows("")),
+            Slot::Workspace(index) if index == self.workspaces.1 => {
+                report("show the windows", window.show_windows(""));
+            }
+            Slot::Workspace(index) => {
+                report("switch the workspace", window.switch_workspace(index));
+            }
             _ => {}
         }
     }
@@ -453,7 +490,9 @@ impl<V: StatusView> App for MenuBarClient<V> {
     fn scene(&mut self, window: &mut Window) -> Scene {
         let (width, height) = window.size();
         let scale = window.scale();
-        self.bar.scene(width, height, scale)
+        let scene = self.bar.scene(width, height, scale);
+        self.report_anchors(window);
+        scene
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
@@ -551,6 +590,7 @@ impl<V: StatusView> App for MenuBarClient<V> {
                 }
             }
             WindowEvent::Workspaces { count, active } => {
+                self.workspaces = (count, active);
                 if self.bar.set_workspaces(count, active) {
                     window.request_redraw();
                 }
@@ -753,6 +793,8 @@ impl<V: StatusView> MenuBarClient<V> {
             handoff: SharedHandoff::default(),
             layout,
             restart: Restart::default(),
+            workspaces: (1, 0),
+            anchors: Vec::new(),
             names,
             entries,
             inbox,
@@ -764,7 +806,7 @@ impl<V: StatusView> MenuBarClient<V> {
             open_anchor: None,
             app_id: String::new(),
             app_root: None,
-            user: user_name(),
+            user: full_name(),
             layouts: Layouts::load(),
             dates,
             next_clock: Instant::now() + CLOCK_TICK,
@@ -806,20 +848,4 @@ fn follow_config(session: &Connection, outbox: &Outbox<Update>) -> zbus::Result<
         }
     }
     Ok(())
-}
-
-fn user_name() -> String {
-    let login = std::env::var("USER").unwrap_or_default();
-    std::fs::read_to_string("/etc/passwd")
-        .ok()
-        .and_then(|passwd| {
-            passwd.lines().find_map(|line| {
-                let fields: Vec<&str> = line.split(':').collect();
-                (fields.first() == Some(&login.as_str()))
-                    .then(|| fields.get(4)?.split(',').next().map(str::to_owned))
-                    .flatten()
-                    .filter(|name| !name.is_empty())
-            })
-        })
-        .unwrap_or(login)
 }

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <protocol name="unbound_shell_v1">
-  <interface name="unbound_shell_v1" version="13">
+  <interface name="unbound_shell_v1" version="14">
     <description summary="requests and events between the compositor and the shell">
       Offered only on the connections of the shell clients the compositor starts
       itself (the Dock and the launcher), never on the listening socket.
@@ -320,6 +320,73 @@
       </description>
       <arg name="text" type="string"/>
     </request>
+
+    <request name="switch_workspace" since="14">
+      <description summary="show another workspace">
+        Slides to the workspace at this position of the row sent with
+        workspaces on the display under the pointer, as clicking one of the
+        bar's workspace dots does, and focuses its frontmost window. An index
+        past the end is ignored.
+      </description>
+      <arg name="index" type="uint"/>
+    </request>
+
+    <enum name="panel" since="14">
+      <entry name="control_center" value="0" summary="Control Center"/>
+      <entry name="notification_center" value="1" summary="the Notification Center"/>
+    </enum>
+
+    <enum name="edge" since="14">
+      <entry name="left" value="0" summary="the left edge of the display"/>
+      <entry name="bottom" value="1" summary="the bottom edge"/>
+      <entry name="right" value="2" summary="the right edge"/>
+      <entry name="top" value="3" summary="the top edge"/>
+    </enum>
+
+    <request name="set_panel_anchor" since="14">
+      <description summary="say where the item that opens a panel is">
+        Tells the compositor where the bar shows the item that opens this
+        panel, as a rectangle in the surface coordinates of the given surface,
+        and on which display edge the bar lies. The compositor relays it to
+        every shell client as panel_anchor in the coordinates of that
+        surface's display, so the panel opens beside its item.
+      </description>
+      <arg name="surface" type="object" interface="wl_surface"/>
+      <arg name="panel" type="uint" enum="panel"/>
+      <arg name="edge" type="uint" enum="edge"/>
+      <arg name="x" type="int"/>
+      <arg name="y" type="int"/>
+      <arg name="width" type="int"/>
+      <arg name="height" type="int"/>
+    </request>
+
+    <event name="panel_anchor" since="14">
+      <description summary="where the item that opens a panel is">
+        Sent on binding for every known anchor and whenever the bar reports a
+        new one, with the item's rectangle in the coordinates of the display
+        named by output and the edge the bar lies on. Control Center and the
+        Notification Center open beside it, away from that edge.
+      </description>
+      <arg name="panel" type="uint" enum="panel"/>
+      <arg name="output" type="string"/>
+      <arg name="edge" type="uint" enum="edge"/>
+      <arg name="x" type="int"/>
+      <arg name="y" type="int"/>
+      <arg name="width" type="int"/>
+      <arg name="height" type="int"/>
+    </event>
+
+    <event name="full_screen" since="14">
+      <description summary="a display shows a full-screen window or stops">
+        Sent on binding for every display and whenever the active workspace of
+        the display with this wl_output name becomes or stops being the space
+        of a full-screen window. Full-screen windows are drawn above the top
+        layer, so the bar moves to the overlay layer and hides until the
+        pointer pushes against its edge.
+      </description>
+      <arg name="output" type="string"/>
+      <arg name="full_screen" type="uint"/>
+    </event>
   </interface>
 
   <interface name="unbound_app_v1" version="5">

@@ -147,6 +147,8 @@ pub struct State {
     pub(crate) output_managers: Vec<crate::management::Manager>,
     pub(crate) output_serial: u32,
     pub(crate) announced_workspaces: (usize, usize),
+    pub(crate) announced_full_screen: Vec<(String, bool)>,
+    pub(crate) panel_anchors: Vec<crate::shell::PanelAnchor>,
     scanout_node: Option<DrmNode>,
     compositor_state: CompositorState,
     xdg_shell_state: XdgShellState,
@@ -287,7 +289,7 @@ impl Headless {
         };
         let center = settings.logical_size().to_f64().downscale(2.0);
         let screen = Screen::new(&handle, config, settings);
-        handle.create_global::<State, UnboundShellV1, ()>(13, ());
+        handle.create_global::<State, UnboundShellV1, ()>(14, ());
         handle.create_global::<State, UnboundAppV1, ()>(5, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
         handle.create_global::<State, smithay::reexports::wayland_protocols_wlr::output_management::v1::server::zwlr_output_manager_v1::ZwlrOutputManagerV1, ()>(crate::management::MANAGER_VERSION, ());
@@ -303,6 +305,8 @@ impl Headless {
             output_managers: Vec::new(),
             output_serial: 0,
             announced_workspaces: (1, 0),
+            announced_full_screen: Vec::new(),
+            panel_anchors: Vec::new(),
             scanout_node: scanout.as_ref().map(|scanout| scanout.node),
             compositor_state: CompositorState::new::<State>(&handle),
             xdg_shell_state: XdgShellState::new_with_capabilities::<State>(

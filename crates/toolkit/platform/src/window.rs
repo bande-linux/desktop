@@ -24,7 +24,7 @@ use unbound_graphics::{
     Rect, Region, RenderError, Scene, TextSystem, damage, pixels,
 };
 use unbound_protocols::client::unbound_shell_v1::{
-    BrightnessKey, LauncherMode, MediaKey, VolumeKey,
+    BrightnessKey, Edge as DisplayEdge, LauncherMode, MediaKey, Panel, VolumeKey,
 };
 use unbound_widgets::{ClipboardRequest, Menu, MenuItem, MenuOutcome, Ui};
 use wayland_client::backend::WaylandError;
@@ -185,6 +185,16 @@ pub enum WindowEvent {
     Workspaces {
         count: usize,
         active: usize,
+    },
+    PanelAnchor {
+        panel: Panel,
+        output: String,
+        edge: DisplayEdge,
+        rect: Rect,
+    },
+    FullScreen {
+        output: String,
+        full_screen: bool,
     },
     CapsLock(bool),
     Accessibility(ActionRequest),
@@ -399,6 +409,15 @@ pub struct Window {
     pub(crate) appearance: Rc<RefCell<AppearanceWatch>>,
 }
 
+fn layer_of(kind: LayerKind) -> zwlr_layer_shell_v1::Layer {
+    match kind {
+        LayerKind::Background => zwlr_layer_shell_v1::Layer::Background,
+        LayerKind::Bottom => zwlr_layer_shell_v1::Layer::Bottom,
+        LayerKind::Top => zwlr_layer_shell_v1::Layer::Top,
+        LayerKind::Overlay => zwlr_layer_shell_v1::Layer::Overlay,
+    }
+}
+
 fn anchor_of(edges: Edges) -> zwlr_layer_surface_v1::Anchor {
     let mut anchor = zwlr_layer_surface_v1::Anchor::empty();
     for (on, edge) in [
@@ -499,12 +518,7 @@ impl Window {
                     .layer_shell
                     .clone()
                     .ok_or(WindowError::Missing("zwlr_layer_shell_v1"))?;
-                let layer = match options.layer {
-                    LayerKind::Background => zwlr_layer_shell_v1::Layer::Background,
-                    LayerKind::Bottom => zwlr_layer_shell_v1::Layer::Bottom,
-                    LayerKind::Top => zwlr_layer_shell_v1::Layer::Top,
-                    LayerKind::Overlay => zwlr_layer_shell_v1::Layer::Overlay,
-                };
+                let layer = layer_of(options.layer);
                 if crate::lock::wanted_output().is_some() {
                     queue.roundtrip(&mut state)?;
                 }
@@ -1542,6 +1556,13 @@ impl Window {
         }
     }
 
+    pub fn set_layer(&mut self, kind: LayerKind) {
+        if let ShellSurface::Layer(layer) = &self.role {
+            layer.set_layer(layer_of(kind));
+            self.needs_redraw = true;
+        }
+    }
+
     pub fn set_layer_anchor(&mut self, anchor: Edges) {
         if let ShellSurface::Layer(layer) = &self.role {
             layer.set_anchor(anchor_of(anchor));
@@ -2031,7 +2052,7 @@ impl Dispatch<WlRegistry, ()> for State {
                     }
                 }
                 "unbound_shell_v1" => {
-                    state.shell.protocol = Some(registry.bind(name, version.min(13), handle, ()));
+                    state.shell.protocol = Some(registry.bind(name, version.min(14), handle, ()));
                 }
                 "unbound_app_v1" => {
                     state.shell.app = Some(registry.bind(name, version.min(5), handle, ()));

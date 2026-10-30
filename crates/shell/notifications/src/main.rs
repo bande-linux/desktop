@@ -11,8 +11,8 @@ use unbound_notifications::{Request, Screen, Sender};
 use unbound_notify::Presentation;
 use unbound_notify::client::NotificationCenter;
 use unbound_toolkit::{
-    App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Rect, Role, Scene, TextSystem,
-    Window, WindowError, WindowEvent,
+    App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Panel, Rect, Role, Scene,
+    TextSystem, Window, WindowError, WindowEvent,
 };
 use unbound_xdg::{
     DesktopEntry, Locale, applications, current_desktops, data_dirs, find_icon, launch,
@@ -197,6 +197,15 @@ impl App for Notifications {
             WindowEvent::AppearanceChanged(appearance) => {
                 self.screen
                     .set_appearance(appearance.palette(), appearance.reduce_motion, now);
+                window.request_redraw();
+            }
+            WindowEvent::PanelAnchor {
+                panel: Panel::NotificationCenter,
+                edge,
+                rect,
+                ..
+            } => {
+                self.screen.set_anchor(edge, rect);
                 window.request_redraw();
             }
             _ => {}

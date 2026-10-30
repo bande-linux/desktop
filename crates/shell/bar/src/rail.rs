@@ -7,8 +7,8 @@ use unbound_datetime::DateFormats;
 use unbound_status::status::{Battery, Status, speaker_waves};
 use unbound_toolkit::ui::PointerButton;
 use unbound_toolkit::{
-    Color, Image, Item, MenuPlacement, Palette, Paragraph, Point, Rect, Scene, Shape, TextAlign,
-    TextStyle, TextSystem,
+    Color, DisplayEdge, Image, Item, MenuPlacement, Palette, Paragraph, Point, Rect, Scene, Shape,
+    TextAlign, TextStyle, TextSystem,
 };
 use unbound_xdg::{ICON_THEMES, find_icon};
 
@@ -760,6 +760,10 @@ impl StatusView for RailView {
     fn slot_of_node(&self, node: NodeId) -> Option<Slot> {
         let index = usize::try_from(node.0.checked_sub(NODE_BASE)?).ok()?;
         self.slots.get(index).map(|(slot, _)| *slot)
+    }
+
+    fn edge(&self) -> DisplayEdge {
+        DisplayEdge::Left
     }
 
     fn menu_placement(&self, anchor: Rect) -> MenuPlacement {

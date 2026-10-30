@@ -28,7 +28,7 @@ pub use popup::MenuPlacement;
 pub use run::{App, Surfaces, run, run_surfaces};
 pub use shell::AppWindow;
 pub use unbound_protocols::client::unbound_shell_v1::{
-    BrightnessKey, LauncherMode, MediaKey, VolumeKey,
+    BrightnessKey, Edge as DisplayEdge, LauncherMode, MediaKey, Panel, VolumeKey,
 };
 pub use window::{
     ACTIVATION_TOKEN_VARIABLE, Edges, FramePath, KeyboardFocus, LayerKind, LayerOptions,

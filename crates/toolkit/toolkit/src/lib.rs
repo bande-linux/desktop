@@ -4,10 +4,10 @@ pub use unbound_graphics::{
     Spacing, Stop, TextAlign, TextRole, TextStyle, TextSystem,
 };
 pub use unbound_toolkit_platform::{
-    ACTIVATION_TOKEN_VARIABLE, App, AppWindow, BrightnessKey, DragAction, DragEvent, DragIcon,
-    Edges, FramePath, FrameRegions, HEADER_HEIGHT, KeyboardFocus, LauncherMode, LayerKind,
-    LayerOptions, MediaKey, MenuPlacement, RENDERER_VARIABLE, ResizeEdge, Role, SHEET_INSET,
-    ScreenImage, Surfaces, ToplevelState, Transfer, VolumeKey, Window, WindowError, WindowEvent,
-    run, run_surfaces,
+    ACTIVATION_TOKEN_VARIABLE, App, AppWindow, BrightnessKey, DisplayEdge, DragAction, DragEvent,
+    DragIcon, Edges, FramePath, FrameRegions, HEADER_HEIGHT, KeyboardFocus, LauncherMode,
+    LayerKind, LayerOptions, MediaKey, MenuPlacement, Panel, RENDERER_VARIABLE, ResizeEdge, Role,
+    SHEET_INSET, ScreenImage, Surfaces, ToplevelState, Transfer, VolumeKey, Window, WindowError,
+    WindowEvent, run, run_surfaces,
 };
 pub use unbound_widgets as ui;

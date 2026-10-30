@@ -2,5 +2,5 @@
 vt = 7
 
 [default_session]
-command = "systemd-cat --identifier=unbound-compositor /usr/bin/unbound-compositor --greeter"
+command = "/usr/bin/unbound-compositor --greeter"
 user = "_greetd"

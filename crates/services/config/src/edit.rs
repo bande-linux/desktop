@@ -4,10 +4,10 @@ use std::time::Duration;
 use kdl::{KdlDocument, KdlEntry, KdlEntryFormat, KdlNode, KdlValue};
 
 use crate::{
-    AlertSound, Appearance, CapsLock, ClockFormat, Config, ConfigError, DEFAULT_DOCK_ICON_SIZE,
-    DisplaySettings, DockEdge, InputSource, LEGACY_DISPLAY, LidOnPower, Mouse, Placement,
-    SecondaryClick, Sound, Suspend, Trackpad, WallpaperFit, WallpaperVariant, same_displays,
-    section_name,
+    AlertSound, Appearance, BarEdge, CapsLock, ClockFormat, Config, ConfigError,
+    DEFAULT_BAR_ICON_SIZE, DisplaySettings, InputSource, LEGACY_DISPLAY, LidOnPower,
+    MenuBarPlacement, Mouse, Placement, SecondaryClick, Sound, Suspend, Trackpad, WallpaperFit,
+    WallpaperVariant, same_displays, section_name,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -18,10 +18,12 @@ pub enum Setting {
     LowPowerOnBattery(bool),
     LidOnPower(LidOnPower),
     ReduceMotion(bool),
-    DockEdge(DockEdge),
-    DockApps(Vec<String>),
-    DockAutoHide(bool),
-    DockIconSize(u32),
+    BarEdge(BarEdge),
+    BarApps(Vec<String>),
+    BarAutoHide(bool),
+    BarIconSize(u32),
+    BarNames(bool),
+    BarMenuBar(MenuBarPlacement),
     IdleDimAfter(Duration),
     IdleLockAfter(Duration),
     IdleSuspend(Suspend),
@@ -88,29 +90,41 @@ impl Setting {
                 "reduce-motion",
                 reduce.then_some(KdlValue::Bool(true)),
             ),
-            Self::DockEdge(edge) => set(
+            Self::BarEdge(edge) => set(
                 &mut document,
-                Some("dock"),
+                Some("bar"),
                 "edge",
-                Some(edge.keyword().into()),
+                (*edge != BarEdge::Left).then(|| edge.keyword().into()),
             ),
-            Self::DockApps(apps) => set_values(
+            Self::BarApps(apps) => set_values(
                 &mut document,
-                Some("dock"),
+                Some("bar"),
                 "apps",
                 Some(apps.iter().map(|app| app.as_str().into()).collect()),
             ),
-            Self::DockAutoHide(auto_hide) => set(
+            Self::BarAutoHide(auto_hide) => set(
                 &mut document,
-                Some("dock"),
+                Some("bar"),
                 "auto-hide",
                 auto_hide.then_some(KdlValue::Bool(true)),
             ),
-            Self::DockIconSize(size) => set(
+            Self::BarIconSize(size) => set(
                 &mut document,
-                Some("dock"),
+                Some("bar"),
                 "size",
-                (*size != DEFAULT_DOCK_ICON_SIZE).then_some(KdlValue::Integer((*size).into())),
+                (*size != DEFAULT_BAR_ICON_SIZE).then_some(KdlValue::Integer((*size).into())),
+            ),
+            Self::BarNames(names) => set(
+                &mut document,
+                Some("bar"),
+                "names",
+                names.then_some(KdlValue::Bool(true)),
+            ),
+            Self::BarMenuBar(placement) => set(
+                &mut document,
+                Some("bar"),
+                "menu-bar",
+                (*placement != MenuBarPlacement::InBar).then(|| placement.keyword().into()),
             ),
             Self::IdleDimAfter(after) => set(
                 &mut document,
@@ -274,12 +288,46 @@ fn introduced<'a>(before: &[ConfigError], after: &'a [ConfigError]) -> Option<&'
 
 fn rename_sections(document: &mut KdlDocument) -> bool {
     let mut renamed = false;
-    for node in document.nodes_mut() {
-        let written = node.name().value().to_owned();
+    let mut position = 0;
+    while position < document.nodes().len() {
+        let written = document.nodes()[position].name().value().to_owned();
         let name = section_name(&written);
-        if name != written {
-            node.set_name(name);
-            renamed = true;
+        if name == written {
+            position += 1;
+            continue;
+        }
+        renamed = true;
+        let Some(target) = document
+            .nodes()
+            .iter()
+            .position(|node| node.name().value() == name)
+        else {
+            document.nodes_mut()[position].set_name(name);
+            position += 1;
+            continue;
+        };
+        let moved: Vec<KdlNode> = document.nodes()[position]
+            .children()
+            .map(|children| children.nodes().to_vec())
+            .unwrap_or_default();
+        remove(document, position);
+        let target = if target > position {
+            target - 1
+        } else {
+            target
+        };
+        let children = document.nodes_mut()[target].ensure_children();
+        for mut child in moved {
+            if let Some(format) = child.format_mut() {
+                format.leading = format.leading.trim_start_matches('\n').to_owned();
+            }
+            let known = children
+                .nodes()
+                .iter()
+                .any(|node| node.name().value() == child.name().value());
+            if !known {
+                children.nodes_mut().push(child);
+            }
         }
     }
     renamed
@@ -337,17 +385,6 @@ impl Appearance {
             Self::Dark => "dark",
             Self::Light => "light",
             Self::Automatic => "automatic",
-        }
-    }
-}
-
-impl DockEdge {
-    pub fn keyword(self) -> &'static str {
-        match self {
-            Self::Left => "left",
-            Self::Bottom => "bottom",
-            Self::Right => "right",
-            Self::Top => "top",
         }
     }
 }

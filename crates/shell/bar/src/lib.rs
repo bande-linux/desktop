@@ -1,4 +1,5 @@
 pub mod dock;
+pub mod menu_search;
 pub mod menubar;
 pub mod menus;
 pub mod rail;
@@ -20,6 +21,7 @@ mod tests {
             include_str!("dock.rs"),
             include_str!("menubar.rs"),
             include_str!("menus.rs"),
+            include_str!("menu_search.rs"),
             include_str!("rail.rs"),
             include_str!("combined_client.rs"),
             include_str!("dialogs.rs"),

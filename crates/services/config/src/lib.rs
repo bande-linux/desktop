@@ -35,8 +35,8 @@ const SCALE_RANGE: (f64, f64) = (1.0, 3.0);
 const REFRESH_RATE_RANGE: (f64, f64) = (60.0, 240.0);
 pub const KEY_REPEAT_RATE_RANGE: (u32, u32) = (1, 60);
 pub const KEY_REPEAT_DELAY_RANGE: (u32, u32) = (150, 2000);
-pub const DOCK_ICON_SIZE_RANGE: (u32, u32) = (24, 96);
-pub const DEFAULT_DOCK_ICON_SIZE: u32 = 48;
+pub const BAR_ICON_SIZE_RANGE: (u32, u32) = (32, 56);
+pub const DEFAULT_BAR_ICON_SIZE: u32 = 40;
 pub const MAX_INPUT_SOURCES: usize = 4;
 pub const POINTER_SPEED_RANGE: (f64, f64) = (-1.0, 1.0);
 pub const ALERT_VOLUME_RANGE: (f64, f64) = (0.0, 1.0);
@@ -70,23 +70,60 @@ impl ClockFormat {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DockEdge {
+pub enum BarEdge {
     Left,
     Bottom,
     Right,
     Top,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum MenuBarPlacement {
-    #[default]
-    Separate,
-    Combined,
+impl BarEdge {
+    pub const ALL: [Self; 4] = [Self::Left, Self::Bottom, Self::Right, Self::Top];
+
+    pub fn keyword(self) -> &'static str {
+        match self {
+            Self::Left => "left",
+            Self::Bottom => "bottom",
+            Self::Right => "right",
+            Self::Top => "top",
+        }
+    }
+
+    pub fn from_keyword(keyword: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|edge| edge.keyword() == keyword)
+    }
+
+    pub fn is_vertical(self) -> bool {
+        matches!(self, Self::Left | Self::Right)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct Bar {
-    pub menu_bar: MenuBarPlacement,
+pub enum MenuBarPlacement {
+    #[default]
+    InBar,
+    Separate,
+}
+
+impl MenuBarPlacement {
+    pub const ALL: [Self; 2] = [Self::InBar, Self::Separate];
+
+    pub fn keyword(self) -> &'static str {
+        match self {
+            Self::InBar => "in-bar",
+            Self::Separate => "separate",
+        }
+    }
+
+    pub fn from_keyword(keyword: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|placement| placement.keyword() == keyword)
+    }
+
+    pub fn combines(self, edge: BarEdge) -> bool {
+        self == Self::InBar && edge == BarEdge::Left
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -460,27 +497,31 @@ impl Wallpaper {
     }
 }
 
-pub const DEFAULT_DOCK_APPS: [&str; 3] = [
+pub const DEFAULT_BAR_APPS: [&str; 3] = [
     "org.unbound.Files",
     "org.unbound.Terminal",
     "org.unbound.Settings",
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Dock {
-    pub edge: DockEdge,
+pub struct Bar {
+    pub edge: BarEdge,
     pub apps: Vec<String>,
     pub auto_hide: bool,
     pub icon_size: u32,
+    pub names: bool,
+    pub menu_bar: MenuBarPlacement,
 }
 
-impl Default for Dock {
+impl Default for Bar {
     fn default() -> Self {
         Self {
-            edge: DockEdge::Left,
-            apps: DEFAULT_DOCK_APPS.map(str::to_owned).to_vec(),
+            edge: BarEdge::Left,
+            apps: DEFAULT_BAR_APPS.map(str::to_owned).to_vec(),
             auto_hide: false,
-            icon_size: DEFAULT_DOCK_ICON_SIZE,
+            icon_size: DEFAULT_BAR_ICON_SIZE,
+            names: false,
+            menu_bar: MenuBarPlacement::InBar,
         }
     }
 }
@@ -490,7 +531,6 @@ pub struct Config {
     pub appearance: Appearance,
     pub clock: ClockFormat,
     pub reduce_motion: bool,
-    pub dock: Dock,
     pub bar: Bar,
     pub idle: Idle,
     pub keyboard: Keyboard,
@@ -519,7 +559,6 @@ impl Default for Config {
             appearance: Appearance::Automatic,
             clock: ClockFormat::Automatic,
             reduce_motion: false,
-            dock: Dock::default(),
             bar: Bar::default(),
             idle: Idle {
                 dim_after: Duration::from_secs(5 * 60),
@@ -567,7 +606,7 @@ pub fn config_path(xdg_config_home: Option<&Path>, home: Option<&Path>) -> Optio
     Some(base.join("unbound").join("config.kdl"))
 }
 
-pub const RENAMED_SECTIONS: [(&str, &str); 1] = [("panel", "dock")];
+pub const RENAMED_SECTIONS: [(&str, &str); 2] = [("panel", "bar"), ("dock", "bar")];
 
 pub const LEGACY_DISPLAY: &str = "output";
 
@@ -652,13 +691,13 @@ impl Parser<'_> {
             let written = node.name().value();
             let name = section_name(written);
             if !matches!(name, "display" | "arrangement" | LEGACY_DISPLAY) {
-                if seen.contains(&name) {
+                if seen.contains(&written) {
                     self.settle(Err(
                         self.at_node(node, format!("`{written}` is set more than once"))
                     ));
                     continue;
                 }
-                seen.push(name);
+                seen.push(written);
             }
             let result = match name {
                 "appearance" => self
@@ -681,12 +720,8 @@ impl Parser<'_> {
                         &ClockFormat::ALL.map(|format| (format.keyword(), format)),
                     )
                     .map(|clock| config.clock = clock),
-                "dock" => {
-                    config.dock = self.dock(node);
-                    Ok(())
-                }
                 "bar" => {
-                    config.bar = self.bar(node);
+                    self.bar(node, &mut config.bar);
                     Ok(())
                 }
                 "idle" => {
@@ -850,49 +885,27 @@ impl Parser<'_> {
         })
     }
 
-    fn bar(&self, node: &KdlNode) -> Bar {
-        let mut bar = Bar::default();
+    fn bar(&self, node: &KdlNode, bar: &mut Bar) {
         self.section(node, |child| {
             match child.name().value() {
+                "edge" => {
+                    bar.edge =
+                        self.keyword(child, &BarEdge::ALL.map(|edge| (edge.keyword(), edge)))?
+                }
+                "apps" => bar.apps = self.app_ids(child)?,
+                "auto-hide" => bar.auto_hide = self.flag(child)?,
+                "names" => bar.names = self.flag(child)?,
+                "size" => bar.icon_size = self.integer_in(child, BAR_ICON_SIZE_RANGE)?,
                 "menu-bar" => {
                     bar.menu_bar = self.keyword(
                         child,
-                        &[
-                            ("separate", MenuBarPlacement::Separate),
-                            ("combined", MenuBarPlacement::Combined),
-                        ],
+                        &MenuBarPlacement::ALL.map(|placement| (placement.keyword(), placement)),
                     )?
                 }
                 _ => return Err(self.unknown_child("bar", child)),
             }
             Ok(())
         });
-        bar
-    }
-
-    fn dock(&self, node: &KdlNode) -> Dock {
-        let mut dock = Dock::default();
-        self.section(node, |child| {
-            match child.name().value() {
-                "edge" => {
-                    dock.edge = self.keyword(
-                        child,
-                        &[
-                            ("left", DockEdge::Left),
-                            ("bottom", DockEdge::Bottom),
-                            ("right", DockEdge::Right),
-                            ("top", DockEdge::Top),
-                        ],
-                    )?
-                }
-                "apps" => dock.apps = self.app_ids(child)?,
-                "auto-hide" => dock.auto_hide = self.flag(child)?,
-                "size" => dock.icon_size = self.integer_in(child, DOCK_ICON_SIZE_RANGE)?,
-                _ => return Err(self.unknown_child("dock", child)),
-            }
-            Ok(())
-        });
-        dock
     }
 
     fn app_ids(&self, node: &KdlNode) -> Result<Vec<String>, ConfigError> {
@@ -905,11 +918,11 @@ impl Parser<'_> {
                 .ok_or_else(|| {
                     self.at_entry(
                         entry,
-                        "`dock apps` takes app IDs such as \"org.unbound.Files\"",
+                        "`bar apps` takes app IDs such as \"org.unbound.Files\"",
                     )
                 })?;
             if apps.iter().any(|known| known == app) {
-                return Err(self.at_entry(entry, format!("\"{app}\" is in the dock twice")));
+                return Err(self.at_entry(entry, format!("\"{app}\" is in the bar twice")));
             }
             apps.push(app.to_owned());
         }

@@ -388,7 +388,7 @@ fn sound_offers_the_alert_effects_a_live_input_level_and_a_volume_per_app() {
             && node.value() == Some("Mallet")
     }));
 
-    open(&mut view, "Dock");
+    open(&mut view, "Bar");
     assert!(
         view.take_commands()
             .contains(&Command::Audio(AudioCommand::Listen(false)))
@@ -657,14 +657,16 @@ fn bundled_wallpapers_are_the_pictures_that_come_as_a_light_and_dark_pair() {
 }
 
 #[test]
-fn the_dock_pane_has_a_size_slider_a_position_and_auto_hide() {
+fn the_bar_pane_has_position_size_names_auto_hide_and_the_menu_bar() {
     let mut view = view();
     view.apply(Update::Values(vec![
-        (SettingId::DockIconSize, Value::Number(48)),
-        (SettingId::DockEdge, Value::Keyword("left".to_owned())),
-        (SettingId::DockAutoHide, Value::Flag(false)),
+        (SettingId::BarIconSize, Value::Number(40)),
+        (SettingId::BarEdge, Value::Keyword("left".to_owned())),
+        (SettingId::BarAutoHide, Value::Flag(false)),
+        (SettingId::BarNames, Value::Flag(false)),
+        (SettingId::BarMenuBar, Value::Keyword("in-bar".to_owned())),
     ]));
-    open(&mut view, "Dock");
+    open(&mut view, "Bar");
     let size = find(&mut view, Role::Slider, "Size").expect("size slider");
     view.perform(&ActionRequest {
         action: Action::Increment,
@@ -674,9 +676,11 @@ fn the_dock_pane_has_a_size_slider_a_position_and_auto_hide() {
     });
     assert_eq!(
         view.take_commands(),
-        [Command::Set(SettingId::DockIconSize, Value::Number(52))]
+        [Command::Set(SettingId::BarIconSize, Value::Number(44))]
     );
     assert!(find(&mut view, Role::Switch, "Automatically hide").is_some());
+    assert!(find(&mut view, Role::Switch, "Show names").is_some());
+    assert!(find(&mut view, Role::RadioGroup, "Menu bar").is_some());
 }
 
 const RULES: &str = r#"<xkbConfigRegistry><layoutList>

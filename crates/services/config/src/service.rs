@@ -13,9 +13,10 @@ use zbus::object_server::SignalEmitter;
 use zbus::zvariant::{OwnedValue, Value};
 
 use crate::{
-    AlertSound, Appearance, CapsLock, ClockFormat, Config, ConfigStore, DisplaySettings, DockEdge,
-    InputSource, LidOnPower, Loaded, Placement, ReloadError, Rotation, SecondaryClick, Setting,
-    Suspend, WallpaperFit, WallpaperVariant, migrate, read_system_input_sources,
+    AlertSound, Appearance, BarEdge, CapsLock, ClockFormat, Config, ConfigStore, DisplaySettings,
+    InputSource, LidOnPower, Loaded, MenuBarPlacement, Placement, ReloadError, Rotation,
+    SecondaryClick, Setting, Suspend, WallpaperFit, WallpaperVariant, migrate,
+    read_system_input_sources,
 };
 
 pub type ArrangedDisplay = (String, i32, i32, bool, String);
@@ -169,17 +170,23 @@ fn publish_changes(
         if before.reduce_motion != after.reduce_motion {
             let _ = guard.reduce_motion_changed(emitter).await;
         }
-        if before.dock.edge != after.dock.edge {
-            let _ = guard.dock_edge_changed(emitter).await;
+        if before.bar.edge != after.bar.edge {
+            let _ = guard.bar_edge_changed(emitter).await;
         }
-        if before.dock.apps != after.dock.apps {
-            let _ = guard.dock_apps_changed(emitter).await;
+        if before.bar.apps != after.bar.apps {
+            let _ = guard.bar_apps_changed(emitter).await;
         }
-        if before.dock.auto_hide != after.dock.auto_hide {
-            let _ = guard.dock_auto_hide_changed(emitter).await;
+        if before.bar.auto_hide != after.bar.auto_hide {
+            let _ = guard.bar_auto_hide_changed(emitter).await;
         }
-        if before.dock.icon_size != after.dock.icon_size {
-            let _ = guard.dock_icon_size_changed(emitter).await;
+        if before.bar.icon_size != after.bar.icon_size {
+            let _ = guard.bar_icon_size_changed(emitter).await;
+        }
+        if before.bar.names != after.bar.names {
+            let _ = guard.bar_names_changed(emitter).await;
+        }
+        if before.bar.menu_bar != after.bar.menu_bar {
+            let _ = guard.bar_menu_bar_changed(emitter).await;
         }
         if before.idle.dim_after != after.idle.dim_after {
             let _ = guard.idle_dim_after_changed(emitter).await;
@@ -447,53 +454,65 @@ impl ConfigInterface {
     }
 
     #[zbus(property)]
-    fn dock_apps(&self) -> Vec<String> {
-        self.store.current().dock.apps.clone()
+    fn bar_apps(&self) -> Vec<String> {
+        self.store.current().bar.apps.clone()
     }
 
     #[zbus(property)]
-    fn set_dock_apps(&self, apps: Vec<String>) -> zbus::fdo::Result<()> {
-        self.write(&Setting::DockApps(apps))
+    fn set_bar_apps(&self, apps: Vec<String>) -> zbus::fdo::Result<()> {
+        self.write(&Setting::BarApps(apps))
     }
 
     #[zbus(property)]
-    fn dock_auto_hide(&self) -> bool {
-        self.store.current().dock.auto_hide
+    fn bar_auto_hide(&self) -> bool {
+        self.store.current().bar.auto_hide
     }
 
     #[zbus(property)]
-    fn set_dock_auto_hide(&self, auto_hide: bool) -> zbus::fdo::Result<()> {
-        self.write(&Setting::DockAutoHide(auto_hide))
+    fn set_bar_auto_hide(&self, auto_hide: bool) -> zbus::fdo::Result<()> {
+        self.write(&Setting::BarAutoHide(auto_hide))
     }
 
     #[zbus(property)]
-    fn dock_icon_size(&self) -> u32 {
-        self.store.current().dock.icon_size
+    fn bar_icon_size(&self) -> u32 {
+        self.store.current().bar.icon_size
     }
 
     #[zbus(property)]
-    fn set_dock_icon_size(&self, size: u32) -> zbus::fdo::Result<()> {
-        self.write(&Setting::DockIconSize(size))
+    fn set_bar_icon_size(&self, size: u32) -> zbus::fdo::Result<()> {
+        self.write(&Setting::BarIconSize(size))
     }
 
     #[zbus(property)]
-    fn dock_edge(&self) -> String {
-        self.store.current().dock.edge.keyword().to_owned()
+    fn bar_names(&self) -> bool {
+        self.store.current().bar.names
     }
 
     #[zbus(property)]
-    fn set_dock_edge(&self, value: String) -> zbus::fdo::Result<()> {
-        let edge = keyword(
-            &[
-                DockEdge::Left,
-                DockEdge::Bottom,
-                DockEdge::Right,
-                DockEdge::Top,
-            ],
-            DockEdge::keyword,
-            &value,
-        )?;
-        self.write(&Setting::DockEdge(edge))
+    fn set_bar_names(&self, names: bool) -> zbus::fdo::Result<()> {
+        self.write(&Setting::BarNames(names))
+    }
+
+    #[zbus(property)]
+    fn bar_edge(&self) -> String {
+        self.store.current().bar.edge.keyword().to_owned()
+    }
+
+    #[zbus(property)]
+    fn set_bar_edge(&self, value: String) -> zbus::fdo::Result<()> {
+        let edge = keyword(&BarEdge::ALL, BarEdge::keyword, &value)?;
+        self.write(&Setting::BarEdge(edge))
+    }
+
+    #[zbus(property)]
+    fn bar_menu_bar(&self) -> String {
+        self.store.current().bar.menu_bar.keyword().to_owned()
+    }
+
+    #[zbus(property)]
+    fn set_bar_menu_bar(&self, value: String) -> zbus::fdo::Result<()> {
+        let placement = keyword(&MenuBarPlacement::ALL, MenuBarPlacement::keyword, &value)?;
+        self.write(&Setting::BarMenuBar(placement))
     }
 
     #[zbus(property)]

@@ -1,11 +1,13 @@
 use std::time::{Duration, Instant};
 
+use smithay::desktop::{WindowSurfaceType, layer_map_for_output};
+use smithay::reexports::wayland_server::WEnum;
 use smithay::reexports::wayland_server::backend::ClientId;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{
     Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource,
 };
-use smithay::utils::Rectangle;
+use smithay::utils::{Logical, Rectangle};
 use smithay::wayland::compositor::with_states;
 use smithay::wayland::foreign_toplevel_list::{
     ForeignToplevelListHandler, ForeignToplevelListState,
@@ -18,6 +20,14 @@ use crate::session::SessionRole;
 use crate::state::{ClientState, State};
 
 const INSERT_PATIENCE: Duration = Duration::from_secs(1);
+
+#[derive(Clone)]
+pub(crate) struct PanelAnchor {
+    panel: unbound_shell_v1::Panel,
+    output: String,
+    edge: unbound_shell_v1::Edge,
+    rect: Rectangle<i32, Logical>,
+}
 
 pub(crate) struct PendingInsert {
     text: String,
@@ -155,6 +165,66 @@ impl State {
                 shell.toggle_control_center();
             }
         }
+    }
+
+    fn set_panel_anchor(
+        &mut self,
+        surface: &WlSurface,
+        panel: unbound_shell_v1::Panel,
+        edge: unbound_shell_v1::Edge,
+        rect: Rectangle<i32, Logical>,
+    ) {
+        let Some(screen) = self.layer_screen(surface) else {
+            return;
+        };
+        let output = self.screens[screen].name();
+        let origin = {
+            let map = layer_map_for_output(&self.screens[screen].output);
+            let Some(geometry) = map
+                .layer_for_surface(surface, WindowSurfaceType::TOPLEVEL)
+                .and_then(|layer| map.layer_geometry(layer))
+            else {
+                return;
+            };
+            geometry.loc
+        };
+        let anchor = PanelAnchor {
+            panel,
+            output,
+            edge,
+            rect: Rectangle::new(origin + rect.loc, rect.size),
+        };
+        self.panel_anchors
+            .retain(|known| known.panel != panel || known.output != anchor.output);
+        for shell in &self.shell_resources {
+            send_panel_anchor(shell, &anchor);
+        }
+        self.panel_anchors.push(anchor);
+    }
+
+    pub(crate) fn announce_full_screen(&mut self) {
+        let states: Vec<(String, bool)> = self
+            .screens
+            .iter()
+            .map(|screen| {
+                let workspaces = &screen.workspaces;
+                (
+                    screen.name(),
+                    workspaces.is_full_screen(workspaces.active_id()),
+                )
+            })
+            .collect();
+        for state in &states {
+            if self.announced_full_screen.contains(state) {
+                continue;
+            }
+            for shell in &self.shell_resources {
+                if shell.version() >= unbound_shell_v1::EVT_FULL_SCREEN_SINCE {
+                    shell.full_screen(state.0.clone(), u32::from(state.1));
+                }
+            }
+        }
+        self.announced_full_screen = states;
     }
 
     pub(crate) fn announce_active_app(&mut self, key: Option<&WlSurface>) {
@@ -322,6 +392,14 @@ impl GlobalDispatch<UnboundShellV1, ()> for State {
         state.announce_minimized_windows(&shell);
         state.announce_workspaces_to(&shell);
         state.announce_input_sources_to(&shell);
+        for anchor in &state.panel_anchors {
+            send_panel_anchor(&shell, anchor);
+        }
+        if shell.version() >= unbound_shell_v1::EVT_FULL_SCREEN_SINCE {
+            for (output, full_screen) in &state.announced_full_screen {
+                shell.full_screen(output.clone(), u32::from(*full_screen));
+            }
+        }
         state.shell_resources.push(shell);
     }
 
@@ -381,6 +459,26 @@ impl Dispatch<UnboundShellV1, ()> for State {
             unbound_shell_v1::Request::SelectInputSource { index } => {
                 state.select_input_source(index as usize);
             }
+            unbound_shell_v1::Request::SwitchWorkspace { index } => {
+                let screen = state.pointer_screen();
+                if (index as usize) < state.screens[screen].workspaces.count() {
+                    state.switch_workspace(screen, index as usize);
+                }
+            }
+            unbound_shell_v1::Request::SetPanelAnchor {
+                surface,
+                panel: WEnum::Value(panel),
+                edge: WEnum::Value(edge),
+                x,
+                y,
+                width,
+                height,
+            } => state.set_panel_anchor(
+                &surface,
+                panel,
+                edge,
+                Rectangle::new((x, y).into(), (width, height).into()),
+            ),
             unbound_shell_v1::Request::Destroy => {
                 state.shell_resources.retain(|shell| shell != resource);
             }
@@ -390,6 +488,20 @@ impl Dispatch<UnboundShellV1, ()> for State {
 
     fn destroyed(state: &mut Self, _client: ClientId, resource: &UnboundShellV1, _data: &()) {
         state.shell_resources.retain(|shell| shell != resource);
+    }
+}
+
+fn send_panel_anchor(shell: &UnboundShellV1, anchor: &PanelAnchor) {
+    if shell.version() >= unbound_shell_v1::EVT_PANEL_ANCHOR_SINCE {
+        shell.panel_anchor(
+            anchor.panel,
+            anchor.output.clone(),
+            anchor.edge,
+            anchor.rect.loc.x,
+            anchor.rect.loc.y,
+            anchor.rect.size.w,
+            anchor.rect.size.h,
+        );
     }
 }
 

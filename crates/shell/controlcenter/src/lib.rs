@@ -1,5 +1,6 @@
 pub mod media;
 mod now_playing;
+mod person;
 
 use std::cell::{Cell, RefCell};
 use std::fs;
@@ -15,7 +16,8 @@ use unbound_toolkit::ui::{
     PopUpButton, SLIDER_HEIGHT, SWITCH_SIZE, Slider, Stack, Toggle, Ui, Widget,
 };
 use unbound_toolkit::{
-    Color, Image, Item, Palette, Point, Rect, Scene, Shape, TextAlign, TextStyle, TextSystem,
+    Color, DisplayEdge, Image, Item, Palette, Point, Rect, Scene, Shape, TextAlign, TextStyle,
+    TextSystem,
 };
 
 use media::{Command, Player};
@@ -40,6 +42,40 @@ const SEGMENT_HEIGHT: f32 = 6.0;
 const TITLE_SIZE: f32 = 13.0;
 const LEVEL_STEP: f64 = 1.0 / SEGMENTS as f64;
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Anchor {
+    pub edge: DisplayEdge,
+    pub item: Rect,
+}
+
+pub fn place_beside(anchor: Option<Anchor>, surface: (f32, f32), size: (f32, f32)) -> Rect {
+    let (width, height) = surface;
+    let (panel_width, panel_height) = size;
+    let along_x =
+        |right: f32| (right - panel_width).clamp(EDGE, (width - EDGE - panel_width).max(EDGE));
+    let along_y =
+        |bottom: f32| (bottom - panel_height).clamp(EDGE, (height - EDGE - panel_height).max(EDGE));
+    let (x, y) = match anchor {
+        None => (width - EDGE - panel_width, EDGE),
+        Some(Anchor { edge, item }) => match edge {
+            DisplayEdge::Left => (item.x + item.width + EDGE, along_y(item.y + item.height)),
+            DisplayEdge::Right => (item.x - EDGE - panel_width, along_y(item.y + item.height)),
+            DisplayEdge::Bottom => (along_x(item.x + item.width), item.y - EDGE - panel_height),
+            _ => (along_x(item.x + item.width), item.y + item.height + EDGE),
+        },
+    };
+    Rect::new(x.round(), y.round(), panel_width, panel_height)
+}
+
+pub fn slide_from(anchor: Option<Anchor>, distance: f32) -> Point {
+    match anchor.map(|anchor| anchor.edge) {
+        Some(DisplayEdge::Left) => Point::new(-distance, 0.0),
+        Some(DisplayEdge::Right) => Point::new(distance, 0.0),
+        Some(DisplayEdge::Bottom) => Point::new(0.0, distance),
+        _ => Point::new(0.0, -distance),
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Status {
     pub wifi: Option<bool>,
@@ -58,6 +94,8 @@ pub struct Status {
     pub player: Option<Player>,
     pub artwork: Option<Image>,
     pub players: Vec<Choice>,
+    pub person: Option<String>,
+    pub icon_dirs: Vec<PathBuf>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -81,6 +119,9 @@ pub enum Change {
     Media(Command),
     RaisePlayer,
     Player(String),
+    Lock,
+    Power,
+    Settings,
 }
 
 pub type Changes = Rc<RefCell<Vec<Change>>>;
@@ -147,6 +188,14 @@ fn slider(
 pub fn panel(status: &Status, palette: Palette, text: TextSystem, changes: &Changes) -> (Ui, f32) {
     let mut controls: Vec<Box<dyn Widget>> = Vec::new();
     let mut heights = Vec::new();
+    if let Some(name) = &status.person {
+        controls.push(Box::new(person::PersonRow::new(
+            name,
+            status.icon_dirs.clone(),
+            changes,
+        )));
+        heights.push(person::HEIGHT);
+    }
     if let Some(on) = status.wifi {
         controls.push(toggle(&L10N.tr("wifi"), on, changes, Change::Wifi));
         heights.push(SWITCH_SIZE.height);

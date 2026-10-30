@@ -47,17 +47,25 @@ pub trait Config {
     #[zbus(property)]
     fn set_wallpaper_fit(&self, value: &str) -> zbus::Result<()>;
     #[zbus(property)]
-    fn dock_icon_size(&self) -> zbus::Result<u32>;
+    fn bar_icon_size(&self) -> zbus::Result<u32>;
     #[zbus(property)]
-    fn set_dock_icon_size(&self, size: u32) -> zbus::Result<()>;
+    fn set_bar_icon_size(&self, size: u32) -> zbus::Result<()>;
     #[zbus(property)]
-    fn dock_auto_hide(&self) -> zbus::Result<bool>;
+    fn bar_auto_hide(&self) -> zbus::Result<bool>;
     #[zbus(property)]
-    fn set_dock_auto_hide(&self, auto_hide: bool) -> zbus::Result<()>;
+    fn set_bar_auto_hide(&self, auto_hide: bool) -> zbus::Result<()>;
     #[zbus(property)]
-    fn dock_edge(&self) -> zbus::Result<String>;
+    fn bar_names(&self) -> zbus::Result<bool>;
     #[zbus(property)]
-    fn set_dock_edge(&self, value: &str) -> zbus::Result<()>;
+    fn set_bar_names(&self, names: bool) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn bar_edge(&self) -> zbus::Result<String>;
+    #[zbus(property)]
+    fn set_bar_edge(&self, value: &str) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn bar_menu_bar(&self) -> zbus::Result<String>;
+    #[zbus(property)]
+    fn set_bar_menu_bar(&self, value: &str) -> zbus::Result<()>;
     #[zbus(property)]
     fn idle_dim_after(&self) -> zbus::Result<u64>;
     #[zbus(property)]
@@ -181,7 +189,7 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 28] = [
+pub const CONFIG_SETTINGS: [SettingId; 30] = [
     SettingId::Appearance,
     SettingId::Clock24Hour,
     SettingId::LowPowerOnBattery,
@@ -189,9 +197,11 @@ pub const CONFIG_SETTINGS: [SettingId; 28] = [
     SettingId::ReduceMotion,
     SettingId::Wallpaper,
     SettingId::WallpaperFit,
-    SettingId::DockIconSize,
-    SettingId::DockAutoHide,
-    SettingId::DockEdge,
+    SettingId::BarIconSize,
+    SettingId::BarAutoHide,
+    SettingId::BarNames,
+    SettingId::BarEdge,
+    SettingId::BarMenuBar,
     SettingId::DimAfter,
     SettingId::LockAfter,
     SettingId::SleepAfter,
@@ -322,9 +332,11 @@ impl SettingsClient {
                 dark: self.config.wallpaper_dark()?,
             },
             SettingId::WallpaperFit => Value::Keyword(self.config.wallpaper_fit()?),
-            SettingId::DockIconSize => Value::Number(self.config.dock_icon_size()?),
-            SettingId::DockAutoHide => Value::Flag(self.config.dock_auto_hide()?),
-            SettingId::DockEdge => Value::Keyword(self.config.dock_edge()?),
+            SettingId::BarIconSize => Value::Number(self.config.bar_icon_size()?),
+            SettingId::BarAutoHide => Value::Flag(self.config.bar_auto_hide()?),
+            SettingId::BarNames => Value::Flag(self.config.bar_names()?),
+            SettingId::BarEdge => Value::Keyword(self.config.bar_edge()?),
+            SettingId::BarMenuBar => Value::Keyword(self.config.bar_menu_bar()?),
             SettingId::DimAfter => Value::Seconds(self.config.idle_dim_after()?),
             SettingId::LockAfter => Value::Seconds(self.config.idle_lock_after()?),
             SettingId::SleepAfter if self.config.idle_suspend_with_display()? => {
@@ -372,7 +384,10 @@ impl SettingsClient {
     pub fn set(&self, id: SettingId, value: &Value) -> zbus::Result<()> {
         match (id, value) {
             (SettingId::Appearance, Value::Keyword(keyword)) => self.config.set_appearance(keyword),
-            (SettingId::DockEdge, Value::Keyword(keyword)) => self.config.set_dock_edge(keyword),
+            (SettingId::BarEdge, Value::Keyword(keyword)) => self.config.set_bar_edge(keyword),
+            (SettingId::BarMenuBar, Value::Keyword(keyword)) => {
+                self.config.set_bar_menu_bar(keyword)
+            }
             (SettingId::Clock24Hour, Value::Flag(twenty_four_hour)) => {
                 self.config.set_clock_format(if *twenty_four_hour {
                     "24-hour"
@@ -396,10 +411,11 @@ impl SettingsClient {
             (SettingId::WallpaperFit, Value::Keyword(keyword)) => {
                 self.config.set_wallpaper_fit(keyword)
             }
-            (SettingId::DockIconSize, Value::Number(size)) => self.config.set_dock_icon_size(*size),
-            (SettingId::DockAutoHide, Value::Flag(auto_hide)) => {
-                self.config.set_dock_auto_hide(*auto_hide)
+            (SettingId::BarIconSize, Value::Number(size)) => self.config.set_bar_icon_size(*size),
+            (SettingId::BarAutoHide, Value::Flag(auto_hide)) => {
+                self.config.set_bar_auto_hide(*auto_hide)
             }
+            (SettingId::BarNames, Value::Flag(names)) => self.config.set_bar_names(*names),
 
             (SettingId::DimAfter, Value::Seconds(seconds)) => {
                 self.config.set_idle_dim_after(*seconds)

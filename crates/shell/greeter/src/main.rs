@@ -284,7 +284,7 @@ impl App for Greeter {
             None
         };
         match backdrop {
-            Some(inbox) => {
+            Some(mut inbox) => {
                 if let Some(image) = inbox.drain().pop() {
                     self.screen
                         .set_backdrop(image.clone(), frame_time().on_screen());

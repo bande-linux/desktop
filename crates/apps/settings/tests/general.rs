@@ -1,8 +1,11 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+mod support;
+
 use std::path::{Path, PathBuf};
 
-use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId};
+use accesskit::{Action, ActionRequest, Role, TreeId};
+use support::{SIZE, click, find, has_text, nodes};
 use unbound_settings::{
     About, AboutCommand, App, Category, Command, InstalledLocale, LocaleState, LoginCommand,
     LoginItems, NetworkCommand, PaneId, SettingId, SettingsView, Storage, StorageCommand, Update,
@@ -12,38 +15,6 @@ use unbound_settings::{
 use unbound_toolkit::ui::{Event, Key, Modifiers};
 use unbound_toolkit::{Palette, Scheme, TextSystem};
 use unbound_xdg::DesktopEntry;
-
-const SIZE: (u32, u32) = (900, 600);
-
-fn nodes(view: &mut SettingsView) -> Vec<(NodeId, Node)> {
-    view.scene(SIZE.0, SIZE.1);
-    view.accessibility().nodes
-}
-
-fn find(view: &mut SettingsView, role: Role, label: &str) -> Option<NodeId> {
-    nodes(view)
-        .into_iter()
-        .find(|(_, node)| {
-            node.role() == role && node.label().is_some_and(|text| text.starts_with(label))
-        })
-        .map(|(id, _)| id)
-}
-
-fn has_text(view: &mut SettingsView, text: &str) -> bool {
-    nodes(view).into_iter().any(|(_, node)| {
-        node.label().is_some_and(|label| label.contains(text))
-            || node.value().is_some_and(|value| value.contains(text))
-    })
-}
-
-fn click(view: &mut SettingsView, target: NodeId) {
-    view.perform(&ActionRequest {
-        action: Action::Click,
-        target_tree: TreeId::ROOT,
-        target_node: target,
-        data: None,
-    });
-}
 
 fn key(view: &mut SettingsView, key: Key, modifiers: Modifiers) {
     view.handle(&Event::Key { key, modifiers });
@@ -64,15 +35,15 @@ fn about() -> About {
     }
 }
 
-pub fn general_view(scheme: Scheme) -> SettingsView {
-    let mut view = SettingsView::new(Palette::for_scheme(scheme), TextSystem::new());
+fn general_view() -> SettingsView {
+    let mut view = SettingsView::new(Palette::for_scheme(Scheme::Light), TextSystem::new());
     view.apply(Update::About(about()));
     view
 }
 
 #[test]
 fn general_lists_its_pages_and_back_returns_to_the_page_you_came_from() {
-    let mut view = general_view(Scheme::Light);
+    let mut view = general_view();
     assert!(view.visible_panes().contains(&PaneId::General));
     assert!(!view.visible_panes().contains(&PaneId::About));
     view.select_pane(PaneId::General);
@@ -110,7 +81,7 @@ fn general_lists_its_pages_and_back_returns_to_the_page_you_came_from() {
 
 #[test]
 fn renaming_the_computer_waits_for_return_and_escape_keeps_the_old_name() {
-    let mut view = general_view(Scheme::Light);
+    let mut view = general_view();
     view.select_pane(PaneId::About);
     view.take_commands();
     let field = nodes(&mut view)
@@ -175,16 +146,9 @@ fn storage() -> Storage {
     }
 }
 
-pub fn storage_view(scheme: Scheme) -> SettingsView {
-    let mut view = general_view(scheme);
-    view.select_pane(PaneId::Storage);
-    view.apply(Update::Storage(storage()));
-    view
-}
-
 #[test]
 fn storage_measures_when_opened_and_asks_before_emptying_the_trash() {
-    let mut view = general_view(Scheme::Light);
+    let mut view = general_view();
     view.select_pane(PaneId::Storage);
     assert_eq!(
         view.take_commands(),
@@ -300,7 +264,7 @@ fn app(id: &str, name: &str) -> App {
 
 #[test]
 fn login_items_are_added_by_name_and_removed_from_their_row() {
-    let mut view = general_view(Scheme::Light);
+    let mut view = general_view();
     view.select_pane(PaneId::LoginItems);
     assert_eq!(
         view.take_commands(),
@@ -408,7 +372,7 @@ fn network_state() -> unbound_settings::NetworkState {
 
 #[test]
 fn ethernet_switches_to_a_manual_address_and_vpns_connect_from_their_row() {
-    let mut view = general_view(Scheme::Light);
+    let mut view = general_view();
     view.apply(Update::Network(network_state()));
     view.select_pane(PaneId::Network);
     assert!(has_text(
@@ -500,7 +464,7 @@ fn languages_come_from_installed_locales_and_write_lang_language_and_formats() {
         ("en_GB.UTF-8".to_owned(), Some("sv_SE.UTF-8".to_owned()))
     );
 
-    let mut view = general_view(Scheme::Light);
+    let mut view = general_view();
     view.apply(Update::Locale(Some(LocaleState {
         installed,
         language: "en_GB.UTF-8".to_owned(),

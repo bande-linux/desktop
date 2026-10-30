@@ -1,36 +1,16 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+mod support;
+
 use std::time::{Duration, Instant};
 
-use accesskit::{Action, ActionRequest, NodeId, Role, TreeId};
+use accesskit::Role;
+use support::{WAIT, click, find};
 use unbound_notify::client::{Request, notify};
 use unbound_notify::{Banners, NotificationServer, Urgency};
 use unbound_settings::{Command, Feed, PaneId, SettingsView, feed, follow_app_notifications};
 use unbound_test_bus::SessionBus;
 use unbound_toolkit::{Palette, Scheme, TextSystem};
-
-const SIZE: (u32, u32) = (900, 600);
-const WAIT: Duration = Duration::from_secs(5);
-
-fn find(view: &mut SettingsView, role: Role, label: &str) -> Option<NodeId> {
-    view.scene(SIZE.0, SIZE.1);
-    view.accessibility()
-        .nodes
-        .into_iter()
-        .find(|(_, node)| {
-            node.role() == role && node.label().is_some_and(|text| text.starts_with(label))
-        })
-        .map(|(id, _)| id)
-}
-
-fn click(view: &mut SettingsView, target: NodeId) {
-    view.perform(&ActionRequest {
-        action: Action::Click,
-        target_tree: TreeId::ROOT,
-        target_node: target,
-        data: None,
-    });
-}
 
 fn pump(
     view: &mut SettingsView,

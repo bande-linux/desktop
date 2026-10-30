@@ -3811,6 +3811,7 @@ dependencies = [
  "rustix 1.1.6",
  "tempfile",
  "tracing",
+ "unbound-app-menu",
  "unbound-l10n",
  "unbound-log",
  "unbound-toolkit",

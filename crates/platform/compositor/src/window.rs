@@ -354,7 +354,11 @@ impl State {
             Some(layer) => layer.previous.clone(),
             None => self.focused(),
         }?;
-        self.toplevel_of(&focused)
+        self.toplevel_of(&focused).or_else(|| {
+            self.key_behind_layer
+                .clone()
+                .filter(|key| self.window_index(key).is_some())
+        })
     }
 
     fn place(&mut self, index: usize, state: xdg_toplevel::State, target: Option<Rect>) {

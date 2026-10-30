@@ -232,8 +232,15 @@ impl Headless {
                     scheme: self.state.decorations.scheme,
                 };
                 let at_origin = Look::shown(Rectangle::from_size(geometry.size.to_f64()));
-                let (shown, _) =
-                    window_elements(window, renderer, scale, shading, false, Some(at_origin));
+                let (shown, _) = window_elements(
+                    window,
+                    renderer,
+                    scale,
+                    shading,
+                    false,
+                    Some(at_origin),
+                    self.state.backdrop(),
+                );
                 let cursor = match paint_cursors {
                     true => self.cursor_elements(renderer, scale),
                     false => Vec::new(),
@@ -245,11 +252,10 @@ impl Headless {
                     .chain(
                         shown
                             .into_iter()
-                            .filter(|element| {
-                                !matches!(
-                                    element,
-                                    OutputElement::Shadow(_) | OutputElement::Blur(_)
-                                )
+                            .filter(|element| match element {
+                                OutputElement::Shadow(_) | OutputElement::Blur(_) => false,
+                                OutputElement::Fill(fill) => !fill.is_backdrop(),
+                                _ => true,
                             })
                             .map(|element| ScreenElement::new(element, Point::default())),
                     )

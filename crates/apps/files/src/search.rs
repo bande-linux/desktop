@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use unbound_search::{FUZZY, FileIndex};
 use unbound_toolkit::ui::{SEGMENTED_HEIGHT, SegmentedControl, WidgetId};
-use unbound_toolkit::{Item, Point, Rect, Shape, TextAlign, TextStyle};
+use unbound_toolkit::{Item, Point, Rect, TextAlign, TextStyle};
 
 use crate::L10N;
 use crate::browser::Location;
@@ -215,7 +215,7 @@ impl FilesView {
 
     pub(crate) fn focus_search(&mut self) {
         self.commit_rename();
-        self.focus(self.search_field);
+        self.focus(self.toolbar.search);
     }
 
     pub(crate) fn show_in_enclosing_folder(&mut self) {
@@ -253,14 +253,6 @@ impl FilesView {
             content.width,
             SEARCH_HEIGHT,
         );
-        items.push(Item::Fill {
-            shape: Shape::rect(bar),
-            paint: self.palette.sheet.into(),
-        });
-        items.push(Item::Fill {
-            shape: Shape::rect(Rect::new(bar.x, bar.y + bar.height - 1.0, bar.width, 1.0)),
-            paint: self.palette.hairline.into(),
-        });
         let muted = self.palette.ink2;
         let label = self.text().paragraph(
             &L10N.tr("search-scope"),

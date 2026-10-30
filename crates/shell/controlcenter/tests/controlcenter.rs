@@ -193,23 +193,37 @@ fn the_keyboard_backlight_slider_appears_only_with_a_backlight_and_asks_for_its_
 }
 
 #[test]
-fn every_switch_is_named_on_screen_beside_it() {
+fn every_switch_is_a_named_tile_that_says_its_state() {
     let (ui, _, _) = open(&Status {
         wifi: Some(false),
-        bluetooth: Some(false),
+        bluetooth: Some(true),
         ..Status::default()
     });
-    let shown: Vec<String> = ui
+    let switches: Vec<(String, String, Option<Toggled>)> = ui
         .accessibility()
         .nodes
         .into_iter()
-        .filter(|(_, node)| node.role() == Role::Label)
-        .filter_map(|(_, node)| node.value().map(str::to_owned))
+        .filter(|(_, node)| node.role() == Role::Switch)
+        .map(|(_, node)| {
+            (
+                node.label().unwrap_or_default().to_owned(),
+                node.description().unwrap_or_default().to_owned(),
+                node.toggled(),
+            )
+        })
         .collect();
+    let switch = |name: &str, state: &str, toggled: Toggled| {
+        (name.to_owned(), state.to_owned(), Some(toggled))
+    };
 
-    for name in ["Wi-Fi", "Bluetooth", "Do Not Disturb"] {
-        assert!(shown.iter().any(|text| text == name), "{name} in {shown:?}");
-    }
+    assert_eq!(
+        switches,
+        [
+            switch("Wi-Fi", "Off", Toggled::False),
+            switch("Bluetooth", "On", Toggled::True),
+            switch("Do Not Disturb", "Off", Toggled::False),
+        ]
+    );
 }
 
 #[test]
@@ -238,18 +252,20 @@ fn switching_a_control_or_choosing_a_network_asks_for_that_change() {
     });
     let (wifi, _) = control(&ui, "Wi-Fi").expect("a Wi-Fi switch");
     let (do_not_disturb, _) = control(&ui, "Do Not Disturb").expect("a Do Not Disturb switch");
-    let (network, _) = control(&ui, "Home").expect("the network in use");
+    let (_, node) = control(&ui, "Wi-Fi").expect("a Wi-Fi switch");
+    assert_eq!(node.description(), Some("Home"));
 
-    for target in [wifi, do_not_disturb, network] {
+    assert!(act(&mut ui, wifi, Action::Expand));
+    for target in [wifi, do_not_disturb] {
         click(&mut ui, target);
     }
 
     assert_eq!(
         *changes.borrow(),
         [
+            Change::ChooseNetwork,
             Change::Wifi(false),
             Change::DoNotDisturb(true),
-            Change::ChooseNetwork
         ]
     );
 }

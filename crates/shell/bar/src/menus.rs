@@ -1,3 +1,4 @@
+use unbound_keyboard::{Action, SHORTCUTS};
 use unbound_toolkit::ui::{Menu, MenuItem};
 
 use unbound_status::Command;
@@ -227,7 +228,7 @@ pub fn cascade(menus: &AppMenus<'_>) -> Menu {
         Some(node) => app_menu(node, menus.item),
         None => standard_app_menu(menus.name),
     };
-    let mut items = vec![MenuItem::submenu(menus.name, app_row)];
+    let mut items = vec![MenuItem::submenu(menus.name, app_row).strong()];
     match menus.root {
         Some(root) => {
             for child in root
@@ -260,5 +261,13 @@ pub fn cascade(menus: &AppMenus<'_>) -> Menu {
             }
         }
     }
-    Menu::new(items).searchable(&L10N.tr("search-menus"), &L10N.tr("no-menu-results"))
+    let shortcut = SHORTCUTS
+        .iter()
+        .find(|shortcut| shortcut.action == Action::SearchMenus)
+        .map_or("", |shortcut| shortcut.keys);
+    Menu::new(items).searchable(
+        &L10N.tr("type-to-search"),
+        shortcut,
+        &L10N.tr("no-menu-results"),
+    )
 }

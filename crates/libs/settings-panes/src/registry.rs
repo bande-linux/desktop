@@ -9,6 +9,7 @@ pub enum PaneId {
     Notifications,
     Sound,
     Appearance,
+    Accessibility,
     Wallpaper,
     Bar,
     Displays,
@@ -25,7 +26,7 @@ pub enum PaneId {
 }
 
 impl PaneId {
-    const KEYWORDS: [(Self, &'static str); 20] = [
+    const KEYWORDS: [(Self, &'static str); 21] = [
         (Self::Wifi, "wifi"),
         (Self::Bluetooth, "bluetooth"),
         (Self::Network, "network"),
@@ -33,6 +34,7 @@ impl PaneId {
         (Self::Notifications, "notifications"),
         (Self::Sound, "sound"),
         (Self::Appearance, "appearance"),
+        (Self::Accessibility, "accessibility"),
         (Self::Wallpaper, "wallpaper"),
         (Self::Bar, "bar"),
         (Self::Displays, "displays"),
@@ -96,7 +98,18 @@ pub enum SettingId {
     SoundEffects,
     VolumeFeedback,
     Appearance,
+    ScreenReader,
+    Zoom,
+    IncreaseContrast,
+    ReduceTransparency,
     ReduceMotion,
+    CursorSize,
+    FlashScreen,
+    StickyKeys,
+    SlowKeys,
+    BounceKeys,
+    Accent,
+    TintedFrame,
     Wallpaper,
     WallpaperFit,
     BarEdge,
@@ -214,6 +227,7 @@ pub enum Kind {
     Resolutions,
     DisplayUses,
     Pictures,
+    Swatches(Vec<Choice>),
     Text,
     List(List),
 }
@@ -221,9 +235,10 @@ pub enum Kind {
 impl Kind {
     pub fn choices(&self) -> &[Choice] {
         match self {
-            Self::Choices(choices) | Self::Menu(choices) | Self::Stops { stops: choices, .. } => {
-                choices
-            }
+            Self::Choices(choices)
+            | Self::Menu(choices)
+            | Self::Swatches(choices)
+            | Self::Stops { stops: choices, .. } => choices,
             Self::Switch
             | Self::Level
             | Self::Range { .. }
@@ -363,6 +378,7 @@ fn numbers(values: &[u32]) -> Vec<Choice> {
 pub const DIM_CHOICES: [u64; 5] = [30, 60, 120, 300, 600];
 pub const LOCK_CHOICES: [u64; 5] = [60, 300, 600, 1200, 3600];
 pub const SLEEP_CHOICES: [u64; 4] = [1800, 3600, 10800, 0];
+pub const CURSOR_SIZES: [u32; 5] = [24, 32, 48, 64, 96];
 const REPEAT_RATES: [u32; 9] = [2, 5, 10, 15, 20, 25, 30, 45, 60];
 const REPEAT_DELAYS: [u32; 8] = [2000, 1500, 1000, 800, 600, 450, 300, 200];
 pub const POINTER_SPEEDS: u32 = 10;
@@ -909,16 +925,34 @@ fn desktop_panes() -> Vec<Pane> {
                     )],
                 ),
                 section(
-                    Some(L10N.tr("motion")),
-                    vec![setting(
-                        SettingId::ReduceMotion,
-                        L10N.tr("reduce-motion"),
-                        L10N.tr("reduce-motion-keywords"),
-                        Kind::Switch,
-                    )],
+                    None,
+                    vec![
+                        setting(
+                            SettingId::Accent,
+                            L10N.tr("accent"),
+                            L10N.tr("accent-keywords"),
+                            Kind::Swatches(keyword_choices(vec![
+                                (L10N.tr("accent-ultramarine"), "ultramarine"),
+                                (L10N.tr("accent-teal"), "teal"),
+                                (L10N.tr("accent-moss"), "moss"),
+                                (L10N.tr("accent-amber"), "amber"),
+                                (L10N.tr("accent-ember"), "ember"),
+                                (L10N.tr("accent-rose"), "rose"),
+                                (L10N.tr("accent-plum"), "plum"),
+                                (L10N.tr("accent-graphite"), "graphite"),
+                            ])),
+                        ),
+                        setting(
+                            SettingId::TintedFrame,
+                            L10N.tr("tinted-frame"),
+                            L10N.tr("tinted-frame-keywords"),
+                            Kind::Switch,
+                        ),
+                    ],
                 ),
             ],
         ),
+        accessibility_pane(),
         pane(
             PaneId::Wallpaper,
             L10N.tr("wallpaper"),
@@ -1046,6 +1080,57 @@ fn speed(id: SettingId, keywords: String) -> Setting {
             low: L10N.tr("slow"),
             high: L10N.tr("fast"),
         },
+    )
+}
+
+fn switch(id: SettingId, name: &str) -> Setting {
+    setting(
+        id,
+        L10N.tr(name),
+        L10N.tr(&format!("{name}-keywords")),
+        Kind::Switch,
+    )
+}
+
+fn accessibility_pane() -> Pane {
+    pane(
+        PaneId::Accessibility,
+        L10N.tr("accessibility"),
+        L10N.tr("accessibility-keywords"),
+        vec![
+            section(
+                Some(L10N.tr("vision")),
+                vec![
+                    switch(SettingId::ScreenReader, "screen-reader"),
+                    switch(SettingId::Zoom, "zoom"),
+                    switch(SettingId::IncreaseContrast, "increase-contrast"),
+                    switch(SettingId::ReduceTransparency, "reduce-transparency"),
+                    switch(SettingId::ReduceMotion, "reduce-motion"),
+                    setting(
+                        SettingId::CursorSize,
+                        L10N.tr("cursor-size"),
+                        L10N.tr("cursor-size-keywords"),
+                        Kind::Stops {
+                            stops: numbers(&CURSOR_SIZES),
+                            low: L10N.tr("small"),
+                            high: L10N.tr("large"),
+                        },
+                    ),
+                ],
+            ),
+            section(
+                Some(L10N.tr("hearing")),
+                vec![switch(SettingId::FlashScreen, "flash-screen")],
+            ),
+            section(
+                Some(L10N.tr("motor")),
+                vec![
+                    switch(SettingId::StickyKeys, "sticky-keys"),
+                    switch(SettingId::SlowKeys, "slow-keys"),
+                    switch(SettingId::BounceKeys, "bounce-keys"),
+                ],
+            ),
+        ],
     )
 }
 

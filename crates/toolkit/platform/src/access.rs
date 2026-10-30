@@ -55,6 +55,7 @@ pub(crate) struct Accessibility {
     adapter: Adapter,
     signals: Receiver<Signal>,
     woken: UnixStream,
+    _wake: UnixStream,
     active: bool,
     tree_requested: bool,
 }
@@ -73,6 +74,7 @@ impl Accessibility {
             adapter,
             signals,
             woken,
+            _wake: wake,
             active: false,
             tree_requested: false,
         })

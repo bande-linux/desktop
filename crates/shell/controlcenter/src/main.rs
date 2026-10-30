@@ -12,8 +12,8 @@ use unbound_bluetooth::Bluetooth;
 use unbound_controlcenter::media::{self, Command, Playback, Player, Players};
 use unbound_controlcenter::{
     Anchor, Change, Changes, Choice, HUD_DURATION, HUD_SIZE, Hud, KeyboardLight, L10N, PANEL_WIDTH,
-    SYSFS_LEDS, Status, blur_rects, card, chooser_menu, hud, material, panel, place_beside, scene,
-    slide_from, stepped,
+    SYSFS_LEDS, Status, chooser_menu, hud, panel, panel_items, place_beside, scene, slide_from,
+    stepped,
 };
 use unbound_inbox::Inbox;
 use unbound_network::NetworkManager;
@@ -62,7 +62,6 @@ struct ControlCenter {
     session: Option<Connection>,
     backlight: Option<Backlight>,
     keyboard_light: Option<KeyboardLight>,
-    blur: Option<Vec<Rect>>,
     players: Players,
     player_updates: Inbox<Vec<Player>>,
     player_commands: Option<Sender<(String, Command)>>,
@@ -718,10 +717,8 @@ impl App for ControlCenter {
         let (width, height) = window.size();
         let now = Instant::now();
         let (shown, _) = self.shown.value_at(now);
-        let mut items = Vec::new();
-        let palette = material(self.palette, self.blur.is_some());
-        let mut shapes = Vec::new();
-        match &mut self.mode {
+        let palette = self.palette;
+        let items = match &mut self.mode {
             Mode::Panel {
                 ui,
                 height: panel_height,
@@ -731,47 +728,18 @@ impl App for ControlCenter {
                     (width as f32, height as f32),
                     (PANEL_WIDTH, *panel_height),
                 );
-                card(&palette, rect, &mut items);
-                shapes.push(rect);
-                let content = ui.scene(PANEL_WIDTH as u32, *panel_height as u32);
-                items.push(Item::Translate {
-                    offset: Point::new(rect.x, rect.y),
-                    items: content.items,
-                });
+                panel_items(ui, &palette, rect)
             }
             Mode::Hud(shown_hud, _) => {
                 let placed = place_beside(self.anchor, (width as f32, height as f32), HUD_SIZE);
-                let origin = Point::new(placed.x, placed.y);
-                shapes.push(Rect::new(origin.x, origin.y, HUD_SIZE.0, HUD_SIZE.1));
-                items.push(Item::Translate {
-                    offset: origin,
+                vec![Item::Translate {
+                    offset: Point::new(placed.x, placed.y),
                     items: hud(*shown_hud, &palette, &mut self.hud_text),
-                });
+                }]
             }
-            Mode::Hidden => {}
-        }
+            Mode::Hidden => Vec::new(),
+        };
         let lift = slide_from(self.anchor, SLIDE * (1.0 - shown));
-        let rects: Vec<Rect> = shapes
-            .into_iter()
-            .filter(|_| shown > 0.5)
-            .flat_map(|rect| {
-                blur_rects(Rect::new(
-                    rect.x + lift.x,
-                    rect.y + lift.y,
-                    rect.width,
-                    rect.height,
-                ))
-            })
-            .collect();
-        if self.blur.as_ref().is_some_and(|known| *known != rects) {
-            match window.set_background_blur(&rects) {
-                Ok(()) => self.blur = Some(rects),
-                Err(error) => {
-                    tracing::info!("Control Center is not blurred: {error}");
-                    self.blur = None;
-                }
-            }
-        }
         scene(
             width,
             height,
@@ -954,7 +922,6 @@ fn run() -> Result<(), WindowError> {
         bluetooth: system.as_ref().map(Bluetooth::new),
         backlight: Backlight::find(Path::new(SYSFS_BACKLIGHT)),
         keyboard_light: KeyboardLight::find(Path::new(SYSFS_LEDS)),
-        blur: Some(vec![Rect::default()]),
         system,
         session,
         players: Players::default(),

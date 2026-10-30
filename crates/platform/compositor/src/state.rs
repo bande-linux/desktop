@@ -87,7 +87,7 @@ use crate::lock::Lock;
 use crate::motion::IconRect;
 use crate::scene::{
     BlurElement, Closing, Drawn, FillElement, PieceElement, Shading, ShadowElement, WindowElement,
-    preview_elements, surface_blurs, tie_blurs_to_what_lies_below, window_elements,
+    preview_elements, scrim, surface_blurs, tie_blurs_to_what_lies_below, window_elements,
 };
 use crate::screen::{OutputConfig, OutputSettings, Screen};
 use crate::session::{ForceQuit, LockScreen, SessionClient, SessionRole};
@@ -117,6 +117,7 @@ pub(crate) enum Placed<'a> {
     Window(&'a Window),
     Closing(&'a Closing),
     Overview(usize),
+    Backdrop(usize),
 }
 
 type Composed<E = ScreenElement> = (
@@ -169,6 +170,7 @@ pub struct State {
     _virtual_keyboard_state: VirtualKeyboardManagerState,
     pending_activation: Option<WlSurface>,
     pub(crate) windowless_app: Option<(Client, String)>,
+    pub(crate) key_behind_layer: Option<WlSurface>,
     pub(crate) shell_resources: Vec<UnboundShellV1>,
     pub(crate) capture_resources:
         Vec<unbound_protocols::server::unbound_capture_v1::UnboundCaptureV1>,
@@ -204,6 +206,7 @@ pub struct State {
     pub(crate) lock: Option<Lock>,
     pub(crate) session_lock_state: SessionLockManagerState,
     pub(crate) popup_grab: Option<PopupGrab<State>>,
+    pub(crate) held_window: Option<crate::grab::HeldWindow>,
     pub(crate) swallowed_button: Option<u32>,
     pub(crate) minimize_sequence: u64,
     pub(crate) closing: Vec<Closing>,
@@ -211,12 +214,16 @@ pub struct State {
     pub(crate) snap: Option<SnapDrag>,
     pub(crate) preview: Option<Preview>,
     pub(crate) reduce_motion: bool,
+    pub(crate) zoom: crate::zoom::Zoom,
+    pub(crate) assistive: crate::assistive::Assistive,
+    pub(crate) keys: crate::access_keys::AccessKeys,
+    pub(crate) keyboard_monitor: crate::keyboard_monitor::KeyboardMonitor,
     pub(crate) needs_redraw: bool,
     pub(crate) animated_at: Option<Duration>,
     pub(crate) pointer_location: Point<f64, Logical>,
     pub(crate) cursor_shown: bool,
     pub(crate) cursor_status: CursorImageStatus,
-    cursor_theme: CursorTheme,
+    pub(crate) cursor_theme: CursorTheme,
     cursor_arrow: Cursor,
     named_cursors: HashMap<CursorIcon, Option<Cursor>>,
     cursor_scale: f64,
@@ -337,6 +344,7 @@ impl Headless {
             }),
             pending_activation: None,
             windowless_app: None,
+            key_behind_layer: None,
             shell_resources: Vec::new(),
             capture_resources: Vec::new(),
             pending_insert: None,
@@ -376,6 +384,7 @@ impl Headless {
             lock: None,
             session_lock_state: SessionLockManagerState::new::<State, _>(&handle, shell::is_shell),
             popup_grab: None,
+            held_window: None,
             swallowed_button: None,
             minimize_sequence: 0,
             closing: Vec::new(),
@@ -383,6 +392,10 @@ impl Headless {
             snap: None,
             preview: None,
             reduce_motion: false,
+            zoom: crate::zoom::Zoom::default(),
+            assistive: crate::assistive::Assistive::default(),
+            keys: crate::access_keys::AccessKeys::default(),
+            keyboard_monitor: crate::keyboard_monitor::KeyboardMonitor::default(),
             needs_redraw: false,
             animated_at: None,
             pointer_location: (center.w, center.h).into(),
@@ -627,9 +640,9 @@ impl Headless {
         {
             return self.compose_mirror(renderer, screen, source, with_cursor);
         }
-        let scale = self.state.screens[screen].scale();
+        let scale = self.state.render_scale(screen);
         let (elements, drawn, icon) = self.compose_at(renderer, screen, scale, with_cursor);
-        let origin = self.state.screens[screen].origin_in_pixels(scale);
+        let origin = self.state.view_origin_in_pixels(screen, scale);
         (relocated(elements, Point::default() - origin), drawn, icon)
     }
 
@@ -675,6 +688,7 @@ impl Headless {
             (Vec::new(), None)
         };
         elements.extend(self.state.alert_elements(renderer, screen, scale));
+        elements.extend(self.state.flash_elements(screen, scale));
         elements.extend(self.state.source_hud_element(renderer, screen, scale));
         elements.extend(self.state.switcher_elements(renderer, screen, scale));
         elements.extend(self.state.assist_elements(renderer, screen, scale));
@@ -690,7 +704,14 @@ impl Headless {
                         1.0,
                         ElementKind::Unspecified,
                     ));
-                    elements.extend(surface_blurs(&surface, location, scale));
+                    elements.extend(surface_blurs(
+                        &surface,
+                        location,
+                        scale,
+                        self.state
+                            .backdrop()
+                            .or_else(|| scrim(renderer, self.state.decorations.scheme)),
+                    ));
                 }
                 Placed::Window(window) => {
                     let shading = Shading {
@@ -702,8 +723,15 @@ impl Headless {
                         .client()
                         .is_some_and(|owner| self.state.watchdog.is_unresponsive(&owner.id()));
                     let presented = self.state.presented(window);
-                    let (shown, look) =
-                        window_elements(window, renderer, scale, shading, hung, presented);
+                    let (shown, look) = window_elements(
+                        window,
+                        renderer,
+                        scale,
+                        shading,
+                        hung,
+                        presented,
+                        self.state.backdrop(),
+                    );
                     elements.extend(shown);
                     elements.extend(self.state.overview_ring(window, scale));
                     if let (Some(ghost), Some(look)) = (self.state.overview_ghost(window), &look) {
@@ -723,6 +751,13 @@ impl Headless {
                 Placed::Closing(closing) => elements.extend(closing.render_elements(scale)),
                 Placed::Overview(screen) => {
                     elements.extend(self.state.overview_elements(renderer, screen, scale));
+                }
+                Placed::Backdrop(screen) => {
+                    elements.extend(self.state.overview_backdrop(
+                        screen,
+                        scale,
+                        renderer.reduced_effects(),
+                    ));
                 }
             }
         }
@@ -915,7 +950,16 @@ impl State {
         if self.redirect_focus_while_locked(&surface) {
             return;
         }
-        self.windowless_app = None;
+        if self.popup_grab.is_some() && surface != self.menu_root() {
+            self.close_menus();
+        }
+        let onto_layer = surface
+            .as_ref()
+            .is_some_and(|surface| self.toplevel_of(surface).is_none());
+        self.key_behind_layer = self.key_window().filter(|_| onto_layer);
+        if !onto_layer {
+            self.windowless_app = None;
+        }
         self.typed_at = None;
         if let Some(surface) = &surface
             && self.window_index(surface).is_some()
@@ -980,7 +1024,10 @@ impl State {
     }
 
     pub(crate) fn refocus_after_losing(&mut self, lost: &WlSurface) {
-        if self.focused().as_ref() != Some(lost) {
+        let Some(focused) = self.focused() else {
+            return;
+        };
+        if &focused != lost && focused.is_alive() && self.root_of(&focused).as_ref() != Some(lost) {
             return;
         }
         let owner = lost.client();
@@ -1097,7 +1144,7 @@ impl State {
             .filter_map(|placed| match placed {
                 Placed::Surface(surface, origin) => Some((surface, origin)),
                 Placed::Window(window) => Some((window.surface().clone(), window.surface_origin())),
-                Placed::Closing(_) | Placed::Overview(_) => None,
+                Placed::Closing(_) | Placed::Overview(_) | Placed::Backdrop(_) => None,
             })
             .collect()
     }
@@ -1173,6 +1220,11 @@ impl State {
             self.window_entries(&on_top),
             self.window_entries(&rest),
             layers(Layer::Bottom),
+            if rendered && self.overview.is_shown() {
+                vec![Placed::Backdrop(screen)]
+            } else {
+                Vec::new()
+            },
             layers(Layer::Background),
         ]
         .concat()
@@ -1518,6 +1570,13 @@ impl SeatHandler for State {
         let client = focused.and_then(|surface| self.display_handle.get_client(surface.id()).ok());
         set_data_device_focus(&self.display_handle, seat, client.clone());
         set_primary_focus(&self.display_handle, seat, client);
+        if let Some(rect) = focused
+            .and_then(|surface| self.window_index(surface))
+            .and_then(|index| self.windows[index].geometry())
+        {
+            self.zoom
+                .follow((rect.location + rect.size.downscale(2).to_point()).to_f64());
+        }
     }
 }
 

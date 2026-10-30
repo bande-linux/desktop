@@ -352,6 +352,8 @@ impl State {
         self.animate_source_hud(time);
         self.animate_switcher(time);
         self.animate_assist(time);
+        self.animate_zoom(time);
+        self.animate_flash(time);
         self.closing.retain(|closing| !closing.motion.is_settled());
         if self.is_animating() {
             self.needs_redraw = true;
@@ -368,6 +370,8 @@ impl State {
             || self.input_sources.is_animating()
             || self.switcher.is_animating()
             || self.assist.is_animating()
+            || self.zoom.is_animating()
+            || self.is_flashing()
             || self.windows.iter().any(|window| window.motion.is_some())
     }
 }

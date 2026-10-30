@@ -5,6 +5,7 @@ use unbound_graphics::{
     TextSystem,
 };
 use unbound_widgets::{MENU_RADIUS, Menu, MenuOutcome, MenuPanel, MenuTracker};
+use wayland_client::protocol::wl_compositor::WlCompositor;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Connection, Dispatch, QueueHandle, delegate_noop};
 use wayland_protocols::wp::viewporter::client::wp_viewport::WpViewport;
@@ -176,6 +177,7 @@ impl Menus {
         let Some(menu) = self.tracker.submenu(level, index) else {
             return Ok(());
         };
+        self.close_from(opening.state, level + 1);
         let Some(parent) = self.popups.get(level) else {
             return Ok(());
         };
@@ -199,10 +201,26 @@ impl Menus {
         Ok(())
     }
 
-    pub(crate) fn search(&mut self, opening: Opening<'_>, menu: Menu) {
+    pub(crate) fn search(&mut self, opening: Opening<'_>, menu: Menu) -> Result<(), WindowError> {
         self.close_from(opening.state, 1);
         let panel = MenuPanel::new(menu, opening.text, &opening.palette);
         self.tracker.searched(panel);
+        let size = self.tracker.panels()[0].size();
+        let compositor = opening
+            .state
+            .compositor
+            .as_ref()
+            .ok_or(WindowError::Missing("wl_compositor"))?;
+        if let Some(popup) = self.popups.first() {
+            set_shape(
+                compositor,
+                opening.handle,
+                &popup.surface,
+                &popup.xdg_surface,
+                (size.width, size.height),
+            );
+        }
+        Ok(())
     }
 
     pub(crate) fn close_from(&mut self, state: &mut State, level: usize) {
@@ -258,16 +276,7 @@ impl Menus {
             popup.shown = Some(look);
             let size = panel.size();
             let shape = Shape::rounded(Rect::new(0.0, 0.0, size.width, size.height), MENU_RADIUS);
-            let mut items: Vec<Item> = Elevation::Overlay
-                .shadows(palette.scheme, true)
-                .into_iter()
-                .map(|shadow| Item::Shadow {
-                    shape,
-                    offset: Point::new(0.0, shadow.offset),
-                    blur_radius: shadow.blur,
-                    color: Color::BLACK.with_opacity(shadow.opacity),
-                })
-                .collect();
+            let mut items = Item::shadows(shape, Elevation::Overlay, palette.scheme, true).to_vec();
             items.extend(panel.paint(&palette, show_highlight));
             let scene = Scene {
                 width: (size.width + 2.0 * MARGIN) as u32,
@@ -340,12 +349,7 @@ fn create(
         }
     };
     positioner.destroy();
-    xdg_surface.set_window_geometry(
-        whole(MARGIN),
-        whole(MARGIN),
-        whole(size.0).max(1),
-        whole(size.1).max(1),
-    );
+    set_shape(compositor, handle, &surface, &xdg_surface, size);
     if let (Some(seat), Some(serial)) = (&state.seat, state.input.serial) {
         popup.grab(seat, serial);
     }
@@ -367,6 +371,23 @@ fn create(
         target: ShmTarget::default(),
         shown: None,
     })
+}
+
+fn set_shape(
+    compositor: &WlCompositor,
+    handle: &QueueHandle<State>,
+    surface: &WlSurface,
+    xdg_surface: &XdgSurface,
+    size: (f32, f32),
+) {
+    let whole = |value: f32| value.round() as i32;
+    let (x, y) = (whole(MARGIN), whole(MARGIN));
+    let (width, height) = (whole(size.0).max(1), whole(size.1).max(1));
+    xdg_surface.set_window_geometry(x, y, width, height);
+    let panel = compositor.create_region(handle, ());
+    panel.add(x, y, width, height);
+    surface.set_input_region(Some(&panel));
+    panel.destroy();
 }
 
 impl Dispatch<XdgSurface, PopupLevel> for State {

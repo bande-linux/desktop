@@ -200,8 +200,12 @@ struct Desktop {
 
 impl Desktop {
     fn new() -> Self {
+        Self::sized(OUTPUT)
+    }
+
+    fn sized(output: (i32, i32)) -> Self {
         Self {
-            server: Headless::new(Size::from(OUTPUT)).expect("headless compositor"),
+            server: Headless::new(Size::from(output)).expect("headless compositor"),
             renderer: Renderer::new().expect("Vulkan renderer"),
             scheduler: FrameScheduler::new(FrameClock::new(Duration::ZERO, REFRESH)),
             start: Instant::now(),
@@ -1026,6 +1030,62 @@ fn escape_or_a_click_outside_closes_a_menu_without_a_choice() {
         menu_events(&client.seen),
         [WindowEvent::MenuClosed, WindowEvent::MenuClosed]
     );
+}
+
+#[test]
+fn a_click_just_beside_a_menu_closes_it_and_only_the_next_click_reaches_the_window() {
+    let mut desktop = Desktop::sized((800, 600));
+    let mut client = pointed_window(&mut desktop, "menu own window");
+    desktop.point_into_content(100, 60);
+    open_menu(&mut desktop, &mut client);
+    desktop.server.press_button(BTN_RIGHT, false, 0);
+    desktop.settle(&mut [&mut client]);
+    let before = presses(&client.seen).len();
+
+    desktop.point_into_content(100 - 8, 60 + 10);
+    desktop.click(BTN_LEFT);
+    desktop.wait_for(
+        &mut [&mut client],
+        |events| menu_events(events) == [WindowEvent::MenuClosed],
+        |desktop| desktop.server.popup_count() == 0,
+    );
+    desktop.settle(&mut [&mut client]);
+    assert_eq!(
+        presses(&client.seen).len(),
+        before,
+        "the closing click is consumed"
+    );
+
+    desktop.click(BTN_LEFT);
+    desktop.wait_for(
+        &mut [&mut client],
+        |events| presses(events).len() == before + 1,
+        |_| true,
+    );
+    assert_eq!(
+        presses(&client.seen)
+            .last()
+            .map(|pointer| (pointer.position.x, pointer.position.y)),
+        Some((92.0, 70.0))
+    );
+}
+
+#[test]
+fn clicking_a_submenu_item_opens_its_submenu_once() {
+    let mut desktop = Desktop::new();
+    let mut client = pointed_window(&mut desktop, "menu submenu click");
+    open_menu(&mut desktop, &mut client);
+    desktop.server.press_button(BTN_RIGHT, false, 0);
+    desktop.settle(&mut [&mut client]);
+    desktop.point_into_content(30 + 40, 20 + 5 + 22 + 22 + 11 + 11);
+    desktop.click(BTN_LEFT);
+    desktop.wait_for(
+        &mut [&mut client],
+        |_| true,
+        |desktop| desktop.server.popup_count() == 2,
+    );
+    desktop.settle(&mut [&mut client]);
+    assert_eq!(desktop.server.popup_count(), 2);
 }
 
 #[test]

@@ -8,6 +8,8 @@ use wayland_protocols::xdg::shell::client::xdg_positioner::{
 use wayland_protocols::xdg::shell::client::xdg_surface::XdgSurface;
 use wayland_protocols::xdg::shell::client::xdg_toplevel::{ResizeEdge, State, XdgToplevel};
 
+use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::ZwlrLayerSurfaceV1;
+
 use crate::{Globals, Headless, ShmImage, TestClient};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -160,6 +162,22 @@ impl TestClient {
     }
 
     pub fn open_popup(&mut self, server: &mut Headless, request: &PopupRequest) -> usize {
+        let parent = self.windows[request.parent].1.clone();
+        self.open_popup_on(server, request, Some(&parent), None)
+    }
+
+    pub fn open_layer_popup(&mut self, server: &mut Headless, request: &PopupRequest) -> usize {
+        let layer = self.globals.shell.layers[request.parent].1.clone();
+        self.open_popup_on(server, request, None, Some(&layer))
+    }
+
+    fn open_popup_on(
+        &mut self,
+        server: &mut Headless,
+        request: &PopupRequest,
+        parent: Option<&XdgSurface>,
+        layer: Option<&ZwlrLayerSurfaceV1>,
+    ) -> usize {
         let qh = self.queue.handle();
         let compositor = self.globals.compositor.as_ref().expect("wl_compositor");
         let wm_base = self.globals.wm_base.as_ref().expect("xdg_wm_base");
@@ -174,8 +192,10 @@ impl TestClient {
         if request.flip_x {
             positioner.set_constraint_adjustment(ConstraintAdjustment::FlipX);
         }
-        let parent: &XdgSurface = &self.windows[request.parent].1;
-        let popup = xdg_surface.get_popup(Some(parent), &positioner, &qh, ());
+        let popup = xdg_surface.get_popup(parent, &positioner, &qh, ());
+        if let Some(layer) = layer {
+            layer.get_popup(&popup);
+        }
         positioner.destroy();
         if request.grab {
             let (seat, serial) = self.seat_and_serial();
@@ -192,6 +212,13 @@ impl TestClient {
         self.attach_solid(&surface, request.size.0, request.size.1, request.color);
         self.exchange(server);
         self.globals.toplevels.popups.len() - 1
+    }
+
+    pub fn destroy_popup(&mut self, server: &mut Headless, index: usize) {
+        let popup = &self.globals.toplevels.popups[index];
+        popup.popup.destroy();
+        popup.surface.destroy();
+        self.exchange(server);
     }
 
     pub fn popup_geometry(&self, index: usize) -> Option<(i32, i32, i32, i32)> {

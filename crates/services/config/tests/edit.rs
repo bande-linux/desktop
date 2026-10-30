@@ -4,8 +4,9 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use unbound_config::{
-    AlertSound, Appearance, BarEdge, CapsLock, ClockFormat, Config, DisplaySettings, InputSource,
-    LidOnPower, Placement, Rotation, Setting, Suspend, WallpaperFit, WallpaperVariant, migrate,
+    Accent, Accessibility, AlertSound, Appearance, BarEdge, CapsLock, ClockFormat, Config,
+    DisplaySettings, InputSource, LidOnPower, Placement, Rotation, Setting, Suspend, WallpaperFit,
+    WallpaperVariant, migrate,
 };
 
 fn apply(setting: Setting, source: &str) -> String {
@@ -45,6 +46,27 @@ fn the_clock_format_is_written_and_automatic_leaves_no_trace() {
         "appearance \"dark\"\n"
     );
     assert_eq!(Config::load("clock \"25-hour\"").expect("KDL").1.len(), 1);
+}
+
+#[test]
+fn the_accent_and_tinted_frame_are_written_and_defaults_leave_no_trace() {
+    let edited = apply(Setting::Accent(Accent::Teal), "appearance \"dark\"\n");
+    let edited = apply(Setting::TintedFrame(true), &edited);
+    assert_eq!(
+        edited,
+        "appearance \"dark\"\naccent \"teal\"\ntinted-frame #true\n"
+    );
+    let config = Config::parse(&edited).expect("valid");
+    assert_eq!((config.accent, config.tinted_frame), (Accent::Teal, true));
+    let edited = apply(Setting::Accent(Accent::Ultramarine), &edited);
+    assert_eq!(
+        apply(Setting::TintedFrame(false), &edited),
+        "appearance \"dark\"\n"
+    );
+    assert_eq!(
+        Config::load("accent \"chartreuse\"").expect("KDL").1.len(),
+        1
+    );
 }
 
 #[test]
@@ -150,10 +172,30 @@ fn dock_and_wallpaper_defaults_leave_no_trace() {
         apply(Setting::WallpaperFit(WallpaperFit::Fill), &fitted),
         ""
     );
+}
 
-    let reduced = apply(Setting::ReduceMotion(true), "");
-    assert_eq!(reduced, "accessibility {\n    reduce-motion #true\n}\n");
-    assert_eq!(apply(Setting::ReduceMotion(false), &reduced), "");
+#[test]
+fn accessibility_writes_only_what_differs_from_the_defaults_and_reads_back() {
+    let access = Accessibility {
+        reduce_motion: true,
+        zoom: 2.5,
+        cursor_size: 48,
+        sticky_keys: true,
+        ..Accessibility::default()
+    };
+    let written = apply(Setting::Accessibility(access), "");
+    assert_eq!(
+        written,
+        "accessibility {\n    reduce-motion #true\n    sticky-keys #true\n    zoom 2.5\n    cursor-size 48\n}\n"
+    );
+    assert_eq!(
+        Config::parse(&written).expect("valid").accessibility,
+        access
+    );
+    assert_eq!(
+        apply(Setting::Accessibility(Accessibility::default()), &written),
+        ""
+    );
 }
 
 #[test]

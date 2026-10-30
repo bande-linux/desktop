@@ -14,12 +14,15 @@ use unbound_monitor::{
 use unbound_toolkit::ui::{
     Event, HEADER_HEIGHT, Key, Modifiers, Pointer, PointerButton, ROW_HEIGHT, Scroll,
 };
-use unbound_toolkit::{CpuRenderer, Image, Palette, Point, Scheme, TextSystem};
+use unbound_toolkit::{
+    CpuRenderer, FrameRegions, Image, Palette, Point, Scheme, TextSystem, framed_scene,
+};
 
 const MIN_SSIM: f64 = 0.995;
 const MONITOR_SIZE: (u32, u32) = (860, 420);
 const FORCE_QUIT_SIZE: (u32, u32) = (380, 340);
 const LIST_TOP: f32 = 48.0 + HEADER_HEIGHT;
+const TITLE: &str = "Activity Monitor";
 
 fn catalog() -> Catalog {
     let mut terminal = entry("org.unbound.Terminal", "Terminal", "unbound-term", false);
@@ -38,14 +41,15 @@ fn catalog() -> Catalog {
 
 fn icons() -> Icons {
     Icons::new(|name| {
-        let app = match name {
-            "org.unbound.Terminal" => "terminal",
-            "org.unbound.Files" => "files",
-            "org.unbound.Settings" => "settings",
+        let theme = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../data/icons/Unbound");
+        let path = match name {
+            "dialog-information-symbolic" => theme.join(format!("symbolic/status/{name}.svg")),
+            "org.unbound.Terminal"
+            | "org.unbound.Files"
+            | "org.unbound.Settings"
+            | "org.unbound.ActivityMonitor" => theme.join(format!("scalable/apps/{name}.svg")),
             _ => return None,
         };
-        let path =
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../{app}/data/{name}.svg"));
         Image::load(&path, 32)
     })
 }
@@ -133,12 +137,21 @@ fn shifted(key: Key) -> Event {
     }
 }
 
-fn render(screen: &mut impl Screen, name: &str, size: (u32, u32)) {
-    let scene = screen.scene(size.0, size.1);
+fn render(screen: &mut impl Screen, scheme: Scheme, title: &str, name: &str, size: (u32, u32)) {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let mut scene = screen.scene(size.0, size.1);
+    while screen.animating() {
+        assert!(Instant::now() < deadline, "the view did not settle");
+        std::thread::sleep(Duration::from_millis(10));
+        scene = screen.scene(size.0, size.1);
+    }
+    let header = screen.header();
+    let regions = header.as_ref().map(|_| FrameRegions::default());
+    let scene = framed_scene(&scene, title, regions, header, &Palette::for_scheme(scheme));
     for (scale, suffix) in [(1.0, ""), (1.5, "@1.5x")] {
         let pixels = (
-            (f64::from(size.0) * scale).round() as u32,
-            (f64::from(size.1) * scale).round() as u32,
+            (f64::from(scene.width) * scale).round() as u32,
+            (f64::from(scene.height) * scale).round() as u32,
         );
         let mut rgba = vec![0; pixels.0 as usize * pixels.1 as usize * 4];
         CpuRenderer::new()
@@ -164,7 +177,13 @@ fn activity_monitor_matches_its_goldens_in_light_and_dark() {
         view.handle(&key(Key::Enter));
         view.handle(&key(Key::Down));
         assert!(view.set_responding(710, "", false));
-        render(&mut view, &format!("monitor-cpu-{suffix}"), MONITOR_SIZE);
+        render(
+            &mut view,
+            scheme,
+            TITLE,
+            &format!("monitor-cpu-{suffix}"),
+            MONITOR_SIZE,
+        );
         view.handle(&Event::Key {
             key: Key::Character('q'),
             modifiers: Modifiers {
@@ -173,7 +192,13 @@ fn activity_monitor_matches_its_goldens_in_light_and_dark() {
                 ..Modifiers::default()
             },
         });
-        render(&mut view, &format!("monitor-quit-{suffix}"), MONITOR_SIZE);
+        render(
+            &mut view,
+            scheme,
+            TITLE,
+            &format!("monitor-quit-{suffix}"),
+            MONITOR_SIZE,
+        );
     }
 }
 
@@ -190,7 +215,13 @@ fn force_quit_matches_its_goldens_in_light_and_dark() {
         assert!(view.set_responding(500, "org.unbound.Terminal", false));
         view.handle(&key(Key::Down));
         view.handle(&key(Key::Down));
-        render(&mut view, &format!("force-quit-{suffix}"), FORCE_QUIT_SIZE);
+        render(
+            &mut view,
+            scheme,
+            "Force Quit Apps",
+            &format!("force-quit-{suffix}"),
+            FORCE_QUIT_SIZE,
+        );
     }
 }
 
@@ -383,7 +414,7 @@ fn header_clicks_sort_numbers_largest_first_and_names_from_a() {
             "Terminal"
         ]
     );
-    let threads = 860.0 - 96.0 - 64.0 - 34.0;
+    let threads = 854.0 - 96.0 - 64.0 - 42.0;
 
     click(&mut view, header(threads), Modifiers::default(), 1);
     view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
@@ -462,6 +493,7 @@ fn a_right_click_selects_the_row_and_offers_quit_turning_into_force_quit_with_al
         menu_actions(view.take_requests()),
         [
             ("quit".to_owned(), true),
+            ("inspect".to_owned(), true),
             ("show-in-files".to_owned(), true),
             ("copy-name".to_owned(), true),
             ("copy-pid".to_owned(), true),
@@ -544,4 +576,62 @@ fn force_quit_lists_apps_for_assistive_technology_and_force_quits_the_selected_o
     assert!(!view.finished());
     view.handle(&key(Key::Escape));
     assert!(view.finished());
+}
+
+fn column_headers(view: &MonitorView) -> Vec<String> {
+    let tree = view.accessibility().expect("an accessibility tree");
+    tree.nodes
+        .iter()
+        .filter(|(_, node)| node.role() == Role::ColumnHeader)
+        .filter_map(|(_, node)| node.label().map(str::to_owned))
+        .collect()
+}
+
+#[test]
+fn a_right_click_on_the_header_chooses_columns_and_the_choice_is_remembered() {
+    let mut view = monitor_view();
+    assert!(view.handle(&right_click(Point::new(300.0, 48.0 + HEADER_HEIGHT / 2.0))));
+    let shown = menu_actions(view.take_requests());
+    assert_eq!(shown[0], ("column:name".to_owned(), false));
+    assert!(shown.contains(&("column:resident".to_owned(), true)));
+    assert!(view.menu_action("column:user"));
+    assert!(view.menu_action("column:resident"));
+    assert!(view.menu_action("column:cpu"));
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    assert_eq!(
+        column_headers(&view),
+        ["Name", "CPU Time", "Threads", "PID", "Resident"]
+    );
+    assert_eq!(view.monitor.sort(), (unbound_monitor::Column::Name, false));
+    let remembered = match view.take_requests().last() {
+        Some(Request::SaveColumns(text)) => text.clone(),
+        other => panic!("expected the columns to be saved, got {other:?}"),
+    };
+    let mut again = Monitor::new(catalog());
+    again.choose_columns(&remembered);
+    assert_eq!(again.columns(), view.monitor.columns());
+}
+
+#[test]
+fn the_gpu_tab_appears_once_the_system_reports_gpu_use() {
+    let mut view = monitor_view();
+    assert!(!view.handle(&command('5')));
+    let mut busy = snapshot(1);
+    busy.gpu = true;
+    busy.processes[3].gpu = Some(unbound_monitor::GpuUse {
+        percent: 30.0,
+        seconds: 4.0,
+        memory: 64_000_000,
+    });
+    view.update(busy);
+    assert!(view.handle(&command('5')));
+    assert_eq!(view.monitor.tab(), Tab::Gpu);
+    assert!(view.measures_gpu());
+    assert_eq!(view.take_requests(), [Request::Resample]);
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    assert_eq!(shown_rows(&view)[0], "Files");
+    assert_eq!(
+        column_headers(&view),
+        ["Name", "% GPU", "GPU Time", "GPU Memory", "PID", "User"]
+    );
 }

@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use smithay::backend::renderer::element::Kind;
 use smithay::backend::renderer::element::surface::render_elements_from_surface_tree;
+use smithay::desktop::PopupUngrabStrategy;
 use smithay::input::Seat;
 use smithay::reexports::wayland_server::protocol::wl_data_device_manager::DndAction;
 use smithay::reexports::wayland_server::protocol::wl_data_source::WlDataSource;
@@ -154,6 +155,9 @@ impl ClientDndGrabHandler for State {
         _seat: Seat<Self>,
     ) {
         let offset = icon.as_ref().map(take_offset).unwrap_or_default();
+        if let Some(mut menu) = self.popup_grab.take() {
+            menu.ungrab(PopupUngrabStrategy::All);
+        }
         self.slide_back = None;
         self.drag = Some(Drag {
             icon,

@@ -523,13 +523,13 @@ fn the_dock_size_auto_hide_wallpaper_fit_and_reduce_motion_are_read() {
         "accessibility {\n    reduce-motion #true\n}\nbar {\n    auto-hide #true\n    size 52\n}\nwallpaper {\n    fit \"fit\"\n}\n",
     )
     .expect("valid config");
-    assert!(config.reduce_motion);
+    assert!(config.accessibility.reduce_motion);
     assert!(config.bar.auto_hide);
     assert_eq!(config.bar.icon_size, 52);
     assert_eq!(config.wallpaper.fit, WallpaperFit::Fit);
 
     let defaults = Config::parse("").expect("empty config");
-    assert!(!defaults.reduce_motion && !defaults.bar.auto_hide);
+    assert!(!defaults.accessibility.reduce_motion && !defaults.bar.auto_hide);
     assert_eq!(defaults.bar.icon_size, 40);
     assert_eq!(defaults.wallpaper.fit, WallpaperFit::Fill);
 }

@@ -7,12 +7,13 @@ use smithay::input::pointer::Focus;
 use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_seat::WlSeat;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
-use smithay::utils::{Logical, Point, Rectangle, Serial};
+use smithay::utils::{Logical, Point, Rectangle, SERIAL_COUNTER, Serial};
 use smithay::wayland::compositor::get_parent;
 use smithay::wayland::shell::wlr_layer::KeyboardInteractivity;
 use smithay::wayland::shell::xdg::{PopupSurface, PositionerState};
 
-use crate::state::State;
+use crate::motion::{BAR_NAMESPACE, DOCK_NAMESPACE};
+use crate::state::{Headless, MENU_BAR_NAMESPACE, State};
 
 impl State {
     pub(crate) fn toplevel_of(&self, surface: &WlSurface) -> Option<WlSurface> {
@@ -130,6 +131,13 @@ impl State {
         let Some(seat) = Seat::<State>::from_resource(seat) else {
             return;
         };
+        if self
+            .menu_root()
+            .is_some_and(|menu| menu.client() != popup.wl_surface().client())
+        {
+            popup.send_popup_done();
+            return;
+        }
         let kind = PopupKind::Xdg(popup);
         let Some(root) = find_popup_root_surface(&kind).ok() else {
             return;
@@ -158,33 +166,113 @@ impl State {
         self.popup_grab = Some(grab);
     }
 
+    pub(crate) fn reachable_beside_menu(&self, surface: &WlSurface) -> bool {
+        let Some(popup) = self
+            .popup_grab
+            .as_ref()
+            .and_then(|grab| grab.current_grab())
+        else {
+            return true;
+        };
+        if popup.client() != surface.client() {
+            return false;
+        }
+        let mut top = surface.clone();
+        while let Some(parent) = get_parent(&top) {
+            top = parent;
+        }
+        self.popups.find_popup(&top).is_some()
+            || self
+                .root_of(surface)
+                .is_some_and(|root| self.is_panel(&root))
+    }
+
+    fn is_panel(&self, surface: &WlSurface) -> bool {
+        self.screens.iter().any(|screen| {
+            layer_map_for_output(&screen.output)
+                .layer_for_surface(surface, WindowSurfaceType::TOPLEVEL)
+                .is_some_and(|layer| {
+                    [MENU_BAR_NAMESPACE, BAR_NAMESPACE, DOCK_NAMESPACE].contains(&layer.namespace())
+                })
+        })
+    }
+
     pub(crate) fn dismisses_popups(&mut self, under: Option<&WlSurface>) -> bool {
-        let Some(grab) = &mut self.popup_grab else {
+        let Some(grab) = &self.popup_grab else {
             return false;
         };
         if grab.has_ended() {
-            self.popup_grab = None;
+            self.return_from_menu();
             return false;
         }
-        let inside = under.is_some_and(|surface| {
-            grab.current_grab()
-                .is_some_and(|popup| popup.client() == surface.client())
+        if under.is_some_and(|surface| self.reachable_beside_menu(surface)) {
+            return false;
+        }
+        self.return_from_menu();
+        true
+    }
+
+    pub(crate) fn return_from_menu(&mut self) {
+        let key = self.end_popup_grab().and_then(|root| {
+            self.toplevel_of(&root)
+                .or_else(|| self.focusable_layer_of(&root))
         });
-        if inside {
-            return false;
-        }
-        let root = grab.ungrab(PopupUngrabStrategy::All);
-        self.popup_grab = None;
-        if let Some(pointer) = self.seat.get_pointer() {
-            pointer.unset_grab(self, smithay::utils::SERIAL_COUNTER.next_serial(), 0);
-        }
-        if let Some(keyboard) = self.seat.get_keyboard() {
-            keyboard.unset_grab(self);
-        }
-        let key = root.and_then(|root| self.toplevel_of(&root));
         if key.is_some() {
             self.focus(key);
         }
-        true
+    }
+
+    pub(crate) fn menu_root(&self) -> Option<WlSurface> {
+        let popup = self
+            .popup_grab
+            .as_ref()
+            .filter(|grab| !grab.has_ended())?
+            .current_grab()?;
+        self.root_of(&popup)
+    }
+
+    pub(crate) fn close_menus(&mut self) {
+        if self.popup_grab.is_some() {
+            self.end_popup_grab();
+            self.refocus_pointer();
+        }
+    }
+
+    pub(crate) fn end_popup_grab(&mut self) -> Option<WlSurface> {
+        let mut grab = self.popup_grab.take()?;
+        let serials = [
+            grab.serial(),
+            grab.previous_serial().unwrap_or(grab.serial()),
+        ];
+        let root = grab.ungrab(PopupUngrabStrategy::All);
+        if let Some(pointer) = self.seat.get_pointer()
+            && serials.iter().any(|serial| pointer.has_grab(*serial))
+        {
+            pointer.unset_grab(self, SERIAL_COUNTER.next_serial(), 0);
+        }
+        if let Some(keyboard) = self.seat.get_keyboard()
+            && serials.iter().any(|serial| keyboard.has_grab(*serial))
+        {
+            keyboard.unset_grab(self);
+        }
+        root
+    }
+}
+
+impl Headless {
+    pub fn pointer_grabbed(&self) -> bool {
+        self.state.popup_grab.is_some()
+            || self
+                .state
+                .seat
+                .get_pointer()
+                .is_some_and(|pointer| pointer.is_grabbed())
+    }
+
+    pub fn keyboard_grabbed(&self) -> bool {
+        self.state
+            .seat
+            .get_keyboard()
+            .is_some_and(|keyboard| keyboard.is_grabbed())
     }
 }

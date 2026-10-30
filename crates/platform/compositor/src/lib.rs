@@ -1,9 +1,11 @@
 mod access;
+mod access_keys;
 mod alert;
 mod app;
 mod appearance;
 mod arrange;
 mod assist;
+mod assistive;
 mod capture;
 mod capture_shell;
 mod cascade;
@@ -25,6 +27,7 @@ mod idle;
 mod ime;
 mod input;
 mod input_settings;
+mod keyboard_monitor;
 mod keymap;
 mod label;
 mod lock;
@@ -49,8 +52,10 @@ mod typing;
 mod watchdog;
 mod window;
 mod workspace;
+mod zoom;
 
 pub use appearance::{SystemAppearance, follow_appearance};
+pub use assistive::follow_alerts;
 pub use clock::{FrameClock, FrameOutput, FrameScheduler, Poll, SAFETY_MARGIN, Submission, Vblank};
 pub use cursor::{
     ARROW_FILL, ARROW_HEIGHT, ARROW_OUTLINE, ARROW_WIDTH, CursorTheme, DEFAULT_CURSOR_SIZE,
@@ -63,6 +68,7 @@ pub use environment::{
 };
 pub use gesture::Gesture;
 pub use input_settings::{InputSettings, follow_input_settings};
+pub use keyboard_monitor::{KEYBOARD_MONITOR_NAME, KeyboardMonitorHandle, serve_keyboard_monitor};
 pub use keymap::KeyboardSettings;
 pub use logind::{SessionRequest, follow_session};
 pub use pointing::PointerSettings;

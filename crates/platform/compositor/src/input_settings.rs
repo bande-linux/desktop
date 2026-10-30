@@ -1,7 +1,9 @@
 use std::path::PathBuf;
 use std::thread;
 
-use unbound_config::{BUS_NAME, Config, OBJECT_PATH, config_path, read_system_input_sources};
+use unbound_config::{
+    Accessibility, BUS_NAME, Config, OBJECT_PATH, config_path, read_system_input_sources,
+};
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
@@ -13,6 +15,7 @@ use crate::state::Headless;
 pub struct InputSettings {
     pub keyboard: KeyboardSettings,
     pub pointer: PointerSettings,
+    pub accessibility: Accessibility,
 }
 
 impl InputSettings {
@@ -23,6 +26,7 @@ impl InputSettings {
                 trackpad: config.trackpad,
                 mouse: config.mouse,
             },
+            accessibility: config.accessibility,
         }
     }
 
@@ -69,5 +73,6 @@ impl Headless {
     pub fn apply_input_settings(&mut self, settings: InputSettings) {
         self.apply_pointer_settings(settings.pointer);
         self.apply_keyboard_settings(settings.keyboard);
+        self.apply_accessibility(settings.accessibility);
     }
 }

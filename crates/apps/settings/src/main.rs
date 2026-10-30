@@ -4,12 +4,16 @@ use std::process::ExitCode;
 use std::time::Instant;
 
 use unbound_app_menu::{AppMenu, Entry, Standard, app_submenu, window_submenu};
+use unbound_settings::SIDEBAR_WIDTH;
 use unbound_settings::{
     Command, Displays, Feed, L10N, PaneId, PointingDevices, Services, SettingsView, UDEV_DATA,
     announce_updates, feed,
 };
 use unbound_settings_panes::panes;
-use unbound_toolkit::{App, Rect, Role, Scene, TextSystem, Window, WindowEvent};
+use unbound_toolkit::ui::ClipboardRequest;
+use unbound_toolkit::{
+    App, FrameRegions, MenuPlacement, Rect, Role, Scene, TextSystem, Window, WindowEvent,
+};
 use unbound_xdg::spawn_detached;
 
 const APP_ID: &str = "org.unbound.Settings";
@@ -25,6 +29,29 @@ struct Settings {
     displays: Option<Displays>,
     services: Services,
     app_menu: Option<AppMenu>,
+}
+
+impl Settings {
+    fn after_input(&mut self, window: &mut Window) {
+        let ui = self.view.ui();
+        let menu = ui.take_menu_request();
+        let clipboard = ui.take_clipboard_request();
+        window.set_cursor(ui.cursor());
+        if let Some((menu, at)) = menu
+            && let Err(error) = window.show_menu(menu, MenuPlacement::AtPoint(at))
+        {
+            tracing::warn!("cannot show the menu: {error}");
+        }
+        match clipboard {
+            Some(ClipboardRequest::Copy(text)) => window.copy(&text),
+            Some(ClipboardRequest::Paste) => {
+                if let Err(error) = window.paste() {
+                    tracing::warn!("cannot paste: {error}");
+                }
+            }
+            None => {}
+        }
+    }
 }
 
 fn reveal(window: &mut Window, path: &Path) {
@@ -83,6 +110,7 @@ impl Settings {
 
 impl App for Settings {
     fn scene(&mut self, window: &mut Window) -> Scene {
+        self.view.set_full_screen(window.header_height() == 0);
         let (width, height) = window.size();
         self.view.scene(width, height)
     }
@@ -101,6 +129,13 @@ impl App for Settings {
         match event {
             WindowEvent::Input(input) => {
                 self.view.handle(&input);
+                self.after_input(window);
+            }
+            WindowEvent::MenuAction(_) | WindowEvent::Pasted(_) | WindowEvent::MenuClosed => {
+                if let Err(error) = window.drive(self.view.ui(), event) {
+                    tracing::warn!("{error}");
+                }
+                self.view.settle();
             }
             WindowEvent::Accessibility(request) => {
                 self.view.perform(&request);
@@ -180,6 +215,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let (feed, updates) = feed()?;
     let services = Services::start(&session, system.as_ref(), &updates);
     let mut window = Window::open(Role::toplevel(&L10N.tr("title"), APP_ID), WINDOW_SIZE)?;
+    window.set_frame_regions(FrameRegions {
+        sidebar: SIDEBAR_WIDTH,
+        toolbar: 0.0,
+    });
     let mut view = SettingsView::new(window.appearance().palette(), TextSystem::new());
     view.set_pointing_devices(PointingDevices::scan(Path::new(UDEV_DATA)));
     let requested = std::env::args().nth(1);

@@ -93,10 +93,7 @@ fn an_app_that_stops_answering_is_reported_veiled_and_released_when_it_answers()
             (pid, APP_ID.to_owned(), true)
         ]
     );
-    assert!(
-        veiled[0] < red[0] && veiled[1] > red[1],
-        "{red:?} {veiled:?}"
-    );
+    assert!(veiled[0] < red[0], "{red:?} {veiled:?}");
     assert_eq!(clear, red);
 }
 

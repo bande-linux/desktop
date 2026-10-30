@@ -9,7 +9,7 @@ use std::sync::LazyLock;
 
 use unbound_l10n::Localizer;
 
-pub use backdrop::{Key as WallpaperKey, Layer, Luma, placeholder};
+pub use backdrop::{Key as WallpaperKey, Layer, Luma};
 pub use confirm::{CONFIRM_DELETE_FLAG, confirm_delete};
 pub use menus::{App as MenuApp, Command, Selection, command, desktop_menu, items_menu};
 pub use model::{
@@ -19,7 +19,7 @@ pub use model::{
 pub use places::{
     Layouts, format_layouts, layouts_path, list, parse_layouts, read_item, save_layouts,
 };
-pub use view::{DesktopView, Request, fitted_label};
+pub use view::{Artwork, DesktopView, Request, fitted_label};
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-desktop-surface.ftl");
 

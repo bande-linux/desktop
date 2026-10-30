@@ -15,8 +15,8 @@ use unbound_compositor::{
     BAR, CLIPBOARD_DAEMON, CONTROL_CENTER, CursorTheme, DESKTOP_SURFACE, DrmBackend, FrameClock,
     FrameOutput, FrameScheduler, GREETER, Headless, InputSettings, LAUNCHER, NOTIFICATIONS,
     REFRESH, REVIEW, Renderer, SCREENSHOT, SessionRequest, SessionRole, SessionUpkeep,
-    export_session_environment, follow_appearance, follow_input_settings, follow_session,
-    notify_ready,
+    export_session_environment, follow_alerts, follow_appearance, follow_input_settings,
+    follow_session, notify_ready, serve_keyboard_monitor,
 };
 use unbound_config::{BUS_NAME, Config, OBJECT_PATH, config_path};
 use zbus::blocking::fdo::PropertiesProxy;
@@ -328,6 +328,27 @@ fn start_user_session<O: 'static>(
                 })?;
         }
         Err(error) => tracing::warn!("cannot follow the appearance: {error}"),
+    }
+    let (alerts, alerted) = channel::channel();
+    let followed = zbus::blocking::Connection::session()
+        .and_then(|connection| follow_alerts(&connection, move || alerts.send(()).is_ok()));
+    match followed {
+        Ok(()) => {
+            event_loop
+                .handle()
+                .insert_source(alerted, |event, _, app| {
+                    if let Event::Msg(()) = event {
+                        app.compositor.flash_screen();
+                    }
+                })?;
+        }
+        Err(error) => tracing::warn!("cannot follow alert sounds: {error}"),
+    }
+    match zbus::blocking::Connection::session()
+        .and_then(|connection| serve_keyboard_monitor(&connection))
+    {
+        Ok(handle) => app.compositor.monitor_keyboard(handle),
+        Err(error) => tracing::warn!("assistive technologies cannot watch the keyboard: {error}"),
     }
     app.compositor.apply_input_settings(InputSettings::read());
     let (input_settings, input_settings_changes) = channel::channel();

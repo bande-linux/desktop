@@ -134,7 +134,7 @@ fn clicking_a_banner_opens_it_and_its_buttons_run_their_actions() {
 
     screen.handle(&pointer(Event::PointerDown, body), now);
     screen.handle(&pointer(Event::PointerUp, body), now);
-    let button = Point::new(card.x + card.width / 2.0, card.y + card.height - 20.0);
+    let button = Point::new(card.x + 40.0, card.y + card.height - 20.0);
     screen.handle(&pointer(Event::PointerDown, button), now);
     screen.handle(&pointer(Event::PointerUp, button), now);
 

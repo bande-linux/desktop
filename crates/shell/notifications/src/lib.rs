@@ -9,10 +9,10 @@ use unbound_datetime::DateFormats;
 use unbound_l10n::Localizer;
 use unbound_notify::{Notification, Presentation, Stack};
 use unbound_spring::rubber_band;
-use unbound_toolkit::ui::{Animated, Event, Key, Spring};
+use unbound_toolkit::ui::{Animated, Event, Key, Spring, focus_ring_for};
 use unbound_toolkit::{
-    Color, DisplayEdge, Item, Palette, Paragraph, Point, Rect, Scene, Shape, TextAlign, TextStyle,
-    TextSystem,
+    Color, ControlSize, DisplayEdge, Elevation, Item, Palette, Paragraph, Point, Radius, Rect,
+    Scene, Scheme, Shape, Spacing, TextAlign, TextRole, TextStyle, TextSystem,
 };
 
 use card::{CLOSE_REACH, contains};
@@ -29,16 +29,13 @@ const GAP: f32 = 10.0;
 const MAX_BANNERS: usize = 4;
 const BANNER_BODY_LINES: usize = 3;
 const CENTER_BODY_LINES: usize = 5;
-const CENTER_PADDING: f32 = 12.0;
-const CENTER_RADIUS: f32 = 20.0;
+const CENTER_PADDING: f32 = Spacing::M as f32;
+const CENTER_RADIUS: f32 = Radius::XL;
 const HEADER_HEIGHT: f32 = 36.0;
 const GROUP_HEIGHT: f32 = 28.0;
-const TITLE_SIZE: f32 = 15.0;
-const SMALL_SIZE: f32 = 12.0;
+const BUTTON_HEIGHT: f32 = ControlSize::Small.height();
+const BUTTON_INSET: f32 = Spacing::S as f32;
 const DRAG_SLOP: f32 = 4.0;
-const BLUR_BANDS: usize = 5;
-const CARD_ALPHA: u8 = 214;
-const PANEL_ALPHA: u8 = 190;
 const DISMISS_FRACTION: f32 = 0.35;
 const FLICK_SPEED: f32 = 600.0;
 
@@ -126,7 +123,6 @@ pub struct Screen {
     pressed: Option<Target>,
     drag: Option<Drag>,
     holding: bool,
-    translucent: bool,
     size: (f32, f32),
     requests: Vec<Request>,
 }
@@ -157,7 +153,6 @@ impl Screen {
             pressed: None,
             drag: None,
             holding: false,
-            translucent: false,
             size: (0.0, 0.0),
             requests: Vec::new(),
         }
@@ -167,34 +162,6 @@ impl Screen {
         self.palette = palette;
         self.reduce_motion = reduce_motion;
         self.rebuild(now);
-    }
-
-    pub fn set_translucent(&mut self, translucent: bool) {
-        self.translucent = translucent;
-    }
-
-    fn material(&self) -> Palette {
-        let mut palette = self.palette;
-        if self.translucent {
-            palette.overlay = palette.overlay.with_alpha(CARD_ALPHA);
-            palette.sheet = palette.sheet.with_alpha(PANEL_ALPHA);
-        }
-        palette
-    }
-
-    pub fn blur_rects(&self, now: Instant) -> Vec<Rect> {
-        let mut rects = Vec::new();
-        if self.banners_visible() {
-            for banner in &self.banners {
-                let origin = self.banner_origin(banner, now);
-                let card = Rect::new(origin.x, origin.y, BANNER_WIDTH, banner.card.height);
-                rects.extend(Shape::rounded(card, card::RADIUS).bands(BLUR_BANDS));
-            }
-        }
-        if self.center_visible(now) {
-            rects.extend(Shape::rounded(self.panel_rect(now), CENTER_RADIUS).bands(BLUR_BANDS));
-        }
-        rects
     }
 
     pub fn set_size(&mut self, width: u32, height: u32) {
@@ -340,7 +307,7 @@ impl Screen {
         let mut rows = Vec::new();
         let title = self.text.paragraph(
             &L10N.tr("notification-center"),
-            TextStyle::new(TITLE_SIZE, palette.ink).weight(TextStyle::SEMIBOLD),
+            TextStyle::role(TextRole::Heading, palette.ink),
             None,
             TextAlign::Start,
         );
@@ -349,18 +316,23 @@ impl Screen {
         let clear_all = (!stacks.is_empty()).then(|| {
             let label = self.text.paragraph(
                 &L10N.tr("clear-all"),
-                TextStyle::new(SMALL_SIZE, palette.ink).weight(TextStyle::MEDIUM),
+                TextStyle::role(TextRole::BodyStrong, palette.accent_text),
                 None,
                 TextAlign::Start,
             );
-            let width = label.width() + 20.0;
-            let rect = Rect::new(inner - width, (HEADER_HEIGHT - 24.0) / 2.0, width, 24.0);
+            let width = (label.width() + 2.0 * BUTTON_INSET).ceil();
+            let rect = Rect::new(
+                inner - width + BUTTON_INSET,
+                (HEADER_HEIGHT - BUTTON_HEIGHT) / 2.0,
+                width,
+                BUTTON_HEIGHT,
+            );
             (label, rect)
         });
         let status = self.presentation.do_not_disturb.then(|| {
             self.text.paragraph(
                 &L10N.tr("do-not-disturb-on"),
-                TextStyle::new(SMALL_SIZE, palette.ink2),
+                TextStyle::role(TextRole::Callout, palette.ink2),
                 Some(inner),
                 TextAlign::Start,
             )
@@ -380,7 +352,7 @@ impl Screen {
         if stacks.is_empty() {
             let empty = self.text.paragraph(
                 &L10N.tr("no-notifications"),
-                TextStyle::new(13.0, palette.ink2),
+                TextStyle::role(TextRole::Body, palette.ink3),
                 Some(inner),
                 TextAlign::Center,
             );
@@ -398,19 +370,25 @@ impl Screen {
                 let name = (self.senders)(&stack.notifications[0], &stack.group).name;
                 let name = self.text.paragraph(
                     &name,
-                    TextStyle::new(13.0, palette.ink).weight(TextStyle::SEMIBOLD),
+                    TextStyle::role(TextRole::BodyStrong, palette.ink),
                     Some(inner / 2.0),
                     TextAlign::Start,
                 );
                 let label = self.text.paragraph(
                     &L10N.tr("show-less"),
-                    TextStyle::new(SMALL_SIZE, palette.ink).weight(TextStyle::MEDIUM),
+                    TextStyle::role(TextRole::BodyStrong, palette.accent_text),
                     None,
                     TextAlign::Start,
                 );
-                let clear = Rect::new(inner - 24.0, 2.0, 24.0, 24.0);
-                let width = label.width() + 20.0;
-                let show_less = Rect::new(clear.x - 6.0 - width, 2.0, width, 24.0);
+                let top = (GROUP_HEIGHT - BUTTON_HEIGHT) / 2.0;
+                let clear = Rect::new(inner - BUTTON_HEIGHT, top, BUTTON_HEIGHT, BUTTON_HEIGHT);
+                let width = (label.width() + 2.0 * BUTTON_INSET).ceil();
+                let show_less = Rect::new(
+                    clear.x - Spacing::XS as f32 - width,
+                    top,
+                    width,
+                    BUTTON_HEIGHT,
+                );
                 rows.push(PlacedRow {
                     y,
                     height: GROUP_HEIGHT,
@@ -505,7 +483,7 @@ impl Screen {
 
     fn panel_height(&self) -> f32 {
         let (_, _, room) = self.panel_frame();
-        self.content_height().min(room.max(HEADER_HEIGHT))
+        room.max(HEADER_HEIGHT)
     }
 
     fn max_scroll(&self) -> f32 {
@@ -975,7 +953,7 @@ impl Screen {
                 let mut card = Vec::new();
                 banner
                     .card
-                    .paint(origin, &self.material(), part, false, &mut card);
+                    .paint(origin, &self.palette, true, part, false, &mut card);
                 items.push(Item::Opacity {
                     alpha: fade,
                     items: card,
@@ -994,24 +972,26 @@ impl Screen {
     }
 
     fn paint_center(&self, now: Instant, items: &mut Vec<Item>) {
-        let palette = self.material();
+        let palette = self.palette;
         let panel = self.panel_rect(now);
         let shape = Shape::rounded(panel, CENTER_RADIUS);
-        items.push(Item::Shadow {
+        items.extend(Item::shadows(
             shape,
-            offset: Point::new(0.0, 8.0),
-            blur_radius: 32.0,
-            color: Color::hex(0).with_alpha(56),
-        });
+            Elevation::Overlay,
+            palette.scheme,
+            true,
+        ));
         items.push(Item::Fill {
             shape,
-            paint: palette.sheet.into(),
+            paint: palette.chassis.into(),
         });
-        items.push(Item::Stroke {
-            shape,
-            width: 0.5,
-            paint: palette.hairline.into(),
-        });
+        if palette.scheme == Scheme::Dark {
+            items.push(Item::Stroke {
+                shape: Shape::rounded(panel.inset(0.5), CENTER_RADIUS - 0.5),
+                width: 1.0,
+                paint: palette.hairline.into(),
+            });
+        }
         let focused = self.focus.and_then(|at| self.targets().get(at).cloned());
         let hovered = self
             .pointer
@@ -1091,7 +1071,14 @@ impl Screen {
                         _ => None,
                     };
                     let is_focused = matches!(&focused, Some(Target::Card(at, _)) if *at == index);
-                    card.paint(origin, &palette, part.as_ref(), is_focused, &mut content);
+                    card.paint(
+                        origin,
+                        &palette,
+                        false,
+                        part.as_ref(),
+                        is_focused,
+                        &mut content,
+                    );
                 }
                 Row::Empty(paragraph) => content.push(Item::Text {
                     origin: Point::new(0.0, origin.y + HEADER_HEIGHT),
@@ -1117,16 +1104,15 @@ fn pill(
     hovered: bool,
     focused: bool,
 ) {
-    items.push(Item::Fill {
-        shape: Shape::rounded(rect, rect.height / 2.0),
-        paint: palette.ink.with_alpha(if hovered { 34 } else { 16 }).into(),
-    });
-    if focused {
-        items.push(Item::Stroke {
-            shape: Shape::rounded(rect, rect.height / 2.0),
-            width: 2.0,
-            paint: palette.accent.into(),
+    let shape = Shape::rounded(rect, Radius::S);
+    if hovered {
+        items.push(Item::Fill {
+            shape,
+            paint: palette.well.into(),
         });
+    }
+    if focused {
+        focus_ring_for(palette, shape, items);
     }
     items.push(Item::Text {
         origin: Point::new(
@@ -1141,23 +1127,24 @@ fn round_close(items: &mut Vec<Item>, palette: &Palette, rect: Rect, hovered: bo
     let shape = Shape::rounded(rect, rect.height / 2.0);
     items.push(Item::Fill {
         shape,
-        paint: palette.ink.with_alpha(if hovered { 34 } else { 16 }).into(),
+        paint: if hovered {
+            palette.well.mix(palette.ink, 0.08)
+        } else {
+            palette.well
+        }
+        .into(),
     });
     if focused {
-        items.push(Item::Stroke {
-            shape,
-            width: 2.0,
-            paint: palette.accent.into(),
-        });
+        focus_ring_for(palette, shape, items);
     }
     let center = Point::new(rect.x + rect.width / 2.0, rect.y + rect.height / 2.0);
-    let arm = 4.0;
+    let arm = 3.5;
     for (dx, dy) in [(arm, arm), (arm, -arm)] {
         items.push(Item::Line {
             from: Point::new(center.x - dx, center.y - dy),
             to: Point::new(center.x + dx, center.y + dy),
             width: 1.5,
-            paint: palette.ink.into(),
+            paint: if hovered { palette.ink } else { palette.ink2 }.into(),
         });
     }
 }

@@ -7,15 +7,22 @@ use std::time::{Duration, Instant};
 
 use unbound_bar::dock::{DockAction, DockApp, DockState, MenuTarget, Shared, dock_ui, scene};
 use unbound_bar::menubar::{Slot, StatusView};
+use unbound_bar::menus::{AppMenus, cascade};
 use unbound_bar::rail::{RailView, bar_width, surface_size};
 use unbound_config::BarEdge;
 use unbound_datetime::{DateFormats, posix_locale};
 use unbound_dock_model::LauncherUpdate;
+use unbound_status::dbusmenu::Node;
 use unbound_status::status::{
     Battery, Bluetooth, Gadget, InputSource, InputSources, Power, Sound, Wifi,
 };
-use unbound_toolkit::ui::{Event, Pointer, PointerButton, Ui};
-use unbound_toolkit::{Appearance, CpuRenderer, Image, Palette, Point, Rect, Scheme, TextSystem};
+use unbound_toolkit::ui::{
+    Event, Key, MenuOutcome, MenuPanel, MenuTracker, Modifiers, Pointer, PointerButton, Ui,
+};
+use unbound_toolkit::{
+    Appearance, Color, CpuRenderer, Elevation, Image, Item, MenuPlacement, Palette, Point, Rect,
+    Scene, Scheme, Shape, TextSystem,
+};
 
 const ICON: f32 = 40.0;
 const HEIGHT: u32 = 720;
@@ -513,4 +520,127 @@ fn the_expanded_bar_lists_the_menus_as_rows_that_open_their_menu() {
         rail.view.slot_at(center(search), PointerButton::Primary),
         Some(Slot::Launcher)
     );
+}
+
+fn menu_node(id: i32, label: &str, children: Vec<Node>) -> Node {
+    Node {
+        id,
+        label: label.to_owned(),
+        enabled: true,
+        visible: true,
+        children,
+        ..Node::default()
+    }
+}
+
+fn files_menus() -> Node {
+    let leaf = |id, label: &str| menu_node(id, label, Vec::new());
+    let shortcut = |node: Node, keys: &str| Node {
+        shortcut: Some(keys.to_owned()),
+        ..node
+    };
+    menu_node(
+        0,
+        "",
+        vec![
+            menu_node(
+                1,
+                "Files",
+                vec![
+                    leaf(10, "About Files"),
+                    shortcut(leaf(11, "Quit Files"), "Super+Q"),
+                ],
+            ),
+            menu_node(2, "File", vec![shortcut(leaf(20, "New Window"), "Super+N")]),
+            menu_node(
+                3,
+                "Edit",
+                vec![
+                    shortcut(leaf(30, "Copy"), "Super+C"),
+                    shortcut(leaf(31, "Find"), "Super+F"),
+                    shortcut(leaf(32, "Find Next"), "Super+G"),
+                ],
+            ),
+            menu_node(4, "View", vec![leaf(40, "Find in Sidebar")]),
+            menu_node(5, "Go", vec![leaf(50, "Home")]),
+            menu_node(6, "Window", vec![leaf(60, "Minimise")]),
+            menu_node(7, "Help", vec![leaf(70, "Files Help")]),
+        ],
+    )
+}
+
+fn open_cascade(scheme: Scheme, query: &str) -> (Vec<u8>, (u32, u32)) {
+    let mut rail = Rail::new(scheme, HEIGHT, apps(1.0));
+    rail.frame(1.0);
+    let header = rail.view.slot_rect(Slot::App).expect("the header");
+    rail.view.set_hovered(Some(Slot::App));
+    rail.view.set_open(Some(Slot::App));
+    let palette = Palette::for_scheme(scheme);
+    let mut text = TextSystem::new();
+    let root = files_menus();
+    let menu = cascade(&AppMenus {
+        name: "Files",
+        root: Some(&root),
+        item: ":1.7/org/unbound/MenuBar",
+        actions: &[],
+        windows: &[],
+    });
+    let mut tracker = MenuTracker::new(MenuPanel::new(menu, &mut text, &palette), false);
+    for character in query.chars() {
+        match tracker.key(
+            Key::Character(character),
+            Modifiers::default(),
+            Instant::now(),
+        ) {
+            MenuOutcome::Search(found) => {
+                tracker.searched(MenuPanel::new(found, &mut text, &palette));
+            }
+            outcome => panic!("typing searched nothing: {outcome:?}"),
+        }
+    }
+    let panel = &tracker.panels()[0];
+    let MenuPlacement::AtPoint(at) = rail.view.menu_placement(header) else {
+        panic!("the cascade opens beside the header");
+    };
+    let size = (360, 360);
+    let bar = rail.view.scene(size.0, size.1, 1.0);
+    let outline = Shape::rounded(
+        Rect::new(0.0, 0.0, panel.size().width, panel.size().height),
+        unbound_toolkit::ui::MENU_RADIUS,
+    );
+    let mut menu = Item::shadows(outline, Elevation::Overlay, scheme, true).to_vec();
+    menu.extend(panel.paint(&palette, true));
+    let mut items = vec![Item::Fill {
+        shape: Shape::rect(Rect::new(0.0, 0.0, size.0 as f32, size.1 as f32)),
+        paint: Color::hex(0x808080).into(),
+    }];
+    items.extend(bar.items);
+    items.push(Item::Translate {
+        offset: at,
+        items: menu,
+    });
+    let scene = Scene {
+        width: size.0,
+        height: size.1,
+        background: Color::TRANSPARENT,
+        items,
+    };
+    let mut rgba = vec![0; (size.0 * size.1 * 4) as usize];
+    CpuRenderer::new()
+        .render_into(&scene, 1.0, &mut rgba)
+        .expect("frame");
+    (rgba, size)
+}
+
+#[test]
+fn the_open_cascade_keeps_the_pressed_header_and_offers_type_to_search() {
+    for (scheme, name) in [
+        (Scheme::Light, "cascade-light"),
+        (Scheme::Dark, "cascade-dark"),
+    ] {
+        let (rgba, size) = open_cascade(scheme, "");
+        check_golden(name, size, rgba);
+        let (rgba, size) = open_cascade(scheme, "fin");
+        check_golden(&format!("{name}-searching"), size, rgba);
+    }
 }

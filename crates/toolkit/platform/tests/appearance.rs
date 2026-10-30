@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use smithay::utils::Size;
 use unbound_compositor::{FrameClock, FrameScheduler, Headless, REFRESH, Renderer};
-use unbound_graphics::{Accent, Appearance, Contrast, Scene, Scheme};
+use unbound_graphics::{Accent, Appearance, Color, Contrast, Scene, Scheme};
 use unbound_test_bus::SessionBus;
 use unbound_toolkit_platform::{App, Role, Window, WindowEvent};
 use zbus::zvariant::{OwnedValue, Value};
@@ -18,6 +18,8 @@ const TIMEOUT: Duration = Duration::from_secs(60);
 const PORTAL_PATH: &str = "/org/freedesktop/portal/desktop";
 const SETTINGS: &str = "org.freedesktop.portal.Settings";
 const APPEARANCE: &str = "org.freedesktop.appearance";
+const UNBOUND_APPEARANCE: &str = "org.unbound.appearance";
+const TINT: [f64; 3] = [0.2, 0.4, 0.6];
 const ACCENT: (f64, f64, f64) = (0.8, 0.2, 0.4);
 
 struct Settings;
@@ -30,10 +32,14 @@ impl Settings {
             ("color-scheme".to_owned(), owned(Value::from(1u32))),
             ("accent-color".to_owned(), owned(Value::from(ACCENT))),
         ]);
-        HashMap::from([(APPEARANCE.to_owned(), appearance)])
-            .into_iter()
-            .filter(|(namespace, _)| namespaces.is_empty() || namespaces.contains(namespace))
-            .collect()
+        let unbound = HashMap::from([("frame-tint".to_owned(), owned(Value::from(TINT.to_vec())))]);
+        HashMap::from([
+            (APPEARANCE.to_owned(), appearance),
+            (UNBOUND_APPEARANCE.to_owned(), unbound),
+        ])
+        .into_iter()
+        .filter(|(namespace, _)| namespaces.is_empty() || namespaces.contains(namespace))
+        .collect()
     }
 }
 
@@ -130,6 +136,11 @@ fn the_window_follows_the_portal_colour_scheme_accent_contrast_and_reduced_motio
                     change(APPEARANCE, "contrast", Value::from(1u32));
                     change(APPEARANCE, "accent-color", Value::from((-1.0, -1.0, -1.0)));
                     change(APPEARANCE, "reduced-motion", Value::from(1u32));
+                    change(
+                        UNBOUND_APPEARANCE,
+                        "frame-tint",
+                        Value::from(Vec::<f64>::new()),
+                    );
                 }
                 2 => change(APPEARANCE, "color-scheme", Value::from(0u32)),
                 _ => {}
@@ -141,6 +152,7 @@ fn the_window_follows_the_portal_colour_scheme_accent_contrast_and_reduced_motio
     let dark = Appearance {
         scheme: Scheme::Dark,
         accent: Accent::Rose,
+        frame_tint: Some(Color::hex(0x336699)),
         ..Appearance::default()
     };
     let dark_reduced = Appearance {

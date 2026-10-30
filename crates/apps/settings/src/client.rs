@@ -19,6 +19,14 @@ pub trait Config {
     #[zbus(property)]
     fn set_appearance(&self, value: &str) -> zbus::Result<()>;
     #[zbus(property)]
+    fn accent(&self) -> zbus::Result<String>;
+    #[zbus(property)]
+    fn set_accent(&self, value: &str) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn tinted_frame(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_tinted_frame(&self, tinted: bool) -> zbus::Result<()>;
+    #[zbus(property)]
     fn clock_format(&self) -> zbus::Result<String>;
     #[zbus(property)]
     fn set_clock_format(&self, value: &str) -> zbus::Result<()>;
@@ -31,9 +39,45 @@ pub trait Config {
     #[zbus(property)]
     fn set_lid_on_power(&self, value: &str) -> zbus::Result<()>;
     #[zbus(property)]
+    fn screen_reader(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_screen_reader(&self, on: bool) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn zoom(&self) -> zbus::Result<f64>;
+    #[zbus(property)]
+    fn set_zoom(&self, zoom: f64) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn increase_contrast(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_increase_contrast(&self, on: bool) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn reduce_transparency(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_reduce_transparency(&self, on: bool) -> zbus::Result<()>;
+    #[zbus(property)]
     fn reduce_motion(&self) -> zbus::Result<bool>;
     #[zbus(property)]
     fn set_reduce_motion(&self, reduce: bool) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn cursor_size(&self) -> zbus::Result<u32>;
+    #[zbus(property)]
+    fn set_cursor_size(&self, size: u32) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn flash_screen(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_flash_screen(&self, on: bool) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn sticky_keys(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_sticky_keys(&self, on: bool) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn slow_keys(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_slow_keys(&self, on: bool) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn bounce_keys(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_bounce_keys(&self, on: bool) -> zbus::Result<()>;
     #[zbus(property)]
     fn wallpaper_light(&self) -> zbus::Result<String>;
     #[zbus(property)]
@@ -189,12 +233,23 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 30] = [
+pub const CONFIG_SETTINGS: [SettingId; 41] = [
     SettingId::Appearance,
     SettingId::Clock24Hour,
     SettingId::LowPowerOnBattery,
     SettingId::LidOnPower,
+    SettingId::ScreenReader,
+    SettingId::Zoom,
+    SettingId::IncreaseContrast,
+    SettingId::ReduceTransparency,
     SettingId::ReduceMotion,
+    SettingId::CursorSize,
+    SettingId::FlashScreen,
+    SettingId::StickyKeys,
+    SettingId::SlowKeys,
+    SettingId::BounceKeys,
+    SettingId::Accent,
+    SettingId::TintedFrame,
     SettingId::Wallpaper,
     SettingId::WallpaperFit,
     SettingId::BarIconSize,
@@ -221,6 +276,8 @@ pub const CONFIG_SETTINGS: [SettingId; 30] = [
     SettingId::SoundEffects,
     SettingId::VolumeFeedback,
 ];
+
+const ZOOM_WHEN_TURNED_ON: f64 = 2.0;
 
 pub fn speed_stop(speed: f64) -> u32 {
     let stops = f64::from(POINTER_SPEEDS);
@@ -319,7 +376,18 @@ impl SettingsClient {
         Ok(match id {
             SettingId::DoNotDisturb => Value::Flag(self.notifications.do_not_disturb()?),
             SettingId::Appearance => Value::Keyword(self.config.appearance()?),
+            SettingId::ScreenReader => Value::Flag(self.config.screen_reader()?),
+            SettingId::Zoom => Value::Flag(self.config.zoom()? > 1.0),
+            SettingId::IncreaseContrast => Value::Flag(self.config.increase_contrast()?),
+            SettingId::ReduceTransparency => Value::Flag(self.config.reduce_transparency()?),
             SettingId::ReduceMotion => Value::Flag(self.config.reduce_motion()?),
+            SettingId::CursorSize => Value::Number(self.config.cursor_size()?),
+            SettingId::FlashScreen => Value::Flag(self.config.flash_screen()?),
+            SettingId::StickyKeys => Value::Flag(self.config.sticky_keys()?),
+            SettingId::SlowKeys => Value::Flag(self.config.slow_keys()?),
+            SettingId::BounceKeys => Value::Flag(self.config.bounce_keys()?),
+            SettingId::Accent => Value::Keyword(self.config.accent()?),
+            SettingId::TintedFrame => Value::Flag(self.config.tinted_frame()?),
             SettingId::LowPowerOnBattery => Value::Flag(self.config.low_power_on_battery()?),
             SettingId::LidOnPower => Value::Keyword(self.config.lid_on_power()?),
             SettingId::Clock24Hour => Value::Flag(match self.config.clock_format()?.as_str() {
@@ -384,6 +452,8 @@ impl SettingsClient {
     pub fn set(&self, id: SettingId, value: &Value) -> zbus::Result<()> {
         match (id, value) {
             (SettingId::Appearance, Value::Keyword(keyword)) => self.config.set_appearance(keyword),
+            (SettingId::Accent, Value::Keyword(keyword)) => self.config.set_accent(keyword),
+            (SettingId::TintedFrame, Value::Flag(tinted)) => self.config.set_tinted_frame(*tinted),
             (SettingId::BarEdge, Value::Keyword(keyword)) => self.config.set_bar_edge(keyword),
             (SettingId::BarMenuBar, Value::Keyword(keyword)) => {
                 self.config.set_bar_menu_bar(keyword)
@@ -401,9 +471,25 @@ impl SettingsClient {
             (SettingId::LidOnPower, Value::Keyword(keyword)) => {
                 self.config.set_lid_on_power(keyword)
             }
+            (SettingId::ScreenReader, Value::Flag(on)) => self.config.set_screen_reader(*on),
+            (SettingId::Zoom, Value::Flag(on)) => {
+                self.config
+                    .set_zoom(if *on { ZOOM_WHEN_TURNED_ON } else { 1.0 })
+            }
+            (SettingId::IncreaseContrast, Value::Flag(on)) => {
+                self.config.set_increase_contrast(*on)
+            }
+            (SettingId::ReduceTransparency, Value::Flag(on)) => {
+                self.config.set_reduce_transparency(*on)
+            }
             (SettingId::ReduceMotion, Value::Flag(reduce)) => {
                 self.config.set_reduce_motion(*reduce)
             }
+            (SettingId::CursorSize, Value::Number(size)) => self.config.set_cursor_size(*size),
+            (SettingId::FlashScreen, Value::Flag(on)) => self.config.set_flash_screen(*on),
+            (SettingId::StickyKeys, Value::Flag(on)) => self.config.set_sticky_keys(*on),
+            (SettingId::SlowKeys, Value::Flag(on)) => self.config.set_slow_keys(*on),
+            (SettingId::BounceKeys, Value::Flag(on)) => self.config.set_bounce_keys(*on),
             (SettingId::Wallpaper, Value::Pictures { light, dark }) => {
                 self.config.set_wallpaper_light(light)?;
                 self.config.set_wallpaper_dark(dark)

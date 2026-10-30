@@ -58,8 +58,8 @@ use crate::access::Accessibility;
 use crate::appearance::AppearanceWatch;
 use crate::capture::Capture;
 use crate::chrome::{
-    Chrome, Control, Frame, FrameRegions, HEADER_HEIGHT, Look, RESIZE_MARGIN, SHEET_INSET, Zone,
-    control_for_node,
+    Chrome, Control, Frame, FrameRegions, HEADER_HEIGHT, Header, Look, RESIZE_MARGIN, SHEET_INSET,
+    Zone, control_for_node,
 };
 use crate::clipboard::Clipboard;
 use crate::clipboard::{DragEvent, Transfer};
@@ -404,6 +404,7 @@ pub struct Window {
     pub(crate) closed_by_button: bool,
     text: Option<TextSystem>,
     shown_frame: Option<Frame>,
+    shown_opaque: Option<Rect>,
     pub(crate) app_cursor: Cursor,
     pub(crate) accessibility: Accessibility,
     pub(crate) appearance: Rc<RefCell<AppearanceWatch>>,
@@ -568,15 +569,11 @@ impl Window {
             Some(_) => state.scaling.scale(),
             None => 1.0,
         };
-        let gpu = if std::env::var_os(RENDERER_VARIABLE).is_some_and(|value| value == "cpu") {
-            Gpu::Unavailable
-        } else {
-            start_gpu(
-                &connection,
-                &surface,
-                (pixels(size.0, scale), pixels(size.1, scale)),
-            )
-        };
+        let gpu = start_gpu(
+            &connection,
+            &surface,
+            (pixels(size.0, scale), pixels(size.1, scale)),
+        );
         if fresh {
             appearance.borrow_mut().wait_for_first_reading();
         }
@@ -606,6 +603,7 @@ impl Window {
             closed_by_button: false,
             text: None,
             shown_frame: None,
+            shown_opaque: None,
             app_cursor: Cursor::Default,
             accessibility: Accessibility::new()?,
             appearance,
@@ -630,6 +628,19 @@ impl Window {
             chrome.regions = Some(regions);
             self.needs_redraw = true;
         }
+    }
+
+    pub fn set_header(&mut self, header: Header) {
+        if let Some(chrome) = &mut self.chrome
+            && chrome.header.as_ref() != Some(&header)
+        {
+            chrome.header = Some(header);
+            self.needs_redraw = true;
+        }
+    }
+
+    pub fn header_height(&self) -> u32 {
+        self.title_height()
     }
 
     pub(crate) fn content_offset(&self) -> Point {
@@ -671,6 +682,10 @@ impl Window {
             title: title as f32,
             inset: if title > 0 { SHEET_INSET as f32 } else { 0.0 },
             regions: self.chrome.as_ref().and_then(|chrome| chrome.regions),
+            header: self
+                .chrome
+                .as_ref()
+                .is_some_and(|chrome| chrome.header.is_some()),
             width: width as f32,
             height: height as f32,
         }
@@ -1194,7 +1209,9 @@ impl Window {
                         text: self.text.get_or_insert_with(TextSystem::new),
                         palette,
                     };
-                    menus.search(opening, menu);
+                    if let Err(error) = menus.search(opening, menu) {
+                        tracing::warn!(%error, "cannot resize the searched menu");
+                    }
                 }
                 true
             }
@@ -1278,7 +1295,7 @@ impl Window {
         };
         match input {
             Event::PointerEnter(pointer) | Event::PointerMove(pointer) => {
-                let zone = frame.zone_at(pointer.position);
+                let zone = chrome.zone_at(&frame, pointer.position);
                 if let Some(control) = chrome.pressed {
                     let inside = zone == Zone::Control(control);
                     if inside != chrome.pressed_inside {
@@ -1312,7 +1329,7 @@ impl Window {
                 self.show_cursor(cursor);
             }
             Event::PointerDown(pointer) => {
-                let zone = frame.zone_at(pointer.position);
+                let zone = chrome.zone_at(&frame, pointer.position);
                 if zone == Zone::Content || chrome.content_buttons > 0 {
                     chrome.content_buttons += 1;
                     passed.push(WindowEvent::Input(Event::PointerDown(into_content(
@@ -1357,7 +1374,7 @@ impl Window {
                     return;
                 };
                 self.needs_redraw = true;
-                if frame.zone_at(pointer.position) != Zone::Control(control) {
+                if chrome.zone_at(&frame, pointer.position) != Zone::Control(control) {
                     return;
                 }
                 let result = match control {
@@ -1391,7 +1408,7 @@ impl Window {
                 }
             }
             Event::Scroll(scroll) => {
-                if frame.zone_at(scroll.position) == Zone::Content {
+                if chrome.zone_at(&frame, scroll.position) == Zone::Content {
                     passed.push(WindowEvent::Input(Event::Scroll(
                         unbound_graphics::Scroll {
                             position: Point::new(
@@ -1480,6 +1497,31 @@ impl Window {
             ),
             None => scene.clone(),
         }
+    }
+
+    fn declare_opaque(&mut self, opaque: Option<Rect>) {
+        if self.shown_opaque == opaque {
+            return;
+        }
+        let Some(compositor) = &self.state.compositor else {
+            return;
+        };
+        self.shown_opaque = opaque;
+        let Some(area) = opaque else {
+            self.surface.set_opaque_region(None);
+            return;
+        };
+        let region = compositor.create_region(&self.queue.handle(), ());
+        let left = area.x.ceil();
+        let top = area.y.ceil();
+        region.add(
+            left as i32,
+            top as i32,
+            ((area.x + area.width).floor() - left) as i32,
+            ((area.y + area.height).floor() - top) as i32,
+        );
+        self.surface.set_opaque_region(Some(&region));
+        region.destroy();
     }
 
     fn frame_surface(&mut self, frame: &Frame) {
@@ -1634,15 +1676,20 @@ impl Window {
         let (extra_width, extra_height) = self.frame().chrome_size();
         self.size = (scene.width + extra_width, scene.height + extra_height);
         let framed;
-        let scene = if self.chrome.is_some() {
+        let (scene, opaque) = if self.chrome.is_some() {
             let frame = self.frame();
             framed = self.framed(&frame, scene);
             self.frame_surface(&frame);
-
-            &framed
+            let chassis = self.appearance.borrow().current().palette().chassis;
+            let opaque =
+                (chassis.a == u8::MAX && scene.background.a == u8::MAX).then(|| frame.window());
+            (&framed, opaque)
         } else {
-            scene
+            let opaque = (scene.background.a == u8::MAX)
+                .then(|| Rect::new(0.0, 0.0, scene.width as f32, scene.height as f32));
+            (scene, opaque)
         };
+        self.declare_opaque(opaque);
         self.needs_redraw = self.chrome.as_ref().is_some_and(|chrome| chrome.animating);
         self.surface.frame(&self.queue.handle(), ());
         self.state.frame_pending = true;
@@ -1926,17 +1973,48 @@ fn clamp_i32(value: u32) -> i32 {
     i32::try_from(value).unwrap_or(i32::MAX)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RendererChoice {
+    Automatic,
+    Gpu,
+    Cpu,
+}
+
+fn renderer_choice() -> RendererChoice {
+    match std::env::var(RENDERER_VARIABLE).as_deref() {
+        Ok("gpu") => RendererChoice::Gpu,
+        Ok("cpu") => RendererChoice::Cpu,
+        _ => RendererChoice::Automatic,
+    }
+}
+
 fn start_gpu(connection: &Connection, surface: &WlSurface, atlas: (u32, u32)) -> Gpu {
+    let choice = renderer_choice();
+    if choice == RendererChoice::Cpu
+        || choice == RendererChoice::Automatic && GpuDevice::known_software_only()
+    {
+        return Gpu::Unavailable;
+    }
+    let allow_software = choice == RendererChoice::Gpu;
     let display = connection.backend().display_ptr() as usize;
     let wl_surface = surface.id().as_ptr() as usize;
     let (sender, receiver) = mpsc::channel();
     thread::spawn(move || {
-        let _ = sender.send(open_gpu(display, wl_surface, atlas));
+        let opened = open_gpu(display, wl_surface, atlas, allow_software);
+        if let Err(error @ RenderError::Software(_)) = &opened {
+            tracing::info!("drawing on the CPU: {error}");
+        }
+        let _ = sender.send(opened);
     });
     Gpu::Starting(receiver)
 }
 
-fn open_gpu(display: usize, surface: usize, atlas: (u32, u32)) -> Result<GpuSurface, RenderError> {
+fn open_gpu(
+    display: usize,
+    surface: usize,
+    atlas: (u32, u32),
+    allow_software: bool,
+) -> Result<GpuSurface, RenderError> {
     let missing = || RenderError::Gpu("the Wayland surface has no libwayland pointer".to_owned());
     let display = NonNull::new(display as *mut c_void).ok_or_else(missing)?;
     let window = NonNull::new(surface as *mut c_void).ok_or_else(missing)?;
@@ -1946,7 +2024,7 @@ fn open_gpu(display: usize, surface: usize, atlas: (u32, u32)) -> Result<GpuSurf
         ))),
         raw_window_handle: RawWindowHandle::Wayland(WaylandWindowHandle::new(window)),
     };
-    let (gpu, surface) = unsafe { GpuDevice::shared_for(target) }?;
+    let (gpu, surface) = unsafe { GpuDevice::shared_for(target, allow_software) }?;
     let capabilities = surface.get_capabilities(gpu.adapter());
     let format = capabilities
         .formats

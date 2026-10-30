@@ -192,9 +192,13 @@ fn start(sample: &PathBuf, renderers: Renderers) -> Result<Start, Box<dyn Error>
     session.server.insert_client(server_end)?;
     let started = Instant::now();
     let mut command = Command::new(sample);
-    if renderers == Renderers::CpuOnly {
-        command.env(RENDERER_VARIABLE, "cpu");
-    }
+    command.env(
+        RENDERER_VARIABLE,
+        match renderers {
+            Renderers::CpuThenGpu => "gpu",
+            Renderers::CpuOnly => "cpu",
+        },
+    );
     let mut child = command
         .env("WAYLAND_SOCKET", "0")
         .env_remove("WAYLAND_DISPLAY")

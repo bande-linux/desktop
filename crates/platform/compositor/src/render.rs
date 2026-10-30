@@ -62,6 +62,10 @@ impl Renderer {
         self.vulkan.device_info()
     }
 
+    pub fn set_reduced_effects(&mut self, reduced: bool) {
+        self.vulkan.set_reduced_effects(reduced);
+    }
+
     pub fn render(&mut self, compositor: &mut Headless) -> Result<FrameStats, RenderError> {
         let main = compositor.main_output();
         self.render_output(compositor, &main)
@@ -75,7 +79,8 @@ impl Renderer {
         let Some(settings) = compositor.output_settings(name) else {
             return Err(RenderError::NothingRendered);
         };
-        let (size, scale, transform) = (settings.mode.size, settings.scale, settings.transform);
+        let scale = compositor.render_scale(name).unwrap_or(settings.scale);
+        let (size, transform) = (settings.mode.size, settings.transform);
         self.outputs
             .retain(|known, _| compositor.outputs().iter().any(|output| output == known));
         let output = match self.outputs.remove(name) {

@@ -2,6 +2,7 @@ mod app;
 mod appearance;
 mod arrange;
 mod capture;
+mod capture_shell;
 mod cascade;
 mod clock;
 mod cursor;

@@ -6,6 +6,7 @@ use wayland_client::protocol::wl_output::WlOutput;
 use wayland_client::protocol::wl_shm::Format;
 use wayland_client::{Connection, Dispatch, QueueHandle, WEnum, delegate_noop};
 use wayland_protocols::ext::image_capture_source::v1::client::ext_image_capture_source_v1::ExtImageCaptureSourceV1;
+use wayland_protocols::ext::image_capture_source::v1::client::ext_foreign_toplevel_image_capture_source_manager_v1::ExtForeignToplevelImageCaptureSourceManagerV1;
 use wayland_protocols::ext::image_capture_source::v1::client::ext_output_image_capture_source_manager_v1::ExtOutputImageCaptureSourceManagerV1;
 use wayland_protocols::ext::image_copy_capture::v1::client::ext_image_copy_capture_frame_v1::{
     self, ExtImageCopyCaptureFrameV1,
@@ -16,6 +17,8 @@ use wayland_protocols::ext::image_copy_capture::v1::client::ext_image_copy_captu
 use wayland_protocols::ext::image_copy_capture::v1::client::ext_image_copy_capture_session_v1::{
     self, ExtImageCopyCaptureSessionV1,
 };
+
+use unbound_protocols::client::unbound_capture_v1::{self, UnboundCaptureV1};
 
 use crate::{Globals, Headless, TestClient};
 
@@ -39,6 +42,10 @@ pub(crate) struct Capture {
     constraints: CaptureConstraints,
     memory: Option<File>,
     outcome: Option<CaptureOutcome>,
+    shell: Option<UnboundCaptureV1>,
+    windows: Vec<(String, (i32, i32, i32, i32))>,
+    windows_done: bool,
+    option_requests: usize,
 }
 
 impl TestClient {
@@ -56,16 +63,42 @@ impl TestClient {
         let output: WlOutput = self.bind("wl_output", 1);
         let sources: ExtOutputImageCaptureSourceManagerV1 =
             self.bind("ext_output_image_capture_source_manager_v1", 1);
+        let source = sources.create_source(&output, &qh, ());
+        self.start_capture_session(server, &source, paint_cursors)
+    }
+
+    pub fn start_window_capture(
+        &mut self,
+        server: &mut Headless,
+        app_id: &str,
+        paint_cursors: bool,
+    ) -> CaptureConstraints {
+        let qh = self.queue.handle();
+        let handle = self
+            .toplevel_handle(app_id)
+            .expect("join_shell first and show a window with this app id");
+        let sources: ExtForeignToplevelImageCaptureSourceManagerV1 =
+            self.bind("ext_foreign_toplevel_image_capture_source_manager_v1", 1);
+        let source = sources.create_source(&handle, &qh, ());
+        self.start_capture_session(server, &source, paint_cursors)
+    }
+
+    fn start_capture_session(
+        &mut self,
+        server: &mut Headless,
+        source: &ExtImageCaptureSourceV1,
+        paint_cursors: bool,
+    ) -> CaptureConstraints {
+        let qh = self.queue.handle();
         let manager: ExtImageCopyCaptureManagerV1 =
             self.bind("ext_image_copy_capture_manager_v1", 1);
-        let source = sources.create_source(&output, &qh, ());
         let options = if paint_cursors {
             Options::PaintCursors
         } else {
             Options::empty()
         };
         self.globals.capture = Capture {
-            session: Some(manager.create_session(&source, options, &qh, ())),
+            session: Some(manager.create_session(source, options, &qh, ())),
             ..Capture::default()
         };
         self.exchange(server);
@@ -99,6 +132,37 @@ impl TestClient {
 
     pub fn capture_outcome(&self) -> Option<&CaptureOutcome> {
         self.globals.capture.outcome.as_ref()
+    }
+
+    pub fn capture_constraints(&self) -> &CaptureConstraints {
+        &self.globals.capture.constraints
+    }
+
+    pub fn join_capture(&mut self, server: &mut Headless) {
+        let capture: UnboundCaptureV1 = self.bind("unbound_capture_v1", 1);
+        self.globals.capture.shell = Some(capture);
+        self.exchange(server);
+    }
+
+    pub fn list_windows(&mut self, server: &mut Headless) -> Vec<(String, (i32, i32, i32, i32))> {
+        let capture = &mut self.globals.capture;
+        capture.windows.clear();
+        capture.windows_done = false;
+        capture
+            .shell
+            .as_ref()
+            .expect("join_capture first")
+            .list_windows();
+        self.exchange(server);
+        assert!(
+            self.globals.capture.windows_done,
+            "windows_done follows the list"
+        );
+        self.globals.capture.windows.clone()
+    }
+
+    pub fn capture_option_requests(&self) -> usize {
+        self.globals.capture.option_requests
     }
 }
 
@@ -155,6 +219,32 @@ impl Dispatch<ExtImageCopyCaptureFrameV1, ()> for Globals {
     }
 }
 
+impl Dispatch<UnboundCaptureV1, ()> for Globals {
+    fn event(
+        globals: &mut Self,
+        _: &UnboundCaptureV1,
+        event: unbound_capture_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        let capture = &mut globals.capture;
+        match event {
+            unbound_capture_v1::Event::Window {
+                identifier,
+                x,
+                y,
+                width,
+                height,
+            } => capture.windows.push((identifier, (x, y, width, height))),
+            unbound_capture_v1::Event::WindowsDone => capture.windows_done = true,
+            unbound_capture_v1::Event::ShowOptions => capture.option_requests += 1,
+            _ => {}
+        }
+    }
+}
+
 delegate_noop!(Globals: ExtOutputImageCaptureSourceManagerV1);
+delegate_noop!(Globals: ExtForeignToplevelImageCaptureSourceManagerV1);
 delegate_noop!(Globals: ExtImageCaptureSourceV1);
 delegate_noop!(Globals: ExtImageCopyCaptureManagerV1);

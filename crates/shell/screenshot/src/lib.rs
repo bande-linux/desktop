@@ -1,4 +1,16 @@
 pub mod area;
+pub mod cast;
+pub mod color;
+pub mod engine;
+pub mod indicator;
+pub mod markup;
+pub mod options;
+pub mod palette;
+pub mod picker;
+pub mod record;
+pub mod service;
+pub mod shadow;
+pub mod thumbnail;
 
 use std::fs;
 use std::io;
@@ -9,14 +21,34 @@ use image::{ImageFormat, RgbaImage};
 use jiff::civil::DateTime;
 use unbound_l10n::Localizer;
 use unbound_toolkit::ScreenImage;
+use unbound_xdg::{Locale, applications, current_desktops, data_dirs};
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-screenshot.ftl");
 
 pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
+pub fn app_name(app_id: &str) -> Option<String> {
+    if app_id.is_empty() {
+        return None;
+    }
+    let locale = Locale::from_env();
+    applications(&data_dirs(), locale.as_ref(), &current_desktops())
+        .into_iter()
+        .find(|entry| entry.app_id() == app_id)
+        .map(|entry| entry.name)
+}
+
 pub fn file_stem(taken: DateTime) -> String {
+    stem("file-name", taken)
+}
+
+pub fn recording_stem(taken: DateTime) -> String {
+    stem("recording-name", taken)
+}
+
+fn stem(id: &str, taken: DateTime) -> String {
     L10N.tr_args(
-        "file-name",
+        id,
         [
             ("date", taken.strftime("%Y-%m-%d").to_string().into()),
             ("time", taken.strftime("%H.%M.%S").to_string().into()),
@@ -24,10 +56,10 @@ pub fn file_stem(taken: DateTime) -> String {
     )
 }
 
-pub fn free_path(dir: &Path, stem: &str) -> PathBuf {
+pub fn free_path(dir: &Path, stem: &str, extension: &str) -> PathBuf {
     let candidate = |copy: u32| match copy {
-        1 => dir.join(format!("{stem}.png")),
-        _ => dir.join(format!("{stem} ({copy}).png")),
+        1 => dir.join(format!("{stem}.{extension}")),
+        _ => dir.join(format!("{stem} ({copy}).{extension}")),
     };
     (1..)
         .map(candidate)
@@ -35,9 +67,19 @@ pub fn free_path(dir: &Path, stem: &str) -> PathBuf {
         .unwrap_or_else(|| candidate(1))
 }
 
+pub fn png(image: &ScreenImage) -> io::Result<Vec<u8>> {
+    let pixels = RgbaImage::from_raw(image.width, image.height, image.rgba.clone())
+        .ok_or_else(|| io::Error::other("the capture does not fill its size"))?;
+    let mut bytes = Vec::new();
+    pixels
+        .write_to(&mut io::Cursor::new(&mut bytes), ImageFormat::Png)
+        .map_err(io::Error::other)?;
+    Ok(bytes)
+}
+
 pub fn save(image: ScreenImage, dir: &Path, taken: DateTime) -> io::Result<PathBuf> {
     fs::create_dir_all(dir)?;
-    let path = free_path(dir, &file_stem(taken));
+    let path = free_path(dir, &file_stem(taken), "png");
     let name = path
         .file_name()
         .ok_or_else(|| io::Error::other("a screenshot path without a name"))?;
@@ -61,6 +103,10 @@ mod tests {
             include_str!("lib.rs"),
             include_str!("main.rs"),
             include_str!("area.rs"),
+            include_str!("picker.rs"),
+            include_str!("service.rs"),
+            include_str!("palette.rs"),
+            include_str!("markup.rs"),
         ];
         assert_eq!(
             unbound_l10n::missing_ids(ENGLISH, &sources),
@@ -82,7 +128,7 @@ mod tests {
         fs::write(dir.path().join(format!("{stem}.png")), b"").expect("first");
 
         assert_eq!(
-            free_path(dir.path(), stem),
+            free_path(dir.path(), stem, "png"),
             dir.path().join(format!("{stem} (2).png"))
         );
     }

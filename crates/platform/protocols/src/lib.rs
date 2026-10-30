@@ -1,4 +1,5 @@
 const _SHELL_PROTOCOL_SOURCE: &str = include_str!("../protocols/unbound-shell-v1.xml");
+const _CAPTURE_PROTOCOL_SOURCE: &str = include_str!("../protocols/unbound-capture-v1.xml");
 
 #[cfg(feature = "client")]
 pub mod client {
@@ -14,6 +15,19 @@ pub mod client {
     use self::__interfaces::*;
 
     wayland_scanner::generate_client_code!("protocols/unbound-shell-v1.xml");
+
+    pub use self::capture::unbound_capture_v1;
+
+    mod capture {
+        use wayland_client;
+
+        pub mod __interfaces {
+            wayland_scanner::generate_interfaces!("protocols/unbound-capture-v1.xml");
+        }
+        use self::__interfaces::*;
+
+        wayland_scanner::generate_client_code!("protocols/unbound-capture-v1.xml");
+    }
 }
 
 #[cfg(feature = "server")]
@@ -30,4 +44,17 @@ pub mod server {
     use self::__interfaces::*;
 
     wayland_scanner::generate_server_code!("protocols/unbound-shell-v1.xml");
+
+    pub use self::capture::unbound_capture_v1;
+
+    mod capture {
+        use wayland_server;
+
+        pub mod __interfaces {
+            wayland_scanner::generate_interfaces!("protocols/unbound-capture-v1.xml");
+        }
+        use self::__interfaces::*;
+
+        wayland_scanner::generate_server_code!("protocols/unbound-capture-v1.xml");
+    }
 }

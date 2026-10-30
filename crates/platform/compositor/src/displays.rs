@@ -10,7 +10,14 @@ use crate::motion::{Look, OPENING_SCALE};
 use crate::screen::{OutputConfig, OutputSettings, Screen};
 use crate::state::{Headless, Rect, State};
 
-const MAIN_SCREEN_LAYERS: [&str; 5] = ["dock", "menubar", "desktop", "notifications", "greeter"];
+const MAIN_SCREEN_LAYERS: [&str; 6] = [
+    "dock",
+    "menubar",
+    "desktop",
+    "notifications",
+    "greeter",
+    "screenshot",
+];
 
 pub(crate) struct Departed {
     identity: String,

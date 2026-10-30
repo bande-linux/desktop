@@ -37,6 +37,7 @@ enum Shortcut {
     Place(Direction),
     CaptureScreen,
     CaptureArea,
+    CaptureOptions,
     Volume(VolumeKey, bool),
     Brightness(BrightnessKey, bool),
     Media(MediaKey),
@@ -91,6 +92,7 @@ fn shortcut(
     match unshifted.filter(|_| shift) {
         Some(keysyms::KEY_3) => return Some(Shortcut::CaptureScreen),
         Some(keysyms::KEY_4) => return Some(Shortcut::CaptureArea),
+        Some(keysyms::KEY_5) => return Some(Shortcut::CaptureOptions),
         _ => {}
     }
     match unshifted {
@@ -208,6 +210,10 @@ impl State {
         }
         if shortcut == Shortcut::CaptureArea {
             self.capture_area();
+            return;
+        }
+        if shortcut == Shortcut::CaptureOptions {
+            self.show_capture_options();
             return;
         }
         if shortcut == Shortcut::LockScreen {
@@ -333,6 +339,7 @@ impl State {
             | Shortcut::FocusShell(_)
             | Shortcut::CaptureScreen
             | Shortcut::CaptureArea
+            | Shortcut::CaptureOptions
             | Shortcut::Volume(..)
             | Shortcut::Brightness(..)
             | Shortcut::Media(_)

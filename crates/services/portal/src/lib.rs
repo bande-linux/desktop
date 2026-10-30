@@ -1,3 +1,4 @@
+pub mod capture;
 pub mod file_chooser;
 pub mod request;
 pub mod screencast;

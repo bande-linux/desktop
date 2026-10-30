@@ -12,7 +12,7 @@ use xdg_desktop_portal_unbound::OBJECT_PATH;
 use xdg_desktop_portal_unbound::request::Cancellation;
 use xdg_desktop_portal_unbound::screencast::{
     CURSOR_EMBEDDED, CURSOR_HIDDEN, CURSOR_METADATA, MONITOR, ScreenCast, ScreenCastBackend,
-    Source, SourceRequest, Stream, VIRTUAL, WINDOW,
+    Source, SourceRequest, Stream, VIRTUAL, WINDOW, close_sessions_streaming,
 };
 use zbus::zvariant::{ObjectPath, OwnedValue, Value};
 
@@ -230,6 +230,36 @@ fn closing_the_session_stops_its_streams() {
         .close(SESSION, "org.freedesktop.impl.portal.Session");
     assert_eq!(fixture.stopped.recv_timeout(WAIT).expect("stopped"), [57]);
     assert_eq!(fixture.start(SESSION).0, 2);
+}
+
+#[test]
+fn a_stream_the_user_stopped_closes_its_session() {
+    let fixture = start();
+    fixture.create(SESSION);
+    fixture.select(SESSION, Options::new());
+    fixture.start(SESSION);
+    let closed = zbus::blocking::MessageIterator::for_match_rule(
+        zbus::MatchRule::builder()
+            .msg_type(zbus::message::Type::Signal)
+            .interface("org.freedesktop.impl.portal.Session")
+            .expect("interface")
+            .member("Closed")
+            .expect("member")
+            .build(),
+        &fixture.portal.client,
+        None,
+    )
+    .expect("signal subscription");
+
+    close_sessions_streaming(&fixture.portal.service, &[57]).expect("closed");
+
+    let signal = closed.into_iter().next().expect("Closed").expect("message");
+    assert_eq!(
+        signal.header().path().map(ToString::to_string).as_deref(),
+        Some(SESSION)
+    );
+    assert_eq!(fixture.start(SESSION).0, 2);
+    assert!(fixture.stopped.try_recv().is_err());
 }
 
 #[test]

@@ -88,12 +88,62 @@ graph LR
   the permission store, and `PickColor`) and `ScreenCast` (sessions, source and cursor
   validation, PipeWire streams, `persist_mode` with restore data that skips the picker, closing
   stops the streams) are implemented over `FileChooserUi`, `ScreenshotUi` and
-  `ScreenCastBackend` traits, which the toolkit and the compositor's capture will implement.
-  No UI or PipeWire producer implements them yet, so the package registers only `Settings`;
-  `unbound-portals.conf` (picked when `XDG_CURRENT_DESKTOP=Unbound`) sends Open and Save
-  dialogs to the GTK backend, secrets to GNOME Keyring, and everything else to GTK. Screenshot
-  and ScreenCast have no backend in an Unbound session (the GTK backend has neither, and the
-  wlr backend needs `wlr-screencopy`), so browser screen sharing does not work yet.
+  `ScreenCastBackend` traits. `unbound-portals.conf` (picked when `XDG_CURRENT_DESKTOP=Unbound`)
+  sends Open and Save dialogs to the GTK backend, secrets to GNOME Keyring, Screenshot and
+  ScreenCast to Unbound, and everything else to GTK.
+- **Capture lives in the screenshot tool.** The portal process has no Wayland connection: its
+  `ScreenshotUi` and `ScreenCastBackend` forward to `org.unbound.Screenshot`, served by
+  `unbound-screenshot`, which the compositor starts as a shell client and so already holds the
+  trusted connection that sees the capture globals (as the clipboard daemon's socket pair does
+  for data control). That service answers only the process that owns the portal's bus name, and
+  sandboxed apps cannot reach it past the Flatpak bus proxy. The tool captures on a second event
+  queue of that same connection, in its own thread, so capturing never waits for its UI.
+- **Screen sharing**: `SelectSources` shows a picker on the tool's overlay: each display (named
+  by its description when there are several) and every open window as live thumbnails (other workspaces and minimised windows included), the
+  first chosen; arrow keys move, Space adds a source when the app allows several, Return
+  shares, Escape cancels, a double click shares at once; the dialog, the list and each source
+  are published to screen readers. `Start` opens one PipeWire `Video/Source` node per source
+  (shared memory, BGRx or BGRA, the source's size, renegotiated when a window is resized, at most
+  60 frames per second and only when something on the screen changed), with the cursor
+  painted in for `cursor_mode` embedded and left out for hidden. While anything is shared, a
+  blue screen symbol sits in the menu bar (a StatusNotifierItem on a connection of its own, so it
+  disappears with it); clicking it stops sharing, and the portal then closes the app's session
+  with `Session.Closed`, as it does when a shared window closes. `persist_mode` hands back
+  restore data with the source ids, and a restored window that has since closed brings the
+  picker back.
+- **Screenshot portal**: a non-interactive request takes the whole screen at once; when the
+  frontend has not checked the permission store the tool first asks "Allow <app> to take a
+  screenshot?" (Don't Allow, Allow). An interactive request lets the user drag out an area.
+  The picture is saved as a PNG under `$XDG_CACHE_HOME/unbound-screenshot` (not the Desktop:
+  the app asked for it, the user did not) and returned as a `file://` URI. `PickColor` shows a
+  loupe with the colour's hex value under the pointer; a click picks, Escape cancels.
+- **Screenshot tool** (`unbound-screenshot`): `Super+Shift+3` saves one picture per display, as
+  macOS does; the overlay lives on the main display, so `Super+Shift+4`
+  lets the user drag out an area, and Space there switches to choosing a window (the window under
+  the pointer is tinted; a click takes it alone with its rounded corners, transparent around it,
+  and a soft shadow drawn by the tool). `Super+Shift+5` (`show_options` on `unbound_capture_v1`)
+  opens a palette above a scrim near the bottom of the screen: Entire Screen, Window, Area, Record
+  Entire Screen, Record Area, an Options menu (save to Desktop, Pictures or the clipboard; a
+  timer of none, 5 or 10 seconds; show the pointer), and Capture or Record. Arrow keys move, Space
+  picks, Return captures, Escape closes; the palette and its parts are published to screen
+  readers. The choices are remembered in `$XDG_STATE_HOME/unbound-screenshot/options`. A timer
+  shows a click-through countdown. Every picture or recording then floats as a thumbnail in the
+  bottom-right corner for five seconds (longer while the pointer rests on it; it slides in and
+  out with `standard`, and fades with Reduce Motion): dragging it drops the file (`text/uri-list`
+  and, for pictures, `image/png`) into any app, and a click opens Markup. Clipboard captures are
+  offered as `image/png` without a file or thumbnail.
+- **Markup** (`unbound-screenshot --markup <file>`): a window with Crop, Arrow, Rectangle, Text and
+  Highlight, Undo (also `Super+Z`), Delete (to the Trash, `Super+Backspace`), Copy (`Super+C`,
+  the marked-up picture as `image/png` and the file) and Done (Return or Escape, which writes the
+  marks into the file; closing the window does the same). Marks are drawn on the picture's own
+  pixels by the toolkit's CPU renderer, so what is saved is what was shown.
+- **Screen recording**: Record Entire Screen or Record Area opens a private PipeWire stream of the
+  screen and runs `gst-launch-1.0` (`pipewiresrc`, `videocrop` for an area, 30 frames per second)
+  into an MP4 (H.264 by `x264enc`, from `gstreamer1.0-plugins-ugly`) or, without it, a WebM (VP8
+  by `vp8enc`). A red stop symbol sits in the menu bar while recording; clicking it or pressing
+  `Super+Shift+5` stops the recorder with an end of stream, so the file is finalised, and the
+  recording appears as a thumbnail with a play mark. Without GStreamer the palette explains what to
+  install instead of failing silently.
 - Qt apps follow dark mode through Qt's own portal platform theme: `unbound-session` sets
   `QT_QPA_PLATFORMTHEME=xdgdesktopportal` (unless already set) and `unbound-desktop`
   recommends `qt6-xdgdesktopportal-platformtheme`, a 66 kB plugin from Qt itself rather than a

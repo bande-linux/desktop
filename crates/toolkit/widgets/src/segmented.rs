@@ -1,0 +1,277 @@
+use accesskit::{Action, ActionRequest, Node, Role, Toggled};
+use unbound_graphics::{Color, Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle};
+
+use super::{Animated, Context, Event, Key, Parts, Size, Spring, Widget, WidgetId, contains};
+
+pub const SEGMENTED_HEIGHT: f32 = 24.0;
+const PADDING: f32 = 10.0;
+const RADIUS: f32 = 7.0;
+const INSET: f32 = 2.0;
+const PILL_RADIUS: f32 = 5.0;
+const FONT_SIZE: f32 = 13.0;
+
+struct Segment {
+    title: String,
+    plain: Option<Paragraph>,
+    selected: Option<Paragraph>,
+    width: f32,
+}
+
+pub struct SegmentedControl {
+    id: WidgetId,
+    label: String,
+    segments: Vec<Segment>,
+    selected: Option<usize>,
+    on_select: Box<dyn FnMut(usize)>,
+    pill: Option<(Animated, Animated)>,
+    frame: Rect,
+}
+
+impl SegmentedControl {
+    pub fn new(
+        label: &str,
+        choices: &[impl AsRef<str>],
+        selected: Option<usize>,
+        on_select: impl FnMut(usize) + 'static,
+    ) -> Self {
+        Self {
+            id: WidgetId::next(),
+            label: label.to_owned(),
+            segments: choices
+                .iter()
+                .map(|title| Segment {
+                    title: title.as_ref().to_owned(),
+                    plain: None,
+                    selected: None,
+                    width: 0.0,
+                })
+                .collect(),
+            selected,
+            on_select: Box::new(on_select),
+            pill: None,
+            frame: Rect::default(),
+        }
+    }
+
+    pub fn selected(&self) -> Option<usize> {
+        self.selected
+    }
+
+    fn segment(&self, index: usize) -> Rect {
+        let x = self.segments[..index]
+            .iter()
+            .map(|segment| segment.width)
+            .sum::<f32>();
+        Rect::new(
+            self.frame.x + x,
+            self.frame.y,
+            self.segments[index].width,
+            self.frame.height,
+        )
+    }
+
+    fn select(&mut self, cx: &Context, index: usize) {
+        if index >= self.segments.len() || self.selected == Some(index) {
+            return;
+        }
+        self.selected = Some(index);
+        let target = self.segment(index);
+        let offset = target.x - self.frame.x;
+        match &mut self.pill {
+            Some((x, width)) => {
+                x.animate_to(cx, offset, Spring::QUICK);
+                width.animate_to(cx, target.width, Spring::QUICK);
+            }
+            None => self.pill = Some((Animated::new(offset), Animated::new(target.width))),
+        }
+        (self.on_select)(index);
+    }
+
+    fn pill(&self, cx: &Context) -> Option<Rect> {
+        let index = self.selected?;
+        let target = self.segment(index);
+        let (x, width) = match &self.pill {
+            Some((x, width)) => (self.frame.x + x.value(cx), width.value(cx)),
+            None => (target.x, target.width),
+        };
+        Some(Rect::new(x, self.frame.y, width, self.frame.height).inset(INSET))
+    }
+}
+
+impl Widget for SegmentedControl {
+    fn id(&self) -> WidgetId {
+        self.id
+    }
+
+    fn measure(&mut self, cx: &mut Context, _available: Size) -> Size {
+        for segment in &mut self.segments {
+            let style = TextStyle::new(FONT_SIZE, cx.palette.label_primary);
+            let plain = cx
+                .text
+                .paragraph(&segment.title, style, None, TextAlign::Start);
+            segment.width = (plain.width() + 2.0 * PADDING).round();
+            segment.selected = Some(cx.text.paragraph(
+                &segment.title,
+                TextStyle::new(FONT_SIZE, Color::hex(0xFFFFFF)),
+                None,
+                TextAlign::Start,
+            ));
+            segment.plain = Some(plain);
+        }
+        Size::new(
+            self.segments.iter().map(|segment| segment.width).sum(),
+            SEGMENTED_HEIGHT,
+        )
+    }
+
+    fn place(&mut self, _cx: &mut Context, frame: Rect) {
+        let width = self.segments.iter().map(|segment| segment.width).sum();
+        self.frame = Rect::new(frame.x, frame.y, width, SEGMENTED_HEIGHT);
+        if let Some(index) = self.selected
+            && self.pill.is_none()
+        {
+            let target = self.segment(index);
+            self.pill = Some((
+                Animated::new(target.x - self.frame.x),
+                Animated::new(target.width),
+            ));
+        }
+    }
+
+    fn frame(&self) -> Rect {
+        self.frame
+    }
+
+    fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
+        let track = Shape::rounded(self.frame, RADIUS);
+        items.push(Item::Fill {
+            shape: track,
+            paint: cx.palette.label_muted.with_alpha(36).into(),
+        });
+        if cx.is_focused(self.id) {
+            super::focus_ring(cx, track, items);
+        }
+        let centred = |paragraph: &Paragraph, segment: Rect| {
+            Point::new(
+                (segment.x + (segment.width - paragraph.width()) / 2.0).round(),
+                segment.y + ((segment.height - paragraph.height()) / 2.0).round(),
+            )
+        };
+        for (index, segment) in self.segments.iter().enumerate() {
+            if let Some(paragraph) = &segment.plain {
+                items.push(Item::Text {
+                    origin: centred(paragraph, self.segment(index)),
+                    paragraph: paragraph.clone(),
+                });
+            }
+        }
+        let Some(pill) = self.pill(cx) else {
+            return;
+        };
+        let shape = Shape::rounded(pill, PILL_RADIUS);
+        let mut selected = vec![Item::Fill {
+            shape,
+            paint: cx.palette.accent_color.into(),
+        }];
+        for (index, segment) in self.segments.iter().enumerate() {
+            if let Some(paragraph) = &segment.selected {
+                selected.push(Item::Text {
+                    origin: centred(paragraph, self.segment(index)),
+                    paragraph: paragraph.clone(),
+                });
+            }
+        }
+        items.push(Item::Clip {
+            shape,
+            items: selected,
+        });
+    }
+
+    fn access(&self, _cx: &Context) -> Node {
+        let mut node = Node::new(Role::RadioGroup);
+        node.set_label(self.label.clone());
+        if let Some(segment) = self.selected.and_then(|index| self.segments.get(index)) {
+            node.set_value(segment.title.clone());
+        }
+        node.add_action(Action::Increment);
+        node.add_action(Action::Decrement);
+        node
+    }
+
+    fn perform(&mut self, cx: &mut Context, request: &ActionRequest) -> bool {
+        let current = self.selected.unwrap_or(0);
+        let index = match request.action {
+            Action::Increment => current + 1,
+            Action::Decrement => current.saturating_sub(1),
+            _ => return false,
+        };
+        self.select(cx, index);
+        true
+    }
+
+    fn parts(&self, _cx: &Context) -> Parts {
+        let nodes: Vec<_> = self
+            .segments
+            .iter()
+            .enumerate()
+            .map(|(index, segment)| {
+                let rect = self.segment(index);
+                let mut node = Node::new(Role::RadioButton);
+                node.set_label(segment.title.clone());
+                node.set_toggled(match self.selected == Some(index) {
+                    true => Toggled::True,
+                    false => Toggled::False,
+                });
+                node.add_action(Action::Click);
+                node.set_bounds(accesskit::Rect {
+                    x0: f64::from(rect.x),
+                    y0: f64::from(rect.y),
+                    x1: f64::from(rect.x + rect.width),
+                    y1: f64::from(rect.y + rect.height),
+                });
+                (self.id.part(index as u64), node)
+            })
+            .collect();
+        Parts {
+            children: nodes.iter().map(|(id, _)| *id).collect(),
+            focus: self.selected.map(|index| self.id.part(index as u64)),
+            nodes,
+        }
+    }
+
+    fn perform_part(&mut self, cx: &mut Context, part: u64, request: &ActionRequest) -> bool {
+        if request.action != Action::Click {
+            return false;
+        }
+        self.select(cx, part as usize);
+        true
+    }
+
+    fn handle(&mut self, cx: &mut Context, event: &Event) -> bool {
+        match event {
+            Event::PointerDown(pointer) if pointer.is_primary() => {
+                if let Some(index) = (0..self.segments.len())
+                    .find(|index| contains(self.segment(*index), pointer.position))
+                {
+                    self.select(cx, index);
+                }
+            }
+            Event::Key { key: Key::Left, .. } => {
+                let index = self.selected.map_or(0, |index| index.saturating_sub(1));
+                self.select(cx, index);
+            }
+            Event::Key {
+                key: Key::Right, ..
+            } => {
+                let index = self.selected.map_or(0, |index| index + 1);
+                self.select(cx, index);
+            }
+            _ => return false,
+        }
+        true
+    }
+
+    fn accepts_focus(&self, cx: &Context) -> bool {
+        cx.keyboard_navigation
+    }
+}

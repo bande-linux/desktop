@@ -138,6 +138,23 @@ impl ScrollState {
         true
     }
 
+    fn jump_to(&mut self, offset: f32) {
+        self.motion = Motion::Still(offset.clamp(0.0, self.limit()));
+    }
+
+    pub fn follow(&mut self, cx: &Context, top: f32, bottom: f32) -> bool {
+        let current = self.offset_at(cx.now()).0;
+        let target = if top < current {
+            top
+        } else if bottom > current + self.viewport {
+            bottom - self.viewport
+        } else {
+            return false;
+        };
+        self.jump_to(target);
+        true
+    }
+
     pub fn reveal(&mut self, cx: &Context, top: f32, bottom: f32) -> bool {
         let target = self.target(cx.now());
         if top < target {

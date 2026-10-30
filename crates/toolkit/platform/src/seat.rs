@@ -24,7 +24,7 @@ const BTN_EXTRA: u32 = 0x114;
 const BTN_FORWARD: u32 = 0x115;
 const BTN_BACK: u32 = 0x116;
 const EVDEV_OFFSET: u32 = 8;
-pub const DOUBLE_CLICK_INTERVAL: Duration = Duration::from_millis(500);
+pub use unbound_graphics::DOUBLE_CLICK_INTERVAL;
 pub const CLICK_SLOP: f32 = 4.0;
 
 struct Keymap {

@@ -1,21 +1,33 @@
 mod animation;
 mod button;
+mod checkbox;
+mod combo_box;
 mod context_menu;
 mod disclosure;
+mod editor;
 mod free_layout;
 mod label;
 mod menu;
+mod pop_up_button;
+mod progress;
+mod radio_group;
 mod scroll;
+mod search_field;
 mod secure_field;
+mod segmented;
 mod sheet;
 mod slider;
 mod stack;
+mod stepper;
 mod table;
 mod text_field;
+mod text_view;
 mod toggle;
+mod tooltip;
 
 use std::any::Any;
 use std::cell;
+use std::sync::LazyLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
@@ -23,21 +35,38 @@ use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId, TreeInfo, Tre
 
 pub use animation::Animated;
 pub use button::{BUTTON_HEIGHT, Button};
+pub use checkbox::{CHECKBOX_SIZE, CheckState, Checkbox};
+pub use combo_box::ComboBox;
 pub use context_menu::ContextMenu;
 pub use disclosure::{DISCLOSURE_HEIGHT, Disclosure};
 pub use free_layout::FreeLayout;
 pub use label::Label;
 pub use menu::{Menu, MenuItem, MenuOutcome, MenuPanel, MenuTracker};
+pub use pop_up_button::PopUpButton;
+pub use progress::{PROGRESS_HEIGHT, ProgressBar, SPINNER_SIZE, Spinner};
+pub use radio_group::RadioGroup;
 pub use scroll::{ScrollState, ScrollView};
+pub use search_field::SearchField;
 pub use secure_field::SecureField;
+pub use segmented::{SEGMENTED_HEIGHT, SegmentedControl};
 pub use sheet::Alert;
 use sheet::Sheet;
 pub use slider::{SLIDER_HEIGHT, Slider};
 pub use stack::{Axis, Stack};
+pub use stepper::{STEPPER_SIZE, Stepper};
 pub use table::{Cell, Column, HEADER_HEIGHT, ROW_HEIGHT, Row, Sort, Table};
 pub use text_field::{TEXT_FIELD_HEIGHT, TextField};
+pub use text_view::TextView;
 pub use toggle::{SWITCH_SIZE, Toggle};
+pub use tooltip::TOOLTIP_DELAY;
+use tooltip::Tooltips;
 pub use unbound_spring::Spring;
+
+use unbound_l10n::Localizer;
+
+const ENGLISH: &str = include_str!("../locales/en-US/unbound-widgets.ftl");
+
+static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
 use unbound_graphics::{Appearance, Item, Palette, Point, Rect, Scene, Shape, TextSystem};
 pub use unbound_graphics::{
@@ -104,6 +133,8 @@ pub struct Context {
     now: Instant,
     animating: cell::Cell<bool>,
     clipboard: Option<ClipboardRequest>,
+    input_method_reset: bool,
+    menu: Option<(Menu, Point)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -123,11 +154,17 @@ impl Context {
             now: Instant::now(),
             animating: cell::Cell::new(false),
             clipboard: None,
+            input_method_reset: false,
+            menu: None,
         }
     }
 
     pub fn copy(&mut self, text: &str) {
         self.clipboard = Some(ClipboardRequest::Copy(text.to_owned()));
+    }
+
+    pub fn show_menu(&mut self, menu: Menu, at: Point) {
+        self.menu = Some((menu, at));
     }
 
     pub fn now(&self) -> Instant {
@@ -216,6 +253,12 @@ pub trait Widget: AsAny {
         None
     }
 
+    fn tooltip(&self) -> Option<&str> {
+        None
+    }
+
+    fn focused_by_keyboard(&mut self) {}
+
     fn dismissed(&self) -> bool {
         false
     }
@@ -248,6 +291,7 @@ pub struct Ui {
     menu_request: Option<(Menu, Point)>,
     awaiting_paste: bool,
     sheet: Option<Sheet>,
+    tooltips: Tooltips,
 }
 
 fn contains(frame: Rect, point: Point) -> bool {
@@ -363,6 +407,11 @@ fn collect(widget: &dyn Widget, cx: &Context, nodes: &mut Vec<(NodeId, Node)>) {
     if widget.accepts_focus(cx) {
         node.add_action(Action::Focus);
     }
+    if let Some(tooltip) = widget.tooltip()
+        && node.description().is_none()
+    {
+        node.set_description(tooltip.to_owned());
+    }
     let parts = widget.parts(cx);
     node.set_children(
         widget
@@ -392,6 +441,7 @@ impl Ui {
             menu_request: None,
             awaiting_paste: false,
             sheet: None,
+            tooltips: Tooltips::default(),
         }
     }
 
@@ -559,6 +609,24 @@ impl Ui {
                 );
             }
         }
+        let text = self
+            .tooltips
+            .owner()
+            .and_then(|owner| self.lookup(owner))
+            .and_then(|widget| widget.tooltip())
+            .map(str::to_owned);
+        if let Some(text) = text
+            && self.tooltips.paint(
+                self.cx.now,
+                &text,
+                &mut self.cx.text,
+                &self.cx.palette,
+                Size::new(width as f32, height as f32),
+                &mut above,
+            )
+        {
+            self.cx.animating.set(true);
+        }
         (items, above)
     }
 
@@ -567,6 +635,7 @@ impl Ui {
         match event {
             Event::PointerDown(pointer) => {
                 let hovered = self.hover(Some(pointer));
+                self.tooltips.dismiss();
                 let Some(&target) = self.hovered.last() else {
                     return hovered;
                 };
@@ -617,6 +686,7 @@ impl Ui {
                 self.hover(None)
             }
             Event::Scroll(scroll) => {
+                self.tooltips.dismiss();
                 let pointer = Pointer::at(scroll.position).with_modifiers(scroll.modifiers);
                 let hovered = self.hover(Some(&pointer));
                 let path = self.hovered.clone();
@@ -633,13 +703,16 @@ impl Ui {
                 key: Key::Tab,
                 modifiers,
             } if !modifiers.logo && !modifiers.control && !modifiers.alt => {
+                self.tooltips.dismiss();
                 self.move_focus(!modifiers.shift);
+                self.show_focus_tooltip();
                 true
             }
             Event::Key { key, modifiers } if opens_menu(*key, *modifiers) => {
                 self.request_keyboard_menu()
             }
             Event::Key { key, modifiers } => {
+                self.tooltips.dismiss();
                 let delivered = self
                     .cx
                     .focus
@@ -711,6 +784,10 @@ impl Ui {
         true
     }
 
+    pub fn take_input_method_reset(&mut self) -> bool {
+        std::mem::take(&mut self.cx.input_method_reset)
+    }
+
     pub fn take_menu_request(&mut self) -> Option<(Menu, Point)> {
         self.menu_request.take()
     }
@@ -762,6 +839,12 @@ impl Ui {
             .filter(|id| !self.hovered.contains(id))
             .copied()
             .collect::<Vec<_>>();
+        let owner = path.iter().rev().copied().find(|id| {
+            self.lookup(*id)
+                .is_some_and(|widget| widget.tooltip().is_some())
+        });
+        self.tooltips
+            .hover(self.cx.now, owner, pointer.map(|pointer| pointer.position));
         self.hovered = path;
         let mut changed = false;
         for id in left.into_iter().rev() {
@@ -790,9 +873,34 @@ impl Ui {
             return false;
         };
         let handled = widget.handle(&mut self.cx, event);
+        self.take_widget_menu(target);
         self.dismiss_finished_sheet();
         self.keep_focus_reachable(focus_path);
         handled
+    }
+
+    pub fn deadline(&self) -> Option<Instant> {
+        self.tooltips.deadline((self.clock)())
+    }
+
+    fn show_focus_tooltip(&mut self) {
+        let Some(focus) = self.cx.focus else {
+            return;
+        };
+        let Some(widget) = self.lookup(focus) else {
+            return;
+        };
+        let owner = widget.tooltip().map(|_| focus);
+        let frame = widget.frame();
+        self.tooltips.focus(self.cx.now, owner, frame);
+    }
+
+    fn take_widget_menu(&mut self, owner: WidgetId) {
+        if let Some(request) = self.cx.menu.take() {
+            self.captured = None;
+            self.menu_owner = Some(owner);
+            self.menu_request = Some(request);
+        }
     }
 
     fn focus_path(&self) -> Vec<WidgetId> {
@@ -834,6 +942,9 @@ impl Ui {
             (Some(index), false) => (index + order.len() - 1) % order.len(),
         };
         self.cx.focus = Some(order[next]);
+        if let Some(widget) = lookup_in(&mut self.root, &mut self.sheet, order[next]) {
+            widget.focused_by_keyboard();
+        }
         self.reveal_focus();
     }
 
@@ -919,6 +1030,7 @@ impl Ui {
             return false;
         };
         let performed = widget.perform(&mut self.cx, request);
+        self.take_widget_menu(target);
         self.dismiss_finished_sheet();
         self.keep_focus_reachable(focus_path);
         performed

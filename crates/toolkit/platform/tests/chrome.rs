@@ -2,7 +2,8 @@
 
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
-use std::sync::mpsc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -43,12 +44,13 @@ fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>) {
 struct Still {
     done: mpsc::Receiver<()>,
     ui: Option<Ui>,
+    at_rest: Arc<AtomicBool>,
 }
 
 impl App for Still {
     fn scene(&mut self, window: &mut Window) -> Scene {
         let (width, height) = window.size();
-        match &mut self.ui {
+        let scene = match &mut self.ui {
             Some(ui) => ui.scene(width, height),
             None => Scene {
                 width,
@@ -56,7 +58,12 @@ impl App for Still {
                 background: Color::hex(0xF4F5F7),
                 items: Vec::new(),
             },
-        }
+        };
+        self.at_rest.store(
+            !self.ui.as_ref().is_some_and(Ui::is_animating),
+            Ordering::SeqCst,
+        );
+        scene
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
@@ -89,6 +96,8 @@ fn shot(name: &str, prepare: fn(&mut Window) -> Option<Ui>, pointer: (i32, i32))
     server.insert_client(server_end).expect("insert client");
     let (drawn, on_screen) = mpsc::channel();
     let (checked, check_done) = mpsc::channel::<()>();
+    let at_rest = Arc::new(AtomicBool::new(false));
+    let client_at_rest = Arc::clone(&at_rest);
     let client = thread::spawn(move || {
         let mut window = Window::open_on(
             client_end,
@@ -99,6 +108,7 @@ fn shot(name: &str, prepare: fn(&mut Window) -> Option<Ui>, pointer: (i32, i32))
         let mut still = Still {
             done: check_done,
             ui: None,
+            at_rest: client_at_rest,
         };
         window.wait_for_gpu();
         let scene = still.scene(&mut window);
@@ -138,7 +148,15 @@ fn shot(name: &str, prepare: fn(&mut Window) -> Option<Ui>, pointer: (i32, i32))
         pump(&mut server, &mut scheduler, &mut renderer);
     }
     let settled = Instant::now() + Duration::from_millis(700);
-    while Instant::now() < settled {
+    while Instant::now() < settled || !at_rest.load(Ordering::SeqCst) || server.is_animating() {
+        assert!(
+            start.elapsed() < Duration::from_secs(30),
+            "the scene never came to rest"
+        );
+        pump(&mut server, &mut scheduler, &mut renderer);
+    }
+    let presented = Instant::now() + Duration::from_millis(100);
+    while Instant::now() < presented {
         pump(&mut server, &mut scheduler, &mut renderer);
     }
     let snapshot = renderer.snapshot(&server).expect("read back");

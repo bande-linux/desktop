@@ -80,5 +80,5 @@ preinstalled. The Dock sits on the left by default, the menu bar on top.
 | Coherent icon set for our apps | basic | M8 |
 | First-run setup assistant | none | M8 |
 | Screen reader access in every app | basic (shell only) | M8 |
-| Input methods (CJK) | basic (compositor and text fields) | done |
+| Input methods (CJK) | done (compositor; in-place composition and candidates in toolkit text) | done |
 | Lock screen, greeter, screenshots | basic | done |

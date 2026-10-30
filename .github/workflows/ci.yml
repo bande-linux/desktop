@@ -96,7 +96,7 @@ jobs:
         run: |
           for package in unbound-compositor unbound-notify unbound-clipboard unbound-config unbound-power \
               xdg-desktop-portal-unbound unbound-tray unbound-automount \
-              unbound-desktop-surface unbound-dock unbound-launcher unbound-term unbound-lock unbound-screenshot unbound-files unbound-settings unbound-greeter unbound-menubar unbound-controlcenter unbound-notifications; do
+              unbound-desktop-surface unbound-dock unbound-launcher unbound-term unbound-lock unbound-screenshot unbound-files unbound-settings unbound-greeter unbound-menubar unbound-controlcenter unbound-notifications unbound-monitor; do
             cargo deb --package "$package" --locked --deb-version "$DEB_VERSION"
           done
       - name: Build the benchmarks for ci/perf against the packaged release build
@@ -159,6 +159,9 @@ jobs:
           test -s "$root/usr/share/icons/hicolor/scalable/apps/org.unbound.Files.svg"
           dpkg-deb --extract target/debian/unbound-settings_*.deb "$root"
           grep -qx 'Exec=unbound-settings' "$root/usr/share/applications/org.unbound.Settings.desktop"
+          dpkg-deb --extract target/debian/unbound-monitor_*.deb "$root"
+          test -x "$root/usr/bin/unbound-monitor"
+          grep -qx 'Exec=unbound-monitor' "$root/usr/share/applications/org.unbound.ActivityMonitor.desktop"
           dpkg-deb --extract target/debian/unbound-greeter_*.deb "$root"
           grep -qx 'command = "unbound-compositor --greeter"' "$root/usr/share/unbound-greeter/greetd-config.toml"
           dpkg-deb --field target/debian/unbound-greeter_*.deb Depends | grep -qw greetd
@@ -285,6 +288,10 @@ jobs:
           ls -l debs
           test "$(dpkg-deb --field debs/unbound-desktop_*_all.deb Version)" = "$version"
           dpkg-deb --field debs/unbound-desktop_*_all.deb Depends | grep -qF "unbound-compositor (= $version)"
+          dpkg-deb --field debs/unbound-desktop_*_all.deb Recommends | grep -qF "unbound-monitor (= $version)"
+          root=$(mktemp -d)
+          dpkg-deb --extract debs/unbound-desktop_*_all.deb "$root"
+          grep -qx 'application/pdf=org.gnome.Papers.desktop;' "$root/usr/share/applications/unbound-mimeapps.list"
       - name: Lint the packages
         run: |
           chmod -R a+rX debs

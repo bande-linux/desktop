@@ -10,7 +10,7 @@ use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel::Res
 use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_seat::WlSeat;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
-use smithay::utils::{Logical, Point, Serial};
+use smithay::utils::{Logical, Point, SERIAL_COUNTER, Serial};
 
 use crate::state::State;
 
@@ -80,6 +80,38 @@ impl State {
         if self.begin_resize(surface, edges) {
             self.start_grab(start, surface, Operation::Resize, serial);
         }
+    }
+
+    pub(crate) fn move_from_title_bar(&mut self, surface: &WlSurface, button: u32) {
+        let location = self.pointer_location;
+        let Some(origin) = self.begin_move(surface, whole(location)) else {
+            return;
+        };
+        let start = GrabStartData {
+            focus: None,
+            button,
+            location,
+        };
+        let serial = SERIAL_COUNTER.next_serial();
+        self.start_grab(start, surface, Operation::Move { origin }, serial);
+    }
+
+    pub(crate) fn resize_from_frame(
+        &mut self,
+        surface: &WlSurface,
+        edges: ResizeEdge,
+        button: u32,
+    ) {
+        if !self.begin_resize(surface, edges) {
+            return;
+        }
+        let start = GrabStartData {
+            focus: None,
+            button,
+            location: self.pointer_location,
+        };
+        let serial = SERIAL_COUNTER.next_serial();
+        self.start_grab(start, surface, Operation::Resize, serial);
     }
 
     fn start_grab(

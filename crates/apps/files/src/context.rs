@@ -32,6 +32,14 @@ impl FilesView {
                 self.selection_changed();
                 self.show_menu(self.folder_menu(), at);
             }
+            Hit::Inspector => {
+                let menu = if self.browser.selection().is_empty() {
+                    self.folder_menu()
+                } else {
+                    self.selection_menu()
+                };
+                self.show_menu(menu, at);
+            }
             Hit::Place(index) => {
                 let Some(Row::Place(place)) = self.sidebar.get(index) else {
                     return false;
@@ -68,6 +76,7 @@ impl FilesView {
             false => self
                 .hits
                 .iter()
+                .rev()
                 .find(|(_, hit)| anchor(hit))
                 .map(|(rect, _)| *rect),
         };

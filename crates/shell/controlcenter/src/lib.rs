@@ -1,4 +1,7 @@
-use std::cell::RefCell;
+pub mod media;
+mod now_playing;
+
+use std::cell::{Cell, RefCell};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -8,12 +11,15 @@ use std::time::Duration;
 use unbound_audio::{Level, VolumeKey};
 use unbound_l10n::Localizer;
 use unbound_toolkit::ui::{
-    Axis, BUTTON_HEIGHT, Button, Context, Label, Menu, MenuItem, SLIDER_HEIGHT, SWITCH_SIZE,
-    Slider, Stack, Toggle, Ui, Widget,
+    Axis, BUTTON_HEIGHT, Button, Context, Label, LevelIndicator, Menu, MenuItem, PROGRESS_HEIGHT,
+    PopUpButton, SLIDER_HEIGHT, SWITCH_SIZE, Slider, Stack, Toggle, Ui, Widget,
 };
 use unbound_toolkit::{
-    Color, Item, Palette, Point, Rect, Scene, Shape, TextAlign, TextStyle, TextSystem,
+    Color, Image, Item, Palette, Point, Rect, Scene, Shape, TextAlign, TextStyle, TextSystem,
 };
+
+use media::{Command, Player};
+pub use now_playing::clock;
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-controlcenter.ftl");
 
@@ -34,15 +40,30 @@ const SEGMENT_HEIGHT: f32 = 6.0;
 const TITLE_SIZE: f32 = 13.0;
 const LEVEL_STEP: f64 = 1.0 / SEGMENTS as f64;
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Status {
     pub wifi: Option<bool>,
     pub network: Option<String>,
     pub bluetooth: Option<bool>,
     pub do_not_disturb: bool,
     pub volume: Option<f32>,
+    pub outputs: Vec<Choice>,
     pub output: Option<String>,
     pub brightness: Option<f32>,
+    pub keyboard_brightness: Option<f32>,
+    pub inputs: Vec<Choice>,
+    pub input: Option<String>,
+    pub input_muted: Option<bool>,
+    pub input_level: Rc<Cell<f32>>,
+    pub player: Option<Player>,
+    pub artwork: Option<Image>,
+    pub players: Vec<Choice>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Choice {
+    pub key: String,
+    pub title: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -52,8 +73,14 @@ pub enum Change {
     DoNotDisturb(bool),
     Volume(f32),
     Brightness(f32),
+    KeyboardBrightness(f32),
     ChooseNetwork,
-    ChooseOutput,
+    Output(String),
+    InputMuted(bool),
+    Input(String),
+    Media(Command),
+    RaisePlayer,
+    Player(String),
 }
 
 pub type Changes = Rc<RefCell<Vec<Change>>>;
@@ -75,6 +102,26 @@ fn chooser(title: &str, changes: &Changes, change: Change) -> Box<dyn Widget> {
     let changes = Rc::clone(changes);
     Box::new(Button::new(title, move || {
         changes.borrow_mut().push(change.clone());
+    }))
+}
+
+fn pop_up(
+    label: &str,
+    choices: &[Choice],
+    selected: Option<&str>,
+    changes: &Changes,
+    change: fn(String) -> Change,
+) -> Box<dyn Widget> {
+    let changes = Rc::clone(changes);
+    let keys: Vec<String> = choices.iter().map(|choice| choice.key.clone()).collect();
+    let titles: Vec<&str> = choices.iter().map(|choice| choice.title.as_str()).collect();
+    let selected = selected
+        .and_then(|selected| keys.iter().position(|key| key == selected))
+        .unwrap_or(0);
+    Box::new(PopUpButton::new(label, &titles, selected, move |index| {
+        if let Some(key) = keys.get(index) {
+            changes.borrow_mut().push(change(key.clone()));
+        }
     }))
 }
 
@@ -137,11 +184,64 @@ pub fn panel(status: &Status, palette: Palette, text: TextSystem, changes: &Chan
         ));
         heights.extend([LABEL_HEIGHT, SLIDER_HEIGHT]);
     }
+    if let Some(brightness) = status.keyboard_brightness {
+        controls.extend(slider(
+            &L10N.tr("keyboard-brightness"),
+            brightness,
+            changes,
+            Change::KeyboardBrightness,
+        ));
+        heights.extend([LABEL_HEIGHT, SLIDER_HEIGHT]);
+    }
     if let Some(volume) = status.volume {
         controls.extend(slider(&L10N.tr("sound"), volume, changes, Change::Volume));
         heights.extend([LABEL_HEIGHT, SLIDER_HEIGHT]);
-        if let Some(output) = &status.output {
-            controls.push(chooser(output, changes, Change::ChooseOutput));
+        if status.outputs.len() > 1 {
+            controls.push(pop_up(
+                &L10N.tr("output"),
+                &status.outputs,
+                status.output.as_deref(),
+                changes,
+                Change::Output,
+            ));
+            heights.push(BUTTON_HEIGHT);
+        }
+    }
+    if let Some(muted) = status.input_muted {
+        controls.push(toggle(&L10N.tr("microphone"), !muted, changes, |on| {
+            Change::InputMuted(!on)
+        }));
+        controls.push(Box::new(LevelIndicator::new(
+            &L10N.tr("input-level"),
+            Rc::clone(&status.input_level),
+        )));
+        heights.extend([SWITCH_SIZE.height, PROGRESS_HEIGHT]);
+        if status.inputs.len() > 1 {
+            controls.push(pop_up(
+                &L10N.tr("input"),
+                &status.inputs,
+                status.input.as_deref(),
+                changes,
+                Change::Input,
+            ));
+            heights.push(BUTTON_HEIGHT);
+        }
+    }
+    if let Some(player) = &status.player {
+        heights.push(now_playing::height(player));
+        controls.push(Box::new(now_playing::NowPlaying::new(
+            player.clone(),
+            status.artwork.clone(),
+            changes,
+        )));
+        if status.players.len() > 1 {
+            controls.push(pop_up(
+                &L10N.tr("player"),
+                &status.players,
+                Some(&player.bus_name),
+                changes,
+                Change::Player,
+            ));
             heights.push(BUTTON_HEIGHT);
         }
     }
@@ -331,7 +431,11 @@ pub fn scene(width: u32, height: u32, items: Vec<Item>) -> Scene {
 mod tests {
     #[test]
     fn every_message_id_used_in_code_is_in_the_english_file() {
-        let sources = [include_str!("lib.rs"), include_str!("main.rs")];
+        let sources = [
+            include_str!("lib.rs"),
+            include_str!("main.rs"),
+            include_str!("now_playing.rs"),
+        ];
         assert_eq!(
             unbound_l10n::missing_ids(super::ENGLISH, &sources),
             Vec::<&str>::new()

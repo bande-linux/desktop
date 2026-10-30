@@ -94,6 +94,14 @@ fn device(id: u32, name: &str, description: &str, direction: Direction, volume: 
 #[test]
 fn the_sound_pane_matches_its_golden() {
     let mut view = SettingsView::new(Palette::for_scheme(Scheme::Light), TextSystem::new());
+    for (id, value) in [
+        (SettingId::AlertSound, Value::Keyword("mallet".to_owned())),
+        (SettingId::AlertVolume, Value::Fraction(0.75)),
+        (SettingId::SoundEffects, Value::Flag(true)),
+        (SettingId::VolumeFeedback, Value::Flag(true)),
+    ] {
+        view.set_value(id, value);
+    }
     view.apply(Update::Audio(Some(Snapshot {
         generation: 1,
         connected: true,
@@ -114,6 +122,7 @@ fn the_sound_pane_matches_its_golden() {
             Direction::Input,
             0.8,
         )],
+        apps: Vec::new(),
         default_output: Some("speakers".to_owned()),
         default_input: Some("microphone".to_owned()),
     })));

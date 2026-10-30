@@ -233,6 +233,7 @@ impl Automounter {
                 body: &body,
                 actions: &[],
                 urgency: Urgency::Normal,
+                sound: None,
             },
         );
         if let Err(error) = posted {

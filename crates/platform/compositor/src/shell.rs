@@ -87,6 +87,14 @@ impl State {
         }
     }
 
+    pub(crate) fn media_key(&mut self, key: unbound_shell_v1::MediaKey) {
+        for shell in &self.shell_resources {
+            if shell.version() >= unbound_shell_v1::EVT_MEDIA_KEY_SINCE {
+                shell.media_key(key);
+            }
+        }
+    }
+
     fn toggle_control_center(&mut self) {
         for shell in &self.shell_resources {
             if shell.version() >= unbound_shell_v1::EVT_TOGGLE_CONTROL_CENTER_SINCE {

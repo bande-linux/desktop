@@ -242,6 +242,19 @@ fn gtk_reads_the_color_scheme_and_cursor_from_the_gnome_interface_namespace() {
 }
 
 #[test]
+fn gtk_plays_its_event_sounds_from_the_unbound_sound_theme() {
+    let fixture = start("");
+    let all = fixture.read_all(&["org.gnome.desktop.sound"]);
+    let sound = &all["org.gnome.desktop.sound"];
+
+    assert_eq!(
+        String::try_from(sound["theme-name"].try_clone().expect("clone")).expect("s"),
+        "Unbound"
+    );
+    assert!(bool::try_from(&sound["event-sounds"]).expect("b"));
+}
+
+#[test]
 fn switching_to_light_signals_the_gnome_color_scheme() {
     let fixture = start("appearance \"dark\"\n");
     let changes = fixture.changes();

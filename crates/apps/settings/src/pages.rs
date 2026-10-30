@@ -5,8 +5,8 @@ use unbound_config::MAX_INPUT_SOURCES;
 use unbound_keyboard::shortcuts_in;
 use unbound_toolkit::Spacing;
 use unbound_toolkit::ui::{
-    Axis, Button, Label, PopUpButton, SearchField, SecureField, SegmentedControl, Slider, Stack,
-    Toggle, Widget, WidgetId, shortcut_symbols,
+    Axis, Button, Label, LevelIndicator, PopUpButton, SearchField, SecureField, SegmentedControl,
+    Slider, Stack, Toggle, Widget, WidgetId, shortcut_symbols,
 };
 
 use crate::L10N;
@@ -352,6 +352,13 @@ impl SettingsView {
                     },
                 ))
             }
+            Kind::List(List::InputLevel) => {
+                self.audio.as_ref()?.default_input()?;
+                boxed(LevelIndicator::new(
+                    &setting.label,
+                    Rc::clone(&self.input_level),
+                ))
+            }
             Kind::List(_) | Kind::Pictures => return None,
         };
         let focus = control.id();
@@ -532,6 +539,38 @@ impl SettingsView {
             .collect()
     }
 
+    fn app_rows(&mut self) -> Widgets {
+        let Some(audio) = self.audio.clone() else {
+            return Vec::new();
+        };
+        if audio.apps.is_empty() {
+            return vec![muted_row(&L10N.tr("no-apps-playing"))];
+        }
+        audio
+            .apps
+            .into_iter()
+            .map(|app| {
+                let name = app.name.clone();
+                let mut change = intent(&self.intents, move |volume: f32| {
+                    Intent::AppVolume(name.clone(), volume)
+                });
+                let slider = Slider::new(
+                    &L10N.tr_args("app-volume", [("app", app.name.clone().into())]),
+                    f64::from(if app.level.muted {
+                        0.0
+                    } else {
+                        app.level.volume
+                    }),
+                    (0.0, 1.0),
+                    VOLUME_STEP,
+                    move |volume| change(volume as f32),
+                );
+                let row = Row::new(Text::new(&app.name, Tone::Primary), Some(boxed(slider)));
+                self.item_row(format!("app:{}", app.name), row)
+            })
+            .collect()
+    }
+
     fn list_rows(&mut self, list: List) -> Widgets {
         match list {
             List::Networks => self.network_rows(),
@@ -539,6 +578,8 @@ impl SettingsView {
             List::NearbyDevices => self.device_rows(false),
             List::OutputDevices => self.audio_rows(Direction::Output),
             List::InputDevices => self.audio_rows(Direction::Input),
+            List::AppVolumes => self.app_rows(),
+            List::InputLevel => Vec::new(),
             List::InputSources => self.input_source_rows(),
             List::Shortcuts => Vec::new(),
         }
@@ -993,7 +1034,7 @@ impl SettingsView {
                 .settings
                 .iter()
                 .find_map(|setting| match setting.kind {
-                    Kind::List(list) => Some((list, setting.id)),
+                    Kind::List(list) if list != List::InputLevel => Some((list, setting.id)),
                     _ => None,
                 });
             let pictures = section

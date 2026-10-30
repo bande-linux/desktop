@@ -6,7 +6,7 @@ use std::sync::mpsc::Sender;
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId};
-use unbound_audio::{Device, Direction, Level, Snapshot};
+use unbound_audio::{AppStream, Device, Direction, Level, Snapshot};
 use unbound_config::{DisplaySettings, Placement};
 use unbound_keyboard::Layouts;
 use unbound_settings::{
@@ -278,6 +278,7 @@ fn sound_shows_both_directions_and_sends_level_and_device_changes() {
             device(2, "USB.Headset", Direction::Output, 0.3),
         ],
         inputs: vec![device(3, "Built-in.Microphone", Direction::Input, 0.8)],
+        apps: Vec::new(),
         default_output: Some("Built-in.Speakers".to_owned()),
         default_input: Some("Built-in.Microphone".to_owned()),
     })));
@@ -305,6 +306,7 @@ fn sound_shows_both_directions_and_sends_level_and_device_changes() {
     assert_eq!(
         view.take_commands(),
         [
+            Command::Audio(AudioCommand::Listen(true)),
             Command::Audio(AudioCommand::Default(
                 Direction::Output,
                 "USB.Headset".to_owned()
@@ -316,6 +318,80 @@ fn sound_shows_both_directions_and_sends_level_and_device_changes() {
     assert_eq!(
         view.value(SettingId::OutputMuted),
         Some(&Value::Flag(false))
+    );
+}
+
+#[test]
+fn sound_offers_the_alert_effects_a_live_input_level_and_a_volume_per_app() {
+    let mut view = view();
+    view.apply(Update::Values(vec![
+        (SettingId::AlertSound, Value::Keyword("mallet".to_owned())),
+        (SettingId::AlertVolume, Value::Fraction(0.75)),
+        (SettingId::SoundEffects, Value::Flag(true)),
+        (SettingId::VolumeFeedback, Value::Flag(true)),
+    ]));
+    view.apply(Update::Audio(Some(Snapshot {
+        generation: 1,
+        connected: true,
+        outputs: vec![device(1, "Built-in.Speakers", Direction::Output, 0.5)],
+        inputs: vec![device(3, "Built-in.Microphone", Direction::Input, 0.8)],
+        apps: vec![AppStream {
+            ids: vec![40, 41],
+            name: "Radio".to_owned(),
+            icon: None,
+            level: Level {
+                volume: 0.5,
+                muted: false,
+            },
+        }],
+        default_output: Some("Built-in.Speakers".to_owned()),
+        default_input: Some("Built-in.Microphone".to_owned()),
+    })));
+    open(&mut view, "Sound");
+    assert_eq!(
+        view.take_commands(),
+        [Command::Audio(AudioCommand::Listen(true))]
+    );
+
+    view.apply(Update::InputLevel(1.0));
+    let level = nodes(&mut view)
+        .into_iter()
+        .find(|(_, node)| node.role() == Role::Meter && node.label() == Some("Input level"))
+        .map(|(_, node)| node)
+        .expect("an input level");
+    assert_eq!(level.numeric_value(), Some(100.0));
+
+    let feedback = find(
+        &mut view,
+        Role::Switch,
+        "Play feedback when volume is changed",
+    )
+    .expect("feedback switch");
+    click(&mut view, feedback);
+    let radio = find(&mut view, Role::Slider, "Radio volume").expect("a slider for Radio");
+    view.perform(&ActionRequest {
+        action: Action::Increment,
+        target_tree: TreeId::ROOT,
+        target_node: radio,
+        data: None,
+    });
+    assert_eq!(
+        view.take_commands(),
+        [
+            Command::Set(SettingId::VolumeFeedback, Value::Flag(false)),
+            Command::Audio(AudioCommand::App("Radio".to_owned(), 0.5625)),
+        ]
+    );
+    assert!(nodes(&mut view).iter().any(|(_, node)| {
+        node.role() == Role::ComboBox
+            && node.label() == Some("Alert sound")
+            && node.value() == Some("Mallet")
+    }));
+
+    open(&mut view, "Dock");
+    assert!(
+        view.take_commands()
+            .contains(&Command::Audio(AudioCommand::Listen(false)))
     );
 }
 

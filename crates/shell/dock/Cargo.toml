@@ -12,6 +12,7 @@ unbound-config.workspace = true
 unbound-fs.workspace = true
 unbound-l10n.workspace = true
 unbound-log.workspace = true
+unbound-sound.workspace = true
 unbound-toolkit.workspace = true
 unbound-xdg.workspace = true
 zbus.workspace = true

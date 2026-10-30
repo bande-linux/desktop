@@ -1,4 +1,6 @@
+use std::cell::Cell;
 use std::f32::consts::TAU;
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use accesskit::{Node, Role};
@@ -12,6 +14,8 @@ const SWEEP: Duration = Duration::from_millis(1400);
 const SWEEP_FRACTION: f32 = 0.3;
 const SPOKES: u32 = 12;
 const SPIN: Duration = Duration::from_millis(1000);
+const LEVEL_CELLS: usize = 24;
+const LEVEL_GAP: f32 = 2.0;
 
 pub struct ProgressBar {
     id: WidgetId,
@@ -205,6 +209,80 @@ impl Widget for Spinner {
         let mut node = Node::new(Role::ProgressIndicator);
         node.set_label(self.label.clone());
         node.set_busy();
+        node
+    }
+}
+
+pub struct LevelIndicator {
+    id: WidgetId,
+    label: String,
+    level: Rc<Cell<f32>>,
+    frame: Rect,
+}
+
+impl LevelIndicator {
+    pub fn new(label: &str, level: Rc<Cell<f32>>) -> Self {
+        Self {
+            id: WidgetId::next(),
+            label: label.to_owned(),
+            level,
+            frame: Rect::default(),
+        }
+    }
+
+    fn lit(&self) -> f32 {
+        self.level.get().clamp(0.0, 1.0) * LEVEL_CELLS as f32
+    }
+}
+
+impl Widget for LevelIndicator {
+    fn id(&self) -> WidgetId {
+        self.id
+    }
+
+    fn measure(&mut self, _cx: &mut Context, available: Size) -> Size {
+        Size::new(available.width, PROGRESS_HEIGHT)
+    }
+
+    fn place(&mut self, _cx: &mut Context, frame: Rect) {
+        self.frame = Rect::new(frame.x, frame.y, frame.width, PROGRESS_HEIGHT);
+    }
+
+    fn frame(&self) -> Rect {
+        self.frame
+    }
+
+    fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
+        let cell = (self.frame.width - LEVEL_GAP * (LEVEL_CELLS - 1) as f32) / LEVEL_CELLS as f32;
+        let lit = self.lit();
+        for index in 0..LEVEL_CELLS {
+            let rect = Rect::new(
+                self.frame.x + index as f32 * (cell + LEVEL_GAP),
+                self.frame.y,
+                cell,
+                self.frame.height,
+            );
+            let shape = Shape::rounded(rect, 1.0);
+            items.push(Item::Fill {
+                shape,
+                paint: cx.palette.hairline.into(),
+            });
+            let fill = (lit - index as f32).clamp(0.0, 1.0);
+            if fill > 0.0 {
+                items.push(Item::Fill {
+                    shape,
+                    paint: cx.palette.accent.with_alpha((fill * 255.0) as u8).into(),
+                });
+            }
+        }
+    }
+
+    fn access(&self, _cx: &Context) -> Node {
+        let mut node = Node::new(Role::Meter);
+        node.set_label(self.label.clone());
+        node.set_numeric_value(f64::from(self.level.get().clamp(0.0, 1.0)) * 100.0);
+        node.set_min_numeric_value(0.0);
+        node.set_max_numeric_value(100.0);
         node
     }
 }

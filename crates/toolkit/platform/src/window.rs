@@ -21,7 +21,7 @@ use unbound_graphics::{
     Appearance, CpuRenderer, Cursor, Event, GpuDevice, GpuRenderer, Point, Pointer, PointerButton,
     Rect, Region, RenderError, Scene, TextSystem, damage, pixels,
 };
-use unbound_protocols::client::unbound_shell_v1::{BrightnessKey, VolumeKey};
+use unbound_protocols::client::unbound_shell_v1::{BrightnessKey, MediaKey, VolumeKey};
 use unbound_widgets::{ClipboardRequest, Menu, MenuItem, MenuOutcome, Ui};
 use wayland_client::backend::WaylandError;
 use wayland_client::protocol::wl_buffer::{self, WlBuffer};
@@ -160,6 +160,7 @@ pub enum WindowEvent {
         key: BrightnessKey,
         fine: bool,
     },
+    MediaKey(MediaKey),
     ToggleControlCenter,
     AppResponding {
         pid: i32,
@@ -1937,7 +1938,7 @@ impl Dispatch<WlRegistry, ()> for State {
                     }
                 }
                 "unbound_shell_v1" => {
-                    state.shell.protocol = Some(registry.bind(name, version.min(10), handle, ()));
+                    state.shell.protocol = Some(registry.bind(name, version.min(11), handle, ()));
                 }
                 "unbound_app_v1" => {
                     state.shell.app = Some(registry.bind(name, version.min(2), handle, ()));

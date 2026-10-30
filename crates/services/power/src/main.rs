@@ -26,6 +26,7 @@ fn serve() -> Result<Services, Box<dyn Error>> {
     let session = Connection::session()?;
     let guard = SleepGuard::start(&system, LOCK_WAIT)?;
     battery::watch(&system, Arc::new(BatteryNotifier::new(&session)))?;
+    battery::chime_when_plugged_in(&system, &session)?;
     let logind = system.clone();
     let inhibitions = InhibitionService::start(&session, move |application, reason| {
         logind::inhibit(&logind, "idle", application, reason, "block")

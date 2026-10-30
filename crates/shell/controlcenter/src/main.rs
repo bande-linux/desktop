@@ -1,28 +1,39 @@
+use std::cell::Cell;
+use std::os::fd::BorrowedFd;
 use std::path::Path;
 use std::process::ExitCode;
-use std::time::Instant;
+use std::rc::Rc;
+use std::sync::mpsc::{self, Sender};
+use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
-use unbound_audio::{Audio, Level};
+use unbound_audio::{Audio, Level, Meter, meter_level};
 use unbound_bluetooth::Bluetooth;
+use unbound_controlcenter::media::{self, Command, Playback, Player, Players};
 use unbound_controlcenter::{
-    Change, Changes, EDGE, HUD_DURATION, HUD_SIZE, Hud, KeyboardLight, PANEL_WIDTH, SYSFS_LEDS,
-    Status, blur_rects, card, chooser_menu, hud, material, panel, scene, stepped,
+    Change, Changes, Choice, EDGE, HUD_DURATION, HUD_SIZE, Hud, KeyboardLight, PANEL_WIDTH,
+    SYSFS_LEDS, Status, blur_rects, card, chooser_menu, hud, material, panel, scene, stepped,
 };
+use unbound_inbox::Inbox;
 use unbound_network::NetworkManager;
 use unbound_notify::client::NotificationCenter;
 use unbound_power::backlight::{Backlight, SYSFS_BACKLIGHT};
 use unbound_power::logind::own_session;
 use unbound_toolkit::ui::{Animated, Event, Key, Pointer, Scroll, Spring, Ui};
 use unbound_toolkit::{
-    App, BrightnessKey, Edges, Item, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement,
-    Palette, Point, Rect, Role, Scene, TextSystem, VolumeKey, Window, WindowError, WindowEvent,
+    App, BrightnessKey, Edges, Image, Item, KeyboardFocus, LayerKind, LayerOptions, MediaKey,
+    MenuPlacement, Palette, Point, Rect, Role, Scene, TextSystem, VolumeKey, Window, WindowError,
+    WindowEvent,
 };
-use unbound_xdg::spawn_detached;
+use unbound_xdg::{
+    DesktopEntry, ICON_THEMES, current_desktops, data_dirs, find_icon, path_from_file_uri,
+    spawn_detached,
+};
 use zbus::blocking::Connection;
 
 const JOIN: &str = "join:";
-const OUTPUT: &str = "output:";
+const ARTWORK_PIXELS: u32 = 128;
+const METER_INTERVAL: Duration = Duration::from_millis(50);
 const SLIDE: f32 = 8.0;
 
 enum Mode {
@@ -48,6 +59,12 @@ struct ControlCenter {
     backlight: Option<Backlight>,
     keyboard_light: Option<KeyboardLight>,
     blur: Option<Vec<Rect>>,
+    players: Players,
+    player_updates: Inbox<Vec<Player>>,
+    player_commands: Option<Sender<(String, Command)>>,
+    artwork: Option<(String, Option<Image>)>,
+    meter: Option<Meter>,
+    input_level: Rc<Cell<f32>>,
 }
 
 fn report<E: std::fmt::Display>(what: &str, result: Result<(), E>) {
@@ -63,6 +80,50 @@ fn audio_key(key: VolumeKey) -> Option<unbound_audio::VolumeKey> {
         VolumeKey::Up => Some(unbound_audio::VolumeKey::Up),
         _ => None,
     }
+}
+
+fn media_command(key: MediaKey) -> Option<Command> {
+    match key {
+        MediaKey::PlayPause => Some(Command::PlayPause),
+        MediaKey::Pause => Some(Command::Pause),
+        MediaKey::Next => Some(Command::Next),
+        MediaKey::Previous => Some(Command::Previous),
+        _ => None,
+    }
+}
+
+fn app_icon(desktop_entry: &str) -> Option<Image> {
+    let directories = data_dirs();
+    let file = format!("{desktop_entry}.desktop");
+    let entry = directories.iter().find_map(|directory| {
+        let path = directory.join("applications").join(&file);
+        let text = std::fs::read_to_string(&path).ok()?;
+        DesktopEntry::parse_handler(&file, &path, &text, None, &current_desktops())
+    })?;
+    let path = find_icon(
+        entry.icon.as_deref()?,
+        ARTWORK_PIXELS,
+        &ICON_THEMES,
+        &directories,
+    )?;
+    Image::load(&path, ARTWORK_PIXELS)
+}
+
+fn artwork(player: &Player) -> Option<Image> {
+    player
+        .art_url
+        .as_deref()
+        .and_then(path_from_file_uri)
+        .and_then(|path| Image::load(&path, ARTWORK_PIXELS))
+        .or_else(|| app_icon(player.desktop_entry.as_deref()?))
+}
+
+fn artwork_key(player: &Player) -> String {
+    format!(
+        "{}\n{}",
+        player.art_url.as_deref().unwrap_or_default(),
+        player.desktop_entry.as_deref().unwrap_or_default()
+    )
 }
 
 fn hex(bytes: &[u8]) -> String {
@@ -146,20 +207,67 @@ impl ControlCenter {
         let output = snapshot
             .as_ref()
             .and_then(|snapshot| snapshot.default_output());
+        let outputs = snapshot
+            .as_ref()
+            .map(|snapshot| {
+                snapshot
+                    .outputs
+                    .iter()
+                    .map(|output| Choice {
+                        key: output.name.clone(),
+                        title: output.description.clone(),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let player = self.players.current().cloned();
+        let input = snapshot
+            .as_ref()
+            .and_then(|snapshot| snapshot.default_input());
         Status {
             wifi,
             network,
             bluetooth,
             do_not_disturb,
             volume: output.map(|output| output.level.volume),
-            output: output
-                .filter(|_| {
-                    snapshot
-                        .as_ref()
-                        .is_some_and(|found| found.outputs.len() > 1)
-                })
-                .map(|output| output.description.clone()),
+            outputs,
+            output: output.map(|output| output.name.clone()),
             brightness: self.brightness(),
+            keyboard_brightness: self.keyboard_light.as_ref().and_then(KeyboardLight::level),
+            inputs: snapshot
+                .as_ref()
+                .map(|snapshot| {
+                    snapshot
+                        .inputs
+                        .iter()
+                        .map(|input| Choice {
+                            key: input.name.clone(),
+                            title: input.description.clone(),
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+            input: input.map(|input| input.name.clone()),
+            input_muted: input.map(|input| input.level.muted),
+            input_level: Rc::clone(&self.input_level),
+            artwork: self
+                .artwork
+                .as_ref()
+                .filter(|(key, _)| {
+                    player
+                        .as_ref()
+                        .is_some_and(|player| artwork_key(player) == *key)
+                })
+                .and_then(|(_, image)| image.clone()),
+            players: self
+                .players
+                .all()
+                .map(|player| Choice {
+                    key: player.bus_name.clone(),
+                    title: player.identity.clone(),
+                })
+                .collect(),
+            player,
         }
     }
 
@@ -192,25 +300,6 @@ impl ControlCenter {
                     found.name(),
                     format!("{JOIN}{}", hex(&found.ssid)),
                     found.current,
-                )
-            })
-            .collect();
-        self.show_menu(window, &choices);
-    }
-
-    fn choose_output(&self, window: &mut Window) {
-        let Some(audio) = &self.audio else {
-            return;
-        };
-        let snapshot = audio.snapshot();
-        let choices: Vec<_> = snapshot
-            .outputs
-            .iter()
-            .map(|output| {
-                (
-                    output.description.clone(),
-                    format!("{OUTPUT}{}", output.name),
-                    snapshot.default_output.as_deref() == Some(output.name.as_str()),
                 )
             })
             .collect();
@@ -284,9 +373,78 @@ impl ControlCenter {
                     );
                 }
             }
+            Change::KeyboardBrightness(level) => self.set_keyboard_light(level),
+            Change::InputMuted(muted) => {
+                if let Some(audio) = &self.audio
+                    && let Some(input) = audio.snapshot().default_input()
+                {
+                    report("mute the microphone", audio.set_muted(input, muted));
+                }
+            }
+            Change::Input(name) => {
+                if let Some(audio) = &self.audio
+                    && let Some(device) = audio.snapshot().device(&name).cloned()
+                {
+                    report("choose the input", audio.set_default(&device));
+                }
+                self.listen();
+            }
             Change::ChooseNetwork => self.choose_network(window),
-            Change::ChooseOutput => self.choose_output(window),
+            Change::Output(name) => {
+                if let Some(audio) = &self.audio
+                    && let Some(device) = audio.snapshot().device(&name).cloned()
+                {
+                    report("choose the output", audio.set_default(&device));
+                }
+            }
+            Change::Media(command) => self.command_player(command),
+            Change::RaisePlayer => self.raise_player(window),
+            Change::Player(bus_name) => {
+                self.players.promote(&bus_name);
+                self.load_artwork();
+                self.rebuild();
+            }
         }
+    }
+
+    fn command_player(&self, command: Command) {
+        if let (Some(player), Some(commands)) = (self.players.current(), &self.player_commands) {
+            let _ = commands.send((player.bus_name.clone(), command));
+        }
+    }
+
+    fn raise_player(&mut self, window: &mut Window) {
+        let Some(player) = self.players.current() else {
+            return;
+        };
+        let running = player
+            .desktop_entry
+            .as_deref()
+            .filter(|entry| window.running_apps().iter().any(|app| app == entry))
+            .map(str::to_owned);
+        match running {
+            Some(app_id) => report("bring the player forward", window.activate_app(&app_id)),
+            None if player.can_raise => self.command_player(Command::Raise),
+            None => return,
+        }
+        self.dismiss(window);
+    }
+
+    fn load_artwork(&mut self) {
+        let Some(player) = self.players.current() else {
+            self.artwork = None;
+            return;
+        };
+        let key = artwork_key(player);
+        if self.artwork.as_ref().is_none_or(|(known, _)| *known != key) {
+            self.artwork = Some((key, artwork(player)));
+        }
+    }
+
+    fn playing(&self) -> Option<&Player> {
+        self.players
+            .current()
+            .filter(|player| player.playback == Playback::Playing && player.length.is_some())
     }
 
     fn rebuild(&mut self) {
@@ -326,7 +484,22 @@ impl ControlCenter {
         window.request_redraw();
     }
 
+    fn listen(&mut self) {
+        self.input_level.set(0.0);
+        self.meter = None;
+        let Some(audio) = &self.audio else {
+            return;
+        };
+        self.meter = audio.snapshot().default_input().and_then(|input| {
+            audio
+                .meter(input)
+                .inspect_err(|error| tracing::warn!("no input level: {error}"))
+                .ok()
+        });
+    }
+
     fn dismiss(&mut self, window: &mut Window) {
+        self.meter = None;
         self.mode = Mode::Hidden;
         self.shown
             .animate_at(Instant::now(), self.reduce_motion, 0.0, Spring::QUICK);
@@ -353,6 +526,7 @@ impl ControlCenter {
             ui: Box::new(ui),
             height,
         };
+        self.listen();
         self.shown.jump_to(0.0);
         self.reveal(window, true);
     }
@@ -362,7 +536,14 @@ impl ControlCenter {
             return;
         };
         match audio.press(key, fine) {
-            Ok(level) => self.show_hud(window, Hud::Volume(level)),
+            Ok(level) => {
+                if !level.muted
+                    && let Some(session) = &self.session
+                {
+                    unbound_sound::play(session, "audio-volume-change");
+                }
+                self.show_hud(window, Hud::Volume(level));
+            }
             Err(error) => tracing::warn!("cannot change the volume: {error}"),
         }
     }
@@ -449,6 +630,24 @@ impl ControlCenter {
     }
 
     fn run_changes(&mut self, window: &mut Window) {
+        if let Mode::Panel { ui, height } = &mut self.mode
+            && let Some((menu, point)) = ui.take_menu_request()
+        {
+            let (width, _) = window.size();
+            let origin = Rect::new(
+                width as f32 - EDGE - PANEL_WIDTH,
+                EDGE,
+                PANEL_WIDTH,
+                *height,
+            );
+            report(
+                "open the menu",
+                window.show_menu(
+                    menu,
+                    MenuPlacement::AtPoint(Point::new(origin.x + point.x, origin.y + point.y)),
+                ),
+            );
+        }
         let changes = std::mem::take(&mut *self.changes.borrow_mut());
         for change in changes {
             self.apply(window, change);
@@ -538,14 +737,17 @@ impl App for ControlCenter {
             WindowEvent::MenuAction(action) => {
                 if let Some(ssid) = action.strip_prefix(JOIN).and_then(unhex) {
                     self.join(window, &ssid);
-                } else if let Some(name) = action.strip_prefix(OUTPUT)
-                    && let Some(audio) = &self.audio
-                    && let Some(device) = audio.snapshot().device(name).cloned()
-                {
-                    report("choose the output", audio.set_default(&device));
+                } else if let Mode::Panel { ui, .. } = &mut self.mode {
+                    ui.menu_action(&action);
+                    self.run_changes(window);
                 }
                 self.rebuild();
                 window.request_redraw();
+            }
+            WindowEvent::MediaKey(key) => {
+                if let Some(command) = media_command(key) {
+                    self.command_player(command);
+                }
             }
             WindowEvent::AppearanceChanged(appearance) => {
                 self.palette = appearance.palette();
@@ -565,17 +767,49 @@ impl App for ControlCenter {
     }
 
     fn deadline(&self) -> Option<Instant> {
+        let now = Instant::now();
         match self.mode {
             Mode::Hud(_, until) => Some(until),
-            Mode::Hidden if self.surface_shown && !self.shown.value_at(Instant::now()).1 => {
-                Some(Instant::now())
+            Mode::Hidden if self.surface_shown && !self.shown.value_at(now).1 => Some(now),
+            Mode::Panel { .. } => {
+                let clock = self.playing().and_then(|player| {
+                    let position = player.position_at(now)?;
+                    let to_next_second = Duration::from_secs(1)
+                        .saturating_sub(Duration::from_nanos(u64::from(position.subsec_nanos())));
+                    Some(now + to_next_second.div_f64(player.rate.max(0.1)))
+                });
+                let meter = self.meter.as_ref().map(|_| now + METER_INTERVAL);
+                clock.into_iter().chain(meter).min()
             }
-            Mode::Hidden | Mode::Panel { .. } => None,
+            Mode::Hidden => None,
+        }
+    }
+
+    fn sources(&self) -> Vec<BorrowedFd<'_>> {
+        vec![self.player_updates.fd()]
+    }
+
+    fn source_ready(&mut self, window: &mut Window, _index: usize) {
+        let Some(latest) = self.player_updates.drain().pop() else {
+            return;
+        };
+        self.players.update(latest);
+        self.load_artwork();
+        if matches!(self.mode, Mode::Panel { .. }) {
+            self.rebuild();
+            window.request_redraw();
         }
     }
 
     fn tick(&mut self, window: &mut Window, now: Instant) {
         match self.mode {
+            Mode::Panel { .. } => {
+                if let Some(meter) = &self.meter {
+                    let level = meter_level(meter.take_peak(), self.input_level.get());
+                    self.input_level.set(level);
+                }
+                window.request_redraw();
+            }
             Mode::Hud(_, until) if now >= until => self.dismiss(window),
             Mode::Hidden if self.surface_shown && !self.shown.value_at(now).1 => {
                 self.surface_shown = false;
@@ -603,6 +837,19 @@ fn run() -> Result<(), WindowError> {
     let session = Connection::session()
         .inspect_err(|error| tracing::warn!("no session bus: {error}"))
         .ok();
+    let player_updates = Inbox::new()?;
+    let player_commands = session.as_ref().map(|connection| {
+        let (commands, received) = mpsc::channel();
+        let (watching, outbox) = (connection.clone(), player_updates.outbox());
+        std::thread::spawn(move || {
+            if let Err(error) = media::watch(&watching, &outbox) {
+                tracing::warn!("cannot follow media players: {error}");
+            }
+        });
+        let commanding = connection.clone();
+        std::thread::spawn(move || media::run_commands(&commanding, &received));
+        commands
+    });
     let mut window = Window::open(
         Role::Layer(LayerOptions {
             layer: LayerKind::Overlay,
@@ -633,6 +880,12 @@ fn run() -> Result<(), WindowError> {
         blur: Some(vec![Rect::default()]),
         system,
         session,
+        players: Players::default(),
+        player_updates,
+        player_commands,
+        artwork: None,
+        meter: None,
+        input_level: Rc::default(),
     };
     unbound_toolkit::run(&mut window, &mut center)
 }

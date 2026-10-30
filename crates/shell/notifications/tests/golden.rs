@@ -1,13 +1,11 @@
 #![allow(clippy::expect_used, clippy::panic)]
 
-use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use unbound_notifications::{Screen, Sender};
 use unbound_notify::{Notification, Presentation, Stack};
 use unbound_toolkit::{Color, CpuRenderer, Palette, Scene, Scheme, TextSystem};
 
-const MIN_SSIM: f64 = 0.99;
 const SIZE: (u32, u32) = (420, 460);
 const SETTLED: Duration = Duration::from_secs(2);
 const DESKTOP: Color = Color::hex(0x7C8698);
@@ -74,24 +72,9 @@ fn screen(presentation: Presentation, now: Instant) -> Screen {
 fn check_golden(name: &str, mut scene: Scene) {
     scene.background = DESKTOP;
     let frame = CpuRenderer::new().render(&scene).expect("frame");
-    let actual = image::RgbaImage::from_raw(frame.width, frame.height, frame.rgba).expect("frame");
-    let actual = image::DynamicImage::ImageRgba8(actual).to_rgb8();
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("tests/golden/{name}.png"));
-    if std::env::var_os("UNBOUND_UPDATE_GOLDENS").is_some() {
-        std::fs::create_dir_all(path.parent().expect("golden directory")).expect("directory");
-        actual.save(&path).expect("write golden");
-    }
-    let target = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}.png"));
-    actual.save(&target).expect("save the frame");
-    let expected = image::open(&path)
-        .unwrap_or_else(|error| panic!("{}: {error}", path.display()))
-        .to_rgb8();
-    let similarity = image_compare::rgb_hybrid_compare(&expected, &actual).expect("same size");
-    assert!(
-        similarity.score >= MIN_SSIM,
-        "{name} differs from its golden: {:.4} (frame in {})",
-        similarity.score,
-        target.display()
+    unbound_golden::assert_golden!(
+        name,
+        &unbound_golden::from_rgba(frame.width, frame.height, frame.rgba)
     );
 }
 

@@ -1305,33 +1305,12 @@ fn dragging_on_empty_space_in_the_icon_view_selects_the_icons_it_touches() {
 }
 
 const GOLDEN_SIZE: (u32, u32) = (900, 560);
-const MIN_SSIM: f64 = 0.99;
 
 fn check_golden(name: &str, rgba: Vec<u8>) {
-    let actual = image::RgbaImage::from_raw(GOLDEN_SIZE.0, GOLDEN_SIZE.1, rgba).expect("frame");
+    let whole = unbound_golden::from_rgba(GOLDEN_SIZE.0, GOLDEN_SIZE.1, rgba);
     let steady = GOLDEN_SIZE.1 - (PATH_BAR_HEIGHT + SHEET_INSET as f32).round() as u32;
-    let whole = image::DynamicImage::ImageRgba8(actual);
-    whole
-        .save(PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}-whole.png")))
-        .expect("save the whole frame");
-    let actual = whole.crop_imm(0, 0, GOLDEN_SIZE.0, steady).to_rgb8();
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("tests/golden/{name}.png"));
-    if std::env::var_os("UNBOUND_UPDATE_GOLDENS").is_some() {
-        fs::create_dir_all(path.parent().expect("golden directory")).expect("directory");
-        actual.save(&path).expect("write golden");
-    }
-    let target = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}.png"));
-    actual.save(&target).expect("save the frame");
-    let expected = image::open(&path)
-        .unwrap_or_else(|error| panic!("{}: {error}", path.display()))
-        .to_rgb8();
-    let similarity = image_compare::rgb_hybrid_compare(&expected, &actual).expect("same size");
-    assert!(
-        similarity.score >= MIN_SSIM,
-        "{name} differs from its golden: {:.4} (frame in {})",
-        similarity.score,
-        target.display()
-    );
+    let steady = image::imageops::crop_imm(&whole, 0, 0, GOLDEN_SIZE.0, steady).to_image();
+    unbound_golden::assert_golden!(name, &steady);
 }
 
 impl Place {

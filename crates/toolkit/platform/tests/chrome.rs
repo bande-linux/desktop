@@ -117,6 +117,8 @@ fn alert(window: &mut Window) -> Option<Ui> {
     Some(ui)
 }
 
+type Prepare = fn(&mut Window) -> Option<Ui>;
+
 #[test]
 fn the_window_frame_menus_tables_and_alerts_match_their_goldens() {
     let _portal = appearance_portal();
@@ -132,7 +134,7 @@ fn the_window_frame_menus_tables_and_alerts_match_their_goldens() {
         title: "Monitor",
         ..documents(false, pointer)
     };
-    let shots: [(&str, fn(&mut Window) -> Option<Ui>, Shot); 8] = [
+    let shots: [(&str, Prepare, Shot); 8] = [
         ("window-frame-rest-light-1x", bare, documents(false, AWAY)),
         ("window-frame-rest-dark-1x", bare, documents(true, AWAY)),
         (

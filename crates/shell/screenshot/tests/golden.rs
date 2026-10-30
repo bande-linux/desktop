@@ -1,7 +1,5 @@
 #![allow(clippy::expect_used, clippy::panic)]
 
-use std::path::PathBuf;
-
 use unbound_screenshot::area::AreaSelection;
 use unbound_screenshot::palette::{Mode, Palette as CapturePalette};
 use unbound_toolkit::ui::{Context, Event, FreeLayout, Pointer, Size, Ui, Widget};
@@ -9,7 +7,6 @@ use unbound_toolkit::{
     Color, CpuRenderer, Item, Palette, Point, Rect, Scene, Scheme, Shape, TextSystem,
 };
 
-const MIN_SSIM: f64 = 0.99;
 const SIZE: (u32, u32) = (640, 400);
 
 fn backdrop() -> Item {
@@ -21,24 +18,9 @@ fn backdrop() -> Item {
 
 fn check_golden(name: &str, scene: &Scene) {
     let frame = CpuRenderer::new().render(scene).expect("frame");
-    let actual = image::RgbaImage::from_raw(frame.width, frame.height, frame.rgba).expect("frame");
-    let actual = image::DynamicImage::ImageRgba8(actual).to_rgb8();
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("tests/golden/{name}.png"));
-    if std::env::var_os("UNBOUND_UPDATE_GOLDENS").is_some() {
-        std::fs::create_dir_all(path.parent().expect("golden directory")).expect("directory");
-        actual.save(&path).expect("write golden");
-    }
-    let target = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}.png"));
-    actual.save(&target).expect("save the frame");
-    let expected = image::open(&path)
-        .unwrap_or_else(|error| panic!("{}: {error}", path.display()))
-        .to_rgb8();
-    let similarity = image_compare::rgb_hybrid_compare(&expected, &actual).expect("same size");
-    assert!(
-        similarity.score >= MIN_SSIM,
-        "{name} differs from its golden: {:.4} (frame in {})",
-        similarity.score,
-        target.display()
+    unbound_golden::assert_golden!(
+        name,
+        &unbound_golden::from_rgba(frame.width, frame.height, frame.rgba)
     );
 }
 

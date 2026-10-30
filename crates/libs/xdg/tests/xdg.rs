@@ -335,7 +335,11 @@ fn user_dirs_follow_xdg_user_dirs_and_default_to_english_names_in_home() {
 
     for (file, dir, expected) in [
         (None, UserDir::Desktop, home.join("Desktop")),
-        (Some("# nothing\n"), UserDir::Downloads, home.join("Downloads")),
+        (
+            Some("# nothing\n"),
+            UserDir::Downloads,
+            home.join("Downloads"),
+        ),
         (Some(user_dirs), UserDir::Desktop, home.join("Skrivbord")),
         (Some(user_dirs), UserDir::Downloads, home.join("Hämtningar")),
         (

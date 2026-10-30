@@ -1,7 +1,4 @@
-use std::path::PathBuf;
-
 use crate::support::*;
-use image::RgbaImage;
 use smithay::utils::Size;
 use unbound_compositor::{Headless, Rect, Renderer};
 use unbound_test_wayland::{BLUE, GREEN, RED, TestClient, roundtrip};
@@ -9,7 +6,6 @@ use unbound_test_wayland::{BLUE, GREEN, RED, TestClient, roundtrip};
 const OUTPUT: (i32, i32) = (480, 270);
 const WINDOW: (i32, i32) = (160, 100);
 const KEY_ENTER: u32 = 28;
-const MIN_SSIM: f64 = 0.99;
 
 fn server() -> Headless {
     Headless::new(Size::from(OUTPUT)).expect("headless compositor")
@@ -132,25 +128,12 @@ fn the_offer_matches_its_golden() {
 
     renderer.render(&mut server).expect("frame");
     let snapshot = renderer.snapshot(&server).expect("read back");
-    let actual = RgbaImage::from_raw(
-        snapshot.size.w.unsigned_abs(),
-        snapshot.size.h.unsigned_abs(),
-        snapshot.rgba,
-    )
-    .expect("frame");
-    let actual = image::DynamicImage::ImageRgba8(actual).to_rgb8();
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/golden/other-half.png");
-    if std::env::var_os("UNBOUND_UPDATE_GOLDENS").is_some() {
-        actual.save(&path).expect("write golden");
-    }
-    let target = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("other-half.png");
-    actual.save(&target).expect("save the frame");
-    let expected = image::open(&path).expect("golden").to_rgb8();
-    let similarity = image_compare::rgb_hybrid_compare(&expected, &actual).expect("same size");
-    assert!(
-        similarity.score >= MIN_SSIM,
-        "differs from its golden: {:.4} (frame in {})",
-        similarity.score,
-        target.display()
+    unbound_golden::assert_golden!(
+        "other-half",
+        &unbound_golden::from_rgba(
+            snapshot.size.w.unsigned_abs(),
+            snapshot.size.h.unsigned_abs(),
+            snapshot.rgba,
+        )
     );
 }

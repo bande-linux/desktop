@@ -11,7 +11,6 @@ const SIZES: [u32; 5] = [16, 24, 32, 48, 64];
 const GAP: f32 = 8.0;
 const COLUMNS: usize = 5;
 const SYMBOLIC_INK: &str = "#201E1A";
-const MIN_SSIM: f64 = 0.99;
 
 fn data() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../data")
@@ -102,23 +101,9 @@ fn contact_sheet(icons: &[(String, String)]) -> Scene {
 
 fn check_golden(name: &str, scene: &Scene) {
     let frame = CpuRenderer::new().render(scene).unwrap();
-    let actual = image::RgbaImage::from_raw(scene.width, scene.height, frame.rgba).unwrap();
-    let actual = image::DynamicImage::ImageRgba8(actual).to_rgb8();
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("tests/golden/{name}.png"));
-    if std::env::var_os("UNBOUND_UPDATE_GOLDENS").is_some() {
-        actual.save(&path).unwrap();
-    }
-    let target = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}.png"));
-    actual.save(&target).unwrap();
-    let expected = image::open(&path)
-        .unwrap_or_else(|error| panic!("{}: {error}", path.display()))
-        .to_rgb8();
-    let similarity = image_compare::rgb_hybrid_compare(&expected, &actual).unwrap();
-    assert!(
-        similarity.score >= MIN_SSIM,
-        "{name} differs from its golden: {:.4} (frame in {})",
-        similarity.score,
-        target.display()
+    unbound_golden::assert_golden!(
+        name,
+        &unbound_golden::from_rgba(frame.width, frame.height, frame.rgba)
     );
 }
 

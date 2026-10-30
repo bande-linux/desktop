@@ -77,6 +77,43 @@ fn running(name: &str) -> bool {
     })
 }
 
+fn is_input_device(path: &Path) -> bool {
+    path.starts_with("/dev/input")
+        && path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.starts_with("event"))
+}
+
+fn input_devices() -> Vec<PathBuf> {
+    let mut devices: Vec<PathBuf> = fs::read_dir("/dev/input")
+        .map(|entries| {
+            entries
+                .filter_map(Result::ok)
+                .map(|entry| entry.path())
+                .filter(|path| is_input_device(path))
+                .collect()
+        })
+        .unwrap_or_default();
+    devices.sort();
+    devices
+}
+
+fn input_devices_held_by(pid: u32) -> Vec<PathBuf> {
+    let mut devices: Vec<PathBuf> = fs::read_dir(format!("/proc/{pid}/fd"))
+        .map(|entries| {
+            entries
+                .filter_map(Result::ok)
+                .filter_map(|entry| fs::read_link(entry.path()).ok())
+                .filter(|path| is_input_device(path))
+                .collect()
+        })
+        .unwrap_or_default();
+    devices.sort();
+    devices.dedup();
+    devices
+}
+
 fn start_desktop() -> Desktop {
     start_desktop_with(&[])
 }
@@ -108,6 +145,10 @@ fn start_desktop_with_arguments(arguments: &[&str], environment: &[(&str, &str)]
         .strip_prefix("WAYLAND_DISPLAY=")
         .unwrap_or_else(|| panic!("{line}"))
         .to_owned();
+    let compositor = child.id();
+    wait_for("the compositor to open every input device", STARTUP, || {
+        input_devices_held_by(compositor) == input_devices()
+    });
     Desktop {
         compositor: child,
         display,
@@ -648,13 +689,13 @@ fn files_drills_into_a_folder_and_quick_looks_a_picture() {
     });
     thread::sleep(Duration::from_secs(1));
 
-    for selected in ["notes.txt", "Pictures"] {
-        let shown = scanout();
-        keyboard.tap(KEY_DOWN);
-        wait_for(&format!("{selected} selected"), STARTUP, || {
-            scanout().rgb != shown.rgb
-        });
-    }
+    let shown = scanout();
+    keyboard.tap(KEY_DOWN);
+    wait_for(
+        "Pictures, listed first as a folder, selected",
+        STARTUP,
+        || scanout().rgb != shown.rgb,
+    );
     keyboard.tap(KEY_RIGHT);
     thread::sleep(Duration::from_secs(1));
     scanout().save("m22-files-columns");

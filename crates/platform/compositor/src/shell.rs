@@ -112,6 +112,18 @@ impl State {
                     .map(|(_, app_id)| app_id.clone())
             })
             .unwrap_or_default();
+        let output = key
+            .and_then(|surface| self.window_index(surface))
+            .map(|index| self.screens[self.screen_of(&self.windows[index])].name())
+            .unwrap_or_default();
+        if output != self.active_output {
+            for shell in &self.shell_resources {
+                if shell.version() >= unbound_shell_v1::EVT_ACTIVE_OUTPUT_SINCE {
+                    shell.active_output(output.clone());
+                }
+            }
+            self.active_output = output;
+        }
         if app_id == self.active_app {
             return;
         }
@@ -248,6 +260,9 @@ impl GlobalDispatch<UnboundShellV1, ()> for State {
         let shell = data_init.init(resource, ());
         if shell.version() >= unbound_shell_v1::EVT_ACTIVE_APP_SINCE {
             shell.active_app(state.active_app.clone());
+        }
+        if shell.version() >= unbound_shell_v1::EVT_ACTIVE_OUTPUT_SINCE {
+            shell.active_output(state.active_output.clone());
         }
         state.announce_unresponsive(&shell);
         state.announce_minimized_windows(&shell);

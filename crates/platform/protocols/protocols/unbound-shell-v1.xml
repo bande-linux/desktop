@@ -276,6 +276,16 @@
       <arg name="key" type="uint" enum="media_key"/>
     </event>
 
+    <event name="active_output" since="12">
+      <description summary="the display holding the key window">
+        Sent on binding and whenever the key window is on another display than
+        before, with the name of that display's wl_output; empty when no window
+        has the keyboard. The bar dims the active app's header on the other
+        displays.
+      </description>
+      <arg name="name" type="string"/>
+    </event>
+
     <request name="show_launcher" since="12">
       <description summary="open the launcher">
         Sent by the bar when its Unbound mark is clicked. The compositor sends

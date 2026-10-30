@@ -156,6 +156,9 @@ fn every_command_survives_its_trip_through_a_menu_action() {
         Command::HideOthers,
         Command::ShowAll,
         Command::SelectInputSource(2),
+        Command::QuitApp,
+        Command::AppAction("new-window".to_owned()),
+        Command::ShowWindow("toplevel:3".to_owned()),
     ] {
         assert_eq!(Command::parse(&command.action()), Some(command));
     }

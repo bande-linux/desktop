@@ -7,7 +7,8 @@ use std::time::{Duration, Instant};
 
 use unbound_bar::menubar::{HEIGHT, MenuBar, Slot, StatusView, app_name};
 use unbound_bar::menus::{
-    app_menu, battery_menu, bluetooth_menu, input_source_menu, sound_menu, system_menu, wifi_menu,
+    AppMenus, app_menu, battery_menu, bluetooth_menu, cascade, input_source_menu, sound_menu,
+    system_menu, wifi_menu,
 };
 use unbound_datetime::DateFormats;
 use unbound_inbox::Inbox;
@@ -23,7 +24,10 @@ use unbound_toolkit::{
     App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Rect, Role, Scene, TextSystem,
     Window, WindowEvent,
 };
-use unbound_xdg::{Locale, applications, current_desktops, data_dirs, find_icon, spawn_detached};
+use unbound_xdg::{
+    DesktopEntry, ICON_THEMES, Locale, applications, current_desktops, data_dirs, find_icon,
+    launch_action, spawn_detached,
+};
 use zbus::blocking::Connection;
 
 const CLOCK_TICK: Duration = Duration::from_secs(1);
@@ -33,11 +37,15 @@ const SETTINGS: &str = "org.unbound.Settings";
 const MONITOR: &str = "org.unbound.ActivityMonitor";
 const BRING_TO_FRONT: &str = "bring-to-front";
 const TRAY_ITEM: &str = "tray-item:";
+const MENU_BAR_NAMESPACE: &str = "menubar";
+const OUTPUT_VARIABLE: &str = "UNBOUND_OUTPUT";
+const HEADER_ICON: f32 = 24.0;
 const BLUR_WIDTH: f32 = 16384.0;
 
 pub struct MenuBarClient<V> {
     bar: V,
     names: Vec<(String, String)>,
+    entries: Vec<DesktopEntry>,
     inbox: Inbox<Update>,
     controls: Option<Sender<Control>>,
     sound: Sender<SoundControl>,
@@ -132,6 +140,14 @@ impl<V: StatusView> MenuBarClient<V> {
                 self.launch(window, "", &[&myself, "--about-app", &app, &version]);
             }
             Command::HideApp => report("hide the app", window.hide_app(&self.app_id)),
+            Command::QuitApp => report("quit the app", window.quit_app(&self.app_id)),
+            Command::ShowWindow(identifier) => {
+                report(
+                    "bring the window forward",
+                    window.activate_window(&identifier),
+                );
+            }
+            Command::AppAction(id) => self.run_app_action(window, &id),
             Command::SelectInputSource(index) => {
                 report("switch the input source", window.select_input_source(index));
             }
@@ -193,10 +209,82 @@ impl<V: StatusView> MenuBarClient<V> {
         }
     }
 
+    fn entry(&self) -> Option<&DesktopEntry> {
+        self.entries
+            .iter()
+            .find(|entry| entry.app_id() == self.app_id)
+    }
+
+    fn run_app_action(&mut self, window: &mut Window, id: &str) {
+        let Some(entry) = self.entry().cloned() else {
+            return;
+        };
+        let Some(action) = entry.actions.iter().find(|action| action.id == id) else {
+            return;
+        };
+        let token = window.activation_token(&self.app_id).ok();
+        if let Err(error) = launch_action(&entry, action, token.as_deref()) {
+            tracing::warn!("cannot {} in {}: {error}", action.name, entry.name);
+        }
+    }
+
+    fn cascade(&self, window: &Window) -> Menu {
+        let actions: Vec<(String, String)> = self
+            .entry()
+            .map(|entry| {
+                entry
+                    .actions
+                    .iter()
+                    .map(|action| (action.id.clone(), action.name.clone()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let windows: Vec<(String, String)> = window
+            .app_windows(&self.app_id)
+            .into_iter()
+            .map(|shown| {
+                let title = if shown.title.is_empty() {
+                    self.bar.app().to_owned()
+                } else {
+                    shown.title
+                };
+                (shown.identifier, title)
+            })
+            .collect();
+        let item = format!("{}{APP_MENU_PATH}", self.app_id);
+        cascade(&AppMenus {
+            name: self.bar.app(),
+            root: self.app_root.as_ref(),
+            item: &item,
+            actions: &actions,
+            windows: &windows,
+        })
+    }
+
+    fn follow_app_icon(&mut self, window: &Window) {
+        let pixels = (f64::from(HEADER_ICON) * window.scale()).round() as u32;
+        let icon = self
+            .entry()
+            .and_then(|entry| entry.icon.clone())
+            .and_then(|name| find_icon(&name, pixels, &ICON_THEMES, &data_dirs()))
+            .and_then(|path| Image::load(&path, pixels));
+        self.bar.set_app_icon(icon);
+    }
+
     fn open(&mut self, window: &mut Window, slot: Slot) {
         let Some(anchor) = self.bar.slot_rect(slot) else {
             return;
         };
+        if slot == Slot::App && self.bar.cascades() {
+            let menu = self.cascade(window);
+            self.bar.set_open(Some(slot));
+            report(
+                "open the app's menus",
+                window.show_menu(menu, self.bar.menu_placement(anchor)),
+            );
+            window.request_redraw();
+            return;
+        }
         let status = self.bar.status().clone();
         let local = match slot {
             Slot::System => Some(system_menu(&self.user)),
@@ -340,6 +428,13 @@ impl<V: StatusView> App for MenuBarClient<V> {
                     self.bar.set_app_menus(Vec::new());
                     let _ = self.errands.send(Errand::AppMenu(app_id.clone()));
                     self.app_id = app_id;
+                    self.follow_app_icon(window);
+                    window.request_redraw();
+                }
+            }
+            WindowEvent::FocusShell(namespace) if namespace == MENU_BAR_NAMESPACE => {
+                if self.bar.cascades() && self.bar.open() != Some(Slot::App) {
+                    self.open(window, Slot::App);
                 }
             }
             WindowEvent::Input(Event::PointerDown(pointer)) => {
@@ -406,6 +501,13 @@ impl<V: StatusView> App for MenuBarClient<V> {
             WindowEvent::AppearanceChanged(appearance) => {
                 self.bar.set_palette(appearance.palette());
                 window.request_redraw();
+            }
+            WindowEvent::ActiveOutput(output) => {
+                let own = std::env::var(OUTPUT_VARIABLE).unwrap_or_default();
+                let key = output.is_empty() || own.is_empty() || output == own;
+                if self.bar.set_key_display(key) {
+                    window.request_redraw();
+                }
             }
             WindowEvent::Workspaces { count, active } => {
                 if self.bar.set_workspaces(count, active) {
@@ -503,7 +605,7 @@ pub fn menu_bar_role() -> Role {
         },
         exclusive_zone: HEIGHT as i32,
         keyboard: KeyboardFocus::None,
-        namespace: "menubar".to_owned(),
+        namespace: MENU_BAR_NAMESPACE.to_owned(),
     })
 }
 
@@ -532,14 +634,15 @@ impl<V: StatusView> MenuBarClient<V> {
         session: Option<&Connection>,
         system: Option<&Connection>,
     ) -> std::io::Result<Self> {
-        let names = applications(
+        let entries = applications(
             &data_dirs(),
             Locale::from_env().as_ref(),
             &current_desktops(),
-        )
-        .into_iter()
-        .map(|entry| (entry.app_id().to_owned(), entry.name))
-        .collect();
+        );
+        let names = entries
+            .iter()
+            .map(|entry| (entry.app_id().to_owned(), entry.name.clone()))
+            .collect();
         let inbox = Inbox::new()?;
         let controls = system.map(|system| {
             let (controls, received) = mpsc::channel();
@@ -572,6 +675,7 @@ impl<V: StatusView> MenuBarClient<V> {
         Ok(Self {
             bar: view,
             names,
+            entries,
             inbox,
             controls,
             sound,

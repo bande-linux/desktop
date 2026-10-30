@@ -20,6 +20,9 @@ pub enum Command {
     HideOthers,
     ShowAll,
     SelectInputSource(usize),
+    QuitApp,
+    AppAction(String),
+    ShowWindow(String),
 }
 
 fn hex(bytes: &[u8]) -> String {
@@ -58,6 +61,9 @@ impl Command {
             Self::Item { item, id } => format!("item:{item}|{id}"),
             Self::AboutApp(version) => format!("about-app:{version}"),
             Self::HideApp => "hide-app".to_owned(),
+            Self::QuitApp => "quit-app".to_owned(),
+            Self::AppAction(id) => format!("app-action:{id}"),
+            Self::ShowWindow(identifier) => format!("window:{identifier}"),
             Self::HideOthers => "hide-others".to_owned(),
             Self::ShowAll => "show-all".to_owned(),
             Self::SelectInputSource(index) => format!("input-source:{index}"),
@@ -88,6 +94,9 @@ impl Command {
             "gadget" => Self::ToggleGadget(argument.to_owned()),
             "about-app" => Self::AboutApp(argument.to_owned()),
             "hide-app" => Self::HideApp,
+            "quit-app" => Self::QuitApp,
+            "app-action" => Self::AppAction(argument.to_owned()),
+            "window" => Self::ShowWindow(argument.to_owned()),
             "hide-others" => Self::HideOthers,
             "show-all" => Self::ShowAll,
             "input-source" => Self::SelectInputSource(argument.parse().ok()?),

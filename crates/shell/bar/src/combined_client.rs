@@ -13,6 +13,7 @@ use crate::dock_client::Dock;
 use crate::menu_bar_client::MenuBarClient;
 
 const BAR_NAMESPACE: &str = "bar";
+const MENU_BAR_NAMESPACE: &str = "menubar";
 const ROOT: NodeId = NodeId(1 << 41);
 
 pub fn combined_role(icon_size: f32) -> (Role, (u32, u32)) {
@@ -75,6 +76,9 @@ impl App for CombinedClient {
         match &event {
             _ if pointer(&event) => {
                 self.dock.event(window, event.clone());
+                self.status.event(window, event);
+            }
+            WindowEvent::FocusShell(namespace) if namespace == MENU_BAR_NAMESPACE => {
                 self.status.event(window, event);
             }
             WindowEvent::Input(_) | WindowEvent::Drag(_) | WindowEvent::FocusShell(_) => {

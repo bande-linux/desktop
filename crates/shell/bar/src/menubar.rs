@@ -62,6 +62,9 @@ pub trait StatusView {
     fn set_app(&mut self, name: &str) -> bool;
     fn app(&self) -> &str;
     fn set_app_menus(&mut self, titles: Vec<String>);
+    fn set_app_icon(&mut self, icon: Option<Image>);
+    fn set_key_display(&mut self, key: bool) -> bool;
+    fn cascades(&self) -> bool;
     fn set_tray(&mut self, items: Vec<(String, Option<Image>)>);
     fn status(&self) -> &Status;
     fn status_mut(&mut self) -> &mut Status;
@@ -93,6 +96,16 @@ impl StatusView for MenuBar {
 
     fn set_app_menus(&mut self, titles: Vec<String>) {
         MenuBar::set_app_menus(self, titles);
+    }
+
+    fn set_app_icon(&mut self, _icon: Option<Image>) {}
+
+    fn set_key_display(&mut self, _key: bool) -> bool {
+        false
+    }
+
+    fn cascades(&self) -> bool {
+        false
     }
 
     fn set_tray(&mut self, items: Vec<(String, Option<Image>)>) {

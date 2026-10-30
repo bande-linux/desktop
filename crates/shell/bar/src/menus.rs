@@ -191,3 +191,66 @@ pub fn app_menu(node: &Node, item: &str) -> Menu {
             .collect(),
     )
 }
+
+pub struct AppMenus<'a> {
+    pub name: &'a str,
+    pub root: Option<&'a Node>,
+    pub item: &'a str,
+    pub actions: &'a [(String, String)],
+    pub windows: &'a [(String, String)],
+}
+
+fn standard_app_menu(name: &str) -> Menu {
+    let app = || [("app", name.to_owned().into())];
+    Menu::new(vec![
+        MenuItem::new(&L10N.tr_args("app-about", app()), "").enabled(false),
+        MenuItem::separator(),
+        item(&L10N.tr_args("app-hide", app()), &Command::HideApp).shortcut("Super+H"),
+        item(&L10N.tr("app-hide-others"), &Command::HideOthers).shortcut("Alt+Super+H"),
+        item(&L10N.tr("app-show-all"), &Command::ShowAll),
+        MenuItem::separator(),
+        item(&L10N.tr_args("app-quit", app()), &Command::QuitApp).shortcut("Super+Q"),
+    ])
+}
+
+pub fn cascade(menus: &AppMenus<'_>) -> Menu {
+    let exported = menus.root.and_then(|root| root.children.first());
+    let app_row = match exported {
+        Some(node) => app_menu(node, menus.item),
+        None => standard_app_menu(menus.name),
+    };
+    let mut items = vec![MenuItem::submenu(menus.name, app_row)];
+    match menus.root {
+        Some(root) => {
+            for child in root
+                .children
+                .iter()
+                .skip(1)
+                .filter(|child| child.visible && !child.separator)
+            {
+                items.push(if child.children.is_empty() {
+                    MenuItem::new(&child.label, &command(child, menus.item).action())
+                        .enabled(child.enabled)
+                } else {
+                    MenuItem::submenu(&child.label, app_menu(child, menus.item))
+                        .enabled(child.enabled)
+                });
+            }
+        }
+        None => {
+            if !menus.actions.is_empty() {
+                items.push(MenuItem::separator());
+            }
+            for (id, title) in menus.actions {
+                items.push(item(title, &Command::AppAction(id.clone())));
+            }
+            if !menus.windows.is_empty() {
+                items.push(MenuItem::separator());
+            }
+            for (identifier, title) in menus.windows {
+                items.push(item(title, &Command::ShowWindow(identifier.clone())));
+            }
+        }
+    }
+    Menu::new(items).searchable(&L10N.tr("search-menus"), &L10N.tr("no-menu-results"))
+}

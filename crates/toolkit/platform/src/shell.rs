@@ -297,6 +297,9 @@ impl Dispatch<UnboundShellV1, ()> for State {
             unbound_shell_v1::Event::FocusShell { namespace } => {
                 state.events.push(WindowEvent::FocusShell(namespace));
             }
+            unbound_shell_v1::Event::ActiveOutput { name } => {
+                state.events.push(WindowEvent::ActiveOutput(name));
+            }
             unbound_shell_v1::Event::Workspaces { count, active } => {
                 state.events.push(WindowEvent::Workspaces {
                     count: count as usize,

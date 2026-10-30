@@ -188,6 +188,7 @@ pub struct State {
     pub(crate) overview: crate::overview::Overview,
     pub(crate) gesture_route: Option<crate::gesture::Route>,
     pub(crate) active_app: String,
+    pub(crate) active_output: String,
     pub(crate) idle: crate::idle::Idle,
     _idle_inhibit_state: smithay::wayland::idle_inhibit::IdleInhibitManagerState,
     pub(crate) lock_states: Option<std::sync::mpsc::Sender<bool>>,
@@ -348,6 +349,7 @@ impl Headless {
             overview: crate::overview::Overview::default(),
             gesture_route: None,
             active_app: String::new(),
+            active_output: String::new(),
             idle: crate::idle::Idle::default(),
             _idle_inhibit_state: smithay::wayland::idle_inhibit::IdleInhibitManagerState::new::<
                 State,

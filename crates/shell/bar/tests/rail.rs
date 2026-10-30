@@ -122,6 +122,11 @@ impl Rail {
             ("Weather".to_owned(), tray_icon()),
         ]);
         view.set_unread(true);
+        view.set_app("Files");
+        view.set_app_icon(Image::load(
+            &data().join("icons/Unbound/scalable/apps/org.unbound.Files.svg"),
+            (24.0 * scale).round() as u32,
+        ));
         view.set_workspaces(3, 0);
         let at = "2026-10-29T14:32:00[Europe/Stockholm]"
             .parse()
@@ -357,4 +362,31 @@ fn every_status_cell_is_a_named_button() {
     assert!(labels.contains(&"Control Center".to_owned()));
     assert!(labels.contains(&"14:32 Thu 29, unread notifications".to_owned()));
     assert!(labels.contains(&"Desktop 2".to_owned()));
+}
+
+#[test]
+fn the_header_names_the_active_app_under_the_mark_and_dims_on_other_displays() {
+    let mut rail = Rail::new(Scheme::Light, HEIGHT, apps(1.0));
+    rail.frame(1.0);
+    let mark = rail.view.slot_rect(Slot::System).expect("mark");
+    let header = rail.view.slot_rect(Slot::App).expect("header");
+    assert_eq!(header.y, mark.y + mark.height);
+    assert!(rail.view.apps_region(HEIGHT as f32).top > header.y + header.height);
+    let point = Point::new(
+        header.x + header.width / 2.0,
+        header.y + header.height / 2.0,
+    );
+    assert_eq!(
+        rail.view.slot_at(point, PointerButton::Primary),
+        Some(Slot::App)
+    );
+    assert!(rail.view.cascades());
+
+    let lit = rail.frame(1.0);
+    assert!(rail.view.set_key_display(false));
+    let dimmed = rail.frame(1.0);
+    assert_ne!(lit, dimmed);
+    rail.view.set_app("");
+    rail.frame(1.0);
+    assert!(rail.view.slot_rect(Slot::App).is_none());
 }

@@ -3,9 +3,15 @@
 use std::path::PathBuf;
 
 use accesskit::{Action, ActionRequest, TreeId};
+use std::cell::Cell;
+use std::rc::Rc;
+use std::time::Instant;
 use unbound_graphics::{CpuRenderer, Palette, Scheme, TextSystem, pixels};
+
 use unbound_widgets::{
-    Axis, Context, Event, SearchField, Stack, TextField, TextView, Ui, Widget, WidgetId,
+    Axis, Button, CheckState, Checkbox, Context, Event, Pointer, PopUpButton, ProgressBar,
+    RadioGroup, SearchField, SegmentedControl, Size, Spinner, Stack, Stepper, TOOLTIP_DELAY,
+    TextField, TextView, Ui, Widget, WidgetId,
 };
 
 const MIN_SSIM: f64 = 0.99;
@@ -92,7 +98,7 @@ fn text_editing(scheme: Scheme) -> Ui {
         Box::new(stack),
         Context::new(TextSystem::new(), Palette::for_scheme(scheme)),
     );
-    ui.layout(unbound_widgets::Size::new(320.0, 254.0));
+    ui.layout(Size::new(320.0, 254.0));
     focus(&mut ui, composing_id);
     ui.handle(&Event::Preedit {
         text: "とうきょう".to_owned(),
@@ -105,4 +111,74 @@ fn text_editing(scheme: Scheme) -> Ui {
 #[test]
 fn text_fields_and_views_match_their_goldens() {
     shoot("text-editing", (320, 254), text_editing);
+}
+
+fn row(children: Vec<Box<dyn Widget>>) -> Box<dyn Widget> {
+    Box::new(Stack::new(Axis::Horizontal, 16.0, 0.0, children))
+}
+
+fn controls(scheme: Scheme) -> Ui {
+    let checks = row(vec![
+        Box::new(Checkbox::new("Off", CheckState::Off, |_| {})),
+        Box::new(Checkbox::new("On", CheckState::On, |_| {})),
+        Box::new(Checkbox::new("Mixed", CheckState::Mixed, |_| {})),
+    ]);
+    let choices = row(vec![
+        Box::new(RadioGroup::new(
+            "Size",
+            &["Small", "Large"],
+            Some(1),
+            |_| {},
+        )),
+        Box::new(SegmentedControl::new(
+            "View",
+            &["Icons", "List", "Columns"],
+            Some(1),
+            |_| {},
+        )),
+    ]);
+    let pickers = row(vec![
+        Box::new(PopUpButton::new(
+            "Sort by",
+            &["Name", "Date Modified"],
+            1,
+            |_| {},
+        )),
+        Box::new(Stepper::new("Copies", 2.0, (1.0, 9.0), 1.0, |_| {})),
+        Box::new(Spinner::new("Loading")),
+    ]);
+    let help = Button::new("Stop", || {}).tooltip("Quit the selected process");
+    let help_id = help.id();
+    let stack = Stack::new(
+        Axis::Vertical,
+        14.0,
+        16.0,
+        vec![
+            checks,
+            choices,
+            pickers,
+            Box::new(ProgressBar::new("Copying", Some(0.4))),
+            Box::new(ProgressBar::new("Preparing", None)),
+            row(vec![Box::new(help)]),
+        ],
+    );
+    let mut ui = Ui::new(
+        Box::new(stack),
+        Context::new(TextSystem::new(), Palette::for_scheme(scheme)),
+    );
+    let clock = Rc::new(Cell::new(Instant::now()));
+    let time = clock.clone();
+    ui.set_clock(move || time.get());
+    ui.layout(Size::new(360.0, 260.0));
+    let frame = ui.widget(help_id).expect("button").frame();
+    ui.handle(&Event::PointerMove(Pointer::at(
+        unbound_graphics::Point::new(frame.x + 10.0, frame.y + 8.0),
+    )));
+    clock.set(clock.get() + TOOLTIP_DELAY * 2);
+    ui
+}
+
+#[test]
+fn controls_match_their_goldens() {
+    shoot("controls", (360, 260), controls);
 }

@@ -4,7 +4,7 @@ use smithay::utils::{Point, Size};
 use unbound_compositor::{Headless, Renderer, automatic_scale};
 use unbound_test_wayland::{
     Anchor, BLUE, BrightnessKey, GREEN, KeyboardInteractivity, LauncherMode, Layer, LayerRequest,
-    MediaKey, RED, ShmImage, TestClient, VolumeKey, roundtrip,
+    MediaKey, Panel, PanelEdge, RED, ShmImage, TestClient, VolumeKey, roundtrip,
 };
 use wayland_client::protocol::wl_shm::Format;
 
@@ -78,6 +78,37 @@ fn a_left_panel_reserves_its_exclusive_zone_and_windows_are_centered_beside_it()
         server.windows()[0].location(),
         Point::from((40 + (216 - 96) / 2, (192 - 64) / 2))
     );
+}
+
+#[test]
+fn panels_hear_where_their_bar_item_is_in_the_area_beside_the_bar() {
+    let mut server = server();
+    let mut bar = TestClient::connect_as_shell(&mut server);
+    bar.join_shell(&mut server);
+    bar.show_named_layer(
+        &mut server,
+        &panel(
+            Layer::Top,
+            Anchor::Left | Anchor::Top | Anchor::Bottom,
+            (40, 0),
+            40,
+        ),
+        "bar",
+    );
+    let mut center = TestClient::connect_as_shell(&mut server);
+    center.join_shell(&mut server);
+    let item = (6, 150, 28, 28);
+
+    bar.set_panel_anchor(&mut server, 0, Panel::ControlCenter, PanelEdge::Left, item);
+    roundtrip(&mut server, &mut [&mut bar, &mut center]);
+    assert_eq!(
+        center.panel_anchor(Panel::ControlCenter),
+        Some((6 - 40, 150, 28, 28))
+    );
+
+    bar.close_layer(&mut server, 0);
+    roundtrip(&mut server, &mut [&mut bar, &mut center]);
+    assert_eq!(center.panel_anchor(Panel::ControlCenter), Some(item));
 }
 
 #[test]

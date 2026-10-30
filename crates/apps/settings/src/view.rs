@@ -364,11 +364,16 @@ impl SettingsView {
                 if let Some(bluetooth) = &bluetooth {
                     self.values
                         .insert(SettingId::BluetoothPower, Value::Flag(bluetooth.powered));
-                    self.busy.retain(|address| {
-                        !bluetooth
+                    let connection = |state: Option<&BluetoothState>, address: &str| {
+                        state?
                             .paired
                             .iter()
-                            .any(|device| device.address == *address)
+                            .find(|device| device.address == address)
+                            .map(|device| device.connected)
+                    };
+                    let before = self.bluetooth.as_ref();
+                    self.busy.retain(|address| {
+                        connection(before, address) == connection(Some(bluetooth), address)
                     });
                 }
                 self.bluetooth = bluetooth;
@@ -410,9 +415,10 @@ impl SettingsView {
                         (SettingId::EthernetRouter, ethernet.router.clone()),
                         (SettingId::EthernetDns, Some(ethernet.dns.join(", "))),
                     ] {
-                        self.values
-                            .entry(id)
-                            .or_insert(Value::Text(value.unwrap_or_default()));
+                        if !self.manual_ipv4 || !self.values.contains_key(&id) {
+                            self.values
+                                .insert(id, Value::Text(value.unwrap_or_default()));
+                        }
                     }
                 }
                 self.network = Some(network);
@@ -1186,7 +1192,8 @@ impl SettingsView {
     fn commit_drafts(&mut self) {
         for (id, text) in std::mem::take(&mut self.drafts) {
             let text = text.trim().to_owned();
-            if !text.is_empty() {
+            let clearable = matches!(id, SettingId::EthernetRouter | SettingId::EthernetDns);
+            if clearable || !text.is_empty() {
                 self.change(id, Value::Text(text));
             }
         }

@@ -17,9 +17,19 @@ impl FilesView {
     pub(crate) fn context_click(&mut self, hit: Hit, at: Point) -> bool {
         match hit {
             Hit::Row { column, row } => {
-                if self.rename.as_ref().is_some_and(|rename| {
-                    rename.path == self.browser.columns()[column].entries[row].path
-                }) {
+                let Some(entry) = self
+                    .browser
+                    .columns()
+                    .get(column)
+                    .and_then(|shown| shown.entries.get(row))
+                else {
+                    return false;
+                };
+                if self
+                    .rename
+                    .as_ref()
+                    .is_some_and(|rename| rename.path == entry.path)
+                {
                     return false;
                 }
                 self.commit_rename();

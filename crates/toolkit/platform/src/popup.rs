@@ -25,7 +25,9 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::ZwlrL
 use crate::window::{ShmTarget, State, WindowError};
 
 const MARGIN: f32 = 24.0;
-const SUBMENU_OFFSET: (i32, i32) = (-2, -4);
+const SUBMENU_OVERLAP: f32 = 2.0;
+const SUBMENU_LIFT: i32 = -4;
+const BELOW_GAP: f32 = 4.0;
 const SLIDE: f32 = 3.0;
 const OPAQUE: u32 = 256;
 
@@ -45,7 +47,64 @@ pub(crate) enum Parent {
 struct Placement {
     anchor_rect: Rect,
     anchor: Anchor,
+    gravity: Gravity,
     offset: (i32, i32),
+    adjustment: ConstraintAdjustment,
+}
+
+impl Placement {
+    fn menu(placement: MenuPlacement) -> Self {
+        let fitting = ConstraintAdjustment::FlipY
+            | ConstraintAdjustment::SlideX
+            | ConstraintAdjustment::SlideY
+            | ConstraintAdjustment::ResizeY;
+        match placement {
+            MenuPlacement::AtPoint(point) => Self {
+                adjustment: fitting | ConstraintAdjustment::FlipX,
+                ..Self::fixed(Rect::new(point.x, point.y, 1.0, 1.0))
+            },
+            MenuPlacement::Below(rect) => Self {
+                anchor_rect: Rect::new(
+                    rect.x,
+                    rect.y - BELOW_GAP,
+                    rect.width,
+                    rect.height + 2.0 * BELOW_GAP,
+                ),
+                anchor: Anchor::BottomLeft,
+                gravity: Gravity::BottomRight,
+                offset: (0, 0),
+                adjustment: fitting,
+            },
+        }
+    }
+
+    fn submenu(row: Rect) -> Self {
+        Self {
+            anchor_rect: Rect::new(
+                row.x + SUBMENU_OVERLAP,
+                row.y,
+                row.width - 2.0 * SUBMENU_OVERLAP,
+                row.height,
+            ),
+            anchor: Anchor::TopRight,
+            gravity: Gravity::BottomRight,
+            offset: (0, SUBMENU_LIFT),
+            adjustment: ConstraintAdjustment::FlipX
+                | ConstraintAdjustment::SlideX
+                | ConstraintAdjustment::SlideY
+                | ConstraintAdjustment::ResizeY,
+        }
+    }
+
+    fn fixed(anchor_rect: Rect) -> Self {
+        Self {
+            anchor_rect,
+            anchor: Anchor::TopLeft,
+            gravity: Gravity::BottomRight,
+            offset: (0, 0),
+            adjustment: ConstraintAdjustment::empty(),
+        }
+    }
 }
 
 #[derive(Default)]
@@ -55,6 +114,8 @@ pub(crate) struct Signals {
     dismissed: AtomicBool,
     x: AtomicI32,
     y: AtomicI32,
+    height: AtomicI32,
+    placed: AtomicBool,
 }
 
 impl Signals {
@@ -78,6 +139,8 @@ struct Look {
     show_highlight: bool,
     appearance: Appearance,
     scale: f64,
+    scrolled: f32,
+    height: f32,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -224,23 +287,11 @@ impl Menus {
     ) -> Result<Self, WindowError> {
         let panel = MenuPanel::new(menu, opening.text, &opening.palette);
         let size = panel.size();
-        let placement = match placement {
-            MenuPlacement::AtPoint(point) => Placement {
-                anchor_rect: Rect::new(point.x, point.y, 1.0, 1.0),
-                anchor: Anchor::TopLeft,
-                offset: (0, 0),
-            },
-            MenuPlacement::Below(rect) => Placement {
-                anchor_rect: rect,
-                anchor: Anchor::BottomLeft,
-                offset: (0, 4),
-            },
-        };
         let mut popup = create(
             opening.state,
             opening.handle,
             &parent,
-            placement,
+            Placement::menu(placement),
             (size.width, size.height),
             Some(0),
         )?;
@@ -291,6 +342,7 @@ impl Menus {
                 self.tracker
                     .pointer_release(level, local(pointer.position), now)
             }
+            Event::Scroll(scroll) => self.tracker.scroll(level, scroll.delta.y),
             Event::Key { key, modifiers } => self.tracker.key(*key, *modifiers, now),
             Event::ModifiersChanged(modifiers) => self.tracker.show_alternates(modifiers.alt),
             _ => MenuOutcome::Nothing,
@@ -321,16 +373,11 @@ impl Menus {
         };
         let panel = MenuPanel::new(menu, opening.text, &opening.palette);
         let size = panel.size();
-        let placement = Placement {
-            anchor_rect: self.tracker.panels()[level].row_rect(index),
-            anchor: Anchor::TopRight,
-            offset: SUBMENU_OFFSET,
-        };
         let popup = create(
             opening.state,
             opening.handle,
             &Parent::Popup(parent.xdg_surface.clone()),
-            placement,
+            Placement::submenu(self.tracker.panels()[level].row_rect(index)),
             (size.width, size.height),
             Some(level + 1),
         )?;
@@ -396,11 +443,7 @@ impl Menus {
             }
             let (x, y) = popup.signals.position();
             origin = (origin.0 + x, origin.1 + y);
-            let placement = Placement {
-                anchor_rect: Rect::new(origin.0 as f32, origin.1 as f32, 1.0, 1.0),
-                anchor: Anchor::TopLeft,
-                offset: (0, 0),
-            };
+            let placement = Placement::fixed(Rect::new(origin.0 as f32, origin.1 as f32, 1.0, 1.0));
             match create(state, handle, &self.root, placement, popup.size, None) {
                 Ok(ghost) => ghosts.push(ghost),
                 Err(error) => {
@@ -421,6 +464,36 @@ impl Menus {
         Fading { originals, ghosts }
     }
 
+    fn fit_placements(
+        &mut self,
+        state: &mut State,
+        handle: &QueueHandle<State>,
+    ) -> Result<(), WindowError> {
+        let compositor = state
+            .compositor
+            .as_ref()
+            .ok_or(WindowError::Missing("wl_compositor"))?;
+        for (level, popup) in self.popups.iter_mut().enumerate() {
+            if !popup.signals.placed.swap(false, Ordering::AcqRel) {
+                continue;
+            }
+            let height = popup.signals.height.load(Ordering::Acquire);
+            let beside_left = popup.signals.x.load(Ordering::Acquire) < 0;
+            self.tracker.placed(level, height as f32, beside_left);
+            let size = self.tracker.panels()[level].size();
+            popup.size = (size.width, size.height);
+            set_shape(
+                compositor,
+                handle,
+                &popup.surface,
+                &popup.xdg_surface,
+                popup.size,
+                true,
+            );
+        }
+        Ok(())
+    }
+
     pub(crate) fn draw(
         &mut self,
         state: &mut State,
@@ -430,6 +503,7 @@ impl Menus {
         scale: f64,
         time: FrameTime,
     ) -> Result<(), WindowError> {
+        self.fit_placements(state, handle)?;
         let palette = appearance.palette();
         let shm = state.shm.clone().ok_or(WindowError::Missing("wl_shm"))?;
         let frame = Frame {
@@ -456,6 +530,8 @@ impl Menus {
                 show_highlight,
                 appearance,
                 scale,
+                scrolled: panel.scroll_offset(),
+                height: panel.size().height,
             };
             let scene = || {
                 let size = panel.size();
@@ -564,16 +640,9 @@ fn create(
         whole(anchor_rect.height).max(1),
     );
     positioner.set_anchor(placement.anchor);
-    positioner.set_gravity(Gravity::BottomRight);
+    positioner.set_gravity(placement.gravity);
     positioner.set_offset(placement.offset.0, placement.offset.1);
-    if level.is_some() {
-        positioner.set_constraint_adjustment(
-            ConstraintAdjustment::FlipX
-                | ConstraintAdjustment::FlipY
-                | ConstraintAdjustment::SlideX
-                | ConstraintAdjustment::SlideY,
-        );
-    }
+    positioner.set_constraint_adjustment(placement.adjustment);
     let signals = Arc::new(Signals::default());
     let surface = compositor.create_surface(handle, ());
     let xdg_surface = wm_base.get_xdg_surface(&surface, handle, signals.clone());
@@ -674,9 +743,11 @@ impl Dispatch<XdgPopup, Arc<Signals>> for State {
         _: &QueueHandle<Self>,
     ) {
         match event {
-            xdg_popup::Event::Configure { x, y, .. } => {
+            xdg_popup::Event::Configure { x, y, height, .. } => {
                 signals.x.store(x, Ordering::Release);
                 signals.y.store(y, Ordering::Release);
+                signals.height.store(height, Ordering::Release);
+                signals.placed.store(true, Ordering::Release);
             }
             xdg_popup::Event::PopupDone => {
                 signals.dismissed.store(true, Ordering::Release);

@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::{self, Sender};
 
 use unbound_wallpaper::{Fit, Picture, render};
@@ -115,7 +116,12 @@ pub(crate) fn choose_file(
     title: &str,
     filter: (String, Vec<(u32, String)>),
 ) -> zbus::Result<Option<PathBuf>> {
-    let token = format!("unbound_settings_{}", std::process::id());
+    static REQUESTS: AtomicU32 = AtomicU32::new(0);
+    let token = format!(
+        "unbound_settings_{}_{}",
+        std::process::id(),
+        REQUESTS.fetch_add(1, Ordering::Relaxed)
+    );
     let path = request_path(session, &token).ok_or(zbus::Error::Unsupported)?;
     let request = Proxy::new(session, PORTAL, path, REQUEST)?;
     let mut responses = request.receive_signal("Response")?;

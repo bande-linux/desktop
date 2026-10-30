@@ -2,10 +2,10 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use unbound_xdg::file_uri;
 use zbus::object_server::ObjectServer;
 use zbus::zvariant::{ObjectPath, OwnedValue, Value};
 
-use crate::file_chooser::uri;
 use crate::request::{self, CANCELLED, Cancellation, OTHER, SUCCESS};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -65,7 +65,7 @@ impl Screenshot {
         let ui = Arc::clone(&self.ui);
         let outcome = request::run(server, &handle, move |cancellation| {
             ui.capture(&capture, cancellation)
-                .map(|path| Value::from(uri(&path)))
+                .map(|path| Value::from(file_uri(&path)))
         })
         .await;
         answer(outcome, "uri")

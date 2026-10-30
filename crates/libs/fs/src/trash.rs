@@ -343,7 +343,7 @@ impl Trash {
                 topdir.join(".Trash").join(&uid),
                 topdir.join(format!(".Trash-{uid}")),
             ] {
-                if root != self.home.root && root.join("info").is_dir() {
+                if !dirs.iter().any(|known| known.root == root) && root.join("info").is_dir() {
                     dirs.push(TrashDir {
                         root,
                         topdir: Some(topdir.clone()),

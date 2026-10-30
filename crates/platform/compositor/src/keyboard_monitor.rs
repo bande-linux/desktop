@@ -55,10 +55,14 @@ impl Listeners {
         self.0.retain(|listener| listener.name.as_str() != name);
     }
 
-    fn listening(&self) -> bool {
-        self.0.iter().any(|listener| {
+    fn listeners(&self) -> impl Iterator<Item = &Listener> {
+        self.0.iter().filter(|listener| {
             listener.watching || listener.grabbing || !listener.modifiers.is_empty()
         })
+    }
+
+    fn listening(&self) -> bool {
+        self.listeners().next().is_some()
     }
 
     fn grabbed(&self) -> bool {
@@ -194,23 +198,30 @@ pub fn serve_keyboard_monitor(connection: &Connection) -> zbus::Result<KeyboardM
     });
     let (events, received) = channel::<KeyEvent>();
     let emitting = connection.clone();
+    let recipients = Arc::clone(&listeners);
     thread::spawn(move || {
         for event in received {
-            let emitted = emitting.emit_signal(
-                None::<()>,
-                PATH,
-                INTERFACE,
-                "KeyEvent",
-                &(
-                    event.released,
-                    event.state,
-                    event.keysym,
-                    event.unichar,
-                    event.keycode,
-                ),
-            );
-            if let Err(error) = emitted {
-                tracing::debug!("cannot tell assistive technologies about a key: {error}");
+            let names: Vec<OwnedUniqueName> = lock(&recipients)
+                .listeners()
+                .map(|listener| listener.name.clone())
+                .collect();
+            for name in names {
+                let emitted = emitting.emit_signal(
+                    Some(&name),
+                    PATH,
+                    INTERFACE,
+                    "KeyEvent",
+                    &(
+                        event.released,
+                        event.state,
+                        event.keysym,
+                        event.unichar,
+                        event.keycode,
+                    ),
+                );
+                if let Err(error) = emitted {
+                    tracing::debug!("cannot tell assistive technologies about a key: {error}");
+                }
             }
         }
     });

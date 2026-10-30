@@ -71,7 +71,9 @@ fn wire_app(app: &App) -> WireApp {
 }
 
 pub fn write_apps<'a>(apps: impl IntoIterator<Item = &'a App>) -> String {
+    let storable = |text: &str| !text.contains(['\t', '\n', '\r']);
     apps.into_iter()
+        .filter(|app| storable(&app.group) && storable(&app.name))
         .map(|app| {
             let (group, name, allow, banners, center) = wire_app(app);
             format!("{group}\t{name}\t{allow}\t{banners}\t{center}\n")
@@ -132,14 +134,15 @@ impl Shared {
         result
     }
 
-    fn remember_apps(&self, center: &Center) {
+    fn remember_apps(&self) {
         let Some(file) = &self.apps_file else {
             return;
         };
+        let apps = write_apps(self.lock().center.apps());
         let written = file
             .parent()
             .map_or(Ok(()), fs::create_dir_all)
-            .and_then(|()| fs::write(file, write_apps(center.apps())));
+            .and_then(|()| fs::write(file, apps));
         if let Err(error) = written {
             tracing::warn!(
                 "cannot remember notification apps in {}: {error}",
@@ -450,7 +453,7 @@ impl Notifications {
             )
         });
         if new_app {
-            self.shared.remember_apps(&self.shared.lock().center);
+            self.shared.remember_apps();
         }
         if audible {
             let _ = self
@@ -544,7 +547,7 @@ impl NotificationCenter {
         if !known {
             return Err(zbus::fdo::Error::InvalidArgs(format!("no app {group:?}")));
         }
-        self.shared.remember_apps(&self.shared.lock().center);
+        self.shared.remember_apps();
         Ok(())
     }
 

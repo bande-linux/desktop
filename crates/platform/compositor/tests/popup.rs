@@ -1,10 +1,10 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use smithay::utils::{Point, Size};
-use unbound_compositor::Headless;
+use unbound_compositor::{Headless, OutputConfig, Rect};
 use unbound_test_wayland::{
-    Anchor, BLUE, GREEN, KeyboardInteractivity, Layer, LayerRequest, PopupRequest, RED, ShmImage,
-    TestClient, roundtrip, roundtrip_until,
+    Anchor, BLUE, ConstraintAdjustment, GREEN, KeyboardInteractivity, Layer, LayerRequest,
+    PopupRequest, RED, ShmImage, TestClient, roundtrip, roundtrip_until,
 };
 use wayland_client::protocol::wl_shm::Format;
 
@@ -126,7 +126,7 @@ fn menu(parent: usize) -> PopupRequest {
         parent,
         anchor_rect: (10, 10, 1, 1),
         size: (30, 20),
-        flip_x: false,
+        adjustment: ConstraintAdjustment::empty(),
         grab: true,
         color: WHITE,
     }
@@ -381,4 +381,182 @@ fn a_drag_out_of_a_menu_ends_the_menu_grab_when_it_drops() {
 
     assert!(desk.editor.popup_dismissed(popup));
     desk.assert_free();
+}
+
+const MENU_SIZE: (i32, i32) = (60, 80);
+const SIDE: &str = "HEADLESS-2";
+
+fn placed_menu(anchor: (i32, i32), size: (i32, i32)) -> PopupRequest {
+    PopupRequest {
+        parent: 0,
+        anchor_rect: (anchor.0, anchor.1, 1, 1),
+        size,
+        adjustment: ConstraintAdjustment::FlipX
+            | ConstraintAdjustment::FlipY
+            | ConstraintAdjustment::SlideX
+            | ConstraintAdjustment::SlideY
+            | ConstraintAdjustment::ResizeY,
+        grab: false,
+        color: WHITE,
+    }
+}
+
+fn shell_layer(server: &mut Headless, namespace: &str, request: &LayerRequest) -> TestClient {
+    let mut shell = TestClient::connect_as_shell(server);
+    shell.use_seat(server);
+    shell.show_named_layer(server, request, namespace);
+    shell
+}
+
+fn desktop(server: &mut Headless) -> TestClient {
+    shell_layer(
+        server,
+        "desktop",
+        &LayerRequest {
+            layer: Layer::Background,
+            anchor: Anchor::Top | Anchor::Bottom | Anchor::Left | Anchor::Right,
+            size: (0, 0),
+            exclusive_zone: -1,
+            keyboard: KeyboardInteractivity::OnDemand,
+            color: BLUE,
+        },
+    )
+}
+
+fn bottom_bar(server: &mut Headless) -> TestClient {
+    shell_layer(
+        server,
+        "bar",
+        &LayerRequest {
+            layer: Layer::Top,
+            anchor: Anchor::Bottom | Anchor::Left | Anchor::Right,
+            size: (0, BAR as u32),
+            exclusive_zone: BAR,
+            keyboard: KeyboardInteractivity::OnDemand,
+            color: GREEN,
+        },
+    )
+}
+
+fn inside(outer: Rect, inner: Rect) -> bool {
+    inner.location.x >= outer.location.x
+        && inner.location.y >= outer.location.y
+        && inner.location.x + inner.size.w <= outer.location.x + outer.size.w
+        && inner.location.y + inner.size.h <= outer.location.y + outer.size.h
+}
+
+fn only_popup(server: &Headless) -> Rect {
+    let rects = server.popup_rects();
+    assert_eq!(rects.len(), 1, "{rects:?}");
+    rects[0]
+}
+
+#[test]
+fn a_desktop_menu_opened_near_any_edge_or_corner_stays_on_the_screen() {
+    let (width, height) = OUTPUT;
+    let anchors = [
+        (2, 2),
+        (width / 2, 2),
+        (width - 3, 2),
+        (width - 3, height / 2),
+        (width - 3, height - 3),
+        (width / 2, height - 3),
+        (2, height - 3),
+        (2, height / 2),
+    ];
+    for anchor in anchors {
+        let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+        let mut desk = desktop(&mut server);
+        desk.open_layer_popup(&mut server, &placed_menu(anchor, MENU_SIZE));
+        roundtrip(&mut server, &mut [&mut desk]);
+
+        let placed = only_popup(&server);
+        assert!(
+            inside(server.usable_area(), placed),
+            "a menu at {anchor:?} lands at {placed:?}"
+        );
+        assert_eq!(placed.size, MENU_SIZE.into());
+    }
+}
+
+#[test]
+fn a_desktop_menu_in_the_bottom_right_corner_opens_up_and_to_the_left_of_the_pointer() {
+    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let mut desk = desktop(&mut server);
+    let pointer = (OUTPUT.0 - 10, OUTPUT.1 - 10);
+    desk.open_layer_popup(&mut server, &placed_menu(pointer, MENU_SIZE));
+    roundtrip(&mut server, &mut [&mut desk]);
+
+    let placed = only_popup(&server);
+    assert_eq!(
+        (placed.location.x, placed.location.y),
+        (pointer.0 - MENU_SIZE.0, pointer.1 - MENU_SIZE.1)
+    );
+}
+
+#[test]
+fn a_desktop_menu_stays_clear_of_the_bar_but_a_bar_menu_may_cover_its_own_bar() {
+    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let mut bar = bottom_bar(&mut server);
+    let mut desk = desktop(&mut server);
+    let usable = server.usable_area();
+    assert_eq!(usable.size.h, OUTPUT.1 - BAR);
+
+    desk.open_layer_popup(
+        &mut server,
+        &placed_menu((40, OUTPUT.1 - BAR - 4), MENU_SIZE),
+    );
+    roundtrip(&mut server, &mut [&mut bar, &mut desk]);
+    let placed = only_popup(&server);
+    assert!(inside(usable, placed), "{placed:?} covers the bar");
+
+    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let mut bar = bottom_bar(&mut server);
+    let request = PopupRequest {
+        adjustment: ConstraintAdjustment::SlideY,
+        ..placed_menu((20, 4), (30, 20))
+    };
+    bar.open_layer_popup(&mut server, &request);
+    roundtrip(&mut server, &mut [&mut bar]);
+    let placed = only_popup(&server);
+    assert_eq!(placed.location.y, OUTPUT.1 - 20);
+}
+
+#[test]
+fn a_menu_taller_than_the_screen_is_shortened_to_the_usable_height() {
+    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let mut bar = bottom_bar(&mut server);
+    let mut desk = desktop(&mut server);
+    desk.open_layer_popup(&mut server, &placed_menu((100, 60), (60, 400)));
+    roundtrip(&mut server, &mut [&mut bar, &mut desk]);
+
+    assert_eq!(desk.popup_geometry(0), Some((101, 0, 60, OUTPUT.1 - BAR)));
+}
+
+#[test]
+fn a_window_menu_is_kept_on_the_display_of_its_anchor() {
+    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    server.add_output(OutputConfig::virtual_display(SIDE, Size::from((320, 240))));
+    server.move_pointer_to(at((OUTPUT.0 + 160, 120)), 0);
+    let mut editor = app(&mut server, RED, EDITOR);
+    let side = server.output_rect(SIDE).expect("side display");
+    let window = server.windows()[0].geometry().expect("mapped");
+    assert!(inside(side, window));
+    let below_main = OUTPUT.1 + 5 - window.location.y;
+    let right_edge = side.location.x + side.size.w - window.location.x - 10;
+
+    let low = editor.open_popup(&mut server, &placed_menu((10, below_main), (60, 30)));
+    roundtrip(&mut server, &mut [&mut editor]);
+    assert_eq!(
+        only_popup(&server).location.y,
+        OUTPUT.1 + 6,
+        "the side display is taller, so the menu need not flip"
+    );
+    editor.destroy_popup(&mut server, low);
+
+    editor.open_popup(&mut server, &placed_menu((right_edge, 10), (60, 30)));
+    roundtrip(&mut server, &mut [&mut editor]);
+    let placed = only_popup(&server);
+    assert!(inside(side, placed), "{placed:?} leaves {side:?}");
+    assert_eq!(placed.location.x + 60, window.location.x + right_edge);
 }

@@ -980,8 +980,13 @@ impl FilesView {
             Hit::Row { column, row } => {
                 let modifiers = pointer.modifiers;
                 let plain = !modifiers.logo && !modifiers.shift;
-                let shown = &self.browser.columns()[column];
-                let path = shown.entries[row].path.clone();
+                let Some(shown) = self.browser.columns().get(column) else {
+                    return false;
+                };
+                let Some(entry) = shown.entries.get(row) else {
+                    return false;
+                };
+                let path = entry.path.clone();
                 let already = self
                     .browser
                     .selected()
@@ -994,8 +999,8 @@ impl FilesView {
                     && shown.marked.len() > 1;
                 let folder_in_tab = pointer.count >= 2
                     && modifiers.logo
-                    && shown.entries[row].is_folder()
-                    && shown.entries[row].trashed.is_none();
+                    && entry.is_folder()
+                    && entry.trashed.is_none();
                 self.commit_rename();
                 if plain && pointer.count == 1 {
                     self.press = Some(Press::Item {
@@ -1093,7 +1098,12 @@ impl FilesView {
     fn middle_click(&mut self, hit: Hit) -> bool {
         let location = match hit {
             Hit::Tab(index) | Hit::CloseTab(index) => return self.close_tab(index),
-            Hit::Row { column, row } => match self.browser.columns()[column].entries.get(row) {
+            Hit::Row { column, row } => match self
+                .browser
+                .columns()
+                .get(column)
+                .and_then(|shown| shown.entries.get(row))
+            {
                 Some(entry) if entry.is_folder() && entry.trashed.is_none() => {
                     Location::Folder(entry.path.clone())
                 }

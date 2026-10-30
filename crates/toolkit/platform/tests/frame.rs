@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use support::{Shot, shot};
 use unbound_test_bus::SessionBus;
+use unbound_toolkit_platform::FrameRegions;
 use zbus::zvariant::{OwnedValue, Value};
 
 const PORTAL_PATH: &str = "/org/freedesktop/portal/desktop";
@@ -60,5 +61,21 @@ fn the_window_frame_matches_its_goldens_in_both_schemes_at_1x_and_1_5x() {
                 );
             }
         }
+        let scheme = if dark { "dark" } else { "light" };
+        shot(
+            &format!("window-frame-sidebar-{scheme}-1x"),
+            |window| {
+                window.set_frame_regions(FrameRegions {
+                    sidebar: 110.0,
+                    toolbar: 0.0,
+                });
+                None
+            },
+            Shot {
+                scale: 1.0,
+                dark,
+                pointer: AWAY,
+            },
+        );
     }
 }

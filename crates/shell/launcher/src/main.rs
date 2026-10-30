@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::rc::Rc;
 use std::sync::mpsc::{Receiver, Sender, channel};
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use accesskit::TreeUpdate;
 use unbound_fs::Entry;
@@ -20,7 +20,7 @@ use unbound_search::{FileIndex, Usage, recently_used_path, usage_path};
 use unbound_thumbnails::{Cache, ThumbnailSize, Thumbnailers, thumbnail};
 use unbound_toolkit::{
     App, Edges, Image, KeyboardFocus, LauncherMode, LayerKind, LayerOptions, MenuPlacement, Rect,
-    Role, Scene, TextSystem, Window, WindowError, WindowEvent,
+    Role, Scene, TextSystem, Window, WindowError, WindowEvent, ui::frame_time,
 };
 use unbound_xdg::{
     Apps, DIRECTORY, DesktopEntry, ICON_THEMES, LaunchError, Locale, MimeDatabase, applications,
@@ -160,7 +160,7 @@ struct LauncherShell {
     apps: Rc<RefCell<Apps>>,
     recently_used: PathBuf,
     skin_tone: PathBuf,
-    blurred: Option<(u32, u32)>,
+    scrim: Option<f32>,
 }
 
 fn load_skin_tone(path: &Path) -> Option<usize> {
@@ -214,12 +214,29 @@ impl LauncherShell {
             self.ask(Request::List);
         }
         if !window.is_visible() {
-            self.launcher.appear(Instant::now());
-        }
-        if let Err(error) = window.show() {
-            tracing::warn!("cannot show: {error}");
+            if let Err(error) = self.show(window) {
+                tracing::warn!("cannot show: {error}");
+            }
+            self.launcher.appear(frame_time().on_screen());
         }
         window.request_redraw();
+    }
+
+    fn show(&mut self, window: &mut Window) -> Result<(), WindowError> {
+        window.set_layer_anchor(Edges::ALL);
+        window.set_layer_margin(0);
+        window.set_layer_size((0, 0))?;
+        window.show()?;
+        let surface = self.launcher.surface(window.size());
+        window.set_layer_anchor(Edges {
+            top: true,
+            bottom: false,
+            left: false,
+            right: false,
+        });
+        window.set_layer_margin(surface.top);
+        self.scrim = None;
+        window.set_layer_size(surface.size)
     }
 
     fn sync(&mut self, window: &mut Window) {
@@ -325,24 +342,25 @@ impl LauncherShell {
 impl App for LauncherShell {
     fn scene(&mut self, window: &mut Window) -> Scene {
         let (width, height) = window.size();
-        if self.blurred != Some((width, height)) {
-            self.blurred = Some((width, height));
-            let screen = Rect::new(0.0, 0.0, width as f32, height as f32);
-            if let Err(error) = window.set_background_blur(&[screen]) {
-                tracing::info!("the launcher's backdrop is not blurred: {error}");
+        let now = frame_time().presentation;
+        let scrim = self.launcher.opacity(now);
+        if self.scrim != Some(scrim) {
+            self.scrim = Some(scrim);
+            if let Err(error) = window.set_scrim(scrim) {
+                tracing::info!("the screen behind the launcher is not dimmed: {error}");
             }
         }
-        let now = Instant::now();
-        let scene = self.launcher.scene(width, height, now);
-        if self.launcher.is_animating(now) {
-            window.request_redraw();
-        }
-        scene
+        self.launcher.scene(width, height, now)
+    }
+
+    fn animating(&self) -> bool {
+        self.launcher.is_animating(frame_time().presentation)
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
         match event {
             WindowEvent::ShowLauncher => self.toggle(window, Mode::Search, false),
+            WindowEvent::ScrimPressed => self.close(window),
             WindowEvent::OpenLauncher { mode, text_field } => {
                 let mode = match mode {
                     LauncherMode::Clipboard => Mode::Clipboard,
@@ -520,7 +538,7 @@ fn run() -> Result<(), WindowError> {
         apps: apps_by_type,
         recently_used,
         skin_tone,
-        blurred: None,
+        scrim: None,
     };
     unbound_toolkit::run(&mut window, &mut shell)
 }

@@ -119,6 +119,7 @@ pub(crate) enum Placed<'a> {
     Closing(&'a Closing),
     Overview(usize),
     Backdrop(usize),
+    Scrim(WlSurface, usize),
 }
 
 type Composed<E = ScreenElement> = (
@@ -297,7 +298,7 @@ impl Headless {
         };
         let center = settings.logical_size().to_f64().downscale(2.0);
         let screen = Screen::new(&handle, config, settings);
-        handle.create_global::<State, UnboundShellV1, ()>(14, ());
+        handle.create_global::<State, UnboundShellV1, ()>(15, ());
         handle.create_global::<State, UnboundAppV1, ()>(5, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
         handle.create_global::<State, smithay::reexports::wayland_protocols_wlr::output_management::v1::server::zwlr_output_manager_v1::ZwlrOutputManagerV1, ()>(crate::management::MANAGER_VERSION, ());
@@ -760,6 +761,17 @@ impl Headless {
                         renderer.reduced_effects(),
                     ));
                 }
+                Placed::Scrim(owner, screen) => {
+                    if let Some(scrim) = crate::effect::scrim(&owner) {
+                        elements.extend(self.state.dim_screen(
+                            screen,
+                            scale,
+                            renderer.reduced_effects(),
+                            scrim.ids,
+                            scrim.opacity,
+                        ));
+                    }
+                }
             }
         }
         tie_blurs_to_what_lies_below(&mut elements, scale);
@@ -1139,7 +1151,10 @@ impl State {
             .filter_map(|placed| match placed {
                 Placed::Surface(surface, origin) => Some((surface, origin)),
                 Placed::Window(window) => Some((window.surface().clone(), window.surface_origin())),
-                Placed::Closing(_) | Placed::Overview(_) | Placed::Backdrop(_) => None,
+                Placed::Closing(_)
+                | Placed::Overview(_)
+                | Placed::Backdrop(_)
+                | Placed::Scrim(..) => None,
             })
             .collect()
     }
@@ -1168,7 +1183,12 @@ impl State {
             self.placed_layers(screen, layer)
                 .into_iter()
                 .flat_map(|(surface, at)| {
-                    popups(&surface, at).chain([Placed::Surface(surface, at)])
+                    let scrim = crate::effect::scrim(&surface)
+                        .filter(|_| is_mapped(&surface))
+                        .map(|_| Placed::Scrim(surface.clone(), screen));
+                    popups(&surface, at)
+                        .chain([Placed::Surface(surface, at)])
+                        .chain(scrim)
                 })
                 .collect::<Vec<_>>()
         };
@@ -1249,8 +1269,7 @@ impl State {
             return false;
         };
         map.arrange();
-        let mapped =
-            with_renderer_surface_state(surface, |state| state.buffer().is_some()).unwrap_or(false);
+        let mapped = is_mapped(surface);
         let exclusive = (mapped
             && matches!(layer.layer(), Layer::Top | Layer::Overlay)
             && layer.cached_state().keyboard_interactivity == KeyboardInteractivity::Exclusive)
@@ -1721,4 +1740,8 @@ impl FractionalScaleHandler for State {
         let scale = self.screens[self.screen_of_surface(&surface)].scale();
         send_preferred_scale(&surface, scale);
     }
+}
+
+pub(crate) fn is_mapped(surface: &WlSurface) -> bool {
+    with_renderer_surface_state(surface, |state| state.buffer().is_some()).unwrap_or(false)
 }

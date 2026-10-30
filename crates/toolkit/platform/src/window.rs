@@ -153,6 +153,7 @@ pub enum WindowEvent {
     PastedTransfer(Transfer),
     Drag(DragEvent),
     ShowLauncher,
+    ScrimPressed,
     OpenLauncher {
         mode: LauncherMode,
         text_field: bool,
@@ -1744,6 +1745,13 @@ impl Window {
         }
     }
 
+    pub fn set_layer_margin(&mut self, top: i32) {
+        if let ShellSurface::Layer(layer) = &self.role {
+            layer.set_margin(top, 0, 0, 0);
+            self.needs_redraw = true;
+        }
+    }
+
     pub fn set_layer_size(&mut self, size: (u32, u32)) -> Result<(), WindowError> {
         let ShellSurface::Layer(layer) = &self.role else {
             return Err(WindowError::Missing("a layer surface"));
@@ -2346,7 +2354,7 @@ impl Dispatch<WlRegistry, ()> for State {
                     }
                 }
                 "unbound_shell_v1" => {
-                    state.shell.protocol = Some(registry.bind(name, version.min(14), handle, ()));
+                    state.shell.protocol = Some(registry.bind(name, version.min(15), handle, ()));
                 }
                 "unbound_app_v1" => {
                     state.shell.app = Some(registry.bind(name, version.min(5), handle, ()));

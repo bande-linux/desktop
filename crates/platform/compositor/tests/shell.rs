@@ -547,6 +547,56 @@ fn a_click_on_a_window_under_an_exclusive_overlay_does_not_take_the_keyboard() {
 }
 
 #[test]
+fn a_scrim_dims_the_screen_behind_a_small_overlay_and_a_press_on_it_goes_to_its_owner() {
+    let mut server = server();
+    let mut renderer = Renderer::new().expect("renderer");
+    let mut app = TestClient::connect(&mut server);
+    app.use_seat(&mut server);
+    let pixels = red(32, 32);
+    app.show_window(&mut server, &image(&pixels, 32, 32));
+    let mut shell = TestClient::connect_as_shell(&mut server);
+    shell.use_seat(&mut server);
+    shell.join_shell(&mut server);
+    shell.show_layer(
+        &mut server,
+        &LayerRequest {
+            keyboard: KeyboardInteractivity::Exclusive,
+            ..panel(Layer::Overlay, Anchor::Top, (64, 16), 0)
+        },
+    );
+    let window = server.windows()[0].location();
+    let inside = (window.x + 4, window.y + 4);
+    let undimmed = pixel(&mut renderer, &mut server, inside.0, inside.1);
+
+    shell.set_scrim(&mut server, 0, 1.0);
+    let dimmed = pixel(&mut renderer, &mut server, inside.0, inside.1);
+    assert!(
+        dimmed[0] < undimmed[0],
+        "{dimmed:?} is not darker than {undimmed:?}"
+    );
+
+    server.move_pointer_to(
+        Point::from((f64::from(window.x + 28), f64::from(window.y + 28))),
+        0,
+    );
+    server.press_button(BTN_LEFT, true, 0);
+    server.press_button(BTN_LEFT, false, 0);
+    roundtrip(&mut server, &mut [&mut app, &mut shell]);
+    assert!(app.buttons().is_empty());
+    assert_eq!(shell.scrim_presses(), 1);
+
+    shell.hide_layer(&mut server, 0);
+    server.press_button(BTN_LEFT, true, 0);
+    server.press_button(BTN_LEFT, false, 0);
+    roundtrip(&mut server, &mut [&mut app, &mut shell]);
+    assert_eq!(app.buttons(), [(BTN_LEFT, true), (BTN_LEFT, false)]);
+    assert_eq!(
+        pixel(&mut renderer, &mut server, inside.0, inside.1),
+        undimmed
+    );
+}
+
+#[test]
 fn the_shell_sees_running_apps_and_brings_one_forward() {
     let mut server = server();
     let mut shell = TestClient::connect_as_shell(&mut server);

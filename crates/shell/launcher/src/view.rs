@@ -9,10 +9,10 @@ use accesskit::{Action, ActionRequest, Node, Role};
 use unbound_fs::Entry;
 use unbound_preview::Preview;
 use unbound_search::{FileResults, Usage};
-use unbound_spring::{Animation, Spring, State as SpringState};
 use unbound_toolkit::Appearance;
 use unbound_toolkit::ui::{
-    Context, Event, Key, Menu, Modifiers, ScrollState, Size, TextField, Ui, Widget, WidgetId,
+    Animated, Context, Event, Key, Menu, Modifiers, ScrollState, Size, Spring, TextField, Ui,
+    Widget, WidgetId,
 };
 use unbound_toolkit::{
     Color, Elevation, Image, Item, Point, Radius, Rect, Scene, Scheme, Shape, TextAlign, TextRole,
@@ -48,7 +48,13 @@ const NO_RESULTS_HEIGHT: f32 = 96.0;
 const FOOTER_HEIGHT: f32 = 40.0;
 const TOP_FRACTION: f32 = 0.22;
 const APPEAR_RISE: f32 = 8.0;
-const SETTLED: f64 = 0.002;
+const SHADOW_MARGIN: f32 = 48.0;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Surface {
+    pub size: (u32, u32),
+    pub top: i32,
+}
 
 pub trait Catalog {
     fn icon(&mut self, hit: &Hit) -> Option<Image>;
@@ -71,6 +77,7 @@ pub struct State {
     sent_generation: u64,
     pub viewport: Rect,
     pub selected_frame: Rect,
+    screen_height: f32,
 }
 
 pub type Shared = Rc<RefCell<State>>;
@@ -328,8 +335,7 @@ impl Widget for Card {
 
     fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
         self.sync_rows();
-        self.max_height = (available.height * (1.0 - TOP_FRACTION) - FIELD_ROW - BOTTOM_MARGIN)
-            .clamp(NO_RESULTS_HEIGHT, RESULTS_MAX_HEIGHT);
+        self.max_height = results_height(available.height);
         self.children[FIELD].measure(cx, Size::new(CARD_WIDTH, FIELD_ROW));
         let footer = if self.has_footer() {
             FOOTER_HEIGHT
@@ -619,13 +625,14 @@ impl Widget for Backdrop {
 
     fn place(&mut self, cx: &mut Context, frame: Rect) {
         self.frame = frame;
+        let screen_height = self.state.borrow().screen_height;
         let card = &mut self.children[0];
-        let size = card.measure(cx, Size::new(frame.width, frame.height));
+        let size = card.measure(cx, Size::new(frame.width, screen_height));
         card.place(
             cx,
             Rect::new(
                 frame.x + ((frame.width - size.width) / 2.0).round(),
-                frame.y + (frame.height * TOP_FRACTION).round(),
+                frame.y + SHADOW_MARGIN,
                 size.width,
                 size.height,
             ),
@@ -685,7 +692,8 @@ pub struct Launcher {
     pub ui: Ui,
     menu_request: Option<(Menu, Point)>,
     field: WidgetId,
-    appear: Option<(Instant, Animation)>,
+    shown: Animated,
+    rise: Animated,
     reduce_motion: bool,
 }
 
@@ -710,6 +718,7 @@ impl Launcher {
             sent_generation: 0,
             viewport: Rect::default(),
             selected_frame: Rect::default(),
+            screen_height: 0.0,
         }));
         let changed = state.clone();
         let field = TextField::new(&L10N.tr("search"), "", move |query| {
@@ -754,7 +763,8 @@ impl Launcher {
             ui,
             menu_request: None,
             field: field_id,
-            appear: None,
+            shown: Animated::new(1.0),
+            rise: Animated::points(0.0),
             reduce_motion: appearance.reduce_motion,
         }
     }
@@ -886,31 +896,32 @@ impl Launcher {
     }
 
     pub fn appear(&mut self, now: Instant) {
-        let spring = if self.reduce_motion {
-            Spring::FADE
-        } else {
-            Spring::QUICK
-        };
-        let start = SpringState {
-            position: 0.0,
-            velocity: 0.0,
-        };
-        self.appear = Some((now, Animation::new(spring, start, 1.0)));
+        self.shown.jump_to(0.0);
+        self.shown.animate_at(now, false, 1.0, Spring::FADE);
+        self.rise.jump_to(APPEAR_RISE);
+        self.rise
+            .animate_at(now, self.reduce_motion, 0.0, Spring::QUICK);
     }
 
-    fn progress(&self, now: Instant) -> f32 {
-        self.appear.map_or(1.0, |(start, mut animation)| {
-            animation.advance(now.saturating_duration_since(start).as_secs_f64());
-            if animation.is_at_rest(SETTLED) {
-                1.0
-            } else {
-                animation.state().position.clamp(0.0, 1.0) as f32
-            }
-        })
+    pub fn surface(&mut self, screen: (u32, u32)) -> Surface {
+        let height = screen.1 as f32;
+        self.state.borrow_mut().screen_height = height;
+        let card = FIELD_ROW + 1.0 + results_height(height);
+        Surface {
+            size: (
+                (CARD_WIDTH + 2.0 * SHADOW_MARGIN) as u32,
+                (card + 2.0 * SHADOW_MARGIN).ceil() as u32,
+            ),
+            top: (height * TOP_FRACTION).round() as i32 - SHADOW_MARGIN as i32,
+        }
+    }
+
+    pub fn opacity(&self, now: Instant) -> f32 {
+        self.shown.value_at(now).0.clamp(0.0, 1.0)
     }
 
     pub fn is_animating(&self, now: Instant) -> bool {
-        self.progress(now) < 1.0 || self.ui.is_animating()
+        self.shown.value_at(now).1 || self.rise.value_at(now).1 || self.ui.is_animating()
     }
 
     pub fn clear(&mut self) {
@@ -1016,31 +1027,30 @@ impl Launcher {
     }
 
     pub fn scene(&mut self, width: u32, height: u32, now: Instant) -> Scene {
-        let progress = self.progress(now);
+        let opacity = self.opacity(now);
+        let rise = self.rise.value_at(now).0;
         let mut scene = self.ui.scene(width, height);
         scene.background = Color::TRANSPARENT;
-        let scrim = Item::Fill {
-            shape: Shape::rect(Rect::new(0.0, 0.0, width as f32, height as f32)),
-            paint: self.ui.context().palette.scrim.into(),
-        };
         let card = std::mem::take(&mut scene.items);
-        let card = if progress < 1.0 && !self.reduce_motion {
-            vec![Item::Translate {
-                offset: Point::new(0.0, (APPEAR_RISE * (1.0 - progress)).round()),
+        let card = match rise != 0.0 {
+            true => vec![Item::Translate {
+                offset: Point::new(0.0, rise),
                 items: card,
-            }]
-        } else {
-            card
+            }],
+            false => card,
         };
-        scene.items = std::iter::once(scrim).chain(card).collect();
-        if progress < 1.0 {
-            scene.items = vec![Item::Opacity {
-                alpha: progress,
-                items: std::mem::take(&mut scene.items),
-            }];
-        } else {
-            self.appear = None;
-        }
+        scene.items = match opacity < 1.0 {
+            true => vec![Item::Opacity {
+                alpha: opacity,
+                items: card,
+            }],
+            false => card,
+        };
         scene
     }
+}
+
+fn results_height(screen_height: f32) -> f32 {
+    (screen_height * (1.0 - TOP_FRACTION) - FIELD_ROW - BOTTOM_MARGIN)
+        .clamp(NO_RESULTS_HEIGHT, RESULTS_MAX_HEIGHT)
 }

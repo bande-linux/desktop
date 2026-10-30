@@ -12,7 +12,7 @@ use unbound_l10n::Localizer;
 
 pub use clips::{Clips, Reply, Request};
 pub use model::{Action, AppInfo, Clip, Heading, Hit, Kind, Mode, PaneInfo, SettingInfo, Target};
-pub use view::{CARD_WIDTH, Catalog, ICON_SIZE, Launcher, Loaded};
+pub use view::{CARD_WIDTH, Catalog, ICON_SIZE, Launcher, Loaded, Surface};
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-launcher.ftl");
 

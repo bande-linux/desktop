@@ -295,21 +295,60 @@ Unbound uses `greetd` for the privileged part of login and keeps its own UI unpr
 3. **Handover**: after authentication, `greetd` opens the PAM session through `pam_systemd.so`
    and starts the user's session, which runs `unbound-compositor`.
 
-Implemented in `crates/shell/greeter`: greetd's IPC (create a session, answer the secret
-prompt, acknowledge information, start, cancel after a refusal) inside
-`unbound-compositor --greeter`, which runs only the greeter and exits with it; the package
-ships a greetd configuration. The login window shows the wallpaper of the person it offers,
+Implemented in `crates/shell/greeter`: greetd's IPC inside `unbound-compositor --greeter`,
+which runs only the greeter and exits with it. The conversation runs on the greeter's event
+loop: the typed password answers PAM's first secret prompt; any further prompt (an expired
+password's "Current password", "New password", a one-time code) becomes the field's
+placeholder and takes the next answer; PAM's information and error messages stay under the
+field until the next attempt or Escape, which also clears the field and cancels a pending
+further prompt. A refused password shakes the field (the `shake` spring) and says so; other
+failures show PAM's or greetd's reason. The field shows a Caps Lock sign while Caps Lock is on
+(`WindowEvent::CapsLock` from the toolkit), and the active keyboard layout under the field when
+the system has several. The greeter compositor applies the system's input settings, so the
+layouts are those of `/etc/default/keyboard`. After authentication the greeter asks greetd to
+start `unbound-session` (the wrapper the `unbound.desktop` session entry runs, which starts
+`unbound-compositor.service` in the user's manager) with `XDG_SESSION_TYPE=wayland`,
+`XDG_CURRENT_DESKTOP=Unbound` and `XDG_SESSION_DESKTOP=unbound`, so `pam_systemd` registers a
+Wayland session; the greeter then exits, its compositor with it, releasing the seat and VT
+before greetd runs the session. When the session ends greetd starts the greeter again.
+
+**Installation.** `/etc/greetd/config.toml` is greetd's conffile and stays untouched. The
+`unbound-greeter` package ships its configuration as
+`/usr/share/unbound-greeter/greetd-config.toml` and a drop-in,
+`/usr/lib/systemd/system/greetd.service.d/unbound.conf`, that starts greetd with
+`--config` pointing at it. greetd's own package makes `greetd.service` the
+`display-manager.service` when no other display manager holds that link; `unbound-greeter`
+does the same on its first installation (never on upgrades, never over an existing link) and
+then records `/usr/sbin/greetd` in `/etc/X11/default-display-manager` if that file is absent,
+which it removes again on purge. An existing GDM, SDDM or LightDM therefore stays in charge.
+To override:
+
+- another greetd configuration: copy the drop-in to
+  `/etc/systemd/system/greetd.service.d/unbound.conf` and change its `--config`, or mask it with
+  `ln -s /dev/null /etc/systemd/system/greetd.service.d/unbound.conf` to go back to
+  `/etc/greetd/config.toml`;
+- another display manager: `systemctl enable --force gdm3` (or `dpkg-reconfigure gdm3`).
+
+Either takes effect after `systemctl daemon-reload` and a restart of the display manager,
+which ends the sessions it started.
+
+The login window shows the wallpaper of the person it offers,
 starting with whoever signed in last (remembered in the greeter user's
 `$XDG_STATE_HOME/unbound-greeter/last-user`, on Debian under `/var/lib/greetd`, the home that
 greetd's package creates owned by `_greetd`, so no state directory of our own is
-needed): `unbound-config` hands the dark picture to
-AccountsService (`SetBackgroundFile`, which a user may do for their own account without a
-password) whenever the wallpaper changes, and the greeter reads `BackgroundFile` from it, as the
-macOS login window shows the user's desktop picture. Pictures inside a home folder that the
-greeter user cannot read (Debian creates homes as 0700) fall back to the default; showing them
-needs a privileged copy, which is not done. Also not done: a user picker (Up/Down switches users
-for now), a second secret prompt, power and accessibility menus, an `unbound-session` wrapper
-(greetd starts `unbound-compositor` directly), and installing the greetd configuration.
+needed), as the macOS login window shows the user's desktop picture. Debian's
+AccountsService lacks Ubuntu's `SetBackgroundFile`, and Debian creates homes as 0700, so
+`unbound-config` copies the dark picture (at most 64 MiB) whenever the wallpaper changes into
+`/var/lib/unbound-greeter/pictures/<uid>`, and removes it when the person returns to the
+default. The package creates that folder as `root:_greetd` with mode 3733: everyone may create
+files in it but no one may list it, the sticky bit keeps people from replacing or deleting each
+other's files, and the setgid bit gives every file the `_greetd` group, so a copy written with
+mode 0640 is readable by its owner and the login window alone. The greeter opens
+`<uid>` without following links and uses it only if it is a regular file owned by that uid
+and within the size limit, then decodes it through `/proc/self/fd`, so the file it checked is
+the file it shows; anything else falls back to the bundled default. Also not done: a user picker (Up/Down switches users
+for now), choosing among several sessions, a visible (non-secret) field for PAM's visible
+prompts (they are answered in the secure field), and power and accessibility menus.
 
 
 ## Crash reporting and supervision

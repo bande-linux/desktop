@@ -1,14 +1,15 @@
-use std::io::{Read, Write};
+use std::fs::File;
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::net::UnixStream;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use std::thread;
 use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
+use unbound_config::LOGIN_PICTURES;
 use unbound_greeter::{
-    Outcome, last_user_file, log_in, login_picture, login_users, remember_user, remembered_user,
+    L10N, Login, Rejection, Request, Step, last_user_file, login_picture, login_users, opened_path,
+    read_message, remember_user, remembered_user, write_message,
 };
 use unbound_keyboard::Layouts;
 use unbound_lock::{BackdropSource, DateFormats, Inbox, LockScreen, User, Variant, load_backdrop};
@@ -19,19 +20,47 @@ use unbound_toolkit::{
 };
 
 const CLOCK_TICK: Duration = Duration::from_secs(1);
-const SESSION: &str = "unbound-compositor";
-const STARTED: u8 = 1;
-const REJECTED: u8 = 0;
+
+struct Conversation {
+    login: Login,
+    greetd: UnixStream,
+    asking: bool,
+    explained: bool,
+    started: bool,
+    rejection: Option<Rejection>,
+}
+
+impl Conversation {
+    fn open(login: &str, password: String) -> std::io::Result<Self> {
+        let socket = std::env::var_os("GREETD_SOCK")
+            .ok_or_else(|| std::io::Error::other("GREETD_SOCK is not set"))?;
+        let mut greetd = UnixStream::connect(socket)?;
+        let (login, request) = Login::begin(login, password);
+        write_message(&mut greetd, &request)?;
+        Ok(Self {
+            login,
+            greetd,
+            asking: false,
+            explained: false,
+            started: false,
+            rejection: None,
+        })
+    }
+
+    fn send(&mut self, request: &Request) -> std::io::Result<()> {
+        write_message(&mut self.greetd, request)
+    }
+}
 
 struct Greeter {
     users: Vec<User>,
     user: usize,
     screen: LockScreen,
-    verdicts: UnixStream,
-    verdict_sender: UnixStream,
+    conversation: Option<Conversation>,
+    caps_lock: bool,
     next_clock: Instant,
     backdrop: Option<Inbox<Image>>,
-    picture: Option<Option<PathBuf>>,
+    picture: Option<File>,
     wallpaper: Option<Image>,
     last_user: Option<PathBuf>,
     layouts: Layouts,
@@ -52,7 +81,7 @@ impl Greeter {
 
     fn switch_user(&mut self, forward: bool) -> bool {
         let count = self.users.len();
-        if count < 2 {
+        if count < 2 || self.conversation.is_some() {
             return false;
         }
         self.user = if forward {
@@ -62,11 +91,9 @@ impl Greeter {
         };
         self.screen = Self::screen_for(&self.users[self.user]);
         self.screen.set_input_source(self.input_source.clone());
-        let picture = login_picture(&self.users[self.user].login);
-        if self.picture.as_ref() != Some(&picture) {
-            self.picture = Some(picture);
-            self.backdrop = None;
-        }
+        self.screen.set_caps_lock(self.caps_lock);
+        self.picture = login_picture(Path::new(LOGIN_PICTURES), self.users[self.user].uid);
+        self.backdrop = None;
         if let Some(wallpaper) = &self.wallpaper {
             self.screen
                 .set_backdrop(wallpaper.clone(), Instant::now() - Duration::from_secs(1));
@@ -75,31 +102,105 @@ impl Greeter {
     }
 
     fn sign_in(&mut self, password: String) {
-        let Ok(mut sender) = self.verdict_sender.try_clone() else {
-            self.screen.reject(Instant::now());
+        self.screen.set_message(None);
+        let sent = match &mut self.conversation {
+            Some(conversation) if conversation.asking => {
+                conversation.asking = false;
+                let answer = conversation.login.answer(password);
+                conversation.send(&answer)
+            }
+            Some(_) => return,
+            None => Conversation::open(&self.users[self.user].login, password)
+                .map(|conversation| self.conversation = Some(conversation)),
+        };
+        if let Err(error) = sent {
+            self.unavailable(&error);
+        }
+    }
+
+    fn unavailable(&mut self, error: &std::io::Error) {
+        tracing::warn!("greetd: {error}");
+        self.conversation = None;
+        self.screen.ask(None);
+        self.screen.reject(Instant::now());
+        self.screen.set_message(Some(L10N.tr("unavailable")));
+    }
+
+    fn cancel_answer(&mut self) {
+        let Some(conversation) = self
+            .conversation
+            .as_mut()
+            .filter(|conversation| conversation.asking)
+        else {
             return;
         };
-        let login = self.users[self.user].login.clone();
-        thread::spawn(move || {
-            let outcome = std::env::var_os("GREETD_SOCK")
-                .ok_or_else(|| std::io::Error::other("GREETD_SOCK is not set"))
-                .and_then(UnixStream::connect)
-                .and_then(|mut greetd| {
-                    log_in(&mut greetd, &login, password, vec![SESSION.to_owned()])
-                });
-            let verdict = match outcome {
-                Ok(Outcome::Started) => STARTED,
-                Ok(Outcome::Rejected(reason)) => {
-                    tracing::info!("{login} not signed in: {reason}");
-                    REJECTED
+        conversation.asking = false;
+        let cancel = conversation.login.cancel();
+        if let Err(error) = conversation.send(&cancel) {
+            self.unavailable(&error);
+        }
+    }
+
+    fn converse(&mut self) {
+        let Some(conversation) = self.conversation.as_mut() else {
+            return;
+        };
+        if let Err(error) = Self::follow(conversation, &mut self.screen) {
+            self.unavailable(&error);
+            return;
+        }
+        if !conversation.login.is_idle() {
+            return;
+        }
+        let Some(finished) = self.conversation.take() else {
+            return;
+        };
+        match finished.rejection {
+            None if finished.started => {
+                self.started = true;
+                if let Some(file) = &self.last_user
+                    && let Err(error) = remember_user(file, &self.users[self.user].login)
+                {
+                    tracing::info!("cannot remember who signed in last: {error}");
                 }
-                Err(error) => {
-                    tracing::warn!("greetd: {error}");
-                    REJECTED
+            }
+            None => self.screen.ask(None),
+            Some(rejection) => {
+                self.screen.ask(None);
+                self.screen.reject(Instant::now());
+                match rejection {
+                    Rejection::WrongPassword => {
+                        self.screen.set_message(Some(L10N.tr("wrong-password")));
+                    }
+                    Rejection::Failed(reason) => {
+                        tracing::info!("not signed in: {reason}");
+                        if !finished.explained {
+                            self.screen.set_message(Some(reason));
+                        }
+                    }
                 }
-            };
-            let _ = sender.write_all(&[verdict]);
-        });
+            }
+        }
+    }
+
+    fn follow(conversation: &mut Conversation, screen: &mut LockScreen) -> std::io::Result<()> {
+        let response = read_message(&mut conversation.greetd)?;
+        for step in conversation.login.respond(response) {
+            match step {
+                Step::Send(request) => conversation.send(&request)?,
+                Step::Ask(prompt) => {
+                    conversation.asking = true;
+                    screen.ask(Some(&prompt));
+                }
+                Step::Show(message) => {
+                    conversation.explained = true;
+                    screen.set_message(Some(message));
+                }
+                Step::Rejected(rejection) => conversation.rejection = Some(rejection),
+                Step::Started => conversation.started = true,
+            }
+        }
+        Ok(())
     }
 }
 
@@ -107,7 +208,7 @@ impl App for Greeter {
     fn scene(&mut self, window: &mut Window) -> Scene {
         let (width, height) = window.size();
         if self.backdrop.is_none() && width > 0 && height > 0 {
-            let picture = self.picture.clone().flatten();
+            let picture = self.picture.as_ref().map(opened_path);
             match load_backdrop(
                 BackdropSource::Picture(picture),
                 Variant::Dark,
@@ -127,7 +228,19 @@ impl App for Greeter {
                 key: key @ (Key::Up | Key::Down),
                 ..
             }) => self.switch_user(key == Key::Down),
+            WindowEvent::Input(
+                input @ Event::Key {
+                    key: Key::Escape, ..
+                },
+            ) => {
+                self.cancel_answer();
+                self.screen.handle(&input)
+            }
             WindowEvent::Input(input) => self.screen.handle(&input),
+            WindowEvent::CapsLock(on) => {
+                self.caps_lock = on;
+                self.screen.set_caps_lock(on)
+            }
             WindowEvent::Accessibility(request) => self.screen.perform(&request),
             WindowEvent::InputSources { sources, active } => {
                 self.input_source = sources
@@ -147,35 +260,27 @@ impl App for Greeter {
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        let mut sources = vec![self.verdicts.as_fd()];
-        sources.extend(self.backdrop.as_ref().map(Inbox::fd));
-        sources
+        self.backdrop
+            .as_ref()
+            .map(Inbox::fd)
+            .into_iter()
+            .chain(
+                self.conversation
+                    .as_ref()
+                    .map(|conversation| conversation.greetd.as_fd()),
+            )
+            .collect()
     }
 
     fn source_ready(&mut self, window: &mut Window, index: usize) {
-        if index == 1 {
-            if let Some(image) = self.backdrop.as_ref().and_then(|inbox| inbox.drain().pop()) {
-                self.screen.set_backdrop(image.clone(), Instant::now());
-                self.wallpaper = Some(image);
-                window.request_redraw();
-            }
-            return;
+        let backdrop = self.backdrop.as_ref().filter(|_| index == 0);
+        if let Some(image) = backdrop.and_then(|inbox| inbox.drain().pop()) {
+            self.screen.set_backdrop(image.clone(), Instant::now());
+            self.wallpaper = Some(image);
+        } else if backdrop.is_none() {
+            self.converse();
         }
-        let mut verdict = [REJECTED];
-        if self.verdicts.read_exact(&mut verdict).is_err() {
-            return;
-        }
-        if verdict[0] == STARTED {
-            self.started = true;
-            if let Some(file) = &self.last_user
-                && let Err(error) = remember_user(file, &self.users[self.user].login)
-            {
-                tracing::info!("cannot remember who signed in last: {error}");
-            }
-        } else {
-            self.screen.reject(Instant::now());
-            window.request_redraw();
-        }
+        window.request_redraw();
     }
 
     fn deadline(&self) -> Option<Instant> {
@@ -222,8 +327,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or(0);
     let chosen = users.get(user).ok_or("no one can sign in")?;
     let screen = Greeter::screen_for(chosen);
-    let picture = login_picture(&chosen.login);
-    let (verdicts, verdict_sender) = UnixStream::pair()?;
+    let picture = login_picture(Path::new(LOGIN_PICTURES), chosen.uid);
     let mut window = Window::open(
         Role::Layer(LayerOptions {
             layer: LayerKind::Overlay,
@@ -238,11 +342,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         users,
         user,
         screen,
-        verdicts,
-        verdict_sender,
+        conversation: None,
+        caps_lock: false,
         next_clock: Instant::now() + CLOCK_TICK,
         backdrop: None,
-        picture: Some(picture),
+        picture,
         wallpaper: None,
         last_user,
         layouts: Layouts::load(),

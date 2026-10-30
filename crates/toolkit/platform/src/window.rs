@@ -180,6 +180,7 @@ pub enum WindowEvent {
         count: usize,
         active: usize,
     },
+    CapsLock(bool),
     Accessibility(ActionRequest),
 
     AppearanceChanged(Appearance),

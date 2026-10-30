@@ -15,6 +15,7 @@ pub fn login_users(passwd: &str) -> Vec<User> {
             let uid = uid.parse::<u32>().ok()?;
             ((FIRST_USER_ID..=LAST_USER_ID).contains(&uid) && !NO_LOGIN_SHELLS.contains(shell))
                 .then(|| User {
+                    uid,
                     login: (*login).to_owned(),
                     full_name: display_name(login, gecos),
                 })

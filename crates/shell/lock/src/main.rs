@@ -83,6 +83,7 @@ impl App for Locker {
                 self.screen.set_palette(appearance.palette());
                 false
             }
+            WindowEvent::CapsLock(on) => self.screen.set_caps_lock(on),
             WindowEvent::InputSources { sources, active } => {
                 let name = sources
                     .get(active)

@@ -16,6 +16,7 @@ unbound-datetime.workspace = true
 unbound-keyboard.workspace = true
 unbound-l10n.workspace = true
 unbound-log.workspace = true
+unbound-spring.workspace = true
 unbound-toolkit.workspace = true
 unbound-wallpaper.workspace = true
 unbound-xdg.workspace = true

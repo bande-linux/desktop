@@ -8,31 +8,36 @@ repository.workspace = true
 [dependencies]
 accesskit.workspace = true
 jiff.workspace = true
+libc.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
+unbound-config.workspace = true
 unbound-keyboard.workspace = true
+unbound-l10n.workspace = true
 unbound-lock.workspace = true
 unbound-log.workspace = true
 unbound-toolkit.workspace = true
-zbus.workspace = true
 
 [dev-dependencies]
+rustix.workspace = true
 tempfile.workspace = true
 
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
 depends = "$auto, fonts-inter, greetd, unbound-compositor"
-recommends = "accountsservice"
 extended-description = """\
 The login window of the Unbound desktop: greetd runs it as its greeter \
 inside unbound-compositor --greeter, and it lists the people who can \
 sign in, asks for the chosen person's password and has greetd start \
-their Unbound session."""
+their Unbound session. It becomes greetd's greeter through a drop-in for \
+greetd.service, and the display manager on systems that have none."""
+maintainer-scripts = "debian/"
 assets = [
     ["target/release/unbound-greeter", "usr/bin/", "755"],
     ["data/config.toml", "usr/share/unbound-greeter/greetd-config.toml", "644"],
+    ["data/greetd.service.conf", "usr/lib/systemd/system/greetd.service.d/unbound.conf", "644"],
 ]
 
 [lints]

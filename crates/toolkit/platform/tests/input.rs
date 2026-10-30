@@ -27,6 +27,7 @@ const KEY_A: u32 = 30;
 const KEY_LEFTSHIFT: u32 = 42;
 const KEY_LEFTALT: u32 = 56;
 const KEY_LEFTCTRL: u32 = 29;
+const KEY_CAPSLOCK: u32 = 58;
 const KEY_C: u32 = 46;
 const KEY_LEFTMETA: u32 = 125;
 const KEY_SPACE: u32 = 57;
@@ -539,6 +540,32 @@ fn control_click_is_a_secondary_click_and_modifier_changes_arrive_alone() {
                 ..Modifiers::default()
             })))
     );
+}
+
+#[test]
+fn caps_lock_is_reported_when_it_locks_and_unlocks() {
+    let mut desktop = Desktop::new();
+    let mut client = pointed_window(&mut desktop, "caps");
+    for _ in 0..2 {
+        desktop.server.key(KEY_CAPSLOCK, true, 0);
+        desktop.server.key(KEY_CAPSLOCK, false, 0);
+    }
+    let reports = |events: &[WindowEvent]| {
+        events
+            .iter()
+            .filter_map(|event| match event {
+                WindowEvent::CapsLock(on) => Some(*on),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    desktop.wait_for(
+        &mut [&mut client],
+        |events| reports(events).len() == 2,
+        |_| true,
+    );
+
+    assert_eq!(reports(&client.seen), [true, false]);
 }
 
 #[test]

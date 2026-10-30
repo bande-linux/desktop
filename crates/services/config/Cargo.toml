@@ -24,7 +24,7 @@ unbound-test-bus.workspace = true
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
 depends = "$auto, dbus-session-bus | default-dbus-session-bus, init-system-helpers (>= 1.66)"
-recommends = "xdg-utils, accountsservice"
+recommends = "xdg-utils"
 extended-description = """\
 Serves ~/.config/unbound/config.kdl as org.unbound.Config on the session \
 bus, applies changes to the file atomically, writes settings back without \

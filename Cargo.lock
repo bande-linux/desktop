@@ -3998,15 +3998,18 @@ version = "0.1.0"
 dependencies = [
  "accesskit",
  "jiff",
+ "libc",
+ "rustix 1.1.6",
  "serde",
  "serde_json",
  "tempfile",
  "tracing",
+ "unbound-config",
  "unbound-keyboard",
+ "unbound-l10n",
  "unbound-lock",
  "unbound-log",
  "unbound-toolkit",
- "zbus",
 ]
 
 [[package]]
@@ -4070,6 +4073,7 @@ dependencies = [
  "unbound-keyboard",
  "unbound-l10n",
  "unbound-log",
+ "unbound-spring",
  "unbound-toolkit",
  "unbound-wallpaper",
  "unbound-xdg",

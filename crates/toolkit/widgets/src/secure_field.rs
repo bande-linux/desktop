@@ -33,6 +33,10 @@ impl SecureField {
         }
     }
 
+    pub fn set_placeholder(&mut self, placeholder: &str) {
+        placeholder.clone_into(&mut self.placeholder);
+    }
+
     fn height(&self) -> f32 {
         (self.font_size * 1.6 + PADDING).ceil()
     }

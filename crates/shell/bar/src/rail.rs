@@ -185,6 +185,10 @@ impl RailView {
         self.width
     }
 
+    pub fn unread(&self) -> bool {
+        self.unread
+    }
+
     pub fn set_icon_size(&mut self, icon_size: f32) {
         self.width = bar_width(icon_size);
     }

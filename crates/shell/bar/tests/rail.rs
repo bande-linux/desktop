@@ -417,3 +417,35 @@ fn the_header_names_the_active_app_under_the_mark_and_dims_on_other_displays() {
     rail.frame(1.0);
     assert!(rail.view.slot_rect(Slot::App).is_none());
 }
+
+#[test]
+fn an_auto_hidden_bar_reveals_on_an_edge_push_and_waits_longer_over_full_screen() {
+    let mut rail = Rail::new(Scheme::Light, HEIGHT, apps(1.0));
+    rail.frame(1.0);
+    let now = rail.clock.get();
+    rail.state.borrow_mut().set_auto_hide(true, now);
+    rail.advance(Duration::from_secs(1));
+    rail.frame(1.0);
+    assert_eq!(rail.state.borrow().exclusive_zone(), 0);
+    assert_eq!(rail.state.borrow().input_region().width, 2.0);
+    let edge = Point::new(0.0, 300.0);
+    rail.ui.handle(&Event::PointerMove(Pointer::at(edge)));
+    rail.advance(Duration::from_millis(150));
+    rail.advance(Duration::from_secs(1));
+    assert!(rail.state.borrow().is_shown());
+    assert_eq!(rail.state.borrow().input_region().width, bar_width(ICON));
+    rail.ui.handle(&Event::PointerLeave);
+    rail.advance(Duration::from_millis(500));
+    rail.advance(Duration::from_secs(1));
+    assert!(!rail.state.borrow().is_shown());
+
+    let now = rail.clock.get();
+    rail.state.borrow_mut().set_auto_hide(false, now);
+    rail.state.borrow_mut().set_full_screen(true, now);
+    rail.advance(Duration::from_secs(1));
+    rail.ui.handle(&Event::PointerMove(Pointer::at(edge)));
+    rail.advance(Duration::from_millis(150));
+    assert!(!rail.state.borrow().is_shown());
+    rail.advance(Duration::from_millis(200));
+    assert!(rail.state.borrow().is_shown());
+}

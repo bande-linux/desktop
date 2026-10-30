@@ -41,6 +41,7 @@ const PROGRESS_HEIGHT: f32 = 4.0;
 const HOLD_FOR_MENU: Duration = Duration::from_millis(500);
 const MENU_GAP: f32 = 6.0;
 const REVEAL_DWELL: Duration = Duration::from_millis(120);
+const FULL_SCREEN_DWELL: Duration = Duration::from_millis(300);
 const HIDE_DELAY: Duration = Duration::from_millis(450);
 const EDGE_STRIP: f32 = 2.0;
 const HIDDEN_SHADOW: f32 = 24.0;
@@ -219,6 +220,7 @@ pub struct DockState {
     panel: Rect,
     populated: bool,
     auto_hide: bool,
+    full_screen: bool,
     reveal: Animated,
     reveal_at: Option<Instant>,
     hide_at: Option<Instant>,
@@ -307,6 +309,7 @@ impl DockState {
             panel: Rect::default(),
             populated: false,
             auto_hide: false,
+            full_screen: false,
             reveal: Animated::new(1.0),
             reveal_at: None,
             hide_at: None,
@@ -622,15 +625,36 @@ impl DockState {
 
     pub fn set_auto_hide(&mut self, auto_hide: bool, now: Instant) {
         self.auto_hide = auto_hide;
+        self.follow_hiding(now);
+    }
+
+    pub fn set_full_screen(&mut self, full_screen: bool, now: Instant) {
+        self.full_screen = full_screen;
+        self.follow_hiding(now);
+    }
+
+    fn follow_hiding(&mut self, now: Instant) {
         self.reveal_at = None;
         self.hide_at = None;
-        let shown = !auto_hide || self.pointer_inside || self.menu_open;
+        let shown = !self.hides() || self.pointer_inside || self.menu_open;
         self.slide(shown, now);
+    }
+
+    fn hides(&self) -> bool {
+        self.auto_hide || self.full_screen
+    }
+
+    pub fn revealed(&self, now: Instant) -> f32 {
+        self.reveal.value_at(now).0.clamp(0.0, 1.0)
+    }
+
+    pub fn is_revealing(&self, now: Instant) -> bool {
+        self.reveal.value_at(now).1
     }
 
     pub fn set_menu_open(&mut self, open: bool, now: Instant) {
         self.menu_open = open;
-        if !open && self.auto_hide && !self.pointer_inside {
+        if !open && self.hides() && !self.pointer_inside {
             self.hide_at = Some(now + HIDE_DELAY);
         }
     }
@@ -640,19 +664,23 @@ impl DockState {
     }
 
     pub fn exclusive_zone(&self) -> i32 {
-        if let Some(rail) = self.rail {
-            return rail.width.round() as i32;
+        if self.hides() {
+            return 0;
         }
-        if self.auto_hide {
-            0
-        } else {
-            exclusive_zone(self.icon_size).round() as i32
+        match self.rail {
+            Some(rail) => rail.width.round() as i32,
+            None => exclusive_zone(self.icon_size).round() as i32,
         }
     }
 
     pub fn input_region(&self) -> Rect {
         if let Some(rail) = self.rail {
-            return Rect::new(0.0, 0.0, rail.width, self.surface.height);
+            let width = if self.is_shown() {
+                rail.width
+            } else {
+                EDGE_STRIP
+            };
+            return Rect::new(0.0, 0.0, width, self.surface.height);
         }
         let panel = self.panel;
         let size = self.surface;
@@ -683,15 +711,20 @@ impl DockState {
     fn pointer_entered(&mut self, now: Instant) {
         self.pointer_inside = true;
         self.hide_at = None;
-        if self.auto_hide && !self.is_shown() && self.reveal_at.is_none() {
-            self.reveal_at = Some(now + REVEAL_DWELL);
+        if self.hides() && !self.is_shown() && self.reveal_at.is_none() {
+            let dwell = if self.full_screen {
+                FULL_SCREEN_DWELL
+            } else {
+                REVEAL_DWELL
+            };
+            self.reveal_at = Some(now + dwell);
         }
     }
 
     fn pointer_left(&mut self, now: Instant) {
         self.pointer_inside = false;
         self.reveal_at = None;
-        if self.auto_hide && !self.menu_open && self.selected.is_none() && self.is_shown() {
+        if self.hides() && !self.menu_open && self.selected.is_none() && self.is_shown() {
             self.hide_at = Some(now + HIDE_DELAY);
         }
     }
@@ -765,7 +798,7 @@ impl DockState {
             return;
         }
         self.hide_label(now);
-        if self.auto_hide && !self.pointer_inside && !self.menu_open {
+        if self.hides() && !self.pointer_inside && !self.menu_open {
             self.hide_at = Some(now + HIDE_DELAY);
         }
     }
@@ -847,7 +880,7 @@ impl DockState {
             slot.shift = (Animated::new(0.0), Animated::new(0.0));
         }
         self.reveal.jump_to(0.0);
-        let shown = !self.auto_hide || self.pointer_inside || self.menu_open;
+        let shown = !self.hides() || self.pointer_inside || self.menu_open;
         self.slide(shown, now);
     }
 

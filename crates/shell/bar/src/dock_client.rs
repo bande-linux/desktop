@@ -39,6 +39,7 @@ const MENU_CONFIRM_EMPTY: &str = "confirm-empty-trash";
 const MENU_CANCEL: &str = "cancel";
 const DOCK_NAMESPACE: &str = "dock";
 const KEYBOARD_GRACE: Duration = Duration::from_millis(60);
+const OUTPUT_VARIABLE: &str = "UNBOUND_OUTPUT";
 
 const MENU_HIDE: &str = "hide";
 const MENU_QUIT: &str = "quit";
@@ -734,6 +735,30 @@ impl Dock {
     pub fn has_menu(&self) -> bool {
         self.menu.is_some()
     }
+
+    pub fn set_menu_open(&mut self, open: bool) {
+        self.state.borrow_mut().set_menu_open(open, Instant::now());
+    }
+
+    pub fn revealed(&self, now: Instant) -> f32 {
+        self.state.borrow().revealed(now)
+    }
+
+    fn follow_full_screen(&mut self, window: &mut Window, output: &str, full_screen: bool) {
+        let own = std::env::var(OUTPUT_VARIABLE).unwrap_or_default();
+        if !own.is_empty() && own != output {
+            return;
+        }
+        self.state
+            .borrow_mut()
+            .set_full_screen(full_screen, Instant::now());
+        window.set_layer(if full_screen {
+            LayerKind::Overlay
+        } else {
+            LayerKind::Top
+        });
+        window.request_redraw();
+    }
 }
 
 impl App for Dock {
@@ -824,6 +849,10 @@ impl App for Dock {
                 self.drag(window, drag);
                 window.request_redraw();
             }
+            WindowEvent::FullScreen {
+                output,
+                full_screen,
+            } => self.follow_full_screen(window, &output, full_screen),
             WindowEvent::AttentionRequested(app_id) => {
                 self.state
                     .borrow_mut()
@@ -883,7 +912,9 @@ impl App for Dock {
     }
 
     fn animating(&self) -> bool {
-        self.ui.is_animating() || self.state.borrow().pulsing(Instant::now())
+        let now = Instant::now();
+        let state = self.state.borrow();
+        self.ui.is_animating() || state.pulsing(now) || state.is_revealing(now)
     }
 
     fn accessibility(&self) -> Option<TreeUpdate> {

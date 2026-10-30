@@ -3,11 +3,13 @@ use std::time::Instant;
 
 use accesskit::{Node, NodeId, Role as AccessRole, TreeInfo, TreeUpdate};
 use unbound_bar::L10N;
+use unbound_bar::menubar::StatusView;
 use unbound_bar::rail::{RailView, bar_width, owns_node, surface_size};
 use unbound_config::BarEdge;
 use unbound_toolkit::ui::Event;
 use unbound_toolkit::{
-    App, Edges, KeyboardFocus, LayerKind, LayerOptions, Role, Scene, Window, WindowEvent,
+    App, Edges, Item, KeyboardFocus, LayerKind, LayerOptions, Point, Rect, Role, Scene, Shape,
+    Window, WindowEvent,
 };
 
 use crate::dock_client::Dock;
@@ -16,6 +18,8 @@ use crate::menu_bar_client::MenuBarClient;
 const BAR_NAMESPACE: &str = "bar";
 const MENU_BAR_NAMESPACE: &str = "menubar";
 const ROOT: NodeId = NodeId(1 << 41);
+const HIDDEN_SHADOW: f32 = 8.0;
+const UNREAD_SLIVER: (f32, f32) = (2.0, 24.0);
 
 pub fn combined_role(_edge: BarEdge, icon_size: f32) -> (Role, (u32, u32)) {
     (
@@ -38,6 +42,7 @@ pub fn combined_role(_edge: BarEdge, icon_size: f32) -> (Role, (u32, u32)) {
 pub struct CombinedClient {
     dock: Dock,
     status: MenuBarClient<RailView>,
+    status_open: bool,
 }
 
 fn pointer(event: &WindowEvent) -> bool {
@@ -56,24 +61,14 @@ fn pointer(event: &WindowEvent) -> bool {
 
 impl CombinedClient {
     pub fn new(dock: Dock, status: MenuBarClient<RailView>) -> Self {
-        Self { dock, status }
-    }
-}
-
-impl App for CombinedClient {
-    fn scene(&mut self, window: &mut Window) -> Scene {
-        let (width, height) = window.size();
-        let view = self.status.view_mut();
-        view.set_icon_size(self.dock.icon_size());
-        self.dock.set_rail(view.apps_region(height as f32));
-        let mut scene = self.status.scene(window);
-        let apps = self.dock.scene(window);
-        scene.width = width;
-        scene.items.extend(apps.items);
-        scene
+        Self {
+            dock,
+            status,
+            status_open: false,
+        }
     }
 
-    fn event(&mut self, window: &mut Window, event: WindowEvent) {
+    fn route(&mut self, window: &mut Window, event: WindowEvent) {
         match &event {
             _ if pointer(&event) => {
                 self.dock.event(window, event.clone());
@@ -99,6 +94,50 @@ impl App for CombinedClient {
                 self.dock.event(window, event.clone());
                 self.status.event(window, event);
             }
+        }
+    }
+}
+
+impl App for CombinedClient {
+    fn scene(&mut self, window: &mut Window) -> Scene {
+        let (width, height) = window.size();
+        let view = self.status.view_mut();
+        view.set_icon_size(self.dock.icon_size());
+        self.dock.set_rail(view.apps_region(height as f32));
+        let mut scene = self.status.scene(window);
+        let apps = self.dock.scene(window);
+        scene.width = width;
+        scene.items.extend(apps.items);
+        let revealed = self.dock.revealed(Instant::now());
+        if revealed < 1.0 {
+            let view = self.status.view_mut();
+            let hidden = -(view.width() + HIDDEN_SHADOW) * (1.0 - revealed);
+            let mut items = vec![Item::Translate {
+                offset: Point::new(hidden.round(), 0.0),
+                items: std::mem::take(&mut scene.items),
+            }];
+            if view.unread() && revealed <= 0.0 {
+                items.push(Item::Fill {
+                    shape: Shape::rect(Rect::new(
+                        0.0,
+                        height as f32 - UNREAD_SLIVER.1,
+                        UNREAD_SLIVER.0,
+                        UNREAD_SLIVER.1,
+                    )),
+                    paint: window.appearance().palette().accent.into(),
+                });
+            }
+            scene.items = items;
+        }
+        scene
+    }
+
+    fn event(&mut self, window: &mut Window, event: WindowEvent) {
+        self.route(window, event);
+        let open = self.status.view_mut().open().is_some();
+        if open != self.status_open {
+            self.status_open = open;
+            self.dock.set_menu_open(open);
         }
     }
 

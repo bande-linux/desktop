@@ -25,6 +25,7 @@ const OUTPUT: (i32, i32) = (320, 240);
 const WINDOW: (u32, u32) = (120, 80);
 const KEY_A: u32 = 30;
 const KEY_LEFTSHIFT: u32 = 42;
+const KEY_LEFTALT: u32 = 56;
 const KEY_LEFTCTRL: u32 = 29;
 const KEY_C: u32 = 46;
 const KEY_LEFTMETA: u32 = 125;
@@ -52,7 +53,8 @@ fn sample_menu() -> Menu {
                 MenuItem::new("Date", "sort-date"),
             ]),
         ),
-        MenuItem::new("Delete", "delete"),
+        MenuItem::new("Delete", "delete")
+            .alternate(MenuItem::new("Delete Immediately", "delete-now")),
     ])
 }
 
@@ -1142,4 +1144,27 @@ fn a_dragged_file_list_arrives_as_uris_where_it_is_dropped() {
     assert_eq!(dropped.1.uris, ["file:///home/user/Report%20one.pdf"]);
     assert_eq!(dropped.2, Some(DragAction::Copy));
     assert!(drags(&client.seen).contains(&DragEvent::Finished(Some(DragAction::Copy))));
+}
+
+#[test]
+fn holding_alt_swaps_in_an_items_alternate() {
+    let mut desktop = Desktop::new();
+    let mut client = pointed_window(&mut desktop, "menu alternate");
+    open_menu(&mut desktop, &mut client);
+    desktop.server.press_button(BTN_RIGHT, false, 0);
+    desktop.settle(&mut [&mut client]);
+    desktop.server.key(KEY_LEFTALT, true, 0);
+    desktop.settle(&mut [&mut client]);
+    desktop.point_into_content(30 + 40, 20 + 5 + 22 + 22 + 11 + 22 + 11);
+    desktop.click(BTN_LEFT);
+    desktop.wait_for(
+        &mut [&mut client],
+        |events| !menu_events(events).is_empty(),
+        |_| true,
+    );
+    desktop.server.key(KEY_LEFTALT, false, 0);
+    assert_eq!(
+        menu_events(&client.seen),
+        [WindowEvent::MenuAction("delete-now".to_owned())]
+    );
 }

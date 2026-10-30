@@ -33,6 +33,11 @@ const EDITOR_WIDTH: f32 = LABEL_WIDTH + 24.0;
 const FRAME: Duration = Duration::from_millis(8);
 const SPRING_DELAY: Duration = Duration::from_millis(900);
 const LABEL_HALO: f32 = 0.6;
+const DRAGGED: f32 = 0.75;
+const BADGE_TEXT: f32 = 11.0;
+const BADGE_HEIGHT: f32 = 18.0;
+const BADGE_PADDING: f32 = 5.0;
+const BADGE_OFFSET: (f32, f32) = (22.0, -14.0);
 const THUMBNAIL_INSET: f32 = 6.0;
 const THUMBNAIL_RADIUS: f32 = 2.0;
 const THUMBNAIL_EDGE: f32 = 0.55;
@@ -795,19 +800,62 @@ impl DesktopView {
                 Some((item, cell))
             })
             .collect();
-        let left = cells.iter().map(|(_, cell)| cell.x).fold(from.x, f32::min);
-        let top = cells.iter().map(|(_, cell)| cell.y).fold(from.y, f32::min);
-        let right = cells
-            .iter()
-            .map(|(_, cell)| cell.x + cell.width)
-            .fold(from.x, f32::max);
-        let bottom = cells
-            .iter()
-            .map(|(_, cell)| cell.y + cell.height)
-            .fold(from.y, f32::max);
+        let badge = (cells.len() > 1).then(|| {
+            let count = self.ui.context().text.paragraph(
+                &cells.len().to_string(),
+                TextStyle::new(BADGE_TEXT, palette.on_danger)
+                    .weight(TextStyle::BOLD)
+                    .tabular(),
+                None,
+                TextAlign::Start,
+            );
+            let width = (count.width() + 2.0 * BADGE_PADDING)
+                .max(BADGE_HEIGHT)
+                .ceil();
+            let rect = Rect::new(
+                (from.x + BADGE_OFFSET.0 - width / 2.0).round(),
+                (from.y + BADGE_OFFSET.1 - BADGE_HEIGHT / 2.0).round(),
+                width,
+                BADGE_HEIGHT,
+            );
+            (count, rect)
+        });
+        let reach = cells.iter().map(|(_, cell)| *cell).chain(
+            badge
+                .as_ref()
+                .map(|(_, rect)| Bounds::new(rect.x, rect.y, rect.width, rect.height)),
+        );
+        let (left, top, right, bottom) = reach.fold(
+            (from.x, from.y, from.x, from.y),
+            |(left, top, right, bottom), cell| {
+                (
+                    left.min(cell.x),
+                    top.min(cell.y),
+                    right.max(cell.x + cell.width),
+                    bottom.max(cell.y + cell.height),
+                )
+            },
+        );
         let mut items = Vec::new();
         for (item, cell) in cells {
             self.paint_item(&item, cell, 1.0, palette, &mut items);
+        }
+        let mut drawn = vec![SceneItem::Opacity {
+            alpha: DRAGGED,
+            items,
+        }];
+        if let Some((count, rect)) = badge {
+            drawn.push(SceneItem::Fill {
+                shape: Shape::rounded(rect, BADGE_HEIGHT / 2.0),
+                paint: palette.danger.into(),
+            });
+            drawn.push(SceneItem::Text {
+                origin: Point::new(
+                    (rect.x + (rect.width - count.width()) / 2.0).round(),
+                    (rect.y + (rect.height - count.height()) / 2.0).round(),
+                ),
+                paragraph: count,
+            });
         }
         DragIcon {
             scene: Scene {
@@ -816,7 +864,7 @@ impl DesktopView {
                 background: Color::TRANSPARENT,
                 items: vec![SceneItem::Translate {
                     offset: Point::new(-left, -top),
-                    items: vec![SceneItem::Opacity { alpha: 0.75, items }],
+                    items: drawn,
                 }],
             },
             hotspot: Point::new(from.x - left, from.y - top),

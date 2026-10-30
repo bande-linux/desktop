@@ -177,7 +177,7 @@ impl State {
                 Placed::Window(window) => zone_at(window, location)
                     .map(|zone| Target::Frame(window.surface().clone(), zone))
                     .or_else(|| surface_at(window.surface(), window.surface_origin(), location)),
-                Placed::Closing(_) | Placed::Overview(_) => None,
+                Placed::Closing(_) | Placed::Overview(_) | Placed::Backdrop(_) => None,
             })
     }
 

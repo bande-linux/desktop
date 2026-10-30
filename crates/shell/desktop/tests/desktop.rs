@@ -683,3 +683,30 @@ fn the_menus_offer_what_fits_the_selection_and_their_actions_reach_the_desktop()
     );
     assert_eq!(command("unknown"), None);
 }
+
+#[test]
+fn dragging_several_icons_carries_a_count_badge_and_one_icon_does_not() {
+    let badged = |names: &[&str]| {
+        let mut view = view_with_items(Scheme::Light);
+        let first = at(&view, names[0]);
+        for name in names {
+            let point = at(&view, name);
+            click(&mut view, point, 1, SUPER);
+        }
+        view.handle(&Event::PointerDown(Pointer::at(first)), Instant::now());
+        view.handle(
+            &Event::PointerMove(Pointer::at(Point::new(first.x - 20.0, first.y))),
+            Instant::now(),
+        );
+        let danger = unbound_toolkit::Palette::for_scheme(Scheme::Light).danger;
+        let icon = view.drag_icon();
+        let [unbound_toolkit::Item::Translate { items, .. }] = icon.scene.items.as_slice() else {
+            panic!("the drag icon is one translated group");
+        };
+        items.iter().any(|item| {
+            matches!(item, unbound_toolkit::Item::Fill { paint, .. } if *paint == danger.into())
+        })
+    };
+    assert!(badged(&["Notes.txt", "Projects"]));
+    assert!(!badged(&["Notes.txt"]));
+}

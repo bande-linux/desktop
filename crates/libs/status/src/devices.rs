@@ -9,6 +9,7 @@ use unbound_inbox::Outbox;
 use unbound_network::NetworkManager;
 use zbus::blocking::fdo::DBusProxy;
 use zbus::blocking::{Connection, MessageIterator};
+use zbus::names::BusName;
 use zbus::proxy::CacheProperties;
 use zbus::zvariant::OwnedObjectPath;
 use zbus::{MatchRule, Message, message};
@@ -17,10 +18,10 @@ use crate::session::Ending;
 use crate::status::{Battery, Bluetooth, Gadget, Output, Power, Sound, Wifi};
 use crate::{Command, Update};
 
-const DEVICE_SERVICES: [&str; 3] = [
-    "org.freedesktop.UPower",
-    "org.freedesktop.NetworkManager",
-    "org.bluez",
+const SOURCES: [(Source, &str); 3] = [
+    (Source::Battery, "org.freedesktop.UPower"),
+    (Source::Wifi, "org.freedesktop.NetworkManager"),
+    (Source::Bluetooth, "org.bluez"),
 ];
 const BUS: &str = "org.freedesktop.DBus";
 const UPOWER_CHARGING: u32 = 1;
@@ -149,7 +150,14 @@ pub enum Control {
     Run(Command),
     Scan,
     End(Ending),
-    Refresh,
+    Refresh(Source),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Source {
+    Battery,
+    Wifi,
+    Bluetooth,
 }
 
 fn report<E: std::fmt::Display>(what: &str, result: Result<(), E>) {
@@ -217,7 +225,7 @@ pub fn end_session(system: &Connection, ending: Ending) -> zbus::Result<()> {
 
 fn device_rules() -> zbus::Result<Vec<MatchRule<'static>>> {
     let mut rules = Vec::new();
-    for service in DEVICE_SERVICES {
+    for (_, service) in SOURCES {
         rules.push(
             MatchRule::builder()
                 .msg_type(message::Type::Signal)
@@ -237,24 +245,39 @@ fn device_rules() -> zbus::Result<Vec<MatchRule<'static>>> {
     Ok(rules)
 }
 
-fn changes_devices(message: &Message) -> bool {
+type Owners = [Option<String>; SOURCES.len()];
+
+fn changed_source(message: &Message, owners: &mut Owners) -> Option<Source> {
     let header = message.header();
     if header.message_type() != message::Type::Signal {
-        return false;
+        return None;
     }
     if header
         .interface()
         .is_none_or(|interface| interface.as_str() != BUS)
     {
-        return true;
+        let sender = header.sender()?.as_str();
+        let index = owners
+            .iter()
+            .position(|owner| owner.as_deref() == Some(sender))?;
+        return Some(SOURCES[index].0);
     }
-    header
+    if header
         .member()
-        .is_some_and(|member| member.as_str() == "NameOwnerChanged")
-        && message
-            .body()
-            .deserialize::<(String, String, String)>()
-            .is_ok_and(|(name, _, _)| DEVICE_SERVICES.contains(&name.as_str()))
+        .is_none_or(|member| member.as_str() != "NameOwnerChanged")
+    {
+        return None;
+    }
+    let (name, _, owner): (String, String, String) = message.body().deserialize().ok()?;
+    let index = SOURCES.iter().position(|(_, service)| *service == name)?;
+    owners[index] = (!owner.is_empty()).then_some(owner);
+    Some(SOURCES[index].0)
+}
+
+fn refresh_all(controls: &Sender<Control>) -> bool {
+    SOURCES
+        .iter()
+        .all(|(source, _)| controls.send(Control::Refresh(*source)).is_ok())
 }
 
 fn watch_devices(system: &Connection, controls: &Sender<Control>) -> zbus::Result<()> {
@@ -263,11 +286,19 @@ fn watch_devices(system: &Connection, controls: &Sender<Control>) -> zbus::Resul
     for rule in device_rules()? {
         bus.add_match_rule(rule)?;
     }
-    if controls.send(Control::Refresh).is_err() {
+    let mut owners: Owners = SOURCES.map(|(_, service)| {
+        BusName::try_from(service)
+            .ok()
+            .and_then(|name| bus.get_name_owner(name).ok())
+            .map(|owner| owner.to_string())
+    });
+    if !refresh_all(controls) {
         return Ok(());
     }
     for message in messages.flatten() {
-        if changes_devices(&message) && controls.send(Control::Refresh).is_err() {
+        if let Some(source) = changed_source(&message, &mut owners)
+            && controls.send(Control::Refresh(source)).is_err()
+        {
             break;
         }
     }
@@ -277,20 +308,37 @@ fn watch_devices(system: &Connection, controls: &Sender<Control>) -> zbus::Resul
 fn run_controls(system: &Connection, controls: &Receiver<Control>, outbox: &Outbox<Update>) {
     let network = NetworkManager::new(system);
     let bluez = BlueZ::new(system);
-    let mut shown: Option<Devices> = None;
+    let mut devices: Devices = (battery(system), wifi(&network), bluetooth(&bluez));
+    if !outbox.send(Update::Devices(devices.clone())) {
+        return;
+    }
+    let mut shown = devices.clone();
     while let Ok(first) = controls.recv() {
+        let mut stale = Vec::new();
         for control in std::iter::once(first).chain(controls.try_iter()) {
             match control {
                 Control::Run(command) => run(system, &network, &bluez, command),
                 Control::Scan => report("scan for networks", network.scan()),
                 Control::End(ending) => report("end the session", end_session(system, ending)),
-                Control::Refresh => {}
+                Control::Refresh(source) => {
+                    stale.push(source);
+                    continue;
+                }
             }
+            stale.extend(SOURCES.map(|(source, _)| source));
         }
-        let devices = (battery(system), wifi(&network), bluetooth(&bluez));
-        if shown.as_ref() != Some(&devices) {
-            shown = Some(devices.clone());
-            if !outbox.send(Update::Devices(devices)) {
+        if stale.contains(&Source::Battery) {
+            devices.0 = battery(system);
+        }
+        if stale.contains(&Source::Wifi) {
+            devices.1 = wifi(&network);
+        }
+        if stale.contains(&Source::Bluetooth) {
+            devices.2 = bluetooth(&bluez);
+        }
+        if devices != shown {
+            shown = devices.clone();
+            if !outbox.send(Update::Devices(devices.clone())) {
                 return;
             }
         }
@@ -303,7 +351,7 @@ pub fn follow_devices(system: &Connection, outbox: Outbox<Update>) -> Sender<Con
     thread::spawn(move || {
         if let Err(error) = watch_devices(&watching, &refreshes) {
             tracing::warn!("battery, Wi-Fi and Bluetooth changes are not followed: {error}");
-            let _ = refreshes.send(Control::Refresh);
+            refresh_all(&refreshes);
         }
     });
     let system = system.clone();
@@ -386,4 +434,73 @@ pub fn follow_sound(outbox: Outbox<Update>) -> Sender<SoundControl> {
     let (controls, received) = mpsc::channel();
     thread::spawn(move || run_sound(received, &outbox));
     controls
+}
+
+#[cfg(test)]
+mod tests {
+    use zbus::Message;
+
+    use super::{Owners, Source, changed_source};
+
+    fn changed(sender: &str) -> Message {
+        Message::signal(
+            "/org/freedesktop/UPower/devices/DisplayDevice",
+            "org.freedesktop.DBus.Properties",
+            "PropertiesChanged",
+        )
+        .unwrap()
+        .sender(sender)
+        .unwrap()
+        .build(&())
+        .unwrap()
+    }
+
+    fn owner_changed(name: &str, owner: &str) -> Message {
+        Message::signal(
+            "/org/freedesktop/DBus",
+            "org.freedesktop.DBus",
+            "NameOwnerChanged",
+        )
+        .unwrap()
+        .sender("org.freedesktop.DBus")
+        .unwrap()
+        .build(&(name, "", owner))
+        .unwrap()
+    }
+
+    #[test]
+    fn a_signal_refreshes_only_the_service_that_sent_it() {
+        let mut owners: Owners = [Some(":1.5".to_owned()), Some(":1.6".to_owned()), None];
+        assert_eq!(
+            changed_source(&changed(":1.5"), &mut owners),
+            Some(Source::Battery)
+        );
+        assert_eq!(
+            changed_source(&changed(":1.6"), &mut owners),
+            Some(Source::Wifi)
+        );
+        assert_eq!(changed_source(&changed(":1.7"), &mut owners), None);
+    }
+
+    #[test]
+    fn a_service_that_starts_or_restarts_is_followed_under_its_new_name() {
+        let mut owners: Owners = [None, None, None];
+        assert_eq!(
+            changed_source(&owner_changed("org.bluez", ":1.9"), &mut owners),
+            Some(Source::Bluetooth)
+        );
+        assert_eq!(
+            changed_source(&changed(":1.9"), &mut owners),
+            Some(Source::Bluetooth)
+        );
+        assert_eq!(
+            changed_source(&owner_changed("org.bluez", ""), &mut owners),
+            Some(Source::Bluetooth)
+        );
+        assert_eq!(changed_source(&changed(":1.9"), &mut owners), None);
+        assert_eq!(
+            changed_source(&owner_changed("org.example.Other", ":1.4"), &mut owners),
+            None
+        );
+    }
 }

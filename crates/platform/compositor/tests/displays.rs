@@ -418,29 +418,26 @@ fn while_locked_a_display_without_a_lock_surface_shows_only_its_wallpaper() {
 }
 
 #[test]
-fn the_desktop_and_menu_bar_run_once_per_display_and_follow_the_displays() {
+fn the_shell_is_told_every_display_with_the_main_one_first() {
     let mut server = two_displays();
-    let shell = std::path::Path::new("/bin/true");
-    server.start_client_on_every_display(shell);
-    server.keep_session_clients_running();
-    assert_eq!(
-        server.display_clients(shell),
-        [(MAIN.to_owned(), false), (SIDE.to_owned(), true)]
-    );
+    assert_eq!(server.shell_displays(), [MAIN, SIDE]);
 
     let arranged = config(
         &server,
         "arrangement {\n    display \"SIDE\" x=0 y=0 main=#true\n    display \"MAIN\" x=320 y=0\n}\n",
     );
     server.set_display_config(arranged);
-    server.keep_session_clients_running();
-    let mut clients = server.display_clients(shell);
-    clients.sort();
-    assert_eq!(clients, [(MAIN.to_owned(), true), (SIDE.to_owned(), false)]);
+    assert_eq!(server.shell_displays(), [SIDE, MAIN]);
+
+    let mirrored = config(
+        &server,
+        "arrangement {\n    display \"MAIN\" x=0 y=0 main=#true\n    display \"SIDE\" mirror=\"MAIN\"\n}\n",
+    );
+    server.set_display_config(mirrored);
+    assert_eq!(server.shell_displays(), [MAIN]);
 
     server.remove_output(SIDE);
-    server.keep_session_clients_running();
-    assert_eq!(server.display_clients(shell), [(MAIN.to_owned(), false)]);
+    assert_eq!(server.shell_displays(), [MAIN]);
 }
 
 #[test]

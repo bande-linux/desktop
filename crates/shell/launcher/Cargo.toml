@@ -1,6 +1,6 @@
 [package]
 name = "unbound-launcher"
-description = "Unbound launcher: finds apps, files and answers on Super+Space"
+description = "Unbound launcher: finds apps, files and answers on Super+Space, as a part of unbound-shell"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
@@ -11,7 +11,6 @@ image.workspace = true
 tracing.workspace = true
 unbound-fs.workspace = true
 unbound-l10n.workspace = true
-unbound-log.workspace = true
 unbound-preview.workspace = true
 unbound-search.workspace = true
 unbound-settings-panes.workspace = true
@@ -24,17 +23,6 @@ zbus.workspace = true
 [dev-dependencies]
 image-compare.workspace = true
 tempfile.workspace = true
-
-[package.metadata.deb]
-maintainer = "Mikael Hug <mikaelhug@gmail.com>"
-section = "misc"
-depends = "$auto, fonts-inter, fonts-noto-color-emoji"
-extended-description = """\
-The launcher of the Unbound desktop: Super+Space opens a search field \
-over the screen that finds apps, folders and documents in the home \
-folder, calculates and converts units, previews the chosen result and \
-opens it. unbound-compositor starts it and keeps it running so that it \
-appears at once."""
 
 [lints]
 workspace = true

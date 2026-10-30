@@ -1,20 +1,19 @@
 use std::cell::Cell;
 use std::os::fd::BorrowedFd;
 use std::path::Path;
-use std::process::ExitCode;
 use std::rc::Rc;
 use std::sync::mpsc::{self, Sender};
 use std::time::{Duration, Instant};
 
-use accesskit::TreeUpdate;
-use unbound_audio::{Audio, Level, Meter, meter_level};
-use unbound_bluetooth::Bluetooth;
-use unbound_controlcenter::media::{self, Command, Playback, Player, Players};
-use unbound_controlcenter::{
+use crate::media::{self, Command, Playback, Player, Players};
+use crate::{
     Anchor, Change, Changes, Choice, HUD_DURATION, HUD_SIZE, Hud, KeyboardLight, L10N, PANEL_WIDTH,
     SYSFS_LEDS, Status, chooser_menu, hud, panel, panel_items, place_beside, scene, slide_from,
     stepped,
 };
+use accesskit::TreeUpdate;
+use unbound_audio::{Audio, Level, Meter, meter_level};
+use unbound_bluetooth::Bluetooth;
 use unbound_inbox::Inbox;
 use unbound_network::NetworkManager;
 use unbound_notify::client::NotificationCenter;
@@ -25,7 +24,7 @@ use unbound_toolkit::ui::{Animated, Event, Key, Menu, MenuItem, Pointer, Scroll,
 use unbound_toolkit::{
     App, BrightnessKey, Edges, Image, Item, KeyboardFocus, LayerKind, LayerOptions, MediaKey,
     MenuPlacement, Palette, Panel, Point, Rect, Role, Scene, TextSystem, VolumeKey, Window,
-    WindowError, WindowEvent,
+    WindowEvent,
 };
 use unbound_xdg::{
     DesktopEntry, ICON_THEMES, current_desktops, data_dirs, find_icon, path_from_file_uri,
@@ -45,13 +44,13 @@ enum Mode {
     Panel { ui: Box<Ui>, height: f32 },
 }
 
-struct ControlCenter {
+pub struct ControlCenter {
     mode: Mode,
     shown: Animated,
     surface_shown: bool,
     reduce_motion: bool,
     palette: Palette,
-    hud_text: TextSystem,
+    text: TextSystem,
     changes: Changes,
     pointer: Point,
     anchor: Option<Anchor>,
@@ -467,7 +466,11 @@ impl ControlCenter {
                 );
             }
         } else {
-            self.launch(window, "", &["unbound-bar", "--confirm", keyword]);
+            let shell = std::env::current_exe()
+                .ok()
+                .and_then(|path| path.to_str().map(str::to_owned))
+                .unwrap_or_else(|| "unbound-shell".to_owned());
+            self.launch(window, "", &[&shell, "--confirm", keyword]);
         }
         self.dismiss(window);
     }
@@ -513,7 +516,7 @@ impl ControlCenter {
         let (fresh, fresh_height) = panel(
             &self.status(),
             self.palette,
-            TextSystem::new(),
+            self.text.sharing_fonts(),
             &self.changes,
         );
         if let Mode::Panel { ui, height } = &mut self.mode {
@@ -578,7 +581,7 @@ impl ControlCenter {
         let (ui, height) = panel(
             &self.status(),
             self.palette,
-            TextSystem::new(),
+            self.text.sharing_fonts(),
             &self.changes,
         );
         self.mode = Mode::Panel {
@@ -734,7 +737,7 @@ impl App for ControlCenter {
                 let placed = place_beside(self.anchor, (width as f32, height as f32), HUD_SIZE);
                 vec![Item::Translate {
                     offset: Point::new(placed.x, placed.y),
-                    items: hud(*shown_hud, &palette, &mut self.hud_text),
+                    items: hud(*shown_hud, &palette, &mut self.text),
                 }]
             }
             Mode::Hidden => Vec::new(),
@@ -871,76 +874,65 @@ impl App for ControlCenter {
     }
 }
 
-fn run() -> Result<(), WindowError> {
-    let audio = Audio::connect()
-        .inspect_err(|error| tracing::warn!("no sound: {error}"))
-        .ok();
-    let system = Connection::system()
-        .inspect_err(|error| tracing::warn!("no system bus: {error}"))
-        .ok();
-    let session = Connection::session()
-        .inspect_err(|error| tracing::warn!("no session bus: {error}"))
-        .ok();
-    let player_updates = Inbox::new()?;
-    let player_commands = session.as_ref().map(|connection| {
-        let (commands, received) = mpsc::channel();
-        let (watching, outbox) = (connection.clone(), player_updates.outbox());
-        std::thread::spawn(move || {
-            if let Err(error) = media::watch(&watching, &outbox) {
-                tracing::warn!("cannot follow media players: {error}");
-            }
-        });
-        let commanding = connection.clone();
-        std::thread::spawn(move || media::run_commands(&commanding, &received));
-        commands
-    });
-    let mut window = Window::open(
-        Role::Layer(LayerOptions {
-            layer: LayerKind::Overlay,
-            anchor: Edges::ALL,
-            exclusive_zone: 0,
-            keyboard: KeyboardFocus::None,
-            namespace: "control-center".to_owned(),
-        }),
-        (0, 0),
-    )?;
-    window.set_input_region(Some(&[]));
-    window.hide()?;
-    let appearance = window.appearance();
-    let mut center = ControlCenter {
-        mode: Mode::Hidden,
-        shown: Animated::new(0.0),
-        surface_shown: false,
-        reduce_motion: appearance.reduce_motion,
-        palette: appearance.palette(),
-        hud_text: TextSystem::new(),
-        changes: Changes::default(),
-        pointer: Point::new(0.0, 0.0),
-        anchor: None,
-        audio,
-        network: system.as_ref().map(NetworkManager::new),
-        bluetooth: system.as_ref().map(Bluetooth::new),
-        backlight: Backlight::find(Path::new(SYSFS_BACKLIGHT)),
-        keyboard_light: KeyboardLight::find(Path::new(SYSFS_LEDS)),
-        system,
-        session,
-        players: Players::default(),
-        player_updates,
-        player_commands,
-        artwork: None,
-        meter: None,
-        input_level: Rc::default(),
-    };
-    unbound_toolkit::run(&mut window, &mut center)
+pub fn role() -> Role {
+    Role::Layer(LayerOptions {
+        layer: LayerKind::Overlay,
+        anchor: Edges::ALL,
+        exclusive_zone: 0,
+        keyboard: KeyboardFocus::None,
+        namespace: "control-center".to_owned(),
+    })
 }
 
-fn main() -> ExitCode {
-    unbound_log::init("unbound-controlcenter");
-    match run() {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(error) => {
-            tracing::error!("{error}");
-            ExitCode::FAILURE
-        }
+impl ControlCenter {
+    pub fn new(
+        window: &mut Window,
+        text: TextSystem,
+        session: Option<&Connection>,
+        system: Option<&Connection>,
+    ) -> std::io::Result<Self> {
+        let audio = Audio::connect()
+            .inspect_err(|error| tracing::warn!("no sound: {error}"))
+            .ok();
+        let player_updates = Inbox::new()?;
+        let player_commands = session.map(|connection| {
+            let (commands, received) = mpsc::channel();
+            let (watching, outbox) = (connection.clone(), player_updates.outbox());
+            std::thread::spawn(move || {
+                if let Err(error) = media::watch(&watching, &outbox) {
+                    tracing::warn!("cannot follow media players: {error}");
+                }
+            });
+            let commanding = connection.clone();
+            std::thread::spawn(move || media::run_commands(&commanding, &received));
+            commands
+        });
+        window.set_input_region(Some(&[]));
+        report("hide", window.hide());
+        let appearance = window.appearance();
+        Ok(Self {
+            mode: Mode::Hidden,
+            shown: Animated::new(0.0),
+            surface_shown: false,
+            reduce_motion: appearance.reduce_motion,
+            palette: appearance.palette(),
+            text,
+            changes: Changes::default(),
+            pointer: Point::new(0.0, 0.0),
+            anchor: None,
+            audio,
+            network: system.map(NetworkManager::new),
+            bluetooth: system.map(Bluetooth::new),
+            backlight: Backlight::find(Path::new(SYSFS_BACKLIGHT)),
+            keyboard_light: KeyboardLight::find(Path::new(SYSFS_LEDS)),
+            system: system.cloned(),
+            session: session.cloned(),
+            players: Players::default(),
+            player_updates,
+            player_commands,
+            artwork: None,
+            meter: None,
+            input_level: Rc::default(),
+        })
     }
 }

@@ -1,3 +1,4 @@
+mod client;
 pub mod media;
 mod modules;
 mod now_playing;
@@ -22,6 +23,7 @@ use unbound_toolkit::{
 
 use modules::{Caption, Module, Tile, TileSpec};
 
+pub use client::{ControlCenter, role};
 use media::{Command, Player};
 pub use now_playing::clock;
 
@@ -521,7 +523,7 @@ mod tests {
     fn every_message_id_used_in_code_is_in_the_english_file() {
         let sources = [
             include_str!("lib.rs"),
-            include_str!("main.rs"),
+            include_str!("client.rs"),
             include_str!("now_playing.rs"),
         ];
         assert_eq!(

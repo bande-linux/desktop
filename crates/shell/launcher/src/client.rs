@@ -4,23 +4,22 @@ use std::io::Read;
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
-use std::process::ExitCode;
 use std::rc::Rc;
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use accesskit::TreeUpdate;
-use unbound_fs::Entry;
-use unbound_launcher::{
+use crate::{
     Action, AppInfo, Catalog, Clips, Hit, ICON_SIZE, Kind, Launcher, Loaded, Mode, PaneInfo, Reply,
     Request, SettingInfo, Target,
 };
+use accesskit::TreeUpdate;
+use unbound_fs::Entry;
 use unbound_preview::{Preview, preview};
 use unbound_search::{FileIndex, Usage, recently_used_path, usage_path};
 use unbound_thumbnails::{Cache, ThumbnailSize, Thumbnailers, thumbnail};
 use unbound_toolkit::{
     App, Edges, Image, KeyboardFocus, LauncherMode, LayerKind, LayerOptions, MenuPlacement, Rect,
-    Role, Scene, TextSystem, Window, WindowError, WindowEvent,
+    Role, Scene, TextSystem, Window, WindowEvent,
 };
 use unbound_xdg::{
     Apps, DIRECTORY, DesktopEntry, ICON_THEMES, LaunchError, Locale, MimeDatabase, applications,
@@ -151,7 +150,7 @@ impl Previewer {
     }
 }
 
-struct LauncherShell {
+pub struct LauncherShell {
     launcher: Launcher,
     entries: Vec<DesktopEntry>,
     index: Option<FileIndex>,
@@ -444,94 +443,93 @@ fn settings_panes() -> Vec<PaneInfo> {
         .collect()
 }
 
-fn run() -> Result<(), WindowError> {
-    let dirs = data_dirs();
-    let entries = applications(&dirs, Locale::from_env().as_ref(), &current_desktops());
-    let apps = entries
-        .iter()
-        .map(|entry| AppInfo {
-            app_id: entry.app_id().to_owned(),
-            name: entry.name.clone(),
-            generic_name: entry.generic_name.clone(),
-            comment: entry.comment.clone(),
-            keywords: entry.keywords.clone(),
-        })
-        .collect();
-    let home = std::env::var_os("HOME").map_or_else(|| PathBuf::from("/"), PathBuf::from);
-    let state_home = std::env::var_os("XDG_STATE_HOME").map(PathBuf::from);
-    let recently_used = recently_used_path(
-        std::env::var_os("XDG_DATA_HOME")
-            .map(PathBuf::from)
-            .as_deref(),
-        &home,
-    );
-    let usage_file = usage_path(state_home.as_deref(), Some(&home));
-    let skin_tone = usage_file
-        .as_deref()
-        .and_then(Path::parent)
-        .unwrap_or(&home)
-        .join("launcher-skin-tone");
-    let usage = usage_file.map(Usage::load).unwrap_or_default();
-    let apps_by_type = Rc::new(RefCell::new(Apps::load(dirs.clone(), &config_dirs())));
-    let library = Library {
-        apps: apps_by_type.clone(),
-        app_icons: app_icons(&entries, &dirs),
-        data_dirs: dirs,
-        icons: HashMap::new(),
-    };
-    let index = FileIndex::spawn(home.clone())
-        .inspect_err(|error| tracing::warn!("cannot index the home folder: {error}"))
-        .ok();
-    let previewer = Previewer::spawn()
-        .inspect_err(|error| tracing::warn!("cannot preview: {error}"))
-        .ok();
-    let mut window = Window::open(
-        Role::Layer(LayerOptions {
-            layer: LayerKind::Overlay,
-            anchor: Edges::ALL,
-            exclusive_zone: -1,
-            keyboard: KeyboardFocus::Exclusive,
-            namespace: "launcher".to_owned(),
-        }),
-        (0, 0),
-    )?;
-    window.hide()?;
-    let mut launcher = Launcher::new(
-        apps,
-        settings_panes(),
-        Box::new(library),
-        home,
-        usage,
-        window.appearance(),
-        TextSystem::new(),
-    );
-    if let Some(index) = &index {
-        index.set_boosts(launcher.file_boosts());
-    }
-    launcher.set_skin_tone(load_skin_tone(&skin_tone));
-    let mut shell = LauncherShell {
-        launcher,
-        entries,
-        index,
-        previewer,
-        clips: Clips::spawn()
-            .inspect_err(|error| tracing::warn!("cannot read the clipboard history: {error}"))
-            .ok(),
-        apps: apps_by_type,
-        recently_used,
-        skin_tone,
-        blurred: None,
-    };
-    unbound_toolkit::run(&mut window, &mut shell)
+pub fn role() -> Role {
+    Role::Layer(LayerOptions {
+        layer: LayerKind::Overlay,
+        anchor: Edges::ALL,
+        exclusive_zone: -1,
+        keyboard: KeyboardFocus::Exclusive,
+        namespace: "launcher".to_owned(),
+    })
 }
 
-fn main() -> ExitCode {
-    unbound_log::init("unbound-launcher");
-    match run() {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(error) => {
-            tracing::error!("{error}");
-            ExitCode::FAILURE
+impl LauncherShell {
+    pub fn new(
+        window: &mut Window,
+        text: TextSystem,
+        session: Option<&zbus::blocking::Connection>,
+    ) -> std::io::Result<Self> {
+        let dirs = data_dirs();
+        let entries = applications(&dirs, Locale::from_env().as_ref(), &current_desktops());
+        let apps = entries
+            .iter()
+            .map(|entry| AppInfo {
+                app_id: entry.app_id().to_owned(),
+                name: entry.name.clone(),
+                generic_name: entry.generic_name.clone(),
+                comment: entry.comment.clone(),
+                keywords: entry.keywords.clone(),
+            })
+            .collect();
+        let home = std::env::var_os("HOME").map_or_else(|| PathBuf::from("/"), PathBuf::from);
+        let state_home = std::env::var_os("XDG_STATE_HOME").map(PathBuf::from);
+        let recently_used = recently_used_path(
+            std::env::var_os("XDG_DATA_HOME")
+                .map(PathBuf::from)
+                .as_deref(),
+            &home,
+        );
+        let usage_file = usage_path(state_home.as_deref(), Some(&home));
+        let skin_tone = usage_file
+            .as_deref()
+            .and_then(Path::parent)
+            .unwrap_or(&home)
+            .join("launcher-skin-tone");
+        let usage = usage_file.map(Usage::load).unwrap_or_default();
+        let apps_by_type = Rc::new(RefCell::new(Apps::load(dirs.clone(), &config_dirs())));
+        let library = Library {
+            apps: apps_by_type.clone(),
+            app_icons: app_icons(&entries, &dirs),
+            data_dirs: dirs,
+            icons: HashMap::new(),
+        };
+        let index = FileIndex::spawn(home.clone())
+            .inspect_err(|error| tracing::warn!("cannot index the home folder: {error}"))
+            .ok();
+        let previewer = Previewer::spawn()
+            .inspect_err(|error| tracing::warn!("cannot preview: {error}"))
+            .ok();
+        if let Err(error) = window.hide() {
+            tracing::warn!("cannot hide: {error}");
         }
+        let mut launcher = Launcher::new(
+            apps,
+            settings_panes(),
+            Box::new(library),
+            home,
+            usage,
+            window.appearance(),
+            text,
+        );
+        if let Some(index) = &index {
+            index.set_boosts(launcher.file_boosts());
+        }
+        launcher.set_skin_tone(load_skin_tone(&skin_tone));
+        let clips = session.and_then(|session| {
+            Clips::spawn(session.clone())
+                .inspect_err(|error| tracing::warn!("cannot read the clipboard history: {error}"))
+                .ok()
+        });
+        Ok(Self {
+            launcher,
+            entries,
+            index,
+            previewer,
+            clips,
+            apps: apps_by_type,
+            recently_used,
+            skin_tone,
+            blurred: None,
+        })
     }
 }

@@ -1,0 +1,50 @@
+[package]
+name = "unbound-shell"
+description = "Unbound shell: the desktop, the bar, the notifications, Control Center and the launcher in one process"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+accesskit.workspace = true
+tracing.workspace = true
+unbound-bar.workspace = true
+unbound-config.workspace = true
+unbound-controlcenter.workspace = true
+unbound-desktop-surface.workspace = true
+unbound-launcher.workspace = true
+unbound-log.workspace = true
+unbound-notifications.workspace = true
+unbound-status.workspace = true
+unbound-toolkit.workspace = true
+zbus.workspace = true
+
+[package.metadata.deb]
+maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+section = "misc"
+depends = "$auto, fonts-inter, fonts-noto-color-emoji, unbound-notify"
+conflicts = "unbound-bar, unbound-desktop-surface, unbound-launcher, unbound-notifications, unbound-controlcenter"
+replaces = "unbound-bar, unbound-desktop-surface, unbound-launcher, unbound-notifications, unbound-controlcenter"
+recommends = "upower, network-manager, bluez, pipewire, wireplumber, unbound-tray, xdg-user-dirs, adwaita-icon-theme"
+assets = [
+    ["target/release/unbound-shell", "usr/bin/", "755"],
+    ["../../../data/wallpapers/*.svg", "usr/share/unbound/wallpapers/", "644"],
+    ["../../../data/icons/Unbound*/**/*", "usr/share/icons/", "644"],
+]
+extended-description = """\
+The shell of the Unbound desktop, one process for the whole session. On \
+every display it draws the desktop, the wallpaper in its light and dark \
+variants with the files of the Desktop folder and the plugged-in drives \
+as icons, and the bar: the apps kept in it and the running apps with \
+their badges and progress, the Trash, the system menu, the active app \
+with its menus, the status notifier items of apps, Bluetooth, sound, \
+Wi-Fi and battery, Control Center and the clock, which opens the \
+Notification Center. Shift+Super+/ searches the active app's menus. It \
+also shows notification banners, Control Center with the volume and \
+brightness HUD, and the launcher that Super+Space opens to find apps, \
+files and answers. unbound-compositor starts it and keeps it running. It \
+installs the Unbound wallpapers, which the lock screen and the login \
+window also show, and the Unbound icon theme."""
+
+[lints]
+workspace = true

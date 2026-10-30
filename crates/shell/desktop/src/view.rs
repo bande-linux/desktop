@@ -253,13 +253,10 @@ pub fn fitted_label(text: &mut TextSystem, name: &str, style: TextStyle, width: 
 }
 
 impl DesktopView {
-    pub fn new(appearance: Appearance, layouts: Layouts) -> Self {
+    pub fn new(appearance: Appearance, layouts: Layouts, text: TextSystem) -> Self {
         let layout = FreeLayout::new();
         let layout_id = layout.id();
-        let mut ui = Ui::new(
-            Box::new(layout),
-            Context::new(TextSystem::new(), appearance.palette()),
-        );
+        let mut ui = Ui::new(Box::new(layout), Context::new(text, appearance.palette()));
         ui.set_appearance(appearance);
         Self {
             desktop: Desktop::new(Grid::new(Bounds::new(0.0, 0.0, 1.0, 1.0))),

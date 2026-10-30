@@ -184,10 +184,9 @@ impl Bench {
             clients: Vec::new(),
             list_frames: false,
         };
-        for shell in ["unbound-desktop-surface", "unbound-bar", "unbound-launcher"] {
-            let child = bench.server.spawn_shell_client(&binaries.join(shell))?;
-            bench.clients.push((shell.to_owned(), child));
-        }
+        let shell = "unbound-shell";
+        let child = bench.server.spawn_shell_client(&binaries.join(shell))?;
+        bench.clients.push((shell.to_owned(), child));
         if full_effects {
             bench.output.renderer.set_reduced_effects(false);
         }

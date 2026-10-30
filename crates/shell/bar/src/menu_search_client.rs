@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use unbound_bar::menu_search::{MenuSearch, NAMESPACE};
+use crate::menu_search::{MenuSearch, NAMESPACE};
 use unbound_toolkit::ui::Menu;
 use unbound_toolkit::{
     App, Edges, KeyboardFocus, LayerKind, LayerOptions, Role, Scene, TextSystem, Window,

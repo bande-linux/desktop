@@ -19,8 +19,6 @@ const WATCHER_INTERFACE: &str = "org.kde.StatusNotifierWatcher";
 const WATCHER: &str = "org.kde.StatusNotifierWatcher";
 const MENU_INTERFACE: &str = "com.canonical.dbusmenu";
 const ICON_PIXELS: i32 = 32;
-const NOTIFICATION_SCREEN: &str = "org.unbound.NotificationScreen";
-const NOTIFICATION_SCREEN_PATH: &str = "/org/unbound/NotificationScreen";
 const BUS: &str = "org.freedesktop.DBus";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -286,7 +284,6 @@ pub enum Errand {
     Clicked { menu: String, id: i32 },
     Activate { item: String, x: i32, y: i32 },
     AppMenu(String),
-    ToggleNotificationCenter,
 }
 
 fn dbus_menu<'a>(connection: &Connection, key: &'a str) -> zbus::Result<DBusMenu<'a>> {
@@ -332,15 +329,6 @@ pub fn run_errands(connection: &Connection, errands: &Receiver<Errand>, outbox: 
                 outbox.send(Update::AppMenu { app, root });
                 Ok(())
             }
-            Errand::ToggleNotificationCenter => connection
-                .call_method(
-                    Some(NOTIFICATION_SCREEN),
-                    NOTIFICATION_SCREEN_PATH,
-                    Some(NOTIFICATION_SCREEN),
-                    "Toggle",
-                    &(),
-                )
-                .map(|_| ()),
         };
         if let Err(error) = result {
             tracing::warn!("a status item did not answer: {error}");

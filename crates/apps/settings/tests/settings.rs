@@ -357,3 +357,67 @@ fn every_pane_opens_by_its_keyword() {
     }
     assert_eq!(PaneId::from_keyword("printers"), None);
 }
+
+fn focused_label(view: &SettingsView) -> Option<String> {
+    let tree = view.accessibility();
+    tree.nodes
+        .iter()
+        .find(|(id, _)| *id == tree.focus)
+        .and_then(|(_, node)| node.label().map(str::to_owned))
+}
+
+#[test]
+fn tab_reaches_every_accessibility_control_and_space_switches_it() {
+    let mut view = view();
+    for id in [
+        SettingId::ScreenReader,
+        SettingId::Zoom,
+        SettingId::IncreaseContrast,
+        SettingId::ReduceTransparency,
+        SettingId::ReduceMotion,
+        SettingId::FlashScreen,
+        SettingId::StickyKeys,
+        SettingId::SlowKeys,
+        SettingId::BounceKeys,
+    ] {
+        view.set_value(id, Value::Flag(false));
+    }
+    view.set_value(SettingId::CursorSize, Value::Number(24));
+    view.select_pane(PaneId::Accessibility);
+    view.scene(SIZE.0, SIZE.1);
+    let mut reached = Vec::new();
+    for _ in 0..40 {
+        press(&mut view, Key::Tab);
+        if let Some(label) = focused_label(&view)
+            && !reached.contains(&label)
+        {
+            reached.push(label);
+        }
+    }
+    for label in [
+        "Screen reader",
+        "Zoom",
+        "Increase contrast",
+        "Reduce transparency",
+        "Reduce motion",
+        "Pointer size",
+        "Flash the screen when an alert sound plays",
+        "Sticky keys",
+        "Slow keys",
+        "Bounce keys",
+    ] {
+        assert!(
+            reached.iter().any(|known| known == label),
+            "Tab never reached {label}: {reached:?}"
+        );
+    }
+    while focused_label(&view).as_deref() != Some("Sticky keys") {
+        press(&mut view, Key::Tab);
+    }
+    changes(&mut view);
+    press(&mut view, Key::Space);
+    assert_eq!(
+        changes(&mut view),
+        [(SettingId::StickyKeys, Value::Flag(true))]
+    );
+}

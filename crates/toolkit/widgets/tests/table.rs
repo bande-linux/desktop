@@ -22,6 +22,7 @@ const SHIFT: Modifiers = Modifiers {
     ..NONE
 };
 const LOGO: Modifiers = Modifiers { logo: true, ..NONE };
+const ALT: Modifiers = Modifiers { alt: true, ..NONE };
 
 #[derive(Default)]
 struct Log {
@@ -394,4 +395,103 @@ fn rows_report_where_they_are_after_scrolling() {
     let middle = Point::new(10.0, bounds.y + bounds.height / 2.0);
     assert_eq!(table.row_at(middle), Some(30));
     assert_eq!(table.cell_bounds(30, 1).expect("size cell").x, 200.0);
+}
+
+fn tree() -> Vec<Row> {
+    let leaf = |name: &str| Row::new(name, vec![Cell::new(name), Cell::new("1")]);
+    vec![
+        Row::new("mail", vec![Cell::new("mail"), Cell::new("3")]).children(vec![
+            leaf("mail helper"),
+            Row::new("mail sync", vec![Cell::new("mail sync"), Cell::new("1")])
+                .children(vec![leaf("mail sync worker")]),
+        ]),
+        leaf("notes"),
+    ]
+}
+
+fn outline() -> Fixture {
+    let mut fixture = Fixture::new(&[]);
+    fixture.table().set_rows(tree());
+    fixture.ui.scene(AREA.width as u32, AREA.height as u32);
+    fixture
+}
+
+#[test]
+fn right_and_left_open_and_close_branches_and_walk_the_outline() {
+    let mut fixture = outline();
+    fixture.click(0, NONE, 1);
+    fixture.key(Key::Down, NONE);
+    assert_eq!(
+        fixture.selection(),
+        keys(&["notes"]),
+        "children start hidden"
+    );
+    fixture.key(Key::Up, NONE);
+    fixture.key(Key::Right, NONE);
+    fixture.key(Key::Right, NONE);
+    assert_eq!(fixture.selection(), keys(&["mail helper"]));
+    fixture.key(Key::Down, NONE);
+    fixture.key(Key::Right, NONE);
+    fixture.key(Key::Down, NONE);
+    assert_eq!(fixture.selection(), keys(&["mail sync worker"]));
+    fixture.key(Key::Left, NONE);
+    assert_eq!(fixture.selection(), keys(&["mail sync"]));
+    fixture.key(Key::Left, NONE);
+    fixture.key(Key::Down, NONE);
+    assert_eq!(fixture.selection(), keys(&["notes"]), "mail sync closed");
+}
+
+#[test]
+fn closing_a_branch_moves_a_hidden_selection_to_the_branch() {
+    let mut fixture = outline();
+    fixture.click(0, NONE, 1);
+    fixture.key(Key::Right, ALT);
+    fixture.key(Key::End, NONE);
+    fixture.key(Key::Up, SHIFT);
+    assert_eq!(fixture.selection(), keys(&["mail sync worker", "notes"]));
+    let mail = Fixture::row_point(0);
+    let triangle = Point::new(12.0, mail.y);
+    fixture
+        .ui
+        .handle(&Event::PointerDown(Pointer::at(triangle)));
+    fixture.ui.handle(&Event::PointerUp(Pointer::at(triangle)));
+    assert_eq!(fixture.selection(), keys(&["mail", "notes"]));
+    assert_eq!(
+        fixture.log.borrow().selections.last(),
+        Some(&keys(&["mail", "notes"]))
+    );
+}
+
+#[test]
+fn an_outline_is_a_tree_grid_with_levels_and_expandable_rows() {
+    let mut fixture = outline();
+    let tree = fixture.ui.accessibility();
+    let table = tree
+        .nodes
+        .iter()
+        .find(|(id, _)| *id == NodeId::from(fixture.table))
+        .expect("table node");
+    assert_eq!(table.1.role(), Role::TreeGrid);
+    let mail = tree
+        .nodes
+        .iter()
+        .find(|(_, node)| node.role() == Role::Row && node.label() == Some("mail"))
+        .expect("mail row");
+    assert_eq!(mail.1.level(), Some(1));
+    assert_eq!(mail.1.is_expanded(), Some(false));
+    assert!(fixture.ui.perform(&ActionRequest {
+        action: Action::Expand,
+        target_tree: TreeId::ROOT,
+        target_node: mail.0,
+        data: None,
+    }));
+    let helper = fixture
+        .ui
+        .accessibility()
+        .nodes
+        .into_iter()
+        .find(|(_, node)| node.label() == Some("mail helper"))
+        .expect("child row");
+    assert_eq!(helper.1.level(), Some(2));
+    assert!(fixture.selection().is_empty(), "expanding selects nothing");
 }

@@ -1,5 +1,5 @@
 use accesskit::{Action, ActionRequest, Node, Role};
-use unbound_graphics::{Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle};
+use unbound_graphics::{Color, Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle};
 use unbound_spring::Spring;
 
 use super::{Animated, Context, Event, Key, Size, Widget, WidgetId, contains};
@@ -65,6 +65,24 @@ impl Disclosure {
     }
 }
 
+pub(crate) fn chevron(centre: Point, turn: f32, color: Color, items: &mut Vec<Item>) {
+    let angle = turn * std::f32::consts::FRAC_PI_2;
+    let rotate = |x: f32, y: f32| {
+        Point::new(
+            centre.x + x * angle.cos() - y * angle.sin(),
+            centre.y + x * angle.sin() + y * angle.cos(),
+        )
+    };
+    for (from, to) in [((-2.0, -4.0), (2.0, 0.0)), ((2.0, 0.0), (-2.0, 4.0))] {
+        items.push(Item::Line {
+            from: rotate(from.0, from.1),
+            to: rotate(to.0, to.1),
+            width: 1.5,
+            paint: color.into(),
+        });
+    }
+}
+
 impl Widget for Disclosure {
     fn id(&self) -> WidgetId {
         self.id
@@ -108,21 +126,7 @@ impl Widget for Disclosure {
         let header = self.header();
         let turn = self.turn.value(cx);
         let centre = Point::new(header.x + 7.0, header.y + header.height / 2.0);
-        let angle = turn * std::f32::consts::FRAC_PI_2;
-        let rotate = |x: f32, y: f32| {
-            Point::new(
-                centre.x + x * angle.cos() - y * angle.sin(),
-                centre.y + x * angle.sin() + y * angle.cos(),
-            )
-        };
-        for (from, to) in [((-2.0, -4.0), (2.0, 0.0)), ((2.0, 0.0), (-2.0, 4.0))] {
-            items.push(Item::Line {
-                from: rotate(from.0, from.1),
-                to: rotate(to.0, to.1),
-                width: 1.5,
-                paint: cx.palette.label_muted.into(),
-            });
-        }
+        chevron(centre, turn, cx.palette.label_muted, items);
         if let Some(paragraph) = &self.paragraph {
             items.push(Item::Text {
                 origin: Point::new(

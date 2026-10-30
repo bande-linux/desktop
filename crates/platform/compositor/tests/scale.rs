@@ -179,3 +179,15 @@ fn the_pointer_reaches_the_window_point_under_it() {
         assert_eq!(scene.app.pointer_focus(), Some((0, 10.0, 20.0)), "{scale}");
     }
 }
+
+#[test]
+fn changing_the_scale_keeps_the_pointer_where_it_is_on_screen() {
+    let mut server = Headless::new(Size::from((512, 384))).expect("headless compositor");
+    server.move_pointer_to((100.0, 50.0).into(), 0);
+
+    server.set_output_scale(2.0);
+    assert_eq!(server.pointer_location(), (50.0, 25.0).into());
+
+    server.set_output_scale(1.0);
+    assert_eq!(server.pointer_location(), (100.0, 50.0).into());
+}

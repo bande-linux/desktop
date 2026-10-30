@@ -921,11 +921,16 @@ impl State {
     }
 
     pub(crate) fn set_output_scale(&mut self, scale: f64) {
+        let ratio = self.output_scale / scale;
         self.output_scale = scale;
         self.output
             .change_current_state(None, None, Some(OutputScale::Fractional(scale)), None);
-        let center = self.logical_output_size().to_f64();
-        self.pointer_location = (center.w / 2.0, center.h / 2.0).into();
+        let size = self.logical_output_size().to_f64();
+        self.pointer_location = (
+            (self.pointer_location.x * ratio).clamp(0.0, size.w - 1.0),
+            (self.pointer_location.y * ratio).clamp(0.0, size.h - 1.0),
+        )
+            .into();
         self.named_cursors.clear();
         if let CursorImageStatus::Named(icon) = self.cursor_status {
             self.load_named_cursor(icon);

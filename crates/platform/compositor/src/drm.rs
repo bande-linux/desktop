@@ -216,7 +216,7 @@ impl DrmBackend {
             OFlags::RDWR | OFlags::CLOEXEC | OFlags::NOCTTY | OFlags::NONBLOCK,
         )?;
         let fd = DrmDeviceFd::new(DeviceFd::from(fd));
-        let (device, notifier) = DrmDevice::new(fd, true)?;
+        let (device, notifier) = DrmDevice::new(fd, false)?;
         if connected(&device)?.is_empty() {
             return Err("no connected connector with a mode".into());
         }

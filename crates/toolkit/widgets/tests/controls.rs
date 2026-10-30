@@ -7,8 +7,8 @@ use std::time::{Duration, Instant};
 use accesskit::{Action, ActionRequest, Node, NodeId, Role, Toggled, TreeId};
 use unbound_graphics::{Item, Palette, Point, Rect, Scheme, TextSystem};
 use unbound_widgets::{
-    Axis, BUTTON_HEIGHT, Button, CheckState, Checkbox, Context, Event, Key, Modifiers, Pointer,
-    PopUpButton, ProgressBar, RadioGroup, SegmentedControl, Size, Spinner, Stack, Stepper,
+    Axis, BUTTON_HEIGHT, Button, CheckState, Checkbox, ComboBox, Context, Event, Key, Modifiers,
+    Pointer, PopUpButton, ProgressBar, RadioGroup, SegmentedControl, Size, Spinner, Stack, Stepper,
     TOOLTIP_DELAY, Ui, Widget, WidgetId,
 };
 
@@ -324,4 +324,44 @@ fn keyboard_focus_shows_a_tooltip_too() {
     assert_eq!(harness.ui.focus(), Some(id));
     harness.advance(TOOLTIP_DELAY);
     assert_eq!(harness.texts(), base + 1);
+}
+
+#[test]
+fn a_combo_box_takes_typing_or_a_choice_from_its_menu() {
+    let (texts, record) = recorder::<String>();
+    let mut record = record;
+    let combo = ComboBox::new("Font size", "12", &["10", "12", "14"], move |text: &str| {
+        record(text.to_owned())
+    });
+    let id = combo.id();
+    let mut harness = Harness::new(combo);
+    let frame = harness.frame(id);
+    harness
+        .ui
+        .handle(&Event::PointerDown(Pointer::at(Point::new(
+            frame.x + frame.width - 6.0,
+            centre(frame).y,
+        ))));
+    let (menu, at) = harness.ui.take_menu_request().expect("the choices");
+    assert!(menu.items[1].checked);
+    assert!(
+        at.y >= frame.y + frame.height,
+        "the choices open below the field"
+    );
+    assert!(harness.ui.menu_action("2"));
+    assert_eq!(*texts.borrow(), ["14"]);
+    harness.key(Key::Character('z'));
+    harness.ui.handle(&Event::Key {
+        key: Key::Character('z'),
+        modifiers: Modifiers { logo: true, ..NONE },
+    });
+    harness.ui.layout(AREA);
+    assert_eq!(texts.borrow().last().map(String::as_str), Some("14"));
+    let node = harness.node(id.into());
+    assert_eq!(node.role(), Role::EditableComboBox);
+    harness.key(Key::Down);
+    assert!(
+        harness.ui.take_menu_request().is_some(),
+        "Down opens the choices"
+    );
 }

@@ -9,9 +9,9 @@ use std::time::Instant;
 use unbound_graphics::{CpuRenderer, Palette, Scheme, TextSystem, pixels};
 
 use unbound_widgets::{
-    Axis, Button, CheckState, Checkbox, Context, Event, Pointer, PopUpButton, ProgressBar,
-    RadioGroup, SearchField, SegmentedControl, Size, Spinner, Stack, Stepper, TOOLTIP_DELAY,
-    TextField, TextView, Ui, Widget, WidgetId,
+    Axis, Button, CheckState, Checkbox, ComboBox, Context, Event, Pointer, PopUpButton,
+    ProgressBar, RadioGroup, SearchField, SegmentedControl, Size, Spinner, Stack, Stepper,
+    TOOLTIP_DELAY, TextField, TextView, Ui, Widget, WidgetId,
 };
 
 const MIN_SSIM: f64 = 0.99;
@@ -147,6 +147,7 @@ fn controls(scheme: Scheme) -> Ui {
         Box::new(Stepper::new("Copies", 2.0, (1.0, 9.0), 1.0, |_| {})),
         Box::new(Spinner::new("Loading")),
     ]);
+    let combo = Box::new(ComboBox::new("Size", "12 pt", &["10 pt", "12 pt"], |_| {}));
     let help = Button::new("Stop", || {}).tooltip("Quit the selected process");
     let help_id = help.id();
     let stack = Stack::new(
@@ -157,6 +158,7 @@ fn controls(scheme: Scheme) -> Ui {
             checks,
             choices,
             pickers,
+            combo,
             Box::new(ProgressBar::new("Copying", Some(0.4))),
             Box::new(ProgressBar::new("Preparing", None)),
             row(vec![Box::new(help)]),
@@ -169,7 +171,7 @@ fn controls(scheme: Scheme) -> Ui {
     let clock = Rc::new(Cell::new(Instant::now()));
     let time = clock.clone();
     ui.set_clock(move || time.get());
-    ui.layout(Size::new(360.0, 260.0));
+    ui.layout(Size::new(360.0, 296.0));
     let frame = ui.widget(help_id).expect("button").frame();
     ui.handle(&Event::PointerMove(Pointer::at(
         unbound_graphics::Point::new(frame.x + 10.0, frame.y + 8.0),
@@ -180,5 +182,5 @@ fn controls(scheme: Scheme) -> Ui {
 
 #[test]
 fn controls_match_their_goldens() {
-    shoot("controls", (360, 260), controls);
+    shoot("controls", (360, 296), controls);
 }

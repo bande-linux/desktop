@@ -208,6 +208,10 @@ impl Widget for SearchField {
         self.field.accepts_focus(cx)
     }
 
+    fn focused_by_keyboard(&mut self) {
+        self.field.focused_by_keyboard();
+    }
+
     fn context_menu(&mut self, cx: &mut Context, point: Point) -> Option<Menu> {
         self.field.context_menu(cx, point)
     }

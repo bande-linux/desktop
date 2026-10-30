@@ -615,3 +615,25 @@ fn a_search_field_is_a_search_input_with_a_clear_button_for_assistive_technology
     assert!(editing.ui.perform(&request(clear, Action::Click, None)));
     assert_eq!(editing.text(), "");
 }
+
+#[test]
+fn tabbing_into_a_field_selects_its_text_so_typing_replaces_it() {
+    let first = TextField::new("First", "Ada", |_| {});
+    let second = TextField::new("Last", "Lovelace", |_| {});
+    let second_id = second.id();
+    let mut ui = Ui::new(
+        Box::new(unbound_widgets::Stack::new(
+            unbound_widgets::Axis::Vertical,
+            8.0,
+            0.0,
+            vec![Box::new(first), Box::new(second)],
+        )),
+        Context::new(TextSystem::new(), Palette::for_scheme(Scheme::Light)),
+    );
+    ui.layout(AREA);
+    ui.handle(&key(Key::Tab, NONE));
+    ui.handle(&key(Key::Tab, NONE));
+    ui.handle(&key(Key::Character('B'), NONE));
+    let field = ui.widget_as::<TextField>(second_id).expect("field");
+    assert_eq!(field.text(), "B");
+}

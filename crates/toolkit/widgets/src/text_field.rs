@@ -74,6 +74,17 @@ impl TextField {
         }
     }
 
+    pub(crate) fn with_trailing(self, trailing: f32) -> Self {
+        Self { trailing, ..self }
+    }
+
+    pub(crate) fn replace_text(&mut self, text: &str) {
+        let revision = self.editor.revision();
+        self.editor.select_all();
+        self.editor.insert(text);
+        self.changed(revision);
+    }
+
     pub(crate) fn clear(&mut self) {
         let revision = self.editor.revision();
         self.editor.clear();
@@ -298,6 +309,10 @@ impl Widget for TextField {
 
     fn accepts_focus(&self, _cx: &Context) -> bool {
         true
+    }
+
+    fn focused_by_keyboard(&mut self) {
+        self.editor.select_all();
     }
 
     fn context_menu(&mut self, _cx: &mut Context, _point: Point) -> Option<Menu> {

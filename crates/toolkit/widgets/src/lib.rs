@@ -1,6 +1,7 @@
 mod animation;
 mod button;
 mod checkbox;
+mod combo_box;
 mod context_menu;
 mod disclosure;
 mod editor;
@@ -35,6 +36,7 @@ use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId, TreeInfo, Tre
 pub use animation::Animated;
 pub use button::{BUTTON_HEIGHT, Button};
 pub use checkbox::{CHECKBOX_SIZE, CheckState, Checkbox};
+pub use combo_box::ComboBox;
 pub use context_menu::ContextMenu;
 pub use disclosure::{DISCLOSURE_HEIGHT, Disclosure};
 pub use free_layout::FreeLayout;
@@ -254,6 +256,8 @@ pub trait Widget: AsAny {
     fn tooltip(&self) -> Option<&str> {
         None
     }
+
+    fn focused_by_keyboard(&mut self) {}
 
     fn dismissed(&self) -> bool {
         false
@@ -938,6 +942,9 @@ impl Ui {
             (Some(index), false) => (index + order.len() - 1) % order.len(),
         };
         self.cx.focus = Some(order[next]);
+        if let Some(widget) = lookup_in(&mut self.root, &mut self.sheet, order[next]) {
+            widget.focused_by_keyboard();
+        }
         self.reveal_focus();
     }
 

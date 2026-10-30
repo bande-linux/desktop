@@ -278,7 +278,10 @@ fn moving_a_window_from_its_menu_slides_it_away_and_hands_the_keyboard_on() {
     roundtrip(&mut server, &mut [&mut editor, &mut viewer]);
 
     assert!(leaving[2] > 0x80 && leaving[0] < 0x20, "{leaving:?}");
-    assert_eq!((server.workspace_count(), server.active_workspace()), (2, 0));
+    assert_eq!(
+        (server.workspace_count(), server.active_workspace()),
+        (2, 0)
+    );
     assert_eq!(center(&mut renderer, &mut server), [0xff, 0, 0]);
     assert!(editor.keyboard_focus_on(0));
 }
@@ -303,5 +306,8 @@ fn with_reduce_motion_a_switch_crossfades_in_place() {
     server.animate(Duration::from_millis(end + 40));
     let [red, green, blue] = center(&mut renderer, &mut server);
 
-    assert!(red > 0x40 && blue > 0x40 && green < 0x28, "{red} {green} {blue}");
+    assert!(
+        red > 0x40 && blue > 0x40 && green < 0x28,
+        "{red} {green} {blue}"
+    );
 }

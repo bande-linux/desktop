@@ -244,10 +244,8 @@ impl State {
             Some(motion) => motion.translate(shift),
             None => {
                 let from = self.windows[index].geometry().map(|rect| {
-                    let mut look = Look::shown(Rectangle::new(
-                        rect.location.to_f64(),
-                        rect.size.to_f64(),
-                    ));
+                    let mut look =
+                        Look::shown(Rectangle::new(rect.location.to_f64(), rect.size.to_f64()));
                     look.rect.loc.x += shift;
                     look
                 });
@@ -301,29 +299,6 @@ impl State {
         self.tidy_workspaces();
     }
 
-    pub(crate) fn move_to_space_at(&mut self, surface: &WlSurface, position: usize) {
-        let Some(index) = self.window_index(surface) else {
-            return;
-        };
-        if self.on_full_screen_space(&self.windows[index]) {
-            return;
-        }
-        let target = match self.workspaces.id_at(position) {
-            Some(id) if !self.workspaces.is_full_screen(id) => id,
-            Some(_) => return,
-            None => self.workspaces.insert(self.workspaces.count(), None),
-        };
-        self.move_window_to_space(index, target);
-        self.refocus_on_workspace(surface);
-        self.announce_workspaces();
-    }
-
-    pub(crate) fn add_workspace(&mut self) {
-        self.workspaces.insert(self.workspaces.count(), None);
-        self.needs_redraw = true;
-        self.announce_workspaces();
-    }
-
     fn refocus_on_workspace(&mut self, moved: &WlSurface) {
         if self.focused().as_ref() == Some(moved) {
             let front = self.frontmost(None);
@@ -339,16 +314,15 @@ impl State {
                 .windows
                 .iter()
                 .any(|window| window.workspace == active && window.surface().client() == owner);
-        self.windows[index].workspace = if self.workspaces.is_full_screen(active)
-            && !shares_full_screen
-        {
-            self.workspaces.spaces[self.workspaces.active]
-                .home
-                .filter(|home| self.workspaces.index_of(*home).is_some())
-                .unwrap_or_else(|| self.workspaces.spaces[0].id)
-        } else {
-            active
-        };
+        self.windows[index].workspace =
+            if self.workspaces.is_full_screen(active) && !shares_full_screen {
+                self.workspaces.spaces[self.workspaces.active]
+                    .home
+                    .filter(|home| self.workspaces.index_of(*home).is_some())
+                    .unwrap_or_else(|| self.workspaces.spaces[0].id)
+            } else {
+                active
+            };
         if self.windows[index].has_state(xdg_toplevel::State::Fullscreen) {
             self.enter_full_screen_space(index);
         }
@@ -547,10 +521,9 @@ impl State {
             return;
         }
         for window in &self.windows {
-            if let (Some(handle), Some(position)) = (
-                &window.foreign,
-                self.workspaces.index_of(window.workspace),
-            ) {
+            if let (Some(handle), Some(position)) =
+                (&window.foreign, self.workspaces.index_of(window.workspace))
+            {
                 shell.window_workspace(handle.identifier(), position as u32);
             }
         }

@@ -767,10 +767,7 @@ pub(crate) fn window_elements(
             Kind::Unspecified,
         );
     let fullscreen = window.has_state(xdg_toplevel::State::Fullscreen);
-    let Some(geometry) = window
-        .geometry()
-        .filter(|_| !fullscreen || look.is_some())
-    else {
+    let Some(geometry) = window.geometry().filter(|_| !fullscreen || look.is_some()) else {
         return (
             surfaces.into_iter().map(OutputElement::Surface).collect(),
             None,

@@ -97,8 +97,31 @@ when they reach the screen is Unbound's own.
   rounds to shown or hidden and settles with `momentum` above 2 pages/s, `standard` below and
   `fade` with Reduce Motion. While the desktop shows, windows take no input and the keyboard
   leaves the app; pinching back or activating any window brings them back and returns the
-  keyboard. A four-finger pinch from the normal state opens the launcher. Three-finger swipes
-  stay with apps until workspaces and the overview exist.
+  keyboard. A four-finger pinch from the normal state opens the launcher. The compositor also
+  claims three-finger swipes: once the fingers have moved 16 units the axis locks, and a
+  horizontal swipe switches workspaces (below). Two- and four-finger swipes go to apps.
+- **Workspaces.** The output has one row of workspaces. A window opens on the active one
+  (a window of another app opened while a full-screen workspace is active opens on that
+  workspace's home). Workspaces are made on demand: moving a window past the last one adds
+  one, and so does going full screen, which gives the window a workspace of its own right
+  of its home, as on a Mac; leaving full screen takes the window home and the full-screen
+  workspace goes away. An empty workspace goes away once the view has settled elsewhere,
+  except the home of a full-screen workspace and the last ordinary one. Switching slides
+  the whole row with `standard`: windows move with it while the wallpaper stays, and the
+  keyboard goes to the frontmost window there. A three-finger horizontal swipe tracks the
+  fingers 1:1 (350 units per workspace, rubber band past either end) and settles like the
+  show-desktop pinch, with `momentum` above 2 workspaces/s; a new swipe during the settle
+  takes over from where the row is. Keyboard (Super is the command key, Ctrl stays with
+  terminals, so `Ctrl+Left/Right` is not taken): `Alt+Super+Left/Right` switch to the
+  neighbour, `Alt+Super+1`…`9` to a workspace by position, and `Ctrl+Super+Shift+Left/Right`
+  carry the focused window along (the window stays put on screen while the row slides
+  under it; past the last workspace a new one is made). `unbound_app_v1.move_to_workspace`
+  (v3) moves a window from its menu without following it: it slides off the screen and the
+  keyboard goes to the next window. Focusing a window anywhere (the Dock's activate app or
+  window, Super+Tab, an activation token) shows its workspace first. Shell clients learn the
+  row through `unbound_shell_v1` v9: `workspaces(count, active)` and
+  `window_workspace(identifier, position)`, sent on binding and on every change. With
+  Reduce Motion a switch crossfades the two workspaces in place.
 - **Not responding.** Whenever the user interacts with a window, and for every app when Force
   Quit opens, the compositor pings the app through `xdg_wm_base.ping` (at most once a second).
   An app that has not answered after 3 s is not responding: its windows are veiled in a soft
@@ -144,6 +167,6 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `zwp_pointer_constraints_v1` / `relative_pointer` | Pointer lock for games | P1 | not implemented |
 | `zwp_pointer_gestures_v1` | Trackpad gestures | P1 | implemented, v3: swipes, pinches and holds the compositor does not claim go to the client under the pointer |
 | `zwp_keyboard_shortcuts_inhibit_v1` | Keyboard passthrough for VMs and remote desktop | P2 | not implemented |
-| `unbound_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Control Center, Dock icon rectangles, apps that stopped responding; for the Dock (v7): hide, quit and force quit an app, activate one window by its foreign-toplevel identifier, minimised windows, attention requests, rounded blur for shell surfaces, Super+F3 and Super+F2 keyboard focus for the Dock and menu bar | P0 | implemented, shell clients only |
-| `unbound_app_v1` (own, in `unbound-shell-v1.xml`) | App-level requests: `quit_requested` on Super+Q instead of closing every window; v2 `place_window` (halves, quarters, restore) for the window menu | P0 | implemented, every client |
+| `unbound_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Control Center, Dock icon rectangles, apps that stopped responding; for the Dock (v7): hide, quit and force quit an app, activate one window by its foreign-toplevel identifier, minimised windows, attention requests, rounded blur for shell surfaces, Super+F3 and Super+F2 keyboard focus for the Dock and menu bar; v9: workspaces and the workspace of each window | P0 | implemented, shell clients only |
+| `unbound_app_v1` (own, in `unbound-shell-v1.xml`) | App-level requests: `quit_requested` on Super+Q instead of closing every window; v2 `place_window` (halves, quarters, restore) for the window menu; v3 `move_to_workspace` (previous, next) for the window menu | P0 | implemented, every client |
 | `ext-background-effect-v1` | Blur behind translucent menus, sidebars, Dock and menu bar | P1 | implemented: dual-filter Kawase blur (3 passes) clipped to the window's rounded shape, below the window's own shadow, redrawn when anything beneath it changes |

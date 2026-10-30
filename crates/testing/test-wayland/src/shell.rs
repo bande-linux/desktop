@@ -218,12 +218,7 @@ impl TestClient {
         self.exchange(server);
     }
 
-    pub fn move_to_workspace(
-        &mut self,
-        server: &mut Headless,
-        index: usize,
-        workspace: Workspace,
-    ) {
+    pub fn move_to_workspace(&mut self, server: &mut Headless, index: usize, workspace: Workspace) {
         let app: UnboundAppV1 = self.bind("unbound_app_v1", 3);
         app.move_to_workspace(&self.windows[index].2, workspace);
         self.exchange(server);
@@ -484,7 +479,10 @@ impl Dispatch<UnboundShellV1, ()> for Globals {
             unbound_shell_v1::Event::WindowWorkspace {
                 identifier,
                 workspace,
-            } => globals.shell.window_workspaces.push((identifier, workspace)),
+            } => globals
+                .shell
+                .window_workspaces
+                .push((identifier, workspace)),
             unbound_shell_v1::Event::FocusShell { namespace } => {
                 globals.shell.shell_focus.push(namespace);
             }

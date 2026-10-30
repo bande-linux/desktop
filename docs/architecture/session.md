@@ -210,9 +210,17 @@ Unbound uses `greetd` for the privileged part of login and keeps its own UI unpr
 Implemented in `crates/shell/greeter`: greetd's IPC (create a session, answer the secret
 prompt, acknowledge information, start, cancel after a refusal) inside
 `unbound-compositor --greeter`, which runs only the greeter and exits with it; the package
-ships a greetd configuration. Not done: a user picker (Up/Down switches users for now), a second
-secret prompt, power and accessibility menus, wallpaper, an `unbound-session` wrapper (greetd
-starts `unbound-compositor` directly), and installing the greetd configuration.
+ships a greetd configuration. The login window shows the wallpaper of the person it offers,
+starting with whoever signed in last (remembered in the greeter user's
+`$XDG_STATE_HOME/unbound-greeter/last-user`): `unbound-config` hands the dark picture to
+AccountsService (`SetBackgroundFile`, which a user may do for their own account without a
+password) whenever the wallpaper changes, and the greeter reads `BackgroundFile` from it, as the
+macOS login window shows the user's desktop picture. Pictures inside a home folder that the
+greeter user cannot read (Debian creates homes as 0700) fall back to the default; showing them
+needs a privileged copy, which is not done. Also not done: a user picker (Up/Down switches users
+for now), a second secret prompt, power and accessibility menus, an `unbound-session` wrapper
+(greetd starts `unbound-compositor` directly), and installing the greetd configuration.
+
 
 ## Crash reporting and supervision
 

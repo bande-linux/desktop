@@ -3,7 +3,9 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use unbound_config::{Appearance, Config, DockEdge, Output, Setting, Suspend, WallpaperVariant};
+use unbound_config::{
+    Appearance, Config, DockEdge, Output, Setting, Suspend, WallpaperFit, WallpaperVariant,
+};
 
 fn apply(setting: Setting, source: &str) -> String {
     setting.apply(source).expect("edit")
@@ -88,6 +90,51 @@ fn key_repeat_and_wallpapers_are_written_and_a_reset_wallpaper_leaves_no_trace()
         apply(Setting::Wallpaper(WallpaperVariant::Dark, None), &edited),
         "appearance \"dark\"\n"
     );
+}
+
+#[test]
+fn the_dock_apps_are_rewritten_in_place_keeping_comments() {
+    let source =
+        "dock {\n    edge \"left\" // near\n    apps \"org.unbound.Files\" // kept apps\n}\n";
+    assert_eq!(
+        apply(
+            Setting::DockApps(vec![
+                "org.unbound.Terminal".to_owned(),
+                "org.mozilla.firefox".to_owned()
+            ]),
+            source
+        ),
+        "dock {\n    edge \"left\" // near\n    apps \"org.unbound.Terminal\" \"org.mozilla.firefox\" // kept apps\n}\n"
+    );
+    assert_eq!(
+        apply(Setting::DockApps(Vec::new()), ""),
+        "dock {\n    apps\n}\n"
+    );
+    assert!(
+        Setting::DockApps(vec!["a.b".to_owned(), "a.b".to_owned()])
+            .apply("")
+            .is_err()
+    );
+}
+
+#[test]
+fn dock_and_wallpaper_defaults_leave_no_trace() {
+    let edited = apply(Setting::DockAutoHide(true), "");
+    let edited = apply(Setting::DockIconSize(64), &edited);
+    assert_eq!(edited, "dock {\n    auto-hide #true\n    size 64\n}\n");
+    let edited = apply(Setting::DockIconSize(48), &edited);
+    assert_eq!(apply(Setting::DockAutoHide(false), &edited), "");
+
+    let fitted = apply(Setting::WallpaperFit(WallpaperFit::Fit), "");
+    assert_eq!(fitted, "wallpaper {\n    fit \"fit\"\n}\n");
+    assert_eq!(
+        apply(Setting::WallpaperFit(WallpaperFit::Fill), &fitted),
+        ""
+    );
+
+    let reduced = apply(Setting::ReduceMotion(true), "");
+    assert_eq!(reduced, "accessibility {\n    reduce-motion #true\n}\n");
+    assert_eq!(apply(Setting::ReduceMotion(false), &reduced), "");
 }
 
 #[test]

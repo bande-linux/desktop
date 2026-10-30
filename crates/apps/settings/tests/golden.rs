@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use unbound_audio::{Device, Direction, Level, Snapshot};
-use unbound_settings::{Display, Mode, SettingId, SettingsView, Update, Value};
+use unbound_settings::{Display, Mode, Pair, SettingId, SettingsView, Update, Value, thumbnail};
 use unbound_toolkit::ui::{Event, Key, Modifiers};
 use unbound_toolkit::{CpuRenderer, Palette, Scheme, TextSystem};
 
@@ -148,7 +148,7 @@ fn the_keyboard_pane_matches_its_golden() {
     let mut view = SettingsView::new(Palette::for_scheme(Scheme::Light), TextSystem::new());
     view.set_value(SettingId::KeyRepeatRate, Value::Number(25));
     view.set_value(SettingId::KeyRepeatDelay, Value::Number(600));
-    for key in [Key::Down, Key::Down, Key::Down] {
+    for key in [Key::Down, Key::Down, Key::Down, Key::Down] {
         view.handle(&Event::Key {
             key: Key::Tab,
             modifiers: Modifiers::default(),
@@ -161,4 +161,39 @@ fn the_keyboard_pane_matches_its_golden() {
     let scene = view.scene(SIZE.0, SIZE.1);
     let frame = CpuRenderer::new().render(&scene).expect("frame");
     check_golden("keyboard-light", frame.rgba);
+}
+
+#[test]
+fn the_wallpaper_pane_matches_its_golden() {
+    let wallpapers = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../data/wallpapers");
+    let pairs: Vec<(String, Pair)> = ["aurora", "drift", "horizon"]
+        .into_iter()
+        .map(|name| {
+            (
+                name.to_owned(),
+                Pair {
+                    light: wallpapers.join(format!("{name}-light.svg")),
+                    dark: wallpapers.join(format!("{name}-dark.svg")),
+                },
+            )
+        })
+        .collect();
+    let mut view = SettingsView::new(Palette::for_scheme(Scheme::Light), TextSystem::new());
+    view.apply(Update::Pictures(pairs.clone()));
+    for (_, pair) in &pairs {
+        let picture = thumbnail(pair).expect("thumbnail");
+        view.apply(Update::Thumbnail(pair.clone(), picture));
+    }
+    view.set_value(
+        SettingId::Wallpaper,
+        Value::Pictures {
+            light: String::new(),
+            dark: String::new(),
+        },
+    );
+    view.set_value(SettingId::WallpaperFit, Value::Keyword("fill".to_owned()));
+    open(&mut view, "wallpaper");
+    let scene = view.scene(SIZE.0, SIZE.1);
+    let frame = CpuRenderer::new().render(&scene).expect("frame");
+    check_golden("wallpaper-light", frame.rgba);
 }

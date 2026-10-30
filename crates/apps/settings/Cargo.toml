@@ -14,7 +14,10 @@ unbound-config.workspace = true
 unbound-l10n.workspace = true
 unbound-log.workspace = true
 unbound-network.workspace = true
+unbound-settings-panes.workspace = true
 unbound-toolkit.workspace = true
+unbound-wallpaper.workspace = true
+unbound-xdg.workspace = true
 wayland-client.workspace = true
 zbus.workspace = true
 

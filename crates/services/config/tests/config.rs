@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use unbound_config::{
     Appearance, Config, ConfigError, ConfigStore, DEFAULT_DOCK_APPS, DockEdge, Output, ReloadError,
-    Suspend, WallpaperVariant, config_path,
+    Suspend, WallpaperFit, WallpaperVariant, config_path, login_picture,
 };
 
 fn error_at(source: &str) -> (usize, usize) {
@@ -19,8 +19,8 @@ fn error_at(source: &str) -> (usize, usize) {
 #[test]
 fn an_empty_file_gives_the_plan_defaults() {
     let config = Config::parse("").expect("empty config");
-    assert_eq!(config.dock_edge, DockEdge::Left);
-    assert_eq!(config.dock_apps, DEFAULT_DOCK_APPS);
+    assert_eq!(config.dock.edge, DockEdge::Left);
+    assert_eq!(config.dock.apps, DEFAULT_DOCK_APPS);
     assert_eq!(config.idle.dim_after, Duration::from_secs(5 * 60));
     assert_eq!(config.idle.lock_after, Duration::from_secs(10 * 60));
     assert!(config.outputs.is_empty());
@@ -52,9 +52,9 @@ output "HDMI-A-1" {
     .expect("valid config");
 
     assert_eq!(config.appearance, Appearance::Dark);
-    assert_eq!(config.dock_edge, DockEdge::Bottom);
+    assert_eq!(config.dock.edge, DockEdge::Bottom);
     assert_eq!(
-        config.dock_apps,
+        config.dock.apps,
         ["org.unbound.Terminal", "org.mozilla.firefox"]
     );
     assert_eq!(config.idle.dim_after, Duration::from_secs(90));
@@ -85,7 +85,7 @@ fn the_dock_accepts_each_of_the_four_edges() {
         ("top", DockEdge::Top),
     ] {
         let config = Config::parse(&format!("dock {{\n    edge \"{name}\"\n}}\n"));
-        assert_eq!(config.map(|config| config.dock_edge), Ok(edge));
+        assert_eq!(config.map(|config| config.dock.edge), Ok(edge));
     }
 }
 
@@ -233,7 +233,7 @@ fn a_valid_file_replaces_the_active_configuration() {
     let store = ConfigStore::default();
     let applied = store.apply("dock {\n    edge \"top\"\n}\n").expect("valid");
     assert!(Arc::ptr_eq(&applied, &store.current()));
-    assert_eq!(store.current().dock_edge, DockEdge::Top);
+    assert_eq!(store.current().dock.edge, DockEdge::Top);
 }
 
 #[test]
@@ -263,7 +263,7 @@ fn readers_never_observe_a_partially_applied_configuration() {
             scope.spawn(|| {
                 while !done.load(Ordering::Relaxed) {
                     let config = store.current();
-                    let pair = (config.appearance, config.dock_edge);
+                    let pair = (config.appearance, config.dock.edge);
                     assert!(
                         pair == (Appearance::Dark, DockEdge::Top)
                             || pair == (Appearance::Light, DockEdge::Bottom),
@@ -291,11 +291,11 @@ fn reloading_reads_the_file_and_keeps_the_old_configuration_on_failure() {
 
     std::fs::write(&path, "dock {\n    edge \"right\"\n}\n").expect("write");
     store.reload(&path).expect("valid file");
-    assert_eq!(store.current().dock_edge, DockEdge::Right);
+    assert_eq!(store.current().dock.edge, DockEdge::Right);
 
     std::fs::write(&path, "dock {\n    edge \"right\"\n").expect("write");
     assert!(matches!(store.reload(&path), Err(ReloadError::Invalid(_))));
-    assert_eq!(store.current().dock_edge, DockEdge::Right);
+    assert_eq!(store.current().dock.edge, DockEdge::Right);
 }
 
 #[test]
@@ -350,5 +350,52 @@ fn the_computer_must_not_sleep_before_the_display_turns_off() {
 #[test]
 fn an_empty_dock_apps_list_empties_the_dock() {
     let config = Config::parse("dock {\n    apps\n}\n").expect("valid config");
-    assert!(config.dock_apps.is_empty());
+    assert!(config.dock.apps.is_empty());
+}
+
+#[test]
+fn the_dock_size_auto_hide_wallpaper_fit_and_reduce_motion_are_read() {
+    let config = Config::parse(
+        "accessibility {\n    reduce-motion #true\n}\ndock {\n    auto-hide #true\n    size 64\n}\nwallpaper {\n    fit \"fit\"\n}\n",
+    )
+    .expect("valid config");
+    assert!(config.reduce_motion);
+    assert!(config.dock.auto_hide);
+    assert_eq!(config.dock.icon_size, 64);
+    assert_eq!(config.wallpaper.fit, WallpaperFit::Fit);
+
+    let defaults = Config::parse("").expect("empty config");
+    assert!(!defaults.reduce_motion && !defaults.dock.auto_hide);
+    assert_eq!(defaults.dock.icon_size, 48);
+    assert_eq!(defaults.wallpaper.fit, WallpaperFit::Fill);
+}
+
+#[test]
+fn the_dock_size_stays_within_24_to_96_points_and_flags_need_a_boolean() {
+    assert_eq!(error_at("dock {\n    size 23\n}\n"), (2, 10));
+    assert_eq!(error_at("dock {\n    size 97\n}\n"), (2, 10));
+    assert!(Config::parse("dock {\n    size 96\n}\n").is_ok());
+    assert_eq!(error_at("dock {\n    auto-hide \"yes\"\n}\n"), (2, 15));
+    assert_eq!(error_at("wallpaper {\n    fit \"tile\"\n}\n"), (2, 9));
+}
+
+#[test]
+fn the_login_window_gets_the_dark_wallpaper_with_the_home_folder_spelled_out() {
+    let home = Path::new("/home/me");
+    let wallpaper = |source: &str| Config::parse(source).expect("valid").wallpaper;
+    assert_eq!(
+        login_picture(
+            &wallpaper("wallpaper {\n    light \"/a.png\"\n    dark \"~/b.png\"\n}\n"),
+            Some(home)
+        ),
+        Some(PathBuf::from("/home/me/b.png"))
+    );
+    assert_eq!(
+        login_picture(
+            &wallpaper("wallpaper {\n    light \"/a.png\"\n}\n"),
+            Some(home)
+        ),
+        Some(PathBuf::from("/a.png"))
+    );
+    assert_eq!(login_picture(&wallpaper(""), Some(home)), None);
 }

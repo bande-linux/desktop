@@ -6,11 +6,13 @@ use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Node, Role};
-use unbound_config::DockEdge;
+use unbound_config::{DEFAULT_DOCK_ICON_SIZE, DOCK_ICON_SIZE_RANGE, DockEdge};
 use unbound_l10n::Localizer;
 use unbound_toolkit::ui::{
-    Animated, Context, Event, PointerButton, Size, Spring, Ui, Widget, WidgetId,
+    Animated, Context, Cursor, Event, Key as KeyboardKey, Modifiers, PointerButton, Size, Spring,
+    Ui, Widget, WidgetId,
 };
+
 use unbound_toolkit::{
     Appearance, Color, Image, Item, Paint, Palette, Paragraph, Point, Rect, Scene, Scheme, Shape,
     Stop, TextAlign, TextStyle, TextSystem,
@@ -23,9 +25,7 @@ pub mod bus;
 
 pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
-pub const ICON_SIZE: f32 = 48.0;
-const MIN_ICON_SIZE: f32 = 24.0;
-const MAX_ICON_SIZE: f32 = 96.0;
+pub const ICON_SIZE: f32 = DEFAULT_DOCK_ICON_SIZE as f32;
 const CELL_PADDING: f32 = 5.0;
 const CROSS_PADDING: f32 = 8.0;
 const END_PADDING: f32 = 6.0;
@@ -52,6 +52,10 @@ const HIDE_DELAY: Duration = Duration::from_millis(450);
 const EDGE_STRIP: f32 = 2.0;
 const HIDDEN_SHADOW: f32 = 24.0;
 const BLUR_BANDS: usize = 5;
+const DRAG_THRESHOLD: f32 = 4.0;
+const DROP_SCALE: f32 = 1.12;
+
+const REMOVE_TEXT: f32 = 12.0;
 
 #[derive(Debug, Clone)]
 pub struct DockApp {
@@ -111,6 +115,23 @@ pub enum DockAction {
     OpenTrash,
     ShowInFiles(String),
     Menu { target: MenuTarget, at: Point },
+    Keep(Vec<String>),
+    ReleaseKeyboard,
+}
+
+pub fn arrange(kept: &[String], shown: &[String], hidden: impl Fn(&str) -> bool) -> Vec<String> {
+    let mut arranged = shown.to_vec();
+    for (index, app_id) in kept.iter().enumerate() {
+        if !hidden(app_id) || arranged.contains(app_id) {
+            continue;
+        }
+        let after = kept[..index]
+            .iter()
+            .rev()
+            .find_map(|before| arranged.iter().position(|known| known == before));
+        arranged.insert(after.map_or(0, |position| position + 1), app_id.clone());
+    }
+    arranged
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -141,6 +162,8 @@ struct Slot {
     initial: Option<Paragraph>,
     badge_text: Option<(String, Paragraph)>,
     cell: Rect,
+    shift: (Animated, Animated),
+    pinned: Option<Point>,
 }
 
 impl Slot {
@@ -159,7 +182,13 @@ impl Slot {
             initial: None,
             badge_text: None,
             cell: Rect::default(),
+            shift: (Animated::new(0.0), Animated::new(0.0)),
+            pinned: None,
         }
+    }
+
+    fn kept(&self) -> bool {
+        self.app.as_ref().is_some_and(|app| app.kept)
     }
 
     fn cell_length(&self, icon: f32) -> f32 {
@@ -176,6 +205,23 @@ struct TrashIcons {
     empty: Option<Image>,
     full: Option<Image>,
     is_full: bool,
+}
+
+struct Drag {
+    key: Key,
+    grab: Point,
+    at: Point,
+    origin: usize,
+    removing: bool,
+    kept_before: Vec<String>,
+}
+
+struct Ghost {
+    icon: Option<Image>,
+    initial: Option<Paragraph>,
+    center: Point,
+    size: f32,
+    fade: Animated,
 }
 
 struct Label {
@@ -200,6 +246,11 @@ pub struct DockState {
     label: Label,
     actions: Vec<DockAction>,
     hold: Option<(Key, Instant)>,
+    press_at: Option<Point>,
+    drag: Option<Drag>,
+    ghost: Option<Ghost>,
+    reflow: bool,
+    remove_text: Option<(Color, Paragraph)>,
     surface: Size,
     panel: Rect,
     populated: bool,
@@ -210,6 +261,7 @@ pub struct DockState {
     hide_at: Option<Instant>,
     pointer_inside: bool,
     menu_open: bool,
+    selected: Option<Key>,
 }
 
 pub type Shared = Rc<RefCell<DockState>>;
@@ -278,7 +330,13 @@ impl DockState {
             },
             actions: Vec::new(),
             hold: None,
+            press_at: None,
+            drag: None,
+            ghost: None,
+            reflow: false,
+            remove_text: None,
             surface: Size::default(),
+
             panel: Rect::default(),
             populated: false,
             blurred: false,
@@ -288,6 +346,7 @@ impl DockState {
             hide_at: None,
             pointer_inside: false,
             menu_open: false,
+            selected: None,
         };
         state.slots.push(Slot::new(Key::RunningSeparator, 0.0));
         state.slots.push(Slot::new(Key::TrashSeparator, 1.0));
@@ -304,7 +363,8 @@ impl DockState {
     }
 
     pub fn set_icon_size(&mut self, size: f32) -> bool {
-        let size = size.clamp(MIN_ICON_SIZE, MAX_ICON_SIZE).round();
+        let (min, max) = DOCK_ICON_SIZE_RANGE;
+        let size = size.clamp(min as f32, max as f32).round();
         if size == self.icon_size {
             return false;
         }
@@ -429,6 +489,18 @@ impl DockState {
             slots.insert(at, slot);
         }
         self.slots = slots;
+        if let Some(drag) = &self.drag {
+            let key = drag.key.clone();
+            let point = drag.at;
+            let removing = drag.removing;
+            if let Some(slot) = self.slot_mut(&key)
+                && removing
+            {
+                slot.presence
+                    .animate_at(now, reduce_motion, 0.0, Spring::STANDARD);
+            }
+            self.drag_to(point, now);
+        }
         if let Some(Key::App(app_id)) = &self.label.key
             && !self
                 .slots
@@ -634,9 +706,135 @@ impl DockState {
     fn pointer_left(&mut self, now: Instant) {
         self.pointer_inside = false;
         self.reveal_at = None;
-        if self.auto_hide && !self.menu_open && self.is_shown() {
+        if self.auto_hide && !self.menu_open && self.selected.is_none() && self.is_shown() {
             self.hide_at = Some(now + HIDE_DELAY);
         }
+    }
+
+    pub fn drop_target(&self, point: Point) -> Option<MenuTarget> {
+        self.slots
+            .iter()
+            .filter(|slot| !slot.leaving)
+            .find(|slot| contains(self.reach(slot.cell), point))
+            .and_then(|slot| match &slot.key {
+                Key::App(app_id) => Some(MenuTarget::App(app_id.clone())),
+                Key::Trash => Some(MenuTarget::Trash),
+                Key::RunningSeparator | Key::TrashSeparator => None,
+            })
+    }
+
+    pub fn drag_inside(&mut self, inside: bool, now: Instant) {
+        match (inside, self.pointer_inside) {
+            (true, false) => self.pointer_entered(now),
+            (false, true) => self.pointer_left(now),
+            _ => {}
+        }
+    }
+
+    pub fn hover_drop(&mut self, target: Option<&MenuTarget>, now: Instant) {
+        let reduce_motion = self.reduce_motion;
+        for slot in &mut self.slots {
+            let hovered = match (&slot.key, target) {
+                (Key::App(app_id), Some(MenuTarget::App(target))) => app_id == target,
+                (Key::Trash, Some(MenuTarget::Trash)) => true,
+                _ => false,
+            };
+            if slot.pressed {
+                continue;
+            }
+            let scale = if hovered { DROP_SCALE } else { 1.0 };
+            slot.press
+                .animate_at(now, reduce_motion, scale, Spring::QUICK);
+        }
+    }
+
+    pub fn is_navigating(&self) -> bool {
+        self.selected.is_some()
+    }
+
+    fn reachable(&self) -> Vec<Key> {
+        self.slots
+            .iter()
+            .filter(|slot| !slot.leaving && !slot.key.is_separator())
+            .map(|slot| slot.key.clone())
+            .collect()
+    }
+
+    pub fn start_navigation(&mut self, active: Option<&str>, now: Instant) {
+        let reachable = self.reachable();
+        let chosen = active
+            .map(|app_id| Key::App(app_id.to_owned()))
+            .filter(|key| reachable.contains(key))
+            .or_else(|| reachable.first().cloned());
+        let Some(chosen) = chosen else {
+            return;
+        };
+        self.hide_at = None;
+        self.reveal_at = None;
+        self.slide(true, now);
+        self.select(chosen, now);
+    }
+
+    pub fn end_navigation(&mut self, now: Instant) {
+        if self.selected.take().is_none() {
+            return;
+        }
+        self.hide_label(now);
+        if self.auto_hide && !self.pointer_inside && !self.menu_open {
+            self.hide_at = Some(now + HIDE_DELAY);
+        }
+    }
+
+    fn select(&mut self, key: Key, now: Instant) {
+        self.selected = Some(key.clone());
+        self.show_label(key, now);
+    }
+
+    pub fn navigate(&mut self, key: KeyboardKey, modifiers: Modifiers, now: Instant) -> bool {
+        let Some(selected) = self.selected.clone() else {
+            return false;
+        };
+        let reachable = self.reachable();
+        let at = reachable
+            .iter()
+            .position(|known| *known == selected)
+            .unwrap_or(0);
+        let (back, forward) = if vertical(self.edge) {
+            (KeyboardKey::Up, KeyboardKey::Down)
+        } else {
+            (KeyboardKey::Left, KeyboardKey::Right)
+        };
+        match key {
+            _ if key == back => {
+                if let Some(previous) = at.checked_sub(1).and_then(|at| reachable.get(at)) {
+                    self.select(previous.clone(), now);
+                }
+            }
+            _ if key == forward => {
+                if let Some(next) = reachable.get(at + 1) {
+                    self.select(next.clone(), now);
+                }
+            }
+            KeyboardKey::Home => {
+                if let Some(first) = reachable.first() {
+                    self.select(first.clone(), now);
+                }
+            }
+            KeyboardKey::End => {
+                if let Some(last) = reachable.last() {
+                    self.select(last.clone(), now);
+                }
+            }
+            KeyboardKey::Enter | KeyboardKey::Space => {
+                self.activate(&selected);
+                self.actions.push(DockAction::ReleaseKeyboard);
+            }
+            KeyboardKey::Menu => self.open_menu(&selected),
+            KeyboardKey::Function(10) if modifiers.shift => self.open_menu(&selected),
+            KeyboardKey::Escape => self.actions.push(DockAction::ReleaseKeyboard),
+            _ => return false,
+        }
+        true
     }
 
     pub fn icon_rects(&self) -> Vec<(String, Rect)> {
@@ -648,6 +846,282 @@ impl DockState {
                 _ => None,
             })
             .collect()
+    }
+
+    pub fn set_edge(&mut self, edge: DockEdge, now: Instant) {
+        if edge == self.edge {
+            return;
+        }
+        self.edge = edge;
+        self.drag = None;
+        self.hide_label(now);
+        self.label.opacity.jump_to(0.0);
+        for slot in &mut self.slots {
+            slot.cell = Rect::default();
+            slot.pinned = None;
+            slot.shift = (Animated::new(0.0), Animated::new(0.0));
+        }
+        self.reveal.jump_to(0.0);
+        let shown = !self.auto_hide || self.pointer_inside || self.menu_open;
+        self.slide(shown, now);
+    }
+
+    pub fn is_dragging(&self) -> bool {
+        self.drag.is_some()
+    }
+
+    fn icon_center(&self, cell: Rect) -> Point {
+        Point::new(cell.x + cell.width / 2.0, cell.y + cell.height / 2.0)
+    }
+
+    fn along_of(&self, point: Point) -> f32 {
+        if vertical(self.edge) {
+            point.y
+        } else {
+            point.x
+        }
+    }
+
+    fn depth_of(&self, point: Point) -> f32 {
+        match self.edge {
+            DockEdge::Left => point.x,
+            DockEdge::Right => self.surface.width - point.x,
+            DockEdge::Top => point.y,
+            DockEdge::Bottom => self.surface.height - point.y,
+        }
+    }
+
+    fn beyond_dock(&self, point: Point) -> bool {
+        self.depth_of(point) > SCREEN_GAP + thickness(self.icon_size) + self.icon_size
+    }
+
+    fn press_at(&mut self, key: &Key, point: Point) {
+        self.press_at = matches!(key, Key::App(_)).then_some(point);
+    }
+
+    fn start_drag(&mut self, key: &Key, point: Point, now: Instant) -> bool {
+        let Some(origin_point) = self.press_at else {
+            return false;
+        };
+        let moved = (point.x - origin_point.x).hypot(point.y - origin_point.y);
+        if moved < DRAG_THRESHOLD {
+            return false;
+        }
+        let Some(origin) = self
+            .slots
+            .iter()
+            .position(|slot| &slot.key == key && !slot.leaving)
+        else {
+            return false;
+        };
+        let center = self.icon_center(self.slots[origin].cell);
+        self.press_at = None;
+        self.hold = None;
+        self.hide_label(now);
+        self.slots[origin].pinned = Some(center);
+        self.slots[origin].shift = (Animated::new(0.0), Animated::new(0.0));
+        self.drag = Some(Drag {
+            key: key.clone(),
+            grab: Point::new(origin_point.x - center.x, origin_point.y - center.y),
+            at: point,
+            origin,
+            removing: false,
+            kept_before: self.kept_ids(),
+        });
+        self.drag_to(point, now);
+        true
+    }
+
+    fn drag_to(&mut self, point: Point, now: Instant) {
+        let Some(drag) = &self.drag else {
+            return;
+        };
+        let key = drag.key.clone();
+        let grab = drag.grab;
+        let origin = drag.origin;
+        let was_removing = drag.removing;
+        let Some(index) = self
+            .slots
+            .iter()
+            .position(|slot| slot.key == key && !slot.leaving)
+        else {
+            self.drag = None;
+            return;
+        };
+        let kept = self.slots[index].kept();
+        let half = self.icon_size / 2.0;
+        let center = Point::new(
+            (point.x - grab.x).clamp(half, (self.surface.width - half).max(half)),
+            (point.y - grab.y).clamp(half, (self.surface.height - half).max(half)),
+        );
+        self.slots[index].pinned = Some(center);
+        let removing = kept && self.beyond_dock(point);
+        if let Some(drag) = &mut self.drag {
+            drag.at = point;
+            drag.removing = removing;
+        }
+        if removing != was_removing {
+            let presence = if removing { 0.0 } else { 1.0 };
+            self.slots[index].presence.animate_at(
+                now,
+                self.reduce_motion,
+                presence,
+                Spring::STANDARD,
+            );
+        }
+        if removing {
+            return;
+        }
+        let along = self.along_of(center);
+        let separator = self
+            .slots
+            .iter()
+            .position(|slot| slot.key == Key::RunningSeparator);
+        let separator_along =
+            separator.map(|separator| self.along_of(self.icon_center(self.slots[separator].cell)));
+        let slot = self.slots.remove(index);
+        let target = if !kept && separator_along.is_none_or(|boundary| along > boundary) {
+            origin.min(self.slots.len())
+        } else {
+            let kept_slots = self
+                .slots
+                .iter()
+                .enumerate()
+                .filter(|(_, slot)| slot.kept() && !slot.leaving)
+                .map(|(position, slot)| (position, self.along_of(self.icon_center(slot.cell))))
+                .collect::<Vec<_>>();
+            kept_slots
+                .iter()
+                .find(|(_, other)| along < *other)
+                .map(|(position, _)| *position)
+                .or_else(|| {
+                    self.slots
+                        .iter()
+                        .position(|slot| slot.key == Key::RunningSeparator)
+                })
+                .unwrap_or(self.slots.len())
+        };
+        self.slots.insert(target, slot);
+        if target != index {
+            self.reflow = true;
+        }
+    }
+
+    fn drop_drag(&mut self, point: Point, now: Instant) {
+        self.drag_to(point, now);
+        let Some(drag) = self.drag.take() else {
+            return;
+        };
+        let Some(index) = self
+            .slots
+            .iter()
+            .position(|slot| slot.key == drag.key && !slot.leaving)
+        else {
+            return;
+        };
+        if drag.removing {
+            let size = self.effective_icon(self.along(self.surface));
+            let mut fade = Animated::new(1.0);
+            fade.animate_at(now, self.reduce_motion, 0.0, Spring::STANDARD);
+            let slot = &mut self.slots[index];
+            let center = slot.pinned.take();
+            let initial = slot.initial.clone();
+            if let Some(app) = &mut slot.app {
+                app.kept = false;
+                if !app.running {
+                    let icon = app.icon.clone();
+                    self.ghost = center.map(|center| Ghost {
+                        icon,
+                        initial,
+                        center,
+                        size,
+                        fade,
+                    });
+                }
+            }
+        } else {
+            let separator = self
+                .slots
+                .iter()
+                .position(|slot| slot.key == Key::RunningSeparator)
+                .unwrap_or(self.slots.len());
+            if let Some(app) = &mut self.slots[index].app {
+                app.kept = index < separator;
+            }
+        }
+        let after = self.kept_ids();
+        if after != drag.kept_before {
+            self.actions.push(DockAction::Keep(after));
+        }
+    }
+
+    fn kept_ids(&self) -> Vec<String> {
+        self.slots
+            .iter()
+            .filter(|slot| slot.kept() && !slot.leaving)
+            .filter_map(|slot| slot.app.as_ref().map(|app| app.app_id.clone()))
+            .collect()
+    }
+
+    fn painted_cell(&self, slot: &Slot, cx: &Context) -> Rect {
+        let cell = slot.cell;
+        match slot.pinned {
+            Some(center) => Rect::new(
+                center.x - cell.width / 2.0,
+                center.y - cell.height / 2.0,
+                cell.width,
+                cell.height,
+            ),
+            None => Rect::new(
+                cell.x + slot.shift.0.value(cx),
+                cell.y + slot.shift.1.value(cx),
+                cell.width,
+                cell.height,
+            ),
+        }
+    }
+
+    fn settle_moves(&mut self, before: &[(WidgetId, Rect)], now: Instant) {
+        let reflow = std::mem::take(&mut self.reflow);
+        let dragged = self.drag.as_ref().map(|drag| drag.key.clone());
+        let reduce_motion = self.reduce_motion;
+        for slot in &mut self.slots {
+            if slot.leaving || dragged.as_ref() == Some(&slot.key) {
+                continue;
+            }
+            let from = match slot.pinned.take() {
+                Some(center) => Some(Point::new(
+                    center.x - slot.cell.width / 2.0,
+                    center.y - slot.cell.height / 2.0,
+                )),
+                None if reflow => before
+                    .iter()
+                    .find(|(id, _)| *id == slot.id)
+                    .filter(|(_, old)| *old != Rect::default())
+                    .map(|(_, old)| {
+                        Point::new(
+                            old.x + slot.shift.0.value_at(now).0,
+                            old.y + slot.shift.1.value_at(now).0,
+                        )
+                    }),
+                None => None,
+            };
+            let Some(from) = from else {
+                continue;
+            };
+            let delta = (from.x - slot.cell.x, from.y - slot.cell.y);
+            if delta.0.abs() < 0.5 && delta.1.abs() < 0.5 {
+                continue;
+            }
+            slot.shift.0.jump_to(delta.0);
+            slot.shift.1.jump_to(delta.1);
+            slot.shift
+                .0
+                .animate_at(now, reduce_motion, 0.0, Spring::STANDARD);
+            slot.shift
+                .1
+                .animate_at(now, reduce_motion, 0.0, Spring::STANDARD);
+        }
     }
 
     fn slot_mut(&mut self, key: &Key) -> Option<&mut Slot> {
@@ -721,14 +1195,27 @@ impl DockState {
             }
         };
         self.panel = place(start, total);
+        let before = self
+            .slots
+            .iter()
+            .map(|slot| (slot.id, slot.cell))
+            .collect::<Vec<_>>();
         let mut offset = start + END_PADDING;
         for (slot, length) in self.slots.iter_mut().zip(lengths) {
             let full = slot.cell_length(icon);
             slot.cell = place(offset - (full - length) / 2.0, full);
             offset += length;
         }
+        self.settle_moves(&before, now);
         self.slots
             .retain(|slot| !(slot.leaving && !slot.presence.value_at(now).1));
+        if self
+            .ghost
+            .as_ref()
+            .is_some_and(|ghost| !ghost.fade.value_at(now).1)
+        {
+            self.ghost = None;
+        }
     }
 
     fn reach(&self, cell: Rect) -> Rect {
@@ -826,6 +1313,10 @@ impl DockState {
         })
     }
 
+    pub fn trash_menu_point(&self) -> Option<Point> {
+        self.menu_point(&Key::Trash)
+    }
+
     fn open_menu(&mut self, key: &Key) {
         let target = match key {
             Key::App(app_id) => MenuTarget::App(app_id.clone()),
@@ -898,6 +1389,21 @@ impl DockState {
                 }
             }
         }
+        let inverse = cx.palette.surface_background;
+        if self.drag.is_some()
+            && self
+                .remove_text
+                .as_ref()
+                .is_none_or(|(color, _)| *color != inverse)
+        {
+            let paragraph = cx.text.paragraph(
+                &L10N.tr("remove"),
+                TextStyle::new(REMOVE_TEXT, inverse).weight(TextStyle::SEMIBOLD),
+                None,
+                TextAlign::Start,
+            );
+            self.remove_text = Some((inverse, paragraph));
+        }
         if let Some(key) = self.label.key.clone() {
             let name = self.name(&key);
             if self.label.text.as_ref().is_none_or(|(known, color, _)| {
@@ -918,7 +1424,16 @@ impl DockState {
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
         let now = cx.now();
         self.paint_panel(items);
+        let dragged = self.drag.as_ref().map(|drag| &drag.key);
+        let mut on_top = Vec::new();
         for slot in &self.slots {
+            let cell = self.painted_cell(slot, cx);
+            if dragged == Some(&slot.key) {
+                if let Key::App(app_id) = &slot.key {
+                    self.paint_app(cx, slot, cell, app_id, now, &mut on_top);
+                }
+                continue;
+            }
             let presence = slot.presence.value(cx).clamp(0.0, 1.0);
             if presence <= 0.0 {
                 continue;
@@ -926,10 +1441,10 @@ impl DockState {
             let mut slot_items = Vec::new();
             match &slot.key {
                 Key::RunningSeparator | Key::TrashSeparator => {
-                    self.paint_separator(cx, slot, &mut slot_items);
+                    self.paint_separator(cx, cell, &mut slot_items);
                 }
                 Key::Trash => {
-                    let rect = scaled(self.icon_rect(slot.cell), slot.press.value(cx));
+                    let rect = scaled(self.icon_rect(cell), slot.press.value(cx));
                     let image = if self.trash.is_full {
                         self.trash.full.as_ref().or(self.trash.empty.as_ref())
                     } else {
@@ -943,7 +1458,7 @@ impl DockState {
                         None => generic_icon(rect, None, &mut slot_items),
                     }
                 }
-                Key::App(app_id) => self.paint_app(cx, slot, app_id, now, &mut slot_items),
+                Key::App(app_id) => self.paint_app(cx, slot, cell, app_id, now, &mut slot_items),
             }
             if presence < 1.0 {
                 items.push(Item::Opacity {
@@ -954,10 +1469,103 @@ impl DockState {
                 items.extend(slot_items);
             }
         }
+        self.paint_ghost(cx, items);
+        self.paint_selection(cx, items);
+        items.extend(on_top);
+        self.paint_remove_label(cx, items);
         self.paint_label(cx, items);
     }
 
-    fn panel_radius(&self) -> f32 {
+    fn paint_selection(&self, cx: &Context, items: &mut Vec<Item>) {
+        let Some(slot) = self
+            .selected
+            .as_ref()
+            .and_then(|key| self.slots.iter().find(|slot| &slot.key == key))
+        else {
+            return;
+        };
+        let ring = self.icon_rect(self.painted_cell(slot, cx)).inset(-4.0);
+        items.push(Item::Stroke {
+            shape: Shape::rounded(ring, ring.width * 0.27),
+            width: 3.0,
+            paint: cx.palette.accent_color.with_alpha(200).into(),
+        });
+    }
+
+    fn paint_ghost(&self, cx: &Context, items: &mut Vec<Item>) {
+        let Some(ghost) = &self.ghost else {
+            return;
+        };
+        let fade = ghost.fade.value(cx).clamp(0.0, 1.0);
+        if fade <= 0.0 {
+            return;
+        }
+        let size = ghost.size * (0.4 + 0.6 * fade);
+        let rect = Rect::new(
+            ghost.center.x - size / 2.0,
+            ghost.center.y - size / 2.0,
+            size,
+            size,
+        );
+        let mut icon = Vec::new();
+        match &ghost.icon {
+            Some(image) => icon.push(Item::Image {
+                rect,
+                image: image.clone(),
+            }),
+            None => generic_icon(rect, ghost.initial.as_ref(), &mut icon),
+        }
+        items.push(Item::Opacity {
+            alpha: fade,
+            items: icon,
+        });
+    }
+
+    fn paint_remove_label(&self, cx: &Context, items: &mut Vec<Item>) {
+        let Some(drag) = self.drag.as_ref().filter(|drag| drag.removing) else {
+            return;
+        };
+        let Some((_, text)) = &self.remove_text else {
+            return;
+        };
+        let Some(center) = self
+            .slots
+            .iter()
+            .find(|slot| slot.key == drag.key)
+            .and_then(|slot| slot.pinned)
+        else {
+            return;
+        };
+        let icon = self.effective_icon(self.along(self.surface));
+        let width = (text.width() + 16.0).ceil();
+        let height = (text.height() + 6.0).ceil();
+        let rect = Rect::new(
+            (center.x - width / 2.0).round(),
+            (center.y + icon / 2.0 + 6.0).round(),
+            width,
+            height,
+        );
+        let shape = Shape::rounded(rect, height / 2.0);
+        items.push(Item::Shadow {
+            shape,
+            offset: Point::new(0.0, 1.0),
+            blur_radius: 6.0,
+            color: Color::hex(0x000000).with_alpha(70),
+        });
+        items.push(Item::Fill {
+            shape,
+            paint: cx.palette.label_primary.with_alpha(200).into(),
+        });
+        items.push(Item::Text {
+            origin: Point::new(
+                rect.x + 8.0,
+                (rect.y + (height - text.height()) / 2.0).round(),
+            ),
+            paragraph: text.clone(),
+        });
+    }
+
+    pub fn panel_radius(&self) -> f32 {
         (thickness(self.icon_size) * 0.3).round()
     }
 
@@ -965,8 +1573,12 @@ impl DockState {
         self.blurred = blurred;
     }
 
-    pub fn blur_rects(&self) -> Vec<Rect> {
-        Shape::rounded(self.panel, self.panel_radius()).bands(BLUR_BANDS)
+    pub fn blur_rects(&self, rounded_behind: bool) -> Vec<Rect> {
+        if rounded_behind {
+            vec![self.panel]
+        } else {
+            Shape::rounded(self.panel, self.panel_radius()).bands(BLUR_BANDS)
+        }
     }
 
     fn paint_panel(&self, items: &mut Vec<Item>) {
@@ -1008,8 +1620,7 @@ impl DockState {
         });
     }
 
-    fn paint_separator(&self, cx: &Context, slot: &Slot, items: &mut Vec<Item>) {
-        let cell = slot.cell;
+    fn paint_separator(&self, cx: &Context, cell: Rect, items: &mut Vec<Item>) {
         let span = thickness(self.icon_size) * 0.56;
         let rect = if vertical(self.edge) {
             Rect::new(
@@ -1036,6 +1647,7 @@ impl DockState {
         &self,
         cx: &Context,
         slot: &Slot,
+        cell: Rect,
         app_id: &str,
         now: Instant,
         items: &mut Vec<Item>,
@@ -1043,7 +1655,7 @@ impl DockState {
         let Some(app) = &slot.app else {
             return;
         };
-        let base = self.icon_rect(slot.cell);
+        let base = self.icon_rect(cell);
         let mut factor = slot.press.value(cx);
         let mut alpha = 1.0;
         if !self.reduce_motion {
@@ -1093,7 +1705,7 @@ impl DockState {
         }
         let dot = slot.dot.value(cx);
         if dot > 0.0 {
-            let center = self.dot_center(slot.cell, base);
+            let center = self.dot_center(cell, base);
             let size = DOT * (0.5 + 0.5 * dot);
             items.push(Item::Opacity {
                 alpha: dot.min(1.0),
@@ -1367,6 +1979,15 @@ impl Widget for Tile {
         node
     }
 
+    fn cursor(&self, _point: Point) -> Option<Cursor> {
+        self.state
+            .borrow()
+            .drag
+            .as_ref()
+            .filter(|drag| drag.key == self.key)
+            .map(|_| Cursor::Grabbing)
+    }
+
     fn handle(&mut self, cx: &mut Context, event: &Event) -> bool {
         let now = cx.now();
         match event {
@@ -1379,6 +2000,10 @@ impl Widget for Tile {
                 }
                 let mut state = self.state.borrow_mut();
                 state.hold = None;
+                state.press_at = None;
+                if let Some(at) = state.drag.as_ref().map(|drag| drag.at) {
+                    state.drop_drag(at, now);
+                }
                 state.hover_leave(&self.key, now);
             }
             Event::PointerDown(pointer)
@@ -1392,15 +2017,33 @@ impl Widget for Tile {
                 let mut state = self.state.borrow_mut();
                 state.hide_label(now);
                 state.hold = Some((self.key.clone(), now));
+                state.press_at(&self.key, pointer.position);
+            }
+            Event::PointerMove(pointer) if self.state.borrow().is_dragging() => {
+                self.state.borrow_mut().drag_to(pointer.position, now);
             }
             Event::PointerMove(pointer) if self.pressed() => {
+                if self
+                    .state
+                    .borrow_mut()
+                    .start_drag(&self.key, pointer.position, now)
+                {
+                    self.press(cx, false, false);
+                    return true;
+                }
                 let inside = contains(self.frame, pointer.position);
                 if !inside {
                     self.state.borrow_mut().hold = None;
                 }
                 self.press(cx, true, inside);
             }
+            Event::PointerUp(pointer)
+                if pointer.is_primary() && self.state.borrow().is_dragging() =>
+            {
+                self.state.borrow_mut().drop_drag(pointer.position, now);
+            }
             Event::PointerUp(pointer) if pointer.is_primary() => {
+                self.state.borrow_mut().press_at = None;
                 let inside = self.pressed() && contains(self.frame, pointer.position);
                 self.press(cx, false, false);
                 let mut state = self.state.borrow_mut();

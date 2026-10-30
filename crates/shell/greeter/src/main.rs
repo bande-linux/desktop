@@ -1,12 +1,15 @@
 use std::io::{Read, Write};
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::net::UnixStream;
+use std::path::PathBuf;
 use std::process::ExitCode;
 use std::thread;
 use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
-use unbound_greeter::{Outcome, log_in, login_users};
+use unbound_greeter::{
+    Outcome, last_user_file, log_in, login_picture, login_users, remember_user, remembered_user,
+};
 use unbound_lock::{BackdropSource, Inbox, LockScreen, User, Variant, load_backdrop};
 use unbound_toolkit::ui::{Event, Key};
 use unbound_toolkit::{
@@ -27,7 +30,9 @@ struct Greeter {
     verdict_sender: UnixStream,
     next_clock: Instant,
     backdrop: Option<Inbox<Image>>,
+    picture: Option<Option<PathBuf>>,
     wallpaper: Option<Image>,
+    last_user: Option<PathBuf>,
     started: bool,
 }
 
@@ -52,6 +57,11 @@ impl Greeter {
             (self.user + count - 1) % count
         };
         self.screen = Self::screen_for(&self.users[self.user]);
+        let picture = login_picture(&self.users[self.user].login);
+        if self.picture.as_ref() != Some(&picture) {
+            self.picture = Some(picture);
+            self.backdrop = None;
+        }
         if let Some(wallpaper) = &self.wallpaper {
             self.screen
                 .set_backdrop(wallpaper.clone(), Instant::now() - Duration::from_secs(1));
@@ -92,7 +102,12 @@ impl App for Greeter {
     fn scene(&mut self, window: &mut Window) -> Scene {
         let (width, height) = window.size();
         if self.backdrop.is_none() && width > 0 && height > 0 {
-            match load_backdrop(BackdropSource::Default, Variant::Dark, (width, height)) {
+            let picture = self.picture.clone().flatten();
+            match load_backdrop(
+                BackdropSource::Picture(picture),
+                Variant::Dark,
+                (width, height),
+            ) {
                 Ok(inbox) => self.backdrop = Some(inbox),
                 Err(error) => tracing::warn!("cannot load the wallpaper: {error}"),
             }
@@ -140,6 +155,11 @@ impl App for Greeter {
         }
         if verdict[0] == STARTED {
             self.started = true;
+            if let Some(file) = &self.last_user
+                && let Err(error) = remember_user(file, &self.users[self.user].login)
+            {
+                tracing::info!("cannot remember who signed in last: {error}");
+            }
         } else {
             self.screen.reject(Instant::now());
             window.request_redraw();
@@ -177,8 +197,20 @@ impl App for Greeter {
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let users = login_users(&std::fs::read_to_string("/etc/passwd")?);
-    let first = users.first().ok_or("no one can sign in")?;
-    let screen = Greeter::screen_for(first);
+    let last_user = last_user_file(
+        std::env::var_os("XDG_STATE_HOME")
+            .map(PathBuf::from)
+            .as_deref(),
+        std::env::home_dir().as_deref(),
+    );
+    let remembered = last_user.as_deref().and_then(remembered_user);
+    let user = users
+        .iter()
+        .position(|user| Some(&user.login) == remembered.as_ref())
+        .unwrap_or(0);
+    let chosen = users.get(user).ok_or("no one can sign in")?;
+    let screen = Greeter::screen_for(chosen);
+    let picture = login_picture(&chosen.login);
     let (verdicts, verdict_sender) = UnixStream::pair()?;
     let mut window = Window::open(
         Role::Layer(LayerOptions {
@@ -192,13 +224,15 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     )?;
     let mut greeter = Greeter {
         users,
-        user: 0,
+        user,
         screen,
         verdicts,
         verdict_sender,
         next_clock: Instant::now() + CLOCK_TICK,
         backdrop: None,
+        picture: Some(picture),
         wallpaper: None,
+        last_user,
         started: false,
     };
     unbound_toolkit::run(&mut window, &mut greeter)?;

@@ -19,6 +19,16 @@ struct Toplevel {
     handle: ExtForeignToplevelHandleV1,
     app_id: String,
     pending_app_id: String,
+    identifier: String,
+    title: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AppWindow {
+    pub identifier: String,
+    pub app_id: String,
+    pub title: String,
+    pub minimized: bool,
 }
 
 #[derive(Default)]
@@ -26,10 +36,64 @@ pub(crate) struct Shell {
     pub(crate) protocol: Option<UnboundShellV1>,
     pub(crate) app: Option<UnboundAppV1>,
     toplevels: Vec<Toplevel>,
+    minimized: Vec<String>,
     token: Option<String>,
 }
 
 impl Window {
+    fn shell_since(&self, version: u32) -> Result<&UnboundShellV1, WindowError> {
+        self.state
+            .shell
+            .protocol
+            .as_ref()
+            .filter(|protocol| protocol.version() >= version)
+            .ok_or(WindowError::Missing("a newer unbound_shell_v1"))
+    }
+
+    pub fn app_windows(&self, app_id: &str) -> Vec<AppWindow> {
+        let shell = &self.state.shell;
+        shell
+            .toplevels
+            .iter()
+            .filter(|toplevel| toplevel.app_id == app_id)
+            .map(|toplevel| AppWindow {
+                identifier: toplevel.identifier.clone(),
+                app_id: toplevel.app_id.clone(),
+                title: toplevel.title.clone(),
+                minimized: shell.minimized.contains(&toplevel.identifier),
+            })
+            .collect()
+    }
+
+    pub fn hide_app(&mut self, app_id: &str) -> Result<(), WindowError> {
+        self.shell_since(unbound_shell_v1::REQ_HIDE_APP_SINCE)?
+            .hide_app(app_id.to_owned());
+        self.flush()
+    }
+
+    pub fn quit_app(&mut self, app_id: &str) -> Result<(), WindowError> {
+        self.shell_since(unbound_shell_v1::REQ_QUIT_APP_SINCE)?
+            .quit_app(app_id.to_owned());
+        self.flush()
+    }
+
+    pub fn force_quit_app(&mut self, app_id: &str) -> Result<(), WindowError> {
+        self.shell_since(unbound_shell_v1::REQ_FORCE_QUIT_APP_SINCE)?
+            .force_quit_app(app_id.to_owned());
+        self.flush()
+    }
+
+    pub fn activate_window(&mut self, identifier: &str) -> Result<(), WindowError> {
+        self.shell_since(unbound_shell_v1::REQ_ACTIVATE_WINDOW_SINCE)?
+            .activate_window(identifier.to_owned());
+        self.flush()
+    }
+
+    pub fn set_corner_radius(&mut self, radius: u32) -> Result<(), WindowError> {
+        self.shell_since(unbound_shell_v1::REQ_SET_CORNER_RADIUS_SINCE)?
+            .set_corner_radius(&self.surface, radius);
+        self.flush()
+    }
     pub fn running_apps(&self) -> Vec<String> {
         let mut apps = Vec::new();
         for toplevel in &self.state.shell.toplevels {
@@ -182,6 +246,23 @@ impl Dispatch<UnboundShellV1, ()> for State {
                 app_id,
                 responding: responding != 0,
             }),
+            unbound_shell_v1::Event::WindowMinimized {
+                identifier,
+                minimized,
+            } => {
+                let known = &mut state.shell.minimized;
+                known.retain(|known| *known != identifier);
+                if minimized != 0 {
+                    known.push(identifier);
+                }
+                state.events.push(WindowEvent::AppsChanged);
+            }
+            unbound_shell_v1::Event::AttentionRequested { app_id } => {
+                state.events.push(WindowEvent::AttentionRequested(app_id));
+            }
+            unbound_shell_v1::Event::FocusShell { namespace } => {
+                state.events.push(WindowEvent::FocusShell(namespace));
+            }
             _ => {}
         }
     }
@@ -201,6 +282,8 @@ impl Dispatch<ExtForeignToplevelListV1, ()> for State {
                 handle: toplevel,
                 app_id: String::new(),
                 pending_app_id: String::new(),
+                identifier: String::new(),
+                title: String::new(),
             });
         }
     }
@@ -230,6 +313,12 @@ impl Dispatch<ExtForeignToplevelHandleV1, ()> for State {
             ext_foreign_toplevel_handle_v1::Event::AppId { app_id } => {
                 toplevels[index].pending_app_id = app_id;
             }
+            ext_foreign_toplevel_handle_v1::Event::Identifier { identifier } => {
+                toplevels[index].identifier = identifier;
+            }
+            ext_foreign_toplevel_handle_v1::Event::Title { title } => {
+                toplevels[index].title = title;
+            }
             ext_foreign_toplevel_handle_v1::Event::Done => {
                 let toplevel = &mut toplevels[index];
                 if toplevel.app_id != toplevel.pending_app_id {
@@ -238,7 +327,13 @@ impl Dispatch<ExtForeignToplevelHandleV1, ()> for State {
                 }
             }
             ext_foreign_toplevel_handle_v1::Event::Closed => {
-                toplevels.remove(index).handle.destroy();
+                let closed = toplevels.remove(index);
+                state
+                    .shell
+                    .minimized
+                    .retain(|identifier| *identifier != closed.identifier);
+                closed.handle.destroy();
+
                 state.events.push(WindowEvent::AppsChanged);
             }
             _ => {}

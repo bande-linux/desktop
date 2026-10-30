@@ -3,8 +3,7 @@ mod displays;
 mod follow;
 mod idle;
 mod pages;
-mod registry;
-mod search;
+mod pictures;
 mod services;
 mod state;
 mod view;
@@ -18,12 +17,12 @@ pub use client::{CONFIG_SETTINGS, SettingsClient};
 pub use displays::Displays;
 pub use follow::{Command, Feed, Services, Update, Updates, feed, follow_config, worker};
 pub use idle::Idle;
-pub use registry::{Choice, Kind, List, Pane, PaneId, Section, Setting, SettingId, Value, panes};
-pub use search::{PaneHit, SettingHit, search};
+pub use pictures::{Pair, PictureCommand, bundled_pairs, thumbnail};
 pub use services::{
     AudioCommand, BluetoothCommand, NetworkCommand, follow_bluetooth, follow_network,
 };
 pub use state::{Answer, BluetoothState, Display, Joined, Mode, Question, WifiState};
+pub use unbound_settings_panes::{PaneId, SettingId, Value};
 pub use view::SettingsView;
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-settings.ftl");
@@ -40,7 +39,7 @@ mod tests {
             include_str!("client.rs"),
             include_str!("follow.rs"),
             include_str!("pages.rs"),
-            include_str!("registry.rs"),
+            include_str!("pictures.rs"),
             include_str!("view.rs"),
         ];
         assert_eq!(

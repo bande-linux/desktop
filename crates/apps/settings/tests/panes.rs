@@ -1,6 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 use std::time::{Duration, Instant};
 
@@ -8,8 +9,9 @@ use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId};
 use unbound_audio::{Device, Direction, Level, Snapshot};
 use unbound_config::Output;
 use unbound_settings::{
-    Answer, AudioCommand, BluetoothCommand, Command, Display, Feed, Mode, NetworkCommand, PaneId,
-    SettingId, SettingsView, Update, Value, feed, follow_bluetooth, follow_network,
+    Answer, AudioCommand, BluetoothCommand, Command, Display, Feed, Mode, NetworkCommand, Pair,
+    PaneId, PictureCommand, SettingId, SettingsView, Update, Value, bundled_pairs, feed,
+    follow_bluetooth, follow_network,
 };
 use unbound_test_bus::SessionBus;
 use unbound_test_bus::bluez::{FakeBluez, PHONE};
@@ -383,4 +385,130 @@ fn a_display_change_keeps_its_other_settings_and_only_offers_what_the_panel_can(
             }
         )]
     );
+}
+
+fn pair(name: &str) -> Pair {
+    Pair {
+        light: PathBuf::from(format!("/usr/share/unbound/wallpapers/{name}-light.svg")),
+        dark: PathBuf::from(format!("/usr/share/unbound/wallpapers/{name}-dark.svg")),
+    }
+}
+
+fn value_of(view: &mut SettingsView, role: Role, label: &str) -> Option<String> {
+    nodes(view)
+        .into_iter()
+        .find(|(_, node)| node.role() == role && node.label() == Some(label))
+        .and_then(|(_, node)| node.value().map(str::to_owned))
+}
+
+#[test]
+fn the_wallpaper_pane_offers_the_bundled_pairs_and_a_picture_of_ones_own() {
+    let mut view = view();
+    view.apply(Update::Pictures(vec![
+        ("aurora".to_owned(), pair("aurora")),
+        ("drift".to_owned(), pair("drift")),
+    ]));
+    view.apply(Update::Values(vec![(
+        SettingId::Wallpaper,
+        Value::Pictures {
+            light: String::new(),
+            dark: String::new(),
+        },
+    )]));
+    open(&mut view, "Wallpaper");
+    assert_eq!(
+        value_of(&mut view, Role::RadioGroup, "Wallpaper").as_deref(),
+        Some("Drift")
+    );
+
+    let grid = find(&mut view, Role::RadioGroup, "Wallpaper").expect("pictures");
+    view.perform(&ActionRequest {
+        action: Action::Decrement,
+        target_tree: TreeId::ROOT,
+        target_node: grid,
+        data: None,
+    });
+    let chosen = Value::Pictures {
+        light: "/usr/share/unbound/wallpapers/aurora-light.svg".to_owned(),
+        dark: "/usr/share/unbound/wallpapers/aurora-dark.svg".to_owned(),
+    };
+    assert_eq!(
+        view.take_commands(),
+        [Command::Set(SettingId::Wallpaper, chosen)]
+    );
+
+    view.apply(Update::Values(vec![(
+        SettingId::Wallpaper,
+        Value::Pictures {
+            light: "/home/me/Pictures/lake.jpg".to_owned(),
+            dark: String::new(),
+        },
+    )]));
+    assert_eq!(
+        value_of(&mut view, Role::RadioGroup, "Wallpaper").as_deref(),
+        Some("lake")
+    );
+    let lake = Pair {
+        light: PathBuf::from("/home/me/Pictures/lake.jpg"),
+        dark: PathBuf::from("/home/me/Pictures/lake.jpg"),
+    };
+    assert_eq!(
+        view.take_commands(),
+        [Command::Picture(PictureCommand::Thumbnail(lake))]
+    );
+
+    let add = button_in_row(&mut view, "Your own picture", "Add Picture…");
+    click(&mut view, add);
+    assert_eq!(
+        view.take_commands(),
+        [Command::Picture(PictureCommand::Choose)]
+    );
+}
+
+#[test]
+fn bundled_wallpapers_are_the_pictures_that_come_as_a_light_and_dark_pair() {
+    let data = tempfile::tempdir().expect("data dir");
+    let folder = data.path().join("unbound/wallpapers");
+    std::fs::create_dir_all(&folder).expect("folder");
+    for file in [
+        "sea-light.svg",
+        "sea-dark.svg",
+        "dune-light.svg",
+        "notes.txt",
+    ] {
+        std::fs::write(folder.join(file), "<svg/>").expect("file");
+    }
+    assert_eq!(
+        bundled_pairs(&[data.path().to_path_buf()]),
+        [(
+            "sea".to_owned(),
+            Pair {
+                light: folder.join("sea-light.svg"),
+                dark: folder.join("sea-dark.svg"),
+            }
+        )]
+    );
+}
+
+#[test]
+fn the_dock_pane_has_a_size_slider_a_position_and_auto_hide() {
+    let mut view = view();
+    view.apply(Update::Values(vec![
+        (SettingId::DockIconSize, Value::Number(48)),
+        (SettingId::DockEdge, Value::Keyword("left".to_owned())),
+        (SettingId::DockAutoHide, Value::Flag(false)),
+    ]));
+    open(&mut view, "Dock");
+    let size = find(&mut view, Role::Slider, "Size").expect("size slider");
+    view.perform(&ActionRequest {
+        action: Action::Increment,
+        target_tree: TreeId::ROOT,
+        target_node: size,
+        data: None,
+    });
+    assert_eq!(
+        view.take_commands(),
+        [Command::Set(SettingId::DockIconSize, Value::Number(52))]
+    );
+    assert!(find(&mut view, Role::Switch, "Automatically hide").is_some());
 }

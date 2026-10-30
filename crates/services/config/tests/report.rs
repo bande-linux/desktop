@@ -44,7 +44,7 @@ fn start(initial: &str) -> Fixture {
         &connection,
         &path,
         Arc::new(ConfigStore::default()),
-        move |result| notifier.report(&result),
+        move |result| notifier.report(&result.map(drop)),
     )
     .expect("config service");
     Fixture {

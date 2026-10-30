@@ -1,3 +1,4 @@
+mod accounts;
 mod edit;
 mod report;
 mod service;
@@ -12,6 +13,7 @@ use std::time::Duration;
 use kdl::{KdlDocument, KdlEntry, KdlNode, KdlValue};
 use unbound_l10n::Localizer;
 
+pub use accounts::{login_picture, share_login_picture};
 pub use edit::Setting;
 pub use report::{EDIT_ACTION, ErrorNotifier};
 pub use service::{BUS_NAME, ConfigService, OBJECT_PATH, ServiceError};
@@ -25,6 +27,8 @@ const SCALE_RANGE: (f64, f64) = (1.0, 2.0);
 const REFRESH_RATE_RANGE: (f64, f64) = (60.0, 240.0);
 pub const KEY_REPEAT_RATE_RANGE: (u32, u32) = (1, 60);
 pub const KEY_REPEAT_DELAY_RANGE: (u32, u32) = (150, 2000);
+pub const DOCK_ICON_SIZE_RANGE: (u32, u32) = (24, 96);
+pub const DEFAULT_DOCK_ICON_SIZE: u32 = 48;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Appearance {
@@ -93,10 +97,27 @@ impl WallpaperVariant {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum WallpaperFit {
+    #[default]
+    Fill,
+    Fit,
+}
+
+impl WallpaperFit {
+    pub fn keyword(self) -> &'static str {
+        match self {
+            Self::Fill => "fill",
+            Self::Fit => "fit",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Wallpaper {
     pub light: Option<PathBuf>,
     pub dark: Option<PathBuf>,
+    pub fit: WallpaperFit,
 }
 
 impl Wallpaper {
@@ -114,11 +135,30 @@ pub const DEFAULT_DOCK_APPS: [&str; 3] = [
     "org.unbound.Settings",
 ];
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Dock {
+    pub edge: DockEdge,
+    pub apps: Vec<String>,
+    pub auto_hide: bool,
+    pub icon_size: u32,
+}
+
+impl Default for Dock {
+    fn default() -> Self {
+        Self {
+            edge: DockEdge::Left,
+            apps: DEFAULT_DOCK_APPS.map(str::to_owned).to_vec(),
+            auto_hide: false,
+            icon_size: DEFAULT_DOCK_ICON_SIZE,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
     pub appearance: Appearance,
-    pub dock_edge: DockEdge,
-    pub dock_apps: Vec<String>,
+    pub reduce_motion: bool,
+    pub dock: Dock,
     pub idle: Idle,
     pub keyboard: Keyboard,
     pub wallpaper: Wallpaper,
@@ -129,8 +169,8 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             appearance: Appearance::Automatic,
-            dock_edge: DockEdge::Left,
-            dock_apps: DEFAULT_DOCK_APPS.map(str::to_owned).to_vec(),
+            reduce_motion: false,
+            dock: Dock::default(),
             idle: Idle {
                 dim_after: Duration::from_secs(5 * 60),
                 lock_after: Duration::from_secs(10 * 60),
@@ -232,7 +272,8 @@ impl Parser<'_> {
                         ],
                     )?
                 }
-                "dock" => (config.dock_edge, config.dock_apps) = self.dock(node)?,
+                "accessibility" => config.reduce_motion = self.accessibility(node)?,
+                "dock" => config.dock = self.dock(node)?,
                 "idle" => config.idle = self.idle(node, config.idle)?,
                 "keyboard" => config.keyboard = self.keyboard(node, config.keyboard)?,
                 "wallpaper" => config.wallpaper = self.wallpaper(node)?,
@@ -324,17 +365,35 @@ impl Parser<'_> {
         )
     }
 
-    fn dock(&self, node: &KdlNode) -> Result<(DockEdge, Vec<String>), ConfigError> {
+    fn accessibility(&self, node: &KdlNode) -> Result<bool, ConfigError> {
         self.no_arguments(node)?;
-        let Config {
-            dock_edge: mut edge,
-            dock_apps: mut apps,
-            ..
-        } = Config::default();
+        let mut reduce_motion = false;
+        for child in self.children(node)? {
+            match child.name().value() {
+                "reduce-motion" => reduce_motion = self.flag(child)?,
+                _ => return Err(self.unknown_child("accessibility", child)),
+            }
+        }
+        Ok(reduce_motion)
+    }
+
+    fn flag(&self, node: &KdlNode) -> Result<bool, ConfigError> {
+        let entry = self.argument(node)?;
+        entry.value().as_bool().ok_or_else(|| {
+            self.at_entry(
+                entry,
+                format!("`{}` must be #true or #false", node.name().value()),
+            )
+        })
+    }
+
+    fn dock(&self, node: &KdlNode) -> Result<Dock, ConfigError> {
+        self.no_arguments(node)?;
+        let mut dock = Dock::default();
         for child in self.children(node)? {
             match child.name().value() {
                 "edge" => {
-                    edge = self.keyword(
+                    dock.edge = self.keyword(
                         child,
                         &[
                             ("left", DockEdge::Left),
@@ -344,11 +403,13 @@ impl Parser<'_> {
                         ],
                     )?
                 }
-                "apps" => apps = self.app_ids(child)?,
+                "apps" => dock.apps = self.app_ids(child)?,
+                "auto-hide" => dock.auto_hide = self.flag(child)?,
+                "size" => dock.icon_size = self.integer_in(child, DOCK_ICON_SIZE_RANGE)?,
                 _ => return Err(self.unknown_child("dock", child)),
             }
         }
-        Ok((edge, apps))
+        Ok(dock)
     }
 
     fn app_ids(&self, node: &KdlNode) -> Result<Vec<String>, ConfigError> {
@@ -436,6 +497,12 @@ impl Parser<'_> {
             match child.name().value() {
                 "light" => wallpaper.light = Some(self.image_path(child)?),
                 "dark" => wallpaper.dark = Some(self.image_path(child)?),
+                "fit" => {
+                    wallpaper.fit = self.keyword(
+                        child,
+                        &[("fill", WallpaperFit::Fill), ("fit", WallpaperFit::Fit)],
+                    )?
+                }
                 _ => return Err(self.unknown_child("wallpaper", child)),
             }
         }
@@ -523,13 +590,7 @@ impl Parser<'_> {
                 "refresh-rate" => {
                     output.refresh_rate = Some(self.number_in(child, REFRESH_RATE_RANGE)?)
                 }
-                "variable-refresh-rate" => {
-                    let entry = self.argument(child)?;
-                    let enabled = entry.value().as_bool().ok_or_else(|| {
-                        self.at_entry(entry, "`variable-refresh-rate` must be #true or #false")
-                    })?;
-                    output.variable_refresh_rate = Some(enabled);
-                }
+                "variable-refresh-rate" => output.variable_refresh_rate = Some(self.flag(child)?),
                 _ => return Err(self.unknown_child("output", child)),
             }
         }
@@ -564,6 +625,7 @@ mod tests {
         let sources = [
             include_str!("lib.rs"),
             include_str!("main.rs"),
+            include_str!("accounts.rs"),
             include_str!("edit.rs"),
             include_str!("report.rs"),
             include_str!("service.rs"),

@@ -4,7 +4,9 @@ use std::thread;
 
 use unbound_graphics::{Palette, Scheme};
 use zbus::blocking::Connection;
+use zbus::blocking::fdo::PropertiesProxy;
 use zbus::object_server::SignalEmitter;
+use zbus::proxy::CacheProperties;
 use zbus::zvariant::{OwnedValue, Value};
 
 use crate::OBJECT_PATH;
@@ -12,6 +14,9 @@ use crate::OBJECT_PATH;
 pub const APPEARANCE: &str = "org.freedesktop.appearance";
 pub const GNOME_INTERFACE: &str = "org.gnome.desktop.interface";
 pub const VERSION: u32 = 2;
+
+const CONFIG_BUS_NAME: &str = "org.unbound.Config";
+const CONFIG_PATH: &str = "/org/unbound/Config";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ColorScheme {
@@ -67,9 +72,28 @@ impl CursorSettings {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Look {
+    scheme: ColorScheme,
+    reduce_motion: bool,
+}
+
+impl Look {
+    fn read(config: &ConfigProxyBlocking<'_>) -> Self {
+        Self {
+            scheme: ColorScheme::from_appearance(&config.appearance().unwrap_or_default()),
+            reduce_motion: config.reduce_motion().unwrap_or(false),
+        }
+    }
+}
+
 type Namespaces = Vec<(&'static str, Vec<(&'static str, OwnedValue)>)>;
 
-fn namespaces(scheme: ColorScheme, cursor: &CursorSettings) -> Namespaces {
+fn namespaces(look: Look, cursor: &CursorSettings) -> Namespaces {
+    let Look {
+        scheme,
+        reduce_motion,
+    } = look;
     let owned = |values: Vec<(&'static str, Value<'_>)>| {
         values
             .into_iter()
@@ -83,6 +107,7 @@ fn namespaces(scheme: ColorScheme, cursor: &CursorSettings) -> Namespaces {
                 ("color-scheme", Value::from(scheme as u32)),
                 ("accent-color", Value::from(scheme.accent_color())),
                 ("contrast", Value::from(0u32)),
+                ("reduced-motion", Value::from(u32::from(reduce_motion))),
             ]),
         ),
         (
@@ -112,38 +137,44 @@ fn matches(namespace: &str, filters: &[String]) -> bool {
 trait Config {
     #[zbus(property)]
     fn appearance(&self) -> zbus::Result<String>;
+    #[zbus(property)]
+    fn reduce_motion(&self) -> zbus::Result<bool>;
 }
 
 pub struct Settings {
-    scheme: Arc<Mutex<ColorScheme>>,
+    look: Arc<Mutex<Look>>,
     cursor: CursorSettings,
 }
 
 impl Settings {
     pub fn serve(connection: &Connection, cursor: CursorSettings) -> zbus::Result<()> {
-        let config = ConfigProxyBlocking::new(connection)?;
-        let changes = config.receive_appearance_changed();
-        let scheme = Arc::new(Mutex::new(ColorScheme::from_appearance(
-            &config.appearance().unwrap_or_default(),
-        )));
+        let config = ConfigProxyBlocking::builder(connection)
+            .cache_properties(CacheProperties::No)
+            .build()?;
+        let changes = PropertiesProxy::builder(connection)
+            .destination(CONFIG_BUS_NAME)?
+            .path(CONFIG_PATH)?
+            .build()?
+            .receive_properties_changed()?;
+        let look = Arc::new(Mutex::new(Look::read(&config)));
         connection.object_server().at(
             OBJECT_PATH,
             Settings {
-                scheme: Arc::clone(&scheme),
+                look: Arc::clone(&look),
                 cursor: cursor.clone(),
             },
         )?;
         let connection = connection.clone();
         thread::spawn(move || {
-            for change in changes {
-                let Ok(appearance) = change.get() else {
-                    continue;
-                };
-                let new = ColorScheme::from_appearance(&appearance);
+            for _ in changes {
+                let new = Look::read(&config);
                 let old = std::mem::replace(
-                    &mut *scheme.lock().unwrap_or_else(PoisonError::into_inner),
+                    &mut *look.lock().unwrap_or_else(PoisonError::into_inner),
                     new,
                 );
+                if old == new {
+                    continue;
+                }
                 let Ok(emitter) = SignalEmitter::new(connection.inner(), OBJECT_PATH) else {
                     continue;
                 };
@@ -173,8 +204,8 @@ impl Settings {
     }
 
     fn current(&self) -> Namespaces {
-        let scheme = *self.scheme.lock().unwrap_or_else(PoisonError::into_inner);
-        namespaces(scheme, &self.cursor)
+        let look = *self.look.lock().unwrap_or_else(PoisonError::into_inner);
+        namespaces(look, &self.cursor)
     }
 }
 

@@ -4,10 +4,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use accesskit::{Node, Role};
-use unbound_config::{Appearance, Config, ConfigService, ConfigStore, DockEdge, Suspend};
-use unbound_settings::{
-    Command, Idle, PaneId, SettingId, SettingsClient, SettingsView, Value, panes, search,
+use unbound_config::{
+    Appearance, Config, ConfigService, ConfigStore, DockEdge, Suspend, WallpaperFit,
 };
+use unbound_settings::{Command, Idle, PaneId, SettingId, SettingsClient, SettingsView, Value};
+use unbound_settings_panes::panes;
 use unbound_test_bus::SessionBus;
 use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer};
 use unbound_toolkit::{Palette, Point, Scheme, TextSystem};
@@ -66,43 +67,6 @@ fn click(view: &mut SettingsView, at: Point) {
 }
 
 #[test]
-fn search_ranks_the_best_match_first_and_marks_the_matched_letters() {
-    let panes = panes();
-    let found = |query: &str| {
-        search(&panes, query)
-            .into_iter()
-            .map(|hit| hit.pane)
-            .collect::<Vec<_>>()
-    };
-
-    assert_eq!(found("dark"), [PaneId::Appearance]);
-    assert_eq!(found("password"), [PaneId::Wifi, PaneId::LockScreen]);
-    assert_eq!(found("screen saver"), [PaneId::LockScreen]);
-    assert_eq!(found("bluetooth"), [PaneId::Bluetooth]);
-    assert_eq!(found("printer"), []);
-    assert_eq!(found("lock")[0], PaneId::LockScreen);
-    assert_eq!(found("rep"), [PaneId::Keyboard]);
-
-    let hits = search(&panes, "sleep never");
-    assert_eq!(hits.len(), 1);
-    let sleep = hits[0].best().expect("best setting");
-    assert_eq!(sleep.setting, SettingId::SleepAfter);
-    assert_eq!(sleep.label, vec![0..5]);
-
-    let hits = search(&panes, "display dim");
-    assert_eq!(hits[0].best().expect("best").setting, SettingId::DimAfter);
-    assert_eq!(hits[0].best().expect("best").label, [0..3, 8..15]);
-}
-
-#[test]
-fn a_word_start_outranks_a_match_inside_a_word() {
-    let panes = panes();
-    let hits = search(&panes, "lock");
-    let lock = hits[0].best().expect("best");
-    assert_eq!(lock.setting, SettingId::LockAfter);
-}
-
-#[test]
 fn changing_one_idle_time_keeps_dim_before_lock_before_sleep() {
     let idle = Idle {
         dim: 300,
@@ -154,7 +118,7 @@ fn changing_one_idle_time_keeps_dim_before_lock_before_sleep() {
 #[test]
 fn typing_anywhere_searches_and_narrows_the_sidebar_to_ranked_panes() {
     let mut view = view();
-    assert_eq!(view.visible_panes().len(), 4);
+    assert_eq!(view.visible_panes().len(), 5);
 
     type_text(&mut view, "suspend");
 
@@ -166,7 +130,7 @@ fn typing_anywhere_searches_and_narrows_the_sidebar_to_ranked_panes() {
 
     press(&mut view, Key::Escape);
     assert_eq!(view.query(), "");
-    assert_eq!(view.visible_panes().len(), 4);
+    assert_eq!(view.visible_panes().len(), 5);
     assert!(view.highlighted_settings().is_empty());
     assert_eq!(view.selected_pane(), PaneId::LockScreen);
 }
@@ -225,7 +189,7 @@ fn tab_reaches_a_control_and_arrows_change_it() {
 fn clicking_a_pane_and_then_a_choice_selects_both() {
     let mut view = view();
     view.set_value(SettingId::DockEdge, keyword("left"));
-    let row = node(&mut view, Role::ListItem, "Desktop & Dock")
+    let row = node(&mut view, Role::ListItem, "Dock")
         .bounds()
         .expect("bounds");
     click(
@@ -298,6 +262,17 @@ fn changes_are_written_through_org_unbound_config() {
         (SettingId::DockEdge, keyword("bottom")),
         (SettingId::SleepAfter, Value::Seconds(0)),
         (SettingId::KeyRepeatDelay, Value::Number(300)),
+        (SettingId::DockIconSize, Value::Number(64)),
+        (SettingId::DockAutoHide, Value::Flag(true)),
+        (SettingId::ReduceMotion, Value::Flag(true)),
+        (SettingId::WallpaperFit, keyword("fit")),
+        (
+            SettingId::Wallpaper,
+            Value::Pictures {
+                light: "/usr/share/unbound/wallpapers/aurora-light.svg".to_owned(),
+                dark: "/usr/share/unbound/wallpapers/aurora-dark.svg".to_owned(),
+            },
+        ),
     ] {
         client.set(id, &value).expect("set");
     }
@@ -305,9 +280,18 @@ fn changes_are_written_through_org_unbound_config() {
     let written =
         Config::parse(&std::fs::read_to_string(&path).expect("config.kdl")).expect("valid config");
     assert_eq!(written.appearance, Appearance::Dark);
-    assert_eq!(written.dock_edge, DockEdge::Bottom);
+    assert_eq!(written.dock.edge, DockEdge::Bottom);
     assert_eq!(written.idle.suspend, Suspend::Never);
     assert_eq!(written.keyboard.repeat_delay, Duration::from_millis(300));
+    assert_eq!((written.dock.icon_size, written.dock.auto_hide), (64, true));
+    assert!(written.reduce_motion);
+    assert_eq!(written.wallpaper.fit, WallpaperFit::Fit);
+    assert_eq!(
+        written.wallpaper.dark.as_deref(),
+        Some(std::path::Path::new(
+            "/usr/share/unbound/wallpapers/aurora-dark.svg"
+        ))
+    );
 
     client
         .set(SettingId::SleepAfter, &keyword("with-display"))
@@ -316,7 +300,7 @@ fn changes_are_written_through_org_unbound_config() {
         client.get(SettingId::SleepAfter).expect("sleep"),
         keyword("with-display")
     );
-    assert_eq!(client.read(&unbound_settings::CONFIG_SETTINGS).len(), 7);
+    assert_eq!(client.read(&unbound_settings::CONFIG_SETTINGS).len(), 12);
 }
 
 #[test]

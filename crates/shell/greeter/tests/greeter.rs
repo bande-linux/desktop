@@ -4,8 +4,8 @@ use std::os::unix::net::UnixStream;
 use std::thread;
 
 use unbound_greeter::{
-    AuthMessageType, ErrorType, Outcome, Request, Response, log_in, login_users, read_message,
-    write_message,
+    AuthMessageType, ErrorType, Outcome, Request, Response, last_user_file, log_in, login_users,
+    read_message, remember_user, remembered_user, write_message,
 };
 
 fn greetd(script: Vec<(Request, Response)>) -> (UnixStream, thread::JoinHandle<Vec<Request>>) {
@@ -192,4 +192,18 @@ nobody:x:65534:65534:nobody:/nonexistent:/usr/sbin/nologin
             .collect::<Vec<_>>(),
         [("ada", "Ada Lovelace"), ("alan", "alan")]
     );
+}
+
+#[test]
+fn the_login_window_remembers_who_signed_in_last_in_its_state_folder() {
+    let home = tempfile::tempdir().expect("home");
+    let file = last_user_file(Some(std::path::Path::new("relative")), Some(home.path()))
+        .expect("state file");
+    assert_eq!(
+        file,
+        home.path().join(".local/state/unbound-greeter/last-user")
+    );
+    assert_eq!(remembered_user(&file), None);
+    remember_user(&file, "ada").expect("remember");
+    assert_eq!(remembered_user(&file).as_deref(), Some("ada"));
 }

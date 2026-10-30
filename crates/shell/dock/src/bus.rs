@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 use std::io::Write;
 use std::os::unix::net::UnixStream;
-use std::sync::mpsc::Sender;
+use std::sync::mpsc::{self, Sender};
 use std::thread;
 
-use unbound_config::{BUS_NAME, OBJECT_PATH};
+use unbound_config::{BUS_NAME, DockEdge, OBJECT_PATH};
 use zbus::blocking::fdo::PropertiesProxy;
 use zbus::blocking::{Connection, MessageIterator, Proxy};
 use zbus::zvariant::OwnedValue;
@@ -18,6 +18,7 @@ const CONFIG_INTERFACE: &str = "org.unbound.Config";
 #[derive(Debug, Clone, PartialEq)]
 pub enum BusEvent {
     DockApps(Vec<String>),
+    Edge(DockEdge),
     AutoHide(bool),
     IconSize(u32),
     Launcher(String, LauncherUpdate),
@@ -104,6 +105,39 @@ fn follow_launcher_entries(session: Connection, outbox: Outbox) {
     });
 }
 
+pub fn edge_from_keyword(keyword: &str) -> Option<DockEdge> {
+    [
+        DockEdge::Left,
+        DockEdge::Bottom,
+        DockEdge::Right,
+        DockEdge::Top,
+    ]
+    .into_iter()
+    .find(|edge| edge.keyword() == keyword)
+}
+
+fn dock_settings(config: &Proxy<'_>) -> zbus::Result<Vec<BusEvent>> {
+    let mut events = Vec::new();
+    if let Ok(size) = config.get_property::<u32>("DockIconSize") {
+        events.push(BusEvent::IconSize(size));
+    }
+    if let Ok(auto_hide) = config.get_property::<bool>("DockAutoHide") {
+        events.push(BusEvent::AutoHide(auto_hide));
+    }
+    if let Some(edge) = config
+        .get_property::<String>("DockEdge")
+        .ok()
+        .as_deref()
+        .and_then(edge_from_keyword)
+    {
+        events.push(BusEvent::Edge(edge));
+    }
+    events.push(BusEvent::DockApps(
+        config.get_property::<Vec<String>>("DockApps")?,
+    ));
+    Ok(events)
+}
+
 fn follow_dock_apps(session: Connection, outbox: Outbox) {
     spawn("dock-apps", move || {
         let follow = || -> zbus::Result<()> {
@@ -113,20 +147,21 @@ fn follow_dock_apps(session: Connection, outbox: Outbox) {
                 .path(OBJECT_PATH)?
                 .build()?
                 .receive_properties_changed()?;
-            let publish = || {
-                if let Ok(size) = config.get_property::<u32>("DockIconSize")
-                    && !outbox.send(BusEvent::IconSize(size))
-                {
-                    return Ok(false);
+            let mut known: Vec<BusEvent> = Vec::new();
+            let mut publish = || -> zbus::Result<bool> {
+                for event in dock_settings(&config)? {
+                    if known.contains(&event) {
+                        continue;
+                    }
+                    known.retain(|old| {
+                        std::mem::discriminant(old) != std::mem::discriminant(&event)
+                    });
+                    known.push(event.clone());
+                    if !outbox.send(event) {
+                        return Ok(false);
+                    }
                 }
-                if let Ok(auto_hide) = config.get_property::<bool>("DockAutoHide")
-                    && !outbox.send(BusEvent::AutoHide(auto_hide))
-                {
-                    return Ok(false);
-                }
-                config
-                    .get_property::<Vec<String>>("DockApps")
-                    .map(|apps| outbox.send(BusEvent::DockApps(apps)))
+                Ok(true)
             };
             if !publish()? {
                 return Ok(());
@@ -142,6 +177,28 @@ fn follow_dock_apps(session: Connection, outbox: Outbox) {
             tracing::warn!("cannot follow the Dock's apps in org.unbound.Config: {error}");
         }
     });
+}
+
+pub fn keep_writer() -> Sender<Vec<String>> {
+    let (sender, receiver) = mpsc::channel::<Vec<String>>();
+    spawn("dock-keep", move || {
+        let config = Connection::session()
+            .and_then(|session| Proxy::new(&session, BUS_NAME, OBJECT_PATH, CONFIG_INTERFACE));
+        let config = match config {
+            Ok(config) => config,
+            Err(error) => {
+                tracing::warn!("cannot reach org.unbound.Config to keep apps: {error}");
+                return;
+            }
+        };
+        while let Ok(first) = receiver.recv() {
+            let apps = receiver.try_iter().last().unwrap_or(first);
+            if let Err(error) = config.set_property("DockApps", apps) {
+                tracing::warn!("cannot change the apps kept in the Dock: {error}");
+            }
+        }
+    });
+    sender
 }
 
 pub fn follow(events: Sender<BusEvent>, wake: UnixStream) {

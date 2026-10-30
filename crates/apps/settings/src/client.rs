@@ -5,7 +5,7 @@ use zbus::blocking::Connection;
 use zbus::proxy::CacheProperties;
 use zbus::zvariant::OwnedValue;
 
-use crate::registry::{SettingId, Value, WITH_DISPLAY};
+use unbound_settings_panes::{SettingId, Value, WITH_DISPLAY};
 
 #[zbus::proxy(
     interface = "org.unbound.Config",
@@ -17,6 +17,30 @@ pub trait Config {
     fn appearance(&self) -> zbus::Result<String>;
     #[zbus(property)]
     fn set_appearance(&self, value: &str) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn reduce_motion(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_reduce_motion(&self, reduce: bool) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn wallpaper_light(&self) -> zbus::Result<String>;
+    #[zbus(property)]
+    fn set_wallpaper_light(&self, path: &str) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn wallpaper_dark(&self) -> zbus::Result<String>;
+    #[zbus(property)]
+    fn set_wallpaper_dark(&self, path: &str) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn wallpaper_fit(&self) -> zbus::Result<String>;
+    #[zbus(property)]
+    fn set_wallpaper_fit(&self, value: &str) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn dock_icon_size(&self) -> zbus::Result<u32>;
+    #[zbus(property)]
+    fn set_dock_icon_size(&self, size: u32) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn dock_auto_hide(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_dock_auto_hide(&self, auto_hide: bool) -> zbus::Result<()>;
     #[zbus(property)]
     fn dock_edge(&self) -> zbus::Result<String>;
     #[zbus(property)]
@@ -81,8 +105,13 @@ fn output(settings: &HashMap<String, OwnedValue>) -> Output {
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 7] = [
+pub const CONFIG_SETTINGS: [SettingId; 12] = [
     SettingId::Appearance,
+    SettingId::ReduceMotion,
+    SettingId::Wallpaper,
+    SettingId::WallpaperFit,
+    SettingId::DockIconSize,
+    SettingId::DockAutoHide,
     SettingId::DockEdge,
     SettingId::DimAfter,
     SettingId::LockAfter,
@@ -135,6 +164,14 @@ impl SettingsClient {
         Ok(match id {
             SettingId::DoNotDisturb => Value::Flag(self.notifications.do_not_disturb()?),
             SettingId::Appearance => Value::Keyword(self.config.appearance()?),
+            SettingId::ReduceMotion => Value::Flag(self.config.reduce_motion()?),
+            SettingId::Wallpaper => Value::Pictures {
+                light: self.config.wallpaper_light()?,
+                dark: self.config.wallpaper_dark()?,
+            },
+            SettingId::WallpaperFit => Value::Keyword(self.config.wallpaper_fit()?),
+            SettingId::DockIconSize => Value::Number(self.config.dock_icon_size()?),
+            SettingId::DockAutoHide => Value::Flag(self.config.dock_auto_hide()?),
             SettingId::DockEdge => Value::Keyword(self.config.dock_edge()?),
             SettingId::DimAfter => Value::Seconds(self.config.idle_dim_after()?),
             SettingId::LockAfter => Value::Seconds(self.config.idle_lock_after()?),
@@ -165,6 +202,21 @@ impl SettingsClient {
         match (id, value) {
             (SettingId::Appearance, Value::Keyword(keyword)) => self.config.set_appearance(keyword),
             (SettingId::DockEdge, Value::Keyword(keyword)) => self.config.set_dock_edge(keyword),
+            (SettingId::ReduceMotion, Value::Flag(reduce)) => {
+                self.config.set_reduce_motion(*reduce)
+            }
+            (SettingId::Wallpaper, Value::Pictures { light, dark }) => {
+                self.config.set_wallpaper_light(light)?;
+                self.config.set_wallpaper_dark(dark)
+            }
+            (SettingId::WallpaperFit, Value::Keyword(keyword)) => {
+                self.config.set_wallpaper_fit(keyword)
+            }
+            (SettingId::DockIconSize, Value::Number(size)) => self.config.set_dock_icon_size(*size),
+            (SettingId::DockAutoHide, Value::Flag(auto_hide)) => {
+                self.config.set_dock_auto_hide(*auto_hide)
+            }
+
             (SettingId::DimAfter, Value::Seconds(seconds)) => {
                 self.config.set_idle_dim_after(*seconds)
             }

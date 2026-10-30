@@ -11,11 +11,12 @@ use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
 use crate::client::{CONFIG_SETTINGS, SettingsClient};
-use crate::registry::{SettingId, Value};
+use crate::pictures::{Pair, PictureCommand, follow_pictures};
 use crate::services::{
     AudioCommand, BluetoothCommand, NetworkCommand, follow_audio, follow_bluetooth, follow_network,
 };
 use crate::state::{Answer, BluetoothState, Joined, Question, WifiState};
+use unbound_settings_panes::{SettingId, Value};
 
 const NOTIFICATIONS: &str = "org.freedesktop.Notifications";
 const NOTIFICATIONS_PATH: &str = "/org/freedesktop/Notifications";
@@ -29,6 +30,8 @@ pub enum Update {
     Joined(Vec<u8>, Joined),
     Bluetooth(Option<BluetoothState>),
     Pairing(Option<Question>),
+    Pictures(Vec<(String, Pair)>),
+    Thumbnail(Pair, unbound_wallpaper::Picture),
     Failed(String),
 }
 
@@ -40,6 +43,7 @@ pub enum Command {
     Network(NetworkCommand),
     Bluetooth(BluetoothCommand),
     Answer(Answer),
+    Picture(PictureCommand),
 }
 
 pub struct Feed {
@@ -198,6 +202,7 @@ pub struct Services {
     audio: Sender<AudioCommand>,
     network: Option<Sender<NetworkCommand>>,
     bluetooth: Option<(Sender<BluetoothCommand>, Sender<Answer>)>,
+    pictures: Sender<PictureCommand>,
 }
 
 impl Services {
@@ -209,6 +214,7 @@ impl Services {
             audio: follow_audio(updates.clone()),
             network: system.map(|system| follow_network(system, updates.clone())),
             bluetooth: system.map(|system| follow_bluetooth(system, updates.clone())),
+            pictures: follow_pictures(session, unbound_xdg::data_dirs(), updates.clone()),
         }
     }
 
@@ -228,6 +234,7 @@ impl Services {
                 .bluetooth
                 .as_ref()
                 .is_some_and(|(_, answers)| answers.send(answer).is_ok()),
+            Command::Picture(command) => self.pictures.send(command).is_ok(),
         };
         if !sent {
             tracing::warn!("a settings service is not running");

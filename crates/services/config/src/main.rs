@@ -1,10 +1,10 @@
 use std::error::Error;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
 
-use unbound_config::{ConfigService, ConfigStore, ErrorNotifier, config_path};
+use unbound_config::{ConfigService, ConfigStore, ErrorNotifier, config_path, share_login_picture};
 use zbus::blocking::Connection;
 
 fn open_in_editor(path: &Path) {
@@ -19,11 +19,21 @@ fn open_in_editor(path: &Path) {
 fn serve(path: &Path) -> Result<ConfigService, Box<dyn Error>> {
     let connection = Connection::session()?;
     let notifier = ErrorNotifier::start(&connection, path, open_in_editor)?;
+    let shared = Mutex::new(None);
     let service = ConfigService::start(
         &connection,
         path,
         Arc::new(ConfigStore::default()),
-        move |result| notifier.report(&result),
+        move |result| {
+            if let Ok(config) = &result {
+                let mut shared = shared.lock().unwrap_or_else(PoisonError::into_inner);
+                if shared.as_ref() != Some(&config.wallpaper) {
+                    share_login_picture(&config.wallpaper);
+                    *shared = Some(config.wallpaper.clone());
+                }
+            }
+            notifier.report(&result.map(drop));
+        },
     )?;
     Ok(service)
 }

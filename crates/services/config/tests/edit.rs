@@ -4,9 +4,9 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use unbound_config::{
-    Accessibility, AlertSound, Appearance, BarEdge, CapsLock, ClockFormat, Config, DisplaySettings,
-    InputSource, LidOnPower, Placement, Rotation, Setting, Suspend, WallpaperFit, WallpaperVariant,
-    migrate,
+    Accent, Accessibility, AlertSound, Appearance, BarEdge, CapsLock, ClockFormat, Config,
+    DisplaySettings, InputSource, LidOnPower, Placement, Rotation, Setting, Suspend, WallpaperFit,
+    WallpaperVariant, migrate,
 };
 
 fn apply(setting: Setting, source: &str) -> String {
@@ -46,6 +46,27 @@ fn the_clock_format_is_written_and_automatic_leaves_no_trace() {
         "appearance \"dark\"\n"
     );
     assert_eq!(Config::load("clock \"25-hour\"").expect("KDL").1.len(), 1);
+}
+
+#[test]
+fn the_accent_and_tinted_frame_are_written_and_defaults_leave_no_trace() {
+    let edited = apply(Setting::Accent(Accent::Teal), "appearance \"dark\"\n");
+    let edited = apply(Setting::TintedFrame(true), &edited);
+    assert_eq!(
+        edited,
+        "appearance \"dark\"\naccent \"teal\"\ntinted-frame #true\n"
+    );
+    let config = Config::parse(&edited).expect("valid");
+    assert_eq!((config.accent, config.tinted_frame), (Accent::Teal, true));
+    let edited = apply(Setting::Accent(Accent::Ultramarine), &edited);
+    assert_eq!(
+        apply(Setting::TintedFrame(false), &edited),
+        "appearance \"dark\"\n"
+    );
+    assert_eq!(
+        Config::load("accent \"chartreuse\"").expect("KDL").1.len(),
+        1
+    );
 }
 
 #[test]

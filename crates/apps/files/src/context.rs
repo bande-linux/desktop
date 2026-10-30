@@ -3,10 +3,13 @@ use unbound_toolkit::Point;
 use unbound_toolkit::ui::Menu;
 
 use crate::browser::Location;
+use std::path::PathBuf;
+
 use crate::menus::{
     App, Command, Folder, Place, Selection, command, folder_menu, items_menu, place_menu,
+    sidebar_menu,
 };
-use crate::sidebar::{PlaceKind, Row};
+use crate::sidebar::{BookmarkEdit, PlaceKind, Row, SidebarEdit, favourites, layout_text};
 use crate::view::{FilesView, Hit, Request};
 use crate::views::ViewMode;
 
@@ -50,13 +53,12 @@ impl FilesView {
                         empty: !self.trash_full,
                     },
                     Location::Folder(_) if place.kind == PlaceKind::Volume => Place::Volume,
-                    _ => Place::Folder {
-                        removable: place.kind == PlaceKind::Bookmark,
-                    },
+                    _ => Place::Folder,
                 });
                 self.menu_place = Some(index);
                 self.show_menu(menu, at);
             }
+            Hit::Sidebar => self.show_menu(sidebar_menu(), at),
             _ => return false,
         }
         true
@@ -154,7 +156,9 @@ impl FilesView {
 
     pub fn menu_action(&mut self, action: &str) -> bool {
         let Some(command) = command(action) else {
-            return false;
+            let handled = self.ui.menu_action(action);
+            self.after_ui();
+            return handled;
         };
         let place = self.menu_place.take();
         match command {
@@ -194,11 +198,16 @@ impl FilesView {
             Command::List => self.set_mode(ViewMode::List),
             Command::ToggleHidden => self.toggle_hidden(),
             Command::EmptyTrash => self.ask_to_empty_trash(),
+            Command::RestoreSidebar => self.requests.push(Request::EditSidebar(SidebarEdit {
+                layout: None,
+                bookmarks: None,
+            })),
             Command::OpenPlace
             | Command::OpenPlaceInNewTab
             | Command::RemoveFromSidebar
             | Command::Eject => {
-                let Some(Row::Place(place)) = place.and_then(|index| self.sidebar.get(index))
+                let Some((index, Row::Place(place))) =
+                    place.and_then(|index| Some((index, self.sidebar.get(index)?)))
                 else {
                     return false;
                 };
@@ -209,9 +218,7 @@ impl FilesView {
                     (Command::Eject, Location::Folder(path)) => {
                         self.requests.push(Request::Eject(path));
                     }
-                    (_, Location::Folder(path)) => {
-                        self.requests.push(Request::RemoveBookmark(path));
-                    }
+                    (Command::RemoveFromSidebar, _) => self.remove_from_sidebar(index),
                     _ => {}
                 }
             }
@@ -234,6 +241,106 @@ impl FilesView {
                 files,
             });
         }
+    }
+
+    fn save_sidebar(
+        &mut self,
+        places: &[crate::sidebar::Place],
+        hidden: &[Location],
+        bookmarks: Option<BookmarkEdit>,
+    ) {
+        let places = places.iter().collect::<Vec<_>>();
+        self.requests.push(Request::EditSidebar(SidebarEdit {
+            layout: Some(layout_text(&places, hidden)),
+            bookmarks,
+        }));
+    }
+
+    fn favourite_places(&self) -> Vec<crate::sidebar::Place> {
+        favourites(&self.favourites).into_iter().cloned().collect()
+    }
+
+    pub(crate) fn remove_from_sidebar(&mut self, index: usize) {
+        let Some(Row::Place(place)) = self.sidebar.get(index).cloned() else {
+            return;
+        };
+        let mut places = self.favourite_places();
+        places.retain(|known| known.location != place.location);
+        let mut hidden = self.hidden_places.clone();
+        let bookmarks = match (place.kind, &place.location) {
+            (PlaceKind::Bookmark, Location::Folder(path)) => {
+                Some(BookmarkEdit::Remove(path.clone()))
+            }
+            _ => {
+                if !hidden.contains(&place.location) {
+                    hidden.push(place.location.clone());
+                }
+                None
+            }
+        };
+        self.save_sidebar(&places, &hidden, bookmarks);
+    }
+
+    pub(crate) fn place_in_sidebar(&mut self, locations: Vec<Location>, before: Option<Location>) {
+        let mut places = self.favourite_places();
+        let mut hidden = self.hidden_places.clone();
+        let mut added: Vec<PathBuf> = Vec::new();
+        let moved = locations
+            .into_iter()
+            .filter(|location| Some(location) != before.as_ref())
+            .filter_map(|location| {
+                let was_hidden = hidden.contains(&location);
+                hidden.retain(|known| *known != location);
+                if let Some(at) = places.iter().position(|known| known.location == location) {
+                    return Some(places.remove(at));
+                }
+                let Location::Folder(path) = &location else {
+                    return None;
+                };
+                if !was_hidden {
+                    added.push(path.clone());
+                }
+                Some(crate::sidebar::Place {
+                    name: path.file_name().map_or_else(
+                        || path.display().to_string(),
+                        |name| name.to_string_lossy().into_owned(),
+                    ),
+                    location,
+                    icon: "folder",
+                    kind: PlaceKind::Bookmark,
+                })
+            })
+            .collect::<Vec<_>>();
+        if moved.is_empty() {
+            return;
+        }
+        let at = before
+            .and_then(|before| places.iter().position(|known| known.location == before))
+            .unwrap_or(places.len());
+        let moved_bookmark = match moved.as_slice() {
+            [place] if place.kind == PlaceKind::Bookmark => match &place.location {
+                Location::Folder(path) => Some(path.clone()),
+                _ => None,
+            },
+            _ => None,
+        };
+        places.splice(at..at, moved);
+        let bookmarks = if !added.is_empty() {
+            Some(BookmarkEdit::Add(added))
+        } else {
+            moved_bookmark.map(|folder| {
+                let before = places
+                    .iter()
+                    .skip_while(|place| place.location != Location::Folder(folder.clone()))
+                    .skip(1)
+                    .find_map(|place| match (&place.kind, &place.location) {
+                        (PlaceKind::Bookmark, Location::Folder(path)) => Some(path.clone()),
+                        _ => None,
+                    });
+                BookmarkEdit::Move { folder, before }
+            })
+        };
+        self.save_sidebar(&places, &hidden, bookmarks);
     }
 
     pub fn menu_closed(&mut self) {

@@ -108,6 +108,8 @@ pub enum SettingId {
     StickyKeys,
     SlowKeys,
     BounceKeys,
+    Accent,
+    TintedFrame,
     Wallpaper,
     WallpaperFit,
     BarEdge,
@@ -225,6 +227,7 @@ pub enum Kind {
     Resolutions,
     DisplayUses,
     Pictures,
+    Swatches(Vec<Choice>),
     Text,
     List(List),
 }
@@ -232,9 +235,10 @@ pub enum Kind {
 impl Kind {
     pub fn choices(&self) -> &[Choice] {
         match self {
-            Self::Choices(choices) | Self::Menu(choices) | Self::Stops { stops: choices, .. } => {
-                choices
-            }
+            Self::Choices(choices)
+            | Self::Menu(choices)
+            | Self::Swatches(choices)
+            | Self::Stops { stops: choices, .. } => choices,
             Self::Switch
             | Self::Level
             | Self::Range { .. }
@@ -906,19 +910,47 @@ fn desktop_panes() -> Vec<Pane> {
             PaneId::Appearance,
             L10N.tr("appearance"),
             L10N.tr("appearance-keywords"),
-            vec![section(
-                None,
-                vec![setting(
-                    SettingId::Appearance,
-                    L10N.tr("appearance-mode"),
-                    L10N.tr("appearance-mode-keywords"),
-                    Kind::Choices(keyword_choices(vec![
-                        (L10N.tr("appearance-light"), "light"),
-                        (L10N.tr("appearance-dark"), "dark"),
-                        (L10N.tr("appearance-automatic"), "automatic"),
-                    ])),
-                )],
-            )],
+            vec![
+                section(
+                    None,
+                    vec![setting(
+                        SettingId::Appearance,
+                        L10N.tr("appearance-mode"),
+                        L10N.tr("appearance-mode-keywords"),
+                        Kind::Choices(keyword_choices(vec![
+                            (L10N.tr("appearance-light"), "light"),
+                            (L10N.tr("appearance-dark"), "dark"),
+                            (L10N.tr("appearance-automatic"), "automatic"),
+                        ])),
+                    )],
+                ),
+                section(
+                    None,
+                    vec![
+                        setting(
+                            SettingId::Accent,
+                            L10N.tr("accent"),
+                            L10N.tr("accent-keywords"),
+                            Kind::Swatches(keyword_choices(vec![
+                                (L10N.tr("accent-ultramarine"), "ultramarine"),
+                                (L10N.tr("accent-teal"), "teal"),
+                                (L10N.tr("accent-moss"), "moss"),
+                                (L10N.tr("accent-amber"), "amber"),
+                                (L10N.tr("accent-ember"), "ember"),
+                                (L10N.tr("accent-rose"), "rose"),
+                                (L10N.tr("accent-plum"), "plum"),
+                                (L10N.tr("accent-graphite"), "graphite"),
+                            ])),
+                        ),
+                        setting(
+                            SettingId::TintedFrame,
+                            L10N.tr("tinted-frame"),
+                            L10N.tr("tinted-frame-keywords"),
+                            Kind::Switch,
+                        ),
+                    ],
+                ),
+            ],
         ),
         accessibility_pane(),
         pane(

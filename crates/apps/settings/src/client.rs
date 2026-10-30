@@ -19,6 +19,14 @@ pub trait Config {
     #[zbus(property)]
     fn set_appearance(&self, value: &str) -> zbus::Result<()>;
     #[zbus(property)]
+    fn accent(&self) -> zbus::Result<String>;
+    #[zbus(property)]
+    fn set_accent(&self, value: &str) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn tinted_frame(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_tinted_frame(&self, tinted: bool) -> zbus::Result<()>;
+    #[zbus(property)]
     fn clock_format(&self) -> zbus::Result<String>;
     #[zbus(property)]
     fn set_clock_format(&self, value: &str) -> zbus::Result<()>;
@@ -225,7 +233,7 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 39] = [
+pub const CONFIG_SETTINGS: [SettingId; 41] = [
     SettingId::Appearance,
     SettingId::Clock24Hour,
     SettingId::LowPowerOnBattery,
@@ -240,6 +248,8 @@ pub const CONFIG_SETTINGS: [SettingId; 39] = [
     SettingId::StickyKeys,
     SettingId::SlowKeys,
     SettingId::BounceKeys,
+    SettingId::Accent,
+    SettingId::TintedFrame,
     SettingId::Wallpaper,
     SettingId::WallpaperFit,
     SettingId::BarIconSize,
@@ -376,6 +386,8 @@ impl SettingsClient {
             SettingId::StickyKeys => Value::Flag(self.config.sticky_keys()?),
             SettingId::SlowKeys => Value::Flag(self.config.slow_keys()?),
             SettingId::BounceKeys => Value::Flag(self.config.bounce_keys()?),
+            SettingId::Accent => Value::Keyword(self.config.accent()?),
+            SettingId::TintedFrame => Value::Flag(self.config.tinted_frame()?),
             SettingId::LowPowerOnBattery => Value::Flag(self.config.low_power_on_battery()?),
             SettingId::LidOnPower => Value::Keyword(self.config.lid_on_power()?),
             SettingId::Clock24Hour => Value::Flag(match self.config.clock_format()?.as_str() {
@@ -440,6 +452,8 @@ impl SettingsClient {
     pub fn set(&self, id: SettingId, value: &Value) -> zbus::Result<()> {
         match (id, value) {
             (SettingId::Appearance, Value::Keyword(keyword)) => self.config.set_appearance(keyword),
+            (SettingId::Accent, Value::Keyword(keyword)) => self.config.set_accent(keyword),
+            (SettingId::TintedFrame, Value::Flag(tinted)) => self.config.set_tinted_frame(*tinted),
             (SettingId::BarEdge, Value::Keyword(keyword)) => self.config.set_bar_edge(keyword),
             (SettingId::BarMenuBar, Value::Keyword(keyword)) => {
                 self.config.set_bar_menu_bar(keyword)

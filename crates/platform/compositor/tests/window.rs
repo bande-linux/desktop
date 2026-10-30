@@ -395,6 +395,81 @@ fn a_click_outside_a_grabbing_popup_dismisses_it_and_is_not_delivered() {
     assert_eq!(server.popup_count(), 0);
 }
 
+fn grabbing_menu(server: &mut Headless, client: &mut TestClient, x: i32, y: i32) -> usize {
+    server.move_pointer_to(at(x, y), 0);
+    server.press_button(BTN_LEFT, true, 1);
+    roundtrip(server, &mut [&mut *client]);
+    let request = PopupRequest {
+        grab: true,
+        ..menu(0, (10, 10, 1, 1), (30, 20))
+    };
+    let popup = client.open_popup(server, &request);
+    server.press_button(BTN_LEFT, false, 2);
+    roundtrip(server, &mut [&mut *client]);
+    popup
+}
+
+#[test]
+fn a_click_on_the_menus_own_window_closes_it_and_only_the_next_click_reaches_the_window() {
+    let mut server = server();
+    let mut shell = top_bar(&mut server);
+    let mut editor = app(&mut server, RED);
+    let origin = geometry(&server).location;
+    let popup = grabbing_menu(&mut server, &mut editor, origin.x + 5, origin.y + 5);
+    let delivered = editor.buttons().len();
+
+    server.move_pointer_to(at(origin.x + 5, origin.y + 40), 3);
+    roundtrip(&mut server, &mut [&mut shell, &mut editor]);
+    assert_eq!(
+        editor.pointer_focus(),
+        None,
+        "hovering beside the menu reaches nothing"
+    );
+
+    click(&mut server, origin.x + 5, origin.y + 40);
+    roundtrip(&mut server, &mut [&mut shell, &mut editor]);
+    assert!(editor.popup_dismissed(popup));
+    assert_eq!(server.popup_count(), 0);
+    assert_eq!(
+        editor.buttons().len(),
+        delivered,
+        "the closing click is consumed"
+    );
+
+    click(&mut server, origin.x + 5, origin.y + 40);
+    roundtrip(&mut server, &mut [&mut shell, &mut editor]);
+    assert_eq!(editor.buttons().len(), delivered + 2);
+    assert_eq!(editor.pointer_focus(), Some((0, 5.0, 40.0)));
+}
+
+#[test]
+fn a_hidden_overlay_never_takes_the_pointer() {
+    let mut server = server();
+    let mut shell = TestClient::connect_as_shell(&mut server);
+    shell.use_seat(&mut server);
+    shell.show_layer(
+        &mut server,
+        &LayerRequest {
+            layer: Layer::Overlay,
+            anchor: Anchor::Top | Anchor::Bottom | Anchor::Left | Anchor::Right,
+            size: (0, 0),
+            exclusive_zone: -1,
+            keyboard: KeyboardInteractivity::Exclusive,
+            color: GREEN,
+        },
+    );
+    shell.hide_layer(&mut server, 0);
+    let mut editor = app(&mut server, RED);
+    roundtrip(&mut server, &mut [&mut shell, &mut editor]);
+
+    click(&mut server, CENTERED.0 + 5, CENTERED.1 + 5);
+    roundtrip(&mut server, &mut [&mut shell, &mut editor]);
+
+    assert!(shell.buttons().is_empty());
+    assert_eq!(editor.buttons().len(), 2);
+    assert!(editor.keyboard_focus_on(0));
+}
+
 #[test]
 fn a_grabbing_popup_that_opens_under_a_still_pointer_has_it_at_once() {
     let mut server = server();

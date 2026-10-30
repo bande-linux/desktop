@@ -4,15 +4,17 @@ use std::time::Duration;
 use kdl::{KdlDocument, KdlEntry, KdlEntryFormat, KdlNode, KdlValue};
 
 use crate::{
-    Accessibility, AlertSound, Appearance, BarEdge, CapsLock, ClockFormat, Config, ConfigError,
-    DEFAULT_BAR_ICON_SIZE, DisplaySettings, InputSource, LEGACY_DISPLAY, LidOnPower,
+    Accent, Accessibility, AlertSound, Appearance, BarEdge, CapsLock, ClockFormat, Config,
+    ConfigError, DEFAULT_BAR_ICON_SIZE, DisplaySettings, InputSource, LEGACY_DISPLAY, LidOnPower,
     MenuBarPlacement, Mouse, Placement, SecondaryClick, Sound, Suspend, Trackpad, WallpaperFit,
-    WallpaperVariant, same_displays, section_name,
+    WallpaperVariant, accent_keyword, same_displays, section_name,
 };
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Setting {
     Appearance(Appearance),
+    Accent(Accent),
+    TintedFrame(bool),
     Clock(ClockFormat),
     ShowBatteryPercentage(bool),
     LowPowerOnBattery(bool),
@@ -59,6 +61,18 @@ impl Setting {
                 None,
                 "appearance",
                 Some(appearance.keyword().into()),
+            ),
+            Self::Accent(accent) => set(
+                &mut document,
+                None,
+                "accent",
+                (*accent != Accent::default()).then(|| accent_keyword(*accent).into()),
+            ),
+            Self::TintedFrame(tinted) => set(
+                &mut document,
+                None,
+                "tinted-frame",
+                tinted.then_some(KdlValue::Bool(true)),
             ),
             Self::Clock(format) => set(
                 &mut document,

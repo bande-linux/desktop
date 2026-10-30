@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use unbound_toolkit::Image;
+use unbound_toolkit::{Color, Image};
 use unbound_xdg::{ICON_THEMES, find_icon};
 
 pub struct Icons {
     data_dirs: Vec<PathBuf>,
     loaded: HashMap<(String, u32), Option<Image>>,
+    tinted: HashMap<(String, u32, [u8; 4]), Option<Image>>,
 }
 
 impl Icons {
@@ -14,6 +15,7 @@ impl Icons {
         Self {
             data_dirs,
             loaded: HashMap::new(),
+            tinted: HashMap::new(),
         }
     }
 
@@ -30,5 +32,22 @@ impl Icons {
 
     pub fn first(&mut self, names: &[&str], pixels: u32) -> Option<Image> {
         names.iter().find_map(|name| self.load(name, pixels))
+    }
+
+    pub fn symbol(&mut self, names: &[&str], pixels: u32, color: Color) -> Option<Image> {
+        let name = names.first()?;
+        let key = (
+            (*name).to_owned(),
+            pixels,
+            [color.r, color.g, color.b, color.a],
+        );
+        if let Some(image) = self.tinted.get(&key) {
+            return image.clone();
+        }
+        let image = self
+            .first(names, pixels)
+            .and_then(|image| image.tinted(color));
+        self.tinted.insert(key, image.clone());
+        image
     }
 }

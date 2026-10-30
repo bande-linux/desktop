@@ -24,6 +24,7 @@ pub struct Button {
     tooltip: Option<String>,
     paragraph: Option<Paragraph>,
     symbol: Option<Symbol>,
+    enabled: bool,
     frame: Rect,
 }
 
@@ -48,7 +49,16 @@ impl Button {
             tooltip: None,
             paragraph: None,
             symbol: None,
+            enabled: true,
             frame: Rect::default(),
+        }
+    }
+
+    pub fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+        if !enabled {
+            self.pressed = false;
+            self.hovered = false;
         }
     }
 
@@ -97,6 +107,9 @@ impl Button {
 
     fn text_style(&self, cx: &Context) -> TextStyle {
         let palette = &cx.palette;
+        if !self.enabled {
+            return TextStyle::new(FONT_SIZE, palette.ink3).weight(TextStyle::MEDIUM);
+        }
         match self.role {
             ButtonRole::Primary => {
                 TextStyle::new(FONT_SIZE, palette.on_accent).weight(TextStyle::SEMIBOLD)
@@ -124,6 +137,9 @@ impl Button {
             (false, true) => color.mix(palette.ink, HOVER_INK),
             (false, false) => color,
         };
+        if !self.enabled {
+            return self.symbol.is_none().then_some(palette.well);
+        }
         match self.role {
             ButtonRole::Primary => Some(shaded(palette.accent)),
             ButtonRole::Destructive => Some(shaded(palette.danger)),
@@ -142,9 +158,10 @@ impl Widget for Button {
 
     fn measure(&mut self, cx: &mut Context, _available: Size) -> Size {
         if let Some(symbol) = &mut self.symbol {
-            symbol.tint(match self.hovered || self.pressed {
-                true => cx.palette.ink,
-                false => cx.palette.ink2,
+            symbol.tint(match (self.enabled, self.hovered || self.pressed) {
+                (false, _) => cx.palette.ink3,
+                (true, true) => cx.palette.ink,
+                (true, false) => cx.palette.ink2,
             });
             return Size::new(BUTTON_HEIGHT, BUTTON_HEIGHT);
         }
@@ -201,11 +218,18 @@ impl Widget for Button {
     fn access(&self, _cx: &Context) -> Node {
         let mut node = Node::new(Role::Button);
         node.set_label(self.title.clone());
-        node.add_action(Action::Click);
+        if self.enabled {
+            node.add_action(Action::Click);
+        } else {
+            node.set_disabled();
+        }
         node
     }
 
     fn handle(&mut self, _cx: &mut Context, event: &Event) -> bool {
+        if !self.enabled {
+            return false;
+        }
         match event {
             Event::PointerEnter(_) => self.hovered = true,
             Event::PointerLeave => {
@@ -232,7 +256,7 @@ impl Widget for Button {
     }
 
     fn perform(&mut self, _cx: &mut Context, request: &ActionRequest) -> bool {
-        if request.action == Action::Click {
+        if self.enabled && request.action == Action::Click {
             (self.on_click)();
             return true;
         }
@@ -240,7 +264,7 @@ impl Widget for Button {
     }
 
     fn accepts_focus(&self, cx: &Context) -> bool {
-        cx.keyboard_navigation
+        self.enabled && cx.keyboard_navigation
     }
 
     fn tooltip(&self) -> Option<&str> {

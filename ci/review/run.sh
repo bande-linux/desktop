@@ -5,7 +5,7 @@ repo=$(cd "$(dirname "$0")/../.." && pwd)
 cargo=${REVIEW_CARGO:-cargo}
 packages=(
     unbound-compositor unbound-notify unbound-clipboard unbound-config unbound-power unbound-sound
-    xdg-desktop-portal-unbound unbound-tray unbound-automount
+    xdg-desktop-portal-unbound unbound-file-chooser unbound-tray unbound-automount
     unbound-desktop-surface unbound-bar unbound-launcher unbound-term unbound-lock unbound-screenshot unbound-files
     unbound-settings unbound-monitor unbound-greeter unbound-controlcenter unbound-notifications
 )

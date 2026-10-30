@@ -55,6 +55,8 @@ pub(crate) enum Signal {
     IconSize(f64),
     View(usize),
     Scope(bool),
+    Back,
+    Forward,
 }
 
 pub(crate) type Signals = Rc<RefCell<Vec<Signal>>>;
@@ -212,7 +214,7 @@ impl FilesView {
     }
 
     fn search_focused(&self) -> bool {
-        self.ui.focus() == Some(self.search_field)
+        self.ui.focus() == Some(self.toolbar.search)
     }
 
     pub(crate) fn replace_widget(
@@ -231,8 +233,10 @@ impl FilesView {
 
     fn controls(&self) -> Vec<WidgetId> {
         [
-            Some(self.search_field),
-            Some(self.view_control),
+            Some(self.toolbar.back),
+            Some(self.toolbar.forward),
+            Some(self.toolbar.view),
+            Some(self.toolbar.search),
             self.size_slider,
             self.searching
                 .as_ref()
@@ -429,7 +433,12 @@ impl FilesView {
     }
 
     pub(crate) fn after_ui(&mut self) {
-        self.ui.take_menu_request();
+        if let Some((menu, at)) = self.ui.take_menu_request() {
+            self.requests.push(Request::ShowMenu { menu, at });
+        }
+        if self.ui.take_emoji_picker_request() {
+            self.requests.push(Request::ShowEmojiPicker);
+        }
         match self.ui.take_clipboard_request() {
             Some(ClipboardRequest::Copy(text)) => self.requests.push(Request::CopyText(text)),
             Some(ClipboardRequest::Paste) => self.requests.push(Request::Paste),
@@ -452,6 +461,8 @@ impl FilesView {
                     Signal::Sort(order) => self.table_sorted(order),
                     Signal::Search(text) => self.search_changed(&text),
                     Signal::View(index) => self.view_chosen(index),
+                    Signal::Back => self.back(),
+                    Signal::Forward => self.forward(),
                     Signal::Scope(everywhere) => self.set_scope(everywhere),
                     Signal::IconSize(size) => self.set_icon_size(size.round() as u32),
                     Signal::GoTo(text) => {

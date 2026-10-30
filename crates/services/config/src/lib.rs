@@ -13,6 +13,7 @@ use std::sync::LazyLock;
 use std::time::Duration;
 
 use kdl::{KdlDocument, KdlEntry, KdlNode, KdlValue};
+pub use unbound_design::Accent;
 use unbound_l10n::Localizer;
 
 pub use connectors::{DRM_CLASS, connected_displays};
@@ -51,6 +52,24 @@ pub enum Appearance {
     Dark,
     Light,
     Automatic,
+}
+
+pub const ACCENTS: [(&str, Accent); 8] = [
+    ("ultramarine", Accent::Ultramarine),
+    ("teal", Accent::Teal),
+    ("moss", Accent::Moss),
+    ("amber", Accent::Amber),
+    ("ember", Accent::Ember),
+    ("rose", Accent::Rose),
+    ("plum", Accent::Plum),
+    ("graphite", Accent::Graphite),
+];
+
+pub fn accent_keyword(accent: Accent) -> &'static str {
+    ACCENTS
+        .iter()
+        .find(|(_, candidate)| *candidate == accent)
+        .map_or("ultramarine", |(keyword, _)| keyword)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -566,6 +585,8 @@ impl Default for Accessibility {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
     pub appearance: Appearance,
+    pub accent: Accent,
+    pub tinted_frame: bool,
     pub clock: ClockFormat,
     pub accessibility: Accessibility,
     pub bar: Bar,
@@ -594,6 +615,8 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             appearance: Appearance::Automatic,
+            accent: Accent::default(),
+            tinted_frame: false,
             clock: ClockFormat::Automatic,
             accessibility: Accessibility::default(),
             bar: Bar::default(),
@@ -747,6 +770,10 @@ impl Parser<'_> {
                         ],
                     )
                     .map(|appearance| config.appearance = appearance),
+                "accent" => self
+                    .keyword(node, &ACCENTS)
+                    .map(|accent| config.accent = accent),
+                "tinted-frame" => self.flag(node).map(|tinted| config.tinted_frame = tinted),
                 "accessibility" => {
                     config.accessibility = self.accessibility(node);
                     Ok(())

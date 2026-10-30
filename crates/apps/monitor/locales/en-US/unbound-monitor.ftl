@@ -4,6 +4,7 @@ tab-cpu = CPU
 tab-memory = Memory
 tab-disk = Disk
 tab-network = Network
+tab-gpu = GPU
 
 column-name = Name
 column-interface = Interface
@@ -22,6 +23,9 @@ column-received = Received/s
 column-sent = Sent/s
 column-received-total = Bytes Received
 column-sent-total = Bytes Sent
+column-gpu = % GPU
+column-gpu-time = GPU Time
+column-gpu-memory = GPU Memory
 
 group-kernel = Kernel
 
@@ -44,6 +48,9 @@ summary-received-rate = Data Received/s
 summary-sent-rate = Data Sent/s
 summary-received = Data Received
 summary-sent = Data Sent
+summary-gpu = GPU Usage
+summary-gpu-memory = GPU Memory
+summary-gpu-processes = Processes Using the GPU
 
 size-bytes = { $count ->
     [one] { $count } byte
@@ -56,6 +63,9 @@ size-terabytes = { $value } TB
 per-second = { $size }/s
 
 search-placeholder = Search
+stop-label = Quit Process
+inspect-label = Inspect Process
+tab-label = Show
 button-ok = OK
 button-cancel = Cancel
 button-quit = Quit
@@ -86,5 +96,37 @@ menu-copy-pid = Copy PID
 menu-quit-process = Quit Process…
 menu-force-quit-process = Force Quit Process…
 menu-find = Find
+menu-inspect = Inspect
 menu-edit = Edit
 menu-view = View
+
+inspector-process = { $name } ({ $pid })
+inspector-info = Info
+inspector-threads = Threads
+inspector-files = Open Files
+inspector-memory = Memory Map
+inspector-value = Value
+inspector-parent = Parent
+inspector-children = Children
+inspector-command = Command
+inspector-executable = Executable
+inspector-running = Running For
+inspector-virtual = Virtual Memory
+inspector-tid = TID
+inspector-state = State
+inspector-fd = FD
+inspector-path = Path
+inspector-address = Address
+inspector-size = Size
+inspector-permissions = Access
+inspector-mapping = Mapping
+inspector-not-permitted = Only its owner or an administrator can see this.
+
+state-running = Running
+state-sleeping = Sleeping
+state-waiting = Waiting for the disk
+state-zombie = Ended, waiting for its parent
+state-stopped = Stopped
+state-idle = Idle
+state-unknown = Unknown
+state-ended = Ended

@@ -10,7 +10,7 @@ use unbound_config::{DisplaySettings, MAX_INPUT_SOURCES, Placement, Rotation};
 use unbound_toolkit::ui::{
     Context, Event, Key, Modifiers, PointerButton, SearchField, Ui, Widget, WidgetId,
 };
-use unbound_toolkit::{Image, Palette, Rect, Scene, TextSystem};
+use unbound_toolkit::{Image, Palette, Rect, SHEET_INSET, Scene, TextSystem};
 
 use crate::L10N;
 use crate::about::{About, AboutCommand};
@@ -749,7 +749,21 @@ impl SettingsView {
         handled
     }
 
-    fn settle(&mut self) {
+    pub fn ui(&mut self) -> &mut Ui {
+        &mut self.ui
+    }
+
+    pub fn set_full_screen(&mut self, full_screen: bool) {
+        let inset = match full_screen {
+            true => 0.0,
+            false => SHEET_INSET as f32,
+        };
+        if let Some(root) = self.ui.widget_as::<Root>(self.root) {
+            root.set_inset(inset);
+        }
+    }
+
+    pub fn settle(&mut self) {
         self.process_intents();
         let focused = self.focused_setting();
         if self.drafts.keys().any(|setting| Some(*setting) != focused) {

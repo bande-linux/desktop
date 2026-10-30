@@ -60,13 +60,45 @@ fn bookmark(line: &str) -> Option<Place> {
     })
 }
 
-pub fn rows(home: &Path, user_dirs: Option<&str>, bookmarks: Option<&str>) -> Vec<Row> {
-    let mut favourites = vec![Place {
-        name: folder_name(home),
-        location: Location::Folder(home.to_path_buf()),
-        icon: "user-home",
+const RECENTS: &str = "recents";
+const TRASH: &str = "trash";
+const HIDDEN: char = '-';
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BookmarkEdit {
+    Add(Vec<PathBuf>),
+    Remove(PathBuf),
+    Move {
+        folder: PathBuf,
+        before: Option<PathBuf>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SidebarEdit {
+    pub layout: Option<String>,
+    pub bookmarks: Option<BookmarkEdit>,
+}
+
+fn recents() -> Place {
+    Place {
+        name: L10N.tr("recents"),
+        location: Location::Recents,
+        icon: "document-open-recent",
         kind: PlaceKind::Standard,
-    }];
+    }
+}
+
+fn defaults(home: &Path, user_dirs: Option<&str>, bookmarks: Option<&str>) -> Vec<Place> {
+    let mut favourites = vec![
+        recents(),
+        Place {
+            name: folder_name(home),
+            location: Location::Folder(home.to_path_buf()),
+            icon: "user-home",
+            kind: PlaceKind::Standard,
+        },
+    ];
     for (dir, icon) in USER_DIRS {
         let path = user_dir(home, user_dirs, dir);
         if path != home && path.is_dir() {
@@ -90,24 +122,94 @@ pub fn rows(home: &Path, user_dirs: Option<&str>, bookmarks: Option<&str>) -> Ve
             favourites.push(place);
         }
     }
-    let mut rows = vec![
-        Row::Heading(L10N.tr("sidebar-favourites")),
-        Row::Place(Place {
-            name: L10N.tr("recents"),
-            location: Location::Recents,
-            icon: "document-open-recent",
-            kind: PlaceKind::Standard,
-        }),
-    ];
+    favourites
+}
+
+fn token(location: &Location) -> Option<String> {
+    match location {
+        Location::Recents => Some(RECENTS.to_owned()),
+        Location::Trash => Some(TRASH.to_owned()),
+        Location::Folder(path) => Some(file_uri(path)),
+        Location::Search(_) => None,
+    }
+}
+
+fn location(token: &str) -> Option<Location> {
+    match token.trim() {
+        RECENTS => Some(Location::Recents),
+        TRASH => Some(Location::Trash),
+        uri => bookmark(uri).map(|place| place.location),
+    }
+}
+
+pub fn hidden_places(layout: Option<&str>) -> Vec<Location> {
+    layout
+        .into_iter()
+        .flat_map(str::lines)
+        .filter_map(|line| line.strip_prefix(HIDDEN))
+        .filter_map(location)
+        .collect()
+}
+
+pub fn rows(
+    home: &Path,
+    user_dirs: Option<&str>,
+    bookmarks: Option<&str>,
+    layout: Option<&str>,
+) -> Vec<Row> {
+    let mut known = defaults(home, user_dirs, bookmarks);
+    let hidden = hidden_places(layout);
+    let mut favourites = Vec::new();
+    for line in layout.into_iter().flat_map(str::lines) {
+        if line.starts_with(HIDDEN) {
+            continue;
+        }
+        let Some(location) = location(line) else {
+            continue;
+        };
+        if let Some(at) = known.iter().position(|place| place.location == location) {
+            favourites.push(known.remove(at));
+        }
+    }
+    favourites.extend(
+        known
+            .into_iter()
+            .filter(|place| !hidden.contains(&place.location)),
+    );
+    let mut rows = vec![Row::Heading(L10N.tr("sidebar-favourites"))];
     rows.extend(favourites.into_iter().map(Row::Place));
     rows.push(Row::Heading(L10N.tr("sidebar-locations")));
-    rows.push(Row::Place(Place {
-        name: L10N.tr("trash"),
-        location: Location::Trash,
-        icon: "user-trash",
-        kind: PlaceKind::Standard,
-    }));
+    if !hidden.contains(&Location::Trash) {
+        rows.push(Row::Place(Place {
+            name: L10N.tr("trash"),
+            location: Location::Trash,
+            icon: "user-trash",
+            kind: PlaceKind::Standard,
+        }));
+    }
     rows
+}
+
+pub fn favourites(rows: &[Row]) -> Vec<&Place> {
+    rows.iter()
+        .skip(1)
+        .map_while(|row| match row {
+            Row::Place(place) => Some(place),
+            Row::Heading(_) => None,
+        })
+        .collect()
+}
+
+pub fn layout_text(favourites: &[&Place], hidden: &[Location]) -> String {
+    let shown = favourites.iter().filter_map(|place| token(&place.location));
+    let hidden = hidden
+        .iter()
+        .filter_map(token)
+        .map(|token| format!("{HIDDEN}{token}"));
+    shown
+        .chain(hidden)
+        .map(|line| format!("{line}\n"))
+        .collect()
 }
 
 pub fn without_bookmark(bookmarks: &str, folder: &Path) -> String {

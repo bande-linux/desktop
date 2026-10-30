@@ -1,20 +1,23 @@
 use std::path::PathBuf;
 
 use unbound_toolkit::ui::ScrollState;
-use unbound_toolkit::{Color, Item, Point, Rect, Shape, TextAlign, TextStyle};
+use unbound_toolkit::{Color, Item, Point, Radius, Rect, Shape, TextAlign, TextStyle};
 
 use crate::L10N;
 use crate::browser::{Browser, Location};
-use crate::toolbar::TOOLBAR_HEIGHT;
-use crate::view::{FilesView, Hit, SIDEBAR_WIDTH};
+use crate::view::{FilesView, Hit};
 use crate::views::ViewMode;
 
-pub const TAB_BAR_HEIGHT: f32 = 28.0;
-const NEW_TAB_WIDTH: f32 = 32.0;
+pub const TAB_BAR_HEIGHT: f32 = 36.0;
+const TAB_HEIGHT: f32 = 28.0;
+const TAB_INSET: f32 = 4.0;
+const TAB_GAP: f32 = 4.0;
+const NEW_TAB_WIDTH: f32 = 28.0;
 const CLOSE_SIZE: f32 = 16.0;
 const CLOSE_INSET: f32 = 6.0;
 const LABEL_SIZE: f32 = 12.0;
 const LABEL_INSET: f32 = 26.0;
+const SYMBOL_PIXELS: u32 = 32;
 
 pub(crate) struct Tab {
     browser: Browser,
@@ -179,36 +182,34 @@ impl FilesView {
     }
 
     fn tab_rects(&self) -> (Vec<Rect>, Rect) {
+        let sheet = self.sheet_frame();
         let content = self.content_frame();
-        let available = (content.width - NEW_TAB_WIDTH).max(0.0);
-        let width = available / self.tabs.len().max(1) as f32;
+        let top = sheet.y + TAB_INSET;
+        let left = content.x + TAB_INSET;
+        let available = (content.width - 2.0 * TAB_INSET - NEW_TAB_WIDTH - TAB_GAP).max(0.0);
+        let count = self.tabs.len().max(1) as f32;
+        let width = (available + TAB_GAP) / count;
         let tabs = (0..self.tabs.len())
             .map(|index| {
-                let left = (index as f32 * width).round();
-                let right = ((index + 1) as f32 * width).round();
-                Rect::new(
-                    SIDEBAR_WIDTH + left,
-                    TOOLBAR_HEIGHT,
-                    right - left,
-                    TAB_BAR_HEIGHT,
-                )
+                let start = (index as f32 * width).round();
+                let end = ((index + 1) as f32 * width - TAB_GAP).round();
+                Rect::new(left + start, top, end - start, TAB_HEIGHT)
             })
             .collect();
         (
             tabs,
-            Rect::new(
-                SIDEBAR_WIDTH + available,
-                TOOLBAR_HEIGHT,
-                NEW_TAB_WIDTH,
-                TAB_BAR_HEIGHT,
-            ),
+            Rect::new(left + available + TAB_GAP, top, NEW_TAB_WIDTH, TAB_HEIGHT),
         )
     }
 
-    fn centred(&mut self, text: &str, size: f32, color: Color, area: Rect) -> Item {
+    fn centred(&mut self, text: &str, size: f32, color: Color, strong: bool, area: Rect) -> Item {
+        let weight = match strong {
+            true => TextStyle::SEMIBOLD,
+            false => TextStyle::REGULAR,
+        };
         let paragraph = self.text().paragraph(
             text,
-            TextStyle::new(size, color),
+            TextStyle::new(size, color).weight(weight),
             Some(area.width),
             TextAlign::Center,
         );
@@ -230,21 +231,6 @@ impl FilesView {
         }
         let palette = self.palette;
         let (tabs, new_tab) = self.tab_rects();
-        let content = self.content_frame();
-        let bar = Rect::new(content.x, TOOLBAR_HEIGHT, content.width, TAB_BAR_HEIGHT);
-        items.push(Item::Fill {
-            shape: Shape::rect(bar),
-            paint: palette.overlay.into(),
-        });
-        items.push(Item::Fill {
-            shape: Shape::rect(Rect::new(
-                bar.x,
-                bar.y + TAB_BAR_HEIGHT - 1.0,
-                bar.width,
-                1.0,
-            )),
-            paint: palette.hairline.into(),
-        });
         let titles = self.tab_titles();
         for (index, (tab, title)) in tabs.iter().zip(titles).enumerate() {
             let active = index == self.active_tab;
@@ -252,26 +238,15 @@ impl FilesView {
                 self.hover,
                 Some(Hit::Tab(hovered) | Hit::CloseTab(hovered)) if hovered == index
             );
-            if active {
+            let fill = match (active, hovered) {
+                (true, _) => Some(palette.well),
+                (false, true) => Some(palette.well.with_opacity(0.5)),
+                (false, false) => None,
+            };
+            if let Some(fill) = fill {
                 items.push(Item::Fill {
-                    shape: Shape::rect(*tab),
-                    paint: palette.sheet.into(),
-                });
-            } else if hovered {
-                items.push(Item::Fill {
-                    shape: Shape::rect(Rect::new(tab.x, tab.y, tab.width, TAB_BAR_HEIGHT - 1.0)),
-                    paint: palette.ink2.with_alpha(24).into(),
-                });
-            }
-            if index + 1 < tabs.len() {
-                items.push(Item::Fill {
-                    shape: Shape::rect(Rect::new(
-                        tab.x + tab.width - 1.0,
-                        tab.y,
-                        1.0,
-                        TAB_BAR_HEIGHT,
-                    )),
-                    paint: palette.hairline.into(),
+                    shape: Shape::rounded(*tab, Radius::S),
+                    paint: fill.into(),
                 });
             }
             let color = match active {
@@ -282,39 +257,46 @@ impl FilesView {
                 tab.x + LABEL_INSET,
                 tab.y,
                 (tab.width - 2.0 * LABEL_INSET).max(0.0),
-                TAB_BAR_HEIGHT,
+                TAB_HEIGHT,
             );
-            items.push(self.centred(&title, LABEL_SIZE, color, label));
+            items.push(self.centred(&title, LABEL_SIZE, color, active, label));
             self.hits.push((*tab, Hit::Tab(index)));
             let close = Rect::new(
                 tab.x + CLOSE_INSET,
-                tab.y + (TAB_BAR_HEIGHT - CLOSE_SIZE) / 2.0,
+                tab.y + (TAB_HEIGHT - CLOSE_SIZE) / 2.0,
                 CLOSE_SIZE,
                 CLOSE_SIZE,
             );
             if hovered {
                 if self.hover == Some(Hit::CloseTab(index)) {
                     items.push(Item::Fill {
-                        shape: Shape::rounded(close, CLOSE_SIZE / 2.0),
-                        paint: palette.ink2.with_alpha(50).into(),
+                        shape: Shape::rounded(close, Radius::XS),
+                        paint: palette.well.mix(palette.ink, 0.08).into(),
                     });
                 }
-                items.push(self.centred("\u{00D7}", 14.0, palette.ink2, close));
+                self.symbol("window-close-symbolic", close, palette.ink2, items);
             }
             self.hits.push((close, Hit::CloseTab(index)));
         }
         if self.hover == Some(Hit::NewTab) {
             items.push(Item::Fill {
-                shape: Shape::rect(Rect::new(
-                    new_tab.x,
-                    new_tab.y,
-                    new_tab.width,
-                    TAB_BAR_HEIGHT - 1.0,
-                )),
-                paint: palette.ink2.with_alpha(24).into(),
+                shape: Shape::rounded(new_tab, Radius::S),
+                paint: palette.well.with_opacity(0.5).into(),
             });
         }
-        items.push(self.centred("+", 16.0, palette.ink2, new_tab));
+        let plus = Rect::new(
+            new_tab.x + (NEW_TAB_WIDTH - CLOSE_SIZE) / 2.0,
+            new_tab.y + (TAB_HEIGHT - CLOSE_SIZE) / 2.0,
+            CLOSE_SIZE,
+            CLOSE_SIZE,
+        );
+        self.symbol("list-add-symbolic", plus, palette.ink2, items);
         self.hits.push((new_tab, Hit::NewTab));
+    }
+
+    fn symbol(&mut self, name: &str, rect: Rect, color: Color, items: &mut Vec<Item>) {
+        if let Some(image) = self.icons.symbol(&[name], SYMBOL_PIXELS, color) {
+            items.push(Item::Image { rect, image });
+        }
     }
 }

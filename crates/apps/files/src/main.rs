@@ -8,15 +8,16 @@ use std::time::Instant;
 use accesskit::TreeUpdate;
 use unbound_app_menu::{AppMenu, Standard};
 use unbound_files::{
-    Browser, FilesView, Location, Request, Row, ViewMemory, rows, views_file, with_bookmarks,
-    without_bookmark,
+    BookmarkEdit, Browser, FilesView, Location, Request, Row, SIDEBAR_WIDTH, SidebarEdit,
+    TOOLBAR_HEIGHT, ViewMemory, hidden_places, rows, sidebar_file, status_bar_file, views_file,
+    with_bookmarks, without_bookmark,
 };
 use unbound_fs::Trash;
 use unbound_search::{recently_used_path, usage_path};
 use unbound_thumbnails::Thumbnails;
 use unbound_toolkit::{
-    App, Appearance, DragAction, DragEvent, MenuPlacement, Rect, Role, Scene, TextSystem, Transfer,
-    Window, WindowEvent,
+    App, Appearance, DragAction, DragEvent, FrameRegions, Header, MenuPlacement, Rect, Role, Scene,
+    TextSystem, Transfer, Window, WindowEvent,
 };
 use unbound_volumes::{eject, media_roots};
 use unbound_xdg::{
@@ -38,35 +39,69 @@ fn bookmarks_file() -> Option<PathBuf> {
     config_home().map(|config| config.join("gtk-3.0/bookmarks"))
 }
 
-fn sidebar(home: &Path) -> Vec<Row> {
-    let read = |path: Option<PathBuf>| path.and_then(|path| std::fs::read_to_string(path).ok());
-    rows(
+fn read(path: Option<PathBuf>) -> Option<String> {
+    path.and_then(|path| std::fs::read_to_string(path).ok())
+}
+
+fn layout_file(home: &Path) -> PathBuf {
+    let state_home = std::env::var_os("XDG_STATE_HOME").map(PathBuf::from);
+    sidebar_file(state_home.as_deref(), home)
+}
+
+fn sidebar(home: &Path) -> (Vec<Row>, Vec<Location>) {
+    let layout = read(Some(layout_file(home)));
+    let rows = rows(
         home,
         read(config_home().map(|config| config.join("user-dirs.dirs"))).as_deref(),
         read(bookmarks_file()).as_deref(),
-    )
+        layout.as_deref(),
+    );
+    (rows, hidden_places(layout.as_deref()))
 }
 
-fn add_bookmarks(folders: &[PathBuf], before: Option<&Path>) -> std::io::Result<()> {
-    let file = bookmarks_file().ok_or(std::io::ErrorKind::NotFound)?;
-    let text = std::fs::read_to_string(&file).unwrap_or_default();
+fn replace(file: &Path, text: &str) -> std::io::Result<()> {
     if let Some(parent) = file.parent() {
         std::fs::create_dir_all(parent)?;
     }
     let staging = file.with_extension("new");
-    std::fs::write(&staging, with_bookmarks(&text, folders, before))?;
+    std::fs::write(&staging, text)?;
     std::fs::rename(staging, file)
 }
 
-fn remove_bookmark(folder: &Path) -> std::io::Result<()> {
+fn edit_bookmarks(edit: &BookmarkEdit) -> std::io::Result<()> {
     let file = bookmarks_file().ok_or(std::io::ErrorKind::NotFound)?;
-    let text = std::fs::read_to_string(&file)?;
-    let staging = file.with_extension("new");
-    std::fs::write(&staging, without_bookmark(&text, folder))?;
-    std::fs::rename(staging, file)
+    let text = std::fs::read_to_string(&file).unwrap_or_default();
+    let edited = match edit {
+        BookmarkEdit::Add(folders) => with_bookmarks(&text, folders, None),
+        BookmarkEdit::Remove(folder) => without_bookmark(&text, folder),
+        BookmarkEdit::Move { folder, before } => {
+            with_bookmarks(&text, std::slice::from_ref(folder), before.as_deref())
+        }
+    };
+    replace(&file, &edited)
+}
+
+fn edit_sidebar(home: &Path, edit: &SidebarEdit) -> std::io::Result<()> {
+    if let Some(bookmarks) = &edit.bookmarks {
+        edit_bookmarks(bookmarks)?;
+    }
+    let file = layout_file(home);
+    match &edit.layout {
+        Some(layout) => replace(&file, layout),
+        None => match std::fs::remove_file(&file) {
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => Err(error),
+            _ => Ok(()),
+        },
+    }
 }
 
 impl Files {
+    fn load_sidebar(&mut self) {
+        let (rows, hidden) = sidebar(&self.home);
+        self.view.set_sidebar(rows);
+        self.view.set_hidden_places(hidden);
+    }
+
     fn menu_bar_action(&mut self, window: &mut Window, action: &str) -> bool {
         self.view
             .set_clipboard_has_files(window.clipboard_has_uris());
@@ -140,16 +175,18 @@ impl Files {
                 Request::Eject(volume) => eject(vec![volume]),
                 Request::NewWindow(location) => new_window(window, &location),
                 Request::OpenTerminal(folder) => open_terminal(window, &folder),
-                Request::AddBookmarks { folders, before } => {
-                    match add_bookmarks(&folders, before.as_deref()) {
-                        Ok(()) => self.view.set_sidebar(sidebar(&self.home)),
-                        Err(error) => tracing::warn!("cannot add the bookmarks: {error}"),
+                Request::EditSidebar(edit) => {
+                    if let Err(error) = edit_sidebar(&self.home, &edit) {
+                        tracing::warn!("cannot change the sidebar: {error}");
+                    }
+                    self.load_sidebar();
+                }
+                Request::ShowEmojiPicker => {
+                    if let Err(error) = window.show_emoji_picker() {
+                        tracing::warn!("cannot show the emoji picker: {error}");
                     }
                 }
-                Request::RemoveBookmark(folder) => match remove_bookmark(&folder) {
-                    Ok(()) => self.view.set_sidebar(sidebar(&self.home)),
-                    Err(error) => tracing::warn!("cannot remove the bookmark: {error}"),
-                },
+                Request::PlaySound(name) => play_sound(name),
             }
         }
         let title = self.view.title();
@@ -164,8 +201,13 @@ impl Files {
 
 impl App for Files {
     fn scene(&mut self, window: &mut Window) -> Scene {
+        let full_screen = window.header_height() == 0;
+        window.set_frame_regions(frame_regions(full_screen));
+        self.view.set_full_screen(full_screen);
         let (width, height) = window.size();
-        self.view.scene(width, height)
+        let scene = self.view.scene(width, height);
+        window.set_header(self.view.header());
+        scene
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
@@ -289,6 +331,25 @@ const TERMINAL_DIRECTORY: &str = "--working-directory";
 const TRASH_URI: &str = "trash:///";
 const RECENTS_URI: &str = "recent:///";
 
+fn frame_regions(full_screen: bool) -> FrameRegions {
+    FrameRegions {
+        sidebar: SIDEBAR_WIDTH,
+        toolbar: if full_screen { TOOLBAR_HEIGHT } else { 0.0 },
+    }
+}
+
+fn play_sound(name: &'static str) {
+    let played = std::thread::Builder::new()
+        .name("sound".to_owned())
+        .spawn(move || match zbus::blocking::Connection::session() {
+            Ok(session) => unbound_sound::play(&session, name),
+            Err(error) => tracing::debug!("cannot play {name}: {error}"),
+        });
+    if let Err(error) = played {
+        tracing::warn!("cannot play {name}: {error}");
+    }
+}
+
 fn open_terminal(window: &mut Window, folder: &Path) {
     let token = window.activation_token(TERMINAL_APP_ID).ok();
     let command = [
@@ -355,7 +416,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(path) = reveal {
         browser.reveal(&path);
     }
-    let sidebar = sidebar(&home);
+    let (sidebar, hidden) = sidebar(&home);
     let apps = Apps::load(data_dirs(), &config_dirs());
     let thumbnails = Thumbnails::for_user(apps.data_dirs());
     let mut view = FilesView::new(
@@ -365,6 +426,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         Appearance::default().palette(),
         TextSystem::new(),
     )?;
+    view.set_hidden_places(hidden);
     if let Some(thumbnails) = thumbnails {
         view.set_thumbnails(thumbnails);
     }
@@ -373,6 +435,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     view.set_templates(user_dir(&home, user_dirs.as_deref(), UserDir::Templates));
     let state_home = std::env::var_os("XDG_STATE_HOME").map(PathBuf::from);
     view.set_view_memory(ViewMemory::load(views_file(state_home.as_deref(), &home)));
+    view.set_status_bar_file(status_bar_file(state_home.as_deref(), &home));
     let data_home = std::env::var_os("XDG_DATA_HOME").map(PathBuf::from);
     if let Some(usage) = usage_path(state_home.as_deref(), Some(&home)) {
         view.set_recents_sources(recently_used_path(data_home.as_deref(), &home), usage);
@@ -383,6 +446,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     view.set_media(media_roots(&std::env::var("USER").unwrap_or_default()));
     let title = view.title();
     let mut window = Window::open(Role::toplevel(&title, APP_ID), WINDOW_SIZE)?;
+    window.set_frame_regions(frame_regions(false));
+    window.set_header(Header::default());
     let app_menu = AppMenu::export(APP_ID, menu_bar::app_menus())
         .inspect_err(|error| tracing::warn!("{error}"))
         .ok();

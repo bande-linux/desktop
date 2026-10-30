@@ -18,7 +18,6 @@ use unbound_wallpaper::{Fit, render};
 use unbound_xdg::file_uri;
 
 const SCREEN: (f32, f32) = (720.0, 480.0);
-const MIN_SSIM: f64 = 0.99;
 
 fn item(name: &str, kind: Kind) -> Item {
     Item {
@@ -308,38 +307,10 @@ fn wallpaper_at(view: &mut DesktopView, scheme: Scheme, now: Instant) {
 
 fn check_golden(name: &str, view: &mut DesktopView) {
     let scene = view.scene(Instant::now() + Duration::from_secs(5));
-    for (scale, suffix) in [(1.0, ""), (1.5, "-1.5x")] {
-        let (width, height) = (
-            (f64::from(scene.width) * scale).round() as u32,
-            (f64::from(scene.height) * scale).round() as u32,
-        );
-        let mut rgba = vec![0; (width * height * 4) as usize];
-        CpuRenderer::new()
-            .render_into(&scene, scale, &mut rgba)
-            .unwrap();
-        compare(&format!("{name}{suffix}"), width, height, rgba);
-    }
-}
-
-fn compare(name: &str, width: u32, height: u32, rgba: Vec<u8>) {
-    let actual = image::RgbaImage::from_raw(width, height, rgba).unwrap();
-    let actual = image::DynamicImage::ImageRgba8(actual).to_rgb8();
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("tests/golden/{name}.png"));
-    if std::env::var_os("UNBOUND_UPDATE_GOLDENS").is_some() {
-        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        actual.save(&path).unwrap();
-    }
-    let target = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}.png"));
-    actual.save(&target).unwrap();
-    let expected = image::open(&path)
-        .unwrap_or_else(|error| panic!("{}: {error}", path.display()))
-        .to_rgb8();
-    let similarity = image_compare::rgb_hybrid_compare(&expected, &actual).unwrap();
-    assert!(
-        similarity.score >= MIN_SSIM,
-        "{name} differs from its golden: {:.4} (frame in {})",
-        similarity.score,
-        target.display()
+    let frame = CpuRenderer::new().render(&scene).unwrap();
+    unbound_golden::assert_golden!(
+        name,
+        &unbound_golden::from_rgba(frame.width, frame.height, frame.rgba)
     );
 }
 

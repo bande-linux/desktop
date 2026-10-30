@@ -1,10 +1,13 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+mod support;
+
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use accesskit::{Action, ActionRequest, NodeId, Role, TreeId};
+use accesskit::{Action, ActionRequest, Role, TreeId};
+use support::{WAIT, find};
 use unbound_settings::{
     Command, Package, PaneId, SettingsView, SoftwareState, check, feed, follow_software,
 };
@@ -13,8 +16,6 @@ use unbound_toolkit::{Palette, Scheme, TextSystem};
 use zbus::object_server::{ObjectServer, SignalEmitter};
 use zbus::zvariant::{OwnedObjectPath, Value};
 
-const SIZE: (u32, u32) = (900, 600);
-const WAIT: Duration = Duration::from_secs(5);
 const UPDATES: [(&str, &str, u64); 2] = [
     (
         "firefox-esr;128.4.0;arm64;debian-security",
@@ -130,17 +131,6 @@ impl Transaction {
 
     #[zbus(signal)]
     async fn finished(emitter: &SignalEmitter<'_>, exit: u32, runtime: u32) -> zbus::Result<()>;
-}
-
-fn find(view: &mut SettingsView, role: Role, label: &str) -> Option<NodeId> {
-    view.scene(SIZE.0, SIZE.1);
-    view.accessibility()
-        .nodes
-        .into_iter()
-        .find(|(_, node)| {
-            node.role() == role && node.label().is_some_and(|text| text.starts_with(label))
-        })
-        .map(|(id, _)| id)
 }
 
 #[test]

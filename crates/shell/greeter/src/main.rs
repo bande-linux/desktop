@@ -283,13 +283,9 @@ impl App for Greeter {
     }
 
     fn source_ready(&mut self, window: &mut Window, index: usize) {
-        match self.backdrop.as_ref().filter(|_| index == 0) {
+        match self.backdrop.as_mut().filter(|_| index == 0) {
             Some(inbox) => {
-                let delivered = inbox.drain();
-                if delivered.is_empty() {
-                    self.backdrop = None;
-                }
-                for (look, image) in delivered {
+                for (look, image) in inbox.drain() {
                     match look {
                         Look::Blurred => {
                             self.screen

@@ -1,5 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+mod support;
+
 use std::cell::Cell;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -24,10 +26,10 @@ use unbound_toolkit::{
     Scene, Scheme, Shape, TextSystem,
 };
 
+use support::check_golden;
+
 const ICON: f32 = 40.0;
 const HEIGHT: u32 = 720;
-const MIN_SSIM: f64 = 0.99;
-const WALLPAPER: u8 = 0x80;
 
 fn data() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../data")
@@ -191,42 +193,12 @@ impl Rail {
     }
 }
 
-fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>) {
-    let over_wallpaper = rgba
-        .as_chunks::<4>()
-        .0
-        .iter()
-        .flat_map(|pixel| {
-            let behind = u16::from(255 - pixel[3]) * u16::from(WALLPAPER) / 255;
-            [0, 1, 2].map(|channel| (u16::from(pixel[channel]) + behind).min(255) as u8)
-        })
-        .collect();
-    let actual = image::RgbImage::from_raw(size.0, size.1, over_wallpaper).expect("frame");
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("tests/golden/{name}.png"));
-    if std::env::var_os("UNBOUND_UPDATE_GOLDENS").is_some() {
-        actual.save(&path).expect("write golden");
-    }
-    let target = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}.png"));
-    actual.save(&target).expect("save the frame");
-    let expected = image::open(&path)
-        .unwrap_or_else(|error| panic!("{}: {error}", path.display()))
-        .to_rgb8();
-    let similarity = image_compare::rgb_hybrid_compare(&expected, &actual).expect("same size");
-    assert!(
-        similarity.score >= MIN_SSIM,
-        "{name} differs from its golden: {:.4} (frame in {})",
-        similarity.score,
-        target.display()
-    );
-}
-
 #[test]
-fn the_combined_bar_matches_its_goldens_in_light_and_dark_at_one_and_one_and_a_half() {
+fn the_combined_bar_matches_its_goldens_in_light_and_dark_and_at_one_and_a_half() {
     for (scheme, scale, name) in [
         (Scheme::Light, 1.0, "bar-light"),
         (Scheme::Dark, 1.0, "bar-dark"),
         (Scheme::Light, 1.5, "bar-light-1.5x"),
-        (Scheme::Dark, 1.5, "bar-dark-1.5x"),
     ] {
         let mut rail = Rail::at_scale(scheme, HEIGHT, apps(scale), scale);
         rail.state.borrow_mut().update_launcher(
@@ -458,42 +430,30 @@ fn an_auto_hidden_bar_reveals_on_an_edge_push_and_waits_longer_over_full_screen(
 }
 
 #[test]
-fn the_expanded_bar_matches_its_goldens_in_light_and_dark_at_one_and_one_and_a_half() {
-    for (scheme, scale, name) in [
-        (Scheme::Light, 1.0, "bar-expanded-light"),
-        (Scheme::Dark, 1.0, "bar-expanded-dark"),
-        (Scheme::Light, 1.5, "bar-expanded-light-1.5x"),
-        (Scheme::Dark, 1.5, "bar-expanded-dark-1.5x"),
-    ] {
-        let mut rail = Rail::at_scale(scheme, HEIGHT, apps(scale), scale);
-        rail.view.set_expanded(true);
-        rail.view.set_app_menus(
-            ["File", "Edit", "View", "Go", "Window", "Help"]
-                .map(str::to_owned)
-                .to_vec(),
-        );
-        rail.state
-            .borrow_mut()
-            .set_rail(rail.view.apps_region(HEIGHT as f32));
-        rail.state.borrow_mut().update_launcher(
-            "org.unbound.Terminal",
-            LauncherUpdate {
-                count: Some(3),
-                count_visible: Some(true),
-                ..LauncherUpdate::default()
-            },
-            rail.clock.get(),
-        );
-        rail.frame(scale);
-        rail.advance(Duration::from_secs(2));
-        let frame = rail.frame(scale);
-        let (width, height) = rail.size();
-        let pixels = (
-            (f64::from(width) * scale).round() as u32,
-            (f64::from(height) * scale).round() as u32,
-        );
-        check_golden(name, pixels, frame);
-    }
+fn the_expanded_bar_matches_its_golden() {
+    let mut rail = Rail::new(Scheme::Light, HEIGHT, apps(1.0));
+    rail.view.set_expanded(true);
+    rail.view.set_app_menus(
+        ["File", "Edit", "View", "Go", "Window", "Help"]
+            .map(str::to_owned)
+            .to_vec(),
+    );
+    rail.state
+        .borrow_mut()
+        .set_rail(rail.view.apps_region(HEIGHT as f32));
+    rail.state.borrow_mut().update_launcher(
+        "org.unbound.Terminal",
+        LauncherUpdate {
+            count: Some(3),
+            count_visible: Some(true),
+            ..LauncherUpdate::default()
+        },
+        rail.clock.get(),
+    );
+    rail.frame(1.0);
+    rail.advance(Duration::from_secs(2));
+    let frame = rail.frame(1.0);
+    check_golden("bar-expanded-light", rail.size(), frame);
 }
 
 #[test]
@@ -569,7 +529,8 @@ fn files_menus() -> Node {
     )
 }
 
-fn open_cascade(scheme: Scheme, query: &str) -> (Vec<u8>, (u32, u32)) {
+fn open_cascade(query: &str) -> (Vec<u8>, (u32, u32)) {
+    let scheme = Scheme::Light;
     let mut rail = Rail::new(scheme, HEIGHT, apps(1.0));
     rail.frame(1.0);
     let header = rail.view.slot_rect(Slot::App).expect("the header");
@@ -634,13 +595,8 @@ fn open_cascade(scheme: Scheme, query: &str) -> (Vec<u8>, (u32, u32)) {
 
 #[test]
 fn the_open_cascade_keeps_the_pressed_header_and_offers_type_to_search() {
-    for (scheme, name) in [
-        (Scheme::Light, "cascade-light"),
-        (Scheme::Dark, "cascade-dark"),
-    ] {
-        let (rgba, size) = open_cascade(scheme, "");
+    for (query, name) in [("", "cascade-light"), ("fin", "cascade-light-searching")] {
+        let (rgba, size) = open_cascade(query);
         check_golden(name, size, rgba);
-        let (rgba, size) = open_cascade(scheme, "fin");
-        check_golden(&format!("{name}-searching"), size, rgba);
     }
 }

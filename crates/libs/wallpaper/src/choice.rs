@@ -4,7 +4,7 @@ use std::thread;
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
-use crate::inbox::Outbox;
+use unbound_inbox::Outbox;
 
 pub const DEFAULT_WALLPAPER: &str = "drift";
 

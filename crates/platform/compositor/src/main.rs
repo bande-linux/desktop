@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::path::{Path, PathBuf};
 use std::process::{Child, ExitCode};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use smithay::backend::drm::{DrmEvent, DrmEventMetadata};
 use smithay::backend::udev::{UdevBackend, UdevEvent};
@@ -13,9 +13,10 @@ use smithay::utils::{Clock, Monotonic, Size};
 use smithay::wayland::socket::ListeningSocketSource;
 use unbound_compositor::{
     CLIPBOARD_DAEMON, CursorTheme, DrmBackend, FrameClock, FrameOutput, FrameScheduler, GREETER,
-    Headless, InputSettings, REFRESH, REVIEW, Renderer, SCREENSHOT, SHELL, SessionRequest,
-    SessionRole, SessionUpkeep, export_session_environment, follow_alerts, follow_appearance,
-    follow_input_settings, follow_session, notify_ready, serve_keyboard_monitor,
+    Headless, InputSettings, REFRESH, REVIEW, Renderer, SCREENSHOT,
+    SESSION_CLIENT_RESTART_THROTTLE, SHELL, SessionRequest, SessionRole, SessionUpkeep, Sleep,
+    export_session_environment, follow_alerts, follow_appearance, follow_input_settings,
+    follow_session, follow_sleep, notify_ready, serve_keyboard_monitor,
 };
 use unbound_config::{BUS_NAME, Config, OBJECT_PATH, config_path};
 use zbus::blocking::fdo::PropertiesProxy;
@@ -34,6 +35,24 @@ struct App<O> {
     schedulers: Vec<FrameScheduler>,
     started: Duration,
     shown: bool,
+}
+
+struct Greeter {
+    child: Option<Child>,
+    started: Instant,
+}
+
+impl Greeter {
+    fn start(compositor: &mut Headless) -> Self {
+        let child = compositor
+            .spawn_shell_client(Path::new(GREETER))
+            .inspect_err(|error| compositor.report_start_failure(Path::new(GREETER), error))
+            .ok();
+        Self {
+            child,
+            started: Instant::now(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -187,6 +206,11 @@ fn hotplug(app: &mut App<DrmBackend>) {
     }
 }
 
+fn reactivate(app: &mut App<DrmBackend>) {
+    hotplug(app);
+    app.schedulers.iter_mut().for_each(FrameScheduler::resume);
+}
+
 fn page_flipped(app: &mut App<DrmBackend>, crtc: crtc::Handle, metadata: Option<DrmEventMetadata>) {
     let flipped = app.output.flipped(crtc, metadata).and_then(|flipped| {
         let Some((name, vblank)) = flipped else {
@@ -244,10 +268,27 @@ fn run_drm(
             tracing::warn!("cannot follow the session: {error}");
         }
         if app.output.session_active() {
-            hotplug(app);
-            app.schedulers.iter_mut().for_each(FrameScheduler::resume);
+            reactivate(app);
         }
     })?;
+    match follow_sleep() {
+        Ok(changes) => {
+            handle.insert_source(changes, |event, _, app| match event {
+                Event::Msg(Sleep::Starting) => app.output.suspend_input(),
+                Event::Msg(Sleep::Ended) => {
+                    if let Err(error) = app.output.wake() {
+                        tracing::warn!("cannot wake the displays and input: {error}");
+                    }
+                    if app.output.session_active() {
+                        reactivate(app);
+                    }
+                    app.compositor.woke();
+                }
+                Event::Closed => {}
+            })?;
+        }
+        Err(error) => tracing::warn!("cannot follow sleep: {error}"),
+    }
     handle.insert_source(notifiers.device, |event, metadata, app| match event {
         DrmEvent::VBlank(crtc) => page_flipped(app, crtc, *metadata),
         DrmEvent::Error(error) => tracing::warn!("DRM error: {error}"),
@@ -450,15 +491,7 @@ where
         }
         Session::Greeter => {
             app.compositor.apply_input_settings(InputSettings::system());
-            let greeter = app
-                .compositor
-                .spawn_shell_client(Path::new(GREETER))
-                .inspect_err(|error| {
-                    app.compositor
-                        .report_start_failure(Path::new(GREETER), error)
-                })
-                .ok();
-            (Some(greeter), None)
+            (Some(Greeter::start(&mut app.compositor)), None)
         }
     };
     let mut timeout = None;
@@ -470,13 +503,25 @@ where
             review = None;
         }
         let upkeep = match greeter.as_mut() {
-            Some(Some(greeter)) => {
-                if greeter.try_wait()?.is_some() {
+            Some(Greeter {
+                child: Some(child), ..
+            }) => {
+                if child.try_wait()?.is_some() {
                     return Ok(app);
                 }
                 SessionUpkeep::default()
             }
-            Some(None) => SessionUpkeep::default(),
+            Some(waiting) => {
+                if waiting.started.elapsed() >= SESSION_CLIENT_RESTART_THROTTLE {
+                    *waiting = Greeter::start(&mut app.compositor);
+                }
+                SessionUpkeep {
+                    retry_in: waiting.child.is_none().then(|| {
+                        SESSION_CLIENT_RESTART_THROTTLE.saturating_sub(waiting.started.elapsed())
+                    }),
+                    ..SessionUpkeep::default()
+                }
+            }
             None => app.compositor.keep_session_clients_running(),
         };
         for (executable, error) in &upkeep.failures {
@@ -494,10 +539,10 @@ where
         let snap_due = compositor.snap_tick(now());
         let mut frame_wake = None;
         for scheduler in schedulers.iter_mut() {
-            let frame = scheduler
-                .poll(now, compositor, output)
-                .map_err(Into::into)?;
-            frame_wake = frame_wake.into_iter().chain(frame.wake_at).min();
+            match scheduler.poll(now, compositor, output) {
+                Ok(frame) => frame_wake = frame_wake.into_iter().chain(frame.wake_at).min(),
+                Err(error) => tracing::warn!("cannot show a frame: {}", error.into()),
+            }
         }
         let frame_wait = frame_wake.map(|at: Duration| at.saturating_sub(now()));
         let idle_wait = compositor

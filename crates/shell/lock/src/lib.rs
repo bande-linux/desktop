@@ -21,7 +21,8 @@ use unbound_toolkit::{
 
 pub use backdrop::{BackdropSource, Look, load_backdrop};
 pub use pam::{AuthError, authenticate};
-pub use unbound_wallpaper::{Inbox, Variant};
+pub use unbound_inbox::Inbox;
+pub use unbound_wallpaper::Variant;
 pub use user::{User, current as current_user, display_name};
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-lock.ftl");

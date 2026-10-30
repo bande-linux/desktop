@@ -349,10 +349,6 @@ impl TestClient {
         self.shell_request(server, |shell| shell.quit_app(app_id.to_owned()));
     }
 
-    pub fn force_quit_app(&mut self, server: &mut Headless, app_id: &str) {
-        self.shell_request(server, |shell| shell.force_quit_app(app_id.to_owned()));
-    }
-
     pub fn activate_window(&mut self, server: &mut Headless, identifier: &str) {
         self.shell_request(server, |shell| shell.activate_window(identifier.to_owned()));
     }

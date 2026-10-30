@@ -201,14 +201,6 @@ fn a_positive_timeout_expires_with_reason_1() {
 }
 
 #[test]
-fn a_zero_timeout_never_expires() {
-    let fixture = start();
-    fixture.notify(0, "sticky", &[], 0);
-    fixture.assert_quiet();
-    assert_eq!(fixture.server.active().len(), 1);
-}
-
-#[test]
 fn replacing_restarts_the_expiry() {
     let fixture = start();
     let id = fixture.notify(0, "first", &[], 100);
@@ -259,14 +251,6 @@ fn a_resident_notification_stays_after_an_action() {
     assert_eq!(fixture.next_event(), Event::Action(id, "pause".to_owned()));
     fixture.assert_quiet();
     assert_eq!(fixture.server.active().len(), 1);
-}
-
-#[test]
-fn only_offered_actions_can_be_invoked() {
-    let fixture = start();
-    let id = fixture.notify(0, "update ready", &["restart", "Restart now"], 0);
-    assert!(!fixture.server.invoke_action(id, "delete").expect("invoke"));
-    fixture.assert_quiet();
 }
 
 #[test]

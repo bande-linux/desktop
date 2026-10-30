@@ -106,6 +106,29 @@ fn a_top_bar_pushes_windows_below_it() {
 }
 
 #[test]
+fn the_menu_bar_spans_the_whole_top_edge_even_when_the_dock_reserved_its_side_first() {
+    let mut server = server();
+    let mut shell = TestClient::connect(&mut server);
+    shell.show_named_layer(
+        &mut server,
+        &panel(Layer::Top, Anchor::Left, (40, 120), 40),
+        "dock",
+    );
+    let bar = shell.show_named_layer(
+        &mut server,
+        &panel(
+            Layer::Top,
+            Anchor::Top | Anchor::Left | Anchor::Right,
+            (0, 24),
+            24,
+        ),
+        "menubar",
+    );
+
+    assert_eq!(bar, (OUTPUT.0 as u32, 24));
+}
+
+#[test]
 fn background_layers_are_drawn_below_windows_and_top_layers_above() {
     let mut server = server();
     let mut renderer = Renderer::new().expect("Vulkan renderer");
@@ -642,6 +665,37 @@ fn the_shell_hears_which_app_is_active() {
 
     assert_eq!(heard[..2], ["", "org.example.Editor"]);
     assert_eq!(heard.last().map(String::as_str), Some("org.example.Viewer"));
+}
+
+#[test]
+fn an_app_stays_active_after_closing_its_last_window_until_it_quits() {
+    let mut server = server();
+    let mut shell = TestClient::connect_as_shell(&mut server);
+    shell.join_shell(&mut server);
+    let pixels = red(32, 32);
+    let mut other = TestClient::connect(&mut server);
+    other.use_seat(&mut server);
+    other.show_window(&mut server, &image(&pixels, 32, 32));
+    other.set_app_id(&mut server, 0, "org.example.Viewer");
+    let mut app = TestClient::connect(&mut server);
+    app.use_seat(&mut server);
+    app.show_window(&mut server, &image(&pixels, 32, 32));
+    app.set_app_id(&mut server, 0, "org.example.Editor");
+    roundtrip(&mut server, &mut [&mut app, &mut other, &mut shell]);
+
+    app.close_window(&mut server, 0);
+    roundtrip(&mut server, &mut [&mut app, &mut other, &mut shell]);
+    assert_eq!(
+        shell.active_apps().last().map(String::as_str),
+        Some("org.example.Editor")
+    );
+    drop(app);
+    roundtrip(&mut server, &mut [&mut other, &mut shell]);
+
+    assert_eq!(
+        shell.active_apps().last().map(String::as_str),
+        Some("org.example.Viewer")
+    );
 }
 
 #[test]

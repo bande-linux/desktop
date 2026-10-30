@@ -8,7 +8,7 @@ use unbound_launcher::{
     Action, AppInfo, Catalog, Hit, Kind, Launcher, Loaded, PaneInfo, SettingInfo, Target,
 };
 use unbound_preview::preview;
-use unbound_search::{FileHit, FileResults, PREFIX, Usage, WORD, usage_path};
+use unbound_search::{EXACT, FileHit, FileResults, PREFIX, Usage, WORD, usage_path};
 use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer, PointerButton};
 use unbound_toolkit::{Appearance, Color, CpuRenderer, Image, Point, Scheme, TextSystem};
 
@@ -235,6 +235,14 @@ fn a_file_is_the_top_hit_when_it_matches_best() {
             "/home/someone/Documents/budget.ods"
         )))]
     );
+}
+
+#[test]
+fn an_app_named_by_a_word_of_the_query_beats_a_folder_of_exactly_that_name() {
+    let mut launcher = launcher();
+    typed(&mut launcher, "settings");
+    files(&mut launcher, &[("src/settings", true, EXACT)]);
+    assert_eq!(launcher.selection().unwrap().title, "System Settings");
 }
 
 #[test]

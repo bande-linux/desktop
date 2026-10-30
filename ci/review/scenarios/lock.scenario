@@ -1,0 +1,22 @@
+# Lock the screen with Super+Ctrl+Q and try a wrong password. The review user's password is unknown, so the session stays locked.
+key super+space
+wait 600ms
+type "terminal"
+wait 500ms
+key enter
+wait-for-window "org.unbound.Terminal"
+wait 1s
+note "Lock the screen"
+key super+ctrl+q
+wait 2s
+shot "lock screen"
+note "A key press shows the password field"
+type "wrong password"
+wait 800ms
+shot "typing"
+key enter
+wait 3s
+shot "after a wrong password"
+key escape
+wait 1s
+shot "after escape"

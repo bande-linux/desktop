@@ -1,0 +1,67 @@
+# Open each app from the launcher, look at it, right-click inside it and open its menu bar menus.
+note "Files"
+key super+space
+wait 600ms
+type "files"
+wait 500ms
+key enter
+wait-for-window "org.unbound.Files"
+wait 1500ms
+shot "files"
+click right 1500 900
+wait 1s
+shot "files context menu"
+key escape
+wait 500ms
+note "The app's first menu in the menu bar"
+click 170 22
+wait 1s
+shot "files app menu"
+key escape
+wait 500ms
+note "Settings"
+key super+space
+wait 600ms
+type "settings"
+wait 500ms
+key enter
+wait-for-window "org.unbound.Settings"
+wait 1500ms
+shot "settings"
+note "Activity Monitor"
+key super+space
+wait 600ms
+type "activity"
+wait 500ms
+key enter
+wait-for-window "org.unbound.ActivityMonitor"
+wait 2s
+shot "activity monitor"
+click right 1500 700
+wait 1s
+shot "activity monitor context menu"
+key escape
+wait 500ms
+note "Terminal"
+key super+space
+wait 600ms
+type "terminal"
+wait 500ms
+key enter
+wait-for-window "org.unbound.Terminal"
+wait 1500ms
+type "ls -la /etc | head -30\n"
+wait 1s
+shot "terminal"
+click right 1500 900
+wait 1s
+shot "terminal context menu"
+key escape
+wait 500ms
+note "Force Quit"
+key super+alt+escape
+wait 2s
+shot "force quit"
+key escape
+wait 1s
+shot "all apps open"

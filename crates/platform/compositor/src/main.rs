@@ -15,7 +15,8 @@ use unbound_compositor::{
     REVIEW, Renderer, SCREENSHOT, SessionRequest, SessionRole, SessionUpkeep, automatic_scale,
     export_session_environment, follow_reduced_motion, follow_session, notify_ready,
 };
-use unbound_config::{Config, config_path};
+use unbound_config::{BUS_NAME, Config, OBJECT_PATH, config_path};
+use zbus::blocking::fdo::PropertiesProxy;
 
 const HEADLESS_SIZE: (i32, i32) = (1920, 1080);
 
@@ -96,6 +97,26 @@ fn configured_scale(connector: &str) -> Option<f64> {
     Config::parse(&source).ok()?.outputs.get(connector)?.scale
 }
 
+fn follow_output_settings(publish: channel::Sender<()>) -> zbus::Result<()> {
+    let connection = zbus::blocking::Connection::session()?;
+    let properties = PropertiesProxy::builder(&connection)
+        .destination(BUS_NAME)?
+        .path(OBJECT_PATH)?
+        .build()?;
+    let changes = properties.receive_properties_changed()?;
+    std::thread::spawn(move || {
+        for change in changes {
+            let outputs_changed = change
+                .args()
+                .is_ok_and(|args| args.changed_properties().contains_key("Outputs"));
+            if outputs_changed && publish.send(()).is_err() {
+                return;
+            }
+        }
+    });
+    Ok(())
+}
+
 fn run_drm(device: Option<&Path>, session: Session) -> Result<(), Box<dyn Error>> {
     let (mut output, notifiers) = DrmOutput::open(device)?;
     tracing::info!(
@@ -104,10 +125,13 @@ fn run_drm(device: Option<&Path>, session: Session) -> Result<(), Box<dyn Error>
         1.0 / output.refresh().as_secs_f64()
     );
     let config = output.output_config();
-    let scale = configured_scale(&config.name)
-        .unwrap_or_else(|| automatic_scale(config.size, config.physical_size_mm));
+    let (connector, size, physical_size_mm) =
+        (config.name.clone(), config.size, config.physical_size_mm);
+    let output_scale = move || {
+        configured_scale(&connector).unwrap_or_else(|| automatic_scale(size, physical_size_mm))
+    };
     let mut compositor = Headless::with_output(config)?;
-    compositor.set_output_scale(scale);
+    compositor.set_output_scale(output_scale());
     if !compositor.enable_explicit_sync(output.device_fd()) {
         tracing::warn!(
             "{} has no syncobj eventfd; explicit sync is off",
@@ -133,6 +157,18 @@ fn run_drm(device: Option<&Path>, session: Session) -> Result<(), Box<dyn Error>
         }
         DrmEvent::Error(error) => tracing::warn!("DRM error: {error}"),
     })?;
+    let (settings, settings_changes) = channel::channel();
+    match follow_output_settings(settings) {
+        Ok(()) => {
+            handle.insert_source(settings_changes, move |event, _, app| {
+                let scale = output_scale();
+                if matches!(event, Event::Msg(())) && scale != app.compositor.output_scale() {
+                    app.compositor.set_output_scale(scale);
+                }
+            })?;
+        }
+        Err(error) => tracing::warn!("cannot follow the display settings: {error}"),
+    }
     let input = output.input_backend()?;
     handle.insert_source(input, |event, _, app| {
         if let Err(error) = app.compositor.handle_input(event) {

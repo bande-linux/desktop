@@ -77,18 +77,20 @@ fn sender_lookup(
             },
             |entry| entry.name.clone(),
         );
-        let icon_name = Some(notification.app_icon.as_str())
-            .filter(|icon| !icon.is_empty())
-            .or_else(|| entry.and_then(|entry| entry.icon.as_deref()))
-            .map(str::to_owned);
-        let icon = icon_name.and_then(|icon_name| {
+        let icon = [
+            Some(notification.app_icon.as_str()).filter(|icon| !icon.is_empty()),
+            entry.and_then(|entry| entry.icon.as_deref()),
+        ]
+        .into_iter()
+        .flatten()
+        .find_map(|icon_name| {
             icons
-                .entry(icon_name.clone())
+                .entry(icon_name.to_owned())
                 .or_insert_with(|| {
                     let path = if icon_name.starts_with('/') {
-                        Some(Path::new(&icon_name).to_path_buf())
+                        Some(Path::new(icon_name).to_path_buf())
                     } else {
-                        find_icon(&icon_name, ICON_PIXELS, &[], &directories)
+                        find_icon(icon_name, ICON_PIXELS, &[], &directories)
                     };
                     path.and_then(|path| Image::load(&path, ICON_PIXELS))
                 })

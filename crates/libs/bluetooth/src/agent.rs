@@ -151,6 +151,9 @@ impl Agent {
 }
 
 pub fn register_agent(system: &Connection, prompt: Arc<dyn PairingPrompt>) -> zbus::Result<()> {
+    if !crate::bluez_running(system)? {
+        return Ok(());
+    }
     system.object_server().at(
         AGENT_PATH,
         Agent {

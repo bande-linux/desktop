@@ -495,3 +495,45 @@ fn an_outline_is_a_tree_grid_with_levels_and_expandable_rows() {
     assert_eq!(helper.1.level(), Some(2));
     assert!(fixture.selection().is_empty(), "expanding selects nothing");
 }
+
+#[test]
+fn code_opens_and_closes_branches_and_a_hidden_selection_moves_to_its_branch() {
+    let mut fixture = outline();
+    assert!(fixture.table().set_row_expanded("mail", true));
+    assert!(!fixture.table().set_row_expanded("mail", true));
+    assert!(!fixture.table().set_row_expanded("notes", true));
+    fixture.ui.scene(AREA.width as u32, AREA.height as u32);
+    fixture.click(1, NONE, 1);
+    assert_eq!(fixture.selection(), keys(&["mail helper"]));
+    assert!(fixture.table().is_row_expanded("mail"));
+    assert!(fixture.table().set_row_expanded("mail", false));
+    assert_eq!(fixture.selection(), keys(&["mail"]));
+    assert_eq!(
+        fixture.log.borrow().selections.last(),
+        Some(&keys(&["mail"]))
+    );
+}
+
+#[test]
+fn a_flexible_column_takes_the_spare_width_and_its_divider_follows_the_pointer() {
+    let mut fixture = Fixture::new(&NAMES);
+    fixture.table().set_columns(vec![
+        Column::new("Name", 120.0).flexible(),
+        Column::new("Size", 100.0).numeric(),
+        Column::new("Kind", 80.0),
+    ]);
+    fixture.table().set_rows(rows(&NAMES));
+    fixture.ui.scene(AREA.width as u32, AREA.height as u32);
+    let size = fixture.table().cell_bounds(0, 1).expect("size cell");
+    assert_eq!((size.x, size.width), (220.0, 100.0));
+    let divider = Point::new(220.0, HEADER_HEIGHT / 2.0);
+    let moved = Point::new(180.0, HEADER_HEIGHT / 2.0);
+    fixture.ui.handle(&Event::PointerDown(Pointer::at(divider)));
+    fixture.ui.handle(&Event::PointerMove(Pointer::at(moved)));
+    fixture.ui.handle(&Event::PointerUp(Pointer::at(moved)));
+    fixture.ui.scene(AREA.width as u32, AREA.height as u32);
+    let size = fixture.table().cell_bounds(0, 1).expect("size cell");
+    assert_eq!((size.x, size.width), (180.0, 140.0));
+    let kind = fixture.table().cell_bounds(0, 2).expect("kind cell");
+    assert_eq!((kind.x, kind.width), (320.0, 80.0));
+}

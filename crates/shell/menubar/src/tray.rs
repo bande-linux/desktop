@@ -6,6 +6,7 @@ use unbound_toolkit::Rect;
 use unbound_toolkit::ui::Menu;
 use zbus::blocking::fdo::DBusProxy;
 use zbus::blocking::{Connection, MessageIterator};
+use zbus::fdo::RequestNameFlags;
 use zbus::names::BusName;
 use zbus::proxy::CacheProperties;
 use zbus::zvariant::{OwnedObjectPath, Value};
@@ -178,7 +179,10 @@ fn register(connection: &Connection, name: &str) {
 
 pub fn host(connection: &Connection, outbox: &Outbox<Update>) -> zbus::Result<()> {
     let name = format!("org.kde.StatusNotifierHost-{}", process::id());
-    connection.request_name(name.as_str())?;
+    DBusProxy::new(connection)?.request_name(
+        name.as_str().try_into()?,
+        RequestNameFlags::DoNotQueue.into(),
+    )?;
     let rule = MatchRule::builder().msg_type(message::Type::Signal).build();
     let signals = MessageIterator::for_match_rule(rule, connection, Some(256))?;
     register(connection, &name);

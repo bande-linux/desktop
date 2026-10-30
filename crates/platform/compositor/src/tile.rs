@@ -286,7 +286,7 @@ impl State {
             let Some((their_tile, theirs)) = self.windows[neighbor].tile else {
                 continue;
             };
-            if neighbor == index || !self.windows[neighbor].visible() {
+            if neighbor == index || !self.present(&self.windows[neighbor]) {
                 continue;
             }
             let mut shared = theirs;

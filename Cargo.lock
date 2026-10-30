@@ -3993,6 +3993,7 @@ dependencies = [
 name = "unbound-monitor"
 version = "0.1.0"
 dependencies = [
+ "accesskit",
  "image",
  "image-compare",
  "rustix 1.1.6",

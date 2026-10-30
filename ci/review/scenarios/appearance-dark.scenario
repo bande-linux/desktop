@@ -1,0 +1,54 @@
+# Switch the whole desktop to dark through config.kdl and look at every shell surface, then back.
+key super+space
+wait 600ms
+type "terminal"
+wait 500ms
+key enter
+wait-for-window "org.unbound.Terminal"
+wait 1s
+type "cp ~/.config/unbound/config.kdl /tmp/config.kdl.review; sed -i '/^appearance/d' ~/.config/unbound/config.kdl; echo 'appearance \"dark\"' >> ~/.config/unbound/config.kdl; clear\n"
+wait 2500ms
+shot "dark terminal and shell"
+key super+space
+wait 600ms
+type "files"
+wait 500ms
+key enter
+wait-for-window "org.unbound.Files"
+wait 1500ms
+shot "dark files"
+click 170 22
+wait 1s
+shot "dark app menu"
+key escape
+wait 500ms
+click right 75 735
+wait 1s
+shot "dark dock menu"
+key escape
+wait 500ms
+click 2800 22
+wait 1200ms
+shot "dark notification center"
+key escape
+wait 800ms
+click 2635 22
+wait 1200ms
+shot "dark control center"
+key escape
+wait 800ms
+key super+space
+wait 800ms
+type "set"
+wait 800ms
+shot "dark launcher"
+key escape
+key escape
+wait 500ms
+click 1500 900
+wait 300ms
+key super+q
+wait 1500ms
+type "cp /tmp/config.kdl.review ~/.config/unbound/config.kdl\n"
+wait 2s
+shot "back to the previous appearance"

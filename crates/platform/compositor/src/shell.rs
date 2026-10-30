@@ -98,6 +98,11 @@ impl State {
     pub(crate) fn announce_active_app(&mut self, key: Option<&WlSurface>) {
         let app_id = key
             .map(|surface| toplevel_names(surface).1)
+            .or_else(|| {
+                self.windowless_app
+                    .as_ref()
+                    .map(|(_, app_id)| app_id.clone())
+            })
             .unwrap_or_default();
         if app_id == self.active_app {
             return;

@@ -91,6 +91,24 @@ fn quitting_the_focused_app_focuses_the_frontmost_remaining_window() {
 }
 
 #[test]
+fn an_app_that_closes_its_last_window_and_then_quits_hands_focus_to_the_next_app() {
+    let mut server = server();
+    let mut other = app(&mut server);
+    open_window(&mut server, &mut other, 2);
+    let mut editor = app(&mut server);
+    open_window(&mut server, &mut editor, 3);
+    roundtrip(&mut server, &mut [&mut other, &mut editor]);
+
+    editor.close_window(&mut server, 0);
+    roundtrip(&mut server, &mut [&mut other, &mut editor]);
+    assert!(!other.has_keyboard_focus());
+    drop(editor);
+    roundtrip(&mut server, &mut [&mut other]);
+
+    assert_eq!(other.focused_window(), Some(0));
+}
+
+#[test]
 fn a_background_apps_new_window_opens_behind_the_focused_window() {
     let mut server = server();
     let mut background = app(&mut server);

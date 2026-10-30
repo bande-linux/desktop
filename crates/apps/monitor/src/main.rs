@@ -3,6 +3,8 @@ use std::path::Path;
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
+use accesskit::TreeUpdate;
+
 use unbound_app_menu::{AppMenu, Standard};
 use unbound_monitor::{
     AppList, Catalog, ForceQuitView, Icons, L10N, Monitor, MonitorView, Request, Sampler, Screen,
@@ -112,6 +114,13 @@ impl<S: Screen> App for ActivityMonitor<S> {
                 if self.screen.handle(&input) {
                     window.request_redraw();
                 }
+                window.set_cursor(self.screen.cursor());
+                self.serve(window);
+            }
+            WindowEvent::Accessibility(request) => {
+                if self.screen.perform(&request) {
+                    window.request_redraw();
+                }
                 self.serve(window);
             }
             WindowEvent::MenuAction(action) => self.menu_action(window, &action),
@@ -157,6 +166,14 @@ impl<S: Screen> App for ActivityMonitor<S> {
 
     fn finished(&self) -> bool {
         self.screen.finished()
+    }
+
+    fn animating(&self) -> bool {
+        self.screen.animating()
+    }
+
+    fn accessibility(&self) -> Option<TreeUpdate> {
+        self.screen.accessibility()
     }
 }
 

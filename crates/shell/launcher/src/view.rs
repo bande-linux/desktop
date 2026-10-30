@@ -15,7 +15,8 @@ use unbound_toolkit::ui::{
     Context, Event, Key, Menu, Modifiers, ScrollState, Size, TextField, Ui, Widget, WidgetId,
 };
 use unbound_toolkit::{
-    Color, Image, Item, Point, Rect, Scene, Shape, TextAlign, TextStyle, TextSystem,
+    Color, Elevation, Image, Item, Point, Radius, Rect, Scene, Scheme, Shape, TextAlign, TextRole,
+    TextStyle, TextSystem,
 };
 
 use crate::L10N;
@@ -23,7 +24,7 @@ use crate::emoji::EMOJI;
 use crate::model::{
     Action as LauncherAction, AppInfo, Clip, Heading, Hit, Kind, Mode, Model, PaneInfo, Target,
 };
-use crate::preview::{PREVIEW_TITLE_SIZE, PreviewPane};
+use crate::preview::PreviewPane;
 use crate::rows::{
     CELL_HEIGHT, Choice, Form, GLYPH_HEIGHT, ROW_HEIGHT, apply_menu_action, centered, contains,
     fitted, hit_menu,
@@ -33,20 +34,18 @@ use crate::tones::{TONES_WIDTH, Tones};
 pub const CARD_WIDTH: f32 = 720.0;
 pub const ICON_SIZE: u32 = 64;
 const LIST_WIDTH: f32 = 300.0;
-const CARD_RADIUS: f32 = 16.0;
+const CARD_RADIUS: f32 = Radius::XL;
 const FIELD_ROW: f32 = 60.0;
 const FIELD_SIZE: f32 = 24.0;
 const GLYPH_SIZE: f32 = 20.0;
 const PADDING: f32 = 8.0;
 const GRID_PADDING: f32 = 12.0;
 const HEADING_HEIGHT: f32 = 26.0;
-const HEADING_SIZE: f32 = 11.0;
 const RESULTS_MIN_HEIGHT: f32 = 320.0;
 const RESULTS_MAX_HEIGHT: f32 = 460.0;
 const BOTTOM_MARGIN: f32 = 24.0;
 const NO_RESULTS_HEIGHT: f32 = 96.0;
 const FOOTER_HEIGHT: f32 = 40.0;
-const FOOTER_SIZE: f32 = 12.0;
 const TOP_FRACTION: f32 = 0.22;
 const APPEAR_RISE: f32 = 8.0;
 const SETTLED: f64 = 0.002;
@@ -180,7 +179,7 @@ impl Card {
 
     fn footer_items(&self, cx: &mut Context, footer: Rect) -> Vec<Item> {
         let state = self.state.borrow();
-        let muted = TextStyle::new(FOOTER_SIZE, cx.palette.ink2);
+        let muted = TextStyle::role(TextRole::Callout, cx.palette.ink2);
         let hint = cx.text.paragraph(
             &L10N.tr(if state.model.inserts {
                 "hint-emoji-insert"
@@ -200,7 +199,7 @@ impl Card {
             let name = fitted(
                 cx,
                 &hit.title,
-                TextStyle::new(FOOTER_SIZE, cx.palette.ink).weight(TextStyle::MEDIUM),
+                TextStyle::role(TextRole::Callout, cx.palette.ink).weight(TextStyle::MEDIUM),
                 hint_x - footer.x - 40.0,
             );
             items.push(Item::Text {
@@ -408,7 +407,7 @@ impl Widget for Card {
                 } else {
                     "no-results"
                 }),
-                TextStyle::new(PREVIEW_TITLE_SIZE, cx.palette.ink2),
+                TextStyle::role(TextRole::Heading, cx.palette.ink3),
                 None,
                 TextAlign::Start,
             );
@@ -433,8 +432,7 @@ impl Widget for Card {
             state.viewport = viewport;
             state.selected_frame = Rect::default();
         }
-        let heading_style =
-            TextStyle::new(HEADING_SIZE, cx.palette.ink2).weight(TextStyle::SEMIBOLD);
+        let heading_style = TextStyle::role(TextRole::Label, cx.palette.ink3);
         let heading_x = if grid {
             GRID_PADDING + 8.0
         } else {
@@ -491,21 +489,23 @@ impl Widget for Card {
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
         let shape = Shape::rounded(self.frame, CARD_RADIUS);
-        items.push(Item::Shadow {
+        items.extend(Item::shadows(
             shape,
-            offset: Point::new(0.0, 16.0),
-            blur_radius: 48.0,
-            color: Color::hex(0x000000).with_alpha(80),
-        });
+            Elevation::Frame,
+            cx.palette.scheme,
+            true,
+        ));
         items.push(Item::Fill {
             shape,
             paint: cx.palette.overlay.into(),
         });
-        items.push(Item::Stroke {
-            shape: Shape::rounded(self.frame.inset(0.5), CARD_RADIUS - 0.5),
-            width: 1.0,
-            paint: cx.palette.hairline.into(),
-        });
+        if cx.palette.scheme == Scheme::Dark {
+            items.push(Item::Stroke {
+                shape: Shape::rounded(self.frame.inset(0.5), CARD_RADIUS - 0.5),
+                width: 1.0,
+                paint: cx.palette.hairline.into(),
+            });
+        }
         let glyph = Rect::new(
             self.frame.x + 20.0,
             self.frame.y + ((FIELD_ROW - GLYPH_SIZE) / 2.0).round(),
@@ -516,13 +516,13 @@ impl Widget for Card {
         items.push(Item::Stroke {
             shape: Shape::rounded(lens, 7.0),
             width: 2.0,
-            paint: cx.palette.ink2.into(),
+            paint: cx.palette.ink3.into(),
         });
         items.push(Item::Line {
             from: Point::new(glyph.x + 13.0, glyph.y + 13.0),
             to: Point::new(glyph.x + 19.0, glyph.y + 19.0),
             width: 2.2,
-            paint: cx.palette.ink2.into(),
+            paint: cx.palette.ink3.into(),
         });
         for child in &self.children[..FIRST_ROW] {
             child.paint(cx, items);
@@ -1019,18 +1019,24 @@ impl Launcher {
         let progress = self.progress(now);
         let mut scene = self.ui.scene(width, height);
         scene.background = Color::TRANSPARENT;
+        let scrim = Item::Fill {
+            shape: Shape::rect(Rect::new(0.0, 0.0, width as f32, height as f32)),
+            paint: self.ui.context().palette.scrim.into(),
+        };
+        let card = std::mem::take(&mut scene.items);
+        let card = if progress < 1.0 && !self.reduce_motion {
+            vec![Item::Translate {
+                offset: Point::new(0.0, (APPEAR_RISE * (1.0 - progress)).round()),
+                items: card,
+            }]
+        } else {
+            card
+        };
+        scene.items = std::iter::once(scrim).chain(card).collect();
         if progress < 1.0 {
-            let items = std::mem::take(&mut scene.items);
             scene.items = vec![Item::Opacity {
                 alpha: progress,
-                items: if self.reduce_motion {
-                    items
-                } else {
-                    vec![Item::Translate {
-                        offset: Point::new(0.0, (APPEAR_RISE * (1.0 - progress)).round()),
-                        items,
-                    }]
-                },
+                items: std::mem::take(&mut scene.items),
             }];
         } else {
             self.appear = None;

@@ -8,6 +8,7 @@ repository.workspace = true
 [dependencies]
 blocking = "=1.7.0"
 tracing.workspace = true
+unbound-bus.workspace = true
 unbound-graphics.workspace = true
 unbound-log.workspace = true
 zbus.workspace = true

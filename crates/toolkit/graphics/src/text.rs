@@ -187,6 +187,24 @@ pub struct GlyphRun {
     pub glyphs: Vec<PositionedGlyph>,
 }
 
+impl PartialEq for GlyphRun {
+    fn eq(&self, other: &Self) -> bool {
+        self.font_blob_id() == other.font_blob_id()
+            && self.font.index == other.font.index
+            && self.size == other.size
+            && self.color == other.color
+            && self.skew_degrees == other.skew_degrees
+            && self.coords == other.coords
+            && self.glyphs == other.glyphs
+    }
+}
+
+impl PartialEq for Paragraph {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.layout, &other.layout) || self.glyph_runs() == other.glyph_runs()
+    }
+}
+
 impl GlyphRun {
     pub fn font_bytes(&self) -> &[u8] {
         self.font.data.data()

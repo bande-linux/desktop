@@ -47,9 +47,10 @@ fn serve() -> zbus::Result<Connection> {
 fn main() -> ExitCode {
     unbound_log::init("xdg-desktop-portal-unbound");
     match serve() {
-        Ok(_connection) => loop {
-            std::thread::park();
-        },
+        Ok(connection) => {
+            unbound_bus::serve_until_closed(&connection);
+            ExitCode::SUCCESS
+        }
         Err(error) => {
             tracing::error!("{error}");
             ExitCode::FAILURE

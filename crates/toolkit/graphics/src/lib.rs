@@ -1,4 +1,5 @@
 mod cpu;
+mod damage;
 mod draw;
 mod gpu;
 mod input;
@@ -10,7 +11,8 @@ mod title_bar;
 mod tokens;
 
 pub use cpu::CpuRenderer;
-pub use gpu::{GpuRenderer, vulkan_instance};
+pub use damage::{Region, damage};
+pub use gpu::{GpuDevice, GpuRenderer};
 pub use input::{
     Cursor, DOUBLE_CLICK_INTERVAL, Event, Key, Modifiers, Pointer, PointerButton, Scroll,
     ScrollPhase, ScrollSource,

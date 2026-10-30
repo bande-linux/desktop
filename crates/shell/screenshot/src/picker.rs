@@ -505,7 +505,6 @@ mod tests {
     fn choice(id: &str, title: &str) -> Choice {
         Choice {
             id: id.to_owned(),
-            kind: 2,
             title: title.to_owned(),
             app_id: String::new(),
             thumbnail: None,

@@ -5,7 +5,7 @@ use std::os::fd::OwnedFd;
 use std::os::unix::net::UnixStream;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::{Buffer, Format as DmabufFormat, Fourcc, Modifier};
@@ -222,15 +222,17 @@ pub struct State {
     pub(crate) needs_redraw: bool,
     pub(crate) pointer_location: Point<f64, Logical>,
     pub(crate) cursor_shown: bool,
-    cursor_status: CursorImageStatus,
+    pub(crate) cursor_status: CursorImageStatus,
     cursor_theme: CursorTheme,
     cursor_arrow: Cursor,
     named_cursors: HashMap<CursorIcon, Option<Cursor>>,
     pub(crate) held_shortcut_keys: Vec<u32>,
+    pub(crate) typed_at: Option<Instant>,
     pub(crate) input_devices: usize,
     pub(crate) input_sources: crate::keymap::InputSources,
     pub(crate) pointing: crate::pointing::Pointing,
     pub(crate) pending_captures: Vec<crate::capture::PendingCapture>,
+    pub(crate) decorations: crate::frame::Decorations,
 }
 
 pub struct Headless {
@@ -401,10 +403,12 @@ impl Headless {
             },
             named_cursors: HashMap::new(),
             held_shortcut_keys: Vec::new(),
+            typed_at: None,
             input_devices: 0,
             input_sources: crate::keymap::InputSources::default(),
             pointing: crate::pointing::Pointing::default(),
             pending_captures: Vec::new(),
+            decorations: crate::frame::Decorations::default(),
         };
         Ok(Self {
             display,
@@ -528,6 +532,7 @@ impl Headless {
     }
 
     pub fn render_elements(&mut self, renderer: &mut VulkanRenderer) -> Vec<OutputElement> {
+        self.state.paint_title_bars(renderer);
         let (elements, drawn, icon) = self.compose(renderer, true);
         self.state.remember_drag_icon(icon);
         for window in &mut self.state.windows {
@@ -780,6 +785,7 @@ impl State {
             return;
         }
         self.windowless_app = None;
+        self.typed_at = None;
         if let Some(surface) = &surface
             && self.window_index(surface).is_some()
         {
@@ -874,6 +880,9 @@ impl State {
         if focused.client() == owner {
             return true;
         }
+        if self.would_interrupt_typing(surface, &focused) {
+            return false;
+        }
         !self.windows.iter().any(|window| {
             window.size.is_some()
                 && window.toplevel.wl_surface() != surface
@@ -903,8 +912,8 @@ pub struct Rect {
 
 pub(crate) fn centered(area: Rect, window: Size<i32, Logical>) -> Point<i32, Logical> {
     (
-        area.location.x + (area.size.w - window.w) / 2,
-        area.location.y + (area.size.h - window.h) / 2,
+        area.location.x + ((area.size.w - window.w) / 2).max(0),
+        area.location.y + ((area.size.h - window.h) / 2).max(0),
     )
         .into()
 }
@@ -926,11 +935,16 @@ impl State {
     }
 
     pub(crate) fn set_output_scale(&mut self, scale: f64) {
+        let ratio = self.output_scale / scale;
         self.output_scale = scale;
         self.output
             .change_current_state(None, None, Some(OutputScale::Fractional(scale)), None);
-        let center = self.logical_output_size().to_f64();
-        self.pointer_location = (center.w / 2.0, center.h / 2.0).into();
+        let size = self.logical_output_size().to_f64();
+        self.pointer_location = (
+            (self.pointer_location.x * ratio).clamp(0.0, size.w - 1.0),
+            (self.pointer_location.y * ratio).clamp(0.0, size.h - 1.0),
+        )
+            .into();
         self.named_cursors.clear();
         if let CursorImageStatus::Named(icon) = self.cursor_status {
             self.load_named_cursor(icon);
@@ -1040,7 +1054,7 @@ impl State {
         windows
             .iter()
             .flat_map(|window| {
-                self.popup_surfaces(window.surface(), window.location)
+                self.popup_surfaces(window.surface(), window.content_location())
                     .into_iter()
                     .map(|(surface, origin)| Placed::Surface(surface, origin))
                     .chain([Placed::Window(window)])
@@ -1176,7 +1190,15 @@ impl State {
                 self.pending_activation = None;
                 self.focus(Some(surface.clone()));
             }
-            (false, true) => self.place_behind_frontmost(surface),
+            (false, true) => {
+                if self
+                    .focused()
+                    .is_some_and(|focused| self.would_interrupt_typing(surface, &focused))
+                {
+                    self.request_attention(shell::toplevel_names(surface).1);
+                }
+                self.place_behind_frontmost(surface);
+            }
             (true, false) => {
                 if let Some(index) = self.window_index(surface) {
                     self.close_window(index);
@@ -1252,6 +1274,7 @@ impl XdgShellHandler for State {
 
     fn title_changed(&mut self, toplevel: ToplevelSurface) {
         self.publish_toplevel(toplevel.wl_surface());
+        self.needs_redraw = true;
     }
 
     fn app_id_changed(&mut self, toplevel: ToplevelSurface) {

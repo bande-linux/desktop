@@ -4246,6 +4246,7 @@ dependencies = [
  "unbound-test-wayland",
  "unbound-toolkit-platform",
  "unbound-widgets",
+ "wayland-client",
  "zbus",
 ]
 
@@ -4310,8 +4311,11 @@ name = "unbound-widgets"
 version = "0.1.0"
 dependencies = [
  "accesskit",
+ "image",
+ "image-compare",
  "parley",
  "unbound-graphics",
+ "unbound-l10n",
  "unbound-spring",
 ]
 

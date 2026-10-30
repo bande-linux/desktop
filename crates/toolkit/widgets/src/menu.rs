@@ -7,11 +7,11 @@ use unbound_graphics::{
 
 use super::{Key, Modifiers, Size};
 
-const ROW_HEIGHT: f32 = 22.0;
+pub(crate) const ROW_HEIGHT: f32 = 22.0;
 const SEPARATOR_HEIGHT: f32 = 11.0;
-const VERTICAL_PADDING: f32 = 5.0;
+pub(crate) const VERTICAL_PADDING: f32 = 5.0;
 const HIGHLIGHT_INSET: f32 = 5.0;
-const TEXT_START: f32 = 24.0;
+pub(crate) const TEXT_START: f32 = 24.0;
 const TRAILING_PADDING: f32 = 16.0;
 const SHORTCUT_GAP: f32 = 28.0;
 const CHEVRON_SPACE: f32 = 18.0;

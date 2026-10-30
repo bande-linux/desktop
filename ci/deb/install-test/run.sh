@@ -9,7 +9,16 @@ echo 'deb [trusted=yes] file:/debs ./' > /etc/apt/sources.list.d/local.list
 apt-get update -qq
 
 echo "== unbound-desktop resolves and installs from the packages alone"
-apt-get install -y -q unbound-desktop < /dev/null
+ours=$(cd /debs && for deb in *.deb; do dpkg-deb --field "$deb" Package; done | grep -v -e apt-source -e archive-keyring)
+apt-get install -y -q --no-install-recommends $ours < /dev/null
+
+echo "== every app unbound-desktop recommends is in Debian 13"
+apt-cache show unbound-desktop | sed -n 's/^Recommends: //p' | tr ',' '\n' | sed 's/^ *//; s/[ (].*//' |
+    while read -r recommended; do
+        [ -n "$recommended" ] || continue
+        candidate=$(apt-cache policy "$recommended" | sed -n 's/^ *Candidate: //p')
+        [ -n "$candidate" ] && [ "$candidate" != "(none)" ] || { echo "$recommended cannot be installed"; exit 1; }
+    done
 version=$(dpkg-query -W -f '${Version}' unbound-desktop)
 for package in $(dpkg-query -W -f '${Package}\n' 'unbound-*' xdg-desktop-portal-unbound | grep -v -e apt-source -e archive-keyring); do
     installed=$(dpkg-query -W -f '${db:Status-Status} ${Version}' "$package" 2>/dev/null || true)

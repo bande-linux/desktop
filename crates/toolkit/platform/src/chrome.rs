@@ -1,7 +1,7 @@
 use accesskit::{Action, Affine, Node, NodeId, Role, TreeUpdate};
 use unbound_graphics::{
     Color, Item, Palette, Paragraph, Point, Rect, Scene, Scheme, Shape, TextAlign, TextStyle,
-    TextSystem,
+    TextSystem, TitleBar, title_style, window_controls_area,
 };
 
 use std::time::Instant;
@@ -11,47 +11,35 @@ use unbound_widgets::{Animated, Spring};
 use crate::L10N;
 use crate::window::ResizeEdge;
 
-pub const TITLE_BAR_HEIGHT: u32 = 28;
-pub(crate) const RESIZE_MARGIN: u32 = 6;
+pub(crate) use unbound_graphics::RESIZE_MARGIN;
+pub use unbound_graphics::TITLE_BAR_HEIGHT;
+pub(crate) use unbound_graphics::WindowControl as Control;
 const RESIZE_BAND: f32 = RESIZE_MARGIN as f32;
-const CORNER_REACH: f32 = 14.0;
-const CONTROL_DIAMETER: f32 = 12.0;
-const CONTROL_PITCH: f32 = 20.0;
-const CONTROLS_INSET: f32 = 12.0;
-const TITLE_SIZE: f32 = 13.0;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Control {
-    Close,
-    Minimize,
-    Zoom,
-}
-
-const CONTROLS: [Control; 3] = [Control::Close, Control::Minimize, Control::Zoom];
+const CORNER_REACH: f32 = unbound_graphics::RESIZE_CORNER;
 
 const WINDOW_NODE: NodeId = NodeId(u64::MAX);
 const TITLE_BAR_NODE: NodeId = NodeId(u64::MAX - 1);
 
-impl Control {
-    fn node(self) -> NodeId {
-        NodeId(match self {
-            Self::Close => u64::MAX - 2,
-            Self::Minimize => u64::MAX - 3,
-            Self::Zoom => u64::MAX - 4,
-        })
-    }
+fn control_node(control: Control) -> NodeId {
+    NodeId(match control {
+        Control::Close => u64::MAX - 2,
+        Control::Minimize => u64::MAX - 3,
+        Control::Zoom => u64::MAX - 4,
+    })
+}
 
-    pub(crate) fn for_node(node: NodeId) -> Option<Self> {
-        CONTROLS.into_iter().find(|control| control.node() == node)
-    }
+pub(crate) fn control_for_node(node: NodeId) -> Option<Control> {
+    Control::ALL
+        .into_iter()
+        .find(|control| control_node(*control) == node)
+}
 
-    fn label(self) -> String {
-        L10N.tr(match self {
-            Self::Close => "close",
-            Self::Minimize => "minimize",
-            Self::Zoom => "zoom",
-        })
-    }
+fn control_label(control: Control) -> String {
+    L10N.tr(match control {
+        Control::Close => "close",
+        Control::Minimize => "minimize",
+        Control::Zoom => "zoom",
+    })
 }
 
 fn bounds(rect: Rect) -> accesskit::Rect {
@@ -100,10 +88,7 @@ impl Frame {
                 return Zone::Content;
             }
             let local = Point::new(point.x - window.x, point.y - window.y);
-            return CONTROLS
-                .into_iter()
-                .find(|control| contains(control_area(*control, self.title), local))
-                .map_or(Zone::TitleBar, Zone::Control);
+            return Control::at(local, self.title).map_or(Zone::TitleBar, Zone::Control);
         }
         if self.margin == 0.0 || !contains(window.inset(-RESIZE_BAND), point) {
             return Zone::Outside;
@@ -146,27 +131,6 @@ fn contains(rect: Rect, point: Point) -> bool {
         && point.y < rect.y + rect.height
 }
 
-fn control_centre(control: Control, title: f32) -> Point {
-    let index = CONTROLS
-        .iter()
-        .position(|candidate| *candidate == control)
-        .unwrap_or(0);
-    Point::new(
-        CONTROLS_INSET + CONTROL_DIAMETER / 2.0 + index as f32 * CONTROL_PITCH,
-        title / 2.0,
-    )
-}
-
-fn control_area(control: Control, title: f32) -> Rect {
-    let centre = control_centre(control, title);
-    Rect::new(centre.x - CONTROL_PITCH / 2.0, 0.0, CONTROL_PITCH, title)
-}
-
-fn controls_group(title: f32) -> Rect {
-    let first = control_area(Control::Close, title);
-    Rect::new(first.x, first.y, CONTROL_PITCH * 3.0, title)
-}
-
 #[derive(Default)]
 pub(crate) struct Chrome {
     pub(crate) title: String,
@@ -204,15 +168,15 @@ impl Chrome {
         let mut bar = Node::new(Role::TitleBar);
         bar.set_label(self.title.clone());
         bar.set_bounds(bounds(Rect::new(0.0, 0.0, frame.width, frame.title)));
-        bar.set_children(CONTROLS.map(Control::node).to_vec());
+        bar.set_children(Control::ALL.map(control_node).to_vec());
         tree.nodes.push((WINDOW_NODE, window));
         tree.nodes.push((TITLE_BAR_NODE, bar));
-        for control in CONTROLS {
+        for control in Control::ALL {
             let mut button = Node::new(Role::Button);
-            button.set_label(control.label());
-            button.set_bounds(bounds(control_area(control, frame.title)));
+            button.set_label(control_label(control));
+            button.set_bounds(bounds(control.area(frame.title)));
             button.add_action(Action::Click);
-            tree.nodes.push((control.node(), button));
+            tree.nodes.push((control_node(control), button));
         }
         tree
     }
@@ -226,7 +190,7 @@ impl Chrome {
     ) -> bool {
         let group = point.is_some_and(|point| {
             contains(
-                controls_group(frame.title),
+                window_controls_area(frame.title),
                 Point::new(point.x - frame.margin, point.y - frame.margin),
             )
         });
@@ -238,20 +202,16 @@ impl Chrome {
         changed
     }
 
-    fn title(&mut self, color: Color) -> Paragraph {
+    fn title(&mut self, style: TextStyle) -> Paragraph {
         if let Some((title, cached_color, paragraph)) = &self.title_paragraph
             && *title == self.title
-            && *cached_color == color
+            && *cached_color == style.color
         {
             return paragraph.clone();
         }
+        let color = style.color;
         let text = self.text.get_or_insert_with(TextSystem::new);
-        let paragraph = text.paragraph(
-            &self.title,
-            TextStyle::new(TITLE_SIZE, color).weight(TextStyle::SEMIBOLD),
-            None,
-            TextAlign::Start,
-        );
+        let paragraph = text.paragraph(&self.title, style, None, TextAlign::Start);
         self.title_paragraph = Some((self.title.clone(), color, paragraph.clone()));
         paragraph
     }
@@ -303,131 +263,21 @@ impl Chrome {
         now: Instant,
         items: &mut Vec<Item>,
     ) {
-        let bar = Rect::new(0.0, 0.0, frame.width, frame.title);
-        items.push(Item::Fill {
-            shape: Shape::rect(bar),
-            paint: palette.surface_elevated.into(),
-        });
-        items.push(Item::Fill {
-            shape: Shape::rect(Rect::new(0.0, frame.title - 1.0, frame.width, 1.0)),
-            paint: palette.separator_color.into(),
-        });
-        let color = if active {
-            palette.label_primary
-        } else {
-            palette.label_muted
-        };
-        let paragraph = self.title(color);
-        let reserved = controls_group(frame.title);
-        let side = reserved.x + reserved.width + 8.0;
-        let available = Rect::new(side, 0.0, (frame.width - 2.0 * side).max(0.0), frame.title);
-        let x = ((frame.width - paragraph.width()) / 2.0)
-            .max(available.x)
-            .round();
-        let y = ((frame.title - paragraph.height()) / 2.0).round();
-        items.push(Item::Clip {
-            shape: Shape::rect(available),
-            items: vec![Item::Text {
-                origin: Point::new(x, y),
-                paragraph,
-            }],
-        });
+        let title = self.title(title_style(palette, active));
         let (shown, moving) = self.glyphs.value_at(now);
         self.animating = moving;
-        let lit = if active { 1.0 } else { shown };
-        for control in CONTROLS {
-            self.control(control, frame.title, scheme, lit, shown, items);
-        }
-    }
-
-    fn control(
-        &self,
-        control: Control,
-        title: f32,
-        scheme: Scheme,
-        lit: f32,
-        shown: f32,
-        items: &mut Vec<Item>,
-    ) {
-        let centre = control_centre(control, title);
-        let half = CONTROL_DIAMETER / 2.0;
-        let disc = Rect::new(
-            centre.x - half,
-            centre.y - half,
-            CONTROL_DIAMETER,
-            CONTROL_DIAMETER,
+        items.extend(
+            TitleBar {
+                width: frame.width,
+                height: frame.title,
+                title,
+                palette,
+                scheme,
+                active,
+                glyphs: shown,
+                pressed: self.pressed.filter(|_| self.pressed_inside),
+            }
+            .items(),
         );
-        let (dim_fill, dim_edge) = unlit_colors(scheme);
-        let (lit_fill, lit_edge, glyph) = control_colors(control);
-        let (fill, edge) = (dim_fill.mix(lit_fill, lit), dim_edge.mix(lit_edge, lit));
-        let pressed = self.pressed == Some(control) && self.pressed_inside;
-        let fill = if pressed { darker(fill) } else { fill };
-        items.push(Item::Fill {
-            shape: Shape::rounded(disc, half),
-            paint: fill.into(),
-        });
-        items.push(Item::Stroke {
-            shape: Shape::rounded(disc.inset(0.25), half - 0.25),
-            width: 0.5,
-            paint: edge.into(),
-        });
-        if shown <= 0.0 {
-            return;
-        }
-        let line = |from: (f32, f32), to: (f32, f32)| Item::Line {
-            from: Point::new(centre.x + from.0, centre.y + from.1),
-            to: Point::new(centre.x + to.0, centre.y + to.1),
-            width: 1.1,
-            paint: glyph.with_alpha((200.0 * shown).round() as u8).into(),
-        };
-        let arm = 2.75;
-        match control {
-            Control::Close => {
-                items.push(line((-arm, -arm), (arm, arm)));
-                items.push(line((-arm, arm), (arm, -arm)));
-            }
-            Control::Minimize => items.push(line((-3.5, 0.0), (3.5, 0.0))),
-            Control::Zoom => {
-                items.push(line((-3.5, 0.0), (3.5, 0.0)));
-                items.push(line((0.0, -3.5), (0.0, 3.5)));
-            }
-        }
-    }
-}
-
-fn unlit_colors(scheme: Scheme) -> (Color, Color) {
-    match scheme {
-        Scheme::Light => (Color::hex(0xD9DADD), Color::hex(0xC3C5CA)),
-        Scheme::Dark => (Color::hex(0x4A4D54), Color::hex(0x5A5E66)),
-    }
-}
-
-fn control_colors(control: Control) -> (Color, Color, Color) {
-    match control {
-        Control::Close => (
-            Color::hex(0xFF5F57),
-            Color::hex(0xE24B41),
-            Color::hex(0x7A0F08),
-        ),
-        Control::Minimize => (
-            Color::hex(0xFEBC2E),
-            Color::hex(0xE1A116),
-            Color::hex(0x8A5300),
-        ),
-        Control::Zoom => (
-            Color::hex(0x28C840),
-            Color::hex(0x1AAB29),
-            Color::hex(0x0B5E14),
-        ),
-    }
-}
-
-fn darker(color: Color) -> Color {
-    let scale = |channel: u8| (u16::from(channel) * 4 / 5) as u8;
-    Color {
-        r: scale(color.r),
-        g: scale(color.g),
-        b: scale(color.b),
-        a: color.a,
     }
 }

@@ -808,6 +808,7 @@ fn the_empty_space_menu_sorts_and_shows_hidden_files() {
         [
             "New Folder",
             "Paste",
+            "Get Info",
             "Sort By",
             "as Columns",
             "as List",
@@ -825,6 +826,41 @@ fn the_empty_space_menu_sorts_and_shows_hidden_files() {
         .collect::<Vec<_>>();
     assert_eq!(names[..2], ["Documents", "Empty"]);
     assert_eq!(names[2], "big.bin");
+}
+
+#[test]
+fn the_space_beside_the_columns_and_the_info_pane_have_menus() {
+    let place = Place::new();
+    let mut view = place.view();
+    let documents = Point::new(SIDEBAR_WIDTH + 60.0, 6.0 + ROW_HEIGHT * 0.5);
+    view.handle(&Event::PointerDown(Pointer::at(documents)));
+    view.handle(&Event::PointerUp(Pointer::at(documents)));
+    view.scene(1000, 600);
+    view.take_requests();
+
+    let beside = right_click(&mut view, Point::new(950.0, 300.0));
+    assert_eq!(titles(&beside)[..3], ["New Folder", "Paste", "Get Info"]);
+    assert_eq!(
+        view.browser().active_folder(),
+        Some(place.home().join("Documents").as_path())
+    );
+    assert!(view.menu_action("info"));
+    view.scene(1000, 600);
+    view.take_requests();
+
+    let info = right_click(&mut view, Point::new(900.0, 100.0));
+    assert_eq!(
+        titles(&info)[..4],
+        ["New Folder", "Paste", "Get Info", "Sort By"]
+    );
+
+    let notes = Point::new(SIDEBAR_WIDTH + 60.0, 6.0 + ROW_HEIGHT * 2.5);
+    view.handle(&Event::PointerDown(Pointer::at(notes)));
+    view.handle(&Event::PointerUp(Pointer::at(notes)));
+    view.scene(1000, 600);
+    view.take_requests();
+    let info = right_click(&mut view, Point::new(900.0, 100.0));
+    assert_eq!(titles(&info)[..2], ["Open", "Open With"]);
 }
 
 #[test]

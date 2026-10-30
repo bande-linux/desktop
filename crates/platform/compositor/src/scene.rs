@@ -830,7 +830,9 @@ pub(crate) fn window_elements(
         from: area,
         to: shown,
     };
-    let pieces = pieces_of(&surfaces, scale);
+    let title_bar = window.title_bar_piece(scale);
+    let mut pieces = pieces_of(&surfaces, scale);
+    pieces.extend(title_bar.clone());
     let shadow = (!fullscreen).then(|| {
         OutputElement::Shadow(ShadowElement::new(
             window.shadow.clone(),
@@ -869,6 +871,13 @@ pub(crate) fn window_elements(
                 .into_iter()
                 .map(|surface| OutputElement::Window(WindowElement::new(surface, placement, clip))),
         )
+        .chain(scaled_pieces(
+            title_bar.as_slice(),
+            area,
+            shown,
+            clip,
+            alpha,
+        ))
         .chain(shadow)
         .chain(blurs)
         .collect();

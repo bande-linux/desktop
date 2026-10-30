@@ -5,8 +5,8 @@ use unbound_config::MAX_INPUT_SOURCES;
 use unbound_keyboard::{Area, shortcuts_in};
 use unbound_toolkit::Spacing;
 use unbound_toolkit::ui::{
-    Axis, Button, Label, SecureField, Slider, Stack, TextField, Toggle, Widget, WidgetId,
-    shortcut_symbols,
+    Axis, Button, Label, PopUpButton, SearchField, SecureField, SegmentedControl, Slider, Stack,
+    Toggle, Widget, WidgetId, shortcut_symbols,
 };
 
 use crate::L10N;
@@ -15,8 +15,8 @@ use crate::pictures::{Pair, PictureCommand, expand};
 use crate::state::{Answer, Display, Question};
 use crate::view::{Anchor, Intent, Intents, SettingsView, intent};
 use crate::widgets::{
-    Caption, Captioned, Card, Check, Column, Row, Scroll, Segmented, SidebarRow, Signal, Text,
-    Thumbnail, Thumbnails, Tone,
+    Caption, Captioned, Card, Check, Column, Row, Scroll, SidebarRow, Signal, Text, Thumbnail,
+    Thumbnails, Tone,
 };
 use unbound_settings_panes::SettingHit;
 use unbound_settings_panes::{AUTOMATIC, Kind, List, PaneId, Section, Setting, SettingId, Value};
@@ -136,7 +136,27 @@ impl SettingsView {
                     choices.iter().map(|choice| choice.label.clone()).collect();
                 let values: Vec<Value> =
                     choices.iter().map(|choice| choice.value.clone()).collect();
-                boxed(Segmented::new(
+                boxed(SegmentedControl::new(
+                    &setting.label,
+                    &labels,
+                    selected,
+                    move |index| {
+                        if let Some(value) = values.get(index) {
+                            set(value.clone());
+                        }
+                    },
+                ))
+            }
+            Kind::Menu(choices) => {
+                let labels: Vec<String> =
+                    choices.iter().map(|choice| choice.label.clone()).collect();
+                let values: Vec<Value> =
+                    choices.iter().map(|choice| choice.value.clone()).collect();
+                let selected = value
+                    .as_ref()
+                    .and_then(|value| setting.kind.position(value))
+                    .unwrap_or(0);
+                boxed(PopUpButton::new(
                     &setting.label,
                     &labels,
                     selected,
@@ -220,7 +240,7 @@ impl SettingsView {
                     }
                     _ => None,
                 };
-                boxed(Segmented::new(
+                boxed(SegmentedControl::new(
                     &setting.label,
                     &labels,
                     selected,
@@ -425,22 +445,31 @@ impl SettingsView {
 
     fn source_buttons(&self, index: usize, count: usize) -> Box<dyn Widget> {
         let mut buttons: Widgets = Vec::new();
-        for (shown, title, make) in [
+        for (shown, title, tooltip, make) in [
             (
                 index > 0,
                 L10N.tr("move-up"),
+                L10N.tr("move-up-tooltip"),
                 Intent::MoveSource(index, true),
             ),
             (
                 index + 1 < count,
                 L10N.tr("move-down"),
+                L10N.tr("move-down-tooltip"),
                 Intent::MoveSource(index, false),
             ),
-            (count > 1, L10N.tr("remove"), Intent::RemoveSource(index)),
+            (
+                count > 1,
+                L10N.tr("remove"),
+                L10N.tr("remove-tooltip"),
+                Intent::RemoveSource(index),
+            ),
         ] {
             if shown {
                 let mut act = intent(&self.intents, move |()| make.clone());
-                buttons.push(boxed(Button::new(&title, move || act(()))));
+                buttons.push(boxed(
+                    Button::new(&title, move || act(())).tooltip(&tooltip),
+                ));
             }
         }
         boxed(Stack::new(
@@ -497,7 +526,7 @@ impl SettingsView {
     }
 
     fn source_search_rows(&mut self, query: &str, added: &[String]) -> Widgets {
-        let field = TextField::new(
+        let field = SearchField::new(
             &L10N.tr("search-layouts"),
             query,
             submit(&self.intents, Intent::SourceQuery),

@@ -38,7 +38,23 @@ fn preedit_cursor(text: &str, begin: i32, end: i32) -> Option<(usize, usize)> {
 }
 
 impl Window {
+    pub(crate) fn reset_text_input(&mut self) {
+        let input = &mut self.state.text_input;
+        let Some(text_input) = &input.text_input else {
+            return;
+        };
+        if !input.enabled {
+            return;
+        }
+        text_input.disable();
+        text_input.commit();
+        input.enabled = false;
+        input.area = None;
+    }
+
     pub(crate) fn set_text_input_area(&mut self, area: Option<Rect>) {
+        let title = self.title_height() as f32;
+        let area = area.map(|rect| Rect::new(rect.x, rect.y + title, rect.width, rect.height));
         let input = &mut self.state.text_input;
         let Some(text_input) = &input.text_input else {
             return;

@@ -332,6 +332,12 @@ impl TestClient {
             .collect()
     }
 
+    pub fn show_window_of(&mut self, server: &mut Headless, image: &ShmImage, app_id: &str) {
+        self.map_window(server, image, Memory::Shm, |_, _, toplevel| {
+            toplevel.set_app_id(app_id.to_owned());
+        });
+    }
+
     pub fn set_app_id(&mut self, server: &mut Headless, index: usize, app_id: &str) {
         self.windows[index].2.set_app_id(app_id.to_owned());
         self.exchange(server);

@@ -117,6 +117,7 @@ pub struct Choice {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Kind {
     Choices(Vec<Choice>),
+    Menu(Vec<Choice>),
     Stops {
         stops: Vec<Choice>,
         low: String,
@@ -138,7 +139,9 @@ pub enum Kind {
 impl Kind {
     pub fn choices(&self) -> &[Choice] {
         match self {
-            Self::Choices(choices) | Self::Stops { stops: choices, .. } => choices,
+            Self::Choices(choices) | Self::Menu(choices) | Self::Stops { stops: choices, .. } => {
+                choices
+            }
             Self::Switch
             | Self::Level
             | Self::Range { .. }
@@ -661,7 +664,7 @@ fn keyboard_pane() -> Pane {
                     SettingId::CapsLock,
                     L10N.tr("caps-lock"),
                     L10N.tr("caps-lock-keywords"),
-                    Kind::Choices(keyword_choices(vec![
+                    Kind::Menu(keyword_choices(vec![
                         (L10N.tr("caps-lock-caps-lock"), "caps-lock"),
                         (L10N.tr("caps-lock-escape"), "escape"),
                         (L10N.tr("caps-lock-control"), "control"),

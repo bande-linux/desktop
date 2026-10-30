@@ -23,12 +23,12 @@ use unbound_toolkit::{
     MenuPlacement, Point, Rect, Role, Scene, TextSystem, Window, WindowError, WindowEvent,
 };
 use unbound_xdg::{
-    DesktopEntry, Locale, applications, current_desktops, data_dirs, find_icon, path_from_file_uri,
+    DesktopEntry, ICON_THEMES, Locale, applications, current_desktops, data_dirs, find_icon,
+    path_from_file_uri,
 };
 
 const FILES: &str = "org.unbound.Files";
 const TRASH_URI: &str = "trash:///";
-const ICON_THEMES: &[&str] = &["Adwaita"];
 const MENU_OPEN: &str = "open";
 const MENU_KEEP: &str = "keep";
 const MENU_LOGIN: &str = "login";
@@ -110,7 +110,7 @@ impl Dock {
         self.icons
             .entry(name.to_owned())
             .or_insert_with(|| {
-                let path = find_icon(name, pixels, ICON_THEMES, &data_dirs())?;
+                let path = find_icon(name, pixels, &ICON_THEMES, &data_dirs())?;
                 Image::load(&path, pixels)
             })
             .clone()

@@ -1,4 +1,8 @@
+use std::time::Duration;
+
 use crate::scene::Point;
+
+pub const DOUBLE_CLICK_INTERVAL: Duration = Duration::from_millis(500);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Modifiers {

@@ -154,6 +154,7 @@ pub struct DesktopView {
     labels: HashMap<PathBuf, Label>,
     motions: HashMap<PathBuf, Motion>,
     backdrop: Backdrop,
+    wallpaper_unavailable: bool,
     ui: Ui,
     layout: WidgetId,
     editor: Option<WidgetId>,
@@ -266,6 +267,7 @@ impl DesktopView {
             labels: HashMap::new(),
             motions: HashMap::new(),
             backdrop: Backdrop::default(),
+            wallpaper_unavailable: false,
             ui,
             layout: layout_id,
             editor: None,
@@ -389,6 +391,10 @@ impl DesktopView {
         self.backdrop.show(layer, now);
         self.labels.clear();
         self.animating = true;
+    }
+
+    pub fn wallpaper_unavailable(&mut self) {
+        self.wallpaper_unavailable = true;
     }
 
     pub fn wallpaper_key(&self) -> Option<&crate::backdrop::Key> {
@@ -1384,7 +1390,10 @@ impl DesktopView {
         Scene {
             width: width.round() as u32,
             height: height.round() as u32,
-            background: palette.chassis,
+            background: match self.backdrop.key().is_some() || self.wallpaper_unavailable {
+                true => palette.chassis,
+                false => Color::TRANSPARENT,
+            },
             items,
         }
     }

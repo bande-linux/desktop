@@ -12,7 +12,7 @@ use crate::{
     layouts_path, list, parse_layouts, save_layouts,
 };
 use accesskit::TreeUpdate;
-use unbound_config::{BarEdge, Config};
+use unbound_config::{BarEdge, Config, Wallpaper, WallpaperFit};
 use unbound_fs::{
     Action, Answer, Change, FolderWatch, Operations, Purpose, Resolution, Task, Trash,
 };
@@ -23,13 +23,16 @@ use unbound_toolkit::{
     MenuPlacement, Point, Role, Scene, Scheme, TextSystem, Transfer, Window, WindowEvent,
 };
 use unbound_volumes::{eject, media_roots, mounted_volumes};
-use unbound_wallpaper::{Choice, Inbox, Outbox, Picture, Variant, choose, follow, inbox, render};
+use unbound_wallpaper::{
+    Choice, Fit, Inbox, Outbox, Picture, Variant, choose, follow, inbox, render, render_cached,
+};
 use unbound_xdg::{
-    Apps, DIRECTORY, DesktopEntry, ICON_THEMES, OCTET_STREAM, UserDir, config_dirs, config_home,
-    data_dirs, file_uri, find_icon, launch, launch_with, path_from_file_uri, user_dir,
+    Apps, DIRECTORY, DesktopEntry, ICON_THEMES, OCTET_STREAM, UserDir, cache_home, config_dirs,
+    config_home, data_dirs, file_uri, find_icon, launch, launch_with, path_from_file_uri, user_dir,
 };
 
 const PDF: &str = "application/pdf";
+const WALLPAPER_CACHE: &str = "unbound/wallpapers";
 const SETTINGS_APP: &str = "org.unbound.Settings";
 const WALLPAPER_PANE: &str = "wallpaper";
 const FILES_INFO_FLAG: &str = "--info";
@@ -97,8 +100,13 @@ impl DesktopSurface {
             return;
         }
         let loader = self.loader.clone();
+        let cache = cache_home().map(|cache| cache.join(WALLPAPER_CACHE));
         let work = move || {
-            let rendered = match render(&key.path, key.fit, key.width, key.height) {
+            let picture = match &cache {
+                Some(cache) => render_cached(cache, &key.path, key.fit, key.width, key.height),
+                None => render(&key.path, key.fit, key.width, key.height),
+            };
+            let rendered = match picture {
                 Ok(picture) => {
                     let luma = Luma::of(&picture);
                     Some((picture, luma))
@@ -120,6 +128,10 @@ impl DesktopSurface {
 
     fn refresh_wallpaper(&mut self, window: &mut Window) {
         let Some(wanted) = self.wallpaper_key(self.variant()) else {
+            if self.choice.is_some() && self.viewport.is_some() {
+                self.view.wallpaper_unavailable();
+                window.request_redraw();
+            }
             return;
         };
         let other = match self.variant() {
@@ -777,8 +789,10 @@ impl App for DesktopSurface {
                 }
             }
             2 => {
+                let mut failed = false;
                 for (key, rendered) in self.loaded.drain() {
                     self.pending.remove(&key);
+                    failed |= rendered.is_none();
                     let layer = rendered.and_then(|(picture, luma)| {
                         Image::from_rgba(picture.width, picture.height, picture.rgba).map(|image| {
                             Layer {
@@ -793,6 +807,10 @@ impl App for DesktopSurface {
                     }
                 }
                 self.refresh_wallpaper(window);
+                if failed && self.view.wallpaper_key().is_none() {
+                    self.view.wallpaper_unavailable();
+                    window.request_redraw();
+                }
             }
             3 if self.thumbnails.is_some() => {
                 self.thumbnails_ready();
@@ -836,6 +854,17 @@ impl App for DesktopSurface {
 
     fn accessibility(&self) -> Option<TreeUpdate> {
         Some(self.view.accessibility())
+    }
+}
+
+fn configured_choice(wallpaper: &Wallpaper) -> Choice {
+    Choice {
+        light: wallpaper.light.clone(),
+        dark: wallpaper.dark.clone(),
+        fit: match wallpaper.fit {
+            WallpaperFit::Fill => Fit::Fill,
+            WallpaperFit::Fit => Fit::Fit,
+        },
     }
 }
 
@@ -908,7 +937,7 @@ impl DesktopSurface {
             layouts_file,
             bar_edge,
             combined_bar,
-            choice: None,
+            choice: Some(configured_choice(&config.wallpaper)),
             choices,
             loaded,
             loader,

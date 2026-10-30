@@ -1,0 +1,15 @@
+[package]
+name = "unbound-inbox"
+description = "Hands values from worker threads to a poll-driven run loop"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+rustix = { workspace = true, features = ["fs"] }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+rustix = { workspace = true, features = ["event"] }

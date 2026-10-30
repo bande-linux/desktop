@@ -64,6 +64,36 @@ impl Shape {
     pub const fn rounded(rect: Rect, radius: f32) -> Self {
         Self { rect, radius }
     }
+
+    pub fn bands(&self, count: usize) -> Vec<Rect> {
+        let Self { rect, radius } = *self;
+        if rect.width <= 0.0 || rect.height <= 0.0 {
+            return Vec::new();
+        }
+        let radius = radius.min(rect.width / 2.0).min(rect.height / 2.0).max(0.0);
+        let count = if radius > 0.0 { count.max(1) } else { 0 };
+        let band = radius / count.max(1) as f32;
+        let mut rects = vec![Rect::new(
+            rect.x,
+            rect.y + radius,
+            rect.width,
+            rect.height - 2.0 * radius,
+        )];
+        for index in 0..count {
+            let from_edge = index as f32 * band;
+            let rise = radius - from_edge;
+            let inset = (radius - (radius * radius - rise * rise).max(0.0).sqrt()).ceil();
+            let width = rect.width - 2.0 * inset;
+            rects.push(Rect::new(rect.x + inset, rect.y + from_edge, width, band));
+            rects.push(Rect::new(
+                rect.x + inset,
+                rect.y + rect.height - from_edge - band,
+                width,
+                band,
+            ));
+        }
+        rects
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -107,27 +137,31 @@ impl Image {
     pub fn load(path: &Path, size: u32) -> Option<Self> {
         let bytes = fs::read(path).ok()?;
         if path.extension().is_some_and(|extension| extension == "svg") {
-            let tree = usvg::Tree::from_data(&bytes, &usvg::Options::default()).ok()?;
-            let mut pixmap = tiny_skia::Pixmap::new(size, size)?;
-            let view = tree.size();
-            let scale = size as f32 / view.width().max(view.height());
-            let offset_x = (size as f32 - view.width() * scale) / 2.0;
-            let offset_y = (size as f32 - view.height() * scale) / 2.0;
-            resvg::render(
-                &tree,
-                tiny_skia::Transform::from_row(scale, 0.0, 0.0, scale, offset_x, offset_y),
-                &mut pixmap.as_mut(),
-            );
-            let mut rgba = Vec::with_capacity((size * size * 4) as usize);
-            for pixel in pixmap.pixels() {
-                let color = pixel.demultiply();
-                rgba.extend_from_slice(&[color.red(), color.green(), color.blue(), color.alpha()]);
-            }
-            return Self::from_rgba(size, size, rgba);
+            return Self::from_svg(&bytes, size, size);
         }
         let decoded = image::load_from_memory(&bytes).ok()?.to_rgba8();
         let (width, height) = decoded.dimensions();
         Self::from_rgba(width, height, decoded.into_raw())
+    }
+
+    pub fn from_svg(bytes: &[u8], width: u32, height: u32) -> Option<Self> {
+        let tree = usvg::Tree::from_data(bytes, &usvg::Options::default()).ok()?;
+        let mut pixmap = tiny_skia::Pixmap::new(width, height)?;
+        let view = tree.size();
+        let scale = (width as f32 / view.width()).min(height as f32 / view.height());
+        let offset_x = (width as f32 - view.width() * scale) / 2.0;
+        let offset_y = (height as f32 - view.height() * scale) / 2.0;
+        resvg::render(
+            &tree,
+            tiny_skia::Transform::from_row(scale, 0.0, 0.0, scale, offset_x, offset_y),
+            &mut pixmap.as_mut(),
+        );
+        let mut rgba = Vec::with_capacity((width * height * 4) as usize);
+        for pixel in pixmap.pixels() {
+            let color = pixel.demultiply();
+            rgba.extend_from_slice(&[color.red(), color.green(), color.blue(), color.alpha()]);
+        }
+        Self::from_rgba(width, height, rgba)
     }
 
     pub fn from_rgba(width: u32, height: u32, mut rgba: Vec<u8>) -> Option<Self> {

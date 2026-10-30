@@ -1,5 +1,43 @@
-use unbound_menubar::{MenuBar, app_name, clock_text};
+#![allow(clippy::expect_used, clippy::panic)]
+
+use std::collections::HashMap;
+use std::time::Duration;
+
+use unbound_menubar::dbusmenu::{Node, menu, tree, without_mnemonics};
+use unbound_menubar::devices::battery_of;
+use unbound_menubar::menus::{Command, battery_menu, bluetooth_menu, sound_menu, system_menu};
+use unbound_menubar::session::{Ending, facts};
+use unbound_menubar::status::{Battery, Bluetooth, Gadget, Output, Power, Sound};
+use unbound_menubar::tray::{TrayIcon, pixmap_rgba, split};
+use unbound_menubar::{MenuBar, Slot, app_name, clock_text};
+use unbound_toolkit::ui::{Menu, MenuItem};
 use unbound_toolkit::{Item, Palette, Point, Scheme, TextSystem};
+use zbus::zvariant::{OwnedValue, Structure, Value};
+
+fn bar() -> MenuBar {
+    MenuBar::new(
+        Palette::for_scheme(Scheme::Light),
+        TextSystem::new(),
+        "Thu 29 Oct 09:05".to_owned(),
+    )
+}
+
+fn titles(menu: &Menu) -> Vec<(String, bool, bool)> {
+    menu.items
+        .iter()
+        .filter(|item| !item.separator)
+        .map(|item| (item.title.clone(), item.enabled, item.checked))
+        .collect()
+}
+
+fn action_of<'a>(menu: &'a Menu, title: &str) -> &'a str {
+    &menu
+        .items
+        .iter()
+        .find(|item| item.title == title)
+        .unwrap_or_else(|| panic!("no {title} in {menu:?}"))
+        .action
+}
 
 #[test]
 fn the_clock_reads_like_the_macos_menu_bar() {
@@ -15,53 +53,354 @@ fn the_active_app_is_named_by_its_desktop_entry() {
         app_name("org.example.Unknown", &names),
         "org.example.Unknown"
     );
-    assert_eq!(app_name("", &names), "");
 }
 
 #[test]
-fn the_app_name_is_drawn_at_the_left_and_the_clock_at_the_right() {
-    let mut bar = MenuBar::new(
-        Palette::for_scheme(Scheme::Light),
-        TextSystem::new(),
-        "Thu 29 Oct 09:05".to_owned(),
+fn the_system_menu_and_app_sit_left_and_status_items_then_the_clock_right() {
+    let mut bar = bar();
+    bar.set_app("Terminal");
+    bar.set_app_menus(vec!["Shell".to_owned(), "Edit".to_owned()]);
+    bar.status_mut().sound = Some(Sound {
+        volume: 0.5,
+        muted: false,
+        outputs: Vec::new(),
+        default_output: None,
+    });
+    bar.status_mut().battery = Some(Battery {
+        percent: 80.0,
+        power: Power::Full,
+    });
+    let scene = bar.scene(1280, 24, 2.0);
+    assert!(
+        scene
+            .items
+            .iter()
+            .any(|item| matches!(item, Item::Image { .. })),
+        "status symbols are drawn"
     );
-    assert!(bar.set_app("Terminal"));
-    assert!(!bar.set_app("Terminal"));
 
-    let scene = bar.scene(1024, 24);
-    let texts = scene
-        .items
+    let order: Vec<Slot> = (0..1280)
+        .step_by(2)
+        .filter_map(|x| bar.slot_at(Point::new(x as f32, 12.0)))
+        .fold(Vec::new(), |mut order, slot| {
+            if order.last() != Some(&slot) {
+                order.push(slot);
+            }
+            order
+        });
+    assert_eq!(
+        order,
+        [
+            Slot::System,
+            Slot::App,
+            Slot::AppMenu(0),
+            Slot::AppMenu(1),
+            Slot::Sound,
+            Slot::Battery,
+            Slot::ControlCenter,
+            Slot::Clock
+        ]
+    );
+    let tree = bar.accessibility();
+    let labels: Vec<String> = tree
+        .nodes
         .iter()
-        .filter_map(|item| match item {
-            Item::Text { origin, paragraph } => Some((origin.x, paragraph.width())),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-    let [(app_x, _), (clock_x, clock_width)] = texts.as_slice() else {
-        panic!("{texts:?}");
+        .skip(1)
+        .filter_map(|(_, node)| node.label().map(str::to_owned))
+        .collect();
+    assert!(labels.contains(&"Battery 80%".to_owned()));
+    assert!(labels.contains(&"Control Center".to_owned()));
+    let (terminal, _) = tree
+        .nodes
+        .iter()
+        .find(|(_, node)| node.label() == Some("Terminal"))
+        .expect("the app is announced");
+    assert_eq!(bar.slot_of_node(*terminal), Some(Slot::App));
+    let clock = bar.slot_rect(Slot::Clock).expect("clock");
+    assert!(clock.x + clock.width <= 1280.0 && clock.x + clock.width > 1260.0);
+}
+
+#[test]
+fn an_open_menu_highlights_its_item() {
+    let mut bar = bar();
+    bar.scene(800, 24, 1.0);
+    let plain = bar.scene(800, 24, 1.0).items.len();
+    assert!(bar.set_open(Some(Slot::System)));
+    assert_eq!(bar.scene(800, 24, 1.0).items.len(), plain + 1);
+    assert!(!bar.set_open(Some(Slot::System)));
+}
+
+#[test]
+fn every_command_survives_its_trip_through_a_menu_action() {
+    for command in [
+        Command::About,
+        Command::Settings(None),
+        Command::Settings(Some("wifi".to_owned())),
+        Command::ForceQuit,
+        Command::Sleep,
+        Command::Restart,
+        Command::ShutDown,
+        Command::LockScreen,
+        Command::LogOut,
+        Command::SetWifi(false),
+        Command::Join(b"caf\xc3\xa9:5G".to_vec()),
+        Command::SetMuted(true),
+        Command::UseOutput("alsa_output.usb".to_owned()),
+        Command::SetBluetooth(true),
+        Command::ToggleGadget("AA:BB:CC:DD:EE:FF".to_owned()),
+        Command::Item {
+            item: ":1.42/MenuBar".to_owned(),
+            id: 7,
+        },
+    ] {
+        assert_eq!(Command::parse(&command.action()), Some(command));
+    }
+    assert_eq!(Command::parse("unknown"), None);
+}
+
+#[test]
+fn the_system_menu_offers_power_and_session_commands_with_the_users_name() {
+    let menu = system_menu("Ada Lovelace");
+    let shown = titles(&menu);
+    assert_eq!(
+        shown.first().map(|item| item.0.as_str()),
+        Some("About This Computer")
+    );
+    assert_eq!(
+        shown.last().map(|item| item.0.as_str()),
+        Some("Log Out Ada Lovelace…")
+    );
+    assert_eq!(
+        Command::parse(action_of(&menu, "Force Quit…")),
+        Some(Command::ForceQuit)
+    );
+    assert_eq!(
+        Command::parse(action_of(&menu, "Shut Down…")),
+        Some(Command::ShutDown)
+    );
+}
+
+#[test]
+fn the_battery_menu_tells_the_time_left_and_the_power_source() {
+    let on_battery = Battery {
+        percent: 64.4,
+        power: Power::Battery {
+            remaining: Some(Duration::from_secs(3 * 3600 + 25 * 60)),
+        },
     };
-    assert!(*app_x < 32.0);
-    assert!(clock_x + clock_width <= 1024.0 && clock_x + clock_width > 990.0);
+    let shown: Vec<String> = titles(&battery_menu(&on_battery))
+        .into_iter()
+        .map(|item| item.0)
+        .collect();
+    assert_eq!(
+        shown,
+        ["Battery 64%", "3:25 remaining", "Power Source: Battery"]
+    );
+
+    let charging = battery_of(1, 50.0, 0, 1800);
+    assert_eq!(
+        charging.power,
+        Power::Charging {
+            until_full: Some(Duration::from_secs(1800))
+        }
+    );
+    assert_eq!(titles(&battery_menu(&charging))[1].0, "0:30 until full");
+    assert_eq!(battery_of(4, 100.0, 0, 0).power, Power::Full);
+    assert_eq!(
+        battery_of(2, 30.0, 0, 0).power,
+        Power::Battery { remaining: None }
+    );
 }
 
 #[test]
-fn control_center_sits_left_of_the_clock_and_takes_only_its_own_clicks() {
-    let mut bar = MenuBar::new(
-        Palette::for_scheme(Scheme::Light),
-        TextSystem::new(),
-        "Thu 29 Oct 09:05".to_owned(),
+fn the_sound_menu_checks_the_output_in_use_and_mute_switches() {
+    let sound = Sound {
+        volume: 0.42,
+        muted: false,
+        outputs: vec![
+            Output {
+                name: "speakers".to_owned(),
+                description: "Speakers".to_owned(),
+            },
+            Output {
+                name: "usb".to_owned(),
+                description: "USB Headset".to_owned(),
+            },
+        ],
+        default_output: Some("usb".to_owned()),
+    };
+    let menu = sound_menu(&sound);
+    let shown = titles(&menu);
+    assert!(shown.contains(&("Volume 42%".to_owned(), false, false)));
+    assert!(shown.contains(&("USB Headset".to_owned(), true, true)));
+    assert!(shown.contains(&("Speakers".to_owned(), true, false)));
+    assert_eq!(
+        Command::parse(action_of(&menu, "Mute")),
+        Some(Command::SetMuted(true))
     );
-    let scene = bar.scene(1024, 24);
-    let clock_x = scene
-        .items
-        .iter()
-        .filter_map(|item| match item {
-            Item::Text { origin, .. } => Some(origin.x),
-            _ => None,
-        })
-        .fold(f32::MIN, f32::max);
+    assert_eq!(
+        Command::parse(action_of(&menu, "Speakers")),
+        Some(Command::UseOutput("speakers".to_owned()))
+    );
+}
 
-    assert!(bar.control_center_hit(Point::new(clock_x - 20.0, 12.0)));
-    assert!(!bar.control_center_hit(Point::new(clock_x + 4.0, 12.0)));
-    assert!(!bar.control_center_hit(Point::new(clock_x - 60.0, 12.0)));
+#[test]
+fn the_bluetooth_menu_lists_devices_only_while_bluetooth_is_on() {
+    let headphones = Gadget {
+        address: "AA:BB".to_owned(),
+        name: "Headphones".to_owned(),
+        connected: true,
+    };
+    let on = Bluetooth {
+        powered: true,
+        devices: vec![headphones.clone()],
+    };
+    let menu = bluetooth_menu(&on);
+    assert!(titles(&menu).contains(&("Headphones".to_owned(), true, true)));
+    assert_eq!(
+        Command::parse(action_of(&menu, "Bluetooth")),
+        Some(Command::SetBluetooth(false))
+    );
+
+    let off = Bluetooth {
+        powered: false,
+        devices: vec![headphones],
+    };
+    assert!(
+        !titles(&bluetooth_menu(&off))
+            .iter()
+            .any(|item| item.0 == "Headphones")
+    );
+}
+
+fn layout_node(
+    id: i32,
+    properties: &[(&str, Value<'static>)],
+    children: Vec<Value<'static>>,
+) -> Value<'static> {
+    let properties: HashMap<String, Value<'static>> = properties
+        .iter()
+        .map(|(name, value)| ((*name).to_owned(), Value::Value(Box::new(value.clone()))))
+        .collect();
+    Value::Structure(Structure::from((id, properties, children)))
+}
+
+#[test]
+fn a_dbusmenu_layout_becomes_a_menu_without_mnemonics_or_hidden_items() {
+    assert_eq!(without_mnemonics("_Open File"), "Open File");
+    assert_eq!(without_mnemonics("Save__As"), "Save_As");
+
+    let children = vec![
+        Value::Value(Box::new(layout_node(
+            1,
+            &[("label", Value::from("_Show"))],
+            Vec::new(),
+        ))),
+        Value::Value(Box::new(layout_node(
+            2,
+            &[("type", Value::from("separator"))],
+            Vec::new(),
+        ))),
+        Value::Value(Box::new(layout_node(
+            3,
+            &[
+                ("label", Value::from("Hidden")),
+                ("visible", Value::from(false)),
+            ],
+            Vec::new(),
+        ))),
+        Value::Value(Box::new(layout_node(
+            4,
+            &[
+                ("label", Value::from("Mute")),
+                ("toggle-type", Value::from("checkmark")),
+                ("toggle-state", Value::from(1)),
+                ("enabled", Value::from(false)),
+            ],
+            Vec::new(),
+        ))),
+        Value::Value(Box::new(layout_node(
+            5,
+            &[("label", Value::from("More"))],
+            vec![Value::Value(Box::new(layout_node(
+                6,
+                &[("label", Value::from("Quit"))],
+                Vec::new(),
+            )))],
+        ))),
+    ];
+    let root: (i32, HashMap<String, OwnedValue>, Vec<OwnedValue>) = (
+        0,
+        HashMap::new(),
+        children
+            .into_iter()
+            .map(|child| OwnedValue::try_from(child).expect("owned"))
+            .collect(),
+    );
+    let node: Node = tree(root);
+    let converted = menu(&node, ":1.9/MenuBar");
+
+    assert_eq!(converted.items.len(), 4);
+    assert_eq!(
+        converted.items[0],
+        MenuItem::new(
+            "Show",
+            &Command::Item {
+                item: ":1.9/MenuBar".to_owned(),
+                id: 1
+            }
+            .action()
+        )
+    );
+    assert!(converted.items[1].separator);
+    assert_eq!(
+        (
+            converted.items[2].title.as_str(),
+            converted.items[2].checked,
+            converted.items[2].enabled
+        ),
+        ("Mute", true, false)
+    );
+    let more = converted.items[3].submenu.as_ref().expect("a submenu");
+    assert_eq!(more.items[0].title, "Quit");
+}
+
+#[test]
+fn status_item_ids_and_pixmaps_are_understood() {
+    assert_eq!(
+        split(":1.5/StatusNotifierItem"),
+        (":1.5", "/StatusNotifierItem")
+    );
+    assert_eq!(
+        split("org.example.Tray"),
+        ("org.example.Tray", "/StatusNotifierItem")
+    );
+    assert_eq!(
+        pixmap_rgba(1, 1, &[0xFF, 0x10, 0x20, 0x30]),
+        Some(TrayIcon::Pixels {
+            width: 1,
+            height: 1,
+            rgba: vec![0x10, 0x20, 0x30, 0xFF]
+        })
+    );
+    assert_eq!(pixmap_rgba(2, 2, &[0; 4]), None);
+}
+
+#[test]
+fn about_this_computer_names_the_system_chip_and_memory() {
+    let found = facts(
+        "studio\n",
+        "NAME=\"Debian GNU/Linux\"\nPRETTY_NAME=\"Debian GNU/Linux 13 (trixie)\"\n",
+        Some("Apple Mac Studio (M2 Max, 2023)\0"),
+        "",
+        "MemTotal:       32768000 kB\nMemFree: 1 kB\n",
+    );
+    assert_eq!(found.name, "studio");
+    assert_eq!(found.system, "Debian GNU/Linux 13 (trixie)");
+    assert_eq!(found.chip, "Apple Mac Studio (M2 Max, 2023)");
+    assert_eq!(found.memory, "31 GB");
+    assert_eq!(
+        Ending::from_keyword(Ending::ShutDown.keyword()),
+        Some(Ending::ShutDown)
+    );
 }

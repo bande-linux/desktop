@@ -3605,7 +3605,10 @@ dependencies = [
  "unbound-l10n",
  "unbound-log",
  "unbound-network",
+ "unbound-notify",
+ "unbound-power",
  "unbound-toolkit",
+ "unbound-xdg",
  "zbus",
 ]
 
@@ -3707,6 +3710,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "unbound-inbox"
+version = "0.1.0"
+dependencies = [
+ "rustix 1.1.6",
+]
+
+[[package]]
 name = "unbound-l10n"
 version = "0.1.0"
 dependencies = [
@@ -3767,11 +3777,18 @@ dependencies = [
 name = "unbound-menubar"
 version = "0.1.0"
 dependencies = [
+ "accesskit",
  "jiff",
  "tracing",
+ "unbound-audio",
+ "unbound-bluetooth",
+ "unbound-inbox",
+ "unbound-l10n",
  "unbound-log",
+ "unbound-network",
  "unbound-toolkit",
  "unbound-xdg",
+ "zbus",
 ]
 
 [[package]]
@@ -3794,6 +3811,21 @@ name = "unbound-network"
 version = "0.1.0"
 dependencies = [
  "unbound-test-bus",
+ "zbus",
+]
+
+[[package]]
+name = "unbound-notifications"
+version = "0.1.0"
+dependencies = [
+ "tracing",
+ "unbound-inbox",
+ "unbound-l10n",
+ "unbound-log",
+ "unbound-notify",
+ "unbound-spring",
+ "unbound-toolkit",
+ "unbound-xdg",
  "zbus",
 ]
 

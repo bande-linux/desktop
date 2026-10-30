@@ -142,7 +142,14 @@ graph LR
     `org.kde.StatusNotifierWatcher` at `/StatusNotifierWatcher`. An item registered by bus name
     is listed as `<name>/StatusNotifierItem`, one registered by object path (libappindicator,
     Ayatana) as `<caller><path>`, as KDE's watcher does; items and hosts are dropped when their
-    connection leaves the bus. The menu bar's tray host is not built yet.
+    connection leaves the bus. The menu bar is the host (`org.kde.StatusNotifierHost-<pid>`): it
+    shows each item that is not `Passive` by its icon name or pixmap; a click opens the item's
+    `com.canonical.dbusmenu` menu below it (or calls `Activate` when it has none), a secondary
+    click calls `Activate`. Our own apps use the same menu format for their app menus: an app
+    owns its app id as bus name and exports `com.canonical.dbusmenu` at `/org/unbound/MenuBar`;
+    the first top-level submenu is shown under the bold app name and the others become the
+    menu titles beside it. The menu bar asks for the menu when the app becomes active, and only
+    when the name has an owner, so it never starts an app by D-Bus activation.
 - **Network and Bluetooth**: NetworkManager (`org.freedesktop.NetworkManager`) and BlueZ
   (`org.bluez`) for Wi-Fi selection and Bluetooth pairing in Control Center and Settings, through
   `crates/libs/network` and `crates/libs/bluetooth`.

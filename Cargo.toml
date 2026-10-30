@@ -69,6 +69,7 @@ unbound-files = { path = "crates/apps/files" }
 unbound-fs = { path = "crates/libs/fs" }
 unbound-graphics = { path = "crates/toolkit/graphics" }
 unbound-greeter = { path = "crates/shell/greeter" }
+unbound-inbox = { path = "crates/libs/inbox" }
 unbound-l10n = { path = "crates/libs/l10n" }
 unbound-launcher = { path = "crates/shell/launcher" }
 unbound-lock = { path = "crates/shell/lock" }
@@ -76,6 +77,7 @@ unbound-log = { path = "crates/libs/log" }
 unbound-menubar = { path = "crates/shell/menubar" }
 unbound-monitor = { path = "crates/apps/monitor" }
 unbound-network = { path = "crates/libs/network" }
+unbound-notifications = { path = "crates/shell/notifications" }
 unbound-notify = { path = "crates/services/notify" }
 unbound-polkit = { path = "crates/services/polkit" }
 unbound-power = { path = "crates/services/power" }

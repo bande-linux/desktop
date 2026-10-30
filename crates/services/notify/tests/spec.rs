@@ -6,6 +6,7 @@ use std::thread;
 use std::time::Duration;
 
 use unbound_notify::NotificationServer;
+use unbound_notify::client::NotificationCenter;
 use unbound_test_bus::SessionBus;
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::zvariant::Value;
@@ -47,12 +48,14 @@ trait Notifications {
 enum Event {
     Closed(u32, u32),
     Action(u32, String),
+    Token(u32, String),
 }
 
 struct Fixture {
     _bus: SessionBus,
     server: NotificationServer,
     client: NotificationsProxyBlocking<'static>,
+    center: NotificationCenter<'static>,
     events: Receiver<Event>,
 }
 
@@ -78,6 +81,9 @@ fn start() -> Fixture {
                 Some("NotificationClosed") => body
                     .deserialize::<(u32, u32)>()
                     .map(|(id, reason)| Event::Closed(id, reason)),
+                Some("ActivationToken") => body
+                    .deserialize::<(u32, String)>()
+                    .map(|(id, token)| Event::Token(id, token)),
                 Some("ActionInvoked") => body
                     .deserialize::<(u32, String)>()
                     .map(|(id, key)| Event::Action(id, key)),
@@ -92,6 +98,7 @@ fn start() -> Fixture {
     Fixture {
         _bus: bus,
         server,
+        center: NotificationCenter::new(&connection).expect("center proxy"),
         client,
         events,
     }
@@ -267,5 +274,25 @@ fn dismissing_emits_reason_2() {
     let fixture = start();
     let id = fixture.notify(0, "dismiss me", &[], 0);
     assert!(fixture.server.dismiss(id).expect("dismiss"));
+    assert_eq!(fixture.next_event(), Event::Closed(id, DISMISSED));
+}
+
+#[test]
+fn clicking_a_notification_hands_the_activation_token_before_the_default_action() {
+    let fixture = start();
+    let id = fixture.notify(0, "new mail", &["default", "Open"], 0);
+
+    assert!(
+        fixture
+            .center
+            .activate(id, "default", "token-1")
+            .expect("Activate")
+    );
+
+    assert_eq!(fixture.next_event(), Event::Token(id, "token-1".to_owned()));
+    assert_eq!(
+        fixture.next_event(),
+        Event::Action(id, "default".to_owned())
+    );
     assert_eq!(fixture.next_event(), Event::Closed(id, DISMISSED));
 }

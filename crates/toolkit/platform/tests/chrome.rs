@@ -18,6 +18,7 @@ use unbound_widgets::{Alert, Cell, Column, Context, Menu, MenuItem, Row, Sort, T
 const MIN_SSIM: f64 = 0.99;
 const SCALE: f64 = 2.0;
 const OUTPUT: (i32, i32) = (420, 300);
+const SHOWN_AT_REST: u32 = 3;
 
 fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>) {
     let actual = image::RgbaImage::from_raw(size.0, size.1, rgba).expect("frame");
@@ -44,6 +45,7 @@ fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>) {
 struct Still {
     done: mpsc::Receiver<()>,
     ui: Option<Ui>,
+    frames_at_rest: u32,
     at_rest: Arc<AtomicBool>,
 }
 
@@ -59,10 +61,13 @@ impl App for Still {
                 items: Vec::new(),
             },
         };
-        self.at_rest.store(
-            !self.ui.as_ref().is_some_and(Ui::is_animating),
-            Ordering::SeqCst,
-        );
+        self.frames_at_rest = if self.ui.as_ref().is_some_and(Ui::is_animating) {
+            0
+        } else {
+            self.frames_at_rest + 1
+        };
+        self.at_rest
+            .store(self.frames_at_rest > SHOWN_AT_REST, Ordering::SeqCst);
         scene
     }
 
@@ -73,7 +78,7 @@ impl App for Still {
     }
 
     fn animating(&self) -> bool {
-        self.ui.as_ref().is_some_and(Ui::is_animating)
+        self.frames_at_rest <= SHOWN_AT_REST
     }
 
     fn deadline(&self) -> Option<Instant> {
@@ -85,7 +90,7 @@ impl App for Still {
     }
 }
 
-fn shot(name: &str, prepare: fn(&mut Window) -> Option<Ui>, pointer: (i32, i32)) {
+fn shot(name: &str, prepare: fn(&mut Window) -> Option<Ui>, pointer: (i32, i32), popups: usize) {
     let output = (
         (f64::from(OUTPUT.0) * SCALE) as i32,
         (f64::from(OUTPUT.1) * SCALE) as i32,
@@ -108,12 +113,15 @@ fn shot(name: &str, prepare: fn(&mut Window) -> Option<Ui>, pointer: (i32, i32))
         let mut still = Still {
             done: check_done,
             ui: None,
+            frames_at_rest: 0,
             at_rest: client_at_rest,
         };
         window.wait_for_gpu();
         let scene = still.scene(&mut window);
         window.draw(&scene).expect("first frame");
         still.ui = prepare(&mut window);
+        still.frames_at_rest = 0;
+        still.at_rest.store(false, Ordering::SeqCst);
         window.request_redraw();
         drawn.send(()).expect("report the frame");
         run(&mut window, &mut still).expect("run loop");
@@ -147,6 +155,13 @@ fn shot(name: &str, prepare: fn(&mut Window) -> Option<Ui>, pointer: (i32, i32))
         );
         pump(&mut server, &mut scheduler, &mut renderer);
     }
+    while server.popup_count() != popups {
+        assert!(
+            start.elapsed() < Duration::from_secs(30),
+            "the popups never opened"
+        );
+        pump(&mut server, &mut scheduler, &mut renderer);
+    }
     let settled = Instant::now() + Duration::from_millis(700);
     while Instant::now() < settled || !at_rest.load(Ordering::SeqCst) || server.is_animating() {
         assert!(
@@ -174,7 +189,7 @@ fn shot(name: &str, prepare: fn(&mut Window) -> Option<Ui>, pointer: (i32, i32))
 
 #[test]
 fn the_window_frame_matches_its_golden_with_the_controls_hovered() {
-    shot("window-frame-hovered", |_| None, (40, 14));
+    shot("window-frame-hovered", |_| None, (40, 14), 0);
 }
 
 fn show_menu(window: &mut Window) -> Option<Ui> {
@@ -207,6 +222,7 @@ fn a_menu_with_an_open_submenu_matches_its_golden() {
         "menu-submenu",
         show_menu,
         (60, TITLE_BAR_HEIGHT as i32 + sort_by),
+        2,
     );
 }
 
@@ -270,7 +286,7 @@ fn processes(_window: &mut Window) -> Option<Ui> {
 
 #[test]
 fn a_table_with_a_sorted_column_and_a_selection_matches_its_golden() {
-    shot("table", processes, (100, TITLE_BAR_HEIGHT as i32 + 60));
+    shot("table", processes, (100, TITLE_BAR_HEIGHT as i32 + 60), 0);
 }
 
 fn alert(window: &mut Window) -> Option<Ui> {
@@ -289,5 +305,5 @@ fn alert(window: &mut Window) -> Option<Ui> {
 
 #[test]
 fn an_alert_sheet_matches_its_golden() {
-    shot("alert", alert, (10, TITLE_BAR_HEIGHT as i32 + 150));
+    shot("alert", alert, (10, TITLE_BAR_HEIGHT as i32 + 150), 0);
 }

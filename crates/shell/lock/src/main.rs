@@ -35,6 +35,7 @@ struct Locker {
     verdict_sender: UnixStream,
     next_clock: Instant,
     backdrop: Option<Inbox<Image>>,
+    backdrop_requested: bool,
     layouts: Layouts,
     unlocked: bool,
 }
@@ -62,7 +63,8 @@ impl Locker {
 impl App for Locker {
     fn scene(&mut self, window: &mut Window) -> Scene {
         let (width, height) = window.size();
-        if self.backdrop.is_none() && width > 0 && height > 0 {
+        if !self.backdrop_requested && width > 0 && height > 0 {
+            self.backdrop_requested = true;
             match load_backdrop(
                 BackdropSource::Session,
                 variant_of(window.appearance().scheme),
@@ -110,7 +112,7 @@ impl App for Locker {
 
     fn source_ready(&mut self, window: &mut Window, index: usize) {
         if index == 1 {
-            if let Some(image) = self.backdrop.as_ref().and_then(|inbox| inbox.drain().pop()) {
+            if let Some(image) = self.backdrop.take().and_then(|inbox| inbox.drain().pop()) {
                 self.screen.set_backdrop(image, frame_time().on_screen());
                 window.request_redraw();
             }
@@ -188,6 +190,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         verdict_sender,
         next_clock: Instant::now() + CLOCK_TICK,
         backdrop: None,
+        backdrop_requested: false,
         layouts: Layouts::load(),
         unlocked: false,
     };

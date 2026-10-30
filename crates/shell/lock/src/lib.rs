@@ -64,7 +64,7 @@ pub fn shake_offset(elapsed: Duration) -> f32 {
 }
 
 pub fn clock_texts(formats: &DateFormats, now: &jiff::Zoned) -> (String, String) {
-    (formats.long_date(now), now.strftime("%H:%M").to_string())
+    (formats.long_date(now), formats.time(now).0)
 }
 
 struct Model {

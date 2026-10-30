@@ -233,7 +233,8 @@
       <description summary="open the overview">
         Opens the overview of the active workspace. With an app id it shows
         only that app's windows on every workspace, as App Exposé does; an
-        empty app id shows every window of the active workspace.
+        empty app id shows every window of the active workspace. Asking again
+        for what is already shown closes it.
       </description>
       <arg name="app_id" type="string"/>
     </request>

@@ -7,7 +7,7 @@ use unbound_datetime::{DateFormats, posix_locale};
 use unbound_notifications::{BANNER_WIDTH, CENTER_WIDTH, Request, Screen, Sender, age_label};
 use unbound_notify::{Notification, Presentation, Stack};
 use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer};
-use unbound_toolkit::{Palette, Point, Rect, Scheme, TextSystem};
+use unbound_toolkit::{DisplayEdge, Palette, Point, Rect, Scheme, TextSystem};
 
 const WIDTH: u32 = 1280;
 const HEIGHT: u32 = 776;
@@ -305,4 +305,25 @@ fn a_notification_tells_its_age_then_the_day_then_the_date() {
     assert_eq!(age("2026-10-27T08:00:00"), "Tuesday");
     assert_eq!(age("2026-10-12T08:00:00"), "Oct 12");
     assert_eq!(age("2025-12-24T08:00:00"), "Dec 24, 2025");
+}
+
+#[test]
+fn a_left_bar_opens_the_center_beside_its_clock_instead_of_at_the_right() {
+    let now = Instant::now();
+    let mut screen = screen();
+    screen.present(
+        banners(vec![stack(
+            "mail",
+            vec![notification(1, "Mail", "Hi", &[])],
+        )]),
+        now,
+    );
+    screen.set_anchor(DisplayEdge::Left, Rect::new(0.0, 724.0, 64.0, 52.0));
+    screen.open(now);
+    let inside = Point::new(64.0 + 12.0 + 40.0, 30.0);
+    screen.handle(&pointer(Event::PointerDown, inside), now + SETTLED);
+    assert!(screen.is_open());
+    let right = Point::new(WIDTH as f32 - 40.0, 30.0);
+    screen.handle(&pointer(Event::PointerDown, right), now + SETTLED);
+    assert!(!screen.is_open());
 }

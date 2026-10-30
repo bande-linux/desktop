@@ -30,6 +30,7 @@ pub enum Update {
     ClockFormat(String),
     BatteryPercentage(bool),
     Unread(bool),
+    BarLayout { menu_bar: String, edge: String },
 }
 
 #[cfg(test)]

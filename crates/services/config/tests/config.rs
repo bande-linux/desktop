@@ -7,8 +7,8 @@ use std::thread;
 use std::time::Duration;
 
 use unbound_config::{
-    AlertSound, Appearance, CapsLock, Config, ConfigError, ConfigStore, DEFAULT_DOCK_APPS,
-    DisplaySettings, DockEdge, InputSource, MenuBarPlacement, Placement, ReloadError, Rotation,
+    AlertSound, Appearance, BarEdge, CapsLock, Config, ConfigError, ConfigStore, DEFAULT_BAR_APPS,
+    DisplaySettings, InputSource, MenuBarPlacement, Placement, ReloadError, Rotation,
     SecondaryClick, Suspend, WallpaperFit, WallpaperVariant, config_path, copy_login_picture,
     login_picture, login_picture_file, system_input_sources,
 };
@@ -29,8 +29,8 @@ const OWNERS_FILE: &str = "appearance \"dark\"
 output \"Virtual-1\" {
     scale 1.5
 }
-dock {
-    size 45
+bar {
+    size 44
 }
 ";
 
@@ -40,7 +40,7 @@ fn a_file_from_before_displays_were_named_still_applies_every_setting() {
 
     assert_eq!(problems, []);
     assert_eq!(config.appearance, Appearance::Dark);
-    assert_eq!(config.dock.icon_size, 45);
+    assert_eq!(config.bar.icon_size, 44);
     assert_eq!(config.display("Virtual-1", "Virtual-1").scale, Some(1.5));
     assert_eq!(
         config
@@ -66,18 +66,26 @@ fn a_named_display_wins_over_its_old_connector_block() {
 }
 
 #[test]
-fn the_old_panel_section_is_read_as_the_dock() {
+fn the_old_panel_and_dock_sections_are_read_into_the_bar() {
     let (config, problems) = Config::load("panel {\n    edge \"top\"\n}\n").expect("KDL");
 
     assert_eq!(problems, []);
-    assert_eq!(config.dock.edge, DockEdge::Top);
-    assert_eq!(error_at("dock {\n}\npanel {\n}\n"), (3, 1));
+    assert_eq!(config.bar.edge, BarEdge::Top);
+    let (config, problems) = Config::load(
+        "dock {\n    size 48\n    edge \"right\"\n}\nbar {\n    menu-bar \"separate\"\n    edge \"bottom\"\n}\n",
+    )
+    .expect("KDL");
+    assert_eq!(problems, []);
+    assert_eq!(config.bar.icon_size, 48);
+    assert_eq!(config.bar.edge, BarEdge::Bottom);
+    assert_eq!(config.bar.menu_bar, MenuBarPlacement::Separate);
+    assert_eq!(error_at("bar {\n}\nbar {\n}\n"), (3, 1));
 }
 
 #[test]
 fn unknown_and_invalid_settings_are_reported_while_every_valid_one_applies() {
     let (config, problems) = Config::load(
-        "appearance \"dark\"\ntheme \"graphite\"\ndock {\n    edge \"middle\"\n    size 64\n    sparkle #true\n}\nidle {\n    dim-after \"10m\"\n    lock-after \"5m\"\n}\nkeyboard {\n    repeat-rate 40\n}\n",
+        "appearance \"dark\"\ntheme \"graphite\"\nbar {\n    edge \"middle\"\n    size 52\n    sparkle #true\n}\nidle {\n    dim-after \"10m\"\n    lock-after \"5m\"\n}\nkeyboard {\n    repeat-rate 40\n}\n",
     )
     .expect("well-formed KDL");
 
@@ -89,8 +97,8 @@ fn unknown_and_invalid_settings_are_reported_while_every_valid_one_applies() {
         [(2, 1), (4, 10), (6, 5), (10, 5)]
     );
     assert_eq!(config.appearance, Appearance::Dark);
-    assert_eq!(config.dock.edge, DockEdge::Left);
-    assert_eq!(config.dock.icon_size, 64);
+    assert_eq!(config.bar.edge, BarEdge::Left);
+    assert_eq!(config.bar.icon_size, 52);
     assert_eq!(config.idle.dim_after, Duration::from_secs(10 * 60));
     assert_eq!(config.idle.lock_after, Duration::from_secs(10 * 60));
     assert_eq!(config.keyboard.repeat_rate, 40);
@@ -99,8 +107,8 @@ fn unknown_and_invalid_settings_are_reported_while_every_valid_one_applies() {
 #[test]
 fn an_empty_file_gives_the_plan_defaults() {
     let config = Config::parse("").expect("empty config");
-    assert_eq!(config.dock.edge, DockEdge::Left);
-    assert_eq!(config.dock.apps, DEFAULT_DOCK_APPS);
+    assert_eq!(config.bar.edge, BarEdge::Left);
+    assert_eq!(config.bar.apps, DEFAULT_BAR_APPS);
     assert_eq!(config.idle.dim_after, Duration::from_secs(5 * 60));
     assert_eq!(config.idle.lock_after, Duration::from_secs(10 * 60));
     assert!(config.displays.is_empty());
@@ -112,7 +120,7 @@ fn every_setting_is_read() {
     let config = Config::parse(
         r#"
 appearance "dark"
-dock {
+bar {
     edge "bottom"
     apps "org.unbound.Terminal" "org.mozilla.firefox"
 }
@@ -142,9 +150,9 @@ arrangement {
     .expect("valid config");
 
     assert_eq!(config.appearance, Appearance::Dark);
-    assert_eq!(config.dock.edge, DockEdge::Bottom);
+    assert_eq!(config.bar.edge, BarEdge::Bottom);
     assert_eq!(
-        config.dock.apps,
+        config.bar.apps,
         ["org.unbound.Terminal", "org.mozilla.firefox"]
     );
     assert_eq!(config.idle.dim_after, Duration::from_secs(90));
@@ -221,25 +229,29 @@ fn a_mirror_must_name_another_display_of_its_arrangement() {
 #[test]
 fn the_dock_accepts_each_of_the_four_edges() {
     for (name, edge) in [
-        ("left", DockEdge::Left),
-        ("bottom", DockEdge::Bottom),
-        ("right", DockEdge::Right),
-        ("top", DockEdge::Top),
+        ("left", BarEdge::Left),
+        ("bottom", BarEdge::Bottom),
+        ("right", BarEdge::Right),
+        ("top", BarEdge::Top),
     ] {
-        let config = Config::parse(&format!("dock {{\n    edge \"{name}\"\n}}\n"));
-        assert_eq!(config.map(|config| config.dock.edge), Ok(edge));
+        let config = Config::parse(&format!("bar {{\n    edge \"{name}\"\n}}\n"));
+        assert_eq!(config.map(|config| config.bar.edge), Ok(edge));
     }
 }
 
 #[test]
-fn the_menu_bar_is_separate_unless_the_bar_combines_it() {
+fn the_menu_bar_is_in_the_bar_unless_set_apart() {
     assert_eq!(
         Config::parse("").map(|config| config.bar.menu_bar),
+        Ok(MenuBarPlacement::InBar)
+    );
+    assert_eq!(
+        Config::parse("bar {\n    menu-bar \"separate\"\n}\n").map(|config| config.bar.menu_bar),
         Ok(MenuBarPlacement::Separate)
     );
     assert_eq!(
-        Config::parse("bar {\n    menu-bar \"combined\"\n}\n").map(|config| config.bar.menu_bar),
-        Ok(MenuBarPlacement::Combined)
+        Config::parse("bar {\n    names #true\n}\n").map(|config| config.bar.names),
+        Ok(true)
     );
     assert_eq!(error_at("bar {\n    menu-bar \"floating\"\n}\n"), (2, 14));
 }
@@ -258,10 +270,10 @@ fn appearance_accepts_dark_light_and_automatic() {
 
 #[test]
 fn a_syntax_error_reports_its_line_and_column() {
-    assert_eq!(error_at("dock {\n    edge \"left\n}\n"), (2, 10));
+    assert_eq!(error_at("bar {\n    edge \"left\n}\n"), (2, 10));
     assert_eq!(
-        error_at("appearance \"dark\"\ndock {\n    edge \"left\"\n"),
-        (2, 6)
+        error_at("appearance \"dark\"\nbar {\n    edge \"left\"\n"),
+        (2, 5)
     );
 }
 
@@ -271,14 +283,14 @@ fn an_unknown_setting_is_reported_where_it_starts() {
         error_at("appearance \"dark\"\n  theme \"graphite\"\n"),
         (2, 3)
     );
-    assert_eq!(error_at("dock {\n    autohide #true\n}\n"), (2, 5));
-    assert_eq!(error_at("dock {\n    apps \"a.b\" \"a.b\"\n}\n"), (2, 16));
-    assert_eq!(error_at("dock {\n    apps 3\n}\n"), (2, 10));
+    assert_eq!(error_at("bar {\n    autohide #true\n}\n"), (2, 5));
+    assert_eq!(error_at("bar {\n    apps \"a.b\" \"a.b\"\n}\n"), (2, 16));
+    assert_eq!(error_at("bar {\n    apps 3\n}\n"), (2, 10));
 }
 
 #[test]
 fn a_value_outside_its_choices_is_reported_at_the_value() {
-    assert_eq!(error_at("dock {\n    edge \"middle\"\n}\n"), (2, 10));
+    assert_eq!(error_at("bar {\n    edge \"middle\"\n}\n"), (2, 10));
     assert_eq!(error_at("appearance \"sepia\"\n"), (1, 12));
 }
 
@@ -383,9 +395,9 @@ fn a_setting_given_twice_is_reported_at_the_second_one() {
 #[test]
 fn a_valid_file_replaces_the_active_configuration() {
     let store = ConfigStore::default();
-    let applied = store.apply("dock {\n    edge \"top\"\n}\n").expect("valid");
+    let applied = store.apply("bar {\n    edge \"top\"\n}\n").expect("valid");
     assert!(Arc::ptr_eq(&applied.config, &store.current()));
-    assert_eq!(store.current().dock.edge, DockEdge::Top);
+    assert_eq!(store.current().bar.edge, BarEdge::Top);
 }
 
 #[test]
@@ -395,7 +407,7 @@ fn an_unreadable_file_leaves_the_active_configuration_untouched() {
     let before = store.current();
 
     let error = store
-        .apply("appearance \"dark\"\ndock {\n    edge \"middle\n}\n")
+        .apply("appearance \"dark\"\nbar {\n    edge \"middle\n}\n")
         .expect_err("invalid");
 
     assert_eq!((error.line, error.column), (3, 10));
@@ -405,8 +417,8 @@ fn an_unreadable_file_leaves_the_active_configuration_untouched() {
 
 #[test]
 fn readers_never_observe_a_partially_applied_configuration() {
-    let first = "appearance \"dark\"\ndock {\n    edge \"top\"\n}\n";
-    let second = "appearance \"light\"\ndock {\n    edge \"bottom\"\n}\n";
+    let first = "appearance \"dark\"\nbar {\n    edge \"top\"\n}\n";
+    let second = "appearance \"light\"\nbar {\n    edge \"bottom\"\n}\n";
     let store = ConfigStore::new(Config::parse(first).expect("valid"));
     let done = AtomicBool::new(false);
 
@@ -415,10 +427,10 @@ fn readers_never_observe_a_partially_applied_configuration() {
             scope.spawn(|| {
                 while !done.load(Ordering::Relaxed) {
                     let config = store.current();
-                    let pair = (config.appearance, config.dock.edge);
+                    let pair = (config.appearance, config.bar.edge);
                     assert!(
-                        pair == (Appearance::Dark, DockEdge::Top)
-                            || pair == (Appearance::Light, DockEdge::Bottom),
+                        pair == (Appearance::Dark, BarEdge::Top)
+                            || pair == (Appearance::Light, BarEdge::Bottom),
                         "torn configuration {pair:?}"
                     );
                 }
@@ -441,13 +453,13 @@ fn reloading_reads_the_file_and_keeps_the_old_configuration_on_failure() {
     assert!(matches!(store.reload(&path), Err(ReloadError::Read(_))));
     assert_eq!(*store.current(), Config::default());
 
-    std::fs::write(&path, "dock {\n    edge \"right\"\n}\n").expect("write");
+    std::fs::write(&path, "bar {\n    edge \"right\"\n}\n").expect("write");
     store.reload(&path).expect("valid file");
-    assert_eq!(store.current().dock.edge, DockEdge::Right);
+    assert_eq!(store.current().bar.edge, BarEdge::Right);
 
-    std::fs::write(&path, "dock {\n    edge \"right\"\n").expect("write");
+    std::fs::write(&path, "bar {\n    edge \"right\"\n").expect("write");
     assert!(matches!(store.reload(&path), Err(ReloadError::Invalid(_))));
-    assert_eq!(store.current().dock.edge, DockEdge::Right);
+    assert_eq!(store.current().bar.edge, BarEdge::Right);
 }
 
 #[test]
@@ -501,33 +513,33 @@ fn the_computer_must_not_sleep_before_the_display_turns_off() {
 
 #[test]
 fn an_empty_dock_apps_list_empties_the_dock() {
-    let config = Config::parse("dock {\n    apps\n}\n").expect("valid config");
-    assert!(config.dock.apps.is_empty());
+    let config = Config::parse("bar {\n    apps\n}\n").expect("valid config");
+    assert!(config.bar.apps.is_empty());
 }
 
 #[test]
 fn the_dock_size_auto_hide_wallpaper_fit_and_reduce_motion_are_read() {
     let config = Config::parse(
-        "accessibility {\n    reduce-motion #true\n}\ndock {\n    auto-hide #true\n    size 64\n}\nwallpaper {\n    fit \"fit\"\n}\n",
+        "accessibility {\n    reduce-motion #true\n}\nbar {\n    auto-hide #true\n    size 52\n}\nwallpaper {\n    fit \"fit\"\n}\n",
     )
     .expect("valid config");
     assert!(config.reduce_motion);
-    assert!(config.dock.auto_hide);
-    assert_eq!(config.dock.icon_size, 64);
+    assert!(config.bar.auto_hide);
+    assert_eq!(config.bar.icon_size, 52);
     assert_eq!(config.wallpaper.fit, WallpaperFit::Fit);
 
     let defaults = Config::parse("").expect("empty config");
-    assert!(!defaults.reduce_motion && !defaults.dock.auto_hide);
-    assert_eq!(defaults.dock.icon_size, 48);
+    assert!(!defaults.reduce_motion && !defaults.bar.auto_hide);
+    assert_eq!(defaults.bar.icon_size, 40);
     assert_eq!(defaults.wallpaper.fit, WallpaperFit::Fill);
 }
 
 #[test]
-fn the_dock_size_stays_within_24_to_96_points_and_flags_need_a_boolean() {
-    assert_eq!(error_at("dock {\n    size 23\n}\n"), (2, 10));
-    assert_eq!(error_at("dock {\n    size 97\n}\n"), (2, 10));
-    assert_eq!(problems("dock {\n    size 96\n}\n"), []);
-    assert_eq!(error_at("dock {\n    auto-hide \"yes\"\n}\n"), (2, 15));
+fn the_bar_size_stays_within_32_to_56_points_and_flags_need_a_boolean() {
+    assert_eq!(error_at("bar {\n    size 31\n}\n"), (2, 10));
+    assert_eq!(error_at("bar {\n    size 57\n}\n"), (2, 10));
+    assert_eq!(problems("bar {\n    size 56\n}\n"), []);
+    assert_eq!(error_at("bar {\n    auto-hide \"yes\"\n}\n"), (2, 15));
     assert_eq!(error_at("wallpaper {\n    fit \"tile\"\n}\n"), (2, 9));
 }
 
@@ -698,4 +710,11 @@ fn connected_displays_are_named_as_the_compositor_names_them() {
             ("Virtual-1".to_owned(), "Virtual-1".to_owned()),
         ]
     );
+}
+
+#[test]
+fn only_the_left_edge_combines_the_menus_into_the_bar_for_now() {
+    assert!(MenuBarPlacement::InBar.combines(BarEdge::Left));
+    assert!(!MenuBarPlacement::InBar.combines(BarEdge::Bottom));
+    assert!(!MenuBarPlacement::Separate.combines(BarEdge::Left));
 }

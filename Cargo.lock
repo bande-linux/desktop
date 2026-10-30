@@ -3888,6 +3888,7 @@ dependencies = [
  "unbound-notify",
  "unbound-power",
  "unbound-sound",
+ "unbound-status",
  "unbound-test-bus",
  "unbound-toolkit",
  "unbound-xdg",

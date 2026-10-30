@@ -116,18 +116,18 @@ fn start(initial: &str) -> Fixture {
 
 #[test]
 fn the_service_owns_its_bus_name_and_exposes_the_loaded_file() {
-    let fixture = start("dock {\n    edge \"right\"\n    apps \"org.unbound.Files\"\n}\n");
+    let fixture = start("bar {\n    edge \"right\"\n    apps \"org.unbound.Files\"\n}\n");
     let bus = DBusProxy::new(&fixture.client).expect("bus proxy");
     assert!(
         bus.name_has_owner(BUS_NAME.try_into().expect("bus name"))
             .expect("NameHasOwner")
     );
     assert_eq!(
-        String::try_from(get(&fixture.client, "DockEdge")).expect("string"),
+        String::try_from(get(&fixture.client, "BarEdge")).expect("string"),
         "right"
     );
     assert_eq!(
-        Vec::<String>::try_from(get(&fixture.client, "DockApps")).expect("app IDs"),
+        Vec::<String>::try_from(get(&fixture.client, "BarApps")).expect("app IDs"),
         ["org.unbound.Files"]
     );
     assert_eq!(
@@ -138,12 +138,12 @@ fn the_service_owns_its_bus_name_and_exposes_the_loaded_file() {
 
 #[test]
 fn replacing_the_file_emits_only_the_changed_properties() {
-    let fixture = start("appearance \"dark\"\ndock {\n    edge \"left\"\n}\n");
+    let fixture = start("appearance \"dark\"\nbar {\n    edge \"left\"\n}\n");
     let changes = watch_changes(&fixture.client);
 
     replace_file(
         &fixture.path,
-        "appearance \"dark\"\ndock {\n    edge \"top\"\n}\n",
+        "appearance \"dark\"\nbar {\n    edge \"top\"\n}\n",
     );
 
     let changed = changes
@@ -151,14 +151,14 @@ fn replacing_the_file_emits_only_the_changed_properties() {
         .expect("PropertiesChanged");
     assert_eq!(
         changed.keys().map(String::as_str).collect::<Vec<_>>(),
-        ["DockEdge"]
+        ["BarEdge"]
     );
     assert_eq!(
-        String::try_from(changed["DockEdge"].try_clone().expect("clone")).expect("string"),
+        String::try_from(changed["BarEdge"].try_clone().expect("clone")).expect("string"),
         "top"
     );
     assert_eq!(
-        String::try_from(get(&fixture.client, "DockEdge")).expect("string"),
+        String::try_from(get(&fixture.client, "BarEdge")).expect("string"),
         "top"
     );
 }
@@ -181,10 +181,10 @@ fn writing_the_file_in_place_is_picked_up() {
 
 #[test]
 fn an_unreadable_file_changes_nothing_and_reports_where_it_is_wrong() {
-    let fixture = start("dock {\n    edge \"left\"\n}\n");
+    let fixture = start("bar {\n    edge \"left\"\n}\n");
     let changes = watch_changes(&fixture.client);
 
-    replace_file(&fixture.path, "dock {\n    edge \"middle\n}\n");
+    replace_file(&fixture.path, "bar {\n    edge \"middle\n}\n");
 
     match fixture
         .errors
@@ -196,7 +196,7 @@ fn an_unreadable_file_changes_nothing_and_reports_where_it_is_wrong() {
     }
     assert!(changes.recv_timeout(QUIET_WAIT).is_err());
     assert_eq!(
-        String::try_from(get(&fixture.client, "DockEdge")).expect("string"),
+        String::try_from(get(&fixture.client, "BarEdge")).expect("string"),
         "left"
     );
 }
@@ -211,17 +211,17 @@ fn set(connection: &Connection, property: &str, value: Value<'_>) -> zbus::fdo::
 
 #[test]
 fn setting_a_property_rewrites_the_file_and_signals_the_change_once() {
-    let fixture = start("// mine\ndock {\n    edge \"left\" // keep\n}\n");
+    let fixture = start("// mine\nbar {\n    edge \"left\" // keep\n}\n");
     let changes = watch_changes(&fixture.client);
 
-    set(&fixture.client, "DockEdge", Value::from("bottom")).expect("Set");
+    set(&fixture.client, "BarEdge", Value::from("bottom")).expect("Set");
 
     assert_eq!(
         std::fs::read_to_string(&fixture.path).expect("read"),
-        "// mine\ndock {\n    edge \"bottom\" // keep\n}\n"
+        "// mine\nbar {\n    edge \"bottom\" // keep\n}\n"
     );
     assert_eq!(
-        String::try_from(get(&fixture.client, "DockEdge")).expect("string"),
+        String::try_from(get(&fixture.client, "BarEdge")).expect("string"),
         "bottom"
     );
     let changed = changes
@@ -229,7 +229,7 @@ fn setting_a_property_rewrites_the_file_and_signals_the_change_once() {
         .expect("PropertiesChanged");
     assert_eq!(
         changed.keys().map(String::as_str).collect::<Vec<_>>(),
-        ["DockEdge"]
+        ["BarEdge"]
     );
     assert!(changes.recv_timeout(QUIET_WAIT).is_err());
     assert!(fixture.errors.try_recv().is_err());
@@ -258,7 +258,7 @@ fn a_value_the_schema_rejects_leaves_the_file_alone() {
 
 #[test]
 fn an_unreadable_file_is_not_overwritten_by_a_setting() {
-    let invalid = "dock {\n    edge \"middle\n}\n";
+    let invalid = "bar {\n    edge \"middle\n}\n";
     let fixture = start(invalid);
 
     let result = set(&fixture.client, "Appearance", Value::from("dark"));
@@ -408,17 +408,17 @@ fn key_repeat_and_wallpaper_are_writable_properties() {
 
 #[test]
 fn the_dock_apps_size_auto_hide_and_wallpaper_fit_are_writable_and_signalled() {
-    let fixture = start("dock {\n    apps \"org.unbound.Files\" // mine\n}\n");
+    let fixture = start("bar {\n    apps \"org.unbound.Files\" // mine\n}\n");
     let changes = watch_changes(&fixture.client);
 
     set(
         &fixture.client,
-        "DockApps",
+        "BarApps",
         Value::from(vec!["org.unbound.Terminal", "org.unbound.Files"]),
     )
     .expect("Set");
-    set(&fixture.client, "DockAutoHide", Value::from(true)).expect("Set");
-    set(&fixture.client, "DockIconSize", Value::from(64u32)).expect("Set");
+    set(&fixture.client, "BarAutoHide", Value::from(true)).expect("Set");
+    set(&fixture.client, "BarIconSize", Value::from(52u32)).expect("Set");
     set(&fixture.client, "WallpaperFit", Value::from("fit")).expect("Set");
 
     let mut changed = Changes::new();
@@ -430,13 +430,13 @@ fn the_dock_apps_size_auto_hide_and_wallpaper_fit_are_writable_and_signalled() {
         );
     }
     assert_eq!(
-        Vec::<String>::try_from(changed["DockApps"].try_clone().expect("clone")).expect("as"),
+        Vec::<String>::try_from(changed["BarApps"].try_clone().expect("clone")).expect("as"),
         ["org.unbound.Terminal", "org.unbound.Files"]
     );
-    assert!(bool::try_from(get(&fixture.client, "DockAutoHide")).expect("b"));
+    assert!(bool::try_from(get(&fixture.client, "BarAutoHide")).expect("b"));
     assert_eq!(
-        u32::try_from(get(&fixture.client, "DockIconSize")).expect("u32"),
-        64
+        u32::try_from(get(&fixture.client, "BarIconSize")).expect("u32"),
+        52
     );
     assert_eq!(
         String::try_from(get(&fixture.client, "WallpaperFit")).expect("s"),
@@ -444,9 +444,9 @@ fn the_dock_apps_size_auto_hide_and_wallpaper_fit_are_writable_and_signalled() {
     );
     assert_eq!(
         std::fs::read_to_string(&fixture.path).expect("read"),
-        "dock {\n    apps \"org.unbound.Terminal\" \"org.unbound.Files\" // mine\n    auto-hide #true\n    size 64\n}\nwallpaper {\n    fit \"fit\"\n}\n"
+        "bar {\n    apps \"org.unbound.Terminal\" \"org.unbound.Files\" // mine\n    auto-hide #true\n    size 52\n}\nwallpaper {\n    fit \"fit\"\n}\n"
     );
-    let too_big = set(&fixture.client, "DockIconSize", Value::from(200u32));
+    let too_big = set(&fixture.client, "BarIconSize", Value::from(200u32));
     assert!(
         matches!(too_big, Err(zbus::fdo::Error::InvalidArgs(_))),
         "{too_big:?}"
@@ -545,7 +545,7 @@ fn the_owners_file_from_before_named_displays_is_migrated_and_fully_applied() {
     let path = directory.path().join("config.kdl");
     std::fs::write(
         &path,
-        "appearance \"dark\"\noutput \"Virtual-1\" {\n    scale 1.5\n}\ndock {\n    size 45\n}\n",
+        "appearance \"dark\"\noutput \"Virtual-1\" {\n    scale 1.5\n}\nbar {\n    size 44\n}\n",
     )
     .expect("write");
     let connected = [("Virtual-1".to_owned(), "Virtual-1".to_owned())];
@@ -555,7 +555,7 @@ fn the_owners_file_from_before_named_displays_is_migrated_and_fully_applied() {
     let source = std::fs::read_to_string(&path).expect("read");
     assert_eq!(
         source,
-        "appearance \"dark\"\ndisplay \"Virtual-1\" {\n    scale 1.5\n}\ndock {\n    size 45\n}\n"
+        "appearance \"dark\"\ndisplay \"Virtual-1\" {\n    scale 1.5\n}\nbar {\n    size 44\n}\n"
     );
 
     let fixture = start(&source);
@@ -564,8 +564,8 @@ fn the_owners_file_from_before_named_displays_is_migrated_and_fully_applied() {
         "dark"
     );
     assert_eq!(
-        u32::try_from(get(&fixture.client, "DockIconSize")).expect("u32"),
-        45
+        u32::try_from(get(&fixture.client, "BarIconSize")).expect("u32"),
+        44
     );
     let displays: HashMap<String, HashMap<String, OwnedValue>> = get(&fixture.client, "Displays")
         .try_into()

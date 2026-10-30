@@ -101,6 +101,8 @@ fn status() -> Status {
             choice("org.mpris.MediaPlayer2.tunes", "Tunes"),
             choice("org.mpris.MediaPlayer2.video", "Video"),
         ],
+        person: Some("Mikael Hug".to_owned()),
+        icon_dirs: vec![PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../data")],
         ..Status::default()
     }
 }

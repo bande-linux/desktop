@@ -7,7 +7,7 @@ use std::thread;
 use std::time::Instant;
 
 use accesskit::TreeUpdate;
-use unbound_config::{Config, DockEdge, MenuBarPlacement, config_path};
+use unbound_config::{BarEdge, Config, config_path};
 use unbound_desktop_surface::{
     Bounds, CONFIRM_DELETE_FLAG, DesktopView, Item, Kind, Layer, Layouts, Luma, MenuApp, Request,
     Selection, WallpaperKey, command, confirm_delete, desktop_menu, items_menu, layouts_path, list,
@@ -54,7 +54,7 @@ struct Surface {
     home: Option<PathBuf>,
     icons: HashMap<(String, u32), Option<Image>>,
     layouts_file: Option<PathBuf>,
-    dock_edge: DockEdge,
+    bar_edge: BarEdge,
     combined_bar: bool,
     choice: Option<Choice>,
     choices: Inbox<Choice>,
@@ -223,17 +223,13 @@ impl Surface {
         let (width, height) = (size.0 as f32, size.1 as f32);
         let top = unbound_bar::menubar::HEIGHT as f32;
         let dock = unbound_bar::dock::exclusive_zone(unbound_bar::dock::ICON_SIZE);
-        let (left, right, bottom, top) = match self.dock_edge {
-            _ if self.combined_bar => (
-                unbound_bar::rail::bar_width(unbound_bar::dock::ICON_SIZE),
-                0.0,
-                0.0,
-                0.0,
-            ),
-            DockEdge::Left => (dock, 0.0, 0.0, top),
-            DockEdge::Right => (0.0, dock, 0.0, top),
-            DockEdge::Bottom => (0.0, 0.0, dock, top),
-            DockEdge::Top => (0.0, 0.0, 0.0, top + dock),
+        let bar = unbound_bar::rail::bar_width(unbound_bar::dock::ICON_SIZE);
+        let (left, right, bottom, top) = match (self.bar_edge, self.combined_bar) {
+            (_, true) => (bar, 0.0, 0.0, 0.0),
+            (BarEdge::Left, false) => (dock, 0.0, 0.0, top),
+            (BarEdge::Right, false) => (0.0, dock, 0.0, top),
+            (BarEdge::Bottom, false) => (0.0, 0.0, dock, top),
+            (BarEdge::Top, false) => (0.0, 0.0, 0.0, top + dock),
         };
         Bounds::new(
             left,
@@ -790,8 +786,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .and_then(|path| std::fs::read_to_string(path).ok())
         .and_then(|source| Config::parse(&source).ok())
         .unwrap_or_default();
-    let dock_edge = config.dock.edge;
-    let combined_bar = config.bar.menu_bar == MenuBarPlacement::Combined;
+    let bar_edge = config.bar.edge;
+    let combined_bar = config.bar.menu_bar.combines(config.bar.edge);
     let desktop_dir = desktop_folder(home.as_deref().unwrap_or(Path::new("/")));
     let user = std::env::var("USER").unwrap_or_default();
     let trash = Trash::for_user().ok_or("no home folder for the Trash")?;
@@ -830,7 +826,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         home,
         icons: HashMap::new(),
         layouts_file,
-        dock_edge,
+        bar_edge,
         combined_bar,
         choice: None,
         choices,

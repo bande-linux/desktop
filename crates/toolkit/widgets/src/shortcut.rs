@@ -75,14 +75,14 @@ pub fn shortcut_keys(shortcut: &str) -> ShortcutKeys {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct ShortcutText {
+pub struct ShortcutText {
     modifiers: Option<Paragraph>,
     logo: Option<f32>,
     key: Paragraph,
 }
 
 impl ShortcutText {
-    pub(crate) fn new(text: &mut TextSystem, shortcut: &str, style: TextStyle) -> Self {
+    pub fn new(text: &mut TextSystem, shortcut: &str, style: TextStyle) -> Self {
         let keys = shortcut_keys(shortcut);
         let mut paragraph = |content: &str| text.paragraph(content, style, None, TextAlign::Start);
         Self {
@@ -92,17 +92,17 @@ impl ShortcutText {
         }
     }
 
-    pub(crate) fn width(&self) -> f32 {
+    pub fn width(&self) -> f32 {
         self.modifiers.as_ref().map_or(0.0, Paragraph::width)
             + self.logo.map_or(0.0, |glyph| glyph + 2.0 * GLYPH_GAP)
             + self.key.width()
     }
 
-    pub(crate) fn height(&self) -> f32 {
+    pub fn height(&self) -> f32 {
         self.key.height()
     }
 
-    pub(crate) fn paint(&self, origin: Point, color: Color, items: &mut Vec<Item>) {
+    pub fn paint(&self, origin: Point, color: Color, items: &mut Vec<Item>) {
         let mut x = origin.x;
         if let Some(modifiers) = &self.modifiers {
             items.push(Item::Text {

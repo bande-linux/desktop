@@ -68,7 +68,7 @@ use crate::lock::{Locked, SessionLock};
 use crate::popup::{MenuPlacement, Menus, Opening, Parent};
 use crate::presentation::Presentation;
 use crate::scale::{Scaling, SurfaceScale};
-use crate::seat::Input;
+use crate::seat::{CLICK_SLOP, Input};
 use crate::shell::Shell;
 use crate::text_input::TextInput;
 
@@ -1326,6 +1326,20 @@ impl Window {
         };
         match input {
             Event::PointerEnter(pointer) | Event::PointerMove(pointer) => {
+                if let Some(start) = chrome.tab_press
+                    && (pointer.position.x - start.x).hypot(pointer.position.y - start.y)
+                        > CLICK_SLOP
+                {
+                    chrome.tab_press = None;
+                    chrome.content_buttons = 0;
+                    if std::mem::take(&mut chrome.pointer_in_content) {
+                        passed.push(WindowEvent::Input(Event::PointerLeave));
+                    }
+                    if self.start_move().is_err() {
+                        self.needs_redraw = true;
+                    }
+                    return;
+                }
                 let zone = chrome.zone_at(&frame, pointer.position);
                 if let Some(control) = chrome.pressed {
                     let inside = zone == Zone::Control(control);
@@ -1362,6 +1376,12 @@ impl Window {
             Event::PointerDown(pointer) => {
                 let zone = chrome.zone_at(&frame, pointer.position);
                 if zone == Zone::Content || chrome.content_buttons > 0 {
+                    if chrome.content_buttons == 0
+                        && pointer.button == PointerButton::Primary
+                        && chrome.tab_at(&frame, pointer.position)
+                    {
+                        chrome.tab_press = Some(pointer.position);
+                    }
                     chrome.content_buttons += 1;
                     passed.push(WindowEvent::Input(Event::PointerDown(into_content(
                         pointer,
@@ -1396,6 +1416,7 @@ impl Window {
                 }
             }
             Event::PointerUp(pointer) => {
+                chrome.tab_press = None;
                 if chrome.content_buttons > 0 {
                     chrome.content_buttons -= 1;
                     passed.push(WindowEvent::Input(Event::PointerUp(into_content(pointer))));
@@ -1431,6 +1452,7 @@ impl Window {
             }
             Event::PointerLeave => {
                 chrome.content_buttons = 0;
+                chrome.tab_press = None;
                 if chrome.hover(&frame, None, now, reduce_motion) {
                     self.needs_redraw = true;
                 }

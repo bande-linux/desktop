@@ -350,8 +350,8 @@ pub fn blur_rects(rect: Rect) -> Vec<Rect> {
 
 pub fn material(palette: Palette, translucent: bool) -> Palette {
     Palette {
-        surface_elevated: palette
-            .surface_elevated
+        overlay: palette
+            .overlay
             .with_alpha(if translucent { 214 } else { 248 }),
         ..palette
     }
@@ -367,12 +367,12 @@ pub fn card(palette: &Palette, rect: Rect, items: &mut Vec<Item>) {
     });
     items.push(Item::Fill {
         shape,
-        paint: palette.surface_elevated.into(),
+        paint: palette.overlay.into(),
     });
     items.push(Item::Stroke {
         shape,
         width: 0.5,
-        paint: palette.separator_color.into(),
+        paint: palette.hairline.into(),
     });
 }
 
@@ -380,7 +380,7 @@ pub fn hud(hud: Hud, palette: &Palette, text: &mut TextSystem) -> Vec<Item> {
     let (width, height) = HUD_SIZE;
     let title = text.paragraph(
         &hud.title(),
-        TextStyle::new(TITLE_SIZE, palette.label_primary).weight(TextStyle::SEMIBOLD),
+        TextStyle::new(TITLE_SIZE, palette.ink).weight(TextStyle::SEMIBOLD),
         None,
         TextAlign::Start,
     );
@@ -403,14 +403,14 @@ pub fn hud(hud: Hud, palette: &Palette, text: &mut TextSystem) -> Vec<Item> {
         let shape = Shape::rounded(rect, SEGMENT_HEIGHT / 2.0);
         items.push(Item::Fill {
             shape,
-            paint: palette.separator_color.into(),
+            paint: palette.hairline.into(),
         });
         if fill > 0.0 {
             items.push(Item::Clip {
                 shape: Shape::rect(Rect::new(rect.x, rect.y, rect.width * fill, rect.height)),
                 items: vec![Item::Fill {
                     shape,
-                    paint: palette.label_primary.into(),
+                    paint: palette.ink.into(),
                 }],
             });
         }

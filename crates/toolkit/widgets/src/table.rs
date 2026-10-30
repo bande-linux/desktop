@@ -1030,8 +1030,8 @@ impl Table {
         let color = match (lit, cell.tint, cell.muted) {
             (true, _, _) => Color::hex(0xFFFFFF),
             (false, Some(tint), _) => tint,
-            (false, None, true) => cx.palette.label_muted,
-            (false, None, false) => cx.palette.label_primary,
+            (false, None, true) => cx.palette.ink2,
+            (false, None, false) => cx.palette.ink,
         };
         let indent = if column == 0 { self.indent(line) } else { 0.0 };
         let width = widths[column] - 2.0 * CELL_PADDING - self.icon_space(column, cell) - indent;
@@ -1097,7 +1097,7 @@ impl Table {
         let header = Rect::new(self.frame.x, self.frame.y, self.frame.width, HEADER_HEIGHT);
         items.push(Item::Fill {
             shape: Shape::rect(header),
-            paint: cx.palette.surface_elevated.into(),
+            paint: cx.palette.overlay.into(),
         });
         for (column, ((x, width), paragraph)) in self
             .column_edges()
@@ -1128,7 +1128,7 @@ impl Table {
                         from: Point::new(arrow_x + 2.5, middle + tip),
                         to: Point::new(arrow_x + 2.5 + side * 3.0, middle + base),
                         width: 1.5,
-                        paint: cx.palette.label_muted.into(),
+                        paint: cx.palette.ink2.into(),
                     });
                 }
             }
@@ -1141,7 +1141,7 @@ impl Table {
                     from: Point::new(x + width - 0.5, self.frame.y + 5.0),
                     to: Point::new(x + width - 0.5, self.frame.y + HEADER_HEIGHT - 5.0),
                     width: 1.0,
-                    paint: cx.palette.separator_color.into(),
+                    paint: cx.palette.hairline.into(),
                 });
             }
         }
@@ -1152,7 +1152,7 @@ impl Table {
                 self.frame.y + HEADER_HEIGHT - 0.5,
             ),
             width: 1.0,
-            paint: cx.palette.separator_color.into(),
+            paint: cx.palette.hairline.into(),
         });
     }
 
@@ -1270,7 +1270,7 @@ impl Widget for Table {
                 } else {
                     TextStyle::MEDIUM
                 };
-                let style = TextStyle::new(12.0, cx.palette.label_muted).weight(weight);
+                let style = TextStyle::new(12.0, cx.palette.ink2).weight(weight);
                 let title = self.columns[column].title.clone();
                 self.text(
                     &mut cx.text,
@@ -1301,8 +1301,8 @@ impl Widget for Table {
             let selected = self.selected.get(index).copied().unwrap_or(false);
             if selected {
                 let color = match focused {
-                    true => cx.palette.accent_color,
-                    false => cx.palette.label_muted.with_alpha(56),
+                    true => cx.palette.accent,
+                    false => cx.palette.ink2.with_alpha(56),
                 };
                 let continues_above = index > 0 && self.selected[index - 1];
                 let continues_below = self.selected.get(index + 1).copied().unwrap_or(false);
@@ -1326,7 +1326,7 @@ impl Widget for Table {
             } else if index % 2 == 1 {
                 rows.push(Item::Fill {
                     shape: Shape::rect(row_rect),
-                    paint: cx.palette.label_primary.with_alpha(8).into(),
+                    paint: cx.palette.ink.with_alpha(8).into(),
                 });
             }
             let lit = focused && selected;
@@ -1344,7 +1344,7 @@ impl Widget for Table {
                 );
                 let color = match lit {
                     true => Color::hex(0xFFFFFF),
-                    false => cx.palette.label_muted,
+                    false => cx.palette.ink2,
                 };
                 chevron(centre, self.turn(cx, line), color, &mut rows);
             }

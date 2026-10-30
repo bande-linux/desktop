@@ -126,11 +126,11 @@ impl Widget for TextView {
     }
 
     fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
-        self.editor.set_color(cx.palette.label_primary);
+        self.editor.set_color(cx.palette.ink);
         self.placeholder_paragraph = (!self.placeholder.is_empty()).then(|| {
             cx.text.paragraph(
                 &self.placeholder,
-                TextStyle::new(FONT_SIZE, cx.palette.label_muted),
+                TextStyle::new(FONT_SIZE, cx.palette.ink2),
                 Some((available.width - 2.0 * HORIZONTAL_PADDING).max(0.0)),
                 TextAlign::Start,
             )
@@ -158,12 +158,12 @@ impl Widget for TextView {
         let focused = cx.is_focused(self.id);
         items.push(Item::Fill {
             shape,
-            paint: cx.palette.surface_elevated.into(),
+            paint: cx.palette.overlay.into(),
         });
         items.push(Item::Stroke {
             shape: Shape::rounded(self.frame.inset(0.5), RADIUS - 0.5),
             width: 1.0,
-            paint: cx.palette.separator_color.into(),
+            paint: cx.palette.hairline.into(),
         });
         if focused {
             super::focus_ring(cx, shape, items);

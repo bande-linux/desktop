@@ -1,8 +1,10 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use unbound_graphics::{Color, GlyphRun, Paragraph, TextAlign, TextStyle, TextSystem};
+use skrifa::{FontRef, MetadataProvider};
+use unbound_graphics::{Color, GlyphRun, Paragraph, TextAlign, TextRole, TextStyle, TextSystem};
 
 const INTER: &str = "/usr/share/fonts/opentype/inter";
+const MANROPE: &str = "/usr/share/fonts/truetype/manrope";
 
 fn runs(text: &mut TextSystem, content: &str, style: TextStyle) -> Vec<GlyphRun> {
     text.paragraph(content, style, None, TextAlign::Start)
@@ -10,7 +12,12 @@ fn runs(text: &mut TextSystem, content: &str, style: TextStyle) -> Vec<GlyphRun>
 }
 
 fn face(file: &str) -> Vec<u8> {
-    std::fs::read(format!("{INTER}/{file}")).expect("fonts-inter is installed")
+    let directory = if file.starts_with("Manrope") {
+        MANROPE
+    } else {
+        INTER
+    };
+    std::fs::read(format!("{directory}/{file}")).expect("the Datum fonts are installed")
 }
 
 fn advance(paragraph: &Paragraph) -> f32 {
@@ -18,7 +25,7 @@ fn advance(paragraph: &Paragraph) -> f32 {
 }
 
 #[test]
-fn latin_text_is_set_in_inter_with_the_display_cut_from_20_px() {
+fn interface_text_is_set_in_inter_and_display_text_in_manrope() {
     let mut text = TextSystem::new();
     let ink = Color::hex(0x000000);
     for (style, file) in [
@@ -28,11 +35,13 @@ fn latin_text_is_set_in_inter_with_the_display_cut_from_20_px() {
             "Inter-SemiBold.otf",
         ),
         (TextStyle::new(19.5, ink), "Inter-Regular.otf"),
-        (TextStyle::new(20.0, ink), "InterDisplay-Regular.otf"),
+        (TextStyle::new(20.0, ink), "Manrope-Regular.ttf"),
         (
-            TextStyle::new(28.0, ink).weight(TextStyle::SEMIBOLD),
-            "InterDisplay-SemiBold.otf",
+            TextStyle::role(TextRole::WindowTitle, ink),
+            "Manrope-Bold.ttf",
         ),
+        (TextStyle::role(TextRole::Heading, ink), "Manrope-Bold.ttf"),
+        (TextStyle::role(TextRole::Label, ink), "Inter-SemiBold.otf"),
     ] {
         let runs = runs(&mut text, "Settings", style);
         assert_eq!(runs.len(), 1);
@@ -43,6 +52,46 @@ fn latin_text_is_set_in_inter_with_the_display_cut_from_20_px() {
             style.weight
         );
     }
+}
+
+#[test]
+fn inter_uses_the_datum_alternates_for_l_and_capital_i() {
+    let mut text = TextSystem::new();
+    let inter = face("Inter-Regular.otf");
+    let font = FontRef::new(&inter).expect("Inter parses");
+    let charmap = font.charmap();
+    let runs = runs(&mut text, "lI", TextStyle::new(13.0, Color::hex(0)));
+    let shaped: Vec<u32> = runs[0].glyphs.iter().map(|glyph| glyph.id).collect();
+    let plain: Vec<u32> = ['l', 'I']
+        .into_iter()
+        .map(|character| charmap.map(character).expect("mapped").to_u32())
+        .collect();
+    assert_eq!(shaped.len(), 2);
+    assert_ne!(shaped[0], plain[0], "l carries its tail (cv05)");
+    assert_ne!(shaped[1], plain[1], "I carries its serifs (cv08)");
+}
+
+#[test]
+fn labels_are_set_in_tracked_capitals() {
+    let mut text = TextSystem::new();
+    let ink = Color::hex(0);
+    let label = text.paragraph(
+        "places",
+        TextStyle::role(TextRole::Label, ink),
+        None,
+        TextAlign::Start,
+    );
+    let capitals = text.paragraph(
+        "PLACES",
+        TextStyle {
+            tracking: 0.0,
+            ..TextStyle::role(TextRole::Label, ink)
+        },
+        None,
+        TextAlign::Start,
+    );
+    assert!(advance(&label) > advance(&capitals) + 2.0);
+    assert_eq!(label.height(), 14.0);
 }
 
 #[test]

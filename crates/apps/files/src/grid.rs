@@ -351,7 +351,7 @@ impl FilesView {
             if marked {
                 shown.push(Item::Fill {
                     shape: Shape::rounded(icon.inset(-ICON_PAD + 1.0), SELECTION_RADIUS),
-                    paint: self.palette.label_muted.with_alpha(40).into(),
+                    paint: self.palette.ink2.with_alpha(40).into(),
                 });
             }
             let (picture, thumbnail) = self.grid_picture(entry, size);
@@ -365,7 +365,7 @@ impl FilesView {
                     shown.push(Item::Stroke {
                         shape: Shape::rect(fitted.inset(-0.5)),
                         width: 1.0,
-                        paint: self.palette.separator_color.into(),
+                        paint: self.palette.hairline.into(),
                     });
                 }
             }
@@ -382,7 +382,7 @@ impl FilesView {
             let color = if marked {
                 Color::hex(0xFFFFFF)
             } else {
-                self.palette.label_primary
+                self.palette.ink
             };
             let paragraph = self.grid_label(&entry.name, label.width, color);
             let (width, height) = (paragraph.width(), paragraph.height());
@@ -391,7 +391,7 @@ impl FilesView {
             if marked {
                 shown.push(Item::Fill {
                     shape: Shape::rounded(text_area, SELECTION_RADIUS),
-                    paint: self.palette.accent_color.into(),
+                    paint: self.palette.accent.into(),
                 });
             }
             shown.push(Item::Text {
@@ -407,7 +407,7 @@ impl FilesView {
             ));
         }
         if column.entries.is_empty() {
-            let muted = self.palette.label_muted;
+            let muted = self.palette.ink2;
             let empty = self.text().paragraph(
                 &L10N.tr("empty-folder"),
                 TextStyle::new(13.0, muted),
@@ -423,12 +423,12 @@ impl FilesView {
             let area = offset(normalised(band.origin, band.current), origin);
             shown.push(Item::Fill {
                 shape: Shape::rect(area),
-                paint: self.palette.label_muted.with_alpha(40).into(),
+                paint: self.palette.ink2.with_alpha(40).into(),
             });
             shown.push(Item::Stroke {
                 shape: Shape::rect(area.inset(0.5)),
                 width: 1.0,
-                paint: self.palette.label_muted.with_alpha(140).into(),
+                paint: self.palette.ink2.with_alpha(140).into(),
             });
         }
         items.push(Item::Clip {

@@ -341,22 +341,22 @@ impl RailView {
         };
         items.push(Item::Fill {
             shape: Shape::rounded(inset, GROUP_RADIUS),
-            paint: self.palette.label_primary.with_alpha(alpha).into(),
+            paint: self.palette.ink.with_alpha(alpha).into(),
         });
     }
 
     fn paint(&mut self, width: f32, height: f32, scale: f64) -> Vec<Item> {
         let (slots, _, hairlines) = self.layout(height);
         let palette = self.palette;
-        let ink = palette.label_primary;
+        let ink = palette.ink;
         let mut items = vec![
             Item::Fill {
                 shape: Shape::rect(Rect::new(0.0, 0.0, width, height)),
-                paint: palette.surface_background.into(),
+                paint: palette.sheet.into(),
             },
             Item::Fill {
                 shape: Shape::rect(Rect::new(width - 1.0, 0.0, 1.0, height)),
-                paint: palette.separator_color.into(),
+                paint: palette.hairline.into(),
             },
         ];
         for y in hairlines {
@@ -367,7 +367,7 @@ impl RailView {
                     HAIRLINE,
                     1.0,
                 )),
-                paint: palette.separator_color.into(),
+                paint: palette.hairline.into(),
             });
         }
         let status_rect = slots
@@ -505,7 +505,7 @@ impl RailView {
                     );
                     items.push(Item::Fill {
                         shape: Shape::rounded(dot, WORKSPACE_DOT / 2.0),
-                        paint: if active { ink } else { palette.label_muted }.into(),
+                        paint: if active { ink } else { palette.ink2 }.into(),
                     });
                 }
                 Slot::Clock => self.paint_clock(rect, scale, &mut items),
@@ -518,8 +518,7 @@ impl RailView {
     }
 
     fn caption(&mut self, width: f32) -> Paragraph {
-        let style =
-            TextStyle::new(CAPTION_SIZE, self.palette.label_primary).weight(TextStyle::SEMIBOLD);
+        let style = TextStyle::new(CAPTION_SIZE, self.palette.ink).weight(TextStyle::SEMIBOLD);
         let mut name: Vec<char> = self.app.chars().collect();
         let mut caption = self.app.clone();
         loop {
@@ -535,12 +534,12 @@ impl RailView {
     fn paint_header(&mut self, rect: Rect, scale: f64, items: &mut Vec<Item>) {
         let mut header = vec![Item::Fill {
             shape: Shape::rounded(rect, GROUP_RADIUS),
-            paint: self.palette.label_primary.with_alpha(WELL_ALPHA).into(),
+            paint: self.palette.ink.with_alpha(WELL_ALPHA).into(),
         }];
         if self.open == Some(Slot::App) || self.hovered == Some(Slot::App) {
             header.push(Item::Fill {
                 shape: Shape::rounded(rect, GROUP_RADIUS),
-                paint: self.palette.label_primary.with_alpha(HOVER_ALPHA).into(),
+                paint: self.palette.ink.with_alpha(HOVER_ALPHA).into(),
             });
         }
         let icon_top = rect.y + 8.0;
@@ -557,7 +556,7 @@ impl RailView {
         }
         let chevron = self.paragraph(
             "›",
-            TextStyle::new(CAPTION_SIZE, self.palette.label_muted).weight(TextStyle::SEMIBOLD),
+            TextStyle::new(CAPTION_SIZE, self.palette.ink2).weight(TextStyle::SEMIBOLD),
         );
         let caption = self.caption(rect.width - 8.0 - chevron.width() - 2.0);
         let total = caption.width() + 2.0 + chevron.width();
@@ -590,11 +589,11 @@ impl RailView {
         };
         let time = self.paragraph(
             &time,
-            TextStyle::new(TIME_SIZE, palette.label_primary)
+            TextStyle::new(TIME_SIZE, palette.ink)
                 .weight(TextStyle::SEMIBOLD)
                 .tabular(),
         );
-        let day = self.paragraph(&day, TextStyle::new(DAY_SIZE, palette.label_muted));
+        let day = self.paragraph(&day, TextStyle::new(DAY_SIZE, palette.ink2));
         let total = time.height() + day.height();
         let top = rect.y + (rect.height - total) / 2.0;
         let time_x = snap(rect.x + (rect.width - time.width()) / 2.0, scale);
@@ -609,7 +608,7 @@ impl RailView {
                     ),
                     UNREAD_DOT / 2.0,
                 ),
-                paint: palette.accent_color.into(),
+                paint: palette.accent.into(),
             });
         }
         items.push(Item::Text {

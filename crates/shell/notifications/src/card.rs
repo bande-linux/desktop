@@ -120,7 +120,7 @@ impl Card {
         let text_width = width - column - PADDING;
         let age = text.paragraph(
             age,
-            TextStyle::new(SMALL_SIZE, palette.label_muted),
+            TextStyle::new(SMALL_SIZE, palette.ink2),
             None,
             TextAlign::Start,
         );
@@ -132,7 +132,7 @@ impl Card {
         let title = fitted(
             text,
             headline,
-            TextStyle::new(TITLE_SIZE, palette.label_primary).weight(TextStyle::SEMIBOLD),
+            TextStyle::new(TITLE_SIZE, palette.ink).weight(TextStyle::SEMIBOLD),
             text_width - age.width() - ICON_GAP,
             1,
         );
@@ -141,7 +141,7 @@ impl Card {
             let paragraph = fitted(
                 text,
                 &notification.body,
-                TextStyle::new(BODY_SIZE, palette.label_primary),
+                TextStyle::new(BODY_SIZE, palette.ink),
                 text_width,
                 body_lines,
             );
@@ -152,7 +152,7 @@ impl Card {
         let more = (count > 1).then(|| {
             let paragraph = text.paragraph(
                 &L10N.tr_args("more", [("count", (count - 1).into())]),
-                TextStyle::new(SMALL_SIZE, palette.label_muted),
+                TextStyle::new(SMALL_SIZE, palette.ink2),
                 Some(text_width),
                 TextAlign::Start,
             );
@@ -181,7 +181,7 @@ impl Card {
                 let label = fitted(
                     text,
                     label,
-                    TextStyle::new(BODY_SIZE, palette.label_primary).weight(TextStyle::MEDIUM),
+                    TextStyle::new(BODY_SIZE, palette.ink).weight(TextStyle::MEDIUM),
                     each - PADDING,
                     1,
                 );
@@ -267,7 +267,7 @@ impl Card {
         items: &mut Vec<Item>,
     ) {
         let mut card = Vec::new();
-        let surface = palette.surface_elevated;
+        let surface = palette.overlay;
         for level in (1..=(self.depth() / SLIVER_STEP) as usize).rev() {
             let step = level as f32;
             let sliver = Rect::new(
@@ -278,12 +278,12 @@ impl Card {
             );
             card.push(Item::Fill {
                 shape: Shape::rounded(sliver, RADIUS),
-                paint: surface.mix(palette.surface_background, 0.35 * step).into(),
+                paint: surface.mix(palette.sheet, 0.35 * step).into(),
             });
             card.push(Item::Stroke {
                 shape: Shape::rounded(sliver, RADIUS),
                 width: 0.5,
-                paint: palette.separator_color.into(),
+                paint: palette.hairline.into(),
             });
         }
         let body = Shape::rounded(Rect::new(0.0, 0.0, self.width, self.height), RADIUS);
@@ -301,9 +301,9 @@ impl Card {
             shape: body,
             width: if focused { 2.0 } else { 0.5 },
             paint: if focused {
-                palette.accent_color.into()
+                palette.accent.into()
             } else {
-                palette.separator_color.into()
+                palette.hairline.into()
             },
         });
         let icon = Rect::new(PADDING, PADDING, ICON, ICON);
@@ -315,7 +315,7 @@ impl Card {
             (None, Some(initial)) => {
                 card.push(Item::Fill {
                     shape: Shape::rounded(icon, 8.0),
-                    paint: palette.accent_color.into(),
+                    paint: palette.accent.into(),
                 });
                 card.push(Item::Text {
                     origin: Point::new(
@@ -350,7 +350,7 @@ impl Card {
             card.push(Item::Fill {
                 shape: Shape::rounded(*rect, 7.0),
                 paint: palette
-                    .label_primary
+                    .ink
                     .with_alpha(if pressed_look { 36 } else { 18 })
                     .into(),
             });
@@ -374,16 +374,16 @@ impl Card {
             card.push(Item::Fill {
                 shape: Shape::rounded(close, CLOSE_SIZE / 2.0),
                 paint: if over {
-                    palette.surface_background.mix(palette.label_muted, 0.25)
+                    palette.sheet.mix(palette.ink2, 0.25)
                 } else {
-                    palette.surface_elevated
+                    palette.overlay
                 }
                 .into(),
             });
             card.push(Item::Stroke {
                 shape: Shape::rounded(close, CLOSE_SIZE / 2.0),
                 width: 0.5,
-                paint: palette.separator_color.into(),
+                paint: palette.hairline.into(),
             });
             let center = Point::new(close.x + CLOSE_SIZE / 2.0, close.y + CLOSE_SIZE / 2.0);
             let arm = 3.5;
@@ -392,7 +392,7 @@ impl Card {
                     from: Point::new(center.x - dx, center.y - dy),
                     to: Point::new(center.x + dx, center.y + dy),
                     width: 1.5,
-                    paint: palette.label_muted.into(),
+                    paint: palette.ink2.into(),
                 });
             }
         }

@@ -90,12 +90,12 @@ impl FilesView {
         if enabled && self.hover.as_ref() == Some(&hit) {
             items.push(Item::Fill {
                 shape: Shape::rounded(area, 6.0),
-                paint: self.palette.label_muted.with_alpha(30).into(),
+                paint: self.palette.ink2.with_alpha(30).into(),
             });
         }
         let color = match enabled {
-            true => self.palette.label_primary,
-            false => self.palette.label_muted.with_alpha(90),
+            true => self.palette.ink,
+            false => self.palette.ink2.with_alpha(90),
         };
         let paragraph = self.text().paragraph(
             symbol,
@@ -125,11 +125,11 @@ impl FilesView {
         );
         items.push(Item::Fill {
             shape: Shape::rect(bar),
-            paint: self.palette.surface_background.into(),
+            paint: self.palette.sheet.into(),
         });
         items.push(Item::Fill {
             shape: Shape::rect(Rect::new(bar.x, bar.height - 1.0, bar.width, 1.0)),
-            paint: self.palette.separator_color.into(),
+            paint: self.palette.hairline.into(),
         });
         let top = ((TOOLBAR_HEIGHT - BUTTON) / 2.0).round();
         let back = self.browser.can_go_back();

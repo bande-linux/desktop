@@ -93,25 +93,17 @@ pub(crate) fn paint_box(
     let shape = Shape::rounded(rect, radius);
     items.push(Item::Fill {
         shape,
-        paint: cx.palette.surface_elevated.into(),
+        paint: cx.palette.overlay.into(),
     });
     items.push(Item::Stroke {
         shape: Shape::rounded(rect.inset(0.5), radius - 0.5),
         width: 1.0,
-        paint: cx
-            .palette
-            .separator_color
-            .mix(cx.palette.label_muted, 0.35)
-            .into(),
+        paint: cx.palette.hairline.mix(cx.palette.ink2, 0.35).into(),
     });
     if shown > 0.0 {
         items.push(Item::Fill {
             shape,
-            paint: cx
-                .palette
-                .accent_color
-                .with_alpha((shown * 255.0) as u8)
-                .into(),
+            paint: cx.palette.accent.with_alpha((shown * 255.0) as u8).into(),
         });
     }
     if pressed {
@@ -130,7 +122,7 @@ impl Widget for Checkbox {
     fn measure(&mut self, cx: &mut Context, _available: Size) -> Size {
         let paragraph = cx.text.paragraph(
             &self.label,
-            TextStyle::new(FONT_SIZE, cx.palette.label_primary),
+            TextStyle::new(FONT_SIZE, cx.palette.ink),
             None,
             TextAlign::Start,
         );

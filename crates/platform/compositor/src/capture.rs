@@ -32,7 +32,7 @@ use unbound_render::{RenderError, VulkanRenderer};
 use crate::element::ScreenElement;
 use crate::motion::Look;
 use crate::render::{background, rendering_error};
-use crate::scene::window_elements;
+use crate::scene::{Shading, window_elements};
 use crate::shell::is_shell;
 use crate::state::{Headless, OutputElement, State};
 use crate::window::Window;
@@ -227,10 +227,13 @@ impl Headless {
                 else {
                     return Err(RenderError::NothingRendered);
                 };
-                let active = self.state.key_window().as_ref() == Some(window.surface());
+                let shading = Shading {
+                    active: self.state.key_window().as_ref() == Some(window.surface()),
+                    scheme: self.state.decorations.scheme,
+                };
                 let at_origin = Look::shown(Rectangle::from_size(geometry.size.to_f64()));
                 let (shown, _) =
-                    window_elements(window, renderer, scale, active, false, Some(at_origin));
+                    window_elements(window, renderer, scale, shading, false, Some(at_origin));
                 let cursor = match paint_cursors {
                     true => self.cursor_elements(renderer, scale),
                     false => Vec::new(),

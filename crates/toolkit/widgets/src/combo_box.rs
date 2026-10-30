@@ -90,7 +90,7 @@ impl Widget for ComboBox {
                 1.0,
                 button.height - 8.0,
             )),
-            paint: cx.palette.separator_color.into(),
+            paint: cx.palette.hairline.into(),
         });
         let centre = Point::new(
             button.x + button.width / 2.0,
@@ -108,7 +108,7 @@ impl Widget for ComboBox {
                     centre.y - CHEVRON_HEIGHT / 2.0,
                 )),
             width: 1.5,
-            paint: cx.palette.label_primary.into(),
+            paint: cx.palette.ink.into(),
         });
     }
 

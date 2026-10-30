@@ -91,7 +91,7 @@ impl Widget for Disclosure {
     fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
         self.paragraph = Some(cx.text.paragraph(
             &self.title,
-            TextStyle::new(13.0, cx.palette.label_primary).weight(TextStyle::MEDIUM),
+            TextStyle::new(13.0, cx.palette.ink).weight(TextStyle::MEDIUM),
             None,
             TextAlign::Start,
         ));
@@ -126,7 +126,7 @@ impl Widget for Disclosure {
         let header = self.header();
         let turn = self.turn.value(cx);
         let centre = Point::new(header.x + 7.0, header.y + header.height / 2.0);
-        chevron(centre, turn, cx.palette.label_muted, items);
+        chevron(centre, turn, cx.palette.ink2, items);
         if let Some(paragraph) = &self.paragraph {
             items.push(Item::Text {
                 origin: Point::new(

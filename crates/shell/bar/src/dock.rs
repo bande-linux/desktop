@@ -1424,7 +1424,7 @@ impl DockState {
     fn prepare_more(&mut self, cx: &mut Context) {
         if let Some(more) = &mut self.more {
             let label = L10N.tr_args("more-apps", [("count", (more.hidden.len() as i64).into())]);
-            let color = cx.palette.label_primary;
+            let color = cx.palette.ink;
             if more
                 .text
                 .as_ref()
@@ -1496,7 +1496,7 @@ impl DockState {
                 }
             }
         }
-        let inverse = cx.palette.surface_background;
+        let inverse = cx.palette.sheet;
         if self.drag.is_some()
             && self
                 .remove_text
@@ -1513,10 +1513,13 @@ impl DockState {
         }
         if let Some(key) = self.label.key.clone() {
             let name = self.name(&key);
-            if self.label.text.as_ref().is_none_or(|(known, color, _)| {
-                known != &name || *color != cx.palette.label_primary
-            }) {
-                let color = cx.palette.label_primary;
+            if self
+                .label
+                .text
+                .as_ref()
+                .is_none_or(|(known, color, _)| known != &name || *color != cx.palette.ink)
+            {
+                let color = cx.palette.ink;
                 let paragraph = cx.text.paragraph(
                     &name,
                     TextStyle::new(LABEL_TEXT, color).weight(TextStyle::MEDIUM),
@@ -1598,7 +1601,7 @@ impl DockState {
         items.push(Item::Stroke {
             shape: Shape::rounded(ring, ring.width * 0.27),
             width: 3.0,
-            paint: cx.palette.accent_color.with_alpha(200).into(),
+            paint: cx.palette.accent.with_alpha(200).into(),
         });
     }
 
@@ -1664,7 +1667,7 @@ impl DockState {
         });
         items.push(Item::Fill {
             shape,
-            paint: cx.palette.label_primary.with_alpha(200).into(),
+            paint: cx.palette.ink.with_alpha(200).into(),
         });
         items.push(Item::Text {
             origin: Point::new(
@@ -1745,7 +1748,7 @@ impl DockState {
                     RAIL_HAIRLINE,
                     1.0,
                 )),
-                paint: cx.palette.separator_color.into(),
+                paint: cx.palette.hairline.into(),
             });
             return;
         }
@@ -1767,7 +1770,7 @@ impl DockState {
         };
         items.push(Item::Fill {
             shape: Shape::rounded(rect, 0.5),
-            paint: cx.palette.label_muted.with_alpha(90).into(),
+            paint: cx.palette.ink2.with_alpha(90).into(),
         });
     }
 
@@ -1844,7 +1847,7 @@ impl DockState {
                         Rect::new(center.x - size / 2.0, center.y - size / 2.0, size, size),
                         size / 2.0,
                     ),
-                    paint: cx.palette.label_primary.with_alpha(220).into(),
+                    paint: cx.palette.ink.with_alpha(220).into(),
                 }],
             });
         }
@@ -1864,7 +1867,7 @@ impl DockState {
             let fill = Rect::new(track.x, track.y, track.width * progress, track.height);
             items.push(Item::Fill {
                 shape: Shape::rounded(fill, PROGRESS_HEIGHT / 2.0),
-                paint: cx.palette.accent_color.into(),
+                paint: cx.palette.accent.into(),
             });
         }
         let badge = slot.badge.value(cx).max(0.0);
@@ -1925,7 +1928,7 @@ impl DockState {
                     width,
                     height,
                 )),
-                paint: cx.palette.accent_color.into(),
+                paint: cx.palette.accent.into(),
             });
         } else if running > 0.0 {
             items.push(Item::Opacity {
@@ -1937,7 +1940,7 @@ impl DockState {
                         RAIL_RUNNING,
                         RAIL_RUNNING,
                     )),
-                    paint: cx.palette.label_muted.into(),
+                    paint: cx.palette.ink2.into(),
                 }],
             });
         }
@@ -1950,7 +1953,7 @@ impl DockState {
         let icon = self.icon_rect(more.cell);
         items.push(Item::Fill {
             shape: Shape::rounded(icon, RAIL_WELL_RADIUS),
-            paint: cx.palette.label_primary.with_alpha(WELL_ALPHA).into(),
+            paint: cx.palette.ink.with_alpha(WELL_ALPHA).into(),
         });
         if let Some((_, _, text)) = &more.text {
             items.push(Item::Text {

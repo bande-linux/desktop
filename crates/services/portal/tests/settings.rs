@@ -95,7 +95,7 @@ impl Fixture {
 }
 
 fn accent(scheme: Scheme) -> (f64, f64, f64) {
-    let color = Palette::for_scheme(scheme).accent_color;
+    let color = Palette::for_scheme(scheme).accent;
     (
         f64::from(color.r) / 255.0,
         f64::from(color.g) / 255.0,

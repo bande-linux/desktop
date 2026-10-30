@@ -382,7 +382,7 @@ impl MenuBar {
     }
 
     fn label(&mut self, text: &str, bold: bool) -> Paragraph {
-        let style = TextStyle::new(TEXT_SIZE, self.palette.label_primary);
+        let style = TextStyle::new(TEXT_SIZE, self.palette.ink);
         let style = if bold {
             style.weight(TextStyle::SEMIBOLD)
         } else {
@@ -395,7 +395,7 @@ impl MenuBar {
         let short = self.status.input_sources.current()?.short.clone();
         let paragraph = self.text.paragraph(
             &short,
-            TextStyle::new(BADGE_TEXT_SIZE, self.palette.label_primary).weight(TextStyle::SEMIBOLD),
+            TextStyle::new(BADGE_TEXT_SIZE, self.palette.ink).weight(TextStyle::SEMIBOLD),
             None,
             TextAlign::Start,
         );
@@ -455,10 +455,7 @@ impl MenuBar {
 
     fn place_symbol(&mut self, symbol: Symbol, rect: Rect, scale: f64, items: &mut Vec<Item>) {
         let (width, height) = natural_size(symbol);
-        let Some(image) = self
-            .symbols
-            .image(symbol, self.palette.label_primary, scale)
-        else {
+        let Some(image) = self.symbols.image(symbol, self.palette.ink, scale) else {
             return;
         };
         let x = snap(rect.x + (rect.width - width) / 2.0, scale);
@@ -475,7 +472,7 @@ impl MenuBar {
     }
 
     fn paint_battery(&mut self, battery: Battery, rect: Rect, scale: f64, items: &mut Vec<Item>) {
-        let label = self.palette.label_primary;
+        let label = self.palette.ink;
         let x = snap(rect.x + (rect.width - BATTERY_WIDTH - 2.0) / 2.0, scale);
         let y = snap(rect.y + (rect.height - BATTERY_HEIGHT) / 2.0, scale);
         let body = Rect::new(x, y, BATTERY_WIDTH, BATTERY_HEIGHT);
@@ -518,7 +515,7 @@ impl MenuBar {
             paint: fill.into(),
         });
         if battery.on_adapter() {
-            let halo = self.palette.surface_elevated;
+            let halo = self.palette.overlay;
             let bolt = Rect::new(body.x, body.y, BATTERY_WIDTH, BATTERY_HEIGHT);
             for (color, offset) in [(halo, -0.6), (halo, 0.6), (label, 0.0)] {
                 if let Some(image) = self.symbols.image(Symbol::Bolt, color, scale) {
@@ -551,7 +548,7 @@ impl MenuBar {
         items.push(Item::Stroke {
             shape: Shape::rounded(badge.inset(0.5), 4.0),
             width: 1.0,
-            paint: self.palette.label_primary.with_alpha(200).into(),
+            paint: self.palette.ink.with_alpha(200).into(),
         });
         items.push(Item::Text {
             origin: Point::new(
@@ -569,7 +566,7 @@ impl MenuBar {
                 shape: Shape::rect(bar),
                 paint: self
                     .palette
-                    .surface_elevated
+                    .overlay
                     .with_alpha(if self.translucent {
                         TRANSLUCENT_ALPHA
                     } else {
@@ -579,7 +576,7 @@ impl MenuBar {
             },
             Item::Fill {
                 shape: Shape::rect(Rect::new(0.0, bar.height - 1.0, bar.width, 1.0)),
-                paint: self.palette.separator_color.with_alpha(160).into(),
+                paint: self.palette.hairline.with_alpha(160).into(),
             },
         ];
         let mut slots = Vec::new();
@@ -635,7 +632,7 @@ impl MenuBar {
                     ),
                     5.0,
                 ),
-                paint: self.palette.label_primary.with_alpha(34).into(),
+                paint: self.palette.ink.with_alpha(34).into(),
             });
         }
         for (x, paragraph) in texts {

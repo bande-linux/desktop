@@ -8,7 +8,7 @@ use resvg::{tiny_skia, usvg};
 use vello_cpu::{PixelMetadata, Pixmap};
 
 use crate::text::Paragraph;
-use crate::tokens::Color;
+use unbound_design::Color;
 
 const SYMBOLIC_INK: &str = "#201E1A";
 
@@ -254,6 +254,20 @@ impl Image {
             )),
             alive: Arc::new(()),
         })
+    }
+
+    pub fn tinted(&self, color: Color) -> Option<Self> {
+        let rgba = self
+            .premultiplied_rgba()
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .flat_map(|pixel| {
+                let alpha = (u16::from(pixel[3]) * u16::from(color.a) + 127) / 255;
+                [color.r, color.g, color.b, alpha as u8]
+            })
+            .collect();
+        Self::from_rgba(self.width(), self.height(), rgba)
     }
 
     pub(crate) fn id(&self) -> u64 {

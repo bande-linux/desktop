@@ -54,8 +54,10 @@ struct Look {
     scale: u64,
     active: bool,
     scheme: Scheme,
-    hovered: bool,
+    hovered: Option<Option<WindowControl>>,
     pressed: Option<WindowControl>,
+    zoomed: bool,
+    alternate: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -68,7 +70,7 @@ struct Painted {
 
 #[derive(Debug, Default)]
 pub(crate) struct Frame {
-    hovered: bool,
+    hovered: Option<Option<WindowControl>>,
     pressed: Option<WindowControl>,
     painted: Option<Painted>,
 }
@@ -133,17 +135,22 @@ fn zone_at(window: &Window, location: Point<f64, Logical>) -> Option<Zone> {
     }))
 }
 
-fn over_controls(window: &Window, location: Point<f64, Logical>) -> bool {
-    let Some(rect) = window.geometry() else {
-        return false;
-    };
-    let area = window_controls_area(window.title_bar_height() as f32);
-    let x = location.x - f64::from(rect.location.x);
-    let y = location.y - f64::from(rect.location.y);
-    x >= f64::from(area.x)
-        && x < f64::from(area.x + area.width)
-        && y >= 0.0
-        && y < f64::from(area.height)
+fn hovered_control(
+    window: &Window,
+    location: Point<f64, Logical>,
+) -> Option<Option<WindowControl>> {
+    let rect = window.geometry()?;
+    let bar = window.title_bar_height() as f32;
+    let area = window_controls_area(bar);
+    let point = unbound_graphics::Point::new(
+        (location.x - f64::from(rect.location.x)) as f32,
+        (location.y - f64::from(rect.location.y)) as f32,
+    );
+    let inside = point.x >= area.x
+        && point.x < area.x + area.width
+        && point.y >= 0.0
+        && point.y < area.height;
+    inside.then(|| WindowControl::at(point, bar))
 }
 
 pub(crate) enum Target {
@@ -188,8 +195,10 @@ impl State {
             .filter(|(_, zone)| matches!(zone, Zone::Control(_) | Zone::TitleBar))
             .map(|(surface, _)| surface.clone());
         for window in &mut self.windows {
-            let over =
-                hovered.as_ref() == Some(window.surface()) && over_controls(window, location);
+            let over = hovered
+                .as_ref()
+                .filter(|surface| *surface == window.surface())
+                .and_then(|_| hovered_control(window, location));
             if window.frame.hovered != over {
                 window.frame.hovered = over;
                 self.needs_redraw = true;
@@ -277,6 +286,7 @@ impl State {
         match control {
             Some(WindowControl::Close) => self.windows[index].toplevel.send_close(),
             Some(WindowControl::Minimize) => self.minimize(&surface),
+            Some(WindowControl::Zoom) if self.alternate_held() => self.fullscreen(&surface),
             Some(WindowControl::Zoom) => self.toggle_zoom(&surface),
             None => {}
         }
@@ -294,8 +304,15 @@ impl State {
         }
     }
 
+    fn alternate_held(&self) -> bool {
+        self.seat
+            .get_keyboard()
+            .is_some_and(|keyboard| keyboard.modifier_state().alt)
+    }
+
     pub(crate) fn paint_title_bars(&mut self, renderer: &mut VulkanRenderer) {
         let key = self.key_window();
+        let alternate = self.alternate_held();
         let scales: Vec<f64> = self
             .windows
             .iter()
@@ -319,6 +336,8 @@ impl State {
                 scheme,
                 hovered: window.frame.hovered,
                 pressed: window.frame.pressed,
+                zoomed: window.has_state(xdg_toplevel::State::Maximized),
+                alternate,
             };
             if window
                 .frame
@@ -373,10 +392,16 @@ impl Decorations {
                 height: bar as f32,
                 title,
                 palette,
-                scheme: look.scheme,
                 active: look.active,
-                glyphs: if look.hovered { 1.0 } else { 0.0 },
+                hover: if look.hovered.is_some() { 1.0 } else { 0.0 },
+                close_hover: if look.hovered == Some(Some(WindowControl::Close)) {
+                    1.0
+                } else {
+                    0.0
+                },
                 pressed: look.pressed,
+                zoomed: look.zoomed,
+                alternate: look.alternate && look.active,
             }
             .items(),
         };

@@ -135,8 +135,7 @@ impl Rail {
         let state = DockState::new(DockEdge::Left, ICON);
         state.borrow_mut().set_appearance(Appearance {
             scheme,
-            accent: None,
-            reduce_motion: false,
+            ..Appearance::default()
         });
         state.borrow_mut().set_rail(view.apps_region(height as f32));
         let pixels = (f64::from(ICON) * scale).round() as u32;

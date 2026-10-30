@@ -56,7 +56,8 @@ use crate::access::Accessibility;
 use crate::appearance::AppearanceWatch;
 use crate::capture::Capture;
 use crate::chrome::{
-    Chrome, Control, Frame, RESIZE_MARGIN, TITLE_BAR_HEIGHT, Zone, control_for_node,
+    Chrome, Control, Frame, FrameRegions, HEADER_HEIGHT, Look, RESIZE_MARGIN, SHEET_INSET, Zone,
+    control_for_node,
 };
 use crate::clipboard::Clipboard;
 use crate::clipboard::{DragEvent, Transfer};
@@ -532,14 +533,15 @@ impl Window {
             queue.blocking_dispatch(&mut state)?;
         }
 
-        let title = if chrome.is_some() {
-            TITLE_BAR_HEIGHT
+        let (extra_width, extra_height) = if chrome.is_some() {
+            (2 * SHEET_INSET, HEADER_HEIGHT + SHEET_INSET)
         } else {
-            0
+            (0, 0)
         };
-        let size = state
-            .suggested_size
-            .unwrap_or((size.0, size.1.saturating_add(title)));
+        let size = state.suggested_size.unwrap_or((
+            size.0.saturating_add(extra_width),
+            size.1.saturating_add(extra_height),
+        ));
         let scale = match surface_scale {
             Some(_) => state.scaling.scale(),
             None => 1.0,
@@ -595,17 +597,31 @@ impl Window {
     }
 
     pub fn size(&self) -> (u32, u32) {
-        let (width, height) = self.geometry();
-        (width, height.saturating_sub(self.title_height()))
+        self.frame().content_size()
+    }
+
+    pub fn set_frame_regions(&mut self, regions: FrameRegions) {
+        if let Some(chrome) = &mut self.chrome
+            && chrome.regions != Some(regions)
+        {
+            chrome.regions = Some(regions);
+            self.needs_redraw = true;
+        }
+    }
+
+    pub(crate) fn content_offset(&self) -> Point {
+        let frame = self.frame();
+        let origin = frame.content_origin();
+        Point::new(origin.x - frame.margin, origin.y - frame.margin)
     }
 
     fn geometry(&self) -> (u32, u32) {
         self.state.suggested_size.unwrap_or(self.size)
     }
 
-    pub(crate) fn title_height(&self) -> u32 {
+    fn title_height(&self) -> u32 {
         match &self.chrome {
-            Some(_) if !self.state.toplevel.fullscreen => TITLE_BAR_HEIGHT,
+            Some(_) if !self.state.toplevel.fullscreen => HEADER_HEIGHT,
             _ => 0,
         }
     }
@@ -626,9 +642,12 @@ impl Window {
 
     fn frame(&self) -> Frame {
         let (width, height) = self.geometry();
+        let title = self.title_height();
         Frame {
             margin: self.resize_margin() as f32,
-            title: self.title_height() as f32,
+            title: title as f32,
+            inset: if title > 0 { SHEET_INSET as f32 } else { 0.0 },
+            regions: self.chrome.as_ref().and_then(|chrome| chrome.regions),
             width: width as f32,
             height: height as f32,
         }
@@ -734,10 +753,10 @@ impl Window {
             MenuItem::new(&L10N.tr("close"), "close").shortcut("Super+W"),
             MenuItem::new(&L10N.tr("quit-app"), "quit").shortcut("Super+Q"),
         ]);
-        let title = self.title_height() as f32;
+        let offset = self.content_offset();
         self.show_menu(
             Menu::new(items),
-            MenuPlacement::AtPoint(Point::new(at.x, at.y - title)),
+            MenuPlacement::AtPoint(Point::new(at.x - offset.x, at.y - offset.y)),
         )?;
         self.window_menu = true;
         Ok(())
@@ -905,14 +924,17 @@ impl Window {
 
     pub fn show_menu(&mut self, menu: Menu, placement: MenuPlacement) -> Result<(), WindowError> {
         self.close_menu();
-        let title = self.title_height() as f32;
+        let offset = self.content_offset();
         let placement = match placement {
             MenuPlacement::AtPoint(point) => {
-                MenuPlacement::AtPoint(Point::new(point.x, point.y + title))
+                MenuPlacement::AtPoint(Point::new(point.x + offset.x, point.y + offset.y))
             }
-            MenuPlacement::Below(rect) => {
-                MenuPlacement::Below(Rect::new(rect.x, rect.y + title, rect.width, rect.height))
-            }
+            MenuPlacement::Below(rect) => MenuPlacement::Below(Rect::new(
+                rect.x + offset.x,
+                rect.y + offset.y,
+                rect.width,
+                rect.height,
+            )),
         };
         let parent = match &self.role {
             ShellSurface::Toplevel(xdg_surface, _) => Parent::Toplevel(xdg_surface),
@@ -1299,11 +1321,19 @@ impl Window {
                         Ok(())
                     }
                     Control::Minimize => self.minimize(),
+                    Control::Zoom if pointer.modifiers.alt => self.toggle_full_screen(),
                     Control::Zoom => self.toggle_zoom(),
                 };
                 if result.is_err() {
                     self.needs_redraw = true;
                 }
+            }
+            Event::ModifiersChanged(modifiers) => {
+                if chrome.alternate != modifiers.alt {
+                    chrome.alternate = modifiers.alt;
+                    self.needs_redraw = true;
+                }
+                passed.push(WindowEvent::Input(input));
             }
             Event::PointerLeave => {
                 chrome.content_buttons = 0;
@@ -1388,14 +1418,18 @@ impl Window {
 
     fn framed(&mut self, frame: &Frame, scene: &Scene) -> Scene {
         let appearance = self.appearance.borrow().current();
-        let active = self.state.toplevel.activated;
+        let toplevel = self.state.toplevel;
+        let look = Look {
+            active: toplevel.activated,
+            zoomed: toplevel.maximized || toplevel.fullscreen,
+        };
         match &mut self.chrome {
             Some(chrome) => chrome.frame_scene(
                 frame,
                 scene,
                 &appearance.palette(),
                 appearance.scheme,
-                active,
+                look,
                 Instant::now(),
             ),
             None => scene.clone(),
@@ -1514,15 +1548,15 @@ impl Window {
             return;
         };
         let wayland_region = compositor.create_region(&self.queue.handle(), ());
-        let title = self.title_height() as f32;
+        let offset = self.content_offset();
         for rect in rects {
-            let left = rect.x.floor() as i32;
-            let top = (rect.y + title).floor() as i32;
+            let left = (rect.x + offset.x).floor() as i32;
+            let top = (rect.y + offset.y).floor() as i32;
             wayland_region.add(
                 left,
                 top,
-                (rect.x + rect.width).ceil() as i32 - left,
-                (rect.y + title + rect.height).ceil() as i32 - top,
+                (rect.x + offset.x + rect.width).ceil() as i32 - left,
+                (rect.y + offset.y + rect.height).ceil() as i32 - top,
             );
         }
         self.surface.set_input_region(Some(&wayland_region));
@@ -1544,7 +1578,8 @@ impl Window {
         self.queue.dispatch_pending(&mut self.state)?;
         self.poll_gpu();
         self.state.suggested_size = None;
-        self.size = (scene.width, scene.height + self.title_height());
+        let (extra_width, extra_height) = self.frame().chrome_size();
+        self.size = (scene.width + extra_width, scene.height + extra_height);
         let framed;
         let scene = if self.chrome.is_some() {
             let frame = self.frame();

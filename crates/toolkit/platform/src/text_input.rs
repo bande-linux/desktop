@@ -53,8 +53,15 @@ impl Window {
     }
 
     pub(crate) fn set_text_input_area(&mut self, area: Option<Rect>) {
-        let title = self.title_height() as f32;
-        let area = area.map(|rect| Rect::new(rect.x, rect.y + title, rect.width, rect.height));
+        let offset = self.content_offset();
+        let area = area.map(|rect| {
+            Rect::new(
+                rect.x + offset.x,
+                rect.y + offset.y,
+                rect.width,
+                rect.height,
+            )
+        });
         let input = &mut self.state.text_input;
         let Some(text_input) = &input.text_input else {
             return;

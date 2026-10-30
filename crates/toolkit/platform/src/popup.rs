@@ -273,13 +273,11 @@ impl Menus {
             let size = panel.size();
             let shape = Shape::rounded(Rect::new(0.0, 0.0, size.width, size.height), RADIUS);
             let material = Palette {
-                surface_elevated: palette
-                    .surface_elevated
-                    .with_alpha(if popup.blur.is_some() {
-                        TRANSLUCENT_ALPHA
-                    } else {
-                        OPAQUE_ALPHA
-                    }),
+                overlay: palette.overlay.with_alpha(if popup.blur.is_some() {
+                    TRANSLUCENT_ALPHA
+                } else {
+                    OPAQUE_ALPHA
+                }),
                 ..*palette
             };
             let mut items = vec![Item::Shadow {

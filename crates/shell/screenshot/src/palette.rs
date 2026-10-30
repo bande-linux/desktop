@@ -218,7 +218,7 @@ impl Widget for Palette {
     }
 
     fn measure(&mut self, cx: &mut Context, _available: Size) -> Size {
-        let style = TextStyle::new(TEXT_SIZE, cx.palette.label_primary);
+        let style = TextStyle::new(TEXT_SIZE, cx.palette.ink);
         let options = cx.text.paragraph(
             &format!("{} ▾", L10N.tr("options")),
             style,
@@ -287,18 +287,18 @@ impl Widget for Palette {
         });
         items.push(Item::Fill {
             shape,
-            paint: cx.palette.surface_elevated.with_alpha(0xf2).into(),
+            paint: cx.palette.overlay.with_alpha(0xf2).into(),
         });
         items.push(Item::Stroke {
             shape: Shape::rounded(self.frame.inset(0.5), RADIUS - 0.5),
             width: 1.0,
-            paint: cx.palette.separator_color.into(),
+            paint: cx.palette.hairline.into(),
         });
         for divider in [1, 4, 6] {
             let x = self.frames[divider].x - (DIVIDER + GAP) / 2.0;
             items.push(Item::Fill {
                 shape: Shape::rect(Rect::new(x, self.frame.y + 14.0, 1.0, HEIGHT - 28.0)),
-                paint: cx.palette.separator_color.into(),
+                paint: cx.palette.hairline.into(),
             });
         }
         let focused = cx.is_focused(self.id) && cx.keyboard_navigation;
@@ -309,8 +309,8 @@ impl Widget for Palette {
             let highlighted = self.pressed == Some(index) || self.hovered == Some(index);
             if chosen || highlighted {
                 let fill = match chosen {
-                    true => cx.palette.label_primary.with_alpha(0x26),
-                    false => cx.palette.label_primary.with_alpha(0x12),
+                    true => cx.palette.ink.with_alpha(0x26),
+                    false => cx.palette.ink.with_alpha(0x12),
                 };
                 items.push(Item::Fill {
                     shape: Shape::rounded(frame, 8.0),
@@ -319,7 +319,7 @@ impl Widget for Palette {
             }
             match segment {
                 Segment::Close => {
-                    let color = cx.palette.label_muted;
+                    let color = cx.palette.ink2;
                     let arm = 5.0;
                     items.push(Item::Line {
                         from: Point::new(center.x - arm, center.y - arm),
@@ -336,8 +336,8 @@ impl Widget for Palette {
                 }
                 Segment::Mode(mode) => {
                     let color = match chosen {
-                        true => cx.palette.accent_color,
-                        false => cx.palette.label_primary,
+                        true => cx.palette.accent,
+                        false => cx.palette.ink,
                     };
                     self.glyph(*mode, center, color, items);
                 }
@@ -355,7 +355,7 @@ impl Widget for Palette {
                 Segment::Go => {
                     items.push(Item::Fill {
                         shape: Shape::rounded(frame, 7.0),
-                        paint: cx.palette.accent_color.into(),
+                        paint: cx.palette.accent.into(),
                     });
                     if let Some(text) = &self.go_text {
                         items.push(Item::Text {
@@ -372,7 +372,7 @@ impl Widget for Palette {
                 items.push(Item::Stroke {
                     shape: Shape::rounded(frame.inset(-2.0), 9.0),
                     width: 2.0,
-                    paint: cx.palette.accent_color.with_alpha(160).into(),
+                    paint: cx.palette.accent.with_alpha(160).into(),
                 });
             }
         }

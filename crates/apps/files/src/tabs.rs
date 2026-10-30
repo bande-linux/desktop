@@ -234,7 +234,7 @@ impl FilesView {
         let bar = Rect::new(content.x, TOOLBAR_HEIGHT, content.width, TAB_BAR_HEIGHT);
         items.push(Item::Fill {
             shape: Shape::rect(bar),
-            paint: palette.surface_elevated.into(),
+            paint: palette.overlay.into(),
         });
         items.push(Item::Fill {
             shape: Shape::rect(Rect::new(
@@ -243,7 +243,7 @@ impl FilesView {
                 bar.width,
                 1.0,
             )),
-            paint: palette.separator_color.into(),
+            paint: palette.hairline.into(),
         });
         let titles = self.tab_titles();
         for (index, (tab, title)) in tabs.iter().zip(titles).enumerate() {
@@ -255,12 +255,12 @@ impl FilesView {
             if active {
                 items.push(Item::Fill {
                     shape: Shape::rect(*tab),
-                    paint: palette.surface_background.into(),
+                    paint: palette.sheet.into(),
                 });
             } else if hovered {
                 items.push(Item::Fill {
                     shape: Shape::rect(Rect::new(tab.x, tab.y, tab.width, TAB_BAR_HEIGHT - 1.0)),
-                    paint: palette.label_muted.with_alpha(24).into(),
+                    paint: palette.ink2.with_alpha(24).into(),
                 });
             }
             if index + 1 < tabs.len() {
@@ -271,12 +271,12 @@ impl FilesView {
                         1.0,
                         TAB_BAR_HEIGHT,
                     )),
-                    paint: palette.separator_color.into(),
+                    paint: palette.hairline.into(),
                 });
             }
             let color = match active {
-                true => palette.label_primary,
-                false => palette.label_muted,
+                true => palette.ink,
+                false => palette.ink2,
             };
             let label = Rect::new(
                 tab.x + LABEL_INSET,
@@ -296,10 +296,10 @@ impl FilesView {
                 if self.hover == Some(Hit::CloseTab(index)) {
                     items.push(Item::Fill {
                         shape: Shape::rounded(close, CLOSE_SIZE / 2.0),
-                        paint: palette.label_muted.with_alpha(50).into(),
+                        paint: palette.ink2.with_alpha(50).into(),
                     });
                 }
-                items.push(self.centred("\u{00D7}", 14.0, palette.label_muted, close));
+                items.push(self.centred("\u{00D7}", 14.0, palette.ink2, close));
             }
             self.hits.push((close, Hit::CloseTab(index)));
         }
@@ -311,10 +311,10 @@ impl FilesView {
                     new_tab.width,
                     TAB_BAR_HEIGHT - 1.0,
                 )),
-                paint: palette.label_muted.with_alpha(24).into(),
+                paint: palette.ink2.with_alpha(24).into(),
             });
         }
-        items.push(self.centred("+", 16.0, palette.label_muted, new_tab));
+        items.push(self.centred("+", 16.0, palette.ink2, new_tab));
         self.hits.push((new_tab, Hit::NewTab));
     }
 }

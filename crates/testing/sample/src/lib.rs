@@ -29,13 +29,13 @@ pub fn scene(text: &mut TextSystem, palette: &Palette, (width, height): (u32, u3
         },
         Item::Fill {
             shape: Shape::rounded(card, 10.0),
-            paint: palette.surface_elevated.into(),
+            paint: palette.overlay.into(),
         },
         Item::Text {
             origin: Point::new(content, card.y + Spacing::L as f32),
             paragraph: text.paragraph(
                 "Settings",
-                TextStyle::new(22.0, palette.label_primary).weight(TextStyle::SEMIBOLD),
+                TextStyle::new(22.0, palette.ink).weight(TextStyle::SEMIBOLD),
                 None,
                 TextAlign::Start,
             ),
@@ -50,13 +50,13 @@ pub fn scene(text: &mut TextSystem, palette: &Palette, (width, height): (u32, u3
                 card.width - 2.0 * Spacing::L as f32,
                 1.0,
             )),
-            paint: palette.separator_color.into(),
+            paint: palette.hairline.into(),
         });
         items.push(Item::Text {
             origin: Point::new(content, y + Spacing::M as f32),
             paragraph: text.paragraph(
                 title,
-                TextStyle::new(13.0, palette.label_primary).weight(TextStyle::MEDIUM),
+                TextStyle::new(13.0, palette.ink).weight(TextStyle::MEDIUM),
                 None,
                 TextAlign::Start,
             ),
@@ -65,7 +65,7 @@ pub fn scene(text: &mut TextSystem, palette: &Palette, (width, height): (u32, u3
             origin: Point::new(content + 160.0, y + Spacing::M as f32),
             paragraph: text.paragraph(
                 detail,
-                TextStyle::new(13.0, palette.label_muted),
+                TextStyle::new(13.0, palette.ink2),
                 Some(card.width - 192.0),
                 TextAlign::Start,
             ),
@@ -75,7 +75,7 @@ pub fn scene(text: &mut TextSystem, palette: &Palette, (width, height): (u32, u3
     Scene {
         width,
         height,
-        background: palette.surface_background,
+        background: palette.sheet,
         items,
     }
 }

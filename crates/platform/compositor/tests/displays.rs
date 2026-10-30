@@ -129,7 +129,7 @@ fn each_display_draws_only_its_own_windows() {
     let _app = app(&mut server);
     let mut renderer = Renderer::new().expect("renderer");
 
-    assert!(red_pixels(&mut renderer, &mut server, SIDE) > (WINDOW.0 * WINDOW.1) as usize * 9 / 10);
+    assert!(red_pixels(&mut renderer, &mut server, SIDE) > (WINDOW.0 * WINDOW.1) as usize * 4 / 5);
 
     assert_eq!(red_pixels(&mut renderer, &mut server, MAIN), 0);
 }
@@ -513,7 +513,7 @@ fn an_apps_windows_cascade_only_from_its_windows_on_the_same_display() {
 #[test]
 fn a_window_with_our_title_bar_moves_to_a_display_of_another_scale_with_its_bar() {
     const DECORATED: (i32, i32) = (120, 40);
-    const BAR: i32 = 28;
+    const BAR: i32 = 40;
     let mut server = two_displays();
     server.set_reduce_motion(true);
     let mut settings = server.output_settings(SIDE).expect("side display");
@@ -544,20 +544,20 @@ fn a_window_with_our_title_bar_moves_to_a_display_of_another_scale_with_its_bar(
     roundtrip(&mut server, &mut [&mut app]);
 
     assert_eq!(server.output_of(&server.windows()[0]), SIDE);
-    assert_eq!(geometry(&server), rect(276, 35, decorated.0, decorated.1));
+    assert_eq!(geometry(&server), rect(276, 33, decorated.0, decorated.1));
     assert_eq!(app.preferred_scale(&mut server, 0), Some(240));
     let mut renderer = Renderer::new().expect("renderer");
     renderer.render_output(&mut server, SIDE).expect("frame");
     let snapshot = renderer.snapshot_output(SIDE).expect("read back");
     let pixel = |x: i32, y: i32| {
-        let at = (((35 + y) * 2 * snapshot.size.w + (276 - 256 + x) * 2) * 4) as usize;
+        let at = (((33 + y) * 2 * snapshot.size.w + (276 - 256 + x) * 2) * 4) as usize;
         [
             snapshot.rgba[at],
             snapshot.rgba[at + 1],
             snapshot.rgba[at + 2],
         ]
     };
-    assert!(pixel(100, BAR - 3).iter().all(|channel| *channel > 0xf0));
+    assert_eq!(pixel(100, 3), [0xEC, 0xEA, 0xE7]);
     assert_eq!(pixel(60, BAR + 3), [0xff, 0, 0]);
 
     chord(
@@ -568,5 +568,5 @@ fn a_window_with_our_title_bar_moves_to_a_display_of_another_scale_with_its_bar(
     roundtrip(&mut server, &mut [&mut app]);
 
     assert_eq!(server.output_of(&server.windows()[0]), MAIN);
-    assert_eq!(geometry(&server), rect(68, 76, decorated.0, decorated.1));
+    assert_eq!(geometry(&server), rect(68, 77, decorated.0, decorated.1));
 }

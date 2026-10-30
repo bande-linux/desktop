@@ -1,49 +1,40 @@
+use std::borrow::Cow;
 use std::fmt;
 use std::sync::Arc;
 
 use parley::fontique::GenericFamily;
 use parley::{
     Alignment, AlignmentOptions, FontContext, FontData, FontFamily, FontFamilyName, FontWeight,
-    Layout, LayoutContext, PositionedLayoutItem, StyleProperty,
+    Layout, LayoutContext, LineHeight, PositionedLayoutItem, RangedBuilder, StyleProperty,
 };
+use unbound_design::{Color, TextRole, Typeface};
 
-use crate::tokens::Color;
+const DISPLAY_SIZE: f32 = 20.0;
 
-pub const FONT_FAMILY: &str = "Inter";
-pub const DISPLAY_FONT_FAMILY: &str = "Inter Display";
-pub const DISPLAY_SIZE: f32 = 20.0;
-pub const MONOSPACE_FONT_FAMILY: &str = "DejaVu Sans Mono";
-
-static MONOSPACE_FAMILIES: [FontFamilyName<'static>; 2] = [
-    FontFamilyName::named(MONOSPACE_FONT_FAMILY),
-    FontFamilyName::Generic(GenericFamily::Monospace),
-];
-
-static TEXT_FAMILIES: [FontFamilyName<'static>; 2] = [
-    FontFamilyName::named(FONT_FAMILY),
+static INTERFACE_FAMILIES: [FontFamilyName<'static>; 2] = [
+    FontFamilyName::named(Typeface::Interface.family()),
     FontFamilyName::Generic(GenericFamily::SansSerif),
 ];
 
 static DISPLAY_FAMILIES: [FontFamilyName<'static>; 3] = [
-    FontFamilyName::named(DISPLAY_FONT_FAMILY),
-    FontFamilyName::named(FONT_FAMILY),
+    FontFamilyName::named(Typeface::Display.family()),
+    FontFamilyName::named(Typeface::Interface.family()),
     FontFamilyName::Generic(GenericFamily::SansSerif),
 ];
 
-pub fn families(size: f32) -> FontFamily<'static> {
-    let families = if size >= DISPLAY_SIZE {
-        DISPLAY_FAMILIES.as_slice()
-    } else {
-        TEXT_FAMILIES.as_slice()
+static MONOSPACE_FAMILIES: [FontFamilyName<'static>; 3] = [
+    FontFamilyName::named(Typeface::Monospace.family()),
+    FontFamilyName::named("DejaVu Sans Mono"),
+    FontFamilyName::Generic(GenericFamily::Monospace),
+];
+
+fn families(typeface: Typeface) -> FontFamily<'static> {
+    let families = match typeface {
+        Typeface::Interface => INTERFACE_FAMILIES.as_slice(),
+        Typeface::Display => DISPLAY_FAMILIES.as_slice(),
+        Typeface::Monospace => MONOSPACE_FAMILIES.as_slice(),
     };
     FontFamily::List(families.into())
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub enum Typeface {
-    #[default]
-    Interface,
-    Monospace,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -53,20 +44,45 @@ pub struct TextStyle {
     pub color: Color,
     pub typeface: Typeface,
     pub tabular: bool,
+    pub line_height: Option<f32>,
+    pub tracking: f32,
+    pub caps: bool,
 }
 
 impl TextStyle {
     pub const REGULAR: f32 = 400.0;
     pub const MEDIUM: f32 = 500.0;
     pub const SEMIBOLD: f32 = 600.0;
+    pub const BOLD: f32 = 700.0;
 
     pub const fn new(size: f32, color: Color) -> Self {
         Self {
             size,
             weight: Self::REGULAR,
             color,
-            typeface: Typeface::Interface,
+            typeface: if size >= DISPLAY_SIZE {
+                Typeface::Display
+            } else {
+                Typeface::Interface
+            },
             tabular: false,
+            line_height: None,
+            tracking: 0.0,
+            caps: false,
+        }
+    }
+
+    pub const fn role(role: TextRole, color: Color) -> Self {
+        let spec = role.spec();
+        Self {
+            size: spec.size,
+            weight: spec.weight,
+            color,
+            typeface: spec.typeface,
+            tabular: false,
+            line_height: Some(spec.line_height),
+            tracking: spec.tracking,
+            caps: spec.caps,
         }
     }
 
@@ -86,6 +102,22 @@ impl TextStyle {
 
     pub const fn weight(self, weight: f32) -> Self {
         Self { weight, ..self }
+    }
+
+    pub fn apply(&self, builder: &mut RangedBuilder<'_, Color>) {
+        builder.push_default(StyleProperty::FontFamily(families(self.typeface)));
+        builder.push_default(StyleProperty::FontSize(self.size));
+        builder.push_default(StyleProperty::FontWeight(FontWeight::new(self.weight)));
+        builder.push_default(StyleProperty::Brush(self.color));
+        builder.push_default(StyleProperty::FontFeatures(
+            self.typeface.features(self.tabular).into(),
+        ));
+        if let Some(line_height) = self.line_height {
+            builder.push_default(StyleProperty::LineHeight(LineHeight::Absolute(line_height)));
+        }
+        if self.tracking != 0.0 {
+            builder.push_default(StyleProperty::LetterSpacing(self.tracking * self.size));
+        }
     }
 }
 
@@ -134,22 +166,16 @@ impl TextSystem {
         max_width: Option<f32>,
         align: TextAlign,
     ) -> Paragraph {
+        let text = if style.caps {
+            Cow::Owned(text.to_uppercase())
+        } else {
+            Cow::Borrowed(text)
+        };
         let mut builder = self
             .layouts
-            .ranged_builder(&mut self.fonts, text, 1.0, true);
-        let families = match style.typeface {
-            Typeface::Monospace => MONOSPACE_FAMILIES.as_slice(),
-            Typeface::Interface if style.size >= DISPLAY_SIZE => DISPLAY_FAMILIES.as_slice(),
-            Typeface::Interface => TEXT_FAMILIES.as_slice(),
-        };
-        builder.push_default(StyleProperty::FontFamily(FontFamily::List(families.into())));
-        builder.push_default(StyleProperty::FontSize(style.size));
-        builder.push_default(StyleProperty::FontWeight(FontWeight::new(style.weight)));
-        builder.push_default(StyleProperty::Brush(style.color));
-        if style.tabular {
-            builder.push_default(StyleProperty::FontFeatures("\"tnum\" on".into()));
-        }
-        let mut layout = builder.build(text);
+            .ranged_builder(&mut self.fonts, &text, 1.0, true);
+        style.apply(&mut builder);
+        let mut layout = builder.build(&text);
         layout.break_all_lines(max_width);
         let alignment = match align {
             TextAlign::Start => Alignment::Start,

@@ -71,7 +71,7 @@ impl Widget for Button {
             ButtonRole::Primary => {
                 TextStyle::new(13.0, Color::hex(0xFFFFFF)).weight(TextStyle::MEDIUM)
             }
-            _ => TextStyle::new(13.0, cx.palette.label_primary),
+            _ => TextStyle::new(13.0, cx.palette.ink),
         };
         let paragraph = cx
             .text
@@ -94,7 +94,7 @@ impl Widget for Button {
         if self.role == ButtonRole::Primary {
             items.push(Item::Fill {
                 shape,
-                paint: cx.palette.accent_color.into(),
+                paint: cx.palette.accent.into(),
             });
             if self.pressed {
                 items.push(Item::Fill {
@@ -104,9 +104,9 @@ impl Widget for Button {
             }
         } else {
             let fill = if self.pressed {
-                cx.palette.separator_color
+                cx.palette.hairline
             } else {
-                cx.palette.surface_elevated
+                cx.palette.overlay
             };
             items.push(Item::Fill {
                 shape,
@@ -115,7 +115,7 @@ impl Widget for Button {
             items.push(Item::Stroke {
                 shape: Shape::rounded(self.frame.inset(0.5), RADIUS - 0.5),
                 width: 1.0,
-                paint: cx.palette.separator_color.into(),
+                paint: cx.palette.hairline.into(),
             });
         }
         if cx.is_focused(self.id) {

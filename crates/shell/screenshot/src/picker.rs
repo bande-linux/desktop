@@ -155,7 +155,7 @@ impl Widget for Grid {
     }
 
     fn measure(&mut self, cx: &mut Context, _available: Size) -> Size {
-        let style = TextStyle::new(LABEL_SIZE, cx.palette.label_primary);
+        let style = TextStyle::new(LABEL_SIZE, cx.palette.ink);
         for tile in &mut self.tiles {
             tile.paragraph = Some(fitted(cx, &tile.label, style, TILE_WIDTH));
         }
@@ -192,7 +192,7 @@ impl Widget for Grid {
             let well = Rect::new(tile.frame.x, tile.frame.y, TILE_WIDTH, THUMBNAIL_HEIGHT);
             items.push(Item::Fill {
                 shape: Shape::rounded(well, TILE_RADIUS),
-                paint: cx.palette.surface_background.into(),
+                paint: cx.palette.sheet.into(),
             });
             if let Some(image) = &tile.image {
                 let fitted = aspect_fit(image, well.inset(8.0));
@@ -208,14 +208,14 @@ impl Widget for Grid {
                 items.push(Item::Stroke {
                     shape: Shape::rounded(well.inset(-RING / 2.0), TILE_RADIUS + RING / 2.0),
                     width: RING,
-                    paint: cx.palette.accent_color.into(),
+                    paint: cx.palette.accent.into(),
                 });
             }
             if focused && index == self.current && cx.keyboard_navigation {
                 items.push(Item::Stroke {
                     shape: Shape::rounded(well.inset(-RING * 1.5), TILE_RADIUS + RING * 1.5),
                     width: 1.0,
-                    paint: cx.palette.accent_color.with_alpha(128).into(),
+                    paint: cx.palette.accent.with_alpha(128).into(),
                 });
             }
             if let Some(paragraph) = &tile.paragraph {
@@ -411,7 +411,7 @@ impl Widget for Picker {
         let width = (grid.width + 2.0 * PADDING).max(420.0).min(available.width);
         let title = cx.text.paragraph(
             &self.title,
-            TextStyle::new(15.0, cx.palette.label_primary).weight(TextStyle::SEMIBOLD),
+            TextStyle::new(15.0, cx.palette.ink).weight(TextStyle::SEMIBOLD),
             Some(width - 2.0 * PADDING),
             TextAlign::Start,
         );

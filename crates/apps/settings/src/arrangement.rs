@@ -256,9 +256,9 @@ impl Widget for Arrangement {
             let shape = Shape::rounded(rect, RADIUS);
             let selected = index == self.selected;
             let fill = if selected {
-                cx.palette.accent_color.with_alpha(96)
+                cx.palette.accent.with_alpha(96)
             } else {
-                cx.palette.label_muted.with_alpha(56)
+                cx.palette.ink2.with_alpha(56)
             };
             items.push(Item::Fill {
                 shape,
@@ -268,9 +268,9 @@ impl Widget for Arrangement {
                 shape: Shape::rounded(rect.inset(0.5), RADIUS - 0.5),
                 width: 1.0,
                 paint: if selected {
-                    cx.palette.accent_color.into()
+                    cx.palette.accent.into()
                 } else {
-                    cx.palette.separator_color.into()
+                    cx.palette.hairline.into()
                 },
             });
             if self.screens[index].main {
@@ -279,14 +279,14 @@ impl Widget for Arrangement {
                         Rect::new(rect.x + 1.0, rect.y + 1.0, rect.width - 2.0, MENU_BAR),
                         2.0,
                     ),
-                    paint: cx.palette.label_primary.with_alpha(160).into(),
+                    paint: cx.palette.ink.with_alpha(160).into(),
                 });
             }
             if selected && cx.is_focused(self.id) {
                 items.push(Item::Stroke {
                     shape: Shape::rounded(rect.inset(-FOCUS_RING), RADIUS + FOCUS_RING),
                     width: FOCUS_RING,
-                    paint: cx.palette.accent_color.with_alpha(128).into(),
+                    paint: cx.palette.accent.with_alpha(128).into(),
                 });
             }
             let label = &self.labels[index];

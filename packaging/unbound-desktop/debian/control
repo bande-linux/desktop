@@ -41,6 +41,8 @@ Recommends: unbound-term (= ${binary:Version}),
             showtime,
             gnome-calculator,
             fonts-inter,
+            fonts-manrope,
+            fonts-jetbrains-mono,
             xdg-user-dirs,
             upower,
             udisks2

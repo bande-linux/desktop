@@ -16,8 +16,8 @@ use unbound_graphics::{
     ScrollSource, TextSystem,
 };
 use unbound_toolkit_platform::{
-    App, DragAction, DragEvent, Edges, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement, Role,
-    TITLE_BAR_HEIGHT, Transfer, Window, WindowEvent,
+    App, DragAction, DragEvent, Edges, HEADER_HEIGHT, KeyboardFocus, LayerKind, LayerOptions,
+    MenuPlacement, Role, SHEET_INSET, Transfer, Window, WindowEvent,
 };
 use unbound_widgets::{Context, ContextMenu, Label, Menu, MenuItem, Ui};
 
@@ -300,7 +300,7 @@ impl Desktop {
     }
 
     fn point_into_content(&mut self, x: i32, y: i32) {
-        self.point_into_window(x, y + TITLE_BAR_HEIGHT as i32);
+        self.point_into_window(x + SHEET_INSET as i32, y + HEADER_HEIGHT as i32);
     }
 
     fn point_into_window(&mut self, x: i32, y: i32) {
@@ -849,7 +849,8 @@ fn dragging_just_outside_the_right_edge_resizes_the_window() {
     let mut desktop = Desktop::new();
     let mut client = pointed_window(&mut desktop, "resize");
     let origin = desktop.server.windows()[0].location();
-    let edge = origin.x + WINDOW.0 as i32;
+    let framed = (WINDOW.0 + 2 * SHEET_INSET) as i32;
+    let edge = origin.x + framed;
     desktop.server.move_pointer_to(
         Point::from((f64::from(edge + 3), f64::from(origin.y + 60))),
         0,
@@ -863,7 +864,7 @@ fn dragging_just_outside_the_right_edge_resizes_the_window() {
     let wider = |desktop: &Desktop| {
         desktop.server.windows()[0]
             .geometry()
-            .is_some_and(|geometry| geometry.size.w == WINDOW.0 as i32 + 40)
+            .is_some_and(|geometry| geometry.size.w == framed + 40)
     };
     desktop.settle(&mut [&mut client]);
     desktop.server.press_button(BTN_LEFT, false, 0);

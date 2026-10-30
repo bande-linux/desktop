@@ -279,9 +279,9 @@ impl MenuPanel {
         let has_submenu = menu.items.iter().any(|item| item.submenu.is_some());
         let field = menu.search.as_ref().map(|search| {
             let (content, color) = if search.query.is_empty() {
-                (search.placeholder.as_str(), palette.label_muted)
+                (search.placeholder.as_str(), palette.ink2)
             } else {
-                (search.query.as_str(), palette.label_primary)
+                (search.query.as_str(), palette.ink)
             };
             (
                 text.paragraph(
@@ -310,14 +310,14 @@ impl MenuPanel {
                         ROW_HEIGHT
                     };
                     let label_color = if item.enabled {
-                        palette.label_primary
+                        palette.ink
                     } else {
-                        palette.label_muted
+                        palette.ink2
                     };
                     let labels =
                         (!item.separator).then(|| paragraphs(text, &item.title, label_color));
                     let shortcuts = item.shortcut.as_deref().map(|shortcut| {
-                        paragraphs(text, &shortcut_symbols(shortcut), palette.label_muted)
+                        paragraphs(text, &shortcut_symbols(shortcut), palette.ink2)
                     });
                     if let Some([label, _]) = &labels {
                         widest_label = widest_label.max(label.width());
@@ -425,12 +425,12 @@ impl MenuPanel {
         let mut items = vec![
             Item::Fill {
                 shape: outline,
-                paint: palette.surface_elevated.into(),
+                paint: palette.overlay.into(),
             },
             Item::Stroke {
                 shape: Shape::rounded(outline.rect.inset(0.25), RADIUS - 0.25),
                 width: 0.5,
-                paint: palette.separator_color.into(),
+                paint: palette.hairline.into(),
             },
         ];
         if let Some((field, typed)) = &self.field {
@@ -442,7 +442,7 @@ impl MenuPanel {
             );
             items.push(Item::Fill {
                 shape: Shape::rounded(well, FIELD_RADIUS),
-                paint: palette.label_primary.with_alpha(FIELD_ALPHA).into(),
+                paint: palette.ink.with_alpha(FIELD_ALPHA).into(),
             });
             let x = well.x + 2.0 * FIELD_INSET;
             let y = (well.y + (well.height - field.height()) / 2.0).round();
@@ -456,7 +456,7 @@ impl MenuPanel {
                     from: Point::new(caret, y + 1.0),
                     to: Point::new(caret, y + field.height() - 1.0),
                     width: 1.0,
-                    paint: palette.accent_color.into(),
+                    paint: palette.accent.into(),
                 });
             }
         }
@@ -477,7 +477,7 @@ impl MenuPanel {
                         self.size.width - HIGHLIGHT_INSET * 4.0,
                         1.0,
                     )),
-                    paint: palette.separator_color.into(),
+                    paint: palette.hairline.into(),
                 });
                 continue;
             }
@@ -493,16 +493,16 @@ impl MenuPanel {
                         ),
                         4.0,
                     ),
-                    paint: palette.accent_color.into(),
+                    paint: palette.accent.into(),
                 });
             }
             let variant = usize::from(lit);
             let mark = if lit {
                 Color::hex(0xFFFFFF)
             } else if item.enabled {
-                palette.label_primary
+                palette.ink
             } else {
-                palette.label_muted
+                palette.ink2
             };
             if let Some(labels) = &row.labels {
                 let label = &labels[variant];

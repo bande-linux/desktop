@@ -7,7 +7,8 @@ use wayland_client::protocol::wl_shm::Format;
 
 const OUTPUT: (i32, i32) = (256, 192);
 const WINDOW: (i32, i32) = (120, 40);
-const BAR: i32 = 28;
+const BAR: i32 = 40;
+const CLOSE: (i32, i32) = (24, BAR / 2);
 const BTN_LEFT: u32 = 0x110;
 
 fn decorated(server: &mut Headless, requested: Option<DecorationMode>) -> TestClient {
@@ -94,12 +95,12 @@ fn a_window_that_asks_for_server_side_decorations_gets_our_title_bar_above_its_c
     );
     assert_eq!(geometry(&server).size, (WINDOW.0, WINDOW.1 + BAR).into());
     assert!(close_to(
-        pixel(&mut server, top_left.0 + 100, top_left.1 + BAR / 2),
-        [0xFF, 0xFF, 0xFF]
+        pixel(&mut server, top_left.0 + 100, top_left.1 + 3),
+        [0xEC, 0xEA, 0xE7]
     ));
     assert!(close_to(
-        pixel(&mut server, top_left.0 + 18, top_left.1 + BAR / 2),
-        [0xFF, 0x5F, 0x57]
+        pixel(&mut server, top_left.0 + 14, top_left.1 + BAR / 2),
+        [0xE2, 0xDF, 0xDB]
     ));
     assert!(close_to(
         pixel(&mut server, top_left.0 + 60, top_left.1 + BAR + 10),
@@ -140,8 +141,32 @@ fn the_title_bar_follows_dark_mode() {
     server.set_dark_appearance(true);
 
     assert!(close_to(
-        pixel(&mut server, top_left.0 + 100, top_left.1 + BAR / 2),
-        [0x23, 0x26, 0x2C]
+        pixel(&mut server, top_left.0 + 100, top_left.1 + 3),
+        [0x14, 0x12, 0x10]
+    ));
+}
+
+#[test]
+fn only_the_close_button_turns_red_under_the_pointer() {
+    let mut server = server();
+    let _client = decorated(&mut server, Some(DecorationMode::ServerSide));
+    let top_left = origin(&server);
+    let beside_the_cross = (top_left.0 + CLOSE.0 + 5, top_left.1 + CLOSE.1);
+    let well = [0xE2, 0xDF, 0xDB];
+
+    assert!(close_to(
+        pixel(&mut server, beside_the_cross.0, beside_the_cross.1),
+        well
+    ));
+    server.move_pointer_to(at(top_left.0 + CLOSE.0 + 21, top_left.1 + CLOSE.1), 10);
+    assert!(close_to(
+        pixel(&mut server, beside_the_cross.0, beside_the_cross.1),
+        well
+    ));
+    server.move_pointer_to(at(top_left.0 + CLOSE.0, top_left.1 + CLOSE.1), 11);
+    assert!(close_to(
+        pixel(&mut server, beside_the_cross.0, beside_the_cross.1),
+        [0xD4, 0x2F, 0x34]
     ));
 }
 
@@ -154,8 +179,8 @@ fn the_close_button_asks_the_app_to_close_its_window() {
     click(
         &mut server,
         &mut client,
-        top_left.0 + 18,
-        top_left.1 + BAR / 2,
+        top_left.0 + CLOSE.0,
+        top_left.1 + CLOSE.1,
         10,
     );
 
@@ -168,7 +193,7 @@ fn a_press_that_slides_off_the_close_button_closes_nothing() {
     let mut client = decorated(&mut server, Some(DecorationMode::ServerSide));
     let top_left = origin(&server);
 
-    server.move_pointer_to(at(top_left.0 + 18, top_left.1 + BAR / 2), 10);
+    server.move_pointer_to(at(top_left.0 + CLOSE.0, top_left.1 + CLOSE.1), 10);
     server.press_button(BTN_LEFT, true, 10);
     server.move_pointer_to(at(top_left.0 + 90, top_left.1 + BAR / 2), 11);
     server.press_button(BTN_LEFT, false, 12);

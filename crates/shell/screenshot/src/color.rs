@@ -1,7 +1,5 @@
 use unbound_toolkit::ui::{Event, Key};
-use unbound_toolkit::{
-    Color, Item, Point, Rect, Scene, Shape, TextAlign, TextStyle, TextSystem, Typeface,
-};
+use unbound_toolkit::{Color, Item, Point, Rect, Scene, Shape, TextAlign, TextStyle, TextSystem};
 
 use crate::engine::Shot;
 
@@ -121,13 +119,9 @@ impl ColorPicker {
                 paint: Color::hex(0xffffff).with_alpha(0xe0).into(),
             });
             if let Some([r, g, b]) = self.pixel(x, y) {
-                let style = TextStyle {
-                    size: LABEL_SIZE,
-                    weight: TextStyle::MEDIUM,
-                    color: Color::hex(0xffffff),
-                    typeface: Typeface::Interface,
-                    tabular: true,
-                };
+                let style = TextStyle::new(LABEL_SIZE, Color::hex(0xffffff))
+                    .weight(TextStyle::MEDIUM)
+                    .tabular();
                 let paragraph = text.paragraph(
                     &format!("#{r:02X}{g:02X}{b:02X}"),
                     style,

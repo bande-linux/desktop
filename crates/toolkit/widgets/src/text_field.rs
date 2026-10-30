@@ -161,12 +161,12 @@ impl Widget for TextField {
     }
 
     fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
-        self.editor.set_color(cx.palette.label_primary);
+        self.editor.set_color(cx.palette.ink);
         self.editor.lay_out(&mut cx.text, WHOLE_LINE);
         self.placeholder_paragraph = (!self.placeholder.is_empty()).then(|| {
             cx.text.paragraph(
                 &self.placeholder,
-                TextStyle::new(self.editor.font_size(), cx.palette.label_muted),
+                TextStyle::new(self.editor.font_size(), cx.palette.ink2),
                 None,
                 TextAlign::Start,
             )
@@ -203,12 +203,12 @@ impl Widget for TextField {
             Border::Field => {
                 items.push(Item::Fill {
                     shape,
-                    paint: cx.palette.surface_elevated.into(),
+                    paint: cx.palette.overlay.into(),
                 });
                 items.push(Item::Stroke {
                     shape: Shape::rounded(self.frame.inset(0.5), RADIUS - 0.5),
                     width: 1.0,
-                    paint: cx.palette.separator_color.into(),
+                    paint: cx.palette.hairline.into(),
                 });
                 if focused {
                     super::focus_ring(cx, shape, items);
@@ -224,19 +224,19 @@ impl Widget for TextField {
                 });
                 items.push(Item::Fill {
                     shape,
-                    paint: cx.palette.surface_elevated.into(),
+                    paint: cx.palette.overlay.into(),
                 });
                 items.push(Item::Stroke {
                     shape,
                     width: 1.5,
-                    paint: cx.palette.accent_color.into(),
+                    paint: cx.palette.accent.into(),
                 });
             }
             Border::Search => {
                 let shape = Shape::rounded(self.frame, SEARCH_RADIUS);
                 items.push(Item::Fill {
                     shape,
-                    paint: cx.palette.label_muted.with_alpha(36).into(),
+                    paint: cx.palette.ink2.with_alpha(36).into(),
                 });
                 if focused {
                     super::focus_ring(cx, shape, items);

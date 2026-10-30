@@ -377,7 +377,7 @@ impl Screenshots {
             picture,
             path,
             video,
-            appearance.palette().surface_elevated,
+            appearance.palette().overlay,
             appearance.reduce_motion,
             Instant::now(),
         ));
@@ -841,7 +841,7 @@ impl Screenshots {
             COUNTDOWN_SIZE,
         );
         let palette = self.ui.context().palette;
-        let style = TextStyle::new(64.0, palette.label_primary).weight(TextStyle::SEMIBOLD);
+        let style = TextStyle::new(64.0, palette.ink).weight(TextStyle::SEMIBOLD);
         let paragraph = self
             .text
             .paragraph(&seconds.to_string(), style, None, TextAlign::Start);
@@ -856,7 +856,7 @@ impl Screenshots {
             items: vec![
                 Item::Fill {
                     shape: Shape::rounded(frame, 14.0),
-                    paint: palette.surface_elevated.into(),
+                    paint: palette.overlay.into(),
                 },
                 Item::Text { origin, paragraph },
             ],

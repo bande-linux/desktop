@@ -301,11 +301,11 @@ impl NowPlaying {
             None => {
                 items.push(Item::Fill {
                     shape,
-                    paint: cx.palette.separator_color.into(),
+                    paint: cx.palette.hairline.into(),
                 });
                 items.push(Item::FillPath {
                     path: music_note(Point::new(rect.x + ART / 2.0, rect.y + ART / 2.0)),
-                    paint: cx.palette.label_muted.into(),
+                    paint: cx.palette.ink2.into(),
                 });
             }
         }
@@ -328,10 +328,10 @@ impl Widget for NowPlaying {
         let styles = [
             (
                 title,
-                TextStyle::new(13.0, cx.palette.label_primary).weight(TextStyle::SEMIBOLD),
+                TextStyle::new(13.0, cx.palette.ink).weight(TextStyle::SEMIBOLD),
                 7.0,
             ),
-            (subtitle, TextStyle::new(12.0, cx.palette.label_muted), 26.0),
+            (subtitle, TextStyle::new(12.0, cx.palette.ink2), 26.0),
         ];
         let text_width =
             available.width - ART - 2.0 * TEXT_GAP - CONTROLS.len() as f32 * (BUTTON + BUTTON_GAP)
@@ -342,7 +342,7 @@ impl Widget for NowPlaying {
             .map(|(line, style, top)| (fitted(&mut cx.text, line, style, text_width), top))
             .collect();
         self.times = self.position(cx.now()).map(|(position, length)| {
-            let style = TextStyle::new(11.0, cx.palette.label_muted).tabular();
+            let style = TextStyle::new(11.0, cx.palette.ink2).tabular();
             let fraction =
                 (position.as_secs_f32() / length.as_secs_f32().max(f32::EPSILON)).min(1.0);
             (
@@ -390,13 +390,13 @@ impl Widget for NowPlaying {
             if self.press == Some(Press::Control(control)) && enabled {
                 items.push(Item::Fill {
                     shape: Shape::rounded(rect, BUTTON / 2.0),
-                    paint: cx.palette.separator_color.into(),
+                    paint: cx.palette.hairline.into(),
                 });
             }
             let color = if enabled {
-                cx.palette.label_primary
+                cx.palette.ink
             } else {
-                cx.palette.label_muted.with_alpha(110)
+                cx.palette.ink2.with_alpha(110)
             };
             let center = Point::new(rect.x + BUTTON / 2.0, rect.y + BUTTON / 2.0);
             for path in symbol(control, self.playing(), center) {
@@ -410,7 +410,7 @@ impl Widget for NowPlaying {
             items.push(Item::Stroke {
                 shape: Shape::rounded(self.frame.inset(-3.0), ART_RADIUS + 3.0),
                 width: 3.0,
-                paint: cx.palette.accent_color.with_alpha(128).into(),
+                paint: cx.palette.accent.with_alpha(128).into(),
             });
         }
         let Some((elapsed, remaining, fraction)) = &self.times else {
@@ -419,14 +419,14 @@ impl Widget for NowPlaying {
         let track = self.track_rect();
         items.push(Item::Fill {
             shape: Shape::rounded(track, TRACK / 2.0),
-            paint: cx.palette.separator_color.into(),
+            paint: cx.palette.hairline.into(),
         });
         items.push(Item::Fill {
             shape: Shape::rounded(
                 Rect::new(track.x, track.y, track.width * fraction, TRACK),
                 TRACK / 2.0,
             ),
-            paint: cx.palette.label_muted.into(),
+            paint: cx.palette.ink2.into(),
         });
         let top = self.frame.y + TIMES_TOP;
         items.push(Item::Text {

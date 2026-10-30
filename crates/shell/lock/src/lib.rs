@@ -171,7 +171,7 @@ impl Widget for LockView {
         let avatar = self.avatar();
         items.push(Item::Fill {
             shape: Shape::rounded(avatar, AVATAR / 2.0),
-            paint: cx.palette.accent_color.into(),
+            paint: cx.palette.accent.into(),
         });
         items.push(Item::Text {
             origin: centred(

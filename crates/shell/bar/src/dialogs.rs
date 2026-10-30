@@ -226,7 +226,7 @@ impl App for AppAbout {
         let name = centred(
             &mut self.text,
             &self.name,
-            TextStyle::new(ABOUT_NAME_SIZE, self.palette.label_primary).weight(TextStyle::SEMIBOLD),
+            TextStyle::new(ABOUT_NAME_SIZE, self.palette.ink).weight(TextStyle::SEMIBOLD),
         );
         let version = centred(
             &mut self.text,
@@ -234,7 +234,7 @@ impl App for AppAbout {
                 "about-app-version",
                 [("version", self.version.clone().into())],
             ),
-            TextStyle::new(ABOUT_VERSION_SIZE, self.palette.label_muted),
+            TextStyle::new(ABOUT_VERSION_SIZE, self.palette.ink2),
         );
         let mut items = Vec::new();
         if let Some(icon) = &self.icon {
@@ -261,7 +261,7 @@ impl App for AppAbout {
         Scene {
             width,
             height,
-            background: self.palette.surface_background,
+            background: self.palette.sheet,
             items,
         }
     }

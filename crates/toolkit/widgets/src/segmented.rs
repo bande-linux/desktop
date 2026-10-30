@@ -105,7 +105,7 @@ impl Widget for SegmentedControl {
 
     fn measure(&mut self, cx: &mut Context, _available: Size) -> Size {
         for segment in &mut self.segments {
-            let style = TextStyle::new(FONT_SIZE, cx.palette.label_primary);
+            let style = TextStyle::new(FONT_SIZE, cx.palette.ink);
             let plain = cx
                 .text
                 .paragraph(&segment.title, style, None, TextAlign::Start);
@@ -146,7 +146,7 @@ impl Widget for SegmentedControl {
         let track = Shape::rounded(self.frame, RADIUS);
         items.push(Item::Fill {
             shape: track,
-            paint: cx.palette.label_muted.with_alpha(36).into(),
+            paint: cx.palette.ink2.with_alpha(36).into(),
         });
         if cx.is_focused(self.id) {
             super::focus_ring(cx, track, items);
@@ -171,7 +171,7 @@ impl Widget for SegmentedControl {
         let shape = Shape::rounded(pill, PILL_RADIUS);
         let mut selected = vec![Item::Fill {
             shape,
-            paint: cx.palette.accent_color.into(),
+            paint: cx.palette.accent.into(),
         }];
         for (index, segment) in self.segments.iter().enumerate() {
             if let Some(paragraph) = &segment.selected {

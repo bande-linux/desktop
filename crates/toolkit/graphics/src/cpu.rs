@@ -171,7 +171,7 @@ mod tests {
 
     use super::CpuRenderer;
     use crate::scene::{Image, Item, Rect, Scene};
-    use crate::tokens::Color;
+    use unbound_design::Color;
 
     fn scene(items: Vec<Item>) -> Scene {
         Scene {

@@ -37,7 +37,7 @@ fn focus_ring(cx: &Context, shape: Shape, items: &mut Vec<Item>) {
             shape.radius + FOCUS_RING / 2.0,
         ),
         width: FOCUS_RING,
-        paint: cx.palette.accent_color.with_alpha(128).into(),
+        paint: cx.palette.accent.with_alpha(128).into(),
     });
 }
 
@@ -117,8 +117,8 @@ impl Text {
 
     pub fn measure(&mut self, cx: &mut Context) -> Size {
         let color = match self.tone {
-            Tone::Primary => cx.palette.label_primary,
-            Tone::Muted => cx.palette.label_muted,
+            Tone::Primary => cx.palette.ink,
+            Tone::Muted => cx.palette.ink2,
             Tone::OnAccent => WHITE,
         };
         let mut x = 0.0;
@@ -164,7 +164,7 @@ impl Text {
                         ),
                         3.0,
                     ),
-                    paint: cx.palette.accent_color.with_alpha(HIGHLIGHT_ALPHA).into(),
+                    paint: cx.palette.accent.with_alpha(HIGHLIGHT_ALPHA).into(),
                 });
             }
             items.push(Item::Text {
@@ -257,11 +257,11 @@ impl Widget for Root {
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
         items.push(Item::Fill {
             shape: Shape::rect(Rect::new(0.0, 0.0, SIDEBAR_WIDTH, self.frame.height)),
-            paint: cx.palette.surface_elevated.into(),
+            paint: cx.palette.overlay.into(),
         });
         items.push(Item::Fill {
             shape: Shape::rect(Rect::new(SIDEBAR_WIDTH - 1.0, 0.0, 1.0, self.frame.height)),
-            paint: cx.palette.separator_color.into(),
+            paint: cx.palette.hairline.into(),
         });
         for child in &self.children {
             child.paint(cx, items);
@@ -456,7 +456,7 @@ impl Widget for SidebarRow {
         if self.selected {
             items.push(Item::Fill {
                 shape,
-                paint: cx.palette.accent_color.into(),
+                paint: cx.palette.accent.into(),
             });
         }
         if cx.is_focused(self.id) {
@@ -621,7 +621,7 @@ impl Widget for Scroll {
                     ),
                     SCROLL_BAR_WIDTH / 2.0,
                 ),
-                paint: cx.palette.label_muted.with_alpha(110).into(),
+                paint: cx.palette.ink2.with_alpha(110).into(),
             });
         }
     }
@@ -690,12 +690,12 @@ impl Widget for Card {
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
         items.push(Item::Fill {
             shape: Shape::rounded(self.frame, CARD_RADIUS),
-            paint: cx.palette.surface_elevated.into(),
+            paint: cx.palette.overlay.into(),
         });
         items.push(Item::Stroke {
             shape: Shape::rounded(self.frame.inset(0.5), CARD_RADIUS - 0.5),
             width: 1.0,
-            paint: cx.palette.separator_color.with_alpha(160).into(),
+            paint: cx.palette.hairline.with_alpha(160).into(),
         });
         for (index, child) in self.children.iter().enumerate() {
             if index > 0 {
@@ -707,7 +707,7 @@ impl Widget for Card {
                         frame.width - 2.0 * ROW_PADDING,
                         1.0,
                     )),
-                    paint: cx.palette.separator_color.into(),
+                    paint: cx.palette.hairline.into(),
                 });
             }
             child.paint(cx, items);
@@ -832,13 +832,13 @@ impl Widget for Row {
             items.push(Item::Stroke {
                 shape,
                 width: 2.0,
-                paint: cx.palette.accent_color.into(),
+                paint: cx.palette.accent.into(),
             });
         }
         if self.pressed {
             items.push(Item::Fill {
                 shape,
-                paint: cx.palette.separator_color.with_alpha(120).into(),
+                paint: cx.palette.hairline.with_alpha(120).into(),
             });
         }
         if cx.is_focused(self.id) {
@@ -1045,20 +1045,20 @@ impl Widget for Signal {
             items.push(Item::Stroke {
                 shape: Shape::rounded(Rect::new(x + 2.0, self.frame.y + 1.0, 5.0, 8.0), 2.5),
                 width: 1.5,
-                paint: cx.palette.label_muted.into(),
+                paint: cx.palette.ink2.into(),
             });
             items.push(Item::Fill {
                 shape: Shape::rounded(body, 1.5),
-                paint: cx.palette.label_muted.into(),
+                paint: cx.palette.ink2.into(),
             });
         }
         x += LOCK_WIDTH + BAR_GAP;
         for bar in 0..BARS {
             let height = SIGNAL_HEIGHT * f32::from(bar + 1) / f32::from(BARS);
             let color = if bar < self.bars() {
-                cx.palette.label_primary
+                cx.palette.ink
             } else {
-                cx.palette.separator_color
+                cx.palette.hairline
             };
             items.push(Item::Fill {
                 shape: Shape::rounded(
@@ -1120,7 +1120,7 @@ impl Widget for Check {
                 let at = Point::new(from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t);
                 items.push(Item::Fill {
                     shape: Shape::rounded(Rect::new(at.x - 1.0, at.y - 1.0, 2.0, 2.0), 1.0),
-                    paint: cx.palette.accent_color.into(),
+                    paint: cx.palette.accent.into(),
                 });
             }
         };
@@ -1250,7 +1250,7 @@ impl Widget for Thumbnails {
                 },
                 None => Item::Fill {
                     shape,
-                    paint: cx.palette.label_muted.with_alpha(36).into(),
+                    paint: cx.palette.ink2.with_alpha(36).into(),
                 },
             };
             items.push(Item::Clip {
@@ -1260,13 +1260,13 @@ impl Widget for Thumbnails {
             items.push(Item::Stroke {
                 shape: Shape::rounded(rect.inset(0.5), THUMBNAIL_RADIUS - 0.5),
                 width: 1.0,
-                paint: cx.palette.separator_color.into(),
+                paint: cx.palette.hairline.into(),
             });
             if self.selected == Some(index) {
                 items.push(Item::Stroke {
                     shape: Shape::rounded(rect.inset(-3.0), THUMBNAIL_RADIUS + 3.0),
                     width: 3.0,
-                    paint: cx.palette.accent_color.into(),
+                    paint: cx.palette.accent.into(),
                 });
                 if cx.is_focused(self.id) {
                     focus_ring(
@@ -1368,7 +1368,7 @@ impl UsageBar {
 
     fn color(cx: &Context, index: usize) -> Color {
         let alpha = SEGMENT_ALPHAS[index % SEGMENT_ALPHAS.len()];
-        cx.palette.accent_color.with_alpha(alpha)
+        cx.palette.accent.with_alpha(alpha)
     }
 }
 
@@ -1423,7 +1423,7 @@ impl Widget for UsageBar {
         );
         let mut fills = vec![Item::Fill {
             shape: Shape::rect(track),
-            paint: cx.palette.separator_color.into(),
+            paint: cx.palette.hairline.into(),
         }];
         let mut x = track.x;
         for (index, segment) in self.segments.iter().enumerate() {
@@ -1561,7 +1561,7 @@ impl Widget for LevelHistory {
                     chart.width,
                     1.0,
                 )),
-                paint: cx.palette.separator_color.into(),
+                paint: cx.palette.hairline.into(),
             });
         }
         let count = self.levels.len().max(1) as f32;
@@ -1575,7 +1575,7 @@ impl Widget for LevelHistory {
                     Rect::new(x, chart.y + chart.height - height, width, height),
                     1.0,
                 ),
-                paint: cx.palette.accent_color.into(),
+                paint: cx.palette.accent.into(),
             });
         }
         let y = chart.y + chart.height + Spacing::XS as f32;

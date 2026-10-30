@@ -1132,7 +1132,7 @@ impl DesktopView {
                 rect: rect(scaled),
                 image,
             }),
-            None => drawn.push(fill(scaled.inset(8.0), 8.0, palette.surface_elevated)),
+            None => drawn.push(fill(scaled.inset(8.0), 8.0, palette.overlay)),
         }
         let renaming = self
             .rename
@@ -1150,7 +1150,7 @@ impl DesktopView {
                     label.text.height() + 2.0,
                 );
                 let color = if self.focused {
-                    palette.accent_color
+                    palette.accent
                 } else {
                     UNFOCUSED_SELECTION
                 };
@@ -1239,7 +1239,7 @@ impl DesktopView {
                     icon.width + 10.0,
                     icon.height + 10.0,
                 );
-                items.push(fill(well, 9.0, palette.accent_color.with_alpha(90)));
+                items.push(fill(well, 9.0, palette.accent.with_alpha(90)));
             }
             match dragging.contains(&item.path) {
                 true => {

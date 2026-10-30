@@ -3898,6 +3898,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "unbound-design"
+version = "0.1.0"
+
+[[package]]
 name = "unbound-desktop-surface"
 version = "0.1.0"
 dependencies = [
@@ -3982,6 +3986,7 @@ dependencies = [
  "skrifa",
  "tempfile",
  "tracing",
+ "unbound-design",
  "vello_cpu",
  "vello_gpu",
  "wgpu",

@@ -374,7 +374,7 @@ impl Widget for Toolbar {
             .map(|command| {
                 let color = match command {
                     Command::Done => Color::hex(0xffffff),
-                    _ => cx.palette.label_primary,
+                    _ => cx.palette.ink,
                 };
                 cx.text.paragraph(
                     &title(*command),
@@ -418,7 +418,7 @@ impl Widget for Toolbar {
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
         items.push(Item::Fill {
             shape: Shape::rect(self.frame),
-            paint: cx.palette.surface_elevated.into(),
+            paint: cx.palette.overlay.into(),
         });
         items.push(Item::Fill {
             shape: Shape::rect(Rect::new(
@@ -427,15 +427,15 @@ impl Widget for Toolbar {
                 self.frame.width,
                 1.0,
             )),
-            paint: cx.palette.separator_color.into(),
+            paint: cx.palette.hairline.into(),
         });
         let focused = cx.is_focused(self.id) && cx.keyboard_navigation;
         for (index, (frame, label)) in self.frames.iter().zip(&self.labels).enumerate() {
             let command = COMMANDS[index];
             let chosen = command == Command::Tool(self.tool);
             let fill = match (command, chosen || self.pressed == Some(index)) {
-                (Command::Done, _) => Some(cx.palette.accent_color),
-                (_, true) => Some(cx.palette.label_primary.with_alpha(0x22)),
+                (Command::Done, _) => Some(cx.palette.accent),
+                (_, true) => Some(cx.palette.ink.with_alpha(0x22)),
                 _ => None,
             };
             if let Some(fill) = fill {
@@ -455,7 +455,7 @@ impl Widget for Toolbar {
                 items.push(Item::Stroke {
                     shape: Shape::rounded(frame.inset(-2.0), 8.0),
                     width: 2.0,
-                    paint: cx.palette.accent_color.with_alpha(160).into(),
+                    paint: cx.palette.accent.with_alpha(160).into(),
                 });
             }
         }

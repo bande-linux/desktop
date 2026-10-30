@@ -170,3 +170,32 @@ fn the_shake_swings_both_ways_and_dies_down() {
     assert!(late < early);
     assert_eq!(shake_offset(SHAKE_DURATION + Duration::from_millis(1)), 0.0);
 }
+
+fn texts(screen: &mut LockScreen) -> usize {
+    screen
+        .scene(OUTPUT.0, OUTPUT.1)
+        .items
+        .iter()
+        .filter(|item| matches!(item, unbound_toolkit::Item::Text { .. }))
+        .count()
+}
+
+#[test]
+fn the_active_input_source_is_named_under_the_field_when_there_are_several() {
+    let mut screen = screen();
+    let plain = texts(&mut screen);
+
+    assert!(screen.set_input_source(Some("Swedish".to_owned())));
+    assert!(!screen.set_input_source(Some("Swedish".to_owned())));
+    assert_eq!(texts(&mut screen), plain + 1);
+    let label = screen
+        .accessibility()
+        .nodes
+        .iter()
+        .find_map(|(_, node)| node.label().map(str::to_owned))
+        .expect("labelled");
+    assert!(label.contains("Swedish"), "{label}");
+
+    assert!(screen.set_input_source(None));
+    assert_eq!(texts(&mut screen), plain);
+}

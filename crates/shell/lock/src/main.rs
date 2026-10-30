@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
 use unbound_datetime::DateFormats;
+use unbound_keyboard::Layouts;
 use unbound_lock::{
     BackdropSource, Inbox, LockScreen, PAM_SERVICE, User, Variant, authenticate, current_user,
     load_backdrop,
@@ -33,6 +34,7 @@ struct Locker {
     verdict_sender: UnixStream,
     next_clock: Instant,
     backdrop: Option<Inbox<Image>>,
+    layouts: Layouts,
     unlocked: bool,
 }
 
@@ -80,6 +82,13 @@ impl App for Locker {
             WindowEvent::AppearanceChanged(appearance) => {
                 self.screen.set_palette(appearance.palette());
                 false
+            }
+            WindowEvent::InputSources { sources, active } => {
+                let name = sources
+                    .get(active)
+                    .filter(|_| sources.len() > 1)
+                    .map(|code| self.layouts.name(code));
+                self.screen.set_input_source(name)
             }
             _ => false,
         };
@@ -166,6 +175,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         verdict_sender,
         next_clock: Instant::now() + CLOCK_TICK,
         backdrop: None,
+        layouts: Layouts::load(),
         unlocked: false,
     };
     unbound_toolkit::run(&mut window, &mut locker).map_err(|error: WindowError| error.into())

@@ -103,11 +103,13 @@ when they reach the screen is Unbound's own.
   arrangement): it keeps no windows or workspaces of its own, the pointer does not enter it, and
   it shows its source drawn again at the scale that fits it, centred. A rotated display is laid
   out upright in points and the renderer turns every quad, clip and shadow into the framebuffer.
-  The desktop surface and the menu bar run once per
-  display (the compositor starts an instance per display with `UNBOUND_OUTPUT` naming its output,
-  and `UNBOUND_SECONDARY_DISPLAY` for every display but the main one, where the desktop shows
-  only the wallpaper and no icons); the Dock and notifications stay on the main display, and an
-  instance is started or stopped as displays come and go or the main display changes. The lock
+  The desktop surface and the menu bar are drawn on every
+  display: the compositor tells the shell the displays that show their own picture, the main one
+  first (`unbound_shell_v1.displays`, since 15, on binding and whenever a display comes, goes,
+  starts or stops mirroring or the main display changes), and the shell opens a desktop and a bar
+  on each of them in its one process; on every display but the main one the desktop shows only
+  the wallpaper and no icons, and the Dock, the menu search and the notifications stay on the main
+  display. The lock
   screen asks for the password on the main display; while locked, every other display shows only
   its wallpaper.
 - **Settings ▸ Displays.** An arrangement of the displays (shown when there are two or more)

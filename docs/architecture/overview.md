@@ -45,10 +45,14 @@ graph TB
     end
 
     subgraph "Shell clients (started by the compositor)"
-        DOCK[Dock]
-        MENUBAR[Menu bar]
-        LAUNCHER[Launcher]
-        CC[Control Center]
+        subgraph "unbound-shell"
+            DESKTOP[Desktop]
+            DOCK[Dock]
+            MENUBAR[Menu bar]
+            NOTES[Notifications]
+            LAUNCHER[Launcher]
+            CC[Control Center]
+        end
         SHOT[Screenshot]
         LOCK[Lock screen]
         GREETER[Greeter]
@@ -83,7 +87,11 @@ graph TB
     SETTINGS & MENUBAR & CC <-->|D-Bus| CONFIG
 ```
 
-The Dock and the menu bar are one process, `unbound-bar` (`crates/shell/bar`); their models live in
+The desktop, the Dock and the menu bar of every display, the notifications, Control Center and the
+launcher are one process, `unbound-shell` (`crates/shell/shell`), with one Wayland connection, one
+GPU device, one font database and one connection per D-Bus bus. Each part is a library crate
+(`unbound-desktop-surface`, `unbound-bar`, `unbound-notifications`, `unbound-controlcenter`,
+`unbound-launcher`) whose surfaces the shell hosts; the bar's models live in
 `unbound-dock-model` and `unbound-status` (`crates/libs`).
 
 ## Process model
@@ -94,8 +102,9 @@ thinks of it as part of the system:
 - **Compositor.** One process, `unbound-compositor`, owns the display, input and every Wayland
   surface. It renders with its own renderer (`unbound-render`); title bars and the rest of the
   visible UI are drawn by clients.
-- **Shell clients.** Wayland clients that make up the desktop around the apps: Dock, menu bar,
-  launcher, Control Center, screenshot tool, lock screen, greeter. The compositor starts them on
+- **Shell clients.** Wayland clients that make up the desktop around the apps: the shell (desktop,
+  Dock, menu bar, notifications, launcher, Control Center), the screenshot tool, the lock screen
+  and the greeter. The compositor starts them on
   socket pairs and restarts them when they exit; only these connections see the private
   `unbound_shell_v1` protocol and `ext-foreign-toplevel-list-v1`
   ([behaviour](behaviour.md)).

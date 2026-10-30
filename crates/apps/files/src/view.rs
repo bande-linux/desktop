@@ -1,4 +1,4 @@
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io;
 use std::os::fd::BorrowedFd;
@@ -12,8 +12,8 @@ use unbound_fs::{
 };
 use unbound_preview::Preview;
 use unbound_toolkit::ui::{
-    Context, Cursor, Event, Key, Menu, Modifiers, Pointer, PointerButton, Scroll, ScrollState, Ui,
-    Widget, WidgetId,
+    Context, Cursor, Event, FreeLayout, Key, Menu, Modifiers, Pointer, PointerButton, Scroll,
+    ScrollState, Ui, Widget, WidgetId,
 };
 use unbound_toolkit::{Image, Item, Palette, Point, Rect, TextSystem};
 use unbound_volumes::mounted_volumes;
@@ -22,7 +22,6 @@ use unbound_xdg::{Apps, DesktopEntry, UserDir, path_from_file_uri, user_dir};
 use crate::L10N;
 use crate::browser::{Browser, Location};
 use crate::controls::{Press, Signals};
-use crate::host::Host;
 use crate::icons::Icons;
 use crate::loader::{Loaded, Loader};
 use crate::sidebar::{Place, PlaceKind, Row, with_volumes};
@@ -104,7 +103,10 @@ pub enum Request {
         paths: Vec<PathBuf>,
         cut: bool,
     },
-    StartDrag(Vec<PathBuf>),
+    StartDrag {
+        paths: Vec<PathBuf>,
+        grab: Point,
+    },
     PasteFiles,
     ShowMenu {
         menu: Menu,
@@ -124,7 +126,6 @@ pub struct FilesView {
     pub(crate) host: WidgetId,
     pub(crate) table: WidgetId,
     pub(crate) signals: Signals,
-    pub(crate) painted: Rc<Cell<usize>>,
     pub(crate) table_revision: Option<u64>,
     pub(crate) table_keys: HashMap<String, usize>,
     pub(crate) table_revealed: Option<usize>,
@@ -198,11 +199,10 @@ impl FilesView {
         let icons = Icons::new(apps.data_dirs().to_vec());
         let operations = Operations::new(browser.trash().clone());
         let signals: Signals = Rc::new(RefCell::new(Vec::new()));
-        let painted = Rc::new(Cell::new(0));
-        let mut host = Host::new(painted.clone());
+        let mut host = FreeLayout::new();
         let table = crate::controls::table(&signals);
         let table_id = Widget::id(&table);
-        host.insert(Box::new(table), Rect::default(), false);
+        host.insert(table, Rect::default());
         let host_id = Widget::id(&host);
         let mut view = Self {
             browser,
@@ -214,7 +214,6 @@ impl FilesView {
             host: host_id,
             table: table_id,
             signals,
-            painted,
             table_revision: None,
             table_keys: HashMap::new(),
             table_revealed: None,
@@ -760,8 +759,6 @@ impl FilesView {
                     self.press = Some(Press::Item {
                         at: pointer.position,
                         collapse: keep.then(|| path.clone()),
-                        sole: false,
-                        ui: false,
                     });
                 }
                 if keep {

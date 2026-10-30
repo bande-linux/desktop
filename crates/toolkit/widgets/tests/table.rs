@@ -22,6 +22,7 @@ const SHIFT: Modifiers = Modifiers {
     ..NONE
 };
 const LOGO: Modifiers = Modifiers { logo: true, ..NONE };
+const ALT: Modifiers = Modifiers { alt: true, ..NONE };
 
 #[derive(Default)]
 struct Log {
@@ -56,10 +57,14 @@ fn keys(names: &[&str]) -> Vec<String> {
 
 impl Fixture {
     fn new(names: &[&str]) -> Self {
+        Self::with(names, |table| table)
+    }
+
+    fn with(names: &[&str], configure: impl FnOnce(Table) -> Table) -> Self {
         let log = Rc::new(RefCell::new(Log::default()));
         let (selection, activate, sort, action) =
             (log.clone(), log.clone(), log.clone(), log.clone());
-        let mut table = Table::new(vec![
+        let table = Table::new(vec![
             Column::new("Name", 200.0),
             Column::new("Size", 100.0).numeric(),
         ])
@@ -75,6 +80,7 @@ impl Fixture {
                     .push((name.to_owned(), keys.to_vec()));
             },
         );
+        let mut table = configure(table);
         table.set_rows(rows(names));
         let id = table.id();
         let mut ui = Ui::new(
@@ -335,4 +341,157 @@ fn super_c_copies_the_selected_rows_as_tab_separated_lines() {
             "bravo\t100\ncharlie\t200".to_owned()
         ))
     );
+}
+
+#[test]
+fn pressing_a_selected_row_keeps_the_group_until_release() {
+    let mut fixture = Fixture::new(&NAMES);
+    fixture.click(1, NONE, 1);
+    fixture.click(3, SHIFT, 1);
+    let pointer = Pointer::at(Fixture::row_point(2));
+    fixture.ui.handle(&Event::PointerDown(pointer));
+    assert_eq!(fixture.selection(), keys(&["bravo", "charlie", "delta"]));
+    fixture.ui.handle(&Event::PointerUp(pointer));
+    assert_eq!(fixture.selection(), keys(&["charlie"]));
+}
+
+#[test]
+fn dragging_from_a_selected_row_hands_the_group_to_the_drag_hook() {
+    let started = Rc::new(RefCell::new(Vec::new()));
+    let log = started.clone();
+    let mut fixture = Fixture::with(&NAMES, |table| {
+        table.on_drag(move |keys, at| log.borrow_mut().push((keys.to_vec(), at)))
+    });
+    fixture.click(0, NONE, 1);
+    fixture.click(1, SHIFT, 1);
+    let from = Fixture::row_point(1);
+    fixture.ui.handle(&Event::PointerDown(Pointer::at(from)));
+    fixture
+        .ui
+        .handle(&Event::PointerMove(Pointer::at(Point::new(
+            from.x + 20.0,
+            from.y + 30.0,
+        ))));
+    assert_eq!(*started.borrow(), [(keys(&["alpha", "bravo"]), from)]);
+    assert_eq!(fixture.selection(), keys(&["alpha", "bravo"]));
+}
+
+#[test]
+fn rows_report_where_they_are_after_scrolling() {
+    let names = (0..50)
+        .map(|index| format!("row {index:02}"))
+        .collect::<Vec<_>>();
+    let names = names.iter().map(String::as_str).collect::<Vec<_>>();
+    let mut fixture = Fixture::new(&names);
+    fixture.table().scroll_to_row(30);
+    for _ in 0..60 {
+        fixture.ui.scene(AREA.width as u32, AREA.height as u32);
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let table = fixture.table();
+    assert!(table.scroll_offset() > 0.0);
+    let bounds = table.row_bounds(30).expect("row 30");
+    assert!(bounds.y >= HEADER_HEIGHT && bounds.y + bounds.height <= AREA.height + 0.5);
+    let middle = Point::new(10.0, bounds.y + bounds.height / 2.0);
+    assert_eq!(table.row_at(middle), Some(30));
+    assert_eq!(table.cell_bounds(30, 1).expect("size cell").x, 200.0);
+}
+
+fn tree() -> Vec<Row> {
+    let leaf = |name: &str| Row::new(name, vec![Cell::new(name), Cell::new("1")]);
+    vec![
+        Row::new("mail", vec![Cell::new("mail"), Cell::new("3")]).children(vec![
+            leaf("mail helper"),
+            Row::new("mail sync", vec![Cell::new("mail sync"), Cell::new("1")])
+                .children(vec![leaf("mail sync worker")]),
+        ]),
+        leaf("notes"),
+    ]
+}
+
+fn outline() -> Fixture {
+    let mut fixture = Fixture::new(&[]);
+    fixture.table().set_rows(tree());
+    fixture.ui.scene(AREA.width as u32, AREA.height as u32);
+    fixture
+}
+
+#[test]
+fn right_and_left_open_and_close_branches_and_walk_the_outline() {
+    let mut fixture = outline();
+    fixture.click(0, NONE, 1);
+    fixture.key(Key::Down, NONE);
+    assert_eq!(
+        fixture.selection(),
+        keys(&["notes"]),
+        "children start hidden"
+    );
+    fixture.key(Key::Up, NONE);
+    fixture.key(Key::Right, NONE);
+    fixture.key(Key::Right, NONE);
+    assert_eq!(fixture.selection(), keys(&["mail helper"]));
+    fixture.key(Key::Down, NONE);
+    fixture.key(Key::Right, NONE);
+    fixture.key(Key::Down, NONE);
+    assert_eq!(fixture.selection(), keys(&["mail sync worker"]));
+    fixture.key(Key::Left, NONE);
+    assert_eq!(fixture.selection(), keys(&["mail sync"]));
+    fixture.key(Key::Left, NONE);
+    fixture.key(Key::Down, NONE);
+    assert_eq!(fixture.selection(), keys(&["notes"]), "mail sync closed");
+}
+
+#[test]
+fn closing_a_branch_moves_a_hidden_selection_to_the_branch() {
+    let mut fixture = outline();
+    fixture.click(0, NONE, 1);
+    fixture.key(Key::Right, ALT);
+    fixture.key(Key::End, NONE);
+    fixture.key(Key::Up, SHIFT);
+    assert_eq!(fixture.selection(), keys(&["mail sync worker", "notes"]));
+    let mail = Fixture::row_point(0);
+    let triangle = Point::new(12.0, mail.y);
+    fixture
+        .ui
+        .handle(&Event::PointerDown(Pointer::at(triangle)));
+    fixture.ui.handle(&Event::PointerUp(Pointer::at(triangle)));
+    assert_eq!(fixture.selection(), keys(&["mail", "notes"]));
+    assert_eq!(
+        fixture.log.borrow().selections.last(),
+        Some(&keys(&["mail", "notes"]))
+    );
+}
+
+#[test]
+fn an_outline_is_a_tree_grid_with_levels_and_expandable_rows() {
+    let mut fixture = outline();
+    let tree = fixture.ui.accessibility();
+    let table = tree
+        .nodes
+        .iter()
+        .find(|(id, _)| *id == NodeId::from(fixture.table))
+        .expect("table node");
+    assert_eq!(table.1.role(), Role::TreeGrid);
+    let mail = tree
+        .nodes
+        .iter()
+        .find(|(_, node)| node.role() == Role::Row && node.label() == Some("mail"))
+        .expect("mail row");
+    assert_eq!(mail.1.level(), Some(1));
+    assert_eq!(mail.1.is_expanded(), Some(false));
+    assert!(fixture.ui.perform(&ActionRequest {
+        action: Action::Expand,
+        target_tree: TreeId::ROOT,
+        target_node: mail.0,
+        data: None,
+    }));
+    let helper = fixture
+        .ui
+        .accessibility()
+        .nodes
+        .into_iter()
+        .find(|(_, node)| node.label() == Some("mail helper"))
+        .expect("child row");
+    assert_eq!(helper.1.level(), Some(2));
+    assert!(fixture.selection().is_empty(), "expanding selects nothing");
 }

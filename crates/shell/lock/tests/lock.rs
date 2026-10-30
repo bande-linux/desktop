@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
+use unbound_datetime::{DateFormats, posix_locale};
 use unbound_lock::{
     LockScreen, SHAKE_AMPLITUDE, SHAKE_DURATION, User, clock_texts, display_name, shake_offset,
 };
@@ -29,9 +30,14 @@ fn ada() -> User {
     }
 }
 
+fn british() -> DateFormats {
+    DateFormats::for_locale(&posix_locale("en_GB.UTF-8"))
+}
+
 fn screen() -> LockScreen {
     LockScreen::new(
         &ada(),
+        british(),
         &morning(),
         Palette::for_scheme(Scheme::Dark),
         TextSystem::new(),
@@ -87,7 +93,7 @@ fn the_lock_screen_matches_its_golden() {
 #[test]
 fn the_clock_shows_the_weekday_and_date_above_the_time() {
     assert_eq!(
-        clock_texts(&morning()),
+        clock_texts(&british(), &morning()),
         ("Wednesday 28 October".to_owned(), "09:41".to_owned())
     );
 }

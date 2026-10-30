@@ -4,16 +4,16 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::Instant;
 
-use accesskit::{Action, ActionRequest, Role, TreeId};
+use accesskit::{Action, ActionRequest, TreeId};
 use unbound_fs::{Sort, SortBy, format_date, format_size};
 use unbound_toolkit::ui::{
-    Alert, Cell, ClipboardRequest, Column, Event, HEADER_HEIGHT, Key, Modifiers, Pointer,
-    PointerButton, Row, Size, Sort as TableSort, Table, TextField, Toggle, Widget, WidgetId,
+    Alert, Cell, ClipboardRequest, Column, Event, FreeLayout, HEADER_HEIGHT, Key, Modifiers,
+    Pointer, PointerButton, Row, Size, Sort as TableSort, Table, TextField, Toggle, Widget,
+    WidgetId,
 };
 use unbound_toolkit::{Image, Point, Rect};
 
 use crate::L10N;
-use crate::host::Host;
 use crate::prompt::{Kind, Prompt};
 use crate::view::{
     COLUMN_WIDTH, FilesView, ROW_HEIGHT, Rename, Request, SEARCH_HEIGHT, SLOW_CLICK_RENAME, Search,
@@ -21,7 +21,6 @@ use crate::view::{
 };
 
 const NAME_SIZE: f32 = 13.0;
-const TABLE_COLUMNS: u64 = 4;
 const TABLE_SORTS: [SortBy; 3] = [SortBy::Name, SortBy::Modified, SortBy::Size];
 const ROW_INSET: f32 = 6.0;
 const NAME_INSET: f32 = 28.0;
@@ -37,6 +36,7 @@ pub(crate) enum Signal {
     Search(String),
     GoTo(String),
     ApplyToAll(bool),
+    Drag(Point),
 }
 
 pub(crate) type Signals = Rc<RefCell<Vec<Signal>>>;
@@ -44,12 +44,13 @@ pub(crate) type Signals = Rc<RefCell<Vec<Signal>>>;
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Press {
     Ui,
+    Table {
+        rename: Option<PathBuf>,
+    },
     Files,
     Item {
         at: Point,
         collapse: Option<PathBuf>,
-        sole: bool,
-        ui: bool,
     },
     Dragging,
 }
@@ -60,7 +61,12 @@ fn sender(signals: &Signals) -> impl Fn(Signal) + 'static {
 }
 
 pub(crate) fn table(signals: &Signals) -> Table {
-    let (selection, activate, sort) = (sender(signals), sender(signals), sender(signals));
+    let (selection, activate, sort, drag) = (
+        sender(signals),
+        sender(signals),
+        sender(signals),
+        sender(signals),
+    );
     Table::new(vec![
         Column::new(&L10N.tr("column-name"), 280.0),
         Column::new(&L10N.tr("column-modified"), 170.0),
@@ -70,6 +76,7 @@ pub(crate) fn table(signals: &Signals) -> Table {
     .on_selection(move |keys| selection(Signal::Selection(keys.to_vec())))
     .on_activate(move |_| activate(Signal::Activate))
     .on_sort(move |order| sort(Signal::Sort(order)))
+    .on_drag(move |_, at| drag(Signal::Drag(at)))
 }
 
 pub(crate) fn key_of(path: &Path) -> String {
@@ -111,18 +118,9 @@ fn request(action: Action, target: accesskit::NodeId) -> ActionRequest {
     }
 }
 
-fn rect(bounds: accesskit::Rect) -> Rect {
-    Rect::new(
-        bounds.x0 as f32,
-        bounds.y0 as f32,
-        (bounds.x1 - bounds.x0) as f32,
-        (bounds.y1 - bounds.y0) as f32,
-    )
-}
-
 impl FilesView {
-    fn host_mut(&mut self) -> Option<&mut Host> {
-        self.ui.widget_as::<Host>(self.host)
+    fn host_mut(&mut self) -> Option<&mut FreeLayout> {
+        self.ui.widget_as::<FreeLayout>(self.host)
     }
 
     pub(crate) fn frame_of(&mut self, id: WidgetId) -> Option<Rect> {
@@ -134,17 +132,16 @@ impl FilesView {
     }
 
     pub(crate) fn focus_content(&mut self) {
-        let target = match self.browser.single() {
-            true => self.table,
-            false => self.host,
-        };
-        self.focus(target);
+        match self.browser.single() {
+            true => self.focus(self.table),
+            false => self.ui.clear_focus(),
+        }
     }
 
-    fn insert(&mut self, widget: impl Widget + 'static, framed: bool) -> WidgetId {
+    fn insert(&mut self, widget: impl Widget + 'static) -> WidgetId {
         let id = widget.id();
         if let Some(host) = self.host_mut() {
-            host.insert(Box::new(widget), Rect::default(), framed);
+            host.insert(widget, Rect::default());
         }
         self.layout_controls();
         id
@@ -170,7 +167,7 @@ impl FilesView {
             Event::Key { key, modifiers } => self.route_key(*key, *modifiers),
             Event::PointerDown(pointer) => self.pointer_down(event, pointer),
             Event::PointerMove(pointer) | Event::PointerEnter(pointer) => match self.press {
-                Some(Press::Ui) => self.ui.handle(event),
+                Some(Press::Ui | Press::Table { .. }) => self.ui.handle(event),
                 Some(Press::Item { at, .. }) => self.maybe_drag(at, pointer),
                 Some(_) => false,
                 None => self.ui.handle(event) | self.files_hover(pointer),
@@ -265,34 +262,19 @@ impl FilesView {
         self.pending_rename = None;
         let row = self.table_row_at(at);
         let column = &self.browser.columns()[0];
-        let marked = row.is_some_and(|row| column.is_marked(row));
         let modifiers = pointer.modifiers;
         let plain = !modifiers.shift && !modifiers.logo && !modifiers.control;
-        if pointer.is_primary() && plain && marked && pointer.count == 1 {
-            let sole = column.marked.len() == 1;
-            let path = row
-                .and_then(|row| column.entries.get(row))
-                .map(|entry| entry.path.clone());
-            if let Some(path) = path {
-                self.focus(self.table);
-                self.press = Some(Press::Item {
-                    at,
-                    collapse: Some(path),
-                    sole,
-                    ui: false,
-                });
-                return true;
-            }
-        }
-        self.press = match row.is_some() && pointer.is_primary() && !modifiers.control {
-            true => Some(Press::Item {
-                at,
-                collapse: None,
-                sole: false,
-                ui: true,
-            }),
-            false => Some(Press::Ui),
-        };
+        let rename = row
+            .filter(|row| {
+                pointer.is_primary()
+                    && plain
+                    && pointer.count == 1
+                    && column.is_marked(*row)
+                    && column.marked.len() == 1
+            })
+            .and_then(|row| column.entries.get(row))
+            .map(|entry| entry.path.clone());
+        self.press = Some(Press::Table { rename });
         let handled = self.ui.handle(event);
         self.drain_signals();
         let menu = pointer.button == PointerButton::Secondary
@@ -309,12 +291,17 @@ impl FilesView {
 
     fn pointer_up(&mut self, event: &Event) -> bool {
         match self.press.take() {
-            Some(Press::Item {
-                collapse, sole, ui, ..
-            }) => {
-                let handled = ui && self.ui.handle(event);
+            Some(Press::Table { rename }) => {
+                let handled = self.ui.handle(event);
+                self.drain_signals();
+                if let Some(path) = rename {
+                    self.pending_rename = Some((Instant::now() + SLOW_CLICK_RENAME, path));
+                }
+                handled
+            }
+            Some(Press::Item { collapse, .. }) => {
                 let Some(path) = collapse else {
-                    return handled;
+                    return false;
                 };
                 let found =
                     self.browser
@@ -328,9 +315,6 @@ impl FilesView {
                 if let Some((column, row)) = found {
                     self.browser.select(column, row);
                     self.selection_changed();
-                }
-                if sole {
-                    self.pending_rename = Some((Instant::now() + SLOW_CLICK_RENAME, path));
                 }
                 true
             }
@@ -381,6 +365,10 @@ impl FilesView {
                             *typed = text;
                         }
                     }
+                    Signal::Drag(at) => {
+                        self.ui.handle(&Event::PointerLeave);
+                        self.start_drag(at);
+                    }
                     Signal::ApplyToAll(on) => {
                         if let Some(Sheet::Conflict { apply_to_all }) = &mut self.sheet {
                             *apply_to_all = on;
@@ -417,6 +405,10 @@ impl FilesView {
 
     fn table(&mut self) -> Option<&mut Table> {
         self.ui.widget_as::<Table>(self.table)
+    }
+
+    pub(crate) fn shown_table(&self) -> Option<&Table> {
+        self.ui.widget_ref::<Table>(self.table)
     }
 
     fn table_contents(&mut self) -> (Vec<Row>, HashMap<String, usize>) {
@@ -496,37 +488,18 @@ impl FilesView {
         }
         if cursor != self.table_revealed {
             self.table_revealed = cursor;
-            if let Some(row) = cursor {
-                self.ui
-                    .layout(Size::new(self.size.0.max(1.0), self.size.1.max(1.0)));
-                let part = self.table.part(row as u64 * (TABLE_COLUMNS + 1));
-                self.ui.perform(&request(Action::ScrollIntoView, part));
+            if let Some((row, table)) = cursor.zip(self.table()) {
+                table.scroll_to_row(row);
             }
         }
     }
 
-    fn table_parts(&self, role: Role) -> Vec<(Option<usize>, Rect)> {
-        self.ui
-            .accessibility()
-            .nodes
-            .iter()
-            .filter(|(_, node)| node.role() == role)
-            .filter_map(|(_, node)| Some((node.row_index(), rect(node.bounds()?))))
-            .collect()
-    }
-
     pub(crate) fn table_row_bounds(&self, row: usize) -> Option<Rect> {
-        self.table_parts(Role::Row)
-            .into_iter()
-            .find(|(index, _)| *index == Some(row))
-            .map(|(_, bounds)| bounds)
+        self.shown_table()?.row_bounds(row)
     }
 
     pub(crate) fn table_row_at(&self, at: Point) -> Option<usize> {
-        self.table_parts(Role::Row)
-            .into_iter()
-            .find(|(_, bounds)| contains(*bounds, at))
-            .and_then(|(index, _)| index)
+        self.shown_table()?.row_at(at)
     }
 
     fn rename_frame(&mut self, path: &Path) -> Rect {
@@ -536,18 +509,13 @@ impl FilesView {
                 .entries
                 .iter()
                 .position(|entry| entry.path == path);
-            let name = self
-                .table_parts(Role::ColumnHeader)
-                .first()
-                .map(|(_, bounds)| *bounds);
-            let (Some(bounds), Some(name)) = (row.and_then(|row| self.table_row_bounds(row)), name)
-            else {
+            let Some(name) = row.and_then(|row| self.shown_table()?.cell_bounds(row, 0)) else {
                 return Rect::default();
             };
             let x = name.x + TABLE_TEXT_INSET - FIELD_INSET;
             return Rect::new(
                 x,
-                bounds.y + 2.0,
+                name.y + 2.0,
                 (name.x + name.width - x - 4.0).max(0.0),
                 ROW_HEIGHT - 4.0,
             );
@@ -614,9 +582,9 @@ impl FilesView {
         };
         let (path, name, folder) = (entry.path.clone(), entry.name.clone(), entry.is_folder());
         self.cancel_rename();
-        let mut field = TextField::new("", &name, |_| {}).borderless(NAME_SIZE);
+        let mut field = TextField::new("", &name, |_| {}).in_place(NAME_SIZE);
         field.select(0..stem_end(&name, folder));
-        let field = self.insert(field, true);
+        let field = self.insert(field);
         self.rename = Some(Rename { path, field });
         self.focus(field);
         self.ui
@@ -656,7 +624,7 @@ impl FilesView {
             send(Signal::Search(text.to_owned()));
         });
         let column = self.browser.active();
-        let field = self.insert(field, false);
+        let field = self.insert(field);
         self.search = Some(Search { column, field });
         self.layout_controls();
         self.focus(field);

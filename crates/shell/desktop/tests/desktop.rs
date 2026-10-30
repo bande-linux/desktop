@@ -458,8 +458,20 @@ fn dragging_moves_icons_on_the_grid_into_folders_and_brings_files_in() {
         view.take_requests(),
         vec![Request::StartDrag(vec![path("Notes.txt")])]
     );
-    assert!(view.drag_icon().width > 1);
-    assert_eq!(view.drag_moved(drop), Some(DragAction::Move));
+    let icon = view.drag_icon();
+    let grabbed = view
+        .desktop()
+        .grid()
+        .cell(view.desktop().slot_of(&path("Notes.txt")).unwrap());
+    assert_eq!(
+        (icon.hotspot.x, icon.hotspot.y),
+        (notes.x - grabbed.x, notes.y - grabbed.y),
+        "the icon stays where it was grabbed"
+    );
+    assert_eq!(
+        view.drag_entered(drop, &[uri("Notes.txt")]),
+        Some(DragAction::Move)
+    );
     assert!(view.dropped(drop, &[uri("Notes.txt")], Some(DragAction::Move), now));
     view.drag_finished();
     assert_eq!(view.desktop().slot_of(&path("Notes.txt")), Some(slot(3, 2)));
@@ -507,6 +519,30 @@ fn dragging_moves_icons_on_the_grid_into_folders_and_brings_files_in() {
             on_items: true,
         }]
     );
+}
+
+#[test]
+fn hovering_a_drag_over_a_folder_springs_it_open() {
+    let mut view = view_with_items(Scheme::Light);
+    view.set_folder(PathBuf::from("/home/ada/Desktop"));
+    let projects = at(&view, "Projects");
+    let report = file_uri(Path::new("/home/ada/Documents/Report.pdf"));
+    let start = Instant::now();
+    assert!(view.drag_entered(projects, &[report]).is_some());
+    view.tick(start + Duration::from_millis(300));
+    assert!(
+        view.take_requests().is_empty(),
+        "a passing drag does not open it"
+    );
+    let due = Instant::now() + Duration::from_secs(1);
+    view.tick(due);
+    assert_eq!(
+        view.take_requests(),
+        vec![Request::Open(vec![path("Projects")])]
+    );
+    view.drag_moved(projects);
+    view.tick(due + Duration::from_secs(2));
+    assert!(view.take_requests().is_empty(), "it opens once");
 }
 
 fn titles(menu: &Menu) -> Vec<String> {
@@ -618,17 +654,9 @@ fn the_menus_offer_what_fits_the_selection_and_their_actions_reach_the_desktop()
         .find_map(|item| item.alternate.as_deref())
         .unwrap();
     view.run_command(command(&delete.action).unwrap(), now);
-    assert_eq!(view.take_requests(), vec![]);
-    view.handle(
-        &Event::Key {
-            key: Key::Enter,
-            modifiers: Modifiers::default(),
-        },
-        now,
-    );
     assert_eq!(
         view.take_requests(),
-        vec![Request::Delete(vec![path("Notes.txt")])]
+        vec![Request::ConfirmDelete(vec![path("Notes.txt")])]
     );
     assert_eq!(command("unknown"), None);
 }

@@ -10,7 +10,7 @@ use accesskit::TreeUpdate;
 use unbound_greeter::{
     Outcome, last_user_file, log_in, login_picture, login_users, remember_user, remembered_user,
 };
-use unbound_lock::{BackdropSource, Inbox, LockScreen, User, Variant, load_backdrop};
+use unbound_lock::{BackdropSource, DateFormats, Inbox, LockScreen, User, Variant, load_backdrop};
 use unbound_toolkit::ui::{Event, Key};
 use unbound_toolkit::{
     App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Palette, Role, Scene, Scheme,
@@ -40,6 +40,7 @@ impl Greeter {
     fn screen_for(user: &User) -> LockScreen {
         LockScreen::new(
             user,
+            DateFormats::from_env(),
             &jiff::Zoned::now(),
             Palette::for_scheme(Scheme::Dark),
             TextSystem::new(),

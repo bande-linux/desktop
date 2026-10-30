@@ -19,6 +19,7 @@ pub(crate) struct Sheet {
     pub(crate) shown: Animated,
     pub(crate) closing: bool,
     pub(crate) previous_focus: Option<WidgetId>,
+    pub(crate) floating: bool,
 }
 
 impl Sheet {
@@ -30,12 +31,15 @@ impl Sheet {
                 .into(),
         });
         let frame = self.widget.frame();
-        let panel = Rect::new(
-            frame.x,
-            frame.y - RADIUS,
-            frame.width,
-            frame.height + RADIUS,
-        );
+        let panel = match self.floating {
+            true => frame,
+            false => Rect::new(
+                frame.x,
+                frame.y - RADIUS,
+                frame.width,
+                frame.height + RADIUS,
+            ),
+        };
         let shape = Shape::rounded(panel, RADIUS);
         let mut content = vec![
             Item::Shadow {

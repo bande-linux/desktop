@@ -49,4 +49,6 @@ fn weekdays_and_dates_are_written_in_the_locale() {
     assert_eq!(formats("en_US.UTF-8").date(&day, false), "Mar 2");
     assert_eq!(formats("en_US.UTF-8").date(&day, true), "Mar 2, 2026");
     assert_eq!(formats("de_DE.UTF-8").date(&day, true), "02.03.2026");
+    assert_eq!(formats("en_US.UTF-8").long_date(&day), "Monday, March 2");
+    assert_eq!(formats("de_DE.UTF-8").long_date(&day), "Montag, 2. März");
 }

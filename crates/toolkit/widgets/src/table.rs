@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Node, Role, SortDirection};
@@ -7,9 +7,10 @@ use unbound_graphics::{
     Color, Image, Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle, TextSystem,
 };
 
+use super::disclosure::chevron;
 use super::{
-    Context, Cursor, Event, Key, Menu, Modifiers, Parts, Pointer, PointerButton, ScrollState, Size,
-    Widget, WidgetId, contains,
+    Animated, Context, Cursor, Event, Key, Menu, Modifiers, Parts, Pointer, PointerButton,
+    ScrollState, Size, Spring, Widget, WidgetId, contains,
 };
 
 pub const ROW_HEIGHT: f32 = 24.0;
@@ -22,6 +23,9 @@ const RESIZE_GRIP: f32 = 4.0;
 const MIN_COLUMN: f32 = 40.0;
 const TYPE_SELECT_PAUSE: Duration = Duration::from_secs(1);
 const ELLIPSIS: char = '…';
+const DRAG_THRESHOLD: f32 = 4.0;
+const INDENT: f32 = 16.0;
+const DISCLOSURE_WIDTH: f32 = 16.0;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Column {
@@ -88,6 +92,7 @@ impl Cell {
 pub struct Row {
     pub key: String,
     pub cells: Vec<Cell>,
+    pub children: Vec<Row>,
 }
 
 impl Row {
@@ -95,8 +100,41 @@ impl Row {
         Self {
             key: key.into(),
             cells,
+            children: Vec::new(),
         }
     }
+
+    pub fn children(self, children: Vec<Row>) -> Self {
+        Self { children, ..self }
+    }
+}
+
+#[derive(Debug)]
+struct Line {
+    key: String,
+    cells: Vec<Cell>,
+    depth: usize,
+    descendants: usize,
+    branch: bool,
+}
+
+fn flatten(rows: Vec<Row>, depth: usize, lines: &mut Vec<Line>) -> usize {
+    let mut added = 0;
+    for row in rows {
+        let at = lines.len();
+        let branch = !row.children.is_empty();
+        lines.push(Line {
+            key: row.key,
+            cells: row.cells,
+            depth,
+            descendants: 0,
+            branch,
+        });
+        let descendants = flatten(row.children, depth + 1, lines);
+        lines[at].descendants = descendants;
+        added += 1 + descendants;
+    }
+    added
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -105,8 +143,19 @@ pub struct Sort {
     pub ascending: bool,
 }
 
+struct Remembered {
+    selected: Vec<String>,
+    cursor: Option<String>,
+    anchor: Option<String>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Drag {
+    Press {
+        from: Point,
+        row: usize,
+        collapse: bool,
+    },
     Select,
     Resize {
         column: usize,
@@ -118,11 +167,16 @@ enum Drag {
 type KeysCallback = Box<dyn FnMut(&[String])>;
 type MenuSource = Box<dyn FnMut(&[String]) -> Option<Menu>>;
 type MenuChoice = Box<dyn FnMut(&str, &[String])>;
+type DragStart = Box<dyn FnMut(&[String], Point)>;
 
 pub struct Table {
     id: WidgetId,
     columns: Vec<Column>,
-    rows: Vec<Row>,
+    lines: Vec<Line>,
+    shown: Vec<usize>,
+    expanded: HashSet<String>,
+    turns: HashMap<String, Animated>,
+    outline: bool,
     selected: Vec<bool>,
     cursor: Option<usize>,
     anchor: Option<usize>,
@@ -141,6 +195,9 @@ pub struct Table {
     menu: MenuSource,
     on_menu_action: MenuChoice,
     menu_keys: Vec<String>,
+    on_drag: Option<DragStart>,
+    offset: f32,
+    pending_reveal: Option<usize>,
 }
 
 impl Table {
@@ -148,7 +205,11 @@ impl Table {
         Self {
             id: WidgetId::next(),
             columns,
-            rows: Vec::new(),
+            lines: Vec::new(),
+            shown: Vec::new(),
+            expanded: HashSet::new(),
+            turns: HashMap::new(),
+            outline: false,
             selected: Vec::new(),
             cursor: None,
             anchor: None,
@@ -167,6 +228,9 @@ impl Table {
             menu: Box::new(|_| None),
             on_menu_action: Box::new(|_, _| {}),
             menu_keys: Vec::new(),
+            on_drag: None,
+            offset: 0.0,
+            pending_reveal: None,
         }
     }
 
@@ -191,6 +255,13 @@ impl Table {
         }
     }
 
+    pub fn on_drag(self, callback: impl FnMut(&[String], Point) + 'static) -> Self {
+        Self {
+            on_drag: Some(Box::new(callback)),
+            ..self
+        }
+    }
+
     pub fn context_menu(
         self,
         menu: impl FnMut(&[String]) -> Option<Menu> + 'static,
@@ -208,50 +279,179 @@ impl Table {
     }
 
     pub fn set_rows(&mut self, rows: Vec<Row>) {
-        let selected_keys = self.selection();
-        let cursor_key = self
-            .cursor
-            .and_then(|index| self.rows.get(index))
-            .map(|row| row.key.clone());
-        let anchor_key = self
-            .anchor
-            .and_then(|index| self.rows.get(index))
-            .map(|row| row.key.clone());
-        let position = |key: &Option<String>| {
-            key.as_ref()
-                .and_then(|key| rows.iter().position(|row| row.key == *key))
-        };
-        self.cursor = position(&cursor_key);
-        self.anchor = position(&anchor_key);
-        self.selected = rows
-            .iter()
-            .map(|row| selected_keys.contains(&row.key))
-            .collect();
-        self.rows = rows;
-        self.texts.borrow_mut().clear();
+        let kept = self.remembered();
+        let mut lines = Vec::with_capacity(rows.len());
+        flatten(rows, 0, &mut lines);
+        self.outline = lines.iter().any(|line| line.branch);
+        self.lines = lines;
+        self.reshow(kept);
     }
 
-    pub fn rows(&self) -> &[Row] {
-        &self.rows
+    fn key_at(&self, index: usize) -> Option<&str> {
+        self.line(index).map(|line| line.key.as_str())
     }
 
     pub fn selection(&self) -> Vec<String> {
-        self.rows
+        self.shown
             .iter()
             .zip(&self.selected)
             .filter(|(_, selected)| **selected)
-            .map(|(row, _)| row.key.clone())
+            .map(|(line, _)| self.lines[*line].key.clone())
             .collect()
     }
 
     pub fn select(&mut self, keys: &[String]) {
+        let keys = keys.iter().map(String::as_str).collect::<HashSet<_>>();
         self.selected = self
-            .rows
+            .shown
             .iter()
-            .map(|row| keys.contains(&row.key))
+            .map(|line| keys.contains(self.lines[*line].key.as_str()))
             .collect();
         self.cursor = self.selected.iter().position(|selected| *selected);
         self.anchor = self.cursor;
+    }
+
+    fn line(&self, index: usize) -> Option<&Line> {
+        self.shown.get(index).map(|line| &self.lines[*line])
+    }
+
+    fn remembered(&self) -> Remembered {
+        let key = |index: Option<usize>| {
+            index
+                .and_then(|index| self.line(index))
+                .map(|line| line.key.clone())
+        };
+        Remembered {
+            selected: self.selection(),
+            cursor: key(self.cursor),
+            anchor: key(self.anchor),
+        }
+    }
+
+    fn reshow(&mut self, kept: Remembered) {
+        let mut shown = Vec::with_capacity(self.lines.len());
+        let mut index = 0;
+        while let Some(line) = self.lines.get(index) {
+            shown.push(index);
+            index += match line.branch && !self.expanded.contains(&line.key) {
+                true => 1 + line.descendants,
+                false => 1,
+            };
+        }
+        self.shown = shown;
+        let positions = self
+            .shown
+            .iter()
+            .enumerate()
+            .map(|(index, line)| (self.lines[*line].key.as_str(), index))
+            .collect::<HashMap<_, _>>();
+        let position =
+            |key: &Option<String>| key.as_deref().and_then(|key| positions.get(key).copied());
+        let cursor = position(&kept.cursor);
+        let anchor = position(&kept.anchor);
+        let mut selected = vec![false; self.shown.len()];
+        for key in &kept.selected {
+            if let Some(index) = positions.get(key.as_str()) {
+                selected[*index] = true;
+            }
+        }
+        self.cursor = cursor;
+        self.anchor = anchor;
+        self.selected = selected;
+        self.texts.borrow_mut().clear();
+    }
+
+    fn ancestor(&self, index: usize) -> Option<usize> {
+        let depth = self.line(index)?.depth;
+        (0..index)
+            .rev()
+            .find(|candidate| self.line(*candidate).is_some_and(|line| line.depth < depth))
+    }
+
+    fn set_expanded(&mut self, cx: &Context, index: usize, expanded: bool, all: bool) -> bool {
+        let Some(&at) = self.shown.get(index) else {
+            return false;
+        };
+        let line = &self.lines[at];
+        if !line.branch {
+            return false;
+        }
+        let subtree = match all {
+            true => at..at + 1 + line.descendants,
+            false => at..at + 1,
+        };
+        let mut changed = Vec::new();
+        for line in &self.lines[subtree] {
+            if line.branch && self.expanded.contains(&line.key) != expanded {
+                changed.push(line.key.clone());
+            }
+        }
+        if changed.is_empty() {
+            return false;
+        }
+        let mut kept = self.remembered();
+        let before = kept.selected.len();
+        for key in &changed {
+            match expanded {
+                true => self.expanded.insert(key.clone()),
+                false => self.expanded.remove(key),
+            };
+            let mut turn = Animated::new(if expanded { 0.0 } else { 1.0 });
+            turn.animate_to(cx, if expanded { 1.0 } else { 0.0 }, Spring::QUICK);
+            self.turns.insert(key.clone(), turn);
+        }
+        let key = self.lines[at].key.clone();
+        let mut moved = false;
+        if !expanded {
+            let hidden = self.lines[at + 1..at + 1 + self.lines[at].descendants]
+                .iter()
+                .map(|line| line.key.as_str())
+                .collect::<HashSet<_>>();
+            kept.selected
+                .retain(|selected| !hidden.contains(selected.as_str()));
+            moved = kept.selected.len() != before;
+            if moved && !kept.selected.contains(&key) {
+                kept.selected.push(key.clone());
+            }
+            if kept
+                .cursor
+                .as_deref()
+                .is_some_and(|cursor| hidden.contains(cursor))
+            {
+                kept.cursor = Some(key.clone());
+                kept.anchor = Some(key);
+            }
+        }
+        self.reshow(kept);
+        if moved {
+            self.notify_selection();
+        }
+        true
+    }
+
+    fn turn(&self, cx: &Context, line: &Line) -> f32 {
+        match self.turns.get(&line.key) {
+            Some(turn) => turn.value(cx),
+            None => match self.expanded.contains(&line.key) {
+                true => 1.0,
+                false => 0.0,
+            },
+        }
+    }
+
+    fn indent(&self, line: &Line) -> f32 {
+        match self.outline {
+            true => line.depth as f32 * INDENT + DISCLOSURE_WIDTH,
+            false => 0.0,
+        }
+    }
+
+    fn disclosure_at(&self, index: usize, point: Point) -> bool {
+        let Some(line) = self.line(index).filter(|line| line.branch) else {
+            return false;
+        };
+        let x = self.frame.x + CELL_PADDING + line.depth as f32 * INDENT;
+        point.x >= x - 2.0 && point.x < x + DISCLOSURE_WIDTH
     }
 
     fn body(&self) -> Rect {
@@ -294,14 +494,48 @@ impl Table {
             .collect()
     }
 
-    fn row_at(&self, cx: &Context, point: Point) -> Option<usize> {
+    pub fn row_at(&self, point: Point) -> Option<usize> {
+        self.row_at_offset(point, self.offset)
+    }
+
+    pub fn row_bounds(&self, index: usize) -> Option<Rect> {
+        let body = self.body();
+        (index < self.shown.len()).then(|| {
+            Rect::new(
+                body.x,
+                body.y + index as f32 * ROW_HEIGHT - self.offset,
+                body.width,
+                ROW_HEIGHT,
+            )
+        })
+    }
+
+    pub fn cell_bounds(&self, index: usize, column: usize) -> Option<Rect> {
+        let row = self.row_bounds(index)?;
+        let (x, width) = *self.column_edges().get(column)?;
+        Some(Rect::new(x, row.y, width, row.height))
+    }
+
+    pub fn scroll_offset(&self) -> f32 {
+        self.offset
+    }
+
+    pub fn scroll_to_row(&mut self, index: usize) {
+        self.pending_reveal = Some(index);
+    }
+
+    fn row_at_offset(&self, point: Point, offset: f32) -> Option<usize> {
         let body = self.body();
         if !contains(body, point) {
             return None;
         }
-        let y = point.y - body.y + self.scroll.offset(cx);
+        let y = point.y - body.y + offset;
         let index = (y / ROW_HEIGHT).floor();
-        (index >= 0.0 && (index as usize) < self.rows.len()).then_some(index as usize)
+        (index >= 0.0 && (index as usize) < self.shown.len()).then_some(index as usize)
+    }
+
+    fn row_under(&self, cx: &Context, point: Point) -> Option<usize> {
+        self.row_at_offset(point, self.scroll.offset(cx))
     }
 
     fn notify_selection(&mut self) {
@@ -315,7 +549,7 @@ impl Table {
     }
 
     fn select_only(&mut self, index: usize) {
-        self.selected = vec![false; self.rows.len()];
+        self.selected = vec![false; self.shown.len()];
         if let Some(selected) = self.selected.get_mut(index) {
             *selected = true;
         }
@@ -326,7 +560,7 @@ impl Table {
     fn select_range(&mut self, to: usize) {
         let anchor = self.anchor.unwrap_or(to);
         let (low, high) = (anchor.min(to), anchor.max(to));
-        self.selected = (0..self.rows.len())
+        self.selected = (0..self.shown.len())
             .map(|index| (low..=high).contains(&index))
             .collect();
         self.cursor = Some(to);
@@ -335,7 +569,7 @@ impl Table {
     fn click(&mut self, index: Option<usize>, modifiers: Modifiers, count: u8) -> bool {
         let Some(index) = index else {
             let had = self.selected.iter().any(|selected| *selected);
-            self.selected = vec![false; self.rows.len()];
+            self.selected = vec![false; self.shown.len()];
             self.cursor = None;
             self.anchor = None;
             if had {
@@ -363,8 +597,8 @@ impl Table {
     }
 
     fn step(&mut self, cx: &Context, to: usize, extend: bool) -> bool {
-        let to = to.min(self.rows.len().saturating_sub(1));
-        if self.rows.is_empty() {
+        let to = to.min(self.shown.len().saturating_sub(1));
+        if self.shown.is_empty() {
             return false;
         }
         if extend {
@@ -382,7 +616,7 @@ impl Table {
     }
 
     fn key(&mut self, cx: &mut Context, key: Key, modifiers: Modifiers) -> bool {
-        let last = self.rows.len().saturating_sub(1);
+        let last = self.shown.len().saturating_sub(1);
         let cursor = self.cursor;
         let extend = modifiers.shift;
         match key {
@@ -404,6 +638,12 @@ impl Table {
                 let page = self.page_rows();
                 self.step(cx, cursor.unwrap_or(0) + page, extend)
             }
+            Key::Right if self.outline => {
+                cursor.is_some_and(|index| self.right(cx, index, modifiers.alt))
+            }
+            Key::Left if self.outline => {
+                cursor.is_some_and(|index| self.left(cx, index, modifiers.alt))
+            }
             Key::Enter if !self.selection().is_empty() => {
                 let keys = self.selection();
                 (self.on_activate)(&keys);
@@ -411,12 +651,13 @@ impl Table {
             }
             Key::Character('c') if modifiers.logo && !self.selection().is_empty() => {
                 let text = self
-                    .rows
+                    .shown
                     .iter()
                     .zip(&self.selected)
                     .filter(|(_, selected)| **selected)
-                    .map(|(row, _)| {
-                        row.cells
+                    .map(|(line, _)| {
+                        self.lines[*line]
+                            .cells
                             .iter()
                             .map(|cell| cell.text.as_str())
                             .collect::<Vec<_>>()
@@ -428,7 +669,7 @@ impl Table {
                 true
             }
             Key::Character('a') if modifiers.logo => {
-                self.selected = vec![true; self.rows.len()];
+                self.selected = vec![true; self.shown.len()];
                 self.notify_selection();
                 true
             }
@@ -438,6 +679,29 @@ impl Table {
                 self.type_select(cx, character)
             }
             _ => false,
+        }
+    }
+
+    fn right(&mut self, cx: &Context, index: usize, all: bool) -> bool {
+        let Some(line) = self.line(index).filter(|line| line.branch) else {
+            return false;
+        };
+        match self.expanded.contains(&line.key) && !all {
+            true => self.step(cx, index + 1, false),
+            false => self.set_expanded(cx, index, true, all),
+        }
+    }
+
+    fn left(&mut self, cx: &Context, index: usize, all: bool) -> bool {
+        let Some(line) = self.line(index) else {
+            return false;
+        };
+        if line.branch && (self.expanded.contains(&line.key) || all) {
+            return self.set_expanded(cx, index, false, all);
+        }
+        match self.ancestor(index) {
+            Some(parent) => self.step(cx, parent, false),
+            None => false,
         }
     }
 
@@ -452,8 +716,9 @@ impl Table {
         self.typed_at = Some(now);
         self.typed.extend(character.to_lowercase());
         let typed = self.typed.clone();
-        let found = self.rows.iter().position(|row| {
-            row.cells
+        let found = self.shown.iter().position(|line| {
+            self.lines[*line]
+                .cells
                 .first()
                 .is_some_and(|cell| cell.text.to_lowercase().starts_with(&typed))
         });
@@ -509,7 +774,15 @@ impl Table {
                 return self.header_click(pointer.position);
             }
         }
-        let index = self.row_at(cx, pointer.position);
+        let index = self.row_under(cx, pointer.position);
+        if let Some(row) = index.filter(|row| {
+            pointer.is_primary() && self.outline && self.disclosure_at(*row, pointer.position)
+        }) {
+            let expanded = self
+                .key_at(row)
+                .is_some_and(|key| self.expanded.contains(key));
+            return self.set_expanded(cx, row, !expanded, pointer.modifiers.alt);
+        }
         if pointer.button == PointerButton::Secondary {
             let on_selection =
                 index.is_some_and(|index| self.selected.get(index).copied().unwrap_or(false));
@@ -518,8 +791,62 @@ impl Table {
             }
             return true;
         }
+        let modifiers = pointer.modifiers;
+        let plain = !modifiers.shift && !modifiers.logo;
+        let collapse = plain
+            && pointer.count == 1
+            && index.is_some_and(|index| self.selected.get(index).copied().unwrap_or(false));
+        self.drag = Some(match index {
+            Some(row) => Drag::Press {
+                from: pointer.position,
+                row,
+                collapse,
+            },
+            None => Drag::Select,
+        });
+        if collapse {
+            self.cursor = index;
+            return true;
+        }
+        self.click(index, modifiers, pointer.count)
+    }
+
+    fn pointer_up(&mut self) -> bool {
+        match self.drag.take() {
+            Some(Drag::Press {
+                row,
+                collapse: true,
+                ..
+            }) => {
+                self.select_only(row);
+                self.notify_selection();
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn press_moved(&mut self, cx: &mut Context, from: Point, row: usize, point: Point) -> bool {
+        let distance = (point.x - from.x).hypot(point.y - from.y);
+        if distance < DRAG_THRESHOLD {
+            return false;
+        }
+        if self.on_drag.is_some() {
+            self.drag = None;
+            let keys = self.selection();
+            if let Some(on_drag) = &mut self.on_drag {
+                on_drag(&keys, from);
+            }
+            return true;
+        }
+        if self.row_under(cx, point) == Some(row) {
+            return false;
+        }
+        if let Some(Drag::Press { collapse: true, .. }) = self.drag {
+            self.select_only(row);
+        }
         self.drag = Some(Drag::Select);
-        self.click(index, pointer.modifiers, pointer.count)
+        self.pointer_move(cx, point)
     }
 
     fn pointer_move(&mut self, cx: &mut Context, point: Point) -> bool {
@@ -533,6 +860,7 @@ impl Table {
                 self.texts.borrow_mut().clear();
                 true
             }
+            Some(Drag::Press { from, row, .. }) => self.press_moved(cx, from, row, point),
             Some(Drag::Select) => {
                 let body = self.body();
                 let clamped =
@@ -546,7 +874,7 @@ impl Table {
                     let offset = self.scroll.offset(cx);
                     self.scroll.scroll_to(cx, offset + edge);
                 }
-                match self.row_at(cx, clamped) {
+                match self.row_under(cx, clamped) {
                     Some(index) if self.cursor != Some(index) => {
                         self.select_range(index);
                         self.notify_selection();
@@ -613,10 +941,10 @@ impl Table {
         let mut texts = self.texts.borrow_mut();
         for index in first..last {
             let lit = focused && self.selected.get(index).copied().unwrap_or(false);
-            let Some(row) = self.rows.get(index) else {
+            let Some(line) = self.line(index) else {
                 continue;
             };
-            for (column, cell) in row.cells.iter().enumerate().take(self.columns.len()) {
+            for (column, cell) in line.cells.iter().enumerate().take(self.columns.len()) {
                 if texts.contains_key(&(index, column, lit)) {
                     continue;
                 }
@@ -625,7 +953,8 @@ impl Table {
                 } else {
                     0.0
                 };
-                let width = widths[column] - 2.0 * CELL_PADDING - icon;
+                let indent = if column == 0 { self.indent(line) } else { 0.0 };
+                let width = widths[column] - 2.0 * CELL_PADDING - icon - indent;
                 let style = self.cell_style(cx, column, cell, lit);
                 let paragraph = self.text(&mut cx.text, &cell.text, style, width.max(0.0));
                 texts.insert((index, column, lit), paragraph);
@@ -638,8 +967,8 @@ impl Table {
         let first = (offset / ROW_HEIGHT).floor() as usize;
         let count = (self.body().height / ROW_HEIGHT).ceil() as usize + 2;
         (
-            first.min(self.rows.len()),
-            (first + count).min(self.rows.len()),
+            first.min(self.shown.len()),
+            (first + count).min(self.shown.len()),
         )
     }
 
@@ -706,10 +1035,21 @@ impl Table {
         });
     }
 
-    fn row_node(&self, index: usize, row: &Row, parts: &mut Parts, bounds: Rect) {
+    fn row_node(&self, index: usize, row: &Line, parts: &mut Parts, bounds: Rect) {
         let row_id = self.id.part(index as u64 * (self.columns.len() as u64 + 1));
         let mut node = Node::new(Role::Row);
         node.set_row_index(index);
+        if self.outline {
+            node.set_level(row.depth + 1);
+        }
+        if row.branch {
+            let expanded = self.expanded.contains(&row.key);
+            node.set_expanded(expanded);
+            node.add_action(match expanded {
+                true => Action::Collapse,
+                false => Action::Expand,
+            });
+        }
         node.set_selected(self.selected.get(index).copied().unwrap_or(false));
         node.add_action(Action::Click);
         node.add_action(Action::Focus);
@@ -762,7 +1102,13 @@ impl Widget for Table {
         self.frame = frame;
         let body = self.body();
         self.scroll
-            .set_extent(self.rows.len() as f32 * ROW_HEIGHT, body.height);
+            .set_extent(self.shown.len() as f32 * ROW_HEIGHT, body.height);
+        if let Some(index) = self.pending_reveal.take() {
+            self.reveal_row(cx, index);
+        }
+        self.offset = self.scroll.offset(cx);
+        self.turns
+            .retain(|_, turn| (turn.value(cx) - turn.target()).abs() > f32::EPSILON);
         let (first, last) = self.visible_rows(cx);
         self.prepare_texts(cx, first, last);
         self.titles = self
@@ -836,12 +1182,30 @@ impl Widget for Table {
                 });
             }
             let lit = focused && selected;
-            let Some(row) = self.rows.get(index) else {
+            let Some(line) = self.line(index) else {
                 continue;
             };
-            for (column, cell) in row.cells.iter().enumerate().take(self.columns.len()) {
+            if line.branch {
+                let centre = Point::new(
+                    self.frame.x
+                        + CELL_PADDING
+                        + line.depth as f32 * INDENT
+                        + DISCLOSURE_WIDTH / 2.0
+                        - 2.0,
+                    y + ROW_HEIGHT / 2.0,
+                );
+                let color = match lit {
+                    true => Color::hex(0xFFFFFF),
+                    false => cx.palette.label_muted,
+                };
+                chevron(centre, self.turn(cx, line), color, &mut rows);
+            }
+            for (column, cell) in line.cells.iter().enumerate().take(self.columns.len()) {
                 let (x, width) = edges[column];
                 let mut text_x = x + CELL_PADDING;
+                if column == 0 {
+                    text_x += self.indent(line);
+                }
                 if let Some(icon) = &cell.icon {
                     rows.push(Item::Image {
                         rect: Rect::new(
@@ -878,8 +1242,11 @@ impl Widget for Table {
     }
 
     fn access(&self, cx: &Context) -> Node {
-        let mut node = Node::new(Role::Table);
-        node.set_row_count(self.rows.len());
+        let mut node = Node::new(match self.outline {
+            true => Role::TreeGrid,
+            false => Role::Table,
+        });
+        node.set_row_count(self.shown.len());
         node.set_column_count(self.columns.len());
         node.set_multiselectable();
         self.scroll.describe(cx, &mut node);
@@ -924,7 +1291,7 @@ impl Widget for Table {
             shown.push(cursor);
         }
         for index in shown {
-            let Some(row) = self.rows.get(index) else {
+            let Some(row) = self.line(index) else {
                 continue;
             };
             let bounds = Rect::new(
@@ -953,11 +1320,13 @@ impl Widget for Table {
                 && self.header_click(Point::new(x + 1.0, self.frame.y + 1.0));
         }
         let index = (part / stride) as usize;
-        if index >= self.rows.len() {
+        if index >= self.shown.len() {
             return false;
         }
         match request.action {
             Action::Click | Action::Focus => self.step(cx, index, false),
+            Action::Expand => self.set_expanded(cx, index, true, false),
+            Action::Collapse => self.set_expanded(cx, index, false, false),
             Action::ScrollIntoView => {
                 self.reveal_row(cx, index);
                 true
@@ -979,9 +1348,10 @@ impl Widget for Table {
                 self.scroll.pointer(cx, self.body(), event)
                     | self.pointer_move(cx, pointer.position)
             }
-            Event::PointerUp(_) => {
+            Event::PointerUp(_) => self.pointer_up() | self.scroll.pointer(cx, self.body(), event),
+            Event::PointerLeave => {
                 self.drag = None;
-                self.scroll.pointer(cx, self.body(), event)
+                false
             }
             Event::Key { key, modifiers } => self.key(cx, *key, *modifiers),
             _ => false,

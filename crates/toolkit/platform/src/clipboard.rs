@@ -12,6 +12,8 @@ use wayland_client::protocol::wl_data_source::{self, WlDataSource};
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Connection, Dispatch, Proxy, QueueHandle, WEnum, event_created_child};
 
+use wayland_protocols::wp::viewporter::client::wp_viewport::WpViewport;
+
 use crate::window::{ShmTarget, State, Window, WindowError, WindowEvent};
 
 const TEXT_TYPES: [&str; 3] = ["text/plain;charset=utf-8", "UTF8_STRING", "text/plain"];
@@ -134,11 +136,17 @@ impl DragAction {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct DragIcon {
+    pub scene: Scene,
+    pub hotspot: Point,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum DragEvent {
     Entered {
         position: Point,
-        uris: bool,
+        uris: Vec<String>,
         text: bool,
     },
     Moved(Point),
@@ -160,6 +168,9 @@ enum Purpose {
         position: Point,
         action: Option<DragAction>,
     },
+    Hover {
+        offer: WlDataOffer,
+    },
 }
 
 struct Reading {
@@ -173,7 +184,20 @@ struct Outgoing {
     source: WlDataSource,
     transfer: Transfer,
     action: Option<DragAction>,
-    icon: Option<(WlSurface, ShmTarget)>,
+    icon: Option<Icon>,
+}
+
+struct Icon {
+    surface: WlSurface,
+    viewport: Option<WpViewport>,
+    target: ShmTarget,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Arrival {
+    Unread,
+    Reading,
+    Announced,
 }
 
 struct Incoming {
@@ -181,6 +205,7 @@ struct Incoming {
     serial: u32,
     position: Point,
     accepted: Option<DragAction>,
+    arrival: Arrival,
 }
 
 #[derive(Default)]
@@ -316,7 +341,7 @@ impl Window {
         &mut self,
         transfer: Transfer,
         actions: &[DragAction],
-        icon: Option<Scene>,
+        icon: Option<DragIcon>,
     ) -> Result<(), WindowError> {
         let (Some(manager), Some(device), Some(serial)) = (
             &self.state.data_device_manager,
@@ -333,18 +358,44 @@ impl Window {
             .fold(DndAction::empty(), |all, action| all | action.wire());
         source.set_actions(wire);
         let icon = match (icon, &self.state.compositor, &self.state.shm) {
-            (Some(scene), Some(compositor), Some(shm)) => {
+            (Some(icon), Some(compositor), Some(shm)) => {
                 let surface = compositor.create_surface(&handle, ());
+                let viewport = self
+                    .state
+                    .scaling
+                    .viewporter
+                    .as_ref()
+                    .map(|viewporter| viewporter.get_viewport(&surface, &handle, ()));
+                let scale = match &viewport {
+                    Some(viewport) => {
+                        viewport.set_destination(
+                            i32::try_from(icon.scene.width.max(1)).unwrap_or(i32::MAX),
+                            i32::try_from(icon.scene.height.max(1)).unwrap_or(i32::MAX),
+                        );
+                        self.scale()
+                    }
+                    None => 1.0,
+                };
+                if surface.version() >= 5 {
+                    surface.offset(
+                        -icon.hotspot.x.round() as i32,
+                        -icon.hotspot.y.round() as i32,
+                    );
+                }
                 let mut target = ShmTarget::default();
-                target.present(&mut self.cpu, shm, &handle, &surface, &scene, 1.0)?;
-                Some((surface, target))
+                target.present(&mut self.cpu, shm, &handle, &surface, &icon.scene, scale)?;
+                Some(Icon {
+                    surface,
+                    viewport,
+                    target,
+                })
             }
             _ => None,
         };
         device.start_drag(
             Some(&source),
             &self.surface,
-            icon.as_ref().map(|(surface, _)| surface),
+            icon.as_ref().map(|icon| &icon.surface),
             serial,
         );
         if let Some(previous) = self.state.clipboard.dragged.replace(Outgoing {
@@ -415,6 +466,66 @@ impl Window {
                 });
                 let _ = self.flush();
             }
+            Purpose::Hover { offer } => self.announce(&offer, transfer.uris),
+        }
+    }
+
+    fn announce(&mut self, offer: &WlDataOffer, uris: Vec<String>) {
+        let Some(incoming) =
+            self.state.clipboard.incoming.as_mut().filter(|incoming| {
+                incoming.offer == *offer && incoming.arrival != Arrival::Announced
+            })
+        else {
+            return;
+        };
+        incoming.arrival = Arrival::Announced;
+        let position = incoming.position;
+        let types = offered_types(offer);
+        self.state.drag_event(DragEvent::Entered {
+            position,
+            uris,
+            text: TEXT_TYPES
+                .iter()
+                .any(|text| types.iter().any(|mime| mime == text)),
+        });
+    }
+
+    pub(crate) fn take_arrival(&mut self) {
+        let Some(incoming) = self
+            .state
+            .clipboard
+            .incoming
+            .as_mut()
+            .filter(|incoming| incoming.arrival == Arrival::Unread)
+        else {
+            return;
+        };
+        incoming.arrival = Arrival::Reading;
+        let offer = incoming.offer.clone();
+        let types = offered_types(&offer);
+        let own = self
+            .state
+            .clipboard
+            .dragged
+            .as_ref()
+            .filter(|_| types.contains(&own_type()))
+            .map(|outgoing| outgoing.transfer.uris.clone());
+        if let Some(uris) = own {
+            self.announce(&offer, uris);
+            return;
+        }
+        if !types.iter().any(|mime| mime == URI_LIST) {
+            self.announce(&offer, Vec::new());
+            return;
+        }
+        let purpose = Purpose::Hover {
+            offer: offer.clone(),
+        };
+        if self
+            .read_offer(&offer, URI_LIST.to_owned(), purpose)
+            .is_err()
+        {
+            self.announce(&offer, Vec::new());
         }
     }
 
@@ -473,9 +584,12 @@ fn respond(incoming: &Incoming) {
 
 fn finish_outgoing(outgoing: Outgoing) {
     outgoing.source.destroy();
-    if let Some((surface, mut target)) = outgoing.icon {
-        target.destroy();
-        surface.destroy();
+    if let Some(mut icon) = outgoing.icon {
+        icon.target.destroy();
+        if let Some(viewport) = icon.viewport {
+            viewport.destroy();
+        }
+        icon.surface.destroy();
     }
 }
 
@@ -501,25 +615,21 @@ impl Dispatch<WlDataDevice, ()> for State {
                 id: Some(offer),
                 ..
             } => {
-                let types = offered_types(&offer);
-                let position = Point::new(x as f32, y as f32);
                 let incoming = Incoming {
                     offer,
                     serial,
-                    position,
+                    position: Point::new(x as f32, y as f32),
                     accepted: None,
+                    arrival: Arrival::Unread,
                 };
                 respond(&incoming);
                 if let Some(previous) = state.clipboard.incoming.replace(incoming) {
+                    let announced = previous.arrival == Arrival::Announced;
                     previous.offer.destroy();
+                    if announced {
+                        state.drag_event(DragEvent::Left);
+                    }
                 }
-                state.drag_event(DragEvent::Entered {
-                    position,
-                    uris: types.iter().any(|mime| mime == URI_LIST),
-                    text: TEXT_TYPES
-                        .iter()
-                        .any(|text| types.iter().any(|mime| mime == text)),
-                });
             }
             wl_data_device::Event::Motion { x, y, .. } => {
                 let position = Point::new(x as f32, y as f32);
@@ -528,12 +638,16 @@ impl Dispatch<WlDataDevice, ()> for State {
                 };
                 incoming.position = position;
                 respond(incoming);
-                state.drag_event(DragEvent::Moved(position));
+                if incoming.arrival == Arrival::Announced {
+                    state.drag_event(DragEvent::Moved(position));
+                }
             }
             wl_data_device::Event::Leave => {
                 if let Some(incoming) = state.clipboard.incoming.take() {
                     incoming.offer.destroy();
-                    state.drag_event(DragEvent::Left);
+                    if incoming.arrival == Arrival::Announced {
+                        state.drag_event(DragEvent::Left);
+                    }
                 }
             }
             wl_data_device::Event::Drop => {

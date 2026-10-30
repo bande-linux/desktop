@@ -2,8 +2,10 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use unbound_fs::{Action, Purpose, Task, same_volume};
-use unbound_toolkit::ui::{Event, Pointer};
-use unbound_toolkit::{Color, DragAction, Item, Point, Rect, Scene, Shape, TextAlign, TextStyle};
+use unbound_toolkit::ui::Pointer;
+use unbound_toolkit::{
+    Color, DragAction, DragIcon, Item, Point, Rect, Scene, Shape, TextAlign, TextStyle,
+};
 use unbound_xdg::path_from_file_uri;
 
 use crate::browser::Location;
@@ -18,6 +20,8 @@ const ICON_PIXELS: u32 = 64;
 const STACK_OFFSET: f32 = 5.0;
 const STACKED: usize = 3;
 const BADGE: f32 = 20.0;
+const TABLE_ICON_CENTRE: f32 = 6.0 + 8.0;
+const COLUMN_ICON_CENTRE: f32 = 6.0 + 6.0 + 8.0;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Target {
@@ -58,19 +62,42 @@ impl FilesView {
         if distance(from, pointer.position) < DRAG_THRESHOLD {
             return false;
         }
+        self.start_drag(from)
+    }
+
+    pub(crate) fn start_drag(&mut self, from: Point) -> bool {
         let paths = self.browser.selected_paths();
-        if let Some(Press::Item { ui: true, .. }) = self.press {
-            self.ui.handle(&Event::PointerUp(*pointer));
-        }
         if paths.is_empty() || self.browser.in_trash() {
             self.press = Some(Press::Files);
             return false;
         }
         self.press = Some(Press::Dragging);
         self.pending_rename = None;
-        self.drag_sources = paths.clone();
-        self.requests.push(Request::StartDrag(paths));
+        let grab = self
+            .grabbed_icon(from)
+            .map_or(Point::new(0.0, 0.0), |centre| {
+                Point::new(from.x - centre.x, from.y - centre.y)
+            });
+        self.requests.push(Request::StartDrag { paths, grab });
         true
+    }
+
+    fn grabbed_icon(&self, at: Point) -> Option<Point> {
+        if self.table_frame().is_some_and(|frame| contains(frame, at)) {
+            let row = self.table_row_at(at)?;
+            let name = self.shown_table()?.cell_bounds(row, 0)?;
+            return Some(Point::new(
+                name.x + TABLE_ICON_CENTRE,
+                name.y + name.height / 2.0,
+            ));
+        }
+        self.hits.iter().find_map(|(rect, hit)| match hit {
+            Hit::Row { .. } if contains(*rect, at) => Some(Point::new(
+                rect.x + COLUMN_ICON_CENTRE,
+                rect.y + rect.height / 2.0,
+            )),
+            _ => None,
+        })
     }
 
     pub fn drag_finished(&mut self) {
@@ -79,7 +106,7 @@ impl FilesView {
         self.drop = None;
     }
 
-    pub fn drag_icon(&mut self) -> Scene {
+    pub fn drag_icon(&mut self, grab: Point) -> DragIcon {
         let entries = self
             .browser
             .selection()
@@ -119,11 +146,18 @@ impl FilesView {
             });
         }
         let pixels = size.ceil() as u32;
-        Scene {
-            width: pixels,
-            height: pixels,
-            background: Color::hex(0).with_alpha(0),
-            items: vec![Item::Opacity { alpha: 0.85, items }],
+        let reach = ICON / 2.0;
+        DragIcon {
+            scene: Scene {
+                width: pixels,
+                height: pixels,
+                background: Color::hex(0).with_alpha(0),
+                items: vec![Item::Opacity { alpha: 0.85, items }],
+            },
+            hotspot: Point::new(
+                reach + grab.x.clamp(-reach, reach),
+                BADGE / 2.0 + stack + reach + grab.y.clamp(-reach, reach),
+            ),
         }
     }
 
@@ -243,8 +277,12 @@ impl FilesView {
         action
     }
 
-    pub fn drag_entered(&mut self, at: Point, uris: bool) -> Option<DragAction> {
-        if !uris {
+    pub fn drag_entered(&mut self, at: Point, uris: &[String]) -> Option<DragAction> {
+        self.drag_sources = uris
+            .iter()
+            .filter_map(|uri| path_from_file_uri(uri))
+            .collect();
+        if self.drag_sources.is_empty() {
             self.drop = None;
             return None;
         }
@@ -253,6 +291,7 @@ impl FilesView {
 
     pub fn drag_left(&mut self) {
         self.drop = None;
+        self.drag_sources.clear();
     }
 
     pub(crate) fn spring(&mut self, now: Instant) {
@@ -277,6 +316,7 @@ impl FilesView {
 
     pub fn dropped(&mut self, at: Point, uris: &[String], action: Option<DragAction>) -> bool {
         self.drop = None;
+        self.drag_sources.clear();
         let sources = uris
             .iter()
             .filter_map(|uri| path_from_file_uri(uri))

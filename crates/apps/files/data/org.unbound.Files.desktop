@@ -8,3 +8,8 @@ Exec=unbound-files %U
 MimeType=inode/directory;
 Categories=System;FileTools;FileManager;
 Keywords=folder;finder;browse;directory;
+Actions=new-window;
+
+[Desktop Action new-window]
+Name=New Window
+Exec=unbound-files

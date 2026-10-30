@@ -13,13 +13,21 @@ const FONT_SIZE: f32 = 13.0;
 const RADIUS: f32 = 5.0;
 const PADDING: f32 = 6.0;
 const CARET_WIDTH: f32 = 1.0;
+const IN_PLACE_RADIUS: f32 = 4.0;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Border {
+    Field,
+    InPlace,
+    None,
+}
 
 pub struct TextField {
     id: WidgetId,
     placeholder: String,
     placeholder_paragraph: Option<Paragraph>,
     font_size: f32,
-    bordered: bool,
+    border: Border,
     editor: PlainEditor<Color>,
     on_change: Box<dyn FnMut(&str)>,
     selecting: bool,
@@ -40,7 +48,7 @@ impl TextField {
             placeholder: placeholder.to_owned(),
             placeholder_paragraph: None,
             font_size: FONT_SIZE,
-            bordered: true,
+            border: Border::Field,
             editor,
             on_change: Box::new(on_change),
             selecting: false,
@@ -58,12 +66,19 @@ impl TextField {
             .edit_styles()
             .insert(StyleProperty::FontFamily(families(font_size)));
         self.font_size = font_size;
-        self.bordered = false;
+        self.border = Border::None;
         self
     }
 
+    pub fn in_place(self, font_size: f32) -> Self {
+        Self {
+            border: Border::InPlace,
+            ..self.borderless(font_size)
+        }
+    }
+
     fn height(&self) -> f32 {
-        if self.bordered {
+        if self.border == Border::Field {
             TEXT_FIELD_HEIGHT
         } else {
             (self.font_size * 1.5).ceil()
@@ -188,19 +203,40 @@ impl Widget for TextField {
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
         let shape = Shape::rounded(self.frame, RADIUS);
         let focused = cx.is_focused(self.id);
-        if self.bordered {
-            items.push(Item::Fill {
-                shape,
-                paint: cx.palette.surface_elevated.into(),
-            });
-            items.push(Item::Stroke {
-                shape: Shape::rounded(self.frame.inset(0.5), RADIUS - 0.5),
-                width: 1.0,
-                paint: cx.palette.separator_color.into(),
-            });
-            if focused {
-                super::focus_ring(cx, shape, items);
+        match self.border {
+            Border::Field => {
+                items.push(Item::Fill {
+                    shape,
+                    paint: cx.palette.surface_elevated.into(),
+                });
+                items.push(Item::Stroke {
+                    shape: Shape::rounded(self.frame.inset(0.5), RADIUS - 0.5),
+                    width: 1.0,
+                    paint: cx.palette.separator_color.into(),
+                });
+                if focused {
+                    super::focus_ring(cx, shape, items);
+                }
             }
+            Border::InPlace => {
+                let shape = Shape::rounded(self.frame, IN_PLACE_RADIUS);
+                items.push(Item::Shadow {
+                    shape,
+                    offset: Point::new(0.0, 1.0),
+                    blur_radius: 4.0,
+                    color: Color::hex(0).with_alpha(60),
+                });
+                items.push(Item::Fill {
+                    shape,
+                    paint: cx.palette.surface_elevated.into(),
+                });
+                items.push(Item::Stroke {
+                    shape,
+                    width: 1.5,
+                    paint: cx.palette.accent_color.into(),
+                });
+            }
+            Border::None => {}
         }
         let origin = self.text_origin();
         let mut content = Vec::new();

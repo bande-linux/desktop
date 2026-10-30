@@ -5,8 +5,8 @@ pub use unbound_graphics::{
     TextStyle, TextSystem, Typeface,
 };
 pub use unbound_toolkit_platform::{
-    ACTIVATION_TOKEN_VARIABLE, App, AppWindow, BrightnessKey, DragAction, DragEvent, Edges,
-    FramePath, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement, RENDERER_VARIABLE,
+    ACTIVATION_TOKEN_VARIABLE, App, AppWindow, BrightnessKey, DragAction, DragEvent, DragIcon,
+    Edges, FramePath, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement, RENDERER_VARIABLE,
     ResizeEdge, Role, ScreenImage, TITLE_BAR_HEIGHT, ToplevelState, Transfer, VolumeKey, Window,
     WindowError, WindowEvent, run,
 };

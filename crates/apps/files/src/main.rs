@@ -85,8 +85,8 @@ impl Files {
                     let transfer = Transfer::uris(uris);
                     window.copy_transfer(if cut { transfer.cut() } else { transfer });
                 }
-                Request::StartDrag(paths) => {
-                    let icon = self.view.drag_icon();
+                Request::StartDrag { paths, grab } => {
+                    let icon = self.view.drag_icon(grab);
                     let uris = paths.iter().map(|path| file_uri(path)).collect();
                     let actions = [DragAction::Copy, DragAction::Move];
                     if let Err(error) =
@@ -153,7 +153,7 @@ impl App for Files {
             WindowEvent::Drag(drag) => {
                 match drag {
                     DragEvent::Entered { position, uris, .. } => {
-                        let action = self.view.drag_entered(position, uris);
+                        let action = self.view.drag_entered(position, &uris);
                         window.accept_drag(action);
                     }
                     DragEvent::Moved(position) => {

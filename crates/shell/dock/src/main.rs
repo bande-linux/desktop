@@ -252,13 +252,14 @@ impl Dock {
 
     fn drag(&mut self, window: &mut Window, drag: DragEvent) {
         let now = Instant::now();
-        match drag {
-            DragEvent::Entered {
-                position,
-                uris: true,
-                ..
+        let drag = match drag {
+            DragEvent::Entered { position, uris, .. } if !uris.is_empty() => {
+                DragEvent::Moved(position)
             }
-            | DragEvent::Moved(position) => {
+            other => other,
+        };
+        match drag {
+            DragEvent::Moved(position) => {
                 let target = self.state.borrow().drop_target(position);
                 let action = target.as_ref().and_then(|target| self.drop_action(target));
                 window.accept_drag(action);

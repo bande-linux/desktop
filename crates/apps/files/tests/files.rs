@@ -933,8 +933,15 @@ fn dragging_a_selection_starts_a_drag_and_dropping_on_a_folder_moves_it_there() 
         row(2.0).y + 12.0,
     ))));
     let dragged = vec![place.home().join("Empty"), place.home().join("notes.txt")];
-    assert_eq!(view.take_requests(), [Request::StartDrag(dragged)]);
-    assert_eq!(view.drag_moved(row(1.0)), None);
+    assert!(matches!(
+        view.take_requests().as_slice(),
+        [Request::StartDrag { paths, .. }] if *paths == dragged
+    ));
+    let uris = dragged
+        .iter()
+        .map(|path| file_uri(path))
+        .collect::<Vec<_>>();
+    assert_eq!(view.drag_entered(row(1.0), &uris), None);
     assert_eq!(view.drag_moved(row(0.0)), Some(DragAction::Move));
     view.drag_finished();
 
@@ -943,4 +950,42 @@ fn dragging_a_selection_starts_a_drag_and_dropping_on_a_folder_moves_it_there() 
     run_until(&mut view, idle);
     assert!(place.home().join("Documents/notes.txt").exists());
     assert!(!place.home().join("notes.txt").exists());
+}
+
+#[test]
+fn dragging_a_group_of_rows_in_the_list_view_drags_all_of_them() {
+    let place = Place::new();
+    let mut view = place.view();
+    view.handle(&command(Key::Character('2'), false));
+    view.scene(1000, 600);
+    let row = |index: f32| Point::new(SIDEBAR_WIDTH + 60.0, 26.0 + ROW_HEIGHT * (index + 0.5));
+    let shift = Modifiers {
+        shift: true,
+        ..Modifiers::default()
+    };
+    for (index, modifiers) in [(1.0, Modifiers::default()), (2.0, shift)] {
+        let pointer = Pointer::at(row(index)).with_modifiers(modifiers);
+        view.handle(&Event::PointerDown(pointer));
+        view.handle(&Event::PointerUp(pointer));
+    }
+    view.scene(1000, 600);
+
+    view.handle(&Event::PointerDown(Pointer::at(row(1.0))));
+    view.handle(&Event::PointerMove(Pointer::at(Point::new(
+        SIDEBAR_WIDTH + 90.0,
+        row(1.0).y + 30.0,
+    ))));
+
+    let dragged = vec![place.home().join("Empty"), place.home().join("notes.txt")];
+    let requests = view.take_requests();
+    let [Request::StartDrag { paths, grab }] = requests.as_slice() else {
+        panic!("one drag starts: {requests:?}");
+    };
+    assert_eq!(*paths, dragged);
+    let icon = view.drag_icon(*grab);
+    assert!(
+        icon.hotspot.x > 20.0 && icon.hotspot.x <= 40.0,
+        "grabbed by the name, the icon sits left of the pointer: {:?}",
+        icon.hotspot
+    );
 }

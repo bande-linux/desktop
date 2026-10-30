@@ -64,9 +64,10 @@ impl Control {
     }
 
     fn locked(ctl: &Ctl, name: String, kind: ElemType) -> Result<Self, CardError> {
-        let control = Self::new(ctl, name, kind)?;
+        let mut control = Self::new(ctl, name, kind)?;
         ctl.elem_lock(&control.id)
             .map_err(|e| CardError::Alsa("lock", control.name.clone(), e))?;
+        control.read(ctl)?;
         Ok(control)
     }
 
@@ -117,10 +118,6 @@ fn decibels_to_sensitivity(decibels: f64) -> f64 {
     10f64.powf(decibels / 20.0) * std::f64::consts::SQRT_2
 }
 
-fn sensitivity_to_millibel(sensitivity: f64) -> MilliBel {
-    MilliBel((2000.0 * (sensitivity / std::f64::consts::SQRT_2).log10()).round() as i64)
-}
-
 impl Card {
     pub fn open(model: &Model) -> Result<Self, CardError> {
         let device = format!("hw:{}", model.card);
@@ -138,17 +135,8 @@ impl Card {
                 let mut current_sense =
                     Control::locked(&ctl, named("ISENSE Switch"), ElemType::Boolean)?;
                 current_sense.set_switch(&ctl, true)?;
-                let mut amplifier_gain =
+                let amplifier_gain =
                     Control::locked(&ctl, named("Amp Gain Volume"), ElemType::Integer)?;
-                let step = ctl
-                    .convert_from_db(
-                        &amplifier_gain.id,
-                        sensitivity_to_millibel(model.amplifier_sensitivity),
-                        Round::Floor,
-                    )
-                    .map_err(|e| CardError::Alsa("convert", amplifier_gain.name.clone(), e))?;
-                amplifier_gain.set_integer(&ctl, i32::try_from(step).unwrap_or(0))?;
-                amplifier_gain.read(&ctl)?;
                 let programmed = ctl
                     .convert_to_db(&amplifier_gain.id, i64::from(amplifier_gain.integer()?))
                     .map_err(|e| CardError::Alsa("convert", amplifier_gain.name.clone(), e))?;

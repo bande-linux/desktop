@@ -112,14 +112,30 @@ impl Guard {
                 }
                 Some(frames) => {
                     let samples = &buffer[..frames * self.channels];
-                    let powers = self
+                    let readings = self
                         .model
                         .speakers
                         .iter()
-                        .map(|s| s.sense.read(samples).map(|r| r.power))
+                        .map(|s| s.sense.read(samples))
                         .collect::<Result<Vec<_>, _>>()
                         .map_err(|fault| fault.to_string())?;
+                    let powers: Vec<f64> = readings.iter().map(|r| r.power).collect();
                     self.apply(&powers, seconds)?;
+                    for (index, (reading, protection)) in
+                        readings.iter().zip(&self.protections).enumerate()
+                    {
+                        tracing::debug!(
+                            speaker = index,
+                            frames,
+                            volts_rms = reading.voltage_rms,
+                            amps_rms = reading.current_rms,
+                            ohms = reading.voltage_rms / reading.current_rms.max(1e-6),
+                            watts = reading.power,
+                            coil_celsius = protection.temperatures.coil,
+                            magnet_celsius = protection.temperatures.magnet,
+                            gain_db = protection.gain_db,
+                        );
+                    }
                     self.card.heartbeat().map_err(|e| e.to_string())?;
                 }
             }

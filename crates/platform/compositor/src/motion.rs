@@ -25,8 +25,9 @@ pub(crate) struct Tick {
 
 impl Tick {
     pub(crate) fn step_since(&self, last: Option<Duration>) -> f64 {
-        last.map_or(self.refresh, |last| self.time.saturating_sub(last))
-            .as_secs_f64()
+        last.map_or(self.refresh.as_secs_f64(), |last| {
+            self.time.as_secs_f64() - last.as_secs_f64()
+        })
     }
 }
 
@@ -407,11 +408,12 @@ impl State {
 
 impl Headless {
     pub fn animate(&mut self, time: Duration) {
-        if self.state.animated_at.is_some_and(|at| time <= at) {
-            return;
-        }
-        self.state.animated_at = Some(time);
         self.state.animate(self.state.tick(time, 0));
+    }
+
+    pub fn animate_on(&mut self, output: &str, time: Duration) {
+        let screen = self.state.screen_named(output).unwrap_or(0);
+        self.state.animate(self.state.tick(time, screen));
     }
 
     pub fn set_reduce_motion(&mut self, reduce: bool) {

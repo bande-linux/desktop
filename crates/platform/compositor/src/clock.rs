@@ -7,6 +7,7 @@ use crate::state::Headless;
 pub const SAFETY_MARGIN: Duration = Duration::from_millis(1);
 
 const REMEMBERED_RENDERS: usize = 16;
+const TYPICAL_RENDER_WEIGHT: f64 = 0.1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Vblank {
@@ -17,7 +18,8 @@ pub struct Vblank {
 pub struct FrameClock {
     origin: Duration,
     refresh: Duration,
-    render_times: VecDeque<Duration>,
+    deadline_to_done: VecDeque<Duration>,
+    typical_render: Option<Duration>,
 }
 
 impl FrameClock {
@@ -25,7 +27,8 @@ impl FrameClock {
         Self {
             origin,
             refresh,
-            render_times: VecDeque::with_capacity(REMEMBERED_RENDERS),
+            deadline_to_done: VecDeque::with_capacity(REMEMBERED_RENDERS),
+            typical_render: None,
         }
     }
 
@@ -51,14 +54,27 @@ impl FrameClock {
         }
     }
 
+    fn within_a_refresh(&self, time: Duration) -> Duration {
+        time.min(self.refresh.saturating_sub(SAFETY_MARGIN))
+    }
+
     pub fn predicted_render(&self) -> Duration {
-        self.render_times.iter().copied().max().unwrap_or_default()
+        let slowest = self.deadline_to_done.iter().copied().max();
+        self.within_a_refresh(slowest.unwrap_or_default())
     }
 
     pub fn deadline(&self, vblank: Vblank) -> Duration {
         vblank
             .time
             .saturating_sub(self.predicted_render() + SAFETY_MARGIN)
+    }
+
+    fn latest_start(&self, vblank: Vblank) -> Duration {
+        vblank.time.saturating_sub(
+            self.typical_render
+                .unwrap_or_default()
+                .min(self.predicted_render()),
+        )
     }
 
     pub fn frame_for(&self, now: Duration) -> Vblank {
@@ -70,11 +86,17 @@ impl FrameClock {
         }
     }
 
-    pub fn record_render(&mut self, deadline_to_done: Duration) {
-        if self.render_times.len() == REMEMBERED_RENDERS {
-            self.render_times.pop_front();
+    pub fn record_render(&mut self, deadline: Duration, started: Duration, done: Duration) {
+        if self.deadline_to_done.len() == REMEMBERED_RENDERS {
+            self.deadline_to_done.pop_front();
         }
-        self.render_times.push_back(deadline_to_done);
+        self.deadline_to_done
+            .push_back(done.saturating_sub(deadline));
+        let render = done.saturating_sub(started);
+        self.typical_render = Some(self.typical_render.map_or(render, |typical| {
+            let (typical, render) = (typical.as_secs_f64(), render.as_secs_f64());
+            Duration::from_secs_f64(typical + (render - typical) * TYPICAL_RENDER_WEIGHT)
+        }));
     }
 }
 
@@ -162,7 +184,7 @@ impl FrameScheduler {
                     });
                 }
                 Phase::Idle => self.phase = Phase::Waiting(self.clock.frame_for(now)),
-                Phase::Waiting(vblank) if now >= vblank.time => {
+                Phase::Waiting(vblank) if now > self.clock.latest_start(vblank) => {
                     self.phase = Phase::Waiting(self.clock.frame_for(now));
                 }
                 Phase::Waiting(vblank) if now < self.clock.deadline(vblank) => {
@@ -172,14 +194,15 @@ impl FrameScheduler {
                     });
                 }
                 Phase::Waiting(vblank) => {
+                    let started = now;
                     compositor.take_redraw_on(&name);
                     self.wanted = false;
-                    compositor.animate(vblank.time);
+                    compositor.animate_on(&name, vblank.time);
                     compositor.latch_on(&name);
                     let deadline = self.clock.deadline(vblank);
                     let submission = output.submit(compositor, &name)?;
                     now = clock();
-                    self.clock.record_render(now.saturating_sub(deadline));
+                    self.clock.record_render(deadline, started, now);
                     self.phase = match submission {
                         Submission::AwaitingFlip => Phase::Flipping,
                         Submission::AtVblank if now <= vblank.time => Phase::Rendered(vblank),

@@ -10,6 +10,7 @@ use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Point, Rectangle, SERIAL_COUNTER};
 use unbound_spring::{Animation, Decay, Spring, State as Phase, rubber_band};
 
+use crate::motion::Tick;
 use crate::state::{Headless, State};
 
 const DESKTOP_FINGERS: u32 = 4;
@@ -19,8 +20,6 @@ const SPREAD_FOR_DESKTOP: f64 = 0.6;
 const PINCH_FOR_LAUNCHER: f64 = 0.8;
 const VELOCITY_WINDOW_MS: f64 = 100.0;
 const MOMENTUM_SPEED: f64 = 2.0;
-const SETTLED_PROGRESS: f64 = 1e-3;
-const SETTLED_SPEED: f64 = 1e-2;
 const SLIVER: f64 = 24.0;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -221,19 +220,16 @@ impl State {
         self.needs_redraw = true;
     }
 
-    pub(crate) fn animate_desktop(&mut self, time: Duration) {
-        let refresh = self.main_screen().refresh();
-
+    pub(crate) fn animate_desktop(&mut self, tick: Tick) {
+        let precision = self.progress_precision();
         let desktop = &mut self.desktop;
         let Some(settle) = desktop.settle.as_mut() else {
             return;
         };
-        let step = desktop
-            .last
-            .map_or(refresh, |last| time.saturating_sub(last));
-        desktop.last = Some(time);
-        desktop.progress = settle.advance(step.as_secs_f64()).position;
-        if settle.is_settled(SETTLED_PROGRESS, SETTLED_SPEED) {
+        let step = tick.step_since(desktop.last);
+        desktop.last = Some(tick.time);
+        desktop.progress = settle.advance(step).position;
+        if settle.is_at_rest(precision) {
             desktop.progress = desktop.target;
             desktop.settle = None;
             desktop.last = None;

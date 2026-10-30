@@ -25,7 +25,7 @@ use unbound_xdg::{
 use crate::L10N;
 use crate::access::Announcer;
 use crate::label::Labels;
-use crate::motion::{Look, Motion};
+use crate::motion::{Look, Motion, Tick};
 use crate::overview::real_rect;
 use crate::scene::{
     Casting, FillElement, Shading, cast_shadows, fresh, pieces_of, rounded, scaled_pieces,
@@ -882,21 +882,20 @@ impl State {
         }
     }
 
-    pub(crate) fn animate_switcher(&mut self, time: Duration) {
+    pub(crate) fn animate_switcher(&mut self, tick: Tick) {
         if let Some(session) = self.switcher.session.as_mut()
             && !session.shown
         {
-            let since = *session.since.get_or_insert(time);
-            if time.saturating_sub(since) >= DWELL {
+            let since = *session.since.get_or_insert(tick.time);
+            if tick.time.saturating_sub(since) >= DWELL {
                 session.shown = true;
                 self.refresh_card();
             }
             self.needs_redraw = true;
         }
-        let refresh = self.main_screen().refresh();
         if let Some(card) = self.switcher.card.as_mut() {
-            card.look.advance(time, refresh);
-            card.ring.advance(time, refresh);
+            card.look.advance(tick);
+            card.ring.advance(tick);
             if card.closing && card.look.is_settled() {
                 self.switcher.card = None;
             }

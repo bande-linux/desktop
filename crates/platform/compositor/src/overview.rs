@@ -15,7 +15,7 @@ use unbound_spring::{Animation, Spring, State as Phase};
 
 use crate::gesture::Tracker;
 use crate::label::{Label, Labels, TITLE};
-use crate::motion::{Look, Motion};
+use crate::motion::{Look, Motion, Tick};
 use crate::scene::{CORNER_RADIUS, FillElement, Piece, fresh, pieces_of, rounded, scaled_pieces};
 use crate::shell::toplevel_names;
 use crate::state::{Headless, OutputElement, State};
@@ -39,8 +39,6 @@ const TITLE_ROOM: f64 = 24.0;
 const RING: f64 = 4.0;
 const DIMMED: f64 = 0.25;
 const MOMENTUM_SPEED: f64 = 2.0;
-const SETTLED_PROGRESS: f64 = 1e-3;
-const SETTLED_SPEED: f64 = 1e-2;
 const THUMB_FILL: [f32; 4] = [0.07, 0.08, 0.1, 1.0];
 const ADD_FILL: [f32; 4] = [0.12, 0.12, 0.12, 0.12];
 const PLUS_FILL: [f32; 4] = [0.75, 0.75, 0.75, 0.75];
@@ -784,22 +782,19 @@ impl State {
         self.focus(Some(surface));
     }
 
-    pub(crate) fn animate_overview(&mut self, time: Duration) {
-        let refresh = self.main_screen().refresh();
+    pub(crate) fn animate_overview(&mut self, tick: Tick) {
+        let precision = self.progress_precision();
         if let Some((_, motion)) = &mut self.overview.returning {
-            motion.advance(time, refresh);
+            motion.advance(tick);
             if motion.is_settled() {
                 self.overview.returning = None;
             }
         }
         if let Some(settle) = self.overview.settle.as_mut() {
-            let step = self
-                .overview
-                .last
-                .map_or(refresh, |last| time.saturating_sub(last));
-            self.overview.last = Some(time);
-            self.overview.progress = settle.advance(step.as_secs_f64()).position;
-            if settle.is_settled(SETTLED_PROGRESS, SETTLED_SPEED) {
+            let step = tick.step_since(self.overview.last);
+            self.overview.last = Some(tick.time);
+            self.overview.progress = settle.advance(step).position;
+            if settle.is_at_rest(precision) {
                 self.overview.progress = self.overview.target;
                 self.overview.settle = None;
                 self.overview.last = None;

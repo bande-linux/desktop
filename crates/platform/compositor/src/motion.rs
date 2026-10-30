@@ -1,21 +1,38 @@
 use std::time::Duration;
 
 use smithay::desktop::layer_map_for_output;
-use smithay::utils::{Logical, Point, Rectangle};
+use smithay::utils::{Logical, Physical, Point, Rectangle, Size};
 use unbound_spring::{Animation, Spring, State as Phase};
 
 use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 
 use crate::scene::Closing;
+use crate::screen::Screen;
 use crate::shell::toplevel_names;
 use crate::state::{Headless, State};
 use crate::window::Window;
 
-const SETTLED_POSITION: f64 = 0.25;
-const SETTLED_SPEED: f64 = 10.0;
-const SETTLED_ALPHA: f64 = 0.002;
-const SETTLED_ALPHA_SPEED: f64 = 0.02;
+const SETTLED_PIXELS: f64 = 0.1;
+const SETTLED_ALPHA: f64 = 1.0 / 512.0;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct Tick {
+    pub(crate) time: Duration,
+    pub(crate) refresh: Duration,
+    pub(crate) scale: f64,
+}
+
+impl Tick {
+    pub(crate) fn step_since(&self, last: Option<Duration>) -> f64 {
+        last.map_or(self.refresh, |last| self.time.saturating_sub(last))
+            .as_secs_f64()
+    }
+}
+
+pub(crate) fn progress_precision(span: Size<i32, Physical>) -> f64 {
+    SETTLED_PIXELS / f64::from(span.w.max(span.h).max(1))
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct Look {
@@ -64,6 +81,7 @@ pub(crate) struct Motion {
     spring: Spring,
     channels: [Animation; 5],
     last: Option<Duration>,
+    at_rest: bool,
 }
 
 impl Motion {
@@ -82,6 +100,7 @@ impl Motion {
                 )
             }),
             last: None,
+            at_rest: false,
         }
     }
 
@@ -101,6 +120,7 @@ impl Motion {
         for (channel, target) in self.channels.iter_mut().zip(to.values()) {
             if channel.target() != target {
                 channel.retarget(target);
+                self.at_rest = false;
             }
         }
     }
@@ -116,17 +136,19 @@ impl Motion {
             },
             channel.target(),
         );
+        self.at_rest = false;
     }
 
-    pub(crate) fn advance(&mut self, time: Duration, refresh: Duration) {
-        let step = match self.last {
-            Some(last) => time.saturating_sub(last),
-            None => refresh,
-        };
-        self.last = Some(time);
+    pub(crate) fn advance(&mut self, tick: Tick) {
+        let step = tick.step_since(self.last);
+        self.last = Some(tick.time);
         for channel in &mut self.channels {
-            channel.advance(step.as_secs_f64());
+            channel.advance(step);
         }
+        let [x, y, w, h, alpha] = &self.channels;
+        let pixel = SETTLED_PIXELS / tick.scale;
+        self.at_rest = [x, y, w, h].iter().all(|channel| channel.is_at_rest(pixel))
+            && alpha.is_at_rest(SETTLED_ALPHA);
     }
 
     pub(crate) fn place(&mut self, rect: Rectangle<f64, Logical>) {
@@ -144,11 +166,7 @@ impl Motion {
     }
 
     pub(crate) fn is_settled(&self) -> bool {
-        let [x, y, w, h, alpha] = &self.channels;
-        [x, y, w, h]
-            .iter()
-            .all(|channel| channel.is_settled(SETTLED_POSITION, SETTLED_SPEED))
-            && alpha.is_settled(SETTLED_ALPHA, SETTLED_ALPHA_SPEED)
+        self.at_rest
     }
 }
 
@@ -158,8 +176,8 @@ pub(crate) struct IconRect {
     rect: Rectangle<i32, Logical>,
 }
 
-pub(crate) const OPENING_SCALE: f64 = 0.95;
-const CLOSING_SCALE: f64 = 0.92;
+pub(crate) const OPENING_SCALE: f64 = 0.96;
+const CLOSING_SCALE: f64 = 0.98;
 const DOCK_ICON_SIZE: f64 = 48.0;
 pub(crate) const DOCK_NAMESPACE: &str = "dock";
 pub(crate) const BAR_NAMESPACE: &str = "bar";
@@ -320,8 +338,23 @@ impl State {
         self.needs_redraw = true;
     }
 
-    fn animate(&mut self, time: Duration) {
-        let (refresh, reduce) = (self.main_screen().refresh(), self.reduce_motion);
+    fn tick(&self, time: Duration, screen: usize) -> Tick {
+        Tick {
+            time,
+            refresh: self.screens[screen].refresh(),
+            scale: self.screens.iter().map(Screen::scale).fold(1.0, f64::max),
+        }
+    }
+
+    pub(crate) fn progress_precision(&self) -> f64 {
+        self.screens
+            .iter()
+            .map(|screen| progress_precision(screen.mode_size()))
+            .fold(f64::INFINITY, f64::min)
+    }
+
+    fn animate(&mut self, tick: Tick) {
+        let reduce = self.reduce_motion;
         for index in 0..self.windows.len() {
             if self.windows[index].motion.is_none() {
                 continue;
@@ -336,22 +369,22 @@ impl State {
                 motion.place(target.rect);
             }
             motion.retarget(target);
-            motion.advance(time, refresh);
+            motion.advance(tick);
             if motion.is_settled() {
                 window.motion = None;
             }
         }
         for closing in &mut self.closing {
-            closing.motion.advance(time, refresh);
+            closing.motion.advance(tick);
         }
-        self.animate_preview(time);
-        self.animate_desktop(time);
-        self.animate_slide_back(time);
-        self.animate_workspaces(time);
-        self.animate_overview(time);
-        self.animate_source_hud(time);
-        self.animate_switcher(time);
-        self.animate_assist(time);
+        self.animate_preview(tick);
+        self.animate_desktop(tick);
+        self.animate_slide_back(tick);
+        self.animate_workspaces(tick);
+        self.animate_overview(tick);
+        self.animate_source_hud(tick.time);
+        self.animate_switcher(tick);
+        self.animate_assist(tick);
         self.closing.retain(|closing| !closing.motion.is_settled());
         if self.is_animating() {
             self.needs_redraw = true;
@@ -378,7 +411,7 @@ impl Headless {
             return;
         }
         self.state.animated_at = Some(time);
-        self.state.animate(time);
+        self.state.animate(self.state.tick(time, 0));
     }
 
     pub fn set_reduce_motion(&mut self, reduce: bool) {

@@ -234,7 +234,7 @@ fn a_window_minimizes_into_its_apps_dock_icon() {
 
     minimize(&mut server, &mut editor);
     frame(&mut renderer, &mut server, start);
-    let arriving = reddish(&frame(&mut renderer, &mut server, start + ms(500))).expect("shown");
+    let arriving = reddish(&frame(&mut renderer, &mut server, start + ms(350))).expect("shown");
 
     assert!(arriving.0 >= 6 && arriving.2 <= 42, "{arriving:?}");
     assert!(arriving.1 >= 138 && arriving.3 <= 174, "{arriving:?}");

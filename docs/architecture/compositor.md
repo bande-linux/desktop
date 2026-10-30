@@ -127,11 +127,13 @@ when they reach the screen is Unbound's own.
   overruns its vblank is presented at the next one.
 - **Window motion.** Every window state change is animated by springs on x, y, width, height
   and opacity, sampled at the frame's vblank (`Headless::animate`, called by the scheduler
-  before it latches a frame). Opening grows from 95 % and fades in (`standard`); closing keeps
-  the last frame's textures and shrinks to 92 % while fading out (`quick`); minimising scales
+  before it latches a frame). An animation stops once its remaining motion is
+  invisible: within 0.1 physical pixel (1/512 for opacity) and slower than that per 20 ms.
+  Opening grows from 96 % and fades in (`standard`); closing keeps the last frame's textures
+  and shrinks to 98 % while fading out (`quick`); minimising scales
   into the app's Dock icon, reported with `unbound_shell_v1.set_icon_rect`, or toward the
   Dock's centre (the bottom edge without a Dock), drawn above the Dock (`gentle`); restoring
-  plays it back. Zoom and full screen (`standard`, `gentle`) start at the request and stretch
+  plays it back. Zoom and full screen (`standard`) start at the request and stretch
   the current buffer until the app commits its new size. Each operation only sets a new
   destination, so a second action mid-flight turns back from the current position and
   velocity. Input, focus and configure go to the destination at once; the input stack never

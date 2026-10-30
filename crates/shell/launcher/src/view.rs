@@ -901,7 +901,7 @@ impl Launcher {
     fn progress(&self, now: Instant) -> f32 {
         self.appear.map_or(1.0, |(start, mut animation)| {
             animation.advance(now.saturating_duration_since(start).as_secs_f64());
-            if animation.is_settled(SETTLED, SETTLED) {
+            if animation.is_at_rest(SETTLED) {
                 1.0
             } else {
                 animation.state().position.clamp(0.0, 1.0) as f32

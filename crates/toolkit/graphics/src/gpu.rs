@@ -245,13 +245,13 @@ impl GpuRenderer {
         surface: &wgpu::Surface<'static>,
         damage: Option<&[Region]>,
     ) -> Result<(), RenderError> {
-        let gpu = Arc::clone(&self.gpu);
-        let _submitting = gpu.submitting();
         let output = match surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(output)
             | wgpu::CurrentSurfaceTexture::Suboptimal(output) => output,
             other => return Err(RenderError::Gpu(format!("no surface texture: {other:?}"))),
         };
+        let gpu = Arc::clone(&self.gpu);
+        let _submitting = gpu.submitting();
         let size = output.texture.size();
         let kept = self
             .frame

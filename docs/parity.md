@@ -57,7 +57,8 @@ preinstalled. The Dock sits on the left by default, the menu bar on top.
 | Feature | Status | Milestone |
 |---|---|---|
 | App switcher overlay (Super+Tab) and same-app windows (Super+`) | basic (switch without overlay) | M5 |
-| Mission Control and Exposé | none | M5 |
+| Mission Control and Exposé | done (overview with workspace strip, titles, filter, drag between workspaces; App Exposé) | M5 |
+| Spaces (workspaces, full-screen spaces, three-finger swipes) | done (one output) | M5 |
 | Minimize to Dock, zoom, spring animations | basic (minimize, no animation) | M5 |
 | Snapping and tiling to halves and quarters | none | M5 |
 

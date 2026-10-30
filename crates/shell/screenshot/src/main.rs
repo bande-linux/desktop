@@ -794,7 +794,7 @@ impl Screenshots {
             MARKUP_FLAG.to_owned(),
             path.to_string_lossy().into_owned(),
         ];
-        if let Err(error) = spawn_detached(&command, None, None) {
+        if let Err(error) = spawn_detached(markup_app::APP_ID, &command, None, None) {
             tracing::warn!("cannot open markup: {error}");
         }
     }

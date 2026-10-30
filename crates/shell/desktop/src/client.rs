@@ -27,7 +27,8 @@ use unbound_volumes::{eject, media_roots, mounted_volumes};
 use unbound_wallpaper::{Choice, Fit, Picture, Variant, choose, follow, render, render_cached};
 use unbound_xdg::{
     Apps, DIRECTORY, DesktopEntry, ICON_THEMES, OCTET_STREAM, UserDir, cache_home, config_dirs,
-    config_home, data_dirs, file_uri, find_icon, launch, launch_with, path_from_file_uri, user_dir,
+    config_home, data_dirs, file_uri, find_icon, launch, launch_with, launch_with_arguments,
+    path_from_file_uri, user_dir,
 };
 
 const PDF: &str = "application/pdf";
@@ -385,21 +386,11 @@ impl DesktopSurface {
             return;
         };
         let token = window.activation_token(files.app_id()).ok();
-        let launched =
-            files
-                .command()
-                .map_err(|error| error.to_string())
-                .and_then(|mut command| {
-                    command.push(FILES_INFO_FLAG.to_owned());
-                    command.push(path.to_string_lossy().into_owned());
-                    unbound_xdg::spawn_detached(
-                        &command,
-                        files.working_directory.as_deref(),
-                        token.as_deref(),
-                    )
-                    .map_err(|error| error.to_string())
-                });
-        if let Err(error) = launched {
+        let arguments = [
+            FILES_INFO_FLAG.to_owned(),
+            path.to_string_lossy().into_owned(),
+        ];
+        if let Err(error) = launch_with_arguments(&files, &arguments, token.as_deref()) {
             tracing::warn!("cannot show the info of {}: {error}", path.display());
         }
     }
@@ -463,18 +454,8 @@ impl DesktopSurface {
             return;
         };
         let token = window.activation_token(SETTINGS_APP).ok();
-        let launched = settings
-            .command()
-            .map_err(|error| error.to_string())
-            .and_then(|mut command| {
-                command.push(WALLPAPER_PANE.to_owned());
-                unbound_xdg::spawn_detached(
-                    &command,
-                    settings.working_directory.as_deref(),
-                    token.as_deref(),
-                )
-                .map_err(|error| error.to_string())
-            });
+        let launched =
+            launch_with_arguments(&settings, &[WALLPAPER_PANE.to_owned()], token.as_deref());
         if let Err(error) = launched {
             tracing::warn!("cannot open Settings: {error}");
         }

@@ -4,6 +4,8 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
+use crate::mimeapps::data_home;
+
 pub const CURRENT_DESKTOP: &str = "Unbound";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -72,6 +74,7 @@ pub struct DesktopEntry {
     pub keywords: Vec<String>,
     pub mime_types: Vec<String>,
     pub no_display: bool,
+    pub startup_wm_class: Option<String>,
     pub actions: Vec<DesktopAction>,
 }
 
@@ -285,6 +288,9 @@ impl DesktopEntry {
             keywords: group.localized_list("Keywords", locale),
             mime_types: group.list("MimeType"),
             no_display: group.boolean("NoDisplay"),
+            startup_wm_class: group
+                .string("StartupWMClass")
+                .filter(|class| !class.is_empty()),
             actions: actions(group, &groups, locale),
         })
     }
@@ -304,10 +310,7 @@ pub fn current_desktops() -> Vec<String> {
 
 pub fn data_dirs() -> Vec<PathBuf> {
     let absolute = |path: &PathBuf| path.is_absolute();
-    let home = env::var_os("XDG_DATA_HOME")
-        .map(PathBuf::from)
-        .filter(absolute)
-        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/share")));
+    let home = data_home();
     let system = env::var_os("XDG_DATA_DIRS")
         .filter(|value| !value.is_empty())
         .map(|value| {

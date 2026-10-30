@@ -6,8 +6,9 @@ use std::time::{Duration, Instant};
 
 use tempfile::TempDir;
 use unbound_xdg::{
-    DesktopEntry, ExecError, ICON_THEMES, Locale, TERMINAL, UserDir, applications, autostart_dir,
-    find_icon, launch, opens_at_login, set_open_at_login, user_dir,
+    DesktopEntry, ExecError, ICON_THEMES, Locale, TERMINAL, UserDir, app_name, applications,
+    autostart_dir, find_app, find_icon, launch, opens_at_login, running_app, set_open_at_login,
+    user_dir,
 };
 
 fn desktops() -> Vec<String> {
@@ -383,4 +384,60 @@ fn open_at_login_copies_the_desktop_entry_into_autostart_and_removes_it_again() 
     set_open_at_login(&dir, id, &entry, false).expect("stop opening at login");
     assert!(!dir.join(id).exists());
     set_open_at_login(&dir, id, &entry, false).expect("already off");
+}
+
+fn installed(id: &str, keys: &str) -> DesktopEntry {
+    DesktopEntry::parse(
+        &format!("{id}.desktop"),
+        &Path::new("/usr/share/applications").join(format!("{id}.desktop")),
+        &format!("[Desktop Entry]\nType=Application\nName={id}\n{keys}\n"),
+        None,
+        &desktops(),
+    )
+    .expect("a shown application")
+}
+
+#[test]
+fn window_app_ids_find_their_desktop_entry() {
+    let entries = [
+        installed("org.gimp.GIMP", "Exec=gimp-3.0 %U"),
+        installed("slack", "Exec=/usr/bin/slack %U"),
+        installed(
+            "signal-desktop",
+            "Exec=/opt/Signal/signal-desktop --no-sandbox %U\nStartupWMClass=Signal",
+        ),
+        installed("firefox", "Exec=firefox %u"),
+        installed("visual-studio-code", "Exec=/usr/share/code/code %F"),
+        installed("org.gnome.Terminal", "Exec=gnome-terminal"),
+        installed("org.unbound.Files", "Exec=unbound-files"),
+        installed("org.unbound.files", "Exec=sh -c files"),
+        installed("python-tool", "Exec=python3 tool.py"),
+    ];
+    let found = |app_id: &str| find_app(&entries, app_id).map(DesktopEntry::app_id);
+
+    assert_eq!(found("gimp"), Some("org.gimp.GIMP"));
+    assert_eq!(found("Slack"), Some("slack"));
+    assert_eq!(found("signal"), Some("signal-desktop"));
+    assert_eq!(found("org.mozilla.firefox"), Some("firefox"));
+    assert_eq!(found("code"), Some("visual-studio-code"));
+    assert_eq!(found("org.unbound.files"), Some("org.unbound.files"));
+    assert_eq!(found("ORG.UNBOUND.FILES"), Some("org.unbound.Files"));
+    assert_eq!(found("org.example.Terminal"), None);
+    assert_eq!(found("python3"), None);
+    assert_eq!(found(""), None);
+
+    assert_eq!(app_name(&entries, "signal"), "signal-desktop");
+    assert_eq!(app_name(&entries, "org.example.Unknown"), "Unknown");
+    assert_eq!(app_name(&entries, ""), "");
+
+    let running = ["gimp".to_owned(), "org.example.Unknown".to_owned()];
+    assert_eq!(
+        running_app(&entries, &running, "org.gimp.GIMP"),
+        Some("gimp")
+    );
+    assert_eq!(
+        running_app(&entries, &running, "org.example.Unknown"),
+        Some("org.example.Unknown")
+    );
+    assert_eq!(running_app(&entries, &running, "slack"), None);
 }

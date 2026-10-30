@@ -14,15 +14,16 @@ use unbound_fs::Entry;
 use unbound_launcher::{
     Action, AppInfo, Catalog, Hit, ICON_SIZE, Kind, Launcher, Loaded, PaneInfo, SettingInfo, Target,
 };
-use unbound_preview::preview;
+use unbound_preview::{Preview, preview};
 use unbound_search::{FileIndex, Usage, usage_path};
+use unbound_thumbnails::{Cache, ThumbnailSize, Thumbnailers, thumbnail};
 use unbound_toolkit::{
     App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement, Rect, Role, Scene,
     TextSystem, Window, WindowError, WindowEvent,
 };
 use unbound_xdg::{
-    Apps, DIRECTORY, DesktopEntry, ICON_THEMES, LaunchError, Locale, applications, config_dirs,
-    current_desktops, data_dirs, find_icon, launch, launch_with, spawn_detached,
+    Apps, DIRECTORY, DesktopEntry, ICON_THEMES, LaunchError, Locale, MimeDatabase, applications,
+    config_dirs, current_desktops, data_dirs, find_icon, launch, launch_with, spawn_detached,
 };
 
 const FALLBACK_DOCUMENT: &str = "application-x-generic";
@@ -97,6 +98,9 @@ impl Previewer {
         std::thread::Builder::new()
             .name("preview".to_owned())
             .spawn(move || {
+                let cache = Cache::for_user();
+                let thumbnailers = Thumbnailers::load(&data_dirs());
+                let mimes = MimeDatabase::load(&data_dirs());
                 while let Ok(mut path) = wanted.recv() {
                     while let Ok(newer) = wanted.try_recv() {
                         path = newer;
@@ -106,7 +110,20 @@ impl Previewer {
                         .map(|name| name.to_string_lossy().into_owned())
                         .unwrap_or_default();
                     let entry = Entry::read(path, name);
-                    let content = preview(&entry, Image::from_rgba);
+                    let mut content = preview(&entry, Image::from_rgba);
+                    if let (Preview::Other { .. }, Some(cache)) = (&content, &cache)
+                        && let Some(picture) = thumbnail(
+                            cache,
+                            &thumbnailers,
+                            &entry.path,
+                            &mimes.for_path(&entry.path),
+                            ThumbnailSize::XLarge,
+                        )
+                        && let Some(image) =
+                            Image::from_rgba(picture.width, picture.height, picture.rgba)
+                    {
+                        content = Preview::Image(image);
+                    }
                     if sender.send(Loaded { entry, content }).is_err() {
                         return;
                     }

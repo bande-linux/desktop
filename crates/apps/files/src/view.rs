@@ -8,12 +8,14 @@ use std::time::{Duration, Instant};
 
 use unbound_fs::{
     Action, Answer, Change, Entry, Finished, FolderWatch, Operations, Purpose, RenameError,
-    Resolution, Task, TrashItem,
+    Resolution, Task, TrashItem, archive_path, can_extract,
 };
 use unbound_preview::Preview;
+use unbound_search::{Usage, recent_files};
+use unbound_thumbnails::Thumbnails;
 use unbound_toolkit::ui::{
     Context, Cursor, Event, FreeLayout, Key, Menu, Modifiers, Pointer, PointerButton, Scroll,
-    ScrollState, Ui, Widget, WidgetId,
+    ScrollState, Slider, Ui, Widget, WidgetId,
 };
 use unbound_toolkit::{Image, Item, Palette, Point, Rect, TextSystem};
 use unbound_volumes::mounted_volumes;
@@ -22,9 +24,15 @@ use unbound_xdg::{Apps, DesktopEntry, UserDir, path_from_file_uri, user_dir};
 use crate::L10N;
 use crate::browser::{Browser, Location};
 use crate::controls::{Press, Signals};
+use crate::grid::Band;
 use crate::icons::Icons;
 use crate::loader::{Loaded, Loader};
+use crate::search::{Index, SEARCH_HEIGHT, Searching};
 use crate::sidebar::{Place, PlaceKind, Row, with_volumes};
+use crate::tabs::{Tab, location_title};
+use crate::thumbs::Thumbs;
+use crate::toolbar::TOOLBAR_HEIGHT;
+use crate::views::{DEFAULT_ICON_SIZE, FolderView, ICON_SIZES, ViewMemory, ViewMode};
 
 pub const COLUMN_WIDTH: f32 = 240.0;
 pub const ROW_HEIGHT: f32 = 24.0;
@@ -34,10 +42,19 @@ pub const PATH_BAR_HEIGHT: f32 = 28.0;
 pub const PROGRESS_HEIGHT: f32 = 48.0;
 pub const TOP_INSET: f32 = 6.0;
 pub const HEADER_HEIGHT: f32 = 26.0;
-pub const SEARCH_HEIGHT: f32 = 36.0;
 pub(crate) const SLOW_CLICK_RENAME: Duration = Duration::from_millis(600);
 const TYPE_SELECT_PAUSE: Duration = Duration::from_millis(1000);
 const NOTICE_TIME: Duration = Duration::from_secs(5);
+const MAX_RECENTS: usize = 200;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Source {
+    Watch,
+    Loader,
+    Thumbnails,
+    Index,
+    Job(usize),
+}
 
 pub struct QuickLook {
     pub entry: Entry,
@@ -53,11 +70,6 @@ pub struct Info {
     pub chosen: Option<usize>,
     pub folder_size: Option<(u64, u64)>,
     pub preview: Option<Preview<Image>>,
-}
-
-pub struct Search {
-    pub column: usize,
-    pub(crate) field: WidgetId,
 }
 
 pub struct Rename {
@@ -90,6 +102,11 @@ pub enum Hit {
     ChooseApp(usize),
     OpenWithChosen,
     UseForAll,
+    Back,
+    Forward,
+    Tab(usize),
+    CloseTab(usize),
+    NewTab,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -114,7 +131,13 @@ pub enum Request {
         at: Point,
     },
     RemoveBookmark(PathBuf),
+    AddBookmarks {
+        folders: Vec<PathBuf>,
+        before: Option<PathBuf>,
+    },
     Eject(PathBuf),
+    NewWindow(Location),
+    OpenTerminal(PathBuf),
 }
 
 pub struct FilesView {
@@ -130,10 +153,16 @@ pub struct FilesView {
     pub(crate) table_revision: Option<u64>,
     pub(crate) table_keys: HashMap<String, usize>,
     pub(crate) table_revealed: Option<usize>,
+    pub(crate) table_found: bool,
     pub(crate) press: Option<Press>,
     pub(crate) drag_sources: Vec<PathBuf>,
+    pub(crate) reordering: Option<PathBuf>,
+    pub(crate) status_bar: bool,
+    templates: Option<PathBuf>,
     pub(crate) drop: Option<crate::drag::Hover>,
-    scrolls: Vec<(Location, ScrollState)>,
+    pub(crate) scrolls: Vec<(Location, ScrollState)>,
+    pub(crate) tabs: Vec<Option<Tab>>,
+    pub(crate) active_tab: usize,
     pub(crate) sheet_cancel: Option<WidgetId>,
     pub(crate) size: (f32, f32),
     pub(crate) quick_look: Option<QuickLook>,
@@ -146,12 +175,26 @@ pub struct FilesView {
     pub(crate) operations: Operations,
     pub(crate) trash_full: bool,
     pub(crate) hover: Option<Hit>,
-    pub(crate) search: Option<Search>,
+    pub(crate) searching: Option<Searching>,
+    pub(crate) index: Option<Index>,
+    pub(crate) search_field: WidgetId,
+    pub(crate) view_control: WidgetId,
+    recents: Option<(PathBuf, PathBuf)>,
     pub(crate) menu_place: Option<usize>,
     media: Vec<PathBuf>,
     favourites: Vec<Row>,
     watch: FolderWatch,
     loader: Loader,
+    pub(crate) thumbs: Thumbs,
+    pub(crate) mode: ViewMode,
+    pub(crate) icon_size: u32,
+    views: ViewMemory,
+    pub(crate) shown_root: Option<Location>,
+    pub(crate) grid_scroll: (Option<Location>, ScrollState),
+    pub(crate) band: Option<Band>,
+    pub(crate) labels: HashMap<(String, u32), String>,
+    pub(crate) grid_wanted: Vec<Entry>,
+    pub(crate) size_slider: Option<WidgetId>,
     pub(crate) requests: Vec<Request>,
     pub(crate) pending_rename: Option<(Instant, PathBuf)>,
     pointer: Point,
@@ -218,10 +261,16 @@ impl FilesView {
             table_revision: None,
             table_keys: HashMap::new(),
             table_revealed: None,
+            table_found: false,
             press: None,
             drag_sources: Vec::new(),
+            reordering: None,
+            status_bar: true,
+            templates: None,
             drop: None,
             scrolls: Vec::new(),
+            tabs: vec![None],
+            active_tab: 0,
             sheet_cancel: None,
             size: (0.0, 0.0),
             quick_look: None,
@@ -234,12 +283,26 @@ impl FilesView {
             operations,
             trash_full: false,
             hover: None,
-            search: None,
+            searching: None,
+            index: None,
+            search_field: WidgetId::next(),
+            view_control: WidgetId::next(),
+            recents: None,
             menu_place: None,
             media: Vec::new(),
             favourites: Vec::new(),
             watch: FolderWatch::new()?,
             loader: Loader::new()?,
+            thumbs: Thumbs::default(),
+            mode: ViewMode::default(),
+            icon_size: DEFAULT_ICON_SIZE,
+            views: ViewMemory::default(),
+            shown_root: None,
+            grid_scroll: (None, ScrollState::default()),
+            band: None,
+            labels: HashMap::new(),
+            grid_wanted: Vec::new(),
+            size_slider: None,
             requests: Vec::new(),
             pending_rename: None,
             pointer: Point::default(),
@@ -247,6 +310,9 @@ impl FilesView {
             paste_moves: None,
             clipboard_files: false,
         };
+        view.shown_root = Some(view.browser.root().clone());
+        view.search_field = view.insert(view.search_field_widget());
+        view.view_control = view.insert(view.view_control_widget());
         view.favourites = view.sidebar.clone();
         view.watch.watch(&view.watched());
         view.trash_full = !view.browser.trash().is_empty();
@@ -374,29 +440,114 @@ impl FilesView {
     }
 
     pub fn title(&self) -> String {
-        match self.browser.current_location() {
-            Location::Trash => L10N.tr("trash"),
-            Location::Folder(folder) => folder.file_name().map_or_else(
-                || folder.display().to_string(),
-                |name| name.to_string_lossy().into_owned(),
-            ),
+        location_title(&self.browser.current_location())
+    }
+
+    pub fn set_thumbnails(&mut self, thumbnails: Thumbnails) {
+        self.thumbs.set_service(thumbnails);
+    }
+
+    pub fn set_view_memory(&mut self, views: ViewMemory) {
+        self.views = views;
+        self.shown_root = None;
+        self.selection_changed();
+    }
+
+    pub fn mode(&self) -> ViewMode {
+        self.mode
+    }
+
+    pub fn icon_size(&self) -> u32 {
+        self.icon_size
+    }
+
+    pub fn set_recents_sources(&mut self, xbel: PathBuf, usage: PathBuf) {
+        self.recents = Some((xbel, usage));
+        self.load_recents();
+    }
+
+    fn load_recents(&mut self) {
+        let Some((xbel, usage)) = &self.recents else {
+            return;
+        };
+        let shared = std::fs::read_to_string(xbel).ok();
+        let usage = Usage::load(usage.clone());
+        self.browser
+            .set_recents(recent_files(shared.as_deref(), &usage, MAX_RECENTS));
+    }
+
+    fn apply_remembered_view(&mut self) {
+        let root = self.browser.root().clone();
+        if self.shown_root.as_ref() == Some(&root) {
+            return;
+        }
+        self.shown_root = Some(root.clone());
+        if root == Location::Recents {
+            self.load_recents();
+        }
+        let Location::Folder(folder) = &root else {
+            return;
+        };
+        if let Some(view) = self.views.get(folder) {
+            self.icon_size = view.icon_size;
+            if view.mode != self.mode {
+                self.mode = view.mode;
+                self.browser.set_single(view.mode != ViewMode::Columns);
+                self.shown_root = Some(self.browser.root().clone());
+                self.focus_content();
+            }
+            self.refresh_size_slider();
+            self.refresh_view_control();
         }
     }
 
+    fn remember_view(&mut self) {
+        let Location::Folder(folder) = self.browser.root().clone() else {
+            return;
+        };
+        let view = FolderView {
+            mode: self.mode,
+            icon_size: self.icon_size,
+        };
+        if let Err(error) = self.views.remember(&folder, view) {
+            tracing::warn!("cannot remember the view of {}: {error}", folder.display());
+        }
+    }
+
+    fn sources(&self) -> Vec<(Source, BorrowedFd<'_>)> {
+        let mut sources = vec![
+            (Source::Watch, self.watch.fd()),
+            (Source::Loader, self.loader.fd()),
+        ];
+        sources.extend(self.thumbs.fd().map(|fd| (Source::Thumbnails, fd)));
+        sources.extend(self.search_index_fd().map(|fd| (Source::Index, fd)));
+        sources.extend(
+            self.operations
+                .fds()
+                .into_iter()
+                .enumerate()
+                .map(|(job, fd)| (Source::Job(job), fd)),
+        );
+        sources
+    }
+
     pub fn fds(&self) -> Vec<BorrowedFd<'_>> {
-        let mut fds = vec![self.watch.fd(), self.loader.fd()];
-        fds.extend(self.operations.fds());
-        fds
+        self.sources().into_iter().map(|(_, fd)| fd).collect()
     }
 
     pub fn source_ready(&mut self, index: usize) -> bool {
-        match index {
-            0 => {
+        let Some(source) = self.sources().get(index).map(|(source, _)| *source) else {
+            return false;
+        };
+        match source {
+            Source::Watch => {
                 self.watch.read();
                 false
             }
-            1 => self.loaded(),
-            job => match self.operations.poll(job - 2) {
+            Source::Loader => self.loaded(),
+            Source::Thumbnails => self.thumbs.take(),
+            Source::Index => self.search_results(),
+            Source::Job(job) => match self.operations.poll(job) {
                 Some(finished) => {
                     self.finished(finished);
                     true
@@ -511,13 +662,7 @@ impl FilesView {
     }
 
     pub(crate) fn selection_changed(&mut self) {
-        if self
-            .search
-            .as_ref()
-            .is_some_and(|search| search.column >= self.browser.columns().len())
-        {
-            self.search = None;
-        }
+        self.apply_remembered_view();
         self.watch.watch(&self.watched());
         self.loader.forget_pending();
         let entry = self.browser.selected().cloned();
@@ -596,17 +741,31 @@ impl FilesView {
     pub fn content_frame(&self) -> Rect {
         let inspector = if self.inspector { INSPECTOR_WIDTH } else { 0.0 };
         let progress = self.visible_jobs() as f32 * PROGRESS_HEIGHT;
-        let search = if self.search.is_some() {
+        let search = if self.searching.is_some() {
             SEARCH_HEIGHT
         } else {
             0.0
         };
+        let top = TOOLBAR_HEIGHT + self.tab_bar_height() + search;
         Rect::new(
             SIDEBAR_WIDTH,
-            search,
+            top,
             (self.size.0 - SIDEBAR_WIDTH - inspector).max(COLUMN_WIDTH),
-            (self.size.1 - PATH_BAR_HEIGHT - progress - search).max(ROW_HEIGHT),
+            (self.size.1 - self.status_bar_height() - progress - top).max(ROW_HEIGHT),
         )
+    }
+
+    pub(crate) fn status_bar_height(&self) -> f32 {
+        match self.status_bar {
+            true => PATH_BAR_HEIGHT,
+            false => 0.0,
+        }
+    }
+
+    pub(crate) fn toggle_status_bar(&mut self) {
+        self.status_bar = !self.status_bar;
+        self.refresh_size_slider();
+        self.selection_changed();
     }
 
     pub(crate) fn visible_jobs(&self) -> usize {
@@ -675,6 +834,10 @@ impl FilesView {
     }
 
     fn keep_selection_visible(&mut self) {
+        if self.mode == ViewMode::Icons {
+            self.reveal_in_grid();
+            return;
+        }
         self.fit_scrolls();
         let rows = self
             .browser
@@ -693,8 +856,13 @@ impl FilesView {
 
     fn scroll(&mut self, scroll: &Scroll) -> bool {
         let content = self.content_frame();
-        if self.browser.single() || !contains(content, scroll.position) {
+        if !contains(content, scroll.position) {
             return false;
+        }
+        match self.mode {
+            ViewMode::Icons => return self.grid_scrolled(scroll),
+            ViewMode::List => return false,
+            ViewMode::Columns => {}
         }
         let column =
             self.first_visible_column() + ((scroll.position.x - content.x) / COLUMN_WIDTH) as usize;
@@ -716,11 +884,11 @@ impl FilesView {
     fn click(&mut self, pointer: &Pointer) -> bool {
         match pointer.button {
             PointerButton::Back => {
-                self.browser.go_back();
-                self.selection_changed();
+                self.back();
                 return true;
             }
             PointerButton::Forward => {
+                self.end_search();
                 self.browser.go_forward();
                 self.selection_changed();
                 return true;
@@ -734,6 +902,9 @@ impl FilesView {
             || (pointer.is_primary() && pointer.modifiers.control)
         {
             return self.context_click(hit, pointer.position);
+        }
+        if pointer.button == PointerButton::Middle {
+            return self.middle_click(hit);
         }
         if !pointer.is_primary() {
             return false;
@@ -755,12 +926,20 @@ impl FilesView {
                     && column == self.browser.active()
                     && shown.is_marked(row)
                     && shown.marked.len() > 1;
+                let folder_in_tab = pointer.count >= 2
+                    && modifiers.logo
+                    && shown.entries[row].is_folder()
+                    && shown.entries[row].trashed.is_none();
                 self.commit_rename();
                 if plain && pointer.count == 1 {
                     self.press = Some(Press::Item {
                         at: pointer.position,
                         collapse: keep.then(|| path.clone()),
                     });
+                }
+                if folder_in_tab {
+                    self.open_tab(Location::Folder(path));
+                    return true;
                 }
                 if keep {
                 } else if modifiers.logo {
@@ -779,13 +958,21 @@ impl FilesView {
             }
             Hit::Column(column) => {
                 self.commit_rename();
-                self.browser.focus_column(column);
+                if self.mode == ViewMode::Icons {
+                    self.start_band(pointer);
+                } else {
+                    self.browser.focus_column(column);
+                }
                 self.selection_changed();
             }
             Hit::Place(index) => {
                 if let Some(Row::Place(place)) = self.sidebar.get(index) {
                     let location = place.location.clone();
                     self.go(location);
+                    self.press = Some(Press::Place {
+                        index,
+                        at: pointer.position,
+                    });
                 }
             }
             Hit::Segment(path) => {
@@ -812,13 +999,54 @@ impl FilesView {
             Hit::OpenWithChosen => self.open_with_chosen(),
             Hit::UseForAll => self.use_chosen_for_all(),
             Hit::Inspector => return false,
+            Hit::Back => self.back(),
+            Hit::Forward => {
+                self.end_search();
+                self.browser.go_forward();
+                self.selection_changed();
+            }
+            Hit::Tab(index) => self.select_tab(index),
+            Hit::CloseTab(index) => {
+                self.close_tab(index);
+            }
+            Hit::NewTab => self.open_tab(self.browser.root().clone()),
         }
+        true
+    }
+
+    fn back(&mut self) {
+        if self.searching.is_some() {
+            self.end_search();
+        } else {
+            self.commit_rename();
+            self.browser.go_back();
+            self.selection_changed();
+        }
+    }
+
+    fn middle_click(&mut self, hit: Hit) -> bool {
+        let location = match hit {
+            Hit::Tab(index) | Hit::CloseTab(index) => return self.close_tab(index),
+            Hit::Row { column, row } => match self.browser.columns()[column].entries.get(row) {
+                Some(entry) if entry.is_folder() && entry.trashed.is_none() => {
+                    Location::Folder(entry.path.clone())
+                }
+                _ => return false,
+            },
+            Hit::Place(index) => match self.sidebar.get(index) {
+                Some(Row::Place(place)) => place.location.clone(),
+                _ => return false,
+            },
+            Hit::Segment(path) if path.is_dir() => Location::Folder(path),
+            _ => return false,
+        };
+        self.open_tab(location);
         true
     }
 
     pub(crate) fn go(&mut self, location: Location) {
         self.commit_rename();
-        self.search = None;
+        self.end_search();
         self.browser.go(location);
         self.selection_changed();
     }
@@ -839,7 +1067,15 @@ impl FilesView {
         let hover = self.hit(pointer.position).filter(|hit| {
             matches!(
                 hit,
-                Hit::Place(_) | Hit::Eject(_) | Hit::Segment(_) | Hit::CancelJob(_)
+                Hit::Place(_)
+                    | Hit::Eject(_)
+                    | Hit::Segment(_)
+                    | Hit::CancelJob(_)
+                    | Hit::Back
+                    | Hit::Forward
+                    | Hit::Tab(_)
+                    | Hit::CloseTab(_)
+                    | Hit::NewTab
             )
         });
         let changed = hover != self.hover;
@@ -980,8 +1216,9 @@ impl FilesView {
         match key {
             Key::Space if !command => self.toggle_quick_look(),
             Key::Escape if self.quick_look.is_some() => self.quick_look = None,
-            Key::Escape if self.search.is_some() => self.close_search(),
-            Key::Character('f' | 'F') if command => self.open_search(),
+            Key::Escape if self.searching.is_some() => self.end_search(),
+            Key::Character('f' | 'F') if command && shift => self.go(Location::Recents),
+            Key::Character('f' | 'F') if command => self.focus_search(),
             Key::Character('.' | '>') if command && shift => self.toggle_hidden(),
             Key::Function(10) if shift => self.keyboard_menu(),
             Key::Up if command => {
@@ -992,6 +1229,11 @@ impl FilesView {
             Key::Character('o' | 'O') if command && !shift => self.open(),
             Key::Enter if !command => self.open(),
             Key::Function(2) => self.start_rename(),
+            Key::Up | Key::Down | Key::Left | Key::Right | Key::Home | Key::End
+                if self.mode == ViewMode::Icons =>
+            {
+                return self.grid_key(key, modifiers);
+            }
             Key::Down if shift => {
                 self.browser.extend(true);
                 self.selection_changed();
@@ -1020,11 +1262,19 @@ impl FilesView {
                 }
                 self.selection_changed();
             }
-            Key::Character('[') if command => {
-                self.browser.go_back();
-                self.selection_changed();
+            Key::Character('{' | '[') if command && shift => self.step_tab(false),
+            Key::Character('}' | ']') if command && shift => self.step_tab(true),
+            Key::Tab if modifiers.control => self.step_tab(!shift),
+            Key::Character('t' | 'T') if command && !shift => {
+                self.open_tab(self.browser.root().clone());
             }
+            Key::Character('n' | 'N') if command && !shift => {
+                let location = self.browser.current_location();
+                self.requests.push(Request::NewWindow(location));
+            }
+            Key::Character('[') if command => self.back(),
             Key::Character(']') if command => {
+                self.end_search();
                 self.browser.go_forward();
                 self.selection_changed();
             }
@@ -1049,8 +1299,12 @@ impl FilesView {
             Key::Character('l' | 'L') if command && alt => {
                 self.go(Location::Folder(user_folder(UserDir::Downloads)));
             }
-            Key::Character('2') if command => self.set_list(true),
-            Key::Character('3') if command => self.set_list(false),
+            Key::Character('/') if command => self.toggle_status_bar(),
+            Key::Character('1') if command => self.set_mode(ViewMode::Icons),
+            Key::Character('2') if command => self.set_mode(ViewMode::List),
+            Key::Character('3') if command => self.set_mode(ViewMode::Columns),
+            Key::Character('=' | '+') if command => self.grow_icons(true),
+            Key::Character('-') if command => self.grow_icons(false),
             Key::Character('i' | 'I') if command => {
                 self.inspector = !self.inspector;
                 self.selection_changed();
@@ -1086,11 +1340,45 @@ impl FilesView {
         }
     }
 
-    pub(crate) fn set_list(&mut self, list: bool) {
+    pub(crate) fn set_mode(&mut self, mode: ViewMode) {
         self.commit_rename();
-        self.browser.set_single(list);
+        self.band = None;
+        self.mode = mode;
+        self.browser.set_single(mode != ViewMode::Columns);
+        self.shown_root = Some(self.browser.root().clone());
+        self.remember_view();
+        self.refresh_size_slider();
+        self.refresh_view_control();
         self.selection_changed();
         self.focus_content();
+    }
+
+    pub(crate) fn set_icon_size(&mut self, size: u32) {
+        let size = size.clamp(ICON_SIZES.0, ICON_SIZES.1);
+        if size != self.icon_size {
+            self.icon_size = size;
+            self.remember_view();
+            self.keep_selection_visible();
+        }
+        let shown = self
+            .size_slider
+            .and_then(|slider| self.ui.widget_ref::<Slider>(slider))
+            .map(|slider| slider.value().round() as u32);
+        if shown != Some(self.icon_size) {
+            self.refresh_size_slider();
+        }
+    }
+
+    pub(crate) fn grow_icons(&mut self, bigger: bool) {
+        if self.mode != ViewMode::Icons {
+            return;
+        }
+        let step = 16;
+        let size = match bigger {
+            true => (self.icon_size / step + 1) * step,
+            false => (self.icon_size.div_ceil(step) - 1) * step,
+        };
+        self.set_icon_size(size);
     }
 
     pub(crate) fn paste(&mut self, moves: bool) {
@@ -1098,37 +1386,25 @@ impl FilesView {
         self.requests.push(Request::PasteFiles);
     }
 
-    pub fn search(&self) -> Option<&Search> {
-        self.search.as_ref()
-    }
-
-    pub(crate) fn apply_search(&mut self, text: &str) {
-        if let Some(search) = &self.search {
-            let column = search.column;
-            self.browser.set_filter(column, text);
-            self.selection_changed();
-        }
-    }
-
     pub(crate) fn search_key(&mut self, key: Key, modifiers: Modifiers) -> bool {
         match key {
-            Key::Escape => self.close_search(),
+            Key::Escape => {
+                self.end_search();
+                self.focus_content();
+            }
             Key::Enter | Key::Tab => {
                 self.focus_content();
                 if key == Key::Enter && self.browser.selected().is_some() {
                     self.open();
                 }
             }
-            Key::Up | Key::Down => {
-                let column = self.search.as_ref().map_or(0, |search| search.column);
-                if self.browser.active() == column {
-                    if key == Key::Up {
-                        self.browser.up();
-                    } else {
-                        self.browser.down();
-                    }
-                    self.selection_changed();
+            Key::Up | Key::Down if self.searching.is_some() => {
+                if key == Key::Up {
+                    self.browser.up();
+                } else {
+                    self.browser.down();
                 }
+                self.selection_changed();
             }
             _ => return self.ui.handle(&Event::Key { key, modifiers }),
         }
@@ -1169,8 +1445,16 @@ impl FilesView {
             self.go(Location::Folder(entry.path.clone()));
             return;
         }
+        let (archives, files): (Vec<_>, Vec<_>) = selection
+            .iter()
+            .filter(|entry| !entry.is_folder())
+            .partition(|entry| entry.trashed.is_none() && can_extract(&entry.path));
+        if !archives.is_empty() {
+            let archives = archives.iter().map(|entry| entry.path.clone()).collect();
+            self.start(Task::Extract { archives }, Purpose::Do(Action::Extract));
+        }
         let mut launches: Vec<(DesktopEntry, Vec<PathBuf>)> = Vec::new();
-        for entry in selection.iter().filter(|entry| !entry.is_folder()) {
+        for entry in files {
             let mime = self.apps.mime_for(&entry.path);
             if let Some(launcher) = self.apps.launcher(&entry.path, &mime) {
                 launches.push((launcher, Vec::new()));
@@ -1270,6 +1554,57 @@ impl FilesView {
         self.selection_changed();
     }
 
+    pub fn set_templates(&mut self, folder: PathBuf) {
+        self.templates = Some(folder);
+    }
+
+    pub(crate) fn templates(&self) -> Vec<String> {
+        let Some(folder) = self.templates.as_ref().filter(|folder| **folder != home()) else {
+            return Vec::new();
+        };
+        let mut names = std::fs::read_dir(folder)
+            .into_iter()
+            .flatten()
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_file()))
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .filter(|name| !name.starts_with('.'))
+            .collect::<Vec<_>>();
+        names.sort_by(|a, b| unbound_fs::finder_order(a, b));
+        names
+    }
+
+    pub(crate) fn new_document(&mut self, name: &str) {
+        let Some(folder) = self.browser.active_folder().map(Path::to_path_buf) else {
+            return;
+        };
+        let Some(template) = self.templates.as_ref().map(|folder| folder.join(name)) else {
+            return;
+        };
+        match unbound_fs::new_document(&folder, &template) {
+            Ok(change) => {
+                if let Change::Created(path) = &change {
+                    self.reveal_after_change(std::slice::from_ref(path));
+                }
+                self.operations.record(Action::NewDocument, change);
+                self.start_rename();
+            }
+            Err(error) => self.show_notice(
+                L10N.tr_args("error-operation", [("error", error.to_string().into())]),
+            ),
+        }
+    }
+
+    pub(crate) fn open_in_terminal(&mut self) {
+        let folder = match self.browser.selection().as_slice() {
+            [entry] if entry.is_folder() && entry.trashed.is_none() => Some(entry.path.clone()),
+            _ => self.browser.active_folder().map(Path::to_path_buf),
+        };
+        if let Some(folder) = folder {
+            self.requests.push(Request::OpenTerminal(folder));
+        }
+    }
+
     pub(crate) fn new_folder(&mut self) {
         let Some(folder) = self.browser.active_folder().map(Path::to_path_buf) else {
             return;
@@ -1286,6 +1621,19 @@ impl FilesView {
             Err(error) => self.show_notice(
                 L10N.tr_args("error-operation", [("error", error.to_string().into())]),
             ),
+        }
+    }
+
+    pub(crate) fn compress(&mut self) {
+        let sources = self.browser.selected_paths();
+        if self.browser.in_trash() {
+            return;
+        }
+        if let Some(archive) = archive_path(&sources) {
+            self.start(
+                Task::Compress { sources, archive },
+                Purpose::Do(Action::Compress),
+            );
         }
     }
 
@@ -1442,8 +1790,14 @@ impl FilesView {
         self.trash_full = !self.browser.trash().is_empty();
         let reveal = matches!(
             finished.purpose,
-            Purpose::Do(Action::Copy | Action::Move | Action::Duplicate | Action::PutBack)
-                | Purpose::Undo(_)
+            Purpose::Do(
+                Action::Copy
+                    | Action::Move
+                    | Action::Duplicate
+                    | Action::PutBack
+                    | Action::Compress
+                    | Action::Extract
+            ) | Purpose::Undo(_)
                 | Purpose::Redo(_)
         );
         let in_view = shown

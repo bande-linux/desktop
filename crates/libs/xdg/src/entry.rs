@@ -219,7 +219,7 @@ fn actions(
         .collect()
 }
 
-pub(crate) fn find_executable(program: &str) -> Option<PathBuf> {
+pub fn find_executable(program: &str) -> Option<PathBuf> {
     let executable = |path: &Path| {
         fs::metadata(path)
             .is_ok_and(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)

@@ -18,12 +18,16 @@ pub fn app_menus() -> Vec<Entry> {
         submenu(
             "menu-file",
             vec![
+                shortcut("menu-new-window", "Super+N"),
+                shortcut("menu-new-tab", "Super+T"),
                 shortcut("menu-new-folder", "Shift+Super+N"),
                 shortcut("menu-open", "Super+O"),
                 Entry::separator(),
                 shortcut("menu-get-info", "Super+I"),
                 shortcut("menu-rename", "F2"),
                 shortcut("menu-duplicate", "Super+D"),
+                Entry::item(&L10N.tr("menu-open-in-terminal"), "open-in-terminal"),
+                Entry::item(&L10N.tr("menu-compress-selection"), "compress"),
                 Entry::separator(),
                 shortcut("menu-move-to-trash", "Super+Backspace"),
                 shortcut("menu-delete-immediately", "Alt+Super+Backspace"),
@@ -50,10 +54,15 @@ pub fn app_menus() -> Vec<Entry> {
         submenu(
             "menu-view",
             vec![
-                shortcut("menu-as-columns", "Super+3"),
+                shortcut("menu-as-icons", "Super+1"),
                 shortcut("menu-as-list", "Super+2"),
+                shortcut("menu-as-columns", "Super+3"),
+                Entry::separator(),
+                shortcut("menu-bigger-icons", "Super+="),
+                shortcut("menu-smaller-icons", "Super+-"),
                 Entry::separator(),
                 shortcut("menu-show-hidden-files", "Shift+Super+."),
+                shortcut("menu-status-bar", "Super+/"),
                 shortcut("menu-quick-look", "Space"),
             ],
         ),
@@ -68,11 +77,15 @@ pub fn app_menus() -> Vec<Entry> {
                 shortcut("menu-documents", "Shift+Super+O"),
                 shortcut("menu-downloads", "Alt+Super+L"),
                 shortcut("menu-home", "Shift+Super+H"),
+                shortcut("recents", "Shift+Super+F"),
                 Entry::separator(),
                 shortcut("menu-go-to-folder", "Shift+Super+G"),
             ],
         ),
-        window_submenu(Vec::new()),
+        window_submenu(vec![
+            shortcut("menu-previous-tab", "Shift+Super+["),
+            shortcut("menu-next-tab", "Shift+Super+]"),
+        ]),
     ]
 }
 

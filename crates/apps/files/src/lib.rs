@@ -1,6 +1,8 @@
 mod browser;
+mod context;
 mod icons;
 mod loader;
+mod menus;
 mod paint;
 mod sidebar;
 mod view;
@@ -11,7 +13,7 @@ use unbound_l10n::Localizer;
 
 pub use browser::{Browser, Column, Location};
 pub use paint::permissions;
-pub use sidebar::{Place, Row, rows};
+pub use sidebar::{Place, Row, rows, without_bookmark};
 pub use view::{
     COLUMN_WIDTH, FilesView, Hit, Info, QuickLook, ROW_HEIGHT, Rename, Request, SIDEBAR_WIDTH,
     Sheet,
@@ -28,6 +30,7 @@ mod tests {
         let sources = [
             include_str!("lib.rs"),
             include_str!("main.rs"),
+            include_str!("menus.rs"),
             include_str!("browser.rs"),
             include_str!("paint.rs"),
             include_str!("sidebar.rs"),

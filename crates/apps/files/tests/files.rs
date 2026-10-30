@@ -7,10 +7,11 @@ use std::time::{Duration, Instant};
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use tempfile::TempDir;
 use unbound_files::{
-    Browser, FilesView, Location, ROW_HEIGHT, Request, Row, SIDEBAR_WIDTH, Sheet, permissions, rows,
+    Browser, FilesView, Location, ROW_HEIGHT, Request, Row, SIDEBAR_WIDTH, Sheet, permissions,
+    rows, without_bookmark,
 };
 use unbound_fs::{Sort, SortBy, Trash, list};
-use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer};
+use unbound_toolkit::ui::{Event, Key, Menu, Modifiers, Pointer, PointerButton};
 use unbound_toolkit::{Item, Palette, Point, Scheme, TextSystem};
 use unbound_xdg::Apps;
 
@@ -642,4 +643,162 @@ fn filtering_narrows_the_folder_and_escape_restores_it() {
         view.browser().selected().map(|entry| entry.name.as_str()),
         Some("notes.txt")
     );
+}
+
+fn right_click(view: &mut FilesView, at: Point) -> Menu {
+    view.handle(&Event::PointerDown(
+        Pointer::at(at).with_button(PointerButton::Secondary),
+    ));
+    match view.take_requests().as_slice() {
+        [Request::ShowMenu { menu, .. }] => menu.clone(),
+        other => panic!("{other:?}"),
+    }
+}
+
+fn titles(menu: &Menu) -> Vec<&str> {
+    menu.items
+        .iter()
+        .filter(|item| !item.separator)
+        .map(|item| item.title.as_str())
+        .collect()
+}
+
+#[test]
+fn right_clicking_an_item_selects_it_and_its_menu_acts_on_it() {
+    let place = Place::new();
+    let mut view = place.view();
+
+    let menu = right_click(
+        &mut view,
+        Point::new(SIDEBAR_WIDTH + 60.0, 6.0 + ROW_HEIGHT * 2.5),
+    );
+
+    assert_eq!(selected_name(view.browser()).as_deref(), Some("notes.txt"));
+    assert_eq!(
+        titles(&menu),
+        [
+            "Open",
+            "Open With",
+            "Quick Look",
+            "Get Info",
+            "Rename",
+            "Duplicate",
+            "Copy",
+            "Move to Trash"
+        ]
+    );
+    let open_with = menu
+        .items
+        .iter()
+        .find_map(|item| item.submenu.as_ref())
+        .expect("open with");
+    assert_eq!(titles(open_with), ["Editor"]);
+    assert!(view.menu_action(&open_with.items[0].action));
+    let requests = view.take_requests();
+    let [Request::Open { app, files }] = requests.as_slice() else {
+        panic!("{requests:?}");
+    };
+    assert_eq!(
+        (app.id.as_str(), files.as_slice()),
+        (
+            "editor.desktop",
+            [place.home().join("notes.txt")].as_slice()
+        )
+    );
+
+    right_click(
+        &mut view,
+        Point::new(SIDEBAR_WIDTH + 60.0, 6.0 + ROW_HEIGHT * 2.5),
+    );
+    assert!(view.menu_action("trash"));
+    run_until(&mut view, idle);
+    assert!(!place.home().join("notes.txt").exists());
+}
+
+#[test]
+fn the_trash_menus_put_back_and_ask_before_emptying() {
+    let place = Place::new();
+    place
+        .trash
+        .put(&place.home().join("notes.txt"))
+        .expect("trash");
+    let mut view = FilesView::new(
+        Browser::open(Location::Trash, place.trash.clone()),
+        Vec::new(),
+        place.apps(),
+        Palette::for_scheme(Scheme::Light),
+        TextSystem::new(),
+    )
+    .expect("view");
+    view.scene(1000, 600);
+
+    let empty_space = right_click(&mut view, Point::new(SIDEBAR_WIDTH + 60.0, 400.0));
+    assert_eq!(titles(&empty_space)[0], "Empty Trash…");
+    assert!(view.menu_action("empty-trash"));
+    assert_eq!(view.sheet(), Some(&Sheet::EmptyTrash));
+    view.handle(&press(Key::Escape));
+
+    let item = right_click(
+        &mut view,
+        Point::new(SIDEBAR_WIDTH + 60.0, 6.0 + ROW_HEIGHT * 0.5),
+    );
+    assert_eq!(titles(&item)[..2], ["Put Back", "Delete Immediately…"]);
+    assert!(view.menu_action("put-back"));
+    run_until(&mut view, idle);
+    assert!(place.home().join("notes.txt").exists());
+}
+
+#[test]
+fn the_empty_space_menu_sorts_and_shows_hidden_files() {
+    let place = Place::new();
+    let mut view = place.view();
+    fs::write(place.home().join("big.bin"), [0u8; 4096]).expect("file");
+    view.refresh(&[place.home()]);
+
+    let menu = right_click(&mut view, Point::new(SIDEBAR_WIDTH + 60.0, 400.0));
+    assert_eq!(
+        titles(&menu),
+        [
+            "New Folder",
+            "Paste",
+            "Sort By",
+            "as Columns",
+            "as List",
+            "Show Hidden Files"
+        ]
+    );
+    assert!(view.menu_action("sort:size"));
+    assert_eq!(view.browser().sort().by, SortBy::Size);
+    assert!(view.menu_action("toggle-hidden"));
+    assert!(view.browser().shows_hidden());
+    let names = view.browser().columns()[0]
+        .entries
+        .iter()
+        .map(|entry| entry.name.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(names[..2], ["Documents", "Empty"]);
+    assert_eq!(names[2], "big.bin");
+}
+
+#[test]
+fn a_bookmark_is_removed_from_the_sidebar_but_not_from_the_disk() {
+    let place = Place::new();
+    let reports = place.home().join("Documents/Reports");
+    let bookmarks = format!("file://{}\nfile:///srv/share Share\n", reports.display());
+    let mut view = place.view();
+    view.set_sidebar(rows(&place.home(), None, Some(&bookmarks)));
+    view.scene(1000, 600);
+
+    let menu = right_click(&mut view, Point::new(40.0, 38.0 + 26.0 * 2.5));
+    assert_eq!(titles(&menu), ["Open", "Remove from Sidebar"]);
+    assert!(view.menu_action("remove-from-sidebar"));
+    assert_eq!(
+        view.take_requests(),
+        [Request::RemoveBookmark(reports.clone())]
+    );
+    assert_eq!(
+        without_bookmark(&bookmarks, &reports),
+        "file:///srv/share Share\n"
+    );
+    assert!(reports.is_dir());
 }

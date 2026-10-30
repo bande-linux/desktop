@@ -10,6 +10,7 @@ pub struct Place {
     pub name: String,
     pub location: Location,
     pub icon: &'static str,
+    pub bookmark: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -48,6 +49,7 @@ fn bookmark(line: &str) -> Option<Place> {
         name,
         location: Location::Folder(path),
         icon: "folder",
+        bookmark: true,
     })
 }
 
@@ -56,6 +58,7 @@ pub fn rows(home: &Path, user_dirs: Option<&str>, bookmarks: Option<&str>) -> Ve
         name: folder_name(home),
         location: Location::Folder(home.to_path_buf()),
         icon: "user-home",
+        bookmark: false,
     }];
     for (dir, icon) in USER_DIRS {
         let path = user_dir(home, user_dirs, dir);
@@ -64,6 +67,7 @@ pub fn rows(home: &Path, user_dirs: Option<&str>, bookmarks: Option<&str>) -> Ve
                 name: folder_name(&path),
                 location: Location::Folder(path),
                 icon,
+                bookmark: false,
             });
         }
     }
@@ -86,6 +90,18 @@ pub fn rows(home: &Path, user_dirs: Option<&str>, bookmarks: Option<&str>) -> Ve
         name: L10N.tr("trash"),
         location: Location::Trash,
         icon: "user-trash",
+        bookmark: false,
     }));
     rows
+}
+
+pub fn without_bookmark(bookmarks: &str, folder: &Path) -> String {
+    bookmarks
+        .lines()
+        .filter(|line| {
+            bookmark(line)
+                .is_none_or(|place| place.location != Location::Folder(folder.to_path_buf()))
+        })
+        .map(|line| format!("{line}\n"))
+        .collect()
 }

@@ -101,9 +101,18 @@ impl Session {
     }
 
     fn until(&self, ready: impl Fn(&Snapshot) -> bool) -> Snapshot {
-        self.audio()
-            .wait_until(WAIT, ready)
-            .unwrap_or_else(|| panic!("PipeWire never got there: {:?}", self.audio().snapshot()))
+        let deadline = Instant::now() + WAIT;
+        loop {
+            let snapshot = self.audio().snapshot();
+            if ready(&snapshot) {
+                return snapshot;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "PipeWire never got there: {snapshot:?}"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
     }
 
     fn device(&self, name: &str) -> Device {

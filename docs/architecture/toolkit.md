@@ -178,7 +178,7 @@ writes a hex value, a corner radius or a font name of its own.
   | `.cancel()` | secondary look, Escape |
   | `.quiet()` | `accent_text` 600, `well` fill on hover only |
   | `.destructive()` | danger fill, `on_danger` text; only for the destructive verb |
-  | `Button::symbol(image, label, action)` | 28×28 icon button: a symbolic `Image` tinted `ink2` (`ink` on hover), `well` on hover; `label` is its tooltip and accessible name |
+  | `Button::symbol(image, label, action)` | 28×28 icon button: a symbolic `Image` tinted `ink2` (`ink` on hover), `well` on hover; `label` is its tooltip and accessible name; `set_enabled(false)` dims any button to `ink3` and ignores it |
   | `TextField`, `TextView`, `SecureField` | `field` fill (`overlay` light, `well` dark), 1 pt `edge` outline, placeholder `ink3`, 1.5 pt accent caret, selection `accent_soft` (`well` when unfocused); `SecureField` shows a Caps Lock sign while focused with Caps Lock on (`Context::caps_lock`, set by `Window::drive`) |
   | `SearchField` | `well` fill, radius 8, no outline, magnifier `ink3`, clear button |
   | `ComboBox` | a text field with a single down chevron |

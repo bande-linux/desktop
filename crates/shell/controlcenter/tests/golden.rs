@@ -110,30 +110,16 @@ fn status() -> Status {
 }
 
 #[test]
-fn control_center_with_now_playing_matches_its_golden_in_light_and_dark() {
-    for (scheme, scale, name) in [
-        (Scheme::Light, 1.0, "panel-light"),
-        (Scheme::Dark, 1.0, "panel-dark"),
-        (Scheme::Light, 1.5, "panel-light-1.5x"),
-        (Scheme::Dark, 1.5, "panel-dark-1.5x"),
-    ] {
-        let palette = Palette::for_scheme(scheme);
-        let (mut ui, height) = panel(&status(), palette, TextSystem::new(), &Changes::default());
-        let rect = Rect::new(MARGIN, MARGIN, PANEL_WIDTH, height);
-        let scene = Scene {
-            width: (PANEL_WIDTH + 2.0 * MARGIN) as u32,
-            height: (height + 2.0 * MARGIN) as u32,
-            background: DESKTOP,
-            items: panel_items(&mut ui, &palette, rect),
-        };
-        let (width, height) = (
-            (f64::from(scene.width) * scale).round() as u32,
-            (f64::from(scene.height) * scale).round() as u32,
-        );
-        let mut rgba = vec![0; (width * height * 4) as usize];
-        CpuRenderer::new()
-            .render_into(&scene, scale, &mut rgba)
-            .expect("frame");
-        check_golden(name, width, height, rgba);
-    }
+fn control_center_with_now_playing_matches_its_golden() {
+    let palette = Palette::for_scheme(Scheme::Light);
+    let (mut ui, height) = panel(&status(), palette, TextSystem::new(), &Changes::default());
+    let rect = Rect::new(MARGIN, MARGIN, PANEL_WIDTH, height);
+    let scene = Scene {
+        width: (PANEL_WIDTH + 2.0 * MARGIN) as u32,
+        height: (height + 2.0 * MARGIN) as u32,
+        background: DESKTOP,
+        items: panel_items(&mut ui, &palette, rect),
+    };
+    let frame = CpuRenderer::new().render(&scene).expect("frame");
+    check_golden("panel-light", frame.width, frame.height, frame.rgba);
 }

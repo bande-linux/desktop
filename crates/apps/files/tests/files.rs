@@ -1,6 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -58,7 +59,7 @@ impl Place {
         fs::create_dir_all(data.join("mime")).expect("mime");
         fs::write(
             data.join("mime/globs2"),
-            "50:text/plain:*.txt\n50:image/png:*.png\n",
+            "50:text/plain:*.txt\n50:image/png:*.png\n50:application/pdf:*.pdf\n",
         )
         .expect("globs");
         fs::create_dir_all(data.join("applications")).expect("applications");
@@ -1565,4 +1566,64 @@ fn compressing_makes_an_undoable_zip_and_opening_it_extracts_beside_it() {
     view.handle(&command(Key::Character('z'), false));
     run_until(&mut view, idle);
     assert!(!archive.exists());
+}
+
+#[test]
+fn quick_look_shows_documents_through_installed_thumbnailers() {
+    let place = Place::new();
+    let sample = place.root.path().join("page.png");
+    picture(&sample, 600, 800);
+    let script = place.root.path().join("pdf-thumbnailer");
+    fs::write(
+        &script,
+        format!("#!/bin/sh\ncp {} \"$2\"\n", sample.display()),
+    )
+    .expect("script");
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).expect("executable");
+    let thumbnailers = place.root.path().join("thumbnailers-data");
+    fs::create_dir_all(thumbnailers.join("thumbnailers")).expect("folder");
+    fs::write(
+        thumbnailers.join("thumbnailers/pdf.thumbnailer"),
+        format!(
+            "[Thumbnailer Entry]\nExec={} %i %o\nMimeType=application/pdf;\n",
+            script.display()
+        ),
+    )
+    .expect("thumbnailer");
+    fs::write(place.home().join("paper.pdf"), b"%PDF-1.7\n\0binary").expect("pdf");
+    let mut view = place.view();
+    view.set_thumbnails(
+        Thumbnails::spawn(
+            Cache::new(place.root.path().join("cache")),
+            Thumbnailers::load(&[thumbnailers]),
+        )
+        .expect("thumbnails"),
+    );
+    view.handle(&press(Key::Up));
+    assert_eq!(selected_name(view.browser()).as_deref(), Some("paper.pdf"));
+
+    view.handle(&press(Key::Space));
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let scene = view.scene(1000, 600);
+        let mut found = Vec::new();
+        images(&scene.items, &mut found);
+        if found
+            .iter()
+            .any(|image| (image.width(), image.height()) == (384, 512))
+        {
+            break;
+        }
+        assert!(Instant::now() < deadline, "the page did not arrive");
+        std::thread::sleep(Duration::from_millis(20));
+        for index in (0..view.fds().len()).rev() {
+            view.source_ready(index);
+        }
+    }
+
+    view.handle(&press(Key::Up));
+    assert_eq!(
+        view.quick_look().map(|shown| shown.entry.name.as_str()),
+        Some("notes.txt")
+    );
 }

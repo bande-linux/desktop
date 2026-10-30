@@ -3,5 +3,5 @@ set -e
 if [ "$1" = "configure" ] && [ -z "$DPKG_ROOT" ] && [ -d /run/systemd/system ]; then
 	systemctl daemon-reload || true
 	udevadm control --reload || true
-	udevadm trigger --subsystem-match=sound --action=add || true
+	udevadm trigger --subsystem-match=sound --sysname-match='pcmC*D2c' --action=add || true
 fi

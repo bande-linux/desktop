@@ -244,7 +244,15 @@ impl Desktop {
             if events_done && until_desktop(self) {
                 return;
             }
-            assert!(Instant::now() < deadline, "timed out");
+            assert!(
+                Instant::now() < deadline,
+                "timed out with {} popups after {:?}",
+                self.server.popup_count(),
+                clients
+                    .iter()
+                    .map(|client| &client.seen)
+                    .collect::<Vec<_>>()
+            );
         }
     }
 

@@ -594,7 +594,11 @@ impl Headless {
         self.state
             .stack()
             .iter()
-            .filter(|(surface, _)| self.state.popups.find_popup(surface).is_some())
+            .filter(|(surface, _)| {
+                self.state.popups.find_popup(surface).is_some()
+                    && with_renderer_surface_state(surface, |state| state.buffer().is_some())
+                        .unwrap_or(false)
+            })
             .count()
     }
 

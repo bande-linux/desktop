@@ -48,6 +48,7 @@ enum Shortcut {
     Overview,
     AppWindows,
     OverviewKey(u32, Option<char>),
+    InputSource { backwards: bool },
 }
 
 fn volume_key(keysym: u32) -> Option<VolumeKey> {
@@ -119,6 +120,7 @@ fn shortcut(
         keysyms::KEY_w | keysyms::KEY_W => Some(Shortcut::CloseWindow),
         keysyms::KEY_q | keysyms::KEY_Q => Some(Shortcut::QuitApp),
         keysyms::KEY_Tab | keysyms::KEY_ISO_Left_Tab => Some(Shortcut::NextApp),
+        keysyms::KEY_space if alt && !ctrl => Some(Shortcut::InputSource { backwards: shift }),
         keysyms::KEY_space => Some(Shortcut::ShowLauncher),
         _ => None,
     }
@@ -189,6 +191,10 @@ impl State {
         }
         if shortcut == Shortcut::ShowLauncher {
             self.show_launcher();
+            return;
+        }
+        if let Shortcut::InputSource { backwards } = shortcut {
+            self.next_input_source(backwards);
             return;
         }
         if shortcut == Shortcut::CaptureScreen {
@@ -323,7 +329,8 @@ impl State {
             | Shortcut::WorkspaceAt(_)
             | Shortcut::Overview
             | Shortcut::AppWindows
-            | Shortcut::OverviewKey(..) => {}
+            | Shortcut::OverviewKey(..)
+            | Shortcut::InputSource { .. } => {}
         }
     }
 }
@@ -552,6 +559,9 @@ impl Headless {
             SERIAL_COUNTER.next_serial(),
             time,
             |state, modifiers, keysym| {
+                if !(modifiers.logo && modifiers.alt) {
+                    state.input_sources.end_cycle();
+                }
                 if !pressed {
                     return if state.held_shortcut_keys.contains(&evdev_code) {
                         state.held_shortcut_keys.retain(|held| *held != evdev_code);
@@ -596,8 +606,10 @@ impl Headless {
                     modifiers.alt,
                     modifiers.shift,
                 )
-                .filter(|_| modifiers.logo && !state.is_locked())
-                {
+                .filter(|shortcut| {
+                    modifiers.logo
+                        && (!state.is_locked() || matches!(shortcut, Shortcut::InputSource { .. }))
+                }) {
                     Some(shortcut) => {
                         state.held_shortcut_keys.push(evdev_code);
                         FilterResult::Intercept(Some(shortcut))
@@ -613,6 +625,80 @@ impl Headless {
         );
         if let Some(Some(shortcut)) = action {
             state.run(shortcut);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use smithay::input::keyboard::keysyms;
+    use unbound_keyboard::{Action, SHORTCUTS};
+
+    use super::{Shortcut, shortcut};
+    use crate::motion::DOCK_NAMESPACE;
+    use crate::state::MENU_BAR_NAMESPACE;
+    use crate::tile::Direction;
+
+    fn keysym(key: &str) -> u32 {
+        match key {
+            "Space" => keysyms::KEY_space,
+            "Tab" => keysyms::KEY_Tab,
+            "Escape" => keysyms::KEY_Escape,
+            "Left" => keysyms::KEY_Left,
+            "Right" => keysyms::KEY_Right,
+            "Up" => keysyms::KEY_Up,
+            "Down" => keysyms::KEY_Down,
+            "F2" => keysyms::KEY_F2,
+            "F3" => keysyms::KEY_F3,
+            single => single
+                .chars()
+                .next()
+                .map_or(0, |character| character.to_ascii_lowercase() as u32),
+        }
+    }
+
+    fn expected(action: Action) -> Shortcut {
+        match action {
+            Action::CloseWindow => Shortcut::CloseWindow,
+            Action::MinimizeWindow => Shortcut::MinimizeWindow,
+            Action::ToggleFullScreen => Shortcut::ToggleFullscreen,
+            Action::TileWindow => Shortcut::Place(Direction::Left),
+            Action::NextApp => Shortcut::NextApp,
+            Action::QuitApp => Shortcut::QuitApp,
+            Action::HideApp => Shortcut::HideApp,
+            Action::HideOthers => Shortcut::HideOthers,
+            Action::ForceQuit => Shortcut::ForceQuit,
+            Action::PreviousWorkspace => Shortcut::Workspace(false),
+            Action::NextWorkspace => Shortcut::Workspace(true),
+            Action::WorkspaceByNumber => Shortcut::WorkspaceAt(0),
+            Action::CarryWindowLeft => Shortcut::CarryWindow(false),
+            Action::CarryWindowRight => Shortcut::CarryWindow(true),
+            Action::Overview => Shortcut::Overview,
+            Action::AppWindows => Shortcut::AppWindows,
+            Action::NextInputSource => Shortcut::InputSource { backwards: false },
+            Action::PreviousInputSource => Shortcut::InputSource { backwards: true },
+            Action::CaptureScreen => Shortcut::CaptureScreen,
+            Action::CaptureArea => Shortcut::CaptureArea,
+            Action::ShowLauncher => Shortcut::ShowLauncher,
+            Action::FocusMenuBar => Shortcut::FocusShell(MENU_BAR_NAMESPACE),
+            Action::FocusDock => Shortcut::FocusShell(DOCK_NAMESPACE),
+            Action::LockScreen => Shortcut::LockScreen,
+        }
+    }
+
+    #[test]
+    fn every_shortcut_listed_in_settings_runs_its_action() {
+        for listed in SHORTCUTS {
+            let parts: Vec<&str> = listed.keys.split('+').collect();
+            let held = |name: &str| parts.contains(&name);
+            assert!(held("Super"), "{} lacks Super", listed.keys);
+            let key = keysym(parts.last().copied().unwrap_or_default());
+            assert_eq!(
+                shortcut(key, Some(key), held("Ctrl"), held("Alt"), held("Shift")),
+                Some(expected(listed.action)),
+                "{}",
+                listed.keys
+            );
         }
     }
 }

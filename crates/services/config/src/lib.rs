@@ -29,6 +29,9 @@ pub const KEY_REPEAT_RATE_RANGE: (u32, u32) = (1, 60);
 pub const KEY_REPEAT_DELAY_RANGE: (u32, u32) = (150, 2000);
 pub const DOCK_ICON_SIZE_RANGE: (u32, u32) = (24, 96);
 pub const DEFAULT_DOCK_ICON_SIZE: u32 = 48;
+pub const MAX_INPUT_SOURCES: usize = 4;
+pub const POINTER_SPEED_RANGE: (f64, f64) = (-1.0, 1.0);
+pub const SYSTEM_KEYBOARD: &str = "/etc/default/keyboard";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Appearance {
@@ -76,10 +79,179 @@ pub struct Output {
     pub variable_refresh_rate: Option<bool>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct InputSource {
+    pub layout: String,
+    pub variant: Option<String>,
+}
+
+fn is_xkb_name(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "-_".contains(c))
+}
+
+impl InputSource {
+    pub fn parse(code: &str) -> Option<Self> {
+        let (layout, variant) = match code.split_once('(') {
+            Some((layout, rest)) => (layout, Some(rest.strip_suffix(')')?)),
+            None => (code, None),
+        };
+        (is_xkb_name(layout) && variant.is_none_or(is_xkb_name)).then(|| Self {
+            layout: layout.to_owned(),
+            variant: variant.map(str::to_owned),
+        })
+    }
+
+    pub fn code(&self) -> String {
+        match &self.variant {
+            Some(variant) => format!("{}({variant})", self.layout),
+            None => self.layout.clone(),
+        }
+    }
+}
+
+pub fn system_input_sources(default_keyboard: &str) -> Vec<InputSource> {
+    let field = |name: &str| {
+        default_keyboard.lines().find_map(|line| {
+            let value = line.trim().strip_prefix(name)?.strip_prefix('=')?;
+            Some(value.trim().trim_matches('"').to_owned())
+        })
+    };
+    let layouts = field("XKBLAYOUT").unwrap_or_default();
+    let variants = field("XKBVARIANT").unwrap_or_default();
+    let mut variants = variants.split(',');
+    let mut sources: Vec<InputSource> = Vec::new();
+    for layout in layouts.split(',') {
+        let variant = variants
+            .next()
+            .map(str::trim)
+            .filter(|variant| !variant.is_empty());
+        let source = InputSource {
+            layout: layout.trim().to_owned(),
+            variant: variant.map(str::to_owned),
+        };
+        if is_xkb_name(&source.layout)
+            && source.variant.as_deref().is_none_or(is_xkb_name)
+            && !sources.contains(&source)
+            && sources.len() < MAX_INPUT_SOURCES
+        {
+            sources.push(source);
+        }
+    }
+    if sources.is_empty() {
+        sources.push(InputSource {
+            layout: "us".to_owned(),
+            variant: None,
+        });
+    }
+    sources
+}
+
+pub fn read_system_input_sources() -> Vec<InputSource> {
+    system_input_sources(&std::fs::read_to_string(SYSTEM_KEYBOARD).unwrap_or_default())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CapsLock {
+    #[default]
+    CapsLock,
+    Escape,
+    Control,
+    Compose,
+    Off,
+}
+
+impl CapsLock {
+    pub const ALL: [Self; 5] = [
+        Self::CapsLock,
+        Self::Escape,
+        Self::Control,
+        Self::Compose,
+        Self::Off,
+    ];
+
+    pub fn keyword(self) -> &'static str {
+        match self {
+            Self::CapsLock => "caps-lock",
+            Self::Escape => "escape",
+            Self::Control => "control",
+            Self::Compose => "compose",
+            Self::Off => "off",
+        }
+    }
+
+    pub fn xkb_option(self) -> Option<&'static str> {
+        match self {
+            Self::CapsLock => None,
+            Self::Escape => Some("caps:escape"),
+            Self::Control => Some("ctrl:nocaps"),
+            Self::Compose => Some("compose:caps"),
+            Self::Off => Some("caps:none"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Keyboard {
     pub repeat_rate: u32,
     pub repeat_delay: Duration,
+    pub input_sources: Vec<InputSource>,
+    pub caps_lock: CapsLock,
+}
+
+impl Keyboard {
+    pub fn input_sources_or(&self, system: impl FnOnce() -> Vec<InputSource>) -> Vec<InputSource> {
+        if self.input_sources.is_empty() {
+            system()
+        } else {
+            self.input_sources.clone()
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SecondaryClick {
+    #[default]
+    TwoFingers,
+    Corner,
+}
+
+impl SecondaryClick {
+    pub fn keyword(self) -> &'static str {
+        match self {
+            Self::TwoFingers => "two-fingers",
+            Self::Corner => "corner",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Trackpad {
+    pub tap_to_click: bool,
+    pub natural_scrolling: bool,
+    pub speed: f64,
+    pub secondary_click: SecondaryClick,
+    pub disable_while_typing: bool,
+}
+
+impl Default for Trackpad {
+    fn default() -> Self {
+        Self {
+            tap_to_click: true,
+            natural_scrolling: true,
+            speed: 0.0,
+            secondary_click: SecondaryClick::TwoFingers,
+            disable_while_typing: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Mouse {
+    pub natural_scrolling: bool,
+    pub speed: f64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -161,6 +333,8 @@ pub struct Config {
     pub dock: Dock,
     pub idle: Idle,
     pub keyboard: Keyboard,
+    pub trackpad: Trackpad,
+    pub mouse: Mouse,
     pub wallpaper: Wallpaper,
     pub outputs: BTreeMap<String, Output>,
 }
@@ -179,7 +353,11 @@ impl Default for Config {
             keyboard: Keyboard {
                 repeat_rate: 25,
                 repeat_delay: Duration::from_millis(600),
+                input_sources: Vec::new(),
+                caps_lock: CapsLock::CapsLock,
             },
+            trackpad: Trackpad::default(),
+            mouse: Mouse::default(),
             wallpaper: Wallpaper::default(),
             outputs: BTreeMap::new(),
         }
@@ -275,7 +453,9 @@ impl Parser<'_> {
                 "accessibility" => config.reduce_motion = self.accessibility(node)?,
                 "dock" => config.dock = self.dock(node)?,
                 "idle" => config.idle = self.idle(node, config.idle)?,
-                "keyboard" => config.keyboard = self.keyboard(node, config.keyboard)?,
+                "keyboard" => config.keyboard = self.keyboard(node, config.keyboard.clone())?,
+                "trackpad" => config.trackpad = self.trackpad(node)?,
+                "mouse" => config.mouse = self.mouse(node)?,
                 "wallpaper" => config.wallpaper = self.wallpaper(node)?,
                 "output" => {
                     let (connector, output) = self.output(node)?;
@@ -484,10 +664,83 @@ impl Parser<'_> {
                         self.integer_in(child, KEY_REPEAT_DELAY_RANGE)?,
                     ))
                 }
+                "input-sources" => keyboard.input_sources = self.input_sources(child)?,
+                "caps-lock" => {
+                    keyboard.caps_lock = self.keyword(
+                        child,
+                        &CapsLock::ALL.map(|choice| (choice.keyword(), choice)),
+                    )?
+                }
                 _ => return Err(self.unknown_child("keyboard", child)),
             }
         }
         Ok(keyboard)
+    }
+
+    fn input_sources(&self, node: &KdlNode) -> Result<Vec<InputSource>, ConfigError> {
+        let mut sources: Vec<InputSource> = Vec::new();
+        for entry in node.entries() {
+            let source = entry
+                .value()
+                .as_string()
+                .filter(|_| entry.name().is_none())
+                .and_then(InputSource::parse)
+                .ok_or_else(|| {
+                    self.at_entry(
+                        entry,
+                        "`keyboard input-sources` takes keyboard layouts such as \"us\" or \"de(nodeadkeys)\"",
+                    )
+                })?;
+            if sources.contains(&source) {
+                return Err(self.at_entry(
+                    entry,
+                    format!("\"{}\" is an input source twice", source.code()),
+                ));
+            }
+            if sources.len() == MAX_INPUT_SOURCES {
+                return Err(self.at_entry(
+                    entry,
+                    format!("`keyboard input-sources` takes at most {MAX_INPUT_SOURCES} layouts"),
+                ));
+            }
+            sources.push(source);
+        }
+        Ok(sources)
+    }
+
+    fn trackpad(&self, node: &KdlNode) -> Result<Trackpad, ConfigError> {
+        self.no_arguments(node)?;
+        let mut trackpad = Trackpad::default();
+        for child in self.children(node)? {
+            match child.name().value() {
+                "tap-to-click" => trackpad.tap_to_click = self.flag(child)?,
+                "natural-scrolling" => trackpad.natural_scrolling = self.flag(child)?,
+                "speed" => trackpad.speed = self.number_in(child, POINTER_SPEED_RANGE)?,
+                "secondary-click" => {
+                    trackpad.secondary_click = self.keyword(
+                        child,
+                        &[SecondaryClick::TwoFingers, SecondaryClick::Corner]
+                            .map(|choice| (choice.keyword(), choice)),
+                    )?
+                }
+                "disable-while-typing" => trackpad.disable_while_typing = self.flag(child)?,
+                _ => return Err(self.unknown_child("trackpad", child)),
+            }
+        }
+        Ok(trackpad)
+    }
+
+    fn mouse(&self, node: &KdlNode) -> Result<Mouse, ConfigError> {
+        self.no_arguments(node)?;
+        let mut mouse = Mouse::default();
+        for child in self.children(node)? {
+            match child.name().value() {
+                "natural-scrolling" => mouse.natural_scrolling = self.flag(child)?,
+                "speed" => mouse.speed = self.number_in(child, POINTER_SPEED_RANGE)?,
+                _ => return Err(self.unknown_child("mouse", child)),
+            }
+        }
+        Ok(mouse)
     }
 
     fn wallpaper(&self, node: &KdlNode) -> Result<Wallpaper, ConfigError> {

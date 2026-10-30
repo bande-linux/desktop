@@ -37,6 +37,11 @@ const BATTERY_SLOT: f32 = 38.0;
 const BATTERY_WIDTH: f32 = 23.0;
 const BATTERY_HEIGHT: f32 = 11.5;
 const HIGHLIGHT_INSET: f32 = 2.0;
+const BADGE_TEXT_SIZE: f32 = 10.0;
+const BADGE_PADDING: f32 = 4.0;
+const BADGE_MIN_WIDTH: f32 = 22.0;
+const BADGE_HEIGHT: f32 = 15.0;
+const BADGE_MARGIN: f32 = 5.0;
 const TRANSLUCENT_ALPHA: u8 = 176;
 const OPAQUE_ALPHA: u8 = 240;
 const LOW: Color = Color::hex(0xFF453A);
@@ -65,6 +70,7 @@ pub enum Slot {
     App,
     AppMenu(usize),
     Tray(usize),
+    InputSource,
     Bluetooth,
     Sound,
     Wifi,
@@ -187,6 +193,12 @@ impl MenuBar {
                 .get(index)
                 .map(|(title, _)| title.clone())
                 .unwrap_or_default(),
+            Slot::InputSource => self
+                .status
+                .input_sources
+                .current()
+                .map(|source| L10N.tr_args("input-source", [("name", source.name.clone().into())]))
+                .unwrap_or_default(),
             Slot::Bluetooth => L10N.tr("bluetooth"),
             Slot::Sound => L10N.tr("sound"),
             Slot::Wifi => L10N.tr("wifi"),
@@ -245,10 +257,25 @@ impl MenuBar {
         self.text.paragraph(text, style, None, TextAlign::Start)
     }
 
-    fn right_slots(&self) -> Vec<(Slot, f32)> {
+    fn input_source_badge(&mut self) -> Option<(Paragraph, f32)> {
+        let short = self.status.input_sources.current()?.short.clone();
+        let paragraph = self.text.paragraph(
+            &short,
+            TextStyle::new(BADGE_TEXT_SIZE, self.palette.label_primary).weight(TextStyle::SEMIBOLD),
+            None,
+            TextAlign::Start,
+        );
+        let width = (paragraph.width() + 2.0 * BADGE_PADDING).max(BADGE_MIN_WIDTH);
+        Some((paragraph, width))
+    }
+
+    fn right_slots(&self, badge_width: Option<f32>) -> Vec<(Slot, f32)> {
         let mut slots: Vec<(Slot, f32)> = (0..self.tray.len())
             .map(|index| (Slot::Tray(index), TRAY_SLOT))
             .collect();
+        if let Some(width) = badge_width {
+            slots.push((Slot::InputSource, width + 2.0 * BADGE_MARGIN));
+        }
         if self.status.bluetooth.is_some() {
             slots.push((Slot::Bluetooth, SYMBOL_SLOT - 4.0));
         }
@@ -376,6 +403,31 @@ impl MenuBar {
         }
     }
 
+    fn paint_badge(
+        &self,
+        paragraph: Paragraph,
+        width: f32,
+        rect: Rect,
+        scale: f64,
+        items: &mut Vec<Item>,
+    ) {
+        let x = snap(rect.x + (rect.width - width) / 2.0, scale);
+        let y = snap(rect.y + (rect.height - BADGE_HEIGHT) / 2.0, scale);
+        let badge = Rect::new(x, y, width, BADGE_HEIGHT);
+        items.push(Item::Stroke {
+            shape: Shape::rounded(badge.inset(0.5), 4.0),
+            width: 1.0,
+            paint: self.palette.label_primary.with_alpha(200).into(),
+        });
+        items.push(Item::Text {
+            origin: Point::new(
+                snap(x + (width - paragraph.width()) / 2.0, scale),
+                snap(y + (BADGE_HEIGHT - paragraph.height()) / 2.0, scale),
+            ),
+            paragraph,
+        });
+    }
+
     pub fn scene(&mut self, width: u32, height: u32, scale: f64) -> Scene {
         let bar = Rect::new(0.0, 0.0, width as f32, height as f32);
         let mut items = vec![
@@ -423,7 +475,12 @@ impl MenuBar {
         let mut right = bar.width - EDGE - clock_width;
         slots.push((Slot::Clock, full(right, clock_width)));
         texts.push((right + TEXT_PADDING, clock));
-        for (slot, width) in self.right_slots().into_iter().rev() {
+        let badge = self.input_source_badge();
+        for (slot, width) in self
+            .right_slots(badge.as_ref().map(|(_, width)| *width))
+            .into_iter()
+            .rev()
+        {
             right -= width;
             slots.push((slot, full(right, width)));
         }
@@ -456,6 +513,11 @@ impl MenuBar {
                 Slot::Battery => {
                     if let Some(battery) = self.status.battery {
                         self.paint_battery(battery, content, scale, &mut items);
+                    }
+                }
+                Slot::InputSource => {
+                    if let Some((paragraph, width)) = badge.clone() {
+                        self.paint_badge(paragraph, width, content, scale, &mut items);
                     }
                 }
                 Slot::Tray(index) => {

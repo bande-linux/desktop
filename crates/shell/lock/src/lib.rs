@@ -42,6 +42,7 @@ const AVATAR: f32 = 72.0;
 const FIELD_WIDTH: f32 = 240.0;
 const FIELD_FONT: f32 = 15.0;
 const GAP: f32 = 12.0;
+const SOURCE_SIZE: f32 = 12.0;
 
 pub fn shake_offset(elapsed: Duration) -> f32 {
     if elapsed >= SHAKE_DURATION {
@@ -56,6 +57,7 @@ pub fn clock_texts(formats: &DateFormats, now: &jiff::Zoned) -> (String, String)
 }
 
 struct Model {
+    input_source: Option<String>,
     name: String,
     initial: String,
     date: String,
@@ -75,6 +77,7 @@ struct LockView {
     model: Shared,
     children: Vec<Box<dyn Widget>>,
     paragraphs: Option<[Paragraph; 4]>,
+    input_source: Option<Paragraph>,
     frame: Rect,
 }
 
@@ -103,6 +106,10 @@ impl Widget for LockView {
             paragraph(&model.initial, INITIAL_SIZE, TextStyle::MEDIUM, cx),
             paragraph(&model.name, NAME_SIZE, TextStyle::SEMIBOLD, cx),
         ]);
+        self.input_source = model.input_source.as_ref().map(|name| {
+            let hint = L10N.tr_args("input-source", [("name", name.as_str().into())]);
+            paragraph(&hint, SOURCE_SIZE, TextStyle::MEDIUM, cx)
+        });
         drop(model);
         for child in &mut self.children {
             child.measure(cx, Size::new(FIELD_WIDTH, available.height));
@@ -181,14 +188,26 @@ impl Widget for LockView {
         for child in &self.children {
             child.paint(cx, items);
         }
+        if let (Some(source), Some(field)) = (&self.input_source, self.children.first()) {
+            let below = field.frame();
+            items.push(Item::Text {
+                origin: centred(source, centre, below.y + below.height + GAP),
+                paragraph: source.clone(),
+            });
+        }
     }
 
     fn access(&self, _cx: &Context) -> Node {
         let mut node = Node::new(Role::Window);
-        node.set_label(L10N.tr_args(
-            "locked",
-            [("name", self.model.borrow().name.as_str().into())],
-        ));
+        let model = self.model.borrow();
+        let locked = L10N.tr_args("locked", [("name", model.name.as_str().into())]);
+        node.set_label(match &model.input_source {
+            Some(name) => format!(
+                "{locked} {}",
+                L10N.tr_args("input-source", [("name", name.as_str().into())])
+            ),
+            None => locked,
+        });
         node
     }
 
@@ -235,6 +254,7 @@ impl LockScreen {
     ) -> Self {
         let (date, time) = clock_texts(&formats, now);
         let model: Shared = Rc::new(RefCell::new(Model {
+            input_source: None,
             name: user.full_name.clone(),
             initial: user
                 .full_name
@@ -265,6 +285,7 @@ impl LockScreen {
             model: model.clone(),
             children: vec![Box::new(field)],
             paragraphs: None,
+            input_source: None,
             frame: Rect::default(),
         };
         let mut ui = Ui::new(Box::new(view), Context::new(text, palette));
@@ -284,6 +305,13 @@ impl LockScreen {
 
     pub fn set_palette(&mut self, palette: Palette) {
         self.ui.context().palette = palette;
+    }
+
+    pub fn set_input_source(&mut self, name: Option<String>) -> bool {
+        let mut model = self.model.borrow_mut();
+        let changed = model.input_source != name;
+        model.input_source = name;
+        changed
     }
 
     pub fn set_clock(&mut self, now: &jiff::Zoned) {

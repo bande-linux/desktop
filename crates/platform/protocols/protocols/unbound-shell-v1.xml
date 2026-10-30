@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <protocol name="unbound_shell_v1">
-  <interface name="unbound_shell_v1" version="10">
+  <interface name="unbound_shell_v1" version="11">
     <description summary="requests and events between the compositor and the shell">
       Offered only on the connections of the shell clients the compositor starts
       itself (the Dock and the launcher), never on the listening socket.
@@ -239,14 +239,35 @@
       <arg name="app_id" type="string"/>
     </request>
 
-    <enum name="media_key" since="10">
+    <event name="input_sources" since="10">
+      <description summary="the keyboard input sources or the active one changed">
+        Sent on binding and whenever the list of input sources or the active
+        one changes. Sources is a comma-separated list of xkb layouts, each
+        optionally followed by its variant in parentheses, such as
+        "se,de(nodeadkeys)", in the order the user arranged them; active
+        counts from 0.
+      </description>
+      <arg name="sources" type="string"/>
+      <arg name="active" type="uint"/>
+    </event>
+
+    <request name="select_input_source" since="10">
+      <description summary="make an input source active">
+        Makes the input source at this position of the list sent with
+        input_sources active for the whole session. An index past the end is
+        ignored.
+      </description>
+      <arg name="index" type="uint"/>
+    </request>
+
+    <enum name="media_key" since="11">
       <entry name="play_pause" value="0" summary="the play/pause key"/>
       <entry name="pause" value="1" summary="the pause key"/>
       <entry name="next" value="2" summary="the next track key"/>
       <entry name="previous" value="3" summary="the previous track key"/>
     </enum>
 
-    <event name="media_key" since="10">
+    <event name="media_key" since="11">
       <description summary="the user pressed a media key">
         Sent for the play/pause, pause, next and previous keys, with or without
         Super and also while the session is locked, as a Mac's media keys

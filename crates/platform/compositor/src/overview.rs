@@ -14,7 +14,7 @@ use unbound_render::VulkanRenderer;
 use unbound_spring::{Animation, Spring, State as Phase};
 
 use crate::gesture::Tracker;
-use crate::label::{Label, Labels};
+use crate::label::{Label, Labels, TITLE};
 use crate::motion::{Look, Motion};
 use crate::scene::{CORNER_RADIUS, FillElement, Piece, fresh, pieces_of, rounded, scaled_pieces};
 use crate::shell::toplevel_names;
@@ -370,7 +370,7 @@ impl State {
             .overview
             .labels
             .get_or_insert_with(Labels::default)
-            .render(&text, width, scale);
+            .render(&text, TITLE, width, scale);
         self.overview.title = label.map(|label| (surface, label));
     }
 

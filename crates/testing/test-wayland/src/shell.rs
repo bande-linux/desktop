@@ -58,6 +58,7 @@ pub(crate) struct Shell {
     toplevels: Vec<(ExtForeignToplevelHandleV1, String, bool)>,
     workspaces: Option<(u32, u32)>,
     window_workspaces: Vec<(String, u32)>,
+    input_sources: Option<(String, u32)>,
 }
 
 pub struct LayerRequest {
@@ -151,7 +152,7 @@ impl TestClient {
     }
 
     pub fn join_shell(&mut self, server: &mut Headless) {
-        let shell: UnboundShellV1 = self.bind("unbound_shell_v1", 10);
+        let shell: UnboundShellV1 = self.bind("unbound_shell_v1", 11);
         self.globals.shell.shell = Some(shell);
         let _: ExtForeignToplevelListV1 = self.bind("ext_foreign_toplevel_list_v1", 1);
         self.exchange(server);
@@ -241,6 +242,15 @@ impl TestClient {
             .rev()
             .find(|(known, _)| known == identifier)
             .map(|(_, workspace)| *workspace)
+    }
+
+    pub fn input_sources(&self) -> Option<(&str, u32)> {
+        let (sources, active) = self.globals.shell.input_sources.as_ref()?;
+        Some((sources, *active))
+    }
+
+    pub fn select_input_source(&mut self, server: &mut Headless, index: u32) {
+        self.shell_request(server, |shell| shell.select_input_source(index));
     }
 
     pub fn show_windows(&mut self, server: &mut Headless, app_id: &str) {
@@ -486,6 +496,9 @@ impl Dispatch<UnboundShellV1, ()> for Globals {
             } => globals.shell.minimized.push((identifier, minimized != 0)),
             unbound_shell_v1::Event::AttentionRequested { app_id } => {
                 globals.shell.attention.push(app_id);
+            }
+            unbound_shell_v1::Event::InputSources { sources, active } => {
+                globals.shell.input_sources = Some((sources, active));
             }
             unbound_shell_v1::Event::Workspaces { count, active } => {
                 globals.shell.workspaces = Some((count, active));

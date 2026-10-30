@@ -1,5 +1,5 @@
 # Dock
-Status: proposal, awaiting the owner's review.
+Status: superseded in part by the [combined bar](bar.md) (owner, 2026-10-30): in the default combined mode the bar also holds the app menus, status items, tray and clock. The rules below still hold for the app area and for "separate menu bar" mode.
 
 ## Purpose
 The Dock (`unbound-dock`) is where apps are started, found again and quit. It shows the apps a

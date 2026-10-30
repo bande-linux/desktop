@@ -144,7 +144,12 @@ writes a hex value, a corner radius or a font name of its own.
     `Scene`'s background). An app with a sidebar or toolbar on the frame calls
     `Window::set_frame_regions(FrameRegions { sidebar, toolbar })`: its content then covers
     everything below the header, the left `sidebar` points and the top `toolbar` points stay on
-    `chassis` for the app to draw on, and the toolkit paints the sheet in the rest. The header
+    `chassis` for the app to draw on, and the toolkit paints the sheet in the rest. An app whose
+    toolbar lives in the header calls `Window::set_header(Header { title_x, items })`: its
+    content then also covers the header (`Window::header_height` is 0 in full screen), the
+    toolkit draws the title at `title_x` (clipped before the next item), presses on `items`
+    (content coordinates) go to the app, and the rest of the header still moves, zooms and
+    opens the window menu. `framed_scene` composes an app's scene with the frame for goldens. The header
     and its buttons are published to screen readers above the app's tree. Server-side frames
     for third-party apps (`compositor/src/frame.rs`) draw the same header and pill from
     `title_bar.rs`, 40 pt high, and redraw when Alt is pressed or released so the zoom glyph

@@ -575,5 +575,23 @@ fn the_menus_offer_what_fits_the_selection_and_their_actions_reach_the_desktop()
             Request::Trash(vec![path("Notes.txt")]),
         ]
     );
+    let delete = files
+        .items
+        .iter()
+        .find_map(|item| item.alternate.as_deref())
+        .unwrap();
+    view.run_command(command(&delete.action).unwrap(), now);
+    assert_eq!(view.take_requests(), vec![]);
+    view.handle(
+        &Event::Key {
+            key: Key::Enter,
+            modifiers: Modifiers::default(),
+        },
+        now,
+    );
+    assert_eq!(
+        view.take_requests(),
+        vec![Request::Delete(vec![path("Notes.txt")])]
+    );
     assert_eq!(command("unknown"), None);
 }

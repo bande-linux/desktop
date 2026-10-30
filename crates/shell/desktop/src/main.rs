@@ -395,6 +395,12 @@ impl Surface {
             match request {
                 Request::Open(paths) => self.open(window, paths),
                 Request::Trash(sources) => self.start(Task::Trash { sources }, Action::Trash),
+                Request::Delete(sources) => {
+                    let task = Task::Delete { sources };
+                    if let Err(error) = self.operations.start(task, Purpose::Erase) {
+                        tracing::warn!("cannot delete: {error}");
+                    }
+                }
                 Request::Duplicate(sources) => {
                     self.start(Task::Duplicate { sources }, Action::Duplicate)
                 }

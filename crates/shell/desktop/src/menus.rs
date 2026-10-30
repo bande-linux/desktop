@@ -40,6 +40,7 @@ pub enum Command {
     Duplicate,
     Copy,
     Trash,
+    DeleteImmediately,
     Eject,
     SetWallpaper,
 }
@@ -110,7 +111,12 @@ pub fn items_menu(selection: &Selection) -> Menu {
         items.push(
             MenuItem::new(&title, "trash")
                 .shortcut("Super+Backspace")
-                .enabled(!any_volume),
+                .enabled(!any_volume)
+                .alternate(
+                    item("delete-immediately", "delete-immediately")
+                        .shortcut("Alt+Super+Backspace")
+                        .enabled(!any_volume),
+                ),
         );
     }
     Menu::new(items)
@@ -138,6 +144,7 @@ pub fn command(action: &str) -> Option<Command> {
         "duplicate" => Command::Duplicate,
         "copy" => Command::Copy,
         "trash" => Command::Trash,
+        "delete-immediately" => Command::DeleteImmediately,
         "eject" => Command::Eject,
         "set-wallpaper" => Command::SetWallpaper,
         _ => return None,

@@ -1,11 +1,13 @@
+use std::cell::Cell;
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
 use unbound_toolkit::ui::{
-    Animated, ClipboardRequest, Context, Event, Key, Modifiers, Pointer, PointerButton, Size,
-    Spring, TextField, Ui, Widget, WidgetId,
+    Alert, Animated, ClipboardRequest, Context, Event, Key, Modifiers, Pointer, PointerButton,
+    Size, Spring, TextField, Ui, Widget, WidgetId,
 };
 use unbound_toolkit::{
     Appearance, Color, Image, Item as SceneItem, Palette, Paragraph, Point, Rect, Scene, Shape,
@@ -14,7 +16,7 @@ use unbound_toolkit::{
 
 use crate::L10N;
 use crate::backdrop::{Backdrop, Layer, placeholder};
-use crate::editor::Anchor;
+use crate::editor::{Anchor, Inset};
 use crate::menus::Command;
 use crate::model::{
     Bounds, Desktop, Direction, Grid, Item, Kind, LABEL_WIDTH, Positions, SortBy, icon_bounds,
@@ -40,6 +42,7 @@ const FIRST_ITEM_NODE: u64 = 2;
 pub enum Request {
     Open(Vec<PathBuf>),
     Trash(Vec<PathBuf>),
+    Delete(Vec<PathBuf>),
     Rename {
         path: PathBuf,
         name: String,
@@ -125,6 +128,7 @@ pub struct DesktopView {
     ui: Ui,
     anchor: WidgetId,
     editing: bool,
+    deleting: Option<(Vec<PathBuf>, Rc<Cell<bool>>)>,
     appearance: Appearance,
     focused: bool,
     size: (f32, f32),
@@ -204,6 +208,7 @@ impl DesktopView {
             ui,
             anchor: anchor_id,
             editing: false,
+            deleting: None,
             appearance,
             focused: false,
             size: (1.0, 1.0),
@@ -458,7 +463,42 @@ impl DesktopView {
             Some(ClipboardRequest::Paste) => self.requests.push(Request::PasteText),
             None => {}
         }
+        if !self.ui.has_sheet()
+            && let Some((paths, confirmed)) = self.deleting.take()
+            && confirmed.get()
+        {
+            self.requests.push(Request::Delete(paths));
+        }
         handled
+    }
+
+    fn ask_to_delete(&mut self, paths: Vec<PathBuf>) {
+        let deletable = paths
+            .into_iter()
+            .filter(|path| {
+                self.desktop
+                    .item(path)
+                    .is_some_and(|item| item.kind != Kind::Volume)
+            })
+            .collect::<Vec<_>>();
+        if deletable.is_empty() || self.ui.has_sheet() {
+            return;
+        }
+        self.cancel_rename();
+        let confirmed = Rc::new(Cell::new(false));
+        let chosen = confirmed.clone();
+        let alert = Alert::new(
+            &L10N.tr_args("delete-title", [("count", deletable.len().into())]),
+            &L10N.tr("cannot-undo"),
+            move |action| chosen.set(action == "delete"),
+        )
+        .cancel(&L10N.tr("cancel"), "cancel")
+        .primary(&L10N.tr("delete"), "delete");
+        self.ui
+            .present_sheet(Inset::new(self.desktop.grid().area.y, alert));
+        self.deleting = Some((deletable, confirmed));
+        self.gesture = Gesture::Idle;
+        self.animating = true;
     }
 
     pub fn pasted(&mut self, text: &str) -> bool {
@@ -477,6 +517,10 @@ impl DesktopView {
     }
 
     pub fn handle(&mut self, event: &Event, now: Instant) -> bool {
+        if self.ui.has_sheet() {
+            self.edit(event);
+            return true;
+        }
         match event {
             Event::PointerDown(pointer) => self.pointer_down(event, pointer),
             Event::PointerMove(_) | Event::PointerUp(_) if self.editing => {
@@ -722,6 +766,9 @@ impl DesktopView {
                     self.start_rename(path);
                 }
             }
+            Key::Backspace | Key::Delete if command && modifiers.alt && !selected.is_empty() => {
+                self.ask_to_delete(selected);
+            }
             Key::Backspace | Key::Delete if command && !selected.is_empty() => {
                 self.requests.push(Request::Trash(selected));
             }
@@ -804,6 +851,10 @@ impl DesktopView {
             Command::Duplicate => Request::Duplicate(selected),
             Command::Copy => Request::Copy(selected),
             Command::Trash => Request::Trash(selected),
+            Command::DeleteImmediately => {
+                self.ask_to_delete(selected);
+                return;
+            }
             Command::Eject => Request::Eject(selected),
             Command::SetWallpaper => match selected.first() {
                 Some(path) => Request::SetWallpaper(path.clone()),
@@ -954,12 +1005,6 @@ impl DesktopView {
             width: 1.5,
             paint: palette.accent_color.into(),
         });
-        let (width, height) = self.size;
-        items.extend(
-            self.ui
-                .scene(width.round() as u32, height.round() as u32)
-                .items,
-        );
     }
 
     pub fn scene(&mut self, now: Instant) -> Scene {
@@ -1022,7 +1067,12 @@ impl DesktopView {
             });
         }
         self.paint_editor(palette, &mut items);
-        self.animating = animating;
+        items.extend(
+            self.ui
+                .scene(width.round() as u32, height.round() as u32)
+                .items,
+        );
+        self.animating = animating || self.ui.is_animating();
         Scene {
             width: width.round() as u32,
             height: height.round() as u32,

@@ -687,6 +687,11 @@ fn right_clicking_an_item_selects_it_and_its_menu_acts_on_it() {
             "Move to Trash"
         ]
     );
+    let delete = menu.items.last().and_then(|item| item.alternate.as_deref());
+    assert_eq!(
+        delete.map(|item| (item.title.as_str(), item.action.as_str())),
+        Some(("Delete Immediately…", "delete-immediately"))
+    );
     let open_with = menu
         .items
         .iter()

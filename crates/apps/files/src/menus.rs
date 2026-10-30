@@ -149,7 +149,14 @@ pub fn items_menu(selection: &Selection) -> Menu {
     } else {
         L10N.tr_args("menu-move-items-to-trash", [("count", count.into())])
     };
-    items.push(MenuItem::new(&trash, action(&Command::Trash)).shortcut("Super+Backspace"));
+    items.push(
+        MenuItem::new(&trash, action(&Command::Trash))
+            .shortcut("Super+Backspace")
+            .alternate(
+                item("menu-delete-immediately", &Command::DeleteImmediately)
+                    .shortcut("Alt+Super+Backspace"),
+            ),
+    );
     Menu::new(items)
 }
 

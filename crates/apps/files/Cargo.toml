@@ -6,6 +6,7 @@ edition.workspace = true
 repository.workspace = true
 
 [dependencies]
+accesskit.workspace = true
 rustix = { workspace = true, features = ["fs"] }
 tracing.workspace = true
 unbound-fs.workspace = true

@@ -394,7 +394,7 @@ fn a_new_folder_is_renamed_in_place_and_undone() {
 
     view.handle(&command(Key::Character('N'), true));
     assert!(place.home().join("untitled folder").is_dir());
-    assert!(view.rename_editor().is_some());
+    assert!(view.renaming().is_some());
     for character in "Plans".chars() {
         view.handle(&press(Key::Character(character)));
     }
@@ -830,4 +830,40 @@ fn mounted_volumes_are_listed_under_locations_before_the_trash() {
         ["Favourites", "ada", "Locations", "Stick", "Trash"]
     );
     assert_eq!(with_volumes(&shown, &[]), favourites);
+}
+
+#[test]
+fn the_list_view_selects_by_click_sorts_by_header_and_opens_on_double_click() {
+    let place = Place::new();
+    fs::write(place.home().join("big.txt"), vec![b'x'; 5000]).expect("file");
+    let mut view = place.view();
+    view.handle(&command(Key::Character('2'), false));
+    view.scene(1000, 600);
+    let row = |index: f32| Point::new(SIDEBAR_WIDTH + 60.0, 26.0 + ROW_HEIGHT * (index + 0.5));
+    let click = |view: &mut FilesView, at: Point, count: u8| {
+        view.handle(&Event::PointerDown(Pointer::at(at).with_count(count)));
+        view.handle(&Event::PointerUp(Pointer::at(at)));
+        view.scene(1000, 600);
+    };
+
+    click(&mut view, row(2.0), 1);
+    assert_eq!(selected_name(view.browser()).as_deref(), Some("big.txt"));
+
+    click(&mut view, Point::new(SIDEBAR_WIDTH + 470.0, 10.0), 1);
+    assert_eq!(
+        view.browser().sort(),
+        Sort {
+            by: SortBy::Size,
+            descending: true
+        }
+    );
+    assert_eq!(selected_name(view.browser()).as_deref(), Some("big.txt"));
+
+    click(&mut view, row(0.0), 1);
+    let first = selected_name(view.browser()).expect("first row");
+    click(&mut view, row(0.0), 2);
+    assert_eq!(
+        view.browser().root(),
+        &Location::Folder(place.home().join(first))
+    );
 }

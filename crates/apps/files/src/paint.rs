@@ -2,9 +2,8 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use unbound_fs::{Entry, Purpose, SortBy, format_date, format_size};
+use unbound_fs::{Entry, Purpose, format_date, format_size};
 use unbound_preview::Preview;
-use unbound_toolkit::ui::NameEditor;
 use unbound_toolkit::{
     Color, Image, Item, Paragraph, Point, Rect, Scene, Shape, TextAlign, TextStyle,
 };
@@ -13,8 +12,8 @@ use crate::L10N;
 use crate::browser::Location;
 use crate::sidebar::{PlaceKind, Row};
 use crate::view::{
-    COLUMN_WIDTH, FilesView, HEADER_HEIGHT, Hit, INSPECTOR_WIDTH, PATH_BAR_HEIGHT, PROGRESS_HEIGHT,
-    ROW_HEIGHT, SEARCH_HEIGHT, SIDEBAR_WIDTH, Sheet, SheetButton,
+    COLUMN_WIDTH, FilesView, Hit, INSPECTOR_WIDTH, PATH_BAR_HEIGHT, PROGRESS_HEIGHT, ROW_HEIGHT,
+    SEARCH_HEIGHT, SIDEBAR_WIDTH,
 };
 
 const ROW_INSET: f32 = 6.0;
@@ -30,7 +29,6 @@ const QUICK_LOOK_HEADER: f32 = 36.0;
 const RADIUS: f32 = 12.0;
 const PADDING: f32 = 16.0;
 const BUTTON_HEIGHT: f32 = 24.0;
-const SHEET_WIDTH: f32 = 420.0;
 
 pub fn permissions(mode: u32) -> String {
     (0..9)
@@ -63,7 +61,7 @@ fn fitted(area: Rect, image: &Image) -> Rect {
 
 impl FilesView {
     fn paragraph(&mut self, text: &str, size: f32, color: Color, weight: f32) -> Paragraph {
-        self.text.paragraph(
+        self.text().paragraph(
             text,
             TextStyle::new(size, color).weight(weight),
             None,
@@ -83,7 +81,7 @@ impl FilesView {
         }
     }
 
-    fn entry_icon(&mut self, entry: &Entry, pixels: u32) -> Option<Image> {
+    pub(crate) fn entry_icon(&mut self, entry: &Entry, pixels: u32) -> Option<Image> {
         if entry.is_folder() {
             return self.icons.first(&["folder"], pixels);
         }
@@ -102,10 +100,14 @@ impl FilesView {
     pub fn scene(&mut self, width: u32, height: u32) -> Scene {
         self.size = (width as f32, height as f32);
         self.hits.clear();
+        self.layout_controls();
+        let mut controls = self.ui.scene(width, height).items;
+        let sheet = controls.split_off(self.painted.get().min(controls.len()));
         let mut items = Vec::new();
         self.paint_sidebar(&mut items);
         self.paint_columns(&mut items);
         self.paint_search(&mut items);
+        items.extend(controls);
         self.paint_path_bar(&mut items);
         self.paint_progress(&mut items);
         if self.inspector {
@@ -113,7 +115,7 @@ impl FilesView {
         }
         self.paint_notice(&mut items);
         self.paint_quick_look(&mut items);
-        self.paint_sheet(&mut items);
+        items.extend(sheet);
         Scene {
             width,
             height,
@@ -204,7 +206,6 @@ impl FilesView {
     fn paint_columns(&mut self, items: &mut Vec<Item>) {
         let content = self.content_frame();
         if self.browser.single() {
-            self.paint_list(content, items);
             return;
         }
         let first = self.first_visible_column();
@@ -224,10 +225,7 @@ impl FilesView {
         self.hits.push((frame, Hit::Column(index)));
         let mut rows = Vec::new();
         let first = (column.scroll / ROW_HEIGHT).floor() as usize;
-        let renaming = self
-            .rename
-            .as_ref()
-            .map(|rename| (rename.path.clone(), rename.editor.clone()));
+        let renaming = self.rename.as_ref().map(|rename| rename.path.clone());
         for (position, entry) in column.entries.iter().enumerate().skip(first) {
             let y = content.y + self.rows_top() + position as f32 * ROW_HEIGHT - column.scroll;
             if y > content.y + content.height {
@@ -265,17 +263,7 @@ impl FilesView {
                 });
             }
             let name_x = row.x + 28.0;
-            if let Some((_, editor)) = renaming.as_ref().filter(|(path, _)| *path == entry.path) {
-                self.paint_editor(
-                    editor,
-                    Rect::new(
-                        name_x - 3.0,
-                        y + 2.0,
-                        row.x + row.width - name_x - 2.0,
-                        ROW_HEIGHT - 4.0,
-                    ),
-                    &mut rows,
-                );
+            if renaming.as_ref() == Some(&entry.path) {
                 continue;
             }
             let name_width = row.width - 28.0 - if entry.is_folder() { 22.0 } else { 6.0 };
@@ -295,7 +283,7 @@ impl FilesView {
         }
         if column.entries.is_empty() {
             let muted = self.palette.label_muted;
-            let empty = self.text.paragraph(
+            let empty = self.text().paragraph(
                 &L10N.tr("empty-folder"),
                 TextStyle::new(NAME_SIZE, muted),
                 Some(COLUMN_WIDTH),
@@ -318,11 +306,9 @@ impl FilesView {
     }
 
     fn paint_search(&mut self, items: &mut Vec<Item>) {
-        let Some(search) = &self.search else {
+        if self.search.is_none() {
             return;
-        };
-        let editor = search.editor.clone();
-        let focused = search.focused;
+        }
         let content = self.content_frame();
         let bar = Rect::new(content.x, 0.0, content.width, SEARCH_HEIGHT);
         items.push(self.fill(bar, 0.0, self.palette.surface_background));
@@ -331,277 +317,6 @@ impl FilesView {
             0.0,
             self.palette.separator_color,
         ));
-        let field = Rect::new(bar.x + 10.0, 6.0, (bar.width - 20.0).min(360.0), 24.0);
-        self.hits.push((field, Hit::Search));
-        if focused {
-            self.paint_editor(&editor, field, items);
-        } else {
-            items.push(self.fill(field, 6.0, self.palette.label_muted.with_alpha(30)));
-            let primary = self.palette.label_primary;
-            items.push(self.line(
-                editor.text(),
-                NAME_SIZE,
-                primary,
-                field.x + 8.0,
-                field.y,
-                field.height,
-            ));
-        }
-        if editor.text().is_empty() {
-            let muted = self.palette.label_muted;
-            items.push(self.line(
-                &L10N.tr("search-placeholder"),
-                NAME_SIZE,
-                muted,
-                field.x + 8.0,
-                field.y,
-                field.height,
-            ));
-        }
-    }
-
-    fn paint_list(&mut self, content: Rect, items: &mut Vec<Item>) {
-        let column = self.browser.columns()[0].clone();
-        let sort = self.browser.sort();
-        let wide = content.width >= 640.0;
-        let size_width = 90.0;
-        let date_width = 160.0;
-        let kind_width = if wide { 170.0 } else { 0.0 };
-        let name_width = content.width - size_width - date_width - kind_width - 2.0 * ROW_INSET;
-        let name_x = content.x + ROW_INSET;
-        let date_x = name_x + name_width;
-        let size_x = date_x + date_width;
-        let kind_x = size_x + size_width;
-        let header = Rect::new(content.x, content.y, content.width, HEADER_HEIGHT);
-        items.push(self.fill(header, 0.0, self.palette.surface_background));
-        items.push(self.fill(
-            Rect::new(header.x, header.y + header.height - 1.0, header.width, 1.0),
-            0.0,
-            self.palette.separator_color,
-        ));
-        let muted = self.palette.label_muted;
-        let mut headings = vec![
-            (
-                L10N.tr("column-name"),
-                Some(SortBy::Name),
-                name_x,
-                name_width,
-            ),
-            (
-                L10N.tr("column-modified"),
-                Some(SortBy::Modified),
-                date_x,
-                date_width,
-            ),
-            (
-                L10N.tr("column-size"),
-                Some(SortBy::Size),
-                size_x,
-                size_width,
-            ),
-        ];
-        if wide {
-            headings.push((L10N.tr("column-kind"), None, kind_x, kind_width));
-        }
-        for (title, by, x, width) in headings {
-            let active = by == Some(sort.by);
-            let title = match (active, sort.descending) {
-                (true, false) => format!("{title}  \u{2191}"),
-                (true, true) => format!("{title}  \u{2193}"),
-                _ => title,
-            };
-            let weight = if active {
-                TextStyle::SEMIBOLD
-            } else {
-                TextStyle::REGULAR
-            };
-            let paragraph = self.paragraph(&title, SMALL_SIZE, muted, weight);
-            items.push(Item::Text {
-                origin: Point::new(
-                    x + 8.0,
-                    header.y + ((HEADER_HEIGHT - paragraph.height()) / 2.0).round(),
-                ),
-                paragraph,
-            });
-            if let Some(by) = by {
-                self.hits.push((
-                    Rect::new(x, header.y, width, HEADER_HEIGHT),
-                    Hit::Header(by),
-                ));
-            }
-        }
-        let body = Rect::new(
-            content.x,
-            content.y + HEADER_HEIGHT,
-            content.width,
-            content.height - HEADER_HEIGHT,
-        );
-        self.hits.push((body, Hit::Column(0)));
-        let renaming = self
-            .rename
-            .as_ref()
-            .map(|rename| (rename.path.clone(), rename.editor.clone()));
-        let first = (column.scroll / ROW_HEIGHT).floor() as usize;
-        let mut rows = Vec::new();
-        for (position, entry) in column.entries.iter().enumerate().skip(first) {
-            let y = body.y + position as f32 * ROW_HEIGHT - column.scroll;
-            if y > body.y + body.height {
-                break;
-            }
-            let row = Rect::new(
-                content.x + ROW_INSET,
-                y,
-                content.width - 2.0 * ROW_INSET,
-                ROW_HEIGHT,
-            );
-            self.hits.push((
-                row,
-                Hit::Row {
-                    column: 0,
-                    row: position,
-                },
-            ));
-            let marked = column.is_marked(position);
-            if marked {
-                rows.push(self.fill(row, 5.0, self.palette.accent_color));
-            } else if position % 2 == 1 {
-                rows.push(self.fill(row, 5.0, self.palette.label_muted.with_alpha(14)));
-            }
-            let (primary, secondary) = if marked {
-                (Color::hex(0xFFFFFF), Color::hex(0xFFFFFF).with_alpha(220))
-            } else {
-                (self.palette.label_primary, self.palette.label_muted)
-            };
-            if let Some(image) = self.entry_icon(entry, ICON_PIXELS) {
-                rows.push(Item::Image {
-                    rect: Rect::new(name_x + 6.0, y + 4.0, ICON_SIZE, ICON_SIZE),
-                    image,
-                });
-            }
-            let text_x = name_x + 28.0;
-            if let Some((_, editor)) = renaming.as_ref().filter(|(path, _)| *path == entry.path) {
-                self.paint_editor(
-                    editor,
-                    Rect::new(text_x - 3.0, y + 2.0, name_width - 36.0, ROW_HEIGHT - 4.0),
-                    &mut rows,
-                );
-            } else {
-                let name = self.line(&entry.name, NAME_SIZE, primary, text_x, y, ROW_HEIGHT);
-                rows.push(Item::Clip {
-                    shape: Shape::rect(Rect::new(text_x, y, name_width - 36.0, ROW_HEIGHT)),
-                    items: vec![name],
-                });
-            }
-            let date = entry.modified.map(format_date).unwrap_or_default();
-            rows.push(self.line(
-                &date,
-                SMALL_SIZE + 1.0,
-                secondary,
-                date_x + 8.0,
-                y,
-                ROW_HEIGHT,
-            ));
-            let size = if entry.is_folder() {
-                "\u{2014}".to_owned()
-            } else {
-                format_size(entry.size)
-            };
-            rows.push(self.line(
-                &size,
-                SMALL_SIZE + 1.0,
-                secondary,
-                size_x + 8.0,
-                y,
-                ROW_HEIGHT,
-            ));
-            if wide {
-                let kind = self.apps.kind_for_name(&entry.name, entry.is_folder());
-                let kind = self.line(
-                    &kind,
-                    SMALL_SIZE + 1.0,
-                    secondary,
-                    kind_x + 8.0,
-                    y,
-                    ROW_HEIGHT,
-                );
-                rows.push(Item::Clip {
-                    shape: Shape::rect(Rect::new(kind_x, y, kind_width - 8.0, ROW_HEIGHT)),
-                    items: vec![kind],
-                });
-            }
-        }
-        if column.entries.is_empty() {
-            let empty = self.text.paragraph(
-                &L10N.tr("empty-folder"),
-                TextStyle::new(NAME_SIZE, muted),
-                Some(body.width),
-                TextAlign::Center,
-            );
-            rows.push(Item::Text {
-                origin: Point::new(body.x, body.y + 40.0),
-                paragraph: empty,
-            });
-        }
-        items.push(Item::Clip {
-            shape: Shape::rect(body),
-            items: rows,
-        });
-    }
-
-    fn paint_editor(&mut self, editor: &NameEditor, field: Rect, items: &mut Vec<Item>) {
-        let text = editor.text().to_owned();
-        let selection = editor.selection();
-        let cursor = editor.cursor();
-        let primary = self.palette.label_primary;
-        items.push(self.fill(field, 4.0, self.palette.surface_elevated));
-        items.push(Item::Stroke {
-            shape: Shape::rounded(field, 4.0),
-            width: 2.0,
-            paint: self.palette.accent_color.into(),
-        });
-        let offset =
-            |view: &mut Self, upto: usize| view.label(&text[..upto], NAME_SIZE, primary).width();
-        let start = offset(self, selection.start);
-        let end = offset(self, selection.end);
-        let caret = offset(self, cursor);
-        let text_x = field.x + 4.0;
-        let scroll = (caret - (field.width - 10.0)).max(0.0);
-        let mut inner = Vec::new();
-        if selection.is_empty() {
-            inner.push(self.fill(
-                Rect::new(
-                    text_x + caret - scroll,
-                    field.y + 3.0,
-                    1.0,
-                    field.height - 6.0,
-                ),
-                0.0,
-                primary,
-            ));
-        } else {
-            inner.push(self.fill(
-                Rect::new(
-                    text_x + start - scroll,
-                    field.y + 2.0,
-                    end - start,
-                    field.height - 4.0,
-                ),
-                2.0,
-                self.palette.accent_color.with_alpha(90),
-            ));
-        }
-        inner.push(self.line(
-            &text,
-            NAME_SIZE,
-            primary,
-            text_x - scroll,
-            field.y,
-            field.height,
-        ));
-        items.push(Item::Clip {
-            shape: Shape::rect(field.inset(2.0)),
-            items: inner,
-        });
     }
 
     fn shown_path(&self) -> Option<PathBuf> {
@@ -901,7 +616,7 @@ impl FilesView {
             [] => L10N.tr("no-selection"),
             entries => L10N.tr_args("item-count", [("count", entries.len().into())]),
         };
-        let title = self.text.paragraph(
+        let title = self.text().paragraph(
             &title,
             TextStyle::new(NAME_SIZE + 1.0, primary).weight(TextStyle::SEMIBOLD),
             Some(inner.width),
@@ -914,7 +629,7 @@ impl FilesView {
         });
         y += title_height + 2.0;
         if !info.kind.is_empty() {
-            let kind = self.text.paragraph(
+            let kind = self.text().paragraph(
                 &info.kind,
                 TextStyle::new(SMALL_SIZE, muted),
                 Some(inner.width),
@@ -996,7 +711,7 @@ impl FilesView {
         }
         for (label, value) in facts {
             let label = self.label(&label, SMALL_SIZE, muted);
-            let value_paragraph = self.text.paragraph(
+            let value_paragraph = self.text().paragraph(
                 &value,
                 TextStyle::new(SMALL_SIZE, primary),
                 Some(inner.width - 90.0),
@@ -1099,7 +814,7 @@ impl FilesView {
             return;
         };
         let content = self.content_frame();
-        let paragraph = self.text.paragraph(
+        let paragraph = self.text().paragraph(
             &text,
             TextStyle::new(NAME_SIZE, Color::hex(0xFFFFFF)),
             Some(content.width - 80.0),
@@ -1161,7 +876,7 @@ impl FilesView {
         let panel = self.quick_look_frame();
         let shape = self.panel(panel, items);
         let primary = self.palette.label_primary;
-        let title = self.text.paragraph(
+        let title = self.text().paragraph(
             &quick_look.entry.name,
             TextStyle::new(NAME_SIZE, primary).weight(TextStyle::SEMIBOLD),
             Some(panel.width - 2.0 * PADDING),
@@ -1186,7 +901,7 @@ impl FilesView {
             Some(Preview::Text(text)) => {
                 let lines = (area.height / CODE_SIZE).ceil() as usize + 1;
                 let shown = text.lines().take(lines).collect::<Vec<_>>().join("\n");
-                let paragraph = self.text.paragraph(
+                let paragraph = self.text().paragraph(
                     &shown,
                     TextStyle::new(CODE_SIZE, primary).monospace(),
                     None,
@@ -1243,13 +958,13 @@ impl FilesView {
         let icon = self.entry_icon(entry, LARGE_ICON_PIXELS);
         let primary = self.palette.label_primary;
         let muted = self.palette.label_muted;
-        let kind = self.text.paragraph(
+        let kind = self.text().paragraph(
             kind,
             TextStyle::new(NAME_SIZE + 4.0, primary).weight(TextStyle::MEDIUM),
             Some(area.width),
             TextAlign::Center,
         );
-        let detail = self.text.paragraph(
+        let detail = self.text().paragraph(
             detail,
             TextStyle::new(NAME_SIZE, muted),
             Some(area.width),
@@ -1278,229 +993,6 @@ impl FilesView {
         items.push(Item::Text {
             origin: Point::new(area.x, detail_y),
             paragraph: detail,
-        });
-    }
-
-    fn paint_go_to(&mut self, editor: &NameEditor, items: &mut Vec<Item>) {
-        let width = SHEET_WIDTH.min(self.size.0 - 40.0);
-        let height = PADDING + 20.0 + 8.0 + BUTTON_HEIGHT + 16.0 + BUTTON_HEIGHT + PADDING;
-        let panel = Rect::new(
-            ((self.size.0 - width) / 2.0).round(),
-            ((self.size.1 - height) / 3.0).round(),
-            width,
-            height,
-        );
-        let shape = self.panel(panel, items);
-        let mut content = Vec::new();
-        let primary = self.palette.label_primary;
-        let title = self.paragraph(
-            &L10N.tr("go-to-title"),
-            NAME_SIZE + 1.0,
-            primary,
-            TextStyle::SEMIBOLD,
-        );
-        content.push(Item::Text {
-            origin: Point::new(panel.x + PADDING, panel.y + PADDING),
-            paragraph: title,
-        });
-        let field = Rect::new(
-            panel.x + PADDING,
-            panel.y + PADDING + 28.0,
-            panel.width - 2.0 * PADDING,
-            BUTTON_HEIGHT,
-        );
-        self.paint_editor(editor, field, &mut content);
-        let y = field.y + field.height + 16.0;
-        let mut x = panel.x + panel.width - PADDING;
-        for (button, title, default) in [
-            (SheetButton::Confirm, L10N.tr("go"), true),
-            (SheetButton::Cancel, L10N.tr("cancel"), false),
-        ] {
-            let paragraph_width = self.label(&title, NAME_SIZE, primary).width();
-            x -= (paragraph_width + 28.0).ceil();
-            let rect = self.button(&title, Point::new(x, y), default, &mut content);
-            self.hits.push((rect, Hit::Sheet(button)));
-            x -= 8.0;
-        }
-        items.push(Item::Clip {
-            shape,
-            items: content,
-        });
-    }
-
-    fn paint_sheet(&mut self, items: &mut Vec<Item>) {
-        let Some(sheet) = self.sheet.clone() else {
-            return;
-        };
-        items.push(self.fill(
-            Rect::new(0.0, 0.0, self.size.0, self.size.1),
-            0.0,
-            Color::hex(0x000000).with_alpha(60),
-        ));
-        let (title, detail, buttons, apply_to_all) = match &sheet {
-            Sheet::GoTo(editor) => {
-                self.paint_go_to(editor, items);
-                return;
-            }
-            Sheet::Conflict { apply_to_all } => {
-                let Some((_, running)) = self.operations.conflict() else {
-                    return;
-                };
-                let Some(conflict) = running.conflict.clone() else {
-                    return;
-                };
-                let several = running.items > 1;
-                let name = conflict
-                    .target
-                    .file_name()
-                    .map(|name| name.to_string_lossy().into_owned())
-                    .unwrap_or_default();
-                let describe = |path: &Path| {
-                    std::fs::symlink_metadata(path)
-                        .ok()
-                        .map(|metadata| {
-                            let modified = metadata.modified().map(format_date).unwrap_or_default();
-                            if metadata.is_dir() {
-                                modified
-                            } else {
-                                format!("{}, {modified}", format_size(metadata.len()))
-                            }
-                        })
-                        .unwrap_or_default()
-                };
-                let detail = L10N.tr_args(
-                    "conflict-detail",
-                    [
-                        ("existing", describe(&conflict.target).into()),
-                        ("new", describe(&conflict.source).into()),
-                    ],
-                );
-                (
-                    L10N.tr_args("conflict-title", [("name", name.into())]),
-                    detail,
-                    vec![
-                        (SheetButton::Stop, L10N.tr("stop"), false),
-                        (SheetButton::Skip, L10N.tr("skip"), false),
-                        (SheetButton::Replace, L10N.tr("replace"), false),
-                        (SheetButton::KeepBoth, L10N.tr("keep-both"), true),
-                    ],
-                    several.then_some(*apply_to_all),
-                )
-            }
-            Sheet::EmptyTrash => (
-                L10N.tr("empty-trash-title"),
-                L10N.tr("cannot-undo"),
-                vec![
-                    (SheetButton::Cancel, L10N.tr("cancel"), false),
-                    (SheetButton::Confirm, L10N.tr("empty-trash"), true),
-                ],
-                None,
-            ),
-            Sheet::DeleteImmediately {
-                paths,
-                items: trashed,
-            } => {
-                let count = paths.len() + trashed.len();
-                (
-                    L10N.tr_args("delete-title", [("count", count.into())]),
-                    L10N.tr("cannot-undo"),
-                    vec![
-                        (SheetButton::Cancel, L10N.tr("cancel"), false),
-                        (SheetButton::Confirm, L10N.tr("delete"), true),
-                    ],
-                    None,
-                )
-            }
-        };
-        let primary = self.palette.label_primary;
-        let muted = self.palette.label_muted;
-        let width = SHEET_WIDTH.min(self.size.0 - 40.0);
-        let title = self.text.paragraph(
-            &title,
-            TextStyle::new(NAME_SIZE + 1.0, primary).weight(TextStyle::SEMIBOLD),
-            Some(width - 2.0 * PADDING),
-            TextAlign::Start,
-        );
-        let detail = self.text.paragraph(
-            &detail,
-            TextStyle::new(SMALL_SIZE + 1.0, muted),
-            Some(width - 2.0 * PADDING),
-            TextAlign::Start,
-        );
-        let check_height = if apply_to_all.is_some() { 30.0 } else { 0.0 };
-        let height = PADDING
-            + title.height()
-            + 8.0
-            + detail.height()
-            + 16.0
-            + check_height
-            + BUTTON_HEIGHT
-            + PADDING;
-        let panel = Rect::new(
-            ((self.size.0 - width) / 2.0).round(),
-            ((self.size.1 - height) / 3.0).round(),
-            width,
-            height,
-        );
-        let shape = self.panel(panel, items);
-        let mut content = Vec::new();
-        let mut y = panel.y + PADDING;
-        let title_height = title.height();
-        content.push(Item::Text {
-            origin: Point::new(panel.x + PADDING, y),
-            paragraph: title,
-        });
-        y += title_height + 8.0;
-        let detail_height = detail.height();
-        content.push(Item::Text {
-            origin: Point::new(panel.x + PADDING, y),
-            paragraph: detail,
-        });
-        y += detail_height + 16.0;
-        if let Some(checked) = apply_to_all {
-            let check = Rect::new(panel.x + PADDING, y + 2.0, 16.0, 16.0);
-            if checked {
-                content.push(self.fill(check, 4.0, self.palette.accent_color));
-                content.push(self.line(
-                    "\u{2713}",
-                    SMALL_SIZE,
-                    Color::hex(0xFFFFFF),
-                    check.x + 3.0,
-                    check.y,
-                    check.height,
-                ));
-            } else {
-                content.push(Item::Stroke {
-                    shape: Shape::rounded(check, 4.0),
-                    width: 1.0,
-                    paint: muted.into(),
-                });
-            }
-            content.push(self.line(
-                &L10N.tr("apply-to-all"),
-                NAME_SIZE,
-                primary,
-                check.x + 24.0,
-                check.y - 2.0,
-                20.0,
-            ));
-            self.hits.push((
-                Rect::new(check.x, check.y - 2.0, 200.0, 20.0),
-                Hit::ApplyToAll,
-            ));
-            y += check_height;
-        }
-        let mut x = panel.x + panel.width - PADDING;
-        for (button, title, default) in buttons.into_iter().rev() {
-            let paragraph_width = self.label(&title, NAME_SIZE, primary).width();
-            x -= (paragraph_width + 28.0).ceil();
-            let rect = self.button(&title, Point::new(x, y), default, &mut content);
-            self.hits.push((rect, Hit::Sheet(button)));
-            x -= 8.0;
-        }
-        items.push(Item::Clip {
-            shape,
-            items: content,
         });
     }
 }

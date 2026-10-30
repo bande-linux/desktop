@@ -458,6 +458,12 @@ impl Surface {
                         .collect();
                     window.copy(&text.join("\n"));
                 }
+                Request::CopyText(text) => window.copy(&text),
+                Request::PasteText => {
+                    if let Err(error) = window.paste() {
+                        tracing::warn!("cannot paste: {error}");
+                    }
+                }
                 Request::Eject(paths) => eject(paths),
                 Request::SetWallpaper(path) => choose(path),
                 Request::ChangeWallpaper => self.change_wallpaper(window),
@@ -535,6 +541,11 @@ impl App for Surface {
                     self.view.run_command(command, Instant::now());
                 }
                 self.run_requests(window);
+            }
+            WindowEvent::Pasted(text) => {
+                if self.view.pasted(&text) {
+                    window.request_redraw();
+                }
             }
             WindowEvent::Focus(focused) => {
                 self.view.set_focused(focused);

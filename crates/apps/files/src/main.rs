@@ -3,10 +3,11 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Instant;
 
+use accesskit::TreeUpdate;
 use unbound_files::{Browser, FilesView, Location, Request, Row, rows, without_bookmark};
 use unbound_fs::Trash;
 use unbound_toolkit::{
-    App, Appearance, MenuPlacement, Role, Scene, TextSystem, Window, WindowEvent,
+    App, Appearance, MenuPlacement, Rect, Role, Scene, TextSystem, Window, WindowEvent,
 };
 use unbound_volumes::{eject, media_roots};
 use unbound_xdg::{Apps, config_dirs, config_home, data_dirs, launch_with, path_from_file_uri};
@@ -74,6 +75,7 @@ impl Files {
             window.set_title(&title);
             self.title = title;
         }
+        window.set_cursor(self.view.cursor());
         window.request_redraw();
     }
 }
@@ -91,6 +93,7 @@ impl App for Files {
                 true
             }
             WindowEvent::Input(input) => self.view.handle(&input),
+            WindowEvent::Accessibility(request) => self.view.perform(&request),
             WindowEvent::Pasted(text) => self.view.pasted(&text),
             WindowEvent::MenuAction(action) => self.view.menu_action(&action),
             WindowEvent::MenuClosed => {
@@ -116,6 +119,18 @@ impl App for Files {
 
     fn deadline(&self) -> Option<Instant> {
         self.view.deadline()
+    }
+
+    fn animating(&self) -> bool {
+        self.view.animating()
+    }
+
+    fn text_input_area(&self) -> Option<Rect> {
+        self.view.text_input_area()
+    }
+
+    fn accessibility(&self) -> Option<TreeUpdate> {
+        Some(self.view.accessibility())
     }
 
     fn tick(&mut self, window: &mut Window, now: Instant) {

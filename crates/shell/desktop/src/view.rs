@@ -4,7 +4,8 @@ use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
 use unbound_toolkit::ui::{
-    Animated, Event, Key, Modifiers, NameEditor, Pointer, PointerButton, Spring,
+    Animated, ClipboardRequest, Context, Event, Key, Modifiers, Pointer, PointerButton, Size,
+    Spring, TextField, Ui, Widget, WidgetId,
 };
 use unbound_toolkit::{
     Appearance, Color, Image, Item as SceneItem, Palette, Paragraph, Point, Rect, Scene, Shape,
@@ -13,6 +14,7 @@ use unbound_toolkit::{
 
 use crate::L10N;
 use crate::backdrop::{Backdrop, Layer, placeholder};
+use crate::editor::Anchor;
 use crate::menus::Command;
 use crate::model::{
     Bounds, Desktop, Direction, Grid, Item, Kind, LABEL_WIDTH, Positions, SortBy, icon_bounds,
@@ -63,6 +65,8 @@ pub enum Request {
         paths: Vec<PathBuf>,
     },
     Copy(Vec<PathBuf>),
+    CopyText(String),
+    PasteText,
     Eject(Vec<PathBuf>),
     SetWallpaper(PathBuf),
     ChangeWallpaper,
@@ -92,7 +96,7 @@ enum Gesture {
 
 struct Rename {
     path: PathBuf,
-    editor: NameEditor,
+    field: WidgetId,
 }
 
 struct Motion {
@@ -118,7 +122,9 @@ pub struct DesktopView {
     labels: HashMap<PathBuf, Label>,
     motions: HashMap<PathBuf, Motion>,
     backdrop: Backdrop,
-    text: TextSystem,
+    ui: Ui,
+    anchor: WidgetId,
+    editing: bool,
     appearance: Appearance,
     focused: bool,
     size: (f32, f32),
@@ -180,6 +186,13 @@ pub fn fitted_label(text: &mut TextSystem, name: &str, style: TextStyle, width: 
 
 impl DesktopView {
     pub fn new(appearance: Appearance, layouts: Layouts) -> Self {
+        let anchor = Anchor::new();
+        let anchor_id = anchor.id();
+        let mut ui = Ui::new(
+            Box::new(anchor),
+            Context::new(TextSystem::new(), appearance.palette()),
+        );
+        ui.set_appearance(appearance);
         Self {
             desktop: Desktop::new(Grid::new(Bounds::new(0.0, 0.0, 1.0, 1.0))),
             layouts,
@@ -188,7 +201,9 @@ impl DesktopView {
             labels: HashMap::new(),
             motions: HashMap::new(),
             backdrop: Backdrop::default(),
-            text: TextSystem::new(),
+            ui,
+            anchor: anchor_id,
+            editing: false,
             appearance,
             focused: false,
             size: (1.0, 1.0),
@@ -272,7 +287,7 @@ impl DesktopView {
         if let Some(rename) = &self.rename
             && self.desktop.item(&rename.path).is_none()
         {
-            self.rename = None;
+            self.cancel_rename();
         }
         self.retarget(now);
         self.populated = true;
@@ -302,6 +317,7 @@ impl DesktopView {
 
     pub fn set_appearance(&mut self, appearance: Appearance) {
         self.appearance = appearance;
+        self.ui.set_appearance(appearance);
         self.labels.clear();
     }
 
@@ -380,27 +396,73 @@ impl DesktopView {
         if item.kind == Kind::Volume {
             return;
         }
+        let name = item.name.clone();
+        let stem = match item.kind {
+            Kind::File => Path::new(&name)
+                .file_stem()
+                .map_or(name.len(), |stem| stem.len()),
+            _ => name.len(),
+        };
+        let mut field = TextField::new("", &name, |_| {}).borderless(LABEL_SIZE);
+        field.select(0..stem);
+        let field_id = field.id();
+        let at = self.editor_bounds(path).map(rect).unwrap_or_default();
+        if let Some(anchor) = self.ui.widget_as::<Anchor>(self.anchor) {
+            anchor.hold(Some(Box::new(field)), at);
+        }
+        self.ui.perform(&ActionRequest {
+            action: Action::Focus,
+            target_tree: TreeId::ROOT,
+            target_node: field_id.into(),
+            data: None,
+        });
+        self.ui.layout(Size::new(self.size.0, self.size.1));
         self.rename = Some(Rename {
             path: path.to_path_buf(),
-            editor: NameEditor::new(&item.name, item.kind == Kind::Folder),
+            field: field_id,
         });
     }
 
+    fn cancel_rename(&mut self) {
+        self.rename = None;
+        self.editing = false;
+        if let Some(anchor) = self.ui.widget_as::<Anchor>(self.anchor) {
+            anchor.hold(None, Rect::default());
+        }
+    }
+
     fn commit_rename(&mut self) {
-        let Some(rename) = self.rename.take() else {
+        let Some(rename) = self.rename.as_ref() else {
             return;
         };
-        let name = rename.editor.text().trim().to_owned();
+        let path = rename.path.clone();
+        let name = self
+            .ui
+            .widget_as::<TextField>(rename.field)
+            .map(|field| field.text().trim().to_owned())
+            .unwrap_or_default();
+        self.cancel_rename();
         let unchanged = self
             .desktop
-            .item(&rename.path)
+            .item(&path)
             .is_some_and(|item| item.name == name);
         if !name.is_empty() && !unchanged {
-            self.requests.push(Request::Rename {
-                path: rename.path,
-                name,
-            });
+            self.requests.push(Request::Rename { path, name });
         }
+    }
+
+    fn edit(&mut self, event: &Event) -> bool {
+        let handled = self.ui.handle(event);
+        match self.ui.take_clipboard_request() {
+            Some(ClipboardRequest::Copy(text)) => self.requests.push(Request::CopyText(text)),
+            Some(ClipboardRequest::Paste) => self.requests.push(Request::PasteText),
+            None => {}
+        }
+        handled
+    }
+
+    pub fn pasted(&mut self, text: &str) -> bool {
+        self.ui.pasted(text)
     }
 
     fn editor_bounds(&self, path: &Path) -> Option<Bounds> {
@@ -416,7 +478,13 @@ impl DesktopView {
 
     pub fn handle(&mut self, event: &Event, now: Instant) -> bool {
         match event {
-            Event::PointerDown(pointer) => self.pointer_down(pointer),
+            Event::PointerDown(pointer) => self.pointer_down(event, pointer),
+            Event::PointerMove(_) | Event::PointerUp(_) if self.editing => {
+                if matches!(event, Event::PointerUp(_)) {
+                    self.editing = false;
+                }
+                self.edit(event)
+            }
             Event::PointerMove(pointer) => self.pointer_move(pointer),
             Event::PointerUp(pointer) => self.pointer_up(pointer, now),
             Event::ModifiersChanged(modifiers) => {
@@ -427,28 +495,24 @@ impl DesktopView {
                 true
             }
             Event::Key { key, modifiers } => self.key(*key, *modifiers, now),
-            Event::Commit(text) => match &mut self.rename {
-                Some(rename) => {
-                    rename.editor.insert(text);
-                    true
-                }
-                None => {
-                    self.type_select(text, now);
-                    true
-                }
-            },
+            Event::Commit(_) | Event::Preedit { .. } if self.rename.is_some() => self.edit(event),
+            Event::Commit(text) => {
+                self.type_select(text, now);
+                true
+            }
             _ => false,
         }
     }
 
-    fn pointer_down(&mut self, pointer: &Pointer) -> bool {
+    fn pointer_down(&mut self, event: &Event, pointer: &Pointer) -> bool {
         let at = pointer.position;
         if let Some(rename) = &self.rename {
             let inside = self
                 .editor_bounds(&rename.path)
                 .is_some_and(|bounds| bounds.contains(at.x, at.y));
             if inside {
-                return false;
+                self.editing = true;
+                return self.edit(event);
             }
             self.commit_rename();
         }
@@ -627,15 +691,11 @@ impl DesktopView {
     fn rename_key(&mut self, key: Key, modifiers: Modifiers) -> bool {
         match key {
             Key::Enter => self.commit_rename(),
-            Key::Escape => self.rename = None,
+            Key::Escape => self.cancel_rename(),
             Key::Tab => {
                 self.commit_rename();
             }
-            _ => {
-                if let Some(rename) = &mut self.rename {
-                    return rename.editor.key(key, modifiers);
-                }
-            }
+            _ => return self.edit(&Event::Key { key, modifiers }),
         }
         true
     }
@@ -772,10 +832,10 @@ impl DesktopView {
             (false, false) => (LIGHT_TEXT, Some(Color::hex(0).with_alpha(150))),
         };
         let style = TextStyle::new(LABEL_SIZE, color).weight(TextStyle::MEDIUM);
-        let text = fitted_label(&mut self.text, &item.name, style, LABEL_WIDTH);
+        let text = fitted_label(&mut self.ui.context().text, &item.name, style, LABEL_WIDTH);
         let shadow = shadow.map(|shadow| {
             fitted_label(
-                &mut self.text,
+                &mut self.ui.context().text,
                 &item.name,
                 TextStyle {
                     color: shadow,
@@ -879,28 +939,9 @@ impl DesktopView {
         let Some(field) = self.editor_bounds(&rename.path) else {
             return;
         };
-        let text = rename.editor.text().to_owned();
-        let selection = rename.editor.selection();
-        let cursor = rename.editor.cursor();
-        let style = TextStyle::new(LABEL_SIZE, palette.label_primary).weight(TextStyle::MEDIUM);
-        let measure = |system: &mut TextSystem, upto: usize| {
-            system
-                .paragraph(&text[..upto], style, None, TextAlign::Start)
-                .width()
-        };
-        let full = measure(&mut self.text, text.len());
-        let (start, end, caret) = (
-            measure(&mut self.text, selection.start),
-            measure(&mut self.text, selection.end),
-            measure(&mut self.text, cursor),
-        );
-        let inner = field.width - 8.0;
-        let scroll = if full <= inner {
-            -((inner - full) / 2.0).round()
-        } else {
-            (caret - inner + 2.0).max(0.0)
-        };
-        let text_x = field.x + 4.0 - scroll;
+        if let Some(anchor) = self.ui.widget_as::<Anchor>(self.anchor) {
+            anchor.move_to(rect(field));
+        }
         items.push(SceneItem::Shadow {
             shape: Shape::rounded(rect(field), 4.0),
             offset: Point::new(0.0, 1.0),
@@ -913,39 +954,12 @@ impl DesktopView {
             width: 1.5,
             paint: palette.accent_color.into(),
         });
-        let mut inside = Vec::new();
-        if selection.is_empty() {
-            inside.push(fill(
-                Bounds::new(text_x + caret, field.y + 3.0, 1.0, field.height - 6.0),
-                0.0,
-                palette.label_primary,
-            ));
-        } else {
-            inside.push(fill(
-                Bounds::new(
-                    text_x + start,
-                    field.y + 2.0,
-                    end - start,
-                    field.height - 4.0,
-                ),
-                2.0,
-                palette.accent_color.with_alpha(90),
-            ));
-        }
-        let paragraph = self.text.paragraph(&text, style, None, TextAlign::Start);
-        inside.push(SceneItem::Text {
-            origin: Point::new(text_x, field.y + (field.height - paragraph.height()) / 2.0),
-            paragraph,
-        });
-        items.push(SceneItem::Clip {
-            shape: Shape::rect(rect(Bounds::new(
-                field.x + 2.0,
-                field.y,
-                field.width - 4.0,
-                field.height,
-            ))),
-            items: inside,
-        });
+        let (width, height) = self.size;
+        items.extend(
+            self.ui
+                .scene(width.round() as u32, height.round() as u32)
+                .items,
+        );
     }
 
     pub fn scene(&mut self, now: Instant) -> Scene {

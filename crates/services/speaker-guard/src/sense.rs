@@ -47,6 +47,7 @@ impl std::fmt::Display for Fault {
 }
 
 const STARTUP_GRACE_FRAMES: usize = 2400;
+const MIN_JUDGED_FRAMES: usize = 256;
 const POLARITY_WINDOW_SECONDS: f64 = 0.5;
 const POLARITY_MIN_POWER: f64 = 0.001;
 const POLARITY_RATIO: f64 = -0.25;
@@ -132,8 +133,9 @@ impl SenseMonitor {
     ) -> Result<f64, Fault> {
         self.stream_frames += frames;
         let in_grace = self.stream_frames <= STARTUP_GRACE_FRAMES;
-        let voltage_frozen = measurement.voltage.min == measurement.voltage.max;
-        let current_frozen = measurement.current.min == measurement.current.max;
+        let judged = frames >= MIN_JUDGED_FRAMES;
+        let voltage_frozen = judged && measurement.voltage.min == measurement.voltage.max;
+        let current_frozen = judged && measurement.current.min == measurement.current.max;
         if voltage_frozen && (self.voltage_seen_live || !in_grace) {
             return Err(Fault::FrozenVoltage);
         }

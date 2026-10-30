@@ -9,6 +9,7 @@ use crate::model::Model;
 
 const UNLOCK_MAGIC: i32 = 0xdec1_be15_u32 as i32;
 const AMPLIFIER_SENSITIVITY_TOLERANCE: f64 = 0.03;
+const EAGAIN: i32 = 11;
 
 #[derive(Debug)]
 pub enum CardError {
@@ -198,7 +199,7 @@ pub struct SensePcm {
 impl SensePcm {
     pub fn open(model: &Model, channels: usize) -> Result<Self, CardError> {
         let name = format!("hw:{},{}", model.card, model.sense_device);
-        let pcm = PCM::new(&name, Direction::Capture, false)
+        let pcm = PCM::new(&name, Direction::Capture, true)
             .map_err(|e| CardError::Alsa("open", name.clone(), e))?;
         {
             let params =
@@ -238,9 +239,11 @@ impl SensePcm {
             .pcm
             .io_i16()
             .map_err(|e| CardError::Alsa("read", self.name.clone(), e))?;
-        io.readi(buffer)
-            .map(Some)
-            .map_err(|e| CardError::Alsa("read", self.name.clone(), e))
+        match io.readi(buffer) {
+            Ok(frames) => Ok(Some(frames)),
+            Err(error) if error.errno() == EAGAIN => Ok(None),
+            Err(error) => Err(CardError::Alsa("read", self.name.clone(), error)),
+        }
     }
 
     pub fn restart(&self) -> Result<(), CardError> {

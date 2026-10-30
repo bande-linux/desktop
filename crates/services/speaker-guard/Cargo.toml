@@ -18,6 +18,7 @@ section = "sound"
 depends = "$auto, systemd"
 conflicts = "speakersafetyd"
 replaces = "speakersafetyd"
+provides = "speakersafetyd"
 extended-description = """\
 Keeps the internal speakers of supported Apple silicon Macs within their \
 thermal limits. It reads the amplifier's voltage and current sense, models \

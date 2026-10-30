@@ -568,29 +568,26 @@ impl DesktopView {
         handled
     }
 
-    fn cut(&mut self, paths: Vec<PathBuf>) {
-        let files = paths
+    fn without_volumes(&self, paths: Vec<PathBuf>) -> Vec<PathBuf> {
+        paths
             .into_iter()
             .filter(|path| {
                 self.desktop
                     .item(path)
                     .is_some_and(|item| item.kind != Kind::Volume)
             })
-            .collect::<Vec<_>>();
+            .collect()
+    }
+
+    fn on_files(&mut self, paths: Vec<PathBuf>, request: fn(Vec<PathBuf>) -> Request) {
+        let files = self.without_volumes(paths);
         if !files.is_empty() {
-            self.requests.push(Request::Cut(files));
+            self.requests.push(request(files));
         }
     }
 
     fn ask_to_delete(&mut self, paths: Vec<PathBuf>) {
-        let deletable = paths
-            .into_iter()
-            .filter(|path| {
-                self.desktop
-                    .item(path)
-                    .is_some_and(|item| item.kind != Kind::Volume)
-            })
-            .collect::<Vec<_>>();
+        let deletable = self.without_volumes(paths);
         if deletable.is_empty() {
             return;
         }
@@ -948,12 +945,25 @@ impl DesktopView {
             _ => None,
         };
         match (self.target(at), own) {
-            (Target::Folder(folder), _) => self.requests.push(Request::Transfer {
-                sources,
-                folder,
-                copy,
-            }),
-            (Target::Desktop, Some(_)) if copy => self.requests.push(Request::Duplicate(sources)),
+            (Target::Folder(folder), _) => {
+                let sources: Vec<PathBuf> = sources
+                    .into_iter()
+                    .filter(|source| {
+                        copy || self
+                            .desktop
+                            .item(source)
+                            .is_none_or(|item| item.kind != Kind::Volume)
+                    })
+                    .collect();
+                if !sources.is_empty() {
+                    self.requests.push(Request::Transfer {
+                        sources,
+                        folder,
+                        copy,
+                    });
+                }
+            }
+            (Target::Desktop, Some(_)) if copy => self.on_files(sources, Request::Duplicate),
             (Target::Desktop, Some(from)) => {
                 let grid = self.desktop.grid();
                 let (start, end) = (grid.slot_at(from.x, from.y), grid.slot_at(at.x, at.y));
@@ -1039,7 +1049,7 @@ impl DesktopView {
                 self.ask_to_delete(selected);
             }
             Key::Backspace | Key::Delete if command && !selected.is_empty() => {
-                self.requests.push(Request::Trash(selected));
+                self.on_files(selected, Request::Trash);
             }
             Key::Function(10) if modifiers.shift => self.menu_from_keyboard(),
             Key::Escape => {
@@ -1050,9 +1060,9 @@ impl DesktopView {
                 'a' => self.desktop.select_all(),
                 'n' if modifiers.shift => self.requests.push(Request::NewFolder),
                 'd' if modifiers.shift => self.requests.push(Request::OpenDesktopFolder),
-                'd' if !selected.is_empty() => self.requests.push(Request::Duplicate(selected)),
+                'd' if !selected.is_empty() => self.on_files(selected, Request::Duplicate),
                 'c' if !selected.is_empty() => self.requests.push(Request::Copy(selected)),
-                'x' if !selected.is_empty() => self.cut(selected),
+                'x' if !selected.is_empty() => self.on_files(selected, Request::Cut),
                 'v' => self.requests.push(Request::Paste {
                     moves: modifiers.alt,
                 }),
@@ -1121,14 +1131,20 @@ impl DesktopView {
                 Some(path) => Request::ShowInfo(path.clone()),
                 None => return,
             },
-            Command::Duplicate => Request::Duplicate(selected),
+            Command::Duplicate => {
+                self.on_files(selected, Request::Duplicate);
+                return;
+            }
             Command::Copy => Request::Copy(selected),
             Command::Cut => {
-                self.cut(selected);
+                self.on_files(selected, Request::Cut);
                 return;
             }
             Command::Paste => Request::Paste { moves: false },
-            Command::Trash => Request::Trash(selected),
+            Command::Trash => {
+                self.on_files(selected, Request::Trash);
+                return;
+            }
             Command::DeleteImmediately => {
                 self.ask_to_delete(selected);
                 return;

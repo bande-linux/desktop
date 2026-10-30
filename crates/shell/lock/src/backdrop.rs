@@ -2,8 +2,9 @@ use std::io;
 use std::path::PathBuf;
 use std::thread;
 
+use unbound_inbox::Inbox;
 use unbound_toolkit::Image;
-use unbound_wallpaper::{Choice, Inbox, Variant, backdrop, inbox, read};
+use unbound_wallpaper::{Choice, Variant, backdrop, read};
 use unbound_xdg::data_dirs;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -17,7 +18,8 @@ pub fn load_backdrop(
     variant: Variant,
     size: (u32, u32),
 ) -> io::Result<Inbox<Image>> {
-    let (received, sender) = inbox()?;
+    let received = Inbox::new()?;
+    let sender = received.outbox();
     thread::Builder::new()
         .name("backdrop".to_owned())
         .spawn(move || {

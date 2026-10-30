@@ -63,6 +63,22 @@ fn count(document: &KdlDocument, key: &str) -> Result<usize, ModelError> {
         .ok_or_else(|| ModelError::Missing(key.to_owned()))
 }
 
+fn counts(document: &KdlDocument, key: &str) -> Result<Vec<usize>, ModelError> {
+    let node = document
+        .get(key)
+        .ok_or_else(|| ModelError::Missing(key.to_owned()))?;
+    node.entries()
+        .iter()
+        .map(|entry| {
+            entry
+                .value()
+                .as_integer()
+                .and_then(|value| usize::try_from(value).ok())
+                .ok_or_else(|| ModelError::Invalid(key.to_owned()))
+        })
+        .collect()
+}
+
 fn text(document: &KdlDocument, key: &str) -> Result<String, ModelError> {
     document
         .get_arg(key)
@@ -85,6 +101,7 @@ fn speaker(node: &KdlNode, document: &KdlDocument) -> Result<Speaker, ModelError
         control_prefix,
         sense: SenseLayout {
             channels: count(document, "sense-channels")?,
+            idle_channels: counts(document, "sense-idle-channels")?,
             current_channel: count(settings, "current-channel")?,
             voltage_channel: count(settings, "voltage-channel")?,
             current_full_scale: number(document, "current-full-scale")?,
@@ -132,6 +149,10 @@ fn speaker(node: &KdlNode, document: &KdlDocument) -> Result<Speaker, ModelError
     if sense.current_channel >= sense.channels
         || sense.voltage_channel >= sense.channels
         || sense.current_channel == sense.voltage_channel
+        || sense.idle_channels.is_empty()
+        || sense.idle_channels.iter().any(|&c| {
+            c >= sense.channels || c == sense.current_channel || c == sense.voltage_channel
+        })
     {
         return Err(ModelError::Invalid("sense channels".to_owned()));
     }

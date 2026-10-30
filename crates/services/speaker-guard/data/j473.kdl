@@ -1,6 +1,7 @@
 card "AppleJ473"
 sense-device 2
-sense-channels 2
+sense-channels 16
+sense-idle-channels 2 3 4 5 6 7 8 9 10 11 12 13 14 15
 period-frames 1024
 amplifier-sensitivity 15.87
 max-gain -20.0

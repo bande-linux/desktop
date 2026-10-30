@@ -3,6 +3,7 @@ pub struct SenseLayout {
     pub channels: usize,
     pub current_channel: usize,
     pub voltage_channel: usize,
+    pub idle_channels: Vec<usize>,
     pub current_full_scale: f64,
     pub voltage_full_scale: f64,
     pub dc_resistance: f64,
@@ -22,6 +23,7 @@ pub struct Measurement {
     pub voltage_rms: f64,
     pub mean_product: f64,
     pub open_loop_power: f64,
+    pub idle_active: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -30,6 +32,7 @@ pub enum Fault {
     Impedance(f64),
     FrozenVoltage,
     FrozenCurrent,
+    Misaligned,
 }
 
 impl std::fmt::Display for Fault {
@@ -42,6 +45,10 @@ impl std::fmt::Display for Fault {
             Self::Impedance(ohms) => write!(f, "implausible speaker impedance {ohms:.2} ohm"),
             Self::FrozenVoltage => write!(f, "voltage sense stream is frozen"),
             Self::FrozenCurrent => write!(f, "current sense stream is frozen"),
+            Self::Misaligned => write!(
+                f,
+                "a sense slot that the amplifier leaves idle carries data: the capture is not aligned with the amplifier's frame"
+            ),
         }
     }
 }
@@ -97,6 +104,10 @@ impl SenseLayout {
             voltage_rms,
             mean_product: product / count,
             open_loop_power: voltage_rms * voltage_rms / self.dc_resistance,
+            idle_active: self
+                .idle_channels
+                .iter()
+                .any(|&channel| samples(channel).any(|v| v != 0)),
         }
     }
 }
@@ -136,6 +147,9 @@ impl SenseMonitor {
         seconds: f64,
         worst_case: f64,
     ) -> Result<f64, Fault> {
+        if measurement.idle_active {
+            return Err(Fault::Misaligned);
+        }
         let judged = frames >= MIN_JUDGED_FRAMES;
         let voltage_frozen = judged && measurement.voltage.min == measurement.voltage.max;
         let current_frozen = judged && measurement.current.min == measurement.current.max;
@@ -193,11 +207,31 @@ mod tests {
             channels: 2,
             current_channel: 0,
             voltage_channel: 1,
+            idle_channels: Vec::new(),
             current_full_scale: 3.75,
             voltage_full_scale: 14.0,
             dc_resistance: 4.6,
         };
         SenseMonitor::new(layout, 15.87 * 15.87 / 4.6)
+    }
+
+    fn sixteen_slots(stream: &[i16], delay: usize) -> Vec<i16> {
+        stream
+            .chunks(2)
+            .flat_map(|pair| {
+                let mut bits = [false; 256];
+                for (word, value) in pair.iter().enumerate() {
+                    for bit in 0..16 {
+                        bits[(word * 16 + bit + delay) % 256] =
+                            (*value as u16) & (0x8000 >> bit) != 0;
+                    }
+                }
+                (0..16).map(move |word| {
+                    (0..16).fold(0u16, |acc, bit| acc << 1 | u16::from(bits[word * 16 + bit]))
+                        as i16
+                })
+            })
+            .collect()
     }
 
     fn stream(volts: f64, ohms: f64, current_sign: f64) -> Vec<i16> {
@@ -284,6 +318,24 @@ mod tests {
         let mut clipped = stream(1.0, 4.6, 1.0);
         clipped[1] = i16::MAX;
         assert_eq!(assess(&mut monitor, &clipped), Ok(monitor.worst_case_power));
+    }
+
+    #[test]
+    fn a_capture_that_is_not_aligned_with_the_amplifier_frame_is_a_fault() {
+        let mut layout = j473().layout;
+        layout.channels = 16;
+        layout.idle_channels = (2..16).collect();
+        let mut monitor = SenseMonitor::new(layout, j473().worst_case_power);
+        let aligned = sixteen_slots(&stream(0.1, 4.6, 1.0), 0);
+        assert!(assess(&mut monitor, &aligned).is_ok());
+        for shift in [1, 2, 7, 15, 16, 80, 129, 255] {
+            let shifted = sixteen_slots(&stream(0.1, 4.6, 1.0), shift);
+            assert_eq!(
+                assess(&mut monitor, &shifted),
+                Err(Fault::Misaligned),
+                "{shift}"
+            );
+        }
     }
 
     #[test]

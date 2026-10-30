@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use unbound_graphics::{Color, CpuRenderer, Item, Point, Rect, Scene, Shape, Snapshot};
+use unbound_graphics::{Color, CpuRenderer, Item, Path, Point, Rect, Scene, Shape, Snapshot};
 
 const WHITE: Color = Color::hex(0xFFFFFF);
 const BLACK: Color = Color::hex(0x000000);
@@ -92,4 +92,61 @@ fn a_line_is_stroked_with_round_caps_between_its_ends() {
     );
     assert_eq!(red(&line, 20, 9), 255);
     assert_eq!(red(&line, 20, 11), 255);
+}
+
+#[test]
+fn a_closed_path_fills_the_area_it_encloses() {
+    let triangle = Path::through(&[
+        Point::new(0.0, 0.0),
+        Point::new(20.0, 0.0),
+        Point::new(0.0, 20.0),
+    ])
+    .close();
+    let frame = render(
+        vec![Item::FillPath {
+            path: triangle,
+            paint: BLACK.into(),
+        }],
+        1.0,
+    );
+    assert_eq!(red(&frame, 3, 3), 0, "inside the triangle");
+    assert_eq!(red(&frame, 16, 16), 255, "beyond its slanted side");
+}
+
+#[test]
+fn a_stroked_polyline_follows_its_points() {
+    let graph = Path::through(&[
+        Point::new(2.0, 18.0),
+        Point::new(20.0, 2.0),
+        Point::new(38.0, 18.0),
+    ]);
+    let frame = render(
+        vec![Item::StrokePath {
+            path: graph,
+            width: 2.0,
+            paint: BLACK.into(),
+        }],
+        1.0,
+    );
+    assert!(red(&frame, 20, 2) < 128, "on the peak");
+    assert!(red(&frame, 29, 10) < 128, "on the falling edge");
+    assert_eq!(red(&frame, 20, 15), 255, "under the peak");
+}
+
+#[test]
+fn a_scale_layer_grows_its_content_around_the_origin_given() {
+    let frame = render(
+        vec![Item::Scale {
+            origin: Point::new(20.0, 10.0),
+            factor: 2.0,
+            items: vec![Item::Fill {
+                shape: Shape::rect(Rect::new(15.0, 5.0, 10.0, 10.0)),
+                paint: BLACK.into(),
+            }],
+        }],
+        1.0,
+    );
+    assert_eq!(red(&frame, 11, 10), 0, "the left edge moved out to x 10");
+    assert_eq!(red(&frame, 9, 10), 255);
+    assert_eq!(red(&frame, 28, 1), 0, "and the top edge up to y 0");
 }

@@ -1,6 +1,6 @@
 use std::fmt;
 use std::fs;
-use std::path::Path;
+use std::path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Weak};
 
@@ -97,6 +97,56 @@ impl Shape {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum PathElement {
+    Move(Point),
+    Line(Point),
+    Cubic(Point, Point, Point),
+    Close,
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Path {
+    pub(crate) elements: Vec<PathElement>,
+}
+
+impl Path {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn through(points: &[Point]) -> Self {
+        let mut path = Self::new();
+        for (index, point) in points.iter().enumerate() {
+            path = match index {
+                0 => path.move_to(*point),
+                _ => path.line_to(*point),
+            };
+        }
+        path
+    }
+
+    pub fn move_to(mut self, point: Point) -> Self {
+        self.elements.push(PathElement::Move(point));
+        self
+    }
+
+    pub fn line_to(mut self, point: Point) -> Self {
+        self.elements.push(PathElement::Line(point));
+        self
+    }
+
+    pub fn cubic_to(mut self, first: Point, second: Point, end: Point) -> Self {
+        self.elements.push(PathElement::Cubic(first, second, end));
+        self
+    }
+
+    pub fn close(mut self) -> Self {
+        self.elements.push(PathElement::Close);
+        self
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Stop {
     pub offset: f32,
     pub color: Color,
@@ -135,7 +185,7 @@ impl fmt::Debug for Image {
 }
 
 impl Image {
-    pub fn load(path: &Path, size: u32) -> Option<Self> {
+    pub fn load(path: &path::Path, size: u32) -> Option<Self> {
         let bytes = fs::read(path).ok()?;
         if path.extension().is_some_and(|extension| extension == "svg") {
             return Self::from_svg(&bytes, size, size);
@@ -248,6 +298,20 @@ pub enum Item {
         to: Point,
         width: f32,
         paint: Paint,
+    },
+    FillPath {
+        path: Path,
+        paint: Paint,
+    },
+    StrokePath {
+        path: Path,
+        width: f32,
+        paint: Paint,
+    },
+    Scale {
+        origin: Point,
+        factor: f32,
+        items: Vec<Item>,
     },
     Image {
         rect: Rect,

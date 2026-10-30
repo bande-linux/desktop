@@ -264,8 +264,9 @@ impl State {
         let Some(tracker) = self.desktop.tracker.take() else {
             return;
         };
+        let before = self.desktop.target;
         let (target, velocity) = if cancelled {
-            (tracker.start, 0.0)
+            (before, 0.0)
         } else {
             tracker.release()
         };
@@ -274,7 +275,7 @@ impl State {
         if !cancelled && !was_shown && scale < PINCH_FOR_LAUNCHER {
             self.show_launcher();
         }
-        if target != tracker.start {
+        if target != before {
             self.hand_keyboard_over(target);
         }
         self.needs_redraw = true;

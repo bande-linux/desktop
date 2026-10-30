@@ -172,6 +172,7 @@ pub enum WindowEvent {
         sources: Vec<String>,
         active: usize,
     },
+    CapsLock(bool),
     Accessibility(ActionRequest),
 
     AppearanceChanged(Appearance),

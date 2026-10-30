@@ -1,27 +1,9 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use std::os::unix::net::UnixStream;
-use std::thread;
-
 use unbound_greeter::{
-    AuthMessageType, ErrorType, Outcome, Request, Response, last_user_file, log_in, login_users,
-    read_message, remember_user, remembered_user, write_message,
+    AuthMessageType, ErrorType, Login, Rejection, Request, Response, Step, last_user_file,
+    login_users, read_message, remember_user, remembered_user, write_message,
 };
-
-fn greetd(script: Vec<(Request, Response)>) -> (UnixStream, thread::JoinHandle<Vec<Request>>) {
-    let (greeter, mut daemon) = UnixStream::pair().expect("socket pair");
-    let handle = thread::spawn(move || {
-        let mut received = Vec::new();
-        for (expected, reply) in script {
-            let request: Request = read_message(&mut daemon).expect("request");
-            assert_eq!(request, expected);
-            received.push(request);
-            write_message(&mut daemon, &reply).expect("reply");
-        }
-        received
-    });
-    (greeter, handle)
-}
 
 fn password_prompt() -> Response {
     Response::AuthMessage {
@@ -57,119 +39,134 @@ fn messages_use_greetds_json_with_a_native_endian_length() {
     );
 }
 
+fn secret(prompt: &str) -> Response {
+    Response::AuthMessage {
+        auth_message_type: AuthMessageType::Secret,
+        auth_message: prompt.to_owned(),
+    }
+}
+
+fn answer(text: &str) -> Step {
+    Step::Send(Request::PostAuthMessageResponse {
+        response: Some(text.to_owned()),
+    })
+}
+
+fn auth_error() -> Response {
+    Response::Error {
+        error_type: ErrorType::AuthError,
+        description: "Authentication failure".to_owned(),
+    }
+}
+
 #[test]
-fn the_right_password_starts_the_session() {
-    let (mut greeter, daemon) = greetd(vec![
-        (
-            Request::CreateSession {
-                username: "ada".to_owned(),
-            },
-            password_prompt(),
-        ),
-        (
-            Request::PostAuthMessageResponse {
-                response: Some("secret".to_owned()),
-            },
-            Response::Success,
-        ),
-        (
-            Request::StartSession {
-                cmd: vec!["unbound-compositor".to_owned()],
-                env: Vec::new(),
-            },
-            Response::Success,
-        ),
-    ]);
+fn the_right_password_starts_the_unbound_session_as_a_wayland_session() {
+    let (mut login, first) = Login::begin("ada", "kåäö1".to_owned());
+    assert_eq!(
+        first,
+        Request::CreateSession {
+            username: "ada".to_owned()
+        }
+    );
 
-    let outcome = log_in(
-        &mut greeter,
-        "ada",
-        "secret".to_owned(),
-        vec!["unbound-compositor".to_owned()],
-    )
-    .expect("conversation");
-
-    assert_eq!(outcome, Outcome::Started);
-    assert_eq!(daemon.join().expect("greetd").len(), 3);
+    assert_eq!(login.respond(password_prompt()), [answer("kåäö1")]);
+    assert_eq!(
+        login.respond(Response::Success),
+        [Step::Send(Request::StartSession {
+            cmd: vec!["unbound-session".to_owned()],
+            env: vec![
+                "XDG_SESSION_TYPE=wayland".to_owned(),
+                "XDG_CURRENT_DESKTOP=Unbound".to_owned(),
+                "XDG_SESSION_DESKTOP=unbound".to_owned(),
+            ],
+        })]
+    );
+    assert_eq!(login.respond(Response::Success), [Step::Started]);
+    assert!(login.is_idle());
 }
 
 #[test]
 fn a_wrong_password_cancels_the_session_so_another_attempt_can_follow() {
-    let (mut greeter, daemon) = greetd(vec![
-        (
-            Request::CreateSession {
-                username: "ada".to_owned(),
-            },
-            password_prompt(),
-        ),
-        (
-            Request::PostAuthMessageResponse {
-                response: Some("wrong".to_owned()),
-            },
-            Response::Error {
-                error_type: ErrorType::AuthError,
-                description: "Authentication failure".to_owned(),
-            },
-        ),
-        (Request::CancelSession, Response::Success),
-    ]);
-
-    let outcome = log_in(
-        &mut greeter,
-        "ada",
-        "wrong".to_owned(),
-        vec!["unbound-compositor".to_owned()],
-    )
-    .expect("conversation");
+    let (mut login, _) = Login::begin("ada", "wrong".to_owned());
+    login.respond(password_prompt());
 
     assert_eq!(
-        outcome,
-        Outcome::Rejected("Authentication failure".to_owned())
+        login.respond(auth_error()),
+        [
+            Step::Rejected(Rejection::WrongPassword),
+            Step::Send(Request::CancelSession)
+        ]
     );
-    daemon.join().expect("greetd");
+    assert!(!login.is_idle());
+    assert_eq!(login.respond(Response::Success), []);
+    assert!(login.is_idle());
 }
 
 #[test]
-fn informational_messages_are_acknowledged_without_a_response() {
-    let (mut greeter, daemon) = greetd(vec![
-        (
-            Request::CreateSession {
-                username: "ada".to_owned(),
-            },
-            Response::AuthMessage {
-                auth_message_type: AuthMessageType::Info,
-                auth_message: "Your password expires in 3 days".to_owned(),
-            },
-        ),
-        (
-            Request::PostAuthMessageResponse { response: None },
-            password_prompt(),
-        ),
-        (
-            Request::PostAuthMessageResponse {
-                response: Some("secret".to_owned()),
-            },
-            Response::Success,
-        ),
-        (
-            Request::StartSession {
-                cmd: vec!["unbound-compositor".to_owned()],
-                env: Vec::new(),
-            },
-            Response::Success,
-        ),
-    ]);
+fn informational_messages_are_shown_and_acknowledged_without_a_response() {
+    let (mut login, _) = Login::begin("ada", "secret".to_owned());
 
-    let outcome = log_in(
-        &mut greeter,
-        "ada",
-        "secret".to_owned(),
-        vec!["unbound-compositor".to_owned()],
-    )
-    .expect("conversation");
+    assert_eq!(
+        login.respond(Response::AuthMessage {
+            auth_message_type: AuthMessageType::Info,
+            auth_message: "Your password expires in 3 days".to_owned(),
+        }),
+        [
+            Step::Show("Your password expires in 3 days".to_owned()),
+            Step::Send(Request::PostAuthMessageResponse { response: None })
+        ]
+    );
+    assert_eq!(login.respond(password_prompt()), [answer("secret")]);
+}
 
-    assert_eq!(outcome, Outcome::Started);
-    daemon.join().expect("greetd");
+#[test]
+fn an_expired_password_asks_for_each_further_secret_and_reports_pams_reason() {
+    let (mut login, _) = Login::begin("ada", "old".to_owned());
+    login.respond(password_prompt());
+    let notice = "You are required to change your password immediately";
+    assert_eq!(
+        login.respond(Response::AuthMessage {
+            auth_message_type: AuthMessageType::Error,
+            auth_message: notice.to_owned(),
+        }),
+        [
+            Step::Show(notice.to_owned()),
+            Step::Send(Request::PostAuthMessageResponse { response: None })
+        ]
+    );
+    assert_eq!(
+        login.respond(secret("Current password: ")),
+        [Step::Ask("Current password: ".to_owned())]
+    );
+    assert_eq!(
+        login.answer("old".to_owned()),
+        Request::PostAuthMessageResponse {
+            response: Some("old".to_owned())
+        }
+    );
+    assert_eq!(
+        login.respond(secret("New password: ")),
+        [Step::Ask("New password: ".to_owned())]
+    );
+
+    assert_eq!(
+        login.respond(auth_error()),
+        [
+            Step::Rejected(Rejection::Failed("Authentication failure".to_owned())),
+            Step::Send(Request::CancelSession)
+        ]
+    );
+}
+
+#[test]
+fn escape_during_a_further_prompt_cancels_the_attempt_without_a_rejection() {
+    let (mut login, _) = Login::begin("ada", "code".to_owned());
+    login.respond(password_prompt());
+    login.respond(secret("Verification code: "));
+
+    assert_eq!(login.cancel(), Request::CancelSession);
+    assert_eq!(login.respond(Response::Success), []);
+    assert!(login.is_idle());
 }
 
 #[test]

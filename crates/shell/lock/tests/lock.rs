@@ -4,9 +4,7 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use unbound_datetime::{DateFormats, posix_locale};
-use unbound_lock::{
-    LockScreen, SHAKE_AMPLITUDE, SHAKE_DURATION, User, clock_texts, display_name, shake_offset,
-};
+use unbound_lock::{LockScreen, SHAKE_DURATION, User, clock_texts, display_name, shake_offset};
 use unbound_toolkit::ui::{Event, Key, Modifiers};
 use unbound_toolkit::{CpuRenderer, Palette, Scheme, TextSystem};
 
@@ -160,7 +158,7 @@ fn the_shake_swings_both_ways_and_dies_down() {
     assert_eq!(*samples.last().expect("samples"), 0.0);
     assert!(samples.iter().any(|offset| *offset > 1.0));
     assert!(samples.iter().any(|offset| *offset < -1.0));
-    assert!(samples.iter().all(|offset| offset.abs() <= SHAKE_AMPLITUDE));
+    assert!(samples.iter().all(|offset| offset.abs() <= 12.0));
     let early = samples[..12]
         .iter()
         .fold(0.0_f32, |max, x| max.max(x.abs()));
@@ -198,4 +196,73 @@ fn the_active_input_source_is_named_under_the_field_when_there_are_several() {
 
     assert!(screen.set_input_source(None));
     assert_eq!(texts(&mut screen), plain);
+}
+
+fn window_label(screen: &LockScreen) -> String {
+    screen
+        .accessibility()
+        .nodes
+        .iter()
+        .find_map(|(_, node)| node.label().map(str::to_owned))
+        .expect("labelled")
+}
+
+fn placeholder(screen: &LockScreen) -> String {
+    screen
+        .accessibility()
+        .nodes
+        .iter()
+        .find_map(|(_, node)| node.placeholder().map(str::to_owned))
+        .expect("a password field")
+}
+
+#[test]
+fn caps_lock_shows_its_sign_in_the_field_and_says_so() {
+    let mut screen = screen();
+    let plain = texts(&mut screen);
+
+    assert!(screen.set_caps_lock(true));
+    assert!(!screen.set_caps_lock(true));
+    assert_eq!(texts(&mut screen), plain + 1);
+    assert!(window_label(&screen).contains("Caps Lock is on"));
+
+    assert!(screen.set_caps_lock(false));
+    assert_eq!(texts(&mut screen), plain);
+}
+
+#[test]
+fn a_message_stays_until_escape_clears_it_with_the_typed_text() {
+    let mut screen = screen();
+    let plain = texts(&mut screen);
+    screen.set_message(Some("Your password expires in 3 days".to_owned()));
+    type_text(&mut screen, "half");
+    assert_eq!(texts(&mut screen), plain + 1);
+    assert!(window_label(&screen).contains("expires in 3 days"));
+
+    assert!(screen.handle(&Event::Key {
+        key: Key::Escape,
+        modifiers: NONE,
+    }));
+
+    assert_eq!(texts(&mut screen), plain);
+    type_text(&mut screen, "whole");
+    press_return(&mut screen);
+    assert_eq!(screen.take_password().as_deref(), Some("whole"));
+}
+
+#[test]
+fn a_follow_up_prompt_names_the_field_and_takes_a_fresh_answer() {
+    let mut screen = screen();
+    type_text(&mut screen, "old");
+    press_return(&mut screen);
+    screen.take_password();
+
+    screen.ask(Some("New password: "));
+    assert_eq!(placeholder(&screen), "New password");
+    type_text(&mut screen, "new");
+    press_return(&mut screen);
+    assert_eq!(screen.take_password().as_deref(), Some("new"));
+
+    screen.ask(None);
+    assert_eq!(placeholder(&screen), "Enter Password");
 }

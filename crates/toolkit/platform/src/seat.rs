@@ -77,6 +77,7 @@ pub(crate) struct Input {
     keyboard: Option<WlKeyboard>,
     keymap: Option<Keymap>,
     modifiers: Modifiers,
+    caps_lock: bool,
     pointer_at: Point,
     held: Vec<(u32, PointerButton)>,
     pointer_popup: Option<usize>,
@@ -188,6 +189,17 @@ impl Input {
         };
         let changed = modifiers != self.modifiers;
         self.modifiers = modifiers;
+        changed
+    }
+
+    fn update_caps_lock(&mut self) -> bool {
+        let caps_lock = self.keymap.as_ref().is_some_and(|keymap| {
+            keymap
+                .state
+                .mod_name_is_active(xkb::MOD_NAME_CAPS, xkb::STATE_MODS_LOCKED)
+        });
+        let changed = caps_lock != self.caps_lock;
+        self.caps_lock = caps_lock;
         changed
     }
 
@@ -512,6 +524,9 @@ impl Dispatch<WlKeyboard, ()> for State {
                         0,
                         group,
                     );
+                }
+                if input.update_caps_lock() {
+                    state.events.push(WindowEvent::CapsLock(input.caps_lock));
                 }
                 if input.update_modifiers() {
                     let modifiers = input.modifiers;

@@ -245,9 +245,22 @@ Unbound uses `greetd` for the privileged part of login and keeps its own UI unpr
 3. **Handover**: after authentication, `greetd` opens the PAM session through `pam_systemd.so`
    and starts the user's session, which runs `unbound-compositor`.
 
-Implemented in `crates/shell/greeter`: greetd's IPC (create a session, answer the secret
-prompt, acknowledge information, start, cancel after a refusal) inside
-`unbound-compositor --greeter`, which runs only the greeter and exits with it.
+Implemented in `crates/shell/greeter`: greetd's IPC inside `unbound-compositor --greeter`,
+which runs only the greeter and exits with it. The conversation runs on the greeter's event
+loop: the typed password answers PAM's first secret prompt; any further prompt (an expired
+password's "Current password", "New password", a one-time code) becomes the field's
+placeholder and takes the next answer; PAM's information and error messages stay under the
+field until the next attempt or Escape, which also clears the field and cancels a pending
+further prompt. A refused password shakes the field (the `shake` spring) and says so; other
+failures show PAM's or greetd's reason. The field shows a Caps Lock sign while Caps Lock is on
+(`WindowEvent::CapsLock` from the toolkit), and the active keyboard layout under the field when
+the system has several. The greeter compositor applies the system's input settings, so the
+layouts are those of `/etc/default/keyboard`. After authentication the greeter asks greetd to
+start `unbound-session` (the wrapper the `unbound.desktop` session entry runs, which starts
+`unbound-compositor.service` in the user's manager) with `XDG_SESSION_TYPE=wayland`,
+`XDG_CURRENT_DESKTOP=Unbound` and `XDG_SESSION_DESKTOP=unbound`, so `pam_systemd` registers a
+Wayland session; the greeter then exits, its compositor with it, releasing the seat and VT
+before greetd runs the session. When the session ends greetd starts the greeter again.
 
 **Installation.** `/etc/greetd/config.toml` is greetd's conffile and stays untouched. The
 `unbound-greeter` package ships its configuration as
@@ -279,8 +292,8 @@ password) whenever the wallpaper changes, and the greeter reads `BackgroundFile`
 macOS login window shows the user's desktop picture. Pictures inside a home folder that the
 greeter user cannot read (Debian creates homes as 0700) fall back to the default; showing them
 needs a privileged copy, which is not done. Also not done: a user picker (Up/Down switches users
-for now), a second secret prompt, power and accessibility menus, and an `unbound-session`
-wrapper (greetd starts `unbound-compositor` directly).
+for now), choosing among several sessions, a visible (non-secret) field for PAM's visible
+prompts (they are answered in the secure field), and power and accessibility menus.
 
 
 ## Crash reporting and supervision

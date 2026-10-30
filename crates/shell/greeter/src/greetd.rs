@@ -2,6 +2,13 @@ use std::io::{self, Read, Write};
 
 use serde::{Deserialize, Serialize};
 
+pub const SESSION: &str = "unbound-session";
+pub const SESSION_ENVIRONMENT: [&str; 3] = [
+    "XDG_SESSION_TYPE=wayland",
+    "XDG_CURRENT_DESKTOP=Unbound",
+    "XDG_SESSION_DESKTOP=unbound",
+];
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Request {
@@ -58,11 +65,17 @@ pub fn read_message<T: for<'de> Deserialize<'de>>(stream: &mut impl Read) -> io:
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Rejection {
+    WrongPassword,
+    Failed(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Step {
     Send(Request),
-    Ask { prompt: String, secret: bool },
+    Ask(String),
     Show(String),
-    Rejected(String),
+    Rejected(Rejection),
     Started,
 }
 
@@ -77,16 +90,16 @@ enum Phase {
 #[derive(Debug)]
 pub struct Login {
     password: Option<String>,
-    session: Vec<String>,
+    asked: bool,
     phase: Phase,
 }
 
 impl Login {
-    pub fn begin(username: &str, password: String, session: Vec<String>) -> (Self, Request) {
+    pub fn begin(username: &str, password: String) -> (Self, Request) {
         (
             Self {
                 password: Some(password),
-                session,
+                asked: false,
                 phase: Phase::Authenticating,
             },
             Request::CreateSession {
@@ -99,10 +112,16 @@ impl Login {
         self.phase == Phase::Idle
     }
 
-    pub fn answer(&mut self, text: String) -> Request {
+    pub fn answer(&self, text: String) -> Request {
         Request::PostAuthMessageResponse {
             response: Some(text),
         }
+    }
+
+    pub fn cancel(&mut self) -> Request {
+        self.password = None;
+        self.phase = Phase::Cancelling;
+        Request::CancelSession
     }
 
     pub fn respond(&mut self, response: Response) -> Vec<Step> {
@@ -114,13 +133,13 @@ impl Login {
             (
                 _,
                 Response::AuthMessage {
-                    auth_message_type: kind @ (AuthMessageType::Secret | AuthMessageType::Visible),
+                    auth_message_type: AuthMessageType::Secret | AuthMessageType::Visible,
                     auth_message,
                 },
-            ) if self.password.is_none() => vec![Step::Ask {
-                prompt: auth_message,
-                secret: kind == AuthMessageType::Secret,
-            }],
+            ) if self.password.is_none() => {
+                self.asked = true;
+                vec![Step::Ask(auth_message)]
+            }
             (
                 _,
                 Response::AuthMessage {
@@ -143,8 +162,8 @@ impl Login {
             (Phase::Authenticating, Response::Success) => {
                 self.phase = Phase::Starting;
                 vec![Step::Send(Request::StartSession {
-                    cmd: self.session.clone(),
-                    env: Vec::new(),
+                    cmd: vec![SESSION.to_owned()],
+                    env: SESSION_ENVIRONMENT.map(str::to_owned).to_vec(),
                 })]
             }
             (Phase::Starting, Response::Success) => {
@@ -152,52 +171,23 @@ impl Login {
                 vec![Step::Started]
             }
             (Phase::Idle, Response::Success) => Vec::new(),
-            (_, Response::Error { description, .. }) => {
-                self.password = None;
-                self.phase = Phase::Cancelling;
-                vec![
-                    Step::Rejected(description),
-                    Step::Send(Request::CancelSession),
-                ]
+            (
+                phase,
+                Response::Error {
+                    error_type,
+                    description,
+                },
+            ) => {
+                let wrong_password = error_type == ErrorType::AuthError
+                    && phase == Phase::Authenticating
+                    && !self.asked;
+                let rejection = if wrong_password {
+                    Rejection::WrongPassword
+                } else {
+                    Rejection::Failed(description)
+                };
+                vec![Step::Rejected(rejection), Step::Send(self.cancel())]
             }
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Outcome {
-    Started,
-    Rejected(String),
-}
-
-pub fn log_in(
-    greetd: &mut (impl Read + Write),
-    username: &str,
-    password: String,
-    session: Vec<String>,
-) -> io::Result<Outcome> {
-    let (mut login, first) = Login::begin(username, password, session);
-    write_message(greetd, &first)?;
-    let mut rejection = None;
-    loop {
-        let response = read_message(greetd)?;
-        for step in login.respond(response) {
-            match step {
-                Step::Send(request) => write_message(greetd, &request)?,
-                Step::Started => return Ok(Outcome::Started),
-                Step::Rejected(reason) => rejection = Some(reason),
-                Step::Ask { prompt, .. } => {
-                    rejection = Some(prompt);
-                    login.phase = Phase::Cancelling;
-                    write_message(greetd, &Request::CancelSession)?;
-                }
-                Step::Show(_) => {}
-            }
-        }
-        if login.is_idle()
-            && let Some(reason) = rejection.take()
-        {
-            return Ok(Outcome::Rejected(reason));
         }
     }
 }

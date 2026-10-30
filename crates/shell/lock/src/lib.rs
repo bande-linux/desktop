@@ -3,7 +3,6 @@ mod pam;
 mod user;
 
 use std::cell::RefCell;
-use std::f32::consts::TAU;
 use std::rc::Rc;
 use std::sync::LazyLock;
 use std::time::{Duration, Instant};
@@ -11,8 +10,9 @@ use std::time::{Duration, Instant};
 use accesskit::{Action, ActionData, ActionRequest, Node, Role, TreeId, TreeUpdate};
 pub use unbound_datetime::DateFormats;
 use unbound_l10n::Localizer;
+use unbound_spring::State;
 use unbound_toolkit::ui::{
-    Animated, Context, Event, SecureField, Size, Spring, Ui, Widget, WidgetId,
+    Animated, Context, Event, Key, SecureField, Size, Spring, Ui, Widget, WidgetId,
 };
 use unbound_toolkit::{
     Color, Image, Item, Palette, Paragraph, Point, Rect, Scene, Shape, TextAlign, TextStyle,
@@ -30,8 +30,7 @@ pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US
 
 pub const PAM_SERVICE: &str = "unbound-lock";
 pub const SHAKE_DURATION: Duration = Duration::from_millis(480);
-pub const SHAKE_AMPLITUDE: f32 = 14.0;
-const SHAKES: f32 = 4.0;
+const SHAKE_KICK: f64 = 600.0;
 const BACKGROUND: Color = Color::hex(0x202830);
 const FOREGROUND: Color = Color::hex(0xFFFFFF);
 const DATE_SIZE: f32 = 20.0;
@@ -43,13 +42,22 @@ const FIELD_WIDTH: f32 = 240.0;
 const FIELD_FONT: f32 = 15.0;
 const GAP: f32 = 12.0;
 const SOURCE_SIZE: f32 = 12.0;
+const MESSAGE_SIZE: f32 = 13.0;
+const MESSAGE_WIDTH: f32 = 360.0;
+const CAPS_LOCK: &str = "\u{21EA}";
+const CAPS_LOCK_INSET: f32 = 8.0;
 
 pub fn shake_offset(elapsed: Duration) -> f32 {
     if elapsed >= SHAKE_DURATION {
         return 0.0;
     }
-    let progress = elapsed.as_secs_f32() / SHAKE_DURATION.as_secs_f32();
-    SHAKE_AMPLITUDE * (1.0 - progress) * (TAU * SHAKES * progress).sin()
+    let kick = State {
+        position: 0.0,
+        velocity: SHAKE_KICK,
+    };
+    Spring::SHAKE
+        .state_at(kick, 0.0, elapsed.as_secs_f64())
+        .position as f32
 }
 
 pub fn clock_texts(formats: &DateFormats, now: &jiff::Zoned) -> (String, String) {
@@ -58,6 +66,8 @@ pub fn clock_texts(formats: &DateFormats, now: &jiff::Zoned) -> (String, String)
 
 struct Model {
     input_source: Option<String>,
+    message: Option<String>,
+    caps_lock: bool,
     name: String,
     initial: String,
     date: String,
@@ -78,6 +88,8 @@ struct LockView {
     children: Vec<Box<dyn Widget>>,
     paragraphs: Option<[Paragraph; 4]>,
     input_source: Option<Paragraph>,
+    message: Option<Paragraph>,
+    caps_lock: Option<Paragraph>,
     frame: Rect,
 }
 
@@ -109,6 +121,22 @@ impl Widget for LockView {
         self.input_source = model.input_source.as_ref().map(|name| {
             let hint = L10N.tr_args("input-source", [("name", name.as_str().into())]);
             paragraph(&hint, SOURCE_SIZE, TextStyle::MEDIUM, cx)
+        });
+        self.message = model.message.as_ref().map(|message| {
+            cx.text.paragraph(
+                message,
+                TextStyle::new(MESSAGE_SIZE, FOREGROUND).weight(TextStyle::MEDIUM),
+                Some(MESSAGE_WIDTH),
+                TextAlign::Center,
+            )
+        });
+        self.caps_lock = model.caps_lock.then(|| {
+            cx.text.paragraph(
+                CAPS_LOCK,
+                TextStyle::new(FIELD_FONT, cx.palette.label_muted).weight(TextStyle::SEMIBOLD),
+                None,
+                TextAlign::Start,
+            )
         });
         drop(model);
         for child in &mut self.children {
@@ -188,10 +216,29 @@ impl Widget for LockView {
         for child in &self.children {
             child.paint(cx, items);
         }
-        if let (Some(source), Some(field)) = (&self.input_source, self.children.first()) {
-            let below = field.frame();
+        let Some(field) = self.children.first().map(|field| field.frame()) else {
+            return;
+        };
+        if let Some(caps_lock) = &self.caps_lock {
             items.push(Item::Text {
-                origin: centred(source, centre, below.y + below.height + GAP),
+                origin: Point::new(
+                    (field.x + field.width - CAPS_LOCK_INSET - caps_lock.width()).round(),
+                    (field.y + (field.height - caps_lock.height()) / 2.0).round(),
+                ),
+                paragraph: caps_lock.clone(),
+            });
+        }
+        let mut below = field.y + field.height + GAP;
+        if let Some(message) = &self.message {
+            items.push(Item::Text {
+                origin: Point::new((centre - MESSAGE_WIDTH / 2.0).round(), below.round()),
+                paragraph: message.clone(),
+            });
+            below += message.height() + GAP / 2.0;
+        }
+        if let Some(source) = &self.input_source {
+            items.push(Item::Text {
+                origin: centred(source, centre, below),
                 paragraph: source.clone(),
             });
         }
@@ -201,13 +248,17 @@ impl Widget for LockView {
         let mut node = Node::new(Role::Window);
         let model = self.model.borrow();
         let locked = L10N.tr_args("locked", [("name", model.name.as_str().into())]);
-        node.set_label(match &model.input_source {
-            Some(name) => format!(
-                "{locked} {}",
-                L10N.tr_args("input-source", [("name", name.as_str().into())])
-            ),
-            None => locked,
-        });
+        let input_source = model
+            .input_source
+            .as_ref()
+            .map(|name| L10N.tr_args("input-source", [("name", name.as_str().into())]));
+        let caps_lock = model.caps_lock.then(|| L10N.tr("caps-lock"));
+        let label = [Some(locked), model.message.clone(), caps_lock, input_source]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join(" ");
+        node.set_label(label);
         node
     }
 
@@ -255,6 +306,8 @@ impl LockScreen {
         let (date, time) = clock_texts(&formats, now);
         let model: Shared = Rc::new(RefCell::new(Model {
             input_source: None,
+            message: None,
+            caps_lock: false,
             name: user.full_name.clone(),
             initial: user
                 .full_name
@@ -286,6 +339,8 @@ impl LockScreen {
             children: vec![Box::new(field)],
             paragraphs: None,
             input_source: None,
+            message: None,
+            caps_lock: None,
             frame: Rect::default(),
         };
         let mut ui = Ui::new(Box::new(view), Context::new(text, palette));
@@ -314,6 +369,37 @@ impl LockScreen {
         changed
     }
 
+    pub fn set_caps_lock(&mut self, on: bool) -> bool {
+        let mut model = self.model.borrow_mut();
+        let changed = model.caps_lock != on;
+        model.caps_lock = on;
+        changed
+    }
+
+    pub fn set_message(&mut self, message: Option<String>) {
+        self.model.borrow_mut().message = message;
+    }
+
+    pub fn ask(&mut self, prompt: Option<&str>) {
+        let placeholder = prompt
+            .map(|prompt| prompt.trim().trim_end_matches(':').to_owned())
+            .unwrap_or_else(|| L10N.tr("enter-password"));
+        if let Some(field) = self.ui.widget_as::<SecureField>(self.field) {
+            field.set_placeholder(&placeholder);
+        }
+        self.clear_field();
+        self.model.borrow_mut().checking = false;
+    }
+
+    fn clear_field(&mut self) {
+        self.ui.perform(&ActionRequest {
+            action: Action::SetValue,
+            target_tree: TreeId::ROOT,
+            target_node: self.field.into(),
+            data: Some(ActionData::Value("".into())),
+        });
+    }
+
     pub fn set_clock(&mut self, now: &jiff::Zoned) {
         let (date, time) = clock_texts(&self.formats, now);
         let mut model = self.model.borrow_mut();
@@ -324,6 +410,14 @@ impl LockScreen {
     pub fn handle(&mut self, event: &Event) -> bool {
         if self.model.borrow().checking {
             return false;
+        }
+        if let Event::Key {
+            key: Key::Escape, ..
+        } = event
+        {
+            self.clear_field();
+            self.model.borrow_mut().message = None;
+            return true;
         }
         self.ui.handle(event)
     }
@@ -344,12 +438,7 @@ impl LockScreen {
     }
 
     pub fn reject(&mut self, at: Instant) {
-        self.ui.perform(&ActionRequest {
-            action: Action::SetValue,
-            target_tree: TreeId::ROOT,
-            target_node: self.field.into(),
-            data: Some(ActionData::Value("".into())),
-        });
+        self.clear_field();
         let mut model = self.model.borrow_mut();
         model.checking = false;
         model.shake_from = Some(at);

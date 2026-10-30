@@ -126,6 +126,10 @@ impl FilesView {
         };
         items_menu(&Selection {
             count: selection.len(),
+            name: selection
+                .first()
+                .map(|entry| entry.name.clone())
+                .unwrap_or_default(),
             trashed,
             searching: self.searching.is_some(),
             folders: !selection.is_empty()
@@ -164,6 +168,7 @@ impl FilesView {
             Command::Info => self.show_inspector(),
             Command::Rename => self.start_rename(),
             Command::Duplicate => self.duplicate(),
+            Command::Compress => self.compress(),
             Command::Copy => self.copy_selection(false),
             Command::Cut => self.copy_selection(true),
             Command::ShowInEnclosingFolder => self.show_in_enclosing_folder(),

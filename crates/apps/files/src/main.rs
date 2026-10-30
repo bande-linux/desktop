@@ -72,7 +72,10 @@ impl Files {
                 return true;
             }
             None => {
-                return menu_bar::key_event(action).is_some_and(|event| self.view.handle(&event));
+                return match menu_bar::key_event(action) {
+                    Some(event) => self.view.handle(&event),
+                    None => self.view.menu_action(action),
+                };
             }
         };
         if let Err(error) = result {

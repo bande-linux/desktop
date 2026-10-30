@@ -9,6 +9,8 @@ pub enum Action {
     NewFolder,
     Trash,
     PutBack,
+    Compress,
+    Extract,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

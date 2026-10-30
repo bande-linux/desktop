@@ -13,6 +13,7 @@ pub enum Command {
     Info,
     Rename,
     Duplicate,
+    Compress,
     Copy,
     Cut,
     ShowInEnclosingFolder,
@@ -35,7 +36,7 @@ pub enum Command {
 
 const OPEN_WITH: &str = "open-with:";
 
-const ACTIONS: [(&str, Command); 26] = [
+const ACTIONS: [(&str, Command); 27] = [
     ("open", Command::Open),
     ("open-in-new-tab", Command::OpenInNewTab),
     ("open-place-in-new-tab", Command::OpenPlaceInNewTab),
@@ -43,6 +44,7 @@ const ACTIONS: [(&str, Command); 26] = [
     ("info", Command::Info),
     ("rename", Command::Rename),
     ("duplicate", Command::Duplicate),
+    ("compress", Command::Compress),
     ("copy", Command::Copy),
     ("cut", Command::Cut),
     ("show-in-enclosing-folder", Command::ShowInEnclosingFolder),
@@ -100,6 +102,7 @@ pub struct App {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Selection {
     pub count: usize,
+    pub name: String,
     pub trashed: bool,
     pub searching: bool,
     pub folders: bool,
@@ -155,6 +158,11 @@ pub fn items_menu(selection: &Selection) -> Menu {
             .enabled(count == 1),
     );
     items.push(item("menu-duplicate", &Command::Duplicate).shortcut("Super+D"));
+    let compress = match count {
+        1 => L10N.tr_args("menu-compress", [("name", selection.name.clone().into())]),
+        _ => L10N.tr_args("menu-compress-items", [("count", count.into())]),
+    };
+    items.push(MenuItem::new(&compress, action(&Command::Compress)));
     items.push(item("menu-cut", &Command::Cut).shortcut("Super+X"));
     items.push(item("menu-copy", &Command::Copy).shortcut("Super+C"));
     items.push(MenuItem::separator());

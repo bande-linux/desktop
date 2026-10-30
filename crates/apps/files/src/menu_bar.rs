@@ -26,6 +26,7 @@ pub fn app_menus() -> Vec<Entry> {
                 shortcut("menu-get-info", "Super+I"),
                 shortcut("menu-rename", "F2"),
                 shortcut("menu-duplicate", "Super+D"),
+                Entry::item(&L10N.tr("menu-compress-selection"), "compress"),
                 Entry::separator(),
                 shortcut("menu-move-to-trash", "Super+Backspace"),
                 shortcut("menu-delete-immediately", "Alt+Super+Backspace"),

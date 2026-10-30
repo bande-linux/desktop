@@ -10,6 +10,10 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use std::time::{Duration, Instant};
 
+mod archive;
+
+pub use archive::{archive_path, can_extract};
+
 use crate::naming::{duplicate_name, keep_both_name, untitled_folder};
 use crate::trash::{Trash, TrashItem, erase, forget, remove_all, restore_to};
 
@@ -51,6 +55,13 @@ pub enum Task {
     EmptyTrash,
     Revert {
         changes: Vec<Change>,
+    },
+    Compress {
+        sources: Vec<PathBuf>,
+        archive: PathBuf,
+    },
+    Extract {
+        archives: Vec<PathBuf>,
     },
 }
 
@@ -344,6 +355,13 @@ impl Worker {
             Task::EmptyTrash => {
                 let items = self.trash.items();
                 self.erase_all(&items)?;
+            }
+            Task::Compress { sources, archive } => self.compress(&sources, &archive)?,
+            Task::Extract { archives } => {
+                for archive in &archives {
+                    let folder = archive.parent().unwrap_or(Path::new("/"));
+                    self.extract(archive, folder)?;
+                }
             }
             Task::Revert { changes } => {
                 self.progress.items_total = changes.len() as u64;

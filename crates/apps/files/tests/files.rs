@@ -746,11 +746,11 @@ fn right_click(view: &mut FilesView, at: Point) -> Menu {
     }
 }
 
-fn titles(menu: &Menu) -> Vec<&str> {
+fn titles(menu: &Menu) -> Vec<String> {
     menu.items
         .iter()
         .filter(|item| !item.separator)
-        .map(|item| item.title.as_str())
+        .map(|item| item.title.replace(['\u{2068}', '\u{2069}'], ""))
         .collect()
 }
 
@@ -777,6 +777,7 @@ fn right_clicking_an_item_selects_it_and_its_menu_acts_on_it() {
             "Get Info",
             "Rename",
             "Duplicate",
+            "Compress “notes.txt”",
             "Cut",
             "Copy",
             "Move to Trash"
@@ -1518,4 +1519,50 @@ fn search_results_match_their_golden() {
         view.handle(&press(Key::Down));
         shoot("search", scheme, &mut view);
     }
+}
+
+#[test]
+fn compressing_makes_an_undoable_zip_and_opening_it_extracts_beside_it() {
+    let place = Place::new();
+    let mut view = place.view();
+    view.handle(&command(Key::Character('2'), false));
+    view.scene(1000, 600);
+    view.handle(&press(Key::End));
+    assert_eq!(selected_name(view.browser()).as_deref(), Some("notes.txt"));
+    let menu = right_click(
+        &mut view,
+        Point::new(
+            SIDEBAR_WIDTH + 60.0,
+            TOOLBAR_HEIGHT + 26.0 + ROW_HEIGHT * 2.5,
+        ),
+    );
+    assert!(titles(&menu).contains(&"Compress “notes.txt”".to_owned()));
+    assert!(view.menu_action("compress"));
+    run_until(&mut view, idle);
+    let archive = place.home().join("notes.txt.zip");
+    assert!(archive.exists());
+    assert_eq!(
+        selected_name(view.browser()).as_deref(),
+        Some("notes.txt.zip")
+    );
+
+    view.handle(&command(Key::Down, false));
+    run_until(&mut view, idle);
+    let extracted = place.home().join("notes 2.txt");
+    assert_eq!(
+        fs::read_to_string(&extracted).expect("extracted"),
+        "notes\n"
+    );
+    assert_eq!(
+        selected_name(view.browser()).as_deref(),
+        Some("notes 2.txt")
+    );
+    assert!(view.take_requests().is_empty());
+
+    view.handle(&command(Key::Character('z'), false));
+    run_until(&mut view, idle);
+    assert!(!extracted.exists());
+    view.handle(&command(Key::Character('z'), false));
+    run_until(&mut view, idle);
+    assert!(!archive.exists());
 }

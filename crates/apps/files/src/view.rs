@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use unbound_fs::{
     Action, Answer, Change, Entry, Finished, FolderWatch, Operations, Purpose, RenameError,
-    Resolution, Task, TrashItem,
+    Resolution, Task, TrashItem, archive_path, can_extract,
 };
 use unbound_preview::Preview;
 use unbound_search::{Usage, recent_files};
@@ -1415,8 +1415,16 @@ impl FilesView {
             self.go(Location::Folder(entry.path.clone()));
             return;
         }
+        let (archives, files): (Vec<_>, Vec<_>) = selection
+            .iter()
+            .filter(|entry| !entry.is_folder())
+            .partition(|entry| entry.trashed.is_none() && can_extract(&entry.path));
+        if !archives.is_empty() {
+            let archives = archives.iter().map(|entry| entry.path.clone()).collect();
+            self.start(Task::Extract { archives }, Purpose::Do(Action::Extract));
+        }
         let mut launches: Vec<(DesktopEntry, Vec<PathBuf>)> = Vec::new();
-        for entry in selection.iter().filter(|entry| !entry.is_folder()) {
+        for entry in files {
             let mime = self.apps.mime_for(&entry.path);
             if let Some(launcher) = self.apps.launcher(&entry.path, &mime) {
                 launches.push((launcher, Vec::new()));
@@ -1532,6 +1540,19 @@ impl FilesView {
             Err(error) => self.show_notice(
                 L10N.tr_args("error-operation", [("error", error.to_string().into())]),
             ),
+        }
+    }
+
+    pub(crate) fn compress(&mut self) {
+        let sources = self.browser.selected_paths();
+        if self.browser.in_trash() {
+            return;
+        }
+        if let Some(archive) = archive_path(&sources) {
+            self.start(
+                Task::Compress { sources, archive },
+                Purpose::Do(Action::Compress),
+            );
         }
     }
 
@@ -1688,8 +1709,14 @@ impl FilesView {
         self.trash_full = !self.browser.trash().is_empty();
         let reveal = matches!(
             finished.purpose,
-            Purpose::Do(Action::Copy | Action::Move | Action::Duplicate | Action::PutBack)
-                | Purpose::Undo(_)
+            Purpose::Do(
+                Action::Copy
+                    | Action::Move
+                    | Action::Duplicate
+                    | Action::PutBack
+                    | Action::Compress
+                    | Action::Extract
+            ) | Purpose::Undo(_)
                 | Purpose::Redo(_)
         );
         let in_view = shown

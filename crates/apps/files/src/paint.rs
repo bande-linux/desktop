@@ -1050,5 +1050,7 @@ fn action_id(action: unbound_fs::Action) -> &'static str {
         unbound_fs::Action::NewFolder => "new-folder",
         unbound_fs::Action::Trash => "trash",
         unbound_fs::Action::PutBack => "put-back",
+        unbound_fs::Action::Compress => "compress",
+        unbound_fs::Action::Extract => "extract",
     }
 }

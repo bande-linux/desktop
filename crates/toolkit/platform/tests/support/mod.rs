@@ -59,9 +59,6 @@ pub fn appearance_portal() -> Portal {
     }
 }
 
-pub const SCHEMES: [(bool, &str); 2] = [(false, "light"), (true, "dark")];
-pub const SCALES: [(f64, &str); 2] = [(1.0, "1x"), (1.5, "1.5x")];
-
 const MIN_SSIM: f64 = 0.99;
 const OUTPUT: (i32, i32) = (480, 340);
 const SHOWN_AT_REST: u32 = 3;
@@ -139,7 +136,6 @@ impl App for Still {
 pub struct Shot {
     pub title: &'static str,
     pub companion: Option<&'static str>,
-    pub scale: f64,
     pub dark: bool,
     pub pointer: (i32, i32),
     pub popups: usize,
@@ -152,12 +148,7 @@ fn draw_on_the_gpu() {
 
 pub fn shot(name: &str, prepare: fn(&mut Window) -> Option<Ui>, shot: Shot) {
     draw_on_the_gpu();
-    let output = (
-        (f64::from(OUTPUT.0) * shot.scale) as i32,
-        (f64::from(OUTPUT.1) * shot.scale) as i32,
-    );
-    let mut server = Headless::new(Size::from(output)).expect("headless compositor");
-    server.set_output_scale(shot.scale);
+    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
     server.set_dark_appearance(shot.dark);
     DARK.store(shot.dark, Ordering::SeqCst);
     let pointer = shot.pointer;

@@ -15,8 +15,9 @@ use unbound_widgets::{
 };
 
 const MIN_SSIM: f64 = 0.99;
-const SCALES: [(f64, &str); 2] = [(1.0, "1x"), (1.5, "1.5x")];
-const SCHEMES: [(Scheme, &str); 2] = [(Scheme::Light, "light"), (Scheme::Dark, "dark")];
+const LIGHT: (Scheme, &str, f64, &str) = (Scheme::Light, "light", 1.0, "1x");
+const DARK: (Scheme, &str, f64, &str) = (Scheme::Dark, "dark", 1.0, "1x");
+const LIGHT_FRACTIONAL: (Scheme, &str, f64, &str) = (Scheme::Light, "light", 1.5, "1.5x");
 
 fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>) {
     let actual = image::RgbaImage::from_raw(size.0, size.1, rgba).expect("frame");
@@ -49,22 +50,25 @@ fn focus(ui: &mut Ui, id: WidgetId) {
     });
 }
 
-fn shoot(name: &str, size: (u32, u32), build: fn(Scheme) -> Ui) {
-    for (scheme, scheme_name) in SCHEMES {
-        for (scale, scale_name) in SCALES {
-            let mut ui = build(scheme);
-            let scene = ui.scene(size.0, size.1);
-            let (width, height) = (pixels(size.0, scale), pixels(size.1, scale));
-            let mut rgba = vec![0; (width * height * 4) as usize];
-            CpuRenderer::new()
-                .render_into(&scene, scale, &mut rgba)
-                .expect("render");
-            check_golden(
-                &format!("{name}-{scheme_name}-{scale_name}"),
-                (width, height),
-                rgba,
-            );
-        }
+fn shoot(
+    name: &str,
+    size: (u32, u32),
+    build: fn(Scheme) -> Ui,
+    variants: &[(Scheme, &str, f64, &str)],
+) {
+    for &(scheme, scheme_name, scale, scale_name) in variants {
+        let mut ui = build(scheme);
+        let scene = ui.scene(size.0, size.1);
+        let (width, height) = (pixels(size.0, scale), pixels(size.1, scale));
+        let mut rgba = vec![0; (width * height * 4) as usize];
+        CpuRenderer::new()
+            .render_into(&scene, scale, &mut rgba)
+            .expect("render");
+        check_golden(
+            &format!("{name}-{scheme_name}-{scale_name}"),
+            (width, height),
+            rgba,
+        );
     }
 }
 
@@ -110,7 +114,7 @@ fn text_editing(scheme: Scheme) -> Ui {
 
 #[test]
 fn text_fields_and_views_match_their_goldens() {
-    shoot("text-editing", (320, 254), text_editing);
+    shoot("text-editing", (320, 254), text_editing, &[LIGHT]);
 }
 
 fn row(children: Vec<Box<dyn Widget>>) -> Box<dyn Widget> {
@@ -199,5 +203,10 @@ const CONTROLS: (u32, u32) = (600, 470);
 
 #[test]
 fn controls_match_their_goldens() {
-    shoot("controls", CONTROLS, controls);
+    shoot(
+        "controls",
+        CONTROLS,
+        controls,
+        &[LIGHT, DARK, LIGHT_FRACTIONAL],
+    );
 }

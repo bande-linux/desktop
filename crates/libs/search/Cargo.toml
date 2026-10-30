@@ -1,0 +1,16 @@
+[package]
+name = "unbound-search"
+description = "Search for Unbound: fuzzy matching, usage ranking, a home folder index and a calculator"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+notify.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

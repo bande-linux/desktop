@@ -3699,9 +3699,14 @@ dependencies = [
  "accesskit",
  "image",
  "image-compare",
+ "tempfile",
  "tracing",
+ "unbound-files",
  "unbound-l10n",
  "unbound-log",
+ "unbound-search",
+ "unbound-settings",
+ "unbound-spring",
  "unbound-toolkit",
  "unbound-xdg",
 ]
@@ -3862,6 +3867,15 @@ dependencies = [
  "unbound-log",
  "unbound-toolkit",
  "unbound-xdg",
+]
+
+[[package]]
+name = "unbound-search"
+version = "0.1.0"
+dependencies = [
+ "notify",
+ "tempfile",
+ "tracing",
 ]
 
 [[package]]

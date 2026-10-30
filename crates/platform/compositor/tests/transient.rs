@@ -1,0 +1,378 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+use std::time::Duration;
+
+use smithay::utils::{Point, Size};
+use unbound_compositor::{Headless, Rect, Renderer};
+use unbound_test_wayland::{BLUE, GREEN, RED, ShmImage, TestClient, roundtrip};
+use wayland_client::protocol::wl_shm::Format;
+
+const OUTPUT: (i32, i32) = (480, 270);
+const PARENT: (i32, i32) = (200, 120);
+const DIALOG: (i32, i32) = (80, 40);
+const BTN_LEFT: u32 = 0x110;
+const KEY_TAB: u32 = 15;
+const KEY_LEFTCTRL: u32 = 29;
+const KEY_LEFTSHIFT: u32 = 42;
+const KEY_M: u32 = 50;
+const KEY_RIGHT: u32 = 106;
+const KEY_UP: u32 = 103;
+const KEY_LEFTALT: u32 = 56;
+const KEY_LEFTMETA: u32 = 125;
+const EDITOR: &str = "org.example.Editor";
+
+fn server() -> Headless {
+    Headless::new(Size::from(OUTPUT)).expect("headless compositor")
+}
+
+fn image(size: (i32, i32), pixels: &[u8]) -> ShmImage<'_> {
+    ShmImage {
+        width: size.0,
+        height: size.1,
+        stride: size.0 * 4,
+        format: Format::Xrgb8888,
+        bytes: pixels,
+    }
+}
+
+fn solid(size: (i32, i32), color: [u8; 4]) -> Vec<u8> {
+    color.repeat((size.0 * size.1) as usize)
+}
+
+fn app_with_dialog(server: &mut Headless) -> TestClient {
+    let mut client = TestClient::connect(server);
+    client.use_seat(server);
+    client.show_window(server, &image(PARENT, &solid(PARENT, RED)));
+    client.show_child_window(server, &image(DIALOG, &solid(DIALOG, GREEN)), 0);
+    client
+}
+
+fn other_app(server: &mut Headless) -> TestClient {
+    let mut client = TestClient::connect(server);
+    client.use_seat(server);
+    client.show_window(server, &image((60, 60), &solid((60, 60), BLUE)));
+    client
+}
+
+fn rect_of(server: &Headless, width: i32) -> Rect {
+    server
+        .windows()
+        .iter()
+        .find(|window| window.size().is_some_and(|size| size.w == width))
+        .and_then(|window| window.geometry())
+        .expect("a mapped window of that width")
+}
+
+fn stacking(server: &Headless) -> Vec<i32> {
+    server
+        .windows()
+        .iter()
+        .map(|window| window.size().expect("mapped").w)
+        .collect()
+}
+
+fn shown(server: &Headless) -> Vec<i32> {
+    server
+        .windows()
+        .iter()
+        .filter(|window| !window.is_minimized())
+        .map(|window| window.size().expect("mapped").w)
+        .collect()
+}
+
+fn settle(server: &mut Headless, from: Duration) -> Duration {
+    let mut at = from;
+    while {
+        at += Duration::from_millis(16);
+        server.animate(at);
+        server.is_animating()
+    } {}
+    at
+}
+
+fn at(x: i32, y: i32) -> Point<f64, smithay::utils::Logical> {
+    (f64::from(x), f64::from(y)).into()
+}
+
+fn click(server: &mut Headless, x: i32, y: i32) {
+    server.move_pointer_to(at(x, y), 0);
+    server.press_button(BTN_LEFT, true, 0);
+    server.press_button(BTN_LEFT, false, 0);
+}
+
+fn beside_dialog(server: &Headless) -> (i32, i32) {
+    let parent = rect_of(server, PARENT.0);
+    (parent.location.x + 10, parent.location.y + 10)
+}
+
+#[test]
+fn a_dialog_opens_centred_over_its_parent_after_the_parent_moved() {
+    let mut server = server();
+    let mut client = TestClient::connect(&mut server);
+    client.use_seat(&mut server);
+    client.show_window(&mut server, &image(PARENT, &solid(PARENT, RED)));
+    let parent = rect_of(&server, PARENT.0);
+    server.move_pointer_to(at(parent.location.x + 5, parent.location.y + 5), 0);
+    server.press_button(BTN_LEFT, true, 0);
+    roundtrip(&mut server, &mut [&mut client]);
+    client.request_move(&mut server, 0);
+    server.move_pointer_to(at(parent.location.x - 95, parent.location.y + 45), 1);
+    server.press_button(BTN_LEFT, false, 2);
+    roundtrip(&mut server, &mut [&mut client]);
+
+    client.show_child_window(&mut server, &image(DIALOG, &solid(DIALOG, GREEN)), 0);
+    roundtrip(&mut server, &mut [&mut client]);
+
+    let parent = rect_of(&server, PARENT.0);
+    let dialog = rect_of(&server, DIALOG.0);
+    assert_eq!(
+        dialog.location,
+        (
+            parent.location.x + (PARENT.0 - DIALOG.0) / 2,
+            parent.location.y + (PARENT.1 - DIALOG.1) / 2
+        )
+            .into()
+    );
+    assert!(client.keyboard_focus_on(1));
+}
+
+#[test]
+fn activating_the_parent_brings_its_dialog_along_on_top() {
+    let mut server = server();
+    let mut editor = app_with_dialog(&mut server);
+    let mut other = other_app(&mut server);
+    roundtrip(&mut server, &mut [&mut editor, &mut other]);
+    assert_eq!(stacking(&server), [PARENT.0, DIALOG.0, 60]);
+
+    let (x, y) = beside_dialog(&server);
+    click(&mut server, x, y);
+    roundtrip(&mut server, &mut [&mut editor, &mut other]);
+
+    assert_eq!(stacking(&server), [60, PARENT.0, DIALOG.0]);
+    assert!(editor.keyboard_focus_on(0));
+}
+
+#[test]
+fn a_dialog_of_a_background_app_opens_directly_above_its_parent() {
+    let mut server = server();
+    let mut editor = TestClient::connect(&mut server);
+    editor.use_seat(&mut server);
+    editor.show_window(&mut server, &image(PARENT, &solid(PARENT, RED)));
+    let mut other = other_app(&mut server);
+    roundtrip(&mut server, &mut [&mut editor, &mut other]);
+
+    editor.show_child_window(&mut server, &image(DIALOG, &solid(DIALOG, GREEN)), 0);
+    roundtrip(&mut server, &mut [&mut editor, &mut other]);
+
+    assert_eq!(stacking(&server), [PARENT.0, DIALOG.0, 60]);
+    assert!(other.keyboard_focus_on(0));
+}
+
+#[test]
+fn moving_the_parent_carries_its_dialog() {
+    let mut server = server();
+    let mut editor = app_with_dialog(&mut server);
+    let before = rect_of(&server, DIALOG.0).location;
+    let (x, y) = beside_dialog(&server);
+
+    server.move_pointer_to(at(x, y), 0);
+    server.press_button(BTN_LEFT, true, 0);
+    roundtrip(&mut server, &mut [&mut editor]);
+    editor.request_move(&mut server, 0);
+    server.move_pointer_to(at(x + 40, y + 25), 1);
+    roundtrip(&mut server, &mut [&mut editor]);
+
+    assert_eq!(
+        rect_of(&server, DIALOG.0).location,
+        before + Point::from((40, 25))
+    );
+}
+
+#[test]
+fn minimizing_a_dialog_minimizes_its_parent_and_restoring_the_app_brings_both_back() {
+    let mut server = server();
+    let mut shell = TestClient::connect_as_shell(&mut server);
+    shell.join_shell(&mut server);
+    let mut editor = app_with_dialog(&mut server);
+    editor.set_app_id(&mut server, 0, EDITOR);
+    editor.set_app_id(&mut server, 1, EDITOR);
+    let mut other = other_app(&mut server);
+    shell.activate_app(&mut server, EDITOR);
+    roundtrip(&mut server, &mut [&mut shell, &mut editor, &mut other]);
+    assert!(editor.keyboard_focus_on(1));
+
+    editor.set_minimized(&mut server, 1);
+    roundtrip(&mut server, &mut [&mut shell, &mut editor, &mut other]);
+    assert_eq!(shown(&server), [60]);
+    assert!(!editor.keyboard_focus_on(0) && !editor.keyboard_focus_on(1));
+
+    shell.activate_app(&mut server, EDITOR);
+    roundtrip(&mut server, &mut [&mut shell, &mut editor, &mut other]);
+    assert_eq!(shown(&server), [60, PARENT.0, DIALOG.0]);
+    assert!(editor.keyboard_focus_on(1));
+}
+
+#[test]
+fn super_m_on_the_parent_takes_its_dialog_along() {
+    let mut server = server();
+    let mut editor = app_with_dialog(&mut server);
+    let mut other = other_app(&mut server);
+    let (x, y) = beside_dialog(&server);
+    click(&mut server, x, y);
+    roundtrip(&mut server, &mut [&mut editor, &mut other]);
+
+    server.key(KEY_LEFTMETA, true, 0);
+    server.key(KEY_M, true, 0);
+    server.key(KEY_M, false, 0);
+    server.key(KEY_LEFTMETA, false, 0);
+    roundtrip(&mut server, &mut [&mut editor, &mut other]);
+
+    let minimized: Vec<bool> = server
+        .windows()
+        .iter()
+        .map(|window| window.is_minimized())
+        .collect();
+    assert_eq!(minimized.iter().filter(|minimized| **minimized).count(), 2);
+    assert!(!editor.keyboard_focus_on(0) && !editor.keyboard_focus_on(1));
+}
+
+#[test]
+fn a_modal_dialog_takes_clicks_on_its_parent_and_shakes() {
+    let mut server = server();
+    let mut editor = app_with_dialog(&mut server);
+    editor.make_modal(&mut server, 1);
+    let mut other = other_app(&mut server);
+    roundtrip(&mut server, &mut [&mut editor, &mut other]);
+    let dialog = rect_of(&server, DIALOG.0);
+    let buttons = editor.buttons().len();
+
+    let (x, y) = beside_dialog(&server);
+    click(&mut server, x, y);
+    roundtrip(&mut server, &mut [&mut editor, &mut other]);
+
+    assert_eq!(editor.buttons().len(), buttons);
+    assert!(editor.keyboard_focus_on(1));
+    assert_eq!(stacking(&server), [60, PARENT.0, DIALOG.0]);
+    server.animate(Duration::from_millis(16));
+    assert!(server.is_animating());
+
+    click(&mut server, dialog.location.x + 5, dialog.location.y + 5);
+    roundtrip(&mut server, &mut [&mut editor, &mut other]);
+    assert!(editor.buttons().len() > buttons);
+}
+
+#[test]
+fn a_non_modal_dialog_lets_its_parent_take_clicks() {
+    let mut server = server();
+    let mut editor = app_with_dialog(&mut server);
+    let buttons = editor.buttons().len();
+
+    let (x, y) = beside_dialog(&server);
+    click(&mut server, x, y);
+    roundtrip(&mut server, &mut [&mut editor]);
+
+    assert!(editor.buttons().len() > buttons);
+    assert!(editor.keyboard_focus_on(0));
+}
+
+#[test]
+fn moving_a_dialog_to_the_next_workspace_takes_its_parent_along() {
+    let mut server = server();
+    let mut editor = app_with_dialog(&mut server);
+    let mut other = other_app(&mut server);
+    let (x, y) = beside_dialog(&server);
+    click(&mut server, x, y);
+    let dialog = rect_of(&server, DIALOG.0);
+    click(&mut server, dialog.location.x + 5, dialog.location.y + 5);
+    roundtrip(&mut server, &mut [&mut editor, &mut other]);
+    assert!(editor.keyboard_focus_on(1));
+
+    for key in [KEY_LEFTCTRL, KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_RIGHT] {
+        server.key(key, true, 0);
+    }
+    for key in [KEY_RIGHT, KEY_LEFTSHIFT, KEY_LEFTMETA, KEY_LEFTCTRL] {
+        server.key(key, false, 0);
+    }
+    settle(&mut server, Duration::ZERO);
+    roundtrip(&mut server, &mut [&mut editor, &mut other]);
+
+    let workspaces: Vec<(i32, Option<usize>)> = server
+        .windows()
+        .iter()
+        .map(|window| {
+            (
+                window.size().expect("mapped").w,
+                server.workspace_of(window),
+            )
+        })
+        .collect();
+    assert!(workspaces.contains(&(PARENT.0, Some(1))));
+    assert!(workspaces.contains(&(DIALOG.0, Some(1))));
+    assert!(workspaces.contains(&(60, Some(0))));
+}
+
+#[test]
+fn the_app_switcher_offers_an_app_once_even_when_its_dialog_has_no_app_id() {
+    let mut server = server();
+    let mut editor = app_with_dialog(&mut server);
+    editor.set_app_id(&mut server, 0, EDITOR);
+    let mut other = other_app(&mut server);
+    roundtrip(&mut server, &mut [&mut editor, &mut other]);
+    let end = settle(&mut server, Duration::ZERO);
+
+    server.key(KEY_LEFTMETA, true, 0);
+    server.key(KEY_TAB, true, 0);
+    server.key(KEY_TAB, false, 0);
+    for step in 1..20 {
+        server.animate(end + Duration::from_millis(step * 16));
+    }
+
+    assert!(server.switcher_shown());
+    assert_eq!(server.switcher_tiles().len(), 2);
+}
+
+fn bounds_of(
+    renderer: &mut Renderer,
+    server: &mut Headless,
+    color: [u8; 3],
+) -> (usize, usize, usize, usize) {
+    renderer.render(server).expect("frame");
+    let snapshot = renderer.snapshot(server).expect("read back");
+    let width = snapshot.size.w as usize;
+    snapshot
+        .rgba
+        .chunks(4)
+        .enumerate()
+        .filter(|(_, pixel)| pixel[..3] == color)
+        .map(|(index, _)| (index % width, index / width))
+        .fold(
+            (usize::MAX, usize::MAX, 0, 0),
+            |(left, top, right, bottom), (x, y)| {
+                (left.min(x), top.min(y), right.max(x), bottom.max(y))
+            },
+        )
+}
+
+#[test]
+fn the_overview_shows_a_dialog_on_its_parents_thumbnail() {
+    let mut server = server();
+    let mut renderer = Renderer::new().expect("renderer");
+    let mut editor = app_with_dialog(&mut server);
+    let mut other = other_app(&mut server);
+    roundtrip(&mut server, &mut [&mut editor, &mut other]);
+    let end = settle(&mut server, Duration::ZERO);
+
+    for key in [KEY_LEFTALT, KEY_LEFTMETA, KEY_UP] {
+        server.key(key, true, 0);
+    }
+    for key in [KEY_UP, KEY_LEFTMETA, KEY_LEFTALT] {
+        server.key(key, false, 0);
+    }
+    settle(&mut server, end);
+
+    let parent = bounds_of(&mut renderer, &mut server, [0xff, 0, 0]);
+    let dialog = bounds_of(&mut renderer, &mut server, [0, 0xff, 0]);
+    assert!(parent.0 < dialog.0 && dialog.2 < parent.2);
+    assert!(parent.1 < dialog.1 && dialog.3 < parent.3);
+    assert!((parent.0 + parent.2).abs_diff(dialog.0 + dialog.2) <= 2);
+}

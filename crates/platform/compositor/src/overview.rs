@@ -281,12 +281,25 @@ impl State {
         )
     }
 
+    fn family_root(&self, window: &Window) -> Option<&Window> {
+        let index = self.window_index(window.surface())?;
+        Some(&self.windows[self.root_index(index)])
+    }
+
     fn arranged(&self, windows: Vec<&Window>, space: u64, area: Frame) -> Vec<Slot> {
-        let rects: Vec<Frame> = windows
+        let (attached, roots): (Vec<&Window>, Vec<&Window>) = windows.iter().partition(|window| {
+            self.family_root(window).is_some_and(|root| {
+                root.surface() != window.surface()
+                    && windows
+                        .iter()
+                        .any(|shown| shown.surface() == root.surface())
+            })
+        });
+        let rects: Vec<Frame> = roots
             .iter()
             .filter_map(|window| real_rect(window))
             .collect();
-        windows
+        let mut slots: Vec<Slot> = roots
             .into_iter()
             .zip(arrange(&rects, area))
             .map(|(window, rect)| Slot {
@@ -294,7 +307,26 @@ impl State {
                 space,
                 rect,
             })
-            .collect()
+            .collect();
+        let carried: Vec<Slot> = attached
+            .into_iter()
+            .filter_map(|window| {
+                let root = self.family_root(window)?;
+                let slot = slots.iter().find(|slot| &slot.surface == root.surface())?;
+                let (home, own) = (real_rect(root)?, real_rect(window)?);
+                let scale = slot.rect.size.w / home.size.w.max(1.0);
+                Some(Slot {
+                    surface: window.surface().clone(),
+                    space,
+                    rect: Rectangle::new(
+                        slot.rect.loc + (own.loc - home.loc).upscale(scale),
+                        own.size.upscale(scale),
+                    ),
+                })
+            })
+            .collect();
+        slots.extend(carried);
+        slots
     }
 
     pub(crate) fn relayout_overview(&mut self) {
@@ -471,7 +503,7 @@ impl State {
         {
             target.rect = returning.rect;
         }
-        if self.overview.dragged() == Some(window.surface())
+        if self.dragged_in_overview(window)
             && let Some(press) = &self.overview.press
         {
             target.rect.loc += self.overview.pointer - press.at;
@@ -570,7 +602,11 @@ impl State {
     }
 
     pub(crate) fn dragged_in_overview(&self, window: &Window) -> bool {
-        self.overview.dragged() == Some(window.surface())
+        self.overview.dragged().is_some_and(|dragged| {
+            self.window_index(dragged)
+                .zip(self.window_index(window.surface()))
+                .is_some_and(|(dragged, index)| self.descends_from(index, dragged))
+        })
     }
 
     fn strip_shift(&self, screen: usize) -> f64 {
@@ -920,6 +956,7 @@ impl State {
         self.overview
             .slots
             .iter()
+            .rev()
             .filter(|slot| Some(&slot.surface) != dragged)
             .find(|slot| self.slot_on_screen(slot).contains(at))
             .map_or(Hit::Nothing, |slot| Hit::Window(slot.surface.clone()))

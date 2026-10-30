@@ -597,6 +597,15 @@ impl Headless {
                     Some(false) => {}
                     None => match under {
                         Some((surface, _)) => {
+                            if let Some(dialog) = state
+                                .toplevel_of(&surface)
+                                .and_then(|window| state.modal_blocker(&window))
+                            {
+                                state.focus(Some(dialog.clone()));
+                                state.nudge(&dialog);
+                                state.swallowed_button = Some(button);
+                                return;
+                            }
                             if let Some(focusable) = state
                                 .toplevel_of(&surface)
                                 .or_else(|| state.focusable_layer_of(&surface))

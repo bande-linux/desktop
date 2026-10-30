@@ -197,6 +197,12 @@ impl State {
     }
 }
 
+impl crate::state::Headless {
+    pub fn is_dragging(&self) -> bool {
+        self.state.drag.is_some()
+    }
+}
+
 impl DataDeviceHandler for State {
     fn data_device_state(&self) -> &DataDeviceState {
         &self.data_device_state

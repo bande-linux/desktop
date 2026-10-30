@@ -32,6 +32,7 @@ serde.workspace = true
 smithay.workspace = true
 unbound-compositor.workspace = true
 unbound-test-bus.workspace = true
+unbound-test-wayland.workspace = true
 
 [lints]
 workspace = true

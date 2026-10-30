@@ -87,7 +87,7 @@ use crate::lock::Lock;
 use crate::motion::IconRect;
 use crate::scene::{
     BlurElement, Closing, Drawn, FillElement, PieceElement, Shading, ShadowElement, WindowElement,
-    preview_elements, surface_blurs, tie_blurs_to_what_lies_below, window_elements,
+    preview_elements, scrim, surface_blurs, tie_blurs_to_what_lies_below, window_elements,
 };
 use crate::screen::{OutputConfig, OutputSettings, Screen};
 use crate::session::{ForceQuit, LockScreen, SessionClient, SessionRole};
@@ -705,7 +705,9 @@ impl Headless {
                         &surface,
                         location,
                         scale,
-                        self.state.backdrop(),
+                        self.state
+                            .backdrop()
+                            .or_else(|| scrim(renderer, self.state.decorations.scheme)),
                     ));
                 }
                 Placed::Window(window) => {
@@ -748,7 +750,11 @@ impl Headless {
                     elements.extend(self.state.overview_elements(renderer, screen, scale));
                 }
                 Placed::Backdrop(screen) => {
-                    elements.extend(self.state.overview_backdrop(screen, scale));
+                    elements.extend(self.state.overview_backdrop(
+                        screen,
+                        scale,
+                        renderer.reduced_effects(),
+                    ));
                 }
             }
         }

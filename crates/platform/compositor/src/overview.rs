@@ -536,7 +536,12 @@ impl State {
         Palette::for_scheme(self.decorations.scheme)
     }
 
-    pub(crate) fn overview_backdrop(&self, screen: usize, scale: f64) -> Vec<OutputElement> {
+    pub(crate) fn overview_backdrop(
+        &self,
+        screen: usize,
+        scale: f64,
+        reduced_effects: bool,
+    ) -> Vec<OutputElement> {
         let alpha = self.overview.progress as f32;
         if alpha <= 0.0 {
             return Vec::new();
@@ -552,12 +557,16 @@ impl State {
         let output = self.screen_rect(screen);
         let output = Rectangle::new(output.location.to_f64(), output.size.to_f64());
         let area = rounded(output.to_physical(scale), 0.0);
+        let scrim = OutputElement::Fill(FillElement::new(
+            scrim,
+            area,
+            premultiplied(self.palette().scrim, alpha),
+        ));
+        if reduced_effects {
+            return vec![scrim];
+        }
         vec![
-            OutputElement::Fill(FillElement::new(
-                scrim,
-                area,
-                premultiplied(self.palette().scrim, alpha),
-            )),
+            scrim,
             OutputElement::Blur(BlurElement::new(blur, area, scale, alpha)),
         ]
     }

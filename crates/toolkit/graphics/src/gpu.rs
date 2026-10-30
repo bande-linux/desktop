@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak, mpsc};
 
 use vello_cpu::Glyph;
@@ -30,6 +31,14 @@ pub struct GpuDevice {
 }
 
 static SHARED: Mutex<Weak<GpuDevice>> = Mutex::new(Weak::new());
+static SOFTWARE_ONLY: AtomicBool = AtomicBool::new(false);
+const SOFTWARE_DRIVERS: [&str; 2] = ["llvmpipe", "lavapipe"];
+
+fn is_software(info: &wgpu::AdapterInfo) -> bool {
+    let name = info.name.to_lowercase();
+    info.device_type == wgpu::DeviceType::Cpu
+        || SOFTWARE_DRIVERS.iter().any(|driver| name.contains(driver))
+}
 
 impl GpuDevice {
     pub fn offscreen() -> Result<Self, RenderError> {
@@ -40,11 +49,16 @@ impl GpuDevice {
         Self::open(instance, adapter)
     }
 
+    pub fn known_software_only() -> bool {
+        SOFTWARE_ONLY.load(Ordering::Relaxed)
+    }
+
     /// # Safety
     ///
     /// The handles in `target` must stay valid until the returned surface is dropped.
     pub unsafe fn shared_for(
         target: wgpu::SurfaceTargetUnsafe,
+        allow_software: bool,
     ) -> Result<(Arc<Self>, wgpu::Surface<'static>), RenderError> {
         let mut shared = SHARED.lock().unwrap_or_else(PoisonError::into_inner);
         if let Some(gpu) = shared.upgrade() {
@@ -65,6 +79,11 @@ impl GpuDevice {
             ..wgpu::RequestAdapterOptions::default()
         }))
         .map_err(RenderError::Adapter)?;
+        let info = adapter.get_info();
+        if !allow_software && is_software(&info) {
+            SOFTWARE_ONLY.store(true, Ordering::Relaxed);
+            return Err(RenderError::Software(info.name));
+        }
         let gpu = Arc::new(Self::open(instance, adapter)?);
         *shared = Arc::downgrade(&gpu);
         Ok((gpu, surface))

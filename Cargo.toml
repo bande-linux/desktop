@@ -26,6 +26,7 @@ icu_locale_core = "=2.4.0"
 jiff = "=0.2.38"
 libc = "=0.2.191"
 libloading = "=0.8.9"
+md-5 = "=0.10.6"
 kdl = { version = "=6.7.1", default-features = false, features = ["span"] }
 image-compare = "=0.5.0"
 pollster = "=1.0.1"
@@ -41,6 +42,7 @@ notify = "=8.2.0"
 fontique = { version = "=0.12.0", features = ["fontconfig-dlopen"] }
 parley = { version = "=0.12.0", features = ["complex-scripts"] }
 pipewire = "=0.10.1"
+png = "=0.18.1"
 serde_json = "=1.0.154"
 zbus = "=5.19.0"
 tracing = "=0.1.44"
@@ -99,6 +101,7 @@ unbound-spring = { path = "crates/libs/spring" }
 unbound-term = { path = "crates/apps/terminal" }
 unbound-test-bus = { path = "crates/testing/test-bus" }
 unbound-test-wayland = { path = "crates/testing/test-wayland" }
+unbound-thumbnails = { path = "crates/libs/thumbnails" }
 unbound-toolkit = { path = "crates/toolkit/toolkit" }
 unbound-toolkit-platform = { path = "crates/toolkit/platform" }
 unbound-tray = { path = "crates/services/tray" }

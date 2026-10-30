@@ -2147,6 +2147,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "md-5"
+version = "0.10.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d89e7ee0cfbedfc4da3340218492196241d89eefb6dab27de5df917a6d2e78cf"
+dependencies = [
+ "cfg-if",
+ "digest",
+]
+
+[[package]]
 name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3846,6 +3856,7 @@ version = "0.1.0"
 dependencies = [
  "accesskit",
  "image",
+ "image-compare",
  "rustix 1.1.6",
  "tempfile",
  "tracing",
@@ -3854,6 +3865,7 @@ dependencies = [
  "unbound-l10n",
  "unbound-log",
  "unbound-preview",
+ "unbound-thumbnails",
  "unbound-toolkit",
  "unbound-volumes",
  "unbound-xdg",
@@ -4219,6 +4231,18 @@ dependencies = [
  "wayland-protocols",
  "wayland-protocols-misc",
  "wayland-protocols-wlr",
+]
+
+[[package]]
+name = "unbound-thumbnails"
+version = "0.1.0"
+dependencies = [
+ "image",
+ "md-5",
+ "png",
+ "tempfile",
+ "tracing",
+ "unbound-xdg",
 ]
 
 [[package]]

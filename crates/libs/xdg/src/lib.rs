@@ -11,7 +11,7 @@ pub use apps::Apps;
 pub use dirs::{UserDir, user_dir};
 pub use entry::{
     CURRENT_DESKTOP, DesktopAction, DesktopEntry, Locale, applications, current_desktops,
-    data_dirs, handlers,
+    data_dirs, find_executable, handlers,
 };
 pub use icon::{FALLBACK_THEME, find_icon};
 pub use launch::{

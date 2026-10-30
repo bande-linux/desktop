@@ -4326,6 +4326,7 @@ version = "0.1.0"
 dependencies = [
  "tracing",
  "unbound-audio",
+ "unbound-bus",
  "unbound-config",
  "unbound-log",
  "unbound-test-bus",

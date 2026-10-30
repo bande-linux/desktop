@@ -142,9 +142,10 @@ fn main() -> ExitCode {
         };
     }
     match serve() {
-        Ok(_connection) => loop {
-            std::thread::park();
-        },
+        Ok(connection) => {
+            unbound_bus::serve_until_closed(&connection);
+            ExitCode::SUCCESS
+        }
         Err(error) => {
             tracing::error!("{error}");
             ExitCode::FAILURE

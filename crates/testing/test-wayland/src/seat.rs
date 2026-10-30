@@ -12,6 +12,8 @@ pub(crate) struct Input {
     keyboard_focus: Option<WlSurface>,
     pub(crate) pointer_focus: Option<(WlSurface, f64, f64)>,
     keys: Vec<(u32, bool)>,
+    layout_group: u32,
+    repeat_info: Option<(i32, i32)>,
     buttons: Vec<(u32, bool)>,
     closed: Vec<XdgToplevel>,
     scrolled: f64,
@@ -55,6 +57,14 @@ impl TestClient {
             .iter()
             .position(|(window, _, _)| window == surface)?;
         Some((index, *x, *y))
+    }
+
+    pub fn layout_group(&self) -> u32 {
+        self.globals.input.layout_group
+    }
+
+    pub fn repeat_info(&self) -> Option<(i32, i32)> {
+        self.globals.input.repeat_info
     }
 
     pub fn keys(&self) -> &[(u32, bool)] {
@@ -118,6 +128,10 @@ impl Dispatch<WlKeyboard, Devices> for Globals {
         match event {
             wl_keyboard::Event::Enter { surface, .. } => input.keyboard_focus = Some(surface),
             wl_keyboard::Event::Leave { .. } => input.keyboard_focus = None,
+            wl_keyboard::Event::Modifiers { group, .. } => input.layout_group = group,
+            wl_keyboard::Event::RepeatInfo { rate, delay } => {
+                input.repeat_info = Some((rate, delay));
+            }
             wl_keyboard::Event::Key { key, state, .. } => input
                 .keys
                 .push((key, pressed(state, wl_keyboard::KeyState::Pressed))),

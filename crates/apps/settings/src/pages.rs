@@ -1,9 +1,12 @@
 use std::rc::Rc;
 
 use unbound_audio::Direction;
+use unbound_config::MAX_INPUT_SOURCES;
+use unbound_keyboard::shortcuts_in;
 use unbound_toolkit::Spacing;
 use unbound_toolkit::ui::{
-    Axis, Button, Label, SecureField, SegmentedControl, Slider, Stack, Toggle, Widget, WidgetId,
+    Axis, Button, Label, PopUpButton, SearchField, SecureField, SegmentedControl, Slider, Stack,
+    Toggle, Widget, WidgetId, shortcut_symbols,
 };
 
 use crate::L10N;
@@ -26,6 +29,7 @@ const PAGE_PADDING: f32 = Spacing::XL as f32;
 const PAGE_SPACING: f32 = Spacing::S as f32;
 const VOLUME_STEP: f64 = 1.0 / 16.0;
 const FIELD_SIZE: f32 = 13.0;
+const SOURCE_RESULTS: usize = 8;
 
 type Widgets = Vec<Box<dyn Widget>>;
 
@@ -156,6 +160,26 @@ impl SettingsView {
                 let values: Vec<Value> =
                     choices.iter().map(|choice| choice.value.clone()).collect();
                 boxed(SegmentedControl::new(
+                    &setting.label,
+                    &labels,
+                    selected,
+                    move |index| {
+                        if let Some(value) = values.get(index) {
+                            set(value.clone());
+                        }
+                    },
+                ))
+            }
+            Kind::Menu(choices) => {
+                let labels: Vec<String> =
+                    choices.iter().map(|choice| choice.label.clone()).collect();
+                let values: Vec<Value> =
+                    choices.iter().map(|choice| choice.value.clone()).collect();
+                let selected = value
+                    .as_ref()
+                    .and_then(|value| setting.kind.position(value))
+                    .unwrap_or(0);
+                boxed(PopUpButton::new(
                     &setting.label,
                     &labels,
                     selected,
@@ -515,7 +539,145 @@ impl SettingsView {
             List::NearbyDevices => self.device_rows(false),
             List::OutputDevices => self.audio_rows(Direction::Output),
             List::InputDevices => self.audio_rows(Direction::Input),
+            List::InputSources => self.input_source_rows(),
+            List::Shortcuts => Vec::new(),
         }
+    }
+
+    fn source_buttons(&self, index: usize, count: usize) -> Box<dyn Widget> {
+        let mut buttons: Widgets = Vec::new();
+        for (shown, title, tooltip, make) in [
+            (
+                index > 0,
+                L10N.tr("move-up"),
+                L10N.tr("move-up-tooltip"),
+                Intent::MoveSource(index, true),
+            ),
+            (
+                index + 1 < count,
+                L10N.tr("move-down"),
+                L10N.tr("move-down-tooltip"),
+                Intent::MoveSource(index, false),
+            ),
+            (
+                count > 1,
+                L10N.tr("remove"),
+                L10N.tr("remove-tooltip"),
+                Intent::RemoveSource(index),
+            ),
+        ] {
+            if shown {
+                let mut act = intent(&self.intents, move |()| make.clone());
+                buttons.push(boxed(
+                    Button::new(&title, move || act(())).tooltip(&tooltip),
+                ));
+            }
+        }
+        boxed(Stack::new(
+            Axis::Horizontal,
+            Spacing::S as f32,
+            0.0,
+            buttons,
+        ))
+    }
+
+    fn input_source_rows(&mut self) -> Widgets {
+        let sources = self.input_sources();
+        let count = sources.len();
+        let mut rows = Vec::new();
+        for (index, code) in sources.iter().enumerate() {
+            let name = self.layouts().name(code);
+            let short = self.layouts().short(code);
+            let buttons = self.source_buttons(index, count);
+            let row = Row::new(Text::new(&name, Tone::Primary), Some(buttons))
+                .detail(Text::new(&short, Tone::Muted).caption());
+            rows.push(self.item_row(code.clone(), row));
+        }
+        match self.adding_source.clone() {
+            Some(query) => rows.extend(self.source_search_rows(&query, &sources)),
+            None if count < MAX_INPUT_SOURCES => {
+                let mut add = intent(&self.intents, |()| Intent::AddingSource(true));
+                let button = Button::new(&L10N.tr("add-input-source"), move || add(()));
+                self.anchors
+                    .push((Anchor::Setting(SettingId::InputSources, None), button.id()));
+                rows.push(boxed(Row::new(
+                    Text::new(&L10N.tr("switch-sources-hint"), Tone::Muted).caption(),
+                    Some(boxed(button)),
+                )));
+            }
+            None => rows.push(muted_row(
+                &L10N.tr_args("input-sources-full", [("count", MAX_INPUT_SOURCES.into())]),
+            )),
+        }
+        rows
+    }
+
+    pub(crate) fn source_matches(
+        &mut self,
+        query: &str,
+        added: &[String],
+    ) -> Vec<(String, String)> {
+        self.layouts()
+            .search(query)
+            .into_iter()
+            .filter(|layout| !added.contains(&layout.code))
+            .take(SOURCE_RESULTS)
+            .map(|layout| (layout.code.clone(), layout.name.clone()))
+            .collect()
+    }
+
+    fn source_search_rows(&mut self, query: &str, added: &[String]) -> Widgets {
+        let field = SearchField::new(
+            &L10N.tr("search-layouts"),
+            query,
+            submit(&self.intents, Intent::SourceQuery),
+        );
+        self.anchors.push((Anchor::SourceSearch, field.id()));
+        let mut cancel = intent(&self.intents, |()| Intent::AddingSource(false));
+        let mut rows = vec![boxed(Row::new(
+            Text::new(&L10N.tr("add-input-source"), Tone::Primary),
+            Some(boxed(Stack::new(
+                Axis::Horizontal,
+                Spacing::S as f32,
+                0.0,
+                vec![
+                    boxed(field),
+                    boxed(Button::new(&L10N.tr("cancel"), move || cancel(()))),
+                ],
+            ))),
+        ))];
+        let matches = self.source_matches(query, added);
+        if matches.is_empty() {
+            rows.push(muted_row(&L10N.tr("no-layouts")));
+        }
+        for (code, name) in matches {
+            let mut add = intent(&self.intents, Intent::AddSource);
+            let chosen = code.clone();
+            let row = Row::new(Text::new(&name, Tone::Primary), None)
+                .detail(Text::new(&code, Tone::Muted).caption())
+                .on_activate(move || add(chosen.clone()));
+            rows.push(self.item_row(format!("add:{code}"), row));
+        }
+        rows
+    }
+
+    fn shortcut_cards(&mut self) -> Widgets {
+        let mut page = Vec::new();
+        for area in unbound_keyboard::Area::ALL {
+            page.push(boxed(Caption::new(
+                Text::new(&area.title(), Tone::Muted).caption(),
+            )));
+            let rows = shortcuts_in(area)
+                .map(|shortcut| {
+                    boxed(Row::new(
+                        Text::new(&shortcut.action.label(), Tone::Primary),
+                        Some(boxed(Label::new(&shortcut_symbols(shortcut.keys)))),
+                    ))
+                })
+                .collect();
+            page.push(boxed(Card::new(rows)));
+        }
+        page
     }
 
     fn picture_rows(&mut self, setting: &Setting) -> Widgets {
@@ -597,6 +759,12 @@ impl SettingsView {
                 .bluetooth
                 .as_ref()
                 .is_some_and(|bluetooth| bluetooth.powered),
+            SettingId::TrackpadTapToClick
+            | SettingId::TrackpadNaturalScrolling
+            | SettingId::TrackpadSpeed
+            | SettingId::TrackpadSecondaryClick
+            | SettingId::TrackpadDisableWhileTyping => self.pointing.trackpad,
+            SettingId::MouseNaturalScrolling | SettingId::MouseSpeed => self.pointing.mouse,
             _ => true,
         })
     }
@@ -806,6 +974,19 @@ impl SettingsView {
                 continue;
             }
             if !self.section_shown(section) {
+                continue;
+            }
+            if section
+                .settings
+                .iter()
+                .any(|setting| setting.kind == Kind::List(List::Shortcuts))
+            {
+                if let Some(title) = &section.title {
+                    page.push(boxed(Caption::new(
+                        Text::new(title, Tone::Muted).caption().semibold(),
+                    )));
+                }
+                page.extend(self.shortcut_cards());
                 continue;
             }
             let list = section

@@ -64,12 +64,33 @@ pub struct Bluetooth {
     pub devices: Vec<Gadget>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InputSource {
+    pub name: String,
+    pub short: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct InputSources {
+    pub sources: Vec<InputSource>,
+    pub active: usize,
+}
+
+impl InputSources {
+    pub fn current(&self) -> Option<&InputSource> {
+        self.sources
+            .get(self.active)
+            .filter(|_| self.sources.len() > 1)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Status {
     pub battery: Option<Battery>,
     pub wifi: Option<Wifi>,
     pub sound: Option<Sound>,
     pub bluetooth: Option<Bluetooth>,
+    pub input_sources: InputSources,
 }
 
 pub fn wifi_bars(strength: u8) -> u8 {

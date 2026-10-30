@@ -10,12 +10,14 @@ use std::time::{Duration, Instant};
 
 use unbound_datetime::DateFormats;
 use unbound_inbox::Inbox;
+use unbound_keyboard::Layouts;
 use unbound_menubar::dbusmenu::{APP_MENU_PATH, Node};
 use unbound_menubar::devices::{Control, SoundControl, end_session, run_controls, run_sound};
 use unbound_menubar::menus::{
-    Command, battery_menu, bluetooth_menu, sound_menu, system_menu, wifi_menu,
+    Command, battery_menu, bluetooth_menu, input_source_menu, sound_menu, system_menu, wifi_menu,
 };
 use unbound_menubar::session::{COUNTDOWN, Ending, facts};
+use unbound_menubar::status::{InputSource, InputSources};
 use unbound_menubar::tray::{Errand, TrayIcon, TrayItem, host, run_errands};
 use unbound_menubar::{HEIGHT, L10N, MenuBar, Slot, Update, app_name};
 use unbound_toolkit::ui::{
@@ -54,6 +56,7 @@ struct Bar {
     app_id: String,
     app_root: Option<Node>,
     user: String,
+    layouts: Layouts,
     dates: DateFormats,
     next_clock: Instant,
 }
@@ -133,6 +136,9 @@ impl Bar {
                 self.launch(window, "", &[&myself, "--about-app", &app, &version]);
             }
             Command::HideApp => report("hide the app", window.hide_app(&self.app_id)),
+            Command::SelectInputSource(index) => {
+                report("switch the input source", window.select_input_source(index));
+            }
             Command::HideOthers => {
                 for app in window.running_apps() {
                     if app != self.app_id {
@@ -205,6 +211,7 @@ impl Bar {
             }
             Slot::Sound => status.sound.as_ref().map(sound_menu),
             Slot::Bluetooth => status.bluetooth.as_ref().map(bluetooth_menu),
+            Slot::InputSource => Some(input_source_menu(&status.input_sources)),
             Slot::App if self.app_root.is_none() => Some(Menu::new(vec![MenuItem::new(
                 self.bar.app(),
                 BRING_TO_FRONT,
@@ -378,6 +385,17 @@ impl App for Bar {
                 self.bar.set_palette(appearance.palette());
                 window.request_redraw();
             }
+            WindowEvent::InputSources { sources, active } => {
+                let sources = sources
+                    .iter()
+                    .map(|code| InputSource {
+                        name: self.layouts.name(code),
+                        short: self.layouts.short(code),
+                    })
+                    .collect();
+                self.bar.status_mut().input_sources = InputSources { sources, active };
+                window.request_redraw();
+            }
             _ => {}
         }
     }
@@ -516,6 +534,7 @@ fn run_bar() -> Result<(), Box<dyn std::error::Error>> {
         app_id: String::new(),
         app_root: None,
         user: user_name(),
+        layouts: Layouts::load(),
         dates,
         next_clock: Instant::now() + CLOCK_TICK,
     };

@@ -21,12 +21,15 @@ mod grab;
 mod idle;
 mod ime;
 mod input;
+mod input_settings;
+mod keymap;
 mod label;
 mod lock;
 mod logind;
 mod management;
 mod motion;
 mod overview;
+mod pointing;
 mod popup;
 mod render;
 mod scanout;
@@ -54,7 +57,10 @@ pub use environment::{
     DESKTOP_NAME, export_session_environment, notify_ready, session_environment,
 };
 pub use gesture::Gesture;
+pub use input_settings::{InputSettings, follow_input_settings};
+pub use keymap::KeyboardSettings;
 pub use logind::{SessionRequest, follow_session};
+pub use pointing::PointerSettings;
 pub use render::{BACKGROUND, FrameStats, Renderer, Snapshot};
 pub use screen::{OutputConfig, OutputMode, OutputSettings, automatic_scale};
 pub use session::{

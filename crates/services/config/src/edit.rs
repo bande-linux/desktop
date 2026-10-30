@@ -4,8 +4,9 @@ use std::time::Duration;
 use kdl::{KdlDocument, KdlEntry, KdlEntryFormat, KdlNode, KdlValue};
 
 use crate::{
-    Appearance, Config, ConfigError, DEFAULT_DOCK_ICON_SIZE, DisplaySettings, DockEdge, Placement,
-    Suspend, WallpaperFit, WallpaperVariant, same_displays,
+    Appearance, CapsLock, Config, ConfigError, DEFAULT_DOCK_ICON_SIZE, DisplaySettings, DockEdge,
+    InputSource, Mouse, Placement, SecondaryClick, Suspend, Trackpad, WallpaperFit,
+    WallpaperVariant, same_displays,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -21,6 +22,15 @@ pub enum Setting {
     IdleSuspend(Suspend),
     KeyRepeatRate(u32),
     KeyRepeatDelay(Duration),
+    InputSources(Vec<InputSource>),
+    CapsLock(CapsLock),
+    TrackpadTapToClick(bool),
+    TrackpadNaturalScrolling(bool),
+    TrackpadSpeed(f64),
+    TrackpadSecondaryClick(SecondaryClick),
+    TrackpadDisableWhileTyping(bool),
+    MouseNaturalScrolling(bool),
+    MouseSpeed(f64),
     Wallpaper(WallpaperVariant, Option<PathBuf>),
     WallpaperFit(WallpaperFit),
     Display(String, DisplaySettings),
@@ -107,6 +117,61 @@ impl Setting {
                 Some(KdlValue::Integer(
                     delay.as_millis().try_into().unwrap_or(i128::MAX),
                 )),
+            ),
+            Self::InputSources(sources) => set_values(
+                &mut document,
+                Some("keyboard"),
+                "input-sources",
+                (!sources.is_empty())
+                    .then(|| sources.iter().map(|source| source.code().into()).collect()),
+            ),
+            Self::CapsLock(caps_lock) => set(
+                &mut document,
+                Some("keyboard"),
+                "caps-lock",
+                (*caps_lock != CapsLock::default()).then(|| caps_lock.keyword().into()),
+            ),
+            Self::TrackpadTapToClick(on) => set(
+                &mut document,
+                Some("trackpad"),
+                "tap-to-click",
+                (*on != Trackpad::default().tap_to_click).then_some(KdlValue::Bool(*on)),
+            ),
+            Self::TrackpadNaturalScrolling(on) => set(
+                &mut document,
+                Some("trackpad"),
+                "natural-scrolling",
+                (*on != Trackpad::default().natural_scrolling).then_some(KdlValue::Bool(*on)),
+            ),
+            Self::TrackpadSpeed(speed) => set(
+                &mut document,
+                Some("trackpad"),
+                "speed",
+                (*speed != Trackpad::default().speed).then(|| number(*speed)),
+            ),
+            Self::TrackpadSecondaryClick(click) => set(
+                &mut document,
+                Some("trackpad"),
+                "secondary-click",
+                (*click != SecondaryClick::default()).then(|| click.keyword().into()),
+            ),
+            Self::TrackpadDisableWhileTyping(on) => set(
+                &mut document,
+                Some("trackpad"),
+                "disable-while-typing",
+                (*on != Trackpad::default().disable_while_typing).then_some(KdlValue::Bool(*on)),
+            ),
+            Self::MouseNaturalScrolling(on) => set(
+                &mut document,
+                Some("mouse"),
+                "natural-scrolling",
+                (*on != Mouse::default().natural_scrolling).then_some(KdlValue::Bool(*on)),
+            ),
+            Self::MouseSpeed(speed) => set(
+                &mut document,
+                Some("mouse"),
+                "speed",
+                (*speed != Mouse::default().speed).then(|| number(*speed)),
             ),
             Self::Wallpaper(variant, path) => set(
                 &mut document,

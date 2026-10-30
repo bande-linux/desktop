@@ -7,9 +7,9 @@ use std::thread;
 use std::time::Duration;
 
 use unbound_config::{
-    Appearance, Config, ConfigError, ConfigStore, DEFAULT_DOCK_APPS, DisplaySettings, DockEdge,
-    Placement, ReloadError, Rotation, Suspend, WallpaperFit, WallpaperVariant, config_path,
-    login_picture,
+    Appearance, CapsLock, Config, ConfigError, ConfigStore, DEFAULT_DOCK_APPS, DisplaySettings,
+    DockEdge, InputSource, Placement, ReloadError, Rotation, SecondaryClick, Suspend, WallpaperFit,
+    WallpaperVariant, config_path, login_picture, system_input_sources,
 };
 
 fn error_at(source: &str) -> (usize, usize) {
@@ -458,4 +458,76 @@ fn the_login_window_gets_the_dark_wallpaper_with_the_home_folder_spelled_out() {
         Some(PathBuf::from("/a.png"))
     );
     assert_eq!(login_picture(&wallpaper(""), Some(home)), None);
+}
+
+fn source(layout: &str, variant: Option<&str>) -> InputSource {
+    InputSource {
+        layout: layout.to_owned(),
+        variant: variant.map(str::to_owned),
+    }
+}
+
+#[test]
+fn input_sources_are_xkb_layouts_with_an_optional_variant() {
+    let keyboard = Config::parse(
+        "keyboard {\n    input-sources \"us\" \"de(nodeadkeys)\"\n    caps-lock \"escape\"\n}\n",
+    )
+    .expect("valid")
+    .keyboard;
+    assert_eq!(
+        keyboard.input_sources,
+        [source("us", None), source("de", Some("nodeadkeys"))]
+    );
+    assert_eq!(keyboard.caps_lock, CapsLock::Escape);
+    assert_eq!(keyboard.caps_lock.xkb_option(), Some("caps:escape"));
+    assert_eq!(source("de", Some("nodeadkeys")).code(), "de(nodeadkeys)");
+}
+
+#[test]
+fn input_sources_must_be_distinct_layouts_and_at_most_four() {
+    for (line, column, sources) in [
+        (2, 24, "\"us\" \"us\""),
+        (2, 19, "\"de(\""),
+        (2, 19, "\"us,se\""),
+        (2, 39, "\"us\" \"se\" \"de\" \"fr\" \"fi\""),
+    ] {
+        let config = format!("keyboard {{\n    input-sources {sources}\n}}\n");
+        assert_eq!(error_at(&config), (line, column), "{sources}");
+    }
+}
+
+#[test]
+fn without_input_sources_the_system_keyboard_layouts_are_used() {
+    let keyboard = Config::parse("").expect("empty").keyboard;
+    let system = system_input_sources(
+        "# KEYBOARD CONFIGURATION FILE\nXKBMODEL=\"pc105\"\nXKBLAYOUT=\"se,us,ru\"\nXKBVARIANT=\",dvorak,\"\nXKBOPTIONS=\"\"\n",
+    );
+    assert_eq!(
+        keyboard.input_sources_or(|| system.clone()),
+        [
+            source("se", None),
+            source("us", Some("dvorak")),
+            source("ru", None)
+        ]
+    );
+    assert_eq!(system_input_sources(""), [source("us", None)]);
+}
+
+#[test]
+fn trackpad_and_mouse_settings_are_read_with_mac_like_defaults() {
+    let defaults = Config::parse("").expect("empty");
+    assert!(defaults.trackpad.tap_to_click);
+    assert!(defaults.trackpad.natural_scrolling);
+    assert!(!defaults.mouse.natural_scrolling);
+    let config = Config::parse(
+        "trackpad {\n    tap-to-click #false\n    speed 0.5\n    secondary-click \"corner\"\n    disable-while-typing #false\n}\nmouse {\n    natural-scrolling #true\n    speed -1\n}\n",
+    )
+    .expect("valid");
+    assert!(!config.trackpad.tap_to_click);
+    assert_eq!(config.trackpad.speed, 0.5);
+    assert_eq!(config.trackpad.secondary_click, SecondaryClick::Corner);
+    assert!(!config.trackpad.disable_while_typing);
+    assert!(config.mouse.natural_scrolling);
+    assert_eq!(config.mouse.speed, -1.0);
+    assert_eq!(error_at("mouse {\n    speed 2\n}\n"), (2, 11));
 }

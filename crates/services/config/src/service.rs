@@ -14,8 +14,9 @@ use zbus::object_server::SignalEmitter;
 use zbus::zvariant::{OwnedValue, Value};
 
 use crate::{
-    Appearance, Config, ConfigStore, DisplaySettings, DockEdge, Placement, ReloadError, Rotation,
-    Setting, Suspend, WallpaperFit, WallpaperVariant,
+    Appearance, CapsLock, Config, ConfigStore, DisplaySettings, DockEdge, InputSource, Placement,
+    ReloadError, Rotation, SecondaryClick, Setting, Suspend, WallpaperFit, WallpaperVariant,
+    read_system_input_sources,
 };
 
 pub type ArrangedDisplay = (String, i32, i32, bool, String);
@@ -179,6 +180,33 @@ fn publish_changes(
         }
         if before.keyboard.repeat_delay != after.keyboard.repeat_delay {
             let _ = guard.key_repeat_delay_changed(emitter).await;
+        }
+        if before.keyboard.input_sources != after.keyboard.input_sources {
+            let _ = guard.input_sources_changed(emitter).await;
+        }
+        if before.keyboard.caps_lock != after.keyboard.caps_lock {
+            let _ = guard.caps_lock_changed(emitter).await;
+        }
+        if before.trackpad.tap_to_click != after.trackpad.tap_to_click {
+            let _ = guard.trackpad_tap_to_click_changed(emitter).await;
+        }
+        if before.trackpad.natural_scrolling != after.trackpad.natural_scrolling {
+            let _ = guard.trackpad_natural_scrolling_changed(emitter).await;
+        }
+        if before.trackpad.speed != after.trackpad.speed {
+            let _ = guard.trackpad_speed_changed(emitter).await;
+        }
+        if before.trackpad.secondary_click != after.trackpad.secondary_click {
+            let _ = guard.trackpad_secondary_click_changed(emitter).await;
+        }
+        if before.trackpad.disable_while_typing != after.trackpad.disable_while_typing {
+            let _ = guard.trackpad_disable_while_typing_changed(emitter).await;
+        }
+        if before.mouse.natural_scrolling != after.mouse.natural_scrolling {
+            let _ = guard.mouse_natural_scrolling_changed(emitter).await;
+        }
+        if before.mouse.speed != after.mouse.speed {
+            let _ = guard.mouse_speed_changed(emitter).await;
         }
         if before.wallpaper.light != after.wallpaper.light {
             let _ = guard.wallpaper_light_changed(emitter).await;
@@ -495,6 +523,125 @@ impl ConfigInterface {
         self.write(&Setting::KeyRepeatDelay(Duration::from_millis(
             milliseconds.into(),
         )))
+    }
+
+    #[zbus(property)]
+    fn input_sources(&self) -> Vec<String> {
+        self.store
+            .current()
+            .keyboard
+            .input_sources_or(read_system_input_sources)
+            .iter()
+            .map(InputSource::code)
+            .collect()
+    }
+
+    #[zbus(property)]
+    fn set_input_sources(&self, codes: Vec<String>) -> zbus::fdo::Result<()> {
+        let sources = codes
+            .iter()
+            .map(|code| {
+                InputSource::parse(code)
+                    .ok_or_else(|| InvalidArgs(format!("\"{code}\" is not a keyboard layout")))
+            })
+            .collect::<zbus::fdo::Result<Vec<_>>>()?;
+        if sources.is_empty() {
+            return Err(InvalidArgs(
+                "at least one input source is needed".to_owned(),
+            ));
+        }
+        self.write(&Setting::InputSources(sources))
+    }
+
+    #[zbus(property)]
+    fn caps_lock(&self) -> String {
+        self.store.current().keyboard.caps_lock.keyword().to_owned()
+    }
+
+    #[zbus(property)]
+    fn set_caps_lock(&self, value: String) -> zbus::fdo::Result<()> {
+        let caps_lock = keyword(&CapsLock::ALL, CapsLock::keyword, &value)?;
+        self.write(&Setting::CapsLock(caps_lock))
+    }
+
+    #[zbus(property)]
+    fn trackpad_tap_to_click(&self) -> bool {
+        self.store.current().trackpad.tap_to_click
+    }
+
+    #[zbus(property)]
+    fn set_trackpad_tap_to_click(&self, on: bool) -> zbus::fdo::Result<()> {
+        self.write(&Setting::TrackpadTapToClick(on))
+    }
+
+    #[zbus(property)]
+    fn trackpad_natural_scrolling(&self) -> bool {
+        self.store.current().trackpad.natural_scrolling
+    }
+
+    #[zbus(property)]
+    fn set_trackpad_natural_scrolling(&self, on: bool) -> zbus::fdo::Result<()> {
+        self.write(&Setting::TrackpadNaturalScrolling(on))
+    }
+
+    #[zbus(property)]
+    fn trackpad_speed(&self) -> f64 {
+        self.store.current().trackpad.speed
+    }
+
+    #[zbus(property)]
+    fn set_trackpad_speed(&self, speed: f64) -> zbus::fdo::Result<()> {
+        self.write(&Setting::TrackpadSpeed(speed))
+    }
+
+    #[zbus(property)]
+    fn trackpad_secondary_click(&self) -> String {
+        self.store
+            .current()
+            .trackpad
+            .secondary_click
+            .keyword()
+            .to_owned()
+    }
+
+    #[zbus(property)]
+    fn set_trackpad_secondary_click(&self, value: String) -> zbus::fdo::Result<()> {
+        let click = keyword(
+            &[SecondaryClick::TwoFingers, SecondaryClick::Corner],
+            SecondaryClick::keyword,
+            &value,
+        )?;
+        self.write(&Setting::TrackpadSecondaryClick(click))
+    }
+
+    #[zbus(property)]
+    fn trackpad_disable_while_typing(&self) -> bool {
+        self.store.current().trackpad.disable_while_typing
+    }
+
+    #[zbus(property)]
+    fn set_trackpad_disable_while_typing(&self, on: bool) -> zbus::fdo::Result<()> {
+        self.write(&Setting::TrackpadDisableWhileTyping(on))
+    }
+
+    #[zbus(property)]
+    fn mouse_natural_scrolling(&self) -> bool {
+        self.store.current().mouse.natural_scrolling
+    }
+
+    #[zbus(property)]
+    fn set_mouse_natural_scrolling(&self, on: bool) -> zbus::fdo::Result<()> {
+        self.write(&Setting::MouseNaturalScrolling(on))
+    }
+
+    #[zbus(property)]
+    fn mouse_speed(&self) -> f64 {
+        self.store.current().mouse.speed
+    }
+
+    #[zbus(property)]
+    fn set_mouse_speed(&self, speed: f64) -> zbus::fdo::Result<()> {
+        self.write(&Setting::MouseSpeed(speed))
     }
 
     #[zbus(property)]

@@ -3,7 +3,10 @@
 use std::path::PathBuf;
 
 use unbound_audio::{Device, Direction, Level, Snapshot};
-use unbound_settings::{Display, Mode, Pair, SettingId, SettingsView, Update, Value, thumbnail};
+use unbound_keyboard::Layouts;
+use unbound_settings::{
+    Display, Mode, Pair, PointingDevices, SettingId, SettingsView, Update, Value, thumbnail,
+};
 use unbound_toolkit::ui::{Event, Key, Modifiers};
 use unbound_toolkit::{CpuRenderer, Palette, Scheme, TextSystem};
 
@@ -172,6 +175,17 @@ fn the_keyboard_pane_matches_its_golden() {
     let mut view = SettingsView::new(Palette::for_scheme(Scheme::Light), TextSystem::new());
     view.set_value(SettingId::KeyRepeatRate, Value::Number(25));
     view.set_value(SettingId::KeyRepeatDelay, Value::Number(600));
+    view.set_layouts(Layouts::parse(
+        r#"<xkbConfigRegistry><layoutList>
+<layout><configItem><name>se</name><shortDescription>sv</shortDescription><description>Swedish</description></configItem></layout>
+<layout><configItem><name>us</name><shortDescription>en</shortDescription><description>English (US)</description></configItem></layout>
+</layoutList></xkbConfigRegistry>"#,
+    ));
+    view.set_value(
+        SettingId::InputSources,
+        Value::Codes(vec!["se".to_owned(), "us".to_owned()]),
+    );
+    view.set_value(SettingId::CapsLock, Value::Keyword("caps-lock".to_owned()));
     for key in [Key::Down, Key::Down, Key::Down, Key::Down] {
         view.handle(&Event::Key {
             key: Key::Tab,
@@ -220,4 +234,29 @@ fn the_wallpaper_pane_matches_its_golden() {
     let scene = view.scene(SIZE.0, SIZE.1);
     let frame = CpuRenderer::new().render(&scene).expect("frame");
     check_golden("wallpaper-light", frame.rgba);
+}
+
+#[test]
+fn the_trackpad_and_mouse_pane_matches_its_golden() {
+    let mut view = SettingsView::new(Palette::for_scheme(Scheme::Dark), TextSystem::new());
+    view.set_pointing_devices(PointingDevices {
+        trackpad: true,
+        mouse: true,
+    });
+    view.apply(Update::Values(vec![
+        (SettingId::TrackpadTapToClick, Value::Flag(true)),
+        (SettingId::TrackpadNaturalScrolling, Value::Flag(true)),
+        (SettingId::TrackpadSpeed, Value::Number(5)),
+        (
+            SettingId::TrackpadSecondaryClick,
+            Value::Keyword("two-fingers".to_owned()),
+        ),
+        (SettingId::TrackpadDisableWhileTyping, Value::Flag(true)),
+        (SettingId::MouseNaturalScrolling, Value::Flag(false)),
+        (SettingId::MouseSpeed, Value::Number(5)),
+    ]));
+    open(&mut view, "trackpad");
+    let scene = view.scene(SIZE.0, SIZE.1);
+    let frame = CpuRenderer::new().render(&scene).expect("frame");
+    check_golden("trackpad-mouse-dark", frame.rgba);
 }

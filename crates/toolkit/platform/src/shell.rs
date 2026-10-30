@@ -95,6 +95,12 @@ impl Window {
         self.flush()
     }
 
+    pub fn select_input_source(&mut self, index: usize) -> Result<(), WindowError> {
+        self.shell_since(unbound_shell_v1::REQ_SELECT_INPUT_SOURCE_SINCE)?
+            .select_input_source(u32::try_from(index).unwrap_or(u32::MAX));
+        self.flush()
+    }
+
     pub fn set_corner_radius(&mut self, radius: u32) -> Result<(), WindowError> {
         self.shell_since(unbound_shell_v1::REQ_SET_CORNER_RADIUS_SINCE)?
             .set_corner_radius(&self.surface, radius);
@@ -275,6 +281,16 @@ impl Dispatch<UnboundShellV1, ()> for State {
             }
             unbound_shell_v1::Event::FocusShell { namespace } => {
                 state.events.push(WindowEvent::FocusShell(namespace));
+            }
+            unbound_shell_v1::Event::InputSources { sources, active } => {
+                state.events.push(WindowEvent::InputSources {
+                    sources: sources
+                        .split(',')
+                        .filter(|source| !source.is_empty())
+                        .map(str::to_owned)
+                        .collect(),
+                    active: active as usize,
+                });
             }
             _ => {}
         }

@@ -5,6 +5,7 @@ mod follow;
 mod idle;
 mod pages;
 mod pictures;
+mod pointing;
 mod services;
 mod state;
 mod view;
@@ -19,6 +20,7 @@ pub use displays::Displays;
 pub use follow::{Command, Feed, Services, Update, Updates, feed, follow_config, worker};
 pub use idle::Idle;
 pub use pictures::{Pair, PictureCommand, bundled_pairs, thumbnail};
+pub use pointing::{PointingDevices, UDEV_DATA};
 pub use services::{
     AudioCommand, BluetoothCommand, NetworkCommand, follow_bluetooth, follow_network,
 };

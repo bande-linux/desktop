@@ -1,9 +1,12 @@
 use std::os::fd::BorrowedFd;
+use std::path::Path;
 use std::process::ExitCode;
 use std::time::Instant;
 
 use unbound_app_menu::{AppMenu, Entry, Standard, app_submenu, window_submenu};
-use unbound_settings::{Displays, Feed, L10N, PaneId, Services, SettingsView, feed};
+use unbound_settings::{
+    Displays, Feed, L10N, PaneId, PointingDevices, Services, SettingsView, UDEV_DATA, feed,
+};
 use unbound_settings_panes::panes;
 use unbound_toolkit::{App, Rect, Role, Scene, TextSystem, Window, WindowEvent};
 
@@ -94,7 +97,8 @@ impl App for Settings {
                 if let Some(Err(error)) = self.app_menu.as_ref().map(AppMenu::claim) {
                     tracing::warn!("{error}");
                 }
-                return;
+                self.view
+                    .set_pointing_devices(PointingDevices::scan(Path::new(UDEV_DATA)));
             }
             _ => return,
         }
@@ -149,6 +153,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let services = Services::start(&session, system.as_ref(), &updates);
     let mut window = Window::open(Role::toplevel(&L10N.tr("title"), APP_ID), WINDOW_SIZE)?;
     let mut view = SettingsView::new(window.appearance().palette(), TextSystem::new());
+    view.set_pointing_devices(PointingDevices::scan(Path::new(UDEV_DATA)));
     let requested = std::env::args().nth(1);
     match requested.as_deref().map(PaneId::from_keyword) {
         Some(Some(pane)) => view.select_pane(pane),

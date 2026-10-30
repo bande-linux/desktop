@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use unbound_config::{
-    Appearance, Config, DisplaySettings, DockEdge, Placement, Rotation, Setting, Suspend,
-    WallpaperFit, WallpaperVariant,
+    Appearance, CapsLock, Config, DisplaySettings, DockEdge, InputSource, Placement, Rotation,
+    Setting, Suspend, WallpaperFit, WallpaperVariant,
 };
 
 fn apply(setting: Setting, source: &str) -> String {
@@ -259,4 +259,44 @@ fn suspend_after_is_written_as_a_duration_or_never_or_left_to_follow_the_display
         ),
         "idle {\n    dim-after \"1m\"\n}\n"
     );
+}
+
+#[test]
+fn input_sources_are_written_as_codes_and_defaults_leave_no_trace() {
+    let sources = vec![
+        InputSource::parse("se").expect("layout"),
+        InputSource::parse("de(nodeadkeys)").expect("layout"),
+    ];
+    let written = apply(Setting::InputSources(sources.clone()), "");
+    assert_eq!(
+        written,
+        "keyboard {\n    input-sources \"se\" \"de(nodeadkeys)\"\n}\n"
+    );
+    assert_eq!(
+        Config::parse(&written)
+            .expect("valid")
+            .keyboard
+            .input_sources,
+        sources
+    );
+    let escape = apply(Setting::CapsLock(CapsLock::Escape), &written);
+    assert!(escape.contains("caps-lock \"escape\""), "{escape}");
+    let restored = apply(Setting::CapsLock(CapsLock::CapsLock), &escape);
+    assert_eq!(apply(Setting::InputSources(Vec::new()), &restored), "");
+}
+
+#[test]
+fn pointer_settings_equal_to_the_defaults_leave_no_trace() {
+    let slower = apply(Setting::TrackpadSpeed(-0.25), "");
+    assert_eq!(slower, "trackpad {\n    speed -0.25\n}\n");
+    let tapless = apply(Setting::TrackpadTapToClick(false), &slower);
+    assert!(tapless.contains("tap-to-click #false"), "{tapless}");
+    let natural = apply(Setting::MouseNaturalScrolling(true), "");
+    assert_eq!(natural, "mouse {\n    natural-scrolling #true\n}\n");
+    assert_eq!(apply(Setting::MouseNaturalScrolling(false), &natural), "");
+    let reset = apply(
+        Setting::TrackpadTapToClick(true),
+        &apply(Setting::TrackpadSpeed(0.0), &tapless),
+    );
+    assert_eq!(reset, "");
 }

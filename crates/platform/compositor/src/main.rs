@@ -13,9 +13,10 @@ use smithay::utils::{Clock, Monotonic, Size};
 use smithay::wayland::socket::ListeningSocketSource;
 use unbound_compositor::{
     CLIPBOARD_DAEMON, CONTROL_CENTER, CursorTheme, DESKTOP_SURFACE, DOCK, DrmBackend, FrameClock,
-    FrameOutput, FrameScheduler, GREETER, Headless, LAUNCHER, MENU_BAR, NOTIFICATIONS, REFRESH,
-    REVIEW, Renderer, SCREENSHOT, SessionRequest, SessionRole, SessionUpkeep,
-    export_session_environment, follow_appearance, follow_session, notify_ready,
+    FrameOutput, FrameScheduler, GREETER, Headless, InputSettings, LAUNCHER, MENU_BAR,
+    NOTIFICATIONS, REFRESH, REVIEW, Renderer, SCREENSHOT, SessionRequest, SessionRole,
+    SessionUpkeep, export_session_environment, follow_appearance, follow_input_settings,
+    follow_session, notify_ready,
 };
 use unbound_config::{BUS_NAME, Config, OBJECT_PATH, config_path};
 use zbus::blocking::fdo::PropertiesProxy;
@@ -252,6 +253,7 @@ fn run_drm(device: Option<&Path>, session: Session) -> Result<(), Box<dyn Error>
     };
     let input = app.output.input_backend()?;
     handle.insert_source(input, |event, _, app| {
+        app.compositor.track_libinput_device(&event);
         if let Err(error) = app.compositor.handle_input(event) {
             tracing::warn!("cannot deliver input: {error}");
         }
@@ -316,6 +318,25 @@ fn start_user_session<O: 'static>(
         }
         Err(error) => tracing::warn!("cannot follow the appearance: {error}"),
     }
+    app.compositor.apply_input_settings(InputSettings::read());
+    let (input_settings, input_settings_changes) = channel::channel();
+    let followed = zbus::blocking::Connection::session().and_then(|connection| {
+        follow_input_settings(&connection, move |settings| {
+            input_settings.send(settings).is_ok()
+        })
+    });
+    match followed {
+        Ok(()) => {
+            event_loop
+                .handle()
+                .insert_source(input_settings_changes, |event, _, app| {
+                    if let Event::Msg(settings) = event {
+                        app.compositor.apply_input_settings(settings);
+                    }
+                })?;
+        }
+        Err(error) => tracing::warn!("cannot follow the keyboard and pointer settings: {error}"),
+    }
     let (lock_states, reported) = std::sync::mpsc::channel();
     match follow_session(reported) {
         Ok(requests) => {
@@ -373,10 +394,13 @@ where
     listen(&event_loop.handle(), &mut app)?;
     let (mut greeter, mut review) = match session {
         Session::User => (None, start_user_session(event_loop, &mut app)?),
-        Session::Greeter => (
-            Some(app.compositor.spawn_shell_client(Path::new(GREETER))?),
-            None,
-        ),
+        Session::Greeter => {
+            app.compositor.apply_input_settings(InputSettings::system());
+            (
+                Some(app.compositor.spawn_shell_client(Path::new(GREETER))?),
+                None,
+            )
+        }
     };
     let mut timeout = None;
     loop {

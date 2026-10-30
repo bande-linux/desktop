@@ -140,7 +140,7 @@ acts as macOS's Command:
 | :--- | :--- | :--- |
 | **`Super`** | Primary action in every app and the terminal | `Super+C` (copy), `Super+V` (paste), `Super+X` (cut), `Super+Z` (undo), `Super+W` (close), `Super+Q` (quit), `Super+,` (settings) |
 | **`Ctrl`** | Terminal signals and readline navigation | `Ctrl+C` (SIGINT), `Ctrl+D` (EOF), `Ctrl+Z` (SIGTSTP), `Ctrl+A` (line start), `Ctrl+E` (line end), `Ctrl+K` (kill to line end) |
-| **`Alt`** | Alternate or precise modification | `Alt+Drag` (duplicate, precise move), `Alt+Click` (toggle disclosure) |
+| **`Alt`** | Alternate or precise modification | `Alt+Drag` (duplicate, precise move), `Alt+Click` (toggle disclosure), `Alt+Super+Space` (next input source, where macOS uses Control+Space) |
 | **`Shift`** | Reversal and extending a selection | `Super+Shift+Z` (redo), `Super+Shift+3/4/5` (screenshots) |
 
 - **Text navigation**: every text field supports `Super+Left/Right` (line start and end) and
@@ -175,6 +175,20 @@ control writes to it, and it can be edited by hand while the session runs.
   keyboard {
       repeat-rate 25            // 1 to 60 characters per second
       repeat-delay 600          // 150 to 2000 milliseconds before repeating starts
+      input-sources "se" "us(dvorak)" // xkb layout(variant), at most 4; unset means
+                                // the layouts of /etc/default/keyboard
+      caps-lock "caps-lock"     // "caps-lock" | "escape" | "control" | "compose" | "off"
+  }
+  trackpad {
+      tap-to-click #true
+      natural-scrolling #true
+      speed 0.0                 // -1.0 to 1.0
+      secondary-click "two-fingers" // "two-fingers" | "corner"
+      disable-while-typing #true
+  }
+  mouse {
+      natural-scrolling #false
+      speed 0.0                 // -1.0 to 1.0
   }
   wallpaper {                   // absolute path or "~/..."; unset means the built-in picture
       light "/usr/share/backgrounds/unbound/day.jpg"
@@ -193,7 +207,7 @@ control writes to it, and it can be edited by hand while the session runs.
       display "LG HDR 4K 104NTAB7K123" mirror="BOE NE135A1M"
   }
   ```
-  The values shown for `appearance`, `dock`, `idle` and `keyboard` are the defaults. The
+  The values shown for `appearance`, `dock`, `idle`, `keyboard` (except `input-sources`), `trackpad` and `mouse` are the defaults. The
   wallpaper used is the one matching the current appearance; the desktop expands a leading `~/`.
   A section left empty by a Settings write is removed from the file. A valid file is parsed
   into a shadow `Config` and swapped in as one `Arc`, so readers see either the old or the new
@@ -203,7 +217,7 @@ control writes to it, and it can be edited by hand while the session runs.
   `IdleSuspendAfter` in seconds, 0 meaning never, `IdleSuspendWithDisplay` true while
   `suspend-after` is unset and sleep follows the display (writing true removes the explicit
   value), `KeyRepeatRate` per second and
-  `KeyRepeatDelay` in milliseconds as `u`, `WallpaperLight` and `WallpaperDark` as paths, empty
+  `KeyRepeatDelay` in milliseconds as `u`, `InputSources` as `as` of layout codes (the system layouts while unset; writing an empty list is rejected), `CapsLock`, `TrackpadTapToClick`, `TrackpadNaturalScrolling`, `TrackpadSpeed` (`d`), `TrackpadSecondaryClick`, `TrackpadDisableWhileTyping`, `MouseNaturalScrolling` and `MouseSpeed` (`d`), `WallpaperLight` and `WallpaperDark` as paths, empty
   meaning unset, `Displays` as `a{sa{sv}}` and `Arrangements` as `aa(siibs)`: name, x, y, main
   and the mirrored display's name, empty when it mirrors nothing). It watches the
   directory and reloads when the file is closed after writing or renamed into place;

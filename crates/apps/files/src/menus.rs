@@ -7,6 +7,7 @@ use crate::views::ViewMode;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
     Open,
+    OpenInNewTab,
     OpenWith(String),
     QuickLook,
     Info,
@@ -27,14 +28,17 @@ pub enum Command {
     ToggleHidden,
     EmptyTrash,
     OpenPlace,
+    OpenPlaceInNewTab,
     RemoveFromSidebar,
     Eject,
 }
 
 const OPEN_WITH: &str = "open-with:";
 
-const ACTIONS: [(&str, Command); 24] = [
+const ACTIONS: [(&str, Command); 26] = [
     ("open", Command::Open),
+    ("open-in-new-tab", Command::OpenInNewTab),
+    ("open-place-in-new-tab", Command::OpenPlaceInNewTab),
     ("quick-look", Command::QuickLook),
     ("info", Command::Info),
     ("rename", Command::Rename),
@@ -98,6 +102,7 @@ pub struct Selection {
     pub count: usize,
     pub trashed: bool,
     pub searching: bool,
+    pub folders: bool,
     pub apps: Vec<App>,
 }
 
@@ -116,6 +121,9 @@ pub fn items_menu(selection: &Selection) -> Menu {
         return Menu::new(items);
     }
     items.push(item("open", &Command::Open).shortcut("Super+Down"));
+    if selection.folders {
+        items.push(item("menu-open-in-new-tab", &Command::OpenInNewTab));
+    }
     if !selection.apps.is_empty() {
         let apps = selection
             .apps
@@ -234,7 +242,10 @@ pub enum Place {
 }
 
 pub fn place_menu(place: Place) -> Menu {
-    let mut items = vec![item("open", &Command::OpenPlace)];
+    let mut items = vec![
+        item("open", &Command::OpenPlace),
+        item("menu-open-in-new-tab", &Command::OpenPlaceInNewTab),
+    ];
     match place {
         Place::Folder { removable: true } => {
             items.push(MenuItem::separator());

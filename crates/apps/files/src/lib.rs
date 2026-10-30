@@ -9,6 +9,7 @@ mod menus;
 mod paint;
 mod prompt;
 mod sidebar;
+mod tabs;
 mod thumbs;
 mod view;
 mod views;
@@ -20,6 +21,7 @@ use unbound_l10n::Localizer;
 pub use browser::{Browser, Column, Location};
 pub use paint::permissions;
 pub use sidebar::{Place, PlaceKind, Row, rows, with_volumes, without_bookmark};
+pub use tabs::TAB_BAR_HEIGHT;
 pub use view::{
     COLUMN_WIDTH, FilesView, Hit, Info, PATH_BAR_HEIGHT, QuickLook, ROW_HEIGHT, Rename, Request,
     SIDEBAR_WIDTH, Sheet,
@@ -45,6 +47,7 @@ mod tests {
             include_str!("sidebar.rs"),
             include_str!("view.rs"),
             include_str!("grid.rs"),
+            include_str!("tabs.rs"),
         ];
         assert_eq!(
             unbound_l10n::missing_ids(super::ENGLISH, &sources),

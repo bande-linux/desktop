@@ -27,6 +27,7 @@ use crate::grid::Band;
 use crate::icons::Icons;
 use crate::loader::{Loaded, Loader};
 use crate::sidebar::{Place, PlaceKind, Row, with_volumes};
+use crate::tabs::{Tab, location_title};
 use crate::thumbs::Thumbs;
 use crate::views::{DEFAULT_ICON_SIZE, FolderView, ICON_SIZES, ViewMemory, ViewMode};
 
@@ -93,6 +94,9 @@ pub enum Hit {
     ChooseApp(usize),
     OpenWithChosen,
     UseForAll,
+    Tab(usize),
+    CloseTab(usize),
+    NewTab,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -118,6 +122,7 @@ pub enum Request {
     },
     RemoveBookmark(PathBuf),
     Eject(PathBuf),
+    NewWindow(Location),
 }
 
 pub struct FilesView {
@@ -136,7 +141,9 @@ pub struct FilesView {
     pub(crate) press: Option<Press>,
     pub(crate) drag_sources: Vec<PathBuf>,
     pub(crate) drop: Option<crate::drag::Hover>,
-    scrolls: Vec<(Location, ScrollState)>,
+    pub(crate) scrolls: Vec<(Location, ScrollState)>,
+    pub(crate) tabs: Vec<Option<Tab>>,
+    pub(crate) active_tab: usize,
     pub(crate) sheet_cancel: Option<WidgetId>,
     pub(crate) size: (f32, f32),
     pub(crate) quick_look: Option<QuickLook>,
@@ -159,7 +166,7 @@ pub struct FilesView {
     pub(crate) mode: ViewMode,
     pub(crate) icon_size: u32,
     views: ViewMemory,
-    shown_root: Option<Location>,
+    pub(crate) shown_root: Option<Location>,
     pub(crate) grid_scroll: (Option<Location>, ScrollState),
     pub(crate) band: Option<Band>,
     pub(crate) labels: HashMap<(String, u32), String>,
@@ -235,6 +242,8 @@ impl FilesView {
             drag_sources: Vec::new(),
             drop: None,
             scrolls: Vec::new(),
+            tabs: vec![None],
+            active_tab: 0,
             sheet_cancel: None,
             size: (0.0, 0.0),
             quick_look: None,
@@ -398,13 +407,7 @@ impl FilesView {
     }
 
     pub fn title(&self) -> String {
-        match self.browser.current_location() {
-            Location::Trash => L10N.tr("trash"),
-            Location::Folder(folder) => folder.file_name().map_or_else(
-                || folder.display().to_string(),
-                |name| name.to_string_lossy().into_owned(),
-            ),
-        }
+        location_title(&self.browser.current_location())
     }
 
     pub fn set_thumbnails(&mut self, thumbnails: Thumbnails) {
@@ -681,11 +684,12 @@ impl FilesView {
         } else {
             0.0
         };
+        let top = self.tab_bar_height() + search;
         Rect::new(
             SIDEBAR_WIDTH,
-            search,
+            top,
             (self.size.0 - SIDEBAR_WIDTH - inspector).max(COLUMN_WIDTH),
-            (self.size.1 - PATH_BAR_HEIGHT - progress - search).max(ROW_HEIGHT),
+            (self.size.1 - PATH_BAR_HEIGHT - progress - top).max(ROW_HEIGHT),
         )
     }
 
@@ -824,6 +828,9 @@ impl FilesView {
         {
             return self.context_click(hit, pointer.position);
         }
+        if pointer.button == PointerButton::Middle {
+            return self.middle_click(hit);
+        }
         if !pointer.is_primary() {
             return false;
         }
@@ -844,12 +851,20 @@ impl FilesView {
                     && column == self.browser.active()
                     && shown.is_marked(row)
                     && shown.marked.len() > 1;
+                let folder_in_tab = pointer.count >= 2
+                    && modifiers.logo
+                    && shown.entries[row].is_folder()
+                    && shown.entries[row].trashed.is_none();
                 self.commit_rename();
                 if plain && pointer.count == 1 {
                     self.press = Some(Press::Item {
                         at: pointer.position,
                         collapse: keep.then(|| path.clone()),
                     });
+                }
+                if folder_in_tab {
+                    self.open_tab(Location::Folder(path));
+                    return true;
                 }
                 if keep {
                 } else if modifiers.logo {
@@ -904,7 +919,32 @@ impl FilesView {
             }
             Hit::OpenWithChosen => self.open_with_chosen(),
             Hit::UseForAll => self.use_chosen_for_all(),
+            Hit::Tab(index) => self.select_tab(index),
+            Hit::CloseTab(index) => {
+                self.close_tab(index);
+            }
+            Hit::NewTab => self.open_tab(self.browser.root().clone()),
         }
+        true
+    }
+
+    fn middle_click(&mut self, hit: Hit) -> bool {
+        let location = match hit {
+            Hit::Tab(index) | Hit::CloseTab(index) => return self.close_tab(index),
+            Hit::Row { column, row } => match self.browser.columns()[column].entries.get(row) {
+                Some(entry) if entry.is_folder() && entry.trashed.is_none() => {
+                    Location::Folder(entry.path.clone())
+                }
+                _ => return false,
+            },
+            Hit::Place(index) => match self.sidebar.get(index) {
+                Some(Row::Place(place)) => place.location.clone(),
+                _ => return false,
+            },
+            Hit::Segment(path) if path.is_dir() => Location::Folder(path),
+            _ => return false,
+        };
+        self.open_tab(location);
         true
     }
 
@@ -931,7 +971,13 @@ impl FilesView {
         let hover = self.hit(pointer.position).filter(|hit| {
             matches!(
                 hit,
-                Hit::Place(_) | Hit::Eject(_) | Hit::Segment(_) | Hit::CancelJob(_)
+                Hit::Place(_)
+                    | Hit::Eject(_)
+                    | Hit::Segment(_)
+                    | Hit::CancelJob(_)
+                    | Hit::Tab(_)
+                    | Hit::CloseTab(_)
+                    | Hit::NewTab
             )
         });
         let changed = hover != self.hover;
@@ -1116,6 +1162,16 @@ impl FilesView {
                     return false;
                 }
                 self.selection_changed();
+            }
+            Key::Character('{' | '[') if command && shift => self.step_tab(false),
+            Key::Character('}' | ']') if command && shift => self.step_tab(true),
+            Key::Tab if modifiers.control => self.step_tab(!shift),
+            Key::Character('t' | 'T') if command && !shift => {
+                self.open_tab(self.browser.root().clone());
+            }
+            Key::Character('n' | 'N') if command && !shift => {
+                let location = self.browser.current_location();
+                self.requests.push(Request::NewWindow(location));
             }
             Key::Character('[') if command => {
                 self.browser.go_back();

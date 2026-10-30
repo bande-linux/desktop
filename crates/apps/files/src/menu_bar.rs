@@ -18,6 +18,8 @@ pub fn app_menus() -> Vec<Entry> {
         submenu(
             "menu-file",
             vec![
+                shortcut("menu-new-window", "Super+N"),
+                shortcut("menu-new-tab", "Super+T"),
                 shortcut("menu-new-folder", "Shift+Super+N"),
                 shortcut("menu-open", "Super+O"),
                 Entry::separator(),
@@ -76,7 +78,10 @@ pub fn app_menus() -> Vec<Entry> {
                 shortcut("menu-go-to-folder", "Shift+Super+G"),
             ],
         ),
-        window_submenu(Vec::new()),
+        window_submenu(vec![
+            shortcut("menu-previous-tab", "Shift+Super+["),
+            shortcut("menu-next-tab", "Shift+Super+]"),
+        ]),
     ]
 }
 

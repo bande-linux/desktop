@@ -108,6 +108,7 @@ impl FilesView {
         self.paint_sidebar(&mut items);
         self.paint_columns(&mut items);
         self.paint_search(&mut items);
+        self.paint_tab_bar(&mut items);
         self.paint_path_bar(&mut items);
         items.extend(controls);
         self.paint_drop(&mut items);
@@ -339,10 +340,15 @@ impl FilesView {
             return;
         }
         let content = self.content_frame();
-        let bar = Rect::new(content.x, 0.0, content.width, SEARCH_HEIGHT);
+        let bar = Rect::new(
+            content.x,
+            content.y - SEARCH_HEIGHT,
+            content.width,
+            SEARCH_HEIGHT,
+        );
         items.push(self.fill(bar, 0.0, self.palette.surface_background));
         items.push(self.fill(
-            Rect::new(bar.x, bar.height - 1.0, bar.width, 1.0),
+            Rect::new(bar.x, bar.y + bar.height - 1.0, bar.width, 1.0),
             0.0,
             self.palette.separator_color,
         ));

@@ -8,7 +8,7 @@ use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use tempfile::TempDir;
 use unbound_files::{
     Browser, FilesView, Location, PATH_BAR_HEIGHT, ROW_HEIGHT, Request, Row, SIDEBAR_WIDTH, Sheet,
-    ViewMemory, ViewMode, permissions, rows, with_volumes, without_bookmark,
+    TAB_BAR_HEIGHT, ViewMemory, ViewMode, permissions, rows, with_volumes, without_bookmark,
 };
 use unbound_fs::{Sort, SortBy, Trash, list};
 use unbound_thumbnails::{Cache, Thumbnailers, Thumbnails};
@@ -839,7 +839,10 @@ fn a_bookmark_is_removed_from_the_sidebar_but_not_from_the_disk() {
     view.scene(1000, 600);
 
     let menu = right_click(&mut view, Point::new(40.0, 38.0 + 26.0 * 2.5));
-    assert_eq!(titles(&menu), ["Open", "Remove from Sidebar"]);
+    assert_eq!(
+        titles(&menu),
+        ["Open", "Open in New Tab", "Remove from Sidebar"]
+    );
     assert!(view.menu_action("remove-from-sidebar"));
     assert_eq!(
         view.take_requests(),
@@ -1215,26 +1218,138 @@ fn the_icon_view_matches_its_golden_with_thumbnails_and_long_names() {
         view.handle(&press(Key::Right));
         view.handle(&press(Key::Right));
         settle_thumbnails(&mut view, GOLDEN_SIZE, 2);
-        let scene = view.scene(GOLDEN_SIZE.0, GOLDEN_SIZE.1);
-        let scheme_name = match scheme {
-            Scheme::Light => "light",
-            Scheme::Dark => "dark",
-        };
-        for (scale, scale_name) in [(1.0, "1x"), (1.5, "1.5x")] {
-            let (width, height) = (
-                (f64::from(GOLDEN_SIZE.0) * scale).round() as u32,
-                (f64::from(GOLDEN_SIZE.1) * scale).round() as u32,
-            );
-            let mut rgba = vec![0; (width * height * 4) as usize];
-            CpuRenderer::new()
-                .render_into(&scene, scale, &mut rgba)
-                .expect("render");
-            check_golden(
-                &format!("icons-{scheme_name}-{scale_name}"),
-                (width, height),
-                rgba,
-                scale,
-            );
-        }
+        shoot("icons", scheme, &mut view);
     }
+}
+
+fn shoot(name: &str, scheme: Scheme, view: &mut FilesView) {
+    let scene = view.scene(GOLDEN_SIZE.0, GOLDEN_SIZE.1);
+    let scheme_name = match scheme {
+        Scheme::Light => "light",
+        Scheme::Dark => "dark",
+    };
+    for (scale, scale_name) in [(1.0, "1x"), (1.5, "1.5x")] {
+        let (width, height) = (
+            (f64::from(GOLDEN_SIZE.0) * scale).round() as u32,
+            (f64::from(GOLDEN_SIZE.1) * scale).round() as u32,
+        );
+        let mut rgba = vec![0; (width * height * 4) as usize];
+        CpuRenderer::new()
+            .render_into(&scene, scale, &mut rgba)
+            .expect("render");
+        check_golden(
+            &format!("{name}-{scheme_name}-{scale_name}"),
+            (width, height),
+            rgba,
+            scale,
+        );
+    }
+}
+
+#[test]
+fn the_list_view_with_tabs_matches_its_golden() {
+    let place = Place::new();
+    fs::write(place.home().join("Budget.txt"), "x".repeat(48_000)).expect("file");
+    let noon = std::time::UNIX_EPOCH + Duration::from_secs(1_773_489_600);
+    for entry in fs::read_dir(place.home()).expect("home") {
+        fs::File::open(entry.expect("entry").path())
+            .and_then(|file| file.set_modified(noon))
+            .expect("set the date");
+    }
+    for scheme in [Scheme::Light, Scheme::Dark] {
+        let mut view = place.themed_view(scheme);
+        view.handle(&command(Key::Character('2'), false));
+        view.handle(&command(Key::Character('t'), false));
+        view.handle(&press(Key::Down));
+        view.handle(&press(Key::Down));
+        view.scene(GOLDEN_SIZE.0, GOLDEN_SIZE.1);
+        view.handle(&Event::PointerMove(Pointer::at(Point::new(
+            SIDEBAR_WIDTH + 100.0,
+            TAB_BAR_HEIGHT / 2.0,
+        ))));
+        shoot("tabs-list", scheme, &mut view);
+    }
+}
+
+#[test]
+fn tabs_keep_their_own_folders_and_close_back_to_one() {
+    let place = Place::new();
+    let mut view = place.view();
+    view.handle(&command(Key::Character('t'), false));
+    assert_eq!((view.tab_count(), view.active_tab()), (2, 1));
+    view.handle(&press(Key::Down));
+    view.handle(&command(Key::Down, false));
+    assert_eq!(
+        view.browser().root(),
+        &Location::Folder(place.home().join("Documents"))
+    );
+    assert_eq!(view.tab_titles(), ["home", "Documents"]);
+    assert_eq!(view.title(), "Documents");
+
+    view.handle(&command(Key::Character('['), true));
+    assert_eq!(view.active_tab(), 0);
+    assert_eq!(view.browser().root(), &Location::Folder(place.home()));
+    view.handle(&command(Key::Character(']'), true));
+    assert_eq!(view.active_tab(), 1);
+
+    view.scene(1000, 600);
+    view.handle(&Event::PointerDown(
+        Pointer::at(Point::new(
+            SIDEBAR_WIDTH + 100.0,
+            TAB_BAR_HEIGHT + 6.0 + ROW_HEIGHT * 0.5,
+        ))
+        .with_button(PointerButton::Middle),
+    ));
+    assert_eq!(view.tab_count(), 3);
+    assert_eq!(view.tab_titles(), ["home", "Documents", "Reports"]);
+
+    assert!(view.close_tab(view.active_tab()));
+    assert_eq!(view.tab_titles(), ["home", "Documents"]);
+    assert_eq!(view.title(), "Documents");
+    assert!(view.close_tab(0));
+    assert_eq!(view.tab_count(), 1);
+    assert!(!view.close_tab(0));
+    assert_eq!(
+        view.browser().root(),
+        &Location::Folder(place.home().join("Documents"))
+    );
+}
+
+#[test]
+fn files_dropped_on_a_tab_move_into_its_folder_and_hovering_springs_it_open() {
+    let place = Place::new();
+    let mut view = place.view();
+    view.handle(&press(Key::Down));
+    assert_eq!(
+        titles(&right_click(
+            &mut view,
+            Point::new(SIDEBAR_WIDTH + 60.0, 6.0 + ROW_HEIGHT * 0.5)
+        ))[..2],
+        ["Open", "Open in New Tab"]
+    );
+    assert!(view.menu_action("open-in-new-tab"));
+    assert_eq!(view.tab_titles(), ["home", "Documents"]);
+    view.scene(1000, 600);
+
+    let notes = place.home().join("notes.txt");
+    let uris = [file_uri(&notes)];
+    let over_documents = Point::new(SIDEBAR_WIDTH + 600.0, TAB_BAR_HEIGHT / 2.0);
+    let over_home = Point::new(SIDEBAR_WIDTH + 200.0, TAB_BAR_HEIGHT / 2.0);
+    assert_eq!(
+        view.drag_entered(over_documents, &uris),
+        Some(DragAction::Move)
+    );
+    view.handle(&command(Key::Character('['), true));
+    view.scene(1000, 600);
+    assert_eq!(view.drag_moved(over_documents), Some(DragAction::Move));
+    assert!(view.dropped(over_documents, &uris, Some(DragAction::Move)));
+    run_until(&mut view, idle);
+    assert!(place.home().join("Documents/notes.txt").exists());
+
+    let uris = [file_uri(&place.home().join("Empty"))];
+    view.drag_entered(over_home, &uris);
+    assert_eq!(view.active_tab(), 0);
+    view.drag_moved(over_documents);
+    view.tick(Instant::now() + Duration::from_secs(2));
+    assert_eq!(view.active_tab(), 1);
 }

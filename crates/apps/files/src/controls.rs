@@ -581,7 +581,12 @@ impl FilesView {
             let width = (content.width - 20.0).min(360.0);
             (
                 search.field,
-                Rect::new(content.x + 10.0, 7.0, width, SEARCH_HEIGHT - 14.0),
+                Rect::new(
+                    content.x + 10.0,
+                    content.y - SEARCH_HEIGHT + 7.0,
+                    width,
+                    SEARCH_HEIGHT - 14.0,
+                ),
             )
         });
         let rename = self

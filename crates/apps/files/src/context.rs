@@ -119,6 +119,10 @@ impl FilesView {
             count: selection.len(),
             trashed,
             searching: self.search.is_some(),
+            folders: !selection.is_empty()
+                && selection
+                    .iter()
+                    .all(|entry| entry.is_folder() && entry.trashed.is_none()),
             apps,
         })
     }
@@ -141,6 +145,7 @@ impl FilesView {
         let place = self.menu_place.take();
         match command {
             Command::Open => self.open(),
+            Command::OpenInNewTab => self.open_selection_in_tabs(),
             Command::OpenWith(id) => self.open_with(&id),
             Command::QuickLook => {
                 if self.quick_look.is_none() {
@@ -172,7 +177,10 @@ impl FilesView {
             Command::List => self.set_mode(ViewMode::List),
             Command::ToggleHidden => self.toggle_hidden(),
             Command::EmptyTrash => self.ask_to_empty_trash(),
-            Command::OpenPlace | Command::RemoveFromSidebar | Command::Eject => {
+            Command::OpenPlace
+            | Command::OpenPlaceInNewTab
+            | Command::RemoveFromSidebar
+            | Command::Eject => {
                 let Some(Row::Place(place)) = place.and_then(|index| self.sidebar.get(index))
                 else {
                     return false;
@@ -180,6 +188,7 @@ impl FilesView {
                 let location = place.location.clone();
                 match (command, location) {
                     (Command::OpenPlace, location) => self.go(location),
+                    (Command::OpenPlaceInNewTab, location) => self.open_tab(location),
                     (Command::Eject, Location::Folder(path)) => {
                         self.requests.push(Request::Eject(path));
                     }

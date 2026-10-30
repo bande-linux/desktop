@@ -19,6 +19,7 @@ use unbound_toolkit::{
 use unbound_volumes::{eject, media_roots};
 use unbound_xdg::{
     Apps, config_dirs, config_home, data_dirs, file_uri, launch_with, path_from_file_uri,
+    spawn_detached,
 };
 
 const APP_ID: &str = "org.unbound.Files";
@@ -59,9 +60,15 @@ impl Files {
         let result = match Standard::parse(action) {
             Some(Standard::Hide | Standard::Minimize) => window.minimize(),
             Some(Standard::Zoom) => window.toggle_zoom(),
-            Some(Standard::Quit | Standard::CloseWindow) => {
+            Some(Standard::Quit) => {
                 window.close();
                 Ok(())
+            }
+            Some(Standard::CloseWindow) => {
+                if !self.view.close_tab(self.view.active_tab()) {
+                    window.close();
+                }
+                return true;
             }
             None => {
                 return menu_bar::key_event(action).is_some_and(|event| self.view.handle(&event));
@@ -115,6 +122,7 @@ impl Files {
                     }
                 }
                 Request::Eject(volume) => eject(vec![volume]),
+                Request::NewWindow(location) => new_window(window, &location),
                 Request::RemoveBookmark(folder) => match remove_bookmark(&folder) {
                     Ok(()) => self.view.set_sidebar(sidebar(&self.home)),
                     Err(error) => tracing::warn!("cannot remove the bookmark: {error}"),
@@ -233,6 +241,18 @@ impl App for Files {
         Some(self.view.accessibility())
     }
 
+    fn should_close(&mut self, window: &mut Window) -> bool {
+        if window.close_requested_by_button() || !self.view.close_tab(self.view.active_tab()) {
+            return true;
+        }
+        self.changed(window);
+        false
+    }
+
+    fn should_quit(&mut self, _window: &mut Window) -> bool {
+        true
+    }
+
     fn tick(&mut self, window: &mut Window, now: Instant) {
         if self.view.tick(now) {
             self.changed(window);
@@ -241,6 +261,21 @@ impl App for Files {
 }
 
 const INFO_FLAG: &str = "--info";
+
+fn new_window(window: &mut Window, location: &Location) {
+    let program = match std::env::current_exe() {
+        Ok(program) => program.to_string_lossy().into_owned(),
+        Err(error) => return tracing::warn!("cannot find the Files program: {error}"),
+    };
+    let argument = match location {
+        Location::Trash => "trash:///".to_owned(),
+        Location::Folder(folder) => folder.to_string_lossy().into_owned(),
+    };
+    let token = window.activation_token(APP_ID).ok();
+    if let Err(error) = spawn_detached(&[program, argument], None, token.as_deref()) {
+        tracing::warn!("cannot open a window: {error}");
+    }
+}
 
 fn start_location(home: &Path, argument: Option<&str>) -> Location {
     let Some(argument) = argument else {

@@ -33,6 +33,7 @@ pub(crate) enum Target {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Spring {
     Go(Location),
+    Tab(usize),
     Open { column: usize, row: usize },
 }
 
@@ -210,6 +211,14 @@ impl FilesView {
                 )),
                 _ => None,
             },
+            Hit::Tab(index) | Hit::CloseTab(index) => {
+                let location = self.tab_location(*index)?;
+                Some((
+                    Self::location_target(&location),
+                    *rect,
+                    Some(Spring::Tab(*index)),
+                ))
+            }
             Hit::Segment(path) if path.is_dir() => Some((
                 Target::Folder(path.clone()),
                 *rect,
@@ -315,6 +324,7 @@ impl FilesView {
         }
         match spring {
             Spring::Go(location) => self.go(location),
+            Spring::Tab(index) => self.select_tab(index),
             Spring::Open { column, row } => {
                 self.browser.select(column, row);
                 self.selection_changed();

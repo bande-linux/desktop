@@ -21,5 +21,7 @@ pub use launch::{
     spawn_detached,
 };
 pub use mime::{DIRECTORY, MimeDatabase, OCTET_STREAM, TEXT_PLAIN};
-pub use mimeapps::{MimeApps, config_dirs, config_home, mimeapps_paths, set_default_app};
+pub use mimeapps::{
+    MimeApps, cache_home, config_dirs, config_home, mimeapps_paths, set_default_app,
+};
 pub use uri::{file_uri, path_from_file_uri, percent_decode, percent_encode};

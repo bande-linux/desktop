@@ -1,6 +1,7 @@
 mod card;
 mod desktop;
 mod devices;
+mod handover;
 mod input;
 mod scanout;
 mod session;

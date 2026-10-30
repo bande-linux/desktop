@@ -77,7 +77,7 @@ pub trait StatusView {
     fn set_battery_percentage(&mut self, shown: bool) -> bool;
     fn battery_percentage(&self) -> bool;
     fn set_workspaces(&mut self, count: usize, active: usize) -> bool;
-    fn shown_tray_items(&self) -> usize;
+    fn hidden_tray(&self) -> Vec<Slot>;
     fn scene(&mut self, width: u32, height: u32, scale: f64) -> Scene;
     fn accessibility(&self) -> TreeUpdate;
 }
@@ -177,8 +177,8 @@ impl StatusView for MenuBar {
         false
     }
 
-    fn shown_tray_items(&self) -> usize {
-        self.tray.len()
+    fn hidden_tray(&self) -> Vec<Slot> {
+        Vec::new()
     }
 
     fn scene(&mut self, width: u32, height: u32, scale: f64) -> Scene {

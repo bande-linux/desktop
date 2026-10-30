@@ -31,7 +31,7 @@ depends = "$auto, dbus-session-bus | default-dbus-session-bus, init-system-helpe
 recommends = "upower, unbound-config"
 extended-description = """\
 Locks the session before the computer sleeps through a logind delay \
-inhibitor, posts low and critical battery notifications from UPower, and \
+inhibitor, makes the power button put the computer to sleep, posts low and critical battery notifications from UPower, and \
 serves org.freedesktop.ScreenSaver so applications can keep the screen \
 on, holding a logind idle inhibitor for each request."""
 maintainer-scripts = "debian/"
@@ -39,6 +39,7 @@ assets = [
     ["target/release/unbound-power", "usr/bin/", "755"],
     ["data/unbound-power.service", "usr/lib/systemd/user/", "644"],
     ["data/org.unbound.Power.service", "usr/share/dbus-1/services/", "644"],
+    ["data/logind.conf", "usr/lib/systemd/logind.conf.d/unbound-power.conf", "644"],
 ]
 
 [lints]

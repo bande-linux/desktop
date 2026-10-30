@@ -18,7 +18,7 @@ use unbound_inbox::Inbox;
 use unbound_network::NetworkManager;
 use unbound_notify::client::NotificationCenter;
 use unbound_power::backlight::{Backlight, SYSFS_BACKLIGHT};
-use unbound_power::logind::{ManagerProxyBlocking, own_session};
+use unbound_power::logind::own_session;
 use unbound_status::session::full_name;
 use unbound_toolkit::ui::{Animated, Event, Key, Menu, MenuItem, Pointer, Scroll, Spring, Ui};
 use unbound_toolkit::{
@@ -460,10 +460,7 @@ impl ControlCenter {
     fn end_session(&mut self, window: &mut Window, keyword: &str) {
         if keyword == "sleep" {
             if let Some(system) = &self.system {
-                report(
-                    "sleep",
-                    ManagerProxyBlocking::new(system).and_then(|login| login.suspend(true)),
-                );
+                report("sleep", unbound_status::devices::sleep(system));
             }
         } else {
             let ending = match keyword {

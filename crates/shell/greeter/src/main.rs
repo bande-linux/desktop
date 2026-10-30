@@ -13,7 +13,7 @@ use unbound_greeter::{
 };
 use unbound_keyboard::Layouts;
 use unbound_lock::{
-    BackdropSource, DateFormats, Inbox, LockScreen, PowerAction, User, Variant, load_backdrop,
+    BackdropSource, DateFormats, Inbox, LockScreen, Look, PowerAction, User, Variant, load_backdrop,
 };
 use unbound_status::devices::{powers, use_power};
 use unbound_toolkit::ui::{Event, Key, frame_time};
@@ -62,7 +62,7 @@ struct Greeter {
     conversation: Option<Conversation>,
     caps_lock: bool,
     next_clock: Instant,
-    backdrop: Option<Inbox<Image>>,
+    backdrop: Option<Inbox<(Look, Image)>>,
     backdrop_requested: bool,
     picture: Option<File>,
     wallpaper: Option<Image>,
@@ -168,6 +168,8 @@ impl Greeter {
         match finished.rejection {
             None if finished.started => {
                 self.started = true;
+                tracing::info!("signed in; handing the screen to the session");
+                self.screen.leave(frame_time().on_screen());
                 if let Some(file) = &self.last_user
                     && let Err(error) = remember_user(file, &self.users[self.user].login)
                 {
@@ -224,6 +226,7 @@ impl App for Greeter {
                 BackdropSource::Picture(picture),
                 Variant::Dark,
                 (width, height),
+                vec![Look::Blurred, Look::Sharp],
             ) {
                 Ok(inbox) => self.backdrop = Some(inbox),
                 Err(error) => tracing::warn!("cannot load the wallpaper: {error}"),
@@ -290,17 +293,17 @@ impl App for Greeter {
     }
 
     fn source_ready(&mut self, window: &mut Window, index: usize) {
-        let backdrop = if index == 0 {
-            self.backdrop.take()
-        } else {
-            None
-        };
-        match backdrop {
-            Some(mut inbox) => {
-                if let Some(image) = inbox.drain().pop() {
-                    self.screen
-                        .set_backdrop(image.clone(), frame_time().on_screen());
-                    self.wallpaper = Some(image);
+        match self.backdrop.as_mut().filter(|_| index == 0) {
+            Some(inbox) => {
+                for (look, image) in inbox.drain() {
+                    match look {
+                        Look::Blurred => {
+                            self.screen
+                                .set_backdrop(image.clone(), frame_time().on_screen());
+                            self.wallpaper = Some(image);
+                        }
+                        Look::Sharp => self.screen.set_wallpaper(image),
+                    }
                 }
             }
             None => self.converse(),
@@ -309,7 +312,10 @@ impl App for Greeter {
     }
 
     fn deadline(&self) -> Option<Instant> {
-        Some(self.next_clock)
+        match self.finished() {
+            true => Some(Instant::now()),
+            false => Some(self.next_clock),
+        }
     }
 
     fn animating(&self) -> bool {
@@ -325,7 +331,7 @@ impl App for Greeter {
     }
 
     fn finished(&self) -> bool {
-        self.started
+        self.started && self.screen.has_left()
     }
 
     fn accessibility(&self) -> Option<TreeUpdate> {

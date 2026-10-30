@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use image::{Rgba, RgbaImage};
-use unbound_wallpaper::{Choice, Fit, Variant, backdrop, bundled, render};
+use unbound_wallpaper::{Choice, Fit, Variant, backdrop, bundled, render, render_cached};
 
 fn bundled_dir() -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();
@@ -128,4 +128,47 @@ fn the_backdrop_is_small_dim_and_opaque() {
     let [red, green, blue, alpha] = pixel(&picture, 32, 20);
     assert_eq!(alpha, 255);
     assert!(red < 180 && red == green && green == blue, "{red}");
+}
+
+#[test]
+fn a_rendered_wallpaper_is_kept_for_the_next_sign_in_until_the_picture_changes() {
+    let dir = tempfile::tempdir().unwrap();
+    let cache = dir.path().join("cache");
+    let path = photo(dir.path());
+    let first = render_cached(&cache, &path, Fit::Fill, 20, 20).unwrap();
+    assert_eq!(first, render(&path, Fit::Fill, 20, 20).unwrap());
+    let entries = || {
+        std::fs::read_dir(&cache)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect::<Vec<_>>()
+    };
+    let [entry] = entries().try_into().unwrap();
+    let mut marked = std::fs::read(&entry).unwrap();
+    marked[8..].fill(7);
+    std::fs::write(&entry, &marked).unwrap();
+    assert_eq!(
+        render_cached(&cache, &path, Fit::Fill, 20, 20)
+            .unwrap()
+            .rgba,
+        vec![7; 20 * 20 * 4],
+        "the second sign-in reads the kept pixels"
+    );
+
+    RgbaImage::from_pixel(30, 30, Rgba([10, 200, 10, 255]))
+        .save(&path)
+        .unwrap();
+    assert_eq!(
+        pixel(
+            &render_cached(&cache, &path, Fit::Fill, 20, 20).unwrap(),
+            5,
+            5
+        ),
+        [10, 200, 10, 255],
+        "a changed picture is drawn again"
+    );
+    for size in 21..30 {
+        render_cached(&cache, &path, Fit::Fill, size, size).unwrap();
+    }
+    assert_eq!(entries().len(), 4, "only the latest few are kept");
 }

@@ -202,7 +202,6 @@ fn report<E: std::fmt::Display>(what: &str, result: Result<(), E>) {
 }
 
 fn run(system: &Connection, network: &NetworkManager, bluez: &BlueZ, command: Command) {
-    let login = || Login::new(system);
     match command {
         Command::SetWifi(on) => report("switch Wi-Fi", network.set_wifi_enabled(on)),
         Command::Join(ssid) => {
@@ -231,7 +230,7 @@ fn run(system: &Connection, network: &NetworkManager, bluez: &BlueZ, command: Co
                 report("connect the device", result);
             }
         }
-        Command::Sleep => report("sleep", login().and_then(|login| login.suspend(true))),
+        Command::Sleep => report("sleep", sleep(system)),
         Command::LockScreen => report("lock the screen", own_session(system, "Lock")),
         _ => {}
     }
@@ -247,6 +246,10 @@ fn own_session(system: &Connection, method: &str) -> zbus::Result<()> {
         &(),
     )?;
     Ok(())
+}
+
+pub fn sleep(system: &Connection) -> zbus::Result<()> {
+    Login::new(system)?.suspend(true)
 }
 
 pub fn end_session(system: &Connection, ending: Ending) -> zbus::Result<()> {

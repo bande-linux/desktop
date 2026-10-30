@@ -8,7 +8,7 @@ use unbound_lock::{
 };
 use unbound_status::status::{Battery, Power, Wifi};
 use unbound_toolkit::ui::{Event, Key, Modifiers};
-use unbound_toolkit::{Appearance, CpuRenderer, Image, TextSystem};
+use unbound_toolkit::{Appearance, CpuRenderer, Image, Item, TextSystem};
 
 const OUTPUT: (u32, u32) = (1024, 768);
 const NONE: Modifiers = Modifiers {
@@ -356,4 +356,69 @@ fn escape_takes_back_the_question_without_shutting_down() {
     press(&mut screen, Key::Enter);
 
     assert_eq!(screen.take_power(), None);
+}
+
+#[test]
+fn leaving_fades_the_card_out_over_the_wallpaper() {
+    let mut screen = screen();
+    let start = Instant::now();
+    screen.set_backdrop(wallpaper(), start - Duration::from_secs(5));
+    screen.advance(start);
+    assert!(texts(&mut screen) > 0);
+    screen.leave(start);
+    assert!(!screen.has_left());
+
+    screen.advance(start + Duration::from_millis(50));
+    let fading = |screen: &mut LockScreen, wanted: fn(f32) -> bool| {
+        screen.scene(OUTPUT.0, OUTPUT.1).items.iter().any(|item| {
+            matches!(item, Item::Opacity { alpha, items } if wanted(*alpha)
+                && items.iter().any(|item| matches!(item, Item::Text { .. })))
+        })
+    };
+    assert!(
+        fading(&mut screen, |alpha| alpha > 0.0 && alpha < 1.0),
+        "the card is part way out"
+    );
+    assert!(screen.is_animating());
+
+    screen.advance(start + Duration::from_secs(1));
+    assert!(screen.has_left());
+    assert!(!screen.is_animating());
+    assert!(
+        fading(&mut screen, |alpha| alpha == 0.0),
+        "the card is gone"
+    );
+    assert_eq!(texts(&mut screen), 0);
+}
+
+fn backdrop_layers(screen: &mut LockScreen) -> (bool, Option<f32>) {
+    let items = screen.scene(OUTPUT.0, OUTPUT.1).items;
+    let sharp = items.iter().any(|item| matches!(item, Item::Image { .. }));
+    let blurred = items.iter().find_map(|item| match item {
+        Item::Opacity { alpha, items } if matches!(items.first(), Some(Item::Image { .. })) => {
+            Some(*alpha)
+        }
+        _ => None,
+    });
+    (sharp, blurred)
+}
+
+#[test]
+fn leaving_unveils_the_sharp_wallpaper_under_the_blurred_one() {
+    let mut screen = screen();
+    let start = Instant::now();
+    screen.set_backdrop(wallpaper(), start - Duration::from_secs(5));
+    screen.set_wallpaper(wallpaper());
+    screen.advance(start);
+    assert_eq!(backdrop_layers(&mut screen), (false, Some(1.0)));
+    screen.leave(start);
+    screen.advance(start + Duration::from_millis(50));
+    let (sharp, blurred) = backdrop_layers(&mut screen);
+    assert!(sharp);
+    assert!(
+        blurred.is_some_and(|alpha| alpha > 0.0 && alpha < 1.0),
+        "{blurred:?}"
+    );
+    screen.advance(start + Duration::from_secs(1));
+    assert_eq!(backdrop_layers(&mut screen), (true, Some(0.0)));
 }

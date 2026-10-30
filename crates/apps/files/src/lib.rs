@@ -1,6 +1,7 @@
 mod browser;
 mod context;
 mod controls;
+mod drag;
 mod host;
 mod icons;
 mod loader;

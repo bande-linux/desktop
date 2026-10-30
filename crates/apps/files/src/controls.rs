@@ -45,7 +45,13 @@ pub(crate) type Signals = Rc<RefCell<Vec<Signal>>>;
 pub(crate) enum Press {
     Ui,
     Files,
-    Row { path: PathBuf, sole: bool },
+    Item {
+        at: Point,
+        collapse: Option<PathBuf>,
+        sole: bool,
+        ui: bool,
+    },
+    Dragging,
 }
 
 fn sender(signals: &Signals) -> impl Fn(Signal) + 'static {
@@ -165,6 +171,7 @@ impl FilesView {
             Event::PointerDown(pointer) => self.pointer_down(event, pointer),
             Event::PointerMove(pointer) | Event::PointerEnter(pointer) => match self.press {
                 Some(Press::Ui) => self.ui.handle(event),
+                Some(Press::Item { at, .. }) => self.maybe_drag(at, pointer),
                 Some(_) => false,
                 None => self.ui.handle(event) | self.files_hover(pointer),
             },
@@ -268,11 +275,24 @@ impl FilesView {
                 .map(|entry| entry.path.clone());
             if let Some(path) = path {
                 self.focus(self.table);
-                self.press = Some(Press::Row { path, sole });
+                self.press = Some(Press::Item {
+                    at,
+                    collapse: Some(path),
+                    sole,
+                    ui: false,
+                });
                 return true;
             }
         }
-        self.press = Some(Press::Ui);
+        self.press = match row.is_some() && pointer.is_primary() && !modifiers.control {
+            true => Some(Press::Item {
+                at,
+                collapse: None,
+                sole: false,
+                ui: true,
+            }),
+            false => Some(Press::Ui),
+        };
         let handled = self.ui.handle(event);
         self.drain_signals();
         let menu = pointer.button == PointerButton::Secondary
@@ -289,13 +309,24 @@ impl FilesView {
 
     fn pointer_up(&mut self, event: &Event) -> bool {
         match self.press.take() {
-            Some(Press::Row { path, sole }) => {
-                let row = self.browser.columns()[0]
-                    .entries
-                    .iter()
-                    .position(|entry| entry.path == path);
-                if let Some(row) = row {
-                    self.browser.select(0, row);
+            Some(Press::Item {
+                collapse, sole, ui, ..
+            }) => {
+                let handled = ui && self.ui.handle(event);
+                let Some(path) = collapse else {
+                    return handled;
+                };
+                let found =
+                    self.browser
+                        .columns()
+                        .iter()
+                        .enumerate()
+                        .find_map(|(index, column)| {
+                            let row = column.entries.iter().position(|entry| entry.path == path)?;
+                            Some((index, row))
+                        });
+                if let Some((column, row)) = found {
+                    self.browser.select(column, row);
                     self.selection_changed();
                 }
                 if sole {
@@ -303,7 +334,7 @@ impl FilesView {
                 }
                 true
             }
-            Some(Press::Files) => false,
+            Some(Press::Files | Press::Dragging) => false,
             _ => self.ui.handle(event),
         }
     }

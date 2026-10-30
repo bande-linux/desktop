@@ -104,6 +104,7 @@ pub enum Request {
         paths: Vec<PathBuf>,
         cut: bool,
     },
+    StartDrag(Vec<PathBuf>),
     PasteFiles,
     ShowMenu {
         menu: Menu,
@@ -128,6 +129,8 @@ pub struct FilesView {
     pub(crate) table_keys: HashMap<String, usize>,
     pub(crate) table_revealed: Option<usize>,
     pub(crate) press: Option<Press>,
+    pub(crate) drag_sources: Vec<PathBuf>,
+    pub(crate) drop: Option<crate::drag::Hover>,
     scrolls: Vec<(Location, ScrollState)>,
     pub(crate) sheet_cancel: Option<WidgetId>,
     pub(crate) size: (f32, f32),
@@ -155,7 +158,7 @@ pub struct FilesView {
     pub(crate) clipboard_files: bool,
 }
 
-fn home() -> PathBuf {
+pub(crate) fn home() -> PathBuf {
     std::env::var_os("HOME").map_or_else(|| PathBuf::from("/"), PathBuf::from)
 }
 
@@ -216,6 +219,8 @@ impl FilesView {
             table_keys: HashMap::new(),
             table_revealed: None,
             press: None,
+            drag_sources: Vec::new(),
+            drop: None,
             scrolls: Vec::new(),
             sheet_cancel: None,
             size: (0.0, 0.0),
@@ -412,6 +417,7 @@ impl FilesView {
             self.operations.deadline(),
             self.notice.as_ref().map(|(_, shown)| *shown + NOTICE_TIME),
             self.pending_rename.as_ref().map(|(due, _)| *due),
+            self.drop.as_ref().and_then(crate::drag::Hover::due),
         ]
         .into_iter()
         .flatten()
@@ -430,6 +436,7 @@ impl FilesView {
         {
             self.notice = None;
         }
+        self.spring(now);
         if let Some((due, path)) = self.pending_rename.take() {
             if due > now {
                 self.pending_rename = Some((due, path));
@@ -735,14 +742,30 @@ impl FilesView {
         match hit {
             Hit::Row { column, row } => {
                 let modifiers = pointer.modifiers;
-                let path = self.browser.columns()[column].entries[row].path.clone();
+                let plain = !modifiers.logo && !modifiers.shift;
+                let shown = &self.browser.columns()[column];
+                let path = shown.entries[row].path.clone();
                 let already = self
                     .browser
                     .selected()
                     .is_some_and(|entry| entry.path == path)
                     && self.browser.active() == column;
+                let keep = plain
+                    && pointer.count == 1
+                    && column == self.browser.active()
+                    && shown.is_marked(row)
+                    && shown.marked.len() > 1;
                 self.commit_rename();
-                if modifiers.logo {
+                if plain && pointer.count == 1 {
+                    self.press = Some(Press::Item {
+                        at: pointer.position,
+                        collapse: keep.then(|| path.clone()),
+                        sole: false,
+                        ui: false,
+                    });
+                }
+                if keep {
+                } else if modifiers.logo {
                     self.browser.toggle(column, row);
                 } else if modifiers.shift {
                     self.browser.extend_to(column, row);
@@ -1126,7 +1149,7 @@ impl FilesView {
         }
     }
 
-    fn start(&mut self, task: Task, purpose: Purpose) {
+    pub(crate) fn start(&mut self, task: Task, purpose: Purpose) {
         if let Err(error) = self.operations.start(task, purpose) {
             self.show_notice(
                 L10N.tr_args("error-operation", [("error", error.to_string().into())]),

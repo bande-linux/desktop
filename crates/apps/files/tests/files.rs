@@ -12,7 +12,7 @@ use unbound_files::{
 };
 use unbound_fs::{Sort, SortBy, Trash, list};
 use unbound_toolkit::ui::{Event, Key, Menu, Modifiers, Pointer, PointerButton};
-use unbound_toolkit::{Item, Palette, Point, Scheme, TextSystem};
+use unbound_toolkit::{DragAction, Item, Palette, Point, Scheme, TextSystem};
 use unbound_xdg::{Apps, file_uri};
 
 fn names(folder: &Path, show_hidden: bool) -> Vec<String> {
@@ -906,4 +906,41 @@ fn the_list_view_selects_by_click_sorts_by_header_and_opens_on_double_click() {
         view.browser().root(),
         &Location::Folder(place.home().join(first))
     );
+}
+
+#[test]
+fn dragging_a_selection_starts_a_drag_and_dropping_on_a_folder_moves_it_there() {
+    let place = Place::new();
+    let mut view = place.view();
+    let row = |index: f32| Point::new(SIDEBAR_WIDTH + 60.0, 6.0 + ROW_HEIGHT * (index + 0.5));
+    click_row(&mut view, 1, 1, Modifiers::default());
+    view.handle(&Event::PointerUp(Pointer::at(row(1.0))));
+    click_row(
+        &mut view,
+        2,
+        1,
+        Modifiers {
+            shift: true,
+            ..Modifiers::default()
+        },
+    );
+    view.handle(&Event::PointerUp(Pointer::at(row(2.0))));
+    view.scene(1000, 600);
+
+    view.handle(&Event::PointerDown(Pointer::at(row(2.0))));
+    view.handle(&Event::PointerMove(Pointer::at(Point::new(
+        SIDEBAR_WIDTH + 70.0,
+        row(2.0).y + 12.0,
+    ))));
+    let dragged = vec![place.home().join("Empty"), place.home().join("notes.txt")];
+    assert_eq!(view.take_requests(), [Request::StartDrag(dragged)]);
+    assert_eq!(view.drag_moved(row(1.0)), None);
+    assert_eq!(view.drag_moved(row(0.0)), Some(DragAction::Move));
+    view.drag_finished();
+
+    let uris = vec![file_uri(&place.home().join("notes.txt"))];
+    assert!(view.dropped(row(0.0), &uris, Some(DragAction::Move)));
+    run_until(&mut view, idle);
+    assert!(place.home().join("Documents/notes.txt").exists());
+    assert!(!place.home().join("notes.txt").exists());
 }

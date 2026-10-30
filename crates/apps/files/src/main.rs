@@ -10,7 +10,8 @@ use unbound_app_menu::{AppMenu, Standard};
 use unbound_files::{Browser, FilesView, Location, Request, Row, rows, without_bookmark};
 use unbound_fs::Trash;
 use unbound_toolkit::{
-    App, Appearance, MenuPlacement, Rect, Role, Scene, TextSystem, Transfer, Window, WindowEvent,
+    App, Appearance, DragAction, DragEvent, MenuPlacement, Rect, Role, Scene, TextSystem, Transfer,
+    Window, WindowEvent,
 };
 use unbound_volumes::{eject, media_roots};
 use unbound_xdg::{
@@ -84,6 +85,17 @@ impl Files {
                     let transfer = Transfer::uris(uris);
                     window.copy_transfer(if cut { transfer.cut() } else { transfer });
                 }
+                Request::StartDrag(paths) => {
+                    let icon = self.view.drag_icon();
+                    let uris = paths.iter().map(|path| file_uri(path)).collect();
+                    let actions = [DragAction::Copy, DragAction::Move];
+                    if let Err(error) =
+                        window.start_drag(Transfer::uris(uris), &actions, Some(icon))
+                    {
+                        tracing::warn!("cannot start dragging: {error}");
+                        self.view.drag_finished();
+                    }
+                }
                 Request::PasteFiles => {
                     if let Err(error) = window.paste_transfer() {
                         tracing::warn!("cannot paste: {error}");
@@ -138,6 +150,28 @@ impl App for Files {
                     .pasted_files(&transfer.uris, &transfer.text, transfer.cut)
             }
             WindowEvent::MenuAction(action) => self.view.menu_action(&action),
+            WindowEvent::Drag(drag) => {
+                match drag {
+                    DragEvent::Entered { position, uris, .. } => {
+                        let action = self.view.drag_entered(position, uris);
+                        window.accept_drag(action);
+                    }
+                    DragEvent::Moved(position) => {
+                        let action = self.view.drag_moved(position);
+                        window.accept_drag(action);
+                    }
+                    DragEvent::Left => self.view.drag_left(),
+                    DragEvent::Dropped {
+                        position,
+                        transfer,
+                        action,
+                    } => {
+                        self.view.dropped(position, &transfer.uris, action);
+                    }
+                    DragEvent::Finished(_) => self.view.drag_finished(),
+                }
+                true
+            }
             WindowEvent::Focus(true) => {
                 if let Some(Err(error)) = self.app_menu.as_ref().map(AppMenu::claim) {
                     tracing::warn!("{error}");

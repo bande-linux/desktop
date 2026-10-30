@@ -108,6 +108,7 @@ impl FilesView {
         self.paint_columns(&mut items);
         self.paint_search(&mut items);
         items.extend(controls);
+        self.paint_drop(&mut items);
         self.paint_path_bar(&mut items);
         self.paint_progress(&mut items);
         if self.inspector {

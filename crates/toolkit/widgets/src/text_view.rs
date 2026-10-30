@@ -2,7 +2,7 @@ use accesskit::{ActionRequest, Node, Role};
 
 use super::control::paint_field;
 use super::editor::Editor;
-use super::{Context, Cursor, Event, Menu, Parts, ScrollState, Size, Widget, WidgetId};
+use super::{Context, Cursor, DragAction, Event, Menu, Parts, ScrollState, Size, Widget, WidgetId};
 use unbound_graphics::{Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle};
 
 const FONT_SIZE: f32 = 13.0;
@@ -213,6 +213,31 @@ impl Widget for TextView {
             self.sync(cx);
         }
         handled
+    }
+
+    fn drop_target(&mut self, cx: &mut Context, point: Option<Point>) -> Option<DragAction> {
+        let origin = self.origin();
+        let local = point.map(|point| Point::new(point.x - origin.x, point.y - origin.y));
+        self.editor.drop_target(&mut cx.text, local)
+    }
+
+    fn drop_text(&mut self, cx: &mut Context, point: Point, text: &str, action: DragAction) {
+        let origin = self.origin();
+        let revision = self.editor.revision();
+        self.editor.drop_text(
+            &mut cx.text,
+            Point::new(point.x - origin.x, point.y - origin.y),
+            text,
+            action,
+        );
+        self.changed(revision);
+        self.sync(cx);
+    }
+
+    fn drag_ended(&mut self, action: Option<DragAction>) {
+        let revision = self.editor.revision();
+        self.editor.drag_ended(action);
+        self.changed(revision);
     }
 
     fn perform(&mut self, cx: &mut Context, request: &ActionRequest) -> bool {

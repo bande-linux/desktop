@@ -1,6 +1,8 @@
 use wayland_client::protocol::wl_shm::Format;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Connection, Dispatch, QueueHandle};
+use wayland_protocols::xdg::dialog::v1::client::xdg_dialog_v1::XdgDialogV1;
+use wayland_protocols::xdg::dialog::v1::client::xdg_wm_dialog_v1::XdgWmDialogV1;
 use wayland_protocols::xdg::shell::client::xdg_popup::{self, XdgPopup};
 use wayland_protocols::xdg::shell::client::xdg_positioner::{
     Anchor, ConstraintAdjustment, Gravity, XdgPositioner,
@@ -40,6 +42,7 @@ struct Popup {
 pub(crate) struct Toplevels {
     configured: Vec<(XdgToplevel, Configured)>,
     popups: Vec<Popup>,
+    dialogs: Vec<XdgDialogV1>,
 }
 
 impl Toplevels {
@@ -156,6 +159,21 @@ impl TestClient {
         self.exchange(server);
     }
 
+    pub fn show_child_window(&mut self, server: &mut Headless, image: &ShmImage, parent: usize) {
+        let parent = self.toplevel(parent).clone();
+        self.map_window(server, image, crate::Memory::Shm, |_, _, toplevel| {
+            toplevel.set_parent(Some(&parent));
+        });
+    }
+
+    pub fn make_modal(&mut self, server: &mut Headless, index: usize) {
+        let manager: XdgWmDialogV1 = self.bind("xdg_wm_dialog_v1", 1);
+        let dialog = manager.get_xdg_dialog(self.toplevel(index), &self.queue.handle(), ());
+        dialog.set_modal();
+        self.globals.toplevels.dialogs.push(dialog);
+        self.exchange(server);
+    }
+
     pub fn set_minimized(&mut self, server: &mut Headless, index: usize) {
         self.toplevel(index).set_minimized();
         self.exchange(server);
@@ -269,3 +287,5 @@ impl Dispatch<XdgPopup, ()> for Globals {
 }
 
 wayland_client::delegate_noop!(Globals: ignore XdgPositioner);
+wayland_client::delegate_noop!(Globals: ignore XdgWmDialogV1);
+wayland_client::delegate_noop!(Globals: ignore XdgDialogV1);

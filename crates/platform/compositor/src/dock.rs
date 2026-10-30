@@ -56,6 +56,7 @@ impl State {
             self.animate_window(index, Spring::FADE, None);
             self.refocus_after_losing(&surface);
         }
+        self.keep_families_together();
         self.needs_redraw = true;
     }
 
@@ -79,6 +80,7 @@ impl State {
             });
             self.animate_window(index, Spring::FADE, from);
         }
+        self.keep_families_together();
     }
 
     pub(crate) fn quit_app_named(&mut self, app_id: &str) {
@@ -136,7 +138,11 @@ impl State {
         if shell.version() < unbound_shell_v1::EVT_WINDOW_MINIMIZED_SINCE {
             return;
         }
-        for window in self.windows.iter().filter(|window| window.is_minimized()) {
+        for window in self
+            .windows
+            .iter()
+            .filter(|window| window.is_minimized() && window.toplevel.parent().is_none())
+        {
             if let Some(handle) = &window.foreign {
                 shell.window_minimized(handle.identifier(), 1);
             }

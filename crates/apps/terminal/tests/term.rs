@@ -10,8 +10,8 @@ use unbound_term::{
     GridSize, HEADER_LEADING, Layout, MenuCommand, MouseButton, MouseKind, Notice, Painter, Pane,
     Profile, Report, Reports, SETTINGS_SIZE, STRIP_HEIGHT, SavedWindow, SearchDirection,
     SelectionKind, Session, Settings, Side, TabBar, TabBarLayout, TabTarget, Terminal,
-    TerminalContext, bracketed, claim, encode_key, is_openable, left_behind, mouse_report,
-    next_font_size, settings_view, shortcut, tab_menu, terminal_menu, window_file,
+    TerminalContext, bracketed, claim, dropped_text, encode_key, is_openable, left_behind,
+    mouse_report, next_font_size, settings_view, shortcut, tab_menu, terminal_menu, window_file,
 };
 use unbound_toolkit::ui::{Key, Modifiers};
 use unbound_toolkit::{
@@ -202,6 +202,21 @@ fn pastes_are_bracketed_when_the_program_asks() {
         b"\x1b[200~x[201~y\x1b[201~"
     );
     assert_eq!(bracketed("echo a\nb", TermMode::empty()), b"echo a\rb");
+}
+
+#[test]
+fn dropped_files_become_shell_quoted_paths_and_dropped_text_stays_as_it_is() {
+    let uris = [
+        "file:///home/ada/notes.txt".to_owned(),
+        "file:///home/ada/Report%20one.pdf".to_owned(),
+        "file:///home/ada/it's%20%24HOME".to_owned(),
+        "https://example.org/a?b=c".to_owned(),
+    ];
+    assert_eq!(
+        dropped_text(&uris, "ignored"),
+        r"/home/ada/notes.txt '/home/ada/Report one.pdf' '/home/ada/it'\''s $HOME' 'https://example.org/a?b=c' "
+    );
+    assert_eq!(dropped_text(&[], "echo hi"), "echo hi");
 }
 
 fn terminal(columns: usize, lines: usize) -> Terminal {
@@ -430,7 +445,6 @@ fn the_tab_strip_shares_the_header_after_the_window_controls_and_keeps_room_for_
 
     let alone = TabBarLayout::new(1, 700.0, HEADER_LEADING);
     assert!(alone.tabs.is_empty());
-    assert_eq!(alone.items(), [alone.new_tab]);
 }
 
 fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>) {
@@ -552,7 +566,8 @@ fn the_window_with_tabs_in_its_header_matches_its_goldens() {
             Some(Default::default()),
             Some(Header {
                 title_x: width,
-                items: layout.items(),
+                items: vec![layout.new_tab],
+                tabs: layout.tabs.clone(),
             }),
             &Palette::for_scheme(scheme),
         );

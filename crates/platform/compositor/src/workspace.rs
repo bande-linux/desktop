@@ -349,9 +349,11 @@ impl State {
         let workspaces = &self.screens[self.screen_of(&self.windows[index])].workspaces;
         let from = workspaces.index_of(self.windows[index].workspace);
         let to = workspaces.index_of(target);
-        self.windows[index].workspace = target;
-        if let (Some(from), Some(to)) = (from, to) {
-            self.carry(index, from as f64 - to as f64);
+        for member in self.family_from(index) {
+            self.windows[member].workspace = target;
+            if let (Some(from), Some(to)) = (from, to) {
+                self.carry(member, from as f64 - to as f64);
+            }
         }
         self.needs_redraw = true;
     }
@@ -374,6 +376,7 @@ impl State {
         let Some(index) = self.window_index(surface) else {
             return;
         };
+        let index = self.root_index(index);
         if self.on_full_screen_space(&self.windows[index]) {
             return;
         }
@@ -397,6 +400,7 @@ impl State {
         let Some(index) = self.window_index(surface) else {
             return;
         };
+        let index = self.root_index(index);
         if self.on_full_screen_space(&self.windows[index]) {
             return;
         }
@@ -430,6 +434,11 @@ impl State {
     }
 
     pub(crate) fn assign_new_window(&mut self, index: usize) {
+        if let Some(workspace) = self.parent_workspace(index) {
+            self.windows[index].workspace = workspace;
+            self.announce_workspaces();
+            return;
+        }
         let screen = self.screen_of(&self.windows[index]);
         let workspaces = &self.screens[screen].workspaces;
         let active = workspaces.active_id();

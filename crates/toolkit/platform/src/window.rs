@@ -26,7 +26,7 @@ use unbound_graphics::{
 use unbound_protocols::client::unbound_shell_v1::{
     BrightnessKey, Edge as DisplayEdge, LauncherMode, MediaKey, Panel, VolumeKey,
 };
-use unbound_widgets::{ClipboardRequest, FrameTime, Menu, MenuItem, MenuOutcome, Ui};
+use unbound_widgets::{FrameTime, Menu, MenuItem, MenuOutcome, Ui};
 use wayland_client::backend::WaylandError;
 use wayland_client::protocol::wl_buffer::{self, WlBuffer};
 use wayland_client::protocol::wl_callback::{self, WlCallback};
@@ -62,13 +62,13 @@ use crate::chrome::{
     Zone, control_for_node,
 };
 use crate::clipboard::Clipboard;
-use crate::clipboard::{DragEvent, Transfer};
+use crate::clipboard::{DragAction, DragEvent, DragIcon, Transfer};
 use crate::effect::BackgroundEffect;
 use crate::lock::{Locked, SessionLock};
 use crate::popup::{MenuPlacement, Menus, Opening, Parent};
 use crate::presentation::Presentation;
 use crate::scale::{Scaling, SurfaceScale};
-use crate::seat::Input;
+use crate::seat::{CLICK_SLOP, Input};
 use crate::shell::Shell;
 use crate::text_input::TextInput;
 
@@ -496,6 +496,7 @@ impl Window {
             .ok_or(WindowError::Missing("wl_compositor"))?;
         state.shm.as_ref().ok_or(WindowError::Missing("wl_shm"))?;
         state.join_data_device(&handle);
+        state.join_primary_selection(&handle);
 
         let surface = compositor.create_surface(&handle, ());
         state.own_surface = Some(surface.clone());
@@ -1041,17 +1042,23 @@ impl Window {
                 if let Some((menu, at)) = ui.take_menu_request() {
                     self.show_menu(menu, MenuPlacement::AtPoint(at))?;
                 }
-                match ui.take_clipboard_request() {
-                    Some(ClipboardRequest::Copy(text)) => self.copy(&text),
-                    Some(ClipboardRequest::Paste) => self.paste()?,
-                    None => {}
+                if let Some(request) = ui.take_clipboard_request() {
+                    self.serve_clipboard(request)?;
                 }
                 if ui.take_input_method_reset() {
                     self.reset_text_input();
                 }
+                if let Some((scene, hotspot, text)) = ui.take_text_drag() {
+                    self.start_drag(
+                        Transfer::text(&text),
+                        &[DragAction::Copy, DragAction::Move],
+                        Some(DragIcon { scene, hotspot }),
+                    )?;
+                }
                 self.set_cursor(ui.cursor());
                 (changed, None)
             }
+            WindowEvent::Drag(drag) => self.drive_drag(ui, drag),
 
             WindowEvent::Accessibility(request) => match ui.perform(&request) {
                 true => (true, None),
@@ -1122,6 +1129,39 @@ impl Window {
         self.flush()
     }
 
+    fn drive_drag(&mut self, ui: &mut Ui, drag: DragEvent) -> (bool, Option<WindowEvent>) {
+        let was_target = ui.is_drop_target();
+        match &drag {
+            DragEvent::Entered { position, .. } | DragEvent::Moved(position)
+                if self.drag_offers_text() =>
+            {
+                match ui.drag_over(Some(*position)) {
+                    Some(action) => {
+                        self.accept_drag(Some(action));
+                        (true, None)
+                    }
+                    None => {
+                        if was_target {
+                            self.accept_drag(None);
+                        }
+                        (was_target, Some(WindowEvent::Drag(drag)))
+                    }
+                }
+            }
+            DragEvent::Left => {
+                ui.drag_over(None);
+                (was_target, Some(WindowEvent::Drag(drag)))
+            }
+            DragEvent::Dropped {
+                position,
+                transfer,
+                action: Some(action),
+            } if was_target => (ui.dropped(*position, &transfer.text, *action), None),
+            DragEvent::Finished(action) if ui.drag_finished(*action) => (true, None),
+            _ => (false, Some(WindowEvent::Drag(drag))),
+        }
+    }
+
     pub(crate) fn deadline(&self) -> Option<Instant> {
         self.menus
             .as_ref()
@@ -1129,6 +1169,7 @@ impl Window {
             .into_iter()
             .chain(self.ui_deadline)
             .chain(self.release_deadline())
+            .chain(self.drag_deadline())
             .min()
     }
 
@@ -1163,6 +1204,7 @@ impl Window {
             self.release_rendering();
         }
         self.serve_menus(self.frame_time());
+        self.abandon_unfinished_drag(now);
         if self.ui_deadline.is_some_and(|deadline| deadline <= now) {
             self.ui_deadline = None;
             self.request_redraw();
@@ -1326,6 +1368,20 @@ impl Window {
         };
         match input {
             Event::PointerEnter(pointer) | Event::PointerMove(pointer) => {
+                if let Some(start) = chrome.tab_press
+                    && (pointer.position.x - start.x).hypot(pointer.position.y - start.y)
+                        > CLICK_SLOP
+                {
+                    chrome.tab_press = None;
+                    chrome.content_buttons = 0;
+                    if std::mem::take(&mut chrome.pointer_in_content) {
+                        passed.push(WindowEvent::Input(Event::PointerLeave));
+                    }
+                    if self.start_move().is_err() {
+                        self.needs_redraw = true;
+                    }
+                    return;
+                }
                 let zone = chrome.zone_at(&frame, pointer.position);
                 if let Some(control) = chrome.pressed {
                     let inside = zone == Zone::Control(control);
@@ -1362,6 +1418,12 @@ impl Window {
             Event::PointerDown(pointer) => {
                 let zone = chrome.zone_at(&frame, pointer.position);
                 if zone == Zone::Content || chrome.content_buttons > 0 {
+                    if chrome.content_buttons == 0
+                        && pointer.button == PointerButton::Primary
+                        && chrome.tab_at(&frame, pointer.position)
+                    {
+                        chrome.tab_press = Some(pointer.position);
+                    }
                     chrome.content_buttons += 1;
                     passed.push(WindowEvent::Input(Event::PointerDown(into_content(
                         pointer,
@@ -1396,6 +1458,7 @@ impl Window {
                 }
             }
             Event::PointerUp(pointer) => {
+                chrome.tab_press = None;
                 if chrome.content_buttons > 0 {
                     chrome.content_buttons -= 1;
                     passed.push(WindowEvent::Input(Event::PointerUp(into_content(pointer))));
@@ -1431,6 +1494,7 @@ impl Window {
             }
             Event::PointerLeave => {
                 chrome.content_buttons = 0;
+                chrome.tab_press = None;
                 if chrome.hover(&frame, None, now, reduce_motion) {
                     self.needs_redraw = true;
                 }
@@ -2200,6 +2264,9 @@ impl Dispatch<WlRegistry, ()> for State {
                 "wl_data_device_manager" => {
                     state.data_device_manager =
                         Some(registry.bind(name, version.min(3), handle, ()));
+                }
+                "zwp_primary_selection_device_manager_v1" => {
+                    state.clipboard.primary.manager = Some(registry.bind(name, 1, handle, ()));
                 }
                 "ext_background_effect_manager_v1" => {
                     state.effect.manager = Some(registry.bind(name, 1, handle, ()));

@@ -430,7 +430,7 @@ impl State {
             .windows
             .iter()
             .rev()
-            .filter(|window| window.size.is_some())
+            .filter(|window| window.size.is_some() && window.toplevel.parent().is_none())
             .map(|window| owner_of(window.surface()));
         for owner in owners {
             if !found

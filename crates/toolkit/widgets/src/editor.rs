@@ -7,7 +7,10 @@ use accesskit::{
 use parley::{Affinity, Alignment, AlignmentOptions, Cursor, Layout, Selection as Span};
 use unbound_graphics::{Color, Item, Paint, Paragraph, Point, Rect, Shape, TextStyle, TextSystem};
 
-use super::{ClipboardRequest, Context, Event, Key, Menu, MenuItem, Modifiers, WidgetId};
+use super::{
+    ClipboardRequest, Context, DragAction, Event, Key, Menu, MenuItem, Modifiers, PointerButton,
+    WidgetId,
+};
 use crate::L10N;
 
 const CARET_WIDTH: f32 = 1.5;
@@ -16,6 +19,7 @@ const LINE_HEIGHT_RATIO: f32 = 1.21;
 const KEPT_LAYOUTS: usize = 1024;
 const UNDERLINE: f32 = 1.0;
 const CLAUSE_UNDERLINE: f32 = 2.0;
+const DRAG_START: f32 = 4.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub(crate) struct Position {
@@ -165,6 +169,12 @@ enum Unit {
 }
 
 #[derive(Debug, Clone, Copy)]
+enum Carry {
+    Pending(Point),
+    Dragging(usize, usize),
+}
+
+#[derive(Debug, Clone, Copy)]
 struct Drag {
     unit: Unit,
     anchor: (Position, Position),
@@ -192,12 +202,15 @@ pub(crate) struct Editor {
     line_height: f32,
     drag: Option<Drag>,
     drag_point: Option<Point>,
+    carry: Option<Carry>,
+    drop_caret: Option<(Position, Affinity)>,
     reveal: bool,
     read_only: bool,
     page: f32,
     frame: u64,
     laid_out: usize,
     revision: u64,
+    offered: Option<(u64, Range<usize>)>,
 }
 
 fn normalized(text: &str) -> Cow<'_, str> {
@@ -234,12 +247,15 @@ impl Editor {
             line_height: (font_size * LINE_HEIGHT_RATIO).ceil(),
             drag: None,
             drag_point: None,
+            carry: None,
+            drop_caret: None,
             reveal: false,
             read_only: false,
             page: 0.0,
             frame: 0,
             laid_out: 0,
             revision: 0,
+            offered: None,
         };
         editor.set_text(text);
         editor
@@ -771,6 +787,11 @@ impl Editor {
         }
         self.history.open = false;
         self.goal_x = None;
+        self.carry = None;
+        if count <= 1 && !extend && self.on_selection(&mut cx.text, point) {
+            self.carry = Some(Carry::Pending(point));
+            return;
+        }
         let unit = match count {
             0 | 1 => Unit::Character,
             2 => Unit::Word,
@@ -800,6 +821,110 @@ impl Editor {
         });
     }
 
+    fn on_selection(&mut self, text: &mut TextSystem, point: Point) -> bool {
+        if self.selection.is_collapsed() {
+            return false;
+        }
+        let (at, _) = self.position_at(text, point);
+        self.selection.start() <= at && at < self.selection.end()
+    }
+
+    fn carry_to(&mut self, cx: &mut Context, point: Point) -> bool {
+        let Some(Carry::Pending(from)) = self.carry else {
+            return false;
+        };
+        if (point.x - from.x).hypot(point.y - from.y) <= DRAG_START {
+            return true;
+        }
+        let range = self.selection();
+        self.carry = Some(Carry::Dragging(range.start, range.end));
+        cx.start_text_drag(self.selected_text());
+        true
+    }
+
+    fn put_down(&mut self, text: &mut TextSystem, point: Point) -> bool {
+        if !matches!(self.carry, Some(Carry::Pending(_))) {
+            return false;
+        }
+        self.carry = None;
+        let (at, affinity) = self.position_at(text, point);
+        self.selection = Selection::caret(at, affinity);
+        true
+    }
+
+    fn dragged_range(&self) -> Option<Range<usize>> {
+        match self.carry {
+            Some(Carry::Dragging(start, end)) => Some(start..end),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn drop_target(
+        &mut self,
+        text: &mut TextSystem,
+        point: Option<Point>,
+    ) -> Option<DragAction> {
+        self.drop_caret = None;
+        let point = point.filter(|_| !self.read_only)?;
+        let (at, affinity) = self.position_at(text, point);
+        let offset = self.byte_offset(at);
+        let dragged = self.dragged_range();
+        if dragged
+            .as_ref()
+            .is_some_and(|range| range.start < offset && offset < range.end)
+        {
+            return None;
+        }
+        self.drop_caret = Some((at, affinity));
+        Some(match dragged {
+            Some(_) => DragAction::Move,
+            None => DragAction::Copy,
+        })
+    }
+
+    pub(crate) fn drop_text(
+        &mut self,
+        text: &mut TextSystem,
+        point: Point,
+        dropped: &str,
+        action: DragAction,
+    ) {
+        self.drop_caret = None;
+        let (at, _) = self.position_at(text, point);
+        let mut offset = self.byte_offset(at);
+        if action == DragAction::Move
+            && let Some(range) = self.dragged_range()
+        {
+            self.carry = None;
+            if range.start < offset && offset < range.end {
+                return;
+            }
+            self.select(range.clone());
+            self.insert("");
+            if offset >= range.end {
+                offset -= range.end - range.start;
+            }
+        }
+        self.select(offset..offset);
+        self.insert(dropped);
+        let end = self.selection().end;
+        self.select(offset..end);
+        self.reveal = true;
+    }
+
+    pub(crate) fn drag_ended(&mut self, action: Option<DragAction>) {
+        let dragged = self.dragged_range();
+        self.carry = None;
+        self.drop_caret = None;
+        if let Some(range) = dragged
+            && action == Some(DragAction::Move)
+            && !self.read_only
+        {
+            self.select(range);
+            self.insert("");
+        }
+    }
+
     fn drag_to(&mut self, text: &mut TextSystem, point: Point) -> bool {
         let Some(Drag { unit, anchor }) = self.drag else {
             return false;
@@ -823,8 +948,46 @@ impl Editor {
     }
 
     pub(crate) fn handle(&mut self, cx: &mut Context, event: &Event, origin: Point) -> bool {
+        let handled = self.handle_event(cx, event, origin);
+        self.offer_primary(cx);
+        handled
+    }
+
+    fn offer_primary(&mut self, cx: &mut Context) {
+        let range = self.selection();
+        let offered = (self.revision, range.clone());
+        if range.is_empty()
+            || self.drag.is_some()
+            || cx.clipboard.is_some()
+            || self.offered.as_ref() == Some(&offered)
+        {
+            return;
+        }
+        self.offered = Some(offered);
+        cx.clipboard = Some(ClipboardRequest::SelectPrimary(self.selected_text()));
+    }
+
+    fn paste_primary(&mut self, cx: &mut Context, point: Point) -> bool {
+        if self.read_only {
+            return false;
+        }
+        if self.preedit.is_some() {
+            self.finish_composition();
+            cx.input_method_reset = true;
+        }
+        self.history.open = false;
+        let at = self.position_at(&mut cx.text, point);
+        self.go(at, false);
+        cx.clipboard = Some(ClipboardRequest::PastePrimary);
+        true
+    }
+
+    fn handle_event(&mut self, cx: &mut Context, event: &Event, origin: Point) -> bool {
         let local = |point: Point| Point::new(point.x - origin.x, point.y - origin.y);
         match event {
+            Event::PointerDown(pointer) if pointer.button == PointerButton::Middle => {
+                return self.paste_primary(cx, local(pointer.position));
+            }
             Event::PointerDown(pointer) if pointer.is_primary() => {
                 self.press(
                     cx,
@@ -836,6 +999,14 @@ impl Editor {
             }
             Event::PointerDown(pointer) => {
                 self.place_caret_for_menu(&mut cx.text, local(pointer.position));
+            }
+            Event::PointerMove(pointer) if matches!(self.carry, Some(Carry::Pending(_))) => {
+                return self.carry_to(cx, local(pointer.position));
+            }
+            Event::PointerUp(pointer)
+                if pointer.is_primary() && self.put_down(&mut cx.text, local(pointer.position)) =>
+            {
+                self.drag_point = None;
             }
             Event::PointerMove(pointer) if self.drag.is_some() => {
                 self.drag_to(&mut cx.text, local(pointer.position));
@@ -1356,7 +1527,9 @@ impl Editor {
             }
             _ => return false,
         };
-        self.key(cx, key, modifiers)
+        let handled = self.key(cx, key, modifiers);
+        self.offer_primary(cx);
+        handled
     }
 
     fn place_caret_for_menu(&mut self, text: &mut TextSystem, point: Point) {
@@ -1470,14 +1643,7 @@ impl Editor {
         }
         let caret_hidden = matches!(&self.preedit, Some(Preedit { cursor: None, .. }))
             || matches!(&self.preedit, Some(Preedit { cursor: Some((begin, end)), .. }) if begin != end);
-        let focus = self.selection.focus.paragraph;
-        if focused
-            && !self.read_only
-            && self.selection.is_collapsed()
-            && !caret_hidden
-            && let Some(text) = &self.blocks[focus].layout
-        {
-            let layout = text.layout();
+        if focused && !self.read_only && self.selection.is_collapsed() && !caret_hidden {
             let mut index = self.layout_index(self.selection.focus);
             if let Some(Preedit {
                 cursor: Some((begin, _)),
@@ -1486,20 +1652,35 @@ impl Editor {
             {
                 index = self.selection.focus.offset + begin;
             }
-            let caret = bounds(
-                Cursor::from_byte_index(layout, index, self.selection.affinity)
-                    .geometry(layout, CARET_WIDTH),
-            );
-            items.push(Item::Fill {
-                shape: Shape::rect(Rect::new(
-                    origin.x + caret.x,
-                    origin.y + self.top(focus) + caret.y,
-                    CARET_WIDTH,
-                    caret.height,
-                )),
-                paint: cx.palette.accent.into(),
-            });
+            let focus = self.selection.focus.paragraph;
+            items.extend(self.caret_item(cx, origin, focus, index, self.selection.affinity));
         }
+        if let Some((at, affinity)) = self.drop_caret {
+            let index = self.layout_index(at);
+            items.extend(self.caret_item(cx, origin, at.paragraph, index, affinity));
+        }
+    }
+
+    fn caret_item(
+        &self,
+        cx: &Context,
+        origin: Point,
+        paragraph: usize,
+        index: usize,
+        affinity: Affinity,
+    ) -> Option<Item> {
+        let layout = self.blocks.get(paragraph)?.layout.as_ref()?.layout();
+        let caret =
+            bounds(Cursor::from_byte_index(layout, index, affinity).geometry(layout, CARET_WIDTH));
+        Some(Item::Fill {
+            shape: Shape::rect(Rect::new(
+                origin.x + caret.x,
+                origin.y + self.top(paragraph) + caret.y,
+                CARET_WIDTH,
+                caret.height,
+            )),
+            paint: cx.palette.accent.into(),
+        })
     }
 
     pub(crate) fn runs(&self, visible: Range<f32>) -> Vec<TextRun> {

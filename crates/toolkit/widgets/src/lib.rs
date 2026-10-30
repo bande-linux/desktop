@@ -74,10 +74,18 @@ const ENGLISH: &str = include_str!("../locales/en-US/unbound-widgets.ftl");
 static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
 pub use control::{focus_ring, focus_ring_for};
-use unbound_graphics::{Appearance, Item, Palette, Point, Rect, Scene, TextSystem};
+use unbound_graphics::{
+    Appearance, Color, Item, Palette, Point, Rect, Scene, TextAlign, TextStyle, TextSystem,
+};
 pub use unbound_graphics::{
     Cursor, Event, Key, Modifiers, Pointer, PointerButton, Scroll, ScrollPhase, ScrollSource,
 };
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DragAction {
+    Copy,
+    Move,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct WidgetId(u64);
@@ -145,12 +153,15 @@ pub struct Context {
     input_method_reset: bool,
     emoji_picker: bool,
     menu: Option<(Menu, Point)>,
+    drag: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ClipboardRequest {
     Copy(String),
     Paste,
+    SelectPrimary(String),
+    PastePrimary,
 }
 
 impl Context {
@@ -170,11 +181,16 @@ impl Context {
             input_method_reset: false,
             emoji_picker: false,
             menu: None,
+            drag: None,
         }
     }
 
     pub fn copy(&mut self, text: &str) {
         self.clipboard = Some(ClipboardRequest::Copy(text.to_owned()));
+    }
+
+    pub fn start_text_drag(&mut self, text: String) {
+        self.drag = Some(text);
     }
 
     pub fn show_emoji_picker(&mut self) {
@@ -204,6 +220,10 @@ impl Context {
 }
 
 const DIALOG_RISE: f32 = 12.0;
+const DRAG_CHARACTERS: usize = 40;
+const DRAG_FONT_SIZE: f32 = 13.0;
+const DRAG_OPACITY: f32 = 0.75;
+const DRAG_WIDTH: f32 = 320.0;
 
 pub trait AsAny {
     fn as_any(&self) -> &dyn Any;
@@ -235,6 +255,14 @@ pub trait Widget: AsAny {
     fn perform(&mut self, _cx: &mut Context, _request: &ActionRequest) -> bool {
         false
     }
+
+    fn drop_target(&mut self, _cx: &mut Context, _point: Option<Point>) -> Option<DragAction> {
+        None
+    }
+
+    fn drop_text(&mut self, _cx: &mut Context, _point: Point, _text: &str, _action: DragAction) {}
+
+    fn drag_ended(&mut self, _action: Option<DragAction>) {}
 
     fn accepts_focus(&self, _cx: &Context) -> bool {
         false
@@ -308,6 +336,8 @@ pub struct Ui {
     sheet: Option<Sheet>,
     sheet_top: f32,
     tooltips: Tooltips,
+    drag_source: Option<WidgetId>,
+    drop_owner: Option<WidgetId>,
 }
 
 fn contains(frame: Rect, point: Point) -> bool {
@@ -459,6 +489,8 @@ impl Ui {
             sheet: None,
             sheet_top: 0.0,
             tooltips: Tooltips::default(),
+            drag_source: None,
+            drop_owner: None,
         }
     }
 
@@ -703,6 +735,11 @@ impl Ui {
                     self.cx.focus = Some(target);
                 }
                 let delivered = self.deliver(target, event);
+                if self.cx.clipboard == Some(ClipboardRequest::PastePrimary)
+                    && self.accepts_focus(target)
+                {
+                    self.cx.focus = Some(target);
+                }
                 if pointer.button == PointerButton::Secondary {
                     self.captured = None;
                     return self.request_menu(pointer.position) | delivered | hovered;
@@ -827,7 +864,10 @@ impl Ui {
 
     pub fn take_clipboard_request(&mut self) -> Option<ClipboardRequest> {
         let request = self.cx.clipboard.take();
-        if request == Some(ClipboardRequest::Paste) {
+        if matches!(
+            request,
+            Some(ClipboardRequest::Paste | ClipboardRequest::PastePrimary)
+        ) {
             self.awaiting_paste = true;
         }
         request
@@ -838,6 +878,92 @@ impl Ui {
             return false;
         }
         self.handle(&Event::Commit(text.to_owned()));
+        true
+    }
+
+    pub fn take_text_drag(&mut self) -> Option<(Scene, Point, String)> {
+        let text = self.cx.drag.take()?;
+        let shown: String = text
+            .lines()
+            .next()
+            .unwrap_or_default()
+            .chars()
+            .take(DRAG_CHARACTERS)
+            .collect();
+        let paragraph = self.cx.text.paragraph(
+            &shown,
+            TextStyle::new(
+                DRAG_FONT_SIZE,
+                self.cx.palette.ink.with_opacity(DRAG_OPACITY),
+            ),
+            Some(DRAG_WIDTH),
+            TextAlign::Start,
+        );
+        let (width, height) = (paragraph.width(), paragraph.height());
+        let scene = Scene {
+            width: width.ceil().max(1.0) as u32,
+            height: height.ceil().max(1.0) as u32,
+            background: Color::TRANSPARENT,
+            items: vec![Item::Text {
+                origin: Point::new(0.0, 0.0),
+                paragraph,
+            }],
+        };
+        let hotspot = Point::new(0.0, height / 2.0);
+        Some((scene, hotspot, text))
+    }
+
+    pub fn drag_over(&mut self, position: Option<Point>) -> Option<DragAction> {
+        let mut path = Vec::new();
+        if let Some(point) = position {
+            hit_path(self.active(), point, &mut path);
+        }
+        let mut accepted = None;
+        for id in path.into_iter().rev() {
+            let Some(widget) = lookup_in(&mut self.root, &mut self.sheet, id) else {
+                continue;
+            };
+            if let Some(action) = widget.drop_target(&mut self.cx, position) {
+                accepted = Some((id, action));
+                break;
+            }
+        }
+        let owner = accepted.map(|(id, _)| id);
+        if let Some(previous) = self.drop_owner.filter(|previous| Some(*previous) != owner)
+            && let Some(widget) = lookup_in(&mut self.root, &mut self.sheet, previous)
+        {
+            widget.drop_target(&mut self.cx, None);
+        }
+        self.drop_owner = owner;
+        accepted.map(|(_, action)| action)
+    }
+
+    pub fn is_drop_target(&self) -> bool {
+        self.drop_owner.is_some()
+    }
+
+    pub fn dropped(&mut self, position: Point, text: &str, action: DragAction) -> bool {
+        let Some(owner) = self.drop_owner.take() else {
+            return false;
+        };
+        let Some(widget) = lookup_in(&mut self.root, &mut self.sheet, owner) else {
+            return false;
+        };
+        widget.drop_text(&mut self.cx, position, text, action);
+        widget.drop_target(&mut self.cx, None);
+        if widget.accepts_focus(&self.cx) {
+            self.cx.focus = Some(owner);
+        }
+        true
+    }
+
+    pub fn drag_finished(&mut self, action: Option<DragAction>) -> bool {
+        let Some(source) = self.drag_source.take() else {
+            return false;
+        };
+        if let Some(widget) = lookup_in(&mut self.root, &mut self.sheet, source) {
+            widget.drag_ended(action);
+        }
         true
     }
 
@@ -934,6 +1060,9 @@ impl Ui {
             return false;
         };
         let handled = widget.handle(&mut self.cx, event);
+        if self.cx.drag.is_some() {
+            self.drag_source = Some(target);
+        }
         self.take_widget_menu(target);
         self.dismiss_finished_sheet();
         self.keep_focus_reachable(focus_path);

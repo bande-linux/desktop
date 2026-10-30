@@ -8,6 +8,7 @@ use crate::{Globals, Headless, ShmImage, TestClient};
 #[derive(Default)]
 pub(crate) struct Dnd {
     pub(crate) accepts: bool,
+    pub(crate) holds: bool,
     pub(crate) offer: Option<WlDataOffer>,
     pub(crate) chosen: Vec<DndAction>,
     pub(crate) drops: usize,
@@ -21,15 +22,24 @@ impl Globals {
             && self.dnd.accepts
         {
             offer.accept(serial, Some(TEXT.to_owned()));
-            offer.set_actions(DndAction::Copy | DndAction::Move, DndAction::Move);
         }
         self.dnd.offer = offer;
+        self.drag_moved();
+    }
+
+    pub(crate) fn drag_moved(&mut self) {
+        if let Some(offer) = &self.dnd.offer
+            && self.dnd.accepts
+        {
+            offer.set_actions(DndAction::Copy | DndAction::Move, DndAction::Move);
+        }
     }
 
     pub(crate) fn drag_dropped(&mut self) {
         self.dnd.drops += 1;
         if let Some(offer) = self.dnd.offer.take()
             && self.dnd.accepts
+            && !self.dnd.holds
         {
             offer.finish();
         }
@@ -39,6 +49,10 @@ impl Globals {
 impl TestClient {
     pub fn accept_drops(&mut self, accepts: bool) {
         self.globals.dnd.accepts = accepts;
+    }
+
+    pub fn hold_drops(&mut self) {
+        self.globals.dnd.holds = true;
     }
 
     pub fn start_drag(&mut self, server: &mut Headless, icon: &ShmImage, offset: (i32, i32)) {

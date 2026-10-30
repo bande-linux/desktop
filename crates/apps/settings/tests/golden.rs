@@ -5,8 +5,8 @@ use std::path::PathBuf;
 use unbound_audio::{Device, Direction, Level, Snapshot};
 use unbound_keyboard::Layouts;
 use unbound_settings::{
-    About, App, BatteryState, Category, Charge, Display, LoginItems, Mode, Pair, PaneId,
-    PointingDevices, SettingId, SettingsView, Storage, TimeState, Update, Value, thumbnail,
+    About, App, AppNotifications, BatteryState, Category, Charge, Display, LoginItems, Mode, Pair,
+    PaneId, PointingDevices, SettingId, SettingsView, Storage, TimeState, Update, Value, thumbnail,
 };
 use unbound_toolkit::ui::{Event, Key, Modifiers};
 use unbound_toolkit::{CpuRenderer, Palette, Scheme, TextSystem};
@@ -396,6 +396,44 @@ fn the_battery_pane_matches_its_goldens() {
         view.set_value(SettingId::LowPowerOnBattery, Value::Flag(true));
         view.set_value(SettingId::LidOnPower, Value::Keyword("sleep".to_owned()));
         view.select_pane(PaneId::Battery);
+        view
+    });
+}
+
+#[test]
+fn the_notifications_pane_matches_its_goldens() {
+    check_in_both_schemes_and_scales("notifications", |scheme| {
+        let mut view = SettingsView::new(Palette::for_scheme(scheme), TextSystem::new());
+        view.set_value(SettingId::DoNotDisturb, Value::Flag(false));
+        let app = |group: &str, name: &str, allow: bool, banners: &str, in_center: bool| {
+            AppNotifications {
+                group: group.to_owned(),
+                name: name.to_owned(),
+                allow,
+                banners: banners.to_owned(),
+                in_center,
+            }
+        };
+        view.apply(Update::NotificationApps(vec![
+            app("org.example.Chat", "Chat", true, "persistent", true),
+            app("org.mozilla.firefox", "Firefox", false, "temporary", true),
+            app("Mail", "Mail", true, "temporary", false),
+        ]));
+        view.select_pane(PaneId::Notifications);
+        view.scene(SIZE.0, SIZE.1);
+        let chat = view
+            .accessibility()
+            .nodes
+            .into_iter()
+            .find(|(_, node)| node.label().is_some_and(|label| label.starts_with("Chat,")))
+            .map(|(id, _)| id)
+            .expect("Chat row");
+        view.perform(&accesskit::ActionRequest {
+            action: accesskit::Action::Click,
+            target_tree: accesskit::TreeId::ROOT,
+            target_node: chat,
+            data: None,
+        });
         view
     });
 }

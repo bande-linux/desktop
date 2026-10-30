@@ -4259,6 +4259,7 @@ dependencies = [
  "unbound-l10n",
  "unbound-log",
  "unbound-network",
+ "unbound-notify",
  "unbound-settings-panes",
  "unbound-test-bus",
  "unbound-toolkit",

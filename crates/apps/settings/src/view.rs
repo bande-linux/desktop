@@ -18,6 +18,7 @@ use crate::battery::{BatteryCommand, BatteryState};
 use crate::follow::{Command, Update};
 use crate::idle::Idle;
 use crate::login::{LoginCommand, LoginItems, login_matches};
+use crate::notifications::{AppNotifications, NotificationCommand};
 use crate::pictures::{Pair, PictureCommand};
 use crate::pointing::PointingDevices;
 use crate::services::{AudioCommand, BluetoothCommand, NetworkCommand};
@@ -68,6 +69,8 @@ pub(crate) enum Intent {
     PickQuery(String),
     Picked(String),
     RemoveLoginItem(String),
+    ExpandApp(Option<String>),
+    SetAppRule(AppNotifications),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -164,6 +167,8 @@ pub struct SettingsView {
     pub(crate) picking: Option<(Picker, String)>,
     pub(crate) login: Option<LoginItems>,
     pub(crate) battery: Option<BatteryState>,
+    pub(crate) notification_apps: Option<Vec<AppNotifications>>,
+    pub(crate) expanded_app: Option<String>,
     ui: Ui,
     root: WidgetId,
     search: WidgetId,
@@ -219,6 +224,8 @@ impl SettingsView {
             picking: None,
             login: None,
             battery: None,
+            notification_apps: None,
+            expanded_app: None,
             ui: Ui::new(Box::new(root), cx),
             root: root_id,
             search,
@@ -353,6 +360,7 @@ impl SettingsView {
                 self.time = time;
             }
             Update::Login(login) => self.login = Some(login),
+            Update::NotificationApps(apps) => self.notification_apps = Some(apps),
             Update::Battery(battery) => {
                 match battery.as_ref().and_then(|battery| battery.profile.clone()) {
                     Some(profile) => {
@@ -368,7 +376,6 @@ impl SettingsView {
             Update::Storage(storage) => {
                 if storage.trash_items == 0 {
                     self.confirming_empty_trash = false;
-                    self.picking = None;
                 }
                 self.storage = Some(storage);
             }
@@ -763,6 +770,22 @@ impl SettingsView {
                         .push(Command::Storage(StorageCommand::EmptyTrash));
                 }
                 Intent::Reveal(path) => self.commands.push(Command::Reveal(path)),
+                Intent::ExpandApp(group) => {
+                    self.focus_next = group
+                        .clone()
+                        .or_else(|| self.expanded_app.clone())
+                        .map(|group| Anchor::Item(format!("app:{group}")));
+                    self.expanded_app = group;
+                }
+                Intent::SetAppRule(app) => {
+                    if let Some(apps) = &mut self.notification_apps
+                        && let Some(known) = apps.iter_mut().find(|known| known.group == app.group)
+                    {
+                        known.clone_from(&app);
+                    }
+                    self.commands
+                        .push(Command::Notifications(NotificationCommand::Set(app)));
+                }
                 Intent::RemoveLoginItem(id) => {
                     self.focus_next = Some(Anchor::Setting(SettingId::LoginItems, None));
                     self.commands.push(Command::Login(LoginCommand::Remove(id)));
@@ -954,11 +977,16 @@ impl SettingsView {
                 .commands
                 .push(Command::Storage(StorageCommand::Measure)),
             PaneId::LoginItems => self.commands.push(Command::Login(LoginCommand::Refresh)),
+            PaneId::Notifications => self
+                .commands
+                .push(Command::Notifications(NotificationCommand::Refresh)),
             _ => {}
         }
         self.pane = pane;
         self.adding_source = None;
         self.confirming_empty_trash = false;
+        self.picking = None;
+        self.expanded_app = None;
         self.scroll.set(0.0);
         self.invalidate();
     }

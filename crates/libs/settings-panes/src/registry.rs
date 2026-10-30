@@ -119,6 +119,7 @@ pub enum SettingId {
     PowerMode,
     LowPowerOnBattery,
     LidOnPower,
+    AppNotifications,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -149,6 +150,7 @@ pub enum List {
     TimeZones,
     LoginItems,
     BatteryHistory,
+    NotificationApps,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -423,15 +425,26 @@ fn connectivity_panes() -> Vec<Pane> {
             PaneId::Notifications,
             L10N.tr("notifications"),
             L10N.tr("notifications-keywords"),
-            vec![section(
-                None,
-                vec![setting(
-                    SettingId::DoNotDisturb,
-                    L10N.tr("do-not-disturb"),
-                    L10N.tr("do-not-disturb-keywords"),
-                    Kind::Switch,
-                )],
-            )],
+            vec![
+                section(
+                    None,
+                    vec![setting(
+                        SettingId::DoNotDisturb,
+                        L10N.tr("do-not-disturb"),
+                        L10N.tr("do-not-disturb-keywords"),
+                        Kind::Switch,
+                    )],
+                ),
+                section(
+                    Some(L10N.tr("app-notifications")),
+                    vec![setting(
+                        SettingId::AppNotifications,
+                        L10N.tr("app-notifications"),
+                        L10N.tr("app-notifications-keywords"),
+                        Kind::List(List::NotificationApps),
+                    )],
+                ),
+            ],
         ),
         pane(
             PaneId::Sound,

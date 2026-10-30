@@ -181,3 +181,5 @@ lid-on-power = When the lid is closed
 lid-on-power-keywords = lid, clamshell, close, external display, keep awake, sleep
 lid-sleep = Sleep
 lid-keep-running = Keep running
+app-notifications = Application notifications
+app-notifications-keywords = per app, apps, banners, alerts, allow notifications, persistent, notification center, block, silence an app

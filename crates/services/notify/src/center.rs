@@ -62,6 +62,56 @@ impl Timeout {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Banners {
+    #[default]
+    Temporary,
+    Persistent,
+    Off,
+}
+
+impl Banners {
+    pub const ALL: [Self; 3] = [Self::Temporary, Self::Persistent, Self::Off];
+
+    pub fn keyword(self) -> &'static str {
+        match self {
+            Self::Temporary => "temporary",
+            Self::Persistent => "persistent",
+            Self::Off => "off",
+        }
+    }
+
+    pub fn parse(keyword: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|banners| banners.keyword() == keyword)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AppRule {
+    pub allow: bool,
+    pub banners: Banners,
+    pub in_center: bool,
+}
+
+impl Default for AppRule {
+    fn default() -> Self {
+        Self {
+            allow: true,
+            banners: Banners::Temporary,
+            in_center: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct App {
+    pub group: String,
+    pub name: String,
+    pub rule: AppRule,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Banner {
     Hidden,
@@ -107,17 +157,59 @@ pub struct Center {
     entries: BTreeMap<u32, Entry>,
     do_not_disturb: bool,
     banners_held: bool,
+    apps: BTreeMap<String, App>,
 }
 
 impl Center {
+    pub fn apps(&self) -> impl Iterator<Item = &App> {
+        self.apps.values()
+    }
+
+    pub fn remember(&mut self, app: App) {
+        self.apps.insert(app.group.clone(), app);
+    }
+
+    pub fn set_rule(&mut self, group: &str, rule: AppRule) -> bool {
+        match self.apps.get_mut(group) {
+            Some(app) => {
+                app.rule = rule;
+                true
+            }
+            None => false,
+        }
+    }
+
+    fn rule_for(&mut self, notification: &Notification) -> AppRule {
+        let group = notification.group().to_owned();
+        let app = self.apps.entry(group.clone()).or_insert_with(|| App {
+            group,
+            name: notification.app_name.clone(),
+            rule: AppRule::default(),
+        });
+        if app.name.is_empty() {
+            app.name.clone_from(&notification.app_name);
+        }
+        app.rule
+    }
+
     pub fn post(&mut self, mut notification: Notification, timeout: Timeout, now: Instant) -> u32 {
         if notification.id == 0 {
             notification.id = self.fresh_id();
         }
         let id = notification.id;
-        let shown = !self.do_not_disturb || notification.urgency == Urgency::Critical;
+        let rule = self.rule_for(&notification);
+        if !rule.allow {
+            self.entries.remove(&id);
+            return id;
+        }
+        notification.transient |= !rule.in_center;
+        let shown = (!self.do_not_disturb && rule.banners != Banners::Off)
+            || notification.urgency == Urgency::Critical;
         let banner = match (shown, timeout) {
             (false, _) => Banner::Hidden,
+            (true, Timeout::ServerDefault) if rule.banners == Banners::Persistent => {
+                Banner::UntilDismissed
+            }
             (true, Timeout::After(after)) => Banner::Until(now + after),
             (true, _) if notification.urgency == Urgency::Critical => Banner::UntilDismissed,
             (true, _) => Banner::Until(now + BANNER_DURATION),

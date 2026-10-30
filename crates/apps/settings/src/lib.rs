@@ -8,6 +8,7 @@ mod follow;
 mod general;
 mod idle;
 mod login;
+mod notifications;
 mod pages;
 mod pictures;
 mod pointing;
@@ -30,6 +31,7 @@ pub use displays::Displays;
 pub use follow::{Command, Feed, Services, Update, Updates, feed, follow_config, worker};
 pub use idle::Idle;
 pub use login::{App, LoginCommand, LoginItems, login_items, login_matches};
+pub use notifications::{AppNotifications, NotificationCommand, follow_app_notifications};
 pub use pictures::{Pair, PictureCommand, bundled_pairs, thumbnail};
 pub use pointing::{PointingDevices, UDEV_DATA};
 pub use power::charge_text;
@@ -60,6 +62,7 @@ mod tests {
             include_str!("clock.rs"),
             include_str!("follow.rs"),
             include_str!("general.rs"),
+            include_str!("notifications.rs"),
             include_str!("pages.rs"),
             include_str!("pictures.rs"),
             include_str!("power.rs"),

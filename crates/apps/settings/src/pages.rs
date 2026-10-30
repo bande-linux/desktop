@@ -579,6 +579,7 @@ impl SettingsView {
             List::TimeZones => self.zone_rows(),
             List::LoginItems => self.login_rows(),
             List::BatteryHistory => self.battery_rows(),
+            List::NotificationApps => self.notification_app_rows(),
         }
     }
 

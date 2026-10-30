@@ -63,6 +63,7 @@ pub enum Update {
     AppMenu { app: String, root: Option<Node> },
     AppMenuChanged,
     ClockFormat(String),
+    BatteryPercentage(bool),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -92,6 +93,7 @@ pub struct MenuBar {
     open: Option<Slot>,
     slots: Vec<(Slot, Rect)>,
     translucent: bool,
+    battery_percentage: bool,
 }
 
 fn snap(value: f32, scale: f64) -> f32 {
@@ -119,7 +121,27 @@ impl MenuBar {
             open: None,
             slots: Vec::new(),
             translucent: false,
+            battery_percentage: false,
         }
+    }
+
+    pub fn set_battery_percentage(&mut self, shown: bool) -> bool {
+        let changed = self.battery_percentage != shown;
+        self.battery_percentage = shown;
+        changed
+    }
+
+    pub fn battery_percentage(&self) -> bool {
+        self.battery_percentage
+    }
+
+    fn percent_label(&mut self) -> Option<Paragraph> {
+        let battery = self.status.battery.filter(|_| self.battery_percentage)?;
+        let text = L10N.tr_args(
+            "battery-percent",
+            [("percent", battery.percent.round().into())],
+        );
+        Some(self.label(&text, false))
     }
 
     pub fn set_app(&mut self, name: &str) -> bool {
@@ -270,7 +292,7 @@ impl MenuBar {
         Some((paragraph, width))
     }
 
-    fn right_slots(&self, badge_width: Option<f32>) -> Vec<(Slot, f32)> {
+    fn right_slots(&self, badge_width: Option<f32>, percent_width: f32) -> Vec<(Slot, f32)> {
         let mut slots: Vec<(Slot, f32)> = (0..self.tray.len())
             .map(|index| (Slot::Tray(index), TRAY_SLOT))
             .collect();
@@ -287,7 +309,7 @@ impl MenuBar {
             slots.push((Slot::Wifi, SYMBOL_SLOT));
         }
         if self.status.battery.is_some() {
-            slots.push((Slot::Battery, BATTERY_SLOT));
+            slots.push((Slot::Battery, BATTERY_SLOT + percent_width));
         }
         slots.push((Slot::ControlCenter, SYMBOL_SLOT));
         slots
@@ -477,8 +499,12 @@ impl MenuBar {
         slots.push((Slot::Clock, full(right, clock_width)));
         texts.push((right + TEXT_PADDING, clock));
         let badge = self.input_source_badge();
+        let percent = self.percent_label();
+        let percent_width = percent.as_ref().map_or(0.0, |paragraph| {
+            paragraph.width().ceil() + TEXT_PADDING / 2.0
+        });
         for (slot, width) in self
-            .right_slots(badge.as_ref().map(|(_, width)| *width))
+            .right_slots(badge.as_ref().map(|(_, width)| *width), percent_width)
             .into_iter()
             .rev()
         {
@@ -513,7 +539,20 @@ impl MenuBar {
             match slot {
                 Slot::Battery => {
                     if let Some(battery) = self.status.battery {
-                        self.paint_battery(battery, content, scale, &mut items);
+                        if let Some(paragraph) = percent.clone() {
+                            let y = snap((content.height - paragraph.height()) / 2.0, scale);
+                            items.push(Item::Text {
+                                origin: Point::new(snap(content.x + TEXT_PADDING / 2.0, scale), y),
+                                paragraph,
+                            });
+                        }
+                        let icon = Rect::new(
+                            content.x + percent_width,
+                            content.y,
+                            content.width - percent_width,
+                            content.height,
+                        );
+                        self.paint_battery(battery, icon, scale, &mut items);
                     }
                 }
                 Slot::InputSource => {

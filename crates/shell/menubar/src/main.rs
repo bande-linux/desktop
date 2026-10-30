@@ -136,6 +136,18 @@ impl Bar {
                 self.launch(window, "", &[&myself, "--about-app", &app, &version]);
             }
             Command::HideApp => report("hide the app", window.hide_app(&self.app_id)),
+            Command::ShowBatteryPercentage(shown) => {
+                self.bar.set_battery_percentage(shown);
+                thread::spawn(move || {
+                    let written = Connection::session().and_then(|session| {
+                        config(&session)?.set_property("ShowBatteryPercentage", shown)?;
+                        Ok(())
+                    });
+                    if let Err(error) = written {
+                        tracing::warn!("cannot save the battery percentage setting: {error}");
+                    }
+                });
+            }
             Command::SelectInputSource(index) => {
                 report("switch the input source", window.select_input_source(index));
             }
@@ -204,7 +216,10 @@ impl Bar {
         let status = self.bar.status().clone();
         let local = match slot {
             Slot::System => Some(system_menu(&self.user)),
-            Slot::Battery => status.battery.as_ref().map(battery_menu),
+            Slot::Battery => status
+                .battery
+                .as_ref()
+                .map(|battery| battery_menu(battery, self.bar.battery_percentage())),
             Slot::Wifi => {
                 self.control(Control::Scan);
                 status.wifi.as_ref().map(wifi_menu)
@@ -426,6 +441,9 @@ impl App for Bar {
                         );
                     }
                 }
+                Update::BatteryPercentage(shown) => {
+                    self.bar.set_battery_percentage(shown);
+                }
                 Update::ClockFormat(format) => {
                     self.dates = DateFormats::from_env().with_clock_format(&format);
                     self.bar.set_clock(self.dates.clock(&jiff::Zoned::now()));
@@ -463,15 +481,33 @@ impl App for Bar {
     }
 }
 
-fn follow_clock_format(session: &Connection, outbox: &Outbox<Update>) -> zbus::Result<()> {
-    let config = zbus::blocking::Proxy::new(
+fn config(session: &Connection) -> zbus::Result<zbus::blocking::Proxy<'static>> {
+    zbus::blocking::Proxy::new(
         session,
         "org.unbound.Config",
         "/org/unbound/Config",
         "org.unbound.Config",
-    )?;
+    )
+}
+
+fn follow_config(session: &Connection, outbox: &Outbox<Update>) -> zbus::Result<()> {
+    let config = config(session)?;
+    let percentage = config.receive_property_changed::<bool>("ShowBatteryPercentage");
     let changes = config.receive_property_changed::<String>("ClockFormat");
+    outbox.send(Update::BatteryPercentage(
+        config.get_property("ShowBatteryPercentage")?,
+    ));
     outbox.send(Update::ClockFormat(config.get_property("ClockFormat")?));
+    let percentages = outbox.clone();
+    thread::spawn(move || {
+        for change in percentage {
+            if let Ok(shown) = change.get()
+                && !percentages.send(Update::BatteryPercentage(shown))
+            {
+                break;
+            }
+        }
+    });
     for change in changes {
         if let Ok(format) = change.get()
             && !outbox.send(Update::ClockFormat(format))
@@ -518,8 +554,8 @@ fn run_bar() -> Result<(), Box<dyn std::error::Error>> {
             });
             let (config, outbox) = (session.clone(), inbox.outbox());
             thread::spawn(move || {
-                if let Err(error) = follow_clock_format(&config, &outbox) {
-                    tracing::warn!("the clock does not follow its format setting: {error}");
+                if let Err(error) = follow_config(&config, &outbox) {
+                    tracing::warn!("the bar does not follow its settings: {error}");
                 }
             });
             let outbox = inbox.outbox();

@@ -15,6 +15,7 @@ use crate::about::{About, AboutCommand, follow_about};
 use crate::battery::{BatteryCommand, BatteryState, follow_battery};
 use crate::client::{CONFIG_SETTINGS, SettingsClient};
 use crate::login::{LoginCommand, LoginItems, follow_login_items};
+use crate::notifications::{AppNotifications, NotificationCommand, follow_app_notifications};
 use crate::pictures::{Pair, PictureCommand, follow_pictures};
 use crate::services::{
     AudioCommand, BluetoothCommand, NetworkCommand, follow_audio, follow_bluetooth, follow_network,
@@ -44,6 +45,7 @@ pub enum Update {
     Time(Option<TimeState>),
     Login(LoginItems),
     Battery(Option<BatteryState>),
+    NotificationApps(Vec<AppNotifications>),
     Failed(String),
 }
 
@@ -62,6 +64,7 @@ pub enum Command {
     Time(TimeCommand),
     Login(LoginCommand),
     Battery(BatteryCommand),
+    Notifications(NotificationCommand),
     Reveal(PathBuf),
 }
 
@@ -247,6 +250,7 @@ pub struct Services {
     time: Option<Sender<TimeCommand>>,
     login: Sender<LoginCommand>,
     battery: Option<Sender<BatteryCommand>>,
+    notifications: Sender<NotificationCommand>,
 }
 
 impl Services {
@@ -264,6 +268,7 @@ impl Services {
             time: system.map(|system| follow_time(system, updates.clone())),
             login: follow_login_items(updates.clone()),
             battery: system.map(|system| follow_battery(system, updates.clone())),
+            notifications: follow_app_notifications(session, updates.clone()),
         }
     }
 
@@ -297,6 +302,7 @@ impl Services {
                 .as_ref()
                 .is_some_and(|time| time.send(command).is_ok()),
             Command::Login(command) => self.login.send(command).is_ok(),
+            Command::Notifications(command) => self.notifications.send(command).is_ok(),
             Command::Battery(command) => self
                 .battery
                 .as_ref()

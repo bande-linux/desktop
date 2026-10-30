@@ -3800,6 +3800,8 @@ dependencies = [
 name = "unbound-compositor"
 version = "0.1.0"
 dependencies = [
+ "accesskit",
+ "accesskit_unix",
  "image",
  "image-compare",
  "rustix 1.1.6",
@@ -3810,12 +3812,14 @@ dependencies = [
  "unbound-graphics",
  "unbound-greeter",
  "unbound-keyboard",
+ "unbound-l10n",
  "unbound-log",
  "unbound-protocols",
  "unbound-render",
  "unbound-spring",
  "unbound-test-bus",
  "unbound-test-wayland",
+ "unbound-xdg",
  "wayland-client",
  "wayland-protocols",
  "zbus",

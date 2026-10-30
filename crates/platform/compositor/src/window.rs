@@ -135,6 +135,10 @@ impl Window {
         self.minimized.is_some()
     }
 
+    pub fn is_hidden(&self) -> bool {
+        self.hidden
+    }
+
     pub fn has_state(&self, state: xdg_toplevel::State) -> bool {
         self.toplevel.current_state().states.contains(state)
     }

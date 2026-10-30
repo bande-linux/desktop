@@ -20,6 +20,7 @@ use crate::state::{Headless, MENU_BAR_NAMESPACE, State};
 use crate::tile::Direction;
 
 const EVDEV_OFFSET: u32 = 8;
+const ABOVE_TAB: u32 = 41;
 
 const SCROLL_PER_DETENT: f64 = 15.0;
 
@@ -27,7 +28,9 @@ const SCROLL_PER_DETENT: f64 = 15.0;
 enum Shortcut {
     CloseWindow,
     QuitApp,
-    NextApp,
+    NextApp { backwards: bool },
+    NextWindow { backwards: bool },
+    SwitcherKey(u32, bool),
     ShowLauncher,
     MinimizeWindow,
     LockScreen,
@@ -99,6 +102,9 @@ fn shortcut(
         }
         Some(keysyms::KEY_h) if alt => return Some(Shortcut::HideOthers),
         Some(keysyms::KEY_h) if !ctrl => return Some(Shortcut::HideApp),
+        Some(keysyms::KEY_grave) if !ctrl && !alt => {
+            return Some(Shortcut::NextWindow { backwards: shift });
+        }
         _ => {}
     }
     match keysym {
@@ -124,7 +130,9 @@ fn shortcut(
         keysyms::KEY_m | keysyms::KEY_M => Some(Shortcut::MinimizeWindow),
         keysyms::KEY_w | keysyms::KEY_W => Some(Shortcut::CloseWindow),
         keysyms::KEY_q | keysyms::KEY_Q => Some(Shortcut::QuitApp),
-        keysyms::KEY_Tab | keysyms::KEY_ISO_Left_Tab => Some(Shortcut::NextApp),
+        keysyms::KEY_Tab | keysyms::KEY_ISO_Left_Tab if !ctrl && !alt => {
+            Some(Shortcut::NextApp { backwards: shift })
+        }
         keysyms::KEY_space if alt && !ctrl => Some(Shortcut::InputSource { backwards: shift }),
         keysyms::KEY_space => Some(Shortcut::ShowLauncher),
         _ => None,
@@ -222,6 +230,12 @@ impl State {
             self.overview_key(keysym, text);
             return;
         }
+        match shortcut {
+            Shortcut::NextApp { backwards } => return self.switch_apps(backwards),
+            Shortcut::NextWindow { backwards } => return self.cycle_windows(backwards),
+            Shortcut::SwitcherKey(keysym, shift) => return self.switcher_key(keysym, shift),
+            _ => {}
+        }
         if shortcut == Shortcut::Overview {
             self.toggle_overview(None);
             return;
@@ -289,19 +303,6 @@ impl State {
                     self.hide_app(&app_id);
                 }
             }
-            Shortcut::NextApp => {
-                let next = self
-                    .windows
-                    .iter()
-                    .rev()
-                    .filter(|window| window.visible())
-                    .map(|window| window.toplevel.wl_surface())
-                    .find(|surface| surface.client() != owner)
-                    .cloned();
-                if next.is_some() {
-                    self.focus(next);
-                }
-            }
             Shortcut::MinimizeWindow => {
                 if let Some(window) = self.toplevel_of(&focused) {
                     self.minimize(&window);
@@ -341,6 +342,9 @@ impl State {
             | Shortcut::Overview
             | Shortcut::AppWindows
             | Shortcut::OverviewKey(..)
+            | Shortcut::NextApp { .. }
+            | Shortcut::NextWindow { .. }
+            | Shortcut::SwitcherKey(..)
             | Shortcut::InputSource { .. } => {}
         }
     }
@@ -474,6 +478,9 @@ impl Headless {
         if state.overview.is_open() {
             state.overview_pointer(location);
         }
+        if state.switcher.is_shown() {
+            state.switcher_pointer(location);
+        }
         let under = state.surface_under(location);
         let Some(pointer) = state.seat.get_pointer() else {
             return;
@@ -501,6 +508,10 @@ impl Headless {
         }
         if !pressed && state.swallowed_button == Some(button) {
             state.swallowed_button = None;
+            return;
+        }
+        if pressed && state.switcher_click() {
+            state.swallowed_button = Some(button);
             return;
         }
         if state.overview.is_open() && state.popup_grab.is_none() {
@@ -597,6 +608,18 @@ impl Headless {
                     return FilterResult::Intercept(Some(Shortcut::Media(key)));
                 }
                 let sym = keysym.modified_sym();
+                if state.switcher.is_active() && !sym.is_modifier_key() {
+                    state.held_shortcut_keys.push(evdev_code);
+                    let pressed = if evdev_code == ABOVE_TAB {
+                        keysyms::KEY_grave
+                    } else {
+                        sym.raw()
+                    };
+                    return FilterResult::Intercept(Some(Shortcut::SwitcherKey(
+                        pressed,
+                        modifiers.shift,
+                    )));
+                }
                 if sym.raw() == keysyms::KEY_XF86LaunchA && !state.is_locked() {
                     state.held_shortcut_keys.push(evdev_code);
                     return FilterResult::Intercept(Some(Shortcut::Overview));
@@ -608,9 +631,13 @@ impl Headless {
                         sym.key_char(),
                     )));
                 }
-                let unshifted = keysym
-                    .raw_latin_sym_or_raw_current_sym()
-                    .map(|sym| sym.raw());
+                let unshifted = if evdev_code == ABOVE_TAB {
+                    Some(keysyms::KEY_grave)
+                } else {
+                    keysym
+                        .raw_latin_sym_or_raw_current_sym()
+                        .map(|sym| sym.raw())
+                };
                 match shortcut(
                     keysym.modified_sym().raw(),
                     unshifted,
@@ -637,6 +664,9 @@ impl Headless {
         );
         if let Some(Some(shortcut)) = action {
             state.run(shortcut);
+        }
+        if state.switcher.is_active() && !keyboard.modifier_state().logo {
+            state.commit_switcher();
         }
     }
 }
@@ -675,7 +705,8 @@ mod tests {
             Action::MinimizeWindow => Shortcut::MinimizeWindow,
             Action::ToggleFullScreen => Shortcut::ToggleFullscreen,
             Action::TileWindow => Shortcut::Place(Direction::Left),
-            Action::NextApp => Shortcut::NextApp,
+            Action::NextApp => Shortcut::NextApp { backwards: false },
+            Action::NextWindow => Shortcut::NextWindow { backwards: false },
             Action::QuitApp => Shortcut::QuitApp,
             Action::HideApp => Shortcut::HideApp,
             Action::HideOthers => Shortcut::HideOthers,

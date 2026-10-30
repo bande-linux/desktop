@@ -61,30 +61,39 @@ impl Labels {
                 },
             ],
         };
+        let buffer = self.paint(&scene, scale)?;
+        Some(Label {
+            text: text.to_owned(),
+            scale,
+            size: (f64::from(width), f64::from(height)).into(),
+            buffer,
+        })
+    }
+
+    pub(crate) fn text(&mut self) -> &mut TextSystem {
+        &mut self.text
+    }
+
+    pub(crate) fn paint(&mut self, scene: &Scene, scale: f64) -> Option<MemoryRenderBuffer> {
         let pixels = (
             unbound_graphics::pixels(scene.width, scale),
             unbound_graphics::pixels(scene.height, scale),
         );
         let mut rgba = vec![0; pixels.0 as usize * pixels.1 as usize * 4];
-        if let Err(error) = self.renderer.render_into(&scene, scale, &mut rgba) {
-            tracing::warn!("cannot draw a window title: {error}");
+        if let Err(error) = self.renderer.render_into(scene, scale, &mut rgba) {
+            tracing::warn!("cannot draw a compositor overlay: {error}");
             return None;
         }
         for pixel in rgba.as_chunks_mut::<4>().0 {
             pixel.swap(0, 2);
         }
-        Some(Label {
-            text: text.to_owned(),
-            scale,
-            size: (f64::from(width), f64::from(height)).into(),
-            buffer: MemoryRenderBuffer::from_slice(
-                &rgba,
-                Fourcc::Argb8888,
-                (pixels.0 as i32, pixels.1 as i32),
-                1,
-                Transform::Normal,
-                None,
-            ),
-        })
+        Some(MemoryRenderBuffer::from_slice(
+            &rgba,
+            Fourcc::Argb8888,
+            (pixels.0 as i32, pixels.1 as i32),
+            1,
+            Transform::Normal,
+            None,
+        ))
     }
 }

@@ -222,7 +222,7 @@ fn inflate(rect: Frame, by: f64) -> Frame {
     )
 }
 
-fn real_rect(window: &Window) -> Option<Frame> {
+pub(crate) fn real_rect(window: &Window) -> Option<Frame> {
     let geometry = window.geometry()?;
     Some(Rectangle::new(
         geometry.location.to_f64(),

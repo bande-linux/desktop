@@ -1,5 +1,6 @@
 use rustix::process::{Pid, Signal, kill_process};
 use smithay::desktop::layer_map_for_output;
+use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{Client, Resource};
 use smithay::wayland::shell::wlr_layer::KeyboardInteractivity;
 use unbound_protocols::server::unbound_shell_v1::{self, UnboundShellV1};
@@ -33,14 +34,25 @@ impl State {
         clients
     }
 
+    fn app_surfaces(&self, app_id: &str) -> Vec<WlSurface> {
+        self.app_windows(app_id)
+            .into_iter()
+            .map(|index| self.windows[index].surface().clone())
+            .collect()
+    }
+
     pub(crate) fn hide_app(&mut self, app_id: &str) {
-        for index in self.app_windows(app_id) {
-            let window = &mut self.windows[index];
-            if window.hidden {
+        self.hide_windows(self.app_surfaces(app_id));
+    }
+
+    pub(crate) fn hide_windows(&mut self, surfaces: Vec<WlSurface>) {
+        for surface in surfaces {
+            let Some(index) = self.window_index(&surface) else {
+                continue;
+            };
+            if std::mem::replace(&mut self.windows[index].hidden, true) {
                 continue;
             }
-            window.hidden = true;
-            let surface = window.surface().clone();
             self.animate_window(index, Spring::FADE, None);
             self.refocus_after_losing(&surface);
         }
@@ -48,7 +60,14 @@ impl State {
     }
 
     pub(crate) fn show_app(&mut self, app_id: &str) {
-        for index in self.app_windows(app_id) {
+        self.show_windows(self.app_surfaces(app_id));
+    }
+
+    pub(crate) fn show_windows(&mut self, surfaces: Vec<WlSurface>) {
+        for surface in surfaces {
+            let Some(index) = self.window_index(&surface) else {
+                continue;
+            };
             if !std::mem::take(&mut self.windows[index].hidden) {
                 continue;
             }
@@ -99,12 +118,7 @@ impl State {
             return;
         };
         let surface = self.windows[index].surface().clone();
-        self.show_app(&toplevel_names(&surface).1);
-        self.unminimize(&surface);
-        if self.exclusive_layer.is_none() {
-            self.focus(Some(surface));
-        }
-        self.needs_redraw = true;
+        self.bring_forward(&surface);
     }
 
     pub(crate) fn announce_minimized(&self, index: usize, minimized: bool) {

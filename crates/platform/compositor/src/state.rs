@@ -186,6 +186,7 @@ pub struct State {
     pub(crate) watchdog: crate::watchdog::Watchdog,
     pub(crate) desktop: crate::gesture::ShowDesktop,
     pub(crate) overview: crate::overview::Overview,
+    pub(crate) switcher: crate::switcher::Switcher,
     pub(crate) gesture_route: Option<crate::gesture::Route>,
     pub(crate) active_app: String,
     pub(crate) idle: crate::idle::Idle,
@@ -346,6 +347,7 @@ impl Headless {
             watchdog: crate::watchdog::Watchdog::default(),
             desktop: crate::gesture::ShowDesktop::default(),
             overview: crate::overview::Overview::default(),
+            switcher: crate::switcher::Switcher::default(),
             gesture_route: None,
             active_app: String::new(),
             idle: crate::idle::Idle::default(),
@@ -568,6 +570,7 @@ impl Headless {
         screen: usize,
     ) -> Vec<ScreenElement> {
         self.state.paint_title_bars(renderer);
+        self.state.prepare_switcher(screen);
         let (elements, drawn, icon) = self.compose(renderer, screen, true);
         if self.state.pointer_screen() == screen {
             self.state.remember_drag_icon(icon);
@@ -652,6 +655,7 @@ impl Headless {
             (Vec::new(), None)
         };
         elements.extend(self.state.source_hud_element(renderer, screen, scale));
+        elements.extend(self.state.switcher_elements(renderer, screen, scale));
         let key = self.state.key_window();
         for placed in self.state.scene(true, screen) {
             match placed {

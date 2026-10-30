@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use accesskit::{ActionRequest, TreeUpdate};
 use raw_window_handle::{
@@ -18,8 +18,8 @@ use raw_window_handle::{
 };
 use rustix::fs::{MemfdFlags, memfd_create};
 use unbound_graphics::{
-    Appearance, CpuRenderer, Cursor, Event, GpuRenderer, Point, Pointer, PointerButton, Rect,
-    RenderError, Scene, TextSystem, pixels, vulkan_instance,
+    Appearance, CpuRenderer, Cursor, Event, GpuDevice, GpuRenderer, Point, Pointer, PointerButton,
+    Rect, Region, RenderError, Scene, TextSystem, damage, pixels,
 };
 use unbound_protocols::client::unbound_shell_v1::{BrightnessKey, VolumeKey};
 use unbound_widgets::{ClipboardRequest, Menu, MenuItem, MenuOutcome, Ui};
@@ -68,6 +68,8 @@ use crate::text_input::TextInput;
 
 pub const RENDERER_VARIABLE: &str = "UNBOUND_RENDERER";
 pub const ACTIVATION_TOKEN_VARIABLE: &str = "XDG_ACTIVATION_TOKEN";
+const RELEASE_HIDDEN_AFTER: Duration = Duration::from_secs(30);
+const MAX_STALE_REGIONS: usize = 64;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FramePath {
@@ -326,9 +328,11 @@ struct ShmBuffer {
     width: u32,
     height: u32,
     busy: Arc<AtomicBool>,
+    stale: Option<Vec<Region>>,
 }
 
 struct GpuSurface {
+    gpu: Arc<GpuDevice>,
     renderer: GpuRenderer,
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
@@ -339,6 +343,7 @@ struct GpuSurface {
 enum Gpu {
     Starting(Receiver<Result<GpuSurface, RenderError>>),
     Ready(Box<GpuSurface>),
+    Released,
     Unavailable,
 }
 
@@ -361,6 +366,8 @@ pub struct Window {
     surface_scale: Option<SurfaceScale>,
     drawn_scale: f64,
     visible: bool,
+    hidden_at: Option<Instant>,
+    shown_scene: Option<(Scene, f64)>,
     needs_redraw: bool,
     chrome: Option<Chrome>,
     menus: Option<Menus>,
@@ -492,18 +499,6 @@ impl Window {
             queue.blocking_dispatch(&mut state)?;
         }
 
-        let gpu = if std::env::var_os(RENDERER_VARIABLE).is_some_and(|value| value == "cpu") {
-            Gpu::Unavailable
-        } else {
-            let display = connection.backend().display_ptr() as usize;
-            let wl_surface = surface.id().as_ptr() as usize;
-            let (sender, receiver) = mpsc::channel();
-            thread::spawn(move || {
-                let _ = sender.send(open_gpu(display, wl_surface));
-            });
-            Gpu::Starting(receiver)
-        };
-
         let title = if chrome.is_some() {
             TITLE_BAR_HEIGHT
         } else {
@@ -512,6 +507,19 @@ impl Window {
         let size = state
             .suggested_size
             .unwrap_or((size.0, size.1.saturating_add(title)));
+        let scale = match surface_scale {
+            Some(_) => state.scaling.scale(),
+            None => 1.0,
+        };
+        let gpu = if std::env::var_os(RENDERER_VARIABLE).is_some_and(|value| value == "cpu") {
+            Gpu::Unavailable
+        } else {
+            start_gpu(
+                &connection,
+                &surface,
+                (pixels(size.0, scale), pixels(size.1, scale)),
+            )
+        };
         appearance.wait_for_first_reading();
         state
             .events
@@ -529,6 +537,8 @@ impl Window {
             surface_scale,
             drawn_scale: 1.0,
             visible: true,
+            hidden_at: None,
+            shown_scene: None,
             needs_redraw: true,
             chrome,
             menus: None,
@@ -571,7 +581,7 @@ impl Window {
         let floating = !(toplevel.maximized || toplevel.fullscreen || toplevel.tiled);
         let transparent = match &self.gpu {
             Gpu::Ready(gpu) => gpu.transparent,
-            Gpu::Starting(_) | Gpu::Unavailable => true,
+            Gpu::Starting(_) | Gpu::Released | Gpu::Unavailable => true,
         };
         if self.chrome.is_some() && floating && transparent {
             RESIZE_MARGIN
@@ -965,10 +975,34 @@ impl Window {
             .and_then(Menus::deadline)
             .into_iter()
             .chain(self.ui_deadline)
+            .chain(self.release_deadline())
             .min()
     }
 
+    fn release_deadline(&self) -> Option<Instant> {
+        let holding =
+            !matches!(self.gpu, Gpu::Released | Gpu::Unavailable) || self.shm_target.is_holding();
+        self.hidden_at
+            .filter(|_| holding)
+            .map(|hidden_at| hidden_at + RELEASE_HIDDEN_AFTER)
+    }
+
+    fn release_rendering(&mut self) {
+        self.wait_for_gpu();
+        if matches!(self.gpu, Gpu::Ready(_)) {
+            self.gpu = Gpu::Released;
+        }
+        self.shm_target.destroy();
+        self.cpu = CpuRenderer::new();
+    }
+
     pub(crate) fn tick(&mut self, now: Instant) {
+        if self
+            .release_deadline()
+            .is_some_and(|deadline| deadline <= now)
+        {
+            self.release_rendering();
+        }
         self.serve_menus(now);
         if self.ui_deadline.is_some_and(|deadline| deadline <= now) {
             self.ui_deadline = None;
@@ -1347,6 +1381,8 @@ impl Window {
             return Ok(());
         }
         self.visible = false;
+        self.hidden_at = Some(Instant::now());
+        self.shown_scene = None;
         self.surface.attach(None, 0, 0);
         self.surface.commit();
         self.state.frame_pending = false;
@@ -1363,6 +1399,16 @@ impl Window {
             self.queue.blocking_dispatch(&mut self.state)?;
         }
         self.visible = true;
+        self.hidden_at = None;
+        if matches!(self.gpu, Gpu::Released) {
+            let size = self.geometry();
+            let scale = self.scale();
+            self.gpu = start_gpu(
+                &self.connection,
+                &self.surface,
+                (pixels(size.0, scale), pixels(size.1, scale)),
+            );
+        }
         self.needs_redraw = true;
         Ok(())
     }
@@ -1457,16 +1503,22 @@ impl Window {
         if let Some(surface_scale) = &self.surface_scale {
             surface_scale.show_at((scene.width, scene.height));
         }
+        let damage = self
+            .shown_scene
+            .take()
+            .filter(|(_, shown_scale)| *shown_scale == scale)
+            .and_then(|(shown, _)| damage(&shown, scene, scale));
         let path = match &mut self.gpu {
             Gpu::Ready(gpu) => {
-                gpu.present(scene, scale)?;
+                gpu.present(scene, scale, damage.as_deref())?;
                 FramePath::Gpu
             }
-            Gpu::Starting(_) | Gpu::Unavailable => {
-                self.draw_on_cpu(scene)?;
+            Gpu::Starting(_) | Gpu::Released | Gpu::Unavailable => {
+                self.draw_on_cpu(scene, damage.as_deref())?;
                 FramePath::Cpu
             }
         };
+        self.shown_scene = Some((scene.clone(), scale));
         self.flush()?;
         Ok(path)
     }
@@ -1481,7 +1533,7 @@ impl Window {
         }
     }
 
-    fn draw_on_cpu(&mut self, scene: &Scene) -> Result<(), WindowError> {
+    fn draw_on_cpu(&mut self, scene: &Scene, damage: Option<&[Region]>) -> Result<(), WindowError> {
         let shm = self
             .state
             .shm
@@ -1494,6 +1546,7 @@ impl Window {
             &self.surface,
             scene,
             self.drawn_scale,
+            damage,
         )
     }
 }
@@ -1501,10 +1554,23 @@ impl Window {
 #[derive(Default)]
 pub(crate) struct ShmTarget {
     buffers: Vec<ShmBuffer>,
-    rgba: Vec<u8>,
+    bgra: Vec<u8>,
+    scratch: Vec<u8>,
+}
+
+fn copy_swizzled(source: &[u8], target: &mut [u8]) {
+    for (to, from) in target
+        .as_chunks_mut::<4>()
+        .0
+        .iter_mut()
+        .zip(source.as_chunks::<4>().0)
+    {
+        *to = [from[2], from[1], from[0], from[3]];
+    }
 }
 
 impl ShmTarget {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn present(
         &mut self,
         cpu: &mut CpuRenderer,
@@ -1513,17 +1579,35 @@ impl ShmTarget {
         surface: &WlSurface,
         scene: &Scene,
         scale: f64,
+        damage: Option<&[Region]>,
     ) -> Result<(), WindowError> {
         let (width, height) = (pixels(scene.width, scale), pixels(scene.height, scale));
         let bytes = width as usize * height as usize * 4;
-        self.rgba.resize(bytes, 0);
-        cpu.render_into(scene, scale, &mut self.rgba)?;
-        for pixel in self.rgba.as_chunks_mut::<4>().0 {
-            pixel.swap(0, 2);
+        let damage = damage.filter(|_| self.bgra.len() == bytes);
+        match damage {
+            Some(regions) => self.render_regions(cpu, scene, scale, width, regions)?,
+            None => {
+                self.bgra.resize(bytes, 0);
+                cpu.render_into(scene, scale, &mut self.bgra)?;
+                for pixel in self.bgra.as_chunks_mut::<4>().0 {
+                    pixel.swap(0, 2);
+                }
+            }
         }
         self.buffers.retain(|buffer| {
             buffer.width == width && buffer.height == height || buffer.busy.load(Ordering::Acquire)
         });
+        for buffer in &mut self.buffers {
+            buffer.stale = match (buffer.stale.take(), damage) {
+                (Some(mut stale), Some(regions))
+                    if stale.len() + regions.len() <= MAX_STALE_REGIONS =>
+                {
+                    stale.extend_from_slice(regions);
+                    Some(stale)
+                }
+                _ => None,
+            };
+        }
         let index = match self.buffers.iter().position(|buffer| {
             buffer.width == width && buffer.height == height && !buffer.busy.load(Ordering::Acquire)
         }) {
@@ -1534,19 +1618,73 @@ impl ShmTarget {
                 self.buffers.len() - 1
             }
         };
-        let buffer = &self.buffers[index];
-        buffer.file.write_all_at(&self.rgba, 0)?;
+        let buffer = &mut self.buffers[index];
+        match buffer.stale.replace(Vec::new()) {
+            None => buffer.file.write_all_at(&self.bgra, 0)?,
+            Some(stale) => {
+                let stride = width as usize * 4;
+                for region in stale {
+                    for row in region.y..region.y + region.height {
+                        let start = row as usize * stride + region.x as usize * 4;
+                        let end = start + region.width as usize * 4;
+                        buffer
+                            .file
+                            .write_all_at(&self.bgra[start..end], start as u64)?;
+                    }
+                }
+            }
+        }
         buffer.busy.store(true, Ordering::Release);
         surface.attach(Some(&buffer.buffer), 0, 0);
-        surface.damage_buffer(0, 0, clamp_i32(width), clamp_i32(height));
+        match damage {
+            Some(regions) => {
+                for region in regions {
+                    surface.damage_buffer(
+                        clamp_i32(region.x),
+                        clamp_i32(region.y),
+                        clamp_i32(region.width),
+                        clamp_i32(region.height),
+                    );
+                }
+            }
+            None => surface.damage_buffer(0, 0, clamp_i32(width), clamp_i32(height)),
+        }
         surface.commit();
         Ok(())
+    }
+
+    fn render_regions(
+        &mut self,
+        cpu: &mut CpuRenderer,
+        scene: &Scene,
+        scale: f64,
+        width: u32,
+        regions: &[Region],
+    ) -> Result<(), WindowError> {
+        let stride = width as usize * 4;
+        for region in regions {
+            let row_bytes = region.width as usize * 4;
+            self.scratch.clear();
+            self.scratch.resize(row_bytes * region.height as usize, 0);
+            cpu.render_region(scene, scale, *region, &mut self.scratch)?;
+            for (row, source) in self.scratch.chunks_exact(row_bytes).enumerate() {
+                let start = (region.y as usize + row) * stride + region.x as usize * 4;
+                copy_swizzled(source, &mut self.bgra[start..start + row_bytes]);
+            }
+        }
+        Ok(())
+    }
+
+    fn is_holding(&self) -> bool {
+        !self.buffers.is_empty() || self.bgra.capacity() > 0
     }
 
     pub(crate) fn destroy(&mut self) {
         for buffer in self.buffers.drain(..) {
             buffer.buffer.destroy();
         }
+        self.bgra = Vec::new();
+        self.scratch = Vec::new();
     }
 }
 
@@ -1584,6 +1722,7 @@ fn create_buffer(
         width,
         height,
         busy,
+        stale: None,
     })
 }
 
@@ -1606,15 +1745,20 @@ impl Drop for Window {
 }
 
 impl GpuSurface {
-    fn present(&mut self, scene: &Scene, scale: f64) -> Result<(), RenderError> {
+    fn present(
+        &mut self,
+        scene: &Scene,
+        scale: f64,
+        damage: Option<&[Region]>,
+    ) -> Result<(), RenderError> {
         let size = (pixels(scene.width, scale), pixels(scene.height, scale));
         if self.configured != Some(size) {
             self.config.width = size.0;
             self.config.height = size.1;
-            self.surface.configure(self.renderer.device(), &self.config);
+            self.surface.configure(self.gpu.device(), &self.config);
             self.configured = Some(size);
         }
-        self.renderer.present(scene, scale, &self.surface)
+        self.renderer.present(scene, scale, &self.surface, damage)
     }
 }
 
@@ -1622,28 +1766,28 @@ fn clamp_i32(value: u32) -> i32 {
     i32::try_from(value).unwrap_or(i32::MAX)
 }
 
-fn open_gpu(display: usize, surface: usize) -> Result<GpuSurface, RenderError> {
+fn start_gpu(connection: &Connection, surface: &WlSurface, atlas: (u32, u32)) -> Gpu {
+    let display = connection.backend().display_ptr() as usize;
+    let wl_surface = surface.id().as_ptr() as usize;
+    let (sender, receiver) = mpsc::channel();
+    thread::spawn(move || {
+        let _ = sender.send(open_gpu(display, wl_surface, atlas));
+    });
+    Gpu::Starting(receiver)
+}
+
+fn open_gpu(display: usize, surface: usize, atlas: (u32, u32)) -> Result<GpuSurface, RenderError> {
     let missing = || RenderError::Gpu("the Wayland surface has no libwayland pointer".to_owned());
     let display = NonNull::new(display as *mut c_void).ok_or_else(missing)?;
     let window = NonNull::new(surface as *mut c_void).ok_or_else(missing)?;
-    let instance = vulkan_instance();
     let target = wgpu::SurfaceTargetUnsafe::RawHandle {
         raw_display_handle: Some(RawDisplayHandle::Wayland(WaylandDisplayHandle::new(
             display,
         ))),
         raw_window_handle: RawWindowHandle::Wayland(WaylandWindowHandle::new(window)),
     };
-    let surface = unsafe { instance.create_surface_unsafe(target) }
-        .map_err(|error| RenderError::Gpu(error.to_string()))?;
-    let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-        compatible_surface: Some(&surface),
-        ..wgpu::RequestAdapterOptions::default()
-    }))
-    .map_err(RenderError::Adapter)?;
-    let (device, queue) =
-        pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default()))
-            .map_err(RenderError::Device)?;
-    let capabilities = surface.get_capabilities(&adapter);
+    let (gpu, surface) = unsafe { GpuDevice::shared_for(target) }?;
+    let capabilities = surface.get_capabilities(gpu.adapter());
     let format = capabilities
         .formats
         .iter()
@@ -1671,8 +1815,13 @@ fn open_gpu(display: usize, surface: usize) -> Result<GpuSurface, RenderError> {
     } else {
         wgpu::PresentMode::Fifo
     };
+    if !capabilities.usages.contains(wgpu::TextureUsages::COPY_DST) {
+        return Err(RenderError::Gpu(
+            "the surface cannot receive copied frames".to_owned(),
+        ));
+    }
     let config = wgpu::SurfaceConfiguration {
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        usage: wgpu::TextureUsages::COPY_DST,
         format,
         color_space: wgpu::SurfaceColorSpace::Auto,
         width: 1,
@@ -1684,7 +1833,8 @@ fn open_gpu(display: usize, surface: usize) -> Result<GpuSurface, RenderError> {
     };
     Ok(GpuSurface {
         transparent: alpha_mode == wgpu::CompositeAlphaMode::PreMultiplied,
-        renderer: GpuRenderer::with_device(adapter, device, queue, format),
+        renderer: GpuRenderer::with_device(Arc::clone(&gpu), format, atlas),
+        gpu,
         surface,
         config,
         configured: None,

@@ -3,6 +3,7 @@ use std::ffi::OsString;
 use std::io;
 use std::os::fd::OwnedFd;
 use std::os::unix::net::UnixStream;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -180,6 +181,7 @@ pub struct State {
     _input_method_state: InputMethodManagerState,
     _virtual_keyboard_state: VirtualKeyboardManagerState,
     pending_activation: Option<WlSurface>,
+    windowless_app: Option<Client>,
     pub(crate) shell_resources: Vec<UnboundShellV1>,
     pub(crate) app_resources: Vec<UnboundAppV1>,
     pub(crate) foreign_toplevel_state: ForeignToplevelListState,
@@ -337,6 +339,7 @@ impl Headless {
                 true
             }),
             pending_activation: None,
+            windowless_app: None,
             shell_resources: Vec::new(),
             app_resources: Vec::new(),
             foreign_toplevel_state: ForeignToplevelListState::new_with_filter::<State>(
@@ -420,6 +423,7 @@ impl Headless {
     pub fn dispatch(&mut self) -> io::Result<()> {
         self.clear_signalled_fences()?;
         self.display.dispatch_clients(&mut self.state)?;
+        self.state.activate_next_app_if_the_windowless_one_quit();
         self.state.popups.cleanup();
         self.state.refocus_pointer();
         self.display.flush_clients()
@@ -688,11 +692,14 @@ impl Headless {
 pub(crate) struct ClientState {
     pub(crate) compositor_state: CompositorClientState,
     pub(crate) role: Option<SessionRole>,
+    pub(crate) departed: AtomicBool,
 }
 
 impl ClientData for ClientState {
     fn initialized(&self, _client_id: ClientId) {}
-    fn disconnected(&self, _client_id: ClientId, _reason: DisconnectReason) {}
+    fn disconnected(&self, _client_id: ClientId, _reason: DisconnectReason) {
+        self.departed.store(true, Ordering::Relaxed);
+    }
 }
 
 const MONOTONIC: u32 = 1;
@@ -761,6 +768,7 @@ impl State {
         if self.redirect_focus_while_locked(&surface) {
             return;
         }
+        self.windowless_app = None;
         if surface
             .as_ref()
             .is_some_and(|surface| self.window_index(surface).is_some())
@@ -818,11 +826,30 @@ impl State {
         if self.focused().as_ref() != Some(lost) {
             return;
         }
-        let next = match lost.client() {
-            Some(owner) => self.frontmost(Some(&owner)),
+        let owner = lost.client();
+        let next = match &owner {
+            Some(owner) => self.frontmost(Some(owner)),
             None => self.frontmost(None),
         };
+        let windowless = next.is_none();
         self.focus(next);
+        if windowless {
+            self.windowless_app = owner;
+        }
+    }
+
+    fn activate_next_app_if_the_windowless_one_quit(&mut self) {
+        let quit = self.windowless_app.as_ref().is_some_and(|app| {
+            app.get_data::<ClientState>()
+                .is_some_and(|state| state.departed.load(Ordering::Relaxed))
+        });
+        if quit {
+            self.windowless_app = None;
+            if self.focused().is_none() {
+                let next = self.frontmost(None);
+                self.focus(next);
+            }
+        }
     }
 
     fn takes_focus_when_mapped(&self, surface: &WlSurface) -> bool {

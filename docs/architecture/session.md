@@ -85,9 +85,22 @@ graph LR
 - `org.freedesktop.impl.portal.FileChooser`: the Files column browser as the Open and Save
   dialog.
 - Implemented in `crates/services/portal`: `Settings` (version 2) publishes
-  `org.freedesktop.appearance` from `org.unbound.Config`, with `color-scheme` 1 for dark, 2 for
-  light and 0 for automatic until the automatic schedule exists, `accent-color` from the
-  toolkit's accent token of that scheme, and `contrast` 0, signalling changes. `FileChooser`
+  `org.freedesktop.appearance` from `org.unbound.Config`, with `color-scheme` 1 for dark and 2
+  for light (Automatic is resolved by the portal: dark from sunset to sunrise at the main city
+  of the time zone in `zone.tab`, 19:00 to 07:00 when the zone is unknown, re-checked at each
+  change and every minute), `accent-color` the exact Datum colour of the chosen accent in that
+  scheme, and `contrast` 0, signalling changes. `org.unbound.appearance` `frame-tint` carries
+  the wallpaper's average colour (as `ad`, empty when "Tinted frame" is off) for the toolkit to
+  mix into `chassis`. `org.gnome.desktop.interface` adds `icon-theme` (`Unbound`, or
+  `Unbound-<Accent>` for the accent's folder tabs) and `org.gnome.desktop.sound` turns
+  `event-sounds` off with the Sound effects switch. libadwaita snaps `accent-color` to its nine
+  presets, so the portal also writes `~/.config/gtk-4.0/unbound.css` (the accent, `on_accent`,
+  frame, sheet, overlay and semantic colours as libadwaita's CSS variables) and keeps
+  `@import url("unbound.css");` at the top of the user's own `gtk.css`, leaving the rest of that
+  file alone. GTK 4.18 has no `prefers-color-scheme` media query, so the file's unconditional
+  block is the current scheme (rewritten when it changes; running GTK apps pick it up at their
+  next start) and media-query blocks make GTK 4.20 and later switch live. Checked headlessly
+  with gnome-text-editor 48 and Loupe 48 (libadwaita 1.7) in light and dark. `FileChooser`
   (open, save, save many, with filters, choices, folders, `file://` URIs and request
   cancellation), `Screenshot` (with the permission question when the frontend has not checked
   the permission store, and `PickColor`) and `ScreenCast` (sessions, source and cursor

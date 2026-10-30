@@ -3860,6 +3860,7 @@ dependencies = [
  "tempfile",
  "tracing",
  "unbound-bus",
+ "unbound-design",
  "unbound-edid",
  "unbound-l10n",
  "unbound-log",
@@ -5377,13 +5378,15 @@ name = "xdg-desktop-portal-unbound"
 version = "0.1.0"
 dependencies = [
  "blocking",
+ "jiff",
  "tempfile",
  "tracing",
  "unbound-bus",
  "unbound-config",
- "unbound-graphics",
+ "unbound-design",
  "unbound-log",
  "unbound-test-bus",
+ "unbound-wallpaper",
  "zbus",
 ]
 

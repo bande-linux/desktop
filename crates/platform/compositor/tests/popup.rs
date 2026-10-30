@@ -354,6 +354,114 @@ fn a_bar_menu_closes_on_a_click_on_a_window_and_on_super_tab() {
 }
 
 #[test]
+fn a_bar_menu_held_open_after_the_bar_gave_the_keyboard_back_leaves_the_app_active() {
+    let mut desk = Desk::new();
+    let mut bar = TestClient::connect_as_shell(&mut desk.server);
+    bar.use_seat(&mut desk.server);
+    bar.join_shell(&mut desk.server);
+    bar.show_named_layer(
+        &mut desk.server,
+        &LayerRequest {
+            layer: Layer::Top,
+            anchor: Anchor::Top | Anchor::Left | Anchor::Right,
+            size: (0, BAR as u32),
+            exclusive_zone: BAR,
+            keyboard: KeyboardInteractivity::OnDemand,
+            color: GREEN,
+        },
+        "bar",
+    );
+    desk.server.move_pointer_to(at((20, 5)), 0);
+    desk.server.press_button(BTN_LEFT, true, 1);
+    roundtrip(
+        &mut desk.server,
+        &mut [&mut bar, &mut desk.bystander, &mut desk.editor],
+    );
+    bar.activate_app(&mut desk.server, EDITOR);
+    roundtrip(
+        &mut desk.server,
+        &mut [&mut bar, &mut desk.bystander, &mut desk.editor],
+    );
+    let popup = bar.open_layer_popup(&mut desk.server, &menu(0));
+    desk.server.press_button(BTN_LEFT, false, 2);
+    roundtrip(
+        &mut desk.server,
+        &mut [&mut bar, &mut desk.bystander, &mut desk.editor],
+    );
+    assert!(desk.server.keyboard_grabbed());
+    let heard = bar.active_apps().len();
+
+    bar.destroy_popup(&mut desk.server, popup);
+    desk.server.dispatch().expect("dispatch");
+    roundtrip(
+        &mut desk.server,
+        &mut [&mut bar, &mut desk.bystander, &mut desk.editor],
+    );
+
+    assert!(!desk.server.keyboard_grabbed());
+    assert!(
+        bar.active_apps()[heard..]
+            .iter()
+            .all(|active| active == EDITOR),
+        "the app was deactivated: {:?}",
+        bar.active_apps()
+    );
+}
+
+#[test]
+fn a_bar_menu_over_an_open_panel_hands_the_keyboard_back_to_the_panel_when_it_closes() {
+    let mut desk = Desk::new();
+    let mut bar = TestClient::connect_as_shell(&mut desk.server);
+    bar.use_seat(&mut desk.server);
+    let strip = |keyboard, layer| LayerRequest {
+        layer,
+        anchor: Anchor::Top | Anchor::Left | Anchor::Right,
+        size: (0, BAR as u32),
+        exclusive_zone: BAR,
+        keyboard,
+        color: GREEN,
+    };
+    bar.show_named_layer(
+        &mut desk.server,
+        &strip(KeyboardInteractivity::OnDemand, Layer::Top),
+        "bar",
+    );
+    bar.show_named_layer(
+        &mut desk.server,
+        &strip(KeyboardInteractivity::Exclusive, Layer::Overlay),
+        "panel",
+    );
+    roundtrip(
+        &mut desk.server,
+        &mut [&mut bar, &mut desk.bystander, &mut desk.editor],
+    );
+    assert!(bar.layer_has_keyboard(1));
+    desk.server.move_pointer_to(at((20, 5)), 0);
+    desk.server.press_button(BTN_LEFT, true, 1);
+    roundtrip(
+        &mut desk.server,
+        &mut [&mut bar, &mut desk.bystander, &mut desk.editor],
+    );
+    let popup = bar.open_layer_popup(&mut desk.server, &menu(0));
+    desk.server.press_button(BTN_LEFT, false, 2);
+    roundtrip(
+        &mut desk.server,
+        &mut [&mut bar, &mut desk.bystander, &mut desk.editor],
+    );
+    assert!(desk.server.keyboard_grabbed());
+
+    bar.destroy_popup(&mut desk.server, popup);
+    desk.server.dispatch().expect("dispatch");
+    roundtrip(
+        &mut desk.server,
+        &mut [&mut bar, &mut desk.bystander, &mut desk.editor],
+    );
+
+    assert!(!desk.server.keyboard_grabbed());
+    assert!(bar.layer_has_keyboard(1));
+}
+
+#[test]
 fn a_drag_out_of_a_menu_ends_the_menu_grab_when_it_drops() {
     let mut desk = Desk::new();
     desk.editor.join_seat(&mut desk.server);

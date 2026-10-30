@@ -212,6 +212,28 @@ impl State {
         self.panel_anchors.push(anchor);
     }
 
+    pub(crate) fn shown_displays(&self) -> Vec<String> {
+        self.screens
+            .iter()
+            .filter(|screen| screen.mirror.is_none())
+            .map(|screen| screen.name())
+            .collect()
+    }
+
+    pub(crate) fn announce_displays(&mut self) {
+        let displays = self.shown_displays();
+        if displays == self.announced_displays {
+            return;
+        }
+        let names = displays.join(",");
+        for shell in &self.shell_resources {
+            if shell.version() >= unbound_shell_v1::EVT_DISPLAYS_SINCE {
+                shell.displays(names.clone());
+            }
+        }
+        self.announced_displays = displays;
+    }
+
     pub(crate) fn announce_full_screen(&mut self) {
         let states: Vec<(String, bool)> = self
             .screens
@@ -409,6 +431,9 @@ impl GlobalDispatch<UnboundShellV1, ()> for State {
             for (output, full_screen) in &state.announced_full_screen {
                 shell.full_screen(output.clone(), u32::from(*full_screen));
             }
+        }
+        if shell.version() >= unbound_shell_v1::EVT_DISPLAYS_SINCE {
+            shell.displays(state.shown_displays().join(","));
         }
         state.shell_resources.push(shell);
     }

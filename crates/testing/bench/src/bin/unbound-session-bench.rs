@@ -189,15 +189,9 @@ impl Bench {
         };
         let notify = Command::new(binaries.join("unbound-notify")).spawn()?;
         bench.clients.push(("unbound-notify".to_owned(), notify));
-        for shell in [
-            "unbound-desktop-surface",
-            "unbound-bar",
-            "unbound-launcher",
-            "unbound-notifications",
-        ] {
-            let child = bench.server.spawn_shell_client(&binaries.join(shell))?;
-            bench.clients.push((shell.to_owned(), child));
-        }
+        let shell = "unbound-shell";
+        let child = bench.server.spawn_shell_client(&binaries.join(shell))?;
+        bench.clients.push((shell.to_owned(), child));
         if full_effects {
             bench.output.renderer.set_reduced_effects(false);
         }

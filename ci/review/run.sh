@@ -6,8 +6,8 @@ cargo=${REVIEW_CARGO:-cargo}
 packages=(
     unbound-compositor unbound-notify unbound-clipboard unbound-config unbound-power unbound-sound
     xdg-desktop-portal-unbound unbound-file-chooser unbound-tray unbound-automount
-    unbound-desktop-surface unbound-bar unbound-launcher unbound-term unbound-lock unbound-screenshot unbound-files
-    unbound-settings unbound-monitor unbound-greeter unbound-controlcenter unbound-notifications
+    unbound-shell unbound-term unbound-lock unbound-screenshot unbound-files
+    unbound-settings unbound-monitor unbound-greeter
 )
 screenshot=/usr/bin/unbound-screenshot
 runtime="${XDG_RUNTIME_DIR:?needs a user session}/unbound-review"

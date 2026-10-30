@@ -7,8 +7,8 @@ use std::sync::mpsc::{self, Sender};
 use std::thread;
 use std::time::Instant;
 
-use unbound_bar::menubar::{HEIGHT, MenuBar, Slot, StatusView, app_name};
-use unbound_bar::menus::{
+use crate::menubar::{HEIGHT, MenuBar, Slot, StatusView, app_name};
+use crate::menus::{
     AppMenus, app_menu, battery_menu, bluetooth_menu, cascade, input_source_menu, sound_menu,
     system_menu, wifi_menu,
 };
@@ -37,6 +37,7 @@ use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
 use crate::menu_search_client::SharedHandoff;
+use crate::surfaces::{Display, NotificationCenter};
 
 const TRAY_PIXELS: u32 = 32;
 const SCROLL_STEP: f32 = 1.0 / 16.0;
@@ -45,15 +46,15 @@ const MONITOR: &str = "org.unbound.ActivityMonitor";
 const BRING_TO_FRONT: &str = "bring-to-front";
 const TRAY_ITEM: &str = "tray-item:";
 const MENU_BAR_NAMESPACE: &str = "menubar";
-const OUTPUT_VARIABLE: &str = "UNBOUND_OUTPUT";
 const HEADER_ICON: f32 = 24.0;
 const CONFIG_INTERFACE: &str = "org.unbound.Config";
-const SECONDARY_DISPLAY: &str = "UNBOUND_SECONDARY_DISPLAY";
 
 pub type Restart = Rc<Cell<bool>>;
 
 pub struct MenuBarClient<V> {
     bar: V,
+    display: Display,
+    notification_center: NotificationCenter,
     handoff: SharedHandoff,
     layout: (MenuBarPlacement, BarEdge),
     restart: Restart,
@@ -114,7 +115,7 @@ impl<V: StatusView> MenuBarClient<V> {
     }
 
     fn report_anchors(&mut self, window: &mut Window) {
-        if std::env::var_os(SECONDARY_DISPLAY).is_some() {
+        if !self.display.main {
             return;
         }
         let edge = self.bar.edge();
@@ -158,7 +159,7 @@ impl<V: StatusView> MenuBarClient<V> {
         std::env::current_exe()
             .ok()
             .and_then(|path| path.to_str().map(str::to_owned))
-            .unwrap_or_else(|| "unbound-bar".to_owned())
+            .unwrap_or_else(|| "unbound-shell".to_owned())
     }
 
     fn control(&self, control: Control) {
@@ -393,9 +394,7 @@ impl<V: StatusView> MenuBarClient<V> {
             Slot::ControlCenter => {
                 report("open Control Center", window.toggle_control_center());
             }
-            Slot::Clock => {
-                let _ = self.errands.send(Errand::ToggleNotificationCenter);
-            }
+            Slot::Clock => (self.notification_center)(),
             Slot::App | Slot::AppMenu(_) => {
                 if let Some(node) = self.app_menu_node(slot) {
                     let menu = format!("{}{APP_MENU_PATH}", self.app_id);
@@ -582,8 +581,7 @@ impl<V: StatusView> App for MenuBarClient<V> {
                 window.request_redraw();
             }
             WindowEvent::ActiveOutput(output) => {
-                let own = std::env::var(OUTPUT_VARIABLE).unwrap_or_default();
-                let key = output.is_empty() || own.is_empty() || output == own;
+                let key = output.is_empty() || output == self.display.output;
                 if self.bar.set_key_display(key) {
                     window.request_redraw();
                 }
@@ -717,20 +715,20 @@ impl MenuBarClient<MenuBar> {
     pub fn new(
         window: &mut Window,
         text: TextSystem,
-        session: Option<&Connection>,
-        system: Option<&Connection>,
+        place: (Display, NotificationCenter),
+        buses: (Option<&Connection>, Option<&Connection>),
         layout: (MenuBarPlacement, BarEdge),
     ) -> std::io::Result<Self> {
         let bar = MenuBar::new(window.appearance().palette(), text, String::new());
-        MenuBarClient::with_view(bar, session, system, layout)
+        MenuBarClient::with_view(bar, place, buses, layout)
     }
 }
 
 impl<V: StatusView> MenuBarClient<V> {
     pub fn with_view(
         mut view: V,
-        session: Option<&Connection>,
-        system: Option<&Connection>,
+        (display, notification_center): (Display, NotificationCenter),
+        (session, system): (Option<&Connection>, Option<&Connection>),
         layout: (MenuBarPlacement, BarEdge),
     ) -> std::io::Result<Self> {
         let entries = applications(
@@ -778,6 +776,8 @@ impl<V: StatusView> MenuBarClient<V> {
         view.set_time(&jiff::Zoned::now(), &dates);
         Ok(Self {
             bar: view,
+            display,
+            notification_center,
             handoff: SharedHandoff::default(),
             layout,
             restart: Restart::default(),

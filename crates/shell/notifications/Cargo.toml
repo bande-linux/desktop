@@ -1,6 +1,6 @@
 [package]
 name = "unbound-notifications"
-description = "Unbound notification banners and Notification Center"
+description = "Unbound notification banners and Notification Center, as a part of unbound-shell"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
@@ -11,7 +11,6 @@ tracing.workspace = true
 unbound-datetime.workspace = true
 unbound-inbox.workspace = true
 unbound-l10n.workspace = true
-unbound-log.workspace = true
 unbound-notify.workspace = true
 unbound-spring.workspace = true
 unbound-toolkit.workspace = true
@@ -21,19 +20,6 @@ zbus.workspace = true
 [dev-dependencies]
 image.workspace = true
 image-compare.workspace = true
-
-[package.metadata.deb]
-maintainer = "Mikael Hug <mikaelhug@gmail.com>"
-section = "misc"
-depends = "$auto, fonts-inter, unbound-notify"
-extended-description = """\
-Draws the notifications of the Unbound desktop: banners that slide in \
-below the menu bar at the top right, stack per app and can be swiped \
-away, and the Notification Center that keeps them, opened from the clock \
-in the menu bar. unbound-compositor starts it and keeps it running."""
-assets = [
-    ["target/release/unbound-notifications", "usr/bin/", "755"],
-]
 
 [lints]
 workspace = true

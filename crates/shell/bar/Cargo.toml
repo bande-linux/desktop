@@ -1,6 +1,6 @@
 [package]
 name = "unbound-bar"
-description = "Unbound bar: the Dock and the menu bar, or both as one bar on a screen edge"
+description = "Unbound bar: the Dock and the menu bar, or both as one bar on a screen edge, as a part of unbound-shell"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
@@ -16,7 +16,6 @@ unbound-fs.workspace = true
 unbound-inbox.workspace = true
 unbound-keyboard.workspace = true
 unbound-l10n.workspace = true
-unbound-log.workspace = true
 unbound-sound.workspace = true
 unbound-status.workspace = true
 unbound-toolkit.workspace = true
@@ -26,23 +25,6 @@ zbus.workspace = true
 [dev-dependencies]
 image.workspace = true
 image-compare.workspace = true
-
-[package.metadata.deb]
-maintainer = "Mikael Hug <mikaelhug@gmail.com>"
-section = "misc"
-depends = "$auto, fonts-inter"
-conflicts = "unbound-dock, unbound-menubar"
-replaces = "unbound-dock, unbound-menubar"
-recommends = "upower, network-manager, bluez, pipewire, wireplumber, unbound-tray, unbound-notifications"
-extended-description = """\
-The bar of the Unbound desktop: the apps kept in it and the running apps \
-with their badges and progress, the Trash, the system menu, the active \
-app with its menus, the status notifier items of apps, Bluetooth, sound, \
-Wi-Fi and battery with their menus, Control Center and the clock, which \
-opens the Notification Center. It is one bar on the screen edge named in \
-config.kdl, or the apps on that edge with a separate menu bar at the top. \
-Shift+Super+/ searches the active app's menus. unbound-compositor starts \
-it on every display and keeps it running."""
 
 [lints]
 workspace = true

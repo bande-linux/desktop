@@ -36,8 +36,10 @@ data/        shared assets (wallpapers, icons, sounds)
   `platform` holds the Wayland window, seat, clipboard, text input, layer and xdg shell
   surfaces, and the accessibility adapter. `widgets` holds the UI tree, the widgets and
   animation.
-- **`shell/`**: one crate per shell client. `dock` was `unbound-dock`; `desktop` and
-  `notifications` are new.
+- **`shell/`**: one crate per shell client or shell part. `shell` is `unbound-shell`, the one
+  process that hosts the parts `desktop`, `bar`, `notifications`, `controlcenter` and `launcher`
+  (library crates, see [overview](../architecture/overview.md)); `screenshot`, `lock` and
+  `greeter` stay processes of their own.
 - **`apps/`**: one crate per app.
 - **`services/`**: one crate per session service; `portal` is `xdg-desktop-portal-unbound`.
 - **`libs/`**: shared logic without UI. `xdg` holds desktop entries, icons, MIME types,
@@ -53,7 +55,8 @@ Rules:
 
 1. **Names.** Directory names are short. Package, binary and Debian package names stay
    `unbound-*` (and `xdg-desktop-portal-unbound`), so nothing installed changes name.
-2. **One crate per process.** Each app, shell client and service is its own crate.
+2. **One crate per process.** Each app, shell client and service is its own crate; each part
+   hosted by `unbound-shell` is its own library crate.
 3. **Dependency direction.** `libs` ← `toolkit` ← `shell` and `apps`. Services never depend on
    the widget crates; CI checks this.
 4. **Crate structure.** In each app and shell crate, `main.rs` is thin, model modules hold no

@@ -1,4 +1,5 @@
 mod card;
+mod client;
 
 use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
@@ -17,6 +18,7 @@ use unbound_toolkit::{
 
 use card::{CLOSE_REACH, contains};
 pub use card::{Card, DEFAULT_ACTION, Part, Sender, age_label};
+pub use client::{Notifications, role};
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-notifications.ftl");
 
@@ -1156,7 +1158,7 @@ mod tests {
         let sources = [
             include_str!("lib.rs"),
             include_str!("card.rs"),
-            include_str!("main.rs"),
+            include_str!("client.rs"),
         ];
         assert_eq!(
             unbound_l10n::missing_ids(super::ENGLISH, &sources),

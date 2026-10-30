@@ -30,7 +30,7 @@ image-compare.workspace = true
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
 depends = "$auto, fonts-inter, libpam0g, libpam-runtime"
-recommends = "unbound-desktop-surface"
+recommends = "unbound-shell"
 assets = [
     ["target/release/unbound-lock", "usr/bin/", "755"],
     ["data/unbound-lock.pam", "etc/pam.d/unbound-lock", "644"],

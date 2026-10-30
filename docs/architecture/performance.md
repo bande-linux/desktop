@@ -6,38 +6,36 @@ checked by `ci/perf`; this page tracks memory, CPU per interaction and size.
 
 ## How to measure
 
-- **Shell clients:** `unbound-footprint` (`crates/testing/bench`) starts each client on a
-  headless compositor with a 2928×1818 output, lets it settle, optionally moves the pointer
+- **Shell clients:** `unbound-footprint` (`crates/testing/bench`) starts each client as a shell
+  client (so it sees `unbound_shell_v1`) on a headless compositor with a 2928×1818 output, lets it settle, optionally moves the pointer
   back and forth 40 times, and prints RSS + swap, Vulkan device memory (the
   `/memfd:allocation` mappings of lavapipe), threads and the client's CPU time per pointer
   move. Run it inside a private bus so that the live session is not touched:
 
   ```sh
-  cargo build --release -p unbound-bench -p unbound-dock -p unbound-desktop-surface
+  cargo build --release -p unbound-bench -p unbound-shell
   dbus-run-session -- target/release/unbound-footprint \
-      --hover 1464,1790,1464,1500 target/release/unbound-dock \
-      --hover 2864,70,2600,900 target/release/unbound-desktop-surface
+      --hover 2864,70,2600,900 target/release/unbound-shell
   ```
 
   `--settle <seconds>` waits longer before measuring (40 s shows a hidden window after it has
   released its renderer).
 - **Session frame times:** `unbound-session-bench` runs the compositor in-process on a
-  headless 2928×1818 output at 1.5×, starts the desktop surface, the bar, the launcher, Files
+  headless 2928×1818 output at 1.5×, starts the shell (desktop, bar, launcher and the rest), Files
   (on a folder of 400 files) and the terminal from its own directory, and replays typical
   actions one refresh apart: the pointer moving over Files, dragging Files by its title bar,
   typing 60 characters into the terminal, scrolling the file list, opening and closing the
   launcher, the overview and a context menu of Files twice, and showing two notification
-  banners that expire after 1.5 s (it starts `unbound-notify` and `unbound-notifications` for
-  this and sends them with `gdbus`). For each it prints the compositor's frame time (p50, p99),
+  banners that expire after 1.5 s (it starts `unbound-notify` for them and sends them with
+  `gdbus`). For each it prints the compositor's frame time (p50, p99),
   its CPU time per frame (including lavapipe's threads), the clients' CPU time per frame, the
   cores kept busy and the pixels repainted per frame. Arguments filter the actions by name;
   `--frames` lists every frame, `--full-effects` keeps blur on a CPU renderer, `--snapshots
   <dir>` writes the screen after each action as PPM. Run it inside the test bus:
 
   ```sh
-  cargo build --release -p unbound-bench -p unbound-desktop-surface -p unbound-bar \
-      -p unbound-launcher -p unbound-files -p unbound-term -p unbound-notify \
-      -p unbound-notifications
+  cargo build --release -p unbound-bench -p unbound-shell -p unbound-files -p unbound-term \
+      -p unbound-notify
   dbus-run-session --config-file=crates/testing/test-bus/data/session.conf -- \
       env -u WAYLAND_DISPLAY target/release/unbound-session-bench
   ```
@@ -74,7 +72,7 @@ clients). "Frames" counts every composed frame of the action, which runs twice.
 - **The launcher is as big as its card.** Its layer surface is the card plus 48 pt for the
   shadow (816 × 617 pt instead of the whole display), anchored to the top edge with the card's
   old position as margin. The dimmed backdrop is drawn by the compositor:
-  `unbound_shell_v1.set_scrim` (version 15) dims and, on a GPU, blurs the display behind a
+  `unbound_shell_v1.set_scrim` (version 16) dims and, on a GPU, blurs the display behind a
   mapped layer surface, and a press on the scrim reaches nothing below it and is sent to the
   surface's client as `scrim_pressed`, which closes the launcher. Each launcher frame now
   uploads 4.5 MB instead of 21.3 MB and shades 13.3 Mpx instead of 17.5. Changing the dimming
@@ -280,6 +278,42 @@ headless setup as above, release build, the Dock and menu bar settled side by si
 | `unbound-bar` (one process) | 160.9 MiB | 14.5 MiB | 37 |
 
 −87 MiB (−35 %) and 28 fewer threads per display.
+
+## 2026-10-30: one shell process
+
+`unbound-shell` hosts the desktop surface, the bar, the menu search card, the notifications,
+Control Center and the launcher in one process: one Wayland connection, one GPU device, one
+font database and one connection per D-Bus bus, with the parts as library crates. Before: `main`
+at `bef5145`, five processes; after: `desktop/one-shell`. Release builds, each measured alone on
+the headless 2928×1818 compositor of `unbound-footprint` after 45 s (the launcher, Control
+Center and notifications hidden), inside the test bus (no NetworkManager, BlueZ, UPower,
+config or notification daemon). Wake-ups per second are summed over every thread from second
+20 to 40.
+
+| Process | RSS + swap | Threads | Wake-ups/s |
+| :--- | ---: | ---: | ---: |
+| unbound-bar | 76.2 MiB | 17 | 24.3 |
+| unbound-desktop-surface | 150.1 MiB | 7 | 2.0 |
+| unbound-launcher | 106.9 MiB | 8 | 2.1 |
+| unbound-notifications | 67.9 MiB | 6 | 15.2 |
+| unbound-controlcenter | 70.8 MiB | 9 | 2.1 |
+| **Five processes before** | **471.9 MiB** | **47** | **45.7** |
+| **`unbound-shell` after** | **204.4 MiB** | **31** | **12.6** |
+
+−268 MiB (−57 %), 16 fewer threads and a third of the wake-ups for the same surfaces, and four
+fewer processes for the compositor to supervise. lavapipe makes every toolkit window draw on the
+CPU here, so the device memory column of the earlier tables is 0 on both sides; on a real GPU
+each process also held its own Vulkan device, so the saving there is larger by four devices and
+their atlases. What the shell shares: the shared libraries' dirty pages and heap of five
+processes, one fontconfig scan and font collection instead of five (Control Center also built a
+new one each time its panel opened), one `blocking` pool and zbus executor per bus instead of
+one per process, and the Notification Center opens from the clock by a call inside the process
+instead of a D-Bus round trip (`org.unbound.NotificationScreen` is gone).
+
+The wake-ups left come from the test bus: without `org.freedesktop.Notifications` the
+notifications retry every 2 s (each retry wakes the caller, zbus and `async-io`). In a session
+`unbound-notify` is D-Bus activated and nothing retries. Each Window still owns its own
+accessibility adapter, as each surface is its own AT-SPI window.
 
 ## 2026-10-30: dependency trims
 

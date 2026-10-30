@@ -5,13 +5,13 @@ use std::sync::mpsc::Sender;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use accesskit::TreeUpdate;
-use unbound_bar::L10N;
-use unbound_bar::dock::{
+use crate::L10N;
+use crate::dock::{
     DockAction, DockApp, DockState, MenuTarget, Rail, Shared, dock_ui, exclusive_zone, scene,
     surface_size,
 };
-use unbound_bar::rail::surface_size as rail_surface_size;
+use crate::rail::surface_size as rail_surface_size;
+use accesskit::TreeUpdate;
 use unbound_config::{Bar as BarConfig, BarEdge};
 use unbound_dock_model::arrange;
 use unbound_dock_model::bus::{self, BusEvent};
@@ -39,7 +39,6 @@ const MENU_CONFIRM_EMPTY: &str = "confirm-empty-trash";
 const MENU_CANCEL: &str = "cancel";
 const DOCK_NAMESPACE: &str = "dock";
 const KEYBOARD_GRACE: Duration = Duration::from_millis(60);
-const OUTPUT_VARIABLE: &str = "UNBOUND_OUTPUT";
 
 const MENU_HIDE: &str = "hide";
 const MENU_QUIT: &str = "quit";
@@ -99,6 +98,7 @@ pub struct Dock {
     trash: Option<TrashWatch>,
     session: Option<Connection>,
     names: bool,
+    output: String,
 }
 
 impl Dock {
@@ -757,8 +757,7 @@ impl Dock {
     }
 
     fn follow_full_screen(&mut self, window: &mut Window, output: &str, full_screen: bool) {
-        let own = std::env::var(OUTPUT_VARIABLE).unwrap_or_default();
-        if !own.is_empty() && own != output {
+        if output != self.output {
             return;
         }
         self.state
@@ -956,6 +955,7 @@ pub fn dock_role(edge: BarEdge, icon_size: f32) -> Role {
 impl Dock {
     pub fn new(
         window: &Window,
+        output: &str,
         config: &BarConfig,
         text: TextSystem,
         session: Option<&Connection>,
@@ -1002,6 +1002,7 @@ impl Dock {
             trash: TrashWatch::start(),
             session: session.cloned(),
             names: config.names,
+            output: output.to_owned(),
         };
         dock.load_trash_icons();
         dock.sync();

@@ -12,11 +12,10 @@ use smithay::reexports::drm::control::crtc;
 use smithay::utils::{Clock, Monotonic, Size};
 use smithay::wayland::socket::ListeningSocketSource;
 use unbound_compositor::{
-    BAR, CLIPBOARD_DAEMON, CONTROL_CENTER, CursorTheme, DESKTOP_SURFACE, DrmBackend, FrameClock,
-    FrameOutput, FrameScheduler, GREETER, Headless, InputSettings, LAUNCHER, NOTIFICATIONS,
-    REFRESH, REVIEW, Renderer, SCREENSHOT, SessionRequest, SessionRole, SessionUpkeep,
-    export_session_environment, follow_alerts, follow_appearance, follow_input_settings,
-    follow_session, notify_ready, serve_keyboard_monitor,
+    CLIPBOARD_DAEMON, CursorTheme, DrmBackend, FrameClock, FrameOutput, FrameScheduler, GREETER,
+    Headless, InputSettings, REFRESH, REVIEW, Renderer, SCREENSHOT, SHELL, SessionRequest,
+    SessionRole, SessionUpkeep, export_session_environment, follow_alerts, follow_appearance,
+    follow_input_settings, follow_session, notify_ready, serve_keyboard_monitor,
 };
 use unbound_config::{BUS_NAME, Config, OBJECT_PATH, config_path};
 use zbus::blocking::fdo::PropertiesProxy;
@@ -383,15 +382,9 @@ fn start_user_session<O: 'static>(
         }
         Err(error) => tracing::warn!("cannot follow the logind session: {error}"),
     }
-    for executable in [DESKTOP_SURFACE, BAR] {
-        app.compositor
-            .start_client_on_every_display(Path::new(executable));
-    }
     for (executable, role) in [
         (CLIPBOARD_DAEMON, SessionRole::ClipboardDaemon),
-        (CONTROL_CENTER, SessionRole::Shell),
-        (NOTIFICATIONS, SessionRole::Shell),
-        (LAUNCHER, SessionRole::Shell),
+        (SHELL, SessionRole::Shell),
         (SCREENSHOT, SessionRole::Shell),
     ] {
         if let Err(error) = app

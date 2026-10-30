@@ -198,6 +198,7 @@ pub enum WindowEvent {
         output: String,
         full_screen: bool,
     },
+    Displays(Vec<String>),
     CapsLock(bool),
     Accessibility(ActionRequest),
 
@@ -452,6 +453,7 @@ impl Window {
             role,
             size,
             None,
+            crate::lock::wanted_output(),
         )
     }
 
@@ -461,6 +463,7 @@ impl Window {
             role,
             size,
             None,
+            crate::lock::wanted_output(),
         )
     }
 
@@ -470,6 +473,22 @@ impl Window {
             role,
             size,
             Some(self.appearance.clone()),
+            crate::lock::wanted_output(),
+        )
+    }
+
+    pub fn open_beside_on(
+        &self,
+        output: &str,
+        role: Role,
+        size: (u32, u32),
+    ) -> Result<Self, WindowError> {
+        Self::on(
+            self.connection.clone(),
+            role,
+            size,
+            Some(self.appearance.clone()),
+            Some(output.to_owned()),
         )
     }
 
@@ -478,6 +497,7 @@ impl Window {
         role: Role,
         size: (u32, u32),
         shared_appearance: Option<Rc<RefCell<AppearanceWatch>>>,
+        output: Option<String>,
     ) -> Result<Self, WindowError> {
         let fresh = shared_appearance.is_none();
         let appearance = match shared_appearance {
@@ -488,6 +508,7 @@ impl Window {
         let handle = queue.handle();
         connection.display().get_registry(&handle, ());
         let mut state = State::default();
+        state.lock.wanted_name = output;
         queue.roundtrip(&mut state)?;
         let compositor = state
             .compositor
@@ -524,12 +545,17 @@ impl Window {
                     .clone()
                     .ok_or(WindowError::Missing("zwlr_layer_shell_v1"))?;
                 let layer = layer_of(options.layer);
-                if crate::lock::wanted_output().is_some() {
+                if state.lock.wanted_name.is_some() {
                     queue.roundtrip(&mut state)?;
+                }
+                let output = state.lock.wanted();
+                if state.lock.wanted_name.is_some() && output.is_none() {
+                    surface.destroy();
+                    return Err(WindowError::Missing("the display"));
                 }
                 let layer_surface = layer_shell.get_layer_surface(
                     &surface,
-                    state.lock.wanted().as_ref(),
+                    output.as_ref(),
                     layer,
                     options.namespace,
                     &handle,
@@ -2348,13 +2374,13 @@ impl Dispatch<WlRegistry, ()> for State {
                     if state.lock.output.is_none() {
                         state.lock.output = Some(registry.bind(name, 1, handle, ()));
                     }
-                    if version >= 4 && crate::lock::wanted_output().is_some() {
+                    if version >= 4 && state.lock.wanted_name.is_some() {
                         let _: wayland_client::protocol::wl_output::WlOutput =
                             registry.bind(name, 4, handle, crate::lock::NamedOutput);
                     }
                 }
                 "unbound_shell_v1" => {
-                    state.shell.protocol = Some(registry.bind(name, version.min(15), handle, ()));
+                    state.shell.protocol = Some(registry.bind(name, version.min(16), handle, ()));
                 }
                 "unbound_app_v1" => {
                     state.shell.app = Some(registry.bind(name, version.min(5), handle, ()));

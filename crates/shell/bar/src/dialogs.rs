@@ -2,7 +2,7 @@ use std::cell::Cell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use unbound_bar::L10N;
+use crate::L10N;
 use unbound_status::devices::end_session;
 use unbound_status::session::{COUNTDOWN, Ending, facts};
 use unbound_toolkit::ui::{Axis, Button, Event, Key, Label, Stack, Ui, Widget};

@@ -38,6 +38,7 @@ pub(crate) struct Shell {
     toplevels: Vec<Toplevel>,
     minimized: Vec<String>,
     token: Option<String>,
+    displays: Vec<String>,
 }
 
 impl Window {
@@ -48,6 +49,10 @@ impl Window {
             .as_ref()
             .filter(|protocol| protocol.version() >= version)
             .ok_or(WindowError::Missing("a newer unbound_shell_v1"))
+    }
+
+    pub fn displays(&self) -> &[String] {
+        &self.state.shell.displays
     }
 
     pub fn app_windows(&self, app_id: &str) -> Vec<AppWindow> {
@@ -416,6 +421,16 @@ impl Dispatch<UnboundShellV1, ()> for State {
                         .collect(),
                     active: active as usize,
                 });
+            }
+            unbound_shell_v1::Event::Displays { names } => {
+                state.shell.displays = names
+                    .split(',')
+                    .filter(|name| !name.is_empty())
+                    .map(str::to_owned)
+                    .collect();
+                state
+                    .events
+                    .push(WindowEvent::Displays(state.shell.displays.clone()));
             }
             _ => {}
         }

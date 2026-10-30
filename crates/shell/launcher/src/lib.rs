@@ -1,3 +1,4 @@
+mod client;
 mod clips;
 mod emoji;
 mod model;
@@ -10,6 +11,7 @@ use std::sync::LazyLock;
 
 use unbound_l10n::Localizer;
 
+pub use client::{LauncherShell, role};
 pub use clips::{Clips, Reply, Request};
 pub use model::{Action, AppInfo, Clip, Heading, Hit, Kind, Mode, PaneInfo, SettingInfo, Target};
 pub use view::{CARD_WIDTH, Catalog, ICON_SIZE, Launcher, Loaded, Surface};
@@ -24,7 +26,7 @@ mod tests {
     fn every_message_id_used_in_code_is_in_the_english_file() {
         let sources = [
             include_str!("lib.rs"),
-            include_str!("main.rs"),
+            include_str!("client.rs"),
             include_str!("view.rs"),
             include_str!("rows.rs"),
             include_str!("preview.rs"),

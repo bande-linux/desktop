@@ -1,8 +1,14 @@
+mod combined_client;
+pub mod dialogs;
 pub mod dock;
+mod dock_client;
+mod menu_bar_client;
 pub mod menu_search;
+mod menu_search_client;
 pub mod menubar;
 pub mod menus;
 pub mod rail;
+pub mod surfaces;
 mod symbols;
 
 use std::sync::LazyLock;

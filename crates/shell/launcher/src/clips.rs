@@ -90,7 +90,7 @@ fn answer(proxy: &ClipboardProxyBlocking<'_>, request: Request) -> zbus::Result<
 }
 
 impl Clips {
-    pub fn spawn() -> std::io::Result<Self> {
+    pub fn spawn(session: zbus::blocking::Connection) -> std::io::Result<Self> {
         let (requests, wanted) = channel::<Request>();
         let (sender, replies) = channel();
         let (wake, signal) = UnixStream::pair()?;
@@ -99,15 +99,8 @@ impl Clips {
         std::thread::Builder::new()
             .name("clipboard".to_owned())
             .spawn(move || {
-                let connection = match zbus::blocking::Connection::session() {
-                    Ok(connection) => connection,
-                    Err(error) => {
-                        tracing::warn!("cannot reach the clipboard history: {error}");
-                        return;
-                    }
-                };
                 while let Ok(request) = wanted.recv() {
-                    let answered = ClipboardProxyBlocking::new(&connection)
+                    let answered = ClipboardProxyBlocking::new(&session)
                         .and_then(|proxy| answer(&proxy, request.clone()));
                     match answered {
                         Ok(Some(reply)) => {

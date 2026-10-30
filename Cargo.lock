@@ -3764,7 +3764,6 @@ dependencies = [
  "unbound-inbox",
  "unbound-keyboard",
  "unbound-l10n",
- "unbound-log",
  "unbound-sound",
  "unbound-status",
  "unbound-toolkit",
@@ -3883,7 +3882,6 @@ dependencies = [
  "unbound-bluetooth",
  "unbound-inbox",
  "unbound-l10n",
- "unbound-log",
  "unbound-network",
  "unbound-notify",
  "unbound-power",
@@ -3921,7 +3919,6 @@ dependencies = [
  "unbound-config",
  "unbound-fs",
  "unbound-l10n",
- "unbound-log",
  "unbound-thumbnails",
  "unbound-toolkit",
  "unbound-volumes",
@@ -4077,7 +4074,6 @@ dependencies = [
  "tracing",
  "unbound-fs",
  "unbound-l10n",
- "unbound-log",
  "unbound-preview",
  "unbound-search",
  "unbound-settings-panes",
@@ -4155,7 +4151,6 @@ dependencies = [
  "unbound-datetime",
  "unbound-inbox",
  "unbound-l10n",
- "unbound-log",
  "unbound-notify",
  "unbound-spring",
  "unbound-toolkit",
@@ -4343,6 +4338,24 @@ name = "unbound-settings-panes"
 version = "0.1.0"
 dependencies = [
  "unbound-l10n",
+]
+
+[[package]]
+name = "unbound-shell"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "tracing",
+ "unbound-bar",
+ "unbound-config",
+ "unbound-controlcenter",
+ "unbound-desktop-surface",
+ "unbound-launcher",
+ "unbound-log",
+ "unbound-notifications",
+ "unbound-status",
+ "unbound-toolkit",
+ "zbus",
 ]
 
 [[package]]

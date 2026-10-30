@@ -81,6 +81,7 @@ unbound-config = { path = "crates/services/config" }
 unbound-datetime = { path = "crates/libs/datetime" }
 unbound-controlcenter = { path = "crates/shell/controlcenter" }
 unbound-design = { path = "crates/toolkit/design" }
+unbound-desktop-surface = { path = "crates/shell/desktop" }
 unbound-dock-model = { path = "crates/libs/dock-model" }
 unbound-edid = { path = "crates/libs/edid" }
 unbound-files = { path = "crates/apps/files" }
@@ -108,6 +109,7 @@ unbound-screenshot = { path = "crates/shell/screenshot" }
 unbound-search = { path = "crates/libs/search" }
 unbound-settings = { path = "crates/apps/settings" }
 unbound-settings-panes = { path = "crates/libs/settings-panes" }
+unbound-shell = { path = "crates/shell/shell" }
 unbound-sound = { path = "crates/services/sound", default-features = false }
 unbound-spring = { path = "crates/libs/spring" }
 unbound-status = { path = "crates/libs/status" }

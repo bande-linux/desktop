@@ -226,7 +226,12 @@ graph LR
 - Services bound to `graphical-session.target` start then: PipeWire, WirePlumber,
   `unbound-config`, `unbound-power`, `unbound-tray`, `unbound-automount`. `unbound-notify` and
   the portal backend are started by D-Bus activation, and `unbound-clipboard` and the shell
-  clients by the compositor ([behaviour](behaviour.md)).
+  clients by the compositor ([behaviour](behaviour.md)): `unbound-shell`, one process for the
+  desktop, the bar, the notifications, Control Center and the launcher of every display, and
+  `unbound-screenshot`. The lock screen, the greeter, the screenshot tool and the file chooser
+  stay processes of their own: the lock screen must hold the session even when the shell
+  crashes, the greeter runs before any session exists, the screenshot tool owns the trusted
+  capture connection, and the portal starts a file chooser process per request.
 
 ### Polkit authentication agent (`unbound-polkit`)
 
@@ -384,7 +389,12 @@ prompts (they are answered in the secure field), and power and accessibility men
 
 - **Supervision** (implemented): the compositor restarts the shell clients and the clipboard
   daemon it started when they exit, at most once every 10 seconds, and keeps the session locked
-  if the lock screen dies. Session services run under systemd user units, which restart them
+  if the lock screen dies. Apps and their windows live in other processes, so a crash of the
+  one shell process takes the bar, the desktop, the notifications, Control Center and the
+  launcher away for a moment but never the session; the notifications themselves live in
+  `unbound-notify` and reappear with the shell. Inside the shell, a surface the compositor closes
+  (for instance with its display) is dropped and reopened, so one closed surface never takes the
+  others with it. Session services run under systemd user units, which restart them
   when they fail (`Restart=on-failure`).
 - **Crash reports** (planned): structured minidumps and stack traces with symbolicated Rust
   frames when a component panics, kept only on the machine in

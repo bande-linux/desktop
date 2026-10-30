@@ -11,3 +11,4 @@ size-kilobytes = { $value } KB
 size-megabytes = { $value } MB
 size-gigabytes = { $value } GB
 size-terabytes = { $value } TB
+archive-name = Archive

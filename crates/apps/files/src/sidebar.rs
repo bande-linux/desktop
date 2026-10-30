@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use unbound_xdg::{UserDir, path_from_file_uri, user_dir};
+use unbound_xdg::{UserDir, file_uri, path_from_file_uri, user_dir};
 
 use crate::L10N;
 use crate::browser::Location;
@@ -90,7 +90,15 @@ pub fn rows(home: &Path, user_dirs: Option<&str>, bookmarks: Option<&str>) -> Ve
             favourites.push(place);
         }
     }
-    let mut rows = vec![Row::Heading(L10N.tr("sidebar-favourites"))];
+    let mut rows = vec![
+        Row::Heading(L10N.tr("sidebar-favourites")),
+        Row::Place(Place {
+            name: L10N.tr("recents"),
+            location: Location::Recents,
+            icon: "document-open-recent",
+            kind: PlaceKind::Standard,
+        }),
+    ];
     rows.extend(favourites.into_iter().map(Row::Place));
     rows.push(Row::Heading(L10N.tr("sidebar-locations")));
     rows.push(Row::Place(Place {
@@ -111,6 +119,35 @@ pub fn without_bookmark(bookmarks: &str, folder: &Path) -> String {
         })
         .map(|line| format!("{line}\n"))
         .collect()
+}
+
+pub fn with_bookmarks(bookmarks: &str, folders: &[PathBuf], before: Option<&Path>) -> String {
+    let location = |line: &str| bookmark(line).map(|place| place.location);
+    let is =
+        |line: &str, folder: &Path| location(line) == Some(Location::Folder(folder.to_path_buf()));
+    let lines = bookmarks
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .collect::<Vec<_>>();
+    let added = folders
+        .iter()
+        .map(|folder| {
+            lines
+                .iter()
+                .find(|line| is(line, folder))
+                .map_or_else(|| file_uri(folder), |line| (*line).to_owned())
+        })
+        .collect::<Vec<_>>();
+    let mut kept = lines
+        .into_iter()
+        .filter(|line| !folders.iter().any(|folder| is(line, folder)))
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    let at = before
+        .and_then(|before| kept.iter().position(|line| is(line, before)))
+        .unwrap_or(kept.len());
+    kept.splice(at..at, added);
+    kept.into_iter().map(|line| format!("{line}\n")).collect()
 }
 
 pub fn with_volumes(rows: &[Row], volumes: &[PathBuf]) -> Vec<Row> {

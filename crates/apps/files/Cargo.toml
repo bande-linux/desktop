@@ -14,12 +14,15 @@ unbound-fs.workspace = true
 unbound-l10n.workspace = true
 unbound-log.workspace = true
 unbound-preview.workspace = true
+unbound-search.workspace = true
+unbound-thumbnails.workspace = true
 unbound-toolkit.workspace = true
 unbound-volumes.workspace = true
 unbound-xdg.workspace = true
 
 [dev-dependencies]
 image.workspace = true
+image-compare.workspace = true
 rustix = { workspace = true, features = ["process"] }
 tempfile.workspace = true
 

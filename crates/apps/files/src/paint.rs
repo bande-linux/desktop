@@ -4,6 +4,7 @@ use std::time::Instant;
 
 use unbound_fs::{Entry, Purpose, format_date, format_size};
 use unbound_preview::Preview;
+use unbound_thumbnails::ThumbnailSize;
 use unbound_toolkit::{
     Color, Image, Item, Paragraph, Point, Rect, Scene, Shape, TextAlign, TextStyle,
 };
@@ -11,10 +12,12 @@ use unbound_toolkit::{
 use crate::L10N;
 use crate::browser::Location;
 use crate::sidebar::{PlaceKind, Row};
+use crate::toolbar::TOOLBAR_HEIGHT;
 use crate::view::{
-    COLUMN_WIDTH, FilesView, Hit, INSPECTOR_WIDTH, PATH_BAR_HEIGHT, PROGRESS_HEIGHT, ROW_HEIGHT,
-    SEARCH_HEIGHT, SIDEBAR_WIDTH,
+    COLUMN_WIDTH, FilesView, Hit, INSPECTOR_WIDTH, PATH_BAR_HEIGHT, PROGRESS_HEIGHT, QuickLook,
+    ROW_HEIGHT, SIDEBAR_WIDTH,
 };
+use crate::views::ViewMode;
 
 const ROW_INSET: f32 = 6.0;
 const NAME_SIZE: f32 = 13.0;
@@ -53,7 +56,7 @@ fn centred(area: Rect, width: f32, height: f32) -> Rect {
     )
 }
 
-fn fitted(area: Rect, image: &Image) -> Rect {
+pub(crate) fn fitted(area: Rect, image: &Image) -> Rect {
     let (width, height) = (image.width() as f32, image.height() as f32);
     let scale = (area.width / width).min(area.height / height).min(1.0);
     centred(area, (width * scale).round(), (height * scale).round())
@@ -105,10 +108,12 @@ impl FilesView {
         let mut items = Vec::new();
         self.paint_sidebar(&mut items);
         self.paint_columns(&mut items);
-        self.paint_search(&mut items);
+        self.paint_scope_bar(&mut items);
+        self.paint_tab_bar(&mut items);
+        self.paint_toolbar(&mut items);
+        self.paint_path_bar(&mut items);
         items.extend(controls);
         self.paint_drop(&mut items);
-        self.paint_path_bar(&mut items);
         self.paint_progress(&mut items);
         if self.inspector {
             self.paint_inspector(&mut items);
@@ -116,12 +121,35 @@ impl FilesView {
         self.paint_notice(&mut items);
         self.paint_quick_look(&mut items);
         items.extend(sheet);
+        self.want_thumbnails();
         Scene {
             width,
             height,
             background: self.palette.surface_background,
             items,
         }
+    }
+
+    fn want_thumbnails(&mut self) {
+        let mut wanted = Vec::new();
+        if let Some(QuickLook {
+            entry,
+            preview: Some(Preview::Other { .. }),
+        }) = &self.quick_look
+        {
+            wanted.push((entry, ThumbnailSize::XLarge));
+        }
+        if let Some(info) = &self.info
+            && let ([entry], Some(Preview::Other { .. })) = (info.entries.as_slice(), &info.preview)
+        {
+            wanted.push((entry, ThumbnailSize::Large));
+        }
+        if self.mode == ViewMode::Icons {
+            let size = self.thumbnail_size();
+            wanted.extend(self.grid_wanted.iter().map(|entry| (entry, size)));
+        }
+        let apps = &self.apps;
+        self.thumbs.want(wanted, |entry| apps.mime_for(&entry.path));
     }
 
     fn paint_sidebar(&mut self, items: &mut Vec<Item>) {
@@ -205,8 +233,10 @@ impl FilesView {
 
     fn paint_columns(&mut self, items: &mut Vec<Item>) {
         let content = self.content_frame();
-        if self.browser.single() {
-            return;
+        match self.mode {
+            ViewMode::Icons => return self.paint_grid(items),
+            ViewMode::List => return,
+            ViewMode::Columns => {}
         }
         let first = self.first_visible_column();
         if let Some(last) = self.browser.columns().len().checked_sub(1) {
@@ -310,20 +340,6 @@ impl FilesView {
         ));
     }
 
-    fn paint_search(&mut self, items: &mut Vec<Item>) {
-        if self.search.is_none() {
-            return;
-        }
-        let content = self.content_frame();
-        let bar = Rect::new(content.x, 0.0, content.width, SEARCH_HEIGHT);
-        items.push(self.fill(bar, 0.0, self.palette.surface_background));
-        items.push(self.fill(
-            Rect::new(bar.x, bar.height - 1.0, bar.width, 1.0),
-            0.0,
-            self.palette.separator_color,
-        ));
-    }
-
     fn shown_path(&self) -> Option<PathBuf> {
         match self.browser.selected() {
             Some(entry) => Some(entry.path.clone()),
@@ -332,6 +348,9 @@ impl FilesView {
     }
 
     fn paint_path_bar(&mut self, items: &mut Vec<Item>) {
+        if !self.status_bar {
+            return;
+        }
         let content = self.content_frame();
         let bar = Rect::new(
             content.x,
@@ -348,7 +367,11 @@ impl FilesView {
         let status = self.status_text();
         let muted = self.palette.label_muted;
         let status_paragraph = self.label(&status, SMALL_SIZE, muted);
-        let status_x = bar.x + bar.width - status_paragraph.width() - 12.0;
+        let slider = match self.size_slider {
+            Some(_) => crate::controls::SLIDER_WIDTH + 26.0,
+            None => 0.0,
+        };
+        let status_x = bar.x + bar.width - status_paragraph.width() - 12.0 - slider;
         items.push(Item::Text {
             origin: Point::new(
                 status_x,
@@ -581,14 +604,14 @@ impl FilesView {
     fn paint_inspector(&mut self, items: &mut Vec<Item>) {
         let area = Rect::new(
             self.size.0 - INSPECTOR_WIDTH,
-            0.0,
+            TOOLBAR_HEIGHT,
             INSPECTOR_WIDTH,
-            self.size.1,
+            self.size.1 - TOOLBAR_HEIGHT,
         );
         self.hits.push((area, Hit::Inspector));
         items.push(self.fill(area, 0.0, self.palette.surface_elevated));
         items.push(self.fill(
-            Rect::new(area.x, 0.0, 1.0, area.height),
+            Rect::new(area.x, area.y, 1.0, area.height),
             0.0,
             self.palette.separator_color,
         ));
@@ -601,11 +624,21 @@ impl FilesView {
         let primary = self.palette.label_primary;
         let muted = self.palette.label_muted;
         let preview_area = Rect::new(inner.x, y, inner.width, 150.0);
+        let thumbnail = match info.entries.as_slice() {
+            [entry] => self.thumbs.get(entry, ThumbnailSize::Large),
+            _ => None,
+        };
         match (&info.preview, info.entries.as_slice()) {
             (Some(Preview::Image(image)), [_]) => content.push(Item::Image {
                 rect: fitted(preview_area, image),
                 image: image.clone(),
             }),
+            (Some(Preview::Other { .. }), [_]) if let Some(image) = thumbnail => {
+                content.push(Item::Image {
+                    rect: fitted(preview_area, &image),
+                    image,
+                });
+            }
             (_, [entry]) => {
                 if let Some(image) = self.entry_icon(entry, LARGE_ICON_PIXELS) {
                     content.push(Item::Image {
@@ -931,6 +964,14 @@ impl FilesView {
                     &mut content,
                 );
             }
+            Some(Preview::Other { .. })
+                if let Some(image) = self.thumbs.get(&quick_look.entry, ThumbnailSize::XLarge) =>
+            {
+                content.push(Item::Image {
+                    rect: fitted(area, &image),
+                    image,
+                });
+            }
             Some(Preview::Other { size }) => {
                 let mime = self.apps.mime_for(&quick_look.entry.path);
                 let kind = self.apps.kind(&mime);
@@ -1009,8 +1050,10 @@ fn action_id(action: unbound_fs::Action) -> &'static str {
         unbound_fs::Action::Move => "move",
         unbound_fs::Action::Duplicate => "duplicate",
         unbound_fs::Action::Rename => "rename",
-        unbound_fs::Action::NewFolder => "new-folder",
+        unbound_fs::Action::NewFolder | unbound_fs::Action::NewDocument => "new-folder",
         unbound_fs::Action::Trash => "trash",
         unbound_fs::Action::PutBack => "put-back",
+        unbound_fs::Action::Compress => "compress",
+        unbound_fs::Action::Extract => "extract",
     }
 }

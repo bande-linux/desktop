@@ -6,8 +6,10 @@ edition.workspace = true
 repository.workspace = true
 
 [dependencies]
+jiff.workspace = true
 tracing.workspace = true
 unbound-watch.workspace = true
+unbound-xdg.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

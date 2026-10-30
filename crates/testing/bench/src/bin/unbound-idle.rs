@@ -9,7 +9,10 @@ use std::time::{Duration, Instant};
 
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use smithay::utils::{Clock, Monotonic, Point, Size};
-use unbound_compositor::{FrameClock, FrameScheduler, Headless, REFRESH, Renderer, SessionRole};
+use unbound_compositor::{
+    CLIPBOARD_DAEMON, FrameClock, FrameScheduler, Headless, LOCK_SCREEN, REFRESH, Renderer,
+    SCREENSHOT, SHELL, SessionRole,
+};
 
 const OUTPUT: (i32, i32) = (2928, 1818);
 const SCALE: f64 = 1.5;
@@ -26,9 +29,9 @@ const BUTTON_LEFT: u32 = 0x110;
 const KEY_LEFTMETA: u32 = 125;
 const KEY_M: u32 = 50;
 const SESSION_CLIENTS: [(&str, SessionRole); 3] = [
-    ("unbound-clipboard", SessionRole::ClipboardDaemon),
-    ("unbound-shell", SessionRole::Shell),
-    ("unbound-screenshot", SessionRole::Shell),
+    (CLIPBOARD_DAEMON, SessionRole::ClipboardDaemon),
+    (SHELL, SessionRole::Shell),
+    (SCREENSHOT, SessionRole::Shell),
 ];
 const CONFIG: &str = "unbound-config";
 const CONFIG_BUS_NAME: &str = "org.unbound.Config";
@@ -186,6 +189,13 @@ fn measure_cases(session: &mut Session, options: &Options) -> Result<Vec<Case>, 
     Ok(cases)
 }
 
+fn beside(binaries: &Path, installed: &str) -> Result<PathBuf, Box<dyn Error>> {
+    let name = Path::new(installed)
+        .file_name()
+        .ok_or_else(|| format!("{installed} names no file"))?;
+    Ok(binaries.join(name))
+}
+
 fn now() -> Duration {
     Duration::from(Clock::<Monotonic>::new().now())
 }
@@ -194,7 +204,7 @@ impl Session {
     fn start(binaries: &Path, home: &Path) -> Result<Self, Box<dyn Error>> {
         let mut server = Headless::new(Size::from(OUTPUT))?;
         server.set_output_scale(SCALE);
-        server.set_lock_screen(&binaries.join("unbound-lock"));
+        server.set_lock_screen(&beside(binaries, LOCK_SCREEN)?);
         let readiness = [server.poll_fd()?, server.fence_fd()?];
         let mut session = Self {
             server,
@@ -217,7 +227,7 @@ impl Session {
         for (client, role) in SESSION_CLIENTS {
             session
                 .server
-                .start_session_client(&binaries.join(client), role)
+                .start_session_client(&beside(binaries, client)?, role)
                 .map_err(|error| format!("cannot start {client}: {error}"))?;
         }
         session.run_for(START)?;

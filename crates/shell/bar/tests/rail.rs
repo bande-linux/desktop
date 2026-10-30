@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use unbound_bar::dock::{DockAction, DockApp, DockState, MenuTarget, Shared, dock_ui, scene};
 use unbound_bar::menubar::{Slot, StatusView};
 use unbound_bar::rail::{RailView, bar_width, surface_size};
-use unbound_config::DockEdge;
+use unbound_config::BarEdge;
 use unbound_datetime::{DateFormats, posix_locale};
 use unbound_dock_model::LauncherUpdate;
 use unbound_status::status::{
@@ -132,7 +132,7 @@ impl Rail {
             .parse()
             .expect("time");
         view.set_time(&at, &DateFormats::for_locale(&posix_locale("en_GB")));
-        let state = DockState::new(DockEdge::Left, ICON);
+        let state = DockState::new(BarEdge::Left, ICON);
         state.borrow_mut().set_appearance(Appearance {
             scheme,
             ..Appearance::default()
@@ -416,4 +416,101 @@ fn the_header_names_the_active_app_under_the_mark_and_dims_on_other_displays() {
     rail.view.set_app("");
     rail.frame(1.0);
     assert!(rail.view.slot_rect(Slot::App).is_none());
+}
+
+#[test]
+fn an_auto_hidden_bar_reveals_on_an_edge_push_and_waits_longer_over_full_screen() {
+    let mut rail = Rail::new(Scheme::Light, HEIGHT, apps(1.0));
+    rail.frame(1.0);
+    let now = rail.clock.get();
+    rail.state.borrow_mut().set_auto_hide(true, now);
+    rail.advance(Duration::from_secs(1));
+    rail.frame(1.0);
+    assert_eq!(rail.state.borrow().exclusive_zone(), 0);
+    assert_eq!(rail.state.borrow().input_region().width, 2.0);
+    let edge = Point::new(0.0, 300.0);
+    rail.ui.handle(&Event::PointerMove(Pointer::at(edge)));
+    rail.advance(Duration::from_millis(150));
+    rail.advance(Duration::from_secs(1));
+    assert!(rail.state.borrow().is_shown());
+    assert_eq!(rail.state.borrow().input_region().width, bar_width(ICON));
+    rail.ui.handle(&Event::PointerLeave);
+    rail.advance(Duration::from_millis(500));
+    rail.advance(Duration::from_secs(1));
+    assert!(!rail.state.borrow().is_shown());
+
+    let now = rail.clock.get();
+    rail.state.borrow_mut().set_auto_hide(false, now);
+    rail.state.borrow_mut().set_full_screen(true, now);
+    rail.advance(Duration::from_secs(1));
+    rail.ui.handle(&Event::PointerMove(Pointer::at(edge)));
+    rail.advance(Duration::from_millis(150));
+    assert!(!rail.state.borrow().is_shown());
+    rail.advance(Duration::from_millis(200));
+    assert!(rail.state.borrow().is_shown());
+}
+
+#[test]
+fn the_expanded_bar_matches_its_goldens_in_light_and_dark_at_one_and_one_and_a_half() {
+    for (scheme, scale, name) in [
+        (Scheme::Light, 1.0, "bar-expanded-light"),
+        (Scheme::Dark, 1.0, "bar-expanded-dark"),
+        (Scheme::Light, 1.5, "bar-expanded-light-1.5x"),
+        (Scheme::Dark, 1.5, "bar-expanded-dark-1.5x"),
+    ] {
+        let mut rail = Rail::at_scale(scheme, HEIGHT, apps(scale), scale);
+        rail.view.set_expanded(true);
+        rail.view.set_app_menus(
+            ["File", "Edit", "View", "Go", "Window", "Help"]
+                .map(str::to_owned)
+                .to_vec(),
+        );
+        rail.state
+            .borrow_mut()
+            .set_rail(rail.view.apps_region(HEIGHT as f32));
+        rail.state.borrow_mut().update_launcher(
+            "org.unbound.Terminal",
+            LauncherUpdate {
+                count: Some(3),
+                count_visible: Some(true),
+                ..LauncherUpdate::default()
+            },
+            rail.clock.get(),
+        );
+        rail.frame(scale);
+        rail.advance(Duration::from_secs(2));
+        let frame = rail.frame(scale);
+        let (width, height) = rail.size();
+        let pixels = (
+            (f64::from(width) * scale).round() as u32,
+            (f64::from(height) * scale).round() as u32,
+        );
+        check_golden(name, pixels, frame);
+    }
+}
+
+#[test]
+fn the_expanded_bar_lists_the_menus_as_rows_that_open_their_menu() {
+    let mut rail = Rail::new(Scheme::Light, HEIGHT, apps(1.0));
+    rail.view.set_expanded(true);
+    rail.view
+        .set_app_menus(["File", "Edit"].map(str::to_owned).to_vec());
+    rail.frame(1.0);
+    let edit = rail.view.slot_rect(Slot::AppMenu(1)).expect("the Edit row");
+    let header = rail.view.slot_rect(Slot::App).expect("the header");
+    assert!(edit.y > header.y + header.height);
+    assert_eq!(
+        rail.view.slot_at(center(edit), PointerButton::Primary),
+        Some(Slot::AppMenu(1))
+    );
+    assert!(rail.view.apps_region(HEIGHT as f32).top > edit.y + edit.height);
+    assert_eq!(rail.view.width(), 248.0);
+    let search = rail
+        .view
+        .slot_rect(Slot::Launcher)
+        .expect("the search field");
+    assert_eq!(
+        rail.view.slot_at(center(search), PointerButton::Primary),
+        Some(Slot::Launcher)
+    );
 }

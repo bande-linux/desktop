@@ -688,6 +688,9 @@ impl State {
                 self.send_workspaces(shell);
             }
         }
+        self.announce_full_screen();
+        let key = self.key_window();
+        self.announce_active_app(key.as_ref());
     }
 
     fn send_workspaces(&self, shell: &UnboundShellV1) {

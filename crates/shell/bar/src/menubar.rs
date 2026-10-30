@@ -3,8 +3,8 @@ use jiff::Zoned;
 use unbound_datetime::DateFormats;
 use unbound_toolkit::ui::PointerButton;
 use unbound_toolkit::{
-    Color, Image, Item, MenuPlacement, Palette, Paragraph, Point, Rect, Scene, Shape, TextAlign,
-    TextStyle, TextSystem,
+    Color, DisplayEdge, Image, Item, MenuPlacement, Palette, Paragraph, Point, Rect, Scene, Shape,
+    TextAlign, TextStyle, TextSystem,
 };
 
 use unbound_status::status::{Battery, Status, speaker_waves, wifi_bars};
@@ -28,10 +28,6 @@ const BADGE_PADDING: f32 = 4.0;
 const BADGE_MIN_WIDTH: f32 = 22.0;
 const BADGE_HEIGHT: f32 = 15.0;
 const BADGE_MARGIN: f32 = 5.0;
-const TRANSLUCENT_ALPHA: u8 = 176;
-const OPAQUE_ALPHA: u8 = 240;
-const LOW: Color = Color::hex(0xFF453A);
-const CHARGING: Color = Color::hex(0x30D158);
 
 pub fn app_name<'a>(app_id: &'a str, names: &'a [(String, String)]) -> &'a str {
     names
@@ -76,6 +72,7 @@ pub trait StatusView {
     fn slot_rect(&self, slot: Slot) -> Option<Rect>;
     fn slot_of_node(&self, node: NodeId) -> Option<Slot>;
     fn menu_placement(&self, anchor: Rect) -> MenuPlacement;
+    fn edge(&self) -> DisplayEdge;
     fn slides_between_menus(&self) -> bool;
     fn set_hovered(&mut self, slot: Option<Slot>) -> bool;
     fn set_unread(&mut self, unread: bool) -> bool;
@@ -154,6 +151,10 @@ impl StatusView for MenuBar {
         MenuPlacement::Below(anchor)
     }
 
+    fn edge(&self) -> DisplayEdge {
+        DisplayEdge::Top
+    }
+
     fn slides_between_menus(&self) -> bool {
         true
     }
@@ -202,7 +203,6 @@ pub struct MenuBar {
     clock: String,
     open: Option<Slot>,
     slots: Vec<(Slot, Rect)>,
-    translucent: bool,
     battery_percentage: bool,
 }
 
@@ -230,7 +230,6 @@ impl MenuBar {
             clock,
             open: None,
             slots: Vec::new(),
-            translucent: false,
             battery_percentage: false,
         }
     }
@@ -278,10 +277,6 @@ impl MenuBar {
 
     pub fn status(&self) -> &Status {
         &self.status
-    }
-
-    pub fn set_translucent(&mut self, translucent: bool) {
-        self.translucent = translucent;
     }
 
     pub fn set_palette(&mut self, palette: Palette) {
@@ -496,9 +491,9 @@ impl MenuBar {
         let inner = body.inset(2.0);
         let level = (battery.percent / 100.0).clamp(0.0, 1.0) as f32;
         let fill = if battery.low() {
-            LOW
+            self.palette.danger
         } else if battery.on_adapter() {
-            CHARGING
+            self.palette.success
         } else {
             label
         };
@@ -564,19 +559,11 @@ impl MenuBar {
         let mut items = vec![
             Item::Fill {
                 shape: Shape::rect(bar),
-                paint: self
-                    .palette
-                    .overlay
-                    .with_alpha(if self.translucent {
-                        TRANSLUCENT_ALPHA
-                    } else {
-                        OPAQUE_ALPHA
-                    })
-                    .into(),
+                paint: self.palette.chassis.into(),
             },
             Item::Fill {
                 shape: Shape::rect(Rect::new(0.0, bar.height - 1.0, bar.width, 1.0)),
-                paint: self.palette.hairline.with_alpha(160).into(),
+                paint: self.palette.edge.into(),
             },
         ];
         let mut slots = Vec::new();

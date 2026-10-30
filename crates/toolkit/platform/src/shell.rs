@@ -113,6 +113,31 @@ impl Window {
         self.flush()
     }
 
+    pub fn switch_workspace(&mut self, index: usize) -> Result<(), WindowError> {
+        self.shell_since(unbound_shell_v1::REQ_SWITCH_WORKSPACE_SINCE)?
+            .switch_workspace(u32::try_from(index).unwrap_or(u32::MAX));
+        self.flush()
+    }
+
+    pub fn set_panel_anchor(
+        &mut self,
+        panel: unbound_shell_v1::Panel,
+        edge: unbound_shell_v1::Edge,
+        rect: Rect,
+    ) -> Result<(), WindowError> {
+        self.shell_since(unbound_shell_v1::REQ_SET_PANEL_ANCHOR_SINCE)?
+            .set_panel_anchor(
+                &self.surface,
+                panel,
+                edge,
+                rect.x.round() as i32,
+                rect.y.round() as i32,
+                rect.width.round() as i32,
+                rect.height.round() as i32,
+            );
+        self.flush()
+    }
+
     pub fn insert_text(&mut self, text: &str) -> Result<(), WindowError> {
         self.shell_since(unbound_shell_v1::REQ_INSERT_TEXT_SINCE)?
             .insert_text(text.to_owned());
@@ -350,6 +375,27 @@ impl Dispatch<UnboundShellV1, ()> for State {
                     active: active as usize,
                 });
             }
+            unbound_shell_v1::Event::PanelAnchor {
+                panel: WEnum::Value(panel),
+                output,
+                edge: WEnum::Value(edge),
+                x,
+                y,
+                width,
+                height,
+            } => state.events.push(WindowEvent::PanelAnchor {
+                panel,
+                output,
+                edge,
+                rect: Rect::new(x as f32, y as f32, width as f32, height as f32),
+            }),
+            unbound_shell_v1::Event::FullScreen {
+                output,
+                full_screen,
+            } => state.events.push(WindowEvent::FullScreen {
+                output,
+                full_screen: full_screen != 0,
+            }),
             unbound_shell_v1::Event::InputSources { sources, active } => {
                 state.events.push(WindowEvent::InputSources {
                     sources: sources

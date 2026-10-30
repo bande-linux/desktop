@@ -33,8 +33,8 @@ profiles. Sizes are tracked in [performance.md](performance.md).
   wins. `ci/deb-install` installs without the third-party recommends and checks that each of
   them has an installation candidate in Debian 13. Installing it adds "Unbound" to the sessions a
   display manager such as GDM, SDDM or greetd offers.
-- **`unbound-dock`, `unbound-menubar`** (`packaging/unbound-desktop`, architecture `all`):
-  transitional packages that depend on `unbound-bar`, so upgrades replace the two old clients.
+- The old `unbound-dock` and `unbound-menubar` packages have no successors of their own:
+  `unbound-bar` conflicts with and replaces them, so an upgrade removes them.
 - **`unbound-archive-keyring`, `unbound-apt-source`, `unbound-apt-source-testing`**
   (`packaging/unbound-apt-source`): the repository's signing key and the APT source for the
   release and testing channels. Installation is described in the top-level `README.md`.

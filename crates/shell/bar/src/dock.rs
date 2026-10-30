@@ -5,7 +5,7 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Node, Role};
-use unbound_config::{DEFAULT_DOCK_ICON_SIZE, DOCK_ICON_SIZE_RANGE, DockEdge};
+use unbound_config::{BAR_ICON_SIZE_RANGE, BarEdge, DEFAULT_BAR_ICON_SIZE};
 use unbound_dock_model::{LauncherEntry, LauncherUpdate};
 use unbound_toolkit::ui::{
     Animated, Context, Cursor, Event, Key as KeyboardKey, Modifiers, PointerButton, Size, Spring,
@@ -14,11 +14,11 @@ use unbound_toolkit::ui::{
 
 use crate::L10N;
 use unbound_toolkit::{
-    Appearance, Color, Image, Item, Paint, Palette, Paragraph, Point, Rect, Scene, Scheme, Shape,
-    Stop, TextAlign, TextStyle, TextSystem,
+    Appearance, Color, Image, Item, Palette, Paragraph, Point, Rect, Scene, Scheme, Shape,
+    TextAlign, TextStyle, TextSystem,
 };
 
-pub const ICON_SIZE: f32 = DEFAULT_DOCK_ICON_SIZE as f32;
+pub const ICON_SIZE: f32 = DEFAULT_BAR_ICON_SIZE as f32;
 const CELL_PADDING: f32 = 5.0;
 const CROSS_PADDING: f32 = 8.0;
 const END_PADDING: f32 = 6.0;
@@ -41,10 +41,10 @@ const PROGRESS_HEIGHT: f32 = 4.0;
 const HOLD_FOR_MENU: Duration = Duration::from_millis(500);
 const MENU_GAP: f32 = 6.0;
 const REVEAL_DWELL: Duration = Duration::from_millis(120);
+const FULL_SCREEN_DWELL: Duration = Duration::from_millis(300);
 const HIDE_DELAY: Duration = Duration::from_millis(450);
 const EDGE_STRIP: f32 = 2.0;
 const HIDDEN_SHADOW: f32 = 24.0;
-const BLUR_BANDS: usize = 5;
 const DRAG_THRESHOLD: f32 = 4.0;
 const DROP_SCALE: f32 = 1.12;
 
@@ -56,6 +56,11 @@ const RAIL_RUNNING: f32 = 3.0;
 const RAIL_TICK: (f32, f32) = (3.0, 16.0);
 const MORE_TEXT: f32 = 13.0;
 const RAIL_WELL_RADIUS: f32 = 10.0;
+const ROW_ICON: f32 = 30.0;
+const ROW_INSET: f32 = 8.0;
+const ROW_TEXT_GAP: f32 = 10.0;
+const ROW_TEXT: f32 = 13.0;
+const ROW_RADIUS: f32 = 6.0;
 pub const WELL_ALPHA: u8 = 14;
 
 #[derive(Debug, Clone)]
@@ -79,6 +84,7 @@ pub struct Rail {
     pub top: f32,
     pub bottom: f32,
     pub width: f32,
+    pub expanded: bool,
 }
 
 struct More {
@@ -123,6 +129,7 @@ struct Slot {
     progress: Animated,
     pressed: bool,
     initial: Option<Paragraph>,
+    name_text: Option<(String, Color, Paragraph)>,
     badge_text: Option<(String, Paragraph)>,
     cell: Rect,
     shift: (Animated, Animated),
@@ -144,6 +151,7 @@ impl Slot {
             progress: Animated::new(0.0),
             pressed: false,
             initial: None,
+            name_text: None,
             badge_text: None,
             cell: Rect::default(),
             shift: (Animated::new(0.0), Animated::new(0.0)),
@@ -199,7 +207,7 @@ struct Label {
 }
 
 pub struct DockState {
-    edge: DockEdge,
+    edge: BarEdge,
     icon_size: f32,
     scheme: Scheme,
     reduce_motion: bool,
@@ -219,8 +227,8 @@ pub struct DockState {
     surface: Size,
     panel: Rect,
     populated: bool,
-    blurred: bool,
     auto_hide: bool,
+    full_screen: bool,
     reveal: Animated,
     reveal_at: Option<Instant>,
     hide_at: Option<Instant>,
@@ -235,8 +243,8 @@ pub struct DockState {
 
 pub type Shared = Rc<RefCell<DockState>>;
 
-fn vertical(edge: DockEdge) -> bool {
-    matches!(edge, DockEdge::Left | DockEdge::Right)
+fn vertical(edge: BarEdge) -> bool {
+    matches!(edge, BarEdge::Left | BarEdge::Right)
 }
 
 pub fn thickness(icon_size: f32) -> f32 {
@@ -278,7 +286,7 @@ fn badge_label(count: i64) -> String {
 }
 
 impl DockState {
-    pub fn new(edge: DockEdge, icon_size: f32) -> Shared {
+    pub fn new(edge: BarEdge, icon_size: f32) -> Shared {
         let mut state = Self {
             edge,
             icon_size,
@@ -308,8 +316,8 @@ impl DockState {
 
             panel: Rect::default(),
             populated: false,
-            blurred: false,
             auto_hide: false,
+            full_screen: false,
             reveal: Animated::new(1.0),
             reveal_at: None,
             hide_at: None,
@@ -327,7 +335,7 @@ impl DockState {
         Rc::new(RefCell::new(state))
     }
 
-    pub fn edge(&self) -> DockEdge {
+    pub fn edge(&self) -> BarEdge {
         self.edge
     }
 
@@ -336,7 +344,7 @@ impl DockState {
     }
 
     pub fn set_icon_size(&mut self, size: f32) -> bool {
-        let (min, max) = DOCK_ICON_SIZE_RANGE;
+        let (min, max) = BAR_ICON_SIZE_RANGE;
         let size = size.clamp(min as f32, max as f32).round();
         if size == self.icon_size {
             return false;
@@ -625,15 +633,36 @@ impl DockState {
 
     pub fn set_auto_hide(&mut self, auto_hide: bool, now: Instant) {
         self.auto_hide = auto_hide;
+        self.follow_hiding(now);
+    }
+
+    pub fn set_full_screen(&mut self, full_screen: bool, now: Instant) {
+        self.full_screen = full_screen;
+        self.follow_hiding(now);
+    }
+
+    fn follow_hiding(&mut self, now: Instant) {
         self.reveal_at = None;
         self.hide_at = None;
-        let shown = !auto_hide || self.pointer_inside || self.menu_open;
+        let shown = !self.hides() || self.pointer_inside || self.menu_open;
         self.slide(shown, now);
+    }
+
+    fn hides(&self) -> bool {
+        self.auto_hide || self.full_screen
+    }
+
+    pub fn revealed(&self, now: Instant) -> f32 {
+        self.reveal.value_at(now).0.clamp(0.0, 1.0)
+    }
+
+    pub fn is_revealing(&self, now: Instant) -> bool {
+        self.reveal.value_at(now).1
     }
 
     pub fn set_menu_open(&mut self, open: bool, now: Instant) {
         self.menu_open = open;
-        if !open && self.auto_hide && !self.pointer_inside {
+        if !open && self.hides() && !self.pointer_inside {
             self.hide_at = Some(now + HIDE_DELAY);
         }
     }
@@ -643,19 +672,23 @@ impl DockState {
     }
 
     pub fn exclusive_zone(&self) -> i32 {
-        if let Some(rail) = self.rail {
-            return rail.width.round() as i32;
+        if self.hides() {
+            return 0;
         }
-        if self.auto_hide {
-            0
-        } else {
-            exclusive_zone(self.icon_size).round() as i32
+        match self.rail {
+            Some(rail) => rail.width.round() as i32,
+            None => exclusive_zone(self.icon_size).round() as i32,
         }
     }
 
     pub fn input_region(&self) -> Rect {
         if let Some(rail) = self.rail {
-            return Rect::new(0.0, 0.0, rail.width, self.surface.height);
+            let width = if self.is_shown() {
+                rail.width
+            } else {
+                EDGE_STRIP
+            };
+            return Rect::new(0.0, 0.0, width, self.surface.height);
         }
         let panel = self.panel;
         let size = self.surface;
@@ -670,10 +703,10 @@ impl DockState {
             (panel.x, panel.width)
         };
         match self.edge {
-            DockEdge::Left => Rect::new(0.0, along.0, depth, along.1),
-            DockEdge::Right => Rect::new(size.width - depth, along.0, depth, along.1),
-            DockEdge::Top => Rect::new(along.0, 0.0, along.1, depth),
-            DockEdge::Bottom => Rect::new(along.0, size.height - depth, along.1, depth),
+            BarEdge::Left => Rect::new(0.0, along.0, depth, along.1),
+            BarEdge::Right => Rect::new(size.width - depth, along.0, depth, along.1),
+            BarEdge::Top => Rect::new(along.0, 0.0, along.1, depth),
+            BarEdge::Bottom => Rect::new(along.0, size.height - depth, along.1, depth),
         }
     }
 
@@ -686,15 +719,20 @@ impl DockState {
     fn pointer_entered(&mut self, now: Instant) {
         self.pointer_inside = true;
         self.hide_at = None;
-        if self.auto_hide && !self.is_shown() && self.reveal_at.is_none() {
-            self.reveal_at = Some(now + REVEAL_DWELL);
+        if self.hides() && !self.is_shown() && self.reveal_at.is_none() {
+            let dwell = if self.full_screen {
+                FULL_SCREEN_DWELL
+            } else {
+                REVEAL_DWELL
+            };
+            self.reveal_at = Some(now + dwell);
         }
     }
 
     fn pointer_left(&mut self, now: Instant) {
         self.pointer_inside = false;
         self.reveal_at = None;
-        if self.auto_hide && !self.menu_open && self.selected.is_none() && self.is_shown() {
+        if self.hides() && !self.menu_open && self.selected.is_none() && self.is_shown() {
             self.hide_at = Some(now + HIDE_DELAY);
         }
     }
@@ -768,7 +806,7 @@ impl DockState {
             return;
         }
         self.hide_label(now);
-        if self.auto_hide && !self.pointer_inside && !self.menu_open {
+        if self.hides() && !self.pointer_inside && !self.menu_open {
             self.hide_at = Some(now + HIDE_DELAY);
         }
     }
@@ -836,7 +874,7 @@ impl DockState {
             .collect()
     }
 
-    pub fn set_edge(&mut self, edge: DockEdge, now: Instant) {
+    pub fn set_edge(&mut self, edge: BarEdge, now: Instant) {
         if edge == self.edge {
             return;
         }
@@ -850,7 +888,7 @@ impl DockState {
             slot.shift = (Animated::new(0.0), Animated::new(0.0));
         }
         self.reveal.jump_to(0.0);
-        let shown = !self.auto_hide || self.pointer_inside || self.menu_open;
+        let shown = !self.hides() || self.pointer_inside || self.menu_open;
         self.slide(shown, now);
     }
 
@@ -872,10 +910,10 @@ impl DockState {
 
     fn depth_of(&self, point: Point) -> f32 {
         match self.edge {
-            DockEdge::Left => point.x,
-            DockEdge::Right => self.surface.width - point.x,
-            DockEdge::Top => point.y,
-            DockEdge::Bottom => self.surface.height - point.y,
+            BarEdge::Left => point.x,
+            BarEdge::Right => self.surface.width - point.x,
+            BarEdge::Top => point.y,
+            BarEdge::Bottom => self.surface.height - point.y,
         }
     }
 
@@ -1141,8 +1179,20 @@ impl DockState {
         self.icon_size.min(fitting).max(16.0)
     }
 
+    fn expanded(&self) -> bool {
+        self.rail.is_some_and(|rail| rail.expanded)
+    }
+
     fn icon_rect(&self, cell: Rect) -> Rect {
         let icon = self.effective_icon(self.along(self.surface));
+        if self.expanded() {
+            return Rect::new(
+                cell.x + ROW_INSET + 4.0,
+                cell.y + (cell.height - icon) / 2.0,
+                icon,
+                icon,
+            );
+        }
         Rect::new(
             cell.x + (cell.width - icon) / 2.0,
             cell.y + (cell.height - icon) / 2.0,
@@ -1180,9 +1230,9 @@ impl DockState {
         let edge = self.edge;
         let hidden = (1.0 - self.reveal.value_at(now).0) * (SCREEN_GAP + thick + HIDDEN_SHADOW);
         let cross = match edge {
-            DockEdge::Left | DockEdge::Top => SCREEN_GAP - hidden,
-            DockEdge::Right => size.width - SCREEN_GAP - thick + hidden,
-            DockEdge::Bottom => size.height - SCREEN_GAP - thick + hidden,
+            BarEdge::Left | BarEdge::Top => SCREEN_GAP - hidden,
+            BarEdge::Right => size.width - SCREEN_GAP - thick + hidden,
+            BarEdge::Bottom => size.height - SCREEN_GAP - thick + hidden,
         };
         let place = |along: f32, length: f32| {
             if vertical(edge) {
@@ -1225,7 +1275,11 @@ impl DockState {
                 .map(|slot| slot.cell_length(icon, RAIL_PADDING) * slot.presence.target())
                 .sum()
         };
-        let full = self.icon_size;
+        let full = if rail.expanded {
+            ROW_ICON
+        } else {
+            self.icon_size
+        };
         let trash_cell = full + 2.0 * RAIL_PADDING;
         let room = rail.bottom - rail.top - trash_cell - SEPARATOR_CELL;
         let icon = if wanted(full) <= room {
@@ -1237,7 +1291,11 @@ impl DockState {
         let overflowing = wanted(icon) > room;
         let more_cell = icon + 2.0 * RAIL_PADDING;
         let limit = if overflowing { room - more_cell } else { room };
-        let thick = thickness(self.icon_size);
+        let thick = if rail.expanded {
+            rail.width
+        } else {
+            thickness(self.icon_size)
+        };
         let cross = ((rail.width - thick) / 2.0).round();
         self.panel = Rect::new(0.0, rail.top, rail.width, rail.bottom - rail.top);
         let before = self
@@ -1296,14 +1354,17 @@ impl DockState {
             return Rect::new(0.0, cell.y, rail.width, cell.height);
         }
         match self.edge {
-            DockEdge::Left => Rect::new(0.0, cell.y, cell.x + cell.width, cell.height),
-            DockEdge::Right => Rect::new(cell.x, cell.y, self.surface.width - cell.x, cell.height),
-            DockEdge::Top => Rect::new(cell.x, 0.0, cell.width, cell.y + cell.height),
-            DockEdge::Bottom => Rect::new(cell.x, cell.y, cell.width, self.surface.height - cell.y),
+            BarEdge::Left => Rect::new(0.0, cell.y, cell.x + cell.width, cell.height),
+            BarEdge::Right => Rect::new(cell.x, cell.y, self.surface.width - cell.x, cell.height),
+            BarEdge::Top => Rect::new(cell.x, 0.0, cell.width, cell.y + cell.height),
+            BarEdge::Bottom => Rect::new(cell.x, cell.y, cell.width, self.surface.height - cell.y),
         }
     }
 
     fn hover_enter(&mut self, key: Key, now: Instant) {
+        if self.expanded() {
+            return;
+        }
         let recently_shown = self.label.opacity.target() > 0.0
             || self
                 .label
@@ -1382,10 +1443,10 @@ impl DockState {
         let icon = self.icon_rect(slot.cell);
         let panel = self.panel;
         Some(match self.edge {
-            DockEdge::Left => Point::new(panel.x + panel.width + MENU_GAP, icon.y),
-            DockEdge::Right => Point::new(panel.x - MENU_GAP, icon.y),
-            DockEdge::Top => Point::new(icon.x, panel.y + panel.height + MENU_GAP),
-            DockEdge::Bottom => Point::new(icon.x, panel.y - MENU_GAP),
+            BarEdge::Left => Point::new(panel.x + panel.width + MENU_GAP, icon.y),
+            BarEdge::Right => Point::new(panel.x - MENU_GAP, icon.y),
+            BarEdge::Top => Point::new(icon.x, panel.y + panel.height + MENU_GAP),
+            BarEdge::Bottom => Point::new(icon.x, panel.y - MENU_GAP),
         })
     }
 
@@ -1453,7 +1514,38 @@ impl DockState {
     }
 
     fn prepare_text(&mut self, cx: &mut Context) {
+        let expanded = self.expanded();
+        let room = self.rail.map_or(0.0, |rail| rail.width)
+            - 2.0 * ROW_INSET
+            - ROW_ICON
+            - 3.0 * ROW_TEXT_GAP
+            - 24.0;
         for slot in &mut self.slots {
+            let name = match (&slot.key, &slot.app) {
+                (Key::App(_), Some(app)) => Some(app.name.clone()),
+                (Key::Trash, _) => Some(L10N.tr("trash")),
+                _ => None,
+            };
+            let ink = cx.palette.ink;
+            if let Some(name) = name.filter(|_| expanded)
+                && slot
+                    .name_text
+                    .as_ref()
+                    .is_none_or(|(known, color, _)| *known != name || *color != ink)
+            {
+                let style = TextStyle::new(ROW_TEXT, ink).weight(TextStyle::MEDIUM);
+                let mut characters: Vec<char> = name.chars().collect();
+                let mut shown = name.clone();
+                let paragraph = loop {
+                    let paragraph = cx.text.paragraph(&shown, style, None, TextAlign::Start);
+                    if paragraph.width() <= room || characters.len() <= 1 {
+                        break paragraph;
+                    }
+                    characters.pop();
+                    shown = format!("{}…", characters.iter().collect::<String>().trim_end());
+                };
+                slot.name_text = Some((name, ink, paragraph));
+            }
             if let Some(app) = &slot.app
                 && app.icon.is_none()
                 && slot.initial.is_none()
@@ -1467,7 +1559,7 @@ impl DockState {
                 slot.initial = Some(
                     cx.text.paragraph(
                         &initial,
-                        TextStyle::new((self.icon_size * 0.5).round(), Color::hex(0xFFFFFF))
+                        TextStyle::new((self.icon_size * 0.5).round(), cx.palette.ink2)
                             .weight(TextStyle::SEMIBOLD),
                         None,
                         TextAlign::Start,
@@ -1487,7 +1579,7 @@ impl DockState {
                 {
                     let paragraph = cx.text.paragraph(
                         &text,
-                        TextStyle::new(BADGE_TEXT, Color::hex(0xFFFFFF))
+                        TextStyle::new(BADGE_TEXT, cx.palette.on_accent)
                             .weight(TextStyle::SEMIBOLD),
                         None,
                         TextAlign::Start,
@@ -1534,7 +1626,7 @@ impl DockState {
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
         let now = cx.now();
         if self.rail.is_none() {
-            self.paint_panel(items);
+            self.paint_panel(cx, items);
         }
         let dragged = self.drag.as_ref().map(|drag| &drag.key);
         let mut on_top = Vec::new();
@@ -1556,6 +1648,7 @@ impl DockState {
                     self.paint_separator(cx, cell, &mut slot_items);
                 }
                 Key::Trash => {
+                    self.paint_name(slot, cell, &mut slot_items);
                     let rect = scaled(self.icon_rect(cell), slot.press.value(cx));
                     let image = if self.trash.is_full {
                         self.trash.full.as_ref().or(self.trash.empty.as_ref())
@@ -1567,7 +1660,7 @@ impl DockState {
                             rect,
                             image: image.clone(),
                         }),
-                        None => generic_icon(rect, None, &mut slot_items),
+                        None => generic_icon(cx, rect, None, &mut slot_items),
                     }
                 }
                 Key::App(app_id) => self.paint_app(cx, slot, cell, app_id, now, &mut slot_items),
@@ -1626,7 +1719,7 @@ impl DockState {
                 rect,
                 image: image.clone(),
             }),
-            None => generic_icon(rect, ghost.initial.as_ref(), &mut icon),
+            None => generic_icon(cx, rect, ghost.initial.as_ref(), &mut icon),
         }
         items.push(Item::Opacity {
             alpha: fade,
@@ -1685,22 +1778,7 @@ impl DockState {
         (thickness(self.icon_size) * 0.3).round()
     }
 
-    pub fn set_blurred(&mut self, blurred: bool) {
-        self.blurred = blurred;
-    }
-
-    pub fn blur_rects(&self, rounded_behind: bool) -> Vec<Rect> {
-        if self.rail.is_some() {
-            return Vec::new();
-        }
-        if rounded_behind {
-            vec![self.panel]
-        } else {
-            Shape::rounded(self.panel, self.panel_radius()).bands(BLUR_BANDS)
-        }
-    }
-
-    fn paint_panel(&self, items: &mut Vec<Item>) {
+    fn paint_panel(&self, cx: &Context, items: &mut Vec<Item>) {
         let dark = self.scheme == Scheme::Dark;
         let radius = self.panel_radius();
         let shape = Shape::rounded(self.panel, radius);
@@ -1710,42 +1788,29 @@ impl DockState {
             blur_radius: 16.0,
             color: Color::hex(0x000000).with_alpha(if dark { 110 } else { 46 }),
         });
-        let (fill, stroke) = match (dark, self.blurred) {
-            (true, true) => (
-                Color::hex(0x2A2D33).with_alpha(178),
-                Color::hex(0xFFFFFF).with_alpha(30),
-            ),
-            (true, false) => (
-                Color::hex(0x2A2D33).with_alpha(232),
-                Color::hex(0xFFFFFF).with_alpha(26),
-            ),
-            (false, true) => (
-                Color::hex(0xF7F8FA).with_alpha(170),
-                Color::hex(0x000000).with_alpha(26),
-            ),
-            (false, false) => (
-                Color::hex(0xF7F8FA).with_alpha(236),
-                Color::hex(0x000000).with_alpha(22),
-            ),
-        };
         items.push(Item::Fill {
             shape,
-            paint: fill.into(),
+            paint: cx.palette.chassis.into(),
         });
         items.push(Item::Stroke {
             shape: Shape::rounded(self.panel.inset(0.5), radius - 0.5),
             width: 1.0,
-            paint: stroke.into(),
+            paint: cx.palette.edge.into(),
         });
     }
 
     fn paint_separator(&self, cx: &Context, cell: Rect, items: &mut Vec<Item>) {
         if let Some(rail) = self.rail {
+            let length = if rail.expanded {
+                rail.width - 4.0 * ROW_INSET
+            } else {
+                RAIL_HAIRLINE
+            };
             items.push(Item::Fill {
                 shape: Shape::rect(Rect::new(
-                    ((rail.width - RAIL_HAIRLINE) / 2.0).round(),
+                    ((rail.width - length) / 2.0).round(),
                     (cell.y + cell.height / 2.0 - 0.5).round(),
-                    RAIL_HAIRLINE,
+                    length,
                     1.0,
                 )),
                 paint: cx.palette.hairline.into(),
@@ -1786,6 +1851,21 @@ impl DockState {
         let Some(app) = &slot.app else {
             return;
         };
+        if self.expanded() && self.active.as_deref() == Some(app_id) {
+            items.push(Item::Fill {
+                shape: Shape::rounded(
+                    Rect::new(
+                        cell.x + ROW_INSET,
+                        cell.y + 1.0,
+                        cell.width - 2.0 * ROW_INSET,
+                        cell.height - 2.0,
+                    ),
+                    ROW_RADIUS,
+                ),
+                paint: cx.palette.well.into(),
+            });
+        }
+        self.paint_name(slot, cell, items);
         let base = self.icon_rect(cell);
         let mut factor = slot.press.value(cx);
         let mut alpha = 1.0;
@@ -1813,7 +1893,7 @@ impl DockState {
                 rect,
                 image: image.clone(),
             }),
-            None => generic_icon(rect, slot.initial.as_ref(), &mut icon_items),
+            None => generic_icon(cx, rect, slot.initial.as_ref(), &mut icon_items),
         }
         if slot.pressed {
             alpha *= 0.8;
@@ -1831,7 +1911,7 @@ impl DockState {
             items.push(Item::Stroke {
                 shape: Shape::rounded(ring, ring.width * 0.26),
                 width: 2.0,
-                paint: Color::hex(0xFF9F0A).into(),
+                paint: cx.palette.warning.into(),
             });
         }
         let dot = slot.dot.value(cx);
@@ -1862,7 +1942,7 @@ impl DockState {
             );
             items.push(Item::Fill {
                 shape: Shape::rounded(track, PROGRESS_HEIGHT / 2.0),
-                paint: Color::hex(0x000000).with_alpha(110).into(),
+                paint: cx.palette.ink.with_alpha(110).into(),
             });
             let fill = Rect::new(track.x, track.y, track.width * progress, track.height);
             items.push(Item::Fill {
@@ -1875,12 +1955,21 @@ impl DockState {
             && let Some((_, text)) = &slot.badge_text
         {
             let width = (text.width() + 10.0).max(BADGE_HEIGHT);
-            let rest = Rect::new(
-                base.x + base.width - width + 4.0,
-                base.y - 4.0,
-                width,
-                BADGE_HEIGHT,
-            );
+            let rest = if self.expanded() {
+                Rect::new(
+                    cell.x + cell.width - ROW_INSET - 6.0 - width,
+                    cell.y + (cell.height - BADGE_HEIGHT) / 2.0,
+                    width,
+                    BADGE_HEIGHT,
+                )
+            } else {
+                Rect::new(
+                    base.x + base.width - width + 4.0,
+                    base.y - 4.0,
+                    width,
+                    BADGE_HEIGHT,
+                )
+            };
             let pill = scaled(rest, badge);
             let mut badge_items = vec![
                 Item::Shadow {
@@ -1891,7 +1980,7 @@ impl DockState {
                 },
                 Item::Fill {
                     shape: Shape::rounded(pill, pill.height / 2.0),
-                    paint: Color::hex(0xFF3B30).into(),
+                    paint: cx.palette.danger.into(),
                 },
             ];
             if badge > 0.6 {
@@ -1908,6 +1997,20 @@ impl DockState {
                 items: badge_items,
             });
         }
+    }
+
+    fn paint_name(&self, slot: &Slot, cell: Rect, items: &mut Vec<Item>) {
+        let Some((_, _, text)) = slot.name_text.as_ref().filter(|_| self.expanded()) else {
+            return;
+        };
+        let icon = self.icon_rect(cell);
+        items.push(Item::Text {
+            origin: Point::new(
+                (icon.x + icon.width + ROW_TEXT_GAP).round(),
+                (cell.y + (cell.height - text.height()) / 2.0).round(),
+            ),
+            paragraph: text.clone(),
+        });
     }
 
     fn paint_rail_indicators(
@@ -1969,10 +2072,10 @@ impl DockState {
     fn dot_center(&self, cell: Rect, icon: Rect) -> Point {
         let inset = CROSS_PADDING / 2.0;
         match self.edge {
-            DockEdge::Left => Point::new(cell.x + inset, icon.y + icon.height / 2.0),
-            DockEdge::Right => Point::new(cell.x + cell.width - inset, icon.y + icon.height / 2.0),
-            DockEdge::Top => Point::new(icon.x + icon.width / 2.0, cell.y + inset),
-            DockEdge::Bottom => Point::new(icon.x + icon.width / 2.0, cell.y + cell.height - inset),
+            BarEdge::Left => Point::new(cell.x + inset, icon.y + icon.height / 2.0),
+            BarEdge::Right => Point::new(cell.x + cell.width - inset, icon.y + icon.height / 2.0),
+            BarEdge::Top => Point::new(icon.x + icon.width / 2.0, cell.y + inset),
+            BarEdge::Bottom => Point::new(icon.x + icon.width / 2.0, cell.y + cell.height - inset),
         }
     }
 
@@ -1989,25 +2092,25 @@ impl DockState {
         let height = (text.height() + 10.0).ceil();
         let panel = self.panel;
         let rect = match self.edge {
-            DockEdge::Left => Rect::new(
+            BarEdge::Left => Rect::new(
                 panel.x + panel.width + LABEL_GAP,
                 along - height / 2.0,
                 width,
                 height,
             ),
-            DockEdge::Right => Rect::new(
+            BarEdge::Right => Rect::new(
                 panel.x - LABEL_GAP - width,
                 along - height / 2.0,
                 width,
                 height,
             ),
-            DockEdge::Top => Rect::new(
+            BarEdge::Top => Rect::new(
                 along - width / 2.0,
                 panel.y + panel.height + LABEL_GAP,
                 width,
                 height,
             ),
-            DockEdge::Bottom => Rect::new(
+            BarEdge::Bottom => Rect::new(
                 along - width / 2.0,
                 panel.y - LABEL_GAP - height,
                 width,
@@ -2017,11 +2120,7 @@ impl DockState {
         let rect = Rect::new(rect.x.round(), rect.y.round(), rect.width, rect.height);
         let shape = Shape::rounded(rect, height / 2.0);
         let dark = self.scheme == Scheme::Dark;
-        let fill = if dark {
-            Color::hex(0x2A2D33).with_alpha(245)
-        } else {
-            Color::hex(0xFFFFFF).with_alpha(245)
-        };
+        let fill = cx.palette.overlay;
         items.push(Item::Opacity {
             alpha: opacity,
             items: vec![
@@ -2038,11 +2137,7 @@ impl DockState {
                 Item::Stroke {
                     shape: Shape::rounded(rect.inset(0.5), height / 2.0 - 0.5),
                     width: 1.0,
-                    paint: if dark {
-                        Color::hex(0xFFFFFF).with_alpha(26).into()
-                    } else {
-                        Color::hex(0x000000).with_alpha(20).into()
-                    },
+                    paint: cx.palette.edge.into(),
                 },
                 Item::Text {
                     origin: Point::new(
@@ -2056,24 +2151,10 @@ impl DockState {
     }
 }
 
-fn generic_icon(rect: Rect, initial: Option<&Paragraph>, items: &mut Vec<Item>) {
-    let shape = Shape::rounded(rect, rect.width * 0.224);
+fn generic_icon(cx: &Context, rect: Rect, initial: Option<&Paragraph>, items: &mut Vec<Item>) {
     items.push(Item::Fill {
-        shape,
-        paint: Paint::LinearGradient {
-            start: Point::new(rect.x, rect.y),
-            end: Point::new(rect.x, rect.y + rect.height),
-            stops: vec![
-                Stop {
-                    offset: 0.0,
-                    color: Color::hex(0x8E9AAF),
-                },
-                Stop {
-                    offset: 1.0,
-                    color: Color::hex(0x5C677D),
-                },
-            ],
-        },
+        shape: Shape::rounded(rect, rect.width * 0.224),
+        paint: cx.palette.well.into(),
     });
     if let Some(initial) = initial {
         items.push(Item::Text {
@@ -2406,7 +2487,7 @@ pub fn dock_ui(state: Shared, palette: Palette, text: TextSystem) -> Ui {
     )
 }
 
-pub fn surface_size(edge: DockEdge, icon_size: f32, output: (u32, u32)) -> (u32, u32) {
+pub fn surface_size(edge: BarEdge, icon_size: f32, output: (u32, u32)) -> (u32, u32) {
     let depth = surface_depth(icon_size).ceil() as u32;
     if vertical(edge) {
         (depth, output.1)

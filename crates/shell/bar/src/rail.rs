@@ -7,8 +7,8 @@ use unbound_datetime::DateFormats;
 use unbound_status::status::{Battery, Status, speaker_waves};
 use unbound_toolkit::ui::PointerButton;
 use unbound_toolkit::{
-    Color, Image, Item, MenuPlacement, Palette, Paragraph, Point, Rect, Scene, Shape, TextAlign,
-    TextStyle, TextSystem,
+    Color, DisplayEdge, Image, Item, MenuPlacement, Palette, Paragraph, Point, Rect, Scene, Shape,
+    TextAlign, TextStyle, TextSystem,
 };
 use unbound_xdg::{ICON_THEMES, find_icon};
 
@@ -48,6 +48,18 @@ const OPEN_ALPHA: u8 = 30;
 const NODE_BASE: u64 = 1 << 40;
 const CONTROL_CENTER_GLYPH: &str = "unbound-control-center-symbolic";
 const MARK_GLYPH: &str = "unbound-symbolic";
+const SEARCH_GLYPH: &str = "system-search-symbolic";
+pub const EXPANDED_WIDTH: f32 = 248.0;
+const ROW_INSET: f32 = 8.0;
+const SEARCH_HEIGHT: f32 = 32.0;
+const HEADER_ROW: f32 = 36.0;
+const MENU_ROW: f32 = 28.0;
+const MENU_TEXT: f32 = 13.0;
+const EXPANDED_CLOCK: f32 = 64.0;
+const EXPANDED_TIME: f32 = 22.0;
+const EXPANDED_STATUS: f32 = 52.0;
+const PILL: (f32, f32) = (26.0, 20.0);
+const EXPANDED_TRAY: usize = 6;
 
 pub fn bar_width(icon_size: f32) -> f32 {
     icon_size + EDGE_PADDING
@@ -65,6 +77,7 @@ struct Clock {
     time: String,
     period: Option<String>,
     day: String,
+    long: String,
 }
 
 pub struct RailView {
@@ -73,6 +86,9 @@ pub struct RailView {
     icon_dirs: Vec<PathBuf>,
     icons: HashMap<(String, Color, u32), Option<Image>>,
     width: f32,
+    icon_size: f32,
+    expanded: bool,
+    menus: Vec<String>,
     app: String,
     app_icon: Option<Image>,
     key_display: bool,
@@ -162,6 +178,9 @@ impl RailView {
             icon_dirs,
             icons: HashMap::new(),
             width: bar_width(icon_size),
+            icon_size,
+            expanded: false,
+            menus: Vec::new(),
             app: String::new(),
             app_icon: None,
             key_display: true,
@@ -171,6 +190,7 @@ impl RailView {
                 time: String::new(),
                 period: None,
                 day: String::new(),
+                long: String::new(),
             },
             unread: false,
             battery_percentage: false,
@@ -185,8 +205,32 @@ impl RailView {
         self.width
     }
 
+    pub fn unread(&self) -> bool {
+        self.unread
+    }
+
     pub fn set_icon_size(&mut self, icon_size: f32) {
-        self.width = bar_width(icon_size);
+        self.icon_size = icon_size;
+        self.follow_width();
+    }
+
+    pub fn set_expanded(&mut self, expanded: bool) -> bool {
+        let changed = self.expanded != expanded;
+        self.expanded = expanded;
+        self.follow_width();
+        changed
+    }
+
+    pub fn is_expanded(&self) -> bool {
+        self.expanded
+    }
+
+    fn follow_width(&mut self) {
+        self.width = if self.expanded {
+            EXPANDED_WIDTH
+        } else {
+            bar_width(self.icon_size)
+        };
     }
 
     fn tray_cells(&self) -> Vec<Slot> {
@@ -194,8 +238,13 @@ impl RailView {
         if self.status.input_sources.current().is_some() {
             cells.push(Slot::InputSource);
         }
-        if cells.len() > TRAY_SHOWN {
-            cells.truncate(TRAY_SHOWN);
+        let shown = if self.expanded {
+            EXPANDED_TRAY
+        } else {
+            TRAY_SHOWN
+        };
+        if cells.len() > shown {
+            cells.truncate(shown);
             cells.push(Slot::TrayMore);
         }
         cells
@@ -211,6 +260,9 @@ impl RailView {
     }
 
     fn layout(&self, height: f32) -> (Vec<(Slot, Rect)>, AppsRegion, Vec<f32>) {
+        if self.expanded {
+            return self.layout_expanded(height);
+        }
         let width = self.width;
         let mut slots = vec![(Slot::System, Rect::new(0.0, 0.0, width, MARK_CELL))];
         if !self.app.is_empty() {
@@ -285,6 +337,96 @@ impl RailView {
             top,
             bottom: bottom.max(top),
             width,
+            expanded: false,
+        };
+        (slots, region, hairlines)
+    }
+
+    fn layout_expanded(&self, height: f32) -> (Vec<(Slot, Rect)>, AppsRegion, Vec<f32>) {
+        let width = self.width;
+        let inner = width - 2.0 * ROW_INSET;
+        let mut slots = vec![
+            (Slot::System, Rect::new(0.0, 0.0, MARK_CELL, MARK_CELL)),
+            (
+                Slot::Launcher,
+                Rect::new(
+                    MARK_CELL,
+                    (MARK_CELL - SEARCH_HEIGHT) / 2.0,
+                    width - MARK_CELL - ROW_INSET,
+                    SEARCH_HEIGHT,
+                ),
+            ),
+        ];
+        let mut top = MARK_CELL;
+        if !self.app.is_empty() {
+            slots.push((Slot::App, Rect::new(ROW_INSET, top, inner, HEADER_ROW)));
+            top += HEADER_ROW;
+            for index in 0..self.menus.len() {
+                slots.push((
+                    Slot::AppMenu(index),
+                    Rect::new(ROW_INSET, top, inner, MENU_ROW),
+                ));
+                top += MENU_ROW;
+            }
+            top += GROUP_GAP;
+        }
+        let mut hairlines = vec![top + HAIRLINE_CELL / 2.0];
+        top += HAIRLINE_CELL;
+        let mut bottom = height - EXPANDED_CLOCK;
+        slots.push((Slot::Clock, Rect::new(0.0, bottom, width, EXPANDED_CLOCK)));
+        bottom -= EXPANDED_STATUS + GROUP_GAP;
+        slots.push((
+            Slot::ControlCenter,
+            Rect::new(ROW_INSET, bottom, inner, EXPANDED_STATUS),
+        ));
+        for (index, (slot, _)) in self.glyph_slots().into_iter().enumerate() {
+            slots.push((
+                slot,
+                Rect::new(
+                    2.0 * ROW_INSET + index as f32 * GRID_CELL,
+                    bottom + 4.0,
+                    GRID_CELL,
+                    GRID_CELL,
+                ),
+            ));
+        }
+        let tray = self.tray_cells();
+        if !tray.is_empty() {
+            bottom -= GROUP_GAP + GRID_CELL;
+            for (index, slot) in tray.into_iter().enumerate() {
+                slots.push((
+                    slot,
+                    Rect::new(
+                        2.0 * ROW_INSET + index as f32 * GRID_CELL,
+                        bottom,
+                        GRID_CELL,
+                        GRID_CELL,
+                    ),
+                ));
+            }
+        }
+        let (count, _) = self.workspaces;
+        if count >= 2 {
+            bottom -= GROUP_GAP + GRID_CELL;
+            for index in 0..count {
+                slots.push((
+                    Slot::Workspace(index),
+                    Rect::new(
+                        2.0 * ROW_INSET + index as f32 * (PILL.0 + 4.0),
+                        bottom + (GRID_CELL - PILL.1) / 2.0,
+                        PILL.0,
+                        PILL.1,
+                    ),
+                ));
+            }
+        }
+        bottom -= HAIRLINE_CELL;
+        hairlines.push(bottom + HAIRLINE_CELL / 2.0);
+        let region = AppsRegion {
+            top,
+            bottom: bottom.max(top),
+            width,
+            expanded: true,
         };
         (slots, region, hairlines)
     }
@@ -352,19 +494,24 @@ impl RailView {
         let mut items = vec![
             Item::Fill {
                 shape: Shape::rect(Rect::new(0.0, 0.0, width, height)),
-                paint: palette.sheet.into(),
+                paint: palette.chassis.into(),
             },
             Item::Fill {
                 shape: Shape::rect(Rect::new(width - 1.0, 0.0, 1.0, height)),
-                paint: palette.hairline.into(),
+                paint: palette.edge.into(),
             },
         ];
+        let hairline = if self.expanded {
+            self.width - 4.0 * ROW_INSET
+        } else {
+            HAIRLINE
+        };
         for y in hairlines {
             items.push(Item::Fill {
                 shape: Shape::rect(Rect::new(
-                    ((width - HAIRLINE) / 2.0).round(),
+                    ((self.width - hairline) / 2.0).round(),
                     (y - 0.5).round(),
-                    HAIRLINE,
+                    hairline,
                     1.0,
                 )),
                 paint: palette.hairline.into(),
@@ -490,6 +637,11 @@ impl RailView {
                         paragraph: text,
                     });
                 }
+                Slot::Workspace(index) if self.expanded => {
+                    self.paint_pill(rect, index, &mut items);
+                }
+                Slot::Launcher => self.paint_search(rect, scale, &mut items),
+                Slot::AppMenu(index) => self.paint_menu_row(rect, index, &mut items),
                 Slot::Workspace(index) => {
                     let active = index == self.workspaces.1;
                     let length = if active {
@@ -508,6 +660,8 @@ impl RailView {
                         paint: if active { ink } else { palette.ink2 }.into(),
                     });
                 }
+                Slot::Clock if self.expanded => self.paint_long_clock(rect, scale, &mut items),
+                Slot::ControlCenter if self.expanded => self.paint_summary(rect, &mut items),
                 Slot::Clock => self.paint_clock(rect, scale, &mut items),
                 Slot::App => self.paint_header(rect, scale, &mut items),
                 _ => {}
@@ -515,6 +669,177 @@ impl RailView {
         }
         self.slots = slots;
         items
+    }
+
+    fn fitted(&mut self, text: &str, style: TextStyle, width: f32) -> Paragraph {
+        let mut characters: Vec<char> = text.chars().collect();
+        let mut shown = text.to_owned();
+        loop {
+            let paragraph = self.paragraph(&shown, style);
+            if paragraph.width() <= width || characters.len() <= 1 {
+                return paragraph;
+            }
+            characters.pop();
+            shown = format!("{}…", characters.iter().collect::<String>().trim_end());
+        }
+    }
+
+    fn centered_text(rect: Rect, x: f32, paragraph: Paragraph, items: &mut Vec<Item>) {
+        items.push(Item::Text {
+            origin: Point::new(
+                x.round(),
+                (rect.y + (rect.height - paragraph.height()) / 2.0).round(),
+            ),
+            paragraph,
+        });
+    }
+
+    fn paint_search(&mut self, rect: Rect, scale: f64, items: &mut Vec<Item>) {
+        let palette = self.palette;
+        items.push(Item::Fill {
+            shape: Shape::rounded(rect, GROUP_RADIUS),
+            paint: palette.well.into(),
+        });
+        if let Some(glyph) = self.glyph(SEARCH_GLYPH, palette.ink2, scale) {
+            Self::place_image(
+                Rect::new(rect.x + 6.0, rect.y, GRID_CELL, rect.height),
+                glyph,
+                GLYPH,
+                scale,
+                items,
+            );
+        }
+        let hint = self.paragraph(
+            &L10N.tr("search-shortcut"),
+            TextStyle::new(CAPTION_SIZE, palette.ink2),
+        );
+        let hint_x = rect.x + rect.width - 10.0 - hint.width();
+        let label = self.paragraph(&L10N.tr("search"), TextStyle::new(MENU_TEXT, palette.ink2));
+        Self::centered_text(rect, rect.x + 8.0 + GRID_CELL, label, items);
+        Self::centered_text(rect, hint_x, hint, items);
+    }
+
+    fn paint_menu_row(&mut self, rect: Rect, index: usize, items: &mut Vec<Item>) {
+        let Some(title) = self.menus.get(index).cloned() else {
+            return;
+        };
+        let palette = self.palette;
+        let mut row = Vec::new();
+        let chevron = self.paragraph("›", TextStyle::new(MENU_TEXT, palette.ink2));
+        let chevron_x = rect.x + rect.width - 10.0 - chevron.width();
+        let text_x = rect.x + 10.0 + HEADER_ICON + 8.0;
+        let label = self.fitted(
+            &title,
+            TextStyle::new(MENU_TEXT, palette.ink),
+            chevron_x - text_x - 4.0,
+        );
+        Self::centered_text(rect, text_x, label, &mut row);
+        Self::centered_text(rect, chevron_x, chevron, &mut row);
+        if self.key_display {
+            items.extend(row);
+        } else {
+            items.push(Item::Opacity {
+                alpha: DIMMED,
+                items: row,
+            });
+        }
+    }
+
+    fn paint_pill(&mut self, rect: Rect, index: usize, items: &mut Vec<Item>) {
+        let palette = self.palette;
+        let active = index == self.workspaces.1;
+        let (fill, ink) = if active {
+            (palette.ink, palette.chassis)
+        } else {
+            (palette.well, palette.ink)
+        };
+        items.push(Item::Fill {
+            shape: Shape::rounded(rect, 5.0),
+            paint: fill.into(),
+        });
+        let number = self.paragraph(
+            &(index + 1).to_string(),
+            TextStyle::new(CAPTION_SIZE, ink)
+                .weight(TextStyle::SEMIBOLD)
+                .tabular(),
+        );
+        let x = rect.x + (rect.width - number.width()) / 2.0;
+        Self::centered_text(rect, x, number, items);
+    }
+
+    fn paint_summary(&mut self, rect: Rect, items: &mut Vec<Item>) {
+        let network = self
+            .status
+            .wifi
+            .as_ref()
+            .and_then(|wifi| wifi.current())
+            .map(|network| network.name());
+        let battery = self.status.battery.map(|battery| {
+            L10N.tr_args(
+                "battery-percent",
+                [("percent", battery.percent.round().into())],
+            )
+        });
+        let summary = [network, battery]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join(" · ");
+        if summary.is_empty() {
+            return;
+        }
+        let text = self.fitted(
+            &summary,
+            TextStyle::new(CAPTION_SIZE, self.palette.ink2),
+            rect.width - 16.0,
+        );
+        items.push(Item::Text {
+            origin: Point::new(
+                rect.x + ROW_INSET,
+                (rect.y + rect.height - 6.0 - text.height()).round(),
+            ),
+            paragraph: text,
+        });
+    }
+
+    fn paint_long_clock(&mut self, rect: Rect, scale: f64, items: &mut Vec<Item>) {
+        let palette = self.palette;
+        let time = match &self.clock.period {
+            Some(period) => format!("{} {period}", self.clock.time),
+            None => self.clock.time.clone(),
+        };
+        let time = self.paragraph(
+            &time,
+            TextStyle::new(EXPANDED_TIME, palette.ink)
+                .weight(TextStyle::SEMIBOLD)
+                .tabular(),
+        );
+        let long = self.clock.long.clone();
+        let date = self.paragraph(&long, TextStyle::new(CAPTION_SIZE, palette.ink2));
+        let top = rect.y + (rect.height - time.height() - date.height()) / 2.0;
+        let x = 2.0 * ROW_INSET + 4.0;
+        if self.unread {
+            items.push(Item::Fill {
+                shape: Shape::rounded(
+                    Rect::new(
+                        rect.x + rect.width - 2.0 * ROW_INSET - UNREAD_DOT,
+                        top + 4.0,
+                        UNREAD_DOT,
+                        UNREAD_DOT,
+                    ),
+                    UNREAD_DOT / 2.0,
+                ),
+                paint: palette.accent.into(),
+            });
+        }
+        items.push(Item::Text {
+            origin: Point::new(x, snap(top + time.height(), scale)),
+            paragraph: date,
+        });
+        items.push(Item::Text {
+            origin: Point::new(x, snap(top, scale)),
+            paragraph: time,
+        });
     }
 
     fn caption(&mut self, width: f32) -> Paragraph {
@@ -532,6 +857,10 @@ impl RailView {
     }
 
     fn paint_header(&mut self, rect: Rect, scale: f64, items: &mut Vec<Item>) {
+        if self.expanded {
+            self.paint_wide_header(rect, scale, items);
+            return;
+        }
         let mut header = vec![Item::Fill {
             shape: Shape::rounded(rect, GROUP_RADIUS),
             paint: self.palette.ink.with_alpha(WELL_ALPHA).into(),
@@ -570,6 +899,53 @@ impl RailView {
             origin: Point::new(x, y),
             paragraph: caption,
         });
+        if self.key_display {
+            items.extend(header);
+        } else {
+            items.push(Item::Opacity {
+                alpha: DIMMED,
+                items: header,
+            });
+        }
+    }
+
+    fn paint_wide_header(&mut self, rect: Rect, scale: f64, items: &mut Vec<Item>) {
+        let palette = self.palette;
+        let group = Rect::new(
+            rect.x,
+            rect.y,
+            rect.width,
+            rect.height + self.menus.len() as f32 * MENU_ROW,
+        );
+        let mut header = vec![Item::Fill {
+            shape: Shape::rounded(group, GROUP_RADIUS),
+            paint: palette.ink.with_alpha(WELL_ALPHA).into(),
+        }];
+        if self.open == Some(Slot::App) || self.hovered == Some(Slot::App) {
+            header.push(Item::Fill {
+                shape: Shape::rounded(rect, GROUP_RADIUS),
+                paint: palette.ink.with_alpha(HOVER_ALPHA).into(),
+            });
+        }
+        if let Some(icon) = self.app_icon.clone() {
+            header.push(Item::Image {
+                rect: Rect::new(
+                    snap(rect.x + 10.0, scale),
+                    snap(rect.y + (rect.height - HEADER_ICON) / 2.0, scale),
+                    HEADER_ICON,
+                    HEADER_ICON,
+                ),
+                image: icon,
+            });
+        }
+        let name_x = rect.x + 10.0 + HEADER_ICON + 8.0;
+        let app = self.app.clone();
+        let name = self.fitted(
+            &app,
+            TextStyle::new(MENU_TEXT + 1.0, palette.ink).weight(TextStyle::BOLD),
+            rect.x + rect.width - name_x - 10.0,
+        );
+        Self::centered_text(rect, name_x, name, &mut header);
         if self.key_display {
             items.extend(header);
         } else {
@@ -677,7 +1053,9 @@ impl StatusView for RailView {
         &self.app
     }
 
-    fn set_app_menus(&mut self, _titles: Vec<String>) {}
+    fn set_app_menus(&mut self, titles: Vec<String>) {
+        self.menus = titles;
+    }
 
     fn set_app_icon(&mut self, icon: Option<Image>) {
         self.app_icon = icon;
@@ -712,9 +1090,17 @@ impl StatusView for RailView {
     fn set_time(&mut self, at: &Zoned, dates: &DateFormats) -> bool {
         let (time, period) = dates.time(at);
         let day = dates.short_day(at);
-        let changed =
-            self.clock.time != time || self.clock.period != period || self.clock.day != day;
-        self.clock = Clock { time, period, day };
+        let long = dates.long_date(at);
+        let changed = self.clock.time != time
+            || self.clock.period != period
+            || self.clock.day != day
+            || self.clock.long != long;
+        self.clock = Clock {
+            time,
+            period,
+            day,
+            long,
+        };
         changed
     }
 
@@ -760,6 +1146,10 @@ impl StatusView for RailView {
     fn slot_of_node(&self, node: NodeId) -> Option<Slot> {
         let index = usize::try_from(node.0.checked_sub(NODE_BASE)?).ok()?;
         self.slots.get(index).map(|(slot, _)| *slot)
+    }
+
+    fn edge(&self) -> DisplayEdge {
+        DisplayEdge::Left
     }
 
     fn menu_placement(&self, anchor: Rect) -> MenuPlacement {

@@ -20,6 +20,7 @@ unbound-log.workspace = true
 unbound-toolkit.workspace = true
 
 [dev-dependencies]
+rustix.workspace = true
 tempfile.workspace = true
 
 [package.metadata.deb]

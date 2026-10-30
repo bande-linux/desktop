@@ -39,6 +39,6 @@ prune() {
 mkdir -p "$cache" "$out"
 prune
 kernel=$(cached kernel kernel.sh kernel.sh kernel.config)
-rootfs=$(cached rootfs rootfs.sh rootfs.sh Dockerfile init)
+rootfs=$(cached rootfs rootfs.sh rootfs.sh Dockerfile init login.service)
 ln -sf "$kernel/Image" "$out/Image"
 ln -sf "$rootfs/rootfs.img" "$out/rootfs.img"

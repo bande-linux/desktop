@@ -10,7 +10,7 @@ status=0
 timeout --foreground "${GUEST_TIMEOUT:-600}" qemu-system-aarch64 \
     -machine virt,gic-version=max,its=off -accel kvm -cpu host -smp 4 -m 4096 \
     -kernel "$images/Image" \
-    -append "console=ttyAMA0 root=/dev/vda rw rootfstype=ext4 init=/sbin/unbound-guest-init panic=-1 loglevel=4 vkms.enable_overlay=1" \
+    -append "console=ttyAMA0 root=/dev/vda rw rootfstype=ext4 init=${GUEST_INIT:-/sbin/unbound-guest-init} panic=-1 loglevel=4 vkms.enable_overlay=1 ${GUEST_APPEND:-}" \
     -drive if=none,id=root,format=raw,file="$images/rootfs.img",snapshot=on \
     -device virtio-blk-pci,drive=root \
     -virtfs local,path="$share",mount_tag=share,security_model=none,id=share \

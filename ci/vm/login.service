@@ -1,0 +1,12 @@
+[Unit]
+Description=Unbound login test
+After=systemd-logind.service systemd-user-sessions.service dbus.service systemd-udev-settle.service
+Wants=systemd-logind.service systemd-udev-settle.service
+
+[Service]
+Type=oneshot
+ExecStartPre=/bin/mkdir -p /share
+ExecStartPre=/bin/mount -t 9p -o trans=virtio,version=9p2000.L,msize=1048576 share /share
+ExecStart=/bin/bash /share/run
+StandardOutput=journal+console
+StandardError=journal+console

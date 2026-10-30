@@ -1,6 +1,6 @@
 [package]
 name = "unbound-test-bus"
-description = "Private dbus-daemon session buses for Unbound tests"
+description = "Private, hermetic dbus-daemon session buses for Unbound tests"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true

@@ -495,14 +495,17 @@ impl Headless {
                         state.held_shortcut_keys.push(evdev_code);
                         FilterResult::Intercept(Some(shortcut))
                     }
-                    None => FilterResult::Forward,
+                    None => {
+                        if !keysym.modified_sym().is_modifier_key() {
+                            state.note_typing();
+                        }
+                        FilterResult::Forward
+                    }
                 }
             },
         );
-        match action {
-            Some(Some(shortcut)) => state.run(shortcut),
-            None if pressed => state.note_typing(),
-            _ => {}
+        if let Some(Some(shortcut)) = action {
+            state.run(shortcut);
         }
     }
 }

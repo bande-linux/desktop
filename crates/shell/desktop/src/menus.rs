@@ -39,6 +39,8 @@ pub enum Command {
     Rename,
     Duplicate,
     Copy,
+    Cut,
+    Paste,
     Trash,
     DeleteImmediately,
     Eject,
@@ -49,7 +51,7 @@ fn item(message: &str, action: &str) -> MenuItem {
     MenuItem::new(&L10N.tr(message), action)
 }
 
-pub fn desktop_menu(sort: SortBy) -> Menu {
+pub fn desktop_menu(sort: SortBy, paste: bool) -> Menu {
     let sorts = SORTS
         .iter()
         .map(|(by, message, keyword)| {
@@ -58,6 +60,8 @@ pub fn desktop_menu(sort: SortBy) -> Menu {
         .collect();
     Menu::new(vec![
         item("new-folder", "new-folder").shortcut("Shift+Super+N"),
+        item("paste", "paste").shortcut("Super+V").enabled(paste),
+        MenuItem::separator(),
         item("get-info", "desktop-info"),
         MenuItem::separator(),
         item("change-wallpaper", "change-wallpaper"),
@@ -94,6 +98,7 @@ pub fn items_menu(selection: &Selection) -> Menu {
             .shortcut("Super+D")
             .enabled(!any_volume),
     );
+    items.push(item("cut", "cut").shortcut("Super+X").enabled(!any_volume));
     items.push(item("copy", "copy").shortcut("Super+C"));
     if selection.picture && count == 1 {
         items.push(MenuItem::separator());
@@ -143,6 +148,8 @@ pub fn command(action: &str) -> Option<Command> {
         "rename" => Command::Rename,
         "duplicate" => Command::Duplicate,
         "copy" => Command::Copy,
+        "cut" => Command::Cut,
+        "paste" => Command::Paste,
         "trash" => Command::Trash,
         "delete-immediately" => Command::DeleteImmediately,
         "eject" => Command::Eject,

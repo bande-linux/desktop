@@ -68,6 +68,10 @@ pub enum Request {
         paths: Vec<PathBuf>,
     },
     Copy(Vec<PathBuf>),
+    Cut(Vec<PathBuf>),
+    Paste {
+        moves: bool,
+    },
     CopyText(String),
     PasteText,
     Eject(Vec<PathBuf>),
@@ -472,6 +476,20 @@ impl DesktopView {
         handled
     }
 
+    fn cut(&mut self, paths: Vec<PathBuf>) {
+        let files = paths
+            .into_iter()
+            .filter(|path| {
+                self.desktop
+                    .item(path)
+                    .is_some_and(|item| item.kind != Kind::Volume)
+            })
+            .collect::<Vec<_>>();
+        if !files.is_empty() {
+            self.requests.push(Request::Cut(files));
+        }
+    }
+
     fn ask_to_delete(&mut self, paths: Vec<PathBuf>) {
         let deletable = paths
             .into_iter()
@@ -783,6 +801,10 @@ impl DesktopView {
                 'd' if modifiers.shift => self.requests.push(Request::OpenDesktopFolder),
                 'd' if !selected.is_empty() => self.requests.push(Request::Duplicate(selected)),
                 'c' if !selected.is_empty() => self.requests.push(Request::Copy(selected)),
+                'x' if !selected.is_empty() => self.cut(selected),
+                'v' => self.requests.push(Request::Paste {
+                    moves: modifiers.alt,
+                }),
                 'i' => {
                     if let Some(path) = selected.first() {
                         self.requests.push(Request::ShowInfo(path.clone()));
@@ -850,6 +872,11 @@ impl DesktopView {
             },
             Command::Duplicate => Request::Duplicate(selected),
             Command::Copy => Request::Copy(selected),
+            Command::Cut => {
+                self.cut(selected);
+                return;
+            }
+            Command::Paste => Request::Paste { moves: false },
             Command::Trash => Request::Trash(selected),
             Command::DeleteImmediately => {
                 self.ask_to_delete(selected);

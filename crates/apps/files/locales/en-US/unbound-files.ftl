@@ -85,6 +85,7 @@ menu-show-in-enclosing-folder = Show in Enclosing Folder
 menu-rename = Rename
 menu-duplicate = Duplicate
 menu-copy = Copy
+menu-cut = Cut
 menu-move-to-trash = Move to Trash
 menu-move-items-to-trash = Move { $count } Items to Trash
 menu-put-back = Put Back

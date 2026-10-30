@@ -13,7 +13,7 @@ use unbound_files::{
 use unbound_fs::{Sort, SortBy, Trash, list};
 use unbound_toolkit::ui::{Event, Key, Menu, Modifiers, Pointer, PointerButton};
 use unbound_toolkit::{Item, Palette, Point, Scheme, TextSystem};
-use unbound_xdg::Apps;
+use unbound_xdg::{Apps, file_uri};
 
 fn names(folder: &Path, show_hidden: bool) -> Vec<String> {
     list(folder, show_hidden, Sort::default())
@@ -465,15 +465,17 @@ fn a_name_conflict_asks_and_keeps_both() {
     );
     view.handle(&command(Key::Character('c'), false));
     let copied = match view.take_requests().as_slice() {
-        [Request::CopyText(text)] => text.clone(),
+        [Request::CopyFiles { paths, cut: false }] => {
+            paths.iter().map(|path| file_uri(path)).collect::<Vec<_>>()
+        }
         other => panic!("{other:?}"),
     };
     fs::write(place.home().join("a.txt"), "other").expect("file");
     let mut view = place.view();
 
     view.handle(&command(Key::Character('v'), false));
-    assert_eq!(view.take_requests(), [Request::Paste]);
-    assert!(view.pasted(&copied));
+    assert_eq!(view.take_requests(), [Request::PasteFiles]);
+    assert!(view.pasted_files(&copied, "", false));
     run_until(&mut view, |view| view.sheet().is_some());
     assert!(matches!(view.sheet(), Some(Sheet::Conflict { .. })));
     view.handle(&press(Key::Enter));
@@ -491,6 +493,38 @@ fn a_name_conflict_asks_and_keeps_both() {
         view.browser().selected().map(|entry| entry.name.as_str()),
         Some("a 2.txt")
     );
+}
+
+#[test]
+fn cut_files_paste_as_a_move_and_paste_waits_for_files_on_the_clipboard() {
+    let place = Place::new();
+    let mut view = place.view();
+    view.handle(&press(Key::Up));
+    view.handle(&command(Key::Character('x'), false));
+    let cut = match view.take_requests().as_slice() {
+        [Request::CopyFiles { paths, cut: true }] => {
+            paths.iter().map(|path| file_uri(path)).collect::<Vec<_>>()
+        }
+        other => panic!("{other:?}"),
+    };
+    let paste_enabled = |view: &mut FilesView| {
+        let menu = right_click(view, Point::new(SIDEBAR_WIDTH + 60.0, 400.0));
+        menu.items
+            .iter()
+            .any(|item| item.title == "Paste" && item.enabled)
+    };
+    assert!(!paste_enabled(&mut view));
+    view.set_clipboard_has_files(true);
+    assert!(paste_enabled(&mut view));
+
+    view.handle(&command(Key::Character('G'), true));
+    view.scene(1000, 600);
+    view.handle(&Event::Commit("Documents".to_owned()));
+    view.handle(&press(Key::Enter));
+    assert!(view.pasted_files(&cut, "", true));
+    run_until(&mut view, idle);
+    assert!(!place.home().join("notes.txt").exists());
+    assert!(place.home().join("Documents/notes.txt").exists());
 }
 
 #[test]
@@ -683,6 +717,7 @@ fn right_clicking_an_item_selects_it_and_its_menu_acts_on_it() {
             "Get Info",
             "Rename",
             "Duplicate",
+            "Cut",
             "Copy",
             "Move to Trash"
         ]

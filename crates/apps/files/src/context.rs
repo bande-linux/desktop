@@ -129,6 +129,7 @@ impl FilesView {
             sort: self.browser.sort().by,
             list: self.browser.single(),
             hidden_shown: self.browser.shows_hidden(),
+            paste: self.clipboard_files,
         })
     }
 
@@ -148,7 +149,8 @@ impl FilesView {
             Command::Info => self.show_inspector(),
             Command::Rename => self.start_rename(),
             Command::Duplicate => self.duplicate(),
-            Command::Copy => self.copy_selection(),
+            Command::Copy => self.copy_selection(false),
+            Command::Cut => self.copy_selection(true),
             Command::ShowInEnclosingFolder => self.close_search(),
             Command::Trash | Command::PutBack => self.trash_or_put_back(),
             Command::DeleteImmediately => self.confirm_delete(),

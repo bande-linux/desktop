@@ -373,6 +373,19 @@ fn clicks_and_keys_ask_for_the_right_file_actions() {
         view.take_requests(),
         vec![Request::Trash(vec![path("Projects"), path("Notes.txt")])]
     );
+    key(&mut view, Key::Character('x'), SUPER);
+    key(
+        &mut view,
+        Key::Character('v'),
+        Modifiers { alt: true, ..SUPER },
+    );
+    assert_eq!(
+        view.take_requests(),
+        vec![
+            Request::Cut(vec![path("Projects"), path("Notes.txt")]),
+            Request::Paste { moves: true }
+        ]
+    );
     key(&mut view, Key::Escape, Modifiers::default());
     assert!(view.desktop().selected().is_empty());
     key(
@@ -489,11 +502,18 @@ fn titles(menu: &Menu) -> Vec<String> {
 
 #[test]
 fn the_menus_offer_what_fits_the_selection_and_their_actions_reach_the_desktop() {
-    let menu = desktop_menu(SortBy::Name);
+    let menu = desktop_menu(SortBy::Name, false);
+    assert!(
+        !menu
+            .items
+            .iter()
+            .any(|item| item.title == "Paste" && item.enabled)
+    );
     assert_eq!(
         titles(&menu),
         [
             "New Folder",
+            "Paste",
             "Get Info",
             "Change Wallpaper…",
             "Sort By",

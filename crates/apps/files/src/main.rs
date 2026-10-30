@@ -10,10 +10,12 @@ use unbound_app_menu::{AppMenu, Standard};
 use unbound_files::{Browser, FilesView, Location, Request, Row, rows, without_bookmark};
 use unbound_fs::Trash;
 use unbound_toolkit::{
-    App, Appearance, MenuPlacement, Rect, Role, Scene, TextSystem, Window, WindowEvent,
+    App, Appearance, MenuPlacement, Rect, Role, Scene, TextSystem, Transfer, Window, WindowEvent,
 };
 use unbound_volumes::{eject, media_roots};
-use unbound_xdg::{Apps, config_dirs, config_home, data_dirs, launch_with, path_from_file_uri};
+use unbound_xdg::{
+    Apps, config_dirs, config_home, data_dirs, file_uri, launch_with, path_from_file_uri,
+};
 
 const APP_ID: &str = "org.unbound.Files";
 const WINDOW_SIZE: (u32, u32) = (1040, 620);
@@ -48,6 +50,8 @@ fn remove_bookmark(folder: &Path) -> std::io::Result<()> {
 
 impl Files {
     fn menu_bar_action(&mut self, window: &mut Window, action: &str) -> bool {
+        self.view
+            .set_clipboard_has_files(window.clipboard_has_uris());
         let result = match Standard::parse(action) {
             Some(Standard::Hide | Standard::Minimize) => window.minimize(),
             Some(Standard::Zoom) => window.toggle_zoom(),
@@ -75,6 +79,16 @@ impl Files {
                     }
                 }
                 Request::CopyText(text) => window.copy(&text),
+                Request::CopyFiles { paths, cut } => {
+                    let uris = paths.iter().map(|path| file_uri(path)).collect();
+                    let transfer = Transfer::uris(uris);
+                    window.copy_transfer(if cut { transfer.cut() } else { transfer });
+                }
+                Request::PasteFiles => {
+                    if let Err(error) = window.paste_transfer() {
+                        tracing::warn!("cannot paste: {error}");
+                    }
+                }
                 Request::Paste => {
                     if let Err(error) = window.paste() {
                         tracing::warn!("cannot paste: {error}");
@@ -109,6 +123,8 @@ impl App for Files {
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
+        self.view
+            .set_clipboard_has_files(window.clipboard_has_uris());
         let changed = match event {
             WindowEvent::AppearanceChanged(appearance) => {
                 self.view.set_palette(appearance.palette());
@@ -117,6 +133,10 @@ impl App for Files {
             WindowEvent::Input(input) => self.view.handle(&input),
             WindowEvent::Accessibility(request) => self.view.perform(&request),
             WindowEvent::Pasted(text) => self.view.pasted(&text),
+            WindowEvent::PastedTransfer(transfer) => {
+                self.view
+                    .pasted_files(&transfer.uris, &transfer.text, transfer.cut)
+            }
             WindowEvent::MenuAction(action) => self.view.menu_action(&action),
             WindowEvent::Focus(true) => {
                 if let Some(Err(error)) = self.app_menu.as_ref().map(AppMenu::claim) {

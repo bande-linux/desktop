@@ -100,6 +100,11 @@ pub enum Request {
     },
     CopyText(String),
     Paste,
+    CopyFiles {
+        paths: Vec<PathBuf>,
+        cut: bool,
+    },
+    PasteFiles,
     ShowMenu {
         menu: Menu,
         at: Point,
@@ -147,6 +152,7 @@ pub struct FilesView {
     pointer: Point,
     typed: (String, Option<Instant>),
     pub(crate) paste_moves: Option<bool>,
+    pub(crate) clipboard_files: bool,
 }
 
 fn home() -> PathBuf {
@@ -234,6 +240,7 @@ impl FilesView {
             pointer: Point::default(),
             typed: (String::new(), None),
             paste_moves: None,
+            clipboard_files: false,
         };
         view.favourites = view.sidebar.clone();
         view.watch.watch(&view.watched());
@@ -1030,7 +1037,8 @@ impl FilesView {
                 self.browser.select_all();
                 self.selection_changed();
             }
-            Key::Character('c' | 'C') if command => self.copy_selection(),
+            Key::Character('c' | 'C') if command => self.copy_selection(false),
+            Key::Character('x' | 'X') if command => self.copy_selection(true),
             Key::Character('v' | 'V') if command => self.paste(alt),
             Key::Character(character) if !command && !modifiers.control => {
                 return self.type_select(character);
@@ -1065,7 +1073,7 @@ impl FilesView {
 
     pub(crate) fn paste(&mut self, moves: bool) {
         self.paste_moves = Some(moves);
-        self.requests.push(Request::Paste);
+        self.requests.push(Request::PasteFiles);
     }
 
     pub fn search(&self) -> Option<&Search> {
@@ -1315,25 +1323,32 @@ impl FilesView {
         }
     }
 
-    pub(crate) fn copy_selection(&mut self) {
+    pub(crate) fn copy_selection(&mut self, cut: bool) {
         let paths = self.browser.selected_paths();
-        if !paths.is_empty() {
-            let text = paths
-                .iter()
-                .map(|path| path.to_string_lossy().into_owned())
-                .collect::<Vec<_>>()
-                .join("\n");
-            self.requests.push(Request::CopyText(text));
+        if !paths.is_empty() && !(cut && self.browser.in_trash()) {
+            self.requests.push(Request::CopyFiles { paths, cut });
         }
     }
 
+    pub fn set_clipboard_has_files(&mut self, files: bool) {
+        self.clipboard_files = files;
+    }
+
     pub fn pasted(&mut self, text: &str) -> bool {
-        if self.ui.pasted(text) {
-            self.after_ui();
-            return true;
+        let handled = self.ui.pasted(text);
+        self.after_ui();
+        handled
+    }
+
+    pub fn pasted_files(&mut self, uris: &[String], text: &str, cut: bool) -> bool {
+        let moves = self.paste_moves.take().unwrap_or(false) || cut;
+        let mut sources = uris
+            .iter()
+            .filter_map(|uri| path_from_file_uri(uri))
+            .collect::<Vec<_>>();
+        if sources.is_empty() {
+            sources = pasted_paths(text);
         }
-        let moves = self.paste_moves.take().unwrap_or(false);
-        let sources = pasted_paths(text);
         let Some(destination) = self
             .browser
             .current_folder()

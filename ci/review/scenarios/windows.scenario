@@ -1,0 +1,41 @@
+# Place windows with Super+Ctrl+arrows, snap one by dragging it to the edge, and spread four fingers to reveal the desktop.
+key super+space
+wait 600ms
+type "terminal"
+wait 500ms
+key enter
+wait-for-window "org.unbound.Terminal"
+wait 1s
+key super+space
+wait 600ms
+type "files"
+wait 500ms
+key enter
+wait-for-window "org.unbound.Files"
+wait 1500ms
+shot "two windows"
+note "Super+Ctrl+Left fills the left half"
+key super+ctrl+left
+wait 1s
+shot "files on the left half"
+note "Super+Tab, then Super+Ctrl+Right"
+key super+tab
+wait 800ms
+key super+ctrl+right
+wait 1s
+shot "side by side"
+note "Super+Ctrl+Up fills the screen"
+key super+ctrl+up
+wait 1s
+shot "terminal filling the screen"
+key super+ctrl+down
+wait 1s
+shot "terminal restored"
+note "Spread four fingers to reveal the desktop"
+pinch out 4
+wait 1200ms
+shot "desktop revealed"
+note "Pinch four fingers to bring the windows back"
+pinch in 4
+wait 1200ms
+shot "windows back"

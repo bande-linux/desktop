@@ -7,7 +7,7 @@ packages=(
     unbound-compositor unbound-notify unbound-clipboard unbound-config unbound-power
     xdg-desktop-portal-unbound unbound-tray unbound-automount
     unbound-desktop-surface unbound-dock unbound-launcher unbound-term unbound-lock unbound-screenshot unbound-files
-    unbound-settings unbound-greeter unbound-menubar unbound-controlcenter unbound-notifications
+    unbound-settings unbound-monitor unbound-greeter unbound-menubar unbound-controlcenter unbound-notifications
 )
 screenshot=/usr/bin/unbound-screenshot
 runtime="${XDG_RUNTIME_DIR:?needs a user session}/unbound-review"
@@ -55,6 +55,10 @@ if [ "$build" = 1 ]; then
         debs+=("$repo/target/debian/${package}_${version}_arm64.deb")
     done
     sudo apt-get install -y --allow-downgrades --reinstall "${debs[@]}"
+    systemctl --user daemon-reload
+    systemctl --user try-restart unbound-config unbound-power unbound-tray unbound-automount \
+        xdg-desktop-portal-unbound
+    pkill -u "$(id -u)" -x unbound-notify || true
 fi
 $cargo build --release --locked --package unbound-review
 review="$repo/target/release/unbound-review"
@@ -118,7 +122,7 @@ record() {
 
     cursor=$(journalctl --user -n 0 --show-cursor --no-pager | sed -n 's/^-- cursor: //p')
     systemctl --user set-environment LIBSEAT_BACKEND=seatd
-    setsid -f unbound-session > "$out/session.log" 2>&1 < /dev/null
+    setsid -f unbound-session > "$out/session.log" 2>&1 < /dev/null 8>&-
     wait_for 60 "the session to start unbound-review" bash -c "[ ! -e '$runtime/job' ]"
     sudo umount --lazy "$screenshot"
 

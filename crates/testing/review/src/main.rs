@@ -12,7 +12,7 @@ use std::sync::mpsc::{self, Sender};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use input::{Keyboard, Pointer};
+use input::{Keyboard, Pointer, Touchpad};
 use recorder::{Frame, Request, Started};
 use report::{Entry, Outcome, Timeline};
 use scenario::{Line, Step};
@@ -77,6 +77,7 @@ fn main() -> ExitCode {
 struct Runner {
     keyboard: Keyboard,
     pointer: Pointer,
+    touchpad: Option<Touchpad>,
     recorder: Sender<Request>,
     epoch: Instant,
     out: PathBuf,
@@ -91,6 +92,11 @@ fn review(arguments: &Arguments) -> Result<(), Box<dyn Error>> {
     let screen = Screen::connect()?;
     let keyboard = Keyboard::new()?;
     let pointer = Pointer::new()?;
+    let touchpad = lines
+        .iter()
+        .any(|line| matches!(line.step, Step::Pinch { .. }))
+        .then(Touchpad::new)
+        .transpose()?;
     let (requests, received) = mpsc::channel();
     let (started_sender, started) = mpsc::channel();
     let out = arguments.out.clone();
@@ -108,6 +114,7 @@ fn review(arguments: &Arguments) -> Result<(), Box<dyn Error>> {
     let mut runner = Runner {
         keyboard,
         pointer,
+        touchpad,
         recorder: requests,
         epoch,
         out: arguments.out.clone(),
@@ -196,6 +203,11 @@ impl Runner {
             }
             Step::Drag { from, to } => self.pointer.drag(*from, *to)?,
             Step::Scroll { direction, detents } => self.pointer.scroll(*direction, *detents)?,
+            Step::Pinch { pinch, fingers } => {
+                if let Some(touchpad) = &mut self.touchpad {
+                    touchpad.pinch(*pinch, *fingers)?;
+                }
+            }
             Step::Wait(duration) => thread::sleep(*duration),
             Step::WaitForWindow { app_id, timeout } => {
                 return self.wait_for_window(app_id, *timeout);

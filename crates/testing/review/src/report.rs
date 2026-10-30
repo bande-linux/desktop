@@ -44,6 +44,7 @@ impl Entry {
             Step::Click { .. } => ("click", None),
             Step::Drag { .. } => ("drag", None),
             Step::Scroll { .. } => ("scroll", None),
+            Step::Pinch { .. } => ("pinch", None),
             Step::Wait(_) => ("wait", None),
             Step::WaitForWindow { .. } => ("wait-for-window", None),
             Step::Shot(name) => ("shot", Some(name.clone())),

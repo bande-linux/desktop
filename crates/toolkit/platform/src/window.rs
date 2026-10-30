@@ -53,7 +53,9 @@ use crate::L10N;
 use crate::access::Accessibility;
 use crate::appearance::AppearanceWatch;
 use crate::capture::Capture;
-use crate::chrome::{Chrome, Control, Frame, RESIZE_MARGIN, TITLE_BAR_HEIGHT, Zone};
+use crate::chrome::{
+    Chrome, Control, Frame, RESIZE_MARGIN, TITLE_BAR_HEIGHT, Zone, control_for_node,
+};
 use crate::clipboard::Clipboard;
 use crate::clipboard::{DragEvent, Transfer};
 use crate::effect::BackgroundEffect;
@@ -358,6 +360,7 @@ pub struct Window {
     needs_redraw: bool,
     chrome: Option<Chrome>,
     menus: Option<Menus>,
+    ui_deadline: Option<Instant>,
     window_menu: bool,
     pub(crate) closed_by_button: bool,
     text: Option<TextSystem>,
@@ -528,6 +531,7 @@ impl Window {
             needs_redraw: true,
             chrome,
             menus: None,
+            ui_deadline: None,
             window_menu: false,
             closed_by_button: false,
             text: None,
@@ -895,6 +899,9 @@ impl Window {
                     Some(ClipboardRequest::Paste) => self.paste()?,
                     None => {}
                 }
+                if ui.take_input_method_reset() {
+                    self.reset_text_input();
+                }
                 self.set_cursor(ui.cursor());
                 (changed, None)
             }
@@ -923,6 +930,7 @@ impl Window {
         if changed || ui.is_animating() {
             self.request_redraw();
         }
+        self.ui_deadline = ui.deadline();
         Ok(unhandled)
     }
 
@@ -951,11 +959,20 @@ impl Window {
     }
 
     pub(crate) fn deadline(&self) -> Option<Instant> {
-        self.menus.as_ref().and_then(Menus::deadline)
+        self.menus
+            .as_ref()
+            .and_then(Menus::deadline)
+            .into_iter()
+            .chain(self.ui_deadline)
+            .min()
     }
 
     pub(crate) fn tick(&mut self, now: Instant) {
         self.serve_menus(now);
+        if self.ui_deadline.is_some_and(|deadline| deadline <= now) {
+            self.ui_deadline = None;
+            self.request_redraw();
+        }
     }
 
     fn serve_menus(&mut self, now: Instant) {
@@ -1257,7 +1274,7 @@ impl Window {
     }
 
     fn perform_chrome(&mut self, request: &ActionRequest) -> bool {
-        let Some(control) = Control::for_node(request.target_node) else {
+        let Some(control) = control_for_node(request.target_node) else {
             return false;
         };
         if self.chrome.is_none() || request.action != accesskit::Action::Click {

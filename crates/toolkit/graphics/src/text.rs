@@ -212,6 +212,10 @@ impl Paragraph {
         }
     }
 
+    pub fn layout(&self) -> &Layout<Color> {
+        &self.layout
+    }
+
     pub fn width(&self) -> f32 {
         self.layout.width()
     }

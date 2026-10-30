@@ -3,7 +3,7 @@ use std::rc::Rc;
 use unbound_audio::Direction;
 use unbound_toolkit::Spacing;
 use unbound_toolkit::ui::{
-    Axis, Button, Label, SecureField, Slider, Stack, Toggle, Widget, WidgetId,
+    Axis, Button, Label, SecureField, SegmentedControl, Slider, Stack, Toggle, Widget, WidgetId,
 };
 
 use crate::L10N;
@@ -15,8 +15,8 @@ use crate::view::{
     Anchor, Intent, Intents, MIRROR_PREFIX, SettingsView, USE_EXTENDED, USE_MAIN, intent,
 };
 use crate::widgets::{
-    Caption, Captioned, Card, Check, Column, Row, Scroll, Segmented, SidebarRow, Signal, Text,
-    Thumbnail, Thumbnails, Tone,
+    Caption, Captioned, Card, Check, Column, Row, Scroll, SidebarRow, Signal, Text, Thumbnail,
+    Thumbnails, Tone,
 };
 use unbound_config::Placement;
 use unbound_settings_panes::SettingHit;
@@ -155,7 +155,7 @@ impl SettingsView {
                     choices.iter().map(|choice| choice.label.clone()).collect();
                 let values: Vec<Value> =
                     choices.iter().map(|choice| choice.value.clone()).collect();
-                boxed(Segmented::new(
+                boxed(SegmentedControl::new(
                     &setting.label,
                     &labels,
                     selected,
@@ -239,7 +239,7 @@ impl SettingsView {
                     }
                     _ => None,
                 };
-                boxed(Segmented::new(
+                boxed(SegmentedControl::new(
                     &setting.label,
                     &labels,
                     selected,
@@ -270,7 +270,7 @@ impl SettingsView {
                         .position(|(width, height)| size == format!("{width}x{height}")),
                     _ => None,
                 };
-                boxed(Segmented::new(
+                boxed(SegmentedControl::new(
                     &setting.label,
                     &labels,
                     selected,
@@ -317,7 +317,7 @@ impl SettingsView {
                 };
                 let selected = choices.iter().position(|(_, value)| *value == current);
                 let labels: Vec<String> = choices.iter().map(|(label, _)| label.clone()).collect();
-                boxed(Segmented::new(
+                boxed(SegmentedControl::new(
                     &setting.label,
                     &labels,
                     selected,

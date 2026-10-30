@@ -196,8 +196,8 @@ impl State {
                     pending.states.set(state);
                 }
             }
-            pending.size = Some(target.size);
         });
+        window.request_size(Some(target.size));
         window.tile = Some((tile, target));
         if let Some(serial) = window.configure() {
             window.pending_location = Some((serial, target.location));
@@ -213,8 +213,8 @@ impl State {
             for state in TILED {
                 pending.states.unset(state);
             }
-            pending.size = restore.map(|restore| restore.size);
         });
+        window.request_size(restore.map(|restore| restore.size));
         let serial = window.configure();
         if let (Some(serial), Some(restore)) = (serial, restore) {
             window.pending_location = Some((serial, restore.location));
@@ -286,7 +286,10 @@ impl State {
             let Some((their_tile, theirs)) = self.windows[neighbor].tile else {
                 continue;
             };
-            if neighbor == index || !self.present(&self.windows[neighbor]) {
+            if neighbor == index
+                || !self.present(&self.windows[neighbor])
+                || self.screen_of(&self.windows[neighbor]) != self.screen_of(&self.windows[index])
+            {
                 continue;
             }
             let mut shared = theirs;
@@ -313,9 +316,7 @@ impl State {
             }
             let window = &mut self.windows[neighbor];
             window.tile = Some((their_tile, shared));
-            window
-                .toplevel
-                .with_pending_state(|pending| pending.size = Some(shared.size));
+            window.request_size(Some(shared.size));
             if let Some(serial) = window.configure() {
                 window.pending_location = Some((serial, shared.location));
             }

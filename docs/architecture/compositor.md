@@ -37,6 +37,20 @@ when they reach the screen is Unbound's own.
   shadow's element covers its blur reach, so moving or focusing a window damages its shadow.
   `ci/perf` damages a 64 × 64 patch inside the top window rather than at its corner, since the
   corner now lets what lies below show through by design.
+- **Title bars for other toolkits.** A window that binds `xdg-decoration` gets a server-side
+  title bar unless it asks for client-side (Qt, foot, SDL and Electron ask for or accept server
+  side; GTK and our toolkit draw their own and never bind it). The bar is the toolkit's: the
+  same 28 pt height, traffic lights, centred semibold title, colours of the light or dark
+  palette (followed from the portal's `color-scheme`) and active, inactive and hover states,
+  drawn by `unbound_graphics::TitleBar`, which `unbound-toolkit-platform` draws its own with.
+  It is rasterised on the CPU at its display's scale whenever its look changes (and stretched
+  to fit while it is drawn on another display mid-drag or in a mirror) and becomes part
+  of the window: inside its rounded clip and shadow, in the opening, closing and overview
+  animations. The window's geometry includes the bar, so placement, zoom and tiling size the
+  app to what is left below it. Dragging the bar moves the window (with snapping), a double
+  click zooms, the buttons close, minimise and zoom (a press that slides off does nothing, as
+  in AppKit), and a 6 pt band outside the window resizes it with the matching cursor. A
+  window never opens with its title bar above the top of the screen.
 - **dma-buf.** `linux-dmabuf-v1` serves single-plane ARGB8888 and XRGB8888 buffers with the
   LINEAR modifier: version 3 headless, version 4 with feedback (main device and a scanout tranche
   of the primary plane's formats) on a DRM device, whose node accepted dma-bufs carry so that
@@ -70,11 +84,14 @@ when they reach the screen is Unbound's own.
   `wl_surface.enter`/`leave` and its scale through `wp_fractional_scale_v1`, so it redraws
   sharp when it moves to a display of another scale. The pointer moves across the displays at
   their own scales and never leaves them (it stops at an edge without a neighbour); a new
-  window opens on the display with the pointer, maximising, full screen, tiling and snapping
+  window opens on the display with the pointer, cascading only from its app's windows shown on
+  that display, maximising, full screen, tiling and snapping
   use the window's display, and dragging a window until the pointer crosses onto another
   display moves it there. `Alt+Super+Shift+Left/Right/Up/Down` move the focused window to the
   neighbouring display in that direction keeping its relative place (shrunk only when it does
-  not fit), which it reaches with the opening spring. When a display goes away its shown
+  not fit), which it reaches with the opening spring; a window with our title bar keeps it
+  across displays and the app is sized to what is left below it. When a display's scale or
+  resolution changes the pointer keeps its relative place on it. When a display goes away its shown
   workspace's windows join the main display's shown workspace and its other workspaces join the
   main display's row, each window keeping its relative place; when it returns, those windows
   and workspaces go back to it, at the place they had. `wlr-output-management-v1` lists the
@@ -238,9 +255,8 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `xdg_activation_v1` | Focus-stealing prevention | P0 | implemented |
 | `ext-foreign-toplevel-list-v1` | Window list for the Dock | P0 | implemented, shell clients only |
 | `zwp_text_input_v3` / `input_method_v2` / `virtual_keyboard_v1` | Input methods (CJK) | P0 | implemented |
-| `zxdg_decoration_manager_v1` | Decoration negotiation (answers client-side) | P1 | implemented |
+| `zxdg_decoration_manager_v1` | Decoration negotiation (server-side unless the client asks for client-side) | P1 | implemented |
 | `wlr-output-management-v1` | Display arrangement and hotplug configuration | P1 | implemented (v4; enabled heads only, no custom modes) |
-
 | `ext-image-capture-source-v1` / `ext-image-copy-capture-v1` | Screen capture for screenshots and the portal | P1 | implemented (output sources) |
 | `wp_cursor_shape_v1` | Cursor shapes from the theme | P1 | implemented |
 | `zwp_pointer_constraints_v1` / `relative_pointer` | Pointer lock for games | P1 | not implemented |

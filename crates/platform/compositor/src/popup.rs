@@ -44,7 +44,7 @@ impl State {
 
     pub(crate) fn geometry_origin(&self, root: &WlSurface) -> Option<Point<i32, Logical>> {
         if let Some(index) = self.window_index(root) {
-            return Some(self.windows[index].location);
+            return Some(self.windows[index].content_location());
         }
         self.layer_origin(root)
     }

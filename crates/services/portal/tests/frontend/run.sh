@@ -24,4 +24,8 @@ exec dbus-run-session -- sh -eu -c '
         org.freedesktop.DBus.Properties.Set string:org.unbound.Config string:Appearance \
         variant:string:light > /dev/null
     wait_for 2
+    dbus-send --session --print-reply --dest=org.freedesktop.portal.Desktop \
+        /org/freedesktop/portal/desktop org.freedesktop.portal.Settings.ReadOne \
+        string:org.freedesktop.appearance string:accent-color | grep -c double | grep -qx 3
+    echo "accent-color is served"
 '

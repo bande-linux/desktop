@@ -6,8 +6,8 @@ use std::time::Duration;
 use unbound_compositor::{Headless, OutputConfig, OutputMode, Rect, Renderer};
 use unbound_config::Config;
 use unbound_test_wayland::{
-    Anchor, BLUE, GREEN, KeyboardInteractivity, Layer, LayerRequest, RED, ShmImage, TestClient,
-    quadrants, roundtrip,
+    Anchor, BLUE, DecorationMode, GREEN, KeyboardInteractivity, Layer, LayerRequest, RED, ShmImage,
+    TestClient, quadrants, roundtrip,
 };
 
 use wayland_client::protocol::wl_shm::Format;
@@ -469,4 +469,104 @@ fn zoom_fills_the_display_the_window_is_on() {
     roundtrip(&mut server, &mut [&mut app]);
 
     assert_eq!(geometry(&server), rect(256, 0, 320, 240));
+}
+
+fn red_image(pixels: &[u8]) -> ShmImage<'_> {
+    ShmImage {
+        width: WINDOW.0,
+        height: WINDOW.1,
+        stride: WINDOW.0 * 4,
+        format: Format::Xrgb8888,
+        bytes: pixels,
+    }
+}
+
+#[test]
+fn an_apps_windows_cascade_only_from_its_windows_on_the_same_display() {
+    let mut server = two_displays();
+    let pixels = RED.repeat((WINDOW.0 * WINDOW.1) as usize);
+    let image = red_image(&pixels);
+    let mut terminal = TestClient::connect(&mut server);
+    terminal.show_window_of(&mut server, &image, "org.example.Terminal");
+    server.move_pointer_to(at(400.0, 100.0), 0);
+
+    terminal.show_window_of(&mut server, &image, "org.example.Terminal");
+    terminal.show_window_of(&mut server, &image, "org.example.Terminal");
+
+    let geometries: Vec<Rect> = server
+        .windows()
+        .iter()
+        .map(|window| window.geometry().expect("mapped"))
+        .collect();
+    assert_eq!(
+        geometries,
+        [
+            rect(96, 72, 64, 48),
+            rect(256 + 128, 96, 64, 48),
+            rect(256 + 128 + 28, 96 + 28, 64, 48),
+        ]
+    );
+    assert_eq!(server.output_of(&server.windows()[1]), SIDE);
+    assert_eq!(server.output_of(&server.windows()[2]), SIDE);
+}
+
+#[test]
+fn a_window_with_our_title_bar_moves_to_a_display_of_another_scale_with_its_bar() {
+    const DECORATED: (i32, i32) = (120, 40);
+    const BAR: i32 = 28;
+    let mut server = two_displays();
+    server.set_reduce_motion(true);
+    let mut settings = server.output_settings(SIDE).expect("side display");
+    settings.scale = 2.0;
+    server.configure_output(SIDE, settings);
+    let mut app = TestClient::connect(&mut server);
+    app.use_seat(&mut server);
+    let pixels = RED.repeat((DECORATED.0 * DECORATED.1) as usize);
+    let image = ShmImage {
+        width: DECORATED.0,
+        height: DECORATED.1,
+        stride: DECORATED.0 * 4,
+        format: Format::Xrgb8888,
+        bytes: &pixels,
+    };
+    app.show_decorated_window(&mut server, &image, Some(DecorationMode::ServerSide));
+    app.exchange(&mut server);
+    app.commit_buffer(0, &image, (0, 0, DECORATED.0, DECORATED.1));
+    app.exchange(&mut server);
+    let decorated = (DECORATED.0, DECORATED.1 + BAR);
+    assert_eq!(geometry(&server), rect(68, 76, decorated.0, decorated.1));
+
+    chord(
+        &mut server,
+        &[KEY_LEFTALT, KEY_LEFTMETA, KEY_LEFTSHIFT],
+        KEY_RIGHT,
+    );
+    roundtrip(&mut server, &mut [&mut app]);
+
+    assert_eq!(server.output_of(&server.windows()[0]), SIDE);
+    assert_eq!(geometry(&server), rect(276, 35, decorated.0, decorated.1));
+    assert_eq!(app.preferred_scale(&mut server, 0), Some(240));
+    let mut renderer = Renderer::new().expect("renderer");
+    renderer.render_output(&mut server, SIDE).expect("frame");
+    let snapshot = renderer.snapshot_output(SIDE).expect("read back");
+    let pixel = |x: i32, y: i32| {
+        let at = (((35 + y) * 2 * snapshot.size.w + (276 - 256 + x) * 2) * 4) as usize;
+        [
+            snapshot.rgba[at],
+            snapshot.rgba[at + 1],
+            snapshot.rgba[at + 2],
+        ]
+    };
+    assert!(pixel(100, BAR - 3).iter().all(|channel| *channel > 0xf0));
+    assert_eq!(pixel(60, BAR + 3), [0xff, 0, 0]);
+
+    chord(
+        &mut server,
+        &[KEY_LEFTALT, KEY_LEFTMETA, KEY_LEFTSHIFT],
+        KEY_LEFT,
+    );
+    roundtrip(&mut server, &mut [&mut app]);
+
+    assert_eq!(server.output_of(&server.windows()[0]), MAIN);
+    assert_eq!(geometry(&server), rect(68, 76, decorated.0, decorated.1));
 }

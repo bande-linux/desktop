@@ -24,8 +24,10 @@ depends = "$auto, xdg-desktop-portal (>= 1.18), dbus-session-bus | default-dbus-
 recommends = "unbound-config, xdg-desktop-portal-gtk"
 extended-description = """\
 Implements xdg-desktop-portal's Settings backend for the Unbound desktop: \
-the colour scheme and accent colour follow the appearance in config.kdl. \
-Interfaces Unbound cannot show yet fall back to the GTK backend."""
+the colour scheme, accent colour and Reduce Motion follow config.kdl, so \
+GTK, libadwaita and Qt apps follow them. Open and Save dialogs and the \
+other interfaces Unbound does not show yet come from the GTK backend, and \
+secrets from GNOME Keyring."""
 assets = [
     ["target/release/xdg-desktop-portal-unbound", "usr/libexec/", "755"],
     ["data/xdg-desktop-portal-unbound.service", "usr/lib/systemd/user/", "644"],

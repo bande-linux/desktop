@@ -19,8 +19,15 @@ something is its own binary package, built with `cargo deb` from the crate's
   It depends on the compositor, the core session services, the Dock, the launcher, the lock
   screen and the portal backend at the same version, and on `xdg-desktop-portal`,
   `dbus-user-session`, logind and `libpam-systemd`; it recommends the terminal, screenshot
-  tool, Files, Settings, tray and automount services, `fonts-inter`, `xdg-user-dirs`, `upower`
-  and `udisks2`, and suggests `firefox-esr`. Installing it adds "Unbound" to the sessions a
+  tool, Files, Settings, Activity Monitor, tray and automount services, `gnome-keyring` with
+  `libpam-gnome-keyring`, Qt's portal platform theme (so Qt apps follow dark mode), the everyday apps a fresh install needs (`firefox-esr`,
+  `gnome-text-editor`, `loupe`, `papers`, `showtime`, `gnome-calculator`), `fonts-inter`,
+  `xdg-user-dirs`, `upower` and `udisks2`, and suggests `gnome-clocks`. It installs
+  `/usr/share/applications/unbound-mimeapps.list`, read only in an Unbound session, which
+  opens folders in Files, web pages in Firefox, text in Text Editor, pictures in Loupe, PDFs
+  in Papers and videos in Showtime; a person's own choice in `~/.config/mimeapps.list` still
+  wins. `ci/deb-install` installs without the third-party recommends and checks that each of
+  them has an installation candidate in Debian 13. Installing it adds "Unbound" to the sessions a
   display manager such as GDM, SDDM or greetd offers.
 - **`unbound-archive-keyring`, `unbound-apt-source`, `unbound-apt-source-testing`**
   (`packaging/unbound-apt-source`): the repository's signing key and the APT source for the

@@ -1,4 +1,5 @@
 use smithay::desktop::utils::bbox_from_surface_tree;
+use smithay::reexports::wayland_protocols::xdg::decoration::zv1::server::zxdg_toplevel_decoration_v1::Mode as DecorationMode;
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Point, Rectangle, Serial, Size};
@@ -10,6 +11,7 @@ use smithay::backend::renderer::element::Id;
 
 use unbound_spring::Spring;
 
+use crate::frame::Frame;
 use crate::motion::{Look, Motion};
 use crate::scene::Drawn;
 use crate::state::{Rect, State};
@@ -33,6 +35,7 @@ pub struct Window {
     pub(crate) tile: Option<(Tile, Rect)>,
     pub(crate) workspace: u64,
     pub(crate) announced_workspace: Option<usize>,
+    pub(crate) frame: Frame,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -46,6 +49,14 @@ const TOP: u32 = 1;
 const BOTTOM: u32 = 2;
 const LEFT: u32 = 4;
 const RIGHT: u32 = 8;
+
+fn title_bar_height(mode: Option<DecorationMode>, fullscreen: bool) -> i32 {
+    if mode == Some(DecorationMode::ServerSide) && !fullscreen {
+        unbound_graphics::TITLE_BAR_HEIGHT as i32
+    } else {
+        0
+    }
+}
 
 impl Resize {
     fn has(&self, edge: u32) -> bool {
@@ -99,6 +110,7 @@ impl Window {
             tile: None,
             workspace,
             announced_workspace: None,
+            frame: Frame::default(),
         }
     }
 
@@ -115,7 +127,7 @@ impl Window {
         let geometry = self.local_geometry();
         Some(Rect {
             location: self.location,
-            size: (geometry.size.w, geometry.size.h).into(),
+            size: (geometry.size.w, geometry.size.h + self.title_bar_height()).into(),
         })
     }
 
@@ -143,9 +155,41 @@ impl Window {
         self.visible() || (self.size.is_some() && self.shown_look().is_some())
     }
 
+    pub(crate) fn title_bar_height(&self) -> i32 {
+        let current = self.toplevel.current_state();
+        title_bar_height(
+            current.decoration_mode,
+            current.states.contains(xdg_toplevel::State::Fullscreen),
+        )
+    }
+
+    pub(crate) fn content_location(&self) -> Point<i32, Logical> {
+        (self.location.x, self.location.y + self.title_bar_height()).into()
+    }
+
     pub(crate) fn surface_origin(&self) -> Point<i32, Logical> {
         let offset = self.local_geometry().loc;
-        (self.location.x - offset.x, self.location.y - offset.y).into()
+        self.content_location() - offset
+    }
+
+    pub(crate) fn request_size(&self, outer: Option<Size<i32, Logical>>) {
+        self.toplevel.with_pending_state(|pending| {
+            let bar = title_bar_height(
+                pending.decoration_mode,
+                pending.states.contains(xdg_toplevel::State::Fullscreen),
+            );
+            pending.size = outer.map(|size| (size.w, (size.h - bar).max(1)).into());
+        });
+    }
+
+    pub(crate) fn requested_size(&self) -> Option<Size<i32, Logical>> {
+        self.toplevel.with_pending_state(|pending| {
+            let bar = title_bar_height(
+                pending.decoration_mode,
+                pending.states.contains(xdg_toplevel::State::Fullscreen),
+            );
+            pending.size.map(|size| (size.w, size.h + bar).into())
+        })
     }
 
     pub(crate) fn local_geometry(&self) -> Rectangle<i32, Logical> {
@@ -171,13 +215,18 @@ impl Window {
         })
     }
 
-    pub(crate) fn clamp_size(&self, size: Size<i32, Logical>) -> Size<i32, Logical> {
+    pub(crate) fn clamp_size(&self, outer: Size<i32, Logical>) -> Size<i32, Logical> {
         let (min, max) = self.size_limits();
+        let bar = self.title_bar_height();
         let clamp = |value: i32, min: i32, max: i32| {
             let value = value.max(min).max(1);
             if max > 0 { value.min(max) } else { value }
         };
-        (clamp(size.w, min.w, max.w), clamp(size.h, min.h, max.h)).into()
+        (
+            clamp(outer.w, min.w, max.w),
+            clamp(outer.h - bar, min.h, max.h) + bar,
+        )
+            .into()
     }
 
     pub(crate) fn configure(&self) -> Option<Serial> {
@@ -202,10 +251,16 @@ impl State {
         let screen = self.screen_of(&self.windows[index]);
         let area = self.usable_area(screen);
         let output = self.screen_rect(screen);
+        let siblings = if self.windows[index].size.is_none() {
+            self.sibling_locations(index)
+        } else {
+            Vec::new()
+        };
         let window = &mut self.windows[index];
         if !window.toplevel.is_initial_configure_sent() {
             window.toplevel.with_pending_state(|state| {
-                state.bounds = Some(area.size);
+                let bar = title_bar_height(state.decoration_mode, false);
+                state.bounds = Some((area.size.w, area.size.h - bar).into());
             });
             window.toplevel.send_configure();
             return;
@@ -221,7 +276,7 @@ impl State {
                 } else if window.has_state(xdg_toplevel::State::Maximized) {
                     area.location
                 } else {
-                    crate::state::centered(area, geometry.size)
+                    crate::cascade::cascaded(area, geometry.size, &siblings)
                 };
                 window.pending_location = None;
             } else if let Some((serial, at)) = window.pending_location
@@ -293,19 +348,18 @@ impl State {
                 }
             }
             match target {
-                Some(target) => {
+                Some(_) => {
                     for tiled in TILED {
                         pending.states.unset(tiled);
                     }
                     pending.states.set(state);
-                    pending.size = Some(target.size);
                 }
                 None => {
                     pending.states.unset(state);
-                    pending.size = window.restore.map(|restore| restore.size);
                 }
             }
         });
+        window.request_size(target.or(window.restore).map(|rect| rect.size));
         if target.is_some() {
             window.tile = None;
         }
@@ -464,9 +518,7 @@ impl State {
             return;
         };
         let size = window.clamp_size(resize.size_for(delta));
-        window.toplevel.with_pending_state(|pending| {
-            pending.size = Some(size);
-        });
+        window.request_size(Some(size));
         window.configure();
         let rect = Rect {
             location: resize.location_for(size),

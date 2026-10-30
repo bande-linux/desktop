@@ -13,6 +13,7 @@ pub struct Button {
     on_click: Box<dyn FnMut()>,
     pressed: bool,
     role: ButtonRole,
+    tooltip: Option<String>,
     paragraph: Option<Paragraph>,
     frame: Rect,
 }
@@ -25,6 +26,7 @@ impl Button {
             on_click: Box::new(on_click),
             pressed: false,
             role: ButtonRole::Plain,
+            tooltip: None,
             paragraph: None,
             frame: Rect::default(),
         }
@@ -33,6 +35,13 @@ impl Button {
     pub fn primary(self) -> Self {
         Self {
             role: ButtonRole::Primary,
+            ..self
+        }
+    }
+
+    pub fn tooltip(self, tooltip: &str) -> Self {
+        Self {
+            tooltip: Some(tooltip.to_owned()),
             ..self
         }
     }
@@ -161,6 +170,10 @@ impl Widget for Button {
 
     fn accepts_focus(&self, cx: &Context) -> bool {
         cx.keyboard_navigation
+    }
+
+    fn tooltip(&self) -> Option<&str> {
+        self.tooltip.as_deref()
     }
 
     fn key_equivalent(&self) -> Option<Key> {

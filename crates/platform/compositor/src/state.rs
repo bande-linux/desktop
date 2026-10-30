@@ -5,7 +5,7 @@ use std::os::fd::OwnedFd;
 use std::os::unix::net::UnixStream;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::element::ScreenElement;
 use smithay::backend::allocator::dmabuf::Dmabuf;
@@ -205,14 +205,16 @@ pub struct State {
     pub(crate) animated_at: Option<Duration>,
     pub(crate) pointer_location: Point<f64, Logical>,
     pub(crate) cursor_shown: bool,
-    cursor_status: CursorImageStatus,
+    pub(crate) cursor_status: CursorImageStatus,
     cursor_theme: CursorTheme,
     cursor_arrow: Cursor,
     named_cursors: HashMap<CursorIcon, Option<Cursor>>,
     cursor_scale: f64,
     pub(crate) held_shortcut_keys: Vec<u32>,
+    pub(crate) typed_at: Option<Instant>,
     pub(crate) input_devices: usize,
     pub(crate) pending_captures: Vec<crate::capture::PendingCapture>,
+    pub(crate) decorations: crate::frame::Decorations,
 }
 
 pub struct Headless {
@@ -372,8 +374,10 @@ impl Headless {
             named_cursors: HashMap::new(),
             cursor_scale: 1.0,
             held_shortcut_keys: Vec::new(),
+            typed_at: None,
             input_devices: 0,
             pending_captures: Vec::new(),
+            decorations: crate::frame::Decorations::default(),
         };
         Ok(Self {
             display,
@@ -559,9 +563,15 @@ impl Headless {
         renderer: &mut VulkanRenderer,
         screen: usize,
     ) -> Vec<ScreenElement> {
+        self.state.paint_title_bars(renderer);
         let (elements, drawn, icon) = self.compose(renderer, screen, true);
         if self.state.pointer_screen() == screen {
             self.state.remember_drag_icon(icon);
+        }
+        for index in 0..self.state.windows.len() {
+            if self.state.screen_of(&self.state.windows[index]) == screen {
+                self.state.windows[index].drawn = None;
+            }
         }
         for (surface, drawn) in drawn {
             if let Some(index) = self.state.window_index(&surface)
@@ -864,6 +874,7 @@ impl State {
             return;
         }
         self.windowless_app = None;
+        self.typed_at = None;
         if let Some(surface) = &surface
             && self.window_index(surface).is_some()
         {
@@ -967,6 +978,9 @@ impl State {
         if focused.client() == owner {
             return true;
         }
+        if self.would_interrupt_typing(surface, &focused) {
+            return false;
+        }
         !self.windows.iter().any(|window| {
             window.size.is_some()
                 && window.toplevel.wl_surface() != surface
@@ -996,8 +1010,8 @@ pub struct Rect {
 
 pub(crate) fn centered(area: Rect, window: Size<i32, Logical>) -> Point<i32, Logical> {
     (
-        area.location.x + (area.size.w - window.w) / 2,
-        area.location.y + (area.size.h - window.h) / 2,
+        area.location.x + ((area.size.w - window.w) / 2).max(0),
+        area.location.y + ((area.size.h - window.h) / 2).max(0),
     )
         .into()
 }
@@ -1123,7 +1137,7 @@ impl State {
         windows
             .iter()
             .flat_map(|window| {
-                self.popup_surfaces(window.surface(), window.location)
+                self.popup_surfaces(window.surface(), window.content_location())
                     .into_iter()
                     .map(|(surface, origin)| Placed::Surface(surface, origin))
                     .chain([Placed::Window(window)])
@@ -1263,8 +1277,13 @@ impl State {
                 self.focus(Some(surface.clone()));
                 self.sync_surface_outputs();
             }
-
             (false, true) => {
+                if self
+                    .focused()
+                    .is_some_and(|focused| self.would_interrupt_typing(surface, &focused))
+                {
+                    self.request_attention(shell::toplevel_names(surface).1);
+                }
                 self.place_behind_frontmost(surface);
                 self.sync_surface_outputs();
             }
@@ -1343,6 +1362,7 @@ impl XdgShellHandler for State {
 
     fn title_changed(&mut self, toplevel: ToplevelSurface) {
         self.publish_toplevel(toplevel.wl_surface());
+        self.needs_redraw = true;
     }
 
     fn app_id_changed(&mut self, toplevel: ToplevelSurface) {

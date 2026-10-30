@@ -15,7 +15,7 @@ use unbound_compositor::{
     CLIPBOARD_DAEMON, CONTROL_CENTER, CursorTheme, DESKTOP_SURFACE, DOCK, DrmBackend, FrameClock,
     FrameOutput, FrameScheduler, GREETER, Headless, LAUNCHER, MENU_BAR, NOTIFICATIONS, REFRESH,
     REVIEW, Renderer, SCREENSHOT, SessionRequest, SessionRole, SessionUpkeep,
-    export_session_environment, follow_reduced_motion, follow_session, notify_ready,
+    export_session_environment, follow_appearance, follow_session, notify_ready,
 };
 use unbound_config::{BUS_NAME, Config, OBJECT_PATH, config_path};
 use zbus::blocking::fdo::PropertiesProxy;
@@ -299,21 +299,22 @@ fn start_user_session<O: 'static>(
     event_loop: &mut EventLoop<'static, App<O>>,
     app: &mut App<O>,
 ) -> Result<Option<Child>, Box<dyn Error>> {
-    let (reduce_motion, reduce_motion_changes) = channel::channel();
+    let (appearance, appearance_changes) = channel::channel();
     let followed = zbus::blocking::Connection::session().and_then(|connection| {
-        follow_reduced_motion(connection, move |reduce| reduce_motion.send(reduce).is_ok())
+        follow_appearance(connection, move |look| appearance.send(look).is_ok())
     });
     match followed {
         Ok(()) => {
             event_loop
                 .handle()
-                .insert_source(reduce_motion_changes, |event, _, app| {
-                    if let Event::Msg(reduce) = event {
-                        app.compositor.set_reduce_motion(reduce);
+                .insert_source(appearance_changes, |event, _, app| {
+                    if let Event::Msg(look) = event {
+                        app.compositor.set_reduce_motion(look.reduce_motion);
+                        app.compositor.set_dark_appearance(look.dark);
                     }
                 })?;
         }
-        Err(error) => tracing::warn!("cannot follow Reduce Motion: {error}"),
+        Err(error) => tracing::warn!("cannot follow the appearance: {error}"),
     }
     let (lock_states, reported) = std::sync::mpsc::channel();
     match follow_session(reported) {

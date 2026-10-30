@@ -130,9 +130,7 @@ impl State {
             .or(free.map(|free| carried(free, area, area)))
             .unwrap_or_else(|| carried(geometry, from, area));
         if target.size != geometry.size {
-            window
-                .toplevel
-                .with_pending_state(|pending| pending.size = Some(target.size));
+            window.request_size(Some(target.size));
             if let Some(serial) = window.configure() {
                 window.pending_location = Some((serial, target.location));
             }
@@ -342,8 +340,17 @@ impl State {
             return;
         }
         let before = self.screen_rect(screen);
+        let pointer_here = self.screen_at(self.pointer_location) == Some(screen);
         self.screens[screen].apply(settings);
         let after = self.screen_rect(screen);
+        if pointer_here {
+            let relative = self.pointer_location - before.location.to_f64();
+            self.pointer_location = after.location.to_f64()
+                + Point::from((
+                    relative.x * f64::from(after.size.w) / f64::from(before.size.w.max(1)),
+                    relative.y * f64::from(after.size.h) / f64::from(before.size.h.max(1)),
+                ));
+        }
         if before != after {
             for index in 0..self.windows.len() {
                 if self.screen_of(&self.windows[index]) != screen {

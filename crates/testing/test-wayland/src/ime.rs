@@ -81,6 +81,13 @@ impl TestClient {
         self.exchange(server);
     }
 
+    pub fn set_preedit(&mut self, server: &mut Headless, text: &str, cursor: (i32, i32)) {
+        let input_method = self.input_method();
+        input_method.set_preedit_string(text.to_owned(), cursor.0, cursor.1);
+        input_method.commit(self.globals.input_method.done);
+        self.exchange(server);
+    }
+
     pub fn grab_keyboard(&mut self, server: &mut Headless) {
         let grab = self.input_method().grab_keyboard(&self.queue.handle(), ());
         self.globals.input_method.grab = Some(grab);

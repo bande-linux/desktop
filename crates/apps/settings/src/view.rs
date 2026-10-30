@@ -5,9 +5,8 @@ use std::rc::Rc;
 use accesskit::{Action, ActionData, ActionRequest, TreeId, TreeUpdate};
 use std::time::{Duration, Instant};
 use unbound_audio::{Direction, Snapshot};
-
 use unbound_config::{DisplaySettings, Placement, Rotation};
-use unbound_toolkit::ui::{Context, Event, Key, Modifiers, TextField, Ui, Widget, WidgetId};
+use unbound_toolkit::ui::{Context, Event, Key, Modifiers, SearchField, Ui, Widget, WidgetId};
 use unbound_toolkit::{Image, Palette, Rect, Scene, TextSystem};
 
 use crate::L10N;
@@ -128,7 +127,7 @@ impl SettingsView {
     pub fn new(palette: Palette, text: TextSystem) -> Self {
         let intents: Intents = Rc::default();
         let queries = Rc::clone(&intents);
-        let field = TextField::new(&L10N.tr("search"), "", move |query: &str| {
+        let field = SearchField::new(&L10N.tr("search"), "", move |query: &str| {
             queries.borrow_mut().push(Intent::Query(query.to_owned()));
         });
         let search = field.id();

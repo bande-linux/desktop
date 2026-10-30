@@ -657,8 +657,10 @@ impl State {
                         Kind::Unspecified,
                     );
                 let small = map(rect).to_physical(scale);
+                let mut pieces = pieces_of(&surfaces, scale);
+                pieces.extend(window.title_bar_piece(scale));
                 elements.extend(scaled_pieces(
-                    &fresh(pieces_of(&surfaces, scale)),
+                    &fresh(pieces),
                     rect.to_physical(scale),
                     small,
                     rounded(small, CORNER_RADIUS * factor * scale),

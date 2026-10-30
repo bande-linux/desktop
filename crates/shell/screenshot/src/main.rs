@@ -23,7 +23,9 @@ use unbound_screenshot::service::{self, Casting, SCREEN_ID, UiRequest};
 use unbound_screenshot::shadow::with_shadow;
 use unbound_screenshot::thumbnail::{Thumbnail, ThumbnailAction};
 use unbound_screenshot::{L10N, app_name, free_path, png, recording_stem, save};
-use unbound_toolkit::ui::{Alert, Context, FreeLayout, Menu, MenuItem, Size, Ui, Widget};
+use unbound_toolkit::ui::{
+    Alert, Context, FreeLayout, Menu, MenuItem, Size, Ui, Widget, frame_time,
+};
 use unbound_toolkit::{
     App, Color, DragAction, DragIcon, Edges, Image, Item, KeyboardFocus, LayerKind, LayerOptions,
     MenuPlacement, Point, Rect, Role, Scene, ScreenImage, Shape, TextAlign, TextStyle, TextSystem,
@@ -35,7 +37,6 @@ use zbus::blocking::Connection;
 const MARKUP_FLAG: &str = "--markup";
 const PALETTE_BOTTOM: f32 = 96.0;
 const COUNTDOWN_SIZE: f32 = 132.0;
-const TICK: Duration = Duration::from_millis(16);
 
 enum Purpose {
     Save,
@@ -372,7 +373,7 @@ impl Screenshots {
             video,
             appearance.palette(),
             appearance.reduce_motion,
-            Instant::now(),
+            frame_time().on_screen(),
         ));
     }
 
@@ -722,6 +723,28 @@ impl Screenshots {
         }
     }
 
+    fn finish_animations(&mut self, window: &mut Window, now: Instant) {
+        self.settle_dialogs(window);
+        if matches!(self.mode, Mode::Idle)
+            && self
+                .thumbnail
+                .as_mut()
+                .is_some_and(|thumbnail| thumbnail.tick(now) == ThumbnailAction::Gone)
+        {
+            self.thumbnail = None;
+            self.arrange(window);
+        }
+    }
+
+    fn dialog_answered(&self) -> bool {
+        match &self.mode {
+            Mode::Picking(outcome, _) => outcome.borrow().is_some(),
+            Mode::Asking { allowed, .. } => allowed.get().is_some(),
+            Mode::Notice(read) => read.get(),
+            _ => false,
+        }
+    }
+
     fn settle_dialogs(&mut self, window: &mut Window) {
         if self.ui.is_animating() {
             return;
@@ -787,7 +810,7 @@ impl Screenshots {
 
     fn thumbnail_event(&mut self, window: &mut Window, input: &unbound_toolkit::ui::Event) {
         let screen = window.size();
-        let now = Instant::now();
+        let now = frame_time().on_screen();
         let Some(thumbnail) = self.thumbnail.as_mut() else {
             return;
         };
@@ -859,6 +882,8 @@ impl Screenshots {
 
 impl App for Screenshots {
     fn scene(&mut self, window: &mut Window) -> Scene {
+        let now = frame_time().presentation;
+        self.finish_animations(window, now);
         let (width, height) = window.size();
         let empty = Scene {
             width,
@@ -892,7 +917,7 @@ impl App for Screenshots {
                 scene
             }
             Mode::Idle => match &self.thumbnail {
-                Some(thumbnail) => thumbnail.scene((width, height), Instant::now()),
+                Some(thumbnail) => thumbnail.scene((width, height), now),
                 None => empty,
             },
         }
@@ -992,7 +1017,6 @@ impl App for Screenshots {
     }
 
     fn tick(&mut self, window: &mut Window, now: Instant) {
-        self.settle_dialogs(window);
         if let Mode::Countdown(until, _) = &self.mode {
             if *until <= now {
                 if let Mode::Countdown(_, target) = std::mem::replace(&mut self.mode, Mode::Idle) {
@@ -1002,47 +1026,29 @@ impl App for Screenshots {
                 window.request_redraw();
             }
         }
-        if matches!(self.mode, Mode::Idle)
-            && let Some(thumbnail) = self.thumbnail.as_mut()
-        {
-            if thumbnail.tick(now) == ThumbnailAction::Gone {
-                self.thumbnail = None;
-                self.arrange(window);
-            } else {
-                window.request_redraw();
-            }
-        }
+        self.finish_animations(window, now);
+        window.request_redraw();
     }
 
     fn deadline(&self) -> Option<Instant> {
-        let now = Instant::now();
-        let animating_dialog = matches!(
-            self.mode,
-            Mode::Picking(..) | Mode::Asking { .. } | Mode::Palette(_) | Mode::Notice(_)
-        ) && self.ui.is_animating();
         let countdown = match &self.mode {
-            Mode::Countdown(until, _) => Some((*until).min(now + Duration::from_millis(250))),
+            Mode::Countdown(until, _) => {
+                Some((*until).min(Instant::now() + Duration::from_millis(250)))
+            }
             _ => None,
         };
-        let thumbnail =
-            self.thumbnail
-                .as_ref()
-                .and_then(|thumbnail| match thumbnail.is_animating(now) {
-                    true => Some(now + TICK),
-                    false => thumbnail.deadline(),
-                });
-        [animating_dialog.then_some(now + TICK), countdown, thumbnail]
-            .into_iter()
-            .flatten()
-            .min()
+        let thumbnail = self.thumbnail.as_ref().and_then(Thumbnail::deadline);
+        [countdown, thumbnail].into_iter().flatten().min()
     }
 
     fn animating(&self) -> bool {
+        let now = frame_time().presentation;
         self.ui.is_animating()
+            || self.dialog_answered()
             || self
                 .thumbnail
                 .as_ref()
-                .is_some_and(|thumbnail| thumbnail.is_animating(Instant::now()))
+                .is_some_and(|thumbnail| thumbnail.is_animating(now) || thumbnail.is_leaving())
     }
 
     fn accessibility(&self) -> Option<TreeUpdate> {

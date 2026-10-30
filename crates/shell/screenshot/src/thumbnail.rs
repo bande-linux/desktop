@@ -94,6 +94,10 @@ impl Thumbnail {
         self.progress(now).1
     }
 
+    pub fn is_leaving(&self) -> bool {
+        self.leaving
+    }
+
     pub fn deadline(&self) -> Option<Instant> {
         (!self.leaving && !self.hovered && self.pressed.is_none()).then_some(self.until)
     }

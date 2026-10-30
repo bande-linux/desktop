@@ -8,7 +8,7 @@ use unbound_graphics::{
 
 use super::control::square_capped;
 use super::shortcut::ShortcutText;
-use super::{Key, Modifiers, Size};
+use super::{Animated, Key, Modifiers, Size, Spring};
 
 pub(crate) const ROW_HEIGHT: f32 = 28.0;
 const SEPARATOR_HEIGHT: f32 = 9.0;
@@ -35,8 +35,14 @@ const MAGNIFIER_CENTRE: f32 = 14.0;
 const MAX_FOUND: usize = 12;
 const PATH_SEPARATOR: &str = " › ";
 const TYPE_SELECT_PAUSE: Duration = Duration::from_secs(1);
-const FLASH_STEP: Duration = Duration::from_millis(70);
-const FADE: Duration = Duration::from_millis(150);
+const FLASH_STEP: Duration = Duration::from_millis(50);
+const FADE_LIMIT: Duration = Duration::from_millis(500);
+
+fn fade_after(chosen: Instant) -> Animated {
+    let mut fade = Animated::new(1.0);
+    fade.animate_at(chosen + 2 * FLASH_STEP, false, 0.0, Spring::FADE);
+    fade
+}
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Menu {
@@ -1012,7 +1018,7 @@ impl MenuTracker {
 
     pub fn deadline(&self) -> Option<Instant> {
         let submenu = self.submenu_due.map(|(_, _, at)| at);
-        let flash = self.flash.map(|(_, at)| at + 2 * FLASH_STEP + FADE);
+        let flash = self.flash.map(|(_, at)| at + 2 * FLASH_STEP + FADE_LIMIT);
         let settle = self.settle.map(|(_, _, at)| at);
         submenu.into_iter().chain(flash).chain(settle).min()
     }
@@ -1040,8 +1046,9 @@ impl MenuTracker {
     }
 
     pub fn is_finished(&self, now: Instant) -> bool {
-        self.flash
-            .is_some_and(|(_, at)| now >= at + 2 * FLASH_STEP + FADE)
+        self.flash.is_some_and(|(_, at)| {
+            now >= at + 2 * FLASH_STEP + FADE_LIMIT || fade_after(at).value_at(now) == (0.0, false)
+        })
     }
 
     pub fn is_flashing(&self) -> bool {
@@ -1054,8 +1061,7 @@ impl MenuTracker {
         };
         let elapsed = now.saturating_duration_since(at);
         let blink_off = elapsed < FLASH_STEP && level == flashed;
-        let fade = elapsed.saturating_sub(2 * FLASH_STEP).as_secs_f32() / FADE.as_secs_f32();
-        (!blink_off, (1.0 - fade).clamp(0.0, 1.0))
+        (!blink_off, fade_after(at).value_at(now).0.clamp(0.0, 1.0))
     }
 
     pub fn access(&self) -> (Vec<(NodeId, Node)>, Vec<NodeId>, Option<NodeId>) {

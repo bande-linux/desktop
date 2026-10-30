@@ -499,19 +499,16 @@ impl LockScreen {
         model.backdrop = Some(image);
         model
             .backdrop_shown
-            .animate_at(now, false, 1.0, Spring::GENTLE);
+            .animate_at(now, false, 1.0, Spring::FADE);
     }
 
-    pub fn is_fading(&self, now: Instant) -> bool {
-        self.model.borrow().backdrop_shown.value_at(now).1
-    }
-
-    pub fn shaking_until(&self) -> Option<Instant> {
+    pub fn is_animating(&self) -> bool {
         let model = self.model.borrow();
-        model
-            .shake_from
-            .map(|from| from + SHAKE_DURATION)
-            .filter(|end| *end > model.now)
+        model.backdrop_shown.value_at(model.now).1
+            || model
+                .shake_from
+                .is_some_and(|from| model.now < from + SHAKE_DURATION)
+            || self.ui.is_animating()
     }
 
     pub fn field_frame(&mut self, width: u32, height: u32) -> Rect {

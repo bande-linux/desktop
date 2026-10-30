@@ -458,3 +458,57 @@ fn the_software_update_pane_matches_its_goldens() {
         view
     });
 }
+
+#[test]
+fn the_network_pane_matches_its_goldens() {
+    check_in_both_schemes_and_scales("network", |scheme| {
+        let mut view = SettingsView::new(Palette::for_scheme(scheme), TextSystem::new());
+        view.apply(Update::Network(unbound_settings::NetworkState {
+            ethernet: Some(unbound_network::Ethernet {
+                interface: "end0".to_owned(),
+                cable: true,
+                managed: true,
+                connected: true,
+                address: Some("192.168.1.20/24".to_owned()),
+                router: Some("192.168.1.1".to_owned()),
+                dns: vec!["1.1.1.1".to_owned(), "9.9.9.9".to_owned()],
+                manual: true,
+            }),
+            vpns: vec![
+                unbound_network::Vpn {
+                    path: "/a".to_owned(),
+                    name: "Home WireGuard".to_owned(),
+                    state: unbound_network::VpnState::Connected,
+                },
+                unbound_network::Vpn {
+                    path: "/b".to_owned(),
+                    name: "Office".to_owned(),
+                    state: unbound_network::VpnState::Off,
+                },
+            ],
+        }));
+        view.select_pane(PaneId::Network);
+        view
+    });
+}
+
+#[test]
+fn the_language_and_region_pane_matches_its_goldens() {
+    check_in_both_schemes_and_scales("language-region", |scheme| {
+        let mut view = general(scheme, PaneId::LanguageRegion);
+        let locale = |code: &str, name: &str| unbound_settings::InstalledLocale {
+            code: code.to_owned(),
+            name: name.to_owned(),
+        };
+        view.apply(Update::Locale(Some(unbound_settings::LocaleState {
+            installed: vec![
+                locale("en_GB.UTF-8", "British English (United Kingdom)"),
+                locale("de_DE.UTF-8", "German (Germany)"),
+                locale("sv_SE.UTF-8", "Swedish (Sweden)"),
+            ],
+            language: "en_GB.UTF-8".to_owned(),
+            region: Some("sv_SE.UTF-8".to_owned()),
+        })));
+        view
+    });
+}

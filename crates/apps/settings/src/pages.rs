@@ -581,6 +581,10 @@ impl SettingsView {
             List::BatteryHistory => self.battery_rows(),
             List::NotificationApps => self.notification_app_rows(),
             List::SoftwareUpdates => self.software_rows(),
+            List::Ethernet => self.ethernet_rows(),
+            List::Vpns => self.vpn_rows(),
+            List::Languages => self.language_rows(),
+            List::Regions => self.region_rows(),
         }
     }
 

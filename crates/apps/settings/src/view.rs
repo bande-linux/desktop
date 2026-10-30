@@ -17,13 +17,14 @@ use crate::about::{About, AboutCommand};
 use crate::battery::{BatteryCommand, BatteryState};
 use crate::follow::{Command, Update};
 use crate::idle::Idle;
+use crate::locale::{LocaleCommand, LocaleState};
 use crate::login::{LoginCommand, LoginItems, login_matches};
 use crate::notifications::{AppNotifications, NotificationCommand};
 use crate::pictures::{Pair, PictureCommand};
 use crate::pointing::PointingDevices;
 use crate::services::{AudioCommand, BluetoothCommand, NetworkCommand};
 use crate::software::{SoftwareCommand, SoftwareState};
-use crate::state::{Answer, BluetoothState, Display, Joined, Question, WifiState};
+use crate::state::{Answer, BluetoothState, Display, Joined, NetworkState, Question, WifiState};
 use crate::storage::{Storage, StorageCommand};
 use crate::time::{TimeCommand, TimeState, parse_manual, zone_matches};
 use crate::widgets::{Column, Root};
@@ -73,6 +74,10 @@ pub(crate) enum Intent {
     ExpandApp(Option<String>),
     SetAppRule(AppNotifications),
     Software(SoftwareCommand),
+    Network(NetworkCommand),
+    ManualIpv4(bool),
+    ImportVpn,
+    Locale(LocaleCommand),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -172,6 +177,9 @@ pub struct SettingsView {
     pub(crate) notification_apps: Option<Vec<AppNotifications>>,
     pub(crate) expanded_app: Option<String>,
     pub(crate) software: SoftwareState,
+    pub(crate) network: Option<NetworkState>,
+    pub(crate) manual_ipv4: bool,
+    pub(crate) locale: Option<LocaleState>,
     ui: Ui,
     root: WidgetId,
     search: WidgetId,
@@ -230,6 +238,9 @@ impl SettingsView {
             notification_apps: None,
             expanded_app: None,
             software: SoftwareState::Unknown,
+            network: None,
+            manual_ipv4: false,
+            locale: None,
             ui: Ui::new(Box::new(root), cx),
             root: root_id,
             search,
@@ -366,6 +377,22 @@ impl SettingsView {
             Update::Login(login) => self.login = Some(login),
             Update::NotificationApps(apps) => self.notification_apps = Some(apps),
             Update::Software(state) => self.software = state,
+            Update::Locale(locale) => self.locale = locale,
+            Update::Network(network) => {
+                if let Some(ethernet) = network.ethernet.as_ref() {
+                    self.manual_ipv4 |= ethernet.manual;
+                    for (id, value) in [
+                        (SettingId::EthernetAddress, ethernet.address.clone()),
+                        (SettingId::EthernetRouter, ethernet.router.clone()),
+                        (SettingId::EthernetDns, Some(ethernet.dns.join(", "))),
+                    ] {
+                        self.values
+                            .entry(id)
+                            .or_insert(Value::Text(value.unwrap_or_default()));
+                    }
+                }
+                self.network = Some(network);
+            }
             Update::Battery(battery) => {
                 match battery.as_ref().and_then(|battery| battery.profile.clone()) {
                     Some(profile) => {
@@ -456,6 +483,7 @@ impl SettingsView {
         match pane {
             PaneId::Wifi => self.wifi.is_some(),
             PaneId::Bluetooth => self.bluetooth.is_some(),
+            PaneId::Network => self.network.is_some(),
             PaneId::Notifications => self.values.contains_key(&SettingId::DoNotDisturb),
             PaneId::Sound => self.audio.is_some(),
             PaneId::Displays => !self.displays.is_empty(),
@@ -471,6 +499,7 @@ impl SettingsView {
             | PaneId::DateTime
             | PaneId::LoginItems
             | PaneId::SoftwareUpdate => true,
+            PaneId::LanguageRegion => self.locale.is_some(),
             PaneId::TrackpadMouse => self.pointing.trackpad || self.pointing.mouse,
         }
     }
@@ -784,6 +813,26 @@ impl SettingsView {
                     self.expanded_app = group;
                 }
                 Intent::Software(command) => self.commands.push(Command::Software(command)),
+                Intent::Network(command) => self.commands.push(Command::Network(command)),
+                Intent::ImportVpn => self.commands.push(Command::ImportVpn),
+                Intent::Locale(command) => {
+                    if let Some(locale) = &mut self.locale {
+                        match &command {
+                            LocaleCommand::Language(language) => {
+                                language.clone_into(&mut locale.language)
+                            }
+                            LocaleCommand::Region(region) => locale.region.clone_from(region),
+                        }
+                    }
+                    self.commands.push(Command::Locale(command));
+                }
+                Intent::ManualIpv4(manual) => {
+                    self.manual_ipv4 = manual;
+                    if !manual {
+                        self.commands
+                            .push(Command::Network(NetworkCommand::ConfigureEthernet(None)));
+                    }
+                }
                 Intent::SetAppRule(app) => {
                     if let Some(apps) = &mut self.notification_apps
                         && let Some(known) = apps.iter_mut().find(|known| known.group == app.group)
@@ -1095,6 +1144,32 @@ impl SettingsView {
     }
 
     fn change(&mut self, id: SettingId, value: Value) {
+        if matches!(
+            id,
+            SettingId::EthernetAddress | SettingId::EthernetRouter | SettingId::EthernetDns
+        ) {
+            self.values.insert(id, value);
+            let text = |id| match self.values.get(&id) {
+                Some(Value::Text(text)) => text.clone(),
+                _ => String::new(),
+            };
+            let manual = unbound_network::parse_manual(
+                &text(SettingId::EthernetAddress),
+                &text(SettingId::EthernetRouter),
+                &text(SettingId::EthernetDns),
+            );
+            self.message = match manual {
+                Some(manual) => {
+                    self.commands
+                        .push(Command::Network(NetworkCommand::ConfigureEthernet(Some(
+                            manual,
+                        ))));
+                    None
+                }
+                None => Some(L10N.tr("manual-address-invalid")),
+            };
+            return;
+        }
         if let (SettingId::DateAndTime, Value::Text(text)) = (id, &value) {
             let zone = self
                 .time

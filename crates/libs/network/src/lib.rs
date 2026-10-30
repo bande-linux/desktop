@@ -1,5 +1,9 @@
+mod connections;
 mod proxy;
 
+pub use connections::{
+    Ethernet, ManualIpv4, Vpn, VpnState, import_vpn, ipv4_settings, parse_manual, vpn_type_of,
+};
 use std::collections::HashMap;
 use std::fmt;
 

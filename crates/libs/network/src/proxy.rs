@@ -24,6 +24,11 @@ pub trait NetworkManager {
         specific_object: &ObjectPath<'_>,
     ) -> zbus::Result<(OwnedObjectPath, OwnedObjectPath)>;
 
+    fn deactivate_connection(&self, active: &ObjectPath<'_>) -> zbus::Result<()>;
+
+    #[zbus(property)]
+    fn active_connections(&self) -> zbus::Result<Vec<OwnedObjectPath>>;
+
     #[zbus(property)]
     fn wireless_enabled(&self) -> zbus::Result<bool>;
 
@@ -41,6 +46,33 @@ pub trait Device {
 
     #[zbus(property)]
     fn state(&self) -> zbus::Result<u32>;
+
+    #[zbus(property)]
+    fn interface(&self) -> zbus::Result<String>;
+
+    #[zbus(property)]
+    fn ip4_config(&self) -> zbus::Result<OwnedObjectPath>;
+
+    #[zbus(property)]
+    fn active_connection(&self) -> zbus::Result<OwnedObjectPath>;
+
+    #[zbus(property)]
+    fn available_connections(&self) -> zbus::Result<Vec<OwnedObjectPath>>;
+}
+
+#[zbus::proxy(
+    interface = "org.freedesktop.NetworkManager.IP4Config",
+    default_service = "org.freedesktop.NetworkManager"
+)]
+pub trait Ip4Config {
+    #[zbus(property)]
+    fn address_data(&self) -> zbus::Result<Vec<HashMap<String, OwnedValue>>>;
+
+    #[zbus(property)]
+    fn gateway(&self) -> zbus::Result<String>;
+
+    #[zbus(property)]
+    fn nameserver_data(&self) -> zbus::Result<Vec<HashMap<String, OwnedValue>>>;
 }
 
 #[zbus::proxy(
@@ -114,6 +146,9 @@ pub trait SettingsConnection {
 pub trait ActiveConnection {
     #[zbus(property)]
     fn state(&self) -> zbus::Result<u32>;
+
+    #[zbus(property)]
+    fn connection(&self) -> zbus::Result<OwnedObjectPath>;
 
     #[zbus(signal, name = "StateChanged")]
     fn activation_state_changed(&self, state: u32, reason: u32) -> zbus::Result<()>;

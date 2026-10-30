@@ -341,5 +341,5 @@ fn every_pane_opens_by_its_keyword() {
         view.select_pane(pane.id);
         assert_eq!(view.selected_pane(), pane.id);
     }
-    assert_eq!(PaneId::from_keyword("network"), None);
+    assert_eq!(PaneId::from_keyword("printers"), None);
 }

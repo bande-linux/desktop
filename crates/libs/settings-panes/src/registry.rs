@@ -4,6 +4,7 @@ use crate::L10N;
 pub enum PaneId {
     Wifi,
     Bluetooth,
+    Network,
     Battery,
     Notifications,
     Sound,
@@ -20,12 +21,14 @@ pub enum PaneId {
     DateTime,
     LoginItems,
     SoftwareUpdate,
+    LanguageRegion,
 }
 
 impl PaneId {
-    const KEYWORDS: [(Self, &'static str); 18] = [
+    const KEYWORDS: [(Self, &'static str); 20] = [
         (Self::Wifi, "wifi"),
         (Self::Bluetooth, "bluetooth"),
+        (Self::Network, "network"),
         (Self::Battery, "battery"),
         (Self::Notifications, "notifications"),
         (Self::Sound, "sound"),
@@ -42,6 +45,7 @@ impl PaneId {
         (Self::DateTime, "date-time"),
         (Self::LoginItems, "login-items"),
         (Self::SoftwareUpdate, "software-update"),
+        (Self::LanguageRegion, "language-region"),
     ];
 
     pub fn keyword(self) -> &'static str {
@@ -64,6 +68,7 @@ impl PaneId {
             | Self::SoftwareUpdate
             | Self::Storage
             | Self::DateTime
+            | Self::LanguageRegion
             | Self::LoginItems => Some(Self::General),
             _ => None,
         }
@@ -127,6 +132,13 @@ pub enum SettingId {
     LidOnPower,
     AppNotifications,
     SoftwareUpdates,
+    Ethernet,
+    EthernetAddress,
+    EthernetRouter,
+    EthernetDns,
+    Vpns,
+    Language,
+    Region,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -159,6 +171,10 @@ pub enum List {
     BatteryHistory,
     NotificationApps,
     SoftwareUpdates,
+    Ethernet,
+    Vpns,
+    Languages,
+    Regions,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -430,6 +446,31 @@ fn connectivity_panes() -> Vec<Pane> {
             ],
         ),
         pane(
+            PaneId::Network,
+            L10N.tr("network"),
+            L10N.tr("network-keywords"),
+            vec![
+                section(
+                    Some(L10N.tr("ethernet")),
+                    vec![setting(
+                        SettingId::Ethernet,
+                        L10N.tr("ethernet"),
+                        L10N.tr("ethernet-keywords"),
+                        Kind::List(List::Ethernet),
+                    )],
+                ),
+                section(
+                    Some(L10N.tr("vpn")),
+                    vec![setting(
+                        SettingId::Vpns,
+                        L10N.tr("vpn"),
+                        L10N.tr("vpn-keywords"),
+                        Kind::List(List::Vpns),
+                    )],
+                ),
+            ],
+        ),
+        pane(
             PaneId::Notifications,
             L10N.tr("notifications"),
             L10N.tr("notifications-keywords"),
@@ -638,6 +679,31 @@ fn general_panes() -> Vec<Pane> {
             ],
         ),
         date_time_pane(),
+        pane(
+            PaneId::LanguageRegion,
+            L10N.tr("language-region"),
+            L10N.tr("language-region-keywords"),
+            vec![
+                section(
+                    None,
+                    vec![setting(
+                        SettingId::Language,
+                        L10N.tr("language"),
+                        L10N.tr("language-keywords"),
+                        Kind::List(List::Languages),
+                    )],
+                ),
+                section(
+                    Some(L10N.tr("formats")),
+                    vec![setting(
+                        SettingId::Region,
+                        L10N.tr("region"),
+                        L10N.tr("region-keywords"),
+                        Kind::List(List::Regions),
+                    )],
+                ),
+            ],
+        ),
         pane(
             PaneId::LoginItems,
             L10N.tr("login-items"),

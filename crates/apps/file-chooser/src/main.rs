@@ -7,7 +7,7 @@ use accesskit::TreeUpdate;
 use unbound_file_chooser::{
     Chooser, ChooserView, Finished, Icons, L10N, initial_folder, remember, remembered_folder,
 };
-use unbound_files::{rows, with_volumes};
+use unbound_files::{rows, sidebar_file, with_volumes};
 use unbound_toolkit::{App, Role, Scene, TextSystem, Window, WindowEvent};
 use unbound_volumes::{media_roots, mounted_volumes};
 use unbound_xdg::{MimeDatabase, UserDir, config_home, data_dirs, user_dir};
@@ -162,8 +162,15 @@ fn run(dialog: Dialog) -> ExitCode {
         &std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default(),
         &media_roots(&user),
     );
+    let state_home = std::env::var_os("XDG_STATE_HOME").map(PathBuf::from);
+    let layout = std::fs::read_to_string(sidebar_file(state_home.as_deref(), &home)).ok();
     let places = with_volumes(
-        &rows(&home, user_dirs.as_deref(), bookmarks.as_deref()),
+        &rows(
+            &home,
+            user_dirs.as_deref(),
+            bookmarks.as_deref(),
+            layout.as_deref(),
+        ),
         &volumes,
     );
     let mut window = match Window::open(Role::toplevel(&title(&dialog), APP_ID), WINDOW_SIZE) {

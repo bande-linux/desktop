@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::path::{Path, PathBuf};
 use std::process::{Child, ExitCode};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use smithay::backend::drm::{DrmEvent, DrmEventMetadata};
 use smithay::backend::udev::{UdevBackend, UdevEvent};
@@ -13,9 +13,10 @@ use smithay::utils::{Clock, Monotonic, Size};
 use smithay::wayland::socket::ListeningSocketSource;
 use unbound_compositor::{
     CLIPBOARD_DAEMON, CursorTheme, DrmBackend, FrameClock, FrameOutput, FrameScheduler, GREETER,
-    Headless, InputSettings, REFRESH, REVIEW, Renderer, SCREENSHOT, SHELL, SessionRequest,
-    SessionRole, SessionUpkeep, export_session_environment, follow_alerts, follow_appearance,
-    follow_input_settings, follow_session, notify_ready, serve_keyboard_monitor,
+    Headless, InputSettings, REFRESH, REVIEW, Renderer, SCREENSHOT,
+    SESSION_CLIENT_RESTART_THROTTLE, SHELL, SessionRequest, SessionRole, SessionUpkeep,
+    export_session_environment, follow_alerts, follow_appearance, follow_input_settings,
+    follow_session, notify_ready, serve_keyboard_monitor,
 };
 use unbound_config::{BUS_NAME, Config, OBJECT_PATH, config_path};
 use zbus::blocking::fdo::PropertiesProxy;
@@ -31,6 +32,24 @@ struct App<O> {
     compositor: Headless,
     output: O,
     schedulers: Vec<FrameScheduler>,
+}
+
+struct Greeter {
+    child: Option<Child>,
+    started: Instant,
+}
+
+impl Greeter {
+    fn start(compositor: &mut Headless) -> Self {
+        let child = compositor
+            .spawn_shell_client(Path::new(GREETER))
+            .inspect_err(|error| compositor.report_start_failure(Path::new(GREETER), error))
+            .ok();
+        Self {
+            child,
+            started: Instant::now(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -421,15 +440,7 @@ where
         Session::User => (None, start_user_session(event_loop, &mut app)?),
         Session::Greeter => {
             app.compositor.apply_input_settings(InputSettings::system());
-            let greeter = app
-                .compositor
-                .spawn_shell_client(Path::new(GREETER))
-                .inspect_err(|error| {
-                    app.compositor
-                        .report_start_failure(Path::new(GREETER), error)
-                })
-                .ok();
-            (Some(greeter), None)
+            (Some(Greeter::start(&mut app.compositor)), None)
         }
     };
     let mut timeout = None;
@@ -441,13 +452,25 @@ where
             review = None;
         }
         let upkeep = match greeter.as_mut() {
-            Some(Some(greeter)) => {
-                if greeter.try_wait()?.is_some() {
+            Some(Greeter {
+                child: Some(child), ..
+            }) => {
+                if child.try_wait()?.is_some() {
                     return Ok(());
                 }
                 SessionUpkeep::default()
             }
-            Some(None) => SessionUpkeep::default(),
+            Some(waiting) => {
+                if waiting.started.elapsed() >= SESSION_CLIENT_RESTART_THROTTLE {
+                    *waiting = Greeter::start(&mut app.compositor);
+                }
+                SessionUpkeep {
+                    retry_in: waiting.child.is_none().then(|| {
+                        SESSION_CLIENT_RESTART_THROTTLE.saturating_sub(waiting.started.elapsed())
+                    }),
+                    ..SessionUpkeep::default()
+                }
+            }
             None => app.compositor.keep_session_clients_running(),
         };
         for (executable, error) in &upkeep.failures {

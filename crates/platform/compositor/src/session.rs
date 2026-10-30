@@ -283,12 +283,14 @@ impl Headless {
                     .map_err(io::Error::from)
             });
         }
+        let executable = PathBuf::from(command.get_program());
         let mut child = command.spawn()?;
         if let Err(error) = self.wake_when_exited(&child) {
             let _ = child.kill();
             let _ = child.wait();
             return Err(error);
         }
+        self.state.clear_alert(&executable);
         Ok((child, client))
     }
 

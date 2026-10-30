@@ -13,6 +13,7 @@ const SETTING_LABEL_PENALTY: u32 = 100;
 const SETTING_KEYWORD_PENALTY: u32 = 200;
 const CALCULATION_SCORE: u32 = u32::MAX;
 const APPLICATION_BONUS: u32 = 25;
+const FILE_PENALTY: u32 = 200;
 
 #[derive(Debug, Clone)]
 pub struct AppInfo {
@@ -308,7 +309,7 @@ impl Model {
                 .map(|parent| display_path(parent, &self.home)),
             title: name,
             target: Target::Path(file.path.clone()),
-            score,
+            score: score.saturating_sub(FILE_PENALTY),
         })
     }
 

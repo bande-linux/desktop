@@ -15,17 +15,20 @@ use crate::L10N;
 use crate::about::{About, AboutCommand};
 use crate::follow::{Command, Update};
 use crate::idle::Idle;
+use crate::login::{LoginCommand, LoginItems, login_matches};
 use crate::pictures::{Pair, PictureCommand};
 use crate::pointing::PointingDevices;
 use crate::services::{AudioCommand, BluetoothCommand, NetworkCommand};
 use crate::state::{Answer, BluetoothState, Display, Joined, Question, WifiState};
 use crate::storage::{Storage, StorageCommand};
+use crate::time::{TimeCommand, TimeState, parse_manual, zone_matches};
 use crate::widgets::{Column, Root};
 use unbound_keyboard::Layouts;
 use unbound_settings_panes::{AUTOMATIC, Pane, PaneId, SettingId, Value, panes};
 use unbound_settings_panes::{PaneHit, search};
 
 const PAGE_STEP: f32 = 240.0;
+const PICK_RESULTS: usize = 8;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Intent {
@@ -53,6 +56,25 @@ pub(crate) enum Intent {
     AskEmptyTrash(bool),
     EmptyTrash,
     Reveal(PathBuf),
+    Pick(Option<Picker>),
+    PickQuery(String),
+    Picked(String),
+    RemoveLoginItem(String),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Picker {
+    Zone,
+    LoginApp,
+}
+
+impl Picker {
+    fn setting(self) -> SettingId {
+        match self {
+            Self::Zone => SettingId::TimeZone,
+            Self::LoginApp => SettingId::LoginItems,
+        }
+    }
 }
 
 pub(crate) type Intents = Rc<RefCell<Vec<Intent>>>;
@@ -64,6 +86,7 @@ pub(crate) enum Anchor {
     Item(String),
     Password,
     SourceSearch,
+    Picker,
     Back,
 }
 
@@ -118,6 +141,9 @@ pub struct SettingsView {
     pub(crate) storage: Option<Storage>,
     pub(crate) drafts: HashMap<SettingId, String>,
     pub(crate) confirming_empty_trash: bool,
+    pub(crate) time: Option<TimeState>,
+    pub(crate) picking: Option<(Picker, String)>,
+    pub(crate) login: Option<LoginItems>,
     ui: Ui,
     root: WidgetId,
     search: WidgetId,
@@ -167,6 +193,9 @@ impl SettingsView {
             storage: None,
             drafts: HashMap::new(),
             confirming_empty_trash: false,
+            time: None,
+            picking: None,
+            login: None,
             ui: Ui::new(Box::new(root), cx),
             root: root_id,
             search,
@@ -292,9 +321,18 @@ impl SettingsView {
                 }
                 self.about = Some(about);
             }
+            Update::Time(time) => {
+                if let Some(time) = &time {
+                    self.values
+                        .insert(SettingId::AutomaticTime, Value::Flag(time.automatic));
+                }
+                self.time = time;
+            }
+            Update::Login(login) => self.login = Some(login),
             Update::Storage(storage) => {
                 if storage.trash_items == 0 {
                     self.confirming_empty_trash = false;
+                    self.picking = None;
                 }
                 self.storage = Some(storage);
             }
@@ -380,7 +418,9 @@ impl SettingsView {
             | PaneId::LockScreen
             | PaneId::Keyboard
             | PaneId::General
-            | PaneId::Storage => true,
+            | PaneId::Storage
+            | PaneId::DateTime
+            | PaneId::LoginItems => true,
             PaneId::TrackpadMouse => self.pointing.trackpad || self.pointing.mouse,
         }
     }
@@ -419,11 +459,25 @@ impl SettingsView {
         })
     }
 
-    fn source_search_focused(&self) -> bool {
+    fn anchor_focused(&self, wanted: &Anchor) -> bool {
         let focus = self.ui.focus();
         self.anchors
             .iter()
-            .any(|(anchor, id)| *anchor == Anchor::SourceSearch && Some(*id) == focus)
+            .any(|(anchor, id)| anchor == wanted && Some(*id) == focus)
+    }
+
+    pub(crate) fn pick_results(&self) -> Vec<String> {
+        match (&self.picking, &self.time) {
+            (Some((Picker::Zone, query)), Some(time)) => {
+                zone_matches(&time.zones, query, PICK_RESULTS)
+            }
+            (Some((Picker::LoginApp, query)), _) => self
+                .login
+                .as_ref()
+                .map(|login| login_matches(login, query, PICK_RESULTS))
+                .unwrap_or_default(),
+            _ => Vec::new(),
+        }
     }
 
     pub fn search_focused(&self) -> bool {
@@ -524,6 +578,21 @@ impl SettingsView {
             Event::Key {
                 key: Key::Escape,
                 modifiers,
+            } if plain(modifiers) && self.picking.is_some() => {
+                self.intents.borrow_mut().push(Intent::Pick(None));
+                true
+            }
+            Event::Key {
+                key: Key::Enter, ..
+            } if self.anchor_focused(&Anchor::Picker) => {
+                if let Some(first) = self.pick_results().into_iter().next() {
+                    self.intents.borrow_mut().push(Intent::Picked(first));
+                }
+                true
+            }
+            Event::Key {
+                key: Key::Escape,
+                modifiers,
             } if plain(modifiers) && self.adding_source.is_some() => {
                 self.intents.borrow_mut().push(Intent::AddingSource(false));
                 true
@@ -559,7 +628,7 @@ impl SettingsView {
             }
             Event::Key {
                 key: Key::Enter, ..
-            } if self.source_search_focused() => {
+            } if self.anchor_focused(&Anchor::SourceSearch) => {
                 let query = self.adding_source.clone().unwrap_or_default();
                 let added = self.input_sources();
                 if let Some((code, _)) = self.source_matches(&query, &added).into_iter().next() {
@@ -657,6 +726,32 @@ impl SettingsView {
                         .push(Command::Storage(StorageCommand::EmptyTrash));
                 }
                 Intent::Reveal(path) => self.commands.push(Command::Reveal(path)),
+                Intent::RemoveLoginItem(id) => {
+                    self.focus_next = Some(Anchor::Setting(SettingId::LoginItems, None));
+                    self.commands.push(Command::Login(LoginCommand::Remove(id)));
+                }
+                Intent::Pick(picker) => {
+                    self.focus_next = Some(match (picker, &self.picking) {
+                        (Some(_), _) => Anchor::Picker,
+                        (None, Some((open, _))) => Anchor::Setting(open.setting(), None),
+                        (None, None) => continue,
+                    });
+                    self.picking = picker.map(|picker| (picker, String::new()));
+                }
+                Intent::PickQuery(query) => {
+                    if let Some((_, picking)) = &mut self.picking {
+                        *picking = query;
+                        self.focus_next = Some(Anchor::Picker);
+                    }
+                }
+                Intent::Picked(key) => {
+                    let Some((picker, _)) = self.picking.take() else {
+                        continue;
+                    };
+                    self.focus_next = Some(Anchor::Setting(picker.setting(), None));
+                    self.message = None;
+                    self.picked(picker, key);
+                }
                 Intent::SelectPane(pane) => {
                     if pane.parent() == Some(self.pane) {
                         self.focus_next = Some(Anchor::Back);
@@ -742,6 +837,18 @@ impl SettingsView {
         }
     }
 
+    fn picked(&mut self, picker: Picker, key: String) {
+        match picker {
+            Picker::Zone => {
+                if let Some(time) = &mut self.time {
+                    time.zone = key.clone();
+                }
+                self.commands.push(Command::Time(TimeCommand::Zone(key)));
+            }
+            Picker::LoginApp => self.commands.push(Command::Login(LoginCommand::Add(key))),
+        }
+    }
+
     fn device_command(
         &mut self,
         address: String,
@@ -807,6 +914,7 @@ impl SettingsView {
             PaneId::Storage => self
                 .commands
                 .push(Command::Storage(StorageCommand::Measure)),
+            PaneId::LoginItems => self.commands.push(Command::Login(LoginCommand::Refresh)),
             _ => {}
         }
         self.pane = pane;
@@ -886,6 +994,9 @@ impl SettingsView {
             (SettingId::BluetoothPower, Value::Flag(on)) => {
                 Command::Bluetooth(BluetoothCommand::Power(on))
             }
+            (SettingId::AutomaticTime, Value::Flag(on)) => {
+                Command::Time(TimeCommand::Automatic(on))
+            }
             (SettingId::ComputerName, Value::Text(name)) => {
                 Command::About(AboutCommand::Rename(name))
             }
@@ -904,6 +1015,21 @@ impl SettingsView {
     }
 
     fn change(&mut self, id: SettingId, value: Value) {
+        if let (SettingId::DateAndTime, Value::Text(text)) = (id, &value) {
+            let zone = self
+                .time
+                .as_ref()
+                .map(|time| time.zone.clone())
+                .unwrap_or_default();
+            self.message = match parse_manual(text, &zone) {
+                Some(at) => {
+                    self.commands.push(Command::Time(TimeCommand::Set(at)));
+                    None
+                }
+                None => Some(L10N.tr("manual-time-invalid")),
+            };
+            return;
+        }
         if self.values.get(&id) == Some(&value) {
             return;
         }
@@ -968,6 +1094,7 @@ impl SettingsView {
         }
         let typed = match &focused {
             Some(Anchor::SourceSearch) => Some(self.adding_source.clone().unwrap_or_default()),
+            Some(Anchor::Picker) => self.picking.as_ref().map(|(_, query)| query.clone()),
             Some(Anchor::Setting(setting, _)) => self.drafts.get(setting).cloned(),
             _ => None,
         };
@@ -988,9 +1115,12 @@ impl SettingsView {
                     target,
                     Some(ActionData::Value(text.into())),
                 ));
-                self.intents
-                    .borrow_mut()
-                    .retain(|intent| !matches!(intent, Intent::SourceQuery(_) | Intent::Draft(..)));
+                self.intents.borrow_mut().retain(|intent| {
+                    !matches!(
+                        intent,
+                        Intent::SourceQuery(_) | Intent::PickQuery(_) | Intent::Draft(..)
+                    )
+                });
             }
         }
         self.stale = false;

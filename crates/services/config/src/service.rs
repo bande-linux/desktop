@@ -14,8 +14,9 @@ use zbus::object_server::SignalEmitter;
 use zbus::zvariant::{OwnedValue, Value};
 
 use crate::{
-    Appearance, CapsLock, Config, ConfigStore, DockEdge, InputSource, Output, ReloadError,
-    SecondaryClick, Setting, Suspend, WallpaperFit, WallpaperVariant, read_system_input_sources,
+    Appearance, CapsLock, ClockFormat, Config, ConfigStore, DockEdge, InputSource, Output,
+    ReloadError, SecondaryClick, Setting, Suspend, WallpaperFit, WallpaperVariant,
+    read_system_input_sources,
 };
 
 pub const BUS_NAME: &str = "org.unbound.Config";
@@ -142,6 +143,9 @@ fn publish_changes(
     zbus::block_on(async {
         if before.appearance != after.appearance {
             let _ = guard.appearance_changed(emitter).await;
+        }
+        if before.clock != after.clock {
+            let _ = guard.clock_format_changed(emitter).await;
         }
         if before.reduce_motion != after.reduce_motion {
             let _ = guard.reduce_motion_changed(emitter).await;
@@ -321,6 +325,17 @@ impl ConfigInterface {
             &value,
         )?;
         self.write(&Setting::Appearance(appearance))
+    }
+
+    #[zbus(property)]
+    fn clock_format(&self) -> String {
+        self.store.current().clock.keyword().to_owned()
+    }
+
+    #[zbus(property)]
+    fn set_clock_format(&self, value: String) -> zbus::fdo::Result<()> {
+        let format = keyword(&ClockFormat::ALL, ClockFormat::keyword, &value)?;
+        self.write(&Setting::Clock(format))
     }
 
     #[zbus(property)]

@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use unbound_config::{
-    Appearance, CapsLock, Config, DockEdge, InputSource, Output, Setting, Suspend, WallpaperFit,
-    WallpaperVariant,
+    Appearance, CapsLock, ClockFormat, Config, DockEdge, InputSource, Output, Setting, Suspend,
+    WallpaperFit, WallpaperVariant,
 };
 
 fn apply(setting: Setting, source: &str) -> String {
@@ -27,6 +27,24 @@ fn a_setting_missing_from_the_file_is_appended() {
         apply(Setting::Appearance(Appearance::Light), ""),
         "appearance \"light\"\n"
     );
+}
+
+#[test]
+fn the_clock_format_is_written_and_automatic_leaves_no_trace() {
+    let edited = apply(
+        Setting::Clock(ClockFormat::TwentyFourHour),
+        "appearance \"dark\"\n",
+    );
+    assert_eq!(edited, "appearance \"dark\"\nclock \"24-hour\"\n");
+    assert_eq!(
+        Config::parse(&edited).expect("valid").clock,
+        ClockFormat::TwentyFourHour
+    );
+    assert_eq!(
+        apply(Setting::Clock(ClockFormat::Automatic), &edited),
+        "appearance \"dark\"\n"
+    );
+    assert!(Config::parse("clock \"25-hour\"").is_err());
 }
 
 #[test]

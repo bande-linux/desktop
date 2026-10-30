@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use unbound_config::Output;
+use unbound_datetime::DateFormats;
 use zbus::blocking::Connection;
 use zbus::proxy::CacheProperties;
 use zbus::zvariant::OwnedValue;
@@ -17,6 +18,10 @@ pub trait Config {
     fn appearance(&self) -> zbus::Result<String>;
     #[zbus(property)]
     fn set_appearance(&self, value: &str) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn clock_format(&self) -> zbus::Result<String>;
+    #[zbus(property)]
+    fn set_clock_format(&self, value: &str) -> zbus::Result<()>;
     #[zbus(property)]
     fn reduce_motion(&self) -> zbus::Result<bool>;
     #[zbus(property)]
@@ -141,8 +146,9 @@ fn output(settings: &HashMap<String, OwnedValue>) -> Output {
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 21] = [
+pub const CONFIG_SETTINGS: [SettingId; 22] = [
     SettingId::Appearance,
+    SettingId::Clock24Hour,
     SettingId::ReduceMotion,
     SettingId::Wallpaper,
     SettingId::WallpaperFit,
@@ -220,6 +226,11 @@ impl SettingsClient {
             SettingId::DoNotDisturb => Value::Flag(self.notifications.do_not_disturb()?),
             SettingId::Appearance => Value::Keyword(self.config.appearance()?),
             SettingId::ReduceMotion => Value::Flag(self.config.reduce_motion()?),
+            SettingId::Clock24Hour => Value::Flag(match self.config.clock_format()?.as_str() {
+                "24-hour" => true,
+                "12-hour" => false,
+                _ => DateFormats::from_env().uses_24_hour_clock(),
+            }),
             SettingId::Wallpaper => Value::Pictures {
                 light: self.config.wallpaper_light()?,
                 dark: self.config.wallpaper_dark()?,
@@ -272,6 +283,13 @@ impl SettingsClient {
         match (id, value) {
             (SettingId::Appearance, Value::Keyword(keyword)) => self.config.set_appearance(keyword),
             (SettingId::DockEdge, Value::Keyword(keyword)) => self.config.set_dock_edge(keyword),
+            (SettingId::Clock24Hour, Value::Flag(twenty_four_hour)) => {
+                self.config.set_clock_format(if *twenty_four_hour {
+                    "24-hour"
+                } else {
+                    "12-hour"
+                })
+            }
             (SettingId::ReduceMotion, Value::Flag(reduce)) => {
                 self.config.set_reduce_motion(*reduce)
             }

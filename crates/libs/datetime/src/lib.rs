@@ -2,6 +2,7 @@ use icu_calendar::Gregorian;
 use icu_datetime::fieldsets::{E, MD, MDE, YMD};
 use icu_datetime::input::{Date, DateTime, Time};
 use icu_datetime::{DateTimeFormatterPreferences, FixedCalendarDateTimeFormatter};
+use icu_locale_core::preferences::extensions::unicode::keywords::HourCycle;
 use icu_locale_core::{Locale, locale};
 use jiff::Zoned;
 
@@ -38,6 +39,22 @@ impl DateFormats {
         Self {
             preferences: locale.into(),
         }
+    }
+
+    pub fn with_clock_format(mut self, format: &str) -> Self {
+        self.preferences.hour_cycle = match format {
+            "24-hour" => Some(HourCycle::Clock24),
+            "12-hour" => Some(HourCycle::Clock12),
+            _ => None,
+        };
+        self
+    }
+
+    pub fn uses_24_hour_clock(&self) -> bool {
+        let afternoon = jiff::civil::date(2026, 1, 1)
+            .at(13, 0, 0, 0)
+            .to_zoned(jiff::tz::TimeZone::UTC);
+        afternoon.is_ok_and(|afternoon| self.clock(&afternoon).contains("13"))
     }
 
     pub fn from_env() -> Self {

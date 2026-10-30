@@ -9,7 +9,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use unbound_datetime::DateFormats;
-use unbound_inbox::Inbox;
+use unbound_inbox::{Inbox, Outbox};
 use unbound_keyboard::Layouts;
 use unbound_menubar::dbusmenu::{APP_MENU_PATH, Node};
 use unbound_menubar::devices::{Control, SoundControl, end_session, run_controls, run_sound};
@@ -426,6 +426,10 @@ impl App for Bar {
                         );
                     }
                 }
+                Update::ClockFormat(format) => {
+                    self.dates = DateFormats::from_env().with_clock_format(&format);
+                    self.bar.set_clock(self.dates.clock(&jiff::Zoned::now()));
+                }
                 Update::AppMenuChanged => {
                     if !self.app_id.is_empty() {
                         let _ = self.errands.send(Errand::AppMenu(self.app_id.clone()));
@@ -457,6 +461,25 @@ impl App for Bar {
             window.request_redraw();
         }
     }
+}
+
+fn follow_clock_format(session: &Connection, outbox: &Outbox<Update>) -> zbus::Result<()> {
+    let config = zbus::blocking::Proxy::new(
+        session,
+        "org.unbound.Config",
+        "/org/unbound/Config",
+        "org.unbound.Config",
+    )?;
+    let changes = config.receive_property_changed::<String>("ClockFormat");
+    outbox.send(Update::ClockFormat(config.get_property("ClockFormat")?));
+    for change in changes {
+        if let Ok(format) = change.get()
+            && !outbox.send(Update::ClockFormat(format))
+        {
+            break;
+        }
+    }
+    Ok(())
 }
 
 fn run_bar() -> Result<(), Box<dyn std::error::Error>> {
@@ -491,6 +514,12 @@ fn run_bar() -> Result<(), Box<dyn std::error::Error>> {
             thread::spawn(move || {
                 if let Err(error) = host(&hosting, &outbox) {
                     tracing::warn!("cannot host status items: {error}");
+                }
+            });
+            let (config, outbox) = (session.clone(), inbox.outbox());
+            thread::spawn(move || {
+                if let Err(error) = follow_clock_format(&config, &outbox) {
+                    tracing::warn!("the clock does not follow its format setting: {error}");
                 }
             });
             let outbox = inbox.outbox();

@@ -1,14 +1,14 @@
 use std::path::Path;
 
 use unbound_fs::format_size;
-use unbound_settings_panes::PaneId;
+use unbound_settings_panes::{PaneId, SettingId};
 use unbound_toolkit::Spacing;
-use unbound_toolkit::ui::{Axis, Button, Label, Stack, Widget};
+use unbound_toolkit::ui::{Axis, Button, Label, SearchField, Stack, Widget};
 
 use crate::L10N;
-use crate::pages::{Widgets, boxed, muted_row};
+use crate::pages::{Widgets, boxed, muted_row, submit};
 use crate::storage::Category;
-use crate::view::{Anchor, Intent, SettingsView, intent};
+use crate::view::{Anchor, Intent, Picker, SettingsView, intent};
 use crate::widgets::{Row, Segment, Text, Tone, UsageBar};
 
 fn info_row(label: &str, value: &str) -> Box<dyn Widget> {
@@ -202,6 +202,73 @@ impl SettingsView {
             Row::new(Text::new(&L10N.tr("storage-trash"), Tone::Primary), control)
                 .detail(Text::new(&detail, Tone::Muted).caption()),
         )
+    }
+
+    pub(crate) fn login_rows(&mut self) -> Widgets {
+        let Some(login) = self.login.clone() else {
+            return Vec::new();
+        };
+        let mut rows: Widgets = Vec::new();
+        if login.items.is_empty() {
+            rows.push(muted_row(&L10N.tr("no-login-items")));
+        }
+        for item in &login.items {
+            let mut remove = intent(&self.intents, Intent::RemoveLoginItem);
+            let id = item.id.clone();
+            let button = Button::new(&L10N.tr("remove"), move || remove(id.clone()))
+                .tooltip(&L10N.tr("remove-login-item-tooltip"));
+            let row = Row::new(Text::new(&item.name, Tone::Primary), Some(boxed(button)));
+            rows.push(self.item_row(format!("login:{}", item.id), row));
+        }
+        let picking = self
+            .picking
+            .clone()
+            .filter(|(picker, _)| *picker == Picker::LoginApp);
+        let Some((_, query)) = picking else {
+            let mut add = intent(&self.intents, |()| Intent::Pick(Some(Picker::LoginApp)));
+            let button = Button::new(&L10N.tr("add-login-item"), move || add(()));
+            self.anchors
+                .push((Anchor::Setting(SettingId::LoginItems, None), button.id()));
+            rows.push(boxed(Row::new(
+                Text::new(&L10N.tr("login-items-hint"), Tone::Muted).caption(),
+                Some(boxed(button)),
+            )));
+            return rows;
+        };
+        let field = SearchField::new(
+            &L10N.tr("search-apps"),
+            &query,
+            submit(&self.intents, Intent::PickQuery),
+        );
+        self.anchors.push((Anchor::Picker, field.id()));
+        let mut cancel = intent(&self.intents, |()| Intent::Pick(None));
+        rows.push(boxed(Row::new(
+            Text::new(&L10N.tr("add-login-item"), Tone::Primary),
+            Some(boxed(Stack::new(
+                Axis::Horizontal,
+                Spacing::S as f32,
+                0.0,
+                vec![
+                    boxed(field),
+                    boxed(Button::new(&L10N.tr("cancel"), move || cancel(())).cancel()),
+                ],
+            ))),
+        )));
+        let results = self.pick_results();
+        if results.is_empty() && !query.trim().is_empty() {
+            rows.push(muted_row(&L10N.tr("no-apps")));
+        }
+        for id in results {
+            let Some(app) = login.apps.iter().find(|app| app.id == id) else {
+                continue;
+            };
+            let mut choose = intent(&self.intents, Intent::Picked);
+            let chosen = id.clone();
+            let row = Row::new(Text::new(&app.name, Tone::Primary), None)
+                .on_activate(move || choose(chosen.clone()));
+            rows.push(self.item_row(format!("add:{id}"), row));
+        }
+        rows
     }
 
     pub(crate) fn large_file_rows(&mut self) -> Widgets {

@@ -40,6 +40,26 @@ pub enum Appearance {
     Automatic,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ClockFormat {
+    #[default]
+    Automatic,
+    TwelveHour,
+    TwentyFourHour,
+}
+
+impl ClockFormat {
+    pub const ALL: [Self; 3] = [Self::Automatic, Self::TwelveHour, Self::TwentyFourHour];
+
+    pub fn keyword(self) -> &'static str {
+        match self {
+            Self::Automatic => "automatic",
+            Self::TwelveHour => "12-hour",
+            Self::TwentyFourHour => "24-hour",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DockEdge {
     Left,
@@ -329,6 +349,7 @@ impl Default for Dock {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
     pub appearance: Appearance,
+    pub clock: ClockFormat,
     pub reduce_motion: bool,
     pub dock: Dock,
     pub idle: Idle,
@@ -343,6 +364,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             appearance: Appearance::Automatic,
+            clock: ClockFormat::Automatic,
             reduce_motion: false,
             dock: Dock::default(),
             idle: Idle {
@@ -448,6 +470,12 @@ impl Parser<'_> {
                             ("light", Appearance::Light),
                             ("automatic", Appearance::Automatic),
                         ],
+                    )?
+                }
+                "clock" => {
+                    config.clock = self.keyword(
+                        node,
+                        &ClockFormat::ALL.map(|format| (format.keyword(), format)),
                     )?
                 }
                 "accessibility" => config.reduce_motion = self.accessibility(node)?,

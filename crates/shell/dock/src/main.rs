@@ -10,7 +10,6 @@ use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
 use unbound_config::{Config, DockEdge, config_path};
-use unbound_dock::autostart::{autostart_dir, opens_at_login, set_open_at_login};
 use unbound_dock::bus::{self, BusEvent};
 use unbound_dock::{
     DockAction, DockApp, DockState, L10N, MenuTarget, Shared, arrange, dock_ui, exclusive_zone,
@@ -23,8 +22,8 @@ use unbound_toolkit::{
     MenuPlacement, Point, Rect, Role, Scene, TextSystem, Window, WindowError, WindowEvent,
 };
 use unbound_xdg::{
-    DesktopEntry, ICON_THEMES, Locale, applications, current_desktops, data_dirs, find_icon,
-    path_from_file_uri,
+    DesktopEntry, ICON_THEMES, Locale, applications, autostart_dir, current_desktops, data_dirs,
+    find_icon, opens_at_login, path_from_file_uri, set_open_at_login,
 };
 
 const FILES: &str = "org.unbound.Files";

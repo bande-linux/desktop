@@ -13,12 +13,14 @@ use zbus::blocking::fdo::PropertiesProxy;
 
 use crate::about::{About, AboutCommand, follow_about};
 use crate::client::{CONFIG_SETTINGS, SettingsClient};
+use crate::login::{LoginCommand, LoginItems, follow_login_items};
 use crate::pictures::{Pair, PictureCommand, follow_pictures};
 use crate::services::{
     AudioCommand, BluetoothCommand, NetworkCommand, follow_audio, follow_bluetooth, follow_network,
 };
 use crate::state::{Answer, BluetoothState, Joined, Question, WifiState};
 use crate::storage::{Storage, StorageCommand, follow_storage};
+use crate::time::{TimeCommand, TimeState, follow_time};
 use unbound_settings_panes::{SettingId, Value};
 
 const NOTIFICATIONS: &str = "org.freedesktop.Notifications";
@@ -37,6 +39,8 @@ pub enum Update {
     Thumbnail(Pair, unbound_wallpaper::Picture),
     About(About),
     Storage(Storage),
+    Time(Option<TimeState>),
+    Login(LoginItems),
     Failed(String),
 }
 
@@ -51,6 +55,8 @@ pub enum Command {
     Picture(PictureCommand),
     About(AboutCommand),
     Storage(StorageCommand),
+    Time(TimeCommand),
+    Login(LoginCommand),
     Reveal(PathBuf),
 }
 
@@ -213,6 +219,8 @@ pub struct Services {
     pictures: Sender<PictureCommand>,
     about: Option<Sender<AboutCommand>>,
     storage: Sender<StorageCommand>,
+    time: Option<Sender<TimeCommand>>,
+    login: Sender<LoginCommand>,
 }
 
 impl Services {
@@ -227,6 +235,8 @@ impl Services {
             pictures: follow_pictures(session, unbound_xdg::data_dirs(), updates.clone()),
             about: system.map(|system| follow_about(system, updates.clone())),
             storage: follow_storage(updates.clone()),
+            time: system.map(|system| follow_time(system, updates.clone())),
+            login: follow_login_items(updates.clone()),
         }
     }
 
@@ -252,6 +262,11 @@ impl Services {
                 .as_ref()
                 .is_some_and(|about| about.send(command).is_ok()),
             Command::Storage(command) => self.storage.send(command).is_ok(),
+            Command::Time(command) => self
+                .time
+                .as_ref()
+                .is_some_and(|time| time.send(command).is_ok()),
+            Command::Login(command) => self.login.send(command).is_ok(),
             Command::Reveal(_) => false,
         };
         if !sent {

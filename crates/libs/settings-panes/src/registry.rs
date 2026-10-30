@@ -16,10 +16,12 @@ pub enum PaneId {
     General,
     About,
     Storage,
+    DateTime,
+    LoginItems,
 }
 
 impl PaneId {
-    const KEYWORDS: [(Self, &'static str); 14] = [
+    const KEYWORDS: [(Self, &'static str); 16] = [
         (Self::Wifi, "wifi"),
         (Self::Bluetooth, "bluetooth"),
         (Self::Notifications, "notifications"),
@@ -34,6 +36,8 @@ impl PaneId {
         (Self::General, "general"),
         (Self::About, "about"),
         (Self::Storage, "storage"),
+        (Self::DateTime, "date-time"),
+        (Self::LoginItems, "login-items"),
     ];
 
     pub fn keyword(self) -> &'static str {
@@ -52,7 +56,7 @@ impl PaneId {
 
     pub fn parent(self) -> Option<Self> {
         match self {
-            Self::About | Self::Storage => Some(Self::General),
+            Self::About | Self::Storage | Self::DateTime | Self::LoginItems => Some(Self::General),
             _ => None,
         }
     }
@@ -101,6 +105,11 @@ pub enum SettingId {
     AboutThisComputer,
     StorageUsage,
     LargeFiles,
+    AutomaticTime,
+    DateAndTime,
+    TimeZone,
+    Clock24Hour,
+    LoginItems,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -127,6 +136,9 @@ pub enum List {
     About,
     Storage,
     LargeFiles,
+    Clock,
+    TimeZones,
+    LoginItems,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -545,7 +557,68 @@ fn general_panes() -> Vec<Pane> {
                 ),
             ],
         ),
+        date_time_pane(),
+        pane(
+            PaneId::LoginItems,
+            L10N.tr("login-items"),
+            L10N.tr("login-items-keywords"),
+            vec![section(
+                None,
+                vec![setting(
+                    SettingId::LoginItems,
+                    L10N.tr("open-at-login"),
+                    L10N.tr("open-at-login-keywords"),
+                    Kind::List(List::LoginItems),
+                )],
+            )],
+        ),
     ]
+}
+
+fn date_time_pane() -> Pane {
+    pane(
+        PaneId::DateTime,
+        L10N.tr("date-time"),
+        L10N.tr("date-time-keywords"),
+        vec![
+            section(
+                None,
+                vec![setting(
+                    SettingId::AutomaticTime,
+                    L10N.tr("automatic-time"),
+                    L10N.tr("automatic-time-keywords"),
+                    Kind::Switch,
+                )],
+            ),
+            section(
+                None,
+                vec![setting(
+                    SettingId::DateAndTime,
+                    L10N.tr("date-and-time"),
+                    L10N.tr("date-and-time-keywords"),
+                    Kind::List(List::Clock),
+                )],
+            ),
+            section(
+                Some(L10N.tr("time-zone")),
+                vec![setting(
+                    SettingId::TimeZone,
+                    L10N.tr("time-zone"),
+                    L10N.tr("time-zone-keywords"),
+                    Kind::List(List::TimeZones),
+                )],
+            ),
+            section(
+                Some(L10N.tr("clock")),
+                vec![setting(
+                    SettingId::Clock24Hour,
+                    L10N.tr("clock-24-hour"),
+                    L10N.tr("clock-24-hour-keywords"),
+                    Kind::Switch,
+                )],
+            ),
+        ],
+    )
 }
 
 pub fn panes() -> Vec<Pane> {

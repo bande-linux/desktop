@@ -158,6 +158,17 @@ impl App for Locker {
     }
 }
 
+fn clock_format() -> zbus::Result<String> {
+    let session = zbus::blocking::Connection::session()?;
+    zbus::blocking::Proxy::new(
+        &session,
+        "org.unbound.Config",
+        "/org/unbound/Config",
+        "org.unbound.Config",
+    )?
+    .get_property("ClockFormat")
+}
+
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let user = current_user()?;
     let (verdicts, verdict_sender) = UnixStream::pair()?;
@@ -165,7 +176,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut locker = Locker {
         screen: LockScreen::new(
             &user,
-            DateFormats::from_env(),
+            DateFormats::from_env().with_clock_format(
+                &clock_format()
+                    .inspect_err(|error| tracing::warn!("no clock format: {error}"))
+                    .unwrap_or_default(),
+            ),
             &jiff::Zoned::now(),
             window.appearance().palette(),
             TextSystem::new(),

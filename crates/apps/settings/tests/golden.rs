@@ -5,8 +5,8 @@ use std::path::PathBuf;
 use unbound_audio::{Device, Direction, Level, Snapshot};
 use unbound_keyboard::Layouts;
 use unbound_settings::{
-    About, Category, Display, Mode, Pair, PaneId, PointingDevices, SettingId, SettingsView,
-    Storage, Update, Value, thumbnail,
+    About, App, Category, Display, LoginItems, Mode, Pair, PaneId, PointingDevices, SettingId,
+    SettingsView, Storage, TimeState, Update, Value, thumbnail,
 };
 use unbound_toolkit::ui::{Event, Key, Modifiers};
 use unbound_toolkit::{CpuRenderer, Palette, Scheme, TextSystem};
@@ -310,4 +310,38 @@ fn the_storage_pane_matches_its_goldens() {
 #[test]
 fn the_general_pane_matches_its_goldens() {
     check_in_both_schemes_and_scales("general", |scheme| general(scheme, PaneId::General));
+}
+
+#[test]
+fn the_date_and_time_pane_matches_its_goldens() {
+    check_in_both_schemes_and_scales("date-time", |scheme| {
+        let mut view = general(scheme, PaneId::DateTime);
+        view.apply(Update::Time(Some(TimeState {
+            automatic: true,
+            can_automatic: true,
+            zone: "Asia/Tokyo".to_owned(),
+            zones: Vec::new(),
+        })));
+        view.set_value(SettingId::Clock24Hour, Value::Flag(true));
+        view
+    });
+}
+
+#[test]
+fn the_login_items_pane_matches_its_goldens() {
+    check_in_both_schemes_and_scales("login-items", |scheme| {
+        let mut view = general(scheme, PaneId::LoginItems);
+        let app = |id: &str, name: &str| App {
+            id: id.to_owned(),
+            name: name.to_owned(),
+        };
+        view.apply(Update::Login(LoginItems {
+            items: vec![
+                app("org.mozilla.firefox.desktop", "Firefox"),
+                app("org.unbound.Terminal.desktop", "Terminal"),
+            ],
+            apps: Vec::new(),
+        }));
+        view
+    });
 }

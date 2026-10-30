@@ -25,6 +25,21 @@ fn posix_locale_names_become_language_tags_and_c_means_american_english() {
 }
 
 #[test]
+fn a_chosen_hour_cycle_overrides_the_locale_and_none_restores_it() {
+    let afternoon = at("2026-10-30T14:05:00");
+    let american = formats("en_US.UTF-8");
+    assert!(!american.uses_24_hour_clock());
+    let american = american.with_clock_format("24-hour");
+    assert!(american.uses_24_hour_clock());
+    assert_eq!(american.clock(&afternoon), "Fri, Oct 30, 14:05");
+    let british = formats("en_GB.UTF-8");
+    assert!(british.uses_24_hour_clock());
+    let british = british.with_clock_format("12-hour");
+    assert!(british.clock(&afternoon).contains("2:05"));
+    assert!(british.with_clock_format("automatic").uses_24_hour_clock());
+}
+
+#[test]
 fn the_clock_follows_the_order_names_and_hour_cycle_of_the_locale() {
     let afternoon = at("2026-10-30T14:05:00");
     assert_eq!(

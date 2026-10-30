@@ -4,12 +4,13 @@ use std::path::{Path, PathBuf};
 
 use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId};
 use unbound_settings::{
-    About, AboutCommand, Category, Command, PaneId, SettingId, SettingsView, Storage,
-    StorageCommand, Update, Value, categorize, chip_name, memory_bytes, static_hostname,
-    system_version, tally,
+    About, AboutCommand, App, Category, Command, LoginCommand, LoginItems, PaneId, SettingId,
+    SettingsView, Storage, StorageCommand, Update, Value, categorize, chip_name, login_items,
+    login_matches, memory_bytes, static_hostname, system_version, tally,
 };
 use unbound_toolkit::ui::{Event, Key, Modifiers};
 use unbound_toolkit::{Palette, Scheme, TextSystem};
+use unbound_xdg::DesktopEntry;
 
 const SIZE: (u32, u32) = (900, 600);
 
@@ -287,4 +288,99 @@ fn storage_splits_used_space_and_finds_the_largest_files() {
     );
     assert!(tally.bytes >= 510_000);
     assert!(tally.bytes < 900_000);
+}
+
+fn app(id: &str, name: &str) -> App {
+    App {
+        id: id.to_owned(),
+        name: name.to_owned(),
+    }
+}
+
+#[test]
+fn login_items_are_added_by_name_and_removed_from_their_row() {
+    let mut view = general_view(Scheme::Light);
+    view.select_pane(PaneId::LoginItems);
+    assert_eq!(
+        view.take_commands(),
+        [Command::Login(LoginCommand::Refresh)]
+    );
+    view.apply(Update::Login(LoginItems {
+        items: vec![app("org.unbound.Terminal.desktop", "Terminal")],
+        apps: vec![
+            app("org.mozilla.firefox.desktop", "Firefox"),
+            app("org.unbound.Files.desktop", "Files"),
+            app("org.unbound.Terminal.desktop", "Terminal"),
+        ],
+    }));
+    let add = find(&mut view, Role::Button, "Add App…").expect("Add App…");
+    click(&mut view, add);
+    for character in "fi".chars() {
+        key(&mut view, Key::Character(character), Modifiers::default());
+    }
+    assert!(has_text(&mut view, "Firefox"));
+    assert!(has_text(&mut view, "Files"));
+    key(&mut view, Key::Enter, Modifiers::default());
+    assert_eq!(
+        view.take_commands(),
+        [Command::Login(LoginCommand::Add(
+            "org.mozilla.firefox.desktop".to_owned()
+        ))]
+    );
+    let remove = find(&mut view, Role::Button, "Remove").expect("Remove");
+    click(&mut view, remove);
+    assert_eq!(
+        view.take_commands(),
+        [Command::Login(LoginCommand::Remove(
+            "org.unbound.Terminal.desktop".to_owned()
+        ))]
+    );
+}
+
+#[test]
+fn login_items_list_what_opens_at_login_and_search_skips_them() {
+    let home = tempfile::tempdir().expect("home");
+    let dir = home.path().join("autostart");
+    std::fs::create_dir_all(&dir).expect("autostart");
+    let write = |id: &str, text: &str| std::fs::write(dir.join(id), text).expect("entry");
+    write(
+        "org.example.Mail.desktop",
+        "[Desktop Entry]\nType=Application\nName=Mail\nExec=mail\n",
+    );
+    write(
+        "org.example.Old.desktop",
+        "[Desktop Entry]\nType=Application\nName=Old\nExec=old\nHidden=true\n",
+    );
+    write("notes.txt", "not an entry");
+    let source = "[Desktop Entry]\nType=Application\nName=Chat\nExec=chat\n";
+    let chat = DesktopEntry::parse(
+        "org.example.Chat.desktop",
+        &dir.join("x"),
+        source,
+        None,
+        &[],
+    )
+    .expect("entry");
+    write("org.example.Chat.desktop", source);
+    let items = login_items(&dir, &[chat]);
+    assert_eq!(
+        items,
+        [
+            app("org.example.Chat.desktop", "Chat"),
+            app("org.example.Mail.desktop", "Mail")
+        ]
+    );
+    let state = LoginItems {
+        items,
+        apps: vec![
+            app("org.example.Chat.desktop", "Chat"),
+            app("org.example.Calc.desktop", "Calculator"),
+            app("org.example.Cam.desktop", "Web Camera"),
+        ],
+    };
+    assert_eq!(
+        login_matches(&state, "ca", 8),
+        ["org.example.Calc.desktop", "org.example.Cam.desktop"]
+    );
+    assert!(login_matches(&state, "chat", 8).is_empty());
 }

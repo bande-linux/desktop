@@ -6,8 +6,8 @@ use std::time::{Duration, Instant};
 
 use tempfile::TempDir;
 use unbound_xdg::{
-    DesktopEntry, ExecError, ICON_THEMES, Locale, TERMINAL, UserDir, applications, find_icon,
-    launch, user_dir,
+    DesktopEntry, ExecError, ICON_THEMES, Locale, TERMINAL, UserDir, applications, autostart_dir,
+    find_icon, launch, opens_at_login, set_open_at_login, user_dir,
 };
 
 fn desktops() -> Vec<String> {
@@ -360,4 +360,22 @@ fn a_relative_or_unquoted_user_dir_is_ignored() {
         user_dir(home, Some("XDG_DESKTOP_DIR=$HOME/desk"), UserDir::Desktop),
         home.join("Desktop")
     );
+}
+
+#[test]
+fn open_at_login_copies_the_desktop_entry_into_autostart_and_removes_it_again() {
+    let home = tempfile::tempdir().expect("home");
+    let dir = autostart_dir(None, Some(home.path())).expect("autostart folder");
+    let entry = home.path().join("org.example.Editor.desktop");
+    std::fs::write(&entry, "[Desktop Entry]\nName=Editor\nExec=editor\n").expect("entry");
+    let id = "org.example.Editor.desktop";
+
+    assert!(!opens_at_login(&dir, id));
+    set_open_at_login(&dir, id, &entry, true).expect("open at login");
+    assert!(opens_at_login(&dir, id));
+    std::fs::write(dir.join(id), "[Desktop Entry]\nHidden=true\n").expect("hidden");
+    assert!(!opens_at_login(&dir, id));
+    set_open_at_login(&dir, id, &entry, false).expect("stop opening at login");
+    assert!(!dir.join(id).exists());
+    set_open_at_login(&dir, id, &entry, false).expect("already off");
 }

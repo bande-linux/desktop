@@ -4,13 +4,14 @@ use std::time::Duration;
 use kdl::{KdlDocument, KdlEntry, KdlEntryFormat, KdlNode, KdlValue};
 
 use crate::{
-    Appearance, CapsLock, Config, ConfigError, DEFAULT_DOCK_ICON_SIZE, DockEdge, InputSource,
-    Mouse, Output, SecondaryClick, Suspend, Trackpad, WallpaperFit, WallpaperVariant,
+    Appearance, CapsLock, ClockFormat, Config, ConfigError, DEFAULT_DOCK_ICON_SIZE, DockEdge,
+    InputSource, Mouse, Output, SecondaryClick, Suspend, Trackpad, WallpaperFit, WallpaperVariant,
 };
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Setting {
     Appearance(Appearance),
+    Clock(ClockFormat),
     ReduceMotion(bool),
     DockEdge(DockEdge),
     DockApps(Vec<String>),
@@ -49,6 +50,12 @@ impl Setting {
                 None,
                 "appearance",
                 Some(appearance.keyword().into()),
+            ),
+            Self::Clock(format) => set(
+                &mut document,
+                None,
+                "clock",
+                (*format != ClockFormat::Automatic).then(|| format.keyword().into()),
             ),
             Self::ReduceMotion(reduce) => set(
                 &mut document,

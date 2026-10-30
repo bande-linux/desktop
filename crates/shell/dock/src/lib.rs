@@ -20,7 +20,6 @@ use unbound_toolkit::{
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-dock.ftl");
 
-pub mod autostart;
 pub mod bus;
 
 pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));

@@ -62,6 +62,7 @@ pub enum Update {
     Menu { menu: Menu, anchor: Rect },
     AppMenu { app: String, root: Option<Node> },
     AppMenuChanged,
+    ClockFormat(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

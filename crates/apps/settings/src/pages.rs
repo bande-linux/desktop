@@ -33,7 +33,7 @@ pub(crate) fn boxed(widget: impl Widget + 'static) -> Box<dyn Widget> {
     Box::new(widget)
 }
 
-fn submit(intents: &Intents, make: fn(String) -> Intent) -> impl FnMut(&str) + 'static {
+pub(crate) fn submit(intents: &Intents, make: fn(String) -> Intent) -> impl FnMut(&str) + 'static {
     let intents = Rc::clone(intents);
     move |text: &str| intents.borrow_mut().push(make(text.to_owned()))
 }
@@ -454,6 +454,9 @@ impl SettingsView {
             List::About => self.about_rows(),
             List::Storage => self.storage_rows(),
             List::LargeFiles => self.large_file_rows(),
+            List::Clock => self.clock_rows(),
+            List::TimeZones => self.zone_rows(),
+            List::LoginItems => self.login_rows(),
         }
     }
 
@@ -678,6 +681,8 @@ impl SettingsView {
             | SettingId::TrackpadSecondaryClick
             | SettingId::TrackpadDisableWhileTyping => self.pointing.trackpad,
             SettingId::MouseNaturalScrolling | SettingId::MouseSpeed => self.pointing.mouse,
+            SettingId::AutomaticTime => self.time.as_ref().is_some_and(|time| time.can_automatic),
+            SettingId::DateAndTime | SettingId::TimeZone => self.time.is_some(),
             _ => true,
         })
     }

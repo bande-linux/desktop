@@ -223,9 +223,10 @@ impl State {
         }
         let Some(focused) = self.focused() else {
             if shortcut == Shortcut::QuitApp
-                && let Some((app, _)) = self.windowless_app.clone()
+                && let Some((app, app_id)) = self.windowless_app.clone()
             {
                 self.quit_app(Some(app));
+                self.quit_app_named(&app_id);
             }
             return;
         };
@@ -240,7 +241,14 @@ impl State {
                     window.toplevel.send_close();
                 }
             }
-            Shortcut::QuitApp => self.quit_app(owner),
+            Shortcut::QuitApp => {
+                let app_id = toplevel_names(&focused).1;
+                if app_id.is_empty() {
+                    self.quit_app(owner);
+                } else {
+                    self.quit_app_named(&app_id);
+                }
+            }
             Shortcut::HideApp => self.hide_app(&toplevel_names(&focused).1),
             Shortcut::HideOthers => {
                 let keep = toplevel_names(&focused).1;

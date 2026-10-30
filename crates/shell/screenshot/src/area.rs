@@ -1,4 +1,6 @@
 use unbound_toolkit::ui::{Event, Key};
+
+use crate::engine::Frame;
 use unbound_toolkit::{
     Color, Item, Paint, Point, Rect, Scene, ScreenImage, Shape, TextAlign, TextStyle, TextSystem,
     Typeface,
@@ -11,6 +13,8 @@ const CROSSHAIR_OUTLINE: Color = Color::hex(0x000000).with_alpha(0x80);
 const CROSSHAIR_ARM: f32 = 10.0;
 const READOUT_OFFSET: f32 = 14.0;
 const READOUT_SIZE: f32 = 12.0;
+const WINDOW_TINT: Color = Color::hex(0x3478f6).with_alpha(0x55);
+const WINDOW_RADIUS: f32 = 10.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Region {
@@ -20,17 +24,20 @@ pub struct Region {
     pub height: u32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AreaOutcome {
     Selecting,
     Cancelled,
     Chosen(Region),
+    ChosenWindow(String),
 }
 
 #[derive(Debug, Default)]
 pub struct AreaSelection {
     anchor: Option<Point>,
     pointer: Option<Point>,
+    windows: Vec<(String, Frame)>,
+    window_mode: bool,
 }
 
 fn pixel(coordinate: f32) -> u32 {
@@ -38,11 +45,46 @@ fn pixel(coordinate: f32) -> u32 {
 }
 
 impl AreaSelection {
+    pub fn new(windows: Vec<(String, Frame)>, window_mode: bool) -> Self {
+        Self {
+            window_mode: window_mode && !windows.is_empty(),
+            windows,
+            ..Self::default()
+        }
+    }
+
+    pub fn is_window_mode(&self) -> bool {
+        self.window_mode
+    }
+
+    fn hovered(&self) -> Option<&(String, Frame)> {
+        let at = self.pointer?;
+        self.windows.iter().find(|(_, frame)| {
+            at.x >= frame.x as f32
+                && at.y >= frame.y as f32
+                && at.x < (frame.x + frame.width) as f32
+                && at.y < (frame.y + frame.height) as f32
+        })
+    }
+
     pub fn handle(&mut self, event: &Event) -> AreaOutcome {
         match event {
             Event::Key {
                 key: Key::Escape, ..
             } => AreaOutcome::Cancelled,
+            Event::Key {
+                key: Key::Space, ..
+            } if self.anchor.is_none() && !self.windows.is_empty() => {
+                self.window_mode = !self.window_mode;
+                AreaOutcome::Selecting
+            }
+            Event::PointerDown(pointer) if pointer.is_primary() && self.window_mode => {
+                self.pointer = Some(pointer.position);
+                match self.hovered() {
+                    Some((identifier, _)) => AreaOutcome::ChosenWindow(identifier.clone()),
+                    None => AreaOutcome::Selecting,
+                }
+            }
             Event::PointerDown(pointer) if pointer.is_primary() => {
                 self.anchor = Some(pointer.position);
                 self.pointer = Some(pointer.position);
@@ -85,6 +127,28 @@ impl AreaSelection {
 
     pub fn scene(&self, width: u32, height: u32, text: &mut TextSystem) -> Scene {
         let mut items = Vec::new();
+        if self.window_mode {
+            if let Some((_, frame)) = self.hovered() {
+                items.push(Item::Fill {
+                    shape: Shape::rounded(
+                        Rect::new(
+                            frame.x as f32,
+                            frame.y as f32,
+                            frame.width as f32,
+                            frame.height as f32,
+                        ),
+                        WINDOW_RADIUS,
+                    ),
+                    paint: WINDOW_TINT.into(),
+                });
+            }
+            return Scene {
+                width,
+                height,
+                background: Color::TRANSPARENT,
+                items,
+            };
+        }
         if let Some(region) = self.region() {
             let frame = Rect::new(
                 region.x as f32,
@@ -240,6 +304,64 @@ mod tests {
         let mut selection = AreaSelection::default();
 
         let outcome = selection.handle(&Event::PointerUp(Pointer::at(Point::new(5.0, 5.0))));
+
+        assert_eq!(outcome, AreaOutcome::Selecting);
+    }
+
+    fn windows() -> Vec<(String, Frame)> {
+        let frame = |x, y| Frame {
+            x,
+            y,
+            width: 100,
+            height: 80,
+        };
+        vec![
+            ("front".to_owned(), frame(50, 50)),
+            ("back".to_owned(), frame(0, 0)),
+        ]
+    }
+
+    fn space() -> Event {
+        Event::Key {
+            key: Key::Space,
+            modifiers: Modifiers::default(),
+        }
+    }
+
+    #[test]
+    fn space_switches_to_choosing_the_frontmost_window_under_the_pointer() {
+        let mut selection = AreaSelection::new(windows(), false);
+        selection.handle(&space());
+
+        let outcome = selection.handle(&Event::PointerDown(Pointer::at(Point::new(60.0, 60.0))));
+
+        assert_eq!(outcome, AreaOutcome::ChosenWindow("front".to_owned()));
+    }
+
+    #[test]
+    fn space_again_goes_back_to_dragging_out_an_area() {
+        let mut selection = AreaSelection::new(windows(), true);
+        selection.handle(&space());
+
+        selection.handle(&Event::PointerDown(Pointer::at(Point::new(10.0, 10.0))));
+        let outcome = selection.handle(&Event::PointerUp(Pointer::at(Point::new(30.0, 40.0))));
+
+        assert_eq!(
+            outcome,
+            AreaOutcome::Chosen(Region {
+                x: 10,
+                y: 10,
+                width: 20,
+                height: 30
+            })
+        );
+    }
+
+    #[test]
+    fn a_click_beside_every_window_chooses_nothing() {
+        let mut selection = AreaSelection::new(windows(), true);
+
+        let outcome = selection.handle(&Event::PointerDown(Pointer::at(Point::new(400.0, 400.0))));
 
         assert_eq!(outcome, AreaOutcome::Selecting);
     }

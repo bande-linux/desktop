@@ -5,7 +5,7 @@ use accesskit::{Action, ActionRequest, Node, Role};
 use unbound_toolkit::ui::{
     BUTTON_HEIGHT, Button, Context, Event, Key, Parts, Size, Widget, WidgetId,
 };
-use unbound_toolkit::{Color, Image, Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle};
+use unbound_toolkit::{Image, Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle};
 
 use crate::L10N;
 use crate::service::Choice;
@@ -196,12 +196,6 @@ impl Widget for Grid {
             });
             if let Some(image) = &tile.image {
                 let fitted = aspect_fit(image, well.inset(8.0));
-                items.push(Item::Shadow {
-                    shape: Shape::rounded(fitted, 3.0),
-                    offset: Point::new(0.0, 1.0),
-                    blur_radius: 4.0,
-                    color: Color::hex(0x000000).with_alpha(60),
-                });
                 items.push(Item::Clip {
                     shape: Shape::rounded(fitted, 3.0),
                     items: vec![Item::Image {

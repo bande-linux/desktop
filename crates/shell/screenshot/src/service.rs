@@ -18,10 +18,10 @@ pub const BUS_NAME: &str = "org.unbound.Screenshot";
 pub const PATH: &str = "/org/unbound/Screenshot";
 pub const INTERFACE: &str = "org.unbound.Screenshot";
 pub const PORTAL: &str = "org.freedesktop.impl.portal.desktop.unbound";
+pub const SCREEN_ID: &str = "monitor:screen";
 pub const MONITOR: u32 = 1;
 pub const WINDOW: u32 = 2;
 pub const CURSOR_EMBEDDED: u32 = 2;
-const SCREEN_ID: &str = "monitor:screen";
 const WINDOW_PREFIX: &str = "window:";
 const THUMBNAIL: u32 = 320;
 
@@ -58,6 +58,7 @@ pub enum UiRequest {
         reply: Sender<Option<(f64, f64, f64)>>,
     },
     Cancel,
+    StopRecording,
 }
 
 pub fn source_of(id: &str) -> Option<Source> {
@@ -99,6 +100,7 @@ pub fn thumbnail(shot: &Shot) -> Thumbnail {
 struct Running {
     node_id: u32,
     stream: u64,
+    shared: bool,
     _cast: Cast,
 }
 
@@ -177,12 +179,7 @@ impl Casting {
             .collect()
     }
 
-    pub fn start(
-        self: &Arc<Self>,
-        id: &str,
-        cursor: bool,
-        activity: Activity,
-    ) -> Option<(u32, u32, u32)> {
+    pub fn open(&self, id: &str, cursor: bool, shared: bool) -> Option<(u32, u32, u32)> {
         let source = source_of(id)?;
         let stream = self.next_stream.fetch_add(1, Ordering::Relaxed);
         let (cast, started) = Cast::new(&L10N.tr("stream-name")).ok()?;
@@ -194,16 +191,18 @@ impl Casting {
         lock(&self.running).push(Running {
             node_id: started.node_id,
             stream,
+            shared,
             _cast: cast,
         });
+        Some((started.node_id, started.width, started.height))
+    }
+
+    pub fn share(self: &Arc<Self>, id: &str, cursor: bool) -> Option<(u32, u32, u32)> {
+        let opened = self.open(id, cursor, true)?;
         let mut indicator = lock(&self.indicator);
         if indicator.is_none() {
             let casting = Arc::downgrade(self);
-            let title = match activity {
-                Activity::Sharing => L10N.tr("sharing-screen"),
-                Activity::Recording => L10N.tr("recording-screen"),
-            };
-            match Indicator::show(activity, &title, move || {
+            match Indicator::show(Activity::Sharing, &L10N.tr("sharing-screen"), move || {
                 if let Some(casting) = casting.upgrade() {
                     casting.stop_all();
                 }
@@ -212,7 +211,7 @@ impl Casting {
                 Err(error) => tracing::warn!("cannot show the sharing indicator: {error}"),
             }
         }
-        Some((started.node_id, started.width, started.height))
+        Some(opened)
     }
 
     pub fn stop(&self, nodes: &[u32]) {
@@ -227,7 +226,7 @@ impl Casting {
         for running in &stopped {
             self.engine.stop(running.stream);
         }
-        if lock(&self.running).is_empty() {
+        if !lock(&self.running).iter().any(|running| running.shared) {
             *lock(&self.indicator) = None;
         }
     }
@@ -235,6 +234,7 @@ impl Casting {
     pub fn stop_all(&self) {
         let nodes: Vec<u32> = lock(&self.running)
             .iter()
+            .filter(|running| running.shared)
             .map(|running| running.node_id)
             .collect();
         self.ended(&nodes);
@@ -280,21 +280,23 @@ fn property(value: Value<'_>) -> Option<OwnedValue> {
 }
 
 async fn from_portal(header: &Header<'_>, connection: &zbus::Connection) -> zbus::fdo::Result<()> {
-    let sender = header.sender().map(ToString::to_string);
-    let owner = zbus::fdo::DBusProxy::new(connection)
-        .await?
-        .get_name_owner(
-            zbus::names::BusName::try_from(PORTAL)
-                .map_err(|error| zbus::fdo::Error::Failed(error.to_string()))?,
-        )
+    let denied = || {
+        zbus::fdo::Error::AccessDenied("only the desktop portal may capture the screen".to_owned())
+    };
+    let bus = zbus::fdo::DBusProxy::new(connection).await?;
+    let portal = zbus::names::BusName::try_from(PORTAL)
+        .map_err(|error| zbus::fdo::Error::Failed(error.to_string()))?;
+    let sender = header.sender().ok_or_else(denied)?;
+    let caller = bus
+        .get_connection_unix_process_id(sender.clone().into())
+        .await?;
+    let portal_process = bus
+        .get_connection_unix_process_id(portal)
         .await
-        .ok()
-        .map(|owner| owner.to_string());
-    match sender.is_some() && sender == owner {
+        .map_err(|_| denied())?;
+    match caller == portal_process {
         true => Ok(()),
-        false => Err(zbus::fdo::Error::AccessDenied(
-            "only the desktop portal may capture the screen".to_owned(),
-        )),
+        false => Err(denied()),
     }
 }
 
@@ -358,7 +360,7 @@ impl Service {
         let started = blocking::unblock(move || {
             let mut started = Vec::new();
             for id in &ids {
-                match casting.start(id, cursor_mode == CURSOR_EMBEDDED, Activity::Sharing) {
+                match casting.share(id, cursor_mode == CURSOR_EMBEDDED) {
                     Some(stream) => started.push((id.clone(), stream)),
                     None => {
                         let nodes: Vec<u32> =

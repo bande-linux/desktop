@@ -19,6 +19,7 @@ use crate::window::{ShmTarget, State, Window, WindowError, WindowEvent};
 const TEXT_TYPES: [&str; 3] = ["text/plain;charset=utf-8", "UTF8_STRING", "text/plain"];
 const URI_LIST: &str = "text/uri-list";
 const GNOME_FILES: &str = "x-special/gnome-copied-files";
+const PNG: &str = "image/png";
 
 fn own_type() -> String {
     format!("application/x-unbound-toolkit-{}", std::process::id())
@@ -29,6 +30,7 @@ pub struct Transfer {
     pub text: String,
     pub uris: Vec<String>,
     pub cut: bool,
+    pub png: Vec<u8>,
 }
 
 impl Transfer {
@@ -37,6 +39,7 @@ impl Transfer {
             text: text.to_owned(),
             uris: Vec::new(),
             cut: false,
+            png: Vec::new(),
         }
     }
 
@@ -45,6 +48,7 @@ impl Transfer {
             text: uris.join("\n"),
             uris,
             cut: false,
+            png: Vec::new(),
         }
     }
 
@@ -52,7 +56,14 @@ impl Transfer {
         Self { cut: true, ..self }
     }
 
+    pub fn with_png(self, png: Vec<u8>) -> Self {
+        Self { png, ..self }
+    }
+
     fn offer(&self, source: &WlDataSource) {
+        if !self.png.is_empty() {
+            source.offer(PNG.to_owned());
+        }
         if !self.uris.is_empty() {
             source.offer(GNOME_FILES.to_owned());
             source.offer(URI_LIST.to_owned());
@@ -79,6 +90,7 @@ impl Transfer {
                 .map(|uri| format!("{uri}\r\n"))
                 .collect::<String>()
                 .into_bytes(),
+            PNG => self.png.clone(),
             _ => self.text.clone().into_bytes(),
         }
     }

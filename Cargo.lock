@@ -4134,10 +4134,13 @@ dependencies = [
  "jiff",
  "pipewire",
  "rustix 1.1.6",
+ "serde",
  "smithay",
  "tempfile",
  "tracing",
  "unbound-compositor",
+ "unbound-fs",
+ "unbound-graphics",
  "unbound-inbox",
  "unbound-l10n",
  "unbound-log",
@@ -4148,6 +4151,7 @@ dependencies = [
  "unbound-xdg",
  "wayland-client",
  "wayland-protocols",
+ "xdg-desktop-portal-unbound",
  "zbus",
 ]
 

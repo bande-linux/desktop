@@ -22,6 +22,7 @@ const BYTES_PER_PIXEL: u32 = 4;
 const MOST_FRAMES_PER_SECOND: u32 = 60;
 const BUFFERS: i32 = 4;
 const START_TIMEOUT: Duration = Duration::from_secs(5);
+const RETRY: Duration = Duration::from_millis(50);
 
 type Picture = (u32, u32, Vec<u8>);
 
@@ -198,6 +199,7 @@ struct Producer {
     started: Option<Sender<Started>>,
     latest: Arc<Mutex<Option<Picture>>>,
     pending: Option<Picture>,
+    last: Option<Picture>,
 }
 
 impl Producer {
@@ -211,6 +213,66 @@ impl Producer {
             self.pending = Some(picture);
         }
     }
+}
+
+fn wake(producer: &Rc<RefCell<Producer>>) {
+    let stream = producer.try_borrow().ok().and_then(|shared| {
+        shared
+            .pending
+            .as_ref()
+            .and(shared.stream.clone())
+            .filter(|stream| stream.state() == StreamState::Streaming)
+    });
+    if let Some(stream) = stream
+        && let Err(error) = stream.trigger_process()
+    {
+        tracing::warn!("cannot hand a frame to PipeWire: {error}");
+    }
+}
+
+fn presentation_time() -> i64 {
+    let now = rustix::time::clock_gettime(rustix::time::ClockId::Monotonic);
+    now.tv_sec
+        .saturating_mul(1_000_000_000)
+        .saturating_add(now.tv_nsec)
+}
+
+fn fill(stream: &StreamRc, pixels: &[u8], stride: u32) -> bool {
+    let raw = stream.as_raw_ptr();
+    unsafe {
+        let buffer = pw::sys::pw_stream_dequeue_buffer(raw);
+        if buffer.is_null() {
+            return false;
+        }
+        let spa = (*buffer).buffer;
+        if !spa.is_null() && (*spa).n_datas > 0 && !(*spa).datas.is_null() {
+            let data = &mut *(*spa).datas;
+            if !data.data.is_null() && !data.chunk.is_null() {
+                let length = (data.maxsize as usize).min(pixels.len());
+                std::ptr::copy_nonoverlapping(pixels.as_ptr(), data.data.cast::<u8>(), length);
+                let chunk = &mut *data.chunk;
+                chunk.offset = 0;
+                chunk.stride = i32::try_from(stride).unwrap_or(i32::MAX);
+                chunk.size = u32::try_from(length).unwrap_or(u32::MAX);
+            }
+            for index in 0..(*spa).n_metas as usize {
+                let meta = &*(*spa).metas.add(index);
+                if meta.type_ == spa::sys::SPA_META_Header
+                    && meta.size as usize >= std::mem::size_of::<spa::sys::spa_meta_header>()
+                    && !meta.data.is_null()
+                {
+                    let header = &mut *meta.data.cast::<spa::sys::spa_meta_header>();
+                    header.flags = 0;
+                    header.offset = 0;
+                    header.pts = presentation_time();
+                    header.dts_offset = 0;
+                    header.seq = header.seq.wrapping_add(1);
+                }
+            }
+        }
+        pw::sys::pw_stream_queue_buffer(raw, buffer);
+    }
+    true
 }
 
 fn push(producer: &Rc<RefCell<Producer>>) {
@@ -228,26 +290,20 @@ fn push(producer: &Rc<RefCell<Producer>>) {
         return;
     };
     drop(shared);
-    if (width, height) != size {
-        return;
-    }
-    let Some(mut buffer) = stream.dequeue_buffer() else {
+    let keep = |picture: Picture| {
         if let Ok(mut shared) = producer.try_borrow_mut() {
-            shared.pending.get_or_insert((width, height, pixels));
+            shared.pending.get_or_insert(picture);
         }
-        return;
     };
-    let Some(data) = buffer.datas_mut().first_mut() else {
-        return;
-    };
+    if (width, height) != size {
+        return keep((width, height, pixels));
+    }
     let stride = width * BYTES_PER_PIXEL;
-    if let Some(memory) = data.data() {
-        let length = memory.len().min(pixels.len());
-        memory[..length].copy_from_slice(&pixels[..length]);
-        let chunk = data.chunk_mut();
-        *chunk.offset_mut() = 0;
-        *chunk.stride_mut() = i32::try_from(stride).unwrap_or(i32::MAX);
-        *chunk.size_mut() = u32::try_from(length).unwrap_or(u32::MAX);
+    if !fill(&stream, &pixels, stride) {
+        return keep((width, height, pixels));
+    }
+    if let Ok(mut shared) = producer.try_borrow_mut() {
+        shared.last = Some((width, height, pixels));
     }
 }
 
@@ -292,7 +348,12 @@ fn connect(
                 }
             }
             if state == StreamState::Streaming {
-                push(&producer);
+                if let Ok(mut shared) = producer.try_borrow_mut()
+                    && shared.pending.is_none()
+                {
+                    shared.pending = shared.last.clone();
+                }
+                wake(&producer);
             }
         })
         .param_changed(move |stream, _, id, param| {
@@ -310,8 +371,10 @@ fn connect(
             if let Ok(mut shared) = producer.try_borrow_mut() {
                 shared.size = (size.width, size.height);
             }
-            let objects = [buffers(size.width, size.height), header()];
-            let bytes: Vec<Vec<u8>> = objects.into_iter().filter_map(pod_bytes).collect();
+            let bytes: Vec<Vec<u8>> = [buffers(size.width, size.height), header()]
+                .into_iter()
+                .filter_map(pod_bytes)
+                .collect();
             let mut params: Vec<&Pod> = bytes
                 .iter()
                 .filter_map(|bytes| Pod::from_bytes(bytes))
@@ -319,6 +382,7 @@ fn connect(
             if let Err(error) = stream.update_params(&mut params) {
                 tracing::warn!("cannot set the screen cast buffers: {error}");
             }
+            wake(&producer);
         })
         .process(move |_, _| {
             if let Some(producer) = processed.upgrade() {
@@ -376,6 +440,7 @@ fn serve(
         started: Some(started),
         latest,
         pending: None,
+        last: None,
     }));
     let quit = main_loop.clone();
     let fed = Rc::clone(&producer);
@@ -401,9 +466,12 @@ fn serve(
             } else if fed.borrow().size != size {
                 resize(&fed, size);
             }
-            push(&fed);
+            wake(&fed);
         }
     });
+    let retried = Rc::clone(&producer);
+    let retry = main_loop.loop_().add_timer(move |_| wake(&retried));
+    let _ = retry.update_timer(Some(RETRY), Some(RETRY));
     main_loop.run();
     let mut producer = producer.borrow_mut();
     if let Some(stream) = producer.stream.take() {

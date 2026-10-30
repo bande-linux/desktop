@@ -84,6 +84,7 @@ pub enum Hit {
     Eject(usize),
     Row { column: usize, row: usize },
     Column(usize),
+    Inspector,
     Segment(PathBuf),
     CancelJob(usize),
     ChooseApp(usize),
@@ -810,6 +811,7 @@ impl FilesView {
             }
             Hit::OpenWithChosen => self.open_with_chosen(),
             Hit::UseForAll => self.use_chosen_for_all(),
+            Hit::Inspector => return false,
         }
         true
     }

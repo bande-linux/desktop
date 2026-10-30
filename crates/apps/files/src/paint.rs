@@ -209,6 +209,9 @@ impl FilesView {
             return;
         }
         let first = self.first_visible_column();
+        if let Some(last) = self.browser.columns().len().checked_sub(1) {
+            self.hits.push((content, Hit::Column(last)));
+        }
         for index in first..self.browser.columns().len() {
             let x = content.x + (index - first) as f32 * COLUMN_WIDTH;
             if x >= content.x + content.width {
@@ -582,6 +585,7 @@ impl FilesView {
             INSPECTOR_WIDTH,
             self.size.1,
         );
+        self.hits.push((area, Hit::Inspector));
         items.push(self.fill(area, 0.0, self.palette.surface_elevated));
         items.push(self.fill(
             Rect::new(area.x, 0.0, 1.0, area.height),

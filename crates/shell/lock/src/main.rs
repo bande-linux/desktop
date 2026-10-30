@@ -5,7 +5,7 @@ use std::process::ExitCode;
 use std::thread;
 
 use accesskit::TreeUpdate;
-use unbound_datetime::DateFormats;
+use unbound_datetime::{DateFormats, MinuteTimer};
 use unbound_keyboard::Layouts;
 use unbound_lock::{
     BackdropSource, Inbox, LockScreen, PAM_SERVICE, User, Variant, authenticate, current_user,
@@ -31,7 +31,7 @@ struct Locker {
     user: User,
     verdicts: UnixStream,
     verdict_sender: UnixStream,
-    minutes: Inbox<()>,
+    minutes: MinuteTimer,
     backdrop: Option<Inbox<Image>>,
     backdrop_requested: bool,
     layouts: Layouts,
@@ -103,17 +103,18 @@ impl App for Locker {
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        let mut sources = vec![self.verdicts.as_fd(), self.minutes.fd()];
+        let mut sources = vec![self.verdicts.as_fd(), self.minutes.as_fd()];
         sources.extend(self.backdrop.as_ref().map(Inbox::fd));
         sources
     }
 
     fn source_ready(&mut self, window: &mut Window, index: usize) {
         if index == 1 {
-            if !self.minutes.drain().is_empty() {
-                self.screen.set_clock(&jiff::Zoned::now());
-                window.request_redraw();
+            if let Err(error) = self.minutes.wait() {
+                tracing::warn!("cannot follow the clock: {error}");
             }
+            self.screen.set_clock(&jiff::Zoned::now());
+            window.request_redraw();
             return;
         }
         if index == 2 {
@@ -166,19 +167,6 @@ fn clock_format() -> zbus::Result<String> {
     .get_property("ClockFormat")
 }
 
-fn follow_minutes() -> std::io::Result<Inbox<()>> {
-    let minutes = Inbox::new()?;
-    let outbox = minutes.outbox();
-    thread::Builder::new()
-        .name("clock".to_owned())
-        .spawn(move || {
-            if let Err(error) = unbound_datetime::follow_minutes(|| outbox.send(())) {
-                tracing::warn!("the clock does not advance: {error}");
-            }
-        })?;
-    Ok(minutes)
-}
-
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let user = current_user()?;
     let (verdicts, verdict_sender) = UnixStream::pair()?;
@@ -198,7 +186,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         user,
         verdicts,
         verdict_sender,
-        minutes: follow_minutes()?,
+        minutes: MinuteTimer::new()?,
         backdrop: None,
         backdrop_requested: false,
         layouts: Layouts::load(),

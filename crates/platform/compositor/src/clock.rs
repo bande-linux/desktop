@@ -201,7 +201,9 @@ impl FrameScheduler {
                     compositor.animate_on(&name, vblank.time);
                     compositor.latch_on(&name);
                     let deadline = self.clock.deadline(vblank);
-                    let submission = output.submit(compositor, &name)?;
+                    let submission = output.submit(compositor, &name).inspect_err(|_| {
+                        self.phase = Phase::Idle;
+                    })?;
                     now = clock();
                     self.clock.record_render(deadline, started, now);
                     self.phase = match submission {

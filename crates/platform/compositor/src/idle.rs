@@ -66,6 +66,11 @@ impl State {
 }
 
 impl Headless {
+    pub fn woke(&mut self) {
+        self.state.note_activity();
+        self.state.needs_redraw = true;
+    }
+
     pub fn idle_tick(&mut self, now: Duration) -> Option<Duration> {
         let state = &mut self.state;
         state

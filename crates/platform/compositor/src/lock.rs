@@ -14,8 +14,9 @@ pub(crate) struct Lock {
     surfaces: Vec<(String, LockSurface)>,
     previous: Option<WlSurface>,
     confirmation: Option<SessionLocker>,
-    blank_latched: Vec<String>,
-    blank_presented: Vec<String>,
+    latched: Vec<String>,
+    presented: Vec<String>,
+    reported: bool,
 }
 
 impl Lock {
@@ -131,11 +132,12 @@ impl State {
 
     pub(crate) fn latch_lock(&mut self, screen: usize) {
         let name = self.screens[screen].name();
+        let shown = self.lock_shown();
         if let Some(lock) = &mut self.lock
-            && lock.confirmation.is_some()
-            && !lock.blank_latched.contains(&name)
+            && (lock.confirmation.is_some() || (shown && !lock.reported))
+            && !lock.latched.contains(&name)
         {
-            lock.blank_latched.push(name);
+            lock.latched.push(name);
         }
     }
 
@@ -145,13 +147,18 @@ impl State {
         let Some(lock) = &mut self.lock else {
             return;
         };
-        if lock.blank_latched.contains(&name) && !lock.blank_presented.contains(&name) {
-            lock.blank_presented.push(name);
+        if lock.latched.contains(&name) && !lock.presented.contains(&name) {
+            lock.presented.push(name);
         }
-        if names.iter().all(|name| lock.blank_presented.contains(name))
-            && let Some(confirmation) = lock.confirmation.take()
-        {
+        if !names.iter().all(|name| lock.presented.contains(name)) {
+            return;
+        }
+        lock.latched.clear();
+        lock.presented.clear();
+        if let Some(confirmation) = lock.confirmation.take() {
             confirmation.lock();
+        } else if !lock.reported {
+            lock.reported = true;
             self.report_lock_state(true);
         }
     }
@@ -187,8 +194,8 @@ impl SessionLockHandler for State {
             lock.owner = owner;
             lock.surfaces.clear();
             lock.confirmation = Some(confirmation);
-            lock.blank_latched.clear();
-            lock.blank_presented.clear();
+            lock.latched.clear();
+            lock.presented.clear();
             return;
         }
         self.release_grabs();
@@ -199,8 +206,9 @@ impl SessionLockHandler for State {
             surfaces: Vec::new(),
             previous,
             confirmation: Some(confirmation),
-            blank_latched: Vec::new(),
-            blank_presented: Vec::new(),
+            latched: Vec::new(),
+            presented: Vec::new(),
+            reported: false,
         });
         self.set_keyboard_focus(None);
         self.needs_redraw = true;

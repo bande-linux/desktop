@@ -1,3 +1,4 @@
+pub mod clock;
 pub mod dbusmenu;
 pub mod devices;
 pub mod session;

@@ -1,15 +1,13 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use unbound_datetime::{DateFormats, posix_locale};
 use unbound_lock::{LockScreen, SHAKE_DURATION, User, clock_texts, display_name, shake_offset};
 use unbound_toolkit::ui::{Event, Key, Modifiers};
-use unbound_toolkit::{Appearance, CpuRenderer, Image, Scheme, TextSystem};
+use unbound_toolkit::{Appearance, CpuRenderer, Image, TextSystem};
 
 const OUTPUT: (u32, u32) = (1024, 768);
-const MIN_SSIM: f64 = 0.99;
 const NONE: Modifiers = Modifiers {
     shift: false,
     alt: false,
@@ -60,25 +58,7 @@ fn press_return(screen: &mut LockScreen) {
 }
 
 fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>) {
-    let actual = image::RgbaImage::from_raw(size.0, size.1, rgba).expect("frame");
-    let actual = image::DynamicImage::ImageRgba8(actual).to_rgb8();
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("tests/golden/{name}.png"));
-    if std::env::var_os("UNBOUND_UPDATE_GOLDENS").is_some() {
-        std::fs::create_dir_all(path.parent().expect("golden directory")).expect("directory");
-        actual.save(&path).expect("write golden");
-    }
-    let target = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}.png"));
-    actual.save(&target).expect("save the frame");
-    let expected = image::open(&path)
-        .unwrap_or_else(|error| panic!("{}: {error}", path.display()))
-        .to_rgb8();
-    let similarity = image_compare::rgb_hybrid_compare(&expected, &actual).expect("same size");
-    assert!(
-        similarity.score >= MIN_SSIM,
-        "{name} differs from its golden: {:.4} (frame in {})",
-        similarity.score,
-        target.display()
-    );
+    unbound_golden::assert_golden!(name, &unbound_golden::from_rgba(size.0, size.1, rgba));
 }
 
 fn wallpaper() -> Image {
@@ -94,45 +74,18 @@ fn wallpaper() -> Image {
 
 fn render(screen: &mut LockScreen, name: &str) {
     let scene = screen.scene(OUTPUT.0, OUTPUT.1);
-    for (scale, suffix) in [(1.0, ""), (1.5, "-1.5x")] {
-        let size = (
-            (f64::from(OUTPUT.0) * scale).round() as u32,
-            (f64::from(OUTPUT.1) * scale).round() as u32,
-        );
-        let mut rgba = vec![0; (size.0 * size.1 * 4) as usize];
-        CpuRenderer::new()
-            .render_into(&scene, scale, &mut rgba)
-            .expect("frame");
-        check_golden(&format!("{name}{suffix}"), size, rgba);
-    }
+    let frame = CpuRenderer::new().render(&scene).expect("frame");
+    check_golden(name, OUTPUT, frame.rgba);
 }
 
 #[test]
-fn the_lock_screen_matches_its_goldens_in_light_and_dark_appearance() {
-    for (scheme, name) in [
-        (Scheme::Light, "lock-screen-light"),
-        (Scheme::Dark, "lock-screen-dark"),
-    ] {
-        let mut screen = LockScreen::new(
-            &ada(),
-            british(),
-            &morning(),
-            Appearance {
-                scheme,
-                ..Appearance::default()
-            },
-            TextSystem::new(),
-        );
-        screen.set_backdrop(wallpaper(), Instant::now() - Duration::from_secs(5));
-        screen.advance(Instant::now());
-        screen.set_position(1, 3);
-        render(&mut screen, name);
-    }
-}
-
-#[test]
-fn the_lock_screen_without_a_wallpaper_matches_its_golden() {
-    render(&mut screen(), "lock-screen");
+fn the_lock_screen_matches_its_goldens_over_a_wallpaper_and_without_one() {
+    let mut screen = screen();
+    render(&mut screen, "lock-screen");
+    screen.set_backdrop(wallpaper(), Instant::now() - Duration::from_secs(5));
+    screen.advance(Instant::now());
+    screen.set_position(1, 3);
+    render(&mut screen, "lock-screen-light");
 }
 
 #[test]

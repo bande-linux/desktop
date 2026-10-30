@@ -278,40 +278,40 @@ fn a_syntax_error_reports_its_line_and_column() {
 }
 
 #[test]
-fn an_unknown_setting_is_reported_where_it_starts() {
-    assert_eq!(
-        error_at("appearance \"dark\"\n  theme \"graphite\"\n"),
-        (2, 3)
-    );
-    assert_eq!(error_at("bar {\n    autohide #true\n}\n"), (2, 5));
-    assert_eq!(error_at("bar {\n    apps \"a.b\" \"a.b\"\n}\n"), (2, 16));
-    assert_eq!(error_at("bar {\n    apps 3\n}\n"), (2, 10));
-}
-
-#[test]
-fn a_value_outside_its_choices_is_reported_at_the_value() {
-    assert_eq!(error_at("bar {\n    edge \"middle\"\n}\n"), (2, 10));
-    assert_eq!(error_at("appearance \"sepia\"\n"), (1, 12));
-}
-
-#[test]
-fn display_scale_must_stay_within_100_to_300_percent() {
-    assert_eq!(problems("display \"A\" {\n    scale 2.5\n}\n"), []);
-    assert_eq!(error_at("display \"A\" {\n    scale 3.5\n}\n"), (2, 11));
-    assert_eq!(error_at("display \"A\" {\n    scale 0.75\n}\n"), (2, 11));
-}
-
-#[test]
-fn refresh_rate_must_stay_within_60_to_240_hz() {
-    assert_eq!(problems("display \"A\" {\n    refresh-rate 240\n}\n"), []);
-    assert_eq!(
-        error_at("display \"A\" {\n    refresh-rate 30\n}\n"),
-        (2, 18)
-    );
-    assert_eq!(
-        error_at("display \"A\" {\n    refresh-rate 360\n}\n"),
-        (2, 18)
-    );
+fn a_setting_that_breaks_a_rule_is_reported_where_it_goes_wrong() {
+    for (source, at) in [
+        ("appearance \"dark\"\n  theme \"graphite\"\n", (2, 3)),
+        ("bar {\n    autohide #true\n}\n", (2, 5)),
+        ("bar {\n    apps \"a.b\" \"a.b\"\n}\n", (2, 16)),
+        ("bar {\n    apps 3\n}\n", (2, 10)),
+        ("bar {\n    edge \"middle\"\n}\n", (2, 10)),
+        ("appearance \"sepia\"\n", (1, 12)),
+        ("display \"A\" {\n    scale 3.5\n}\n", (2, 11)),
+        ("display \"A\" {\n    scale 0.75\n}\n", (2, 11)),
+        ("display \"A\" {\n    refresh-rate 30\n}\n", (2, 18)),
+        ("display \"A\" {\n    refresh-rate 360\n}\n", (2, 18)),
+        ("bar {\n    size 31\n}\n", (2, 10)),
+        ("bar {\n    size 57\n}\n", (2, 10)),
+        ("bar {\n    auto-hide \"yes\"\n}\n", (2, 15)),
+        ("wallpaper {\n    fit \"tile\"\n}\n", (2, 9)),
+        (
+            "idle {\n    dim-after \"10m\"\n    lock-after \"5m\"\n}\n",
+            (3, 5),
+        ),
+        ("idle {\n    suspend-after \"5m\"\n}\n", (2, 5)),
+        ("idle {\n    suspend-after \"soon\"\n}\n", (2, 19)),
+        ("appearance \"dark\"\nappearance \"light\"\n", (2, 1)),
+        ("display \"A\" {\n}\ndisplay \"A\" {\n}\n", (3, 1)),
+    ] {
+        assert_eq!(error_at(source), at, "{source:?}");
+    }
+    for source in [
+        "display \"A\" {\n    scale 2.5\n}\n",
+        "display \"A\" {\n    refresh-rate 240\n}\n",
+        "bar {\n    size 56\n}\n",
+    ] {
+        assert_eq!(problems(source), [], "{source:?}");
+    }
 }
 
 #[test]
@@ -368,28 +368,11 @@ fn wallpapers_are_absolute_or_home_relative_paths() {
 }
 
 #[test]
-fn the_screen_must_dim_before_it_locks() {
-    assert_eq!(
-        error_at("idle {\n    dim-after \"10m\"\n    lock-after \"5m\"\n}\n"),
-        (3, 5)
-    );
-}
-
-#[test]
 fn durations_need_a_positive_amount_and_a_unit() {
     for duration in ["5", "0m", "m", "-5m", "5 m", "1d"] {
         let source = format!("idle {{\n    dim-after \"{duration}\"\n}}\n");
         assert_eq!(error_at(&source), (2, 15), "duration {duration:?}");
     }
-}
-
-#[test]
-fn a_setting_given_twice_is_reported_at_the_second_one() {
-    assert_eq!(
-        error_at("appearance \"dark\"\nappearance \"light\"\n"),
-        (2, 1)
-    );
-    assert_eq!(error_at("display \"A\" {\n}\ndisplay \"A\" {\n}\n"), (3, 1));
 }
 
 #[test]
@@ -506,12 +489,6 @@ fn the_computer_sleeps_when_the_display_turns_off_unless_told_otherwise() {
 }
 
 #[test]
-fn the_computer_must_not_sleep_before_the_display_turns_off() {
-    assert_eq!(error_at("idle {\n    suspend-after \"5m\"\n}\n"), (2, 5));
-    assert_eq!(error_at("idle {\n    suspend-after \"soon\"\n}\n"), (2, 19));
-}
-
-#[test]
 fn an_empty_dock_apps_list_empties_the_dock() {
     let config = Config::parse("bar {\n    apps\n}\n").expect("valid config");
     assert!(config.bar.apps.is_empty());
@@ -532,15 +509,6 @@ fn the_dock_size_auto_hide_wallpaper_fit_and_reduce_motion_are_read() {
     assert!(!defaults.accessibility.reduce_motion && !defaults.bar.auto_hide);
     assert_eq!(defaults.bar.icon_size, 40);
     assert_eq!(defaults.wallpaper.fit, WallpaperFit::Fill);
-}
-
-#[test]
-fn the_bar_size_stays_within_32_to_56_points_and_flags_need_a_boolean() {
-    assert_eq!(error_at("bar {\n    size 31\n}\n"), (2, 10));
-    assert_eq!(error_at("bar {\n    size 57\n}\n"), (2, 10));
-    assert_eq!(problems("bar {\n    size 56\n}\n"), []);
-    assert_eq!(error_at("bar {\n    auto-hide \"yes\"\n}\n"), (2, 15));
-    assert_eq!(error_at("wallpaper {\n    fit \"tile\"\n}\n"), (2, 9));
 }
 
 #[test]

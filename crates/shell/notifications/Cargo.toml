@@ -18,8 +18,7 @@ unbound-xdg.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]
-image.workspace = true
-image-compare.workspace = true
+unbound-golden.workspace = true
 
 [lints]
 workspace = true

@@ -13,9 +13,10 @@ use crate::menus::{
     system_menu, wifi_menu,
 };
 use unbound_config::{BUS_NAME, BarEdge, MenuBarPlacement, OBJECT_PATH};
-use unbound_datetime::{DateFormats, follow_minutes};
+use unbound_datetime::DateFormats;
 use unbound_inbox::{Inbox, Outbox};
 use unbound_keyboard::Layouts;
+use unbound_status::clock::follow_minutes;
 use unbound_status::dbusmenu::{APP_MENU_PATH, Node};
 use unbound_status::devices::{Control, SoundControl, follow_devices, follow_sound};
 use unbound_status::session::full_name;
@@ -759,7 +760,7 @@ impl<V: StatusView> MenuBarClient<V> {
         let sound = follow_sound(inbox.outbox());
         let minutes = inbox.outbox();
         thread::spawn(move || {
-            if let Err(error) = follow_minutes(|| minutes.send(Update::Minute)) {
+            if let Err(error) = follow_minutes(&minutes) {
                 tracing::warn!("the clock does not advance: {error}");
             }
         });

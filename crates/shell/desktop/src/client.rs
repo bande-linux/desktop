@@ -16,7 +16,7 @@ use unbound_config::{BarEdge, Config};
 use unbound_fs::{
     Action, Answer, Change, FolderWatch, Operations, Purpose, Resolution, Task, Trash,
 };
-use unbound_inbox::{Inbox, Outbox};
+use unbound_inbox::Inbox;
 use unbound_thumbnails::{Request as ThumbnailRequest, ThumbnailSize, Thumbnails};
 use unbound_toolkit::ui::frame_time;
 use unbound_toolkit::{
@@ -59,14 +59,13 @@ pub struct DesktopSurface {
     icons: HashMap<(String, u32), Option<Image>>,
     thumbnails: Option<Thumbnails>,
     items: Vec<Item>,
-    pictures: HashMap<PathBuf, (Option<SystemTime>, Option<Image>)>,
+    pictures: HashMap<PathBuf, (Option<SystemTime>, Option<Option<Image>>)>,
     layouts_file: Option<PathBuf>,
     bar_edge: BarEdge,
     combined_bar: bool,
     choice: Option<Choice>,
     choices: Inbox<Choice>,
     loaded: Inbox<Loaded>,
-    loader: Outbox<Loaded>,
     pending: HashSet<WallpaperKey>,
     wallpapers: HashMap<WallpaperKey, Layer>,
     scheme: Scheme,
@@ -98,7 +97,7 @@ impl DesktopSurface {
         if self.wallpapers.contains_key(&key) || !self.pending.insert(key.clone()) {
             return;
         }
-        let loader = self.loader.clone();
+        let loader = self.loaded.outbox();
         let work = move || {
             let rendered = match render(&key.path, key.fit, key.width, key.height) {
                 Ok(picture) => {
@@ -192,11 +191,15 @@ impl DesktopSurface {
             let modified = std::fs::metadata(&item.path)
                 .and_then(|metadata| metadata.modified())
                 .ok();
-            match self.pictures.get(&item.path) {
-                Some((made, Some(picture))) if *made == modified => {
+            let known = self
+                .pictures
+                .get(&item.path)
+                .filter(|(made, _)| *made == modified);
+            match known {
+                Some((_, Some(Some(picture)))) => {
                     return Some(Artwork::Thumbnail(picture.clone()));
                 }
-                Some((made, None)) if *made == modified => {}
+                Some((_, Some(None))) => {}
                 _ => {
                     self.pictures.insert(item.path.clone(), (modified, None));
                     wanted.push(ThumbnailRequest {
@@ -219,12 +222,13 @@ impl DesktopSurface {
         if done.is_empty() {
             return;
         }
-        for thumbnailed in done {
+        let size = ThumbnailSize::for_pixels(self.icon_pixels());
+        for thumbnailed in done.into_iter().filter(|done| done.size == size) {
             let picture = thumbnailed
                 .picture
                 .and_then(|picture| Image::from_rgba(picture.width, picture.height, picture.rgba));
             if let Some((_, kept)) = self.pictures.get_mut(&thumbnailed.path) {
-                *kept = picture;
+                *kept = Some(picture);
             }
         }
         self.show_items();
@@ -253,7 +257,9 @@ impl DesktopSurface {
                 let artwork = self.artwork(&item, pixels, &mut wanted);
                 (item, artwork)
             })
-            .collect();
+            .collect::<Vec<_>>();
+        let present: HashSet<&PathBuf> = with_icons.iter().map(|(item, _)| &item.path).collect();
+        self.pictures.retain(|path, _| present.contains(path));
         if let Some(thumbnails) = self.thumbnails.as_ref().filter(|_| !wanted.is_empty()) {
             thumbnails.want(wanted);
         }
@@ -324,6 +330,7 @@ impl DesktopSurface {
         );
         if relist {
             self.icons.clear();
+            self.pictures.clear();
             self.relist();
         }
         self.save_layouts();
@@ -786,7 +793,6 @@ impl App for DesktopSurface {
             }
             2 => {
                 for (key, rendered) in self.loaded.drain() {
-                    self.pending.remove(&key);
                     let layer = rendered.and_then(|(picture, luma)| {
                         Image::from_rgba(picture.width, picture.height, picture.rgba).map(|image| {
                             Layer {
@@ -797,6 +803,7 @@ impl App for DesktopSurface {
                         })
                     });
                     if let Some(layer) = layer {
+                        self.pending.remove(&key);
                         self.wallpapers.insert(key, layer);
                     }
                 }
@@ -896,10 +903,9 @@ impl DesktopSurface {
         let choices = Inbox::new()?;
         follow(choices.outbox());
         let loaded = Inbox::new()?;
-        let loader = loaded.outbox();
         let appearance = window.appearance();
         let data_dirs = data_dirs();
-        let thumbnails = Thumbnails::for_user(&data_dirs);
+        let thumbnails = main.then(|| Thumbnails::for_user(&data_dirs)).flatten();
         let mut surface = DesktopSurface {
             view: DesktopView::new(appearance, layouts, text),
             paste_moves: false,
@@ -921,7 +927,6 @@ impl DesktopSurface {
             choice: None,
             choices,
             loaded,
-            loader,
             pending: HashSet::new(),
             wallpapers: HashMap::new(),
             scheme: appearance.scheme,

@@ -77,8 +77,8 @@ impl Field {
         laid_out(&mut self.field, &mut self.cx);
     }
 
-    fn selected(&self) -> &str {
-        &self.field.text()[self.field.selection()]
+    fn selected(&self) -> String {
+        self.field.text()[self.field.selection()].to_owned()
     }
 }
 

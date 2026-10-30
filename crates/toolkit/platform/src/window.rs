@@ -892,6 +892,9 @@ impl Window {
                     Some(ClipboardRequest::Paste) => self.paste()?,
                     None => {}
                 }
+                if ui.take_input_method_reset() {
+                    self.reset_text_input();
+                }
                 self.set_cursor(ui.cursor());
                 (changed, None)
             }

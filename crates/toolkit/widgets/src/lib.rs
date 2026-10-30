@@ -2,6 +2,7 @@ mod animation;
 mod button;
 mod context_menu;
 mod disclosure;
+mod editor;
 mod free_layout;
 mod label;
 mod menu;
@@ -12,10 +13,12 @@ mod slider;
 mod stack;
 mod table;
 mod text_field;
+mod text_view;
 mod toggle;
 
 use std::any::Any;
 use std::cell;
+use std::sync::LazyLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
@@ -36,8 +39,15 @@ pub use slider::{SLIDER_HEIGHT, Slider};
 pub use stack::{Axis, Stack};
 pub use table::{Cell, Column, HEADER_HEIGHT, ROW_HEIGHT, Row, Sort, Table};
 pub use text_field::{TEXT_FIELD_HEIGHT, TextField};
+pub use text_view::TextView;
 pub use toggle::{SWITCH_SIZE, Toggle};
 pub use unbound_spring::Spring;
+
+use unbound_l10n::Localizer;
+
+const ENGLISH: &str = include_str!("../locales/en-US/unbound-widgets.ftl");
+
+static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
 use unbound_graphics::{Appearance, Item, Palette, Point, Rect, Scene, Shape, TextSystem};
 pub use unbound_graphics::{
@@ -104,6 +114,7 @@ pub struct Context {
     now: Instant,
     animating: cell::Cell<bool>,
     clipboard: Option<ClipboardRequest>,
+    input_method_reset: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -123,6 +134,7 @@ impl Context {
             now: Instant::now(),
             animating: cell::Cell::new(false),
             clipboard: None,
+            input_method_reset: false,
         }
     }
 
@@ -709,6 +721,10 @@ impl Ui {
         }
         self.handle(&Event::Commit(text.to_owned()));
         true
+    }
+
+    pub fn take_input_method_reset(&mut self) -> bool {
+        std::mem::take(&mut self.cx.input_method_reset)
     }
 
     pub fn take_menu_request(&mut self) -> Option<(Menu, Point)> {

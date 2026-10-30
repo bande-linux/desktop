@@ -1,19 +1,18 @@
-use accesskit::{Action, ActionData, ActionRequest, Node, Role};
-use parley::{PlainEditor, StyleProperty};
+use accesskit::{ActionRequest, Node, Role};
 
 use std::ops::Range;
 
-use super::{ClipboardRequest, Context, Cursor, Event, Key, Modifiers, Size, Widget, WidgetId};
-use unbound_graphics::{
-    Color, Item, Paint, Paragraph, Point, Rect, Shape, TextAlign, TextStyle, families,
-};
+use super::editor::Editor;
+use super::{Context, Cursor, Event, Menu, Parts, Size, Widget, WidgetId};
+use unbound_graphics::{Color, Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle};
 
 pub const TEXT_FIELD_HEIGHT: f32 = 22.0;
 const FONT_SIZE: f32 = 13.0;
 const RADIUS: f32 = 5.0;
 const PADDING: f32 = 6.0;
-const CARET_WIDTH: f32 = 1.0;
+const CARET_ROOM: f32 = 1.0;
 const IN_PLACE_RADIUS: f32 = 4.0;
+const WHOLE_LINE: Range<f32> = 0.0..f32::MAX;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Border {
@@ -26,46 +25,33 @@ pub struct TextField {
     id: WidgetId,
     placeholder: String,
     placeholder_paragraph: Option<Paragraph>,
-    font_size: f32,
     border: Border,
-    editor: PlainEditor<Color>,
+    leading: f32,
+    trailing: f32,
+    editor: Editor,
     on_change: Box<dyn FnMut(&str)>,
-    selecting: bool,
-    pending_selection: Option<Range<usize>>,
-    paragraph: Option<Paragraph>,
+    scroll: f32,
     frame: Rect,
 }
 
 impl TextField {
     pub fn new(placeholder: &str, text: &str, on_change: impl FnMut(&str) + 'static) -> Self {
-        let mut editor = PlainEditor::new(FONT_SIZE);
-        editor.set_text(text);
-        editor
-            .edit_styles()
-            .insert(StyleProperty::FontFamily(families(FONT_SIZE)));
         Self {
             id: WidgetId::next(),
             placeholder: placeholder.to_owned(),
             placeholder_paragraph: None,
-            font_size: FONT_SIZE,
             border: Border::Field,
-            editor,
+            leading: PADDING,
+            trailing: PADDING,
+            editor: Editor::new(text, FONT_SIZE, false),
             on_change: Box::new(on_change),
-            selecting: false,
-            pending_selection: None,
-            paragraph: None,
+            scroll: 0.0,
             frame: Rect::default(),
         }
     }
 
     pub fn borderless(mut self, font_size: f32) -> Self {
-        let text = self.editor.raw_text().to_owned();
-        self.editor = PlainEditor::new(font_size);
-        self.editor.set_text(&text);
-        self.editor
-            .edit_styles()
-            .insert(StyleProperty::FontFamily(families(font_size)));
-        self.font_size = font_size;
+        self.editor = Editor::new(&self.editor.text(), font_size, false);
         self.border = Border::None;
         self
     }
@@ -81,85 +67,59 @@ impl TextField {
         if self.border == Border::Field {
             TEXT_FIELD_HEIGHT
         } else {
-            (self.font_size * 1.5).ceil()
+            (self.editor.font_size() * 1.5).ceil()
         }
     }
 
-    pub fn text(&self) -> &str {
-        self.editor.raw_text()
+    pub fn text(&self) -> String {
+        self.editor.text()
     }
 
     pub fn selection(&self) -> Range<usize> {
-        self.editor.raw_selection().text_range()
+        self.editor.selection()
     }
 
     pub fn select(&mut self, range: Range<usize>) {
-        self.pending_selection = Some(range);
+        self.editor.select(range);
+    }
+
+    fn inner_width(&self) -> f32 {
+        (self.frame.width - self.leading - self.trailing).max(0.0)
     }
 
     fn text_origin(&self) -> Point {
-        let height = self.paragraph.as_ref().map_or(0.0, Paragraph::height);
+        let (width, rtl) = self.editor.line_extent();
+        let inner = self.inner_width();
+        let shift = match rtl && width < inner {
+            true => inner - width - CARET_ROOM,
+            false => 0.0,
+        };
+        let height = self.editor.first_line_height();
         Point::new(
-            self.frame.x + PADDING,
+            self.frame.x + self.leading - self.scroll + shift,
             self.frame.y + ((self.frame.height - height) / 2.0).round(),
         )
     }
 
-    fn edit(&mut self, cx: &mut Context, key: Key, modifiers: Modifiers) -> bool {
-        let before = self.editor.raw_text().to_owned();
-        let (fonts, layouts) = cx.text.contexts();
-        let mut driver = self.editor.driver(fonts, layouts);
-        let Modifiers {
-            shift, alt, logo, ..
-        } = modifiers;
-        match key {
-            Key::Left if logo && shift => driver.select_to_line_start(),
-            Key::Left if logo => driver.move_to_line_start(),
-            Key::Left if alt && shift => driver.select_word_left(),
-            Key::Left if alt => driver.move_word_left(),
-            Key::Left if shift => driver.select_left(),
-            Key::Left => driver.move_left(),
-            Key::Right if logo && shift => driver.select_to_line_end(),
-            Key::Right if logo => driver.move_to_line_end(),
-            Key::Right if alt && shift => driver.select_word_right(),
-            Key::Right if alt => driver.move_word_right(),
-            Key::Right if shift => driver.select_right(),
-            Key::Right => driver.move_right(),
-            Key::Up if shift => driver.select_to_text_start(),
-            Key::Up => driver.move_to_text_start(),
-            Key::Down if shift => driver.select_to_text_end(),
-            Key::Down => driver.move_to_text_end(),
-            Key::Backspace if logo => {
-                if driver.editor.raw_selection().is_collapsed() {
-                    driver.select_to_line_start();
-                }
-                driver.delete_selection();
-            }
-            Key::Backspace if alt => driver.backdelete_word(),
-            Key::Backspace => driver.backdelete(),
-            Key::Delete if alt => driver.delete_word(),
-            Key::Delete => driver.delete(),
-            Key::Character('a') if logo => driver.select_all(),
-            Key::Character('c' | 'x') if logo => {
-                let Some(selected) = driver.editor.selected_text().map(str::to_owned) else {
-                    return true;
-                };
-                cx.clipboard = Some(ClipboardRequest::Copy(selected));
-                if key == Key::Character('x') {
-                    driver.delete_selection();
-                }
-            }
-            Key::Character('v') if logo => cx.clipboard = Some(ClipboardRequest::Paste),
-            Key::Character(character) if !logo && !modifiers.control => {
-                driver.insert_or_replace_selection(character.encode_utf8(&mut [0; 4]));
-            }
-            Key::Space if !logo && !modifiers.control => driver.insert_or_replace_selection(" "),
-            _ => return false,
+    fn reveal_caret(&mut self, cx: &mut Context) {
+        let caret = self.editor.caret_rect(&mut cx.text);
+        let inner = self.inner_width();
+        let (width, _) = self.editor.line_extent();
+        if caret.x - self.scroll < 0.0 {
+            self.scroll = caret.x;
+        } else if caret.x + CARET_ROOM - self.scroll > inner {
+            self.scroll = caret.x + CARET_ROOM - inner;
         }
-        if self.editor.raw_text() != before {
-            (self.on_change)(self.editor.raw_text());
+        self.scroll = self
+            .scroll
+            .clamp(0.0, (width + CARET_ROOM - inner).max(0.0))
+            .round();
+    }
+
+    fn changed(&mut self, revision: u64) {
+        if self.editor.revision() != revision {
+            (self.on_change)(&self.editor.text());
         }
-        true
     }
 }
 
@@ -169,22 +129,12 @@ impl Widget for TextField {
     }
 
     fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
-        self.editor
-            .edit_styles()
-            .insert(StyleProperty::Brush(cx.palette.label_primary));
-        let (fonts, layouts) = cx.text.contexts();
-        if let Some(range) = self.pending_selection.take() {
-            self.editor
-                .driver(fonts, layouts)
-                .select_byte_range(range.start, range.end);
-        }
-        self.paragraph = Some(Paragraph::from_layout(
-            self.editor.layout(fonts, layouts).clone(),
-        ));
+        self.editor.set_color(cx.palette.label_primary);
+        self.editor.lay_out(&mut cx.text, WHOLE_LINE);
         self.placeholder_paragraph = (!self.placeholder.is_empty()).then(|| {
             cx.text.paragraph(
                 &self.placeholder,
-                TextStyle::new(self.font_size, cx.palette.label_muted),
+                TextStyle::new(self.editor.font_size(), cx.palette.label_muted),
                 None,
                 TextAlign::Start,
             )
@@ -192,8 +142,22 @@ impl Widget for TextField {
         Size::new(available.width, self.height())
     }
 
-    fn place(&mut self, _cx: &mut Context, frame: Rect) {
+    fn place(&mut self, cx: &mut Context, frame: Rect) {
         self.frame = Rect::new(frame.x, frame.y, frame.width, self.height());
+        let content = Rect::new(
+            self.frame.x + self.leading,
+            f32::MIN / 2.0,
+            self.inner_width(),
+            f32::MAX,
+        );
+        if self
+            .editor
+            .autoscroll(&mut cx.text, self.text_origin(), content)
+        {
+            cx.animating.set(true);
+        }
+        self.editor.take_reveal();
+        self.reveal_caret(cx);
     }
 
     fn frame(&self) -> Rect {
@@ -240,125 +204,61 @@ impl Widget for TextField {
         }
         let origin = self.text_origin();
         let mut content = Vec::new();
-        if self.editor.raw_text().is_empty()
+        if self.editor.is_empty()
             && let Some(placeholder) = &self.placeholder_paragraph
         {
             content.push(Item::Text {
-                origin,
+                origin: Point::new(self.frame.x + self.leading, origin.y),
                 paragraph: placeholder.clone(),
             });
         }
-        self.editor.selection_geometry_with(|bounds, _| {
-            content.push(Item::Fill {
-                shape: Shape::rect(Rect::new(
-                    origin.x + bounds.x0 as f32,
-                    origin.y + bounds.y0 as f32,
-                    (bounds.x1 - bounds.x0) as f32,
-                    (bounds.y1 - bounds.y0) as f32,
-                )),
-                paint: Paint::Solid(cx.palette.accent_color.with_alpha(80)),
-            });
-        });
-        if let Some(paragraph) = &self.paragraph {
-            content.push(Item::Text {
-                origin,
-                paragraph: paragraph.clone(),
-            });
-        }
-        if focused
-            && self.editor.raw_selection().is_collapsed()
-            && let Some(caret) = self.editor.cursor_geometry(CARET_WIDTH)
-        {
-            content.push(Item::Fill {
-                shape: Shape::rect(Rect::new(
-                    origin.x + caret.x0 as f32,
-                    origin.y + caret.y0 as f32,
-                    CARET_WIDTH,
-                    (caret.y1 - caret.y0) as f32,
-                )),
-                paint: cx.palette.label_primary.into(),
-            });
-        }
+        self.editor
+            .paint(cx, origin, WHOLE_LINE, focused, &mut content);
+        let clip = Rect::new(
+            self.frame.x + self.leading - CARET_ROOM,
+            self.frame.y + 1.0,
+            self.inner_width() + 2.0 * CARET_ROOM,
+            (self.frame.height - 2.0).max(0.0),
+        );
         items.push(Item::Clip {
-            shape: Shape::rect(self.frame.inset(1.0)),
+            shape: Shape::rect(clip),
             items: content,
         });
     }
 
     fn access(&self, _cx: &Context) -> Node {
         let mut node = Node::new(Role::TextInput);
-        node.set_value(self.editor.raw_text().to_owned());
+        node.set_value(self.editor.text());
         node.set_placeholder(self.placeholder.clone());
-        node.add_action(Action::SetValue);
-        node.add_action(Action::ReplaceSelectedText);
+        let runs = self.editor.runs(WHOLE_LINE);
+        self.editor.describe(&mut node, self.id, &runs);
         node
     }
 
-    fn handle(&mut self, cx: &mut Context, event: &Event) -> bool {
-        let origin = self.text_origin();
-        let (fonts, layouts) = cx.text.contexts();
-        match event {
-            Event::PointerDown(pointer) if pointer.is_primary() => {
-                self.selecting = true;
-                let (x, y) = (pointer.position.x - origin.x, pointer.position.y - origin.y);
-                let mut driver = self.editor.driver(fonts, layouts);
-                match pointer.count {
-                    1 if pointer.modifiers.shift => driver.shift_click_extension(x, y),
-                    1 => driver.move_to_point(x, y),
-                    2 => driver.select_word_at_point(x, y),
-                    _ => driver.select_all(),
-                }
-            }
-            Event::PointerMove(pointer) if self.selecting => {
-                self.editor
-                    .driver(fonts, layouts)
-                    .extend_selection_to_point(
-                        pointer.position.x - origin.x,
-                        pointer.position.y - origin.y,
-                    );
-            }
-            Event::PointerUp(pointer) if pointer.is_primary() => self.selecting = false,
-            Event::Key { key, modifiers } => return self.edit(cx, *key, *modifiers),
-            Event::Commit(text) => {
-                let mut driver = self.editor.driver(fonts, layouts);
-                driver.clear_compose();
-                driver.insert_or_replace_selection(text);
-                (self.on_change)(self.editor.raw_text());
-            }
-            Event::Preedit { text, .. } if text.is_empty() => {
-                if !self.editor.is_composing() {
-                    return false;
-                }
-                self.editor.driver(fonts, layouts).clear_compose();
-            }
-            Event::Preedit { text, cursor } => {
-                self.editor
-                    .driver(fonts, layouts)
-                    .set_compose(text, *cursor);
-            }
-            _ => return false,
+    fn parts(&self, _cx: &Context) -> Parts {
+        let runs = self.editor.runs(WHOLE_LINE);
+        let nodes = self.editor.run_nodes(self.id, &runs, self.text_origin());
+        Parts {
+            children: nodes.iter().map(|(id, _)| *id).collect(),
+            nodes,
+            focus: None,
         }
-        true
+    }
+
+    fn handle(&mut self, cx: &mut Context, event: &Event) -> bool {
+        let revision = self.editor.revision();
+        let handled = self.editor.handle(cx, event, self.text_origin());
+        self.changed(revision);
+        handled
     }
 
     fn perform(&mut self, cx: &mut Context, request: &ActionRequest) -> bool {
-        let Some(ActionData::Value(value)) = &request.data else {
-            return false;
-        };
-        let (fonts, layouts) = cx.text.contexts();
-        match request.action {
-            Action::SetValue => {
-                self.editor.set_text(value);
-                self.editor.driver(fonts, layouts).move_to_text_end();
-            }
-            Action::ReplaceSelectedText => self
-                .editor
-                .driver(fonts, layouts)
-                .insert_or_replace_selection(value),
-            _ => return false,
-        }
-        (self.on_change)(self.editor.raw_text());
-        true
+        let revision = self.editor.revision();
+        let runs = self.editor.runs(WHOLE_LINE);
+        let performed = self.editor.perform(self.id, &runs, request);
+        self.editor.lay_out(&mut cx.text, WHOLE_LINE);
+        self.changed(revision);
+        performed
     }
 
     fn cursor(&self, _point: Point) -> Option<Cursor> {
@@ -369,14 +269,25 @@ impl Widget for TextField {
         true
     }
 
+    fn context_menu(&mut self, _cx: &mut Context, _point: Point) -> Option<Menu> {
+        Some(self.editor.menu())
+    }
+
+    fn menu_action(&mut self, cx: &mut Context, action: &str) -> bool {
+        let revision = self.editor.revision();
+        let handled = self.editor.menu_action(cx, action);
+        self.changed(revision);
+        handled
+    }
+
     fn text_input_area(&self) -> Option<Rect> {
         let origin = self.text_origin();
-        let area = self.editor.ime_cursor_area();
+        let area = self.editor.input_area();
         Some(Rect::new(
-            origin.x + area.x0 as f32,
-            origin.y + area.y0 as f32,
-            (area.x1 - area.x0) as f32,
-            (area.y1 - area.y0) as f32,
+            origin.x + area.x,
+            origin.y + area.y,
+            area.width,
+            area.height,
         ))
     }
 }

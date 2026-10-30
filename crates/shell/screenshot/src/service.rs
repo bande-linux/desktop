@@ -23,6 +23,7 @@ pub const MONITOR: u32 = 1;
 pub const WINDOW: u32 = 2;
 pub const CURSOR_EMBEDDED: u32 = 2;
 const WINDOW_PREFIX: &str = "window:";
+const MONITOR_PREFIX: &str = "monitor:";
 const THUMBNAIL: u32 = 320;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -62,18 +63,20 @@ pub enum UiRequest {
 }
 
 pub fn source_of(id: &str) -> Option<Source> {
-    match id {
-        SCREEN_ID => Some(Source::Screen),
-        _ => id
-            .strip_prefix(WINDOW_PREFIX)
-            .map(|identifier| Source::Window(identifier.to_owned())),
+    if id == SCREEN_ID {
+        return Some(Source::Screen);
     }
+    if let Some(name) = id.strip_prefix(MONITOR_PREFIX) {
+        return Some(Source::Display(name.to_owned()));
+    }
+    id.strip_prefix(WINDOW_PREFIX)
+        .map(|identifier| Source::Window(identifier.to_owned()))
 }
 
 fn kind_of(id: &str) -> u32 {
-    match id {
-        SCREEN_ID => MONITOR,
-        _ => WINDOW,
+    match id.starts_with(MONITOR_PREFIX) {
+        true => MONITOR,
+        false => WINDOW,
     }
 }
 
@@ -134,17 +137,26 @@ impl Casting {
     fn choices(&self, types: u32) -> Vec<Choice> {
         let mut choices = Vec::new();
         if types & MONITOR != 0 {
-            choices.push(Choice {
-                id: SCREEN_ID.to_owned(),
-                kind: MONITOR,
-                title: L10N.tr("entire-screen"),
-                app_id: String::new(),
-                thumbnail: self
-                    .engine
-                    .shoot(Source::Screen, false)
-                    .as_ref()
-                    .map(thumbnail),
-            });
+            let displays = self.engine.displays();
+            let several = displays.len() > 1;
+            for display in displays {
+                let title = match (several, display.description.is_empty()) {
+                    (true, false) => display.description.clone(),
+                    (true, true) => display.name.clone(),
+                    (false, _) => L10N.tr("entire-screen"),
+                };
+                choices.push(Choice {
+                    id: format!("{MONITOR_PREFIX}{}", display.name),
+                    kind: MONITOR,
+                    title,
+                    app_id: String::new(),
+                    thumbnail: self
+                        .engine
+                        .shoot(Source::Display(display.name), false)
+                        .as_ref()
+                        .map(thumbnail),
+                });
+            }
         }
         if types & WINDOW != 0 {
             for window in self.engine.windows() {
@@ -167,9 +179,11 @@ impl Casting {
 
     fn resolve(&self, ids: &[String]) -> Vec<String> {
         let windows = self.engine.windows();
+        let displays = self.engine.displays();
         ids.iter()
             .filter(|id| match source_of(id) {
                 Some(Source::Screen) => true,
+                Some(Source::Display(name)) => displays.iter().any(|display| display.name == name),
                 Some(Source::Window(identifier)) => {
                     windows.iter().any(|window| window.identifier == identifier)
                 }

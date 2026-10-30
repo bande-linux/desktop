@@ -26,7 +26,7 @@ use unbound_screenshot::area::Region;
 use unbound_screenshot::cast::Cast;
 use unbound_screenshot::engine::Source;
 use unbound_screenshot::record::{Container, Recording};
-use unbound_screenshot::service::{self, Casting, SCREEN_ID, UiRequest};
+use unbound_screenshot::service::{self, Casting, UiRequest};
 use unbound_test_bus::SessionBus;
 use xdg_desktop_portal_unbound::capture::ScreenshotTool;
 use xdg_desktop_portal_unbound::screencast::ScreenCast;
@@ -475,7 +475,8 @@ fn an_app_shares_the_screen_through_xdg_desktop_portal() {
                         .map(|choice| choice.id.clone())
                         .collect::<Vec<_>>(),
                 );
-                let _ = reply.send(Some(vec![SCREEN_ID.to_owned()]));
+                let first = choices.first().map(|choice| choice.id.clone());
+                let _ = reply.send(first.map(|id| vec![id]));
             }
         }
         desktop.step();
@@ -494,7 +495,9 @@ fn an_app_shares_the_screen_through_xdg_desktop_portal() {
     let _ = frontend.kill();
     let _ = frontend.wait();
 
-    assert_eq!(picked, Some(vec![SCREEN_ID.to_owned()]));
+    let picked = picked.expect("the picker was shown");
+    assert_eq!(picked.len(), 1, "{picked:?}");
+    assert!(picked[0].starts_with("monitor:"), "{picked:?}");
     assert_eq!(
         (frame.width, frame.height),
         (OUTPUT.0 as u32, OUTPUT.1 as u32)

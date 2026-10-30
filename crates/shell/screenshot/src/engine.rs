@@ -14,8 +14,8 @@ use unbound_protocols::client::unbound_capture_v1::{self, UnboundCaptureV1};
 use wayland_client::backend::WaylandError;
 use wayland_client::globals::{GlobalListContents, registry_queue_init};
 use wayland_client::protocol::wl_buffer::WlBuffer;
-use wayland_client::protocol::wl_output::WlOutput;
-use wayland_client::protocol::wl_registry::WlRegistry;
+use wayland_client::protocol::wl_output::{self, WlOutput};
+use wayland_client::protocol::wl_registry::{self, WlRegistry};
 use wayland_client::protocol::wl_shm::{Format, WlShm};
 use wayland_client::protocol::wl_shm_pool::WlShmPool;
 use wayland_client::{Connection, Dispatch, EventQueue, QueueHandle, WEnum, delegate_noop, event_created_child};
@@ -45,7 +45,16 @@ const MOST_FRAMES_PER_SECOND: u32 = 60;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Source {
     Screen,
+    Display(String),
     Window(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Display {
+    pub name: String,
+    pub description: String,
+    pub x: i32,
+    pub y: i32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -99,6 +108,7 @@ pub enum EngineEvent {
 
 enum Command {
     Windows(Sender<Vec<WindowInfo>>),
+    Displays(Sender<Vec<Display>>),
     Shoot {
         source: Source,
         cursor: bool,
@@ -127,7 +137,7 @@ impl Engine {
         let handle = queue.handle();
         let mut capture = Capture {
             shm: globals.bind(&handle, 1..=1, ()).ok(),
-            output: globals.bind(&handle, 1..=4, ()).ok(),
+            displays: Vec::new(),
             output_sources: globals.bind(&handle, 1..=1, ()).ok(),
             toplevel_sources: globals.bind(&handle, 1..=1, ()).ok(),
             copy: globals.bind(&handle, 1..=1, ()).ok(),
@@ -145,6 +155,26 @@ impl Engine {
             ));
         }
         let _: Option<ExtForeignToplevelListV1> = globals.bind(&handle, 1..=1, ()).ok();
+        for global in globals.contents().clone_list() {
+            if global.interface == "wl_output" {
+                let output: WlOutput = globals.registry().bind(
+                    global.name,
+                    global.version.min(4),
+                    &handle,
+                    global.name,
+                );
+                capture.displays.push(Output {
+                    output,
+                    global: global.name,
+                    display: Display {
+                        name: String::new(),
+                        description: String::new(),
+                        x: 0,
+                        y: 0,
+                    },
+                });
+            }
+        }
         thread::Builder::new()
             .name("capture".into())
             .spawn(move || {
@@ -153,6 +183,12 @@ impl Engine {
                 }
             })?;
         Ok(Self { commands })
+    }
+
+    pub fn displays(&self) -> Vec<Display> {
+        let (reply, answer) = mpsc::channel();
+        self.commands.send(Command::Displays(reply));
+        answer.recv().unwrap_or_default()
     }
 
     pub fn windows(&self) -> Vec<WindowInfo> {
@@ -183,6 +219,12 @@ impl Engine {
     pub fn stop(&self, id: u64) {
         self.commands.send(Command::Stop(id));
     }
+}
+
+struct Output {
+    output: WlOutput,
+    global: u32,
+    display: Display,
 }
 
 struct Toplevel {
@@ -221,7 +263,7 @@ struct Session {
 
 struct Capture {
     shm: Option<WlShm>,
-    output: Option<WlOutput>,
+    displays: Vec<Output>,
     output_sources: Option<ExtOutputImageCaptureSourceManagerV1>,
     toplevel_sources: Option<ExtForeignToplevelImageCaptureSourceManagerV1>,
     copy: Option<ExtImageCopyCaptureManagerV1>,
@@ -303,6 +345,14 @@ impl Capture {
                     let _ = reply.send(self.window_infos(&[]));
                 }
             },
+            Command::Displays(reply) => {
+                let _ = reply.send(
+                    self.displays
+                        .iter()
+                        .map(|output| output.display.clone())
+                        .collect(),
+                );
+            }
             Command::Shoot {
                 source,
                 cursor,
@@ -370,10 +420,21 @@ impl Capture {
             return false;
         };
         let captured = match source {
-            Source::Screen => match (&self.output_sources, &self.output) {
-                (Some(sources), Some(output)) => sources.create_source(output, handle, ()),
-                _ => return false,
-            },
+            Source::Screen | Source::Display(_) => {
+                let output = match source {
+                    Source::Display(name) => self
+                        .displays
+                        .iter()
+                        .find(|output| &output.display.name == name),
+                    _ => self.displays.first(),
+                };
+                match (&self.output_sources, output) {
+                    (Some(sources), Some(output)) => {
+                        sources.create_source(&output.output, handle, ())
+                    }
+                    _ => return false,
+                }
+            }
             Source::Window(identifier) => {
                 let toplevel = self
                     .toplevels
@@ -714,18 +775,70 @@ impl Dispatch<ExtForeignToplevelHandleV1, ()> for Capture {
 
 impl Dispatch<WlRegistry, GlobalListContents> for Capture {
     fn event(
-        _: &mut Self,
-        _: &WlRegistry,
-        _: wayland_client::protocol::wl_registry::Event,
+        capture: &mut Self,
+        registry: &WlRegistry,
+        event: wl_registry::Event,
         _: &GlobalListContents,
+        _: &Connection,
+        handle: &QueueHandle<Self>,
+    ) {
+        match event {
+            wl_registry::Event::Global {
+                name,
+                interface,
+                version,
+            } if interface == "wl_output" => {
+                let output = registry.bind(name, version.min(4), handle, name);
+                capture.displays.push(Output {
+                    output,
+                    global: name,
+                    display: Display {
+                        name: String::new(),
+                        description: String::new(),
+                        x: 0,
+                        y: 0,
+                    },
+                });
+            }
+            wl_registry::Event::GlobalRemove { name } => {
+                capture.displays.retain(|output| output.global != name);
+            }
+            _ => {}
+        }
+    }
+}
+
+impl Dispatch<WlOutput, u32> for Capture {
+    fn event(
+        capture: &mut Self,
+        _: &WlOutput,
+        event: wl_output::Event,
+        global: &u32,
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
+        let Some(output) = capture
+            .displays
+            .iter_mut()
+            .find(|output| output.global == *global)
+        else {
+            return;
+        };
+        match event {
+            wl_output::Event::Geometry { x, y, .. } => {
+                output.display.x = x;
+                output.display.y = y;
+            }
+            wl_output::Event::Name { name } => output.display.name = name,
+            wl_output::Event::Description { description } => {
+                output.display.description = description;
+            }
+            _ => {}
+        }
     }
 }
 
 delegate_noop!(Capture: ignore WlShm);
-delegate_noop!(Capture: ignore WlOutput);
 delegate_noop!(Capture: WlShmPool);
 delegate_noop!(Capture: ignore WlBuffer);
 delegate_noop!(Capture: ExtOutputImageCaptureSourceManagerV1);

@@ -98,8 +98,8 @@ graph LR
   for data control). That service answers only the process that owns the portal's bus name, and
   sandboxed apps cannot reach it past the Flatpak bus proxy. The tool captures on a second event
   queue of that same connection, in its own thread, so capturing never waits for its UI.
-- **Screen sharing**: `SelectSources` shows a picker on the tool's overlay: the entire screen and
-  every open window as live thumbnails (other workspaces and minimised windows included), the
+- **Screen sharing**: `SelectSources` shows a picker on the tool's overlay: each display (named
+  by its description when there are several) and every open window as live thumbnails (other workspaces and minimised windows included), the
   first chosen; arrow keys move, Space adds a source when the app allows several, Return
   shares, Escape cancels, a double click shares at once; the dialog, the list and each source
   are published to screen readers. `Start` opens one PipeWire `Video/Source` node per source
@@ -117,7 +117,8 @@ graph LR
   The picture is saved as a PNG under `$XDG_CACHE_HOME/unbound-screenshot` (not the Desktop:
   the app asked for it, the user did not) and returned as a `file://` URI. `PickColor` shows a
   loupe with the colour's hex value under the pointer; a click picks, Escape cancels.
-- **Screenshot tool** (`unbound-screenshot`): `Super+Shift+3` takes the screen, `Super+Shift+4`
+- **Screenshot tool** (`unbound-screenshot`): `Super+Shift+3` saves one picture per display, as
+  macOS does; the overlay lives on the main display, so `Super+Shift+4`
   lets the user drag out an area, and Space there switches to choosing a window (the window under
   the pointer is tinted; a click takes it alone with its rounded corners, transparent around it,
   and a soft shadow drawn by the tool). `Super+Shift+5` (`show_options` on `unbound_capture_v1`)

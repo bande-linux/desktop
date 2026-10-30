@@ -18,6 +18,24 @@ fn the_engine_lists_windows_with_their_names_and_frames() {
 }
 
 #[test]
+fn each_display_can_be_shot_by_its_name() {
+    let mut desktop = Desktop::start();
+    let displays = desktop.wait(|engine| engine.displays());
+    let name = displays[0].name.clone();
+
+    let shot = desktop
+        .wait(move |engine| engine.shoot(Source::Display(name), false))
+        .expect("a shot of the display");
+
+    assert_eq!(displays.len(), 1);
+    assert!(!displays[0].name.is_empty());
+    assert_eq!(
+        (shot.width, shot.height),
+        (OUTPUT.0 as u32, OUTPUT.1 as u32)
+    );
+}
+
+#[test]
 fn a_screen_shot_holds_the_window_where_it_is() {
     let mut desktop = Desktop::start();
     let windows = desktop.wait(|engine| engine.windows());

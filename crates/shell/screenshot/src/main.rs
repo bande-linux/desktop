@@ -239,12 +239,27 @@ impl Screenshots {
     }
 
     fn windows(&self) -> Vec<(String, unbound_screenshot::engine::Frame)> {
-        self.engine
-            .as_ref()
-            .map(Engine::windows)
-            .unwrap_or_default()
+        let Some(engine) = &self.engine else {
+            return Vec::new();
+        };
+        let (left, top) = engine
+            .displays()
+            .first()
+            .map_or((0, 0), |main| (main.x, main.y));
+        engine
+            .windows()
             .into_iter()
-            .filter_map(|window| Some((window.identifier, window.frame?)))
+            .filter_map(|window| {
+                let frame = window.frame?;
+                Some((
+                    window.identifier,
+                    unbound_screenshot::engine::Frame {
+                        x: frame.x - left,
+                        y: frame.y - top,
+                        ..frame
+                    },
+                ))
+            })
             .collect()
     }
 
@@ -285,6 +300,27 @@ impl Screenshots {
             Target::RecordScreen => self.start_recording(window, Target::RecordScreen),
             Target::RecordArea(region) => {
                 self.start_recording(window, Target::RecordArea(region));
+            }
+            Target::Screen if self.options.destination != Destination::Clipboard => {
+                self.hide_overlay(window);
+                let pointer = self.options.show_pointer;
+                let images: Vec<ScreenImage> = self
+                    .engine
+                    .as_ref()
+                    .map(|engine| {
+                        engine
+                            .displays()
+                            .into_iter()
+                            .filter_map(|display| {
+                                engine.shoot(Source::Display(display.name), pointer)
+                            })
+                            .map(|shot| as_screen_image(&shot))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                for image in images.into_iter().rev() {
+                    self.deliver(window, image);
+                }
             }
             target => {
                 let Some(image) = self.shoot(window, &target) else {

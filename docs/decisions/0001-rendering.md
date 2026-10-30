@@ -126,6 +126,17 @@ CI cannot measure photons or a real GPU, so `ci/perf` measures on lavapipe with
   same app kept on the CPU path with `UNBOUND_RENDERER=cpu`, which is the toolkit's own
   memory (gated at 30 MiB); and the sample scene's frame time on `vello_cpu` and on
   `vello_gpu` including readback (reported).
+- **Idle wakeups** (`unbound-idle`, same job, gated): a whole session runs headless on a
+  private session bus (the compositor in-process, the shell, the clipboard and screenshot
+  daemons, every session service, and Files, Settings, Terminal and Activity Monitor) and
+  sits untouched for 60 s three times: windows open, windows minimised, screen locked. Each
+  process's context switches, summed over its threads, count as its wakeups (lavapipe's
+  `llvmpipe-*` rasteriser threads, which a GPU does not have, are listed but not counted);
+  every process must stay at or under 1 per second, so a timer, a poll or a run loop that
+  spins while nothing happens fails the gate. The one exception is live data on screen:
+  with the windows open, Activity Monitor redraws its sample every 2 s and the compositor
+  shows those frames, so they may wake 5 and 10 times a second. The clocks' minute ticks
+  and Activity Monitor's sampling while hidden fit inside the budget.
 
 Measuring true input-to-photon needs a camera or photodiode on a real Mac; that is a
 hardware-rig task. Until then the exact frame-latency metric is the gate.

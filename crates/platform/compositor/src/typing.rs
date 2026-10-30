@@ -46,7 +46,7 @@ impl State {
                 .map(|credentials| credentials.pid)
         };
         match (pid(surface), pid(focused)) {
-            (Some(opening), Some(typing)) => !descends_from(opening, typing),
+            (Some(opening), Some(typing)) => opening != typing && !descends_from(opening, typing),
             _ => true,
         }
     }

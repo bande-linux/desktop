@@ -142,6 +142,7 @@ impl FilesView {
 
     pub(crate) fn folder_menu(&self) -> Menu {
         folder_menu(Folder {
+            templates: self.templates(),
             trash: self.browser.active_column().location == Location::Trash,
             trash_empty: !self.trash_full,
             sort: self.browser.sort().by,
@@ -159,6 +160,8 @@ impl FilesView {
         match command {
             Command::Open => self.open(),
             Command::OpenInNewTab => self.open_selection_in_tabs(),
+            Command::OpenInTerminal => self.open_in_terminal(),
+            Command::NewDocument(name) => self.new_document(&name),
             Command::OpenWith(id) => self.open_with(&id),
             Command::QuickLook => {
                 if self.quick_look.is_none() {

@@ -72,6 +72,10 @@ pub(crate) enum Press {
     },
     Dragging,
     Band,
+    Place {
+        index: usize,
+        at: Point,
+    },
 }
 
 pub(crate) fn sender(signals: &Signals) -> impl Fn(Signal) + 'static {
@@ -250,6 +254,7 @@ impl FilesView {
                 Some(Press::Ui | Press::Table { .. }) => self.ui.handle(event),
                 Some(Press::Item { at, .. }) => self.maybe_drag(at, pointer),
                 Some(Press::Band) => self.band_moved(pointer),
+                Some(Press::Place { index, at }) => self.reorder_moved(index, at, pointer),
                 Some(_) => false,
                 None => self.ui.handle(event) | self.files_hover(pointer),
             },
@@ -403,6 +408,7 @@ impl FilesView {
                 true
             }
             Some(Press::Band) => self.end_band(),
+            Some(Press::Place { .. }) => self.reorder_finished(),
             Some(Press::Files | Press::Dragging) => false,
             _ => self.ui.handle(event),
         }
@@ -738,7 +744,7 @@ impl FilesView {
         if let Some(slider) = self.size_slider.take() {
             self.remove(slider);
         }
-        if self.mode != ViewMode::Icons {
+        if self.mode != ViewMode::Icons || !self.status_bar {
             return;
         }
         let send = sender(&self.signals);

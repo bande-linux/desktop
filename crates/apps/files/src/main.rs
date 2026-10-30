@@ -8,7 +8,8 @@ use std::time::Instant;
 use accesskit::TreeUpdate;
 use unbound_app_menu::{AppMenu, Standard};
 use unbound_files::{
-    Browser, FilesView, Location, Request, Row, ViewMemory, rows, views_file, without_bookmark,
+    Browser, FilesView, Location, Request, Row, ViewMemory, rows, views_file, with_bookmarks,
+    without_bookmark,
 };
 use unbound_fs::Trash;
 use unbound_search::{recently_used_path, usage_path};
@@ -19,8 +20,8 @@ use unbound_toolkit::{
 };
 use unbound_volumes::{eject, media_roots};
 use unbound_xdg::{
-    Apps, config_dirs, config_home, data_dirs, file_uri, launch_with, path_from_file_uri,
-    spawn_detached,
+    Apps, TERMINAL, UserDir, config_dirs, config_home, data_dirs, file_uri, launch_with,
+    path_from_file_uri, spawn_detached, user_dir,
 };
 
 const APP_ID: &str = "org.unbound.Files";
@@ -44,6 +45,17 @@ fn sidebar(home: &Path) -> Vec<Row> {
         read(config_home().map(|config| config.join("user-dirs.dirs"))).as_deref(),
         read(bookmarks_file()).as_deref(),
     )
+}
+
+fn add_bookmarks(folders: &[PathBuf], before: Option<&Path>) -> std::io::Result<()> {
+    let file = bookmarks_file().ok_or(std::io::ErrorKind::NotFound)?;
+    let text = std::fs::read_to_string(&file).unwrap_or_default();
+    if let Some(parent) = file.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let staging = file.with_extension("new");
+    std::fs::write(&staging, with_bookmarks(&text, folders, before))?;
+    std::fs::rename(staging, file)
 }
 
 fn remove_bookmark(folder: &Path) -> std::io::Result<()> {
@@ -127,6 +139,13 @@ impl Files {
                 }
                 Request::Eject(volume) => eject(vec![volume]),
                 Request::NewWindow(location) => new_window(window, &location),
+                Request::OpenTerminal(folder) => open_terminal(window, &folder),
+                Request::AddBookmarks { folders, before } => {
+                    match add_bookmarks(&folders, before.as_deref()) {
+                        Ok(()) => self.view.set_sidebar(sidebar(&self.home)),
+                        Err(error) => tracing::warn!("cannot add the bookmarks: {error}"),
+                    }
+                }
                 Request::RemoveBookmark(folder) => match remove_bookmark(&folder) {
                     Ok(()) => self.view.set_sidebar(sidebar(&self.home)),
                     Err(error) => tracing::warn!("cannot remove the bookmark: {error}"),
@@ -265,8 +284,22 @@ impl App for Files {
 }
 
 const INFO_FLAG: &str = "--info";
+const TERMINAL_APP_ID: &str = "org.unbound.Terminal";
+const TERMINAL_DIRECTORY: &str = "--working-directory";
 const TRASH_URI: &str = "trash:///";
 const RECENTS_URI: &str = "recent:///";
+
+fn open_terminal(window: &mut Window, folder: &Path) {
+    let token = window.activation_token(TERMINAL_APP_ID).ok();
+    let command = [
+        TERMINAL.to_owned(),
+        TERMINAL_DIRECTORY.to_owned(),
+        folder.to_string_lossy().into_owned(),
+    ];
+    if let Err(error) = spawn_detached(&command, None, token.as_deref()) {
+        tracing::warn!("cannot open a terminal: {error}");
+    }
+}
 
 fn new_window(window: &mut Window, location: &Location) {
     let program = match std::env::current_exe() {
@@ -335,6 +368,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(thumbnails) = thumbnails {
         view.set_thumbnails(thumbnails);
     }
+    let user_dirs = config_home()
+        .and_then(|config| std::fs::read_to_string(config.join("user-dirs.dirs")).ok());
+    view.set_templates(user_dir(&home, user_dirs.as_deref(), UserDir::Templates));
     let state_home = std::env::var_os("XDG_STATE_HOME").map(PathBuf::from);
     view.set_view_memory(ViewMemory::load(views_file(state_home.as_deref(), &home)));
     let data_home = std::env::var_os("XDG_DATA_HOME").map(PathBuf::from);

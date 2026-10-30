@@ -348,6 +348,9 @@ impl FilesView {
     }
 
     fn paint_path_bar(&mut self, items: &mut Vec<Item>) {
+        if !self.status_bar {
+            return;
+        }
         let content = self.content_frame();
         let bar = Rect::new(
             content.x,
@@ -1047,7 +1050,7 @@ fn action_id(action: unbound_fs::Action) -> &'static str {
         unbound_fs::Action::Move => "move",
         unbound_fs::Action::Duplicate => "duplicate",
         unbound_fs::Action::Rename => "rename",
-        unbound_fs::Action::NewFolder => "new-folder",
+        unbound_fs::Action::NewFolder | unbound_fs::Action::NewDocument => "new-folder",
         unbound_fs::Action::Trash => "trash",
         unbound_fs::Action::PutBack => "put-back",
         unbound_fs::Action::Compress => "compress",

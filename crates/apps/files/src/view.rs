@@ -131,8 +131,13 @@ pub enum Request {
         at: Point,
     },
     RemoveBookmark(PathBuf),
+    AddBookmarks {
+        folders: Vec<PathBuf>,
+        before: Option<PathBuf>,
+    },
     Eject(PathBuf),
     NewWindow(Location),
+    OpenTerminal(PathBuf),
 }
 
 pub struct FilesView {
@@ -151,6 +156,9 @@ pub struct FilesView {
     pub(crate) table_found: bool,
     pub(crate) press: Option<Press>,
     pub(crate) drag_sources: Vec<PathBuf>,
+    pub(crate) reordering: Option<PathBuf>,
+    pub(crate) status_bar: bool,
+    templates: Option<PathBuf>,
     pub(crate) drop: Option<crate::drag::Hover>,
     pub(crate) scrolls: Vec<(Location, ScrollState)>,
     pub(crate) tabs: Vec<Option<Tab>>,
@@ -256,6 +264,9 @@ impl FilesView {
             table_found: false,
             press: None,
             drag_sources: Vec::new(),
+            reordering: None,
+            status_bar: true,
+            templates: None,
             drop: None,
             scrolls: Vec::new(),
             tabs: vec![None],
@@ -740,8 +751,21 @@ impl FilesView {
             SIDEBAR_WIDTH,
             top,
             (self.size.0 - SIDEBAR_WIDTH - inspector).max(COLUMN_WIDTH),
-            (self.size.1 - PATH_BAR_HEIGHT - progress - top).max(ROW_HEIGHT),
+            (self.size.1 - self.status_bar_height() - progress - top).max(ROW_HEIGHT),
         )
+    }
+
+    pub(crate) fn status_bar_height(&self) -> f32 {
+        match self.status_bar {
+            true => PATH_BAR_HEIGHT,
+            false => 0.0,
+        }
+    }
+
+    pub(crate) fn toggle_status_bar(&mut self) {
+        self.status_bar = !self.status_bar;
+        self.refresh_size_slider();
+        self.selection_changed();
     }
 
     pub(crate) fn visible_jobs(&self) -> usize {
@@ -945,6 +969,10 @@ impl FilesView {
                 if let Some(Row::Place(place)) = self.sidebar.get(index) {
                     let location = place.location.clone();
                     self.go(location);
+                    self.press = Some(Press::Place {
+                        index,
+                        at: pointer.position,
+                    });
                 }
             }
             Hit::Segment(path) => {
@@ -1271,6 +1299,7 @@ impl FilesView {
             Key::Character('l' | 'L') if command && alt => {
                 self.go(Location::Folder(user_folder(UserDir::Downloads)));
             }
+            Key::Character('/') if command => self.toggle_status_bar(),
             Key::Character('1') if command => self.set_mode(ViewMode::Icons),
             Key::Character('2') if command => self.set_mode(ViewMode::List),
             Key::Character('3') if command => self.set_mode(ViewMode::Columns),
@@ -1522,6 +1551,57 @@ impl FilesView {
         self.browser.refresh(&folders);
         self.browser.reveal_all(paths);
         self.selection_changed();
+    }
+
+    pub fn set_templates(&mut self, folder: PathBuf) {
+        self.templates = Some(folder);
+    }
+
+    pub(crate) fn templates(&self) -> Vec<String> {
+        let Some(folder) = self.templates.as_ref().filter(|folder| **folder != home()) else {
+            return Vec::new();
+        };
+        let mut names = std::fs::read_dir(folder)
+            .into_iter()
+            .flatten()
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_file()))
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .filter(|name| !name.starts_with('.'))
+            .collect::<Vec<_>>();
+        names.sort_by(|a, b| unbound_fs::finder_order(a, b));
+        names
+    }
+
+    pub(crate) fn new_document(&mut self, name: &str) {
+        let Some(folder) = self.browser.active_folder().map(Path::to_path_buf) else {
+            return;
+        };
+        let Some(template) = self.templates.as_ref().map(|folder| folder.join(name)) else {
+            return;
+        };
+        match unbound_fs::new_document(&folder, &template) {
+            Ok(change) => {
+                if let Change::Created(path) = &change {
+                    self.reveal_after_change(std::slice::from_ref(path));
+                }
+                self.operations.record(Action::NewDocument, change);
+                self.start_rename();
+            }
+            Err(error) => self.show_notice(
+                L10N.tr_args("error-operation", [("error", error.to_string().into())]),
+            ),
+        }
+    }
+
+    pub(crate) fn open_in_terminal(&mut self) {
+        let folder = match self.browser.selection().as_slice() {
+            [entry] if entry.is_folder() && entry.trashed.is_none() => Some(entry.path.clone()),
+            _ => self.browser.active_folder().map(Path::to_path_buf),
+        };
+        if let Some(folder) = folder {
+            self.requests.push(Request::OpenTerminal(folder));
+        }
     }
 
     pub(crate) fn new_folder(&mut self) {

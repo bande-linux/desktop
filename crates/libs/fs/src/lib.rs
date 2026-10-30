@@ -18,7 +18,7 @@ pub use naming::{duplicate_name, keep_both_name, untitled_folder};
 pub use operations::{Finished, Operations, Purpose, Running};
 pub use ops::{
     Answer, Change, Conflict, Failure, Job, Outcome, Progress, RenameError, Report, Resolution,
-    Task, archive_path, can_extract, new_folder, rename,
+    Task, archive_path, can_extract, new_document, new_folder, rename,
 };
 pub use trash::{Trash, TrashDir, TrashItem};
 pub use undo::{Action, History, Step};

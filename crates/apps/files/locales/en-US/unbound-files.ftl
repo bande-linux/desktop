@@ -144,3 +144,6 @@ menu-compress-items = Compress { $count } Items
 progress-compress = Compressing { $done } of { $total } items
 progress-extract = Extracting { $done } of { $total } items
 menu-compress-selection = Compress
+menu-open-in-terminal = Open in Terminal
+menu-new-document = New Document
+menu-status-bar = Show or Hide Status Bar

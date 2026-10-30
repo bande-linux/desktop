@@ -8,6 +8,8 @@ use crate::views::ViewMode;
 pub enum Command {
     Open,
     OpenInNewTab,
+    OpenInTerminal,
+    NewDocument(String),
     OpenWith(String),
     QuickLook,
     Info,
@@ -35,10 +37,12 @@ pub enum Command {
 }
 
 const OPEN_WITH: &str = "open-with:";
+const NEW_DOCUMENT: &str = "new-document:";
 
-const ACTIONS: [(&str, Command); 27] = [
+const ACTIONS: [(&str, Command); 28] = [
     ("open", Command::Open),
     ("open-in-new-tab", Command::OpenInNewTab),
+    ("open-in-terminal", Command::OpenInTerminal),
     ("open-place-in-new-tab", Command::OpenPlaceInNewTab),
     ("quick-look", Command::QuickLook),
     ("info", Command::Info),
@@ -75,6 +79,9 @@ const SORTS: [(SortBy, &str); 3] = [
 pub fn command(action: &str) -> Option<Command> {
     if let Some(id) = action.strip_prefix(OPEN_WITH) {
         return Some(Command::OpenWith(id.to_owned()));
+    }
+    if let Some(name) = action.strip_prefix(NEW_DOCUMENT) {
+        return Some(Command::NewDocument(name.to_owned()));
     }
     ACTIONS
         .iter()
@@ -126,6 +133,9 @@ pub fn items_menu(selection: &Selection) -> Menu {
     items.push(item("open", &Command::Open).shortcut("Super+Down"));
     if selection.folders {
         items.push(item("menu-open-in-new-tab", &Command::OpenInNewTab));
+    }
+    if selection.folders && count == 1 {
+        items.push(item("menu-open-in-terminal", &Command::OpenInTerminal));
     }
     if !selection.apps.is_empty() {
         let apps = selection
@@ -182,8 +192,9 @@ pub fn items_menu(selection: &Selection) -> Menu {
     Menu::new(items)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Folder {
+    pub templates: Vec<String>,
     pub trash: bool,
     pub trash_empty: bool,
     pub sort: SortBy,
@@ -207,7 +218,21 @@ pub fn folder_menu(folder: Folder) -> Menu {
                 .enabled(folder.paste),
         ]
     };
+    if !folder.trash && !folder.templates.is_empty() {
+        let documents = folder
+            .templates
+            .iter()
+            .map(|name| MenuItem::new(name, &format!("{NEW_DOCUMENT}{name}")))
+            .collect();
+        items.insert(
+            1,
+            MenuItem::submenu(&L10N.tr("menu-new-document"), Menu::new(documents)),
+        );
+    }
     items.push(item("menu-get-info", &Command::Info).shortcut("Super+I"));
+    if !folder.trash {
+        items.push(item("menu-open-in-terminal", &Command::OpenInTerminal));
+    }
     let sorts = SORTS
         .iter()
         .map(|(by, message)| item(message, &Command::Sort(*by)).checked(*by == folder.sort))

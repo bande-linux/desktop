@@ -7,6 +7,7 @@ pub enum Action {
     Duplicate,
     Rename,
     NewFolder,
+    NewDocument,
     Trash,
     PutBack,
     Compress,

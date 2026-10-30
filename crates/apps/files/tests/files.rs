@@ -9,8 +9,8 @@ use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use tempfile::TempDir;
 use unbound_files::{
     Browser, FilesView, Location, PATH_BAR_HEIGHT, ROW_HEIGHT, Request, Row, SIDEBAR_WIDTH, Sheet,
-    TAB_BAR_HEIGHT, TOOLBAR_HEIGHT, ViewMemory, ViewMode, permissions, rows, with_volumes,
-    without_bookmark,
+    TAB_BAR_HEIGHT, TOOLBAR_HEIGHT, ViewMemory, ViewMode, permissions, rows, with_bookmarks,
+    with_volumes, without_bookmark,
 };
 use unbound_fs::{Sort, SortBy, Trash, list};
 use unbound_thumbnails::{Cache, Thumbnailers, Thumbnails};
@@ -877,6 +877,7 @@ fn the_empty_space_menu_sorts_and_shows_hidden_files() {
             "New Folder",
             "Paste",
             "Get Info",
+            "Open in Terminal",
             "Sort By",
             "as Icons",
             "as List",
@@ -923,7 +924,7 @@ fn the_space_beside_the_columns_and_the_info_pane_have_menus() {
     let info = right_click(&mut view, Point::new(900.0, 100.0));
     assert_eq!(
         titles(&info)[..4],
-        ["New Folder", "Paste", "Get Info", "Sort By"]
+        ["New Folder", "Paste", "Get Info", "Open in Terminal"]
     );
 
     let notes = Point::new(
@@ -1626,4 +1627,102 @@ fn quick_look_shows_documents_through_installed_thumbnailers() {
         view.quick_look().map(|shown| shown.entry.name.as_str()),
         Some("notes.txt")
     );
+}
+
+#[test]
+fn bookmarks_are_added_before_a_favourite_or_moved_keeping_their_label() {
+    let text = "file:///srv/a A\nfile:///srv/b\nsftp://host/x\n";
+    assert_eq!(
+        with_bookmarks(text, &[PathBuf::from("/srv/new")], None),
+        "file:///srv/a A\nfile:///srv/b\nsftp://host/x\nfile:///srv/new\n"
+    );
+    assert_eq!(
+        with_bookmarks(text, &[PathBuf::from("/srv/b")], Some(Path::new("/srv/a"))),
+        "file:///srv/b\nfile:///srv/a A\nsftp://host/x\n"
+    );
+    assert_eq!(
+        with_bookmarks(text, &[PathBuf::from("/srv/a")], None),
+        "file:///srv/b\nsftp://host/x\nfile:///srv/a A\n"
+    );
+}
+
+#[test]
+fn folders_dropped_between_favourites_and_dragged_bookmarks_join_the_sidebar() {
+    let place = Place::new();
+    let reports = place.home().join("Documents/Reports");
+    let empty = place.home().join("Empty");
+    let bookmarks = format!("file://{}\nfile://{}\n", reports.display(), empty.display());
+    let mut view = place.view();
+    view.set_sidebar(rows(&place.home(), None, Some(&bookmarks)));
+    view.scene(1000, 600);
+    let row_top = |row: f32| 38.0 + 26.0 * row;
+
+    let uris = [file_uri(&place.home().join("Documents"))];
+    let between_home_and_documents = Point::new(60.0, row_top(2.0));
+    assert_eq!(
+        view.drag_entered(between_home_and_documents, &uris),
+        Some(DragAction::Copy)
+    );
+    assert!(view.dropped(between_home_and_documents, &uris, Some(DragAction::Copy)));
+    assert_eq!(
+        view.take_requests(),
+        [Request::AddBookmarks {
+            folders: vec![place.home().join("Documents")],
+            before: Some(reports.clone()),
+        }]
+    );
+    let notes = [file_uri(&place.home().join("notes.txt"))];
+    view.drag_entered(between_home_and_documents, &notes);
+    assert!(view.dropped(between_home_and_documents, &notes, Some(DragAction::Move)));
+    run_until(&mut view, idle);
+    assert!(place.home().join("Documents/notes.txt").exists());
+    view.take_requests();
+
+    let on_reports = Point::new(60.0, row_top(3.5));
+    view.handle(&Event::PointerDown(Pointer::at(on_reports)));
+    view.handle(&Event::PointerMove(Pointer::at(Point::new(
+        60.0,
+        row_top(5.0) + 4.0,
+    ))));
+    view.handle(&Event::PointerUp(Pointer::at(Point::new(
+        60.0,
+        row_top(5.0) + 4.0,
+    ))));
+    assert_eq!(
+        view.take_requests(),
+        [Request::AddBookmarks {
+            folders: vec![reports],
+            before: None,
+        }]
+    );
+}
+
+#[test]
+fn templates_make_new_documents_and_folders_open_in_the_terminal() {
+    let place = Place::new();
+    let templates = place.root.path().join("Templates");
+    fs::create_dir(&templates).expect("templates");
+    fs::write(templates.join("Letter.txt"), "Dear\n").expect("template");
+    let mut view = place.view();
+    view.set_templates(templates);
+
+    let menu = right_click(&mut view, Point::new(SIDEBAR_WIDTH + 60.0, 400.0));
+    let titles = titles(&menu);
+    assert_eq!(titles[..2], ["New Folder", "New Document"]);
+    assert!(titles.contains(&"Open in Terminal".to_owned()));
+    assert!(view.menu_action("open-in-terminal"));
+    assert_eq!(view.take_requests(), [Request::OpenTerminal(place.home())]);
+
+    assert!(view.menu_action("new-document:Letter.txt"));
+    let letter = place.home().join("Letter.txt");
+    assert_eq!(fs::read_to_string(&letter).expect("letter"), "Dear\n");
+    assert_eq!(view.renaming(), Some(letter.as_path()));
+    view.handle(&press(Key::Escape));
+    view.handle(&command(Key::Character('z'), false));
+    run_until(&mut view, idle);
+    assert!(!letter.exists());
+
+    let height = view.content_frame().height;
+    view.handle(&command(Key::Character('/'), false));
+    assert_eq!(view.content_frame().height, height + PATH_BAR_HEIGHT);
 }

@@ -761,6 +761,16 @@ pub fn rename(path: &Path, new_name: &str) -> Result<Option<Change>, RenameError
     }))
 }
 
+pub fn new_document(parent: &Path, template: &Path) -> io::Result<Change> {
+    let name = name_of(template)?.to_string_lossy().into_owned();
+    let mut path = parent.join(&name);
+    if path.symlink_metadata().is_ok() {
+        path = keep_both_name(parent, &name, false);
+    }
+    fs::copy(template, &path)?;
+    Ok(Change::Created(path))
+}
+
 pub fn new_folder(parent: &Path) -> io::Result<Change> {
     let path = untitled_folder(parent);
     fs::create_dir(&path)?;

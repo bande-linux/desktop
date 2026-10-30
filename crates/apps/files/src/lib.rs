@@ -23,7 +23,7 @@ use unbound_l10n::Localizer;
 pub use browser::{Browser, Column, Location};
 pub use paint::permissions;
 pub use search::SEARCH_HEIGHT;
-pub use sidebar::{Place, PlaceKind, Row, rows, with_volumes, without_bookmark};
+pub use sidebar::{Place, PlaceKind, Row, rows, with_bookmarks, with_volumes, without_bookmark};
 pub use tabs::TAB_BAR_HEIGHT;
 pub use toolbar::TOOLBAR_HEIGHT;
 pub use view::{

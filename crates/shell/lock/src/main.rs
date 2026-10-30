@@ -80,7 +80,7 @@ impl App for Locker {
             WindowEvent::Input(input) => self.screen.handle(&input),
             WindowEvent::Accessibility(request) => self.screen.perform(&request),
             WindowEvent::AppearanceChanged(appearance) => {
-                self.screen.set_palette(appearance.palette());
+                self.screen.set_appearance(appearance);
                 false
             }
             WindowEvent::CapsLock(on) => self.screen.set_caps_lock(on),
@@ -183,7 +183,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     .unwrap_or_default(),
             ),
             &jiff::Zoned::now(),
-            window.appearance().palette(),
+            window.appearance(),
             TextSystem::new(),
         ),
         user,

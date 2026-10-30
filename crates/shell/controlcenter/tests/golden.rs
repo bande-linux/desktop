@@ -6,10 +6,12 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use unbound_controlcenter::media::{Playback, Player};
-use unbound_controlcenter::{Changes, Choice, PANEL_WIDTH, Status, panel};
-use unbound_toolkit::{CpuRenderer, Image, Palette, Scheme, TextSystem};
+use unbound_controlcenter::{Changes, Choice, PANEL_WIDTH, Status, panel, panel_items};
+use unbound_toolkit::{Color, CpuRenderer, Image, Palette, Rect, Scene, Scheme, TextSystem};
 
 const MIN_SSIM: f64 = 0.99;
+const MARGIN: f32 = 24.0;
+const DESKTOP: Color = Color::hex(0x7C8698);
 
 fn check_golden(name: &str, width: u32, height: u32, rgba: Vec<u8>) {
     let actual = image::RgbaImage::from_raw(width, height, rgba).expect("frame");
@@ -109,16 +111,29 @@ fn status() -> Status {
 
 #[test]
 fn control_center_with_now_playing_matches_its_golden_in_light_and_dark() {
-    for (scheme, name) in [(Scheme::Light, "panel-light"), (Scheme::Dark, "panel-dark")] {
-        let (mut ui, height) = panel(
-            &status(),
-            Palette::for_scheme(scheme),
-            TextSystem::new(),
-            &Changes::default(),
+    for (scheme, scale, name) in [
+        (Scheme::Light, 1.0, "panel-light"),
+        (Scheme::Dark, 1.0, "panel-dark"),
+        (Scheme::Light, 1.5, "panel-light-1.5x"),
+        (Scheme::Dark, 1.5, "panel-dark-1.5x"),
+    ] {
+        let palette = Palette::for_scheme(scheme);
+        let (mut ui, height) = panel(&status(), palette, TextSystem::new(), &Changes::default());
+        let rect = Rect::new(MARGIN, MARGIN, PANEL_WIDTH, height);
+        let scene = Scene {
+            width: (PANEL_WIDTH + 2.0 * MARGIN) as u32,
+            height: (height + 2.0 * MARGIN) as u32,
+            background: DESKTOP,
+            items: panel_items(&mut ui, &palette, rect),
+        };
+        let (width, height) = (
+            (f64::from(scene.width) * scale).round() as u32,
+            (f64::from(scene.height) * scale).round() as u32,
         );
-        let (width, height) = (PANEL_WIDTH as u32, height as u32);
-        let scene = ui.scene(width, height);
-        let frame = CpuRenderer::new().render(&scene).expect("frame");
-        check_golden(name, width, height, frame.rgba);
+        let mut rgba = vec![0; (width * height * 4) as usize];
+        CpuRenderer::new()
+            .render_into(&scene, scale, &mut rgba)
+            .expect("frame");
+        check_golden(name, width, height, rgba);
     }
 }

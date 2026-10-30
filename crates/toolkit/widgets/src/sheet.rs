@@ -3,8 +3,7 @@ use std::rc::Rc;
 
 use accesskit::{Node, Role};
 use unbound_graphics::{
-    Color, Elevation, Image, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextRole,
-    TextStyle,
+    Elevation, Image, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextRole, TextStyle,
 };
 
 use super::{Animated, BUTTON_HEIGHT, Button, Context, Size, Widget, WidgetId};
@@ -28,7 +27,14 @@ pub(crate) struct Sheet {
 }
 
 impl Sheet {
-    pub(crate) fn paint(&self, cx: &Context, shown: f32, area: Size, items: &mut Vec<Item>) {
+    pub(crate) fn paint(
+        &self,
+        cx: &Context,
+        shown: f32,
+        area: Size,
+        top: f32,
+        items: &mut Vec<Item>,
+    ) {
         let shown = shown.clamp(0.0, 1.0);
         items.push(Item::Fill {
             shape: Shape::rect(Rect::new(0.0, 0.0, area.width, area.height)),
@@ -45,16 +51,7 @@ impl Sheet {
             ),
         };
         let shape = Shape::rounded(panel, Radius::XL);
-        let mut content: Vec<Item> = Elevation::Frame
-            .shadows(cx.palette.scheme, true)
-            .into_iter()
-            .map(|shadow| Item::Shadow {
-                shape,
-                offset: Point::new(0.0, shadow.offset),
-                blur_radius: shadow.blur,
-                color: Color::BLACK.with_opacity(shadow.opacity),
-            })
-            .collect();
+        let mut content = Item::shadows(shape, Elevation::Frame, cx.palette.scheme, true).to_vec();
         content.push(Item::Fill {
             shape,
             paint: cx.palette.overlay.into(),
@@ -65,6 +62,18 @@ impl Sheet {
             shape,
             items: inner,
         });
+        let content = match self.floating {
+            true => content,
+            false => vec![Item::Clip {
+                shape: Shape::rect(Rect::new(
+                    0.0,
+                    top,
+                    area.width,
+                    (area.height - top).max(0.0),
+                )),
+                items: content,
+            }],
+        };
         items.push(Item::Opacity {
             alpha: shown,
             items: content,

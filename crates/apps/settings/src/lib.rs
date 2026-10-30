@@ -57,7 +57,7 @@ pub use time::{
 };
 pub use unbound_settings_panes::{PaneId, SettingId, Value};
 pub use view::SettingsView;
-pub use widgets::bucket_levels;
+pub use widgets::{SIDEBAR_WIDTH, bucket_levels};
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-settings.ftl");
 

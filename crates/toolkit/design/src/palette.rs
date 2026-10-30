@@ -233,10 +233,17 @@ pub struct Appearance {
     pub accent: Accent,
     pub contrast: Contrast,
     pub reduce_motion: bool,
+    pub frame_tint: Option<Color>,
 }
+
+const FRAME_TINT: f32 = 0.06;
 
 impl Appearance {
     pub fn palette(self) -> Palette {
-        Palette::generate(self.scheme, self.accent, self.contrast)
+        let mut palette = Palette::generate(self.scheme, self.accent, self.contrast);
+        if let Some(tint) = self.frame_tint {
+            palette.chassis = palette.chassis.mix(tint, FRAME_TINT);
+        }
+        palette
     }
 }

@@ -15,10 +15,12 @@ unbound-l10n.workspace = true
 unbound-log.workspace = true
 unbound-preview.workspace = true
 unbound-search.workspace = true
+unbound-sound.workspace = true
 unbound-thumbnails.workspace = true
 unbound-toolkit.workspace = true
 unbound-volumes.workspace = true
 unbound-xdg.workspace = true
+zbus.workspace = true
 
 [dev-dependencies]
 image.workspace = true

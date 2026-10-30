@@ -1,4 +1,4 @@
 locked = Locked. { $name }
 enter-password = Enter Password
 input-source = { $name } · ⌥⌘Space switches
-caps-lock = Caps Lock is on
+user-position = User { $index } of { $count }. Up and Down choose another.

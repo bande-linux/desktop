@@ -17,7 +17,7 @@ use crate::state::OutputElement;
 use crate::state::mapped_size;
 use crate::tile::{Preview, TILED};
 use crate::window::Window;
-use unbound_graphics::{Elevation, Palette, Radius, Scheme};
+use unbound_graphics::{Color, Elevation, Palette, Radius, Scheme};
 use unbound_render::{
     Blur, RenderError, RoundedRect, Shadow, VulkanFrame, VulkanRenderer, VulkanTexture,
 };
@@ -445,8 +445,13 @@ impl RenderElement<VulkanRenderer> for PieceElement {
     }
 }
 
-const PREVIEW_FILL: [f32; 4] = [0.16, 0.16, 0.16, 0.16];
-const HUNG_VEIL: [f32; 4] = [0.12, 0.12, 0.12, 0.24];
+const PREVIEW_FILL: f32 = 0.16;
+
+pub(crate) fn premultiplied(color: Color, alpha: f32) -> [f32; 4] {
+    let alpha = f32::from(color.a) / 255.0 * alpha;
+    let [r, g, b] = [color.r, color.g, color.b].map(|channel| f32::from(channel) / 255.0 * alpha);
+    [r, g, b, alpha]
+}
 const BLUR_PASSES: u32 = 3;
 const BLUR_OFFSET: f64 = 1.5;
 
@@ -716,7 +721,7 @@ pub(crate) fn preview_elements(
     std::iter::once(OutputElement::Fill(FillElement::new(
         preview.fill.clone(),
         shape,
-        PREVIEW_FILL.map(|channel| channel * alpha),
+        premultiplied(Palette::for_scheme(scheme).accent, PREVIEW_FILL * alpha),
     )))
     .chain(cast_shadows(
         &preview.shadow,
@@ -968,7 +973,7 @@ pub(crate) fn window_elements(
         OutputElement::Fill(FillElement::new(
             window.veil.clone(),
             clip,
-            HUNG_VEIL.map(|channel| channel * alpha),
+            premultiplied(Palette::for_scheme(shading.scheme).scrim, alpha),
         ))
     });
     let elements = veil

@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use unbound_toolkit::ui::{Animated, Spring};
-use unbound_toolkit::{Color, Image, Item, Rect};
+use unbound_toolkit::{Image, Item, Rect};
 use unbound_wallpaper::{Fit, Picture};
 
 use crate::model::Bounds;
@@ -140,13 +140,5 @@ impl Backdrop {
                 }
             });
         }
-    }
-}
-
-pub fn placeholder(dark: bool) -> Color {
-    if dark {
-        Color::hex(0x141826)
-    } else {
-        Color::hex(0xE8ECF3)
     }
 }

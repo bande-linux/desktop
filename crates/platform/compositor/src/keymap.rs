@@ -5,14 +5,16 @@ use smithay::backend::renderer::element::memory::MemoryRenderBufferRenderElement
 use smithay::input::keyboard::{Layout, XkbConfig};
 use smithay::utils::{Clock, Logical, Monotonic, Point};
 use unbound_config::{CapsLock, InputSource, Keyboard};
+use unbound_graphics::TextRole;
 use unbound_render::VulkanRenderer;
 
-use crate::label::{Label, LabelStyle, Labels};
+use crate::label::{Label, LabelStyle, Labels, Look};
 use crate::state::{Headless, OutputElement, State};
 
 const HUD_STYLE: LabelStyle = LabelStyle {
-    text_size: 17.0,
-    padding: (22.0, 10.0),
+    role: TextRole::Heading,
+    padding: (24.0, 12.0),
+    look: Look::Card,
 };
 const HUD_HOLD: Duration = Duration::from_millis(1000);
 const HUD_FADE_OUT: Duration = Duration::from_millis(300);
@@ -218,7 +220,7 @@ impl State {
             .input_sources
             .labels
             .get_or_insert_with(Labels::default)
-            .render(&name, HUD_STYLE, width, scale);
+            .render(&name, HUD_STYLE, width, self.decorations.scheme, scale);
         self.input_sources.hud = label.map(|label| Hud {
             label,
             screen,

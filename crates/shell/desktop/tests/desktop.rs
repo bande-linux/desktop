@@ -5,9 +5,9 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use unbound_desktop_surface::{
-    Bounds, Desktop, DesktopView, Direction, Grid, Item, Kind, Layer, Layouts, Luma, MenuApp,
-    Positions, Request, Selection, Slot, SortBy, WallpaperKey, command, desktop_menu, fitted_label,
-    format_layouts, items_menu, parse_layouts,
+    Artwork, Bounds, Desktop, DesktopView, Direction, Grid, Item, Kind, Layer, Layouts, Luma,
+    MenuApp, Positions, Request, Selection, Slot, SortBy, WallpaperKey, command, desktop_menu,
+    fitted_label, format_layouts, items_menu, parse_layouts,
 };
 use unbound_toolkit::ui::{Event, Key, Menu, Modifiers, Pointer, PointerButton};
 use unbound_toolkit::{
@@ -248,14 +248,24 @@ fn view_with_items(scheme: Scheme) -> DesktopView {
         Bounds::new(64.0, 24.0, SCREEN.0 - 64.0, SCREEN.1 - 24.0),
         now,
     );
-    let folder = Image::from_rgba(64, 64, [0x5B, 0x8D, 0xEF, 0xFF].repeat(64 * 64));
-    let document = Image::from_rgba(64, 64, [0xF4, 0xF5, 0xF7, 0xFF].repeat(64 * 64));
+    let folder =
+        Image::from_rgba(64, 64, [0x5B, 0x8D, 0xEF, 0xFF].repeat(64 * 64)).map(Artwork::Icon);
+    let document =
+        Image::from_rgba(64, 64, [0xF4, 0xF5, 0xF7, 0xFF].repeat(64 * 64)).map(Artwork::Icon);
+    let (width, height) = (128, 80);
+    let screenshot = (0..width * height)
+        .flat_map(|index| {
+            let (x, y) = (index % width, index / width);
+            [(40 + x) as u8, (90 + y) as u8, (200 - x / 2) as u8, 255]
+        })
+        .collect();
+    let screenshot = Image::from_rgba(width, height, screenshot).map(Artwork::Thumbnail);
     view.set_items(
         vec![
             (item("Projects", Kind::Folder), folder.clone()),
             (
                 item("Screenshot 2026-10-30 at 09.41.12.png", Kind::File),
-                document.clone(),
+                screenshot,
             ),
             (item("Notes.txt", Kind::File), document),
             (item("Stick", Kind::Volume), folder),
@@ -293,8 +303,21 @@ fn wallpaper(view: &mut DesktopView, scheme: Scheme) {
 
 fn check_golden(name: &str, view: &mut DesktopView) {
     let scene = view.scene(Instant::now() + Duration::from_secs(5));
-    let frame = CpuRenderer::new().render(&scene).unwrap();
-    let actual = image::RgbaImage::from_raw(scene.width, scene.height, frame.rgba).unwrap();
+    for (scale, suffix) in [(1.0, ""), (1.5, "-1.5x")] {
+        let (width, height) = (
+            (f64::from(scene.width) * scale).round() as u32,
+            (f64::from(scene.height) * scale).round() as u32,
+        );
+        let mut rgba = vec![0; (width * height * 4) as usize];
+        CpuRenderer::new()
+            .render_into(&scene, scale, &mut rgba)
+            .unwrap();
+        compare(&format!("{name}{suffix}"), width, height, rgba);
+    }
+}
+
+fn compare(name: &str, width: u32, height: u32, rgba: Vec<u8>) {
+    let actual = image::RgbaImage::from_raw(width, height, rgba).unwrap();
     let actual = image::DynamicImage::ImageRgba8(actual).to_rgb8();
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("tests/golden/{name}.png"));
     if std::env::var_os("UNBOUND_UPDATE_GOLDENS").is_some() {
@@ -659,4 +682,31 @@ fn the_menus_offer_what_fits_the_selection_and_their_actions_reach_the_desktop()
         vec![Request::ConfirmDelete(vec![path("Notes.txt")])]
     );
     assert_eq!(command("unknown"), None);
+}
+
+#[test]
+fn dragging_several_icons_carries_a_count_badge_and_one_icon_does_not() {
+    let badged = |names: &[&str]| {
+        let mut view = view_with_items(Scheme::Light);
+        let first = at(&view, names[0]);
+        for name in names {
+            let point = at(&view, name);
+            click(&mut view, point, 1, SUPER);
+        }
+        view.handle(&Event::PointerDown(Pointer::at(first)), Instant::now());
+        view.handle(
+            &Event::PointerMove(Pointer::at(Point::new(first.x - 20.0, first.y))),
+            Instant::now(),
+        );
+        let danger = unbound_toolkit::Palette::for_scheme(Scheme::Light).danger;
+        let icon = view.drag_icon();
+        let [unbound_toolkit::Item::Translate { items, .. }] = icon.scene.items.as_slice() else {
+            panic!("the drag icon is one translated group");
+        };
+        items.iter().any(|item| {
+            matches!(item, unbound_toolkit::Item::Fill { paint, .. } if *paint == danger.into())
+        })
+    };
+    assert!(badged(&["Notes.txt", "Projects"]));
+    assert!(!badged(&["Notes.txt"]));
 }

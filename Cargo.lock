@@ -3860,6 +3860,7 @@ dependencies = [
  "tempfile",
  "tracing",
  "unbound-bus",
+ "unbound-design",
  "unbound-edid",
  "unbound-l10n",
  "unbound-log",
@@ -3921,6 +3922,7 @@ dependencies = [
  "unbound-fs",
  "unbound-l10n",
  "unbound-log",
+ "unbound-thumbnails",
  "unbound-toolkit",
  "unbound-volumes",
  "unbound-wallpaper",
@@ -3942,6 +3944,25 @@ name = "unbound-edid"
 version = "0.1.0"
 
 [[package]]
+name = "unbound-file-chooser"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "image",
+ "image-compare",
+ "tempfile",
+ "tracing",
+ "unbound-files",
+ "unbound-fs",
+ "unbound-l10n",
+ "unbound-log",
+ "unbound-toolkit",
+ "unbound-volumes",
+ "unbound-xdg",
+ "xdg-desktop-portal-unbound",
+]
+
+[[package]]
 name = "unbound-files"
 version = "0.1.0"
 dependencies = [
@@ -3957,10 +3978,12 @@ dependencies = [
  "unbound-log",
  "unbound-preview",
  "unbound-search",
+ "unbound-sound",
  "unbound-thumbnails",
  "unbound-toolkit",
  "unbound-volumes",
  "unbound-xdg",
+ "zbus",
 ]
 
 [[package]]
@@ -4127,6 +4150,8 @@ dependencies = [
 name = "unbound-notifications"
 version = "0.1.0"
 dependencies = [
+ "image",
+ "image-compare",
  "jiff",
  "tracing",
  "unbound-datetime",
@@ -4244,6 +4269,7 @@ dependencies = [
  "accesskit",
  "blocking",
  "image",
+ "image-compare",
  "jiff",
  "pipewire",
  "rustix 1.1.6",
@@ -4361,12 +4387,17 @@ dependencies = [
  "alacritty_terminal",
  "image",
  "image-compare",
+ "tempfile",
  "tracing",
  "unbound-app-menu",
+ "unbound-design",
  "unbound-l10n",
  "unbound-log",
+ "unbound-notify",
  "unbound-toolkit",
+ "unbound-watch",
  "unbound-xdg",
+ "zbus",
 ]
 
 [[package]]
@@ -5379,13 +5410,16 @@ name = "xdg-desktop-portal-unbound"
 version = "0.1.0"
 dependencies = [
  "blocking",
+ "jiff",
+ "rustix 1.1.6",
  "tempfile",
  "tracing",
  "unbound-bus",
  "unbound-config",
- "unbound-graphics",
+ "unbound-design",
  "unbound-log",
  "unbound-test-bus",
+ "unbound-wallpaper",
  "zbus",
 ]
 

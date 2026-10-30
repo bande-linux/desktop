@@ -147,3 +147,4 @@ menu-compress-selection = Compress
 menu-open-in-terminal = Open in Terminal
 menu-new-document = New Document
 menu-status-bar = Show or Hide Status Bar
+menu-restore-sidebar = Restore Default Sidebar

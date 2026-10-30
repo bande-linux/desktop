@@ -27,6 +27,8 @@ wayland-protocols.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]
+image.workspace = true
+image-compare.workspace = true
 serde.workspace = true
 smithay.workspace = true
 tempfile.workspace = true

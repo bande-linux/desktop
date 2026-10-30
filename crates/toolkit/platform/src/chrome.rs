@@ -16,6 +16,7 @@ pub(crate) use unbound_graphics::RESIZE_MARGIN;
 pub const SHEET_INSET: u32 = 6;
 pub(crate) use unbound_graphics::WindowControl as Control;
 const RESIZE_BAND: f32 = RESIZE_MARGIN as f32;
+const TITLE_TRAILING_GAP: f32 = 12.0;
 const CORNER_REACH: f32 = unbound_graphics::RESIZE_CORNER;
 
 const WINDOW_NODE: NodeId = NodeId(u64::MAX);
@@ -67,12 +68,36 @@ pub struct FrameRegions {
     pub toolbar: f32,
 }
 
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Header {
+    pub title_x: f32,
+    pub items: Vec<Rect>,
+}
+
+impl Header {
+    fn title_area(&self, width: f32) -> Rect {
+        let end = self
+            .items
+            .iter()
+            .map(|item| item.x)
+            .filter(|x| *x > self.title_x)
+            .fold(width, f32::min);
+        Rect::new(
+            self.title_x,
+            0.0,
+            (end - self.title_x - TITLE_TRAILING_GAP).max(0.0),
+            HEADER_HEIGHT as f32,
+        )
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct Frame {
     pub(crate) margin: f32,
     pub(crate) title: f32,
     pub(crate) inset: f32,
     pub(crate) regions: Option<FrameRegions>,
+    pub(crate) header: bool,
     pub(crate) width: f32,
     pub(crate) height: f32,
 }
@@ -104,6 +129,7 @@ impl Frame {
 
     fn content(&self) -> Rect {
         match self.regions {
+            _ if self.header => Rect::new(0.0, 0.0, self.width, self.height),
             Some(_) => Rect::new(0.0, self.title, self.width, self.height - self.title),
             None => self.sheet(),
         }
@@ -198,6 +224,7 @@ pub(crate) struct Chrome {
     close_hover: Animated,
     pub(crate) alternate: bool,
     pub(crate) regions: Option<FrameRegions>,
+    pub(crate) header: Option<Header>,
     pub(crate) animating: bool,
     pub(crate) pressed: Option<Control>,
     pub(crate) pressed_inside: bool,
@@ -210,6 +237,20 @@ impl Chrome {
         Self {
             title,
             ..Self::default()
+        }
+    }
+
+    pub(crate) fn zone_at(&self, frame: &Frame, point: Point) -> Zone {
+        let zone = frame.zone_at(point);
+        let local = Point::new(point.x - frame.margin, point.y - frame.margin);
+        match &self.header {
+            Some(header)
+                if zone == Zone::TitleBar
+                    && header.items.iter().any(|item| contains(*item, local)) =>
+            {
+                Zone::Content
+            }
+            _ => zone,
         }
     }
 
@@ -316,6 +357,7 @@ impl Chrome {
             sheet.height,
         );
         let drawn = match frame.regions {
+            _ if frame.header => content.items.clone(),
             Some(_) => content.items.clone(),
             None => vec![Item::Clip {
                 shape: Shape::rounded(local, radius),
@@ -352,7 +394,16 @@ impl Chrome {
         now: Instant,
         items: &mut Vec<Item>,
     ) {
-        let title = self.title(title_style(palette, look.active));
+        let style = title_style(palette, look.active);
+        let title = self.title(style);
+        let (title, header_title) = match &self.header {
+            Some(header) => {
+                let text = self.text.get_or_insert_with(TextSystem::new);
+                let empty = text.paragraph("", style, None, TextAlign::Start);
+                (empty, Some((header.title_area(frame.width), title)))
+            }
+            None => (title, None),
+        };
         let (hover, hovering) = self.hover.value_at(now);
         let (close_hover, closing) = self.close_hover.value_at(now);
         self.animating = hovering || closing;
@@ -371,6 +422,15 @@ impl Chrome {
             }
             .items(),
         );
+        if let Some((area, paragraph)) = header_title {
+            items.push(Item::Clip {
+                shape: Shape::rect(area),
+                items: vec![Item::Text {
+                    origin: Point::new(area.x, ((frame.title - paragraph.height()) / 2.0).round()),
+                    paragraph,
+                }],
+            });
+        }
     }
 }
 
@@ -378,4 +438,44 @@ impl Chrome {
 pub(crate) struct Look {
     pub(crate) active: bool,
     pub(crate) zoomed: bool,
+}
+
+pub fn framed_scene(
+    content: &Scene,
+    title: &str,
+    regions: Option<FrameRegions>,
+    header: Option<Header>,
+    palette: &Palette,
+) -> Scene {
+    let header_height = HEADER_HEIGHT as f32;
+    let inset = SHEET_INSET as f32;
+    let (width, height) = (content.width as f32, content.height as f32);
+    let (width, height) = match (&header, regions) {
+        (Some(_), _) => (width, height),
+        (None, Some(_)) => (width, height + header_height),
+        (None, None) => (width + 2.0 * inset, height + header_height + inset),
+    };
+    let frame = Frame {
+        margin: 0.0,
+        title: header_height,
+        inset,
+        regions,
+        header: header.is_some(),
+        width,
+        height,
+    };
+    let mut chrome = Chrome::new(title.to_owned());
+    chrome.regions = regions;
+    chrome.header = header;
+    chrome.frame_scene(
+        &frame,
+        content,
+        palette,
+        palette.scheme,
+        Look {
+            active: true,
+            zoomed: false,
+        },
+        Instant::now(),
+    )
 }

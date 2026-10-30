@@ -95,7 +95,7 @@ jobs:
           RUSTFLAGS: --remap-path-prefix=${{ github.workspace }}=/build --remap-path-prefix=/root/.cargo=/cargo --remap-path-prefix=/root/.rustup=/rustup
         run: |
           packages="unbound-compositor unbound-notify unbound-clipboard unbound-config unbound-power unbound-sound \
-              xdg-desktop-portal-unbound unbound-tray unbound-automount \
+              xdg-desktop-portal-unbound unbound-file-chooser unbound-tray unbound-automount \
               unbound-desktop-surface unbound-bar unbound-launcher unbound-term unbound-lock unbound-screenshot unbound-files unbound-settings unbound-greeter unbound-controlcenter unbound-notifications unbound-monitor"
           cargo build --profile dist --locked $(printf -- '--package %s ' $packages)
           for package in $packages; do

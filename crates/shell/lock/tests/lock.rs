@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use unbound_datetime::{DateFormats, posix_locale};
 use unbound_lock::{LockScreen, SHAKE_DURATION, User, clock_texts, display_name, shake_offset};
 use unbound_toolkit::ui::{Event, Key, Modifiers};
-use unbound_toolkit::{CpuRenderer, Palette, Scheme, TextSystem};
+use unbound_toolkit::{Appearance, CpuRenderer, Image, Scheme, TextSystem};
 
 const OUTPUT: (u32, u32) = (1024, 768);
 const MIN_SSIM: f64 = 0.99;
@@ -38,7 +38,7 @@ fn screen() -> LockScreen {
         &ada(),
         british(),
         &morning(),
-        Palette::for_scheme(Scheme::Dark),
+        Appearance::default(),
         TextSystem::new(),
     )
 }
@@ -81,12 +81,68 @@ fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>) {
     );
 }
 
-#[test]
-fn the_lock_screen_matches_its_golden() {
-    let mut screen = screen();
+fn wallpaper() -> Image {
+    let (width, height) = (64, 48);
+    let rgba = (0..width * height)
+        .flat_map(|index| {
+            let (x, y) = (index % width, index / width);
+            [(150 + x) as u8, (170 + y) as u8, (230 - x / 2) as u8, 255]
+        })
+        .collect();
+    Image::from_rgba(width, height, rgba).expect("wallpaper")
+}
+
+fn render(screen: &mut LockScreen, name: &str) {
     let scene = screen.scene(OUTPUT.0, OUTPUT.1);
-    let frame = CpuRenderer::new().render(&scene).expect("frame");
-    check_golden("lock-screen", OUTPUT, frame.rgba);
+    for (scale, suffix) in [(1.0, ""), (1.5, "-1.5x")] {
+        let size = (
+            (f64::from(OUTPUT.0) * scale).round() as u32,
+            (f64::from(OUTPUT.1) * scale).round() as u32,
+        );
+        let mut rgba = vec![0; (size.0 * size.1 * 4) as usize];
+        CpuRenderer::new()
+            .render_into(&scene, scale, &mut rgba)
+            .expect("frame");
+        check_golden(&format!("{name}{suffix}"), size, rgba);
+    }
+}
+
+#[test]
+fn the_lock_screen_matches_its_goldens_in_light_and_dark_appearance() {
+    for (scheme, name) in [
+        (Scheme::Light, "lock-screen-light"),
+        (Scheme::Dark, "lock-screen-dark"),
+    ] {
+        let mut screen = LockScreen::new(
+            &ada(),
+            british(),
+            &morning(),
+            Appearance {
+                scheme,
+                ..Appearance::default()
+            },
+            TextSystem::new(),
+        );
+        screen.set_backdrop(wallpaper(), Instant::now() - Duration::from_secs(5));
+        screen.advance(Instant::now());
+        screen.set_position(1, 3);
+        render(&mut screen, name);
+    }
+}
+
+#[test]
+fn the_lock_screen_without_a_wallpaper_matches_its_golden() {
+    render(&mut screen(), "lock-screen");
+}
+
+#[test]
+fn several_people_show_where_the_chosen_one_is_and_say_so() {
+    let mut screen = screen();
+    let alone = window_label(&screen);
+    screen.set_position(1, 3);
+    let label = window_label(&screen);
+    assert!(!alone.contains("of 3"), "{alone}");
+    assert!(label.contains("User 2 of 3"), "{label}");
 }
 
 #[test]
@@ -222,13 +278,24 @@ fn caps_lock_shows_its_sign_in_the_field_and_says_so() {
     let mut screen = screen();
     let plain = texts(&mut screen);
 
+    let field = |screen: &LockScreen| {
+        screen
+            .accessibility()
+            .nodes
+            .into_iter()
+            .find(|(_, node)| node.placeholder().is_some())
+            .and_then(|(_, node)| node.description().map(str::to_owned))
+    };
+    let plain_items = screen.scene(OUTPUT.0, OUTPUT.1).items;
+
     assert!(screen.set_caps_lock(true));
     assert!(!screen.set_caps_lock(true));
-    assert_eq!(texts(&mut screen), plain + 1);
-    assert!(window_label(&screen).contains("Caps Lock is on"));
+    assert_eq!(texts(&mut screen), plain);
+    assert_ne!(screen.scene(OUTPUT.0, OUTPUT.1).items, plain_items);
+    assert_eq!(field(&screen).as_deref(), Some("Caps Lock is on"));
 
     assert!(screen.set_caps_lock(false));
-    assert_eq!(texts(&mut screen), plain);
+    assert_eq!(field(&screen), None);
 }
 
 #[test]

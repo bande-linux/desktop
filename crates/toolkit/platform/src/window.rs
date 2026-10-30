@@ -58,8 +58,8 @@ use crate::access::Accessibility;
 use crate::appearance::AppearanceWatch;
 use crate::capture::Capture;
 use crate::chrome::{
-    Chrome, Control, Frame, FrameRegions, HEADER_HEIGHT, Look, RESIZE_MARGIN, SHEET_INSET, Zone,
-    control_for_node,
+    Chrome, Control, Frame, FrameRegions, HEADER_HEIGHT, Header, Look, RESIZE_MARGIN, SHEET_INSET,
+    Zone, control_for_node,
 };
 use crate::clipboard::Clipboard;
 use crate::clipboard::{DragEvent, Transfer};
@@ -630,6 +630,19 @@ impl Window {
         }
     }
 
+    pub fn set_header(&mut self, header: Header) {
+        if let Some(chrome) = &mut self.chrome
+            && chrome.header.as_ref() != Some(&header)
+        {
+            chrome.header = Some(header);
+            self.needs_redraw = true;
+        }
+    }
+
+    pub fn header_height(&self) -> u32 {
+        self.title_height()
+    }
+
     pub(crate) fn content_offset(&self) -> Point {
         let frame = self.frame();
         let origin = frame.content_origin();
@@ -669,6 +682,10 @@ impl Window {
             title: title as f32,
             inset: if title > 0 { SHEET_INSET as f32 } else { 0.0 },
             regions: self.chrome.as_ref().and_then(|chrome| chrome.regions),
+            header: self
+                .chrome
+                .as_ref()
+                .is_some_and(|chrome| chrome.header.is_some()),
             width: width as f32,
             height: height as f32,
         }
@@ -1276,7 +1293,7 @@ impl Window {
         };
         match input {
             Event::PointerEnter(pointer) | Event::PointerMove(pointer) => {
-                let zone = frame.zone_at(pointer.position);
+                let zone = chrome.zone_at(&frame, pointer.position);
                 if let Some(control) = chrome.pressed {
                     let inside = zone == Zone::Control(control);
                     if inside != chrome.pressed_inside {
@@ -1310,7 +1327,7 @@ impl Window {
                 self.show_cursor(cursor);
             }
             Event::PointerDown(pointer) => {
-                let zone = frame.zone_at(pointer.position);
+                let zone = chrome.zone_at(&frame, pointer.position);
                 if zone == Zone::Content || chrome.content_buttons > 0 {
                     chrome.content_buttons += 1;
                     passed.push(WindowEvent::Input(Event::PointerDown(into_content(
@@ -1355,7 +1372,7 @@ impl Window {
                     return;
                 };
                 self.needs_redraw = true;
-                if frame.zone_at(pointer.position) != Zone::Control(control) {
+                if chrome.zone_at(&frame, pointer.position) != Zone::Control(control) {
                     return;
                 }
                 let result = match control {
@@ -1389,7 +1406,7 @@ impl Window {
                 }
             }
             Event::Scroll(scroll) => {
-                if frame.zone_at(scroll.position) == Zone::Content {
+                if chrome.zone_at(&frame, scroll.position) == Zone::Content {
                     passed.push(WindowEvent::Input(Event::Scroll(
                         unbound_graphics::Scroll {
                             position: Point::new(

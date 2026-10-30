@@ -176,6 +176,7 @@ impl Menus {
         let Some(menu) = self.tracker.submenu(level, index) else {
             return Ok(());
         };
+        self.close_from(opening.state, level + 1);
         let Some(parent) = self.popups.get(level) else {
             return Ok(());
         };
@@ -258,16 +259,7 @@ impl Menus {
             popup.shown = Some(look);
             let size = panel.size();
             let shape = Shape::rounded(Rect::new(0.0, 0.0, size.width, size.height), MENU_RADIUS);
-            let mut items: Vec<Item> = Elevation::Overlay
-                .shadows(palette.scheme, true)
-                .into_iter()
-                .map(|shadow| Item::Shadow {
-                    shape,
-                    offset: Point::new(0.0, shadow.offset),
-                    blur_radius: shadow.blur,
-                    color: Color::BLACK.with_opacity(shadow.opacity),
-                })
-                .collect();
+            let mut items = Item::shadows(shape, Elevation::Overlay, palette.scheme, true).to_vec();
             items.extend(panel.paint(&palette, show_highlight));
             let scene = Scene {
                 width: (size.width + 2.0 * MARGIN) as u32,
@@ -346,6 +338,15 @@ fn create(
         whole(size.0).max(1),
         whole(size.1).max(1),
     );
+    let panel = compositor.create_region(handle, ());
+    panel.add(
+        whole(MARGIN),
+        whole(MARGIN),
+        whole(size.0).max(1),
+        whole(size.1).max(1),
+    );
+    surface.set_input_region(Some(&panel));
+    panel.destroy();
     if let (Some(seat), Some(serial)) = (&state.seat, state.input.serial) {
         popup.grab(seat, serial);
     }

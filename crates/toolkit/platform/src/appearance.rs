@@ -14,6 +14,8 @@ const PORTAL: &str = "org.freedesktop.portal.Desktop";
 const PORTAL_PATH: &str = "/org/freedesktop/portal/desktop";
 const SETTINGS: &str = "org.freedesktop.portal.Settings";
 const NAMESPACE: &str = "org.freedesktop.appearance";
+const UNBOUND_NAMESPACE: &str = "org.unbound.appearance";
+const NAMESPACES: [&str; 2] = [NAMESPACE, UNBOUND_NAMESPACE];
 const PREFER_DARK: u32 = 1;
 const REDUCE: u32 = 1;
 const HIGH_CONTRAST: u32 = 1;
@@ -69,21 +71,20 @@ fn follow(sender: &Sender<Appearance>, wake: &UnixStream) -> zbus::Result<()> {
     let connection = Connection::session()?;
     let settings = Proxy::new(&connection, PORTAL, PORTAL_PATH, SETTINGS)?;
     let changes = settings.receive_signal("SettingChanged")?;
-    let mut all: HashMap<String, HashMap<String, OwnedValue>> =
-        settings.call("ReadAll", &(&[NAMESPACE][..],))?;
     let mut appearance = Appearance::default();
-    for (key, value) in all.remove(NAMESPACE).into_iter().flatten() {
-        apply(&mut appearance, &key, value);
+    let all: HashMap<String, HashMap<String, OwnedValue>> =
+        settings.call("ReadAll", &(&NAMESPACES[..],))?;
+    for (namespace, values) in all {
+        for (key, value) in values {
+            apply(&mut appearance, &namespace, &key, value);
+        }
     }
     if !publish(sender, wake, appearance) {
         return Ok(());
     }
     for change in changes {
         let (namespace, key, value): (String, String, OwnedValue) = change.body().deserialize()?;
-        if namespace == NAMESPACE
-            && apply(&mut appearance, &key, value)
-            && !publish(sender, wake, appearance)
-        {
+        if apply(&mut appearance, &namespace, &key, value) && !publish(sender, wake, appearance) {
             break;
         }
     }
@@ -94,41 +95,53 @@ fn publish(sender: &Sender<Appearance>, mut wake: &UnixStream, appearance: Appea
     sender.send(appearance).is_ok() && wake.write_all(&[0]).is_ok()
 }
 
-fn apply(appearance: &mut Appearance, key: &str, value: OwnedValue) -> bool {
+fn apply(appearance: &mut Appearance, namespace: &str, key: &str, value: OwnedValue) -> bool {
     let before = *appearance;
-    match key {
-        "color-scheme" => {
+    match (namespace, key) {
+        (NAMESPACE, "color-scheme") => {
             appearance.scheme = match u32::try_from(&value) {
                 Ok(PREFER_DARK) => Scheme::Dark,
                 _ => Scheme::Light,
             };
         }
-        "accent-color" => {
-            appearance.accent = accent(value).map_or_else(Accent::default, Accent::nearest);
+        (NAMESPACE, "accent-color") => {
+            appearance.accent = <(f64, f64, f64)>::try_from(value)
+                .ok()
+                .and_then(|(red, green, blue)| color(&[red, green, blue]))
+                .map_or_else(Accent::default, Accent::nearest);
         }
-        "contrast" => {
+        (NAMESPACE, "contrast") => {
             appearance.contrast = match u32::try_from(&value) {
                 Ok(HIGH_CONTRAST) => Contrast::Increased,
                 _ => Contrast::Standard,
             };
         }
-        "reduced-motion" => appearance.reduce_motion = u32::try_from(&value) == Ok(REDUCE),
+        (NAMESPACE, "reduced-motion") => {
+            appearance.reduce_motion = u32::try_from(&value) == Ok(REDUCE);
+        }
+        (UNBOUND_NAMESPACE, "frame-tint") => {
+            appearance.frame_tint = Vec::<f64>::try_from(value)
+                .ok()
+                .and_then(|channels| color(&channels));
+        }
         _ => {}
     }
     *appearance != before
 }
 
-fn accent(value: OwnedValue) -> Option<Color> {
-    let (red, green, blue) = <(f64, f64, f64)>::try_from(value).ok()?;
+fn color(channels: &[f64]) -> Option<Color> {
     let channel = |value: f64| {
         (0.0..=1.0)
             .contains(&value)
             .then(|| (value * 255.0).round() as u8)
     };
+    let [red, green, blue] = channels else {
+        return None;
+    };
     Some(Color {
-        r: channel(red)?,
-        g: channel(green)?,
-        b: channel(blue)?,
+        r: channel(*red)?,
+        g: channel(*green)?,
+        b: channel(*blue)?,
         a: u8::MAX,
     })
 }

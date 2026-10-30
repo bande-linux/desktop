@@ -22,6 +22,7 @@ use crate::notifications::{AppNotifications, NotificationCommand};
 use crate::pictures::{Pair, PictureCommand};
 use crate::pointing::PointingDevices;
 use crate::services::{AudioCommand, BluetoothCommand, NetworkCommand};
+use crate::software::{SoftwareCommand, SoftwareState};
 use crate::state::{Answer, BluetoothState, Display, Joined, Question, WifiState};
 use crate::storage::{Storage, StorageCommand};
 use crate::time::{TimeCommand, TimeState, parse_manual, zone_matches};
@@ -71,6 +72,7 @@ pub(crate) enum Intent {
     RemoveLoginItem(String),
     ExpandApp(Option<String>),
     SetAppRule(AppNotifications),
+    Software(SoftwareCommand),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -169,6 +171,7 @@ pub struct SettingsView {
     pub(crate) battery: Option<BatteryState>,
     pub(crate) notification_apps: Option<Vec<AppNotifications>>,
     pub(crate) expanded_app: Option<String>,
+    pub(crate) software: SoftwareState,
     ui: Ui,
     root: WidgetId,
     search: WidgetId,
@@ -226,6 +229,7 @@ impl SettingsView {
             battery: None,
             notification_apps: None,
             expanded_app: None,
+            software: SoftwareState::Unknown,
             ui: Ui::new(Box::new(root), cx),
             root: root_id,
             search,
@@ -361,6 +365,7 @@ impl SettingsView {
             }
             Update::Login(login) => self.login = Some(login),
             Update::NotificationApps(apps) => self.notification_apps = Some(apps),
+            Update::Software(state) => self.software = state,
             Update::Battery(battery) => {
                 match battery.as_ref().and_then(|battery| battery.profile.clone()) {
                     Some(profile) => {
@@ -464,7 +469,8 @@ impl SettingsView {
             | PaneId::General
             | PaneId::Storage
             | PaneId::DateTime
-            | PaneId::LoginItems => true,
+            | PaneId::LoginItems
+            | PaneId::SoftwareUpdate => true,
             PaneId::TrackpadMouse => self.pointing.trackpad || self.pointing.mouse,
         }
     }
@@ -777,6 +783,7 @@ impl SettingsView {
                         .map(|group| Anchor::Item(format!("app:{group}")));
                     self.expanded_app = group;
                 }
+                Intent::Software(command) => self.commands.push(Command::Software(command)),
                 Intent::SetAppRule(app) => {
                     if let Some(apps) = &mut self.notification_apps
                         && let Some(known) = apps.iter_mut().find(|known| known.group == app.group)
@@ -980,6 +987,9 @@ impl SettingsView {
             PaneId::Notifications => self
                 .commands
                 .push(Command::Notifications(NotificationCommand::Refresh)),
+            PaneId::SoftwareUpdate if self.software == SoftwareState::Unknown => self
+                .commands
+                .push(Command::Software(SoftwareCommand::Check)),
             _ => {}
         }
         self.pane = pane;

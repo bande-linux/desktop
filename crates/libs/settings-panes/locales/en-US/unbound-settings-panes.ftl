@@ -183,3 +183,6 @@ lid-sleep = Sleep
 lid-keep-running = Keep running
 app-notifications = Application notifications
 app-notifications-keywords = per app, apps, banners, alerts, allow notifications, persistent, notification center, block, silence an app
+software-update = Software Update
+software-update-keywords = updates, upgrade, packages, apt, debian
+software-updates-keywords = install updates, check for updates, security updates, upgrade, packages, restart

@@ -48,6 +48,13 @@ impl SettingsView {
     fn pane_summary(&self, pane: PaneId) -> Option<String> {
         match pane {
             PaneId::About => self.about.as_ref().map(|about| about.model.clone()),
+            PaneId::SoftwareUpdate => match &self.software {
+                crate::software::SoftwareState::Available(packages) => {
+                    Some(L10N.tr_args("updates-available", [("count", packages.len().into())]))
+                }
+                crate::software::SoftwareState::UpToDate => Some(L10N.tr("up-to-date")),
+                _ => None,
+            },
             PaneId::Storage => self
                 .about
                 .as_ref()

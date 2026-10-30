@@ -125,3 +125,26 @@ show-in-center = Show in Notification Center
 no-notification-apps = Apps appear here after they send a notification
 banners-only = { $banners } banners
 center-only = Notification Center only
+checking-updates = Checking for updates…
+up-to-date = Your computer is up to date
+check-now = Check Now
+download-size = { $size } to download
+install-now = Install Now
+updates-available = { $count ->
+    [one] 1 update is available
+   *[other] { $count } updates are available
+}
+more-updates = and { $count } more
+installing-updates = Installing updates…
+installing-hint = You can keep working while updates install
+updates-installed = Updates are installed
+restart-to-finish = Restart to finish installing them
+restart-now = Restart Now
+updates-failed = Could not check for updates
+try-again = Try Again
+updates-notification = Software updates are available
+updates-notification-body = { $count ->
+    [one] 1 update is ready to install.
+   *[other] { $count } updates are ready to install.
+}
+show-updates = Show Updates

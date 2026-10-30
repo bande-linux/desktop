@@ -5,7 +5,8 @@ use std::time::Instant;
 
 use unbound_app_menu::{AppMenu, Entry, Standard, app_submenu, window_submenu};
 use unbound_settings::{
-    Command, Displays, Feed, L10N, PaneId, PointingDevices, Services, SettingsView, UDEV_DATA, feed,
+    Command, Displays, Feed, L10N, PaneId, PointingDevices, Services, SettingsView, UDEV_DATA,
+    announce_updates, feed,
 };
 use unbound_settings_panes::panes;
 use unbound_toolkit::{App, Rect, Role, Scene, TextSystem, Window, WindowEvent};
@@ -158,6 +159,19 @@ impl App for Settings {
     }
 }
 
+const CHECK_UPDATES: &str = "--check-updates";
+
+fn check_updates() -> Result<(), Box<dyn std::error::Error>> {
+    let session = zbus::blocking::Connection::session()?;
+    let system = zbus::blocking::Connection::system()?;
+    if announce_updates(&session, &system)? {
+        let program = std::env::current_exe()?.to_string_lossy().into_owned();
+        let pane = PaneId::SoftwareUpdate.keyword().to_owned();
+        spawn_detached(&[program, pane], None, None)?;
+    }
+    Ok(())
+}
+
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let session = zbus::blocking::Connection::session()?;
     let system = zbus::blocking::Connection::system()
@@ -194,7 +208,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
 fn main() -> ExitCode {
     unbound_log::init("unbound-settings");
-    match run() {
+    let checking = std::env::args().nth(1).as_deref() == Some(CHECK_UPDATES);
+    match if checking { check_updates() } else { run() } {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             tracing::error!("{error}");

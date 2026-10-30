@@ -580,6 +580,7 @@ impl SettingsView {
             List::LoginItems => self.login_rows(),
             List::BatteryHistory => self.battery_rows(),
             List::NotificationApps => self.notification_app_rows(),
+            List::SoftwareUpdates => self.software_rows(),
         }
     }
 

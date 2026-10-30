@@ -5,8 +5,9 @@ use std::path::PathBuf;
 use unbound_audio::{Device, Direction, Level, Snapshot};
 use unbound_keyboard::Layouts;
 use unbound_settings::{
-    About, App, AppNotifications, BatteryState, Category, Charge, Display, LoginItems, Mode, Pair,
-    PaneId, PointingDevices, SettingId, SettingsView, Storage, TimeState, Update, Value, thumbnail,
+    About, App, AppNotifications, BatteryState, Category, Charge, Display, LoginItems, Mode,
+    Package, Pair, PaneId, PointingDevices, SettingId, SettingsView, SoftwareState, Storage,
+    TimeState, Update, Value, thumbnail,
 };
 use unbound_toolkit::ui::{Event, Key, Modifiers};
 use unbound_toolkit::{CpuRenderer, Palette, Scheme, TextSystem};
@@ -434,6 +435,26 @@ fn the_notifications_pane_matches_its_goldens() {
             target_node: chat,
             data: None,
         });
+        view
+    });
+}
+
+#[test]
+fn the_software_update_pane_matches_its_goldens() {
+    check_in_both_schemes_and_scales("software-update", |scheme| {
+        let mut view = general(scheme, PaneId::SoftwareUpdate);
+        let package = |name: &str, version: &str, size: u64| Package {
+            id: format!("{name};{version};arm64;debian"),
+            name: name.to_owned(),
+            version: version.to_owned(),
+            summary: String::new(),
+            size,
+        };
+        view.apply(Update::Software(SoftwareState::Available(vec![
+            package("firefox-esr", "128.4.0esr-1~deb13u1", 70_400_000),
+            package("libc6", "2.41-12", 3_100_000),
+            package("linux-image-asahi", "6.12.9-1", 121_000_000),
+        ])));
         view
     });
 }

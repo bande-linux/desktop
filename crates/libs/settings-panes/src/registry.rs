@@ -19,10 +19,11 @@ pub enum PaneId {
     Storage,
     DateTime,
     LoginItems,
+    SoftwareUpdate,
 }
 
 impl PaneId {
-    const KEYWORDS: [(Self, &'static str); 17] = [
+    const KEYWORDS: [(Self, &'static str); 18] = [
         (Self::Wifi, "wifi"),
         (Self::Bluetooth, "bluetooth"),
         (Self::Battery, "battery"),
@@ -40,6 +41,7 @@ impl PaneId {
         (Self::Storage, "storage"),
         (Self::DateTime, "date-time"),
         (Self::LoginItems, "login-items"),
+        (Self::SoftwareUpdate, "software-update"),
     ];
 
     pub fn keyword(self) -> &'static str {
@@ -58,7 +60,11 @@ impl PaneId {
 
     pub fn parent(self) -> Option<Self> {
         match self {
-            Self::About | Self::Storage | Self::DateTime | Self::LoginItems => Some(Self::General),
+            Self::About
+            | Self::SoftwareUpdate
+            | Self::Storage
+            | Self::DateTime
+            | Self::LoginItems => Some(Self::General),
             _ => None,
         }
     }
@@ -120,6 +126,7 @@ pub enum SettingId {
     LowPowerOnBattery,
     LidOnPower,
     AppNotifications,
+    SoftwareUpdates,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -151,6 +158,7 @@ pub enum List {
     LoginItems,
     BatteryHistory,
     NotificationApps,
+    SoftwareUpdates,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -589,6 +597,20 @@ fn general_panes() -> Vec<Pane> {
                     )],
                 ),
             ],
+        ),
+        pane(
+            PaneId::SoftwareUpdate,
+            L10N.tr("software-update"),
+            L10N.tr("software-update-keywords"),
+            vec![section(
+                None,
+                vec![setting(
+                    SettingId::SoftwareUpdates,
+                    L10N.tr("software-update"),
+                    L10N.tr("software-updates-keywords"),
+                    Kind::List(List::SoftwareUpdates),
+                )],
+            )],
         ),
         pane(
             PaneId::Storage,

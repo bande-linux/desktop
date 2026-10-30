@@ -14,9 +14,11 @@ mod pictures;
 mod pointing;
 mod power;
 mod services;
+mod software;
 mod state;
 mod storage;
 mod time;
+mod updates;
 mod view;
 mod widgets;
 
@@ -37,6 +39,9 @@ pub use pointing::{PointingDevices, UDEV_DATA};
 pub use power::charge_text;
 pub use services::{
     AudioCommand, BluetoothCommand, NetworkCommand, follow_bluetooth, follow_network,
+};
+pub use software::{
+    Package, SoftwareCommand, SoftwareState, announce_updates, check, follow_software,
 };
 pub use state::{Answer, BluetoothState, Display, Joined, Mode, Question, WifiState};
 pub use storage::{Category, Storage, StorageCommand, Tally, categorize, tally};
@@ -65,7 +70,9 @@ mod tests {
             include_str!("notifications.rs"),
             include_str!("pages.rs"),
             include_str!("pictures.rs"),
+            include_str!("software.rs"),
             include_str!("power.rs"),
+            include_str!("updates.rs"),
             include_str!("view.rs"),
         ];
         assert_eq!(

@@ -20,6 +20,7 @@ use crate::pictures::{Pair, PictureCommand, follow_pictures};
 use crate::services::{
     AudioCommand, BluetoothCommand, NetworkCommand, follow_audio, follow_bluetooth, follow_network,
 };
+use crate::software::{SoftwareCommand, SoftwareState, follow_software};
 use crate::state::{Answer, BluetoothState, Joined, Question, WifiState};
 use crate::storage::{Storage, StorageCommand, follow_storage};
 use crate::time::{TimeCommand, TimeState, follow_time};
@@ -46,6 +47,7 @@ pub enum Update {
     Login(LoginItems),
     Battery(Option<BatteryState>),
     NotificationApps(Vec<AppNotifications>),
+    Software(SoftwareState),
     Failed(String),
 }
 
@@ -65,6 +67,7 @@ pub enum Command {
     Login(LoginCommand),
     Battery(BatteryCommand),
     Notifications(NotificationCommand),
+    Software(SoftwareCommand),
     Reveal(PathBuf),
 }
 
@@ -251,6 +254,7 @@ pub struct Services {
     login: Sender<LoginCommand>,
     battery: Option<Sender<BatteryCommand>>,
     notifications: Sender<NotificationCommand>,
+    software: Option<Sender<SoftwareCommand>>,
 }
 
 impl Services {
@@ -269,6 +273,7 @@ impl Services {
             login: follow_login_items(updates.clone()),
             battery: system.map(|system| follow_battery(system, updates.clone())),
             notifications: follow_app_notifications(session, updates.clone()),
+            software: system.map(|system| follow_software(system, updates.clone())),
         }
     }
 
@@ -303,6 +308,10 @@ impl Services {
                 .is_some_and(|time| time.send(command).is_ok()),
             Command::Login(command) => self.login.send(command).is_ok(),
             Command::Notifications(command) => self.notifications.send(command).is_ok(),
+            Command::Software(command) => self
+                .software
+                .as_ref()
+                .is_some_and(|software| software.send(command).is_ok()),
             Command::Battery(command) => self
                 .battery
                 .as_ref()

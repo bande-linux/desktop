@@ -381,7 +381,7 @@ impl Table {
         ((self.body().height / ROW_HEIGHT).floor() as usize).max(1)
     }
 
-    fn key(&mut self, cx: &Context, key: Key, modifiers: Modifiers) -> bool {
+    fn key(&mut self, cx: &mut Context, key: Key, modifiers: Modifiers) -> bool {
         let last = self.rows.len().saturating_sub(1);
         let cursor = self.cursor;
         let extend = modifiers.shift;
@@ -407,6 +407,24 @@ impl Table {
             Key::Enter if !self.selection().is_empty() => {
                 let keys = self.selection();
                 (self.on_activate)(&keys);
+                true
+            }
+            Key::Character('c') if modifiers.logo && !self.selection().is_empty() => {
+                let text = self
+                    .rows
+                    .iter()
+                    .zip(&self.selected)
+                    .filter(|(_, selected)| **selected)
+                    .map(|(row, _)| {
+                        row.cells
+                            .iter()
+                            .map(|cell| cell.text.as_str())
+                            .collect::<Vec<_>>()
+                            .join("\t")
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                cx.copy(&text);
                 true
             }
             Key::Character('a') if modifiers.logo => {

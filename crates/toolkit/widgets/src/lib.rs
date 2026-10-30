@@ -96,6 +96,13 @@ pub struct Context {
     focus: Option<WidgetId>,
     now: Instant,
     animating: cell::Cell<bool>,
+    clipboard: Option<ClipboardRequest>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ClipboardRequest {
+    Copy(String),
+    Paste,
 }
 
 impl Context {
@@ -108,7 +115,12 @@ impl Context {
             focus: None,
             now: Instant::now(),
             animating: cell::Cell::new(false),
+            clipboard: None,
         }
+    }
+
+    pub fn copy(&mut self, text: &str) {
+        self.clipboard = Some(ClipboardRequest::Copy(text.to_owned()));
     }
 
     pub fn now(&self) -> Instant {
@@ -187,6 +199,10 @@ pub trait Widget: AsAny {
         false
     }
 
+    fn key_equivalent(&self) -> Option<Key> {
+        None
+    }
+
     fn hit_children(&self, _point: Point) -> bool {
         true
     }
@@ -213,6 +229,7 @@ pub struct Ui {
     pointer: Option<Point>,
     menu_owner: Option<WidgetId>,
     menu_request: Option<(Menu, Point)>,
+    awaiting_paste: bool,
 }
 
 fn contains(frame: Rect, point: Point) -> bool {
@@ -256,6 +273,16 @@ fn hit_path(widget: &dyn Widget, point: Point, path: &mut Vec<WidgetId>) -> bool
         }
     }
     true
+}
+
+fn equivalent(widget: &dyn Widget, key: Key) -> Option<WidgetId> {
+    if widget.key_equivalent() == Some(key) {
+        return Some(widget.id());
+    }
+    widget
+        .children()
+        .iter()
+        .find_map(|child| equivalent(child.as_ref(), key))
 }
 
 fn path_to(widget: &dyn Widget, id: WidgetId, path: &mut Vec<WidgetId>) -> bool {
@@ -334,6 +361,7 @@ impl Ui {
             pointer: None,
             menu_owner: None,
             menu_request: None,
+            awaiting_paste: false,
         }
     }
 
@@ -466,11 +494,30 @@ impl Ui {
             Event::Key { key, modifiers } if opens_menu(*key, *modifiers) => {
                 self.request_keyboard_menu()
             }
-            Event::Key { .. } | Event::Commit(_) | Event::Preedit { .. } => self
+            Event::Key { key, modifiers } => {
+                let delivered = self
+                    .cx
+                    .focus
+                    .is_some_and(|target| self.deliver(target, event));
+                delivered || (*modifiers == Modifiers::default() && self.press_equivalent(*key))
+            }
+            Event::Commit(_) | Event::Preedit { .. } => self
                 .cx
                 .focus
                 .is_some_and(|target| self.deliver(target, event)),
         }
+    }
+
+    fn press_equivalent(&mut self, key: Key) -> bool {
+        let Some(target) = equivalent(self.root.as_ref(), key) else {
+            return false;
+        };
+        self.perform(&ActionRequest {
+            action: Action::Click,
+            target_tree: TreeId::ROOT,
+            target_node: target.node(),
+            data: None,
+        })
     }
 
     fn request_keyboard_menu(&mut self) -> bool {
@@ -501,6 +548,22 @@ impl Ui {
             }
         }
         false
+    }
+
+    pub fn take_clipboard_request(&mut self) -> Option<ClipboardRequest> {
+        let request = self.cx.clipboard.take();
+        if request == Some(ClipboardRequest::Paste) {
+            self.awaiting_paste = true;
+        }
+        request
+    }
+
+    pub fn pasted(&mut self, text: &str) -> bool {
+        if !std::mem::take(&mut self.awaiting_paste) {
+            return false;
+        }
+        self.handle(&Event::Commit(text.to_owned()));
+        true
     }
 
     pub fn take_menu_request(&mut self) -> Option<(Menu, Point)> {

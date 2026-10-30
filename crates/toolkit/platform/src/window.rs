@@ -22,7 +22,7 @@ use unbound_graphics::{
     RenderError, Scene, TextSystem, pixels, vulkan_instance,
 };
 use unbound_protocols::client::unbound_shell_v1::VolumeKey;
-use unbound_widgets::{Menu, MenuOutcome, Ui};
+use unbound_widgets::{ClipboardRequest, Menu, MenuOutcome, Ui};
 use wayland_client::backend::WaylandError;
 use wayland_client::protocol::wl_buffer::{self, WlBuffer};
 use wayland_client::protocol::wl_callback::{self, WlCallback};
@@ -766,6 +766,11 @@ impl Window {
                 if let Some((menu, at)) = ui.take_menu_request() {
                     self.show_menu(menu, MenuPlacement::AtPoint(at))?;
                 }
+                match ui.take_clipboard_request() {
+                    Some(ClipboardRequest::Copy(text)) => self.copy(&text),
+                    Some(ClipboardRequest::Paste) => self.paste()?,
+                    None => {}
+                }
                 self.set_cursor(ui.cursor());
                 (changed, None)
             }
@@ -776,6 +781,10 @@ impl Window {
             WindowEvent::MenuAction(action) => match ui.menu_action(&action) {
                 true => (true, None),
                 false => (false, Some(WindowEvent::MenuAction(action))),
+            },
+            WindowEvent::Pasted(text) => match ui.pasted(&text) {
+                true => (true, None),
+                false => (false, Some(WindowEvent::Pasted(text))),
             },
             WindowEvent::MenuClosed => match ui.menu_closed() {
                 true => (false, None),

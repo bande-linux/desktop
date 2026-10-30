@@ -1,7 +1,9 @@
 use accesskit::{Action, ActionData, ActionRequest, Node, Role};
 use parley::{PlainEditor, StyleProperty};
 
-use super::{Context, Cursor, Event, Key, Modifiers, Size, Widget, WidgetId};
+use std::ops::Range;
+
+use super::{ClipboardRequest, Context, Cursor, Event, Key, Modifiers, Size, Widget, WidgetId};
 use unbound_graphics::{
     Color, Item, Paint, Paragraph, Point, Rect, Shape, TextAlign, TextStyle, families,
 };
@@ -21,6 +23,7 @@ pub struct TextField {
     editor: PlainEditor<Color>,
     on_change: Box<dyn FnMut(&str)>,
     selecting: bool,
+    pending_selection: Option<Range<usize>>,
     paragraph: Option<Paragraph>,
     frame: Rect,
 }
@@ -41,6 +44,7 @@ impl TextField {
             editor,
             on_change: Box::new(on_change),
             selecting: false,
+            pending_selection: None,
             paragraph: None,
             frame: Rect::default(),
         }
@@ -70,8 +74,12 @@ impl TextField {
         self.editor.raw_text()
     }
 
-    pub fn selection(&self) -> std::ops::Range<usize> {
+    pub fn selection(&self) -> Range<usize> {
         self.editor.raw_selection().text_range()
+    }
+
+    pub fn select(&mut self, range: Range<usize>) {
+        self.pending_selection = Some(range);
     }
 
     fn text_origin(&self) -> Point {
@@ -117,6 +125,16 @@ impl TextField {
             Key::Delete if alt => driver.delete_word(),
             Key::Delete => driver.delete(),
             Key::Character('a') if logo => driver.select_all(),
+            Key::Character('c' | 'x') if logo => {
+                let Some(selected) = driver.editor.selected_text().map(str::to_owned) else {
+                    return true;
+                };
+                cx.clipboard = Some(ClipboardRequest::Copy(selected));
+                if key == Key::Character('x') {
+                    driver.delete_selection();
+                }
+            }
+            Key::Character('v') if logo => cx.clipboard = Some(ClipboardRequest::Paste),
             Key::Character(character) if !logo && !modifiers.control => {
                 driver.insert_or_replace_selection(character.encode_utf8(&mut [0; 4]));
             }
@@ -140,6 +158,11 @@ impl Widget for TextField {
             .edit_styles()
             .insert(StyleProperty::Brush(cx.palette.label_primary));
         let (fonts, layouts) = cx.text.contexts();
+        if let Some(range) = self.pending_selection.take() {
+            self.editor
+                .driver(fonts, layouts)
+                .select_byte_range(range.start, range.end);
+        }
         self.paragraph = Some(Paragraph::from_layout(
             self.editor.layout(fonts, layouts).clone(),
         ));

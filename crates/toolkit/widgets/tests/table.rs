@@ -6,8 +6,8 @@ use std::rc::Rc;
 use accesskit::{Action, ActionRequest, NodeId, Role, TreeId};
 use unbound_graphics::{Palette, Point, Scheme, TextSystem};
 use unbound_widgets::{
-    Cell, Column, Context, Event, HEADER_HEIGHT, Key, Menu, MenuItem, Modifiers, Pointer,
-    PointerButton, ROW_HEIGHT, Row, Size, Sort, Table, Ui, Widget, WidgetId,
+    Cell, ClipboardRequest, Column, Context, Event, HEADER_HEIGHT, Key, Menu, MenuItem, Modifiers,
+    Pointer, PointerButton, ROW_HEIGHT, Row, Size, Sort, Table, Ui, Widget, WidgetId,
 };
 
 const AREA: Size = Size::new(400.0, HEADER_HEIGHT + 10.0 * ROW_HEIGHT);
@@ -320,5 +320,19 @@ fn dragging_a_header_divider_resizes_the_column() {
             ascending: true
         }],
         "the name column now reaches past 200"
+    );
+}
+
+#[test]
+fn super_c_copies_the_selected_rows_as_tab_separated_lines() {
+    let mut fixture = Fixture::new(&NAMES);
+    fixture.click(1, NONE, 1);
+    fixture.click(2, SHIFT, 1);
+    fixture.key(Key::Character('c'), LOGO);
+    assert_eq!(
+        fixture.ui.take_clipboard_request(),
+        Some(ClipboardRequest::Copy(
+            "bravo\t100\ncharlie\t200".to_owned()
+        ))
     );
 }

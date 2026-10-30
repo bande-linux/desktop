@@ -6,9 +6,9 @@ use std::rc::Rc;
 use accesskit::{Action, ActionData, ActionRequest, Node, NodeId, Role, Toggled, TreeId};
 use unbound_graphics::{Palette, Point, Rect, Scheme, TextSystem};
 use unbound_widgets::{
-    Axis, BUTTON_HEIGHT, Button, Context, ContextMenu, Cursor, Event, Key, Label, Menu, MenuItem,
-    Modifiers, Pointer, PointerButton, SWITCH_SIZE, Scroll, SecureField, Size, Slider, Stack,
-    TEXT_FIELD_HEIGHT, TextField, Toggle, Ui, Widget, WidgetId,
+    Axis, BUTTON_HEIGHT, Button, ClipboardRequest, Context, ContextMenu, Cursor, Event, Key, Label,
+    Menu, MenuItem, Modifiers, Pointer, PointerButton, SWITCH_SIZE, Scroll, SecureField, Size,
+    Slider, Stack, TEXT_FIELD_HEIGHT, TextField, Toggle, Ui, Widget, WidgetId,
 };
 
 const NONE: Modifiers = Modifiers {
@@ -272,6 +272,72 @@ fn a_secondary_click_asks_the_widget_under_the_pointer_for_its_menu_and_routes_t
     assert!(ui.menu_action("rename"));
     assert_eq!(*chosen.borrow(), ["rename"]);
     assert!(!ui.menu_action("rename"), "a choice is delivered once");
+}
+
+#[test]
+fn return_and_escape_press_the_primary_and_cancel_buttons_from_a_text_field() {
+    let pressed = Rc::new(RefCell::new(Vec::new()));
+    let (save, cancel) = (pressed.clone(), pressed.clone());
+    let field = TextField::new("Name", "", |_| {});
+    let stack = Stack::new(
+        Axis::Vertical,
+        8.0,
+        0.0,
+        vec![
+            Box::new(field),
+            Box::new(Button::new("Cancel", move || cancel.borrow_mut().push("cancel")).cancel()),
+            Box::new(Button::new("Save", move || save.borrow_mut().push("save")).primary()),
+        ],
+    );
+    let mut ui = Ui::new(Box::new(stack), context());
+    ui.layout(AREA);
+    ui.handle(&key(Key::Tab, NONE));
+    ui.handle(&key(Key::Character('x'), NONE));
+    ui.handle(&key(Key::Enter, NONE));
+    ui.handle(&key(Key::Escape, NONE));
+    ui.handle(&key(Key::Enter, SHIFT));
+    assert_eq!(*pressed.borrow(), ["save", "cancel"]);
+}
+
+#[test]
+fn a_rename_field_preselects_the_name_without_its_extension() {
+    let mut field = Field::with("Report.pdf");
+    field.field.select(0..6);
+    laid_out(&mut field.field, &mut field.cx);
+    assert_eq!(field.field.selection(), 0..6);
+    field.press(Key::Character('N'), NONE);
+    assert_eq!(field.field.text(), "N.pdf");
+}
+
+#[test]
+fn super_c_x_and_v_go_through_the_clipboard() {
+    let field = TextField::new("Name", "Quarterly report", |_| {});
+    let id = field.id();
+    let mut ui = Ui::new(Box::new(field), context());
+    ui.layout(AREA);
+    ui.handle(&key(Key::Tab, NONE));
+    ui.handle(&key(Key::Down, NONE));
+    ui.handle(&key(Key::Left, Modifiers { shift: true, ..ALT }));
+    ui.handle(&key(Key::Character('c'), LOGO));
+    assert_eq!(
+        ui.take_clipboard_request(),
+        Some(ClipboardRequest::Copy("report".to_owned()))
+    );
+    ui.handle(&key(Key::Character('x'), LOGO));
+    assert_eq!(
+        ui.take_clipboard_request(),
+        Some(ClipboardRequest::Copy("report".to_owned()))
+    );
+    assert!(!ui.pasted("ignored"), "nothing was asked for");
+    ui.handle(&key(Key::Character('v'), LOGO));
+    assert_eq!(ui.take_clipboard_request(), Some(ClipboardRequest::Paste));
+    assert!(ui.pasted("summary"));
+    let text = ui
+        .widget_as::<TextField>(id)
+        .expect("field")
+        .text()
+        .to_owned();
+    assert_eq!(text, "Quarterly summary");
 }
 
 #[test]

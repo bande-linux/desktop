@@ -1,7 +1,7 @@
 use accesskit::{Action, ActionRequest, Node, Role};
 
 use super::{Context, Event, Key, Size, Widget, WidgetId, contains};
-use unbound_graphics::{Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle};
+use unbound_graphics::{Color, Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle};
 
 pub const BUTTON_HEIGHT: f32 = 22.0;
 const RADIUS: f32 = 5.0;
@@ -12,6 +12,7 @@ pub struct Button {
     title: String,
     on_click: Box<dyn FnMut()>,
     pressed: bool,
+    role: ButtonRole,
     paragraph: Option<Paragraph>,
     frame: Rect,
 }
@@ -23,10 +24,32 @@ impl Button {
             title: title.to_owned(),
             on_click: Box::new(on_click),
             pressed: false,
+            role: ButtonRole::Plain,
             paragraph: None,
             frame: Rect::default(),
         }
     }
+
+    pub fn primary(self) -> Self {
+        Self {
+            role: ButtonRole::Primary,
+            ..self
+        }
+    }
+
+    pub fn cancel(self) -> Self {
+        Self {
+            role: ButtonRole::Cancel,
+            ..self
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ButtonRole {
+    Plain,
+    Primary,
+    Cancel,
 }
 
 impl Widget for Button {
@@ -35,12 +58,15 @@ impl Widget for Button {
     }
 
     fn measure(&mut self, cx: &mut Context, _available: Size) -> Size {
-        let paragraph = cx.text.paragraph(
-            &self.title,
-            TextStyle::new(13.0, cx.palette.label_primary),
-            None,
-            TextAlign::Start,
-        );
+        let style = match self.role {
+            ButtonRole::Primary => {
+                TextStyle::new(13.0, Color::hex(0xFFFFFF)).weight(TextStyle::MEDIUM)
+            }
+            _ => TextStyle::new(13.0, cx.palette.label_primary),
+        };
+        let paragraph = cx
+            .text
+            .paragraph(&self.title, style, None, TextAlign::Start);
         let size = Size::new((paragraph.width() + 2.0 * PADDING).ceil(), BUTTON_HEIGHT);
         self.paragraph = Some(paragraph);
         size
@@ -56,20 +82,33 @@ impl Widget for Button {
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
         let shape = Shape::rounded(self.frame, RADIUS);
-        let fill = if self.pressed {
-            cx.palette.separator_color
+        if self.role == ButtonRole::Primary {
+            items.push(Item::Fill {
+                shape,
+                paint: cx.palette.accent_color.into(),
+            });
+            if self.pressed {
+                items.push(Item::Fill {
+                    shape,
+                    paint: Color::hex(0x000000).with_alpha(48).into(),
+                });
+            }
         } else {
-            cx.palette.surface_elevated
-        };
-        items.push(Item::Fill {
-            shape,
-            paint: fill.into(),
-        });
-        items.push(Item::Stroke {
-            shape: Shape::rounded(self.frame.inset(0.5), RADIUS - 0.5),
-            width: 1.0,
-            paint: cx.palette.separator_color.into(),
-        });
+            let fill = if self.pressed {
+                cx.palette.separator_color
+            } else {
+                cx.palette.surface_elevated
+            };
+            items.push(Item::Fill {
+                shape,
+                paint: fill.into(),
+            });
+            items.push(Item::Stroke {
+                shape: Shape::rounded(self.frame.inset(0.5), RADIUS - 0.5),
+                width: 1.0,
+                paint: cx.palette.separator_color.into(),
+            });
+        }
         if cx.is_focused(self.id) {
             super::focus_ring(cx, shape, items);
         }
@@ -122,5 +161,13 @@ impl Widget for Button {
 
     fn accepts_focus(&self, cx: &Context) -> bool {
         cx.keyboard_navigation
+    }
+
+    fn key_equivalent(&self) -> Option<Key> {
+        match self.role {
+            ButtonRole::Plain => None,
+            ButtonRole::Primary => Some(Key::Enter),
+            ButtonRole::Cancel => Some(Key::Escape),
+        }
     }
 }

@@ -21,6 +21,7 @@ use unbound_config::{BUS_NAME, Config, OBJECT_PATH, config_path};
 use zbus::blocking::fdo::PropertiesProxy;
 
 const HEADLESS_SIZE: (i32, i32) = (1920, 1080);
+const SHELL_READY_TIMEOUT: Duration = Duration::from_millis(2500);
 
 enum Backend {
     Headless,
@@ -31,6 +32,8 @@ struct App<O> {
     compositor: Headless,
     output: O,
     schedulers: Vec<FrameScheduler>,
+    started: Duration,
+    shown: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -40,10 +43,11 @@ enum Session {
 }
 
 fn main() -> ExitCode {
+    let started = now();
     unbound_log::init("unbound-compositor");
     let result = parse_args().and_then(|(backend, session)| match backend {
-        Backend::Headless => run_headless(session),
-        Backend::Drm(device) => run_drm(device.as_deref(), session),
+        Backend::Headless => run_headless(session, started),
+        Backend::Drm(device) => run_drm(device.as_deref(), session, started),
     });
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -77,7 +81,7 @@ fn now() -> Duration {
     Duration::from(Clock::<Monotonic>::new().now())
 }
 
-fn run_headless(session: Session) -> Result<(), Box<dyn Error>> {
+fn run_headless(session: Session, started: Duration) -> Result<(), Box<dyn Error>> {
     let renderer = Renderer::new()?;
     let info = renderer.device_info();
     tracing::info!("rendering on {} ({})", info.name, info.driver);
@@ -87,8 +91,10 @@ fn run_headless(session: Session) -> Result<(), Box<dyn Error>> {
         compositor,
         output: renderer,
         schedulers: vec![FrameScheduler::new(FrameClock::new(now(), REFRESH))],
+        started,
+        shown: false,
     };
-    serve(&mut event_loop, app, session)
+    serve(&mut event_loop, app, session).map(drop)
 }
 
 fn window_memory() -> Option<PathBuf> {
@@ -186,6 +192,13 @@ fn page_flipped(app: &mut App<DrmBackend>, crtc: crtc::Handle, metadata: Option<
         let Some((name, vblank)) = flipped else {
             return Ok(());
         };
+        if !app.shown {
+            app.shown = true;
+            tracing::info!(
+                "the first frame is on {name} {} ms after the compositor started",
+                vblank.time.saturating_sub(app.started).as_millis()
+            );
+        }
         let App {
             compositor,
             schedulers,
@@ -204,7 +217,11 @@ fn page_flipped(app: &mut App<DrmBackend>, crtc: crtc::Handle, metadata: Option<
     }
 }
 
-fn run_drm(device: Option<&Path>, session: Session) -> Result<(), Box<dyn Error>> {
+fn run_drm(
+    device: Option<&Path>,
+    session: Session,
+    started: Duration,
+) -> Result<(), Box<dyn Error>> {
     let (backend, notifiers) = DrmBackend::open(device)?;
     tracing::info!("driving {}", backend.path().display());
     let mut outputs = backend.outputs().into_iter();
@@ -261,6 +278,8 @@ fn run_drm(device: Option<&Path>, session: Session) -> Result<(), Box<dyn Error>
         compositor,
         output: backend,
         schedulers: Vec::new(),
+        started,
+        shown: false,
     };
     let input = app.output.input_backend()?;
     handle.insert_source(input, |event, _, app| {
@@ -270,8 +289,15 @@ fn run_drm(device: Option<&Path>, session: Session) -> Result<(), Box<dyn Error>
         }
     })?;
     sync_heads(&mut app);
-    serve(&mut event_loop, app, session)
+    let App {
+        compositor, output, ..
+    } = serve(&mut event_loop, app, session)?;
+    drop(compositor);
+    tracing::info!("leaving the last frame on screen for the session that follows");
+    output.leave_on_screen();
+    Ok(())
 }
+
 fn listen<O: 'static>(
     handle: &LoopHandle<'static, App<O>>,
     app: &mut App<O>,
@@ -311,66 +337,74 @@ fn listen<O: 'static>(
     Ok(())
 }
 
-fn start_user_session<O: 'static>(
+fn follow_session_bus<O: 'static>(
     event_loop: &mut EventLoop<'static, App<O>>,
     app: &mut App<O>,
-) -> Result<Option<Child>, Box<dyn Error>> {
+    bus: &zbus::blocking::Connection,
+) -> Result<(), Box<dyn Error>> {
+    let handle = event_loop.handle();
     let (appearance, appearance_changes) = channel::channel();
-    let followed = zbus::blocking::Connection::session().and_then(|connection| {
-        follow_appearance(connection, move |look| appearance.send(look).is_ok())
-    });
-    match followed {
+    match follow_appearance(bus.clone(), move |look| appearance.send(look).is_ok()) {
         Ok(()) => {
-            event_loop
-                .handle()
-                .insert_source(appearance_changes, |event, _, app| {
-                    if let Event::Msg(look) = event {
-                        app.compositor.set_reduce_motion(look.reduce_motion);
-                        app.compositor.set_dark_appearance(look.dark);
-                    }
-                })?;
+            handle.insert_source(appearance_changes, |event, _, app| {
+                if let Event::Msg(look) = event {
+                    app.compositor.set_reduce_motion(look.reduce_motion);
+                    app.compositor.set_dark_appearance(look.dark);
+                }
+            })?;
         }
         Err(error) => tracing::warn!("cannot follow the appearance: {error}"),
     }
     let (alerts, alerted) = channel::channel();
-    let followed = zbus::blocking::Connection::session()
-        .and_then(|connection| follow_alerts(&connection, move || alerts.send(()).is_ok()));
-    match followed {
+    match follow_alerts(bus, move || alerts.send(()).is_ok()) {
         Ok(()) => {
-            event_loop
-                .handle()
-                .insert_source(alerted, |event, _, app| {
-                    if let Event::Msg(()) = event {
-                        app.compositor.flash_screen();
-                    }
-                })?;
+            handle.insert_source(alerted, |event, _, app| {
+                if let Event::Msg(()) = event {
+                    app.compositor.flash_screen();
+                }
+            })?;
         }
         Err(error) => tracing::warn!("cannot follow alert sounds: {error}"),
     }
-    match zbus::blocking::Connection::session()
-        .and_then(|connection| serve_keyboard_monitor(&connection))
-    {
-        Ok(handle) => app.compositor.monitor_keyboard(handle),
+    match serve_keyboard_monitor(bus) {
+        Ok(monitor) => app.compositor.monitor_keyboard(monitor),
         Err(error) => tracing::warn!("assistive technologies cannot watch the keyboard: {error}"),
     }
-    app.compositor.apply_input_settings(InputSettings::read());
     let (input_settings, input_settings_changes) = channel::channel();
-    let followed = zbus::blocking::Connection::session().and_then(|connection| {
-        follow_input_settings(&connection, move |settings| {
-            input_settings.send(settings).is_ok()
-        })
-    });
-    match followed {
+    match follow_input_settings(bus, move |settings| input_settings.send(settings).is_ok()) {
         Ok(()) => {
-            event_loop
-                .handle()
-                .insert_source(input_settings_changes, |event, _, app| {
-                    if let Event::Msg(settings) = event {
-                        app.compositor.apply_input_settings(settings);
-                    }
-                })?;
+            handle.insert_source(input_settings_changes, |event, _, app| {
+                if let Event::Msg(settings) = event {
+                    app.compositor.apply_input_settings(settings);
+                }
+            })?;
         }
         Err(error) => tracing::warn!("cannot follow the keyboard and pointer settings: {error}"),
+    }
+    Ok(())
+}
+
+fn start_user_session<O: 'static>(
+    event_loop: &mut EventLoop<'static, App<O>>,
+    app: &mut App<O>,
+) -> Result<Option<Child>, Box<dyn Error>> {
+    for (executable, role) in [
+        (SHELL, SessionRole::Shell),
+        (CLIPBOARD_DAEMON, SessionRole::ClipboardDaemon),
+        (SCREENSHOT, SessionRole::Shell),
+    ] {
+        if let Err(error) = app
+            .compositor
+            .start_session_client(Path::new(executable), role)
+        {
+            app.compositor
+                .report_start_failure(Path::new(executable), &error);
+        }
+    }
+    app.compositor.apply_input_settings(InputSettings::read());
+    match zbus::blocking::Connection::session() {
+        Ok(bus) => follow_session_bus(event_loop, app, &bus)?,
+        Err(error) => tracing::warn!("cannot follow the session settings: {error}"),
     }
     let (lock_states, reported) = std::sync::mpsc::channel();
     match follow_session(reported) {
@@ -385,19 +419,6 @@ fn start_user_session<O: 'static>(
                 })?;
         }
         Err(error) => tracing::warn!("cannot follow the logind session: {error}"),
-    }
-    for (executable, role) in [
-        (CLIPBOARD_DAEMON, SessionRole::ClipboardDaemon),
-        (SHELL, SessionRole::Shell),
-        (SCREENSHOT, SessionRole::Shell),
-    ] {
-        if let Err(error) = app
-            .compositor
-            .start_session_client(Path::new(executable), role)
-        {
-            app.compositor
-                .report_start_failure(Path::new(executable), &error);
-        }
     }
     if std::env::var_os("UNBOUND_REVIEW_JOB").is_none() {
         return Ok(None);
@@ -415,14 +436,18 @@ fn serve<O>(
     event_loop: &mut EventLoop<'static, App<O>>,
     mut app: App<O>,
     session: Session,
-) -> Result<(), Box<dyn Error>>
+) -> Result<App<O>, Box<dyn Error>>
 where
     O: FrameOutput + 'static,
     O::Error: Into<Box<dyn Error>>,
 {
     listen(&event_loop.handle(), &mut app)?;
     let (mut greeter, mut review) = match session {
-        Session::User => (None, start_user_session(event_loop, &mut app)?),
+        Session::User => {
+            app.compositor
+                .hold_until_shell_ready(app.started, app.started + SHELL_READY_TIMEOUT);
+            (None, start_user_session(event_loop, &mut app)?)
+        }
         Session::Greeter => {
             app.compositor.apply_input_settings(InputSettings::system());
             let greeter = app
@@ -447,7 +472,7 @@ where
         let upkeep = match greeter.as_mut() {
             Some(Some(greeter)) => {
                 if greeter.try_wait()?.is_some() {
-                    return Ok(());
+                    return Ok(app);
                 }
                 SessionUpkeep::default()
             }
@@ -461,7 +486,11 @@ where
             compositor,
             output,
             schedulers,
+            ..
         } = &mut app;
+        let reveal_wait = compositor
+            .reveal_wake(now())
+            .map(|at| at.saturating_sub(now()));
         let snap_due = compositor.snap_tick(now());
         let mut frame_wake = None;
         for scheduler in schedulers.iter_mut() {
@@ -485,6 +514,7 @@ where
             .chain(idle_wait)
             .chain(snap_wait)
             .chain(watchdog_wait)
+            .chain(reveal_wait)
             .min();
     }
 }

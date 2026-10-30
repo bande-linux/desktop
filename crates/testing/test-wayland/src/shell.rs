@@ -133,6 +133,22 @@ impl TestClient {
         self.exchange(server);
     }
 
+    pub fn declare_layer_opaque(
+        &mut self,
+        server: &mut Headless,
+        index: usize,
+        (width, height): (u32, u32),
+    ) {
+        let surface = &self.globals.shell.layers[index].0;
+        let compositor = self.globals.compositor.as_ref().expect("wl_compositor");
+        let region = compositor.create_region(&self.queue.handle(), ());
+        region.add(0, 0, width as i32, height as i32);
+        surface.set_opaque_region(Some(&region));
+        region.destroy();
+        surface.commit();
+        self.exchange(server);
+    }
+
     pub fn reconfigure_layer(&mut self, server: &mut Headless, index: usize) -> bool {
         self.globals.shell.layer_size = None;
         self.globals.shell.layers[index].0.commit();

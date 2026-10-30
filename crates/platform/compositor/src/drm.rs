@@ -399,6 +399,10 @@ impl DrmBackend {
             .any(|head| head.config.name == name && head.scanned_out)
     }
 
+    pub fn leave_on_screen(mut self) {
+        self.device.pause();
+    }
+
     pub fn session_active(&self) -> bool {
         self.session.is_active()
     }
@@ -473,7 +477,7 @@ impl FrameOutput for DrmBackend {
         compositor: &mut Headless,
         output: &str,
     ) -> Result<Submission, DrmBackendError> {
-        if !self.session.is_active() {
+        if !self.session.is_active() || compositor.holds_frames() {
             return Ok(Submission::AtVblank);
         }
         let Some(settings) = compositor.output_settings(output) else {

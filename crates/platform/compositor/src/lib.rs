@@ -40,6 +40,7 @@ mod pointing;
 mod popup;
 mod recall;
 mod render;
+mod reveal;
 mod scanout;
 mod scene;
 mod screen;

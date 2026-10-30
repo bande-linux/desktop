@@ -256,6 +256,7 @@ fn deliver(app: &mut impl Surfaces) -> Result<bool, WindowError> {
         window.dispatch_pending()?;
         window.fire_repeats(now);
         set_frame_time(window.frame_time());
+        let count = app.windows().len();
         for event in window.take_events() {
             if let WindowEvent::Focus(focused) = event
                 && let Some(window) = app.windows_mut().get_mut(index)
@@ -263,6 +264,9 @@ fn deliver(app: &mut impl Surfaces) -> Result<bool, WindowError> {
                 window.accessibility.set_window_focused(focused);
             }
             app.event(index, event);
+            if app.windows().len() < count {
+                return Ok(app.closed());
+            }
         }
     }
     Ok(app.closed())
@@ -396,18 +400,29 @@ pub fn run_surfaces(app: &mut impl Surfaces) -> Result<(), WindowError> {
         }
         set_frame_time(app.windows()[0].frame_time());
         for index in readiness.accessibility {
-            let requests = app.windows_mut()[index].accessibility.take_requests();
-            for request in requests {
-                if !app.windows_mut()[index].perform_window_action(&request) {
+            let Some(window) = app.windows_mut().get_mut(index) else {
+                continue;
+            };
+            for request in window.accessibility.take_requests() {
+                let Some(window) = app.windows_mut().get_mut(index) else {
+                    break;
+                };
+                if !window.perform_window_action(&request) {
                     app.event(index, WindowEvent::Accessibility(request));
                 }
             }
         }
         if readiness.appearance {
-            let change = app.windows()[0].appearance.borrow_mut().take_change();
+            let change = app
+                .windows()
+                .first()
+                .and_then(|window| window.appearance.borrow_mut().take_change());
             if let Some(appearance) = change {
                 for index in 0..app.windows().len() {
-                    app.windows_mut()[index].request_redraw();
+                    let Some(window) = app.windows_mut().get_mut(index) else {
+                        break;
+                    };
+                    window.request_redraw();
                     app.event(index, WindowEvent::AppearanceChanged(appearance));
                 }
             }

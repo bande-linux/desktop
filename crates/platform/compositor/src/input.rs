@@ -166,7 +166,7 @@ fn shortcut(
 }
 
 impl State {
-    fn surface_under(
+    pub(crate) fn surface_under(
         &self,
         location: Point<f64, Logical>,
     ) -> Option<(WlSurface, Point<f64, Logical>)> {
@@ -552,6 +552,7 @@ impl Headless {
         if !pointer.is_grabbed() {
             state.point_at_frame(location, under.is_some());
         }
+        state.drag_over(under.as_ref().map(|(surface, _)| surface));
         pointer.motion(
             state,
             under,
@@ -640,7 +641,7 @@ impl State {
         } else {
             KeyState::Released
         };
-        let alternate = keyboard.modifier_state().alt;
+        let before = keyboard.modifier_state();
         let action = keyboard.input(
             state,
             Keycode::new(evdev_code + EVDEV_OFFSET),
@@ -760,8 +761,12 @@ impl State {
         if let Some(Some(shortcut)) = action {
             state.run(shortcut);
         }
-        if keyboard.modifier_state().alt != alternate && state.has_server_side_frames() {
+        let after = keyboard.modifier_state();
+        if after.alt != before.alt && state.has_server_side_frames() {
             state.needs_redraw = true;
+        }
+        if (after.alt, after.logo) != (before.alt, before.logo) {
+            state.renegotiate_drag();
         }
         if state.switcher.is_active() && !keyboard.modifier_state().logo {
             state.commit_switcher();

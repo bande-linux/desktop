@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use smithay::utils::{Point, Size};
-use unbound_compositor::{Headless, Renderer};
+use unbound_compositor::{Headless, OutputConfig, Renderer};
 use unbound_test_wayland::{BLUE, GREEN, RED, ShmImage, TestClient, roundtrip};
 use wayland_client::protocol::wl_data_device_manager::DndAction;
 use wayland_client::protocol::wl_shm::Format;
@@ -175,4 +175,118 @@ fn escape_cancels_a_drag_slides_the_icon_back_and_nothing_is_dropped() {
     server.press_button(BTN_LEFT, false, 41);
     roundtrip(&mut server, &mut [&mut target, &mut source]);
     assert_eq!(target.buttons().len(), pressed + 2);
+}
+
+#[test]
+fn pressing_option_or_super_mid_drag_changes_the_action_without_moving() {
+    let (mut server, mut client) = start_drag(true);
+    server.move_pointer_to(at(AWAY), 10);
+    server.move_pointer_to(at(START), 20);
+    client.exchange(&mut server);
+    let resting = client.drag_actions().last().copied();
+
+    server.key(KEY_LEFTALT, true, 30);
+    client.exchange(&mut server);
+    let with_option = client.drag_actions().last().copied();
+    server.key(KEY_LEFTALT, false, 31);
+    client.exchange(&mut server);
+    let released = client.drag_actions().last().copied();
+
+    assert_eq!(resting, Some(DndAction::Move));
+    assert_eq!(with_option, Some(DndAction::Copy));
+    assert_eq!(released, Some(DndAction::Move));
+}
+
+fn two_clients() -> (Headless, TestClient, TestClient) {
+    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let mut target = TestClient::connect(&mut server);
+    target.use_seat(&mut server);
+    target.join_seat(&mut server);
+    target.accept_drops(true);
+    let behind = image(GREEN, WINDOW);
+    target.show_window(&mut server, &shm(&behind, WINDOW));
+    target.set_maximized(&mut server, 0, true);
+    target.fill_configured_size(&mut server, 0, GREEN);
+    let mut source = TestClient::connect(&mut server);
+    source.use_seat(&mut server);
+    source.join_seat(&mut server);
+    let window = image(RED, WINDOW);
+    source.show_window(&mut server, &shm(&window, WINDOW));
+    server.move_pointer_to(at(START), 1);
+    server.press_button(BTN_LEFT, true, 2);
+    roundtrip(&mut server, &mut [&mut target, &mut source]);
+    let icon = image(BLUE, ICON);
+    source.start_drag(&mut server, &shm(&icon, ICON), (-ICON / 2, -ICON / 2));
+    server.move_pointer_to(at(AWAY), 10);
+    roundtrip(&mut server, &mut [&mut target, &mut source]);
+    (server, target, source)
+}
+
+fn next_click_reaches(server: &mut Headless, client: &mut TestClient) {
+    assert!(!server.pointer_grabbed());
+    let pressed = client.buttons().len();
+    server.move_pointer_to(at((AWAY.0 + 3, AWAY.1)), 50);
+    server.press_button(BTN_LEFT, true, 51);
+    server.press_button(BTN_LEFT, false, 52);
+    client.exchange(server);
+    assert_eq!(client.buttons().len(), pressed + 2);
+}
+
+#[test]
+fn a_source_that_dies_mid_drag_ends_the_drag_and_frees_the_pointer() {
+    let (mut server, mut target, source) = two_clients();
+    assert!(server.pointer_grabbed());
+
+    drop(source);
+    roundtrip(&mut server, &mut [&mut target]);
+
+    assert!(!server.pointer_grabbed());
+    server.press_button(BTN_LEFT, false, 40);
+    roundtrip(&mut server, &mut [&mut target]);
+    next_click_reaches(&mut server, &mut target);
+}
+
+#[test]
+fn a_target_that_dies_mid_drag_gets_no_drop_and_the_source_is_cancelled() {
+    let (mut server, target, mut source) = two_clients();
+
+    drop(target);
+    roundtrip(&mut server, &mut [&mut source]);
+    server.press_button(BTN_LEFT, false, 40);
+    roundtrip(&mut server, &mut [&mut source]);
+
+    assert_eq!(source.cancelled_sources(), 1);
+    assert!(!server.pointer_grabbed());
+}
+
+#[test]
+fn the_drag_icon_is_drawn_on_both_displays_where_it_straddles_the_seam() {
+    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    server.add_output(OutputConfig::virtual_display(
+        "HEADLESS-2",
+        Size::from(OUTPUT),
+    ));
+    let mut client = TestClient::connect(&mut server);
+    client.use_seat(&mut server);
+    client.join_seat(&mut server);
+    let window = image(RED, WINDOW);
+    client.show_window(&mut server, &shm(&window, WINDOW));
+    server.move_pointer_to(at(START), 1);
+    server.press_button(BTN_LEFT, true, 2);
+    roundtrip(&mut server, &mut [&mut client]);
+    let icon = image(BLUE, ICON);
+    client.start_drag(&mut server, &shm(&icon, ICON), (-ICON / 2, -ICON / 2));
+    let mut renderer = Renderer::new().expect("renderer");
+
+    server.move_pointer_to(at((OUTPUT.0 - 2, START.1)), 10);
+    client.exchange(&mut server);
+    let mut blue_on = |output: &str, x: i32| {
+        renderer.render_output(&mut server, output).expect("frame");
+        let snapshot = renderer.snapshot_output(output).expect("read back");
+        let index = ((START.1 * snapshot.size.w + x) * 4) as usize;
+        snapshot.rgba[index..index + 3] == DRAWN_BLUE
+    };
+
+    assert!(blue_on("HEADLESS-1", OUTPUT.0 - 6));
+    assert!(blue_on("HEADLESS-2", 2));
 }

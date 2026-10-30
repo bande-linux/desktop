@@ -21,9 +21,17 @@ impl Globals {
             && self.dnd.accepts
         {
             offer.accept(serial, Some(TEXT.to_owned()));
-            offer.set_actions(DndAction::Copy | DndAction::Move, DndAction::Move);
         }
         self.dnd.offer = offer;
+        self.drag_moved();
+    }
+
+    pub(crate) fn drag_moved(&mut self) {
+        if let Some(offer) = &self.dnd.offer
+            && self.dnd.accepts
+        {
+            offer.set_actions(DndAction::Copy | DndAction::Move, DndAction::Move);
+        }
     }
 
     pub(crate) fn drag_dropped(&mut self) {

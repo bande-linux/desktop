@@ -441,6 +441,7 @@ impl Headless {
         self.state.deliver_pending_insert();
         self.state.activate_next_app_if_the_windowless_one_quit();
         self.state.popups.cleanup();
+        self.state.end_orphaned_drag();
         self.state.refocus_pointer();
         self.display.flush_clients()
     }
@@ -675,14 +676,15 @@ impl Headless {
     ) -> Composed<OutputElement> {
         let mut drawn = Vec::new();
         let pointer_here = self.state.pointer_screen() == screen;
-        let (mut elements, icon): (Vec<OutputElement>, _) = if with_cursor && pointer_here {
-            let (dragged, icon) = self.state.drag_icon_elements(renderer, scale);
-            let mut elements = self.cursor_elements(renderer, scale);
-            elements.extend(dragged);
-            (elements, icon)
-        } else {
-            (Vec::new(), None)
+        let (dragged, icon) = match with_cursor {
+            true => self.state.drag_icon_elements(renderer, scale),
+            false => (Vec::new(), None),
         };
+        let mut elements: Vec<OutputElement> = match with_cursor && pointer_here {
+            true => self.cursor_elements(renderer, scale),
+            false => Vec::new(),
+        };
+        elements.extend(dragged);
         elements.extend(self.state.flash_elements(screen, scale));
         elements.extend(self.state.source_hud_element(renderer, screen, scale));
         elements.extend(self.state.switcher_elements(renderer, screen, scale));
@@ -788,16 +790,17 @@ impl Headless {
         }
         let at: Point<i32, Physical> = state.pointer_location.to_physical(scale).to_i32_round();
         let busy = CursorImageStatus::Named(CursorIcon::Wait);
+        let dragging = state.drag_cursor().map(CursorImageStatus::Named);
         let over_hung_app = state
             .seat
             .get_pointer()
             .and_then(|pointer| pointer.current_focus())
             .and_then(|surface| surface.client())
             .is_some_and(|owner| state.watchdog.is_unresponsive(&owner.id()));
-        let status = if over_hung_app {
-            &busy
-        } else {
-            &state.cursor_status
+        let status = match &dragging {
+            Some(dragging) => dragging,
+            None if over_hung_app => &busy,
+            None => &state.cursor_status,
         };
         match status {
             CursorImageStatus::Hidden => Vec::new(),
@@ -918,14 +921,15 @@ impl State {
         if let CursorImageStatus::Named(icon) = self.cursor_status {
             self.load_named_cursor(icon);
         }
+        if let Some(icon) = self.drag_cursor() {
+            self.load_named_cursor(icon);
+        }
     }
 
     pub(crate) fn use_cursor_theme(&mut self, theme: CursorTheme) {
         self.cursor_theme = theme;
         self.named_cursors.clear();
-        if let CursorImageStatus::Named(icon) = self.cursor_status {
-            self.load_named_cursor(icon);
-        }
+        self.reload_cursor();
         self.needs_redraw = true;
     }
 

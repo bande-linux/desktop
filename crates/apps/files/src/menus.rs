@@ -12,6 +12,7 @@ pub enum Command {
     Rename,
     Duplicate,
     Copy,
+    Cut,
     ShowInEnclosingFolder,
     Trash,
     PutBack,
@@ -30,13 +31,14 @@ pub enum Command {
 
 const OPEN_WITH: &str = "open-with:";
 
-const ACTIONS: [(&str, Command); 22] = [
+const ACTIONS: [(&str, Command); 23] = [
     ("open", Command::Open),
     ("quick-look", Command::QuickLook),
     ("info", Command::Info),
     ("rename", Command::Rename),
     ("duplicate", Command::Duplicate),
     ("copy", Command::Copy),
+    ("cut", Command::Cut),
     ("show-in-enclosing-folder", Command::ShowInEnclosingFolder),
     ("trash", Command::Trash),
     ("put-back", Command::PutBack),
@@ -142,6 +144,7 @@ pub fn items_menu(selection: &Selection) -> Menu {
             .enabled(count == 1),
     );
     items.push(item("menu-duplicate", &Command::Duplicate).shortcut("Super+D"));
+    items.push(item("menu-cut", &Command::Cut).shortcut("Super+X"));
     items.push(item("menu-copy", &Command::Copy).shortcut("Super+C"));
     items.push(MenuItem::separator());
     let trash = if count == 1 {
@@ -149,7 +152,14 @@ pub fn items_menu(selection: &Selection) -> Menu {
     } else {
         L10N.tr_args("menu-move-items-to-trash", [("count", count.into())])
     };
-    items.push(MenuItem::new(&trash, action(&Command::Trash)).shortcut("Super+Backspace"));
+    items.push(
+        MenuItem::new(&trash, action(&Command::Trash))
+            .shortcut("Super+Backspace")
+            .alternate(
+                item("menu-delete-immediately", &Command::DeleteImmediately)
+                    .shortcut("Alt+Super+Backspace"),
+            ),
+    );
     Menu::new(items)
 }
 
@@ -160,6 +170,7 @@ pub struct Folder {
     pub sort: SortBy,
     pub list: bool,
     pub hidden_shown: bool,
+    pub paste: bool,
 }
 
 pub fn folder_menu(folder: Folder) -> Menu {
@@ -172,7 +183,9 @@ pub fn folder_menu(folder: Folder) -> Menu {
     } else {
         vec![
             item("menu-new-folder", &Command::NewFolder).shortcut("Shift+Super+N"),
-            item("menu-paste", &Command::Paste).shortcut("Super+V"),
+            item("menu-paste", &Command::Paste)
+                .shortcut("Super+V")
+                .enabled(folder.paste),
         ]
     };
     let sorts = SORTS

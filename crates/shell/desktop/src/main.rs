@@ -16,14 +16,14 @@ use unbound_fs::{
     Action, Answer, Change, FolderWatch, Operations, Purpose, Resolution, Task, Trash,
 };
 use unbound_toolkit::{
-    App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement, Point, Role, Scene,
-    Scheme, Window, WindowEvent,
+    App, DragAction, DragEvent, Edges, Image, KeyboardFocus, LayerKind, LayerOptions,
+    MenuPlacement, Point, Role, Scene, Scheme, Transfer, Window, WindowEvent,
 };
 use unbound_volumes::{eject, media_roots, mounted_volumes};
 use unbound_wallpaper::{Choice, Inbox, Outbox, Picture, Variant, choose, follow, inbox, render};
 use unbound_xdg::{
     Apps, DIRECTORY, DesktopEntry, OCTET_STREAM, UserDir, config_dirs, config_home, data_dirs,
-    find_icon, launch, launch_with, user_dir,
+    file_uri, find_icon, launch, launch_with, path_from_file_uri, user_dir,
 };
 
 const ICON_THEMES: [&str; 1] = ["Adwaita"];
@@ -35,6 +35,7 @@ type Loaded = (WallpaperKey, Option<(Picture, Luma)>);
 
 struct Surface {
     view: DesktopView,
+    paste_moves: bool,
     apps: Apps,
     operations: Operations,
     watch: FolderWatch,
@@ -347,7 +348,7 @@ impl Surface {
             };
             items_menu(&selection)
         } else {
-            desktop_menu(self.view.desktop().sort())
+            desktop_menu(self.view.desktop().sort(), window.clipboard_has_uris())
         };
         if let Err(error) = window.show_menu(menu, MenuPlacement::AtPoint(at)) {
             tracing::warn!("cannot show the menu: {error}");
@@ -395,6 +396,12 @@ impl Surface {
             match request {
                 Request::Open(paths) => self.open(window, paths),
                 Request::Trash(sources) => self.start(Task::Trash { sources }, Action::Trash),
+                Request::Delete(sources) => {
+                    let task = Task::Delete { sources };
+                    if let Err(error) = self.operations.start(task, Purpose::Erase) {
+                        tracing::warn!("cannot delete: {error}");
+                    }
+                }
                 Request::Duplicate(sources) => {
                     self.start(Task::Duplicate { sources }, Action::Duplicate)
                 }
@@ -451,12 +458,29 @@ impl Surface {
                         self.launch_with(window, &app, &paths);
                     }
                 }
-                Request::Copy(paths) => {
-                    let text: Vec<String> = paths
-                        .iter()
-                        .map(|path| path.to_string_lossy().into_owned())
-                        .collect();
-                    window.copy(&text.join("\n"));
+                Request::Copy(paths) => window.copy_transfer(file_transfer(&paths)),
+                Request::StartDrag(paths) => {
+                    let icon = self.view.drag_icon();
+                    let actions = [DragAction::Copy, DragAction::Move];
+                    if let Err(error) =
+                        window.start_drag(file_transfer(&paths), &actions, Some(icon))
+                    {
+                        tracing::warn!("cannot start dragging: {error}");
+                        self.view.drag_finished();
+                    }
+                }
+                Request::Cut(paths) => window.copy_transfer(file_transfer(&paths).cut()),
+                Request::Paste { moves } => {
+                    self.paste_moves = moves;
+                    if let Err(error) = window.paste_transfer() {
+                        tracing::warn!("cannot paste: {error}");
+                    }
+                }
+                Request::CopyText(text) => window.copy(&text),
+                Request::PasteText => {
+                    if let Err(error) = window.paste() {
+                        tracing::warn!("cannot paste: {error}");
+                    }
                 }
                 Request::Eject(paths) => eject(paths),
                 Request::SetWallpaper(path) => choose(path),
@@ -475,6 +499,34 @@ impl Surface {
         }
         self.save_layouts();
         window.request_redraw();
+    }
+
+    fn paste_files(&mut self, transfer: &Transfer) {
+        let sources: Vec<PathBuf> = transfer
+            .uris
+            .iter()
+            .filter_map(|uri| path_from_file_uri(uri))
+            .collect();
+        if sources.is_empty() {
+            return;
+        }
+        let destination = self.desktop_dir.clone();
+        match std::mem::take(&mut self.paste_moves) || transfer.cut {
+            true => self.start(
+                Task::Move {
+                    sources,
+                    destination,
+                },
+                Action::Move,
+            ),
+            false => self.start(
+                Task::Copy {
+                    sources,
+                    destination,
+                },
+                Action::Copy,
+            ),
+        }
     }
 
     fn poll_operation(&mut self, index: usize) {
@@ -535,6 +587,40 @@ impl App for Surface {
                     self.view.run_command(command, Instant::now());
                 }
                 self.run_requests(window);
+            }
+            WindowEvent::Drag(drag) => {
+                match drag {
+                    DragEvent::Entered {
+                        position,
+                        uris: true,
+                        ..
+                    }
+                    | DragEvent::Moved(position) => {
+                        let action = self.view.drag_moved(position);
+                        window.accept_drag(action);
+                    }
+                    DragEvent::Entered { .. } => window.accept_drag(None),
+                    DragEvent::Left => self.view.drag_left(),
+                    DragEvent::Dropped {
+                        position,
+                        transfer,
+                        action,
+                    } => {
+                        self.view
+                            .dropped(position, &transfer.uris, action, Instant::now());
+                    }
+                    DragEvent::Finished(_) => self.view.drag_finished(),
+                }
+                self.run_requests(window);
+            }
+            WindowEvent::PastedTransfer(transfer) => {
+                self.paste_files(&transfer);
+                window.request_redraw();
+            }
+            WindowEvent::Pasted(text) => {
+                if self.view.pasted(&text) {
+                    window.request_redraw();
+                }
             }
             WindowEvent::Focus(focused) => {
                 self.view.set_focused(focused);
@@ -613,6 +699,10 @@ impl App for Surface {
     }
 }
 
+fn file_transfer(paths: &[PathBuf]) -> Transfer {
+    Transfer::uris(paths.iter().map(|path| file_uri(path)).collect())
+}
+
 fn desktop_folder(home: &Path) -> PathBuf {
     let dirs = config_home()
         .map(|config| config.join("user-dirs.dirs"))
@@ -661,6 +751,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let data_dirs = data_dirs();
     let mut surface = Surface {
         view: DesktopView::new(appearance, layouts),
+        paste_moves: false,
         apps: Apps::load(data_dirs.clone(), &config_dirs()),
         operations: Operations::new(trash),
         watch: FolderWatch::new()?,
@@ -680,6 +771,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         scheme: appearance.scheme,
         viewport: None,
     };
+    let folder = surface.desktop_dir.clone();
+    surface.view.set_folder(folder);
     unbound_toolkit::run(&mut window, &mut surface)?;
     Ok(())
 }

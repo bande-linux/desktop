@@ -61,12 +61,17 @@ impl FilesView {
             (Hit::Column(column), None) => *column == active,
             _ => false,
         };
-        let Some(rect) = self
-            .hits
-            .iter()
-            .find(|(_, hit)| anchor(hit))
-            .map(|(rect, _)| *rect)
-        else {
+        let rect = match self.browser.single() {
+            true => selected
+                .and_then(|row| self.table_row_bounds(row))
+                .or_else(|| self.frame_of(self.table)),
+            false => self
+                .hits
+                .iter()
+                .find(|(_, hit)| anchor(hit))
+                .map(|(rect, _)| *rect),
+        };
+        let Some(rect) = rect else {
             return;
         };
         let at = Point::new(rect.x + 24.0, rect.y + rect.height);
@@ -78,11 +83,11 @@ impl FilesView {
         self.show_menu(menu, at);
     }
 
-    fn show_menu(&mut self, menu: Menu, at: Point) {
+    pub(crate) fn show_menu(&mut self, menu: Menu, at: Point) {
         self.requests.push(Request::ShowMenu { menu, at });
     }
 
-    fn selection_menu(&self) -> Menu {
+    pub(crate) fn selection_menu(&self) -> Menu {
         let selection = self.browser.selection();
         let trashed =
             !selection.is_empty() && selection.iter().all(|entry| entry.trashed.is_some());
@@ -117,13 +122,14 @@ impl FilesView {
         })
     }
 
-    fn folder_menu(&self) -> Menu {
+    pub(crate) fn folder_menu(&self) -> Menu {
         folder_menu(Folder {
             trash: self.browser.active_column().location == Location::Trash,
             trash_empty: !self.trash_full,
             sort: self.browser.sort().by,
             list: self.browser.single(),
             hidden_shown: self.browser.shows_hidden(),
+            paste: self.clipboard_files,
         })
     }
 
@@ -143,7 +149,8 @@ impl FilesView {
             Command::Info => self.show_inspector(),
             Command::Rename => self.start_rename(),
             Command::Duplicate => self.duplicate(),
-            Command::Copy => self.copy_selection(),
+            Command::Copy => self.copy_selection(false),
+            Command::Cut => self.copy_selection(true),
             Command::ShowInEnclosingFolder => self.close_search(),
             Command::Trash | Command::PutBack => self.trash_or_put_back(),
             Command::DeleteImmediately => self.confirm_delete(),

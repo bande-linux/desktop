@@ -5,14 +5,18 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Instant;
 
+use accesskit::TreeUpdate;
 use unbound_app_menu::{AppMenu, Standard};
 use unbound_files::{Browser, FilesView, Location, Request, Row, rows, without_bookmark};
 use unbound_fs::Trash;
 use unbound_toolkit::{
-    App, Appearance, MenuPlacement, Role, Scene, TextSystem, Window, WindowEvent,
+    App, Appearance, DragAction, DragEvent, MenuPlacement, Rect, Role, Scene, TextSystem, Transfer,
+    Window, WindowEvent,
 };
 use unbound_volumes::{eject, media_roots};
-use unbound_xdg::{Apps, config_dirs, config_home, data_dirs, launch_with, path_from_file_uri};
+use unbound_xdg::{
+    Apps, config_dirs, config_home, data_dirs, file_uri, launch_with, path_from_file_uri,
+};
 
 const APP_ID: &str = "org.unbound.Files";
 const WINDOW_SIZE: (u32, u32) = (1040, 620);
@@ -47,6 +51,8 @@ fn remove_bookmark(folder: &Path) -> std::io::Result<()> {
 
 impl Files {
     fn menu_bar_action(&mut self, window: &mut Window, action: &str) -> bool {
+        self.view
+            .set_clipboard_has_files(window.clipboard_has_uris());
         let result = match Standard::parse(action) {
             Some(Standard::Hide | Standard::Minimize) => window.minimize(),
             Some(Standard::Zoom) => window.toggle_zoom(),
@@ -74,6 +80,27 @@ impl Files {
                     }
                 }
                 Request::CopyText(text) => window.copy(&text),
+                Request::CopyFiles { paths, cut } => {
+                    let uris = paths.iter().map(|path| file_uri(path)).collect();
+                    let transfer = Transfer::uris(uris);
+                    window.copy_transfer(if cut { transfer.cut() } else { transfer });
+                }
+                Request::StartDrag(paths) => {
+                    let icon = self.view.drag_icon();
+                    let uris = paths.iter().map(|path| file_uri(path)).collect();
+                    let actions = [DragAction::Copy, DragAction::Move];
+                    if let Err(error) =
+                        window.start_drag(Transfer::uris(uris), &actions, Some(icon))
+                    {
+                        tracing::warn!("cannot start dragging: {error}");
+                        self.view.drag_finished();
+                    }
+                }
+                Request::PasteFiles => {
+                    if let Err(error) = window.paste_transfer() {
+                        tracing::warn!("cannot paste: {error}");
+                    }
+                }
                 Request::Paste => {
                     if let Err(error) = window.paste() {
                         tracing::warn!("cannot paste: {error}");
@@ -96,6 +123,7 @@ impl Files {
             window.set_title(&title);
             self.title = title;
         }
+        window.set_cursor(self.view.cursor());
         window.request_redraw();
     }
 }
@@ -107,14 +135,43 @@ impl App for Files {
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
+        self.view
+            .set_clipboard_has_files(window.clipboard_has_uris());
         let changed = match event {
             WindowEvent::AppearanceChanged(appearance) => {
                 self.view.set_palette(appearance.palette());
                 true
             }
             WindowEvent::Input(input) => self.view.handle(&input),
+            WindowEvent::Accessibility(request) => self.view.perform(&request),
             WindowEvent::Pasted(text) => self.view.pasted(&text),
+            WindowEvent::PastedTransfer(transfer) => {
+                self.view
+                    .pasted_files(&transfer.uris, &transfer.text, transfer.cut)
+            }
             WindowEvent::MenuAction(action) => self.view.menu_action(&action),
+            WindowEvent::Drag(drag) => {
+                match drag {
+                    DragEvent::Entered { position, uris, .. } => {
+                        let action = self.view.drag_entered(position, uris);
+                        window.accept_drag(action);
+                    }
+                    DragEvent::Moved(position) => {
+                        let action = self.view.drag_moved(position);
+                        window.accept_drag(action);
+                    }
+                    DragEvent::Left => self.view.drag_left(),
+                    DragEvent::Dropped {
+                        position,
+                        transfer,
+                        action,
+                    } => {
+                        self.view.dropped(position, &transfer.uris, action);
+                    }
+                    DragEvent::Finished(_) => self.view.drag_finished(),
+                }
+                true
+            }
             WindowEvent::Focus(true) => {
                 if let Some(Err(error)) = self.app_menu.as_ref().map(AppMenu::claim) {
                     tracing::warn!("{error}");
@@ -159,6 +216,18 @@ impl App for Files {
 
     fn deadline(&self) -> Option<Instant> {
         self.view.deadline()
+    }
+
+    fn animating(&self) -> bool {
+        self.view.animating()
+    }
+
+    fn text_input_area(&self) -> Option<Rect> {
+        self.view.text_input_area()
+    }
+
+    fn accessibility(&self) -> Option<TreeUpdate> {
+        Some(self.view.accessibility())
     }
 
     fn tick(&mut self, window: &mut Window, now: Instant) {

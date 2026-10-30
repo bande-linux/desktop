@@ -1,24 +1,30 @@
+use std::cell::Cell;
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
+use unbound_fs::same_volume;
 use unbound_toolkit::ui::{
-    Animated, Event, Key, Modifiers, NameEditor, Pointer, PointerButton, Spring,
+    Alert, Animated, ClipboardRequest, Context, Event, Key, Modifiers, Pointer, PointerButton,
+    Size, Spring, TextField, Ui, Widget, WidgetId,
 };
 use unbound_toolkit::{
-    Appearance, Color, Image, Item as SceneItem, Palette, Paragraph, Point, Rect, Scene, Shape,
-    TextAlign, TextStyle, TextSystem,
+    Appearance, Color, DragAction, Image, Item as SceneItem, Palette, Paragraph, Point, Rect,
+    Scene, Shape, TextAlign, TextStyle, TextSystem,
 };
 
 use crate::L10N;
 use crate::backdrop::{Backdrop, Layer, placeholder};
+use crate::editor::{Anchor, Inset};
 use crate::menus::Command;
 use crate::model::{
-    Bounds, Desktop, Direction, Grid, Item, Kind, LABEL_WIDTH, Positions, SortBy, icon_bounds,
-    label_bounds,
+    Bounds, Desktop, Direction, Grid, Item, Kind, LABEL_WIDTH, Positions, Slot, SortBy,
+    icon_bounds, label_bounds,
 };
 use crate::places::Layouts;
+use unbound_xdg::path_from_file_uri;
 
 const LABEL_SIZE: f32 = 12.0;
 const LABEL_LINES: usize = 2;
@@ -38,12 +44,14 @@ const FIRST_ITEM_NODE: u64 = 2;
 pub enum Request {
     Open(Vec<PathBuf>),
     Trash(Vec<PathBuf>),
+    Delete(Vec<PathBuf>),
     Rename {
         path: PathBuf,
         name: String,
     },
     NewFolder,
     Duplicate(Vec<PathBuf>),
+    StartDrag(Vec<PathBuf>),
     Transfer {
         sources: Vec<PathBuf>,
         folder: PathBuf,
@@ -63,6 +71,12 @@ pub enum Request {
         paths: Vec<PathBuf>,
     },
     Copy(Vec<PathBuf>),
+    Cut(Vec<PathBuf>),
+    Paste {
+        moves: bool,
+    },
+    CopyText(String),
+    PasteText,
     Eject(Vec<PathBuf>),
     SetWallpaper(PathBuf),
     ChangeWallpaper,
@@ -84,15 +98,19 @@ enum Gesture {
     },
     Drag {
         from: Point,
-        to: Point,
         paths: Vec<PathBuf>,
-        copy: bool,
     },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum Target {
+    Folder(PathBuf),
+    Desktop,
 }
 
 struct Rename {
     path: PathBuf,
-    editor: NameEditor,
+    field: WidgetId,
 }
 
 struct Motion {
@@ -118,7 +136,13 @@ pub struct DesktopView {
     labels: HashMap<PathBuf, Label>,
     motions: HashMap<PathBuf, Motion>,
     backdrop: Backdrop,
-    text: TextSystem,
+    ui: Ui,
+    anchor: WidgetId,
+    editing: bool,
+    deleting: Option<(Vec<PathBuf>, Rc<Cell<bool>>)>,
+    folder: PathBuf,
+    drop: Option<(Target, Option<DragAction>)>,
+    arriving: Option<(Vec<String>, Slot)>,
     appearance: Appearance,
     focused: bool,
     size: (f32, f32),
@@ -180,6 +204,13 @@ pub fn fitted_label(text: &mut TextSystem, name: &str, style: TextStyle, width: 
 
 impl DesktopView {
     pub fn new(appearance: Appearance, layouts: Layouts) -> Self {
+        let anchor = Anchor::new();
+        let anchor_id = anchor.id();
+        let mut ui = Ui::new(
+            Box::new(anchor),
+            Context::new(TextSystem::new(), appearance.palette()),
+        );
+        ui.set_appearance(appearance);
         Self {
             desktop: Desktop::new(Grid::new(Bounds::new(0.0, 0.0, 1.0, 1.0))),
             layouts,
@@ -188,7 +219,13 @@ impl DesktopView {
             labels: HashMap::new(),
             motions: HashMap::new(),
             backdrop: Backdrop::default(),
-            text: TextSystem::new(),
+            ui,
+            anchor: anchor_id,
+            editing: false,
+            deleting: None,
+            folder: PathBuf::new(),
+            drop: None,
+            arriving: None,
             appearance,
             focused: false,
             size: (1.0, 1.0),
@@ -272,7 +309,17 @@ impl DesktopView {
         if let Some(rename) = &self.rename
             && self.desktop.item(&rename.path).is_none()
         {
-            self.rename = None;
+            self.cancel_rename();
+        }
+        if let Some((names, slot)) = self.arriving.take() {
+            let (arrived, waiting): (Vec<String>, Vec<String>) = names
+                .into_iter()
+                .partition(|name| self.desktop.item(&self.folder.join(name)).is_some());
+            let paths: Vec<PathBuf> = arrived.iter().map(|name| self.folder.join(name)).collect();
+            self.desktop.place_at(&paths, slot);
+            if !waiting.is_empty() {
+                self.arriving = Some((waiting, slot));
+            }
         }
         self.retarget(now);
         self.populated = true;
@@ -302,6 +349,7 @@ impl DesktopView {
 
     pub fn set_appearance(&mut self, appearance: Appearance) {
         self.appearance = appearance;
+        self.ui.set_appearance(appearance);
         self.labels.clear();
     }
 
@@ -380,27 +428,122 @@ impl DesktopView {
         if item.kind == Kind::Volume {
             return;
         }
+        let name = item.name.clone();
+        let stem = match item.kind {
+            Kind::File => Path::new(&name)
+                .file_stem()
+                .map_or(name.len(), |stem| stem.len()),
+            _ => name.len(),
+        };
+        let mut field = TextField::new("", &name, |_| {}).borderless(LABEL_SIZE);
+        field.select(0..stem);
+        let field_id = field.id();
+        let at = self.editor_bounds(path).map(rect).unwrap_or_default();
+        if let Some(anchor) = self.ui.widget_as::<Anchor>(self.anchor) {
+            anchor.hold(Some(Box::new(field)), at);
+        }
+        self.ui.perform(&ActionRequest {
+            action: Action::Focus,
+            target_tree: TreeId::ROOT,
+            target_node: field_id.into(),
+            data: None,
+        });
+        self.ui.layout(Size::new(self.size.0, self.size.1));
         self.rename = Some(Rename {
             path: path.to_path_buf(),
-            editor: NameEditor::new(&item.name, item.kind == Kind::Folder),
+            field: field_id,
         });
     }
 
+    fn cancel_rename(&mut self) {
+        self.rename = None;
+        self.editing = false;
+        if let Some(anchor) = self.ui.widget_as::<Anchor>(self.anchor) {
+            anchor.hold(None, Rect::default());
+        }
+    }
+
     fn commit_rename(&mut self) {
-        let Some(rename) = self.rename.take() else {
+        let Some(rename) = self.rename.as_ref() else {
             return;
         };
-        let name = rename.editor.text().trim().to_owned();
+        let path = rename.path.clone();
+        let name = self
+            .ui
+            .widget_as::<TextField>(rename.field)
+            .map(|field| field.text().trim().to_owned())
+            .unwrap_or_default();
+        self.cancel_rename();
         let unchanged = self
             .desktop
-            .item(&rename.path)
+            .item(&path)
             .is_some_and(|item| item.name == name);
         if !name.is_empty() && !unchanged {
-            self.requests.push(Request::Rename {
-                path: rename.path,
-                name,
-            });
+            self.requests.push(Request::Rename { path, name });
         }
+    }
+
+    fn edit(&mut self, event: &Event) -> bool {
+        let handled = self.ui.handle(event);
+        match self.ui.take_clipboard_request() {
+            Some(ClipboardRequest::Copy(text)) => self.requests.push(Request::CopyText(text)),
+            Some(ClipboardRequest::Paste) => self.requests.push(Request::PasteText),
+            None => {}
+        }
+        if !self.ui.has_sheet()
+            && let Some((paths, confirmed)) = self.deleting.take()
+            && confirmed.get()
+        {
+            self.requests.push(Request::Delete(paths));
+        }
+        handled
+    }
+
+    fn cut(&mut self, paths: Vec<PathBuf>) {
+        let files = paths
+            .into_iter()
+            .filter(|path| {
+                self.desktop
+                    .item(path)
+                    .is_some_and(|item| item.kind != Kind::Volume)
+            })
+            .collect::<Vec<_>>();
+        if !files.is_empty() {
+            self.requests.push(Request::Cut(files));
+        }
+    }
+
+    fn ask_to_delete(&mut self, paths: Vec<PathBuf>) {
+        let deletable = paths
+            .into_iter()
+            .filter(|path| {
+                self.desktop
+                    .item(path)
+                    .is_some_and(|item| item.kind != Kind::Volume)
+            })
+            .collect::<Vec<_>>();
+        if deletable.is_empty() || self.ui.has_sheet() {
+            return;
+        }
+        self.cancel_rename();
+        let confirmed = Rc::new(Cell::new(false));
+        let chosen = confirmed.clone();
+        let alert = Alert::new(
+            &L10N.tr_args("delete-title", [("count", deletable.len().into())]),
+            &L10N.tr("cannot-undo"),
+            move |action| chosen.set(action == "delete"),
+        )
+        .cancel(&L10N.tr("cancel"), "cancel")
+        .primary(&L10N.tr("delete"), "delete");
+        self.ui
+            .present_sheet(Inset::new(self.desktop.grid().area.y, alert));
+        self.deleting = Some((deletable, confirmed));
+        self.gesture = Gesture::Idle;
+        self.animating = true;
+    }
+
+    pub fn pasted(&mut self, text: &str) -> bool {
+        self.ui.pasted(text)
     }
 
     fn editor_bounds(&self, path: &Path) -> Option<Bounds> {
@@ -415,40 +558,43 @@ impl DesktopView {
     }
 
     pub fn handle(&mut self, event: &Event, now: Instant) -> bool {
+        if self.ui.has_sheet() {
+            self.edit(event);
+            return true;
+        }
         match event {
-            Event::PointerDown(pointer) => self.pointer_down(pointer),
+            Event::PointerDown(pointer) => self.pointer_down(event, pointer),
+            Event::PointerMove(_) | Event::PointerUp(_) if self.editing => {
+                if matches!(event, Event::PointerUp(_)) {
+                    self.editing = false;
+                }
+                self.edit(event)
+            }
             Event::PointerMove(pointer) => self.pointer_move(pointer),
-            Event::PointerUp(pointer) => self.pointer_up(pointer, now),
+            Event::PointerUp(pointer) => self.pointer_up(pointer),
             Event::ModifiersChanged(modifiers) => {
                 self.modifiers = *modifiers;
-                if let Gesture::Drag { copy, .. } = &mut self.gesture {
-                    *copy = modifiers.alt;
-                }
                 true
             }
             Event::Key { key, modifiers } => self.key(*key, *modifiers, now),
-            Event::Commit(text) => match &mut self.rename {
-                Some(rename) => {
-                    rename.editor.insert(text);
-                    true
-                }
-                None => {
-                    self.type_select(text, now);
-                    true
-                }
-            },
+            Event::Commit(_) | Event::Preedit { .. } if self.rename.is_some() => self.edit(event),
+            Event::Commit(text) => {
+                self.type_select(text, now);
+                true
+            }
             _ => false,
         }
     }
 
-    fn pointer_down(&mut self, pointer: &Pointer) -> bool {
+    fn pointer_down(&mut self, event: &Event, pointer: &Pointer) -> bool {
         let at = pointer.position;
         if let Some(rename) = &self.rename {
             let inside = self
                 .editor_bounds(&rename.path)
                 .is_some_and(|bounds| bounds.contains(at.x, at.y));
             if inside {
-                return false;
+                self.editing = true;
+                return self.edit(event);
             }
             self.commit_rename();
         }
@@ -526,12 +672,12 @@ impl DesktopView {
                 if hit.is_none() || distance(*from, at) < DRAG_THRESHOLD {
                     return false;
                 }
+                let paths = self.desktop.selected();
                 self.gesture = Gesture::Drag {
                     from: *from,
-                    to: at,
-                    paths: self.desktop.selected(),
-                    copy: pointer.modifiers.alt,
+                    paths: paths.clone(),
                 };
+                self.requests.push(Request::StartDrag(paths));
                 true
             }
             Gesture::Band { from, to, keep } => {
@@ -541,15 +687,11 @@ impl DesktopView {
                 self.desktop.select_in(area, &keep);
                 true
             }
-            Gesture::Drag { to, copy, .. } => {
-                *to = at;
-                *copy = pointer.modifiers.alt;
-                true
-            }
+            Gesture::Drag { .. } => false,
         }
     }
 
-    fn pointer_up(&mut self, pointer: &Pointer, now: Instant) -> bool {
+    fn pointer_up(&mut self, pointer: &Pointer) -> bool {
         if !pointer.is_primary() {
             return false;
         }
@@ -570,46 +712,161 @@ impl DesktopView {
                 true
             }
             Gesture::Pressed { hit: None, .. } | Gesture::Band { .. } => true,
-            Gesture::Drag {
-                from, to, paths, ..
-            } => {
-                self.drop_items(from, to, paths, pointer.modifiers.alt, now);
-                true
-            }
+            Gesture::Drag { .. } => false,
         }
     }
 
-    fn drop_items(
-        &mut self,
-        from: Point,
-        to: Point,
-        paths: Vec<PathBuf>,
-        copy: bool,
-        now: Instant,
-    ) {
-        let target = self
-            .desktop
-            .hit(to.x, to.y)
+    pub fn set_folder(&mut self, folder: PathBuf) {
+        self.folder = folder;
+    }
+
+    pub fn drag_icon(&mut self) -> Scene {
+        let Gesture::Drag { from, paths } = self.gesture.clone() else {
+            return Scene {
+                width: 1,
+                height: 1,
+                background: Color::hex(0).with_alpha(0),
+                items: Vec::new(),
+            };
+        };
+        let palette = self.appearance.palette();
+        let grid = self.desktop.grid();
+        let cells: Vec<(Item, Bounds)> = paths
+            .iter()
+            .filter_map(|path| {
+                let item = self.desktop.item(path)?.clone();
+                let cell = grid.cell(self.desktop.slot_of(path)?);
+                Some((item, cell))
+            })
+            .collect();
+        let left = cells.iter().map(|(_, cell)| cell.x).fold(from.x, f32::min);
+        let top = cells.iter().map(|(_, cell)| cell.y).fold(from.y, f32::min);
+        let right = cells
+            .iter()
+            .map(|(_, cell)| cell.x + cell.width)
+            .fold(from.x, f32::max);
+        let bottom = cells
+            .iter()
+            .map(|(_, cell)| cell.y + cell.height)
+            .fold(from.y, f32::max);
+        let mut items = Vec::new();
+        for (item, cell) in cells {
+            self.paint_item(&item, cell, 1.0, palette, &mut items);
+        }
+        Scene {
+            width: (right - left).ceil().max(1.0) as u32,
+            height: (bottom - top).ceil().max(1.0) as u32,
+            background: Color::hex(0).with_alpha(0),
+            items: vec![SceneItem::Translate {
+                offset: Point::new(-left, -top),
+                items: vec![SceneItem::Opacity { alpha: 0.75, items }],
+            }],
+        }
+    }
+
+    fn dragged(&self) -> &[PathBuf] {
+        match &self.gesture {
+            Gesture::Drag { paths, .. } => paths,
+            _ => &[],
+        }
+    }
+
+    fn target(&self, at: Point) -> Target {
+        self.desktop
+            .hit(at.x, at.y)
             .filter(|item| matches!(item.kind, Kind::Folder | Kind::Volume))
-            .filter(|item| !paths.contains(&item.path))
-            .map(|item| item.path.clone());
-        if let Some(folder) = target {
-            self.requests.push(Request::Transfer {
-                sources: paths,
+            .filter(|item| !self.dragged().contains(&item.path))
+            .map_or(Target::Desktop, |item| Target::Folder(item.path.clone()))
+    }
+
+    pub fn drag_moved(&mut self, at: Point) -> Option<DragAction> {
+        let target = self.target(at);
+        let dragged = self.dragged();
+        let action = match &target {
+            Target::Desktop => Some(DragAction::Move),
+            Target::Folder(folder) => {
+                let reference = dragged.first().unwrap_or(&self.folder);
+                match same_volume(reference, folder) {
+                    true => Some(DragAction::Move),
+                    false => Some(DragAction::Copy),
+                }
+            }
+        };
+        self.drop = Some((target, action));
+        action
+    }
+
+    pub fn drag_left(&mut self) {
+        self.drop = None;
+    }
+
+    pub fn drag_finished(&mut self) {
+        self.drop = None;
+        if matches!(self.gesture, Gesture::Drag { .. }) {
+            self.gesture = Gesture::Idle;
+        }
+    }
+
+    pub fn dropped(
+        &mut self,
+        at: Point,
+        uris: &[String],
+        action: Option<DragAction>,
+        now: Instant,
+    ) -> bool {
+        self.drop = None;
+        let sources: Vec<PathBuf> = uris
+            .iter()
+            .filter_map(|uri| path_from_file_uri(uri))
+            .collect();
+        if sources.is_empty() {
+            return false;
+        }
+        let copy = action == Some(DragAction::Copy);
+        let own = match &self.gesture {
+            Gesture::Drag { from, paths } if *paths == sources => Some(*from),
+            _ => None,
+        };
+        match (self.target(at), own) {
+            (Target::Folder(folder), _) => self.requests.push(Request::Transfer {
+                sources,
                 folder,
                 copy,
-            });
-            return;
+            }),
+            (Target::Desktop, Some(_)) if copy => self.requests.push(Request::Duplicate(sources)),
+            (Target::Desktop, Some(from)) => {
+                let grid = self.desktop.grid();
+                let (start, end) = (grid.slot_at(from.x, from.y), grid.slot_at(at.x, at.y));
+                let by = (
+                    i64::from(end.column) - i64::from(start.column),
+                    i64::from(end.row) - i64::from(start.row),
+                );
+                self.desktop.move_items(&sources, by);
+                self.retarget(now);
+                self.remember();
+            }
+            (Target::Desktop, None) => {
+                let here = sources
+                    .iter()
+                    .all(|source| source.parent() == Some(self.folder.as_path()));
+                if here {
+                    return false;
+                }
+                let names = sources
+                    .iter()
+                    .filter_map(|source| source.file_name())
+                    .map(|name| name.to_string_lossy().into_owned())
+                    .collect();
+                self.arriving = Some((names, self.desktop.grid().slot_at(at.x, at.y)));
+                let folder = self.folder.clone();
+                self.requests.push(Request::Transfer {
+                    sources,
+                    folder,
+                    copy,
+                });
+            }
         }
-        let grid = self.desktop.grid();
-        let (start, end) = (grid.slot_at(from.x, from.y), grid.slot_at(to.x, to.y));
-        let by = (
-            i64::from(end.column) - i64::from(start.column),
-            i64::from(end.row) - i64::from(start.row),
-        );
-        self.desktop.move_items(&paths, by);
-        self.retarget(now);
-        self.remember();
+        true
     }
 
     fn type_select(&mut self, text: &str, now: Instant) {
@@ -627,15 +884,11 @@ impl DesktopView {
     fn rename_key(&mut self, key: Key, modifiers: Modifiers) -> bool {
         match key {
             Key::Enter => self.commit_rename(),
-            Key::Escape => self.rename = None,
+            Key::Escape => self.cancel_rename(),
             Key::Tab => {
                 self.commit_rename();
             }
-            _ => {
-                if let Some(rename) = &mut self.rename {
-                    return rename.editor.key(key, modifiers);
-                }
-            }
+            _ => return self.edit(&Event::Key { key, modifiers }),
         }
         true
     }
@@ -662,6 +915,9 @@ impl DesktopView {
                     self.start_rename(path);
                 }
             }
+            Key::Backspace | Key::Delete if command && modifiers.alt && !selected.is_empty() => {
+                self.ask_to_delete(selected);
+            }
             Key::Backspace | Key::Delete if command && !selected.is_empty() => {
                 self.requests.push(Request::Trash(selected));
             }
@@ -676,6 +932,10 @@ impl DesktopView {
                 'd' if modifiers.shift => self.requests.push(Request::OpenDesktopFolder),
                 'd' if !selected.is_empty() => self.requests.push(Request::Duplicate(selected)),
                 'c' if !selected.is_empty() => self.requests.push(Request::Copy(selected)),
+                'x' if !selected.is_empty() => self.cut(selected),
+                'v' => self.requests.push(Request::Paste {
+                    moves: modifiers.alt,
+                }),
                 'i' => {
                     if let Some(path) = selected.first() {
                         self.requests.push(Request::ShowInfo(path.clone()));
@@ -743,7 +1003,16 @@ impl DesktopView {
             },
             Command::Duplicate => Request::Duplicate(selected),
             Command::Copy => Request::Copy(selected),
+            Command::Cut => {
+                self.cut(selected);
+                return;
+            }
+            Command::Paste => Request::Paste { moves: false },
             Command::Trash => Request::Trash(selected),
+            Command::DeleteImmediately => {
+                self.ask_to_delete(selected);
+                return;
+            }
             Command::Eject => Request::Eject(selected),
             Command::SetWallpaper => match selected.first() {
                 Some(path) => Request::SetWallpaper(path.clone()),
@@ -772,10 +1041,10 @@ impl DesktopView {
             (false, false) => (LIGHT_TEXT, Some(Color::hex(0).with_alpha(150))),
         };
         let style = TextStyle::new(LABEL_SIZE, color).weight(TextStyle::MEDIUM);
-        let text = fitted_label(&mut self.text, &item.name, style, LABEL_WIDTH);
+        let text = fitted_label(&mut self.ui.context().text, &item.name, style, LABEL_WIDTH);
         let shadow = shadow.map(|shadow| {
             fitted_label(
-                &mut self.text,
+                &mut self.ui.context().text,
                 &item.name,
                 TextStyle {
                     color: shadow,
@@ -879,28 +1148,9 @@ impl DesktopView {
         let Some(field) = self.editor_bounds(&rename.path) else {
             return;
         };
-        let text = rename.editor.text().to_owned();
-        let selection = rename.editor.selection();
-        let cursor = rename.editor.cursor();
-        let style = TextStyle::new(LABEL_SIZE, palette.label_primary).weight(TextStyle::MEDIUM);
-        let measure = |system: &mut TextSystem, upto: usize| {
-            system
-                .paragraph(&text[..upto], style, None, TextAlign::Start)
-                .width()
-        };
-        let full = measure(&mut self.text, text.len());
-        let (start, end, caret) = (
-            measure(&mut self.text, selection.start),
-            measure(&mut self.text, selection.end),
-            measure(&mut self.text, cursor),
-        );
-        let inner = field.width - 8.0;
-        let scroll = if full <= inner {
-            -((inner - full) / 2.0).round()
-        } else {
-            (caret - inner + 2.0).max(0.0)
-        };
-        let text_x = field.x + 4.0 - scroll;
+        if let Some(anchor) = self.ui.widget_as::<Anchor>(self.anchor) {
+            anchor.move_to(rect(field));
+        }
         items.push(SceneItem::Shadow {
             shape: Shape::rounded(rect(field), 4.0),
             offset: Point::new(0.0, 1.0),
@@ -913,39 +1163,6 @@ impl DesktopView {
             width: 1.5,
             paint: palette.accent_color.into(),
         });
-        let mut inside = Vec::new();
-        if selection.is_empty() {
-            inside.push(fill(
-                Bounds::new(text_x + caret, field.y + 3.0, 1.0, field.height - 6.0),
-                0.0,
-                palette.label_primary,
-            ));
-        } else {
-            inside.push(fill(
-                Bounds::new(
-                    text_x + start,
-                    field.y + 2.0,
-                    end - start,
-                    field.height - 4.0,
-                ),
-                2.0,
-                palette.accent_color.with_alpha(90),
-            ));
-        }
-        let paragraph = self.text.paragraph(&text, style, None, TextAlign::Start);
-        inside.push(SceneItem::Text {
-            origin: Point::new(text_x, field.y + (field.height - paragraph.height()) / 2.0),
-            paragraph,
-        });
-        items.push(SceneItem::Clip {
-            shape: Shape::rect(rect(Bounds::new(
-                field.x + 2.0,
-                field.y,
-                field.width - 4.0,
-                field.height,
-            ))),
-            items: inside,
-        });
     }
 
     pub fn scene(&mut self, now: Instant) -> Scene {
@@ -956,10 +1173,9 @@ impl DesktopView {
         self.backdrop
             .paint(Rect::new(0.0, 0.0, width, height), now, &mut items);
         let mut animating = self.backdrop.is_fading(now);
-        let dragging: Option<(Vec<PathBuf>, Point)> = match &self.gesture {
-            Gesture::Drag {
-                from, to, paths, ..
-            } => Some((paths.clone(), Point::new(to.x - from.x, to.y - from.y))),
+        let dragging = self.dragged().to_vec();
+        let target = match &self.drop {
+            Some((Target::Folder(folder), Some(_))) => Some(folder.clone()),
             _ => None,
         };
         let entries: Vec<(Item, Bounds, f32)> = self
@@ -980,23 +1196,28 @@ impl DesktopView {
                 (item.clone(), cell, shown)
             })
             .collect();
-        let mut lifted = Vec::new();
         for (item, cell, shown) in &entries {
-            match &dragging {
-                Some((paths, _)) if paths.contains(&item.path) => {
-                    self.paint_item(item, *cell, *shown, palette, &mut lifted);
-                }
-                _ => self.paint_item(item, *cell, *shown, palette, &mut items),
+            if target.as_ref() == Some(&item.path) {
+                let icon = icon_bounds(*cell);
+                let well = Bounds::new(
+                    icon.x - 5.0,
+                    icon.y - 5.0,
+                    icon.width + 10.0,
+                    icon.height + 10.0,
+                );
+                items.push(fill(well, 9.0, palette.accent_color.with_alpha(90)));
             }
-        }
-        if let Some((_, offset)) = dragging {
-            items.push(SceneItem::Opacity {
-                alpha: 0.75,
-                items: vec![SceneItem::Translate {
-                    offset,
-                    items: lifted,
-                }],
-            });
+            match dragging.contains(&item.path) {
+                true => {
+                    let mut lifted = Vec::new();
+                    self.paint_item(item, *cell, *shown, palette, &mut lifted);
+                    items.push(SceneItem::Opacity {
+                        alpha: 0.4,
+                        items: lifted,
+                    });
+                }
+                false => self.paint_item(item, *cell, *shown, palette, &mut items),
+            }
         }
         if let Gesture::Band { from, to, .. } = &self.gesture {
             let band = Bounds::spanning((from.x, from.y), (to.x, to.y));
@@ -1008,7 +1229,12 @@ impl DesktopView {
             });
         }
         self.paint_editor(palette, &mut items);
-        self.animating = animating;
+        items.extend(
+            self.ui
+                .scene(width.round() as u32, height.round() as u32)
+                .items,
+        );
+        self.animating = animating || self.ui.is_animating();
         Scene {
             width: width.round() as u32,
             height: height.round() as u32,

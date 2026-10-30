@@ -40,6 +40,7 @@ pub fn app_menus() -> Vec<Entry> {
                 shortcut("menu-undo", "Super+Z"),
                 shortcut("menu-redo", "Shift+Super+Z"),
                 Entry::separator(),
+                shortcut("menu-cut", "Super+X"),
                 shortcut("menu-copy", "Super+C"),
                 shortcut("menu-paste", "Super+V"),
                 shortcut("menu-move-item-here", "Alt+Super+V"),

@@ -12,8 +12,8 @@ use unbound_files::{
 };
 use unbound_fs::{Sort, SortBy, Trash, list};
 use unbound_toolkit::ui::{Event, Key, Menu, Modifiers, Pointer, PointerButton};
-use unbound_toolkit::{Item, Palette, Point, Scheme, TextSystem};
-use unbound_xdg::Apps;
+use unbound_toolkit::{DragAction, Item, Palette, Point, Scheme, TextSystem};
+use unbound_xdg::{Apps, file_uri};
 
 fn names(folder: &Path, show_hidden: bool) -> Vec<String> {
     list(folder, show_hidden, Sort::default())
@@ -394,7 +394,7 @@ fn a_new_folder_is_renamed_in_place_and_undone() {
 
     view.handle(&command(Key::Character('N'), true));
     assert!(place.home().join("untitled folder").is_dir());
-    assert!(view.rename_editor().is_some());
+    assert!(view.renaming().is_some());
     for character in "Plans".chars() {
         view.handle(&press(Key::Character(character)));
     }
@@ -465,15 +465,17 @@ fn a_name_conflict_asks_and_keeps_both() {
     );
     view.handle(&command(Key::Character('c'), false));
     let copied = match view.take_requests().as_slice() {
-        [Request::CopyText(text)] => text.clone(),
+        [Request::CopyFiles { paths, cut: false }] => {
+            paths.iter().map(|path| file_uri(path)).collect::<Vec<_>>()
+        }
         other => panic!("{other:?}"),
     };
     fs::write(place.home().join("a.txt"), "other").expect("file");
     let mut view = place.view();
 
     view.handle(&command(Key::Character('v'), false));
-    assert_eq!(view.take_requests(), [Request::Paste]);
-    assert!(view.pasted(&copied));
+    assert_eq!(view.take_requests(), [Request::PasteFiles]);
+    assert!(view.pasted_files(&copied, "", false));
     run_until(&mut view, |view| view.sheet().is_some());
     assert!(matches!(view.sheet(), Some(Sheet::Conflict { .. })));
     view.handle(&press(Key::Enter));
@@ -491,6 +493,38 @@ fn a_name_conflict_asks_and_keeps_both() {
         view.browser().selected().map(|entry| entry.name.as_str()),
         Some("a 2.txt")
     );
+}
+
+#[test]
+fn cut_files_paste_as_a_move_and_paste_waits_for_files_on_the_clipboard() {
+    let place = Place::new();
+    let mut view = place.view();
+    view.handle(&press(Key::Up));
+    view.handle(&command(Key::Character('x'), false));
+    let cut = match view.take_requests().as_slice() {
+        [Request::CopyFiles { paths, cut: true }] => {
+            paths.iter().map(|path| file_uri(path)).collect::<Vec<_>>()
+        }
+        other => panic!("{other:?}"),
+    };
+    let paste_enabled = |view: &mut FilesView| {
+        let menu = right_click(view, Point::new(SIDEBAR_WIDTH + 60.0, 400.0));
+        menu.items
+            .iter()
+            .any(|item| item.title == "Paste" && item.enabled)
+    };
+    assert!(!paste_enabled(&mut view));
+    view.set_clipboard_has_files(true);
+    assert!(paste_enabled(&mut view));
+
+    view.handle(&command(Key::Character('G'), true));
+    view.scene(1000, 600);
+    view.handle(&Event::Commit("Documents".to_owned()));
+    view.handle(&press(Key::Enter));
+    assert!(view.pasted_files(&cut, "", true));
+    run_until(&mut view, idle);
+    assert!(!place.home().join("notes.txt").exists());
+    assert!(place.home().join("Documents/notes.txt").exists());
 }
 
 #[test]
@@ -683,9 +717,15 @@ fn right_clicking_an_item_selects_it_and_its_menu_acts_on_it() {
             "Get Info",
             "Rename",
             "Duplicate",
+            "Cut",
             "Copy",
             "Move to Trash"
         ]
+    );
+    let delete = menu.items.last().and_then(|item| item.alternate.as_deref());
+    assert_eq!(
+        delete.map(|item| (item.title.as_str(), item.action.as_str())),
+        Some(("Delete Immediately…", "delete-immediately"))
     );
     let open_with = menu
         .items
@@ -830,4 +870,77 @@ fn mounted_volumes_are_listed_under_locations_before_the_trash() {
         ["Favourites", "ada", "Locations", "Stick", "Trash"]
     );
     assert_eq!(with_volumes(&shown, &[]), favourites);
+}
+
+#[test]
+fn the_list_view_selects_by_click_sorts_by_header_and_opens_on_double_click() {
+    let place = Place::new();
+    fs::write(place.home().join("big.txt"), vec![b'x'; 5000]).expect("file");
+    let mut view = place.view();
+    view.handle(&command(Key::Character('2'), false));
+    view.scene(1000, 600);
+    let row = |index: f32| Point::new(SIDEBAR_WIDTH + 60.0, 26.0 + ROW_HEIGHT * (index + 0.5));
+    let click = |view: &mut FilesView, at: Point, count: u8| {
+        view.handle(&Event::PointerDown(Pointer::at(at).with_count(count)));
+        view.handle(&Event::PointerUp(Pointer::at(at)));
+        view.scene(1000, 600);
+    };
+
+    click(&mut view, row(2.0), 1);
+    assert_eq!(selected_name(view.browser()).as_deref(), Some("big.txt"));
+
+    click(&mut view, Point::new(SIDEBAR_WIDTH + 470.0, 10.0), 1);
+    assert_eq!(
+        view.browser().sort(),
+        Sort {
+            by: SortBy::Size,
+            descending: true
+        }
+    );
+    assert_eq!(selected_name(view.browser()).as_deref(), Some("big.txt"));
+
+    click(&mut view, row(0.0), 1);
+    let first = selected_name(view.browser()).expect("first row");
+    click(&mut view, row(0.0), 2);
+    assert_eq!(
+        view.browser().root(),
+        &Location::Folder(place.home().join(first))
+    );
+}
+
+#[test]
+fn dragging_a_selection_starts_a_drag_and_dropping_on_a_folder_moves_it_there() {
+    let place = Place::new();
+    let mut view = place.view();
+    let row = |index: f32| Point::new(SIDEBAR_WIDTH + 60.0, 6.0 + ROW_HEIGHT * (index + 0.5));
+    click_row(&mut view, 1, 1, Modifiers::default());
+    view.handle(&Event::PointerUp(Pointer::at(row(1.0))));
+    click_row(
+        &mut view,
+        2,
+        1,
+        Modifiers {
+            shift: true,
+            ..Modifiers::default()
+        },
+    );
+    view.handle(&Event::PointerUp(Pointer::at(row(2.0))));
+    view.scene(1000, 600);
+
+    view.handle(&Event::PointerDown(Pointer::at(row(2.0))));
+    view.handle(&Event::PointerMove(Pointer::at(Point::new(
+        SIDEBAR_WIDTH + 70.0,
+        row(2.0).y + 12.0,
+    ))));
+    let dragged = vec![place.home().join("Empty"), place.home().join("notes.txt")];
+    assert_eq!(view.take_requests(), [Request::StartDrag(dragged)]);
+    assert_eq!(view.drag_moved(row(1.0)), None);
+    assert_eq!(view.drag_moved(row(0.0)), Some(DragAction::Move));
+    view.drag_finished();
+
+    let uris = vec![file_uri(&place.home().join("notes.txt"))];
+    assert!(view.dropped(row(0.0), &uris, Some(DragAction::Move)));
+    run_until(&mut view, idle);
+    assert!(place.home().join("Documents/notes.txt").exists());
+    assert!(!place.home().join("notes.txt").exists());
 }

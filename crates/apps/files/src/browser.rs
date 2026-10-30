@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use unbound_fs::{Entry, Sort, Trash, list, list_trash};
 
@@ -15,19 +16,24 @@ pub struct Column {
     pub selected: Option<usize>,
     pub marked: Vec<usize>,
     pub anchor: Option<usize>,
-    pub scroll: f32,
     pub filter: String,
+    pub revision: u64,
+}
+
+fn next_revision() -> u64 {
+    static NEXT: AtomicU64 = AtomicU64::new(1);
+    NEXT.fetch_add(1, Ordering::Relaxed)
 }
 
 impl Column {
     fn new(location: Location, entries: Vec<Entry>) -> Self {
         Self {
+            revision: next_revision(),
             location,
             entries,
             selected: None,
             marked: Vec::new(),
             anchor: None,
-            scroll: 0.0,
             filter: String::new(),
         }
     }
@@ -314,6 +320,29 @@ impl Browser {
         self.open_child(column);
     }
 
+    pub fn mark(&mut self, column: usize, rows: Vec<usize>) {
+        let Some(shown) = self.columns.get_mut(column) else {
+            return;
+        };
+        let mut rows = rows
+            .into_iter()
+            .filter(|row| *row < shown.entries.len())
+            .collect::<Vec<_>>();
+        rows.sort_unstable();
+        rows.dedup();
+        let added = rows
+            .iter()
+            .rev()
+            .find(|row| !shown.marked.contains(row))
+            .copied();
+        let kept = shown.selected.filter(|row| rows.contains(row));
+        shown.selected = added.or(kept).or_else(|| rows.last().copied());
+        shown.anchor = shown.selected;
+        shown.marked = rows;
+        self.active = column;
+        self.open_child(column);
+    }
+
     pub fn select_all(&mut self) {
         let column = &mut self.columns[self.active];
         if column.entries.is_empty() {
@@ -333,7 +362,6 @@ impl Browser {
             return;
         }
         shown.filter = filter.to_owned();
-        shown.scroll = 0.0;
         self.reload_column(column);
         let shown = &mut self.columns[column];
         if shown.selected.is_none() && !shown.entries.is_empty() && !filter.is_empty() {
@@ -482,7 +510,10 @@ impl Browser {
             .get(index + 1)
             .map(|child| child.location.clone());
         let column = &mut self.columns[index];
-        column.entries = entries;
+        if column.entries != entries {
+            column.entries = entries;
+            column.revision = next_revision();
+        }
         column.marked = marked;
         column.selected = selected;
         column.anchor = anchor;

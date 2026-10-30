@@ -1,4 +1,5 @@
 mod backdrop;
+mod editor;
 mod menus;
 mod model;
 mod places;

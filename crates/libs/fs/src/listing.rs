@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 use std::fs;
 use std::io;
 use std::iter::Peekable;
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::str::Chars;
 use std::time::SystemTime;
@@ -121,6 +122,13 @@ fn digits(chars: &mut Peekable<Chars<'_>>) -> String {
 fn compare_numbers(a: &str, b: &str) -> Ordering {
     let (a, b) = (a.trim_start_matches('0'), b.trim_start_matches('0'));
     a.len().cmp(&b.len()).then_with(|| a.cmp(b))
+}
+
+pub fn same_volume(a: &Path, b: &Path) -> bool {
+    match (fs::metadata(a), fs::metadata(b)) {
+        (Ok(a), Ok(b)) => a.dev() == b.dev(),
+        _ => false,
+    }
 }
 
 pub fn finder_order(a: &str, b: &str) -> Ordering {

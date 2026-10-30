@@ -1,9 +1,13 @@
 mod browser;
 mod context;
+mod controls;
+mod drag;
+mod host;
 mod icons;
 mod loader;
 mod menus;
 mod paint;
+mod prompt;
 mod sidebar;
 mod view;
 
@@ -33,6 +37,7 @@ mod tests {
             include_str!("menu_bar.rs"),
             include_str!("menus.rs"),
             include_str!("browser.rs"),
+            include_str!("controls.rs"),
             include_str!("paint.rs"),
             include_str!("sidebar.rs"),
             include_str!("view.rs"),

@@ -225,7 +225,9 @@ prompt, acknowledge information, start, cancel after a refusal) inside
 `unbound-compositor --greeter`, which runs only the greeter and exits with it; the package
 ships a greetd configuration. The login window shows the wallpaper of the person it offers,
 starting with whoever signed in last (remembered in the greeter user's
-`$XDG_STATE_HOME/unbound-greeter/last-user`): `unbound-config` hands the dark picture to
+`$XDG_STATE_HOME/unbound-greeter/last-user`, on Debian under `/var/lib/greetd`, the home that
+greetd's package creates owned by `_greetd`, so no state directory of our own is
+needed): `unbound-config` hands the dark picture to
 AccountsService (`SetBackgroundFile`, which a user may do for their own account without a
 password) whenever the wallpaper changes, and the greeter reads `BackgroundFile` from it, as the
 macOS login window shows the user's desktop picture. Pictures inside a home folder that the

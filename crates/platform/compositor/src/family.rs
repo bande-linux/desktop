@@ -161,9 +161,19 @@ impl State {
         order.sort_by_key(|&(index, _)| {
             std::iter::successors(Some(index), |&at| self.parent_index(at)).count()
         });
+        let order: Vec<WlSurface> = order
+            .into_iter()
+            .map(|(child, _)| self.windows[child].surface().clone())
+            .collect();
         let mut lost = Vec::new();
         let mut moved_workspace = false;
-        for (child, parent) in order {
+        for surface in order {
+            let Some(child) = self.window_index(&surface) else {
+                continue;
+            };
+            let Some(parent) = self.parent_index(child) else {
+                continue;
+            };
             if self.windows[parent].size.is_none() || self.windows[child].size.is_none() {
                 continue;
             }

@@ -4,8 +4,8 @@ use std::time::Instant;
 
 use accesskit::{Action, ActionData, ActionRequest, Node, NodeId, Role, TreeId};
 use unbound_toolkit::ui::{
-    Animated, Context, Event, Key, Menu, MenuItem, Parts, Size, Spring, TextField, Ui, Widget,
-    WidgetId, shortcut_symbols,
+    Animated, Context, Event, Key, Menu, MenuItem, Parts, ShortcutText, Size, Spring, TextField,
+    Ui, Widget, WidgetId,
 };
 use unbound_toolkit::{
     Appearance, Color, Item, Paragraph, Point, Radius, Rect, Scene, Shape, TextAlign, TextStyle,
@@ -98,7 +98,7 @@ struct Row {
     frame: Rect,
     path: Option<Paragraph>,
     title: Paragraph,
-    shortcut: Option<Paragraph>,
+    shortcut: Option<(ShortcutText, Color)>,
     selected: bool,
 }
 
@@ -150,18 +150,16 @@ impl Card {
                 (cx.palette.ink, cx.palette.ink2)
             };
             let shortcut = item.shortcut.as_deref().map(|shortcut| {
-                cx.text.paragraph(
-                    &shortcut_symbols(shortcut),
-                    TextStyle::new(TEXT_SIZE, muted),
-                    None,
-                    TextAlign::Start,
+                (
+                    ShortcutText::new(&mut cx.text, shortcut, TextStyle::new(TEXT_SIZE, muted)),
+                    muted,
                 )
             });
             let room = width
                 - 2.0 * TEXT_INSET
                 - shortcut
                     .as_ref()
-                    .map_or(0.0, |shortcut| shortcut.width() + SHORTCUT_GAP);
+                    .map_or(0.0, |(shortcut, _)| shortcut.width() + SHORTCUT_GAP);
             let title = leaf(&item.title);
             let prefix = item
                 .title
@@ -232,14 +230,15 @@ impl Card {
             origin: Point::new(x.round(), baseline(&row.title)),
             paragraph: row.title.clone(),
         });
-        if let Some(shortcut) = &row.shortcut {
-            items.push(Item::Text {
-                origin: Point::new(
+        if let Some((shortcut, color)) = &row.shortcut {
+            shortcut.paint(
+                Point::new(
                     (row.frame.x + row.frame.width - TEXT_INSET - shortcut.width()).round(),
-                    baseline(shortcut),
+                    (row.frame.y + (row.frame.height - shortcut.height()) / 2.0).round(),
                 ),
-                paragraph: shortcut.clone(),
-            });
+                *color,
+                items,
+            );
         }
     }
 }

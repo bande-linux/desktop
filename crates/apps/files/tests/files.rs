@@ -7,12 +7,13 @@ use std::time::{Duration, Instant};
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use tempfile::TempDir;
 use unbound_files::{
-    Browser, FilesView, Location, ROW_HEIGHT, Request, Row, SIDEBAR_WIDTH, Sheet, permissions,
-    rows, with_volumes, without_bookmark,
+    Browser, FilesView, Location, PATH_BAR_HEIGHT, ROW_HEIGHT, Request, Row, SIDEBAR_WIDTH, Sheet,
+    ViewMemory, ViewMode, permissions, rows, with_volumes, without_bookmark,
 };
 use unbound_fs::{Sort, SortBy, Trash, list};
+use unbound_thumbnails::{Cache, Thumbnailers, Thumbnails};
 use unbound_toolkit::ui::{Event, Key, Menu, Modifiers, Pointer, PointerButton};
-use unbound_toolkit::{DragAction, Item, Palette, Point, Scheme, TextSystem};
+use unbound_toolkit::{CpuRenderer, DragAction, Image, Item, Palette, Point, Scheme, TextSystem};
 use unbound_xdg::{Apps, file_uri};
 
 fn names(folder: &Path, show_hidden: bool) -> Vec<String> {
@@ -809,8 +810,9 @@ fn the_empty_space_menu_sorts_and_shows_hidden_files() {
             "New Folder",
             "Paste",
             "Sort By",
-            "as Columns",
+            "as Icons",
             "as List",
+            "as Columns",
             "Show Hidden Files"
         ]
     );
@@ -988,4 +990,251 @@ fn dragging_a_group_of_rows_in_the_list_view_drags_all_of_them() {
         "grabbed by the name, the icon sits left of the pointer: {:?}",
         icon.hotspot
     );
+}
+
+fn names_of(entries: Vec<&unbound_fs::Entry>) -> Vec<String> {
+    entries
+        .into_iter()
+        .map(|entry| entry.name.clone())
+        .collect()
+}
+
+fn shift(key: Key) -> Event {
+    Event::Key {
+        key,
+        modifiers: Modifiers {
+            shift: true,
+            ..Modifiers::default()
+        },
+    }
+}
+
+#[test]
+fn the_icon_view_moves_in_two_dimensions_and_is_remembered_per_folder() {
+    let place = Place::new();
+    for index in 1..=10 {
+        fs::write(place.home().join(format!("f{index:02}.txt")), "x").expect("file");
+    }
+    let memory = place.root.path().join("state/files-views");
+    let mut view = place.view();
+    view.set_view_memory(ViewMemory::load(memory.clone()));
+    view.handle(&command(Key::Character('1'), false));
+    assert_eq!(view.mode(), ViewMode::Icons);
+    view.scene(1000, 600);
+
+    let selected = |view: &FilesView| names_of(view.browser().selection());
+    view.handle(&press(Key::Right));
+    assert_eq!(selected(&view), ["Documents"]);
+    view.handle(&press(Key::Down));
+    assert_eq!(selected(&view), ["f06.txt"]);
+    view.handle(&press(Key::Right));
+    view.handle(&press(Key::Down));
+    assert_eq!(selected(&view), ["f07.txt"]);
+    view.handle(&press(Key::Up));
+    assert_eq!(selected(&view), ["Empty"]);
+    view.handle(&shift(Key::Right));
+    assert_eq!(selected(&view), ["Empty", "f01.txt"]);
+
+    view.handle(&press(Key::Home));
+    view.handle(&press(Key::Enter));
+    assert_eq!(
+        view.browser().root(),
+        &Location::Folder(place.home().join("Documents"))
+    );
+    assert_eq!(view.mode(), ViewMode::Icons);
+    view.handle(&command(Key::Character('3'), false));
+    view.handle(&command(Key::Character('['), false));
+    assert_eq!(view.browser().root(), &Location::Folder(place.home()));
+    assert_eq!(view.mode(), ViewMode::Icons);
+    view.handle(&command(Key::Character('='), false));
+    assert_eq!(view.icon_size(), 80);
+
+    let remembered = ViewMemory::load(memory);
+    let home = remembered.get(&place.home()).expect("home is remembered");
+    assert_eq!((home.mode, home.icon_size), (ViewMode::Icons, 80));
+    let documents = remembered
+        .get(&place.home().join("Documents"))
+        .expect("documents are remembered");
+    assert_eq!(documents.mode, ViewMode::Columns);
+}
+
+#[test]
+fn dragging_on_empty_space_in_the_icon_view_selects_the_icons_it_touches() {
+    let place = Place::new();
+    let mut view = place.view();
+    view.handle(&command(Key::Character('1'), false));
+    view.scene(1000, 600);
+
+    view.handle(&Event::PointerDown(Pointer::at(Point::new(
+        SIDEBAR_WIDTH + 4.0,
+        4.0,
+    ))));
+    view.handle(&Event::PointerMove(Pointer::at(Point::new(
+        SIDEBAR_WIDTH + 200.0,
+        60.0,
+    ))));
+    assert_eq!(names_of(view.browser().selection()), ["Documents", "Empty"]);
+    view.handle(&Event::PointerMove(Pointer::at(Point::new(
+        SIDEBAR_WIDTH + 100.0,
+        60.0,
+    ))));
+    assert_eq!(names_of(view.browser().selection()), ["Documents"]);
+    view.handle(&Event::PointerUp(Pointer::at(Point::new(
+        SIDEBAR_WIDTH + 100.0,
+        60.0,
+    ))));
+
+    view.handle(&Event::PointerDown(
+        Pointer::at(Point::new(SIDEBAR_WIDTH + 400.0, 400.0)).with_button(PointerButton::Secondary),
+    ));
+    assert!(matches!(
+        view.take_requests().as_slice(),
+        [Request::ShowMenu { .. }]
+    ));
+}
+
+const GOLDEN_SIZE: (u32, u32) = (900, 560);
+const MIN_SSIM: f64 = 0.99;
+
+fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>, scale: f64) {
+    let actual = image::RgbaImage::from_raw(size.0, size.1, rgba).expect("frame");
+    let steady = size.1 - (f64::from(PATH_BAR_HEIGHT) * scale).round() as u32;
+    let whole = image::DynamicImage::ImageRgba8(actual);
+    whole
+        .save(PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}-whole.png")))
+        .expect("save the whole frame");
+    let actual = whole.crop_imm(0, 0, size.0, steady).to_rgb8();
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("tests/golden/{name}.png"));
+    if std::env::var_os("UNBOUND_UPDATE_GOLDENS").is_some() {
+        fs::create_dir_all(path.parent().expect("golden directory")).expect("directory");
+        actual.save(&path).expect("write golden");
+    }
+    let target = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}.png"));
+    actual.save(&target).expect("save the frame");
+    let expected = image::open(&path)
+        .unwrap_or_else(|error| panic!("{}: {error}", path.display()))
+        .to_rgb8();
+    let similarity = image_compare::rgb_hybrid_compare(&expected, &actual).expect("same size");
+    assert!(
+        similarity.score >= MIN_SSIM,
+        "{name} differs from its golden: {:.4} (frame in {})",
+        similarity.score,
+        target.display()
+    );
+}
+
+const FOLDER_SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><path d="M6 14a4 4 0 0 1 4-4h14l5 5h25a4 4 0 0 1 4 4v31a4 4 0 0 1-4 4H10a4 4 0 0 1-4-4z" fill="#3D8AE0"/><path d="M6 22h52v28a4 4 0 0 1-4 4H10a4 4 0 0 1-4-4z" fill="#5FA2EC"/></svg>"##;
+const DOCUMENT_SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><path d="M14 6h26l12 12v38a2 2 0 0 1-2 2H14a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" fill="#F4F5F7" stroke="#9AA0A8" stroke-width="1.5"/><path d="M40 6v12h12" fill="#DCE0E5"/><path d="M20 28h24M20 34h24M20 40h16" stroke="#9AA0A8" stroke-width="2"/></svg>"##;
+
+impl Place {
+    fn themed_view(&self, scheme: Scheme) -> FilesView {
+        let apps = self.apps();
+        let data = self.root.path().join("data");
+        fs::create_dir_all(data.join("pixmaps")).expect("pixmaps");
+        fs::write(data.join("pixmaps/folder.svg"), FOLDER_SVG).expect("folder icon");
+        for name in ["text-x-generic", "image-x-generic"] {
+            fs::write(data.join(format!("pixmaps/{name}.svg")), DOCUMENT_SVG).expect("icon");
+        }
+        let mut view = FilesView::new(
+            self.browser(),
+            rows(&self.home(), None, None),
+            apps,
+            Palette::for_scheme(scheme),
+            TextSystem::new(),
+        )
+        .expect("view");
+        view.set_thumbnails(
+            Thumbnails::spawn(
+                Cache::new(self.root.path().join("cache")),
+                Thumbnailers::default(),
+            )
+            .expect("thumbnails"),
+        );
+        view
+    }
+}
+
+fn images(items: &[Item], found: &mut Vec<Image>) {
+    for item in items {
+        match item {
+            Item::Image { image, .. } => found.push(image.clone()),
+            Item::Clip { items, .. } | Item::Opacity { items, .. } => images(items, found),
+            _ => {}
+        }
+    }
+}
+
+fn settle_thumbnails(view: &mut FilesView, size: (u32, u32), thumbnails: usize) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let scene = view.scene(size.0, size.1);
+        let mut found = Vec::new();
+        images(&scene.items, &mut found);
+        if found
+            .iter()
+            .filter(|image| image.width() != image.height())
+            .count()
+            >= thumbnails
+        {
+            return;
+        }
+        assert!(Instant::now() < deadline, "the thumbnails did not arrive");
+        std::thread::sleep(Duration::from_millis(20));
+        for index in (0..view.fds().len()).rev() {
+            view.source_ready(index);
+        }
+    }
+}
+
+fn picture(path: &Path, width: u32, height: u32) {
+    image::RgbaImage::from_fn(width, height, |x, y| match y < height * 3 / 5 {
+        true => image::Rgba([90, 150 + (y * 60 / height) as u8, 230, 255]),
+        false => image::Rgba([60 + (x * 80 / width) as u8, 150, 70, 255]),
+    })
+    .save(path)
+    .expect("picture");
+}
+
+#[test]
+fn the_icon_view_matches_its_golden_with_thumbnails_and_long_names() {
+    let place = Place::new();
+    picture(&place.home().join("Holiday.png"), 640, 400);
+    picture(&place.home().join("Portrait.png"), 300, 450);
+    fs::write(
+        place
+            .home()
+            .join("A very long document name that needs two lines to show.txt"),
+        "long",
+    )
+    .expect("file");
+    for scheme in [Scheme::Light, Scheme::Dark] {
+        let mut view = place.themed_view(scheme);
+        view.handle(&command(Key::Character('1'), false));
+        view.scene(GOLDEN_SIZE.0, GOLDEN_SIZE.1);
+        view.handle(&press(Key::Right));
+        view.handle(&press(Key::Right));
+        view.handle(&press(Key::Right));
+        settle_thumbnails(&mut view, GOLDEN_SIZE, 2);
+        let scene = view.scene(GOLDEN_SIZE.0, GOLDEN_SIZE.1);
+        let scheme_name = match scheme {
+            Scheme::Light => "light",
+            Scheme::Dark => "dark",
+        };
+        for (scale, scale_name) in [(1.0, "1x"), (1.5, "1.5x")] {
+            let (width, height) = (
+                (f64::from(GOLDEN_SIZE.0) * scale).round() as u32,
+                (f64::from(GOLDEN_SIZE.1) * scale).round() as u32,
+            );
+            let mut rgba = vec![0; (width * height * 4) as usize];
+            CpuRenderer::new()
+                .render_into(&scene, scale, &mut rgba)
+                .expect("render");
+            check_golden(
+                &format!("icons-{scheme_name}-{scale_name}"),
+                (width, height),
+                rgba,
+                scale,
+            );
+        }
+    }
 }

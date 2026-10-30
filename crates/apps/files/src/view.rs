@@ -11,9 +11,10 @@ use unbound_fs::{
     Resolution, Task, TrashItem,
 };
 use unbound_preview::Preview;
+use unbound_thumbnails::Thumbnails;
 use unbound_toolkit::ui::{
     Context, Cursor, Event, FreeLayout, Key, Menu, Modifiers, Pointer, PointerButton, Scroll,
-    ScrollState, Ui, Widget, WidgetId,
+    ScrollState, Slider, Ui, Widget, WidgetId,
 };
 use unbound_toolkit::{Image, Item, Palette, Point, Rect, TextSystem};
 use unbound_volumes::mounted_volumes;
@@ -22,9 +23,12 @@ use unbound_xdg::{Apps, DesktopEntry, UserDir, path_from_file_uri, user_dir};
 use crate::L10N;
 use crate::browser::{Browser, Location};
 use crate::controls::{Press, Signals};
+use crate::grid::Band;
 use crate::icons::Icons;
 use crate::loader::{Loaded, Loader};
 use crate::sidebar::{Place, PlaceKind, Row, with_volumes};
+use crate::thumbs::Thumbs;
+use crate::views::{DEFAULT_ICON_SIZE, FolderView, ICON_SIZES, ViewMemory, ViewMode};
 
 pub const COLUMN_WIDTH: f32 = 240.0;
 pub const ROW_HEIGHT: f32 = 24.0;
@@ -151,6 +155,16 @@ pub struct FilesView {
     favourites: Vec<Row>,
     watch: FolderWatch,
     loader: Loader,
+    pub(crate) thumbs: Thumbs,
+    pub(crate) mode: ViewMode,
+    pub(crate) icon_size: u32,
+    views: ViewMemory,
+    shown_root: Option<Location>,
+    pub(crate) grid_scroll: (Option<Location>, ScrollState),
+    pub(crate) band: Option<Band>,
+    pub(crate) labels: HashMap<(String, u32), String>,
+    pub(crate) grid_wanted: Vec<Entry>,
+    pub(crate) size_slider: Option<WidgetId>,
     pub(crate) requests: Vec<Request>,
     pub(crate) pending_rename: Option<(Instant, PathBuf)>,
     pointer: Point,
@@ -239,6 +253,16 @@ impl FilesView {
             favourites: Vec::new(),
             watch: FolderWatch::new()?,
             loader: Loader::new()?,
+            thumbs: Thumbs::default(),
+            mode: ViewMode::default(),
+            icon_size: DEFAULT_ICON_SIZE,
+            views: ViewMemory::default(),
+            shown_root: None,
+            grid_scroll: (None, ScrollState::default()),
+            band: None,
+            labels: HashMap::new(),
+            grid_wanted: Vec::new(),
+            size_slider: None,
             requests: Vec::new(),
             pending_rename: None,
             pointer: Point::default(),
@@ -246,6 +270,7 @@ impl FilesView {
             paste_moves: None,
             clipboard_files: false,
         };
+        view.shown_root = Some(view.browser.root().clone());
         view.favourites = view.sidebar.clone();
         view.watch.watch(&view.watched());
         view.trash_full = !view.browser.trash().is_empty();
@@ -382,20 +407,75 @@ impl FilesView {
         }
     }
 
+    pub fn set_thumbnails(&mut self, thumbnails: Thumbnails) {
+        self.thumbs.set_service(thumbnails);
+    }
+
+    pub fn set_view_memory(&mut self, views: ViewMemory) {
+        self.views = views;
+        self.shown_root = None;
+        self.selection_changed();
+    }
+
+    pub fn mode(&self) -> ViewMode {
+        self.mode
+    }
+
+    pub fn icon_size(&self) -> u32 {
+        self.icon_size
+    }
+
+    fn apply_remembered_view(&mut self) {
+        let root = self.browser.root().clone();
+        if self.shown_root.as_ref() == Some(&root) {
+            return;
+        }
+        self.shown_root = Some(root.clone());
+        let Location::Folder(folder) = &root else {
+            return;
+        };
+        if let Some(view) = self.views.get(folder) {
+            self.icon_size = view.icon_size;
+            if view.mode != self.mode {
+                self.mode = view.mode;
+                self.browser.set_single(view.mode != ViewMode::Columns);
+                self.shown_root = Some(self.browser.root().clone());
+                self.focus_content();
+            }
+            self.refresh_size_slider();
+        }
+    }
+
+    fn remember_view(&mut self) {
+        let Location::Folder(folder) = self.browser.root().clone() else {
+            return;
+        };
+        let view = FolderView {
+            mode: self.mode,
+            icon_size: self.icon_size,
+        };
+        if let Err(error) = self.views.remember(&folder, view) {
+            tracing::warn!("cannot remember the view of {}: {error}", folder.display());
+        }
+    }
+
     pub fn fds(&self) -> Vec<BorrowedFd<'_>> {
         let mut fds = vec![self.watch.fd(), self.loader.fd()];
+        fds.extend(self.thumbs.fd());
         fds.extend(self.operations.fds());
         fds
     }
 
     pub fn source_ready(&mut self, index: usize) -> bool {
+        let jobs = 2 + usize::from(self.thumbs.fd().is_some());
         match index {
             0 => {
                 self.watch.read();
                 false
             }
             1 => self.loaded(),
-            job => match self.operations.poll(job - 2) {
+            2 if jobs == 3 => self.thumbs.take(),
+            job => match self.operations.poll(job - jobs) {
                 Some(finished) => {
                     self.finished(finished);
                     true
@@ -510,6 +590,7 @@ impl FilesView {
     }
 
     pub(crate) fn selection_changed(&mut self) {
+        self.apply_remembered_view();
         if self
             .search
             .as_ref()
@@ -674,6 +755,10 @@ impl FilesView {
     }
 
     fn keep_selection_visible(&mut self) {
+        if self.mode == ViewMode::Icons {
+            self.reveal_in_grid();
+            return;
+        }
         self.fit_scrolls();
         let rows = self
             .browser
@@ -692,8 +777,13 @@ impl FilesView {
 
     fn scroll(&mut self, scroll: &Scroll) -> bool {
         let content = self.content_frame();
-        if self.browser.single() || !contains(content, scroll.position) {
+        if !contains(content, scroll.position) {
             return false;
+        }
+        match self.mode {
+            ViewMode::Icons => return self.grid_scrolled(scroll),
+            ViewMode::List => return false,
+            ViewMode::Columns => {}
         }
         let column =
             self.first_visible_column() + ((scroll.position.x - content.x) / COLUMN_WIDTH) as usize;
@@ -778,7 +868,11 @@ impl FilesView {
             }
             Hit::Column(column) => {
                 self.commit_rename();
-                self.browser.focus_column(column);
+                if self.mode == ViewMode::Icons {
+                    self.start_band(pointer);
+                } else {
+                    self.browser.focus_column(column);
+                }
                 self.selection_changed();
             }
             Hit::Place(index) => {
@@ -990,6 +1084,11 @@ impl FilesView {
             Key::Character('o' | 'O') if command && !shift => self.open(),
             Key::Enter if !command => self.open(),
             Key::Function(2) => self.start_rename(),
+            Key::Up | Key::Down | Key::Left | Key::Right | Key::Home | Key::End
+                if self.mode == ViewMode::Icons =>
+            {
+                return self.grid_key(key, modifiers);
+            }
             Key::Down if shift => {
                 self.browser.extend(true);
                 self.selection_changed();
@@ -1047,8 +1146,11 @@ impl FilesView {
             Key::Character('l' | 'L') if command && alt => {
                 self.go(Location::Folder(user_folder(UserDir::Downloads)));
             }
-            Key::Character('2') if command => self.set_list(true),
-            Key::Character('3') if command => self.set_list(false),
+            Key::Character('1') if command => self.set_mode(ViewMode::Icons),
+            Key::Character('2') if command => self.set_mode(ViewMode::List),
+            Key::Character('3') if command => self.set_mode(ViewMode::Columns),
+            Key::Character('=' | '+') if command => self.grow_icons(true),
+            Key::Character('-') if command => self.grow_icons(false),
             Key::Character('i' | 'I') if command => {
                 self.inspector = !self.inspector;
                 self.selection_changed();
@@ -1084,11 +1186,44 @@ impl FilesView {
         }
     }
 
-    pub(crate) fn set_list(&mut self, list: bool) {
+    pub(crate) fn set_mode(&mut self, mode: ViewMode) {
         self.commit_rename();
-        self.browser.set_single(list);
+        self.band = None;
+        self.mode = mode;
+        self.browser.set_single(mode != ViewMode::Columns);
+        self.shown_root = Some(self.browser.root().clone());
+        self.remember_view();
+        self.refresh_size_slider();
         self.selection_changed();
         self.focus_content();
+    }
+
+    pub(crate) fn set_icon_size(&mut self, size: u32) {
+        let size = size.clamp(ICON_SIZES.0, ICON_SIZES.1);
+        if size != self.icon_size {
+            self.icon_size = size;
+            self.remember_view();
+            self.keep_selection_visible();
+        }
+        let shown = self
+            .size_slider
+            .and_then(|slider| self.ui.widget_ref::<Slider>(slider))
+            .map(|slider| slider.value().round() as u32);
+        if shown != Some(self.icon_size) {
+            self.refresh_size_slider();
+        }
+    }
+
+    pub(crate) fn grow_icons(&mut self, bigger: bool) {
+        if self.mode != ViewMode::Icons {
+            return;
+        }
+        let step = 16;
+        let size = match bigger {
+            true => (self.icon_size / step + 1) * step,
+            false => (self.icon_size.div_ceil(step) - 1) * step,
+        };
+        self.set_icon_size(size);
     }
 
     pub(crate) fn paste(&mut self, moves: bool) {

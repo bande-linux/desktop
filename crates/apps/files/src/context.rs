@@ -8,6 +8,7 @@ use crate::menus::{
 };
 use crate::sidebar::{PlaceKind, Row};
 use crate::view::{FilesView, Hit, Request};
+use crate::views::ViewMode;
 
 impl FilesView {
     pub(crate) fn context_click(&mut self, hit: Hit, at: Point) -> bool {
@@ -61,7 +62,7 @@ impl FilesView {
             (Hit::Column(column), None) => *column == active,
             _ => false,
         };
-        let rect = match self.browser.single() {
+        let rect = match self.mode == ViewMode::List {
             true => selected
                 .and_then(|row| self.table_row_bounds(row))
                 .or_else(|| self.frame_of(self.table)),
@@ -127,7 +128,7 @@ impl FilesView {
             trash: self.browser.active_column().location == Location::Trash,
             trash_empty: !self.trash_full,
             sort: self.browser.sort().by,
-            list: self.browser.single(),
+            mode: self.mode,
             hidden_shown: self.browser.shows_hidden(),
             paste: self.clipboard_files,
         })
@@ -166,8 +167,9 @@ impl FilesView {
                     self.selection_changed();
                 }
             }
-            Command::Columns => self.set_list(false),
-            Command::List => self.set_list(true),
+            Command::Icons => self.set_mode(ViewMode::Icons),
+            Command::Columns => self.set_mode(ViewMode::Columns),
+            Command::List => self.set_mode(ViewMode::List),
             Command::ToggleHidden => self.toggle_hidden(),
             Command::EmptyTrash => self.ask_to_empty_trash(),
             Command::OpenPlace | Command::RemoveFromSidebar | Command::Eject => {

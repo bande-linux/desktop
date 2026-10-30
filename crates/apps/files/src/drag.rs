@@ -12,6 +12,7 @@ use crate::browser::Location;
 use crate::controls::Press;
 use crate::sidebar::Row;
 use crate::view::{FilesView, Hit, Request, contains, home};
+use crate::views::ViewMode;
 
 const DRAG_THRESHOLD: f32 = 4.0;
 const SPRING_DELAY: Duration = Duration::from_millis(900);
@@ -82,7 +83,7 @@ impl FilesView {
         true
     }
 
-    fn grabbed_icon(&self, at: Point) -> Option<Point> {
+    fn grabbed_icon(&mut self, at: Point) -> Option<Point> {
         if self.table_frame().is_some_and(|frame| contains(frame, at)) {
             let row = self.table_row_at(at)?;
             let name = self.shown_table()?.cell_bounds(row, 0)?;
@@ -90,6 +91,13 @@ impl FilesView {
                 name.x + TABLE_ICON_CENTRE,
                 name.y + name.height / 2.0,
             ));
+        }
+        let row = self.hits.iter().find_map(|(rect, hit)| match hit {
+            Hit::Row { row, .. } if contains(*rect, at) => Some(*row),
+            _ => None,
+        });
+        if self.mode == ViewMode::Icons {
+            return row.map(|row| self.grid_icon_centre(row));
         }
         self.hits.iter().find_map(|(rect, hit)| match hit {
             Hit::Row { .. } if contains(*rect, at) => Some(Point::new(
@@ -162,7 +170,7 @@ impl FilesView {
     }
 
     fn table_frame(&self) -> Option<Rect> {
-        self.browser.single().then(|| self.content_frame())
+        (self.mode == ViewMode::List).then(|| self.content_frame())
     }
 
     fn location_target(location: &Location) -> Target {
@@ -211,14 +219,14 @@ impl FilesView {
                 let shown = self.browser.columns().get(*column)?;
                 let entry = shown.entries.get(*row)?;
                 if entry.is_folder() && entry.trashed.is_none() {
-                    return Some((
-                        Target::Folder(entry.path.clone()),
-                        *rect,
-                        Some(Spring::Open {
+                    let spring = match self.mode {
+                        ViewMode::Columns => Spring::Open {
                             column: *column,
                             row: *row,
-                        }),
-                    ));
+                        },
+                        _ => Spring::Go(Location::Folder(entry.path.clone())),
+                    };
+                    return Some((Target::Folder(entry.path.clone()), *rect, Some(spring)));
                 }
                 self.column_target(*column)
             }

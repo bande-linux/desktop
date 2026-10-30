@@ -50,8 +50,12 @@ pub fn app_menus() -> Vec<Entry> {
         submenu(
             "menu-view",
             vec![
-                shortcut("menu-as-columns", "Super+3"),
+                shortcut("menu-as-icons", "Super+1"),
                 shortcut("menu-as-list", "Super+2"),
+                shortcut("menu-as-columns", "Super+3"),
+                Entry::separator(),
+                shortcut("menu-bigger-icons", "Super+="),
+                shortcut("menu-smaller-icons", "Super+-"),
                 Entry::separator(),
                 shortcut("menu-show-hidden-files", "Shift+Super+."),
                 shortcut("menu-quick-look", "Space"),

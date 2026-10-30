@@ -2,6 +2,7 @@ use unbound_fs::SortBy;
 use unbound_toolkit::ui::{Menu, MenuItem};
 
 use crate::L10N;
+use crate::views::ViewMode;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
@@ -20,6 +21,7 @@ pub enum Command {
     NewFolder,
     Paste,
     Sort(SortBy),
+    Icons,
     Columns,
     List,
     ToggleHidden,
@@ -31,7 +33,7 @@ pub enum Command {
 
 const OPEN_WITH: &str = "open-with:";
 
-const ACTIONS: [(&str, Command); 23] = [
+const ACTIONS: [(&str, Command); 24] = [
     ("open", Command::Open),
     ("quick-look", Command::QuickLook),
     ("info", Command::Info),
@@ -48,6 +50,7 @@ const ACTIONS: [(&str, Command); 23] = [
     ("sort:name", Command::Sort(SortBy::Name)),
     ("sort:modified", Command::Sort(SortBy::Modified)),
     ("sort:size", Command::Sort(SortBy::Size)),
+    ("icons", Command::Icons),
     ("columns", Command::Columns),
     ("list", Command::List),
     ("toggle-hidden", Command::ToggleHidden),
@@ -168,7 +171,7 @@ pub struct Folder {
     pub trash: bool,
     pub trash_empty: bool,
     pub sort: SortBy,
-    pub list: bool,
+    pub mode: ViewMode,
     pub hidden_shown: bool,
     pub paste: bool,
 }
@@ -198,16 +201,22 @@ pub fn folder_menu(folder: Folder) -> Menu {
         Menu::new(sorts),
     ));
     items.push(MenuItem::separator());
-    items.push(
-        item("menu-as-columns", &Command::Columns)
-            .shortcut("Super+3")
-            .checked(!folder.list),
-    );
-    items.push(
-        item("menu-as-list", &Command::List)
-            .shortcut("Super+2")
-            .checked(folder.list),
-    );
+    for (message, command, keys, mode) in [
+        ("menu-as-icons", Command::Icons, "Super+1", ViewMode::Icons),
+        ("menu-as-list", Command::List, "Super+2", ViewMode::List),
+        (
+            "menu-as-columns",
+            Command::Columns,
+            "Super+3",
+            ViewMode::Columns,
+        ),
+    ] {
+        items.push(
+            item(message, &command)
+                .shortcut(keys)
+                .checked(folder.mode == mode),
+        );
+    }
     let hidden = if folder.hidden_shown {
         "menu-hide-hidden-files"
     } else {

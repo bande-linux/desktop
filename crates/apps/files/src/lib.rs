@@ -2,13 +2,16 @@ mod browser;
 mod context;
 mod controls;
 mod drag;
+mod grid;
 mod icons;
 mod loader;
 mod menus;
 mod paint;
 mod prompt;
 mod sidebar;
+mod thumbs;
 mod view;
+mod views;
 
 use std::sync::LazyLock;
 
@@ -18,9 +21,10 @@ pub use browser::{Browser, Column, Location};
 pub use paint::permissions;
 pub use sidebar::{Place, PlaceKind, Row, rows, with_volumes, without_bookmark};
 pub use view::{
-    COLUMN_WIDTH, FilesView, Hit, Info, QuickLook, ROW_HEIGHT, Rename, Request, SIDEBAR_WIDTH,
-    Sheet,
+    COLUMN_WIDTH, FilesView, Hit, Info, PATH_BAR_HEIGHT, QuickLook, ROW_HEIGHT, Rename, Request,
+    SIDEBAR_WIDTH, Sheet,
 };
+pub use views::{FolderView, ViewMemory, ViewMode, views_file};
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-files.ftl");
 
@@ -40,6 +44,7 @@ mod tests {
             include_str!("paint.rs"),
             include_str!("sidebar.rs"),
             include_str!("view.rs"),
+            include_str!("grid.rs"),
         ];
         assert_eq!(
             unbound_l10n::missing_ids(super::ENGLISH, &sources),

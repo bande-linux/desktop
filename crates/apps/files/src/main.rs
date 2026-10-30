@@ -7,8 +7,11 @@ use std::time::Instant;
 
 use accesskit::TreeUpdate;
 use unbound_app_menu::{AppMenu, Standard};
-use unbound_files::{Browser, FilesView, Location, Request, Row, rows, without_bookmark};
+use unbound_files::{
+    Browser, FilesView, Location, Request, Row, ViewMemory, rows, views_file, without_bookmark,
+};
 use unbound_fs::Trash;
+use unbound_thumbnails::Thumbnails;
 use unbound_toolkit::{
     App, Appearance, DragAction, DragEvent, MenuPlacement, Rect, Role, Scene, TextSystem, Transfer,
     Window, WindowEvent,
@@ -274,6 +277,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     let sidebar = sidebar(&home);
     let apps = Apps::load(data_dirs(), &config_dirs());
+    let thumbnails = Thumbnails::for_user(apps.data_dirs());
     let mut view = FilesView::new(
         browser,
         sidebar,
@@ -281,6 +285,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         Appearance::default().palette(),
         TextSystem::new(),
     )?;
+    if let Some(thumbnails) = thumbnails {
+        view.set_thumbnails(thumbnails);
+    }
+    let state_home = std::env::var_os("XDG_STATE_HOME").map(PathBuf::from);
+    view.set_view_memory(ViewMemory::load(views_file(state_home.as_deref(), &home)));
     if info {
         view.show_inspector();
     }

@@ -49,6 +49,25 @@ fn the_session_goes_idle_after_the_timeout_without_input_and_resumes_on_input() 
 }
 
 #[test]
+fn waking_from_sleep_restarts_the_countdown_and_ends_idle() {
+    let mut server = server();
+    let mut power = watcher(&mut server);
+    let watch = power.watch_idle(&mut server, 5_000, false);
+    tick(&mut server, &mut power, SECOND);
+    tick(&mut server, &mut power, 6 * SECOND);
+    assert_eq!(power.idle_events(watch), [IdleEvent::Idled]);
+
+    server.woke();
+    assert_eq!(tick(&mut server, &mut power, 7 * SECOND), Some(12 * SECOND));
+    tick(&mut server, &mut power, 11 * SECOND);
+
+    assert_eq!(
+        power.idle_events(watch),
+        [IdleEvent::Idled, IdleEvent::Resumed]
+    );
+}
+
+#[test]
 fn input_restarts_the_countdown() {
     let mut server = server();
     let mut power = watcher(&mut server);

@@ -442,24 +442,36 @@ impl DrmBackend {
     pub fn session_changed(&mut self, event: SessionEvent) -> Result<(), DrmBackendError> {
         match event {
             SessionEvent::PauseSession => {
-                if let Some(libinput) = self.libinput.as_mut() {
-                    libinput.suspend();
-                }
+                self.suspend_input();
                 self.device.pause();
+                Ok(())
             }
             SessionEvent::ActivateSession => {
                 self.device.activate(true)?;
-                for head in &mut self.heads {
-                    if let Err(error) = head.compositor.reset_state() {
-                        tracing::warn!("cannot reset {}: {error}", head.config.name);
-                    }
-                }
-                if let Some(libinput) = self.libinput.as_mut() {
-                    libinput
-                        .resume()
-                        .map_err(|()| "libinput cannot resume its devices")?;
-                }
+                self.wake()
             }
+        }
+    }
+
+    pub fn suspend_input(&mut self) {
+        if let Some(libinput) = self.libinput.as_mut() {
+            libinput.suspend();
+        }
+    }
+
+    pub fn wake(&mut self) -> Result<(), DrmBackendError> {
+        if !self.session.is_active() {
+            return Ok(());
+        }
+        for head in &mut self.heads {
+            if let Err(error) = head.compositor.reset_state() {
+                tracing::warn!("cannot reset {}: {error}", head.config.name);
+            }
+        }
+        if let Some(libinput) = self.libinput.as_mut() {
+            libinput
+                .resume()
+                .map_err(|()| "libinput cannot resume its devices")?;
         }
         Ok(())
     }

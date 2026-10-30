@@ -14,8 +14,9 @@ use smithay::wayland::socket::ListeningSocketSource;
 use unbound_compositor::{
     CLIPBOARD_DAEMON, CursorTheme, DrmBackend, FrameClock, FrameOutput, FrameScheduler, GREETER,
     Headless, InputSettings, REFRESH, REVIEW, Renderer, SCREENSHOT, SHELL, SessionRequest,
-    SessionRole, SessionUpkeep, export_session_environment, follow_alerts, follow_appearance,
-    follow_input_settings, follow_session, notify_ready, serve_keyboard_monitor,
+    SessionRole, SessionUpkeep, Sleep, export_session_environment, follow_alerts,
+    follow_appearance, follow_input_settings, follow_session, follow_sleep, notify_ready,
+    serve_keyboard_monitor,
 };
 use unbound_config::{BUS_NAME, Config, OBJECT_PATH, config_path};
 use zbus::blocking::fdo::PropertiesProxy;
@@ -181,6 +182,11 @@ fn hotplug(app: &mut App<DrmBackend>) {
     }
 }
 
+fn reactivate(app: &mut App<DrmBackend>) {
+    hotplug(app);
+    app.schedulers.iter_mut().for_each(FrameScheduler::resume);
+}
+
 fn page_flipped(app: &mut App<DrmBackend>, crtc: crtc::Handle, metadata: Option<DrmEventMetadata>) {
     let flipped = app.output.flipped(crtc, metadata).and_then(|flipped| {
         let Some((name, vblank)) = flipped else {
@@ -227,10 +233,27 @@ fn run_drm(device: Option<&Path>, session: Session) -> Result<(), Box<dyn Error>
             tracing::warn!("cannot follow the session: {error}");
         }
         if app.output.session_active() {
-            hotplug(app);
-            app.schedulers.iter_mut().for_each(FrameScheduler::resume);
+            reactivate(app);
         }
     })?;
+    match follow_sleep() {
+        Ok(changes) => {
+            handle.insert_source(changes, |event, _, app| match event {
+                Event::Msg(Sleep::Starting) => app.output.suspend_input(),
+                Event::Msg(Sleep::Ended) => {
+                    if let Err(error) = app.output.wake() {
+                        tracing::warn!("cannot wake the displays and input: {error}");
+                    }
+                    if app.output.session_active() {
+                        reactivate(app);
+                    }
+                    app.compositor.woke();
+                }
+                Event::Closed => {}
+            })?;
+        }
+        Err(error) => tracing::warn!("cannot follow sleep: {error}"),
+    }
     handle.insert_source(notifiers.device, |event, metadata, app| match event {
         DrmEvent::VBlank(crtc) => page_flipped(app, crtc, *metadata),
         DrmEvent::Error(error) => tracing::warn!("DRM error: {error}"),
@@ -465,10 +488,10 @@ where
         let snap_due = compositor.snap_tick(now());
         let mut frame_wake = None;
         for scheduler in schedulers.iter_mut() {
-            let frame = scheduler
-                .poll(now, compositor, output)
-                .map_err(Into::into)?;
-            frame_wake = frame_wake.into_iter().chain(frame.wake_at).min();
+            match scheduler.poll(now, compositor, output) {
+                Ok(frame) => frame_wake = frame_wake.into_iter().chain(frame.wake_at).min(),
+                Err(error) => tracing::warn!("cannot show a frame: {}", error.into()),
+            }
         }
         let frame_wait = frame_wake.map(|at: Duration| at.saturating_sub(now()));
         let idle_wait = compositor

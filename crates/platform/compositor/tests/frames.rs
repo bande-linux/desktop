@@ -1,10 +1,12 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+use std::io;
 use std::time::Duration;
 
 use smithay::utils::Size;
 use unbound_compositor::{
-    FrameClock, FrameScheduler, Headless, REFRESH, Renderer, SAFETY_MARGIN, Vblank,
+    FrameClock, FrameOutput, FrameScheduler, Headless, Poll, REFRESH, Renderer, SAFETY_MARGIN,
+    Submission, Vblank,
 };
 use unbound_test_wayland::{Presented, RED, ShmImage, TestClient};
 use wayland_client::protocol::wl_shm::Format;
@@ -208,4 +210,83 @@ fn a_wake_up_too_late_to_render_in_time_draws_at_once_for_the_next_vblank() {
     let (next, _, presented) = late_wake_up(milliseconds(3) + MICROSECOND);
 
     assert_eq!(presented.sequence, next.sequence + 1);
+}
+
+struct Display {
+    failing: bool,
+    submitted: usize,
+}
+
+impl FrameOutput for Display {
+    type Error = io::Error;
+
+    fn submit(&mut self, _: &mut Headless, _: &str) -> io::Result<Submission> {
+        if self.failing {
+            return Err(io::Error::other("the connector is gone"));
+        }
+        self.submitted += 1;
+        Ok(Submission::AwaitingFlip)
+    }
+}
+
+fn poll_display(session: &mut Session, display: &mut Display, now: Duration) -> io::Result<Poll> {
+    session.scheduler.poll(|| now, &mut session.server, display)
+}
+
+fn submit_through(session: &mut Session, display: &mut Display, mut now: Duration) {
+    let before = display.submitted;
+    loop {
+        let poll = poll_display(session, display, now).expect("frame");
+        if display.submitted > before {
+            return;
+        }
+        now = poll.wake_at.expect("a frame is due");
+    }
+}
+
+#[test]
+fn a_flip_lost_in_sleep_stops_holding_back_frames_once_awake() {
+    let (mut session, last) = Session::with_a_window();
+    let mut display = Display {
+        failing: false,
+        submitted: 0,
+    };
+    session.commit_with_feedback();
+    submit_through(&mut session, &mut display, last.time);
+
+    session.commit_with_feedback();
+    let later = last.time + REFRESH * 10;
+    assert_eq!(
+        poll_display(&mut session, &mut display, later).expect("frame"),
+        Poll::default()
+    );
+
+    session.scheduler.resume();
+    submit_through(&mut session, &mut display, later);
+    assert_eq!(display.submitted, 2);
+}
+
+#[test]
+fn a_frame_the_display_refuses_is_dropped_instead_of_retried_every_refresh() {
+    let (mut session, last) = Session::with_a_window();
+    let mut display = Display {
+        failing: true,
+        submitted: 0,
+    };
+    session.commit_with_feedback();
+    let mut now = last.time;
+    while let Ok(poll) = poll_display(&mut session, &mut display, now) {
+        now = poll.wake_at.expect("a frame is due");
+    }
+
+    let later = now + REFRESH * 3;
+    assert_eq!(
+        poll_display(&mut session, &mut display, later).expect("idle"),
+        Poll::default()
+    );
+
+    display.failing = false;
+    session.commit_with_feedback();
+    submit_through(&mut session, &mut display, later);
+    assert_eq!(display.submitted, 1);
 }

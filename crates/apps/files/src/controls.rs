@@ -173,10 +173,10 @@ impl FilesView {
                 self.press = None;
                 self.ui.handle(event) | self.leave()
             }
-            Event::Scroll(scroll) => match self.over_control(scroll.position) {
-                true => self.ui.handle(event),
-                false => self.files_scroll(scroll.position, scroll.delta.y),
-            },
+            Event::Scroll(scroll) => {
+                self.ui.handle(event)
+                    || (!self.over_control(scroll.position) && self.files_scroll(scroll))
+            }
             _ => self.ui.handle(event),
         }
     }
@@ -530,11 +530,12 @@ impl FilesView {
             .skip(first)
             .find_map(|(index, column)| {
                 let row = column.entries.iter().position(|entry| entry.path == path)?;
-                Some((index, row, column.scroll))
+                Some((index, row))
             });
-        let Some((index, row, scroll)) = found else {
+        let Some((index, row)) = found else {
             return Rect::default();
         };
+        let scroll = self.column_offset(index);
         let x = content.x + (index - first) as f32 * COLUMN_WIDTH + ROW_INSET;
         let y = content.y + self.rows_top() + row as f32 * ROW_HEIGHT - scroll;
         let name_x = x + NAME_INSET - FIELD_INSET;

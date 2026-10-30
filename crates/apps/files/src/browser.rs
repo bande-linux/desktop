@@ -16,7 +16,6 @@ pub struct Column {
     pub selected: Option<usize>,
     pub marked: Vec<usize>,
     pub anchor: Option<usize>,
-    pub scroll: f32,
     pub filter: String,
     pub revision: u64,
 }
@@ -35,7 +34,6 @@ impl Column {
             selected: None,
             marked: Vec::new(),
             anchor: None,
-            scroll: 0.0,
             filter: String::new(),
         }
     }
@@ -364,7 +362,6 @@ impl Browser {
             return;
         }
         shown.filter = filter.to_owned();
-        shown.scroll = 0.0;
         self.reload_column(column);
         let shown = &mut self.columns[column];
         if shown.selected.is_none() && !shown.entries.is_empty() && !filter.is_empty() {

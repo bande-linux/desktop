@@ -224,10 +224,11 @@ impl FilesView {
         let frame = Rect::new(x, content.y, COLUMN_WIDTH, content.height);
         self.hits.push((frame, Hit::Column(index)));
         let mut rows = Vec::new();
-        let first = (column.scroll / ROW_HEIGHT).floor() as usize;
+        let scroll = self.column_offset(index);
+        let first = (scroll.max(0.0) / ROW_HEIGHT).floor() as usize;
         let renaming = self.rename.as_ref().map(|rename| rename.path.clone());
         for (position, entry) in column.entries.iter().enumerate().skip(first) {
-            let y = content.y + self.rows_top() + position as f32 * ROW_HEIGHT - column.scroll;
+            let y = content.y + self.rows_top() + position as f32 * ROW_HEIGHT - scroll;
             if y > content.y + content.height {
                 break;
             }
@@ -298,6 +299,7 @@ impl FilesView {
             shape: Shape::rect(frame),
             items: rows,
         });
+        self.paint_column_scrollbar(index, frame, items);
         items.push(self.fill(
             Rect::new(x + COLUMN_WIDTH - 1.0, content.y, 1.0, content.height),
             0.0,

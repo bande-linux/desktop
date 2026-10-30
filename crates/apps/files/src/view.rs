@@ -12,9 +12,10 @@ use unbound_fs::{
 };
 use unbound_preview::Preview;
 use unbound_toolkit::ui::{
-    Context, Cursor, Event, Key, Menu, Modifiers, Pointer, PointerButton, Ui, Widget, WidgetId,
+    Context, Cursor, Event, Key, Menu, Modifiers, Pointer, PointerButton, Scroll, ScrollState, Ui,
+    Widget, WidgetId,
 };
-use unbound_toolkit::{Image, Palette, Point, Rect, TextSystem};
+use unbound_toolkit::{Image, Item, Palette, Point, Rect, TextSystem};
 use unbound_volumes::mounted_volumes;
 use unbound_xdg::{Apps, DesktopEntry, UserDir, path_from_file_uri, user_dir};
 
@@ -122,6 +123,7 @@ pub struct FilesView {
     pub(crate) table_keys: HashMap<String, usize>,
     pub(crate) table_revealed: Option<usize>,
     pub(crate) press: Option<Press>,
+    scrolls: Vec<(Location, ScrollState)>,
     pub(crate) sheet_cancel: Option<WidgetId>,
     pub(crate) size: (f32, f32),
     pub(crate) quick_look: Option<QuickLook>,
@@ -208,6 +210,7 @@ impl FilesView {
             table_keys: HashMap::new(),
             table_revealed: None,
             press: None,
+            scrolls: Vec::new(),
             sheet_cancel: None,
             size: (0.0, 0.0),
             quick_look: None,
@@ -620,47 +623,72 @@ impl FilesView {
         }
     }
 
+    fn fit_scrolls(&mut self) {
+        let viewport = self.rows_height();
+        let columns = self.browser.columns();
+        self.scrolls.truncate(columns.len());
+        for (index, column) in columns.iter().enumerate() {
+            let content = column.entries.len() as f32 * ROW_HEIGHT;
+            match self.scrolls.get_mut(index) {
+                Some((location, _)) if *location == column.location => {}
+                Some(slot) => *slot = (column.location.clone(), ScrollState::default()),
+                None => self
+                    .scrolls
+                    .push((column.location.clone(), ScrollState::default())),
+            }
+            self.scrolls[index].1.set_extent(content, viewport);
+        }
+    }
+
+    pub(crate) fn column_offset(&mut self, index: usize) -> f32 {
+        self.fit_scrolls();
+        let cx = self.ui.context();
+        self.scrolls
+            .get(index)
+            .map_or(0.0, |(_, scroll)| scroll.offset(cx))
+    }
+
+    pub(crate) fn paint_column_scrollbar(
+        &mut self,
+        index: usize,
+        frame: Rect,
+        items: &mut Vec<Item>,
+    ) {
+        let cx = self.ui.context();
+        if let Some((_, scroll)) = self.scrolls.get(index) {
+            scroll.paint_scrollbar(cx, frame, items);
+        }
+    }
+
     fn keep_selection_visible(&mut self) {
-        let height = self.rows_height();
-        for column in self.browser.columns_mut() {
-            let Some(row) = column.selected else {
-                continue;
-            };
-            let top = row as f32 * ROW_HEIGHT;
-            let scroll = column.scroll;
-            if top < scroll {
-                column.scroll = top;
-            } else if top + ROW_HEIGHT > scroll + height {
-                column.scroll = top + ROW_HEIGHT - height;
+        self.fit_scrolls();
+        let rows = self
+            .browser
+            .columns()
+            .iter()
+            .map(|column| column.selected)
+            .collect::<Vec<_>>();
+        let cx = self.ui.context();
+        for ((_, scroll), row) in self.scrolls.iter_mut().zip(rows) {
+            if let Some(row) = row {
+                let top = row as f32 * ROW_HEIGHT;
+                scroll.reveal(cx, top, top + ROW_HEIGHT);
             }
         }
-        self.clamp_scroll();
     }
 
-    fn clamp_scroll(&mut self) {
-        let height = self.rows_height();
-        for column in self.browser.columns_mut() {
-            let content = column.entries.len() as f32 * ROW_HEIGHT;
-            column.scroll = column.scroll.clamp(0.0, (content - height).max(0.0));
-        }
-    }
-
-    pub fn scroll(&mut self, dy: f32) -> bool {
+    fn scroll(&mut self, scroll: &Scroll) -> bool {
         let content = self.content_frame();
-        if !contains(content, self.pointer) {
+        if self.browser.single() || !contains(content, scroll.position) {
             return false;
         }
-        let column = if self.browser.single() {
-            0
-        } else {
-            self.first_visible_column() + ((self.pointer.x - content.x) / COLUMN_WIDTH) as usize
-        };
-        let Some(shown) = self.browser.columns_mut().get_mut(column) else {
-            return false;
-        };
-        shown.scroll += dy;
-        self.clamp_scroll();
-        true
+        let column =
+            self.first_visible_column() + ((scroll.position.x - content.x) / COLUMN_WIDTH) as usize;
+        self.fit_scrolls();
+        let cx = self.ui.context();
+        self.scrolls
+            .get_mut(column)
+            .is_some_and(|(_, state)| state.scroll(cx, scroll))
     }
 
     pub(crate) fn hit(&self, at: Point) -> Option<Hit> {
@@ -790,9 +818,9 @@ impl FilesView {
         changed
     }
 
-    pub(crate) fn files_scroll(&mut self, position: Point, dy: f32) -> bool {
-        self.pointer = position;
-        self.scroll(dy)
+    pub(crate) fn files_scroll(&mut self, scroll: &Scroll) -> bool {
+        self.pointer = scroll.position;
+        self.scroll(scroll)
     }
 
     pub(crate) fn leave(&mut self) -> bool {

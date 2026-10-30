@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use smithay::backend::renderer::element::memory::{
     MemoryRenderBuffer, MemoryRenderBufferRenderElement,
@@ -34,6 +34,7 @@ use crate::state::{Headless, OutputElement, State};
 type Frame = Rectangle<f64, Logical>;
 
 const DWELL: Duration = Duration::from_millis(150);
+const ENTRIES_FRESH_FOR: Duration = Duration::from_secs(30);
 const MARGIN: f64 = 48.0;
 const PAD: f64 = 12.0;
 const GAP: f64 = 4.0;
@@ -210,7 +211,7 @@ pub(crate) struct Switcher {
     session: Option<Session>,
     card: Option<Card>,
     labels: Option<Labels>,
-    entries: Option<Vec<DesktopEntry>>,
+    entries: Option<(Instant, Vec<DesktopEntry>)>,
     known: HashMap<String, App>,
     images: HashMap<(String, u32), Option<Image>>,
     announcer: Announcer,
@@ -237,14 +238,25 @@ impl Switcher {
         if let Some(known) = self.known.get(id) {
             return known.clone();
         }
-        let entries = self.entries.get_or_insert_with(|| {
-            applications(
-                &data_dirs(),
-                Locale::from_env().as_ref(),
-                &current_desktops(),
-            )
-        });
-        let entry = entries.iter().find(|entry| entry.app_id() == id);
+        let stale = self
+            .entries
+            .as_ref()
+            .is_none_or(|(loaded, _)| loaded.elapsed() >= ENTRIES_FRESH_FOR);
+        if stale && !id.is_empty() {
+            self.entries = Some((
+                Instant::now(),
+                applications(
+                    &data_dirs(),
+                    Locale::from_env().as_ref(),
+                    &current_desktops(),
+                ),
+            ));
+        }
+        let entry = self
+            .entries
+            .iter()
+            .flat_map(|(_, entries)| entries)
+            .find(|entry| entry.app_id() == id);
         let name = entry.map(|entry| entry.name.clone()).unwrap_or_else(|| {
             if id.is_empty() {
                 title.to_owned()
@@ -258,7 +270,7 @@ impl Switcher {
             name,
             icon: entry.and_then(|entry| entry.icon.clone()),
         };
-        if !id.is_empty() {
+        if entry.is_some() {
             self.known.insert(id.to_owned(), app.clone());
         }
         app

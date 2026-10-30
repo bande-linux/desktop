@@ -657,7 +657,7 @@ impl Table {
     }
 
     fn select_range(&mut self, to: usize) {
-        let anchor = self.anchor.unwrap_or(to);
+        let anchor = *self.anchor.get_or_insert(to);
         let (low, high) = (anchor.min(to), anchor.max(to));
         self.selected = (0..self.shown.len())
             .map(|index| (low..=high).contains(&index))

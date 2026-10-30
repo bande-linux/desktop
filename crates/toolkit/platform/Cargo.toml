@@ -11,6 +11,7 @@ accesskit_unix.workspace = true
 pollster.workspace = true
 raw-window-handle.workspace = true
 rustix = { workspace = true, features = ["fs", "pipe"] }
+tracing.workspace = true
 unbound-graphics.workspace = true
 unbound-l10n.workspace = true
 unbound-protocols = { workspace = true, features = ["client"] }

@@ -1512,15 +1512,24 @@ impl Window {
             .take()
             .filter(|(_, shown_scale)| *shown_scale == scale)
             .and_then(|(shown, _)| damage(&shown, scene, scale));
-        let path = match &mut self.gpu {
-            Gpu::Ready(gpu) => {
-                gpu.present(scene, scale, damage.as_deref())?;
+        let presented = match &mut self.gpu {
+            Gpu::Ready(gpu) => Some(gpu.present(scene, scale, damage.as_deref())),
+            Gpu::Starting(_) | Gpu::Released | Gpu::Unavailable => None,
+        };
+        let path = match presented {
+            Some(Ok(())) => {
                 if self.shm_target.is_holding() {
                     self.shm_target.destroy();
                 }
                 FramePath::Gpu
             }
-            Gpu::Starting(_) | Gpu::Released | Gpu::Unavailable => {
+            Some(Err(error)) => {
+                tracing::warn!(%error, "drawing on the CPU after a GPU failure");
+                self.gpu = Gpu::Unavailable;
+                self.draw_on_cpu(scene, None)?;
+                FramePath::Cpu
+            }
+            None => {
                 self.draw_on_cpu(scene, damage.as_deref())?;
                 FramePath::Cpu
             }
@@ -1762,7 +1771,7 @@ impl GpuSurface {
         if self.configured != Some(size) {
             self.config.width = size.0;
             self.config.height = size.1;
-            self.surface.configure(self.gpu.device(), &self.config);
+            self.gpu.configure(&self.surface, &self.config)?;
             self.configured = Some(size);
         }
         self.renderer.present(scene, scale, &self.surface, damage)

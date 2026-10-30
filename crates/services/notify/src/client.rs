@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use zbus::blocking::Connection;
 use zbus::zvariant::Value;
 
-use crate::{BUS_NAME, OBJECT_PATH, Urgency};
+use crate::{BUS_NAME, OBJECT_PATH, Urgency, WirePresentation};
 
 const INTERFACE: &str = "org.freedesktop.Notifications";
 
@@ -24,11 +24,7 @@ pub fn notify(connection: &Connection, request: &Request<'_>) -> zbus::Result<u3
         .iter()
         .flat_map(|(key, label)| [*key, *label])
         .collect();
-    let urgency = Value::from(match request.urgency {
-        Urgency::Low => 0u8,
-        Urgency::Normal => 1,
-        Urgency::Critical => 2,
-    });
+    let urgency = Value::from(crate::wire::urgency_code(request.urgency));
     let hints = HashMap::from([("urgency", urgency)]);
     connection
         .call_method(
@@ -49,6 +45,38 @@ pub fn notify(connection: &Connection, request: &Request<'_>) -> zbus::Result<u3
         )?
         .body()
         .deserialize()
+}
+
+#[zbus::proxy(
+    interface = "org.unbound.NotificationCenter",
+    default_service = "org.freedesktop.Notifications",
+    default_path = "/org/freedesktop/Notifications",
+    gen_async = false,
+    blocking_name = "NotificationCenter"
+)]
+pub trait NotificationCenter {
+    fn get_presentation(&self) -> zbus::Result<WirePresentation>;
+
+    fn activate(&self, id: u32, action_key: &str, activation_token: &str) -> zbus::Result<bool>;
+
+    fn dismiss(&self, id: u32) -> zbus::Result<()>;
+
+    fn hide_banner(&self, id: u32) -> zbus::Result<()>;
+
+    fn clear(&self, group: &str) -> zbus::Result<()>;
+
+    fn clear_all(&self) -> zbus::Result<()>;
+
+    fn hold_banners(&self, held: bool) -> zbus::Result<()>;
+
+    #[zbus(property)]
+    fn do_not_disturb(&self) -> zbus::Result<bool>;
+
+    #[zbus(property)]
+    fn set_do_not_disturb(&self, enabled: bool) -> zbus::Result<()>;
+
+    #[zbus(signal)]
+    fn presentation_changed(&self, presentation: WirePresentation) -> zbus::Result<()>;
 }
 
 pub fn close(connection: &Connection, id: u32) -> zbus::Result<()> {

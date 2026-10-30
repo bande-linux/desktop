@@ -13,7 +13,10 @@ unbound-bluetooth.workspace = true
 unbound-l10n.workspace = true
 unbound-log.workspace = true
 unbound-network.workspace = true
+unbound-notify.workspace = true
+unbound-power.workspace = true
 unbound-toolkit.workspace = true
+unbound-xdg.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]

@@ -360,6 +360,14 @@ fn anchor_of(edges: Edges) -> zwlr_layer_surface_v1::Anchor {
     anchor
 }
 
+fn keyboard_interactivity(focus: KeyboardFocus) -> zwlr_layer_surface_v1::KeyboardInteractivity {
+    match focus {
+        KeyboardFocus::None => zwlr_layer_surface_v1::KeyboardInteractivity::None,
+        KeyboardFocus::OnDemand => zwlr_layer_surface_v1::KeyboardInteractivity::OnDemand,
+        KeyboardFocus::Exclusive => zwlr_layer_surface_v1::KeyboardInteractivity::Exclusive,
+    }
+}
+
 impl Window {
     pub fn open(role: Role, size: (u32, u32)) -> Result<Self, WindowError> {
         Self::on(
@@ -437,15 +445,7 @@ impl Window {
                     stretched(options.anchor.top, options.anchor.bottom, size.1),
                 );
                 layer_surface.set_exclusive_zone(options.exclusive_zone);
-                layer_surface.set_keyboard_interactivity(match options.keyboard {
-                    KeyboardFocus::None => zwlr_layer_surface_v1::KeyboardInteractivity::None,
-                    KeyboardFocus::OnDemand => {
-                        zwlr_layer_surface_v1::KeyboardInteractivity::OnDemand
-                    }
-                    KeyboardFocus::Exclusive => {
-                        zwlr_layer_surface_v1::KeyboardInteractivity::Exclusive
-                    }
-                });
+                layer_surface.set_keyboard_interactivity(keyboard_interactivity(options.keyboard));
                 ShellSurface::Layer(layer_surface)
             }
             Role::Lock => ShellSurface::Lock(Locked::lock(&mut state, &mut queue, &surface)?),
@@ -1135,26 +1135,6 @@ impl Window {
         Ok(())
     }
 
-    pub fn set_input_region(&mut self, area: Option<Rect>) {
-        let Some(area) = area else {
-            self.surface.set_input_region(None);
-            return;
-        };
-        let Some(compositor) = &self.state.compositor else {
-            return;
-        };
-        let region = compositor.create_region(&self.queue.handle(), ());
-        region.add(
-            area.x.floor() as i32,
-            area.y.floor() as i32,
-            area.width.ceil() as i32,
-            area.height.ceil() as i32,
-        );
-        self.surface.set_input_region(Some(&region));
-        region.destroy();
-        self.needs_redraw = true;
-    }
-
     pub fn set_exclusive_zone(&mut self, zone: i32) {
         if let ShellSurface::Layer(layer) = &self.role {
             layer.set_exclusive_zone(zone);
@@ -1182,6 +1162,40 @@ impl Window {
         while !self.state.configured {
             self.queue.blocking_dispatch(&mut self.state)?;
         }
+        self.needs_redraw = true;
+        Ok(())
+    }
+
+    pub fn set_input_region(&mut self, region: Option<&[Rect]>) {
+        let Some(rects) = region else {
+            self.surface.set_input_region(None);
+            self.needs_redraw = true;
+            return;
+        };
+        let Some(compositor) = &self.state.compositor else {
+            return;
+        };
+        let wayland_region = compositor.create_region(&self.queue.handle(), ());
+        for rect in rects {
+            let left = rect.x.floor() as i32;
+            let top = rect.y.floor() as i32;
+            wayland_region.add(
+                left,
+                top,
+                (rect.x + rect.width).ceil() as i32 - left,
+                (rect.y + rect.height).ceil() as i32 - top,
+            );
+        }
+        self.surface.set_input_region(Some(&wayland_region));
+        wayland_region.destroy();
+        self.needs_redraw = true;
+    }
+
+    pub fn set_keyboard_focus(&mut self, focus: KeyboardFocus) -> Result<(), WindowError> {
+        let ShellSurface::Layer(layer) = &self.role else {
+            return Err(WindowError::Missing("a layer surface"));
+        };
+        layer.set_keyboard_interactivity(keyboard_interactivity(focus));
         self.needs_redraw = true;
         Ok(())
     }

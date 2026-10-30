@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
 pub const BANNER_DURATION: Duration = Duration::from_secs(5);
+pub const BANNER_LINGER: Duration = Duration::from_secs(2);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CloseReason {
@@ -94,12 +95,18 @@ pub struct Invoked {
     pub closed: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HiddenBanner {
+    pub closed: bool,
+}
+
 #[derive(Debug, Default)]
 pub struct Center {
     last_id: u32,
     sequence: u64,
     entries: BTreeMap<u32, Entry>,
     do_not_disturb: bool,
+    banners_held: bool,
 }
 
 impl Center {
@@ -189,18 +196,55 @@ impl Center {
         self.do_not_disturb
     }
 
+    pub fn clear_all(&mut self) -> Vec<u32> {
+        std::mem::take(&mut self.entries).into_keys().collect()
+    }
+
+    pub fn hide_banner(&mut self, id: u32) -> Option<HiddenBanner> {
+        let entry = self.entries.get_mut(&id)?;
+        if entry.banner == Banner::Hidden {
+            return None;
+        }
+        if entry.notification.transient {
+            self.entries.remove(&id);
+            return Some(HiddenBanner { closed: true });
+        }
+        entry.banner = Banner::Hidden;
+        Some(HiddenBanner { closed: false })
+    }
+
+    pub fn hold_banners(&mut self, held: bool, now: Instant) {
+        if self.banners_held && !held {
+            let linger = now + BANNER_LINGER;
+            for entry in self.entries.values_mut() {
+                if let Banner::Until(deadline) = entry.banner {
+                    let deadline = deadline.max(linger);
+                    entry.banner = Banner::Until(deadline);
+                    entry.expires_at = entry.expires_at.map(|expiry| expiry.max(deadline));
+                }
+            }
+        }
+        self.banners_held = held;
+    }
+
+    fn paused(&self, entry: &Entry) -> bool {
+        self.banners_held && entry.banner != Banner::Hidden
+    }
+
     pub fn advance(&mut self, now: Instant) -> Vec<u32> {
         let expired: Vec<u32> = self
             .entries
             .values()
+            .filter(|entry| !self.paused(entry))
             .filter(|entry| entry.expires_at.is_some_and(|deadline| deadline <= now))
             .map(|entry| entry.notification.id)
             .collect();
         for id in &expired {
             self.entries.remove(id);
         }
+        let held = self.banners_held;
         for entry in self.entries.values_mut() {
-            if matches!(entry.banner, Banner::Until(deadline) if deadline <= now) {
+            if !held && matches!(entry.banner, Banner::Until(deadline) if deadline <= now) {
                 entry.banner = Banner::Hidden;
             }
         }
@@ -210,6 +254,7 @@ impl Center {
     pub fn next_deadline(&self) -> Option<Instant> {
         self.entries
             .values()
+            .filter(|entry| !self.paused(entry))
             .flat_map(|entry| {
                 let banner = match entry.banner {
                     Banner::Until(deadline) => Some(deadline),

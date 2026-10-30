@@ -398,7 +398,7 @@ impl Dock {
         let region = state.input_region();
         if self.input != Some(region) {
             self.input = Some(region);
-            window.set_input_region(Some(region));
+            window.set_input_region(Some(&[region]));
         }
         let zone = state.exclusive_zone();
         if self.zone != zone {

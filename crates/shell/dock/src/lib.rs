@@ -1424,35 +1424,7 @@ impl DockState {
     }
 
     pub fn blur_rects(&self) -> Vec<Rect> {
-        let panel = self.panel;
-        let radius = self
-            .panel_radius()
-            .min(panel.width / 2.0)
-            .min(panel.height / 2.0);
-        if panel.width <= 0.0 || panel.height <= 0.0 {
-            return Vec::new();
-        }
-        let band = radius / BLUR_BANDS as f32;
-        let mut rects = vec![Rect::new(
-            panel.x,
-            panel.y + radius,
-            panel.width,
-            panel.height - 2.0 * radius,
-        )];
-        for index in 0..BLUR_BANDS {
-            let from_edge = index as f32 * band;
-            let rise = radius - from_edge;
-            let inset = (radius - (radius * radius - rise * rise).max(0.0).sqrt()).ceil();
-            let width = panel.width - 2.0 * inset;
-            rects.push(Rect::new(panel.x + inset, panel.y + from_edge, width, band));
-            rects.push(Rect::new(
-                panel.x + inset,
-                panel.y + panel.height - from_edge - band,
-                width,
-                band,
-            ));
-        }
-        rects
+        Shape::rounded(self.panel, self.panel_radius()).bands(BLUR_BANDS)
     }
 
     fn paint_panel(&self, items: &mut Vec<Item>) {

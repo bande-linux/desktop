@@ -1,5 +1,5 @@
 # Dock
-Status: superseded in part by the [combined bar](bar.md) (owner, 2026-10-30): in the default combined mode the bar also holds the app menus, status items, tray and clock. The rules below still hold for the app area and for "separate menu bar" mode.
+Status: superseded by the [combined bar](bar.md) (owner, 2026-10-30), which is the default since E5: the bar holds the app menus, status items, tray, workspaces and clock, and "Clock, tray icons, workspace switcher in the Dock: never" below is reversed. There is no `unbound-dock` binary or package any more and Settings ▸ Dock became Settings ▸ Bar. The rules below still hold for the apps area of the bar and for the "separate menu bar" layout.
 
 ## Purpose
 The Dock (`unbound-dock`) is where apps are started, found again and quit. It shows the apps a

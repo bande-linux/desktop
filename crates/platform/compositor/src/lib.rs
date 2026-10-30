@@ -1,4 +1,5 @@
 mod access;
+mod alert;
 mod app;
 mod appearance;
 mod arrange;

@@ -1,0 +1,36 @@
+[package]
+name = "unbound-speaker-guard"
+description = "Thermal protection for the internal speakers of Apple silicon Macs"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+alsa.workspace = true
+kdl.workspace = true
+signal-hook.workspace = true
+tracing.workspace = true
+unbound-log.workspace = true
+
+[package.metadata.deb]
+maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+section = "sound"
+depends = "$auto, systemd"
+conflicts = "speakersafetyd"
+replaces = "speakersafetyd"
+extended-description = """\
+Keeps the internal speakers of supported Apple silicon Macs within their \
+thermal limits. It reads the amplifier's voltage and current sense, models \
+the voice coil and magnet temperatures with each model's parameters, lowers \
+the amplifier volume before the limit, and keeps the kernel's speaker \
+volume interlock unlocked only while it runs and sees plausible sense data."""
+maintainer-scripts = "debian/"
+assets = [
+    ["target/release/unbound-speaker-guard", "usr/bin/", "755"],
+    ["data/unbound-speaker-guard.service", "usr/lib/systemd/system/", "644"],
+    ["data/96-unbound-speaker-guard.rules", "usr/lib/udev/rules.d/", "644"],
+    ["data/*.kdl", "usr/share/unbound-speaker-guard/", "644"],
+]
+
+[lints]
+workspace = true

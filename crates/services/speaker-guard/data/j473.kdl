@@ -1,0 +1,23 @@
+card "AppleJ473"
+sense-device 2
+sense-channels 2
+period-frames 1024
+amplifier-sensitivity 15.87
+current-full-scale 3.75
+voltage-full-scale 14.0
+
+speaker "" {
+    current-channel 0
+    voltage-channel 1
+    dc-resistance 4.6
+    ambient 46.0
+    coil-thermal-resistance 40.0
+    coil-time-constant 3.7
+    magnet-thermal-resistance 60.0
+    magnet-time-constant 250.0
+    temperature-limit 140.0
+    hard-limit-headroom 40.0
+    attack 1.0
+    release 20.0
+    max-reduction 20.0
+}

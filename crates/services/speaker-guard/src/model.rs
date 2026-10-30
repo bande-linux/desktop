@@ -1,0 +1,151 @@
+use std::path::Path;
+
+use kdl::{KdlDocument, KdlNode};
+
+use crate::sense::SenseLayout;
+use crate::thermal::{LimiterParams, ThermalParams};
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Model {
+    pub card: String,
+    pub sense_device: u32,
+    pub period_frames: usize,
+    pub amplifier_sensitivity: f64,
+    pub speakers: Vec<Speaker>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Speaker {
+    pub control_prefix: String,
+    pub sense: SenseLayout,
+    pub thermal: ThermalParams,
+    pub limiter: LimiterParams,
+}
+
+#[derive(Debug)]
+pub enum ModelError {
+    Read(std::io::Error),
+    Parse(kdl::KdlError),
+    Missing(String),
+    Invalid(String),
+}
+
+impl std::fmt::Display for ModelError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Read(error) => write!(f, "cannot read the model file: {error}"),
+            Self::Parse(error) => write!(f, "cannot parse the model file: {error}"),
+            Self::Missing(key) => write!(f, "the model file has no {key}"),
+            Self::Invalid(reason) => write!(f, "the model file is invalid: {reason}"),
+        }
+    }
+}
+
+impl std::error::Error for ModelError {}
+
+fn number(document: &KdlDocument, key: &str) -> Result<f64, ModelError> {
+    document
+        .get_arg(key)
+        .and_then(|value| {
+            value
+                .as_float()
+                .or_else(|| value.as_integer().map(|i| i as f64))
+        })
+        .ok_or_else(|| ModelError::Missing(key.to_owned()))
+}
+
+fn count(document: &KdlDocument, key: &str) -> Result<usize, ModelError> {
+    document
+        .get_arg(key)
+        .and_then(|value| value.as_integer())
+        .and_then(|value| usize::try_from(value).ok())
+        .ok_or_else(|| ModelError::Missing(key.to_owned()))
+}
+
+fn text(document: &KdlDocument, key: &str) -> Result<String, ModelError> {
+    document
+        .get_arg(key)
+        .and_then(|value| value.as_string())
+        .map(str::to_owned)
+        .ok_or_else(|| ModelError::Missing(key.to_owned()))
+}
+
+fn speaker(node: &KdlNode, document: &KdlDocument) -> Result<Speaker, ModelError> {
+    let control_prefix = node
+        .entries()
+        .first()
+        .and_then(|entry| entry.value().as_string())
+        .ok_or_else(|| ModelError::Missing("speaker control prefix".to_owned()))?
+        .to_owned();
+    let settings = node
+        .children()
+        .ok_or_else(|| ModelError::Missing("speaker settings".to_owned()))?;
+    let speaker = Speaker {
+        control_prefix,
+        sense: SenseLayout {
+            channels: count(document, "sense-channels")?,
+            current_channel: count(settings, "current-channel")?,
+            voltage_channel: count(settings, "voltage-channel")?,
+            current_full_scale: number(document, "current-full-scale")?,
+            voltage_full_scale: number(document, "voltage-full-scale")?,
+            dc_resistance: number(settings, "dc-resistance")?,
+        },
+        thermal: ThermalParams {
+            ambient: number(settings, "ambient")?,
+            coil_resistance: number(settings, "coil-thermal-resistance")?,
+            coil_time_constant: number(settings, "coil-time-constant")?,
+            magnet_resistance: number(settings, "magnet-thermal-resistance")?,
+            magnet_time_constant: number(settings, "magnet-time-constant")?,
+            limit: number(settings, "temperature-limit")?,
+            headroom: number(settings, "hard-limit-headroom")?,
+        },
+        limiter: LimiterParams {
+            attack: number(settings, "attack")?,
+            release: number(settings, "release")?,
+            max_reduction_db: number(settings, "max-reduction")?,
+        },
+    };
+    let sense = &speaker.sense;
+    let thermal = &speaker.thermal;
+    if sense.current_channel >= sense.channels
+        || sense.voltage_channel >= sense.channels
+        || sense.current_channel == sense.voltage_channel
+    {
+        return Err(ModelError::Invalid("sense channels".to_owned()));
+    }
+    if thermal.magnet_time_constant <= thermal.coil_time_constant
+        || thermal.coil_time_constant <= 0.0
+        || thermal.limit <= thermal.ambient
+        || sense.dc_resistance <= 0.0
+    {
+        return Err(ModelError::Invalid("thermal parameters".to_owned()));
+    }
+    Ok(speaker)
+}
+
+impl Model {
+    pub fn parse(source: &str) -> Result<Self, ModelError> {
+        let document: KdlDocument = source.parse().map_err(ModelError::Parse)?;
+        let speakers = document
+            .nodes()
+            .iter()
+            .filter(|node| node.name().value() == "speaker")
+            .map(|node| speaker(node, &document))
+            .collect::<Result<Vec<_>, _>>()?;
+        if speakers.is_empty() {
+            return Err(ModelError::Missing("speaker".to_owned()));
+        }
+        Ok(Self {
+            card: text(&document, "card")?,
+            sense_device: u32::try_from(count(&document, "sense-device")?)
+                .map_err(|_| ModelError::Invalid("sense-device".to_owned()))?,
+            period_frames: count(&document, "period-frames")?,
+            amplifier_sensitivity: number(&document, "amplifier-sensitivity")?,
+            speakers,
+        })
+    }
+
+    pub fn load(path: &Path) -> Result<Self, ModelError> {
+        Self::parse(&std::fs::read_to_string(path).map_err(ModelError::Read)?)
+    }
+}

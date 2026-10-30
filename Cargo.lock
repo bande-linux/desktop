@@ -3901,6 +3901,7 @@ dependencies = [
  "unbound-config",
  "unbound-graphics",
  "unbound-greeter",
+ "unbound-keyboard",
  "unbound-log",
  "unbound-protocols",
  "unbound-render",
@@ -4060,6 +4061,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tracing",
+ "unbound-keyboard",
  "unbound-lock",
  "unbound-log",
  "unbound-toolkit",
@@ -4071,6 +4073,14 @@ name = "unbound-inbox"
 version = "0.1.0"
 dependencies = [
  "rustix 1.1.6",
+]
+
+[[package]]
+name = "unbound-keyboard"
+version = "0.1.0"
+dependencies = [
+ "roxmltree",
+ "unbound-l10n",
 ]
 
 [[package]]
@@ -4115,6 +4125,7 @@ dependencies = [
  "rustix 1.1.6",
  "tracing",
  "unbound-datetime",
+ "unbound-keyboard",
  "unbound-l10n",
  "unbound-log",
  "unbound-toolkit",
@@ -4144,6 +4155,7 @@ dependencies = [
  "unbound-bluetooth",
  "unbound-datetime",
  "unbound-inbox",
+ "unbound-keyboard",
  "unbound-l10n",
  "unbound-log",
  "unbound-network",
@@ -4326,6 +4338,7 @@ dependencies = [
  "unbound-bluetooth",
  "unbound-compositor",
  "unbound-config",
+ "unbound-keyboard",
  "unbound-l10n",
  "unbound-log",
  "unbound-network",

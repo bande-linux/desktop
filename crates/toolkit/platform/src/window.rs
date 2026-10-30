@@ -165,6 +165,10 @@ pub enum WindowEvent {
     },
     AttentionRequested(String),
     FocusShell(String),
+    InputSources {
+        sources: Vec<String>,
+        active: usize,
+    },
     Accessibility(ActionRequest),
 
     AppearanceChanged(Appearance),
@@ -1736,7 +1740,7 @@ impl Dispatch<WlRegistry, ()> for State {
                     state.lock.output = Some(registry.bind(name, 1, handle, ()));
                 }
                 "unbound_shell_v1" => {
-                    state.shell.protocol = Some(registry.bind(name, version.min(8), handle, ()));
+                    state.shell.protocol = Some(registry.bind(name, version.min(10), handle, ()));
                 }
                 "unbound_app_v1" => {
                     state.shell.app = Some(registry.bind(name, version.min(2), handle, ()));

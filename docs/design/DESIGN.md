@@ -51,10 +51,12 @@ better.
 
 ## 4. Look
 
-- **Our own visual language,** built from the tokens in `unbound-toolkit` (colour roles,
-  spacing scale, type scale), never per-app values.
-- **Depth through light, not lines.** Elevation is shown with shadows and translucent
-  materials; separators are used sparingly.
+- **Our own visual language, [Datum](datum.md):** quiet surfaces, one signal, exact edges. Every
+  value comes from the design tokens (colour roles, radii, spacing, type roles, elevation), never
+  per-app values.
+- **Depth through tone, not glass or lines.** Surfaces are opaque; elevation is a tone step plus
+  one shadow pair. Blur only behind the launcher, the overview and modal alerts. Hairlines are
+  rare and named.
 - **Content first.** Chrome is quiet and recedes in inactive windows; the active window and
   the selection are the strongest elements on screen.
 - **Crisp at every scale.** Everything is laid out in points and drawn in pixels at the
@@ -73,7 +75,9 @@ better.
 
 ## 6. Where Unbound deliberately differs from macOS
 
-- The Dock sits on the left edge by default (any edge is possible).
+- One combined bar ([bar](features/bar.md)) on the left edge by default holds the launcher mark,
+  the active app's menus, the apps, status and the clock; a separate top menu bar is an option.
+- Window controls sit on the left as one neutral pill, not traffic lights.
 - Super is the command key; Ctrl is left to terminals and readline.
 - Pure Wayland; no X11 compatibility layer.
 - Configuration is a human-readable file (`config.kdl`); every Settings control writes to it.

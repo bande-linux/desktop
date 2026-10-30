@@ -41,7 +41,7 @@ pub use context_menu::ContextMenu;
 pub use disclosure::{DISCLOSURE_HEIGHT, Disclosure};
 pub use free_layout::FreeLayout;
 pub use label::Label;
-pub use menu::{Menu, MenuItem, MenuOutcome, MenuPanel, MenuTracker};
+pub use menu::{Menu, MenuItem, MenuOutcome, MenuPanel, MenuTracker, shortcut_symbols};
 pub use pop_up_button::PopUpButton;
 pub use progress::{PROGRESS_HEIGHT, ProgressBar, SPINNER_SIZE, Spinner};
 pub use radio_group::RadioGroup;

@@ -22,6 +22,7 @@ image.workspace = true
 image-compare.workspace = true
 rustix = { workspace = true, features = ["fs", "mm"] }
 unbound-greeter.workspace = true
+unbound-keyboard.workspace = true
 unbound-test-bus.workspace = true
 tempfile.workspace = true
 unbound-test-wayland.workspace = true

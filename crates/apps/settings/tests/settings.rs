@@ -5,7 +5,8 @@ use std::time::Duration;
 
 use accesskit::{Node, Role};
 use unbound_config::{
-    Appearance, Config, ConfigService, ConfigStore, DockEdge, Suspend, WallpaperFit,
+    Appearance, CapsLock, Config, ConfigService, ConfigStore, DockEdge, SecondaryClick, Suspend,
+    WallpaperFit,
 };
 use unbound_settings::{Command, Idle, PaneId, SettingId, SettingsClient, SettingsView, Value};
 use unbound_settings_panes::panes;
@@ -267,6 +268,14 @@ fn changes_are_written_through_org_unbound_config() {
         (SettingId::ReduceMotion, Value::Flag(true)),
         (SettingId::WallpaperFit, keyword("fit")),
         (
+            SettingId::InputSources,
+            Value::Codes(vec!["se".to_owned(), "us(dvorak)".to_owned()]),
+        ),
+        (SettingId::CapsLock, keyword("escape")),
+        (SettingId::TrackpadSpeed, Value::Number(8)),
+        (SettingId::TrackpadSecondaryClick, keyword("corner")),
+        (SettingId::MouseNaturalScrolling, Value::Flag(true)),
+        (
             SettingId::Wallpaper,
             Value::Pictures {
                 light: "/usr/share/unbound/wallpapers/aurora-light.svg".to_owned(),
@@ -287,6 +296,23 @@ fn changes_are_written_through_org_unbound_config() {
     assert!(written.reduce_motion);
     assert_eq!(written.wallpaper.fit, WallpaperFit::Fit);
     assert_eq!(
+        written
+            .keyboard
+            .input_sources
+            .iter()
+            .map(|source| source.code())
+            .collect::<Vec<_>>(),
+        ["se", "us(dvorak)"]
+    );
+    assert_eq!(written.keyboard.caps_lock, CapsLock::Escape);
+    assert!((written.trackpad.speed - 0.6).abs() < 1e-9);
+    assert_eq!(written.trackpad.secondary_click, SecondaryClick::Corner);
+    assert!(written.mouse.natural_scrolling);
+    assert_eq!(
+        client.get(SettingId::TrackpadSpeed).expect("speed"),
+        Value::Number(8)
+    );
+    assert_eq!(
         written.wallpaper.dark.as_deref(),
         Some(std::path::Path::new(
             "/usr/share/unbound/wallpapers/aurora-dark.svg"
@@ -300,7 +326,10 @@ fn changes_are_written_through_org_unbound_config() {
         client.get(SettingId::SleepAfter).expect("sleep"),
         keyword("with-display")
     );
-    assert_eq!(client.read(&unbound_settings::CONFIG_SETTINGS).len(), 12);
+    assert_eq!(
+        client.read(&unbound_settings::CONFIG_SETTINGS).len(),
+        unbound_settings::CONFIG_SETTINGS.len()
+    );
 }
 
 #[test]

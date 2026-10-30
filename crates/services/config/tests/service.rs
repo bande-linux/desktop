@@ -458,3 +458,46 @@ fn sleep_can_be_returned_to_following_the_display() {
             .contains("suspend-after")
     );
 }
+
+#[test]
+fn input_sources_and_pointer_settings_are_writable_properties() {
+    let fixture = start("");
+    let codes = |fixture: &Fixture| {
+        Vec::<String>::try_from(get(&fixture.client, "InputSources")).expect("strings")
+    };
+    assert!(!codes(&fixture).is_empty());
+    set(
+        &fixture.client,
+        "InputSources",
+        Value::from(vec!["se", "us(dvorak)"]),
+    )
+    .expect("Set");
+    assert_eq!(codes(&fixture), ["se", "us(dvorak)"]);
+    for invalid in [Value::from(Vec::<&str>::new()), Value::from(vec!["us,se"])] {
+        let rejected = set(&fixture.client, "InputSources", invalid);
+        assert!(
+            matches!(rejected, Err(zbus::fdo::Error::InvalidArgs(_))),
+            "{rejected:?}"
+        );
+    }
+    set(&fixture.client, "TrackpadSpeed", Value::from(0.5)).expect("Set");
+    set(
+        &fixture.client,
+        "TrackpadSecondaryClick",
+        Value::from("corner"),
+    )
+    .expect("Set");
+    assert_eq!(
+        f64::try_from(get(&fixture.client, "TrackpadSpeed")).expect("double"),
+        0.5
+    );
+    assert_eq!(
+        String::try_from(get(&fixture.client, "TrackpadSecondaryClick")).expect("string"),
+        "corner"
+    );
+    let too_fast = set(&fixture.client, "MouseSpeed", Value::from(3.0));
+    assert!(
+        matches!(too_fast, Err(zbus::fdo::Error::InvalidArgs(_))),
+        "{too_fast:?}"
+    );
+}

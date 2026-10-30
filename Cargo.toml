@@ -35,6 +35,7 @@ image-compare = "=0.5.0"
 pollster = "=1.0.1"
 raw-window-handle = "=0.6.2"
 resvg = { version = "=0.49.0", default-features = false }
+roxmltree = "=0.21.2"
 serde = { version = "=1.0.229", features = ["derive"] }
 ruzstd = "=0.9.1"
 rustix = { version = "=1.1.6", features = ["event", "param", "process"] }
@@ -83,6 +84,7 @@ unbound-fs = { path = "crates/libs/fs" }
 unbound-graphics = { path = "crates/toolkit/graphics" }
 unbound-greeter = { path = "crates/shell/greeter" }
 unbound-inbox = { path = "crates/libs/inbox" }
+unbound-keyboard = { path = "crates/libs/keyboard" }
 unbound-l10n = { path = "crates/libs/l10n" }
 unbound-launcher = { path = "crates/shell/launcher" }
 unbound-lock = { path = "crates/shell/lock" }

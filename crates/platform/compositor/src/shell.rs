@@ -213,6 +213,21 @@ impl State {
     }
 }
 
+impl State {
+    pub(crate) fn announce_input_sources_to(&self, shell: &UnboundShellV1) {
+        if shell.version() >= unbound_shell_v1::EVT_INPUT_SOURCES_SINCE {
+            let sources = &self.input_sources;
+            shell.input_sources(sources.codes().join(","), sources.active() as u32);
+        }
+    }
+
+    pub(crate) fn announce_input_sources(&self) {
+        for shell in &self.shell_resources {
+            self.announce_input_sources_to(shell);
+        }
+    }
+}
+
 impl GlobalDispatch<UnboundShellV1, ()> for State {
     fn bind(
         state: &mut Self,
@@ -229,6 +244,7 @@ impl GlobalDispatch<UnboundShellV1, ()> for State {
         state.announce_unresponsive(&shell);
         state.announce_minimized_windows(&shell);
         state.announce_workspaces_to(&shell);
+        state.announce_input_sources_to(&shell);
         state.shell_resources.push(shell);
     }
 
@@ -278,6 +294,9 @@ impl Dispatch<UnboundShellV1, ()> for State {
             }
             unbound_shell_v1::Request::ShowWindows { app_id } => {
                 state.toggle_overview(Some(app_id).filter(|app_id| !app_id.is_empty()));
+            }
+            unbound_shell_v1::Request::SelectInputSource { index } => {
+                state.select_input_source(index as usize);
             }
             unbound_shell_v1::Request::Destroy => {
                 state.shell_resources.retain(|shell| shell != resource);

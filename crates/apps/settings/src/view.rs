@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use accesskit::{Action, ActionData, ActionRequest, TreeId, TreeUpdate};
 use unbound_audio::{Direction, Snapshot};
-use unbound_config::Output;
+use unbound_config::{MAX_INPUT_SOURCES, Output};
 use unbound_toolkit::ui::{Context, Event, Key, Modifiers, SearchField, Ui, Widget, WidgetId};
 use unbound_toolkit::{Image, Palette, Rect, Scene, TextSystem};
 
@@ -12,9 +12,11 @@ use crate::L10N;
 use crate::follow::{Command, Update};
 use crate::idle::Idle;
 use crate::pictures::{Pair, PictureCommand};
+use crate::pointing::PointingDevices;
 use crate::services::{AudioCommand, BluetoothCommand, NetworkCommand};
 use crate::state::{Answer, BluetoothState, Display, Joined, Question, WifiState};
 use crate::widgets::{Column, Root};
+use unbound_keyboard::Layouts;
 use unbound_settings_panes::{AUTOMATIC, Pane, PaneId, SettingId, Value, panes};
 use unbound_settings_panes::{PaneHit, search};
 
@@ -36,6 +38,11 @@ pub(crate) enum Intent {
     Pair(String),
     Answer(Answer),
     ChoosePicture,
+    AddingSource(bool),
+    SourceQuery(String),
+    AddSource(String),
+    RemoveSource(usize),
+    MoveSource(usize, bool),
 }
 
 pub(crate) type Intents = Rc<RefCell<Vec<Intent>>>;
@@ -46,6 +53,7 @@ pub(crate) enum Anchor {
     Setting(SettingId, Option<String>),
     Item(String),
     Password,
+    SourceSearch,
 }
 
 pub(crate) fn intent<T>(
@@ -92,6 +100,9 @@ pub struct SettingsView {
     pub(crate) query: String,
     pub(crate) hits: Vec<PaneHit>,
     pub(crate) pane: PaneId,
+    pub(crate) layouts: Option<Layouts>,
+    pub(crate) adding_source: Option<String>,
+    pub(crate) pointing: PointingDevices,
     ui: Ui,
     root: WidgetId,
     search: WidgetId,
@@ -134,6 +145,9 @@ impl SettingsView {
             query: String::new(),
             hits: Vec::new(),
             pane: PaneId::Appearance,
+            layouts: None,
+            adding_source: None,
+            pointing: PointingDevices::default(),
             ui: Ui::new(Box::new(root), cx),
             root: root_id,
             search,
@@ -167,6 +181,41 @@ impl SettingsView {
 
     pub fn message(&self) -> Option<&str> {
         self.message.as_deref()
+    }
+
+    pub fn set_layouts(&mut self, layouts: Layouts) {
+        self.layouts = Some(layouts);
+        self.invalidate();
+    }
+
+    pub fn set_pointing_devices(&mut self, devices: PointingDevices) {
+        if self.pointing != devices {
+            self.pointing = devices;
+            self.availability_changed();
+        }
+    }
+
+    pub fn adding_source(&self) -> Option<&str> {
+        self.adding_source.as_deref()
+    }
+
+    pub(crate) fn input_sources(&self) -> Vec<String> {
+        match self.values.get(&SettingId::InputSources) {
+            Some(Value::Codes(codes)) => codes.clone(),
+            _ => Vec::new(),
+        }
+    }
+
+    pub(crate) fn layouts(&mut self) -> &Layouts {
+        self.layouts.get_or_insert_with(Layouts::load)
+    }
+
+    fn edit_sources(&mut self, edit: impl FnOnce(&mut Vec<String>)) {
+        let mut sources = self.input_sources();
+        edit(&mut sources);
+        if !sources.is_empty() && sources.len() <= MAX_INPUT_SOURCES {
+            self.change(SettingId::InputSources, Value::Codes(sources));
+        }
     }
 
     pub fn set_displays(&mut self, displays: Vec<Display>) {
@@ -297,6 +346,7 @@ impl SettingsView {
             | PaneId::Dock
             | PaneId::LockScreen
             | PaneId::Keyboard => true,
+            PaneId::TrackpadMouse => self.pointing.trackpad || self.pointing.mouse,
         }
     }
 
@@ -332,6 +382,13 @@ impl SettingsView {
             Anchor::Item(item) if *id == focus => Some(item.clone()),
             _ => None,
         })
+    }
+
+    fn source_search_focused(&self) -> bool {
+        let focus = self.ui.focus();
+        self.anchors
+            .iter()
+            .any(|(anchor, id)| *anchor == Anchor::SourceSearch && Some(*id) == focus)
     }
 
     pub fn search_focused(&self) -> bool {
@@ -379,6 +436,13 @@ impl SettingsView {
             Event::Key {
                 key: Key::Escape,
                 modifiers,
+            } if plain(modifiers) && self.adding_source.is_some() => {
+                self.intents.borrow_mut().push(Intent::AddingSource(false));
+                true
+            }
+            Event::Key {
+                key: Key::Escape,
+                modifiers,
             } if plain(modifiers) && self.pairing.is_some() => {
                 self.intents
                     .borrow_mut()
@@ -403,6 +467,16 @@ impl SettingsView {
             } if self.search_focused() => {
                 let step = if *key == Key::Up { -1 } else { 1 };
                 self.intents.borrow_mut().push(Intent::StepPane(step));
+                true
+            }
+            Event::Key {
+                key: Key::Enter, ..
+            } if self.source_search_focused() => {
+                let query = self.adding_source.clone().unwrap_or_default();
+                let added = self.input_sources();
+                if let Some((code, _)) = self.source_matches(&query, &added).into_iter().next() {
+                    self.intents.borrow_mut().push(Intent::AddSource(code));
+                }
                 true
             }
             Event::Key {
@@ -496,6 +570,54 @@ impl SettingsView {
                 Intent::ChoosePicture => {
                     self.commands.push(Command::Picture(PictureCommand::Choose));
                 }
+                Intent::AddingSource(adding) => {
+                    self.adding_source = adding.then(String::new);
+                    self.focus_next = Some(if adding {
+                        Anchor::SourceSearch
+                    } else {
+                        Anchor::Setting(SettingId::InputSources, None)
+                    });
+                }
+                Intent::SourceQuery(query) => {
+                    if self.adding_source.is_some() {
+                        self.adding_source = Some(query);
+                        self.focus_next = Some(Anchor::SourceSearch);
+                    }
+                }
+                Intent::AddSource(code) => {
+                    self.adding_source = None;
+                    self.focus_next = Some(Anchor::Item(code.clone()));
+                    self.edit_sources(|sources| {
+                        if !sources.contains(&code) {
+                            sources.push(code);
+                        }
+                    });
+                }
+                Intent::RemoveSource(index) => {
+                    self.focus_next = Some(Anchor::Setting(SettingId::InputSources, None));
+                    self.edit_sources(|sources| {
+                        if index < sources.len() {
+                            sources.remove(index);
+                        }
+                    });
+                }
+                Intent::MoveSource(index, up) => {
+                    let target = if up {
+                        index.checked_sub(1)
+                    } else {
+                        Some(index + 1)
+                    };
+                    self.edit_sources(|sources| {
+                        if let Some(target) = target.filter(|target| *target < sources.len()) {
+                            sources.swap(index, target);
+                        }
+                    });
+                    if let Some(code) =
+                        target.and_then(|target| self.input_sources().get(target).cloned())
+                    {
+                        self.focus_next = Some(Anchor::Item(code));
+                    }
+                }
             }
         }
     }
@@ -565,6 +687,7 @@ impl SettingsView {
             _ => {}
         }
         self.pane = pane;
+        self.adding_source = None;
         self.scroll.set(0.0);
         self.stale = true;
     }
@@ -703,6 +826,7 @@ impl SettingsView {
             children[Root::PANES] = sidebar;
             children[Root::CONTENT] = content;
         }
+        let typing_source = focused == Some(Anchor::SourceSearch);
         let target = focused.and_then(|anchor| {
             self.anchors
                 .iter()
@@ -714,6 +838,17 @@ impl SettingsView {
         });
         if let Some(target) = target {
             self.ui.perform(&request(Action::Focus, target, None));
+            if typing_source {
+                let query = self.adding_source.clone().unwrap_or_default();
+                self.ui.perform(&request(
+                    Action::SetValue,
+                    target,
+                    Some(ActionData::Value(query.into())),
+                ));
+                self.intents
+                    .borrow_mut()
+                    .retain(|intent| !matches!(intent, Intent::SourceQuery(_)));
+            }
         }
         self.stale = false;
     }

@@ -106,6 +106,29 @@ fn a_top_bar_pushes_windows_below_it() {
 }
 
 #[test]
+fn the_menu_bar_spans_the_whole_top_edge_even_when_the_dock_reserved_its_side_first() {
+    let mut server = server();
+    let mut shell = TestClient::connect(&mut server);
+    shell.show_named_layer(
+        &mut server,
+        &panel(Layer::Top, Anchor::Left, (40, 120), 40),
+        "dock",
+    );
+    let bar = shell.show_named_layer(
+        &mut server,
+        &panel(
+            Layer::Top,
+            Anchor::Top | Anchor::Left | Anchor::Right,
+            (0, 24),
+            24,
+        ),
+        "menubar",
+    );
+
+    assert_eq!(bar, (OUTPUT.0 as u32, 24));
+}
+
+#[test]
 fn background_layers_are_drawn_below_windows_and_top_layers_above() {
     let mut server = server();
     let mut renderer = Renderer::new().expect("Vulkan renderer");

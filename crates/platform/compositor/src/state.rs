@@ -117,6 +117,7 @@ pub struct OutputConfig {
     pub scanout: Option<ScanoutDevice>,
 }
 
+pub(crate) const MENU_BAR_NAMESPACE: &str = "menubar";
 const REFERENCE_PIXELS_PER_INCH: f64 = 110.0;
 const SCALE_STEP: f64 = 0.25;
 const HIGH_DENSITY_HEIGHT: i32 = 1600;
@@ -1350,12 +1351,24 @@ impl WlrLayerShellHandler for State {
         _layer: Layer,
         namespace: String,
     ) {
+        let spans_the_edge = namespace == MENU_BAR_NAMESPACE;
         let mapped = MappedLayer::new(surface.clone(), namespace);
-        if layer_map_for_output(&self.output)
-            .map_layer(&mapped)
-            .is_err()
-        {
+        let mut map = layer_map_for_output(&self.output);
+        let arranged_after: Vec<MappedLayer> = if spans_the_edge {
+            map.layers().cloned().collect()
+        } else {
+            Vec::new()
+        };
+        for layer in &arranged_after {
+            map.unmap_layer(layer);
+        }
+        if map.map_layer(&mapped).is_err() {
             surface.send_close();
+        }
+        for layer in &arranged_after {
+            if map.map_layer(layer).is_err() {
+                layer.layer_surface().send_close();
+            }
         }
     }
 

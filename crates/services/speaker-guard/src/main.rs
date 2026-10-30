@@ -105,6 +105,7 @@ impl Guard {
                         SensePcm::open(&self.model, self.channels).map_err(|e| e.to_string())?;
                     continue;
                 }
+                Ok(Some(0)) => continue,
                 other => other.map_err(|e| e.to_string())?,
             };
             let now = Instant::now();

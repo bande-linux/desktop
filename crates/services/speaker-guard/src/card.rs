@@ -241,7 +241,7 @@ impl SensePcm {
             .map_err(|e| CardError::Alsa("read", self.name.clone(), e))?;
         match io.readi(buffer) {
             Ok(frames) => Ok(Some(frames)),
-            Err(error) if error.errno() == EAGAIN => Ok(None),
+            Err(error) if error.errno() == EAGAIN => Ok(Some(0)),
             Err(error) => Err(CardError::Alsa("read", self.name.clone(), error)),
         }
     }

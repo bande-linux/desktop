@@ -107,6 +107,7 @@ pub struct Scroll {
     pub source: ScrollSource,
     pub phase: ScrollPhase,
     pub modifiers: Modifiers,
+    pub time: Duration,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash)]

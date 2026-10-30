@@ -6,6 +6,7 @@ use accesskit::TreeUpdate;
 
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use unbound_graphics::{Rect, Scene};
+use unbound_widgets::{set_frame_time, take_wake};
 use wayland_client::backend::{ReadEventsGuard, WaylandError};
 
 use crate::window::{Window, WindowError, WindowEvent};
@@ -77,6 +78,7 @@ pub fn run(window: &mut Window, app: &mut impl App) -> Result<(), WindowError> {
         read_events(guard)?;
         window.dispatch_pending()?;
         window.fire_repeats(Instant::now());
+        set_frame_time(window.frame_time());
         for event in window.take_events() {
             match event {
                 WindowEvent::CloseRequested => {
@@ -102,8 +104,10 @@ pub fn run(window: &mut Window, app: &mut impl App) -> Result<(), WindowError> {
         }
         let frame_drawn = window.wants_frame();
         if frame_drawn {
+            set_frame_time(window.plan_frame());
             let scene = app.scene(window);
             window.draw(&scene)?;
+            window.wake_ui_at(take_wake());
             if app.animating() {
                 window.request_redraw();
             }
@@ -174,6 +178,7 @@ pub fn run(window: &mut Window, app: &mut impl App) -> Result<(), WindowError> {
         } else {
             drop(guard);
         }
+        set_frame_time(window.frame_time());
         if accessibility_ready {
             for request in window.accessibility.take_requests() {
                 if !window.perform_window_action(&request) {
@@ -242,6 +247,7 @@ fn deliver(app: &mut impl Surfaces) -> Result<bool, WindowError> {
         };
         window.dispatch_pending()?;
         window.fire_repeats(now);
+        set_frame_time(window.frame_time());
         for event in window.take_events() {
             if let WindowEvent::Focus(focused) = event
                 && let Some(window) = app.windows_mut().get_mut(index)
@@ -334,10 +340,12 @@ pub fn run_surfaces(app: &mut impl Surfaces) -> Result<(), WindowError> {
         for index in 0..app.windows().len() {
             let frame_drawn = app.windows()[index].wants_frame();
             if frame_drawn {
+                set_frame_time(app.windows_mut()[index].plan_frame());
                 let scene = app.scene(index);
                 let animating = app.animating(index);
                 let window = &mut app.windows_mut()[index];
                 window.draw(&scene)?;
+                window.wake_ui_at(take_wake());
                 if animating {
                     window.request_redraw();
                 }
@@ -376,6 +384,7 @@ pub fn run_surfaces(app: &mut impl Surfaces) -> Result<(), WindowError> {
         } else {
             drop(guard);
         }
+        set_frame_time(app.windows()[0].frame_time());
         for index in readiness.accessibility {
             let requests = app.windows_mut()[index].accessibility.take_requests();
             for request in requests {

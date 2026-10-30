@@ -7,6 +7,7 @@ repository.workspace = true
 
 [dependencies]
 accesskit.workspace = true
+image.workspace = true
 tracing.workspace = true
 unbound-fs.workspace = true
 unbound-l10n.workspace = true
@@ -18,9 +19,9 @@ unbound-spring.workspace = true
 unbound-thumbnails.workspace = true
 unbound-toolkit.workspace = true
 unbound-xdg.workspace = true
+zbus.workspace = true
 
 [dev-dependencies]
-image.workspace = true
 image-compare.workspace = true
 tempfile.workspace = true
 

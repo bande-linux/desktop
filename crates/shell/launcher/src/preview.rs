@@ -5,9 +5,9 @@ use unbound_toolkit::ui::{Context, Size, Widget, WidgetId};
 use unbound_toolkit::{Image, Item, Palette, Point, Rect, Shape, TextAlign, TextStyle};
 
 use crate::L10N;
-use crate::model::{Hit, Kind, Target};
+use crate::model::{Clip, Hit, Kind, Target};
 use crate::rows::{centered, fitted, icon_items};
-use crate::view::{ICON_SIZE, Loaded, Shared};
+use crate::view::{ICON_SIZE, Shared};
 
 const PREVIEW_PADDING: f32 = 20.0;
 const PREVIEW_VISUAL: f32 = 150.0;
@@ -18,6 +18,37 @@ const RESULT_SIZE: f32 = 34.0;
 const HINT_SIZE: f32 = 11.0;
 const INFO_LABEL_WIDTH: f32 = 72.0;
 const INFO_LINE: f32 = 18.0;
+const CLIP_VISUAL: f32 = 200.0;
+
+fn ago(seconds: u64) -> String {
+    let (id, count) = match seconds {
+        0..60 => return L10N.tr("just-now"),
+        60..3600 => ("minutes-ago", seconds / 60),
+        3600..86400 => ("hours-ago", seconds / 3600),
+        _ => ("days-ago", seconds / 86400),
+    };
+    L10N.tr_args(id, [("count", count.into())])
+}
+
+fn clip_description(clip: &Clip, content: Option<&Preview<Image>>) -> String {
+    match clip.kind() {
+        Kind::CopiedFiles => L10N.tr_args("file-count", [("count", clip.paths().len().into())]),
+        Kind::CopiedImage => match content {
+            Some(Preview::Image(image)) => L10N.tr_args(
+                "image-size",
+                [
+                    ("width", image.width().into()),
+                    ("height", image.height().into()),
+                ],
+            ),
+            _ => L10N.tr("copied-image"),
+        },
+        _ => L10N.tr_args(
+            "character-count",
+            [("count", clip.text.chars().count().into())],
+        ),
+    }
+}
 
 #[derive(Clone, Copy, PartialEq)]
 struct PreviewKey {
@@ -80,11 +111,11 @@ impl PreviewPane {
         cx: &mut Context,
         hit: &Hit,
         icon: Option<&Image>,
-        loaded: Option<&Loaded>,
+        content: Option<&Preview<Image>>,
         area: Rect,
         items: &mut Vec<Item>,
     ) {
-        match loaded.map(|loaded| &loaded.content) {
+        match content {
             Some(Preview::Image(image)) => {
                 let scale = (area.width / image.width() as f32)
                     .min(area.height / image.height() as f32)
@@ -157,6 +188,25 @@ impl PreviewPane {
         let loaded = state.preview.as_ref().filter(
             |loaded| matches!(&hit.target, Target::Path(path) if *path == loaded.entry.path),
         );
+        let clip = match &hit.target {
+            Target::Clip(id) => state.model.clip(*id).cloned(),
+            _ => None,
+        };
+        let clip_text = clip
+            .as_ref()
+            .filter(|clip| clip.kind() == Kind::CopiedText)
+            .map(|clip| Preview::Text(clip.text.clone()));
+        let content = match &hit.target {
+            Target::Path(_) => loaded.map(|loaded| &loaded.content),
+            Target::Clip(id) => clip_text.as_ref().or_else(|| {
+                state
+                    .clip_picture
+                    .as_ref()
+                    .filter(|(pictured, _)| pictured == id)
+                    .map(|(_, picture)| picture)
+            }),
+            _ => None,
+        };
         if let (Kind::Calculation, Some(expression)) = (hit.kind, &hit.detail) {
             let expression = fitted(cx, expression, TextStyle::new(15.0, muted), inner);
             let result = fitted(
@@ -172,20 +222,30 @@ impl PreviewPane {
             self.items.push(centered(&result, frame, y));
         } else {
             let icon = state.catalog.icon(&hit);
-            let area = Rect::new(frame.x + PREVIEW_PADDING, y, inner, PREVIEW_VISUAL);
-            Self::visual(cx, &hit, icon.as_ref(), loaded, area, &mut self.items);
-            y += PREVIEW_VISUAL + 14.0;
-            let title = fitted(
-                cx,
-                &hit.title,
-                TextStyle::new(PREVIEW_TITLE_SIZE, primary).weight(TextStyle::SEMIBOLD),
-                inner,
-            );
-            self.items.push(centered(&title, frame, y));
-            y += title.height() + 2.0;
-            let subtitle = match &hit.target {
-                Target::Path(path) => Some(state.catalog.kind(path, hit.kind == Kind::Folder)),
-                Target::Settings(_) => hit.detail.clone().or_else(|| Some(L10N.tr("settings"))),
+            let visual = if hit.kind == Kind::CopiedText {
+                CLIP_VISUAL
+            } else {
+                PREVIEW_VISUAL
+            };
+            let area = Rect::new(frame.x + PREVIEW_PADDING, y, inner, visual);
+            Self::visual(cx, &hit, icon.as_ref(), content, area, &mut self.items);
+            y += visual + 14.0;
+            if hit.kind != Kind::CopiedText {
+                let title = fitted(
+                    cx,
+                    &hit.title,
+                    TextStyle::new(PREVIEW_TITLE_SIZE, primary).weight(TextStyle::SEMIBOLD),
+                    inner,
+                );
+                self.items.push(centered(&title, frame, y));
+                y += title.height() + 2.0;
+            }
+            let subtitle = match (&hit.target, &clip) {
+                (Target::Path(path), _) => Some(state.catalog.kind(path, hit.kind == Kind::Folder)),
+                (Target::Settings(_), _) => {
+                    hit.detail.clone().or_else(|| Some(L10N.tr("settings")))
+                }
+                (Target::Clip(_), Some(clip)) => Some(clip_description(clip, content)),
                 _ => hit.detail.clone(),
             };
             if let Some(subtitle) = subtitle.filter(|subtitle| *subtitle != hit.title) {
@@ -218,6 +278,13 @@ impl PreviewPane {
                 }
                 Self::info(cx, frame, &mut y, &lines, &mut self.items);
             }
+            if let Some(clip) = &clip {
+                let lines = [(
+                    L10N.tr("info-copied"),
+                    ago(state.model.now().saturating_sub(clip.copied)),
+                )];
+                Self::info(cx, frame, &mut y, &lines, &mut self.items);
+            }
         }
         let hint = if key.copied {
             L10N.tr("hint-copied")
@@ -227,6 +294,10 @@ impl PreviewPane {
                 Kind::Application => L10N.tr("hint-application"),
                 Kind::Setting => L10N.tr("hint-setting"),
                 Kind::Emoji => L10N.tr("hint-emoji-copy"),
+                Kind::CopiedText if state.model.inserts => L10N.tr("hint-clip-insert"),
+                Kind::CopiedText | Kind::CopiedImage | Kind::CopiedFiles => {
+                    L10N.tr("hint-clip-copy")
+                }
                 Kind::Folder | Kind::Document => L10N.tr("hint-file"),
             }
         };
@@ -263,7 +334,7 @@ impl Widget for PreviewPane {
                 revision: state.model.revision,
                 selected: state.model.selected,
                 copied: state.model.copied,
-                loaded: state.preview.is_some(),
+                loaded: state.preview.is_some() || state.clip_picture.is_some(),
                 palette: cx.palette,
                 frame,
             }

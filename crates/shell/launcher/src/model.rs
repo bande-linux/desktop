@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use unbound_search::{FileHit, FileResults, Query, Usage, calculate, fold, recent_files};
+use unbound_xdg::path_from_file_uri;
 
 use crate::emoji::EMOJI;
 
@@ -150,10 +151,72 @@ impl IndexedPane {
 pub enum Mode {
     Search,
     Emoji,
+    Clipboard,
+}
+
+const URI_LIST: &str = "text/uri-list";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Clip {
+    pub id: u64,
+    pub copied: u64,
+    pub text: String,
+    pub mimes: Vec<String>,
+}
+
+impl Clip {
+    pub fn kind(&self) -> Kind {
+        if self.mimes.iter().any(|mime| mime == URI_LIST) {
+            Kind::CopiedFiles
+        } else if self.text.is_empty() && self.picture().is_some() {
+            Kind::CopiedImage
+        } else {
+            Kind::CopiedText
+        }
+    }
+
+    pub fn picture(&self) -> Option<&str> {
+        self.mimes
+            .iter()
+            .find(|mime| *mime == "image/png")
+            .or_else(|| self.mimes.iter().find(|mime| mime.starts_with("image/")))
+            .map(String::as_str)
+    }
+
+    pub fn paths(&self) -> Vec<PathBuf> {
+        self.text
+            .lines()
+            .filter(|line| !line.starts_with('#'))
+            .filter_map(|line| path_from_file_uri(line.trim()))
+            .collect()
+    }
+
+    fn title(&self) -> String {
+        match self.kind() {
+            Kind::CopiedFiles => self
+                .paths()
+                .iter()
+                .filter_map(|path| path.file_name())
+                .map(|name| name.to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+                .join(", "),
+            Kind::CopiedImage => crate::L10N.tr("copied-image"),
+            _ => self
+                .text
+                .lines()
+                .map(str::trim)
+                .find(|line| !line.is_empty())
+                .unwrap_or_default()
+                .to_owned(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
+    CopiedText,
+    CopiedImage,
+    CopiedFiles,
     Emoji,
     Calculation,
     Application,
@@ -169,6 +232,7 @@ pub enum Target {
     Path(PathBuf),
     Value(String),
     Emoji(String),
+    Clip(u64),
 }
 
 impl Target {
@@ -178,7 +242,7 @@ impl Target {
             Self::Settings(keyword) => Some(format!("settings:{keyword}")),
             Self::Path(path) => path.to_str().map(|path| format!("file:{path}")),
             Self::Emoji(character) => Some(format!("{EMOJI_KEY}{character}")),
-            Self::Value(_) => None,
+            Self::Value(_) | Self::Clip(_) => None,
         }
     }
 }
@@ -214,6 +278,9 @@ pub enum Action {
     Copy(String),
     Insert(String),
     SkinTone(Option<usize>),
+    PasteClip(u64),
+    RemoveClip(u64),
+    ClearClips,
     Close,
 }
 
@@ -227,6 +294,7 @@ pub struct Model {
     pub generation: u64,
     files: Vec<FileHit>,
     recent_documents: Vec<PathBuf>,
+    pub clips: Vec<Clip>,
     pub files_complete: bool,
     pub hits: Vec<Hit>,
     pub headings: Vec<(usize, Heading)>,
@@ -266,6 +334,7 @@ impl Model {
             generation: 0,
             files: Vec::new(),
             recent_documents: Vec::new(),
+            clips: Vec::new(),
             files_complete: false,
             hits: Vec::new(),
             headings: Vec::new(),
@@ -300,6 +369,10 @@ impl Model {
                 Some((PathBuf::from(path), self.usage.boost(key, self.now)))
             })
             .collect()
+    }
+
+    pub fn now(&self) -> u64 {
+        self.now
     }
 
     pub fn set_now(&mut self, now: u64) {
@@ -385,8 +458,11 @@ impl Model {
         self.copied = false;
         self.hits.clear();
         self.headings.clear();
-        if self.mode == Mode::Emoji {
-            self.rebuild_emoji();
+        if self.mode != Mode::Search {
+            match self.mode {
+                Mode::Emoji => self.rebuild_emoji(),
+                _ => self.rebuild_clipboard(),
+            }
             self.selected = keep
                 .and_then(|target| self.hits.iter().position(|hit| hit.target == target))
                 .unwrap_or(0);
@@ -573,6 +649,66 @@ impl Model {
         }
     }
 
+    pub fn set_clips(&mut self, clips: Vec<Clip>) {
+        self.clips = clips;
+        if self.mode == Mode::Clipboard {
+            let keep = self.selection().map(|hit| hit.target.clone());
+            self.rebuild(keep);
+        }
+    }
+
+    pub fn clip(&self, id: u64) -> Option<&Clip> {
+        self.clips.iter().find(|clip| clip.id == id)
+    }
+
+    fn rebuild_clipboard(&mut self) {
+        self.columns = 0;
+        self.files_complete = true;
+        let query = Query::new(&self.query);
+        self.hits = self
+            .clips
+            .iter()
+            .filter_map(|clip| {
+                let title = clip.title();
+                let matched = match &query {
+                    Some(query) => {
+                        let folded = fold(&clip.text);
+                        if !folded.contains(query.text()) && query.score(&fold(&title)).is_none() {
+                            return None;
+                        }
+                        query.matched(&fold(&title))
+                    }
+                    None => Vec::new(),
+                };
+                Some(Hit {
+                    kind: clip.kind(),
+                    title,
+                    detail: None,
+                    target: Target::Clip(clip.id),
+                    matched,
+                    score: 0,
+                })
+            })
+            .collect();
+    }
+
+    pub fn remove_clip(&mut self) {
+        let Some(Target::Clip(id)) = self.selection().map(|hit| hit.target.clone()) else {
+            return;
+        };
+        let selected = self.selected;
+        self.clips.retain(|clip| clip.id != id);
+        self.actions.push(Action::RemoveClip(id));
+        self.rebuild(None);
+        self.selected = selected.min(self.hits.len().saturating_sub(1));
+    }
+
+    pub fn clear_clips(&mut self) {
+        self.clips.clear();
+        self.actions.push(Action::ClearClips);
+        self.rebuild(None);
+    }
+
     fn rebuild_emoji(&mut self) {
         self.columns = EMOJI_COLUMNS;
         self.files_complete = true;
@@ -729,6 +865,17 @@ impl Model {
                     self.actions.push(Action::Close);
                 }
             }
+            Target::Clip(id) => {
+                let text = self
+                    .clip(id)
+                    .filter(|clip| self.inserts && clip.kind() == Kind::CopiedText)
+                    .map(|clip| clip.text.clone());
+                self.actions.push(Action::PasteClip(id));
+                self.actions.push(Action::Close);
+                if let Some(text) = text {
+                    self.actions.push(Action::Insert(text));
+                }
+            }
             target => self.actions.push(Action::Open(target)),
         }
     }
@@ -748,6 +895,11 @@ impl Model {
             Some(Target::Value(value)) => value.clone(),
             Some(Target::Path(path)) => path.display().to_string(),
             Some(Target::Emoji(character)) => self.emoji_text(character),
+            Some(Target::Clip(id)) => {
+                self.actions.push(Action::PasteClip(*id));
+                self.copied = true;
+                return true;
+            }
             Some(Target::App(_) | Target::Settings(_)) | None => return false,
         };
         self.actions.push(Action::Copy(text));

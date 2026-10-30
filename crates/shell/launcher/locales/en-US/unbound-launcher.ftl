@@ -49,3 +49,34 @@ tone-medium-light = Medium-Light
 tone-medium = Medium
 tone-medium-dark = Medium-Dark
 tone-dark = Dark
+search-clipboard = Search Clipboard History
+clipboard-empty = Things you copy appear here
+copied-image = Image
+image-size = Image · { $width } × { $height }
+file-count = { $count ->
+    [one] { $count } file
+   *[other] { $count } files
+}
+character-count = { $count ->
+    [one] { $count } character
+   *[other] { $count } characters
+}
+info-copied = Copied
+hint-clip-insert = Return to paste · Delete to remove
+hint-clip-copy = Return to copy, then paste with Super+V · Delete to remove
+menu-paste = Paste
+menu-delete = Delete
+menu-clear-history = Clear History
+just-now = Just now
+minutes-ago = { $count ->
+    [one] { $count } minute ago
+   *[other] { $count } minutes ago
+}
+hours-ago = { $count ->
+    [one] { $count } hour ago
+   *[other] { $count } hours ago
+}
+days-ago = { $count ->
+    [one] { $count } day ago
+   *[other] { $count } days ago
+}

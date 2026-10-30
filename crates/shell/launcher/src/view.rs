@@ -21,7 +21,7 @@ use unbound_toolkit::{
 use crate::L10N;
 use crate::emoji::EMOJI;
 use crate::model::{
-    Action as LauncherAction, AppInfo, Heading, Hit, Mode, Model, PaneInfo, Target,
+    Action as LauncherAction, AppInfo, Clip, Heading, Hit, Kind, Mode, Model, PaneInfo, Target,
 };
 use crate::preview::{PREVIEW_TITLE_SIZE, PreviewPane};
 use crate::rows::{
@@ -65,7 +65,9 @@ pub struct State {
     pub model: Model,
     pub catalog: Box<dyn Catalog>,
     pub preview: Option<Loaded>,
+    pub clip_picture: Option<(u64, Preview<Image>)>,
     requested: Option<PathBuf>,
+    requested_clip: Option<u64>,
     pub hovered: Option<usize>,
     sent_generation: u64,
     pub viewport: Rect,
@@ -118,6 +120,7 @@ fn placeholder(mode: Mode) -> String {
     L10N.tr(match mode {
         Mode::Search => "search",
         Mode::Emoji => "search-emoji",
+        Mode::Clipboard => "search-clipboard",
     })
 }
 
@@ -163,6 +166,7 @@ impl Card {
     fn shows_results(&self) -> bool {
         let state = self.state.borrow();
         !state.model.hits.is_empty()
+            || state.model.mode == Mode::Clipboard
             || (!state.model.query.trim().is_empty() && state.model.files_complete)
     }
 
@@ -394,8 +398,16 @@ impl Widget for Card {
         let grid = self.is_grid();
         self.empty = self.state.borrow().model.hits.is_empty();
         if self.empty {
+            let empty_history = {
+                let model = &self.state.borrow().model;
+                model.mode == Mode::Clipboard && model.query.trim().is_empty()
+            };
             let message = cx.text.paragraph(
-                &L10N.tr("no-results"),
+                &L10N.tr(if empty_history {
+                    "clipboard-empty"
+                } else {
+                    "no-results"
+                }),
                 TextStyle::new(PREVIEW_TITLE_SIZE, cx.palette.label_muted),
                 None,
                 TextAlign::Start,
@@ -691,7 +703,9 @@ impl Launcher {
             model: Model::new(apps, panes, home, usage, 0),
             catalog,
             preview: None,
+            clip_picture: None,
             requested: None,
+            requested_clip: None,
             hovered: None,
             sent_generation: 0,
             viewport: Rect::default(),
@@ -827,6 +841,14 @@ impl Launcher {
                     true
                 }
                 Key::Character('c') if modifiers.logo => model.copy(),
+                Key::Delete if model.mode == Mode::Clipboard && model.query.is_empty() => {
+                    model.remove_clip();
+                    true
+                }
+                Key::Backspace if model.mode == Mode::Clipboard && modifiers.logo => {
+                    model.remove_clip();
+                    true
+                }
                 Key::Escape if model.query.is_empty() => {
                     model.actions.push(LauncherAction::Close);
                     true
@@ -902,6 +924,8 @@ impl Launcher {
         state.model.set_query("");
         state.preview = None;
         state.requested = None;
+        state.clip_picture = None;
+        state.requested_clip = None;
     }
 
     pub fn take_actions(&mut self) -> Vec<LauncherAction> {
@@ -913,6 +937,35 @@ impl Launcher {
         self.state.borrow_mut().model.set_mode(mode, inserts);
         if let Some(field) = self.ui.widget_as::<TextField>(self.field) {
             field.set_placeholder(&placeholder(mode));
+        }
+    }
+
+    pub fn set_clips(&mut self, clips: Vec<Clip>) {
+        self.state.borrow_mut().model.set_clips(clips);
+    }
+
+    pub fn clip_picture_request(&mut self) -> Option<(u64, String)> {
+        let mut state = self.state.borrow_mut();
+        let Some(Target::Clip(id)) = state.model.selection().map(|hit| hit.target.clone()) else {
+            return None;
+        };
+        let mime = state
+            .model
+            .clip(id)
+            .filter(|clip| clip.kind() == Kind::CopiedImage)?
+            .picture()?
+            .to_owned();
+        if state.requested_clip == Some(id) {
+            return None;
+        }
+        state.requested_clip = Some(id);
+        Some((id, mime))
+    }
+
+    pub fn set_clip_picture(&mut self, id: u64, picture: Preview<Image>) {
+        let mut state = self.state.borrow_mut();
+        if state.requested_clip == Some(id) {
+            state.clip_picture = Some((id, picture));
         }
     }
 

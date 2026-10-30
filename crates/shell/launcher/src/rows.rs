@@ -25,6 +25,8 @@ pub const SELECTED_LABEL: Color = Color::hex(0xFFFFFF);
 pub const OPEN: &str = "open";
 pub const REVEAL: &str = "reveal";
 pub const COPY: &str = "copy";
+const REMOVE: &str = "remove";
+const CLEAR: &str = "clear";
 const TONE_PREFIX: &str = "tone-";
 
 pub fn contains(frame: Rect, point: Point) -> bool {
@@ -175,6 +177,19 @@ pub const SKIN_TONES: [Option<usize>; 6] = [None, Some(0), Some(1), Some(2), Som
 
 pub fn hit_menu(hit: &Hit, model: &Model) -> Menu {
     let items = match &hit.target {
+        Target::Clip(_) => {
+            let label = if model.inserts && hit.kind == Kind::CopiedText {
+                "menu-paste"
+            } else {
+                "menu-copy"
+            };
+            vec![
+                MenuItem::new(&L10N.tr(label), OPEN).shortcut("Return"),
+                MenuItem::new(&L10N.tr("menu-delete"), REMOVE).shortcut("Delete"),
+                MenuItem::separator(),
+                MenuItem::new(&L10N.tr("menu-clear-history"), CLEAR),
+            ]
+        }
         Target::Emoji(character) => {
             let (label, shortcut) = if model.inserts {
                 ("menu-insert", "Return")
@@ -219,6 +234,8 @@ pub fn apply_menu_action(model: &mut Model, action: &str) -> bool {
         OPEN => model.activate(),
         REVEAL => model.reveal(),
         COPY => return model.copy(),
+        REMOVE => model.remove_clip(),
+        CLEAR => model.clear_clips(),
         _ => {
             let Some(tone) = action
                 .strip_prefix(TONE_PREFIX)

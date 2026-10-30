@@ -34,7 +34,12 @@ graph LR
   client only. Data control is offered to `unbound-clipboard` alone
   ([behaviour](behaviour.md)). The daemon takes each new clipboard and primary selection over as
   soon as it has read it; a selection it set itself is recognised while its source is live, and
-  a source that stays silent for two seconds is skipped. History is not implemented.
+  a source that stays silent for two seconds is skipped. It keeps a history of the clipboard
+  (not the primary selection): the last 100 copies of the past seven days, at most 16 MiB each
+  and 64 MiB in all, never a copy marked `x-kde-passwordManagerHint: secret` or
+  `application/x-nspasteboard-concealed-type`, in `$XDG_STATE_HOME/unbound/clipboard` (folder
+  0700, files 0600). It serves the history to the launcher as `org.unbound.Clipboard` on the
+  session bus (`Items`, `Content`, `Paste`, `Remove`, `Clear`).
 
 ### Screen lock and idle (`unbound-lock`, `unbound-power`)
 

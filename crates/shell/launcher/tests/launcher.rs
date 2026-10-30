@@ -5,8 +5,8 @@ use std::time::{Duration, Instant};
 
 use unbound_fs::Entry;
 use unbound_launcher::{
-    Action, AppInfo, Catalog, Heading, Hit, Kind, Launcher, Loaded, Mode, PaneInfo, SettingInfo,
-    Target,
+    Action, AppInfo, Catalog, Clip, Heading, Hit, Kind, Launcher, Loaded, Mode, PaneInfo,
+    SettingInfo, Target,
 };
 use unbound_preview::preview;
 use unbound_search::{EXACT, FileHit, FileResults, PREFIX, Usage, WORD, usage_path};
@@ -658,6 +658,11 @@ fn the_launcher_matches_its_goldens() {
         typed(&mut launcher, "arrow");
         key(&mut launcher, Key::Right);
         render(&mut launcher, &format!("launcher-emoji-{suffix}"));
+
+        launcher.set_now(NOW);
+        launcher.open(Mode::Clipboard, false);
+        launcher.set_clips(clips());
+        render(&mut launcher, &format!("launcher-clipboard-{suffix}"));
     }
 }
 
@@ -919,4 +924,133 @@ fn a_skin_tone_chosen_from_the_menu_is_remembered_and_used() {
         launcher.take_actions(),
         [Action::Close, Action::Insert("👋\u{1F3FD}".to_owned())]
     );
+}
+
+fn clips() -> Vec<Clip> {
+    let text = |id: u64, text: &str| Clip {
+        id,
+        copied: NOW - id * 60,
+        text: text.to_owned(),
+        mimes: vec!["text/plain;charset=utf-8".to_owned()],
+    };
+    vec![
+        text(1, "Meeting notes\n- agenda\n- budget"),
+        Clip {
+            id: 2,
+            copied: NOW - 120,
+            text: String::new(),
+            mimes: vec!["image/png".to_owned()],
+        },
+        Clip {
+            id: 3,
+            copied: NOW - 180,
+            text: "file:///home/someone/Report.pdf\r\nfile:///home/someone/Budget.ods\r\n"
+                .to_owned(),
+            mimes: vec!["text/uri-list".to_owned()],
+        },
+        text(4, "https://example.org/budget"),
+    ]
+}
+
+fn clipboard_launcher(inserts: bool) -> Launcher {
+    let mut launcher = launcher();
+    launcher.open(Mode::Clipboard, inserts);
+    launcher.set_clips(clips());
+    launcher
+}
+
+#[test]
+fn the_clipboard_history_lists_copies_newest_first_and_filters_them() {
+    let mut launcher = clipboard_launcher(false);
+    assert_eq!(
+        titles(&launcher),
+        [
+            "Meeting notes",
+            "Image",
+            "Report.pdf, Budget.ods",
+            "https://example.org/budget"
+        ]
+    );
+    let kinds: Vec<Kind> = launcher.hits().iter().map(|hit| hit.kind).collect();
+    assert_eq!(
+        kinds,
+        [
+            Kind::CopiedText,
+            Kind::CopiedImage,
+            Kind::CopiedFiles,
+            Kind::CopiedText
+        ]
+    );
+    typed(&mut launcher, "budget");
+    assert_eq!(
+        titles(&launcher),
+        [
+            "Meeting notes",
+            "Report.pdf, Budget.ods",
+            "https://example.org/budget"
+        ]
+    );
+    assert!(launcher.file_query().is_none());
+}
+
+#[test]
+fn return_puts_a_copy_back_on_the_clipboard_and_types_text_when_it_can() {
+    let mut launcher = clipboard_launcher(false);
+    key(&mut launcher, Key::Enter);
+    assert_eq!(
+        launcher.take_actions(),
+        [Action::PasteClip(1), Action::Close]
+    );
+
+    let mut launcher = clipboard_launcher(true);
+    key(&mut launcher, Key::Enter);
+    assert_eq!(
+        launcher.take_actions(),
+        [
+            Action::PasteClip(1),
+            Action::Close,
+            Action::Insert("Meeting notes\n- agenda\n- budget".to_owned())
+        ]
+    );
+    key(&mut launcher, Key::Down);
+    key(&mut launcher, Key::Enter);
+    assert_eq!(
+        launcher.take_actions(),
+        [Action::PasteClip(2), Action::Close]
+    );
+}
+
+#[test]
+fn delete_removes_a_copy_and_clear_history_removes_them_all() {
+    let mut launcher = clipboard_launcher(false);
+    key(&mut launcher, Key::Down);
+    key(&mut launcher, Key::Delete);
+    assert_eq!(launcher.take_actions(), [Action::RemoveClip(2)]);
+    assert_eq!(launcher.selection().unwrap().target, Target::Clip(3));
+    assert_eq!(launcher.hits().len(), 3);
+    launcher.scene(SCREEN.0, SCREEN.1, Instant::now());
+    key(&mut launcher, Key::Menu);
+    let (menu, _) = launcher.take_menu_request().expect("a menu");
+    let actions: Vec<&str> = menu
+        .items
+        .iter()
+        .filter(|item| !item.separator)
+        .map(|item| item.action.as_str())
+        .collect();
+    assert_eq!(actions, ["open", "remove", "clear"]);
+    assert!(launcher.menu_action("clear"));
+    assert_eq!(launcher.take_actions(), [Action::ClearClips]);
+    assert!(launcher.hits().is_empty());
+}
+
+#[test]
+fn an_image_copy_asks_for_its_picture_once_selected() {
+    let mut launcher = clipboard_launcher(false);
+    assert_eq!(launcher.clip_picture_request(), None);
+    key(&mut launcher, Key::Down);
+    assert_eq!(
+        launcher.clip_picture_request(),
+        Some((2, "image/png".to_owned()))
+    );
+    assert_eq!(launcher.clip_picture_request(), None);
 }

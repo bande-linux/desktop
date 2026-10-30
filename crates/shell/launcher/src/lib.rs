@@ -1,3 +1,4 @@
+mod clips;
 mod emoji;
 mod model;
 mod preview;
@@ -9,7 +10,8 @@ use std::sync::LazyLock;
 
 use unbound_l10n::Localizer;
 
-pub use model::{Action, AppInfo, Heading, Hit, Kind, Mode, PaneInfo, SettingInfo, Target};
+pub use clips::{Clips, Reply, Request};
+pub use model::{Action, AppInfo, Clip, Heading, Hit, Kind, Mode, PaneInfo, SettingInfo, Target};
 pub use view::{CARD_WIDTH, Catalog, ICON_SIZE, Launcher, Loaded};
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-launcher.ftl");
@@ -28,6 +30,8 @@ mod tests {
             include_str!("preview.rs"),
             include_str!("tones.rs"),
             include_str!("emoji.rs"),
+            include_str!("model.rs"),
+            include_str!("clips.rs"),
         ];
         assert_eq!(
             unbound_l10n::missing_ids(super::ENGLISH, &sources),

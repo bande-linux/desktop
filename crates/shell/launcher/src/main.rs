@@ -12,8 +12,8 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use accesskit::TreeUpdate;
 use unbound_fs::Entry;
 use unbound_launcher::{
-    Action, AppInfo, Catalog, Hit, ICON_SIZE, Kind, Launcher, Loaded, Mode, PaneInfo, SettingInfo,
-    Target,
+    Action, AppInfo, Catalog, Clips, Hit, ICON_SIZE, Kind, Launcher, Loaded, Mode, PaneInfo, Reply,
+    Request, SettingInfo, Target,
 };
 use unbound_preview::{Preview, preview};
 use unbound_search::{FileIndex, Usage, recently_used_path, usage_path};
@@ -28,6 +28,9 @@ use unbound_xdg::{
 };
 
 const FALLBACK_DOCUMENT: &str = "application-x-generic";
+const CLIP_TEXT: &str = "text-x-generic";
+const CLIP_IMAGE: &str = "image-x-generic";
+const CLIP_FILES: &str = "folder";
 const SETTINGS_APP: &str = "org.unbound.Settings";
 
 struct Library {
@@ -70,6 +73,9 @@ impl Catalog for Library {
                 names.push(FALLBACK_DOCUMENT.to_owned());
                 self.named_icon(&names)
             }
+            (Target::Clip(_), Kind::CopiedImage) => self.named_icon(&[CLIP_IMAGE.to_owned()]),
+            (Target::Clip(_), Kind::CopiedFiles) => self.named_icon(&[CLIP_FILES.to_owned()]),
+            (Target::Clip(_), _) => self.named_icon(&[CLIP_TEXT.to_owned()]),
             (Target::Value(_) | Target::Emoji(_), _) => None,
         }
     }
@@ -150,6 +156,7 @@ struct LauncherShell {
     entries: Vec<DesktopEntry>,
     index: Option<FileIndex>,
     previewer: Option<Previewer>,
+    clips: Option<Clips>,
     apps: Rc<RefCell<Apps>>,
     recently_used: PathBuf,
     skin_tone: PathBuf,
@@ -185,6 +192,12 @@ impl LauncherShell {
         self.launcher.clear();
     }
 
+    fn ask(&self, request: Request) {
+        if let Some(clips) = &self.clips {
+            clips.ask(request);
+        }
+    }
+
     fn toggle(&mut self, window: &mut Window, mode: Mode, inserts: bool) {
         if window.is_visible() && self.launcher.mode() == mode {
             self.close(window);
@@ -196,6 +209,9 @@ impl LauncherShell {
             self.launcher.set_recently_used(xbel.as_deref());
         }
         self.launcher.open(mode, inserts);
+        if mode == Mode::Clipboard {
+            self.ask(Request::List);
+        }
         if !window.is_visible() {
             self.launcher.appear(Instant::now());
         }
@@ -218,6 +234,9 @@ impl LauncherShell {
         if let (Some(previewer), Some(path)) = (&self.previewer, self.launcher.preview_request()) {
             let _ = previewer.requests.send(path);
         }
+        if let Some((id, mime)) = self.launcher.clip_picture_request() {
+            self.ask(Request::Picture(id, mime));
+        }
         for action in self.launcher.take_actions() {
             match action {
                 Action::Open(target) => self.open(window, &target),
@@ -228,6 +247,9 @@ impl LauncherShell {
                         tracing::warn!("cannot insert {text}: {error}");
                     }
                 }
+                Action::PasteClip(id) => self.ask(Request::Paste(id)),
+                Action::RemoveClip(id) => self.ask(Request::Remove(id)),
+                Action::ClearClips => self.ask(Request::Clear),
                 Action::SkinTone(tone) => {
                     if let Err(error) = save_skin_tone(&self.skin_tone, tone) {
                         tracing::warn!("cannot remember the skin tone: {error}");
@@ -270,7 +292,7 @@ impl LauncherShell {
                         .map(|_| ())
                         .map_err(LaunchError::Spawn)
                 }),
-            Target::Value(_) | Target::Emoji(_) => None,
+            Target::Value(_) | Target::Emoji(_) | Target::Clip(_) => None,
         };
         match opened {
             Some(Ok(())) => {
@@ -313,10 +335,13 @@ impl App for LauncherShell {
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
         match event {
             WindowEvent::ShowLauncher => self.toggle(window, Mode::Search, false),
-            WindowEvent::OpenLauncher {
-                mode: LauncherMode::Emoji,
-                text_field,
-            } => self.toggle(window, Mode::Emoji, text_field),
+            WindowEvent::OpenLauncher { mode, text_field } => {
+                let mode = match mode {
+                    LauncherMode::Clipboard => Mode::Clipboard,
+                    _ => Mode::Emoji,
+                };
+                self.toggle(window, mode, text_field);
+            }
             WindowEvent::Input(input) => {
                 self.launcher.handle(&input);
                 self.sync(window);
@@ -345,20 +370,21 @@ impl App for LauncherShell {
                     .iter()
                     .map(|previewer| previewer.wake.as_fd()),
             )
+            .chain(self.clips.iter().map(|clips| clips.wake.as_fd()))
             .collect()
     }
 
-    fn source_ready(&mut self, window: &mut Window, index: usize) {
-        match (index, &mut self.index) {
-            (0, Some(files)) => {
-                if let Some(results) = files.take() {
-                    self.launcher.set_files(results);
-                }
-            }
-            _ => {
-                for loaded in self.previewer.iter().flat_map(Previewer::take) {
-                    self.launcher.set_preview(loaded);
-                }
+    fn source_ready(&mut self, window: &mut Window, _index: usize) {
+        if let Some(results) = self.index.as_mut().and_then(FileIndex::take) {
+            self.launcher.set_files(results);
+        }
+        for loaded in self.previewer.iter().flat_map(Previewer::take) {
+            self.launcher.set_preview(loaded);
+        }
+        for reply in self.clips.iter().flat_map(Clips::take) {
+            match reply {
+                Reply::Listed(clips) => self.launcher.set_clips(clips),
+                Reply::Picture(id, picture) => self.launcher.set_clip_picture(id, picture),
             }
         }
         self.sync(window);
@@ -480,6 +506,9 @@ fn run() -> Result<(), WindowError> {
         entries,
         index,
         previewer,
+        clips: Clips::spawn()
+            .inspect_err(|error| tracing::warn!("cannot read the clipboard history: {error}"))
+            .ok(),
         apps: apps_by_type,
         recently_used,
         skin_tone,

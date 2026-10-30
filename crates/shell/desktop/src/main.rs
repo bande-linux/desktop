@@ -26,7 +26,7 @@ use unbound_xdg::{
 
 const ICON_THEMES: [&str; 1] = ["Adwaita"];
 const SETTINGS_APP: &str = "org.unbound.Settings";
-const WALLPAPER_PANE: &str = "appearance";
+const WALLPAPER_PANE: &str = "wallpaper";
 
 type Loaded = (WallpaperKey, Option<(Picture, Luma)>);
 

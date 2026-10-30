@@ -3,9 +3,6 @@ use rustix::time::{
     ClockId, Itimerspec, TimerfdClockId, TimerfdFlags, TimerfdTimerFlags, Timespec, clock_gettime,
     timerfd_create, timerfd_settime,
 };
-use unbound_inbox::Outbox;
-
-use crate::Update;
 
 const ONCE: Timespec = Timespec {
     tv_sec: 0,
@@ -19,7 +16,7 @@ fn next_minute(now: Timespec) -> Timespec {
     }
 }
 
-pub fn follow_minutes(outbox: &Outbox<Update>) -> rustix::io::Result<()> {
+pub fn follow_minutes(mut minute: impl FnMut() -> bool) -> rustix::io::Result<()> {
     let timer = timerfd_create(TimerfdClockId::Realtime, TimerfdFlags::CLOEXEC)?;
     let mut expirations = [0; 8];
     loop {
@@ -36,7 +33,7 @@ pub fn follow_minutes(outbox: &Outbox<Update>) -> rustix::io::Result<()> {
             Err(Errno::INTR) => continue,
             Err(error) => return Err(error),
         }
-        if !outbox.send(Update::Minute) {
+        if !minute() {
             return Ok(());
         }
     }

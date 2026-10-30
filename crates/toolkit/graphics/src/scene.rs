@@ -10,6 +10,8 @@ use vello_cpu::{PixelMetadata, Pixmap};
 use crate::text::Paragraph;
 use crate::tokens::Color;
 
+const SYMBOLIC_INK: &str = "#201E1A";
+
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Point {
     pub x: f32,
@@ -199,6 +201,15 @@ impl Image {
         let decoded = image::load_from_memory(&bytes).ok()?.to_rgba8();
         let (width, height) = decoded.dimensions();
         Self::from_rgba(width, height, decoded.into_raw())
+    }
+
+    pub fn load_symbolic(path: &path::Path, size: u32, color: Color) -> Option<Self> {
+        let source = fs::read_to_string(path).ok()?;
+        let ink = format!("#{:02X}{:02X}{:02X}", color.r, color.g, color.b);
+        let recoloured = source
+            .replace(SYMBOLIC_INK, &ink)
+            .replace(&SYMBOLIC_INK.to_lowercase(), &ink);
+        Self::from_svg(recoloured.as_bytes(), size, size)
     }
 
     pub fn from_svg(bytes: &[u8], width: u32, height: u32) -> Option<Self> {

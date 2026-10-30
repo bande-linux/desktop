@@ -5,7 +5,7 @@ use std::sync::mpsc::{self, Sender};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use unbound_bar::menubar::{HEIGHT, MenuBar, Slot, app_name};
+use unbound_bar::menubar::{HEIGHT, MenuBar, Slot, StatusView, app_name};
 use unbound_bar::menus::{
     app_menu, battery_menu, bluetooth_menu, input_source_menu, sound_menu, system_menu, wifi_menu,
 };
@@ -16,11 +16,12 @@ use unbound_status::dbusmenu::{APP_MENU_PATH, Node};
 use unbound_status::devices::{Control, SoundControl, run_controls, run_sound};
 use unbound_status::status::{InputSource, InputSources};
 use unbound_status::tray::{Errand, TrayIcon, TrayItem, host, run_errands};
+use unbound_status::unread::follow_unread;
 use unbound_status::{Command, Update};
 use unbound_toolkit::ui::{Event, Menu, MenuItem, PointerButton};
 use unbound_toolkit::{
-    App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement, Rect, Role, Scene,
-    TextSystem, Window, WindowEvent,
+    App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Rect, Role, Scene, TextSystem,
+    Window, WindowEvent,
 };
 use unbound_xdg::{Locale, applications, current_desktops, data_dirs, find_icon, spawn_detached};
 use zbus::blocking::Connection;
@@ -31,10 +32,11 @@ const SCROLL_STEP: f32 = 1.0 / 16.0;
 const SETTINGS: &str = "org.unbound.Settings";
 const MONITOR: &str = "org.unbound.ActivityMonitor";
 const BRING_TO_FRONT: &str = "bring-to-front";
+const TRAY_ITEM: &str = "tray-item:";
 const BLUR_WIDTH: f32 = 16384.0;
 
-pub struct MenuBarClient {
-    bar: MenuBar,
+pub struct MenuBarClient<V> {
+    bar: V,
     names: Vec<(String, String)>,
     inbox: Inbox<Update>,
     controls: Option<Sender<Control>>,
@@ -76,7 +78,11 @@ fn tray_image(icon: &TrayIcon, pixels: u32) -> Option<Image> {
     }
 }
 
-impl MenuBarClient {
+impl<V: StatusView> MenuBarClient<V> {
+    pub fn view_mut(&mut self) -> &mut V {
+        &mut self.bar
+    }
+
     fn launch(&self, window: &mut Window, app_id: &str, command: &[&str]) {
         let token = window.activation_token(app_id).ok();
         let command: Vec<String> = command.iter().map(|part| (*part).to_owned()).collect();
@@ -202,6 +208,14 @@ impl MenuBarClient {
             Slot::Sound => status.sound.as_ref().map(sound_menu),
             Slot::Bluetooth => status.bluetooth.as_ref().map(bluetooth_menu),
             Slot::InputSource => Some(input_source_menu(&status.input_sources)),
+            Slot::TrayMore => Some(Menu::new(
+                self.tray
+                    .iter()
+                    .enumerate()
+                    .skip(self.bar.shown_tray_items())
+                    .map(|(index, item)| MenuItem::new(&item.title, &format!("{TRAY_ITEM}{index}")))
+                    .collect(),
+            )),
             Slot::App if self.app_root.is_none() => Some(Menu::new(vec![MenuItem::new(
                 self.bar.app(),
                 BRING_TO_FRONT,
@@ -212,7 +226,7 @@ impl MenuBarClient {
             self.bar.set_open(Some(slot));
             report(
                 "open the menu",
-                window.show_menu(menu, MenuPlacement::Below(anchor)),
+                window.show_menu(menu, self.bar.menu_placement(anchor)),
             );
             window.request_redraw();
             return;
@@ -235,6 +249,8 @@ impl MenuBarClient {
                 }
             }
             Slot::Tray(index) => self.open_tray(window, index, anchor, false),
+            Slot::Launcher => report("open the launcher", window.show_launcher()),
+            Slot::Workspace(_) => report("show the windows", window.show_windows("")),
             _ => {}
         }
     }
@@ -287,7 +303,7 @@ impl MenuBarClient {
         position: unbound_toolkit::Point,
         button: PointerButton,
     ) {
-        let Some(slot) = self.bar.slot_at(position) else {
+        let Some(slot) = self.bar.slot_at(position, button) else {
             return;
         };
         if self.bar.open() == Some(slot) {
@@ -306,7 +322,7 @@ impl MenuBarClient {
     }
 }
 
-impl App for MenuBarClient {
+impl<V: StatusView> App for MenuBarClient<V> {
     fn scene(&mut self, window: &mut Window) -> Scene {
         let (width, height) = window.size();
         let scale = window.scale();
@@ -329,9 +345,18 @@ impl App for MenuBarClient {
             WindowEvent::Input(Event::PointerDown(pointer)) => {
                 self.pointer_down(window, pointer.position, pointer.button);
             }
+            WindowEvent::Input(Event::PointerLeave) => {
+                if self.bar.set_hovered(None) {
+                    window.request_redraw();
+                }
+            }
             WindowEvent::Input(Event::PointerMove(pointer)) => {
-                if let (Some(open), Some(slot)) =
-                    (self.bar.open(), self.bar.slot_at(pointer.position))
+                let slot = self.bar.slot_at(pointer.position, PointerButton::Primary);
+                if self.bar.set_hovered(slot) {
+                    window.request_redraw();
+                }
+                if let (Some(open), Some(slot)) = (self.bar.open(), slot)
+                    && self.bar.slides_between_menus()
                     && open != slot
                     && !matches!(slot, Slot::ControlCenter | Slot::Clock)
                 {
@@ -341,7 +366,11 @@ impl App for MenuBarClient {
                 }
             }
             WindowEvent::Input(Event::Scroll(scroll)) => {
-                if self.bar.slot_at(scroll.position) == Some(Slot::Sound) && scroll.delta.y != 0.0 {
+                let over_sound = matches!(
+                    self.bar.slot_at(scroll.position, PointerButton::Secondary),
+                    Some(Slot::Sound | Slot::ControlCenter)
+                );
+                if over_sound && scroll.delta.y != 0.0 {
                     let delta = -scroll.delta.y.signum() * SCROLL_STEP;
                     let _ = self.sound.send(SoundControl::Nudge(delta));
                 }
@@ -349,7 +378,13 @@ impl App for MenuBarClient {
             WindowEvent::MenuAction(action) => {
                 self.bar.set_open(None);
                 window.request_redraw();
-                if action == BRING_TO_FRONT {
+                if let Some(index) = action
+                    .strip_prefix(TRAY_ITEM)
+                    .and_then(|index| index.parse::<usize>().ok())
+                    && let Some(anchor) = self.bar.slot_rect(Slot::TrayMore)
+                {
+                    self.open_tray(window, index, anchor, false);
+                } else if action == BRING_TO_FRONT {
                     let app = self.app_id.clone();
                     report("bring the app forward", window.activate_app(&app));
                 } else if let Some(command) = Command::parse(&action) {
@@ -371,6 +406,11 @@ impl App for MenuBarClient {
             WindowEvent::AppearanceChanged(appearance) => {
                 self.bar.set_palette(appearance.palette());
                 window.request_redraw();
+            }
+            WindowEvent::Workspaces { count, active } => {
+                if self.bar.set_workspaces(count, active) {
+                    window.request_redraw();
+                }
             }
             WindowEvent::InputSources { sources, active } => {
                 let sources = sources
@@ -411,9 +451,13 @@ impl App for MenuBarClient {
                     {
                         report(
                             "open the menu",
-                            window.show_menu(app_menu(&root, &menu), MenuPlacement::Below(anchor)),
+                            window
+                                .show_menu(app_menu(&root, &menu), self.bar.menu_placement(anchor)),
                         );
                     }
+                }
+                Update::Unread(unread) => {
+                    self.bar.set_unread(unread);
                 }
                 Update::AppMenuChanged => {
                     if !self.app_id.is_empty() {
@@ -442,7 +486,7 @@ impl App for MenuBarClient {
 
     fn tick(&mut self, window: &mut Window, now: Instant) {
         self.next_clock = now + CLOCK_TICK;
-        if self.bar.set_clock(self.dates.clock(&jiff::Zoned::now())) {
+        if self.bar.set_time(&jiff::Zoned::now(), &self.dates) {
             window.request_redraw();
         }
     }
@@ -465,10 +509,26 @@ pub fn menu_bar_role() -> Role {
 
 pub const MENU_BAR_SIZE: (u32, u32) = (0, HEIGHT);
 
-impl MenuBarClient {
+impl MenuBarClient<MenuBar> {
     pub fn new(
         window: &mut Window,
         text: TextSystem,
+        session: Option<&Connection>,
+        system: Option<&Connection>,
+    ) -> std::io::Result<Self> {
+        let blurred = window
+            .set_background_blur(&[Rect::new(0.0, 0.0, BLUR_WIDTH, HEIGHT as f32)])
+            .inspect_err(|error| tracing::info!("the menu bar is not blurred: {error}"))
+            .is_ok();
+        let mut bar = MenuBar::new(window.appearance().palette(), text, String::new());
+        bar.set_translucent(blurred);
+        MenuBarClient::with_view(bar, session, system)
+    }
+}
+
+impl<V: StatusView> MenuBarClient<V> {
+    pub fn with_view(
+        mut view: V,
         session: Option<&Connection>,
         system: Option<&Connection>,
     ) -> std::io::Result<Self> {
@@ -498,20 +558,19 @@ impl MenuBarClient {
                     tracing::warn!("cannot host status items: {error}");
                 }
             });
+            let (following, outbox) = (session.clone(), inbox.outbox());
+            thread::spawn(move || {
+                if let Err(error) = follow_unread(&following, &outbox) {
+                    tracing::info!("cannot follow unread notifications: {error}");
+                }
+            });
             let (session, outbox) = (session.clone(), inbox.outbox());
             thread::spawn(move || run_errands(&session, &errand_queue, &outbox));
         }
-        let blurred = window
-            .set_background_blur(&[Rect::new(0.0, 0.0, BLUR_WIDTH, HEIGHT as f32)])
-            .inspect_err(|error| tracing::info!("the menu bar is not blurred: {error}"))
-            .is_ok();
         let dates = DateFormats::from_env();
-        let mut client = Self {
-            bar: MenuBar::new(
-                window.appearance().palette(),
-                text,
-                dates.clock(&jiff::Zoned::now()),
-            ),
+        view.set_time(&jiff::Zoned::now(), &dates);
+        Ok(Self {
+            bar: view,
             names,
             inbox,
             controls,
@@ -526,9 +585,7 @@ impl MenuBarClient {
             layouts: Layouts::load(),
             dates,
             next_clock: Instant::now() + CLOCK_TICK,
-        };
-        client.bar.set_translucent(blurred);
-        Ok(client)
+        })
     }
 }
 

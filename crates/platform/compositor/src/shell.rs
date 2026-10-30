@@ -266,6 +266,7 @@ impl Dispatch<UnboundShellV1, ()> for State {
         match request {
             unbound_shell_v1::Request::ActivateApp { app_id } => state.activate_app(&app_id),
             unbound_shell_v1::Request::ToggleControlCenter => state.toggle_control_center(),
+            unbound_shell_v1::Request::ShowLauncher => state.show_launcher(),
             unbound_shell_v1::Request::SetIconRect {
                 app_id,
                 surface,

@@ -41,6 +41,11 @@ about-app-title = About { $app }
 about-app-version = Version { $version }
 dock = Dock
 trash = Trash
+more-apps = +{ $count }
+more-apps-name = { $count ->
+    [one] One more app
+   *[other] { $count } more apps
+}
 trash-full = contains items
 opening = opening
 running = running
@@ -64,3 +69,9 @@ menu-minimized-window = ◇ { $title }
 menu-hide = Hide
 menu-quit = Quit
 menu-force-quit = Force Quit
+launcher = Open the launcher
+more-status-items = More status items
+clock-unread = { $time }, unread notifications
+workspace = Desktop { $number }
+status-area = Status
+bar = Bar

@@ -1,7 +1,10 @@
 use accesskit::{Action, Node as AccessNode, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
+use jiff::Zoned;
+use unbound_datetime::DateFormats;
+use unbound_toolkit::ui::PointerButton;
 use unbound_toolkit::{
-    Color, Image, Item, Palette, Paragraph, Point, Rect, Scene, Shape, TextAlign, TextStyle,
-    TextSystem,
+    Color, Image, Item, MenuPlacement, Palette, Paragraph, Point, Rect, Scene, Shape, TextAlign,
+    TextStyle, TextSystem,
 };
 
 use unbound_status::status::{Battery, Status, speaker_waves, wifi_bars};
@@ -50,6 +53,119 @@ pub enum Slot {
     Battery,
     ControlCenter,
     Clock,
+    TrayMore,
+    Workspace(usize),
+    Launcher,
+}
+
+pub trait StatusView {
+    fn set_app(&mut self, name: &str) -> bool;
+    fn app(&self) -> &str;
+    fn set_app_menus(&mut self, titles: Vec<String>);
+    fn set_tray(&mut self, items: Vec<(String, Option<Image>)>);
+    fn status(&self) -> &Status;
+    fn status_mut(&mut self) -> &mut Status;
+    fn set_palette(&mut self, palette: Palette);
+    fn set_time(&mut self, at: &Zoned, dates: &DateFormats) -> bool;
+    fn set_open(&mut self, slot: Option<Slot>) -> bool;
+    fn open(&self) -> Option<Slot>;
+    fn slot_at(&self, point: Point, button: PointerButton) -> Option<Slot>;
+    fn slot_rect(&self, slot: Slot) -> Option<Rect>;
+    fn slot_of_node(&self, node: NodeId) -> Option<Slot>;
+    fn menu_placement(&self, anchor: Rect) -> MenuPlacement;
+    fn slides_between_menus(&self) -> bool;
+    fn set_hovered(&mut self, slot: Option<Slot>) -> bool;
+    fn set_unread(&mut self, unread: bool) -> bool;
+    fn set_workspaces(&mut self, count: usize, active: usize) -> bool;
+    fn shown_tray_items(&self) -> usize;
+    fn scene(&mut self, width: u32, height: u32, scale: f64) -> Scene;
+    fn accessibility(&self) -> TreeUpdate;
+}
+
+impl StatusView for MenuBar {
+    fn set_app(&mut self, name: &str) -> bool {
+        MenuBar::set_app(self, name)
+    }
+
+    fn app(&self) -> &str {
+        MenuBar::app(self)
+    }
+
+    fn set_app_menus(&mut self, titles: Vec<String>) {
+        MenuBar::set_app_menus(self, titles);
+    }
+
+    fn set_tray(&mut self, items: Vec<(String, Option<Image>)>) {
+        MenuBar::set_tray(self, items);
+    }
+
+    fn status(&self) -> &Status {
+        MenuBar::status(self)
+    }
+
+    fn status_mut(&mut self) -> &mut Status {
+        MenuBar::status_mut(self)
+    }
+
+    fn set_palette(&mut self, palette: Palette) {
+        MenuBar::set_palette(self, palette);
+    }
+
+    fn set_time(&mut self, at: &Zoned, dates: &DateFormats) -> bool {
+        self.set_clock(dates.clock(at))
+    }
+
+    fn set_open(&mut self, slot: Option<Slot>) -> bool {
+        MenuBar::set_open(self, slot)
+    }
+
+    fn open(&self) -> Option<Slot> {
+        MenuBar::open(self)
+    }
+
+    fn slot_at(&self, point: Point, _button: PointerButton) -> Option<Slot> {
+        MenuBar::slot_at(self, point)
+    }
+
+    fn slot_rect(&self, slot: Slot) -> Option<Rect> {
+        MenuBar::slot_rect(self, slot)
+    }
+
+    fn slot_of_node(&self, node: NodeId) -> Option<Slot> {
+        MenuBar::slot_of_node(self, node)
+    }
+
+    fn menu_placement(&self, anchor: Rect) -> MenuPlacement {
+        MenuPlacement::Below(anchor)
+    }
+
+    fn slides_between_menus(&self) -> bool {
+        true
+    }
+
+    fn set_hovered(&mut self, _slot: Option<Slot>) -> bool {
+        false
+    }
+
+    fn set_unread(&mut self, _unread: bool) -> bool {
+        false
+    }
+
+    fn set_workspaces(&mut self, _count: usize, _active: usize) -> bool {
+        false
+    }
+
+    fn shown_tray_items(&self) -> usize {
+        self.tray.len()
+    }
+
+    fn scene(&mut self, width: u32, height: u32, scale: f64) -> Scene {
+        MenuBar::scene(self, width, height, scale)
+    }
+
+    fn accessibility(&self) -> TreeUpdate {
+        MenuBar::accessibility(self)
+    }
 }
 
 pub struct MenuBar {
@@ -183,6 +299,7 @@ impl MenuBar {
             }),
             Slot::ControlCenter => L10N.tr("control-center"),
             Slot::Clock => self.clock.clone(),
+            Slot::TrayMore | Slot::Workspace(_) | Slot::Launcher => String::new(),
         }
     }
 

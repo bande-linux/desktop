@@ -7,7 +7,7 @@ use std::thread;
 use std::time::Instant;
 
 use accesskit::TreeUpdate;
-use unbound_config::{Config, DockEdge, config_path};
+use unbound_config::{Config, DockEdge, MenuBarPlacement, config_path};
 use unbound_desktop_surface::{
     Bounds, CONFIRM_DELETE_FLAG, DesktopView, Item, Kind, Layer, Layouts, Luma, MenuApp, Request,
     Selection, WallpaperKey, command, confirm_delete, desktop_menu, items_menu, layouts_path, list,
@@ -55,6 +55,7 @@ struct Surface {
     icons: HashMap<(String, u32), Option<Image>>,
     layouts_file: Option<PathBuf>,
     dock_edge: DockEdge,
+    combined_bar: bool,
     choice: Option<Choice>,
     choices: Inbox<Choice>,
     loaded: Inbox<Loaded>,
@@ -223,6 +224,12 @@ impl Surface {
         let top = unbound_bar::menubar::HEIGHT as f32;
         let dock = unbound_bar::dock::exclusive_zone(unbound_bar::dock::ICON_SIZE);
         let (left, right, bottom, top) = match self.dock_edge {
+            _ if self.combined_bar => (
+                unbound_bar::rail::bar_width(unbound_bar::dock::ICON_SIZE),
+                0.0,
+                0.0,
+                0.0,
+            ),
             DockEdge::Left => (dock, 0.0, 0.0, top),
             DockEdge::Right => (0.0, dock, 0.0, top),
             DockEdge::Bottom => (0.0, 0.0, dock, top),
@@ -779,12 +786,12 @@ fn desktop_folder(home: &Path) -> PathBuf {
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let home = std::env::var_os("HOME").map(PathBuf::from);
     let config_home_dir = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from);
-    let dock_edge = config_path(config_home_dir.as_deref(), home.as_deref())
+    let config = config_path(config_home_dir.as_deref(), home.as_deref())
         .and_then(|path| std::fs::read_to_string(path).ok())
         .and_then(|source| Config::parse(&source).ok())
-        .unwrap_or_default()
-        .dock
-        .edge;
+        .unwrap_or_default();
+    let dock_edge = config.dock.edge;
+    let combined_bar = config.bar.menu_bar == MenuBarPlacement::Combined;
     let desktop_dir = desktop_folder(home.as_deref().unwrap_or(Path::new("/")));
     let user = std::env::var("USER").unwrap_or_default();
     let trash = Trash::for_user().ok_or("no home folder for the Trash")?;
@@ -824,6 +831,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         icons: HashMap::new(),
         layouts_file,
         dock_edge,
+        combined_bar,
         choice: None,
         choices,
         loaded,

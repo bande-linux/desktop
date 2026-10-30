@@ -1,6 +1,7 @@
 pub mod dock;
 pub mod menubar;
 pub mod menus;
+pub mod rail;
 mod symbols;
 
 use std::sync::LazyLock;
@@ -19,6 +20,8 @@ mod tests {
             include_str!("dock.rs"),
             include_str!("menubar.rs"),
             include_str!("menus.rs"),
+            include_str!("rail.rs"),
+            include_str!("combined_client.rs"),
             include_str!("dialogs.rs"),
             include_str!("dock_client.rs"),
             include_str!("menu_bar_client.rs"),

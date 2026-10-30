@@ -1,3 +1,4 @@
+mod combined_client;
 mod dialogs;
 mod dock_client;
 mod menu_bar_client;
@@ -9,11 +10,14 @@ use std::time::Instant;
 
 use accesskit::TreeUpdate;
 use unbound_bar::dock::surface_size;
-use unbound_config::{Config, config_path};
+use unbound_bar::rail::RailView;
+use unbound_config::{Config, DockEdge, MenuBarPlacement, config_path};
 use unbound_status::session::Ending;
 use unbound_toolkit::{App, Scene, Surfaces, TextSystem, Window, WindowEvent};
+use unbound_xdg::data_dirs;
 use zbus::blocking::Connection;
 
+use crate::combined_client::{CombinedClient, combined_role};
 use crate::dock_client::{Dock, dock_role};
 use crate::menu_bar_client::{MENU_BAR_SIZE, MenuBarClient, menu_bar_role};
 
@@ -108,6 +112,36 @@ fn run_bar() -> Result<(), Box<dyn std::error::Error>> {
     let session = bus(Connection::session(), "session");
     let system = bus(Connection::system(), "system");
     let text = TextSystem::new();
+    if config.bar.menu_bar == MenuBarPlacement::Combined {
+        let dock_config = unbound_config::Dock {
+            edge: DockEdge::Left,
+            ..config.dock.clone()
+        };
+        let icon_size = dock_config.icon_size as f32;
+        let (role, size) = combined_role(icon_size);
+        let mut window = Window::open(role, size)?;
+        window.share_fonts(&text);
+        let dock = Dock::new(
+            &window,
+            &dock_config,
+            text.sharing_fonts(),
+            session.as_ref(),
+            (config_home.as_deref(), home.as_deref()),
+        )?;
+        let view = RailView::new(
+            window.appearance().palette(),
+            text.sharing_fonts(),
+            data_dirs(),
+            icon_size,
+        );
+        let status = MenuBarClient::with_view(view, session.as_ref(), system.as_ref())?;
+        let mut bar = Bar {
+            windows: vec![window],
+            parts: vec![Box::new(CombinedClient::new(dock, status))],
+        };
+        unbound_toolkit::run_surfaces(&mut bar)?;
+        return Ok(());
+    }
     let mut menu_bar = Window::open(menu_bar_role(), MENU_BAR_SIZE)?;
     menu_bar.share_fonts(&text);
     let client = MenuBarClient::new(

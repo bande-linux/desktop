@@ -4281,6 +4281,7 @@ dependencies = [
  "unbound-inbox",
  "unbound-l10n",
  "unbound-network",
+ "unbound-notify",
  "zbus",
 ]
 

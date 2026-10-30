@@ -52,3 +52,17 @@ fn weekdays_and_dates_are_written_in_the_locale() {
     assert_eq!(formats("en_US.UTF-8").long_date(&day), "Monday, March 2");
     assert_eq!(formats("de_DE.UTF-8").long_date(&day), "Montag, 2. März");
 }
+
+#[test]
+fn the_bar_clock_stacks_the_time_over_the_day_with_any_day_period_apart() {
+    let afternoon = at("2026-10-30T14:05:00");
+    assert_eq!(
+        formats("en_GB.UTF-8").time(&afternoon),
+        ("14:05".to_owned(), None)
+    );
+    assert_eq!(
+        formats("en_US.UTF-8").time(&afternoon),
+        ("2:05".to_owned(), Some("PM".to_owned()))
+    );
+    assert_eq!(formats("en_GB.UTF-8").short_day(&afternoon), "Fri 30");
+}

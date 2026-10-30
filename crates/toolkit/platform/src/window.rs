@@ -1110,6 +1110,20 @@ impl Window {
                 }
                 true
             }
+            MenuOutcome::Search(menu) => {
+                let handle = self.queue.handle();
+                let palette = self.appearance.borrow().current().palette();
+                if let Some(menus) = &mut self.menus {
+                    let opening = Opening {
+                        state: &mut self.state,
+                        handle: &handle,
+                        text: self.text.get_or_insert_with(TextSystem::new),
+                        palette,
+                    };
+                    menus.search(opening, menu);
+                }
+                true
+            }
             MenuOutcome::OpenSubmenu { level, index } => {
                 let handle = self.queue.handle();
                 let palette = self.appearance.borrow().current().palette();
@@ -1939,7 +1953,7 @@ impl Dispatch<WlRegistry, ()> for State {
                     }
                 }
                 "unbound_shell_v1" => {
-                    state.shell.protocol = Some(registry.bind(name, version.min(10), handle, ()));
+                    state.shell.protocol = Some(registry.bind(name, version.min(12), handle, ()));
                 }
                 "unbound_app_v1" => {
                     state.shell.app = Some(registry.bind(name, version.min(2), handle, ()));

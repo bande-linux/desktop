@@ -8,9 +8,10 @@ use std::time::{Duration, Instant};
 use accesskit::TreeUpdate;
 use unbound_bar::L10N;
 use unbound_bar::dock::{
-    DockAction, DockApp, DockState, MenuTarget, Shared, dock_ui, exclusive_zone, scene,
+    DockAction, DockApp, DockState, MenuTarget, Rail, Shared, dock_ui, exclusive_zone, scene,
     surface_size,
 };
+use unbound_bar::rail::surface_size as rail_surface_size;
 use unbound_config::{Dock as DockConfig, DockEdge};
 use unbound_dock_model::arrange;
 use unbound_dock_model::autostart::{autostart_dir, opens_at_login, set_open_at_login};
@@ -45,6 +46,7 @@ const MENU_QUIT: &str = "quit";
 const MENU_FORCE_QUIT: &str = "force-quit";
 const MENU_WINDOW: &str = "window:";
 const MENU_ACTION: &str = "action:";
+const MENU_OPEN_APP: &str = "open-app:";
 
 struct TrashWatch {
     trash: Trash,
@@ -243,6 +245,7 @@ impl Dock {
     fn drop_action(&self, target: &MenuTarget) -> Option<DragAction> {
         match target {
             MenuTarget::Trash => self.trash.is_some().then_some(DragAction::Move),
+            MenuTarget::More(_) => None,
             MenuTarget::App(app_id) => self
                 .entry(app_id)
                 .filter(|entry| !entry.mime_types.is_empty())
@@ -290,7 +293,7 @@ impl Dock {
                 match target {
                     Some(MenuTarget::Trash) => self.move_to_trash(files),
                     Some(MenuTarget::App(app_id)) => self.open_with(window, &app_id, &files),
-                    None => {}
+                    Some(MenuTarget::More(_)) | None => {}
                 }
             }
         }
@@ -427,6 +430,12 @@ impl Dock {
     fn show_menu(&mut self, window: &mut Window, target: MenuTarget, at: Point) {
         self.confirming = false;
         let items = match &target {
+            MenuTarget::More(hidden) => hidden
+                .iter()
+                .map(|app_id| {
+                    MenuItem::new(&self.app_name(app_id), &format!("{MENU_OPEN_APP}{app_id}"))
+                })
+                .collect(),
             MenuTarget::Trash => vec![
                 MenuItem::new(&L10N.tr("menu-open"), MENU_OPEN),
                 MenuItem::separator(),
@@ -517,6 +526,9 @@ impl Dock {
             return;
         };
         match (target, action) {
+            (MenuTarget::More(_), action) if action.starts_with(MENU_OPEN_APP) => {
+                self.open(window, &action[MENU_OPEN_APP.len()..]);
+            }
             (MenuTarget::Trash, MENU_OPEN) => self.open_in_files(window, TRASH_URI),
             (MenuTarget::Trash, MENU_EMPTY_TRASH) => {
                 let at = self.state.borrow().trash_menu_point();
@@ -670,9 +682,11 @@ impl Dock {
     }
 
     fn move_to(&mut self, window: &mut Window, edge: DockEdge, now: Instant) {
-        if self.state.borrow().edge() == edge {
+        let state = self.state.borrow();
+        if state.edge() == edge || state.rail().is_some() {
             return;
         }
+        drop(state);
         self.state.borrow_mut().set_edge(edge, now);
         self.reported.clear();
         self.input = None;
@@ -694,7 +708,12 @@ impl Dock {
         self.icons.clear();
         self.load_trash_icons();
         self.sync();
-        if let Err(error) = window.set_layer_size(surface_size(edge, icon_size, (0, 0))) {
+        let size = if self.state.borrow().rail().is_some() {
+            rail_surface_size(icon_size)
+        } else {
+            surface_size(edge, icon_size, (0, 0))
+        };
+        if let Err(error) = window.set_layer_size(size) {
             tracing::warn!("cannot resize the Dock: {error}");
         }
     }
@@ -722,6 +741,20 @@ impl Dock {
             }
         }
         window.request_redraw();
+    }
+}
+
+impl Dock {
+    pub fn set_rail(&mut self, rail: Rail) {
+        self.state.borrow_mut().set_rail(rail);
+    }
+
+    pub fn icon_size(&self) -> f32 {
+        self.state.borrow().icon_size()
+    }
+
+    pub fn has_menu(&self) -> bool {
+        self.menu.is_some()
     }
 }
 

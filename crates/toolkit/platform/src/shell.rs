@@ -95,6 +95,12 @@ impl Window {
         self.flush()
     }
 
+    pub fn show_launcher(&mut self) -> Result<(), WindowError> {
+        self.shell_since(unbound_shell_v1::REQ_SHOW_LAUNCHER_SINCE)?
+            .show_launcher();
+        self.flush()
+    }
+
     pub fn show_windows(&mut self, app_id: &str) -> Result<(), WindowError> {
         self.shell_since(unbound_shell_v1::REQ_SHOW_WINDOWS_SINCE)?
             .show_windows(app_id.to_owned());

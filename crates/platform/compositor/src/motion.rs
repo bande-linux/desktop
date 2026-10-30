@@ -162,6 +162,7 @@ pub(crate) const OPENING_SCALE: f64 = 0.95;
 const CLOSING_SCALE: f64 = 0.92;
 const DOCK_ICON_SIZE: f64 = 48.0;
 pub(crate) const DOCK_NAMESPACE: &str = "dock";
+pub(crate) const BAR_NAMESPACE: &str = "bar";
 
 impl State {
     fn rect_of(window: &Window) -> Option<Rectangle<f64, Logical>> {
@@ -233,7 +234,7 @@ impl State {
         let dock = self.screens.iter().find_map(|screen| {
             let map = layer_map_for_output(&screen.output);
             map.layers()
-                .find(|layer| layer.namespace() == DOCK_NAMESPACE)
+                .find(|layer| [DOCK_NAMESPACE, BAR_NAMESPACE].contains(&layer.namespace()))
                 .and_then(|layer| map.layer_geometry(layer))
                 .map(|geometry| (screen.settings.position + geometry.loc, geometry.size))
         });

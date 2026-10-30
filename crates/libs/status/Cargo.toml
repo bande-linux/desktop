@@ -13,6 +13,7 @@ unbound-bluetooth.workspace = true
 unbound-inbox.workspace = true
 unbound-l10n.workspace = true
 unbound-network.workspace = true
+unbound-notify.workspace = true
 zbus.workspace = true
 
 [lints]

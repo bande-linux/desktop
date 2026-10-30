@@ -1,5 +1,5 @@
 use icu_calendar::Gregorian;
-use icu_datetime::fieldsets::{E, MD, MDE, YMD};
+use icu_datetime::fieldsets::{DE, E, MD, MDE, T, YMD};
 use icu_datetime::input::{Date, DateTime, Time};
 use icu_datetime::{DateTimeFormatterPreferences, FixedCalendarDateTimeFormatter};
 use icu_locale_core::{Locale, locale};
@@ -58,6 +58,36 @@ impl DateFormats {
         .zip(date_of(at).zip(time_of(at)))
         .map(|(formatter, (date, time))| formatter.format(&DateTime { date, time }).to_string())
         .unwrap_or_else(|| at.strftime("%a %-d %b %H:%M").to_string())
+    }
+
+    pub fn time(&self, at: &Zoned) -> (String, Option<String>) {
+        let formatted =
+            FixedCalendarDateTimeFormatter::<Gregorian, _>::try_new(self.preferences, T::hm())
+                .ok()
+                .zip(date_of(at).zip(time_of(at)))
+                .map(|(formatter, (date, time))| {
+                    formatter.format(&DateTime { date, time }).to_string()
+                })
+                .unwrap_or_else(|| at.strftime("%H:%M").to_string());
+        let digits = |character: char| character.is_ascii_digit() || character == ':';
+        let start = formatted.find(digits).unwrap_or(0);
+        let end = formatted
+            .rfind(digits)
+            .map_or(formatted.len(), |end| end + 1);
+        let period = format!("{} {}", &formatted[..start], &formatted[end..]);
+        let period = period.trim_matches(|character: char| character.is_whitespace());
+        (
+            formatted[start..end].to_owned(),
+            (!period.is_empty()).then(|| period.to_owned()),
+        )
+    }
+
+    pub fn short_day(&self, at: &Zoned) -> String {
+        FixedCalendarDateTimeFormatter::<Gregorian, _>::try_new(self.preferences, DE::short())
+            .ok()
+            .zip(date_of(at))
+            .map(|(formatter, date)| formatter.format(&date).to_string())
+            .unwrap_or_else(|| at.strftime("%a %-d").to_string())
     }
 
     pub fn weekday(&self, at: &Zoned) -> String {

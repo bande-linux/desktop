@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <protocol name="unbound_shell_v1">
-  <interface name="unbound_shell_v1" version="10">
+  <interface name="unbound_shell_v1" version="12">
     <description summary="requests and events between the compositor and the shell">
       Offered only on the connections of the shell clients the compositor starts
       itself (the Dock and the launcher), never on the listening socket.
@@ -258,6 +258,13 @@
         ignored.
       </description>
       <arg name="index" type="uint"/>
+    </request>
+
+    <request name="show_launcher" since="12">
+      <description summary="open the launcher">
+        Sent by the bar when its Unbound mark is clicked. The compositor sends
+        show_launcher to the shell clients, as Super+Space does.
+      </description>
     </request>
   </interface>
 

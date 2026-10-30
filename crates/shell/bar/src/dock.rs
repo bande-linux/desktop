@@ -49,6 +49,14 @@ const DRAG_THRESHOLD: f32 = 4.0;
 const DROP_SCALE: f32 = 1.12;
 
 const REMOVE_TEXT: f32 = 12.0;
+const RAIL_PADDING: f32 = 4.0;
+const RAIL_SHRINK: f32 = 4.0;
+const RAIL_HAIRLINE: f32 = 32.0;
+const RAIL_RUNNING: f32 = 3.0;
+const RAIL_TICK: (f32, f32) = (3.0, 16.0);
+const MORE_TEXT: f32 = 13.0;
+const RAIL_WELL_RADIUS: f32 = 10.0;
+pub const WELL_ALPHA: u8 = 14;
 
 #[derive(Debug, Clone)]
 pub struct DockApp {
@@ -63,6 +71,20 @@ pub struct DockApp {
 pub enum MenuTarget {
     App(String),
     Trash,
+    More(Vec<String>),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Rail {
+    pub top: f32,
+    pub bottom: f32,
+    pub width: f32,
+}
+
+struct More {
+    hidden: Vec<String>,
+    cell: Rect,
+    text: Option<(String, Color, Paragraph)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -105,6 +127,7 @@ struct Slot {
     cell: Rect,
     shift: (Animated, Animated),
     pinned: Option<Point>,
+    hidden: bool,
 }
 
 impl Slot {
@@ -125,6 +148,7 @@ impl Slot {
             cell: Rect::default(),
             shift: (Animated::new(0.0), Animated::new(0.0)),
             pinned: None,
+            hidden: false,
         }
     }
 
@@ -132,11 +156,11 @@ impl Slot {
         self.app.as_ref().is_some_and(|app| app.kept)
     }
 
-    fn cell_length(&self, icon: f32) -> f32 {
+    fn cell_length(&self, icon: f32, padding: f32) -> f32 {
         if self.key.is_separator() {
             SEPARATOR_CELL
         } else {
-            icon + 2.0 * CELL_PADDING
+            icon + 2.0 * padding
         }
     }
 }
@@ -203,6 +227,10 @@ pub struct DockState {
     pointer_inside: bool,
     menu_open: bool,
     selected: Option<Key>,
+    rail: Option<Rail>,
+    rail_icon: f32,
+    active: Option<String>,
+    more: Option<More>,
 }
 
 pub type Shared = Rc<RefCell<DockState>>;
@@ -288,6 +316,10 @@ impl DockState {
             pointer_inside: false,
             menu_open: false,
             selected: None,
+            rail: None,
+            rail_icon: icon_size,
+            active: None,
+            more: None,
         };
         state.slots.push(Slot::new(Key::RunningSeparator, 0.0));
         state.slots.push(Slot::new(Key::TrashSeparator, 1.0));
@@ -468,7 +500,16 @@ impl DockState {
         self.attention.insert(app_id.to_owned(), now);
     }
 
+    pub fn set_rail(&mut self, rail: Rail) {
+        self.rail = Some(rail);
+    }
+
+    pub fn rail(&self) -> Option<Rail> {
+        self.rail
+    }
+
     pub fn activated(&mut self, app_id: &str) {
+        self.active = (!app_id.is_empty()).then(|| app_id.to_owned());
         self.attention.remove(app_id);
         if let Some(state) = self.launcher.get_mut(app_id) {
             state.urgent = false;
@@ -602,6 +643,9 @@ impl DockState {
     }
 
     pub fn exclusive_zone(&self) -> i32 {
+        if let Some(rail) = self.rail {
+            return rail.width.round() as i32;
+        }
         if self.auto_hide {
             0
         } else {
@@ -610,6 +654,9 @@ impl DockState {
     }
 
     pub fn input_region(&self) -> Rect {
+        if let Some(rail) = self.rail {
+            return Rect::new(0.0, 0.0, rail.width, self.surface.height);
+        }
         let panel = self.panel;
         let size = self.surface;
         let depth = if self.is_shown() {
@@ -655,7 +702,7 @@ impl DockState {
     pub fn drop_target(&self, point: Point) -> Option<MenuTarget> {
         self.slots
             .iter()
-            .filter(|slot| !slot.leaving)
+            .filter(|slot| !slot.leaving && !slot.hidden)
             .find(|slot| contains(self.reach(slot.cell), point))
             .and_then(|slot| match &slot.key {
                 Key::App(app_id) => Some(MenuTarget::App(app_id.clone())),
@@ -696,7 +743,7 @@ impl DockState {
     fn reachable(&self) -> Vec<Key> {
         self.slots
             .iter()
-            .filter(|slot| !slot.leaving && !slot.key.is_separator())
+            .filter(|slot| !slot.leaving && !slot.hidden && !slot.key.is_separator())
             .map(|slot| slot.key.clone())
             .collect()
     }
@@ -781,7 +828,7 @@ impl DockState {
     pub fn icon_rects(&self) -> Vec<(String, Rect)> {
         self.slots
             .iter()
-            .filter(|slot| !slot.leaving)
+            .filter(|slot| !slot.leaving && !slot.hidden)
             .filter_map(|slot| match &slot.key {
                 Key::App(app_id) => Some((app_id.clone(), self.icon_rect(slot.cell))),
                 _ => None,
@@ -1072,6 +1119,9 @@ impl DockState {
     }
 
     fn effective_icon(&self, length: f32) -> f32 {
+        if self.rail.is_some() {
+            return self.rail_icon;
+        }
         let (cells, separators) =
             self.slots
                 .iter()
@@ -1110,6 +1160,10 @@ impl DockState {
     }
 
     fn layout(&mut self, size: Size, now: Instant) {
+        if let Some(rail) = self.rail {
+            self.layout_rail(rail, size, now);
+            return;
+        }
         self.surface = size;
         let along_length = self.along(size);
         let icon = self.effective_icon(along_length);
@@ -1117,7 +1171,9 @@ impl DockState {
         let lengths = self
             .slots
             .iter()
-            .map(|slot| slot.cell_length(icon) * slot.presence.value_at(now).0.max(0.0))
+            .map(|slot| {
+                slot.cell_length(icon, CELL_PADDING) * slot.presence.value_at(now).0.max(0.0)
+            })
             .collect::<Vec<_>>();
         let total = 2.0 * END_PADDING + lengths.iter().sum::<f32>();
         let start = ((along_length - total) / 2.0).max(SCREEN_GAP);
@@ -1143,7 +1199,7 @@ impl DockState {
             .collect::<Vec<_>>();
         let mut offset = start + END_PADDING;
         for (slot, length) in self.slots.iter_mut().zip(lengths) {
-            let full = slot.cell_length(icon);
+            let full = slot.cell_length(icon, CELL_PADDING);
             slot.cell = place(offset - (full - length) / 2.0, full);
             offset += length;
         }
@@ -1159,7 +1215,86 @@ impl DockState {
         }
     }
 
+    fn layout_rail(&mut self, rail: Rail, size: Size, now: Instant) {
+        self.surface = size;
+        let pinned_to_bottom = |key: &Key| matches!(key, Key::Trash | Key::TrashSeparator);
+        let wanted = |icon: f32| -> f32 {
+            self.slots
+                .iter()
+                .filter(|slot| !pinned_to_bottom(&slot.key))
+                .map(|slot| slot.cell_length(icon, RAIL_PADDING) * slot.presence.target())
+                .sum()
+        };
+        let full = self.icon_size;
+        let trash_cell = full + 2.0 * RAIL_PADDING;
+        let room = rail.bottom - rail.top - trash_cell - SEPARATOR_CELL;
+        let icon = if wanted(full) <= room {
+            full
+        } else {
+            full - RAIL_SHRINK
+        };
+        self.rail_icon = icon;
+        let overflowing = wanted(icon) > room;
+        let more_cell = icon + 2.0 * RAIL_PADDING;
+        let limit = if overflowing { room - more_cell } else { room };
+        let thick = thickness(self.icon_size);
+        let cross = ((rail.width - thick) / 2.0).round();
+        self.panel = Rect::new(0.0, rail.top, rail.width, rail.bottom - rail.top);
+        let before = self
+            .slots
+            .iter()
+            .map(|slot| (slot.id, slot.cell))
+            .collect::<Vec<_>>();
+        let mut offset = rail.top;
+        let mut hidden = Vec::new();
+        let mut more_at = None;
+        for slot in &mut self.slots {
+            if pinned_to_bottom(&slot.key) {
+                continue;
+            }
+            let length = slot.cell_length(icon, RAIL_PADDING);
+            let shown_length = length * slot.presence.value_at(now).0.max(0.0);
+            slot.hidden = overflowing && offset + length > rail.top + limit;
+            if slot.hidden {
+                more_at.get_or_insert(offset);
+                if let Some(app) = slot.app.as_ref().filter(|_| !slot.leaving) {
+                    hidden.push(app.app_id.clone());
+                }
+                continue;
+            }
+            slot.cell = Rect::new(cross, offset - (length - shown_length) / 2.0, thick, length);
+            offset += shown_length;
+        }
+        self.more = more_at.filter(|_| !hidden.is_empty()).map(|at| More {
+            hidden,
+            cell: Rect::new(cross, at, thick, more_cell),
+            text: self.more.take().and_then(|more| more.text),
+        });
+        let mut bottom = rail.bottom;
+        for key in [Key::Trash, Key::TrashSeparator] {
+            if let Some(slot) = self.slots.iter_mut().find(|slot| slot.key == key) {
+                let length = slot.cell_length(icon, RAIL_PADDING);
+                bottom -= length;
+                slot.cell = Rect::new(cross, bottom, thick, length);
+                slot.hidden = false;
+            }
+        }
+        self.settle_moves(&before, now);
+        self.slots
+            .retain(|slot| !(slot.leaving && !slot.presence.value_at(now).1));
+        if self
+            .ghost
+            .as_ref()
+            .is_some_and(|ghost| !ghost.fade.value_at(now).1)
+        {
+            self.ghost = None;
+        }
+    }
+
     fn reach(&self, cell: Rect) -> Rect {
+        if let Some(rail) = self.rail {
+            return Rect::new(0.0, cell.y, rail.width, cell.height);
+        }
         match self.edge {
             DockEdge::Left => Rect::new(0.0, cell.y, cell.x + cell.width, cell.height),
             DockEdge::Right => Rect::new(cell.x, cell.y, self.surface.width - cell.x, cell.height),
@@ -1286,6 +1421,37 @@ impl DockState {
         }
     }
 
+    fn prepare_more(&mut self, cx: &mut Context) {
+        if let Some(more) = &mut self.more {
+            let label = L10N.tr_args("more-apps", [("count", (more.hidden.len() as i64).into())]);
+            let color = cx.palette.label_primary;
+            if more
+                .text
+                .as_ref()
+                .is_none_or(|(known, known_color, _)| *known != label || *known_color != color)
+            {
+                let paragraph = cx.text.paragraph(
+                    &label,
+                    TextStyle::new(MORE_TEXT, color).weight(TextStyle::SEMIBOLD),
+                    None,
+                    TextAlign::Start,
+                );
+                more.text = Some((label, color, paragraph));
+            }
+        }
+    }
+
+    fn open_more(&mut self) {
+        let Some(more) = &self.more else {
+            return;
+        };
+        let at = Point::new(self.panel.x + self.panel.width + MENU_GAP, more.cell.y);
+        self.actions.push(DockAction::Menu {
+            target: MenuTarget::More(more.hidden.clone()),
+            at,
+        });
+    }
+
     fn prepare_text(&mut self, cx: &mut Context) {
         for slot in &mut self.slots {
             if let Some(app) = &slot.app
@@ -1364,7 +1530,9 @@ impl DockState {
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
         let now = cx.now();
-        self.paint_panel(items);
+        if self.rail.is_none() {
+            self.paint_panel(items);
+        }
         let dragged = self.drag.as_ref().map(|drag| &drag.key);
         let mut on_top = Vec::new();
         for slot in &self.slots {
@@ -1376,7 +1544,7 @@ impl DockState {
                 continue;
             }
             let presence = slot.presence.value(cx).clamp(0.0, 1.0);
-            if presence <= 0.0 {
+            if presence <= 0.0 || slot.hidden {
                 continue;
             }
             let mut slot_items = Vec::new();
@@ -1410,6 +1578,7 @@ impl DockState {
                 items.extend(slot_items);
             }
         }
+        self.paint_more(cx, items);
         self.paint_ghost(cx, items);
         self.paint_selection(cx, items);
         items.extend(on_top);
@@ -1507,6 +1676,9 @@ impl DockState {
     }
 
     pub fn panel_radius(&self) -> f32 {
+        if self.rail.is_some() {
+            return 0.0;
+        }
         (thickness(self.icon_size) * 0.3).round()
     }
 
@@ -1515,6 +1687,9 @@ impl DockState {
     }
 
     pub fn blur_rects(&self, rounded_behind: bool) -> Vec<Rect> {
+        if self.rail.is_some() {
+            return Vec::new();
+        }
         if rounded_behind {
             vec![self.panel]
         } else {
@@ -1562,6 +1737,18 @@ impl DockState {
     }
 
     fn paint_separator(&self, cx: &Context, cell: Rect, items: &mut Vec<Item>) {
+        if let Some(rail) = self.rail {
+            items.push(Item::Fill {
+                shape: Shape::rect(Rect::new(
+                    ((rail.width - RAIL_HAIRLINE) / 2.0).round(),
+                    (cell.y + cell.height / 2.0 - 0.5).round(),
+                    RAIL_HAIRLINE,
+                    1.0,
+                )),
+                paint: cx.palette.separator_color.into(),
+            });
+            return;
+        }
         let span = thickness(self.icon_size) * 0.56;
         let rect = if vertical(self.edge) {
             Rect::new(
@@ -1645,7 +1832,9 @@ impl DockState {
             });
         }
         let dot = slot.dot.value(cx);
-        if dot > 0.0 {
+        if self.rail.is_some() {
+            self.paint_rail_indicators(cx, base, app_id, dot, items);
+        } else if dot > 0.0 {
             let center = self.dot_center(cell, base);
             let size = DOT * (0.5 + 0.5 * dot);
             items.push(Item::Opacity {
@@ -1714,6 +1903,62 @@ impl DockState {
             items.push(Item::Opacity {
                 alpha: badge.min(1.0),
                 items: badge_items,
+            });
+        }
+    }
+
+    fn paint_rail_indicators(
+        &self,
+        cx: &Context,
+        icon: Rect,
+        app_id: &str,
+        running: f32,
+        items: &mut Vec<Item>,
+    ) {
+        let middle = icon.y + icon.height / 2.0;
+        if self.active.as_deref() == Some(app_id) && running > 0.0 {
+            let (width, height) = RAIL_TICK;
+            items.push(Item::Fill {
+                shape: Shape::rect(Rect::new(
+                    0.0,
+                    (middle - height / 2.0).round(),
+                    width,
+                    height,
+                )),
+                paint: cx.palette.accent_color.into(),
+            });
+        } else if running > 0.0 {
+            items.push(Item::Opacity {
+                alpha: running.min(1.0),
+                items: vec![Item::Fill {
+                    shape: Shape::rect(Rect::new(
+                        1.0,
+                        (middle - RAIL_RUNNING / 2.0).round(),
+                        RAIL_RUNNING,
+                        RAIL_RUNNING,
+                    )),
+                    paint: cx.palette.label_muted.into(),
+                }],
+            });
+        }
+    }
+
+    fn paint_more(&self, cx: &Context, items: &mut Vec<Item>) {
+        let Some(more) = &self.more else {
+            return;
+        };
+        let icon = self.icon_rect(more.cell);
+        items.push(Item::Fill {
+            shape: Shape::rounded(icon, RAIL_WELL_RADIUS),
+            paint: cx.palette.label_primary.with_alpha(WELL_ALPHA).into(),
+        });
+        if let Some((_, _, text)) = &more.text {
+            items.push(Item::Text {
+                origin: Point::new(
+                    (icon.x + (icon.width - text.width()) / 2.0).round(),
+                    (icon.y + (icon.height - text.height()) / 2.0).round(),
+                ),
+                paragraph: text.clone(),
             });
         }
     }
@@ -2010,8 +2255,64 @@ impl Widget for Tile {
     }
 }
 
+struct MoreTile {
+    id: WidgetId,
+    state: Shared,
+    frame: Rect,
+}
+
+impl Widget for MoreTile {
+    fn id(&self) -> WidgetId {
+        self.id
+    }
+
+    fn measure(&mut self, _cx: &mut Context, _available: Size) -> Size {
+        Size::new(self.frame.width, self.frame.height)
+    }
+
+    fn place(&mut self, _cx: &mut Context, frame: Rect) {
+        self.frame = frame;
+    }
+
+    fn frame(&self) -> Rect {
+        self.frame
+    }
+
+    fn paint(&self, _cx: &Context, _items: &mut Vec<Item>) {}
+
+    fn access(&self, _cx: &Context) -> Node {
+        let state = self.state.borrow();
+        let count = state.more.as_ref().map_or(0, |more| more.hidden.len());
+        let mut node = Node::new(Role::Button);
+        node.set_label(L10N.tr_args("more-apps-name", [("count", (count as i64).into())]));
+        node.add_action(Action::Click);
+        node
+    }
+
+    fn handle(&mut self, _cx: &mut Context, event: &Event) -> bool {
+        match event {
+            Event::PointerDown(pointer)
+                if pointer.is_primary() || pointer.button == PointerButton::Secondary =>
+            {
+                self.state.borrow_mut().open_more();
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn perform(&mut self, _cx: &mut Context, request: &ActionRequest) -> bool {
+        if request.action != Action::Click {
+            return false;
+        }
+        self.state.borrow_mut().open_more();
+        true
+    }
+}
+
 struct Dock {
     id: WidgetId,
+    more_id: WidgetId,
     state: Shared,
     children: Vec<Box<dyn Widget>>,
     frame: Rect,
@@ -2031,10 +2332,11 @@ impl Widget for Dock {
         self.frame = frame;
         let mut state = self.state.borrow_mut();
         state.layout(Size::new(frame.width, frame.height), cx.now());
+        state.prepare_more(cx);
         self.children = state
             .slots
             .iter()
-            .filter(|slot| !slot.leaving && !slot.key.is_separator())
+            .filter(|slot| !slot.leaving && !slot.hidden && !slot.key.is_separator())
             .map(|slot| {
                 Box::new(Tile {
                     id: slot.id,
@@ -2044,6 +2346,13 @@ impl Widget for Dock {
                 }) as Box<dyn Widget>
             })
             .collect();
+        if let Some(more) = &state.more {
+            self.children.push(Box::new(MoreTile {
+                id: self.more_id,
+                state: self.state.clone(),
+                frame: state.reach(more.cell),
+            }));
+        }
     }
 
     fn frame(&self) -> Rect {
@@ -2085,6 +2394,7 @@ pub fn dock_ui(state: Shared, palette: Palette, text: TextSystem) -> Ui {
     Ui::new(
         Box::new(Dock {
             id: WidgetId::next(),
+            more_id: WidgetId::next(),
             state,
             children: Vec::new(),
             frame: Rect::default(),

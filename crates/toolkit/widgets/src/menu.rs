@@ -19,6 +19,15 @@ const MINIMUM_WIDTH: f32 = 120.0;
 const RADIUS: f32 = 8.0;
 const FONT_SIZE: f32 = 13.0;
 pub const SUBMENU_DELAY: Duration = Duration::from_millis(200);
+const SAFE_DELAY: Duration = Duration::from_millis(300);
+const SAFE_MARGIN: f32 = 6.0;
+const FIELD_HEIGHT: f32 = 30.0;
+const FIELD_INSET: f32 = 6.0;
+const FIELD_RADIUS: f32 = 6.0;
+const FIELD_ALPHA: u8 = 16;
+const SEARCH_WIDTH: f32 = 260.0;
+const MAX_FOUND: usize = 12;
+const PATH_SEPARATOR: &str = " › ";
 const TYPE_SELECT_PAUSE: Duration = Duration::from_secs(1);
 const FLASH_STEP: Duration = Duration::from_millis(70);
 const FADE: Duration = Duration::from_millis(150);
@@ -26,11 +35,81 @@ const FADE: Duration = Duration::from_millis(150);
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Menu {
     pub items: Vec<MenuItem>,
+    pub search: Option<Search>,
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Search {
+    pub placeholder: String,
+    pub nothing_found: String,
+    pub query: String,
 }
 
 impl Menu {
     pub fn new(items: Vec<MenuItem>) -> Self {
-        Self { items }
+        Self {
+            items,
+            search: None,
+        }
+    }
+
+    pub fn searchable(self, placeholder: &str, nothing_found: &str) -> Self {
+        Self {
+            search: Some(Search {
+                placeholder: placeholder.to_owned(),
+                nothing_found: nothing_found.to_owned(),
+                query: String::new(),
+            }),
+            ..self
+        }
+    }
+
+    pub fn found(&self, query: &str) -> Menu {
+        let query = query.to_lowercase();
+        let mut items = Vec::new();
+        collect_found(&self.items, &[], &query, &mut items);
+        let search = self.search.clone().map(|search| Search {
+            query: query.clone(),
+            ..search
+        });
+        if items.is_empty() {
+            let nothing = search
+                .as_ref()
+                .map(|search| search.nothing_found.clone())
+                .unwrap_or_default();
+            items.push(MenuItem::new(&nothing, "").enabled(false));
+        }
+        items.truncate(MAX_FOUND);
+        Menu { items, search }
+    }
+}
+
+fn collect_found(items: &[MenuItem], path: &[&str], query: &str, found: &mut Vec<MenuItem>) {
+    for item in items {
+        if item.separator {
+            continue;
+        }
+        match &item.submenu {
+            Some(submenu) if item.enabled => {
+                let mut inner = path.to_vec();
+                inner.push(&item.title);
+                collect_found(&submenu.items, &inner, query, found);
+            }
+            Some(_) => {}
+            None if item.enabled && item.title.to_lowercase().contains(query) => {
+                let mut title = path.join(PATH_SEPARATOR);
+                if !title.is_empty() {
+                    title.push_str(PATH_SEPARATOR);
+                }
+                title.push_str(&item.title);
+                found.push(MenuItem {
+                    title,
+                    alternate: None,
+                    ..item.clone()
+                });
+            }
+            None => {}
+        }
     }
 }
 
@@ -168,6 +247,7 @@ pub struct MenuPanel {
     alternates: bool,
     size: Size,
     highlighted: Option<usize>,
+    field: Option<(Paragraph, bool)>,
 }
 
 impl MenuPanel {
@@ -197,8 +277,30 @@ impl MenuPanel {
         let mut widest_label: f32 = 0.0;
         let mut widest_shortcut: f32 = 0.0;
         let has_submenu = menu.items.iter().any(|item| item.submenu.is_some());
+        let field = menu.search.as_ref().map(|search| {
+            let (content, color) = if search.query.is_empty() {
+                (search.placeholder.as_str(), palette.label_muted)
+            } else {
+                (search.query.as_str(), palette.label_primary)
+            };
+            (
+                text.paragraph(
+                    content,
+                    TextStyle::new(FONT_SIZE, color),
+                    None,
+                    TextAlign::Start,
+                ),
+                !search.query.is_empty(),
+            )
+        });
+        let field_height = if field.is_some() { FIELD_HEIGHT } else { 0.0 };
+        let minimum_width = if field.is_some() {
+            SEARCH_WIDTH
+        } else {
+            MINIMUM_WIDTH
+        };
         let rows = [&menu, &alternate].map(|menu| {
-            let mut top = VERTICAL_PADDING;
+            let mut top = VERTICAL_PADDING + field_height;
             menu.items
                 .iter()
                 .map(|item| {
@@ -236,7 +338,7 @@ impl MenuPanel {
         });
         let top = rows[0]
             .last()
-            .map_or(VERTICAL_PADDING, |row| row.top + row.height);
+            .map_or(VERTICAL_PADDING + field_height, |row| row.top + row.height);
         let shortcut_space = if widest_shortcut > 0.0 {
             SHORTCUT_GAP + widest_shortcut
         } else {
@@ -244,7 +346,7 @@ impl MenuPanel {
         };
         let chevron_space = if has_submenu { CHEVRON_SPACE } else { 0.0 };
         let width = (TEXT_START + widest_label + shortcut_space + chevron_space + TRAILING_PADDING)
-            .max(MINIMUM_WIDTH)
+            .max(minimum_width)
             .ceil();
         Self {
             menus: [menu, alternate],
@@ -252,6 +354,17 @@ impl MenuPanel {
             alternates: false,
             size: Size::new(width, top + VERTICAL_PADDING),
             highlighted: None,
+            field,
+        }
+    }
+
+    pub fn at_least(self, size: Size) -> Self {
+        Self {
+            size: Size::new(
+                self.size.width.max(size.width),
+                self.size.height.max(size.height),
+            ),
+            ..self
         }
     }
 
@@ -320,6 +433,33 @@ impl MenuPanel {
                 paint: palette.separator_color.into(),
             },
         ];
+        if let Some((field, typed)) = &self.field {
+            let well = Rect::new(
+                FIELD_INSET,
+                VERTICAL_PADDING,
+                self.size.width - 2.0 * FIELD_INSET,
+                FIELD_HEIGHT - FIELD_INSET,
+            );
+            items.push(Item::Fill {
+                shape: Shape::rounded(well, FIELD_RADIUS),
+                paint: palette.label_primary.with_alpha(FIELD_ALPHA).into(),
+            });
+            let x = well.x + 2.0 * FIELD_INSET;
+            let y = (well.y + (well.height - field.height()) / 2.0).round();
+            items.push(Item::Text {
+                origin: Point::new(x, y),
+                paragraph: field.clone(),
+            });
+            if *typed {
+                let caret = (x + field.width() + 1.0).round() + 0.5;
+                items.push(Item::Line {
+                    from: Point::new(caret, y + 1.0),
+                    to: Point::new(caret, y + field.height() - 1.0),
+                    width: 1.0,
+                    paint: palette.accent_color.into(),
+                });
+            }
+        }
         for (index, (item, row)) in self
             .menu()
             .items
@@ -464,6 +604,7 @@ pub enum MenuOutcome {
     CloseFrom(usize),
     Activate(String),
     Dismiss,
+    Search(Menu),
 }
 
 fn entered(mut panel: MenuPanel, from_keyboard: bool) -> MenuPanel {
@@ -480,10 +621,26 @@ pub struct MenuTracker {
     submenu_due: Option<(usize, usize, Instant)>,
     armed: bool,
     flash: Option<(usize, Instant)>,
+    searched: Option<(Menu, String)>,
+    revision: u32,
+    pointer: Option<(usize, Point)>,
+    settle: Option<(usize, Point, Instant)>,
+}
+
+fn inside_triangle(point: Point, corners: [Point; 3]) -> bool {
+    let side = |a: Point, b: Point| (b.x - a.x) * (point.y - a.y) - (b.y - a.y) * (point.x - a.x);
+    let [a, b, c] = corners;
+    let sides = [side(a, b), side(b, c), side(c, a)];
+    sides.iter().all(|value| *value >= 0.0) || sides.iter().all(|value| *value <= 0.0)
 }
 
 impl MenuTracker {
     pub fn new(root: MenuPanel, from_keyboard: bool) -> Self {
+        let searched = root
+            .menu()
+            .search
+            .is_some()
+            .then(|| (root.menu().clone(), String::new()));
         Self {
             panels: vec![entered(root, from_keyboard)],
             typed: String::new(),
@@ -491,7 +648,48 @@ impl MenuTracker {
             submenu_due: None,
             armed: false,
             flash: None,
+            searched,
+            revision: 0,
+            pointer: None,
+            settle: None,
         }
+    }
+
+    pub fn revision(&self) -> u32 {
+        self.revision
+    }
+
+    pub fn searched(&mut self, panel: MenuPanel) {
+        let size = self.panels[0].size();
+        let mut panel = panel.at_least(size);
+        panel.highlighted = panel.step(None, true);
+        self.panels = vec![panel];
+        self.submenu_due = None;
+        self.settle = None;
+        self.revision = self.revision.wrapping_add(1);
+    }
+
+    fn search(&mut self, edit: impl FnOnce(&mut String)) -> MenuOutcome {
+        let Some((source, query)) = &mut self.searched else {
+            return MenuOutcome::Nothing;
+        };
+        let before = query.clone();
+        edit(query);
+        if *query == before {
+            return MenuOutcome::Nothing;
+        }
+        let menu = if query.is_empty() {
+            source.clone()
+        } else {
+            source.found(query)
+        };
+        MenuOutcome::Search(menu)
+    }
+
+    fn searching(&self) -> bool {
+        self.searched
+            .as_ref()
+            .is_some_and(|(_, query)| !query.is_empty())
     }
 
     pub fn panels(&self) -> &[MenuPanel] {
@@ -540,11 +738,51 @@ impl MenuTracker {
         if index.is_some() {
             self.armed = true;
         }
+        let from = self
+            .pointer
+            .filter(|(known, _)| *known == level)
+            .map(|(_, from)| from);
+        self.pointer = Some((level, point));
         let keeps_submenu = index.is_none() && self.panels.len() > level + 1;
         if keeps_submenu {
             return MenuOutcome::Nothing;
         }
+        if let (Some(from), Some(open)) = (from, self.heading_to_submenu(level))
+            && index != Some(open)
+            && self.toward_submenu(level, open, from, point)
+        {
+            self.settle = Some((level, point, now + SAFE_DELAY));
+            return MenuOutcome::Nothing;
+        }
+        self.settle = None;
         self.highlight(level, index, now)
+    }
+
+    fn heading_to_submenu(&self, level: usize) -> Option<usize> {
+        let open = self.panels.get(level)?.highlighted?;
+        let opening = self
+            .submenu_due
+            .is_some_and(|(due, index, _)| due == level && index == open);
+        (self.panels.len() > level + 1 || opening).then_some(open)
+    }
+
+    fn toward_submenu(&self, level: usize, open: usize, from: Point, point: Point) -> bool {
+        let panel = &self.panels[level];
+        let row = panel.row_rect(open);
+        let height = self
+            .panels
+            .get(level + 1)
+            .map_or(row.height, |submenu| submenu.size().height);
+        let edge = panel.size().width;
+        point.x > from.x
+            && inside_triangle(
+                point,
+                [
+                    Point::new(from.x - 1.0, from.y),
+                    Point::new(edge + SAFE_MARGIN, row.y - SAFE_MARGIN),
+                    Point::new(edge + SAFE_MARGIN, row.y + height + SAFE_MARGIN),
+                ],
+            )
     }
 
     pub fn pointer_press(&mut self, level: usize, point: Point) -> MenuOutcome {
@@ -627,11 +865,20 @@ impl MenuTracker {
             },
             Key::Left if level > 0 => MenuOutcome::CloseFrom(level),
             Key::Escape if level > 0 => MenuOutcome::CloseFrom(level),
+            Key::Escape if self.searching() => self.search(String::clear),
             Key::Escape => MenuOutcome::Dismiss,
+            Key::Backspace if self.searching() => self.search(|query| {
+                query.pop();
+            }),
             Key::Enter | Key::Space => match current {
                 Some(index) => self.activate(level, index, now),
                 None => MenuOutcome::Nothing,
             },
+            Key::Character(character)
+                if !modifiers.logo && !modifiers.control && self.searched.is_some() =>
+            {
+                self.search(|query| query.push(character))
+            }
             Key::Character(character) if !modifiers.logo && !modifiers.control => {
                 self.type_select(level, character, now)
             }
@@ -680,10 +927,21 @@ impl MenuTracker {
     pub fn deadline(&self) -> Option<Instant> {
         let submenu = self.submenu_due.map(|(_, _, at)| at);
         let flash = self.flash.map(|(_, at)| at + 2 * FLASH_STEP + FADE);
-        submenu.into_iter().chain(flash).min()
+        let settle = self.settle.map(|(_, _, at)| at);
+        submenu.into_iter().chain(flash).chain(settle).min()
     }
 
     pub fn tick(&mut self, now: Instant) -> MenuOutcome {
+        if let Some((level, point, at)) = self.settle
+            && at <= now
+        {
+            self.settle = None;
+            let index = self
+                .panels
+                .get(level)
+                .and_then(|panel| panel.item_at(point));
+            return self.highlight(level, index, now);
+        }
         if let Some((level, index, at)) = self.submenu_due
             && at <= now
         {

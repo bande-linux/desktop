@@ -3,6 +3,7 @@ pub mod devices;
 pub mod session;
 pub mod status;
 pub mod tray;
+pub mod unread;
 
 mod command;
 
@@ -26,6 +27,7 @@ pub enum Update {
     Menu { menu: String, root: Node },
     AppMenu { app: String, root: Option<Node> },
     AppMenuChanged,
+    Unread(bool),
 }
 
 #[cfg(test)]

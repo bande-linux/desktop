@@ -59,6 +59,7 @@ struct Popup {
 
 #[derive(Clone, Copy, PartialEq)]
 struct Look {
+    revision: u32,
     highlighted: Option<usize>,
     alternates: bool,
     show_highlight: bool,
@@ -207,6 +208,12 @@ impl Menus {
         Ok(())
     }
 
+    pub(crate) fn search(&mut self, opening: Opening<'_>, menu: Menu) {
+        self.close_from(opening.state, 1);
+        let panel = MenuPanel::new(menu, opening.text, &opening.palette);
+        self.tracker.searched(panel);
+    }
+
     pub(crate) fn close_from(&mut self, state: &mut State, level: usize) {
         let level = level.max(1);
         for popup in self.popups.drain(level.min(self.popups.len())..).rev() {
@@ -245,6 +252,7 @@ impl Menus {
             }
             let (show_highlight, opacity) = self.tracker.appearance(level, now);
             let look = Look {
+                revision: self.tracker.revision(),
                 highlighted: panel.highlighted(),
                 alternates: panel.shows_alternates(),
                 show_highlight,

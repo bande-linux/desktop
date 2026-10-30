@@ -4,6 +4,7 @@ use std::process::{Child, ExitCode};
 use std::time::{Duration, Instant};
 
 use smithay::backend::drm::{DrmEvent, DrmEventMetadata};
+use smithay::backend::session::Event as SessionEvent;
 use smithay::backend::udev::{UdevBackend, UdevEvent};
 use smithay::reexports::calloop::channel::{self, Event};
 use smithay::reexports::calloop::generic::Generic;
@@ -242,8 +243,14 @@ fn run_drm(device: Option<&Path>, session: Session) -> Result<(), Box<dyn Error>
     let mut event_loop: EventLoop<App<DrmBackend>> = EventLoop::try_new()?;
     let handle = event_loop.handle();
     handle.insert_source(notifiers.session, |event, _, app| {
+        let activated = matches!(event, SessionEvent::ActivateSession);
         if let Err(error) = app.output.session_changed(event) {
             tracing::warn!("cannot follow the session: {error}");
+        } else if activated {
+            hotplug(app);
+            for scheduler in &mut app.schedulers {
+                scheduler.restart();
+            }
         }
     })?;
     handle.insert_source(notifiers.device, |event, metadata, app| match event {

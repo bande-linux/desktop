@@ -471,6 +471,9 @@ impl FrameOutput for DrmBackend {
         compositor: &mut Headless,
         output: &str,
     ) -> Result<Submission, DrmBackendError> {
+        if !self.session.is_active() {
+            return Ok(Submission::AtVblank);
+        }
         let Some(settings) = compositor.output_settings(output) else {
             return Ok(Submission::AtVblank);
         };

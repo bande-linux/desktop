@@ -7,11 +7,13 @@ repository.workspace = true
 
 [dependencies]
 accesskit.workspace = true
+rustix = { workspace = true, features = ["fs"] }
 tracing.workspace = true
 unbound-app-menu.workspace = true
 unbound-audio.workspace = true
 unbound-bluetooth.workspace = true
 unbound-config.workspace = true
+unbound-fs.workspace = true
 unbound-keyboard.workspace = true
 unbound-l10n.workspace = true
 unbound-log.workspace = true

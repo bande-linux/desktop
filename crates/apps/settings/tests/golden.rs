@@ -5,7 +5,8 @@ use std::path::PathBuf;
 use unbound_audio::{Device, Direction, Level, Snapshot};
 use unbound_keyboard::Layouts;
 use unbound_settings::{
-    Display, Mode, Pair, PointingDevices, SettingId, SettingsView, Update, Value, thumbnail,
+    About, Category, Display, Mode, Pair, PaneId, PointingDevices, SettingId, SettingsView,
+    Storage, Update, Value, thumbnail,
 };
 use unbound_toolkit::ui::{Event, Key, Modifiers};
 use unbound_toolkit::{CpuRenderer, Palette, Scheme, TextSystem};
@@ -14,7 +15,11 @@ const SIZE: (u32, u32) = (900, 600);
 const MIN_SSIM: f64 = 0.99;
 
 fn check_golden(name: &str, rgba: Vec<u8>) {
-    let actual = image::RgbaImage::from_raw(SIZE.0, SIZE.1, rgba).expect("frame");
+    check_golden_sized(name, SIZE, rgba);
+}
+
+fn check_golden_sized(name: &str, size: (u32, u32), rgba: Vec<u8>) {
+    let actual = image::RgbaImage::from_raw(size.0, size.1, rgba).expect("frame");
     let actual = image::DynamicImage::ImageRgba8(actual).to_rgb8();
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("tests/golden/{name}.png"));
     if std::env::var_os("UNBOUND_UPDATE_GOLDENS").is_some() {
@@ -235,4 +240,74 @@ fn the_trackpad_and_mouse_pane_matches_its_golden() {
     let scene = view.scene(SIZE.0, SIZE.1);
     let frame = CpuRenderer::new().render(&scene).expect("frame");
     check_golden("trackpad-mouse-dark", frame.rgba);
+}
+
+fn check_in_both_schemes_and_scales(name: &str, build: impl Fn(Scheme) -> SettingsView) {
+    for (scheme, suffix) in [(Scheme::Light, "light"), (Scheme::Dark, "dark")] {
+        let mut view = build(scheme);
+        let scene = view.scene(SIZE.0, SIZE.1);
+        for (scale, density) in [(1.0, ""), (1.5, "@1.5x")] {
+            let pixels = (
+                (f64::from(SIZE.0) * scale).round() as u32,
+                (f64::from(SIZE.1) * scale).round() as u32,
+            );
+            let mut rgba = vec![0; pixels.0 as usize * pixels.1 as usize * 4];
+            CpuRenderer::new()
+                .render_into(&scene, scale, &mut rgba)
+                .expect("frame");
+            check_golden_sized(&format!("{name}-{suffix}{density}"), pixels, rgba);
+        }
+    }
+}
+
+fn general(scheme: Scheme, pane: PaneId) -> SettingsView {
+    let mut view = SettingsView::new(Palette::for_scheme(scheme), TextSystem::new());
+    view.apply(Update::About(About {
+        name: "Studio".to_owned(),
+        model: "Apple MacBook Pro (14-inch, M1 Pro, 2021)".to_owned(),
+        chip: "Apple M1 Pro".to_owned(),
+        memory: 16_000_000_000,
+        capacity: 494_000_000_000,
+        available: 210_000_000_000,
+        unbound: "0.1.0".to_owned(),
+        system: "Debian 13.7 (trixie)".to_owned(),
+        serial: Some("C02XL0GHJGH5".to_owned()),
+    }));
+    view.select_pane(pane);
+    view
+}
+
+#[test]
+fn the_about_pane_matches_its_goldens() {
+    check_in_both_schemes_and_scales("about", |scheme| general(scheme, PaneId::About));
+}
+
+#[test]
+fn the_storage_pane_matches_its_goldens() {
+    let home = std::env::home_dir().expect("home");
+    check_in_both_schemes_and_scales("storage", |scheme| {
+        let mut view = general(scheme, PaneId::Storage);
+        view.apply(Update::Storage(Storage {
+            capacity: 494_000_000_000,
+            available: 210_000_000_000,
+            categories: Some(vec![
+                (Category::Apps, 21_000_000_000),
+                (Category::Documents, 182_000_000_000),
+                (Category::Trash, 4_100_000_000),
+                (Category::System, 76_900_000_000),
+            ]),
+            largest: vec![
+                (home.join("Movies/Holiday.mov"), 9_800_000_000),
+                (home.join("Downloads/debian-13.iso"), 3_900_000_000),
+                (home.join("Music/Live at the Barbican.flac"), 1_200_000_000),
+            ],
+            trash_items: 12,
+        }));
+        view
+    });
+}
+
+#[test]
+fn the_general_pane_matches_its_goldens() {
+    check_in_both_schemes_and_scales("general", |scheme| general(scheme, PaneId::General));
 }

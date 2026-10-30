@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::io::{self, Read, Write};
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::net::UnixStream;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
@@ -10,12 +11,14 @@ use unbound_config::{BUS_NAME, OBJECT_PATH, Output};
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
+use crate::about::{About, AboutCommand, follow_about};
 use crate::client::{CONFIG_SETTINGS, SettingsClient};
 use crate::pictures::{Pair, PictureCommand, follow_pictures};
 use crate::services::{
     AudioCommand, BluetoothCommand, NetworkCommand, follow_audio, follow_bluetooth, follow_network,
 };
 use crate::state::{Answer, BluetoothState, Joined, Question, WifiState};
+use crate::storage::{Storage, StorageCommand, follow_storage};
 use unbound_settings_panes::{SettingId, Value};
 
 const NOTIFICATIONS: &str = "org.freedesktop.Notifications";
@@ -32,6 +35,8 @@ pub enum Update {
     Pairing(Option<Question>),
     Pictures(Vec<(String, Pair)>),
     Thumbnail(Pair, unbound_wallpaper::Picture),
+    About(About),
+    Storage(Storage),
     Failed(String),
 }
 
@@ -44,6 +49,9 @@ pub enum Command {
     Bluetooth(BluetoothCommand),
     Answer(Answer),
     Picture(PictureCommand),
+    About(AboutCommand),
+    Storage(StorageCommand),
+    Reveal(PathBuf),
 }
 
 pub struct Feed {
@@ -203,6 +211,8 @@ pub struct Services {
     network: Option<Sender<NetworkCommand>>,
     bluetooth: Option<(Sender<BluetoothCommand>, Sender<Answer>)>,
     pictures: Sender<PictureCommand>,
+    about: Option<Sender<AboutCommand>>,
+    storage: Sender<StorageCommand>,
 }
 
 impl Services {
@@ -215,6 +225,8 @@ impl Services {
             network: system.map(|system| follow_network(system, updates.clone())),
             bluetooth: system.map(|system| follow_bluetooth(system, updates.clone())),
             pictures: follow_pictures(session, unbound_xdg::data_dirs(), updates.clone()),
+            about: system.map(|system| follow_about(system, updates.clone())),
+            storage: follow_storage(updates.clone()),
         }
     }
 
@@ -235,6 +247,12 @@ impl Services {
                 .as_ref()
                 .is_some_and(|(_, answers)| answers.send(answer).is_ok()),
             Command::Picture(command) => self.pictures.send(command).is_ok(),
+            Command::About(command) => self
+                .about
+                .as_ref()
+                .is_some_and(|about| about.send(command).is_ok()),
+            Command::Storage(command) => self.storage.send(command).is_ok(),
+            Command::Reveal(_) => false,
         };
         if !sent {
             tracing::warn!("a settings service is not running");

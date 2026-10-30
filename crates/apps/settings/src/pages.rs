@@ -6,7 +6,7 @@ use unbound_keyboard::{Area, shortcuts_in};
 use unbound_toolkit::Spacing;
 use unbound_toolkit::ui::{
     Axis, Button, Label, PopUpButton, SearchField, SecureField, SegmentedControl, Slider, Stack,
-    Toggle, Widget, WidgetId, shortcut_symbols,
+    TextField, Toggle, Widget, WidgetId, shortcut_symbols,
 };
 
 use crate::L10N;
@@ -27,9 +27,9 @@ const VOLUME_STEP: f64 = 1.0 / 16.0;
 const FIELD_SIZE: f32 = 13.0;
 const SOURCE_RESULTS: usize = 8;
 
-type Widgets = Vec<Box<dyn Widget>>;
+pub(crate) type Widgets = Vec<Box<dyn Widget>>;
 
-fn boxed(widget: impl Widget + 'static) -> Box<dyn Widget> {
+pub(crate) fn boxed(widget: impl Widget + 'static) -> Box<dyn Widget> {
     Box::new(widget)
 }
 
@@ -38,7 +38,7 @@ fn submit(intents: &Intents, make: fn(String) -> Intent) -> impl FnMut(&str) + '
     move |text: &str| intents.borrow_mut().push(make(text.to_owned()))
 }
 
-fn muted_row(text: &str) -> Box<dyn Widget> {
+pub(crate) fn muted_row(text: &str) -> Box<dyn Widget> {
     boxed(Row::new(Text::new(text, Tone::Muted), None))
 }
 
@@ -81,7 +81,7 @@ impl SettingsView {
             .into_iter()
             .filter_map(|id| {
                 let pane = self.panes.iter().find(|pane| pane.id == id)?;
-                let selected = id == self.pane;
+                let selected = id == self.pane || self.pane.parent() == Some(id);
                 let tone = if selected {
                     Tone::OnAccent
                 } else {
@@ -251,6 +251,17 @@ impl SettingsView {
                     },
                 ))
             }
+            Kind::Text => {
+                let saved = match value {
+                    Some(Value::Text(text)) => Some(text),
+                    _ => None,
+                };
+                let text = self.drafts.get(&id).cloned().or(saved)?;
+                let mut draft = intent(&self.intents, move |text: String| Intent::Draft(id, text));
+                boxed(TextField::new(&setting.label, &text, move |text: &str| {
+                    draft(text.to_owned())
+                }))
+            }
             Kind::List(_) | Kind::Pictures => return None,
         };
         let focus = control.id();
@@ -277,7 +288,7 @@ impl SettingsView {
         ))
     }
 
-    fn item_row(&mut self, anchor: String, row: Row) -> Box<dyn Widget> {
+    pub(crate) fn item_row(&mut self, anchor: String, row: Row) -> Box<dyn Widget> {
         self.anchors.push((Anchor::Item(anchor), row.id()));
         boxed(row)
     }
@@ -440,6 +451,9 @@ impl SettingsView {
             List::InputDevices => self.audio_rows(Direction::Input),
             List::InputSources => self.input_source_rows(),
             List::Shortcuts => Vec::new(),
+            List::About => self.about_rows(),
+            List::Storage => self.storage_rows(),
+            List::LargeFiles => self.large_file_rows(),
         }
     }
 
@@ -775,7 +789,16 @@ impl SettingsView {
         };
         let hit = self.hit(pane.id).cloned();
         let matched = move |id: SettingId| hit.as_ref().and_then(|hit| hit.setting(id)).cloned();
-        let mut page: Widgets = vec![boxed(Label::heading(&pane.name))];
+        let mut page: Widgets = pane
+            .id
+            .parent()
+            .and_then(|parent| self.back_button(parent))
+            .into_iter()
+            .collect();
+        page.push(boxed(Label::heading(&pane.name)));
+        if pane.id == PaneId::General {
+            page.push(boxed(Card::new(self.general_rows())));
+        }
         if pane.id == PaneId::Bluetooth
             && let Some(card) = self.pairing_card()
         {

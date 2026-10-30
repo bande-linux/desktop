@@ -1,12 +1,15 @@
+mod about;
 mod client;
 mod displays;
 mod follow;
+mod general;
 mod idle;
 mod pages;
 mod pictures;
 mod pointing;
 mod services;
 mod state;
+mod storage;
 mod view;
 mod widgets;
 
@@ -14,6 +17,7 @@ use std::sync::LazyLock;
 
 use unbound_l10n::Localizer;
 
+pub use about::{About, AboutCommand, chip_name, memory_bytes, static_hostname, system_version};
 pub use client::{CONFIG_SETTINGS, SettingsClient};
 pub use displays::Displays;
 pub use follow::{Command, Feed, Services, Update, Updates, feed, follow_config, worker};
@@ -24,6 +28,7 @@ pub use services::{
     AudioCommand, BluetoothCommand, NetworkCommand, follow_bluetooth, follow_network,
 };
 pub use state::{Answer, BluetoothState, Display, Joined, Mode, Question, WifiState};
+pub use storage::{Category, Storage, StorageCommand, Tally, categorize, tally};
 pub use unbound_settings_panes::{PaneId, SettingId, Value};
 pub use view::SettingsView;
 
@@ -40,6 +45,7 @@ mod tests {
             include_str!("main.rs"),
             include_str!("client.rs"),
             include_str!("follow.rs"),
+            include_str!("general.rs"),
             include_str!("pages.rs"),
             include_str!("pictures.rs"),
             include_str!("view.rs"),

@@ -45,3 +45,34 @@ switch-sources-hint = ⌥⌘Space switches between sources
 input-sources-full = Up to { $count } input sources can be used
 search-layouts = Search layouts
 no-layouts = No keyboard layout matches
+back-to = ‹ { $pane }
+back-tooltip = Go back (Super+[)
+available-of = { $available } available of { $capacity }
+about-model = Model
+about-chip = Chip
+about-memory = Memory
+about-storage = Storage
+about-unbound = Unbound
+about-system = System
+about-serial = Serial number
+calculating = Calculating…
+startup-disk = Startup disk
+storage-apps = Apps
+storage-documents = Documents
+storage-trash = Trash
+storage-system = System
+storage-category = { $category } { $size }
+trash-empty = Empty
+trash-items = { $count ->
+    [one] 1 item
+   *[other] { $count } items
+}
+empty-trash-ellipsis = Empty Trash…
+empty-trash = Empty Trash
+empty-trash-question = Erase { $count ->
+    [one] the item
+   *[other] all { $count } items
+} in the Trash?
+empty-trash-warning = This cannot be undone.
+no-large-files = No large files in your home folder
+show-in-files = Show in Files

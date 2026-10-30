@@ -4,15 +4,18 @@ use std::process::ExitCode;
 
 use unbound_app_menu::{AppMenu, Entry, Standard, app_submenu, window_submenu};
 use unbound_settings::{
-    Displays, Feed, L10N, PaneId, PointingDevices, Services, SettingsView, UDEV_DATA, feed,
+    Command, Displays, Feed, L10N, PaneId, PointingDevices, Services, SettingsView, UDEV_DATA, feed,
 };
 use unbound_settings_panes::panes;
 use unbound_toolkit::{App, Rect, Role, Scene, TextSystem, Window, WindowEvent};
+use unbound_xdg::spawn_detached;
 
 const APP_ID: &str = "org.unbound.Settings";
 const WINDOW_SIZE: (u32, u32) = (900, 600);
 const FEED: usize = 0;
 const PANE_ACTION: &str = "pane:";
+const FILES_APP_ID: &str = "org.unbound.Files";
+const FILES: &str = "unbound-files";
 
 struct Settings {
     view: SettingsView,
@@ -20,6 +23,14 @@ struct Settings {
     displays: Option<Displays>,
     services: Services,
     app_menu: Option<AppMenu>,
+}
+
+fn reveal(window: &mut Window, path: &Path) {
+    let token = window.activation_token(FILES_APP_ID).ok();
+    let command = [FILES.to_owned(), path.to_string_lossy().into_owned()];
+    if let Err(error) = spawn_detached(&command, None, token.as_deref()) {
+        tracing::warn!("cannot show {} in Files: {error}", path.display());
+    }
 }
 
 fn app_menus() -> Vec<Entry> {
@@ -58,9 +69,12 @@ impl Settings {
         }
     }
 
-    fn send_commands(&mut self) {
+    fn send_commands(&mut self, window: &mut Window) {
         for command in self.view.take_commands() {
-            self.services.send(command);
+            match command {
+                Command::Reveal(path) => reveal(window, &path),
+                command => self.services.send(command),
+            }
         }
     }
 }
@@ -91,7 +105,7 @@ impl App for Settings {
             }
             _ => return,
         }
-        self.send_commands();
+        self.send_commands(window);
         window.request_redraw();
     }
 
@@ -120,7 +134,7 @@ impl App for Settings {
         } else if let Some(displays) = self.displays.as_mut().and_then(Displays::dispatch) {
             self.view.set_displays(displays);
         }
-        self.send_commands();
+        self.send_commands(window);
         window.request_redraw();
     }
 

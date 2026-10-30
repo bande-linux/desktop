@@ -1334,3 +1334,144 @@ impl Widget for Thumbnails {
         cx.keyboard_navigation
     }
 }
+
+const USAGE_BAR_HEIGHT: f32 = 12.0;
+const USAGE_BAR_RADIUS: f32 = 4.0;
+const SWATCH: f32 = 8.0;
+const SEGMENT_ALPHAS: [u8; 4] = [255, 185, 120, 70];
+
+pub struct Segment {
+    pub label: String,
+    pub bytes: u64,
+}
+
+pub struct UsageBar {
+    id: WidgetId,
+    summary: String,
+    segments: Vec<Segment>,
+    capacity: u64,
+    legend: Vec<(Text, Point)>,
+    frame: Rect,
+}
+
+impl UsageBar {
+    pub fn new(summary: &str, segments: Vec<Segment>, capacity: u64) -> Self {
+        Self {
+            id: WidgetId::next(),
+            summary: summary.to_owned(),
+            segments,
+            capacity,
+            legend: Vec::new(),
+            frame: Rect::default(),
+        }
+    }
+
+    fn color(cx: &Context, index: usize) -> Color {
+        let alpha = SEGMENT_ALPHAS[index % SEGMENT_ALPHAS.len()];
+        cx.palette.accent_color.with_alpha(alpha)
+    }
+}
+
+impl Widget for UsageBar {
+    fn id(&self) -> WidgetId {
+        self.id
+    }
+
+    fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
+        let width = (available.width - 2.0 * ROW_PADDING).max(0.0);
+        let mut legend = Vec::new();
+        let (mut x, mut y, mut line) = (0.0_f32, 0.0_f32, 0.0_f32);
+        for segment in &self.segments {
+            let mut text = Text::new(&segment.label, Tone::Primary).caption();
+            let size = text.measure(cx);
+            let item = SWATCH + Spacing::XS as f32 + size.width;
+            if x > 0.0 && x + item > width {
+                x = 0.0;
+                y += line + Spacing::XS as f32;
+                line = 0.0;
+            }
+            legend.push((text, Point::new(x, y)));
+            x += item + Spacing::L as f32;
+            line = line.max(size.height);
+        }
+        self.legend = legend;
+        let legend_height = if self.segments.is_empty() {
+            0.0
+        } else {
+            y + line + Spacing::S as f32
+        };
+        Size::new(
+            available.width,
+            (2.0 * Spacing::M as f32 + USAGE_BAR_HEIGHT + legend_height).ceil(),
+        )
+    }
+
+    fn place(&mut self, _cx: &mut Context, frame: Rect) {
+        self.frame = frame;
+    }
+
+    fn frame(&self) -> Rect {
+        self.frame
+    }
+
+    fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
+        let track = Rect::new(
+            self.frame.x + ROW_PADDING,
+            self.frame.y + Spacing::M as f32,
+            (self.frame.width - 2.0 * ROW_PADDING).max(0.0),
+            USAGE_BAR_HEIGHT,
+        );
+        let mut fills = vec![Item::Fill {
+            shape: Shape::rect(track),
+            paint: cx.palette.separator_color.into(),
+        }];
+        let mut x = track.x;
+        for (index, segment) in self.segments.iter().enumerate() {
+            let share = segment.bytes as f64 / self.capacity.max(1) as f64;
+            let width = (track.width * share as f32).max(1.0);
+            fills.push(Item::Fill {
+                shape: Shape::rect(Rect::new(
+                    x.round(),
+                    track.y,
+                    (x + width).round() - x.round(),
+                    track.height,
+                )),
+                paint: Self::color(cx, index).into(),
+            });
+            x += width;
+        }
+        items.push(Item::Clip {
+            shape: Shape::rounded(track, USAGE_BAR_RADIUS),
+            items: fills,
+        });
+        let origin = Point::new(track.x, track.y + track.height + Spacing::S as f32);
+        for (index, (text, at)) in self.legend.iter().enumerate() {
+            let y = origin.y + at.y;
+            let swatch_y = y + ((text.size().height - SWATCH) / 2.0).round();
+            items.push(Item::Fill {
+                shape: Shape::rounded(Rect::new(origin.x + at.x, swatch_y, SWATCH, SWATCH), 2.0),
+                paint: Self::color(cx, index).into(),
+            });
+            text.paint(
+                cx,
+                Point::new(origin.x + at.x + SWATCH + Spacing::XS as f32, y),
+                items,
+            );
+        }
+    }
+
+    fn access(&self, _cx: &Context) -> Node {
+        let mut node = Node::new(Role::Meter);
+        let used: u64 = self.segments.iter().map(|segment| segment.bytes).sum();
+        let legend: Vec<&str> = self
+            .segments
+            .iter()
+            .map(|segment| segment.label.as_str())
+            .collect();
+        node.set_label(format!("{}: {}", self.summary, legend.join(", ")));
+        node.set_numeric_value(used as f64);
+        node.set_min_numeric_value(0.0);
+        node.set_max_numeric_value(self.capacity as f64);
+        node
+    }
+}

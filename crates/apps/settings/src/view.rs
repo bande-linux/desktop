@@ -1,20 +1,25 @@
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, HashMap};
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use accesskit::{Action, ActionData, ActionRequest, TreeId, TreeUpdate};
 use unbound_audio::{Direction, Snapshot};
 use unbound_config::{MAX_INPUT_SOURCES, Output};
-use unbound_toolkit::ui::{Context, Event, Key, Modifiers, SearchField, Ui, Widget, WidgetId};
+use unbound_toolkit::ui::{
+    Context, Event, Key, Modifiers, PointerButton, SearchField, Ui, Widget, WidgetId,
+};
 use unbound_toolkit::{Image, Palette, Rect, Scene, TextSystem};
 
 use crate::L10N;
+use crate::about::{About, AboutCommand};
 use crate::follow::{Command, Update};
 use crate::idle::Idle;
 use crate::pictures::{Pair, PictureCommand};
 use crate::pointing::PointingDevices;
 use crate::services::{AudioCommand, BluetoothCommand, NetworkCommand};
 use crate::state::{Answer, BluetoothState, Display, Joined, Question, WifiState};
+use crate::storage::{Storage, StorageCommand};
 use crate::widgets::{Column, Root};
 use unbound_keyboard::Layouts;
 use unbound_settings_panes::{AUTOMATIC, Pane, PaneId, SettingId, Value, panes};
@@ -43,6 +48,11 @@ pub(crate) enum Intent {
     AddSource(String),
     RemoveSource(usize),
     MoveSource(usize, bool),
+    Back,
+    Draft(SettingId, String),
+    AskEmptyTrash(bool),
+    EmptyTrash,
+    Reveal(PathBuf),
 }
 
 pub(crate) type Intents = Rc<RefCell<Vec<Intent>>>;
@@ -54,6 +64,7 @@ pub(crate) enum Anchor {
     Item(String),
     Password,
     SourceSearch,
+    Back,
 }
 
 pub(crate) fn intent<T>(
@@ -103,6 +114,10 @@ pub struct SettingsView {
     pub(crate) layouts: Option<Layouts>,
     pub(crate) adding_source: Option<String>,
     pub(crate) pointing: PointingDevices,
+    pub(crate) about: Option<About>,
+    pub(crate) storage: Option<Storage>,
+    pub(crate) drafts: HashMap<SettingId, String>,
+    pub(crate) confirming_empty_trash: bool,
     ui: Ui,
     root: WidgetId,
     search: WidgetId,
@@ -148,6 +163,10 @@ impl SettingsView {
             layouts: None,
             adding_source: None,
             pointing: PointingDevices::default(),
+            about: None,
+            storage: None,
+            drafts: HashMap::new(),
+            confirming_empty_trash: false,
             ui: Ui::new(Box::new(root), cx),
             root: root_id,
             search,
@@ -266,6 +285,19 @@ impl SettingsView {
                 let image = Image::from_rgba(picture.width, picture.height, picture.rgba);
                 self.thumbnails.insert(pair, image);
             }
+            Update::About(about) => {
+                if !self.drafts.contains_key(&SettingId::ComputerName) {
+                    self.values
+                        .insert(SettingId::ComputerName, Value::Text(about.name.clone()));
+                }
+                self.about = Some(about);
+            }
+            Update::Storage(storage) => {
+                if storage.trash_items == 0 {
+                    self.confirming_empty_trash = false;
+                }
+                self.storage = Some(storage);
+            }
             Update::Failed(error) => {
                 self.busy.clear();
                 self.message = Some(L10N.tr_args("not-changed", [("error", error.into())]));
@@ -341,11 +373,14 @@ impl SettingsView {
             PaneId::Notifications => self.values.contains_key(&SettingId::DoNotDisturb),
             PaneId::Sound => self.audio.is_some(),
             PaneId::Displays => !self.displays.is_empty(),
+            PaneId::About => self.about.is_some(),
             PaneId::Appearance
             | PaneId::Wallpaper
             | PaneId::Dock
             | PaneId::LockScreen
-            | PaneId::Keyboard => true,
+            | PaneId::Keyboard
+            | PaneId::General
+            | PaneId::Storage => true,
             PaneId::TrackpadMouse => self.pointing.trackpad || self.pointing.mouse,
         }
     }
@@ -355,7 +390,7 @@ impl SettingsView {
             self.panes
                 .iter()
                 .map(|pane| pane.id)
-                .filter(|pane| self.available(*pane))
+                .filter(|pane| pane.parent().is_none() && self.available(*pane))
                 .collect()
         } else {
             self.hits.iter().map(|hit| hit.pane).collect()
@@ -395,6 +430,15 @@ impl SettingsView {
         self.ui.focus() == Some(self.search)
     }
 
+    fn shown_in(&self, visible: &[PaneId]) -> bool {
+        visible.contains(&self.pane)
+            || (self.available(self.pane)
+                && self
+                    .pane
+                    .parent()
+                    .is_some_and(|parent| visible.contains(&parent)))
+    }
+
     pub(crate) fn hit(&self, pane: PaneId) -> Option<&PaneHit> {
         self.hits.iter().find(|hit| hit.pane == pane)
     }
@@ -404,7 +448,7 @@ impl SettingsView {
             self.hits = self.search_hits(&self.query.clone());
         }
         let visible = self.visible_panes();
-        if !visible.contains(&self.pane)
+        if !self.shown_in(&visible)
             && let Some(&first) = visible.first()
         {
             self.select_pane(first);
@@ -425,7 +469,51 @@ impl SettingsView {
             Event::PointerUp(_) => self.pressed = false,
             _ => {}
         }
+        let editing = self
+            .focused_setting()
+            .filter(|setting| self.drafts.contains_key(setting));
         let handled = match event {
+            Event::Key {
+                key: Key::Enter, ..
+            } if editing.is_some() => {
+                self.commit_drafts();
+                true
+            }
+            Event::Key {
+                key: Key::Escape,
+                modifiers,
+            } if plain(modifiers) && editing.is_some() => {
+                self.drafts.clear();
+                self.invalidate();
+                true
+            }
+            Event::Key {
+                key: Key::Character('['),
+                modifiers,
+            } if modifiers.logo && self.pane.parent().is_some() => {
+                self.intents.borrow_mut().push(Intent::Back);
+                true
+            }
+            Event::Key {
+                key: Key::Left,
+                modifiers,
+            } if modifiers.alt && self.pane.parent().is_some() => {
+                self.intents.borrow_mut().push(Intent::Back);
+                true
+            }
+            Event::PointerDown(pointer)
+                if pointer.button == PointerButton::Back && self.pane.parent().is_some() =>
+            {
+                self.intents.borrow_mut().push(Intent::Back);
+                true
+            }
+            Event::Key {
+                key: Key::Escape,
+                modifiers,
+            } if plain(modifiers) && self.confirming_empty_trash => {
+                self.intents.borrow_mut().push(Intent::AskEmptyTrash(false));
+                true
+            }
             Event::Key {
                 key: Key::Escape,
                 modifiers,
@@ -506,6 +594,10 @@ impl SettingsView {
 
     fn settle(&mut self) {
         self.process_intents();
+        let focused = self.focused_setting();
+        if self.drafts.keys().any(|setting| Some(*setting) != focused) {
+            self.commit_drafts();
+        }
         if self.stale && !self.pressed {
             self.rebuild();
         }
@@ -540,9 +632,37 @@ impl SettingsView {
     fn process_intents(&mut self) {
         let intents = std::mem::take(&mut *self.intents.borrow_mut());
         for intent in intents {
+            if let Intent::Draft(id, text) = intent {
+                self.drafts.insert(id, text);
+                continue;
+            }
             self.stale = true;
             match intent {
-                Intent::SelectPane(pane) => self.select_pane(pane),
+                Intent::Draft(..) => {}
+                Intent::Back => {
+                    if let Some(parent) = self.pane.parent() {
+                        self.focus_next = Some(Anchor::Item(self.pane.keyword().to_owned()));
+                        self.select_pane(parent);
+                    }
+                }
+                Intent::AskEmptyTrash(asking) => {
+                    self.confirming_empty_trash = asking;
+                    self.focus_next = Some(Anchor::Item(
+                        if asking { "empty-trash" } else { "trash" }.to_owned(),
+                    ));
+                }
+                Intent::EmptyTrash => {
+                    self.confirming_empty_trash = false;
+                    self.commands
+                        .push(Command::Storage(StorageCommand::EmptyTrash));
+                }
+                Intent::Reveal(path) => self.commands.push(Command::Reveal(path)),
+                Intent::SelectPane(pane) => {
+                    if pane.parent() == Some(self.pane) {
+                        self.focus_next = Some(Anchor::Back);
+                    }
+                    self.select_pane(pane);
+                }
                 Intent::StepPane(step) => self.step_pane(step),
                 Intent::Query(query) => self.set_query(query),
                 Intent::Set(id, value) => self.change(id, value),
@@ -684,17 +804,24 @@ impl SettingsView {
             PaneId::Bluetooth => self
                 .commands
                 .push(Command::Bluetooth(BluetoothCommand::Discover(true))),
+            PaneId::Storage => self
+                .commands
+                .push(Command::Storage(StorageCommand::Measure)),
             _ => {}
         }
         self.pane = pane;
         self.adding_source = None;
+        self.confirming_empty_trash = false;
         self.scroll.set(0.0);
-        self.stale = true;
+        self.invalidate();
     }
 
     fn step_pane(&mut self, step: isize) {
         let visible = self.visible_panes();
-        let Some(at) = visible.iter().position(|pane| *pane == self.pane) else {
+        let Some(at) = visible
+            .iter()
+            .position(|pane| *pane == self.pane || Some(*pane) == self.pane.parent())
+        else {
             return;
         };
         if let Some(&pane) = at
@@ -723,7 +850,7 @@ impl SettingsView {
         self.query = query;
         let visible = self.visible_panes();
         if let Some(&first) = visible.first()
-            && (!visible.contains(&self.pane) || !self.hits.is_empty())
+            && (!self.shown_in(&visible) || !self.hits.is_empty())
         {
             self.select_pane(first);
         }
@@ -759,8 +886,21 @@ impl SettingsView {
             (SettingId::BluetoothPower, Value::Flag(on)) => {
                 Command::Bluetooth(BluetoothCommand::Power(on))
             }
+            (SettingId::ComputerName, Value::Text(name)) => {
+                Command::About(AboutCommand::Rename(name))
+            }
             (id, value) => Command::Set(id, value),
         }
+    }
+
+    fn commit_drafts(&mut self) {
+        for (id, text) in std::mem::take(&mut self.drafts) {
+            let text = text.trim().to_owned();
+            if !text.is_empty() {
+                self.change(id, Value::Text(text));
+            }
+        }
+        self.invalidate();
     }
 
     fn change(&mut self, id: SettingId, value: Value) {
@@ -826,7 +966,11 @@ impl SettingsView {
             children[Root::PANES] = sidebar;
             children[Root::CONTENT] = content;
         }
-        let typing_source = focused == Some(Anchor::SourceSearch);
+        let typed = match &focused {
+            Some(Anchor::SourceSearch) => Some(self.adding_source.clone().unwrap_or_default()),
+            Some(Anchor::Setting(setting, _)) => self.drafts.get(setting).cloned(),
+            _ => None,
+        };
         let target = focused.and_then(|anchor| {
             self.anchors
                 .iter()
@@ -838,16 +982,15 @@ impl SettingsView {
         });
         if let Some(target) = target {
             self.ui.perform(&request(Action::Focus, target, None));
-            if typing_source {
-                let query = self.adding_source.clone().unwrap_or_default();
+            if let Some(text) = typed {
                 self.ui.perform(&request(
                     Action::SetValue,
                     target,
-                    Some(ActionData::Value(query.into())),
+                    Some(ActionData::Value(text.into())),
                 ));
                 self.intents
                     .borrow_mut()
-                    .retain(|intent| !matches!(intent, Intent::SourceQuery(_)));
+                    .retain(|intent| !matches!(intent, Intent::SourceQuery(_) | Intent::Draft(..)));
             }
         }
         self.stale = false;

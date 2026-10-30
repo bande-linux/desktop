@@ -13,10 +13,13 @@ pub enum PaneId {
     LockScreen,
     Keyboard,
     TrackpadMouse,
+    General,
+    About,
+    Storage,
 }
 
 impl PaneId {
-    const KEYWORDS: [(Self, &'static str); 11] = [
+    const KEYWORDS: [(Self, &'static str); 14] = [
         (Self::Wifi, "wifi"),
         (Self::Bluetooth, "bluetooth"),
         (Self::Notifications, "notifications"),
@@ -28,6 +31,9 @@ impl PaneId {
         (Self::LockScreen, "lock-screen"),
         (Self::Keyboard, "keyboard"),
         (Self::TrackpadMouse, "trackpad-mouse"),
+        (Self::General, "general"),
+        (Self::About, "about"),
+        (Self::Storage, "storage"),
     ];
 
     pub fn keyword(self) -> &'static str {
@@ -42,6 +48,13 @@ impl PaneId {
             .iter()
             .find(|(_, candidate)| *candidate == keyword)
             .map(|(pane, _)| *pane)
+    }
+
+    pub fn parent(self) -> Option<Self> {
+        match self {
+            Self::About | Self::Storage => Some(Self::General),
+            _ => None,
+        }
     }
 }
 
@@ -84,6 +97,10 @@ pub enum SettingId {
     TrackpadDisableWhileTyping,
     MouseNaturalScrolling,
     MouseSpeed,
+    ComputerName,
+    AboutThisComputer,
+    StorageUsage,
+    LargeFiles,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -95,6 +112,7 @@ pub enum Value {
     Fraction(f32),
     Pictures { light: String, dark: String },
     Codes(Vec<String>),
+    Text(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -106,6 +124,9 @@ pub enum List {
     InputDevices,
     InputSources,
     Shortcuts,
+    About,
+    Storage,
+    LargeFiles,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -133,6 +154,7 @@ pub enum Kind {
     },
     RefreshRates,
     Pictures,
+    Text,
     List(List),
 }
 
@@ -147,6 +169,7 @@ impl Kind {
             | Self::Range { .. }
             | Self::RefreshRates
             | Self::Pictures
+            | Self::Text
             | Self::List(_) => &[],
         }
     }
@@ -464,8 +487,70 @@ fn displays_pane() -> Pane {
     )
 }
 
+fn general_panes() -> Vec<Pane> {
+    vec![
+        pane(
+            PaneId::General,
+            L10N.tr("general"),
+            L10N.tr("general-keywords"),
+            Vec::new(),
+        ),
+        pane(
+            PaneId::About,
+            L10N.tr("about"),
+            L10N.tr("about-keywords"),
+            vec![
+                section(
+                    None,
+                    vec![setting(
+                        SettingId::ComputerName,
+                        L10N.tr("computer-name"),
+                        L10N.tr("computer-name-keywords"),
+                        Kind::Text,
+                    )],
+                ),
+                section(
+                    None,
+                    vec![setting(
+                        SettingId::AboutThisComputer,
+                        L10N.tr("about"),
+                        L10N.tr("about-this-computer-keywords"),
+                        Kind::List(List::About),
+                    )],
+                ),
+            ],
+        ),
+        pane(
+            PaneId::Storage,
+            L10N.tr("storage"),
+            L10N.tr("storage-keywords"),
+            vec![
+                section(
+                    None,
+                    vec![setting(
+                        SettingId::StorageUsage,
+                        L10N.tr("storage"),
+                        L10N.tr("storage-usage-keywords"),
+                        Kind::List(List::Storage),
+                    )],
+                ),
+                section(
+                    Some(L10N.tr("large-files")),
+                    vec![setting(
+                        SettingId::LargeFiles,
+                        L10N.tr("large-files"),
+                        L10N.tr("large-files-keywords"),
+                        Kind::List(List::LargeFiles),
+                    )],
+                ),
+            ],
+        ),
+    ]
+}
+
 pub fn panes() -> Vec<Pane> {
     let mut panes = connectivity_panes();
+    panes.extend(general_panes());
     panes.extend(desktop_panes());
     panes.push(keyboard_pane());
     panes.push(trackpad_mouse_pane());

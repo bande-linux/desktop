@@ -2,7 +2,8 @@ use std::os::fd::BorrowedFd;
 use std::process::ExitCode;
 
 use unbound_app_menu::{AppMenu, Entry, Standard, app_submenu, window_submenu};
-use unbound_settings::{Displays, Feed, L10N, PaneId, Services, SettingsView, feed, panes};
+use unbound_settings::{Displays, Feed, L10N, PaneId, Services, SettingsView, feed};
+use unbound_settings_panes::panes;
 use unbound_toolkit::{App, Rect, Role, Scene, TextSystem, Window, WindowEvent};
 
 const APP_ID: &str = "org.unbound.Settings";

@@ -91,6 +91,7 @@ impl Guard {
             return Ok(());
         }
         let mut last = Instant::now();
+        let mut idle = true;
         self.card.heartbeat().map_err(|e| e.to_string())?;
         let gains: Vec<f64> = self.protections.iter().map(|p| p.gain_db).collect();
         for (index, gain) in gains.into_iter().enumerate() {
@@ -126,12 +127,17 @@ impl Guard {
                     self.monitors
                         .iter_mut()
                         .for_each(SenseMonitor::stream_paused);
-                    let idle = vec![0.0; self.protections.len()];
-                    self.apply(&idle, seconds)?;
+                    let silence = vec![0.0; self.protections.len()];
+                    self.apply(&silence, seconds)?;
+                    idle = true;
                     self.card.heartbeat().map_err(|e| e.to_string())?;
                 }
                 Some(frames) => {
                     let samples = &buffer[..frames * self.channels];
+                    let rate = self.card.sample_rate().map_err(|e| e.to_string())?;
+                    let measured = rate.map_or(seconds, |rate| frames as f64 / rate);
+                    let gap = (seconds - measured).max(0.0);
+                    let mut gap_powers = Vec::with_capacity(self.monitors.len());
                     let mut powers = Vec::with_capacity(self.monitors.len());
                     for (index, monitor) in self.monitors.iter_mut().enumerate() {
                         let m = monitor.layout.measure(samples);
@@ -139,6 +145,7 @@ impl Guard {
                             self.protections[index].gain_db.min(self.model.max_gain_db);
                         let worst_case =
                             monitor.worst_case_power * thermal::db_to_power(applied_db);
+                        gap_powers.push(if idle { 0.0 } else { worst_case });
                         tracing::debug!(
                             speaker = index,
                             frames,
@@ -155,11 +162,15 @@ impl Guard {
                         );
                         powers.push(
                             monitor
-                                .assess(&m, frames, seconds, worst_case)
+                                .assess(&m, frames, measured, worst_case)
                                 .map_err(|fault| fault.to_string())?,
                         );
                     }
-                    self.apply(&powers, seconds)?;
+                    if gap > 0.0 {
+                        self.apply(&gap_powers, gap)?;
+                    }
+                    self.apply(&powers, measured)?;
+                    idle = false;
                     for (index, protection) in self.protections.iter().enumerate() {
                         tracing::debug!(
                             speaker = index,

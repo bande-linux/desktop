@@ -1,6 +1,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+use std::cell::Cell;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use unbound_controlcenter::media::{Playback, Player};
@@ -67,6 +69,13 @@ fn status() -> Status {
         output: Some("speakers".to_owned()),
         brightness: Some(0.7),
         keyboard_brightness: Some(0.4),
+        inputs: vec![
+            choice("mic", "MacBook Pro Microphone"),
+            choice("usb", "Studio Headset"),
+        ],
+        input: Some("mic".to_owned()),
+        input_muted: Some(false),
+        input_level: Rc::new(Cell::new(0.4)),
         player: Some(Player {
             bus_name: "org.mpris.MediaPlayer2.tunes".to_owned(),
             identity: "Tunes".to_owned(),

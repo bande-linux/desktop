@@ -14,3 +14,6 @@ pause = Pause
 next-track = Next
 previous-track = Previous
 playback-position = Position
+microphone = Microphone
+input-level = Input Level
+input = Input

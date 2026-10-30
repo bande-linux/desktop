@@ -1,7 +1,7 @@
 pub mod media;
 mod now_playing;
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -11,8 +11,8 @@ use std::time::Duration;
 use unbound_audio::{Level, VolumeKey};
 use unbound_l10n::Localizer;
 use unbound_toolkit::ui::{
-    Axis, BUTTON_HEIGHT, Button, Context, Label, Menu, MenuItem, PopUpButton, SLIDER_HEIGHT,
-    SWITCH_SIZE, Slider, Stack, Toggle, Ui, Widget,
+    Axis, BUTTON_HEIGHT, Button, Context, Label, LevelIndicator, Menu, MenuItem, PROGRESS_HEIGHT,
+    PopUpButton, SLIDER_HEIGHT, SWITCH_SIZE, Slider, Stack, Toggle, Ui, Widget,
 };
 use unbound_toolkit::{
     Color, Image, Item, Palette, Point, Rect, Scene, Shape, TextAlign, TextStyle, TextSystem,
@@ -51,6 +51,10 @@ pub struct Status {
     pub output: Option<String>,
     pub brightness: Option<f32>,
     pub keyboard_brightness: Option<f32>,
+    pub inputs: Vec<Choice>,
+    pub input: Option<String>,
+    pub input_muted: Option<bool>,
+    pub input_level: Rc<Cell<f32>>,
     pub player: Option<Player>,
     pub artwork: Option<Image>,
     pub players: Vec<Choice>,
@@ -72,6 +76,8 @@ pub enum Change {
     KeyboardBrightness(f32),
     ChooseNetwork,
     Output(String),
+    InputMuted(bool),
+    Input(String),
     Media(Command),
     RaisePlayer,
     Player(String),
@@ -201,6 +207,26 @@ pub fn panel(status: &Status, palette: Palette, text: TextSystem, changes: &Chan
             heights.push(BUTTON_HEIGHT);
         }
     }
+    if let Some(muted) = status.input_muted {
+        controls.push(toggle(&L10N.tr("microphone"), !muted, changes, |on| {
+            Change::InputMuted(!on)
+        }));
+        controls.push(Box::new(LevelIndicator::new(
+            &L10N.tr("input-level"),
+            Rc::clone(&status.input_level),
+        )));
+        heights.extend([SWITCH_SIZE.height, PROGRESS_HEIGHT]);
+        if status.inputs.len() > 1 {
+            controls.push(pop_up(
+                &L10N.tr("input"),
+                &status.inputs,
+                status.input.as_deref(),
+                changes,
+                Change::Input,
+            ));
+            heights.push(BUTTON_HEIGHT);
+        }
+    }
     if let Some(player) = &status.player {
         heights.push(now_playing::height(player));
         controls.push(Box::new(now_playing::NowPlaying::new(
@@ -227,6 +253,15 @@ pub fn panel(status: &Status, palette: Palette, text: TextSystem, changes: &Chan
         Context::new(text, palette),
     );
     (ui, height.ceil())
+}
+
+const METER_FLOOR_DB: f32 = -60.0;
+const METER_FALL: f32 = 0.82;
+
+pub fn meter_level(peak: f32, shown: f32) -> f32 {
+    let decibels = 20.0 * peak.max(f32::MIN_POSITIVE).log10();
+    let level = (1.0 - decibels / METER_FLOOR_DB).clamp(0.0, 1.0);
+    level.max(shown * METER_FALL)
 }
 
 pub fn chooser_menu(choices: &[(String, String, bool)]) -> Menu {

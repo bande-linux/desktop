@@ -1,16 +1,19 @@
+use std::cell::Cell;
 use std::os::fd::BorrowedFd;
 use std::path::Path;
 use std::process::ExitCode;
+use std::rc::Rc;
 use std::sync::mpsc::{self, Sender};
 use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
-use unbound_audio::{Audio, Level};
+use unbound_audio::{Audio, Level, Meter};
 use unbound_bluetooth::Bluetooth;
 use unbound_controlcenter::media::{self, Command, Playback, Player, Players};
 use unbound_controlcenter::{
     Change, Changes, Choice, EDGE, HUD_DURATION, HUD_SIZE, Hud, KeyboardLight, PANEL_WIDTH,
-    SYSFS_LEDS, Status, blur_rects, card, chooser_menu, hud, material, panel, scene, stepped,
+    SYSFS_LEDS, Status, blur_rects, card, chooser_menu, hud, material, meter_level, panel, scene,
+    stepped,
 };
 use unbound_inbox::Inbox;
 use unbound_network::NetworkManager;
@@ -31,6 +34,7 @@ use zbus::blocking::Connection;
 
 const JOIN: &str = "join:";
 const ARTWORK_PIXELS: u32 = 128;
+const METER_INTERVAL: Duration = Duration::from_millis(50);
 const SLIDE: f32 = 8.0;
 
 enum Mode {
@@ -60,6 +64,8 @@ struct ControlCenter {
     player_updates: Inbox<Vec<Player>>,
     player_commands: Option<Sender<(String, Command)>>,
     artwork: Option<(String, Option<Image>)>,
+    meter: Option<Meter>,
+    input_level: Rc<Cell<f32>>,
 }
 
 fn report<E: std::fmt::Display>(what: &str, result: Result<(), E>) {
@@ -216,6 +222,9 @@ impl ControlCenter {
             })
             .unwrap_or_default();
         let player = self.players.current().cloned();
+        let input = snapshot
+            .as_ref()
+            .and_then(|snapshot| snapshot.default_input());
         Status {
             wifi,
             network,
@@ -226,6 +235,22 @@ impl ControlCenter {
             output: output.map(|output| output.name.clone()),
             brightness: self.brightness(),
             keyboard_brightness: self.keyboard_light.as_ref().and_then(KeyboardLight::level),
+            inputs: snapshot
+                .as_ref()
+                .map(|snapshot| {
+                    snapshot
+                        .inputs
+                        .iter()
+                        .map(|input| Choice {
+                            key: input.name.clone(),
+                            title: input.description.clone(),
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+            input: input.map(|input| input.name.clone()),
+            input_muted: input.map(|input| input.level.muted),
+            input_level: Rc::clone(&self.input_level),
             artwork: self
                 .artwork
                 .as_ref()
@@ -350,6 +375,21 @@ impl ControlCenter {
                 }
             }
             Change::KeyboardBrightness(level) => self.set_keyboard_light(level),
+            Change::InputMuted(muted) => {
+                if let Some(audio) = &self.audio
+                    && let Some(input) = audio.snapshot().default_input()
+                {
+                    report("mute the microphone", audio.set_muted(input, muted));
+                }
+            }
+            Change::Input(name) => {
+                if let Some(audio) = &self.audio
+                    && let Some(device) = audio.snapshot().device(&name).cloned()
+                {
+                    report("choose the input", audio.set_default(&device));
+                }
+                self.listen();
+            }
             Change::ChooseNetwork => self.choose_network(window),
             Change::Output(name) => {
                 if let Some(audio) = &self.audio
@@ -445,7 +485,22 @@ impl ControlCenter {
         window.request_redraw();
     }
 
+    fn listen(&mut self) {
+        self.input_level.set(0.0);
+        self.meter = None;
+        let Some(audio) = &self.audio else {
+            return;
+        };
+        self.meter = audio.snapshot().default_input().and_then(|input| {
+            audio
+                .meter(input)
+                .inspect_err(|error| tracing::warn!("no input level: {error}"))
+                .ok()
+        });
+    }
+
     fn dismiss(&mut self, window: &mut Window) {
+        self.meter = None;
         self.mode = Mode::Hidden;
         self.shown
             .animate_at(Instant::now(), self.reduce_motion, 0.0, Spring::QUICK);
@@ -472,6 +527,7 @@ impl ControlCenter {
             ui: Box::new(ui),
             height,
         };
+        self.listen();
         self.shown.jump_to(0.0);
         self.reveal(window, true);
     }
@@ -716,12 +772,16 @@ impl App for ControlCenter {
         match self.mode {
             Mode::Hud(_, until) => Some(until),
             Mode::Hidden if self.surface_shown && !self.shown.value_at(now).1 => Some(now),
-            Mode::Panel { .. } => self.playing().and_then(|player| {
-                let position = player.position_at(now)?;
-                let to_next_second = Duration::from_secs(1)
-                    .saturating_sub(Duration::from_nanos(u64::from(position.subsec_nanos())));
-                Some(now + to_next_second.div_f64(player.rate.max(0.1)))
-            }),
+            Mode::Panel { .. } => {
+                let clock = self.playing().and_then(|player| {
+                    let position = player.position_at(now)?;
+                    let to_next_second = Duration::from_secs(1)
+                        .saturating_sub(Duration::from_nanos(u64::from(position.subsec_nanos())));
+                    Some(now + to_next_second.div_f64(player.rate.max(0.1)))
+                });
+                let meter = self.meter.as_ref().map(|_| now + METER_INTERVAL);
+                clock.into_iter().chain(meter).min()
+            }
             Mode::Hidden => None,
         }
     }
@@ -744,7 +804,13 @@ impl App for ControlCenter {
 
     fn tick(&mut self, window: &mut Window, now: Instant) {
         match self.mode {
-            Mode::Panel { .. } if self.playing().is_some() => window.request_redraw(),
+            Mode::Panel { .. } => {
+                if let Some(meter) = &self.meter {
+                    let level = meter_level(meter.take_peak(), self.input_level.get());
+                    self.input_level.set(level);
+                }
+                window.request_redraw();
+            }
             Mode::Hud(_, until) if now >= until => self.dismiss(window),
             Mode::Hidden if self.surface_shown && !self.shown.value_at(now).1 => {
                 self.surface_shown = false;
@@ -819,6 +885,8 @@ fn run() -> Result<(), WindowError> {
         player_updates,
         player_commands,
         artwork: None,
+        meter: None,
+        input_level: Rc::default(),
     };
     unbound_toolkit::run(&mut window, &mut center)
 }

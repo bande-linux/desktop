@@ -12,14 +12,15 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use accesskit::TreeUpdate;
 use unbound_fs::Entry;
 use unbound_launcher::{
-    Action, AppInfo, Catalog, Hit, ICON_SIZE, Kind, Launcher, Loaded, PaneInfo, SettingInfo, Target,
+    Action, AppInfo, Catalog, Clips, Hit, ICON_SIZE, Kind, Launcher, Loaded, Mode, PaneInfo, Reply,
+    Request, SettingInfo, Target,
 };
 use unbound_preview::{Preview, preview};
-use unbound_search::{FileIndex, Usage, usage_path};
+use unbound_search::{FileIndex, Usage, recently_used_path, usage_path};
 use unbound_thumbnails::{Cache, ThumbnailSize, Thumbnailers, thumbnail};
 use unbound_toolkit::{
-    App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement, Rect, Role, Scene,
-    TextSystem, Window, WindowError, WindowEvent,
+    App, Edges, Image, KeyboardFocus, LauncherMode, LayerKind, LayerOptions, MenuPlacement, Rect,
+    Role, Scene, TextSystem, Window, WindowError, WindowEvent,
 };
 use unbound_xdg::{
     Apps, DIRECTORY, DesktopEntry, ICON_THEMES, LaunchError, Locale, MimeDatabase, applications,
@@ -27,6 +28,9 @@ use unbound_xdg::{
 };
 
 const FALLBACK_DOCUMENT: &str = "application-x-generic";
+const CLIP_TEXT: &str = "text-x-generic";
+const CLIP_IMAGE: &str = "image-x-generic";
+const CLIP_FILES: &str = "folder";
 const SETTINGS_APP: &str = "org.unbound.Settings";
 
 struct Library {
@@ -69,7 +73,10 @@ impl Catalog for Library {
                 names.push(FALLBACK_DOCUMENT.to_owned());
                 self.named_icon(&names)
             }
-            (Target::Value(_), _) => None,
+            (Target::Clip(_), Kind::CopiedImage) => self.named_icon(&[CLIP_IMAGE.to_owned()]),
+            (Target::Clip(_), Kind::CopiedFiles) => self.named_icon(&[CLIP_FILES.to_owned()]),
+            (Target::Clip(_), _) => self.named_icon(&[CLIP_TEXT.to_owned()]),
+            (Target::Value(_) | Target::Emoji(_), _) => None,
         }
     }
 
@@ -149,7 +156,26 @@ struct LauncherShell {
     entries: Vec<DesktopEntry>,
     index: Option<FileIndex>,
     previewer: Option<Previewer>,
+    clips: Option<Clips>,
     apps: Rc<RefCell<Apps>>,
+    recently_used: PathBuf,
+    skin_tone: PathBuf,
+}
+
+fn load_skin_tone(path: &Path) -> Option<usize> {
+    std::fs::read_to_string(path)
+        .ok()?
+        .trim()
+        .parse::<usize>()
+        .ok()?
+        .checked_sub(1)
+}
+
+fn save_skin_tone(path: &Path, tone: Option<usize>) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(path, tone.map_or(0, |tone| tone + 1).to_string())
 }
 
 fn unix_now() -> u64 {
@@ -166,8 +192,37 @@ impl LauncherShell {
         self.launcher.clear();
     }
 
+    fn ask(&self, request: Request) {
+        if let Some(clips) = &self.clips {
+            clips.ask(request);
+        }
+    }
+
+    fn toggle(&mut self, window: &mut Window, mode: Mode, inserts: bool) {
+        if window.is_visible() && self.launcher.mode() == mode {
+            self.close(window);
+            return;
+        }
+        self.launcher.set_now(unix_now());
+        if mode == Mode::Search {
+            let xbel = std::fs::read_to_string(&self.recently_used).ok();
+            self.launcher.set_recently_used(xbel.as_deref());
+        }
+        self.launcher.open(mode, inserts);
+        if mode == Mode::Clipboard {
+            self.ask(Request::List);
+        }
+        if !window.is_visible() {
+            self.launcher.appear(Instant::now());
+        }
+        if let Err(error) = window.show() {
+            tracing::warn!("cannot show: {error}");
+        }
+        window.request_redraw();
+    }
+
     fn sync(&mut self, window: &mut Window) {
-        if let Some((menu, point)) = self.launcher.ui.take_menu_request()
+        if let Some((menu, point)) = self.launcher.take_menu_request()
             && let Err(error) = window.show_menu(menu, MenuPlacement::AtPoint(point))
         {
             tracing::warn!("cannot show the menu: {error}");
@@ -179,11 +234,27 @@ impl LauncherShell {
         if let (Some(previewer), Some(path)) = (&self.previewer, self.launcher.preview_request()) {
             let _ = previewer.requests.send(path);
         }
+        if let Some((id, mime)) = self.launcher.clip_picture_request() {
+            self.ask(Request::Picture(id, mime));
+        }
         for action in self.launcher.take_actions() {
             match action {
                 Action::Open(target) => self.open(window, &target),
                 Action::Reveal(path) => self.reveal(window, &path),
                 Action::Copy(text) => window.copy(&text),
+                Action::Insert(text) => {
+                    if let Err(error) = window.insert_text(&text) {
+                        tracing::warn!("cannot insert {text}: {error}");
+                    }
+                }
+                Action::PasteClip(id) => self.ask(Request::Paste(id)),
+                Action::RemoveClip(id) => self.ask(Request::Remove(id)),
+                Action::ClearClips => self.ask(Request::Clear),
+                Action::SkinTone(tone) => {
+                    if let Err(error) = save_skin_tone(&self.skin_tone, tone) {
+                        tracing::warn!("cannot remember the skin tone: {error}");
+                    }
+                }
                 Action::Close => self.close(window),
             }
         }
@@ -221,7 +292,7 @@ impl LauncherShell {
                         .map(|_| ())
                         .map_err(LaunchError::Spawn)
                 }),
-            Target::Value(_) => None,
+            Target::Value(_) | Target::Emoji(_) | Target::Clip(_) => None,
         };
         match opened {
             Some(Ok(())) => {
@@ -263,13 +334,13 @@ impl App for LauncherShell {
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
         match event {
-            WindowEvent::ShowLauncher if window.is_visible() => self.close(window),
-            WindowEvent::ShowLauncher => {
-                self.launcher.set_now(unix_now());
-                self.launcher.appear(Instant::now());
-                if let Err(error) = window.show() {
-                    tracing::warn!("cannot show: {error}");
-                }
+            WindowEvent::ShowLauncher => self.toggle(window, Mode::Search, false),
+            WindowEvent::OpenLauncher { mode, text_field } => {
+                let mode = match mode {
+                    LauncherMode::Clipboard => Mode::Clipboard,
+                    _ => Mode::Emoji,
+                };
+                self.toggle(window, mode, text_field);
             }
             WindowEvent::Input(input) => {
                 self.launcher.handle(&input);
@@ -283,7 +354,7 @@ impl App for LauncherShell {
                 self.launcher.set_appearance(appearance);
             }
             WindowEvent::MenuAction(action) => {
-                self.launcher.ui.menu_action(&action);
+                self.launcher.menu_action(&action);
                 self.sync(window);
             }
             _ => {}
@@ -299,20 +370,21 @@ impl App for LauncherShell {
                     .iter()
                     .map(|previewer| previewer.wake.as_fd()),
             )
+            .chain(self.clips.iter().map(|clips| clips.wake.as_fd()))
             .collect()
     }
 
-    fn source_ready(&mut self, window: &mut Window, index: usize) {
-        match (index, &mut self.index) {
-            (0, Some(files)) => {
-                if let Some(results) = files.take() {
-                    self.launcher.set_files(results);
-                }
-            }
-            _ => {
-                for loaded in self.previewer.iter().flat_map(Previewer::take) {
-                    self.launcher.set_preview(loaded);
-                }
+    fn source_ready(&mut self, window: &mut Window, _index: usize) {
+        if let Some(results) = self.index.as_mut().and_then(FileIndex::take) {
+            self.launcher.set_files(results);
+        }
+        for loaded in self.previewer.iter().flat_map(Previewer::take) {
+            self.launcher.set_preview(loaded);
+        }
+        for reply in self.clips.iter().flat_map(Clips::take) {
+            match reply {
+                Reply::Listed(clips) => self.launcher.set_clips(clips),
+                Reply::Picture(id, picture) => self.launcher.set_clip_picture(id, picture),
             }
         }
         self.sync(window);
@@ -379,9 +451,19 @@ fn run() -> Result<(), WindowError> {
         .collect();
     let home = std::env::var_os("HOME").map_or_else(|| PathBuf::from("/"), PathBuf::from);
     let state_home = std::env::var_os("XDG_STATE_HOME").map(PathBuf::from);
-    let usage = usage_path(state_home.as_deref(), Some(&home))
-        .map(Usage::load)
-        .unwrap_or_default();
+    let recently_used = recently_used_path(
+        std::env::var_os("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .as_deref(),
+        &home,
+    );
+    let usage_file = usage_path(state_home.as_deref(), Some(&home));
+    let skin_tone = usage_file
+        .as_deref()
+        .and_then(Path::parent)
+        .unwrap_or(&home)
+        .join("launcher-skin-tone");
+    let usage = usage_file.map(Usage::load).unwrap_or_default();
     let apps_by_type = Rc::new(RefCell::new(Apps::load(dirs.clone(), &config_dirs())));
     let library = Library {
         apps: apps_by_type.clone(),
@@ -406,7 +488,7 @@ fn run() -> Result<(), WindowError> {
         (0, 0),
     )?;
     window.hide()?;
-    let launcher = Launcher::new(
+    let mut launcher = Launcher::new(
         apps,
         settings_panes(),
         Box::new(library),
@@ -418,12 +500,18 @@ fn run() -> Result<(), WindowError> {
     if let Some(index) = &index {
         index.set_boosts(launcher.file_boosts());
     }
+    launcher.set_skin_tone(load_skin_tone(&skin_tone));
     let mut shell = LauncherShell {
         launcher,
         entries,
         index,
         previewer,
+        clips: Clips::spawn()
+            .inspect_err(|error| tracing::warn!("cannot read the clipboard history: {error}"))
+            .ok(),
         apps: apps_by_type,
+        recently_used,
+        skin_tone,
     };
     unbound_toolkit::run(&mut window, &mut shell)
 }

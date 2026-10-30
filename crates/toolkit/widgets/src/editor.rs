@@ -1327,6 +1327,8 @@ impl Editor {
             item("paste", "Super+V", true),
             MenuItem::separator(),
             item("select-all", "Super+A", !self.is_empty()),
+            MenuItem::separator(),
+            item("emoji-and-symbols", "Ctrl+Super+Space", true),
         ])
     }
 
@@ -1348,6 +1350,10 @@ impl Editor {
             "copy" => shortcut('c', false),
             "paste" => shortcut('v', false),
             "select-all" => shortcut('a', false),
+            "emoji-and-symbols" => {
+                cx.show_emoji_picker();
+                return true;
+            }
             _ => return false,
         };
         self.key(cx, key, modifiers)

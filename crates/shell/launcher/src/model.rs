@@ -1,8 +1,16 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use unbound_search::{FileHit, FileResults, Query, Usage, calculate, fold};
+use unbound_search::{FileHit, FileResults, Query, Usage, calculate, fold, recent_files};
+use unbound_xdg::path_from_file_uri;
 
+use crate::emoji::EMOJI;
+
+pub const GRID_COLUMNS: usize = 8;
+pub const EMOJI_COLUMNS: usize = 12;
+const FREQUENT_EMOJI_ROWS: usize = 2;
+const MAX_EMOJI: usize = 240;
+const EMOJI_KEY: &str = "emoji:";
 pub const MAX_APPS: usize = 4;
 pub const MAX_SETTINGS: usize = 3;
 pub const MAX_FOLDERS: usize = 3;
@@ -140,7 +148,76 @@ impl IndexedPane {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mode {
+    Search,
+    Emoji,
+    Clipboard,
+}
+
+const URI_LIST: &str = "text/uri-list";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Clip {
+    pub id: u64,
+    pub copied: u64,
+    pub text: String,
+    pub mimes: Vec<String>,
+}
+
+impl Clip {
+    pub fn kind(&self) -> Kind {
+        if self.mimes.iter().any(|mime| mime == URI_LIST) {
+            Kind::CopiedFiles
+        } else if self.text.is_empty() && self.picture().is_some() {
+            Kind::CopiedImage
+        } else {
+            Kind::CopiedText
+        }
+    }
+
+    pub fn picture(&self) -> Option<&str> {
+        self.mimes
+            .iter()
+            .find(|mime| *mime == "image/png")
+            .or_else(|| self.mimes.iter().find(|mime| mime.starts_with("image/")))
+            .map(String::as_str)
+    }
+
+    pub fn paths(&self) -> Vec<PathBuf> {
+        self.text
+            .lines()
+            .filter(|line| !line.starts_with('#'))
+            .filter_map(|line| path_from_file_uri(line.trim()))
+            .collect()
+    }
+
+    fn title(&self) -> String {
+        match self.kind() {
+            Kind::CopiedFiles => self
+                .paths()
+                .iter()
+                .filter_map(|path| path.file_name())
+                .map(|name| name.to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+                .join(", "),
+            Kind::CopiedImage => crate::L10N.tr("copied-image"),
+            _ => self
+                .text
+                .lines()
+                .map(str::trim)
+                .find(|line| !line.is_empty())
+                .unwrap_or_default()
+                .to_owned(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
+    CopiedText,
+    CopiedImage,
+    CopiedFiles,
+    Emoji,
     Calculation,
     Application,
     Setting,
@@ -154,6 +231,8 @@ pub enum Target {
     Settings(String),
     Path(PathBuf),
     Value(String),
+    Emoji(String),
+    Clip(u64),
 }
 
 impl Target {
@@ -162,7 +241,8 @@ impl Target {
             Self::App(app_id) => Some(format!("app:{app_id}")),
             Self::Settings(keyword) => Some(format!("settings:{keyword}")),
             Self::Path(path) => path.to_str().map(|path| format!("file:{path}")),
-            Self::Value(_) => None,
+            Self::Emoji(character) => Some(format!("{EMOJI_KEY}{character}")),
+            Self::Value(_) | Self::Clip(_) => None,
         }
     }
 }
@@ -173,6 +253,7 @@ pub struct Hit {
     pub title: String,
     pub detail: Option<String>,
     pub target: Target,
+    pub matched: Vec<usize>,
     score: u32,
 }
 
@@ -183,6 +264,11 @@ pub enum Heading {
     Settings,
     Folders,
     Documents,
+    RecentApps,
+    RecentDocuments,
+    AllApps,
+    FrequentlyUsed,
+    EmojiGroup(usize),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -190,6 +276,11 @@ pub enum Action {
     Open(Target),
     Reveal(PathBuf),
     Copy(String),
+    Insert(String),
+    SkinTone(Option<usize>),
+    PasteClip(u64),
+    RemoveClip(u64),
+    ClearClips,
     Close,
 }
 
@@ -202,9 +293,15 @@ pub struct Model {
     pub query: String,
     pub generation: u64,
     files: Vec<FileHit>,
+    recent_documents: Vec<PathBuf>,
+    pub clips: Vec<Clip>,
     pub files_complete: bool,
     pub hits: Vec<Hit>,
     pub headings: Vec<(usize, Heading)>,
+    pub columns: usize,
+    pub mode: Mode,
+    pub inserts: bool,
+    pub skin_tone: Option<usize>,
     pub selected: usize,
     pub copied: bool,
     pub actions: Vec<Action>,
@@ -227,7 +324,7 @@ impl Model {
         usage: Usage,
         now: u64,
     ) -> Self {
-        Self {
+        let mut model = Self {
             apps: apps.into_iter().map(IndexedApp::new).collect(),
             panes: panes.into_iter().map(IndexedPane::new).collect(),
             home,
@@ -236,13 +333,31 @@ impl Model {
             query: String::new(),
             generation: 0,
             files: Vec::new(),
+            recent_documents: Vec::new(),
+            clips: Vec::new(),
             files_complete: false,
             hits: Vec::new(),
             headings: Vec::new(),
+            columns: 0,
+            mode: Mode::Search,
+            inserts: false,
+            skin_tone: None,
             selected: 0,
             copied: false,
             actions: Vec::new(),
             revision: 0,
+        };
+        model.rebuild(None);
+        model
+    }
+
+    pub fn set_recently_used(&mut self, xbel: Option<&str>) {
+        let documents = recent_files(xbel, &self.usage, GRID_COLUMNS);
+        if documents != self.recent_documents {
+            self.recent_documents = documents;
+            if Query::new(&self.query).is_none() {
+                self.rebuild(None);
+            }
         }
     }
 
@@ -256,8 +371,32 @@ impl Model {
             .collect()
     }
 
+    pub fn now(&self) -> u64 {
+        self.now
+    }
+
     pub fn set_now(&mut self, now: u64) {
         self.now = now;
+    }
+
+    pub fn set_mode(&mut self, mode: Mode, inserts: bool) {
+        self.inserts = inserts;
+        if mode != self.mode {
+            self.mode = mode;
+            self.generation += 1;
+            self.rebuild(None);
+        }
+    }
+
+    pub fn set_skin_tone(&mut self, tone: Option<usize>) {
+        if tone != self.skin_tone {
+            self.skin_tone = tone;
+            self.actions.push(Action::SkinTone(tone));
+        }
+    }
+
+    pub fn emoji_text(&self, character: &str) -> String {
+        EMOJI.with_tone(character, self.skin_tone)
     }
 
     pub fn set_query(&mut self, query: &str) {
@@ -298,6 +437,7 @@ impl Model {
             query.score(&fold(&name))?
         };
         Some(Hit {
+            matched: query.matched(&fold(&name)),
             kind: if file.folder {
                 Kind::Folder
             } else {
@@ -318,15 +458,28 @@ impl Model {
         self.copied = false;
         self.hits.clear();
         self.headings.clear();
+        if self.mode != Mode::Search {
+            match self.mode {
+                Mode::Emoji => self.rebuild_emoji(),
+                _ => self.rebuild_clipboard(),
+            }
+            self.selected = keep
+                .and_then(|target| self.hits.iter().position(|hit| hit.target == target))
+                .unwrap_or(0);
+            return;
+        }
         let Some(query) = Query::new(&self.query) else {
             self.files.clear();
+            self.browse();
             return;
         };
+        self.columns = 0;
         let calculation = calculate(&self.query).map(|value| Hit {
             kind: Kind::Calculation,
             title: value.clone(),
             detail: Some(self.query.trim().to_owned()),
             target: Target::Value(value),
+            matched: Vec::new(),
             score: CALCULATION_SCORE,
         });
         let mut apps: Vec<Hit> = self
@@ -338,6 +491,7 @@ impl Model {
                     .usage_key()
                     .map_or(0, |key| self.usage.boost(&key, self.now));
                 app.score(&query).map(|score| Hit {
+                    matched: query.matched(&app.name),
                     kind: Kind::Application,
                     title: app.info.name.clone(),
                     detail: app
@@ -367,6 +521,7 @@ impl Model {
                     .usage_key()
                     .map_or(0, |key| self.usage.boost(&key, self.now));
                 Some(Hit {
+                    matched: query.matched(&pane.name),
                     kind: Kind::Setting,
                     title: pane.info.name.clone(),
                     detail: setting,
@@ -415,6 +570,248 @@ impl Model {
             .unwrap_or(0);
     }
 
+    fn app_hit(&self, app: &IndexedApp) -> Hit {
+        Hit {
+            kind: Kind::Application,
+            title: app.info.name.clone(),
+            detail: app
+                .info
+                .generic_name
+                .clone()
+                .or_else(|| app.info.comment.clone()),
+            target: Target::App(app.info.app_id.clone()),
+            matched: Vec::new(),
+            score: 0,
+        }
+    }
+
+    fn browse(&mut self) {
+        self.columns = GRID_COLUMNS;
+        let mut used: Vec<(PathBuf, u64)> = self.usage.last_used("app:").collect();
+        used.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+        let recent_apps: Vec<Hit> = used
+            .iter()
+            .filter_map(|(app_id, _)| {
+                self.apps
+                    .iter()
+                    .find(|app| Path::new(&app.info.app_id) == app_id)
+            })
+            .take(GRID_COLUMNS)
+            .map(|app| self.app_hit(app))
+            .collect();
+        let recent_documents: Vec<Hit> = self
+            .recent_documents
+            .iter()
+            .filter_map(|path| {
+                Some(Hit {
+                    kind: Kind::Document,
+                    title: path.file_name()?.to_string_lossy().into_owned(),
+                    detail: path.parent().map(|parent| display_path(parent, &self.home)),
+                    target: Target::Path(path.clone()),
+                    matched: Vec::new(),
+                    score: 0,
+                })
+            })
+            .collect();
+        let mut all: Vec<&IndexedApp> = self.apps.iter().collect();
+        all.sort_by(|a, b| {
+            a.name
+                .cmp(&b.name)
+                .then_with(|| a.info.name.cmp(&b.info.name))
+        });
+        let all_apps: Vec<Hit> = all.into_iter().map(|app| self.app_hit(app)).collect();
+        for (heading, group) in [
+            (Heading::RecentApps, recent_apps),
+            (Heading::RecentDocuments, recent_documents),
+            (Heading::AllApps, all_apps),
+        ] {
+            if !group.is_empty() {
+                self.headings.push((self.hits.len(), heading));
+                self.hits.extend(group);
+            }
+        }
+        self.selected = 0;
+    }
+
+    fn emoji_hit(character: &str, name: &str, matched: Vec<usize>) -> Hit {
+        let mut characters = name.chars();
+        let title = characters
+            .next()
+            .map(|first| first.to_uppercase().chain(characters).collect())
+            .unwrap_or_default();
+        Hit {
+            kind: Kind::Emoji,
+            title,
+            detail: None,
+            target: Target::Emoji(character.to_owned()),
+            matched,
+            score: 0,
+        }
+    }
+
+    pub fn set_clips(&mut self, clips: Vec<Clip>) {
+        self.clips = clips;
+        if self.mode == Mode::Clipboard {
+            let keep = self.selection().map(|hit| hit.target.clone());
+            self.rebuild(keep);
+        }
+    }
+
+    pub fn clip(&self, id: u64) -> Option<&Clip> {
+        self.clips.iter().find(|clip| clip.id == id)
+    }
+
+    fn rebuild_clipboard(&mut self) {
+        self.columns = 0;
+        self.files_complete = true;
+        let query = Query::new(&self.query);
+        self.hits = self
+            .clips
+            .iter()
+            .filter_map(|clip| {
+                let title = clip.title();
+                let matched = match &query {
+                    Some(query) => {
+                        let folded = fold(&clip.text);
+                        if !folded.contains(query.text()) && query.score(&fold(&title)).is_none() {
+                            return None;
+                        }
+                        query.matched(&fold(&title))
+                    }
+                    None => Vec::new(),
+                };
+                Some(Hit {
+                    kind: clip.kind(),
+                    title,
+                    detail: None,
+                    target: Target::Clip(clip.id),
+                    matched,
+                    score: 0,
+                })
+            })
+            .collect();
+    }
+
+    pub fn remove_clip(&mut self) {
+        let Some(Target::Clip(id)) = self.selection().map(|hit| hit.target.clone()) else {
+            return;
+        };
+        let selected = self.selected;
+        self.clips.retain(|clip| clip.id != id);
+        self.actions.push(Action::RemoveClip(id));
+        self.rebuild(None);
+        self.selected = selected.min(self.hits.len().saturating_sub(1));
+    }
+
+    pub fn clear_clips(&mut self) {
+        self.clips.clear();
+        self.actions.push(Action::ClearClips);
+        self.rebuild(None);
+    }
+
+    fn rebuild_emoji(&mut self) {
+        self.columns = EMOJI_COLUMNS;
+        self.files_complete = true;
+        if let Some(query) = Query::new(&self.query) {
+            self.hits = EMOJI
+                .search(&query)
+                .into_iter()
+                .take(MAX_EMOJI)
+                .map(|(emoji, _, matched)| Self::emoji_hit(emoji.character, emoji.name, matched))
+                .collect();
+            return;
+        }
+        let mut used: Vec<(u32, u64, String)> = self
+            .usage
+            .last_used(EMOJI_KEY)
+            .map(|(character, last)| {
+                let character = character.to_string_lossy().into_owned();
+                let key = format!("{EMOJI_KEY}{character}");
+                (self.usage.boost(&key, self.now), last, character)
+            })
+            .collect();
+        used.sort_by(|a, b| b.0.cmp(&a.0).then(b.1.cmp(&a.1)));
+        let frequent: Vec<Hit> = used
+            .iter()
+            .filter_map(|(_, _, character)| EMOJI.find(character))
+            .take(FREQUENT_EMOJI_ROWS * EMOJI_COLUMNS)
+            .map(|emoji| Self::emoji_hit(emoji.character, emoji.name, Vec::new()))
+            .collect();
+        if !frequent.is_empty() {
+            self.headings.push((0, Heading::FrequentlyUsed));
+            self.hits.extend(frequent);
+        }
+        for emoji in &EMOJI.emoji {
+            if self.headings.last().map(|(_, heading)| *heading)
+                != Some(Heading::EmojiGroup(emoji.group))
+            {
+                self.headings
+                    .push((self.hits.len(), Heading::EmojiGroup(emoji.group)));
+            }
+            self.hits
+                .push(Self::emoji_hit(emoji.character, emoji.name, Vec::new()));
+        }
+    }
+
+    fn sections(&self) -> Vec<(usize, usize)> {
+        let mut starts: Vec<usize> = self.headings.iter().map(|(start, _)| *start).collect();
+        if starts.first() != Some(&0) {
+            starts.insert(0, 0);
+        }
+        starts
+            .iter()
+            .enumerate()
+            .map(|(index, start)| {
+                (
+                    *start,
+                    starts.get(index + 1).copied().unwrap_or(self.hits.len()),
+                )
+            })
+            .collect()
+    }
+
+    pub fn select_vertically(&mut self, down: bool) {
+        if self.columns == 0 {
+            if down {
+                self.select_next();
+            } else {
+                self.select_previous();
+            }
+            return;
+        }
+        let columns = self.columns;
+        let sections = self.sections();
+        let Some(section) = sections
+            .iter()
+            .position(|(start, end)| (*start..*end).contains(&self.selected))
+        else {
+            return;
+        };
+        let (start, end) = sections[section];
+        let offset = self.selected - start;
+        let column = offset % columns;
+        let row = offset / columns;
+        let last_row = (end - start - 1) / columns;
+        let target = if down && row < last_row {
+            Some((start + (row + 1) * columns + column).min(end - 1))
+        } else if !down && row > 0 {
+            Some(start + (row - 1) * columns + column)
+        } else if down {
+            sections
+                .get(section + 1)
+                .map(|(next, next_end)| (next + column).min(next_end - 1))
+        } else {
+            section.checked_sub(1).map(|previous| {
+                let (previous_start, previous_end) = sections[previous];
+                let last = (previous_end - previous_start - 1) / columns * columns;
+                (previous_start + last + column).min(previous_end - 1)
+            })
+        };
+        if let Some(target) = target {
+            self.select(target);
+        }
+    }
+
     pub fn selection(&self) -> Option<&Hit> {
         self.hits.get(self.selected)
     }
@@ -450,14 +847,36 @@ impl Model {
         let Some(hit) = self.selection() else {
             return;
         };
-        let action = match &hit.target {
-            Target::Value(value) => Action::Copy(value.clone()),
-            target => Action::Open(target.clone()),
-        };
-        let closes = matches!(action, Action::Copy(_));
-        self.actions.push(action);
-        if closes {
-            self.actions.push(Action::Close);
+        match hit.target.clone() {
+            Target::Value(value) => {
+                self.actions.push(Action::Copy(value));
+                self.actions.push(Action::Close);
+            }
+            Target::Emoji(character) => {
+                let text = self.emoji_text(&character);
+                if let Err(error) = self.record_use(&Target::Emoji(character)) {
+                    tracing::warn!("cannot remember the emoji: {error}");
+                }
+                if self.inserts {
+                    self.actions.push(Action::Close);
+                    self.actions.push(Action::Insert(text));
+                } else {
+                    self.actions.push(Action::Copy(text));
+                    self.actions.push(Action::Close);
+                }
+            }
+            Target::Clip(id) => {
+                let text = self
+                    .clip(id)
+                    .filter(|clip| self.inserts && clip.kind() == Kind::CopiedText)
+                    .map(|clip| clip.text.clone());
+                self.actions.push(Action::PasteClip(id));
+                self.actions.push(Action::Close);
+                if let Some(text) = text {
+                    self.actions.push(Action::Insert(text));
+                }
+            }
+            target => self.actions.push(Action::Open(target)),
         }
     }
 
@@ -475,6 +894,12 @@ impl Model {
         let text = match self.selection().map(|hit| &hit.target) {
             Some(Target::Value(value)) => value.clone(),
             Some(Target::Path(path)) => path.display().to_string(),
+            Some(Target::Emoji(character)) => self.emoji_text(character),
+            Some(Target::Clip(id)) => {
+                self.actions.push(Action::PasteClip(*id));
+                self.copied = true;
+                return true;
+            }
             Some(Target::App(_) | Target::Settings(_)) | None => return false,
         };
         self.actions.push(Action::Copy(text));

@@ -1,6 +1,6 @@
 [package]
 name = "unbound-clipboard"
-description = "Unbound clipboard daemon: keeps the selection after the copying app quits"
+description = "Unbound clipboard daemon: keeps the selection after the copying app quits and remembers recent copies"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
@@ -12,11 +12,13 @@ unbound-log.workspace = true
 wayland-backend.workspace = true
 wayland-client.workspace = true
 wayland-protocols.workspace = true
+zbus.workspace = true
 
 [dev-dependencies]
 smithay.workspace = true
 tempfile.workspace = true
 unbound-compositor.workspace = true
+unbound-test-bus.workspace = true
 unbound-test-wayland.workspace = true
 
 [package.metadata.deb]
@@ -25,8 +27,11 @@ section = "misc"
 extended-description = """\
 Takes over each new clipboard and primary selection through \
 ext-data-control-v1 and serves it after the copying application has \
-quit. unbound-compositor starts it on a socket pair and offers \
-ext-data-control on that connection only."""
+quit. It also keeps the last 100 copies of the past week (never ones \
+marked as passwords) in ~/.local/state/unbound/clipboard, readable by \
+the user only, and offers them to the launcher on the session bus as \
+org.unbound.Clipboard. unbound-compositor starts it on a socket pair and \
+offers ext-data-control on that connection only."""
 
 [lints]
 workspace = true

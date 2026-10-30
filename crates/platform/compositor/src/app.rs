@@ -4,6 +4,7 @@ use smithay::reexports::wayland_server::{
     Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource,
 };
 use unbound_protocols::server::unbound_app_v1::{self, UnboundAppV1};
+use unbound_protocols::server::unbound_shell_v1;
 
 use crate::state::State;
 
@@ -84,6 +85,9 @@ impl Dispatch<UnboundAppV1, ()> for State {
                         false,
                     );
                 }
+            }
+            unbound_app_v1::Request::ShowEmojiPicker => {
+                state.open_launcher(unbound_shell_v1::LauncherMode::Emoji);
             }
             unbound_app_v1::Request::Destroy => {
                 state.app_resources.retain(|app| app != resource);

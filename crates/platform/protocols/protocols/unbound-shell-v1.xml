@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <protocol name="unbound_shell_v1">
-  <interface name="unbound_shell_v1" version="12">
+  <interface name="unbound_shell_v1" version="13">
     <description summary="requests and events between the compositor and the shell">
       Offered only on the connections of the shell clients the compositor starts
       itself (the Dock and the launcher), never on the listening socket.
@@ -292,9 +292,35 @@
         show_launcher to the shell clients, as Super+Space does.
       </description>
     </request>
+
+    <enum name="launcher_mode" since="13">
+      <entry name="clipboard" value="0" summary="the clipboard history"/>
+      <entry name="emoji" value="1" summary="the emoji and symbols picker"/>
+    </enum>
+
+    <event name="open_launcher" since="13">
+      <description summary="the user asked for one of the launcher's modes">
+        Sent for Super+Shift+V (clipboard), Ctrl+Super+Space (emoji) and when
+        an app asks for the emoji picker. Text field is 1 when the window that
+        had the keyboard has an enabled text input, so that insert_text can
+        type into it.
+      </description>
+      <arg name="mode" type="uint" enum="launcher_mode"/>
+      <arg name="text_field" type="uint"/>
+    </event>
+
+    <request name="insert_text" since="13">
+      <description summary="type text into the window the launcher covered">
+        Commits the text through text-input-v3 into the text field of the
+        window that gets the keyboard back after the shell surface closes, as
+        the macOS character viewer inserts into the frontmost app. Dropped if
+        no other client's text input becomes active within a second.
+      </description>
+      <arg name="text" type="string"/>
+    </request>
   </interface>
 
-  <interface name="unbound_app_v1" version="4">
+  <interface name="unbound_app_v1" version="5">
     <description summary="requests from the desktop to a whole app">
       Offered to every client. A client that binds it takes over app-level
       requests that the compositor would otherwise express per window: while
@@ -365,6 +391,14 @@
       </description>
       <arg name="toplevel" type="object" interface="xdg_toplevel"/>
       <arg name="keep" type="uint" summary="1 to keep the window on top, 0 to stop"/>
+    </request>
+
+    <request name="show_emoji_picker" since="5">
+      <description summary="open the emoji and symbols picker">
+        Sent by a text field's Emoji and Symbols item. The compositor opens the
+        launcher's emoji mode as Ctrl+Super+Space does, and the chosen
+        character is typed into the app's focused text field.
+      </description>
     </request>
   </interface>
 </protocol>

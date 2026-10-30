@@ -1,3 +1,5 @@
+use std::time::{Duration, Instant};
+
 use smithay::reexports::wayland_server::backend::ClientId;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{
@@ -9,10 +11,19 @@ use smithay::wayland::foreign_toplevel_list::{
     ForeignToplevelListHandler, ForeignToplevelListState,
 };
 use smithay::wayland::shell::xdg::XdgToplevelSurfaceData;
+use smithay::wayland::text_input::TextInputSeat;
 use unbound_protocols::server::unbound_shell_v1::{self, UnboundShellV1};
 
 use crate::session::SessionRole;
 use crate::state::{ClientState, State};
+
+const INSERT_PATIENCE: Duration = Duration::from_secs(1);
+
+pub(crate) struct PendingInsert {
+    text: String,
+    requester: ClientId,
+    until: Instant,
+}
 
 pub(crate) fn is_shell(client: &Client) -> bool {
     client
@@ -52,6 +63,49 @@ impl State {
     pub(crate) fn show_launcher(&mut self) {
         for shell in &self.shell_resources {
             shell.show_launcher();
+        }
+    }
+
+    pub(crate) fn open_launcher(&mut self, mode: unbound_shell_v1::LauncherMode) {
+        let mut text_field = false;
+        self.seat
+            .text_input()
+            .with_active_text_input(|_, _| text_field = true);
+        for shell in &self.shell_resources {
+            if shell.version() >= unbound_shell_v1::EVT_OPEN_LAUNCHER_SINCE {
+                shell.open_launcher(mode, u32::from(text_field));
+            }
+        }
+    }
+
+    pub(crate) fn insert_text(&mut self, text: String, requester: ClientId) {
+        self.pending_insert = Some(PendingInsert {
+            text,
+            requester,
+            until: Instant::now() + INSERT_PATIENCE,
+        });
+        self.deliver_pending_insert();
+    }
+
+    pub(crate) fn deliver_pending_insert(&mut self) {
+        let Some(pending) = self.pending_insert.take() else {
+            return;
+        };
+        if Instant::now() > pending.until {
+            return;
+        }
+        let handle = self.seat.text_input();
+        let mut inserted = false;
+        handle.with_active_text_input(|text_input, surface| {
+            if surface.client().map(|client| client.id()) != Some(pending.requester.clone()) {
+                text_input.commit_string(Some(pending.text.clone()));
+                inserted = true;
+            }
+        });
+        if inserted {
+            handle.done(false);
+        } else {
+            self.pending_insert = Some(pending);
         }
     }
 
@@ -288,6 +342,11 @@ impl Dispatch<UnboundShellV1, ()> for State {
     ) {
         match request {
             unbound_shell_v1::Request::ActivateApp { app_id } => state.activate_app(&app_id),
+            unbound_shell_v1::Request::InsertText { text } => {
+                if let Some(client) = resource.client() {
+                    state.insert_text(text, client.id());
+                }
+            }
             unbound_shell_v1::Request::ToggleControlCenter => state.toggle_control_center(),
             unbound_shell_v1::Request::ShowLauncher => state.show_launcher(),
             unbound_shell_v1::Request::SetIconRect {

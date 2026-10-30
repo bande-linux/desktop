@@ -104,6 +104,73 @@ impl Query {
         self.fuzzy(folded)
     }
 
+    pub fn matched(&self, folded: &str) -> Vec<usize> {
+        if self.score(folded).is_none() {
+            return Vec::new();
+        }
+        let query = self.folded.as_str();
+        let span = |byte: usize, text: &str| {
+            let start = folded[..byte].chars().count();
+            start..start + text.chars().count()
+        };
+        let word_start =
+            |text: &str| word_starts(folded).find(|start| folded[*start..].starts_with(text));
+        if folded.starts_with(query) {
+            return span(0, query).collect();
+        }
+        if let Some(start) = word_start(query) {
+            return span(start, query).collect();
+        }
+        if self.words.len() > 1 && self.words.iter().all(|word| word_start(word).is_some()) {
+            let mut positions: Vec<usize> = self
+                .words
+                .iter()
+                .filter_map(|word| word_start(word).map(|start| span(start, word)))
+                .flatten()
+                .collect();
+            positions.sort_unstable();
+            positions.dedup();
+            return positions;
+        }
+        let initials: String = word_starts(folded)
+            .filter_map(|start| folded[start..].chars().next())
+            .collect();
+        if query.chars().count() > 1
+            && !query.contains(char::is_whitespace)
+            && initials.starts_with(query)
+        {
+            return word_starts(folded)
+                .take(query.chars().count())
+                .map(|start| folded[..start].chars().count())
+                .collect();
+        }
+        if let Some(position) = folded.find(query) {
+            return span(position, query).collect();
+        }
+        self.fuzzy_positions(folded)
+    }
+
+    fn fuzzy_positions(&self, folded: &str) -> Vec<usize> {
+        let mut wanted = self
+            .folded
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .peekable();
+        let mut positions = Vec::new();
+        let mut previous = None;
+        for (index, character) in folded.chars().enumerate() {
+            let Some(&next) = wanted.peek() else {
+                break;
+            };
+            if character == next && (!positions.is_empty() || is_word_start(previous)) {
+                wanted.next();
+                positions.push(index);
+            }
+            previous = Some(character);
+        }
+        positions
+    }
+
     fn fuzzy(&self, folded: &str) -> Option<u32> {
         let mut wanted = self
             .folded

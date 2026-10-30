@@ -2,11 +2,17 @@ use std::error::Error;
 use std::fs::File;
 use std::io::{ErrorKind, PipeReader, Read, Write};
 use std::os::fd::{AsFd, OwnedFd};
+use std::os::unix::net::UnixStream;
+use std::path::PathBuf;
 use std::process::ExitCode;
+use std::sync::mpsc::{Receiver, channel};
 use std::sync::{Arc, Mutex};
 
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use rustix::process::{DumpableBehavior, set_dumpable_behavior};
+use unbound_clipboard::{
+    BUS_NAME, ClipboardHistory, Contents, History, OBJECT_PATH, Shared, lock, now, state_dir,
+};
 use wayland_client::backend::WaylandError;
 use wayland_client::globals::{GlobalListContents, registry_queue_init};
 use wayland_client::protocol::wl_registry::WlRegistry;
@@ -45,7 +51,6 @@ impl Selection {
 }
 
 type Mimes = Mutex<Vec<String>>;
-type Contents = Vec<(String, Vec<u8>)>;
 
 struct Saved {
     selection: Selection,
@@ -102,6 +107,68 @@ fn compositor_gone(error: &(dyn Error + 'static)) -> bool {
     })
 }
 
+fn serve_history(
+    history: &Shared,
+) -> Result<(zbus::blocking::Connection, Receiver<Contents>, UnixStream), Box<dyn Error>> {
+    let (paste, pasted) = channel();
+    let (wake, woken) = UnixStream::pair()?;
+    woken.set_nonblocking(true)?;
+    let bus = zbus::blocking::connection::Builder::session()?
+        .serve_at(
+            OBJECT_PATH,
+            ClipboardHistory {
+                history: Arc::clone(history),
+                paste,
+                wake,
+            },
+        )?
+        .name(BUS_NAME)?
+        .build()?;
+    Ok((bus, pasted, woken))
+}
+
+fn history() -> Shared {
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let state_home = std::env::var_os("XDG_STATE_HOME").map(PathBuf::from);
+    let history = state_dir(state_home.as_deref(), home.as_deref())
+        .map(|dir| History::load(dir, now()))
+        .unwrap_or_default();
+    Arc::new(Mutex::new(history))
+}
+
+fn wait(
+    queue: &mut wayland_client::EventQueue<Daemon>,
+    woken: Option<&UnixStream>,
+) -> Result<(), Box<dyn Error>> {
+    let Some(guard) = queue.prepare_read() else {
+        return Ok(());
+    };
+    let wayland_ready = {
+        let connection_fd = guard.connection_fd();
+        let mut fds = vec![PollFd::new(&connection_fd, PollFlags::IN)];
+        if let Some(woken) = woken {
+            fds.push(PollFd::new(woken, PollFlags::IN));
+        }
+        match poll(&mut fds, None) {
+            Ok(_) | Err(rustix::io::Errno::INTR) => {}
+            Err(error) => return Err(error.into()),
+        }
+        !fds[0].revents().is_empty()
+    };
+    if wayland_ready {
+        match guard.read() {
+            Ok(_) => {}
+            Err(WaylandError::Io(error)) if error.kind() == ErrorKind::WouldBlock => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    if let Some(mut woken) = woken {
+        let mut drained = [0u8; 64];
+        while matches!(woken.read(&mut drained), Ok(read) if read > 0) {}
+    }
+    Ok(())
+}
+
 fn run() -> Result<(), Box<dyn Error>> {
     set_dumpable_behavior(DumpableBehavior::NotDumpable)?;
     let connection = Connection::connect_to_env()?;
@@ -111,9 +178,27 @@ fn run() -> Result<(), Box<dyn Error>> {
     let manager: ExtDataControlManagerV1 = globals.bind(&qh, 1..=1, ())?;
     let device = manager.get_data_device(&seat, &qh, ());
     let mut daemon = Daemon::default();
+    let history = history();
+    let served = serve_history(&history)
+        .inspect_err(|error| tracing::warn!("cannot offer the clipboard history: {error}"))
+        .ok();
+    let (_bus, pasted, woken) = match served {
+        Some((bus, pasted, woken)) => (Some(bus), Some(pasted), Some(woken)),
+        None => (None, None, None),
+    };
 
     while !daemon.finished {
-        queue.blocking_dispatch(&mut daemon)?;
+        queue.dispatch_pending(&mut daemon)?;
+        for contents in pasted.iter().flat_map(Receiver::try_iter) {
+            take_over(
+                &manager,
+                &device,
+                &qh,
+                &mut daemon,
+                Selection::Clipboard,
+                contents,
+            );
+        }
         for selection in Selection::ALL {
             let Some(offer) = daemon.pending[selection.index()].take() else {
                 continue;
@@ -124,7 +209,14 @@ fn run() -> Result<(), Box<dyn Error>> {
             if daemon.pending[selection.index()].is_some() || contents.is_empty() {
                 continue;
             }
+            if selection == Selection::Clipboard {
+                lock(&history).record(contents.clone(), now());
+            }
             take_over(&manager, &device, &qh, &mut daemon, selection, contents);
+        }
+        connection.flush()?;
+        if !daemon.finished {
+            wait(&mut queue, woken.as_ref())?;
         }
     }
     Ok(())

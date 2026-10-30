@@ -23,7 +23,9 @@ use unbound_graphics::{
     Appearance, CpuRenderer, Cursor, Event, GpuDevice, GpuRenderer, Point, Pointer, PointerButton,
     Rect, Region, RenderError, Scene, TextSystem, damage, pixels,
 };
-use unbound_protocols::client::unbound_shell_v1::{BrightnessKey, MediaKey, VolumeKey};
+use unbound_protocols::client::unbound_shell_v1::{
+    BrightnessKey, LauncherMode, MediaKey, VolumeKey,
+};
 use unbound_widgets::{ClipboardRequest, Menu, MenuItem, MenuOutcome, Ui};
 use wayland_client::backend::WaylandError;
 use wayland_client::protocol::wl_buffer::{self, WlBuffer};
@@ -150,6 +152,10 @@ pub enum WindowEvent {
     PastedTransfer(Transfer),
     Drag(DragEvent),
     ShowLauncher,
+    OpenLauncher {
+        mode: LauncherMode,
+        text_field: bool,
+    },
     CaptureScreen,
     CaptureArea,
     ActiveApp(String),
@@ -1000,12 +1006,18 @@ impl Window {
                 self.set_cursor(ui.cursor());
                 (changed, None)
             }
+
             WindowEvent::Accessibility(request) => match ui.perform(&request) {
                 true => (true, None),
                 false => (false, Some(WindowEvent::Accessibility(request))),
             },
             WindowEvent::MenuAction(action) => match ui.menu_action(&action) {
-                true => (true, None),
+                true => {
+                    if ui.take_emoji_picker_request() {
+                        self.show_emoji_picker()?;
+                    }
+                    (true, None)
+                }
                 false => (false, Some(WindowEvent::MenuAction(action))),
             },
             WindowEvent::Pasted(text) => match ui.pasted(&text) {
@@ -2019,10 +2031,10 @@ impl Dispatch<WlRegistry, ()> for State {
                     }
                 }
                 "unbound_shell_v1" => {
-                    state.shell.protocol = Some(registry.bind(name, version.min(12), handle, ()));
+                    state.shell.protocol = Some(registry.bind(name, version.min(13), handle, ()));
                 }
                 "unbound_app_v1" => {
-                    state.shell.app = Some(registry.bind(name, version.min(4), handle, ()));
+                    state.shell.app = Some(registry.bind(name, version.min(5), handle, ()));
                 }
                 "ext_output_image_capture_source_manager_v1" => {
                     state.capture.sources = Some(registry.bind(name, 1, handle, ()));

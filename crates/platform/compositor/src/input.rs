@@ -10,7 +10,9 @@ use smithay::input::pointer::{AxisFrame, ButtonEvent, MotionEvent};
 use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Clock, Logical, Monotonic, Point, SERIAL_COUNTER};
-use unbound_protocols::server::unbound_shell_v1::{BrightnessKey, MediaKey, VolumeKey};
+use unbound_protocols::server::unbound_shell_v1::{
+    BrightnessKey, LauncherMode, MediaKey, VolumeKey,
+};
 
 use crate::frame::Target;
 use crate::gesture::Gesture;
@@ -33,6 +35,7 @@ enum Shortcut {
     SwitcherKey(u32, bool),
     AssistKey(u32, bool),
     ShowLauncher,
+    OpenLauncher(LauncherMode),
     MinimizeWindow,
     LockScreen,
     ForceQuit,
@@ -108,6 +111,9 @@ fn shortcut(
         Some(keysyms::KEY_grave) if !ctrl && !alt => {
             return Some(Shortcut::NextWindow { backwards: shift });
         }
+        Some(keysyms::KEY_v) if shift && !ctrl && !alt => {
+            return Some(Shortcut::OpenLauncher(LauncherMode::Clipboard));
+        }
         _ => {}
     }
     match keysym {
@@ -137,6 +143,7 @@ fn shortcut(
             Some(Shortcut::NextApp { backwards: shift })
         }
         keysyms::KEY_space if alt && !ctrl => Some(Shortcut::InputSource { backwards: shift }),
+        keysyms::KEY_space if ctrl && !alt => Some(Shortcut::OpenLauncher(LauncherMode::Emoji)),
         keysyms::KEY_space => Some(Shortcut::ShowLauncher),
         _ => None,
     }
@@ -207,6 +214,10 @@ impl State {
         }
         if shortcut == Shortcut::ShowLauncher {
             self.show_launcher();
+            return;
+        }
+        if let Shortcut::OpenLauncher(mode) = shortcut {
+            self.open_launcher(mode);
             return;
         }
         if let Shortcut::InputSource { backwards } = shortcut {
@@ -341,6 +352,7 @@ impl State {
                 }
             }
             Shortcut::ShowLauncher
+            | Shortcut::OpenLauncher(_)
             | Shortcut::LockScreen
             | Shortcut::ForceQuit
             | Shortcut::FocusShell(_)
@@ -699,6 +711,7 @@ impl Headless {
 mod tests {
     use smithay::input::keyboard::keysyms;
     use unbound_keyboard::{Action, SHORTCUTS};
+    use unbound_protocols::server::unbound_shell_v1::LauncherMode;
 
     use super::{Shortcut, shortcut};
     use crate::motion::DOCK_NAMESPACE;
@@ -747,6 +760,8 @@ mod tests {
             Action::CaptureScreen => Shortcut::CaptureScreen,
             Action::CaptureArea => Shortcut::CaptureArea,
             Action::ShowLauncher => Shortcut::ShowLauncher,
+            Action::ShowClipboardHistory => Shortcut::OpenLauncher(LauncherMode::Clipboard),
+            Action::ShowEmojiPicker => Shortcut::OpenLauncher(LauncherMode::Emoji),
             Action::FocusMenuBar => Shortcut::FocusShell(MENU_BAR_NAMESPACE),
             Action::FocusDock => Shortcut::FocusShell(DOCK_NAMESPACE),
             Action::LockScreen => Shortcut::LockScreen,

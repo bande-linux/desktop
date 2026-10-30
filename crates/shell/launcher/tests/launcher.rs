@@ -5,7 +5,8 @@ use std::time::{Duration, Instant};
 
 use unbound_fs::Entry;
 use unbound_launcher::{
-    Action, AppInfo, Catalog, Hit, Kind, Launcher, Loaded, PaneInfo, SettingInfo, Target,
+    Action, AppInfo, Catalog, Clip, Heading, Hit, Kind, Launcher, Loaded, Mode, PaneInfo,
+    SettingInfo, Target,
 };
 use unbound_preview::preview;
 use unbound_search::{EXACT, FileHit, FileResults, PREFIX, Usage, WORD, usage_path};
@@ -15,6 +16,7 @@ use unbound_toolkit::{Appearance, Color, CpuRenderer, Image, Point, Scheme, Text
 const SCREEN: (u32, u32) = (1024, 720);
 const MIN_SSIM: f64 = 0.99;
 const HOME: &str = "/home/someone";
+const NOW: u64 = 1_800_000_000;
 
 struct Plain;
 
@@ -185,7 +187,7 @@ fn names_that_start_with_the_query_come_before_words_and_keywords() {
     }
     launcher.clear();
     typed(&mut launcher, "  ");
-    assert!(launcher.hits().is_empty());
+    assert_eq!(launcher.headings(), [Heading::AllApps]);
 }
 
 #[test]
@@ -434,7 +436,7 @@ fn escape_clears_the_query_and_then_closes() {
     typed(&mut launcher, "te");
     key(&mut launcher, Key::Escape);
     assert_eq!(launcher.query(), "");
-    assert!(launcher.hits().is_empty());
+    assert_eq!(launcher.headings(), [Heading::AllApps]);
     assert!(launcher.take_actions().is_empty());
     key(&mut launcher, Key::Escape);
     assert_eq!(launcher.take_actions(), [Action::Close]);
@@ -563,8 +565,8 @@ fn every_keystroke_updates_the_results_within_a_frame() {
     assert!(median < Duration::from_millis(16), "median {median:?}");
 }
 
-fn check_golden(name: &str, rgba: Vec<u8>) {
-    let actual = image::RgbaImage::from_raw(SCREEN.0, SCREEN.1, rgba).expect("frame");
+fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>) {
+    let actual = image::RgbaImage::from_raw(size.0, size.1, rgba).expect("frame");
     let actual = image::DynamicImage::ImageRgba8(actual).to_rgb8();
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("tests/golden/{name}.png"));
     if std::env::var_os("UNBOUND_UPDATE_GOLDENS").is_some() {
@@ -588,8 +590,17 @@ fn check_golden(name: &str, rgba: Vec<u8>) {
 fn render(launcher: &mut Launcher, name: &str) {
     let mut scene = launcher.scene(SCREEN.0, SCREEN.1, Instant::now());
     scene.background = Color::hex(0x5A6B7D);
-    let frame = CpuRenderer::new().render(&scene).expect("frame");
-    check_golden(name, frame.rgba);
+    for (scale, suffix) in [(1.0, "1x"), (1.5, "1.5x")] {
+        let size = (
+            (f64::from(SCREEN.0) * scale).round() as u32,
+            (f64::from(SCREEN.1) * scale).round() as u32,
+        );
+        let mut rgba = vec![0; (size.0 * size.1 * 4) as usize];
+        CpuRenderer::new()
+            .render_into(&scene, scale, &mut rgba)
+            .expect("frame");
+        check_golden(&format!("{name}-{suffix}"), size, rgba);
+    }
 }
 
 #[test]
@@ -597,9 +608,15 @@ fn the_launcher_matches_its_goldens() {
     let folder = tempfile::tempdir().unwrap();
     let document = folder.path().join("notes.txt");
     std::fs::write(&document, "Groceries\n- tea\n- bread\n").unwrap();
+    std::fs::write(folder.path().join("Holiday plans.txt"), "Rome").unwrap();
+    let xbel = recently_used_xbel(&[&folder.path().join("Holiday plans.txt")]);
     for (scheme, suffix) in [(Scheme::Light, "light"), (Scheme::Dark, "dark")] {
-        let mut launcher = launcher_with(Usage::default(), scheme);
-        render(&mut launcher, &format!("launcher-empty-{suffix}"));
+        let mut usage = Usage::default();
+        usage.record("app:org.unbound.Terminal", NOW).unwrap();
+        let mut launcher = launcher_with(usage, scheme);
+        launcher.set_now(NOW);
+        launcher.set_recently_used(Some(&xbel));
+        render(&mut launcher, &format!("launcher-browse-{suffix}"));
 
         typed(&mut launcher, "te");
         key(&mut launcher, Key::Down);
@@ -636,5 +653,404 @@ fn the_launcher_matches_its_goldens() {
         typed(&mut launcher, "zzzq");
         files(&mut launcher, &[]);
         render(&mut launcher, &format!("launcher-none-{suffix}"));
+
+        launcher.open(Mode::Emoji, true);
+        typed(&mut launcher, "arrow");
+        key(&mut launcher, Key::Right);
+        render(&mut launcher, &format!("launcher-emoji-{suffix}"));
+
+        launcher.set_now(NOW);
+        launcher.open(Mode::Clipboard, false);
+        launcher.set_clips(clips());
+        render(&mut launcher, &format!("launcher-clipboard-{suffix}"));
     }
+}
+
+fn recently_used_xbel(paths: &[&Path]) -> String {
+    let bookmarks: String = paths
+        .iter()
+        .map(|path| {
+            format!(
+                "<bookmark href=\"file://{}\" added=\"2026-01-01T10:00:00Z\" modified=\"2026-01-01T10:00:00Z\" visited=\"2026-01-01T10:00:00Z\"></bookmark>\n",
+                path.display()
+            )
+        })
+        .collect();
+    format!("<?xml version=\"1.0\"?>\n<xbel version=\"1.0\">\n{bookmarks}</xbel>\n")
+}
+
+#[test]
+fn an_empty_query_shows_recent_apps_and_documents_then_every_app_alphabetically() {
+    let folder = tempfile::tempdir().unwrap();
+    let report = folder.path().join("report.pdf");
+    std::fs::write(&report, "pdf").unwrap();
+    let mut usage = Usage::default();
+    usage.record("app:org.unbound.Terminal", NOW - 60).unwrap();
+    usage.record("app:org.example.Fonts", NOW).unwrap();
+    usage.record("app:org.example.Removed", NOW).unwrap();
+    let mut launcher = launcher_with(usage, Scheme::Light);
+    launcher.set_now(NOW);
+    launcher.set_recently_used(Some(&recently_used_xbel(&[
+        &report,
+        &folder.path().join("deleted.txt"),
+    ])));
+    assert_eq!(
+        launcher.headings(),
+        [
+            Heading::RecentApps,
+            Heading::RecentDocuments,
+            Heading::AllApps
+        ]
+    );
+    assert_eq!(
+        titles(&launcher),
+        [
+            "Fonts",
+            "Terminal",
+            "report.pdf",
+            "Calculator",
+            "Fonts",
+            "System Settings",
+            "Terminal",
+            "Text Editor"
+        ]
+    );
+    key(&mut launcher, Key::Enter);
+    assert_eq!(
+        launcher.take_actions(),
+        [Action::Open(Target::App("org.example.Fonts".to_owned()))]
+    );
+    typed(&mut launcher, "fo");
+    assert_eq!(titles(&launcher), ["Fonts"]);
+}
+
+#[test]
+fn arrows_move_through_the_app_grid_in_two_dimensions() {
+    let mut apps = apps();
+    for index in 0..20 {
+        apps.push(app(
+            &format!("org.example.Z{index:02}"),
+            &format!("Zeta {index:02}"),
+            None,
+            &[],
+        ));
+    }
+    let mut launcher = Launcher::new(
+        apps,
+        panes(),
+        Box::new(Plain),
+        PathBuf::from(HOME),
+        Usage::default(),
+        appearance(Scheme::Light),
+        TextSystem::new(),
+    );
+    let selected = |launcher: &Launcher| launcher.selection().unwrap().title;
+    assert_eq!(selected(&launcher), "Calculator");
+    key(&mut launcher, Key::Right);
+    assert_eq!(selected(&launcher), "Fonts");
+    key(&mut launcher, Key::Down);
+    assert_eq!(selected(&launcher), "Zeta 04");
+    key(&mut launcher, Key::Down);
+    key(&mut launcher, Key::Down);
+    assert_eq!(selected(&launcher), "Zeta 19");
+    key(&mut launcher, Key::Up);
+    assert_eq!(selected(&launcher), "Zeta 11");
+    key(&mut launcher, Key::Left);
+    assert_eq!(selected(&launcher), "Zeta 10");
+}
+
+#[test]
+fn a_long_list_scrolls_to_keep_the_selection_in_view() {
+    let mut apps = apps();
+    for index in 0..200 {
+        apps.push(app(
+            &format!("org.example.App{index:03}"),
+            &format!("Example {index:03}"),
+            None,
+            &[],
+        ));
+    }
+    let mut launcher = Launcher::new(
+        apps,
+        panes(),
+        Box::new(Plain),
+        PathBuf::from(HOME),
+        Usage::default(),
+        Appearance {
+            reduce_motion: true,
+            ..Appearance::default()
+        },
+        TextSystem::new(),
+    );
+    let scroll = |launcher: &mut Launcher| {
+        launcher.scene(SCREEN.0, SCREEN.1, Instant::now() + Duration::from_secs(5));
+        launcher
+            .ui
+            .accessibility()
+            .nodes
+            .iter()
+            .find(|(_, node)| node.role() == accesskit::Role::Dialog)
+            .and_then(|(_, node)| node.scroll_y())
+            .unwrap()
+    };
+    assert_eq!(scroll(&mut launcher), 0.0);
+    for _ in 0..12 {
+        key(&mut launcher, Key::Down);
+        scroll(&mut launcher);
+    }
+    assert!(scroll(&mut launcher) > 500.0);
+    launcher.handle(&Event::Scroll(unbound_toolkit::ui::Scroll {
+        position: Point::new(SCREEN.0 as f32 / 2.0, SCREEN.1 as f32 * 0.5),
+        delta: Point::new(0.0, -10_000.0),
+        ..unbound_toolkit::ui::Scroll::default()
+    }));
+    assert_eq!(scroll(&mut launcher), 0.0);
+}
+
+#[test]
+fn the_menu_key_and_shift_f10_open_the_menu_of_the_selection() {
+    let mut launcher = launcher();
+    typed(&mut launcher, "budget");
+    files(&mut launcher, &[("budget.ods", false, PREFIX)]);
+    launcher.scene(SCREEN.0, SCREEN.1, Instant::now());
+    key(&mut launcher, Key::Menu);
+    let (menu, point) = launcher.take_menu_request().expect("a context menu");
+    assert_eq!(menu.items[0].action, "open");
+    assert!(point.y > SCREEN.1 as f32 * 0.22 + 60.0);
+    launcher.handle(&Event::Key {
+        key: Key::Function(10),
+        modifiers: Modifiers {
+            shift: true,
+            ..Modifiers::default()
+        },
+    });
+    assert!(launcher.take_menu_request().is_some());
+    assert!(launcher.menu_action("copy"));
+    assert_eq!(
+        launcher.take_actions(),
+        [Action::Copy("/home/someone/budget.ods".to_owned())]
+    );
+}
+
+#[test]
+fn result_names_mark_the_characters_that_matched() {
+    let mut launcher = launcher();
+    typed(&mut launcher, "ted");
+    let hit = launcher.selection().unwrap();
+    assert_eq!(hit.title, "Text Editor");
+    assert_eq!(hit.matched, [0, 1, 6]);
+    launcher.clear();
+    typed(&mut launcher, "edit");
+    assert_eq!(launcher.selection().unwrap().matched, [5, 6, 7, 8]);
+}
+
+fn emoji_targets(launcher: &Launcher) -> Vec<Target> {
+    launcher.hits().into_iter().map(|hit| hit.target).collect()
+}
+
+#[test]
+fn emoji_are_found_by_name_and_keyword_and_return_inserts_or_copies() {
+    let mut launcher = launcher();
+    launcher.open(Mode::Emoji, true);
+    assert_eq!(launcher.headings()[0], Heading::EmojiGroup(0));
+    assert!(launcher.take_actions().is_empty());
+    typed(&mut launcher, "grinning face");
+    assert_eq!(emoji_targets(&launcher)[0], Target::Emoji("😀".to_owned()));
+    assert_eq!(launcher.selection().unwrap().title, "Grinning face");
+    launcher.clear();
+    typed(&mut launcher, "lol");
+    assert!(emoji_targets(&launcher).contains(&Target::Emoji("😂".to_owned())));
+    launcher.clear();
+    typed(&mut launcher, "grinning face");
+    key(&mut launcher, Key::Enter);
+    assert_eq!(
+        launcher.take_actions(),
+        [Action::Close, Action::Insert("😀".to_owned())]
+    );
+
+    launcher.open(Mode::Emoji, false);
+    typed(&mut launcher, "grinning face");
+    key(&mut launcher, Key::Enter);
+    assert_eq!(
+        launcher.take_actions(),
+        [Action::Copy("😀".to_owned()), Action::Close]
+    );
+    launcher.open(Mode::Search, false);
+    typed(&mut launcher, "te");
+    assert!(launcher.file_query().is_some());
+    assert_eq!(titles(&launcher), ["Terminal", "Text Editor"]);
+}
+
+#[test]
+fn chosen_emoji_come_first_next_time() {
+    let folder = tempfile::tempdir().unwrap();
+    let path = usage_path(Some(folder.path()), None).unwrap();
+    let mut launcher = launcher_with(Usage::load(path), Scheme::Light);
+    launcher.set_now(NOW);
+    launcher.open(Mode::Emoji, false);
+    typed(&mut launcher, "red heart");
+    key(&mut launcher, Key::Enter);
+    launcher.open(Mode::Emoji, false);
+    assert_eq!(
+        launcher.headings()[..2],
+        [Heading::FrequentlyUsed, Heading::EmojiGroup(0)]
+    );
+    assert_eq!(
+        emoji_targets(&launcher)[0],
+        Target::Emoji("❤\u{FE0F}".to_owned())
+    );
+}
+
+#[test]
+fn a_skin_tone_chosen_from_the_menu_is_remembered_and_used() {
+    let mut launcher = launcher();
+    launcher.open(Mode::Emoji, true);
+    typed(&mut launcher, "waving hand");
+    launcher.scene(SCREEN.0, SCREEN.1, Instant::now());
+    key(&mut launcher, Key::Menu);
+    let (menu, _) = launcher.take_menu_request().expect("a menu");
+    let tones: Vec<&str> = menu
+        .items
+        .iter()
+        .filter(|item| item.action.starts_with("tone-"))
+        .map(|item| item.title.as_str())
+        .collect();
+    assert_eq!(tones.len(), 6);
+    assert!(tones[3].starts_with("👋\u{1F3FD}"));
+    assert!(launcher.menu_action("tone-3"));
+    assert_eq!(launcher.take_actions(), [Action::SkinTone(Some(2))]);
+    key(&mut launcher, Key::Enter);
+    assert_eq!(
+        launcher.take_actions(),
+        [Action::Close, Action::Insert("👋\u{1F3FD}".to_owned())]
+    );
+}
+
+fn clips() -> Vec<Clip> {
+    let text = |id: u64, text: &str| Clip {
+        id,
+        copied: NOW - id * 60,
+        text: text.to_owned(),
+        mimes: vec!["text/plain;charset=utf-8".to_owned()],
+    };
+    vec![
+        text(1, "Meeting notes\n- agenda\n- budget"),
+        Clip {
+            id: 2,
+            copied: NOW - 120,
+            text: String::new(),
+            mimes: vec!["image/png".to_owned()],
+        },
+        Clip {
+            id: 3,
+            copied: NOW - 180,
+            text: "file:///home/someone/Report.pdf\r\nfile:///home/someone/Budget.ods\r\n"
+                .to_owned(),
+            mimes: vec!["text/uri-list".to_owned()],
+        },
+        text(4, "https://example.org/budget"),
+    ]
+}
+
+fn clipboard_launcher(inserts: bool) -> Launcher {
+    let mut launcher = launcher();
+    launcher.open(Mode::Clipboard, inserts);
+    launcher.set_clips(clips());
+    launcher
+}
+
+#[test]
+fn the_clipboard_history_lists_copies_newest_first_and_filters_them() {
+    let mut launcher = clipboard_launcher(false);
+    assert_eq!(
+        titles(&launcher),
+        [
+            "Meeting notes",
+            "Image",
+            "Report.pdf, Budget.ods",
+            "https://example.org/budget"
+        ]
+    );
+    let kinds: Vec<Kind> = launcher.hits().iter().map(|hit| hit.kind).collect();
+    assert_eq!(
+        kinds,
+        [
+            Kind::CopiedText,
+            Kind::CopiedImage,
+            Kind::CopiedFiles,
+            Kind::CopiedText
+        ]
+    );
+    typed(&mut launcher, "budget");
+    assert_eq!(
+        titles(&launcher),
+        [
+            "Meeting notes",
+            "Report.pdf, Budget.ods",
+            "https://example.org/budget"
+        ]
+    );
+    assert!(launcher.file_query().is_none());
+}
+
+#[test]
+fn return_puts_a_copy_back_on_the_clipboard_and_types_text_when_it_can() {
+    let mut launcher = clipboard_launcher(false);
+    key(&mut launcher, Key::Enter);
+    assert_eq!(
+        launcher.take_actions(),
+        [Action::PasteClip(1), Action::Close]
+    );
+
+    let mut launcher = clipboard_launcher(true);
+    key(&mut launcher, Key::Enter);
+    assert_eq!(
+        launcher.take_actions(),
+        [
+            Action::PasteClip(1),
+            Action::Close,
+            Action::Insert("Meeting notes\n- agenda\n- budget".to_owned())
+        ]
+    );
+    key(&mut launcher, Key::Down);
+    key(&mut launcher, Key::Enter);
+    assert_eq!(
+        launcher.take_actions(),
+        [Action::PasteClip(2), Action::Close]
+    );
+}
+
+#[test]
+fn delete_removes_a_copy_and_clear_history_removes_them_all() {
+    let mut launcher = clipboard_launcher(false);
+    key(&mut launcher, Key::Down);
+    key(&mut launcher, Key::Delete);
+    assert_eq!(launcher.take_actions(), [Action::RemoveClip(2)]);
+    assert_eq!(launcher.selection().unwrap().target, Target::Clip(3));
+    assert_eq!(launcher.hits().len(), 3);
+    launcher.scene(SCREEN.0, SCREEN.1, Instant::now());
+    key(&mut launcher, Key::Menu);
+    let (menu, _) = launcher.take_menu_request().expect("a menu");
+    let actions: Vec<&str> = menu
+        .items
+        .iter()
+        .filter(|item| !item.separator)
+        .map(|item| item.action.as_str())
+        .collect();
+    assert_eq!(actions, ["open", "remove", "clear"]);
+    assert!(launcher.menu_action("clear"));
+    assert_eq!(launcher.take_actions(), [Action::ClearClips]);
+    assert!(launcher.hits().is_empty());
+}
+
+#[test]
+fn an_image_copy_asks_for_its_picture_once_selected() {
+    let mut launcher = clipboard_launcher(false);
+    assert_eq!(launcher.clip_picture_request(), None);
+    key(&mut launcher, Key::Down);
+    assert_eq!(
+        launcher.clip_picture_request(),
+        Some((2, "image/png".to_owned()))
+    );
+    assert_eq!(launcher.clip_picture_request(), None);
 }

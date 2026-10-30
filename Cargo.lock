@@ -3814,10 +3814,12 @@ dependencies = [
  "tracing",
  "unbound-compositor",
  "unbound-log",
+ "unbound-test-bus",
  "unbound-test-wayland",
  "wayland-backend",
  "wayland-client",
  "wayland-protocols",
+ "zbus",
 ]
 
 [[package]]
@@ -4059,6 +4061,7 @@ dependencies = [
  "unbound-thumbnails",
  "unbound-toolkit",
  "unbound-xdg",
+ "zbus",
 ]
 
 [[package]]

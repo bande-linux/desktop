@@ -56,6 +56,8 @@ pub enum Action {
     CaptureScreen,
     CaptureArea,
     ShowLauncher,
+    ShowClipboardHistory,
+    ShowEmojiPicker,
     FocusMenuBar,
     FocusDock,
     LockScreen,
@@ -83,9 +85,12 @@ impl Action {
             | Self::AppWindows => Area::Workspaces,
             Self::NextInputSource | Self::PreviousInputSource => Area::Keyboard,
             Self::CaptureScreen | Self::CaptureArea => Area::Screenshots,
-            Self::ShowLauncher | Self::FocusMenuBar | Self::FocusDock | Self::LockScreen => {
-                Area::System
-            }
+            Self::ShowLauncher
+            | Self::ShowClipboardHistory
+            | Self::ShowEmojiPicker
+            | Self::FocusMenuBar
+            | Self::FocusDock
+            | Self::LockScreen => Area::System,
         }
     }
 
@@ -113,6 +118,8 @@ impl Action {
             Self::CaptureScreen => L10N.tr("capture-screen"),
             Self::CaptureArea => L10N.tr("capture-area"),
             Self::ShowLauncher => L10N.tr("show-launcher"),
+            Self::ShowClipboardHistory => L10N.tr("show-clipboard-history"),
+            Self::ShowEmojiPicker => L10N.tr("show-emoji-picker"),
             Self::FocusMenuBar => L10N.tr("focus-menu-bar"),
             Self::FocusDock => L10N.tr("focus-dock"),
             Self::LockScreen => L10N.tr("lock-screen"),
@@ -130,7 +137,7 @@ const fn shortcut(action: Action, keys: &'static str) -> Shortcut {
     Shortcut { action, keys }
 }
 
-pub const SHORTCUTS: [Shortcut; 25] = [
+pub const SHORTCUTS: [Shortcut; 27] = [
     shortcut(Action::CloseWindow, "Super+W"),
     shortcut(Action::MinimizeWindow, "Super+M"),
     shortcut(Action::ToggleFullScreen, "Ctrl+Super+F"),
@@ -153,6 +160,8 @@ pub const SHORTCUTS: [Shortcut; 25] = [
     shortcut(Action::CaptureScreen, "Shift+Super+3"),
     shortcut(Action::CaptureArea, "Shift+Super+4"),
     shortcut(Action::ShowLauncher, "Super+Space"),
+    shortcut(Action::ShowClipboardHistory, "Shift+Super+V"),
+    shortcut(Action::ShowEmojiPicker, "Ctrl+Super+Space"),
     shortcut(Action::FocusMenuBar, "Super+F2"),
     shortcut(Action::FocusDock, "Super+F3"),
     shortcut(Action::LockScreen, "Ctrl+Super+Q"),

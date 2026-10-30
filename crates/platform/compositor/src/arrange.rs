@@ -12,21 +12,11 @@ pub(crate) struct Arranged {
 }
 
 pub(crate) fn identities(heads: &[OutputConfig]) -> Vec<String> {
-    heads
+    let named: Vec<(&str, String)> = heads
         .iter()
-        .map(|head| {
-            let identity = head.identity();
-            let shared = heads
-                .iter()
-                .filter(|other| other.identity() == identity)
-                .count();
-            if shared > 1 {
-                format!("{identity} ({})", head.name)
-            } else {
-                identity
-            }
-        })
-        .collect()
+        .map(|head| (head.name.as_str(), head.identity()))
+        .collect();
+    unbound_edid::distinct_identities(&named)
 }
 
 fn transform(rotation: Option<Rotation>) -> Transform {
@@ -127,7 +117,7 @@ pub(crate) fn arrange(
         .iter()
         .zip(&identities)
         .filter_map(|(head, identity)| {
-            let display = config.displays.get(identity).copied().unwrap_or_default();
+            let display = config.display(identity, &head.name);
             Some(Arranged {
                 name: head.name.clone(),
                 settings: settings_for(head, &display)?,

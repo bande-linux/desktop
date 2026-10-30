@@ -247,7 +247,7 @@ jobs:
             daemon=$!
             for attempt in $(seq 50); do
               reply=$(dbus-send --session --print-reply --dest=org.unbound.Config /org/unbound/Config \
-                org.freedesktop.DBus.Properties.Get string:org.unbound.Config string:PanelEdge 2>/dev/null) \
+                org.freedesktop.DBus.Properties.Get string:org.unbound.Config string:DockEdge 2>/dev/null) \
                 && break
               sleep 0.1
             done

@@ -10,7 +10,6 @@ mod displays;
 mod dock;
 mod drag;
 mod drm;
-mod edid;
 mod element;
 
 mod effect;

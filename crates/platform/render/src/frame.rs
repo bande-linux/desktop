@@ -33,6 +33,34 @@ impl RoundedRect {
     pub fn components(self) -> [f32; 4] {
         [self.x, self.y, self.width, self.height]
     }
+
+    pub fn translated(self, (dx, dy): (i32, i32)) -> Self {
+        Self {
+            x: self.x + dx as f32,
+            y: self.y + dy as f32,
+            ..self
+        }
+    }
+
+    fn turned(self, turn: Transform, area: (i32, i32)) -> Self {
+        if turn == Transform::Normal {
+            return self;
+        }
+        let rect = turn.transform_rect_in(
+            Rectangle::<f64, Physical>::new(
+                (f64::from(self.x), f64::from(self.y)).into(),
+                (f64::from(self.width), f64::from(self.height)).into(),
+            ),
+            &(f64::from(area.0), f64::from(area.1)).into(),
+        );
+        Self {
+            x: rect.loc.x as f32,
+            y: rect.loc.y as f32,
+            width: rect.size.w as f32,
+            height: rect.size.h as f32,
+            radius: self.radius,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -68,6 +96,7 @@ struct Quad {
     blur: f32,
     clip: RoundedRect,
     caster: RoundedRect,
+    orientation: f32,
 }
 
 pub struct VulkanFrame<'frame, 'buffer> {
@@ -79,6 +108,9 @@ pub struct VulkanFrame<'frame, 'buffer> {
     bounds: Rect,
     bound: Option<Program>,
     clip: Option<RoundedRect>,
+    origin: (i32, i32),
+    turn: Transform,
+    area: (i32, i32),
     drawn: Vec<Rect>,
     finished: bool,
     _framebuffer: PhantomData<&'frame mut VulkanFramebuffer<'buffer>>,
@@ -105,6 +137,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
     pub(crate) fn begin(
         renderer: &'frame mut VulkanRenderer,
         framebuffer: &'frame mut VulkanFramebuffer<'buffer>,
+        turn: Transform,
     ) -> Result<Self, RenderError> {
         let target = renderer
             .targets
@@ -117,6 +150,12 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             target.rendered,
         );
         let bounds = Rect::new(0, 0, target.image.width, target.image.height);
+        let area = turn
+            .invert()
+            .transform_size(smithay::utils::Size::<i32, Physical>::from((
+                bounds.width,
+                bounds.height,
+            )));
         renderer.begin_commands()?;
         renderer.record_copies();
         let device = &renderer.device;
@@ -150,12 +189,52 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             bounds,
             bound: None,
             clip: None,
+            origin: (0, 0),
+            turn,
+            area: (area.w, area.h),
             drawn: Vec::new(),
             finished: false,
             _framebuffer: PhantomData,
         };
         frame.begin_rendering(view, bounds, vk::AttachmentLoadOp::LOAD);
         Ok(frame)
+    }
+
+    pub(crate) fn turned(&self, rect: Rect) -> Rect {
+        if self.turn == Transform::Normal {
+            return rect;
+        }
+        let rect = self.turn.transform_rect_in(
+            Rectangle::<i32, Physical>::new(
+                (rect.x, rect.y).into(),
+                (rect.width, rect.height).into(),
+            ),
+            &self.area.into(),
+        );
+        Rect::new(rect.loc.x, rect.loc.y, rect.size.w, rect.size.h)
+    }
+
+    pub(crate) fn turned_shape(&self, shape: RoundedRect) -> RoundedRect {
+        shape.turned(self.turn, self.area)
+    }
+
+    fn placed(&self, destination: Rect, damage: &[Rectangle<i32, Physical>]) -> (Rect, Vec<Rect>) {
+        let rects = self.clip(
+            damage
+                .iter()
+                .map(|rect| self.turned(physical(rect).translated(destination.x, destination.y))),
+            self.turned(destination),
+        );
+        (self.turned(destination), rects)
+    }
+
+    fn orientation(&self) -> f32 {
+        match self.turn.invert() {
+            Transform::_90 => 1.0,
+            Transform::_180 => 2.0,
+            Transform::_270 => 3.0,
+            _ => 0.0,
+        }
     }
 
     fn clip(&self, rects: impl IntoIterator<Item = Rect>, within: Rect) -> Vec<Rect> {
@@ -197,7 +276,15 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
     }
 
     pub fn clip_to(&mut self, clip: Option<RoundedRect>) {
-        self.clip = clip;
+        self.clip = clip.map(|clip| self.turned_shape(clip.translated(self.origin)));
+    }
+
+    pub fn move_origin(&mut self, by: (i32, i32)) {
+        self.origin = by;
+    }
+
+    pub(crate) fn origin(&self) -> (i32, i32) {
+        self.origin
     }
 
     pub fn draw_shadow(
@@ -205,13 +292,18 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         shadow: &Shadow,
         damage: &[Rectangle<i32, Physical>],
     ) -> Result<(), RenderError> {
+        let shadow = &Shadow {
+            caster: shadow.caster.translated(self.origin),
+            window: shadow.window.translated(self.origin),
+            ..*shadow
+        };
+        let (_, rects) = self.placed(shadow.bounds(), damage);
+        let shadow = &Shadow {
+            caster: self.turned_shape(shadow.caster),
+            window: self.turned_shape(shadow.window),
+            ..*shadow
+        };
         let destination = shadow.bounds();
-        let rects = self.clip(
-            damage
-                .iter()
-                .map(|rect| physical(rect).translated(destination.x, destination.y)),
-            destination,
-        );
         if rects.is_empty() {
             return Ok(());
         }
@@ -298,7 +390,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             ])
             .chain(quad.clip.components())
             .chain(quad.caster.components())
-            .chain([quad.clip.radius, quad.caster.radius, 0.0, 0.0])
+            .chain([quad.clip.radius, quad.caster.radius, quad.orientation, 0.0])
             .flat_map(f32::to_ne_bytes)
             .collect();
         let device = &self.renderer.device;
@@ -474,7 +566,10 @@ impl Frame for VulkanFrame<'_, '_> {
         color: Color32F,
         at: &[Rectangle<i32, Physical>],
     ) -> Result<(), RenderError> {
-        let rects = self.clip(at.iter().map(physical), self.bounds);
+        let rects = self.clip(
+            at.iter().map(|rect| self.turned(physical(rect))),
+            self.bounds,
+        );
         self.fill(color, &rects);
         Ok(())
     }
@@ -485,13 +580,7 @@ impl Frame for VulkanFrame<'_, '_> {
         damage: &[Rectangle<i32, Physical>],
         color: Color32F,
     ) -> Result<(), RenderError> {
-        let destination = physical(&dst);
-        let rects = self.clip(
-            damage
-                .iter()
-                .map(|rect| physical(rect).translated(destination.x, destination.y)),
-            destination,
-        );
+        let (destination, rects) = self.placed(physical(&dst), damage);
         if color.is_opaque() && self.clip.is_none() {
             self.fill(color, &rects);
             return Ok(());
@@ -535,13 +624,7 @@ impl Frame for VulkanFrame<'_, '_> {
         else {
             return Ok(());
         };
-        let destination = physical(&dst);
-        let rects = self.clip(
-            damage
-                .iter()
-                .map(|rect| physical(rect).translated(destination.x, destination.y)),
-            destination,
-        );
+        let (destination, rects) = self.placed(physical(&dst), damage);
         if rects.is_empty() {
             return Ok(());
         }
@@ -553,6 +636,7 @@ impl Frame for VulkanFrame<'_, '_> {
                 source: src,
                 alpha,
                 clip: self.clip.unwrap_or_default(),
+                orientation: self.orientation(),
                 ..Quad::default()
             },
             &rects,
@@ -561,7 +645,7 @@ impl Frame for VulkanFrame<'_, '_> {
     }
 
     fn transformation(&self) -> Transform {
-        Transform::Normal
+        self.turn
     }
 
     fn wait(&mut self, sync: &SyncPoint) -> Result<(), RenderError> {

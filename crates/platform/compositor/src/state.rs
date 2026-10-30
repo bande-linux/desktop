@@ -7,36 +7,34 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use crate::element::ScreenElement;
 use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::{Buffer, Format as DmabufFormat, Fourcc, Modifier};
 use smithay::backend::drm::DrmNode;
 use smithay::backend::renderer::element::Kind as ElementKind;
+use smithay::backend::renderer::element::memory::MemoryRenderBufferRenderElement;
 use smithay::backend::renderer::element::surface::{
     WaylandSurfaceRenderElement, render_elements_from_surface_tree,
 };
 use smithay::backend::renderer::utils::{on_commit_buffer_handler, with_renderer_surface_state};
-use smithay::backend::renderer::element::memory::{
-    MemoryRenderBufferRenderElement,
-};
 use smithay::desktop::{
     LayerSurface as MappedLayer, PopupGrab, PopupManager, WindowSurfaceType, layer_map_for_output,
 };
 use smithay::input::keyboard::XkbConfig;
 use smithay::input::pointer::{CursorIcon, CursorImageAttributes, CursorImageStatus};
 use smithay::render_elements;
-use smithay::output::{Mode, Output, PhysicalProperties, Scale as OutputScale, Subpixel};
+
 use smithay::input::{Seat, SeatHandler, SeatState};
 use smithay::reexports::wayland_protocols::wp::presentation_time::server::wp_presentation_feedback::Kind;
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::reexports::wayland_server::backend::{ClientData, ClientId, DisconnectReason};
 use smithay::reexports::wayland_server::protocol::wl_buffer::WlBuffer;
 use smithay::reexports::wayland_server::protocol::wl_output::WlOutput;
-use smithay::reexports::wayland_server::protocol::wl_callback::WlCallback;
 use smithay::reexports::wayland_server::protocol::wl_seat::WlSeat;
 use smithay::reexports::wayland_server::protocol::wl_shm::Format;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{Client, Display, DisplayHandle, Resource};
-use smithay::utils::{Logical, Physical, Point, Raw, SERIAL_COUNTER, Serial, Size};
+use smithay::utils::{Logical, Physical, Point, SERIAL_COUNTER, Serial, Size, Transform};
 use smithay::wayland::buffer::BufferHandler;
 use smithay::wayland::compositor::{
     CompositorClientState, CompositorHandler, CompositorState, SurfaceAttributes,
@@ -50,7 +48,7 @@ use smithay::wayland::fractional_scale::{
 };
 use smithay::wayland::output::{OutputHandler, OutputManagerState};
 use smithay::wayland::presentation::{
-    PresentationFeedbackCachedState, PresentationFeedbackCallback, PresentationState, Refresh,
+    PresentationFeedbackCachedState, PresentationState, Refresh,
 };
 use smithay::wayland::selection::SelectionHandler;
 use smithay::wayland::selection::data_device::{DataDeviceState, set_data_device_focus};
@@ -91,6 +89,7 @@ use crate::scene::{
     BlurElement, Closing, Drawn, FillElement, PieceElement, ShadowElement, WindowElement,
     preview_elements, surface_blurs, tie_blurs_to_what_lies_below, window_elements,
 };
+use crate::screen::{OutputConfig, OutputSettings, Screen};
 use crate::session::{ForceQuit, LockScreen, SessionClient, SessionRole};
 use crate::shell;
 use crate::tile::{Preview, SnapDrag};
@@ -109,46 +108,28 @@ pub struct ScanoutDevice {
     pub feedback: DmabufFeedback,
 }
 
-pub struct OutputConfig {
-    pub name: String,
-    pub model: String,
-    pub size: Size<i32, Physical>,
-    pub physical_size_mm: Size<i32, Raw>,
-    pub refresh: Duration,
-    pub scanout: Option<ScanoutDevice>,
-}
-
 pub(crate) const MENU_BAR_NAMESPACE: &str = "menubar";
-const REFERENCE_PIXELS_PER_INCH: f64 = 110.0;
-const SCALE_STEP: f64 = 0.25;
-const HIGH_DENSITY_HEIGHT: i32 = 1600;
-
-pub fn automatic_scale(size: Size<i32, Physical>, physical_size_mm: Size<i32, Raw>) -> f64 {
-    if physical_size_mm.w > 0 && physical_size_mm.h > 0 {
-        let pixels_per_inch = f64::from(size.w) / (f64::from(physical_size_mm.w) / 25.4);
-        let scale = (pixels_per_inch / REFERENCE_PIXELS_PER_INCH / SCALE_STEP).round() * SCALE_STEP;
-        return scale.clamp(1.0, 3.0);
-    }
-    if size.h >= HIGH_DENSITY_HEIGHT {
-        2.0
-    } else {
-        1.0
-    }
-}
 
 #[derive(Clone)]
 pub(crate) enum Placed<'a> {
     Surface(WlSurface, Point<i32, Logical>),
     Window(&'a Window),
     Closing(&'a Closing),
-    Overview,
+    Overview(usize),
 }
 
-type Composed = (
-    Vec<OutputElement>,
+type Composed<E = ScreenElement> = (
+    Vec<E>,
     Vec<(WlSurface, Option<Drawn>)>,
     Option<(Vec<crate::scene::Piece>, crate::scene::Area)>,
 );
+
+fn relocated(elements: Vec<OutputElement>, by: Point<i32, Physical>) -> Vec<ScreenElement> {
+    elements
+        .into_iter()
+        .map(|element| ScreenElement::new(element, by))
+        .collect()
+}
 
 pub(crate) struct ExclusiveLayer {
     pub(crate) surface: WlSurface,
@@ -159,16 +140,18 @@ pub struct State {
     pub(crate) display_handle: DisplayHandle,
     pub(crate) syncobj_state: Option<smithay::wayland::drm_syncobj::DrmSyncobjState>,
     pub(crate) blockers: smithay::reexports::calloop::LoopHandle<'static, State>,
-    pub(crate) output_size: Size<i32, Physical>,
-    pub(crate) output_scale: f64,
-    pub(crate) refresh: Duration,
+    pub(crate) screens: Vec<Screen>,
+    pub(crate) departed: Vec<crate::displays::Departed>,
+    pub(crate) display_config: unbound_config::Config,
+    pub(crate) output_managers: Vec<crate::management::Manager>,
+    pub(crate) output_serial: u32,
+    pub(crate) announced_workspaces: (usize, usize),
     scanout_node: Option<DrmNode>,
     compositor_state: CompositorState,
     xdg_shell_state: XdgShellState,
     shm_state: ShmState,
     dmabuf_state: DmabufState,
     _dmabuf_global: DmabufGlobal,
-    pub(crate) output: Output,
     _output_manager_state: OutputManagerState,
     _presentation_state: PresentationState,
     layer_shell_state: WlrLayerShellState,
@@ -202,7 +185,6 @@ pub struct State {
     pub(crate) slide_back: Option<crate::scene::SlideBack>,
     pub(crate) watchdog: crate::watchdog::Watchdog,
     pub(crate) desktop: crate::gesture::ShowDesktop,
-    pub(crate) workspaces: crate::workspace::Workspaces,
     pub(crate) overview: crate::overview::Overview,
     pub(crate) gesture_route: Option<crate::gesture::Route>,
     pub(crate) active_app: String,
@@ -220,12 +202,14 @@ pub struct State {
     pub(crate) preview: Option<Preview>,
     pub(crate) reduce_motion: bool,
     pub(crate) needs_redraw: bool,
+    pub(crate) animated_at: Option<Duration>,
     pub(crate) pointer_location: Point<f64, Logical>,
     pub(crate) cursor_shown: bool,
     pub(crate) cursor_status: CursorImageStatus,
     cursor_theme: CursorTheme,
     cursor_arrow: Cursor,
     named_cursors: HashMap<CursorIcon, Option<Cursor>>,
+    cursor_scale: f64,
     pub(crate) held_shortcut_keys: Vec<u32>,
     pub(crate) typed_at: Option<Instant>,
     pub(crate) input_devices: usize,
@@ -239,9 +223,8 @@ pub struct Headless {
     display: Display<State>,
     pub(crate) fences: smithay::reexports::calloop::EventLoop<'static, State>,
     pub(crate) state: State,
-    latched_feedback: Vec<PresentationFeedbackCallback>,
-    latched_frame_callbacks: Vec<WlCallback>,
     pub(crate) session_clients: Vec<SessionClient>,
+    pub(crate) per_display_clients: Vec<std::path::PathBuf>,
     pub(crate) lock_screen: LockScreen,
     pub(crate) force_quit: ForceQuit,
     pub(crate) socket_name: Option<OsString>,
@@ -249,18 +232,23 @@ pub struct Headless {
 
 impl Headless {
     pub fn new(output_size: Size<i32, Physical>) -> io::Result<Self> {
-        Self::with_output(OutputConfig {
-            name: "HEADLESS-1".to_owned(),
-            model: "Headless".to_owned(),
-            size: output_size,
-            physical_size_mm: (0, 0).into(),
-            refresh: REFRESH,
-            scanout: None,
-        })
+        Self::with_output(OutputConfig::virtual_display("HEADLESS-1", output_size))
     }
 
     pub fn with_output(config: OutputConfig) -> io::Result<Self> {
-        let output_size = config.size;
+        Self::on_device(config, None)
+    }
+
+    pub fn on_device(config: OutputConfig, scanout: Option<ScanoutDevice>) -> io::Result<Self> {
+        let mode = config
+            .preferred_mode()
+            .ok_or_else(|| io::Error::other(format!("{} has no mode", config.name)))?;
+        let settings = OutputSettings {
+            mode,
+            scale: 1.0,
+            transform: Transform::Normal,
+            position: Point::default(),
+        };
         let display = Display::new().map_err(io::Error::other)?;
         let fences = smithay::reexports::calloop::EventLoop::try_new().map_err(io::Error::other)?;
         let handle = display.handle();
@@ -278,7 +266,7 @@ impl Headless {
                     .is_some_and(|state| state.role == Some(SessionRole::ClipboardDaemon))
             });
         let mut dmabuf_state = DmabufState::new();
-        let dmabuf_global = match &config.scanout {
+        let dmabuf_global = match &scanout {
             Some(scanout) => dmabuf_state
                 .create_global_with_default_feedback::<State>(&handle, &scanout.feedback),
             None => dmabuf_state.create_global::<State>(
@@ -289,35 +277,24 @@ impl Headless {
                 }),
             ),
         };
-        let output = Output::new(
-            config.name,
-            PhysicalProperties {
-                size: config.physical_size_mm,
-                subpixel: Subpixel::Unknown,
-                make: "Unbound".to_owned(),
-                model: config.model,
-            },
-        );
-        let millihertz = 1_000_000_000_000u128 / config.refresh.as_nanos().max(1);
-        let mode = Mode {
-            size: (output_size.w, output_size.h).into(),
-            refresh: i32::try_from(millihertz).unwrap_or(i32::MAX),
-        };
-        output.change_current_state(Some(mode), None, None, Some((0, 0).into()));
-        output.set_preferred(mode);
-        output.create_global::<State>(&handle);
+        let center = settings.logical_size().to_f64().downscale(2.0);
+        let screen = Screen::new(&handle, config, settings);
         handle.create_global::<State, UnboundShellV1, ()>(10, ());
         handle.create_global::<State, UnboundAppV1, ()>(3, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
+        handle.create_global::<State, smithay::reexports::wayland_protocols_wlr::output_management::v1::server::zwlr_output_manager_v1::ZwlrOutputManagerV1, ()>(crate::management::MANAGER_VERSION, ());
         State::create_capture_globals(&handle);
         let state = State {
             display_handle: handle.clone(),
             syncobj_state: None,
             blockers: fences.handle(),
-            output_size,
-            output_scale: 1.0,
-            refresh: config.refresh,
-            scanout_node: config.scanout.as_ref().map(|scanout| scanout.node),
+            screens: vec![screen],
+            departed: Vec::new(),
+            display_config: unbound_config::Config::default(),
+            output_managers: Vec::new(),
+            output_serial: 0,
+            announced_workspaces: (1, 0),
+            scanout_node: scanout.as_ref().map(|scanout| scanout.node),
             compositor_state: CompositorState::new::<State>(&handle),
             xdg_shell_state: XdgShellState::new_with_capabilities::<State>(
                 &handle,
@@ -330,7 +307,6 @@ impl Headless {
             shm_state: ShmState::new::<State>(&handle, []),
             dmabuf_state,
             _dmabuf_global: dmabuf_global,
-            output,
             _output_manager_state: OutputManagerState::new(),
             _presentation_state: PresentationState::new::<State>(&handle, MONOTONIC),
             layer_shell_state: WlrLayerShellState::new::<State>(&handle),
@@ -369,7 +345,6 @@ impl Headless {
             slide_back: None,
             watchdog: crate::watchdog::Watchdog::default(),
             desktop: crate::gesture::ShowDesktop::default(),
-            workspaces: crate::workspace::Workspaces::default(),
             overview: crate::overview::Overview::default(),
             gesture_route: None,
             active_app: String::new(),
@@ -389,11 +364,8 @@ impl Headless {
             preview: None,
             reduce_motion: false,
             needs_redraw: false,
-            pointer_location: (
-                f64::from(output_size.w) / 2.0,
-                f64::from(output_size.h) / 2.0,
-            )
-                .into(),
+            animated_at: None,
+            pointer_location: (center.w, center.h).into(),
             cursor_shown: false,
             cursor_status: CursorImageStatus::default_named(),
             cursor_theme: CursorTheme::builtin(),
@@ -402,6 +374,7 @@ impl Headless {
                 hotspot: Point::default(),
             },
             named_cursors: HashMap::new(),
+            cursor_scale: 1.0,
             held_shortcut_keys: Vec::new(),
             typed_at: None,
             input_devices: 0,
@@ -414,9 +387,8 @@ impl Headless {
             display,
             fences,
             state,
-            latched_feedback: Vec::new(),
-            latched_frame_callbacks: Vec::new(),
             session_clients: Vec::new(),
+            per_display_clients: Vec::new(),
             lock_screen: LockScreen::new(),
             force_quit: ForceQuit::new(),
             socket_name: None,
@@ -447,40 +419,77 @@ impl Headless {
     }
 
     pub fn take_redraw(&mut self) -> bool {
-        std::mem::take(&mut self.state.needs_redraw)
+        self.take_screen_redraw(0)
+    }
+
+    pub fn take_redraw_on(&mut self, output: &str) -> bool {
+        self.state
+            .screen_named(output)
+            .is_some_and(|screen| self.take_screen_redraw(screen))
+    }
+
+    fn take_screen_redraw(&mut self, screen: usize) -> bool {
+        if std::mem::take(&mut self.state.needs_redraw) {
+            for screen in &mut self.state.screens {
+                screen.redraw = true;
+            }
+        }
+        std::mem::take(&mut self.state.screens[screen].redraw)
     }
 
     pub fn latch(&mut self) {
-        self.state.latch_lock();
-        let unmapped = self
-            .state
+        self.latch_screen(0);
+    }
+
+    pub fn present(&mut self, vblank: Vblank) -> io::Result<()> {
+        self.present_screen(0, vblank)
+    }
+
+    pub fn latch_on(&mut self, output: &str) {
+        if let Some(screen) = self.state.screen_named(output) {
+            self.latch_screen(screen);
+        }
+    }
+
+    pub fn present_on(&mut self, output: &str, vblank: Vblank) -> io::Result<()> {
+        match self.state.screen_named(output) {
+            Some(screen) => self.present_screen(screen, vblank),
+            None => Ok(()),
+        }
+    }
+
+    fn latch_screen(&mut self, screen: usize) {
+        let state = &mut self.state;
+        state.latch_lock(screen);
+        let unmapped = state
             .windows
             .iter()
+            .filter(|window| state.screen_of(window) == screen)
             .filter(|window| {
-                window.size.is_none() || (self.state.overview.is_shown() && window.visible())
+                window.size.is_none() || (state.overview.is_shown() && window.visible())
             })
             .map(|window| window.surface().clone());
-        let roots = self
-            .state
-            .stack()
+        let roots = state
+            .stack(screen)
             .into_iter()
             .map(|(surface, _)| surface)
             .chain(unmapped)
             .collect::<Vec<_>>();
+        let latched = &mut state.screens[screen];
         for root in roots {
             with_surface_tree_downward(
                 &root,
                 (),
                 |_, _, _| TraversalAction::DoChildren(()),
                 |_, states, _| {
-                    self.latched_feedback.append(
+                    latched.latched_feedback.append(
                         &mut states
                             .cached_state
                             .get::<PresentationFeedbackCachedState>()
                             .current()
                             .callbacks,
                     );
-                    self.latched_frame_callbacks.append(
+                    latched.latched_frame_callbacks.append(
                         &mut states
                             .cached_state
                             .get::<SurfaceAttributes>()
@@ -493,53 +502,85 @@ impl Headless {
         }
     }
 
-    pub fn present(&mut self, vblank: Vblank) -> io::Result<()> {
-        for feedback in self.latched_feedback.drain(..) {
+    fn present_screen(&mut self, screen: usize, vblank: Vblank) -> io::Result<()> {
+        let presented = &mut self.state.screens[screen];
+        let refresh = presented.refresh();
+        for feedback in presented.latched_feedback.drain(..) {
             feedback.presented(
-                &self.state.output,
+                &presented.output,
                 vblank.time,
-                Refresh::fixed(self.state.refresh),
+                Refresh::fixed(refresh),
                 vblank.sequence,
                 Kind::Vsync,
             );
         }
         let millis = (vblank.time.as_millis() % (1 << 32)) as u32;
-        for callback in self.latched_frame_callbacks.drain(..) {
+        for callback in presented.latched_frame_callbacks.drain(..) {
             callback.done(millis);
         }
-        self.state.confirm_lock();
+        self.state.confirm_lock(screen);
         self.display.flush_clients()
     }
 
     pub fn output_size(&self) -> Size<i32, Physical> {
-        self.state.output_size
+        self.state.main_screen().mode_size()
     }
 
     pub fn output_scale(&self) -> f64 {
-        self.state.output_scale
+        self.state.main_screen().scale()
     }
 
     pub fn logical_output_size(&self) -> Size<i32, Logical> {
-        self.state.logical_output_size()
+        self.state.main_screen().rect().size
     }
 
     pub fn set_output_scale(&mut self, scale: f64) {
-        self.state.set_output_scale(scale);
+        let name = self.state.main_screen().name();
+        let settings = OutputSettings {
+            scale,
+            ..self.state.main_screen().settings
+        };
+        self.configure_output(&name, settings);
     }
 
     pub fn windows(&self) -> &[Window] {
         &self.state.windows
     }
 
-    pub fn render_elements(&mut self, renderer: &mut VulkanRenderer) -> Vec<OutputElement> {
+    pub fn render_elements(&mut self, renderer: &mut VulkanRenderer) -> Vec<ScreenElement> {
+        self.render_screen(renderer, 0)
+    }
+
+    pub fn render_elements_on(
+        &mut self,
+        renderer: &mut VulkanRenderer,
+        output: &str,
+    ) -> Vec<ScreenElement> {
+        match self.state.screen_named(output) {
+            Some(screen) => self.render_screen(renderer, screen),
+            None => Vec::new(),
+        }
+    }
+
+    fn render_screen(
+        &mut self,
+        renderer: &mut VulkanRenderer,
+        screen: usize,
+    ) -> Vec<ScreenElement> {
         self.state.paint_title_bars(renderer);
-        let (elements, drawn, icon) = self.compose(renderer, true);
-        self.state.remember_drag_icon(icon);
-        for window in &mut self.state.windows {
-            window.drawn = None;
+        let (elements, drawn, icon) = self.compose(renderer, screen, true);
+        if self.state.pointer_screen() == screen {
+            self.state.remember_drag_icon(icon);
+        }
+        for index in 0..self.state.windows.len() {
+            if self.state.screen_of(&self.state.windows[index]) == screen {
+                self.state.windows[index].drawn = None;
+            }
         }
         for (surface, drawn) in drawn {
-            if let Some(index) = self.state.window_index(&surface) {
+            if let Some(index) = self.state.window_index(&surface)
+                && self.state.screen_of(&self.state.windows[index]) == screen
+            {
                 self.state.windows[index].drawn = drawn;
             }
         }
@@ -549,25 +590,70 @@ impl Headless {
     pub(crate) fn scene_elements(
         &self,
         renderer: &mut VulkanRenderer,
+        screen: usize,
         with_cursor: bool,
-    ) -> Vec<OutputElement> {
-        self.compose(renderer, with_cursor).0
+    ) -> Vec<ScreenElement> {
+        self.compose(renderer, screen, with_cursor).0
     }
 
-    fn compose(&self, renderer: &mut VulkanRenderer, with_cursor: bool) -> Composed {
+    fn compose(&self, renderer: &mut VulkanRenderer, screen: usize, with_cursor: bool) -> Composed {
+        if let Some(source) = self.state.screens[screen]
+            .mirror
+            .as_deref()
+            .and_then(|source| self.state.screen_named(source))
+        {
+            return self.compose_mirror(renderer, screen, source, with_cursor);
+        }
+        let scale = self.state.screens[screen].scale();
+        let (elements, drawn, icon) = self.compose_at(renderer, screen, scale, with_cursor);
+        let origin = self.state.screens[screen].origin_in_pixels(scale);
+        (relocated(elements, Point::default() - origin), drawn, icon)
+    }
+
+    fn compose_mirror(
+        &self,
+        renderer: &mut VulkanRenderer,
+        screen: usize,
+        source: usize,
+        with_cursor: bool,
+    ) -> Composed {
+        let mirror = &self.state.screens[screen];
+        let scale = mirror.scale();
+        let frame = mirror.settings.transform.transform_size(mirror.mode_size());
+        let shown = self
+            .state
+            .screen_rect(source)
+            .size
+            .to_f64()
+            .to_physical(scale)
+            .to_i32_round::<i32>();
+        let inset =
+            Point::<i32, Physical>::from(((frame.w - shown.w) / 2, (frame.h - shown.h) / 2));
+        let (elements, _, _) = self.compose_at(renderer, source, scale, with_cursor);
+        let origin = self.state.screens[source].origin_in_pixels(scale);
+        (relocated(elements, inset - origin), Vec::new(), None)
+    }
+
+    fn compose_at(
+        &self,
+        renderer: &mut VulkanRenderer,
+        screen: usize,
+        scale: f64,
+        with_cursor: bool,
+    ) -> Composed<OutputElement> {
         let mut drawn = Vec::new();
-        let (mut elements, icon): (Vec<OutputElement>, _) = if with_cursor {
-            let (dragged, icon) = self.state.drag_icon_elements(renderer);
-            let mut elements = self.cursor_elements(renderer);
+        let pointer_here = self.state.pointer_screen() == screen;
+        let (mut elements, icon): (Vec<OutputElement>, _) = if with_cursor && pointer_here {
+            let (dragged, icon) = self.state.drag_icon_elements(renderer, scale);
+            let mut elements = self.cursor_elements(renderer, scale);
             elements.extend(dragged);
             (elements, icon)
         } else {
             (Vec::new(), None)
         };
-        elements.extend(self.state.source_hud_element(renderer));
-        let scale = self.state.output_scale;
+        elements.extend(self.state.source_hud_element(renderer, screen, scale));
         let key = self.state.key_window();
-        for placed in self.state.scene(true) {
+        for placed in self.state.scene(true, screen) {
             match placed {
                 Placed::Surface(surface, location) => {
                     elements.extend(render_elements_from_surface_tree(
@@ -602,8 +688,8 @@ impl Headless {
                     }
                 }
                 Placed::Closing(closing) => elements.extend(closing.render_elements(scale)),
-                Placed::Overview => {
-                    elements.extend(self.state.overview_elements(renderer, scale));
+                Placed::Overview(screen) => {
+                    elements.extend(self.state.overview_elements(renderer, screen, scale));
                 }
             }
         }
@@ -612,9 +698,8 @@ impl Headless {
     }
 
     pub fn popup_count(&self) -> usize {
-        self.state
-            .stack()
-            .iter()
+        (0..self.state.screens.len())
+            .flat_map(|screen| self.state.stack(screen))
             .filter(|(surface, _)| {
                 self.state.popups.find_popup(surface).is_some()
                     && with_renderer_surface_state(surface, |state| state.buffer().is_some())
@@ -632,15 +717,14 @@ impl Headless {
     }
 
     pub fn usable_area(&self) -> Rect {
-        self.state.usable_area()
+        self.state.usable_area(0)
     }
 
-    fn cursor_elements(&self, renderer: &mut VulkanRenderer) -> Vec<OutputElement> {
+    fn cursor_elements(&self, renderer: &mut VulkanRenderer, scale: f64) -> Vec<OutputElement> {
         let state = &self.state;
         if !state.cursor_shown {
             return Vec::new();
         }
-        let scale = state.output_scale;
         let at: Point<i32, Physical> = state.pointer_location.to_physical(scale).to_i32_round();
         let busy = CursorImageStatus::Named(CursorIcon::Wait);
         let over_hung_app = state
@@ -758,11 +842,21 @@ fn shm_size(buffer: &WlBuffer) -> Option<Size<i32, Physical>> {
 
 impl State {
     pub(crate) fn load_named_cursor(&mut self, icon: CursorIcon) {
+        let scale = self.screens[self.pointer_screen()].scale();
+        if scale != self.cursor_scale {
+            self.cursor_scale = scale;
+            self.named_cursors.clear();
+        }
         let theme = &self.cursor_theme;
-        let scale = self.output_scale;
         self.named_cursors
             .entry(icon)
             .or_insert_with(|| theme.load(icon, scale));
+    }
+
+    pub(crate) fn reload_cursor(&mut self) {
+        if let CursorImageStatus::Named(icon) = self.cursor_status {
+            self.load_named_cursor(icon);
+        }
     }
 
     pub(crate) fn use_cursor_theme(&mut self, theme: CursorTheme) {
@@ -837,6 +931,15 @@ impl State {
                     .is_some_and(|client| owner.is_none_or(|owner| &client == owner))
             })
             .cloned()
+    }
+
+    pub(crate) fn frontmost_on(&self, screen: usize) -> Option<WlSurface> {
+        self.windows
+            .iter()
+            .rev()
+            .filter(|window| self.present(window) && self.screen_of(window) == screen)
+            .map(|window| window.toplevel.wl_surface().clone())
+            .next()
     }
 
     pub(crate) fn refocus_after_losing(&mut self, lost: &WlSurface) {
@@ -919,90 +1022,71 @@ pub(crate) fn centered(area: Rect, window: Size<i32, Logical>) -> Point<i32, Log
 }
 
 impl State {
-    pub(crate) fn usable_area(&self) -> Rect {
-        let zone = layer_map_for_output(&self.output).non_exclusive_zone();
-        Rect {
-            location: (zone.loc.x, zone.loc.y).into(),
-            size: (zone.size.w, zone.size.h).into(),
-        }
-    }
-
-    pub(crate) fn logical_output_size(&self) -> Size<i32, Logical> {
-        self.output_size
-            .to_f64()
-            .to_logical(self.output_scale)
-            .to_i32_round()
-    }
-
-    pub(crate) fn set_output_scale(&mut self, scale: f64) {
-        let ratio = self.output_scale / scale;
-        self.output_scale = scale;
-        self.output
-            .change_current_state(None, None, Some(OutputScale::Fractional(scale)), None);
-        let size = self.logical_output_size().to_f64();
-        self.pointer_location = (
-            (self.pointer_location.x * ratio).clamp(0.0, size.w - 1.0),
-            (self.pointer_location.y * ratio).clamp(0.0, size.h - 1.0),
-        )
-            .into();
-        self.named_cursors.clear();
-        if let CursorImageStatus::Named(icon) = self.cursor_status {
-            self.load_named_cursor(icon);
-        }
-        layer_map_for_output(&self.output).arrange();
-        for (surface, _) in self.stack() {
-            send_preferred_scale(&surface, scale);
-        }
-        self.needs_redraw = true;
-    }
-
-    pub(crate) fn placed_layers(&self, layer: Layer) -> Vec<(WlSurface, Point<i32, Logical>)> {
-        let map = layer_map_for_output(&self.output);
+    pub(crate) fn placed_layers(
+        &self,
+        screen: usize,
+        layer: Layer,
+    ) -> Vec<(WlSurface, Point<i32, Logical>)> {
+        let origin = self.screens[screen].settings.position;
+        let map = layer_map_for_output(&self.screens[screen].output);
         map.layers_on(layer)
             .rev()
             .filter_map(|mapped| {
                 let geometry = map.layer_geometry(mapped)?;
-                Some((
-                    mapped.wl_surface().clone(),
-                    (geometry.loc.x, geometry.loc.y).into(),
-                ))
+                Some((mapped.wl_surface().clone(), origin + geometry.loc))
             })
             .collect()
     }
 
-    pub(crate) fn layer_origin(&self, surface: &WlSurface) -> Option<Point<i32, Logical>> {
-        let map = layer_map_for_output(&self.output);
-        let layer = map.layer_for_surface(surface, WindowSurfaceType::TOPLEVEL)?;
-        let geometry = map.layer_geometry(layer)?;
-        Some((geometry.loc.x, geometry.loc.y).into())
+    pub(crate) fn layer_screen(&self, surface: &WlSurface) -> Option<usize> {
+        self.screens.iter().position(|screen| {
+            layer_map_for_output(&screen.output)
+                .layer_for_surface(surface, WindowSurfaceType::TOPLEVEL)
+                .is_some()
+        })
     }
 
-    pub(crate) fn stack(&self) -> Vec<(WlSurface, Point<i32, Logical>)> {
-        self.scene(false)
+    pub(crate) fn layer_origin(&self, surface: &WlSurface) -> Option<Point<i32, Logical>> {
+        let screen = &self.screens[self.layer_screen(surface)?];
+        let map = layer_map_for_output(&screen.output);
+        let layer = map.layer_for_surface(surface, WindowSurfaceType::TOPLEVEL)?;
+        let geometry = map.layer_geometry(layer)?;
+        Some(screen.settings.position + geometry.loc)
+    }
+
+    pub(crate) fn stack(&self, screen: usize) -> Vec<(WlSurface, Point<i32, Logical>)> {
+        self.scene(false, screen)
             .into_iter()
             .filter_map(|placed| match placed {
                 Placed::Surface(surface, origin) => Some((surface, origin)),
                 Placed::Window(window) => Some((window.surface().clone(), window.surface_origin())),
-                Placed::Closing(_) | Placed::Overview => None,
+                Placed::Closing(_) | Placed::Overview(_) => None,
             })
             .collect()
     }
 
-    pub(crate) fn scene(&self, rendered: bool) -> Vec<Placed<'_>> {
+    pub(crate) fn scene(&self, rendered: bool, screen: usize) -> Vec<Placed<'_>> {
         if self.is_locked() {
-            return self
-                .locked_stack()
+            let locked = self.locked_stack(screen);
+            let wallpaper = if rendered && locked.is_empty() && self.lock_shown() {
+                self.placed_layers(screen, Layer::Background)
+            } else {
+                Vec::new()
+            };
+            return locked
                 .into_iter()
+                .chain(wallpaper)
                 .map(|(surface, origin)| Placed::Surface(surface, origin))
                 .collect();
         }
+
         let popups = |surface: &WlSurface, geometry_origin| {
             self.popup_surfaces(surface, geometry_origin)
                 .into_iter()
                 .map(|(surface, origin)| Placed::Surface(surface, origin))
         };
         let layers = |layer: Layer| {
-            self.placed_layers(layer)
+            self.placed_layers(screen, layer)
                 .into_iter()
                 .flat_map(|(surface, at)| {
                     popups(&surface, at).chain([Placed::Surface(surface, at)])
@@ -1013,6 +1097,9 @@ impl State {
             .windows
             .iter()
             .rev()
+            .filter(|window| {
+                self.screen_of(window) == screen || (rendered && self.dragged_onto(window, screen))
+            })
             .filter(|window| {
                 if rendered {
                     window.rendered() && self.on_view(window)
@@ -1028,19 +1115,20 @@ impl State {
         });
         let (leaving, rest): (Vec<&Window>, Vec<&Window>) =
             rest.into_iter().partition(|window| window.is_minimized());
+        let name = self.screens[screen].name();
         [
             layers(Layer::Overlay),
             self.window_entries(&leaving),
             self.window_entries(&front),
             layers(Layer::Top),
             if rendered && self.overview.is_shown() {
-                vec![Placed::Overview]
+                vec![Placed::Overview(screen)]
             } else {
                 Vec::new()
             },
             self.closing
                 .iter()
-                .filter(|_| rendered)
+                .filter(|closing| rendered && closing.output == name)
                 .map(Placed::Closing)
                 .collect(),
             self.window_entries(&rest),
@@ -1063,7 +1151,10 @@ impl State {
     }
 
     fn commit_layer(&mut self, surface: &WlSurface) -> bool {
-        let mut map = layer_map_for_output(&self.output);
+        let Some(screen) = self.layer_screen(surface) else {
+            return false;
+        };
+        let mut map = layer_map_for_output(&self.screens[screen].output);
         let Some(layer) = map
             .layer_for_surface(surface, WindowSurfaceType::TOPLEVEL)
             .cloned()
@@ -1189,6 +1280,7 @@ impl State {
             {
                 self.pending_activation = None;
                 self.focus(Some(surface.clone()));
+                self.sync_surface_outputs();
             }
             (false, true) => {
                 if self
@@ -1198,6 +1290,7 @@ impl State {
                     self.request_attention(shell::toplevel_names(surface).1);
                 }
                 self.place_behind_frontmost(surface);
+                self.sync_surface_outputs();
             }
             (true, false) => {
                 if let Some(index) = self.window_index(surface) {
@@ -1255,7 +1348,7 @@ impl XdgShellHandler for State {
     }
 
     fn new_toplevel(&mut self, toplevel: ToplevelSurface) {
-        let workspace = self.workspaces.active_id();
+        let workspace = self.screens[self.pointer_screen()].workspaces.active_id();
         self.windows.push(Window::new(toplevel, workspace));
     }
 
@@ -1424,13 +1517,21 @@ impl WlrLayerShellHandler for State {
     fn new_layer_surface(
         &mut self,
         surface: LayerSurface,
-        _output: Option<WlOutput>,
+        output: Option<WlOutput>,
         _layer: Layer,
         namespace: String,
     ) {
+        let screen = output
+            .as_ref()
+            .and_then(|output| {
+                self.screens
+                    .iter()
+                    .position(|screen| screen.output.owns(output))
+            })
+            .unwrap_or_else(|| self.screen_for_layer(&namespace));
         let spans_the_edge = namespace == MENU_BAR_NAMESPACE;
         let mapped = MappedLayer::new(surface.clone(), namespace);
-        let mut map = layer_map_for_output(&self.output);
+        let mut map = layer_map_for_output(&self.screens[screen].output);
         let arranged_after: Vec<MappedLayer> = if spans_the_edge {
             map.layers().cloned().collect()
         } else {
@@ -1450,14 +1551,15 @@ impl WlrLayerShellHandler for State {
     }
 
     fn layer_destroyed(&mut self, surface: LayerSurface) {
-        let mut map = layer_map_for_output(&self.output);
-        let mapped = map
-            .layer_for_surface(surface.wl_surface(), WindowSurfaceType::TOPLEVEL)
-            .cloned();
-        if let Some(mapped) = mapped {
-            map.unmap_layer(&mapped);
+        if let Some(screen) = self.layer_screen(surface.wl_surface()) {
+            let mut map = layer_map_for_output(&self.screens[screen].output);
+            let mapped = map
+                .layer_for_surface(surface.wl_surface(), WindowSurfaceType::TOPLEVEL)
+                .cloned();
+            if let Some(mapped) = mapped {
+                map.unmap_layer(&mapped);
+            }
         }
-        drop(map);
         self.needs_redraw = true;
         self.follow_exclusive_layer(surface.wl_surface(), None);
     }
@@ -1516,6 +1618,7 @@ impl XdgActivationHandler for State {
 
 impl FractionalScaleHandler for State {
     fn new_fractional_scale(&mut self, surface: WlSurface) {
-        send_preferred_scale(&surface, self.output_scale);
+        let scale = self.screens[self.screen_of_surface(&surface)].scale();
+        send_preferred_scale(&surface, scale);
     }
 }

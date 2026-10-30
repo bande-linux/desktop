@@ -24,6 +24,7 @@ The architecture is split by subject:
 | [`behaviour.md`](behaviour.md) | recorded behaviour decisions and their macOS precedents |
 | [`ci.md`](ci.md) | CI runners, jobs and the verification funnel |
 | [`packaging.md`](packaging.md) | Debian packages and the meta-package |
+| [`performance.md`](performance.md) | measured memory, CPU and size of the shell, and how to measure them |
 
 ## Component map
 
@@ -194,10 +195,17 @@ control writes to it, and it can be edited by hand while the session runs.
       light "/usr/share/backgrounds/unbound/day.jpg"
       dark "~/Pictures/night.jpg"
   }
-  output "eDP-1" {              // once per connector
-      scale 1.5                 // 1.0 to 2.0 (100%-200%)
-      refresh-rate 120          // 60 to 240 Hz
+  display "Dell DELL U2720Q 7ZD5K53" {  // once per display, named by its EDID maker, model, serial
+      resolution 3840 2160      // one of the display's modes; unset means its preferred one
+      refresh-rate 120          // 60 to 240 Hz; the closest the resolution offers
+      scale 1.5                 // 1.0 to 3.0 (100%-300%); unset means automatic
+      rotation 90               // 0, 90, 180 or 270
       variable-refresh-rate #true
+  }
+  arrangement {                 // once per set of displays connected together
+      display "BOE NE135A1M" x=0 y=0 main=#true
+      display "Dell DELL U2720Q 7ZD5K53" x=1504 y=-300
+      display "LG HDR 4K 104NTAB7K123" mirror="BOE NE135A1M"
   }
   ```
   The values shown for `appearance`, `dock`, `idle`, `keyboard` (except `input-sources`), `trackpad` and `mouse` are the defaults. The
@@ -211,15 +219,18 @@ control writes to it, and it can be edited by hand while the session runs.
   `suspend-after` is unset and sleep follows the display (writing true removes the explicit
   value), `KeyRepeatRate` per second and
   `KeyRepeatDelay` in milliseconds as `u`, `InputSources` as `as` of layout codes (the system layouts while unset; writing an empty list is rejected), `CapsLock`, `TrackpadTapToClick`, `TrackpadNaturalScrolling`, `TrackpadSpeed` (`d`), `TrackpadSecondaryClick`, `TrackpadDisableWhileTyping`, `MouseNaturalScrolling` and `MouseSpeed` (`d`), `WallpaperLight` and `WallpaperDark` as paths, empty
-  meaning unset, `Outputs` as `a{sa{sv}}`). It watches the
+  meaning unset, `Displays` as `a{sa{sv}}` and `Arrangements` as `aa(siibs)`: name, x, y, main
+  and the mirrored display's name, empty when it mirrors nothing). It watches the
   directory and reloads when the file is closed after writing or renamed into place;
   `PropertiesChanged` lists only the properties that changed. The `unbound-config` daemon runs
   the service for the session and posts an invalid file as a notification through
   `unbound-notify` with the line, column and message and an "Open in Editor" action
   (`xdg-open` on the file); a later error replaces it and a valid file closes it. The
   compositor does not draw a toast of its own. The scalar properties are writable and
-  `SetOutput(s connector, a{sv} settings)` replaces one output's settings (an empty dictionary
-  removes it): a write edits only the affected node of the file, keeping the user's comments
+  `SetDisplay(s name, a{sv} settings)` replaces one display's settings (an empty dictionary
+  removes it) and `SetArrangement(a(siibs))` the arrangement of the same set of displays: a
+  write edits only the affected node of the file, keeping the user's comments
+
   and layout, validates the whole result, replaces the file by rename and applies it, so the
   file stays the single source of truth. A value the schema rejects fails with `InvalidArgs`,
   and a file that is invalid on disk is never overwritten.

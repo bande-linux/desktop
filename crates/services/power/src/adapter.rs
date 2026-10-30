@@ -96,10 +96,22 @@ pub fn follow(system: &Connection, session: &Connection) -> zbus::Result<()> {
     let low_power = config.receive_low_power_on_battery_changed();
     let lid = config.receive_lid_on_power_changed();
     let notify = changed.clone();
-    thread::spawn(move || battery.for_each(|_| drop(notify.send(()))));
+    thread::spawn(move || {
+        battery.for_each(|_| {
+            let _ = notify.send(());
+        })
+    });
     let notify = changed.clone();
-    thread::spawn(move || low_power.for_each(|_| drop(notify.send(()))));
-    thread::spawn(move || lid.for_each(|_| drop(changed.send(()))));
+    thread::spawn(move || {
+        low_power.for_each(|_| {
+            let _ = notify.send(());
+        })
+    });
+    thread::spawn(move || {
+        lid.for_each(|_| {
+            let _ = changed.send(());
+        })
+    });
     let system = system.clone();
     thread::spawn(move || {
         let mut policy = AdapterPolicy::default();

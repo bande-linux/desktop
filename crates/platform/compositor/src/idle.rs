@@ -52,7 +52,9 @@ impl State {
     }
 
     fn inhibited(&self) -> bool {
-        let shown = self.stack();
+        let shown: Vec<_> = (0..self.screens.len())
+            .flat_map(|screen| self.stack(screen))
+            .collect();
         self.idle.inhibitors.iter().any(|surface| {
             let root = Self::root_of_surface(surface);
             surface.is_alive() && shown.iter().any(|(visible, _)| *visible == root)

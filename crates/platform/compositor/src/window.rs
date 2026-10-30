@@ -245,11 +245,12 @@ impl State {
     }
 
     pub(crate) fn commit_window(&mut self, surface: &WlSurface) {
-        let area = self.usable_area();
-        let output = self.output_rect();
         let Some(index) = self.window_index(surface) else {
             return;
         };
+        let screen = self.screen_of(&self.windows[index]);
+        let area = self.usable_area(screen);
+        let output = self.screen_rect(screen);
         let siblings = if self.windows[index].size.is_none() {
             self.sibling_locations(index)
         } else {
@@ -301,13 +302,6 @@ impl State {
             self.withdraw_toplevel(&surface);
         }
         self.after_window_commit(&surface, mapped, size.is_some());
-    }
-
-    pub(crate) fn output_rect(&self) -> Rect {
-        Rect {
-            location: Point::default(),
-            size: self.logical_output_size(),
-        }
     }
 
     pub(crate) fn sync_activated(&mut self) {
@@ -390,8 +384,8 @@ impl State {
     }
 
     pub(crate) fn maximize(&mut self, surface: &WlSurface) {
-        let area = self.usable_area();
         if let Some(index) = self.window_index(surface) {
+            let area = self.usable_area(self.screen_of(&self.windows[index]));
             self.place(index, xdg_toplevel::State::Maximized, Some(area));
         }
     }
@@ -415,8 +409,8 @@ impl State {
     }
 
     pub(crate) fn fullscreen(&mut self, surface: &WlSurface) {
-        let output = self.output_rect();
         if let Some(index) = self.window_index(surface) {
+            let output = self.screen_rect(self.screen_of(&self.windows[index]));
             let was_maximized = self.windows[index].has_state(xdg_toplevel::State::Maximized);
             self.place(index, xdg_toplevel::State::Fullscreen, Some(output));
             self.windows[index].resize = None;
@@ -440,7 +434,7 @@ impl State {
             .toplevel
             .with_pending_state(|pending| pending.states.contains(xdg_toplevel::State::Maximized));
         if stays_maximized {
-            let area = self.usable_area();
+            let area = self.usable_area(self.screen_of(&self.windows[index]));
             self.place(index, xdg_toplevel::State::Maximized, Some(area));
         } else {
             self.place(index, xdg_toplevel::State::Fullscreen, None);
@@ -548,13 +542,27 @@ impl State {
     }
 
     pub(crate) fn move_window_to(&mut self, surface: &WlSurface, location: Point<i32, Logical>) {
-        let top = self.usable_area().location.y;
-        if let Some(index) = self.window_index(surface) {
-            let window = &mut self.windows[index];
-            window.location = (location.x, location.y.max(top)).into();
-            window.pending_location = None;
-            self.needs_redraw = true;
+        let Some(index) = self.window_index(surface) else {
+            return;
+        };
+        let screen = self.pointer_screen();
+        if screen != self.screen_of(&self.windows[index])
+            && !self.on_full_screen_space(&self.windows[index])
+        {
+            let left = self.windows[index].workspace;
+            self.windows[index].workspace = self.screens[screen].workspaces.active_id();
+            self.window_left_workspace(left);
+            self.sync_surface_outputs();
+            self.announce_workspaces();
         }
+        let top = self
+            .usable_area(self.screen_of(&self.windows[index]))
+            .location
+            .y;
+        let window = &mut self.windows[index];
+        window.location = (location.x, location.y.max(top)).into();
+        window.pending_location = None;
+        self.needs_redraw = true;
     }
 
     pub(crate) fn begin_move(

@@ -1,4 +1,5 @@
 mod about;
+mod arrangement;
 mod battery;
 mod client;
 mod clock;

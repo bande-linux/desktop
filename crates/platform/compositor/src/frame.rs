@@ -162,14 +162,15 @@ fn surface_at(
 
 impl State {
     pub(crate) fn pointer_target(&self, location: Point<f64, Logical>) -> Option<Target> {
-        self.scene(false)
+        let screen = self.screen_at(location)?;
+        self.scene(false, screen)
             .into_iter()
             .find_map(|placed| match placed {
                 Placed::Surface(surface, origin) => surface_at(&surface, origin, location),
                 Placed::Window(window) => zone_at(window, location)
                     .map(|zone| Target::Frame(window.surface().clone(), zone))
                     .or_else(|| surface_at(window.surface(), window.surface_origin(), location)),
-                Placed::Closing(_) | Placed::Overview => None,
+                Placed::Closing(_) | Placed::Overview(_) => None,
             })
     }
 
@@ -295,12 +296,16 @@ impl State {
 
     pub(crate) fn paint_title_bars(&mut self, renderer: &mut VulkanRenderer) {
         let key = self.key_window();
-        let scale = self.output_scale;
+        let scales: Vec<f64> = self
+            .windows
+            .iter()
+            .map(|window| self.screens[self.screen_of(window)].scale())
+            .collect();
         let scheme = self.decorations.scheme;
         let palette = Palette::for_scheme(scheme);
         let context = renderer.context_id();
         let decorations = &mut self.decorations;
-        for window in &mut self.windows {
+        for (window, scale) in self.windows.iter_mut().zip(scales) {
             let bar = window.title_bar_height();
             let Some(rect) = window.geometry().filter(|_| bar > 0) else {
                 window.frame.painted = None;
@@ -403,21 +408,24 @@ impl Decorations {
 impl Window {
     pub(crate) fn title_bar_piece(&self, scale: f64) -> Option<Piece> {
         let painted = self.frame.painted.as_ref()?;
-        if self.title_bar_height() == 0 {
+        let bar = self.title_bar_height();
+        if bar == 0 {
             return None;
         }
+        let texture = (
+            f64::from(painted.texture.width()),
+            f64::from(painted.texture.height()),
+        );
         let size = (
-            painted.texture.width() as i32,
-            painted.texture.height() as i32,
+            unbound_graphics::pixels(painted.look.width.unsigned_abs(), scale) as i32,
+            unbound_graphics::pixels(bar.unsigned_abs(), scale) as i32,
         );
         let location: Point<i32, Physical> =
             self.location.to_f64().to_physical(scale).to_i32_round();
         Some(Piece {
             id: painted.id.clone(),
             texture: painted.texture.clone(),
-            src: Rectangle::<f64, BufferCoords>::from_size(
-                (f64::from(size.0), f64::from(size.1)).into(),
-            ),
+            src: Rectangle::<f64, BufferCoords>::from_size(texture.into()),
             geometry: Rectangle::new(location, size.into()),
         })
     }

@@ -253,7 +253,7 @@ fn icons_are_found_by_size_through_inherited_themes() {
 }
 
 #[test]
-fn the_unbound_theme_draws_documents_and_the_trash_and_adwaita_the_rest() {
+fn the_unbound_theme_draws_its_own_icons_and_adwaita_the_rest() {
     let system = TempDir::new().expect("data dir");
     let adwaita = system.path().join("icons/Adwaita");
     write(
@@ -262,27 +262,45 @@ fn the_unbound_theme_draws_documents_and_the_trash_and_adwaita_the_rest() {
             .replace("48x48/apps,scalable/apps", "scalable/apps")
             .replace("Name=Hicolor", "Name=Adwaita"),
     );
-    for name in ["folder", "user-trash", "text-x-generic"] {
+    for name in ["folder", "user-trash", "text-x-generic", "computer"] {
         write(&adwaita.join(format!("scalable/apps/{name}.svg")), SQUARE);
     }
     let shipped = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../data");
     let dirs = vec![system.path().to_path_buf(), shipped.clone()];
-    let ours = shipped.join("icons/Unbound/scalable");
+    let ours = shipped.join("icons/Unbound");
 
-    for (name, kind) in [
-        ("user-trash", "places"),
-        ("user-trash-full", "places"),
-        ("text-x-generic", "mimetypes"),
-        ("application-x-generic", "mimetypes"),
+    for (name, directory) in [
+        ("folder", "scalable/places"),
+        ("user-trash", "scalable/places"),
+        ("user-trash-full", "scalable/places"),
+        ("text-x-generic", "scalable/mimetypes"),
+        ("application-pdf", "scalable/mimetypes"),
+        ("org.unbound.Files", "scalable/apps"),
+        ("org.gnome.Papers", "scalable/apps"),
+        ("network-wireless-signal-good-symbolic", "symbolic/status"),
+        ("go-previous-symbolic", "symbolic/actions"),
     ] {
         assert_eq!(
             find_icon(name, 32, &ICON_THEMES, &dirs),
-            Some(ours.join(format!("{kind}/{name}.svg")))
+            Some(ours.join(format!("{directory}/{name}.svg")))
         );
     }
     assert_eq!(
-        find_icon("folder", 32, &ICON_THEMES, &dirs),
-        Some(adwaita.join("scalable/apps/folder.svg"))
+        find_icon("computer", 32, &ICON_THEMES, &dirs),
+        Some(adwaita.join("scalable/apps/computer.svg"))
+    );
+    assert_eq!(
+        find_icon("folder", 32, &["Unbound-Teal", "Unbound", "Adwaita"], &dirs),
+        Some(shipped.join("icons/Unbound-Teal/scalable/places/folder.svg"))
+    );
+    assert_eq!(
+        find_icon(
+            "user-trash",
+            32,
+            &["Unbound-Teal", "Unbound", "Adwaita"],
+            &dirs
+        ),
+        Some(ours.join("scalable/places/user-trash.svg"))
     );
 }
 

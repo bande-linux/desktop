@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::io;
 
 use smithay::backend::allocator::Fourcc;
@@ -32,13 +33,14 @@ pub struct Snapshot {
 struct Output {
     size: Size<i32, Physical>,
     scale: f64,
+    transform: Transform,
     target: OffscreenTarget,
     damage: OutputDamageTracker,
 }
 
 pub struct Renderer {
     vulkan: VulkanRenderer,
-    output: Option<Output>,
+    outputs: HashMap<String, Output>,
 }
 
 pub(crate) fn rendering_error(error: DamageError<RenderError>) -> RenderError {
@@ -52,7 +54,7 @@ impl Renderer {
     pub fn new() -> Result<Self, RenderError> {
         Ok(Self {
             vulkan: VulkanRenderer::new()?,
-            output: None,
+            outputs: HashMap::new(),
         })
     }
 
@@ -61,10 +63,29 @@ impl Renderer {
     }
 
     pub fn render(&mut self, compositor: &mut Headless) -> Result<FrameStats, RenderError> {
-        let size = compositor.output_size();
-        let scale = compositor.output_scale();
-        let output = match self.output.take() {
-            Some(output) if output.size == size && output.scale == scale => Some(output),
+        let main = compositor.main_output();
+        self.render_output(compositor, &main)
+    }
+
+    pub fn render_output(
+        &mut self,
+        compositor: &mut Headless,
+        name: &str,
+    ) -> Result<FrameStats, RenderError> {
+        let Some(settings) = compositor.output_settings(name) else {
+            return Err(RenderError::NothingRendered);
+        };
+        let (size, scale, transform) = (settings.mode.size, settings.scale, settings.transform);
+        self.outputs
+            .retain(|known, _| compositor.outputs().iter().any(|output| output == known));
+        let output = match self.outputs.remove(name) {
+            Some(output)
+                if output.size == size
+                    && output.scale == scale
+                    && output.transform == transform =>
+            {
+                Some(output)
+            }
             _ => None,
         };
         let age = usize::from(output.is_some());
@@ -73,13 +94,14 @@ impl Renderer {
             None => Output {
                 size,
                 scale,
+                transform,
                 target: self
                     .vulkan
                     .create_buffer(Fourcc::Abgr8888, Size::from((size.w, size.h)))?,
-                damage: OutputDamageTracker::new(size, scale, Transform::Normal),
+                damage: OutputDamageTracker::new(size, scale, transform),
             },
         };
-        let elements = compositor.render_elements(&mut self.vulkan);
+        let elements = compositor.render_elements_on(&mut self.vulkan, name);
         let rendered = self
             .vulkan
             .bind(&mut output.target)
@@ -106,9 +128,9 @@ impl Renderer {
                     })
                     .map_err(rendering_error)
             });
-        self.output = Some(output);
+        self.outputs.insert(name.to_owned(), output);
         let counters = self.vulkan.take_counters();
-        compositor.copy_captures(&mut self.vulkan);
+        compositor.copy_captures(&mut self.vulkan, name);
         self.vulkan.take_counters();
         Ok(FrameStats {
             uploaded_bytes: counters.uploaded_bytes,
@@ -118,9 +140,13 @@ impl Renderer {
     }
 
     pub fn snapshot(&mut self, compositor: &Headless) -> Result<Snapshot, RenderError> {
-        let output = self.output.as_ref().ok_or(RenderError::NothingRendered)?;
+        self.snapshot_output(&compositor.main_output())
+    }
+
+    pub fn snapshot_output(&mut self, name: &str) -> Result<Snapshot, RenderError> {
+        let output = self.outputs.get(name).ok_or(RenderError::NothingRendered)?;
         Ok(Snapshot {
-            size: compositor.output_size(),
+            size: output.size,
             rgba: self.vulkan.read_target(&output.target)?,
         })
     }
@@ -129,8 +155,12 @@ impl Renderer {
 impl FrameOutput for Renderer {
     type Error = RenderError;
 
-    fn submit(&mut self, compositor: &mut Headless) -> Result<Submission, RenderError> {
-        self.render(compositor)?;
+    fn submit(
+        &mut self,
+        compositor: &mut Headless,
+        output: &str,
+    ) -> Result<Submission, RenderError> {
+        self.render_output(compositor, output)?;
         Ok(Submission::AtVblank)
     }
 }

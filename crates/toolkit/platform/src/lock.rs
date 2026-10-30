@@ -1,4 +1,4 @@
-use wayland_client::protocol::wl_output::WlOutput;
+use wayland_client::protocol::wl_output::{self, WlOutput};
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Connection, Dispatch, EventQueue, QueueHandle, delegate_noop};
 use wayland_protocols::ext::session_lock::v1::client::ext_session_lock_manager_v1::ExtSessionLockManagerV1;
@@ -11,12 +11,49 @@ use wayland_protocols::ext::session_lock::v1::client::ext_session_lock_v1::{
 
 use crate::window::{State, WindowError, WindowEvent};
 
+const OUTPUT_VARIABLE: &str = "UNBOUND_OUTPUT";
+
 #[derive(Default)]
 pub(crate) struct SessionLock {
     pub(crate) manager: Option<ExtSessionLockManagerV1>,
     pub(crate) output: Option<WlOutput>,
+    pub(crate) named: Vec<(WlOutput, String)>,
     locked: bool,
     refused: bool,
+}
+
+pub(crate) struct NamedOutput;
+
+pub(crate) fn wanted_output() -> Option<String> {
+    std::env::var(OUTPUT_VARIABLE)
+        .ok()
+        .filter(|name| !name.is_empty())
+}
+
+impl SessionLock {
+    pub(crate) fn wanted(&self) -> Option<WlOutput> {
+        let wanted = wanted_output()?;
+        self.named
+            .iter()
+            .find(|(_, name)| *name == wanted)
+            .map(|(output, _)| output.clone())
+    }
+}
+
+impl Dispatch<WlOutput, NamedOutput> for State {
+    fn event(
+        state: &mut Self,
+        output: &WlOutput,
+        event: wl_output::Event,
+        _: &NamedOutput,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        if let wl_output::Event::Name { name } = event {
+            state.lock.named.retain(|(known, _)| known != output);
+            state.lock.named.push((output.clone(), name));
+        }
+    }
 }
 
 pub(crate) struct Locked {
@@ -38,9 +75,10 @@ impl Locked {
             .ok_or(WindowError::Missing("ext_session_lock_manager_v1"))?;
         let output = state
             .lock
-            .output
-            .clone()
+            .wanted()
+            .or_else(|| state.lock.output.clone())
             .ok_or(WindowError::Missing("wl_output"))?;
+
         let lock = manager.lock(&handle, ());
         while !state.lock.locked {
             if state.lock.refused {

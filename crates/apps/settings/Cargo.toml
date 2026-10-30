@@ -25,6 +25,7 @@ unbound-toolkit.workspace = true
 unbound-wallpaper.workspace = true
 unbound-xdg.workspace = true
 wayland-client.workspace = true
+wayland-protocols-wlr.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]

@@ -141,16 +141,22 @@ impl State {
         if self.is_locked() || self.exclusive_layer.is_some() {
             return;
         }
-        let surface = {
-            let map = layer_map_for_output(&self.output);
-            map.layers()
-                .find(|layer| {
-                    layer.namespace() == namespace
-                        && layer.cached_state().keyboard_interactivity
-                            != KeyboardInteractivity::None
-                })
-                .map(|layer| layer.wl_surface().clone())
-        };
+        let pointer = self.pointer_screen();
+        let order =
+            std::iter::once(pointer).chain((0..self.screens.len()).filter(|s| *s != pointer));
+        let surface = order
+            .filter_map(|screen| {
+                let map = layer_map_for_output(&self.screens[screen].output);
+                map.layers()
+                    .find(|layer| {
+                        layer.namespace() == namespace
+                            && layer.cached_state().keyboard_interactivity
+                                != KeyboardInteractivity::None
+                    })
+                    .map(|layer| layer.wl_surface().clone())
+            })
+            .next();
+
         let Some(surface) = surface else {
             return;
         };

@@ -55,8 +55,8 @@ impl State {
     pub(crate) fn drag_icon_elements(
         &self,
         renderer: &mut VulkanRenderer,
+        scale: f64,
     ) -> (Vec<OutputElement>, Option<(Vec<Piece>, Area)>) {
-        let scale = self.output_scale;
         let slid = self
             .slide_back
             .iter()
@@ -94,7 +94,7 @@ impl State {
     }
 
     pub(crate) fn animate_slide_back(&mut self, time: Duration) {
-        let refresh = self.refresh;
+        let refresh = self.main_screen().refresh();
         let Some(slide) = self.slide_back.as_mut() else {
             return;
         };
@@ -109,8 +109,9 @@ impl State {
         let Some((pieces, area)) = drag.drawn else {
             return;
         };
-        let scale = self.output_scale;
+        let scale = self.screens[self.pointer_screen()].scale();
         let shown: Rectangle<f64, Logical> = area.to_logical(scale);
+
         let home = Rectangle::new(
             shown.loc + (drag.origin - self.pointer_location),
             shown.size,

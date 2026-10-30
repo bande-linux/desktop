@@ -1,14 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
-  <defs>
-    <linearGradient id="page" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#FFFFFF"/>
-      <stop offset="1" stop-color="#F1F2F4"/>
-    </linearGradient>
-  </defs>
-  <path d="M30 7 H78 L107 36 V113 A8 8 0 0 1 99 121 H30 A8 8 0 0 1 22 113 V15 A8 8 0 0 1 30 7 Z" fill="url(#page)" stroke="#9EA3AB" stroke-width="5" stroke-linejoin="round"/>
-  <path d="M78 7 V28 A8 8 0 0 0 86 36 H107 Z" fill="#DCDFE4" stroke="#9EA3AB" stroke-width="5" stroke-linejoin="round"/>
-  <g fill="none" stroke="#2F7BE0" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M52 58 L38 74 L52 90"/>
-    <path d="M76 58 L90 74 L76 90"/>
-  </g>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48"><rect x="9" y="4" width="30" height="40" rx="3" fill="#FFFFFF"/><rect x="9.5" y="4.5" width="29" height="39" rx="2.5" fill="none" stroke="#000000" stroke-opacity="0.16" stroke-width="1"/><path d="M14.5 9.5l3 2.5-3 2.5" fill="none" stroke="#201E1A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/><rect x="19.5" y="13.2" width="6" height="1.6" rx="0.8" fill="#201E1A" opacity="0.7"/><rect x="14" y="18.5" width="18" height="1.6" rx="0.8" fill="#201E1A" opacity="0.42"/><rect x="14" y="22.1" width="13" height="1.6" rx="0.8" fill="#201E1A" opacity="0.42"/><rect x="14" y="25.7" width="19" height="1.6" rx="0.8" fill="#201E1A" opacity="0.42"/><path d="M9 31H39V41a3 3 0 0 1-3 3H12a3 3 0 0 1-3-3Z" fill="#008384"/><path d="M21.42 40.68Q20.83 40.68 20.39 40.47Q19.94 40.26 19.70 39.88Q19.46 39.49 19.46 38.95L20.44 38.95Q20.44 39.34 20.71 39.58Q20.98 39.81 21.42 39.81Q21.86 39.81 22.11 39.58Q22.36 39.35 22.36 38.97Q22.36 38.68 22.20 38.46Q22.03 38.24 21.73 38.16L20.94 37.96Q20.31 37.80 19.94 37.36Q19.58 36.92 19.58 36.31Q19.58 35.57 20.06 35.12Q20.55 34.68 21.37 34.68Q21.92 34.68 22.33 34.88Q22.74 35.08 22.97 35.44Q23.19 35.81 23.19 36.30L22.22 36.30Q22.22 35.96 21.98 35.75Q21.75 35.54 21.37 35.54Q20.99 35.54 20.77 35.75Q20.55 35.95 20.55 36.28Q20.55 36.55 20.71 36.73Q20.86 36.90 21.14 36.98L21.95 37.18Q22.60 37.34 22.97 37.82Q23.34 38.30 23.34 38.97Q23.34 39.49 23.11 39.87Q22.87 40.26 22.44 40.47Q22.01 40.68 21.42 40.68ZM24.82 40.60L24.82 34.76L25.82 34.76L25.82 37.13L27.38 37.13L27.38 34.76L28.38 34.76L28.38 40.60L27.38 40.60L27.38 38.03L25.82 38.03L25.82 40.60L24.82 40.60Z" fill="#FFFFFF"/></svg>

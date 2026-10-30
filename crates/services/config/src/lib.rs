@@ -16,14 +16,14 @@ use unbound_l10n::Localizer;
 pub use accounts::{login_picture, share_login_picture};
 pub use edit::Setting;
 pub use report::{EDIT_ACTION, ErrorNotifier};
-pub use service::{BUS_NAME, ConfigService, OBJECT_PATH, ServiceError};
+pub use service::{ArrangedDisplay, BUS_NAME, ConfigService, OBJECT_PATH, ServiceError};
 pub use store::{ConfigStore, ReloadError};
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-config.ftl");
 
 static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
-const SCALE_RANGE: (f64, f64) = (1.0, 2.0);
+const SCALE_RANGE: (f64, f64) = (1.0, 3.0);
 const REFRESH_RATE_RANGE: (f64, f64) = (60.0, 240.0);
 pub const KEY_REPEAT_RATE_RANGE: (u32, u32) = (1, 60);
 pub const KEY_REPEAT_DELAY_RANGE: (u32, u32) = (150, 2000);
@@ -92,11 +92,63 @@ impl Idle {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Rotation {
+    Upright,
+    Quarter,
+    Half,
+    ThreeQuarters,
+}
+
+impl Rotation {
+    pub const ALL: [Self; 4] = [
+        Self::Upright,
+        Self::Quarter,
+        Self::Half,
+        Self::ThreeQuarters,
+    ];
+
+    pub fn degrees(self) -> u32 {
+        match self {
+            Self::Upright => 0,
+            Self::Quarter => 90,
+            Self::Half => 180,
+            Self::ThreeQuarters => 270,
+        }
+    }
+
+    pub fn from_degrees(degrees: u32) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|rotation| rotation.degrees() == degrees)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub struct Output {
-    pub scale: Option<f64>,
+pub struct DisplaySettings {
+    pub resolution: Option<(u32, u32)>,
     pub refresh_rate: Option<f64>,
+    pub scale: Option<f64>,
+    pub rotation: Option<Rotation>,
     pub variable_refresh_rate: Option<bool>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Placement {
+    pub display: String,
+    pub x: i32,
+    pub y: i32,
+    pub main: bool,
+    pub mirror: Option<String>,
+}
+
+pub fn same_displays(placements: &[Placement], displays: &[String]) -> bool {
+    placements.len() == displays.len()
+        && displays.iter().all(|display| {
+            placements
+                .iter()
+                .any(|placement| &placement.display == display)
+        })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -383,7 +435,17 @@ pub struct Config {
     pub mouse: Mouse,
     pub power: Power,
     pub wallpaper: Wallpaper,
-    pub outputs: BTreeMap<String, Output>,
+    pub displays: BTreeMap<String, DisplaySettings>,
+    pub arrangements: Vec<Vec<Placement>>,
+}
+
+impl Config {
+    pub fn arrangement(&self, displays: &[String]) -> Option<&[Placement]> {
+        self.arrangements
+            .iter()
+            .find(|placements| same_displays(placements, displays))
+            .map(Vec::as_slice)
+    }
 }
 
 impl Default for Config {
@@ -408,7 +470,8 @@ impl Default for Config {
             mouse: Mouse::default(),
             power: Power::default(),
             wallpaper: Wallpaper::default(),
-            outputs: BTreeMap::new(),
+            displays: BTreeMap::new(),
+            arrangements: Vec::new(),
         }
     }
 }
@@ -482,7 +545,7 @@ impl Parser<'_> {
         let mut seen = Vec::new();
         for node in document.nodes() {
             let name = node.name().value();
-            if name != "output" {
+            if name != "display" && name != "arrangement" {
                 if seen.contains(&name) {
                     return Err(self.at_node(node, format!("`{name}` is set more than once")));
                 }
@@ -513,14 +576,27 @@ impl Parser<'_> {
                 "mouse" => config.mouse = self.mouse(node)?,
                 "power" => config.power = self.power(node)?,
                 "wallpaper" => config.wallpaper = self.wallpaper(node)?,
-                "output" => {
-                    let (connector, output) = self.output(node)?;
-                    if config.outputs.insert(connector.clone(), output).is_some() {
+                "display" => {
+                    let (identity, display) = self.display(node)?;
+                    if config.displays.insert(identity.clone(), display).is_some() {
                         return Err(self.at_node(
                             node,
-                            format!("output \"{connector}\" is configured more than once"),
+                            format!("display \"{identity}\" is configured more than once"),
                         ));
                     }
+                }
+                "arrangement" => {
+                    let placements = self.arrangement(node)?;
+                    let displays: Vec<String> = placements
+                        .iter()
+                        .map(|placement| placement.display.clone())
+                        .collect();
+                    if config.arrangement(&displays).is_some() {
+                        return Err(
+                            self.at_node(node, "these displays are arranged more than once")
+                        );
+                    }
+                    config.arrangements.push(placements);
                 }
                 _ => return Err(self.at_node(node, format!("unknown setting `{name}`"))),
             }
@@ -901,28 +977,141 @@ impl Parser<'_> {
             .ok_or_else(invalid)
     }
 
-    fn output(&self, node: &KdlNode) -> Result<(String, Output), ConfigError> {
-        let entry = self.argument(node)?;
-        let connector = entry
+    fn identity(&self, node: &KdlNode, entry: &KdlEntry) -> Result<String, ConfigError> {
+        entry
             .value()
             .as_string()
-            .filter(|connector| !connector.is_empty())
+            .filter(|identity| entry.name().is_none() && !identity.is_empty())
+            .map(str::to_owned)
             .ok_or_else(|| {
-                self.at_entry(entry, "`output` needs a connector name such as \"eDP-1\"")
-            })?
-            .to_owned();
-        let mut output = Output::default();
+                self.at_entry(
+                    entry,
+                    format!(
+                        "`{}` needs the display's name such as \"Dell Inc. DELL U2720Q 7ZD5K53\"",
+                        node.name().value()
+                    ),
+                )
+            })
+    }
+
+    fn display(&self, node: &KdlNode) -> Result<(String, DisplaySettings), ConfigError> {
+        let identity = self.identity(node, self.argument(node)?)?;
+        let mut display = DisplaySettings::default();
         for child in self.children(node)? {
             match child.name().value() {
-                "scale" => output.scale = Some(self.number_in(child, SCALE_RANGE)?),
+                "resolution" => display.resolution = Some(self.resolution(child)?),
+                "scale" => display.scale = Some(self.number_in(child, SCALE_RANGE)?),
                 "refresh-rate" => {
-                    output.refresh_rate = Some(self.number_in(child, REFRESH_RATE_RANGE)?)
+                    display.refresh_rate = Some(self.number_in(child, REFRESH_RATE_RANGE)?)
                 }
-                "variable-refresh-rate" => output.variable_refresh_rate = Some(self.flag(child)?),
-                _ => return Err(self.unknown_child("output", child)),
+                "rotation" => display.rotation = Some(self.rotation(child)?),
+                "variable-refresh-rate" => display.variable_refresh_rate = Some(self.flag(child)?),
+                _ => return Err(self.unknown_child("display", child)),
             }
         }
-        Ok((connector, output))
+        Ok((identity, display))
+    }
+
+    fn resolution(&self, node: &KdlNode) -> Result<(u32, u32), ConfigError> {
+        let pixels = |entry: &KdlEntry| match entry.value() {
+            KdlValue::Integer(value) if entry.name().is_none() => {
+                u32::try_from(*value).ok().filter(|value| *value > 0)
+            }
+            _ => None,
+        };
+        match node.entries() {
+            [width, height] => pixels(width).zip(pixels(height)),
+            _ => None,
+        }
+        .ok_or_else(|| {
+            self.at_node(
+                node,
+                "`resolution` needs a width and a height in pixels such as 3840 2160",
+            )
+        })
+    }
+
+    fn rotation(&self, node: &KdlNode) -> Result<Rotation, ConfigError> {
+        let entry = self.argument(node)?;
+        match entry.value() {
+            KdlValue::Integer(value) => u32::try_from(*value).ok(),
+            _ => None,
+        }
+        .and_then(Rotation::from_degrees)
+        .ok_or_else(|| self.at_entry(entry, "`rotation` must be 0, 90, 180 or 270"))
+    }
+
+    fn arrangement(&self, node: &KdlNode) -> Result<Vec<Placement>, ConfigError> {
+        self.no_arguments(node)?;
+        let mut placements: Vec<Placement> = Vec::new();
+        for child in node.children().map_or(&[][..], KdlDocument::nodes) {
+            if child.name().value() != "display" {
+                return Err(self.unknown_child("arrangement", child));
+            }
+            let mut entries = child.entries().iter();
+            let identity = match entries.next() {
+                Some(entry) => self.identity(child, entry)?,
+                None => return Err(self.at_node(child, "`display` needs the display's name")),
+            };
+            if placements.iter().any(|known| known.display == identity) {
+                return Err(self.at_node(child, format!("\"{identity}\" is placed twice")));
+            }
+            let mut placement = Placement {
+                display: identity,
+                x: 0,
+                y: 0,
+                main: false,
+                mirror: None,
+            };
+            for entry in entries {
+                let invalid = || {
+                    self.at_entry(
+                        entry,
+                        "`display` takes x=, y=, main=#true and mirror=\"display\"",
+                    )
+                };
+                let coordinate = || match entry.value() {
+                    KdlValue::Integer(value) => i32::try_from(*value).ok(),
+                    _ => None,
+                };
+                match entry.name().map(|name| name.value()) {
+                    Some("x") => placement.x = coordinate().ok_or_else(invalid)?,
+                    Some("y") => placement.y = coordinate().ok_or_else(invalid)?,
+                    Some("main") => placement.main = entry.value().as_bool().ok_or_else(invalid)?,
+                    Some("mirror") => {
+                        placement.mirror = Some(
+                            entry
+                                .value()
+                                .as_string()
+                                .filter(|display| !display.is_empty())
+                                .ok_or_else(invalid)?
+                                .to_owned(),
+                        )
+                    }
+                    _ => return Err(invalid()),
+                }
+            }
+            placements.push(placement);
+        }
+        if placements.is_empty() {
+            return Err(self.at_node(node, "`arrangement` needs at least one display"));
+        }
+        let mirrors_elsewhere = |placement: &Placement| {
+            placement.mirror.as_ref().is_some_and(|mirror| {
+                *mirror == placement.display
+                    || !placements.iter().any(|other| other.display == *mirror)
+            })
+        };
+        if placements.iter().any(mirrors_elsewhere) {
+            return Err(self.at_node(
+                node,
+                "`mirror` must name another display of the same arrangement",
+            ));
+        }
+        if placements.iter().filter(|placement| placement.main).count() > 1 {
+            return Err(self.at_node(node, "only one display can be the main display"));
+        }
+        Ok(placements)
     }
 
     fn number_in(&self, node: &KdlNode, (min, max): (f64, f64)) -> Result<f64, ConfigError> {

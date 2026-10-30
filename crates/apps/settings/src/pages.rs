@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use unbound_audio::Direction;
 use unbound_config::MAX_INPUT_SOURCES;
-use unbound_keyboard::{Area, shortcuts_in};
+use unbound_keyboard::shortcuts_in;
 use unbound_toolkit::Spacing;
 use unbound_toolkit::ui::{
     Axis, Button, Label, PopUpButton, SearchField, SecureField, SegmentedControl, Slider, Stack,
@@ -10,14 +10,18 @@ use unbound_toolkit::ui::{
 };
 
 use crate::L10N;
+use crate::arrangement::{Area, Arrangement, Screen};
 use crate::follow::Command;
 use crate::pictures::{Pair, PictureCommand, expand};
 use crate::state::{Answer, Display, Question};
-use crate::view::{Anchor, Intent, Intents, SettingsView, intent};
+use crate::view::{
+    Anchor, Intent, Intents, MIRROR_PREFIX, SettingsView, USE_EXTENDED, USE_MAIN, intent,
+};
 use crate::widgets::{
     Caption, Captioned, Card, Check, Column, Row, Scroll, SidebarRow, Signal, Text, Thumbnail,
     Thumbnails, Tone,
 };
+use unbound_config::Placement;
 use unbound_settings_panes::SettingHit;
 use unbound_settings_panes::{
     AUTOMATIC, Choice, Kind, List, PaneId, Section, Setting, SettingId, Value,
@@ -30,6 +34,8 @@ const FIELD_SIZE: f32 = 13.0;
 const SOURCE_RESULTS: usize = 8;
 
 pub(crate) type Widgets = Vec<Box<dyn Widget>>;
+
+const KEEP_ANCHOR: &str = "keep-display-settings";
 
 pub(crate) fn boxed(widget: impl Widget + 'static) -> Box<dyn Widget> {
     Box::new(widget)
@@ -54,7 +60,7 @@ fn picture_name(name: &str) -> String {
 
 fn display_value(
     display: &Display,
-    output: Option<unbound_config::Output>,
+    output: Option<unbound_config::DisplaySettings>,
     id: SettingId,
 ) -> Option<Value> {
     let output = output.unwrap_or_default();
@@ -72,6 +78,21 @@ fn display_value(
         SettingId::VariableRefreshRate => {
             Value::Flag(output.variable_refresh_rate.unwrap_or(false))
         }
+        SettingId::DisplayResolution => {
+            let (width, height) = output.resolution.or_else(|| {
+                let mode = display.current?;
+                Some((
+                    u32::try_from(mode.width).ok()?,
+                    u32::try_from(mode.height).ok()?,
+                ))
+            })?;
+            Value::Keyword(format!("{width}x{height}"))
+        }
+        SettingId::DisplayRotation => Value::Number(
+            output
+                .rotation
+                .map_or(display.rotation, |rotation| rotation.degrees()),
+        ),
         _ => return None,
     })
 }
@@ -119,9 +140,9 @@ impl SettingsView {
         id: SettingId,
         scope: Option<&Display>,
     ) -> impl FnMut(Value) + 'static {
-        let connector = scope.map(|display| display.connector.clone());
-        intent(&self.intents, move |value| match &connector {
-            Some(connector) => Intent::Display(connector.clone(), id, value),
+        let identity = scope.map(|display| display.identity.clone());
+        intent(&self.intents, move |value| match &identity {
+            Some(identity) => Intent::Display(identity.clone(), id, value),
             None => Intent::Set(id, value),
         })
     }
@@ -133,9 +154,11 @@ impl SettingsView {
     ) -> Option<(Box<dyn Widget>, WidgetId)> {
         let id = setting.id;
         let value = match scope {
-            Some(display) => {
-                display_value(display, self.outputs.get(&display.connector).copied(), id)
-            }
+            Some(display) => display_value(
+                display,
+                self.display_settings.get(&display.identity).copied(),
+                id,
+            ),
             None => self.values.get(&id).cloned(),
         };
         let mut set = self.setting_intent(id, scope);
@@ -281,6 +304,84 @@ impl SettingsView {
                 boxed(TextField::new(&setting.label, &text, move |text: &str| {
                     draft(text.to_owned())
                 }))
+            }
+            Kind::Resolutions => {
+                let sizes = scope?.resolutions();
+                if sizes.len() < 2 {
+                    return None;
+                }
+                let labels: Vec<String> = sizes
+                    .iter()
+                    .map(|(width, height)| {
+                        L10N.tr_args(
+                            "resolution",
+                            [("width", (*width).into()), ("height", (*height).into())],
+                        )
+                    })
+                    .collect();
+                let selected = match value {
+                    Some(Value::Keyword(size)) => sizes
+                        .iter()
+                        .position(|(width, height)| size == format!("{width}x{height}")),
+                    _ => None,
+                };
+                boxed(SegmentedControl::new(
+                    &setting.label,
+                    &labels,
+                    selected,
+                    move |index| {
+                        if let Some((width, height)) = sizes.get(index) {
+                            set(Value::Keyword(format!("{width}x{height}")));
+                        }
+                    },
+                ))
+            }
+            Kind::DisplayUses => {
+                let display = scope?;
+                let others: Vec<&Display> = self
+                    .displays
+                    .iter()
+                    .filter(|other| other.identity != display.identity)
+                    .collect();
+                if others.is_empty() {
+                    return None;
+                }
+                let mut choices = vec![
+                    (L10N.tr("use-main"), USE_MAIN.to_owned()),
+                    (L10N.tr("use-extended"), USE_EXTENDED.to_owned()),
+                ];
+                for other in &others {
+                    let label = if others.len() == 1 {
+                        L10N.tr("use-mirror")
+                    } else {
+                        L10N.tr_args("use-mirror-of", [("display", other.name().into())])
+                    };
+                    choices.push((label, format!("{MIRROR_PREFIX}{}", other.identity)));
+                }
+                let placement = self
+                    .placements()
+                    .into_iter()
+                    .find(|placement| placement.display == display.identity);
+                let current = match placement {
+                    Some(Placement {
+                        mirror: Some(mirror),
+                        ..
+                    }) => format!("{MIRROR_PREFIX}{mirror}"),
+                    Some(Placement { main: true, .. }) => USE_MAIN.to_owned(),
+                    _ => USE_EXTENDED.to_owned(),
+                };
+                let selected = choices.iter().position(|(_, value)| *value == current);
+                let labels: Vec<String> = choices.iter().map(|(label, _)| label.clone()).collect();
+                boxed(SegmentedControl::new(
+                    &setting.label,
+                    &labels,
+                    selected,
+                    move |index| {
+                        if let Some((_, value)) = choices.get(index) {
+                            set(Value::Keyword(value.clone()));
+                        }
+                    },
+                ))
             }
             Kind::List(_) | Kind::Pictures => return None,
         };
@@ -600,7 +701,7 @@ impl SettingsView {
 
     fn shortcut_cards(&mut self) -> Widgets {
         let mut page = Vec::new();
-        for area in Area::ALL {
+        for area in unbound_keyboard::Area::ALL {
             page.push(boxed(Caption::new(
                 Text::new(&area.title(), Tone::Muted).caption(),
             )));
@@ -786,18 +887,104 @@ impl SettingsView {
         ])
     }
 
+    fn keep_card(&mut self) -> Option<Widgets> {
+        self.keep.as_ref()?;
+        let button = |intents: &Intents, title: &str, keep: bool| {
+            let mut send = intent(intents, Intent::KeepDisplays);
+            boxed(Button::new(title, move || send(keep)))
+        };
+        let buttons = boxed(Stack::new(
+            Axis::Horizontal,
+            Spacing::S as f32,
+            0.0,
+            vec![
+                button(&self.intents, &L10N.tr("revert"), false),
+                button(&self.intents, &L10N.tr("keep"), true),
+            ],
+        ));
+        let focus = buttons
+            .children()
+            .last()
+            .map_or(buttons.id(), |button| button.id());
+        self.anchors
+            .push((Anchor::Item(KEEP_ANCHOR.to_owned()), focus));
+        let countdown = L10N.tr_args("reverting-in", [("seconds", self.seconds_left().into())]);
+        Some(vec![boxed(Card::new(vec![
+            boxed(
+                Row::new(
+                    Text::new(&L10N.tr("keep-display-settings"), Tone::Primary).semibold(),
+                    Some(buttons),
+                )
+                .highlighted(true),
+            ),
+            boxed(Caption::new(Text::new(&countdown, Tone::Muted))),
+        ]))])
+    }
+
+    fn arrangement_card(&mut self) -> Option<Widgets> {
+        if self.displays.len() < 2 {
+            return None;
+        }
+        let placements = self.placements();
+        let shown: Vec<(Display, bool)> = self
+            .displays
+            .iter()
+            .zip(&placements)
+            .filter(|(_, placement)| placement.mirror.is_none())
+            .map(|(display, placement)| (display.clone(), placement.main))
+            .collect();
+        let screens = shown
+            .iter()
+            .map(|(display, main)| {
+                let (width, height) = display.logical_size();
+                Screen {
+                    label: display.name(),
+                    area: Area {
+                        x: display.position.0,
+                        y: display.position.1,
+                        width,
+                        height,
+                    },
+                    main: *main,
+                }
+            })
+            .collect();
+        let identities: Vec<String> = shown
+            .iter()
+            .map(|(display, _)| display.identity.clone())
+            .collect();
+        let mut send = intent(&self.intents, |(identity, position)| {
+            Intent::Arrange(identity, position)
+        });
+        let canvas = Arrangement::new(&L10N.tr("arrangement"), screens, move |index, position| {
+            if let Some(identity) = identities.get(index) {
+                send((identity.clone(), position));
+            }
+        });
+        Some(vec![
+            boxed(Caption::new(
+                Text::new(&L10N.tr("arrangement"), Tone::Muted)
+                    .caption()
+                    .semibold(),
+            )),
+            boxed(Card::new(vec![boxed(canvas)])),
+            boxed(Caption::new(Text::new(
+                &L10N.tr("arrangement-hint"),
+                Tone::Muted,
+            ))),
+        ])
+    }
+
     fn display_sections(
         &mut self,
         section: &Section,
         matched: &dyn Fn(SettingId) -> Option<SettingHit>,
     ) -> Widgets {
         let mut page = Vec::new();
+        page.extend(self.keep_card().into_iter().flatten());
+        page.extend(self.arrangement_card().into_iter().flatten());
         for display in self.displays.clone() {
-            let title = if display.description.is_empty() {
-                display.connector.clone()
-            } else {
-                display.description.clone()
-            };
+            let title = display.name();
             page.push(boxed(Caption::new(
                 Text::new(&title, Tone::Muted).caption().semibold(),
             )));

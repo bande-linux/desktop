@@ -16,7 +16,7 @@ fn open_in_editor(path: &Path) {
     }
 }
 
-fn serve(path: &Path) -> Result<ConfigService, Box<dyn Error>> {
+fn serve(path: &Path) -> Result<(ConfigService, Connection), Box<dyn Error>> {
     let connection = Connection::session()?;
     let notifier = ErrorNotifier::start(&connection, path, open_in_editor)?;
     let shared = Mutex::new(None);
@@ -35,7 +35,7 @@ fn serve(path: &Path) -> Result<ConfigService, Box<dyn Error>> {
             notifier.report(&result.map(drop));
         },
     )?;
-    Ok(service)
+    Ok((service, connection))
 }
 
 fn main() -> ExitCode {
@@ -46,9 +46,10 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     };
     match serve(&path) {
-        Ok(_service) => loop {
-            thread::park();
-        },
+        Ok((_service, connection)) => {
+            unbound_bus::serve_until_closed(&connection);
+            ExitCode::SUCCESS
+        }
         Err(error) => {
             tracing::error!("{error}");
             ExitCode::FAILURE

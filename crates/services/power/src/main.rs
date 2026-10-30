@@ -15,7 +15,12 @@ use zbus::blocking::Connection;
 
 const LOCK_WAIT: Duration = Duration::from_secs(3);
 
-type Services = (SleepGuard, InhibitionService, Arc<IdleController>);
+type Services = (
+    SleepGuard,
+    InhibitionService,
+    Arc<IdleController>,
+    Connection,
+);
 
 fn serve() -> Result<Services, Box<dyn Error>> {
     let system = Connection::system()?;
@@ -49,15 +54,16 @@ fn serve() -> Result<Services, Box<dyn Error>> {
         }
         Err(error) => tracing::warn!("cannot watch for idle without Wayland: {error}"),
     }
-    Ok((guard, inhibitions, idle))
+    Ok((guard, inhibitions, idle, session))
 }
 
 fn main() -> ExitCode {
     unbound_log::init("unbound-power");
     match serve() {
-        Ok(_services) => loop {
-            std::thread::park();
-        },
+        Ok((_guard, _inhibitions, _idle, session)) => {
+            unbound_bus::serve_until_closed(&session);
+            ExitCode::SUCCESS
+        }
         Err(error) => {
             tracing::error!("{error}");
             ExitCode::FAILURE

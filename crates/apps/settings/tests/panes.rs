@@ -8,10 +8,11 @@ use std::time::{Duration, Instant};
 use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId};
 use unbound_audio::{Device, Direction, Level, Snapshot};
 use unbound_config::Output;
+use unbound_keyboard::Layouts;
 use unbound_settings::{
     Answer, AudioCommand, BluetoothCommand, Command, Display, Feed, Mode, NetworkCommand, Pair,
-    PaneId, PictureCommand, SettingId, SettingsView, Update, Value, bundled_pairs, feed,
-    follow_bluetooth, follow_network,
+    PaneId, PictureCommand, PointingDevices, SettingId, SettingsView, Update, Value, bundled_pairs,
+    feed, follow_bluetooth, follow_network,
 };
 use unbound_test_bus::SessionBus;
 use unbound_test_bus::bluez::{FakeBluez, PHONE};
@@ -511,4 +512,115 @@ fn the_dock_pane_has_a_size_slider_a_position_and_auto_hide() {
         [Command::Set(SettingId::DockIconSize, Value::Number(52))]
     );
     assert!(find(&mut view, Role::Switch, "Automatically hide").is_some());
+}
+
+const RULES: &str = r#"<xkbConfigRegistry><layoutList>
+<layout><configItem><name>se</name><shortDescription>sv</shortDescription><description>Swedish</description></configItem></layout>
+<layout><configItem><name>us</name><shortDescription>en</shortDescription><description>English (US)</description></configItem>
+<variantList><variant><configItem><name>dvorak</name><description>English (Dvorak)</description></configItem></variant></variantList></layout>
+<layout><configItem><name>de</name><shortDescription>de</shortDescription><description>German</description></configItem></layout>
+</layoutList></xkbConfigRegistry>"#;
+
+fn keyboard_view(codes: &[&str]) -> SettingsView {
+    let mut view = view();
+    view.set_layouts(Layouts::parse(RULES));
+    view.apply(Update::Values(vec![(
+        SettingId::InputSources,
+        Value::Codes(codes.iter().map(|code| (*code).to_owned()).collect()),
+    )]));
+    open(&mut view, "Keyboard");
+    view
+}
+
+fn codes(codes: &[&str]) -> Command {
+    Command::Set(
+        SettingId::InputSources,
+        Value::Codes(codes.iter().map(|code| (*code).to_owned()).collect()),
+    )
+}
+
+#[test]
+fn input_sources_are_reordered_and_removed_but_never_emptied() {
+    let mut view = keyboard_view(&["se", "us"]);
+    assert!(has_text(&mut view, "English (US)"));
+
+    let down = button_in_row(&mut view, "Swedish", "↓");
+    click(&mut view, down);
+    assert_eq!(view.take_commands(), [codes(&["us", "se"])]);
+
+    let remove = button_in_row(&mut view, "Swedish", "Remove");
+    click(&mut view, remove);
+    assert_eq!(view.take_commands(), [codes(&["us"])]);
+    assert!(find(&mut view, Role::Button, "Remove").is_none());
+}
+
+#[test]
+fn a_layout_is_added_by_searching_its_name_and_pressing_return() {
+    let mut view = keyboard_view(&["se"]);
+    let add = find(&mut view, Role::Button, "Add Input Source…").expect("add button");
+    click(&mut view, add);
+    for character in "germ".chars() {
+        press(&mut view, Key::Character(character));
+    }
+    assert_eq!(view.adding_source(), Some("germ"));
+    assert!(has_text(&mut view, "German"));
+    assert!(!has_text(&mut view, "English (Dvorak)"));
+    assert_eq!(view.adding_source(), Some("germ"));
+
+    press(&mut view, Key::Enter);
+    assert_eq!(view.take_commands(), [codes(&["se", "de"])]);
+    assert_eq!(view.adding_source(), None);
+}
+
+#[test]
+fn escape_stops_adding_a_layout_and_a_full_list_offers_no_more() {
+    let mut view = keyboard_view(&["se"]);
+    let add = find(&mut view, Role::Button, "Add Input Source…").expect("add button");
+    click(&mut view, add);
+    press(&mut view, Key::Escape);
+    assert_eq!(view.adding_source(), None);
+    assert!(view.take_commands().is_empty());
+
+    let mut full = keyboard_view(&["se", "us", "de", "us(dvorak)"]);
+    assert!(find(&mut full, Role::Button, "Add Input Source…").is_none());
+}
+
+#[test]
+fn the_keyboard_pane_lists_the_desktop_shortcuts_with_key_symbols() {
+    let mut view = keyboard_view(&["se"]);
+    assert!(has_text(&mut view, "⌥⌘Space"));
+    assert!(has_text(&mut view, "Lock Screen"));
+}
+
+#[test]
+fn trackpad_settings_appear_only_with_a_trackpad_and_mouse_settings_only_with_a_mouse() {
+    let mut view = view();
+    view.apply(Update::Values(vec![
+        (SettingId::TrackpadTapToClick, Value::Flag(true)),
+        (SettingId::MouseNaturalScrolling, Value::Flag(false)),
+        (SettingId::MouseSpeed, Value::Number(5)),
+    ]));
+    assert!(find(&mut view, Role::ListItem, "Trackpad & Mouse").is_none());
+
+    view.set_pointing_devices(PointingDevices {
+        trackpad: false,
+        mouse: true,
+    });
+    open(&mut view, "Trackpad & Mouse");
+    assert!(find(&mut view, Role::Switch, "Tap to click").is_none());
+    let natural = find(&mut view, Role::Switch, "Natural scrolling").expect("mouse scrolling");
+    click(&mut view, natural);
+    assert_eq!(
+        view.take_commands(),
+        [Command::Set(
+            SettingId::MouseNaturalScrolling,
+            Value::Flag(true)
+        )]
+    );
+
+    view.set_pointing_devices(PointingDevices {
+        trackpad: true,
+        mouse: true,
+    });
+    assert!(find(&mut view, Role::Switch, "Tap to click").is_some());
 }

@@ -4173,6 +4173,7 @@ dependencies = [
  "unbound-bluetooth",
  "unbound-compositor",
  "unbound-config",
+ "unbound-keyboard",
  "unbound-l10n",
  "unbound-log",
  "unbound-network",

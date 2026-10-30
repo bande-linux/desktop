@@ -119,6 +119,10 @@ impl Overview {
     }
 
     fn settle_to(&mut self, target: f64, velocity: f64, spring: Spring) {
+        let velocity = match &self.settle {
+            Some(settle) if velocity == 0.0 => settle.state().velocity,
+            _ => velocity,
+        };
         self.tracker = None;
         self.target = target;
         self.last = None;

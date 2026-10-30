@@ -154,6 +154,12 @@ pub(crate) struct SnapDrag {
     shown: Option<Snap>,
 }
 
+impl SnapDrag {
+    pub(crate) fn surface(&self) -> &WlSurface {
+        &self.surface
+    }
+}
+
 pub(crate) struct Preview {
     pub(crate) owner: WlSurface,
     pub(crate) motion: Motion,

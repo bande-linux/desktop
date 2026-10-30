@@ -16,6 +16,7 @@ const KEY_LEFTMETA: u32 = 125;
 const KEY_LEFT: u32 = 105;
 const KEY_RIGHT: u32 = 106;
 const KEY_F: u32 = 33;
+const BTN_LEFT: u32 = 0x110;
 const EDITOR: &str = "org.example.Editor";
 const VIEWER: &str = "org.example.Viewer";
 
@@ -309,5 +310,39 @@ fn with_reduce_motion_a_switch_crossfades_in_place() {
     assert!(
         red > 0x40 && blue > 0x40 && green < 0x28,
         "{red} {green} {blue}"
+    );
+}
+
+#[test]
+fn a_window_being_dragged_comes_along_and_the_workspace_it_left_empty_goes_away() {
+    let mut server = server();
+    let mut editor = app(&mut server, RED, EDITOR);
+    let mut viewer = app(&mut server, BLUE, VIEWER);
+    chord(
+        &mut server,
+        &[KEY_LEFTCTRL, KEY_LEFTMETA, KEY_LEFTSHIFT],
+        KEY_RIGHT,
+    );
+    let end = settle(&mut server, 0);
+    chord(&mut server, &[KEY_LEFTALT, KEY_LEFTMETA], KEY_LEFT);
+    let end = settle(&mut server, end);
+    roundtrip(&mut server, &mut [&mut editor, &mut viewer]);
+
+    server.move_pointer_to((128.0, 80.0).into(), 1);
+    server.press_button(BTN_LEFT, true, 2);
+    roundtrip(&mut server, &mut [&mut editor, &mut viewer]);
+    editor.request_move(&mut server, 0);
+    server.move_pointer_to((140.0, 90.0).into(), 3);
+    chord(&mut server, &[KEY_LEFTALT, KEY_LEFTMETA], KEY_RIGHT);
+    settle(&mut server, end);
+    server.press_button(BTN_LEFT, false, 4);
+    roundtrip(&mut server, &mut [&mut editor, &mut viewer]);
+
+    assert_eq!(server.workspace_count(), 1);
+    assert!(
+        server
+            .windows()
+            .iter()
+            .all(|window| server.workspace_of(window) == Some(0))
     );
 }

@@ -119,6 +119,10 @@ impl Workspaces {
     }
 
     fn settle_to(&mut self, index: usize, velocity: f64, spring: Spring) {
+        let velocity = match &self.settle {
+            Some(settle) if velocity == 0.0 => settle.state().velocity,
+            _ => velocity,
+        };
         self.tracker = None;
         self.active = index;
         self.last = None;
@@ -199,11 +203,28 @@ impl State {
     fn slide_to(&mut self, index: usize, velocity: f64) {
         let index = index.min(self.workspaces.count() - 1);
         self.hide_desktop();
+        self.carry_dragged_window(index);
         let spring = self.workspace_spring(velocity);
         self.workspaces.settle_to(index, velocity, spring);
         self.needs_redraw = true;
         self.announce_workspaces();
         self.refocus_pointer();
+    }
+
+    fn carry_dragged_window(&mut self, index: usize) {
+        let Some(target) = self.workspaces.id_at(index) else {
+            return;
+        };
+        let dragged = self
+            .snap
+            .as_ref()
+            .and_then(|drag| self.window_index(drag.surface()));
+        if let Some(dragged) = dragged
+            && self.windows[dragged].workspace != target
+            && !self.on_full_screen_space(&self.windows[dragged])
+        {
+            self.move_window_to_space(dragged, target);
+        }
     }
 
     pub(crate) fn switch_workspace(&mut self, index: usize) {

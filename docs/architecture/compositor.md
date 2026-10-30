@@ -116,7 +116,9 @@ when they reach the screen is Unbound's own.
   terminals, so `Ctrl+Left/Right` is not taken): `Alt+Super+Left/Right` switch to the
   neighbour, `Alt+Super+1`…`9` to a workspace by position, and `Ctrl+Super+Shift+Left/Right`
   carry the focused window along (the window stays put on screen while the row slides
-  under it; past the last workspace a new one is made). `unbound_app_v1.move_to_workspace`
+  under it; past the last workspace a new one is made). A window being dragged by its title
+  bar comes along to whichever workspace the user switches to. A switch started while the
+  row is still moving keeps its velocity. `unbound_app_v1.move_to_workspace`
   (v3) moves a window from its menu without following it: it slides off the screen and the
   keyboard goes to the next window. Focusing a window anywhere (the Dock's activate app or
   window, Super+Tab, an activation token) shows its workspace first. Shell clients learn the

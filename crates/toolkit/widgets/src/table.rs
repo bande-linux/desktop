@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Node, Role, SortDirection};
@@ -22,6 +22,7 @@ const RESIZE_GRIP: f32 = 4.0;
 const MIN_COLUMN: f32 = 40.0;
 const TYPE_SELECT_PAUSE: Duration = Duration::from_secs(1);
 const ELLIPSIS: char = '…';
+const DRAG_THRESHOLD: f32 = 4.0;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Column {
@@ -107,6 +108,11 @@ pub struct Sort {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Drag {
+    Press {
+        from: Point,
+        row: usize,
+        collapse: bool,
+    },
     Select,
     Resize {
         column: usize,
@@ -118,6 +124,7 @@ enum Drag {
 type KeysCallback = Box<dyn FnMut(&[String])>;
 type MenuSource = Box<dyn FnMut(&[String]) -> Option<Menu>>;
 type MenuChoice = Box<dyn FnMut(&str, &[String])>;
+type DragStart = Box<dyn FnMut(&[String], Point)>;
 
 pub struct Table {
     id: WidgetId,
@@ -141,6 +148,9 @@ pub struct Table {
     menu: MenuSource,
     on_menu_action: MenuChoice,
     menu_keys: Vec<String>,
+    on_drag: Option<DragStart>,
+    offset: f32,
+    pending_reveal: Option<usize>,
 }
 
 impl Table {
@@ -167,6 +177,9 @@ impl Table {
             menu: Box::new(|_| None),
             on_menu_action: Box::new(|_, _| {}),
             menu_keys: Vec::new(),
+            on_drag: None,
+            offset: 0.0,
+            pending_reveal: None,
         }
     }
 
@@ -187,6 +200,13 @@ impl Table {
     pub fn on_activate(self, callback: impl FnMut(&[String]) + 'static) -> Self {
         Self {
             on_activate: Box::new(callback),
+            ..self
+        }
+    }
+
+    pub fn on_drag(self, callback: impl FnMut(&[String], Point) + 'static) -> Self {
+        Self {
+            on_drag: Some(Box::new(callback)),
             ..self
         }
     }
@@ -223,9 +243,13 @@ impl Table {
         };
         self.cursor = position(&cursor_key);
         self.anchor = position(&anchor_key);
+        let selected_keys = selected_keys
+            .iter()
+            .map(String::as_str)
+            .collect::<HashSet<_>>();
         self.selected = rows
             .iter()
-            .map(|row| selected_keys.contains(&row.key))
+            .map(|row| selected_keys.contains(row.key.as_str()))
             .collect();
         self.rows = rows;
         self.texts.borrow_mut().clear();
@@ -245,10 +269,11 @@ impl Table {
     }
 
     pub fn select(&mut self, keys: &[String]) {
+        let keys = keys.iter().map(String::as_str).collect::<HashSet<_>>();
         self.selected = self
             .rows
             .iter()
-            .map(|row| keys.contains(&row.key))
+            .map(|row| keys.contains(row.key.as_str()))
             .collect();
         self.cursor = self.selected.iter().position(|selected| *selected);
         self.anchor = self.cursor;
@@ -294,14 +319,48 @@ impl Table {
             .collect()
     }
 
-    fn row_at(&self, cx: &Context, point: Point) -> Option<usize> {
+    pub fn row_at(&self, point: Point) -> Option<usize> {
+        self.row_at_offset(point, self.offset)
+    }
+
+    pub fn row_bounds(&self, index: usize) -> Option<Rect> {
+        let body = self.body();
+        (index < self.rows.len()).then(|| {
+            Rect::new(
+                body.x,
+                body.y + index as f32 * ROW_HEIGHT - self.offset,
+                body.width,
+                ROW_HEIGHT,
+            )
+        })
+    }
+
+    pub fn cell_bounds(&self, index: usize, column: usize) -> Option<Rect> {
+        let row = self.row_bounds(index)?;
+        let (x, width) = *self.column_edges().get(column)?;
+        Some(Rect::new(x, row.y, width, row.height))
+    }
+
+    pub fn scroll_offset(&self) -> f32 {
+        self.offset
+    }
+
+    pub fn scroll_to_row(&mut self, index: usize) {
+        self.pending_reveal = Some(index);
+    }
+
+    fn row_at_offset(&self, point: Point, offset: f32) -> Option<usize> {
         let body = self.body();
         if !contains(body, point) {
             return None;
         }
-        let y = point.y - body.y + self.scroll.offset(cx);
+        let y = point.y - body.y + offset;
         let index = (y / ROW_HEIGHT).floor();
         (index >= 0.0 && (index as usize) < self.rows.len()).then_some(index as usize)
+    }
+
+    fn row_under(&self, cx: &Context, point: Point) -> Option<usize> {
+        self.row_at_offset(point, self.scroll.offset(cx))
     }
 
     fn notify_selection(&mut self) {
@@ -509,7 +568,7 @@ impl Table {
                 return self.header_click(pointer.position);
             }
         }
-        let index = self.row_at(cx, pointer.position);
+        let index = self.row_under(cx, pointer.position);
         if pointer.button == PointerButton::Secondary {
             let on_selection =
                 index.is_some_and(|index| self.selected.get(index).copied().unwrap_or(false));
@@ -518,8 +577,62 @@ impl Table {
             }
             return true;
         }
+        let modifiers = pointer.modifiers;
+        let plain = !modifiers.shift && !modifiers.logo;
+        let collapse = plain
+            && pointer.count == 1
+            && index.is_some_and(|index| self.selected.get(index).copied().unwrap_or(false));
+        self.drag = Some(match index {
+            Some(row) => Drag::Press {
+                from: pointer.position,
+                row,
+                collapse,
+            },
+            None => Drag::Select,
+        });
+        if collapse {
+            self.cursor = index;
+            return true;
+        }
+        self.click(index, modifiers, pointer.count)
+    }
+
+    fn pointer_up(&mut self) -> bool {
+        match self.drag.take() {
+            Some(Drag::Press {
+                row,
+                collapse: true,
+                ..
+            }) => {
+                self.select_only(row);
+                self.notify_selection();
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn press_moved(&mut self, cx: &mut Context, from: Point, row: usize, point: Point) -> bool {
+        let distance = (point.x - from.x).hypot(point.y - from.y);
+        if distance < DRAG_THRESHOLD {
+            return false;
+        }
+        if self.on_drag.is_some() {
+            self.drag = None;
+            let keys = self.selection();
+            if let Some(on_drag) = &mut self.on_drag {
+                on_drag(&keys, from);
+            }
+            return true;
+        }
+        if self.row_under(cx, point) == Some(row) {
+            return false;
+        }
+        if let Some(Drag::Press { collapse: true, .. }) = self.drag {
+            self.select_only(row);
+        }
         self.drag = Some(Drag::Select);
-        self.click(index, pointer.modifiers, pointer.count)
+        self.pointer_move(cx, point)
     }
 
     fn pointer_move(&mut self, cx: &mut Context, point: Point) -> bool {
@@ -533,6 +646,7 @@ impl Table {
                 self.texts.borrow_mut().clear();
                 true
             }
+            Some(Drag::Press { from, row, .. }) => self.press_moved(cx, from, row, point),
             Some(Drag::Select) => {
                 let body = self.body();
                 let clamped =
@@ -546,7 +660,7 @@ impl Table {
                     let offset = self.scroll.offset(cx);
                     self.scroll.scroll_to(cx, offset + edge);
                 }
-                match self.row_at(cx, clamped) {
+                match self.row_under(cx, clamped) {
                     Some(index) if self.cursor != Some(index) => {
                         self.select_range(index);
                         self.notify_selection();
@@ -763,6 +877,10 @@ impl Widget for Table {
         let body = self.body();
         self.scroll
             .set_extent(self.rows.len() as f32 * ROW_HEIGHT, body.height);
+        if let Some(index) = self.pending_reveal.take() {
+            self.reveal_row(cx, index);
+        }
+        self.offset = self.scroll.offset(cx);
         let (first, last) = self.visible_rows(cx);
         self.prepare_texts(cx, first, last);
         self.titles = self
@@ -979,9 +1097,10 @@ impl Widget for Table {
                 self.scroll.pointer(cx, self.body(), event)
                     | self.pointer_move(cx, pointer.position)
             }
-            Event::PointerUp(_) => {
+            Event::PointerUp(_) => self.pointer_up() | self.scroll.pointer(cx, self.body(), event),
+            Event::PointerLeave => {
                 self.drag = None;
-                self.scroll.pointer(cx, self.body(), event)
+                false
             }
             Event::Key { key, modifiers } => self.key(cx, *key, *modifiers),
             _ => false,

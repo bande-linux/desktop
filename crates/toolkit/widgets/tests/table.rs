@@ -56,10 +56,14 @@ fn keys(names: &[&str]) -> Vec<String> {
 
 impl Fixture {
     fn new(names: &[&str]) -> Self {
+        Self::with(names, |table| table)
+    }
+
+    fn with(names: &[&str], configure: impl FnOnce(Table) -> Table) -> Self {
         let log = Rc::new(RefCell::new(Log::default()));
         let (selection, activate, sort, action) =
             (log.clone(), log.clone(), log.clone(), log.clone());
-        let mut table = Table::new(vec![
+        let table = Table::new(vec![
             Column::new("Name", 200.0),
             Column::new("Size", 100.0).numeric(),
         ])
@@ -75,6 +79,7 @@ impl Fixture {
                     .push((name.to_owned(), keys.to_vec()));
             },
         );
+        let mut table = configure(table);
         table.set_rows(rows(names));
         let id = table.id();
         let mut ui = Ui::new(
@@ -335,4 +340,58 @@ fn super_c_copies_the_selected_rows_as_tab_separated_lines() {
             "bravo\t100\ncharlie\t200".to_owned()
         ))
     );
+}
+
+#[test]
+fn pressing_a_selected_row_keeps_the_group_until_release() {
+    let mut fixture = Fixture::new(&NAMES);
+    fixture.click(1, NONE, 1);
+    fixture.click(3, SHIFT, 1);
+    let pointer = Pointer::at(Fixture::row_point(2));
+    fixture.ui.handle(&Event::PointerDown(pointer));
+    assert_eq!(fixture.selection(), keys(&["bravo", "charlie", "delta"]));
+    fixture.ui.handle(&Event::PointerUp(pointer));
+    assert_eq!(fixture.selection(), keys(&["charlie"]));
+}
+
+#[test]
+fn dragging_from_a_selected_row_hands_the_group_to_the_drag_hook() {
+    let started = Rc::new(RefCell::new(Vec::new()));
+    let log = started.clone();
+    let mut fixture = Fixture::with(&NAMES, |table| {
+        table.on_drag(move |keys, at| log.borrow_mut().push((keys.to_vec(), at)))
+    });
+    fixture.click(0, NONE, 1);
+    fixture.click(1, SHIFT, 1);
+    let from = Fixture::row_point(1);
+    fixture.ui.handle(&Event::PointerDown(Pointer::at(from)));
+    fixture
+        .ui
+        .handle(&Event::PointerMove(Pointer::at(Point::new(
+            from.x + 20.0,
+            from.y + 30.0,
+        ))));
+    assert_eq!(*started.borrow(), [(keys(&["alpha", "bravo"]), from)]);
+    assert_eq!(fixture.selection(), keys(&["alpha", "bravo"]));
+}
+
+#[test]
+fn rows_report_where_they_are_after_scrolling() {
+    let names = (0..50)
+        .map(|index| format!("row {index:02}"))
+        .collect::<Vec<_>>();
+    let names = names.iter().map(String::as_str).collect::<Vec<_>>();
+    let mut fixture = Fixture::new(&names);
+    fixture.table().scroll_to_row(30);
+    for _ in 0..60 {
+        fixture.ui.scene(AREA.width as u32, AREA.height as u32);
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let table = fixture.table();
+    assert!(table.scroll_offset() > 0.0);
+    let bounds = table.row_bounds(30).expect("row 30");
+    assert!(bounds.y >= HEADER_HEIGHT && bounds.y + bounds.height <= AREA.height + 0.5);
+    let middle = Point::new(10.0, bounds.y + bounds.height / 2.0);
+    assert_eq!(table.row_at(middle), Some(30));
+    assert_eq!(table.cell_bounds(30, 1).expect("size cell").x, 200.0);
 }

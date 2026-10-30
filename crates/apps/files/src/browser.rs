@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -497,8 +498,14 @@ impl Browser {
         if !filter.is_empty() {
             entries.retain(|entry| entry.name.to_lowercase().contains(&filter));
         }
-        let find = |path: &PathBuf| entries.iter().position(|entry| entry.path == *path);
-        let marked = marked_paths.iter().filter_map(find).collect::<Vec<_>>();
+        let rows = entries
+            .iter()
+            .enumerate()
+            .map(|(row, entry)| (&entry.path, row))
+            .collect::<HashMap<_, _>>();
+        let find = |path: &PathBuf| rows.get(path).copied();
+        let mut marked = marked_paths.iter().filter_map(find).collect::<Vec<_>>();
+        marked.sort_unstable();
         let selected = selected_path
             .as_ref()
             .and_then(find)

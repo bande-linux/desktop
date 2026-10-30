@@ -151,10 +151,15 @@ fn focus_ring(cx: &Context, shape: Shape, items: &mut Vec<Item>) {
 }
 
 pub trait AsAny {
+    fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
 impl<T: Any> AsAny for T {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
@@ -401,6 +406,10 @@ impl Ui {
 
     pub fn widget_as<T: Widget + 'static>(&mut self, id: WidgetId) -> Option<&mut T> {
         self.lookup_mut(id)?.as_any_mut().downcast_mut()
+    }
+
+    pub fn widget_ref<T: Widget + 'static>(&self, id: WidgetId) -> Option<&T> {
+        self.lookup(id)?.as_any().downcast_ref()
     }
 
     fn lookup(&self, id: WidgetId) -> Option<&dyn Widget> {

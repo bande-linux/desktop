@@ -760,8 +760,6 @@ impl FilesView {
                     self.press = Some(Press::Item {
                         at: pointer.position,
                         collapse: keep.then(|| path.clone()),
-                        sole: false,
-                        ui: false,
                     });
                 }
                 if keep {

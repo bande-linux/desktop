@@ -944,3 +944,31 @@ fn dragging_a_selection_starts_a_drag_and_dropping_on_a_folder_moves_it_there() 
     assert!(place.home().join("Documents/notes.txt").exists());
     assert!(!place.home().join("notes.txt").exists());
 }
+
+#[test]
+fn dragging_a_group_of_rows_in_the_list_view_drags_all_of_them() {
+    let place = Place::new();
+    let mut view = place.view();
+    view.handle(&command(Key::Character('2'), false));
+    view.scene(1000, 600);
+    let row = |index: f32| Point::new(SIDEBAR_WIDTH + 60.0, 26.0 + ROW_HEIGHT * (index + 0.5));
+    let shift = Modifiers {
+        shift: true,
+        ..Modifiers::default()
+    };
+    for (index, modifiers) in [(1.0, Modifiers::default()), (2.0, shift)] {
+        let pointer = Pointer::at(row(index)).with_modifiers(modifiers);
+        view.handle(&Event::PointerDown(pointer));
+        view.handle(&Event::PointerUp(pointer));
+    }
+    view.scene(1000, 600);
+
+    view.handle(&Event::PointerDown(Pointer::at(row(1.0))));
+    view.handle(&Event::PointerMove(Pointer::at(Point::new(
+        SIDEBAR_WIDTH + 90.0,
+        row(1.0).y + 30.0,
+    ))));
+
+    let dragged = vec![place.home().join("Empty"), place.home().join("notes.txt")];
+    assert_eq!(view.take_requests(), [Request::StartDrag(dragged)]);
+}

@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use unbound_fs::{Action, Purpose, Task, same_volume};
-use unbound_toolkit::ui::{Event, Pointer};
+use unbound_toolkit::ui::Pointer;
 use unbound_toolkit::{Color, DragAction, Item, Point, Rect, Scene, Shape, TextAlign, TextStyle};
 use unbound_xdg::path_from_file_uri;
 
@@ -58,10 +58,11 @@ impl FilesView {
         if distance(from, pointer.position) < DRAG_THRESHOLD {
             return false;
         }
+        self.start_drag(from)
+    }
+
+    pub(crate) fn start_drag(&mut self, _from: Point) -> bool {
         let paths = self.browser.selected_paths();
-        if let Some(Press::Item { ui: true, .. }) = self.press {
-            self.ui.handle(&Event::PointerUp(*pointer));
-        }
         if paths.is_empty() || self.browser.in_trash() {
             self.press = Some(Press::Files);
             return false;

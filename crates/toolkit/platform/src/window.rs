@@ -1162,6 +1162,13 @@ impl Window {
         }
     }
 
+    pub fn set_layer_anchor(&mut self, anchor: Edges) {
+        if let ShellSurface::Layer(layer) = &self.role {
+            layer.set_anchor(anchor_of(anchor));
+            self.needs_redraw = true;
+        }
+    }
+
     pub fn set_layer_size(&mut self, size: (u32, u32)) -> Result<(), WindowError> {
         let ShellSurface::Layer(layer) = &self.role else {
             return Err(WindowError::Missing("a layer surface"));

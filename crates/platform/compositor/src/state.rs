@@ -297,7 +297,7 @@ impl Headless {
         output.set_preferred(mode);
         output.create_global::<State>(&handle);
         handle.create_global::<State, UnboundShellV1, ()>(7, ());
-        handle.create_global::<State, UnboundAppV1, ()>(1, ());
+        handle.create_global::<State, UnboundAppV1, ()>(2, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
         State::create_capture_globals(&handle);
         let state = State {

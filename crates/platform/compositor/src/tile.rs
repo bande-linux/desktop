@@ -4,6 +4,7 @@ use smithay::backend::renderer::element::Id;
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Point, Rectangle};
+use unbound_protocols::server::unbound_app_v1;
 use unbound_spring::Spring;
 
 use crate::motion::{Look, Motion};
@@ -213,6 +214,41 @@ impl State {
             window.pending_location = Some((serial, restore.location));
         }
         restore
+    }
+
+    pub(crate) fn place_window(
+        &mut self,
+        toplevel: &xdg_toplevel::XdgToplevel,
+        placement: unbound_app_v1::Placement,
+    ) {
+        let Some(index) = self
+            .windows
+            .iter()
+            .position(|window| window.toplevel.xdg_toplevel() == toplevel)
+        else {
+            return;
+        };
+        if self.windows[index].has_state(xdg_toplevel::State::Fullscreen) {
+            return;
+        }
+        let tile = match placement {
+            unbound_app_v1::Placement::Left => Tile::Left,
+            unbound_app_v1::Placement::Right => Tile::Right,
+            unbound_app_v1::Placement::TopLeft => Tile::TopLeft,
+            unbound_app_v1::Placement::TopRight => Tile::TopRight,
+            unbound_app_v1::Placement::BottomLeft => Tile::BottomLeft,
+            unbound_app_v1::Placement::BottomRight => Tile::BottomRight,
+            _ => {
+                let surface = self.windows[index].surface().clone();
+                if self.windows[index].has_state(xdg_toplevel::State::Maximized) {
+                    self.unmaximize(&surface);
+                } else if self.untile(index).is_some() {
+                    self.animate_window(index, Spring::STANDARD, None);
+                }
+                return;
+            }
+        };
+        self.tile_window(index, tile);
     }
 
     pub(crate) fn place_with_key(&mut self, surface: &WlSurface, direction: Direction) {

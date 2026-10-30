@@ -184,7 +184,7 @@
     </event>
   </interface>
 
-  <interface name="unbound_app_v1" version="1">
+  <interface name="unbound_app_v1" version="2">
     <description summary="requests from the desktop to a whole app">
       Offered to every client. A client that binds it takes over app-level
       requests that the compositor would otherwise express per window: while
@@ -202,5 +202,27 @@
         the user cancels, the app keeps running and nothing is closed.
       </description>
     </event>
+
+    <enum name="placement" since="2">
+      <entry name="left" value="0" summary="the left half of the usable area"/>
+      <entry name="right" value="1" summary="the right half"/>
+      <entry name="top_left" value="2" summary="the top left quarter"/>
+      <entry name="top_right" value="3" summary="the top right quarter"/>
+      <entry name="bottom_left" value="4" summary="the bottom left quarter"/>
+      <entry name="bottom_right" value="5" summary="the bottom right quarter"/>
+      <entry name="restore" value="6" summary="the size and place the window had before it was tiled or zoomed"/>
+    </enum>
+
+    <request name="place_window" since="2">
+      <description summary="tile one of the app's windows">
+        Places the toplevel as the window menu's Move and Resize items do, with
+        the same animation and tiled states as dragging the window to a screen
+        edge or pressing Ctrl+Super+Arrows. Restore undoes tiling and zoom. Zoom,
+        full screen and minimise use xdg_toplevel's own requests. Ignored for a
+        toplevel of another client and in full screen.
+      </description>
+      <arg name="toplevel" type="object" interface="xdg_toplevel"/>
+      <arg name="placement" type="uint" enum="placement"/>
+    </request>
   </interface>
 </protocol>

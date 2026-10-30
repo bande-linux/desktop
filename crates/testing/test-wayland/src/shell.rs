@@ -1,5 +1,5 @@
 use unbound_compositor::SessionRole;
-use unbound_protocols::client::unbound_app_v1::{self, UnboundAppV1};
+use unbound_protocols::client::unbound_app_v1::{self, Placement, UnboundAppV1};
 use unbound_protocols::client::unbound_shell_v1::{self, UnboundShellV1};
 use wayland_client::protocol::wl_shm::Format;
 use wayland_client::protocol::wl_surface::WlSurface;
@@ -202,6 +202,12 @@ impl TestClient {
 
     pub fn take_app_requests(&mut self, server: &mut Headless) {
         let _: UnboundAppV1 = self.bind("unbound_app_v1", 1);
+        self.exchange(server);
+    }
+
+    pub fn place_window(&mut self, server: &mut Headless, index: usize, placement: Placement) {
+        let app: UnboundAppV1 = self.bind("unbound_app_v1", 2);
+        app.place_window(&self.windows[index].2, placement);
         self.exchange(server);
     }
 

@@ -1,3 +1,4 @@
+use smithay::reexports::wayland_server::WEnum;
 use smithay::reexports::wayland_server::backend::ClientId;
 use smithay::reexports::wayland_server::{
     Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource,
@@ -47,8 +48,17 @@ impl Dispatch<UnboundAppV1, ()> for State {
         _display: &DisplayHandle,
         _data_init: &mut DataInit<'_, Self>,
     ) {
-        if let unbound_app_v1::Request::Destroy = request {
-            state.app_resources.retain(|app| app != resource);
+        match request {
+            unbound_app_v1::Request::PlaceWindow {
+                toplevel,
+                placement: WEnum::Value(placement),
+            } if toplevel.client() == resource.client() => {
+                state.place_window(&toplevel, placement);
+            }
+            unbound_app_v1::Request::Destroy => {
+                state.app_resources.retain(|app| app != resource);
+            }
+            _ => {}
         }
     }
 

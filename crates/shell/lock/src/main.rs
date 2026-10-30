@@ -3,10 +3,9 @@ use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::net::UnixStream;
 use std::process::ExitCode;
 use std::thread;
-use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
-use unbound_datetime::DateFormats;
+use unbound_datetime::{DateFormats, MinuteTimer};
 use unbound_keyboard::Layouts;
 use unbound_lock::{
     BackdropSource, Inbox, LockScreen, PAM_SERVICE, User, Variant, authenticate, current_user,
@@ -17,7 +16,6 @@ use unbound_toolkit::{
     App, Image, Role, Scene, Scheme, TextSystem, Window, WindowError, WindowEvent,
 };
 
-const CLOCK_TICK: Duration = Duration::from_secs(1);
 const ACCEPTED: u8 = 1;
 const REJECTED: u8 = 0;
 
@@ -33,7 +31,7 @@ struct Locker {
     user: User,
     verdicts: UnixStream,
     verdict_sender: UnixStream,
-    next_clock: Instant,
+    minutes: MinuteTimer,
     backdrop: Option<Inbox<Image>>,
     backdrop_requested: bool,
     layouts: Layouts,
@@ -105,13 +103,21 @@ impl App for Locker {
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        let mut sources = vec![self.verdicts.as_fd()];
+        let mut sources = vec![self.verdicts.as_fd(), self.minutes.as_fd()];
         sources.extend(self.backdrop.as_ref().map(Inbox::fd));
         sources
     }
 
     fn source_ready(&mut self, window: &mut Window, index: usize) {
         if index == 1 {
+            if let Err(error) = self.minutes.wait() {
+                tracing::warn!("cannot follow the clock: {error}");
+            }
+            self.screen.set_clock(&jiff::Zoned::now());
+            window.request_redraw();
+            return;
+        }
+        if index == 2 {
             if let Some(image) = self.backdrop.take().and_then(|inbox| inbox.drain().pop()) {
                 self.screen.set_backdrop(image, frame_time().on_screen());
                 window.request_redraw();
@@ -133,20 +139,8 @@ impl App for Locker {
         }
     }
 
-    fn deadline(&self) -> Option<Instant> {
-        Some(self.next_clock)
-    }
-
     fn animating(&self) -> bool {
         self.screen.is_animating()
-    }
-
-    fn tick(&mut self, window: &mut Window, now: Instant) {
-        if now >= self.next_clock {
-            self.screen.set_clock(&jiff::Zoned::now());
-            self.next_clock = now + CLOCK_TICK;
-        }
-        window.request_redraw();
     }
 
     fn finished(&self) -> bool {
@@ -188,7 +182,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         user,
         verdicts,
         verdict_sender,
-        next_clock: Instant::now() + CLOCK_TICK,
+        minutes: MinuteTimer::new()?,
         backdrop: None,
         backdrop_requested: false,
         layouts: Layouts::load(),

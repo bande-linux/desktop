@@ -3,7 +3,8 @@ use unbound_graphics::{Item, Point, Rect};
 
 use super::control::chevron_down;
 use super::{
-    Context, Cursor, Event, Key, Menu, MenuItem, Parts, Size, TextField, Widget, WidgetId, contains,
+    Context, Cursor, DragAction, Event, Key, Menu, MenuItem, Parts, Size, TextField, Widget,
+    WidgetId, contains,
 };
 use crate::L10N;
 
@@ -146,6 +147,18 @@ impl Widget for ComboBox {
 
     fn perform(&mut self, cx: &mut Context, request: &ActionRequest) -> bool {
         self.field.perform(cx, request)
+    }
+
+    fn drop_target(&mut self, cx: &mut Context, point: Option<Point>) -> Option<DragAction> {
+        self.field.drop_target(cx, point)
+    }
+
+    fn drop_text(&mut self, cx: &mut Context, point: Point, text: &str, action: DragAction) {
+        self.field.drop_text(cx, point, text, action);
+    }
+
+    fn drag_ended(&mut self, action: Option<DragAction>) {
+        self.field.drag_ended(action);
     }
 
     fn cursor(&self, point: Point) -> Option<Cursor> {

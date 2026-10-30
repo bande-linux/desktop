@@ -62,7 +62,7 @@ use crate::chrome::{
     Zone, control_for_node,
 };
 use crate::clipboard::Clipboard;
-use crate::clipboard::{DragEvent, Transfer};
+use crate::clipboard::{DragAction, DragEvent, DragIcon, Transfer};
 use crate::effect::BackgroundEffect;
 use crate::lock::{Locked, SessionLock};
 use crate::popup::{MenuPlacement, Menus, Opening, Parent};
@@ -1049,9 +1049,17 @@ impl Window {
                 if ui.take_input_method_reset() {
                     self.reset_text_input();
                 }
+                if let Some((scene, hotspot, text)) = ui.take_text_drag() {
+                    self.start_drag(
+                        Transfer::text(&text),
+                        &[DragAction::Copy, DragAction::Move],
+                        Some(DragIcon { scene, hotspot }),
+                    )?;
+                }
                 self.set_cursor(ui.cursor());
                 (changed, None)
             }
+            WindowEvent::Drag(drag) => self.drive_drag(ui, drag),
 
             WindowEvent::Accessibility(request) => match ui.perform(&request) {
                 true => (true, None),
@@ -1122,6 +1130,39 @@ impl Window {
         self.flush()
     }
 
+    fn drive_drag(&mut self, ui: &mut Ui, drag: DragEvent) -> (bool, Option<WindowEvent>) {
+        let was_target = ui.is_drop_target();
+        match &drag {
+            DragEvent::Entered { position, .. } | DragEvent::Moved(position)
+                if self.drag_offers_text() =>
+            {
+                match ui.drag_over(Some(*position)) {
+                    Some(action) => {
+                        self.accept_drag(Some(action));
+                        (true, None)
+                    }
+                    None => {
+                        if was_target {
+                            self.accept_drag(None);
+                        }
+                        (was_target, Some(WindowEvent::Drag(drag)))
+                    }
+                }
+            }
+            DragEvent::Left => {
+                ui.drag_over(None);
+                (was_target, Some(WindowEvent::Drag(drag)))
+            }
+            DragEvent::Dropped {
+                position,
+                transfer,
+                action: Some(action),
+            } if was_target => (ui.dropped(*position, &transfer.text, *action), None),
+            DragEvent::Finished(action) if ui.drag_finished(*action) => (true, None),
+            _ => (false, Some(WindowEvent::Drag(drag))),
+        }
+    }
+
     pub(crate) fn deadline(&self) -> Option<Instant> {
         self.menus
             .as_ref()
@@ -1129,6 +1170,7 @@ impl Window {
             .into_iter()
             .chain(self.ui_deadline)
             .chain(self.release_deadline())
+            .chain(self.drag_deadline())
             .min()
     }
 
@@ -1163,6 +1205,7 @@ impl Window {
             self.release_rendering();
         }
         self.serve_menus(self.frame_time());
+        self.abandon_unfinished_drag(now);
         if self.ui_deadline.is_some_and(|deadline| deadline <= now) {
             self.ui_deadline = None;
             self.request_redraw();

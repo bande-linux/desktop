@@ -9,8 +9,8 @@ use accesskit::{
 };
 use unbound_graphics::{Item, Palette, Point, Rect, Scheme, TextSystem};
 use unbound_widgets::{
-    ClipboardRequest, Context, Event, Key, Modifiers, Pointer, PointerButton, SearchField, Size,
-    TextField, TextView, Ui, Widget, WidgetId,
+    ClipboardRequest, Context, DragAction, Event, Key, Modifiers, Pointer, PointerButton,
+    SearchField, Size, TextField, TextView, Ui, Widget, WidgetId,
 };
 
 const NONE: Modifiers = Modifiers {
@@ -377,6 +377,64 @@ fn double_click_drag_extends_by_whole_words() {
     editing.send(Event::PointerUp(Pointer::at(at(0.45))));
     editing.send(Event::PointerDown(Pointer::at(at(0.9)).with_count(3)));
     assert_eq!(editing.selected(), "hello brave new world");
+}
+
+#[test]
+fn pressing_on_a_selection_and_moving_drags_its_text_while_a_click_there_places_the_caret() {
+    let mut editing = Editing::field("hello brave new world");
+    let frame = editing.frame();
+    let y = frame.y + frame.height / 2.0;
+    editing.press(Key::Up, NONE);
+    let start = editing.caret().x;
+    editing.press(Key::Right, LOGO);
+    let end = editing.caret().x;
+    let at = |fraction: f32| Point::new(start + (end - start) * fraction, y);
+    let select_brave = |editing: &mut Editing| {
+        editing.send(Event::PointerDown(Pointer::at(at(0.4)).with_count(2)));
+        editing.send(Event::PointerUp(Pointer::at(at(0.4))));
+        assert_eq!(editing.selected(), "brave");
+    };
+
+    select_brave(&mut editing);
+    editing.send(Event::PointerDown(Pointer::at(at(0.4))));
+    editing.send(Event::PointerUp(Pointer::at(at(0.4))));
+    assert_eq!(editing.selection().len(), 0);
+    assert!(editing.ui.take_text_drag().is_none());
+
+    select_brave(&mut editing);
+    editing.send(Event::PointerDown(Pointer::at(at(0.4))));
+    editing.send(Event::PointerMove(Pointer::at(Point::new(
+        at(0.4).x + 2.0,
+        y,
+    ))));
+    assert!(editing.ui.take_text_drag().is_none());
+    editing.send(Event::PointerMove(Pointer::at(Point::new(
+        at(0.4).x + 12.0,
+        y,
+    ))));
+    let (_, _, text) = editing.ui.take_text_drag().expect("a text drag");
+    assert_eq!(text, "brave");
+    assert_eq!(editing.selected(), "brave");
+}
+
+#[test]
+fn a_field_takes_dropped_text_where_it_lands_and_selects_it_but_a_read_only_view_refuses() {
+    let mut editing = Editing::field("world");
+    let frame = editing.frame();
+    let start = Point::new(frame.x + 2.0, frame.y + frame.height / 2.0);
+
+    assert_eq!(editing.ui.drag_over(Some(start)), Some(DragAction::Copy));
+    assert!(editing.ui.dropped(start, "hello ", DragAction::Copy));
+    editing.ui.layout(AREA);
+
+    assert_eq!(editing.text(), "hello world");
+    assert_eq!(editing.selected(), "hello ");
+    let mut reading =
+        Editing::with(|_| Box::new(TextView::new("", "Release notes", |_| {}).read_only()));
+    let frame = reading.frame();
+    let inside = Point::new(frame.x + 10.0, frame.y + 8.0);
+    assert_eq!(reading.ui.drag_over(Some(inside)), None);
+    assert!(!reading.ui.dropped(inside, "x", DragAction::Copy));
 }
 
 #[test]

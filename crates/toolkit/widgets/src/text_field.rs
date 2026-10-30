@@ -4,7 +4,7 @@ use std::ops::Range;
 
 use super::control::{field_focus, paint_field};
 use super::editor::Editor;
-use super::{Context, Cursor, Event, Menu, Parts, Size, Widget, WidgetId};
+use super::{Context, Cursor, DragAction, Event, Menu, Parts, Size, Widget, WidgetId};
 use unbound_graphics::{
     Color, ControlSize, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextStyle,
 };
@@ -282,6 +282,30 @@ impl Widget for TextField {
         let handled = self.editor.handle(cx, event, self.text_origin());
         self.changed(revision);
         handled
+    }
+
+    fn drop_target(&mut self, cx: &mut Context, point: Option<Point>) -> Option<DragAction> {
+        let origin = self.text_origin();
+        let local = point.map(|point| Point::new(point.x - origin.x, point.y - origin.y));
+        self.editor.drop_target(&mut cx.text, local)
+    }
+
+    fn drop_text(&mut self, cx: &mut Context, point: Point, text: &str, action: DragAction) {
+        let origin = self.text_origin();
+        let revision = self.editor.revision();
+        self.editor.drop_text(
+            &mut cx.text,
+            Point::new(point.x - origin.x, point.y - origin.y),
+            text,
+            action,
+        );
+        self.changed(revision);
+    }
+
+    fn drag_ended(&mut self, action: Option<DragAction>) {
+        let revision = self.editor.revision();
+        self.editor.drag_ended(action);
+        self.changed(revision);
     }
 
     fn perform(&mut self, cx: &mut Context, request: &ActionRequest) -> bool {

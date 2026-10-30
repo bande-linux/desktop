@@ -151,7 +151,7 @@ impl Markup {
         true
     }
 
-    fn commit_text(&mut self) {
+    pub fn commit_text(&mut self) {
         if let Some((at, typed)) = self.typing.take()
             && !typed.trim().is_empty()
         {

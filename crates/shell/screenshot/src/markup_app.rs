@@ -60,6 +60,7 @@ impl MarkupApp {
     }
 
     fn rendered(&mut self) -> Option<ScreenImage> {
+        self.markup.commit_text();
         let snapshot = self.markup.export(&self.image, &mut self.text)?;
         Some(ScreenImage {
             width: snapshot.width,
@@ -69,6 +70,7 @@ impl MarkupApp {
     }
 
     fn done(&mut self, window: &mut Window) {
+        self.markup.commit_text();
         if !self.markup.edits().is_empty() {
             let saved = self
                 .rendered()

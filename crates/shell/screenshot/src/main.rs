@@ -22,7 +22,7 @@ use unbound_screenshot::record::{Container, Recording};
 use unbound_screenshot::service::{self, Casting, SCREEN_ID, UiRequest};
 use unbound_screenshot::shadow::with_shadow;
 use unbound_screenshot::thumbnail::{Thumbnail, ThumbnailAction};
-use unbound_screenshot::{L10N, app_name, free_path, png, recording_stem, save};
+use unbound_screenshot::{L10N, app_name, free_path, png, recording_stem, save, shrunk};
 use unbound_toolkit::ui::{
     Alert, Context, FreeLayout, Menu, MenuItem, Size, Ui, Widget, frame_time,
 };
@@ -37,6 +37,7 @@ use zbus::blocking::Connection;
 const MARKUP_FLAG: &str = "--markup";
 const PALETTE_BOTTOM: f32 = 96.0;
 const COUNTDOWN_SIZE: f32 = 132.0;
+const THUMBNAIL_SIDE: u32 = 480;
 
 enum Purpose {
     Save,
@@ -118,9 +119,13 @@ fn scaled(region: Region, scale: f64) -> Region {
 }
 
 fn new_ui(window: &Window) -> Ui {
+    ui_with(window, FreeLayout::new())
+}
+
+fn ui_with(window: &Window, layout: FreeLayout) -> Ui {
     let appearance = window.appearance();
     let mut ui = Ui::new(
-        Box::new(FreeLayout::new()),
+        Box::new(layout),
         Context::new(TextSystem::new(), appearance.palette()),
     );
     ui.context().keyboard_navigation = true;
@@ -130,17 +135,8 @@ fn new_ui(window: &Window) -> Ui {
 }
 
 fn thumbnail_image(image: &ScreenImage) -> Option<Image> {
-    let scale = (480.0 / image.width.max(image.height).max(1) as f32).min(1.0);
-    let width = ((image.width as f32 * scale).round() as u32).max(1);
-    let height = ((image.height as f32 * scale).round() as u32).max(1);
-    let source = image::RgbaImage::from_raw(image.width, image.height, image.rgba.clone())?;
-    let small = image::imageops::resize(
-        &source,
-        width,
-        height,
-        image::imageops::FilterType::Triangle,
-    );
-    Image::from_rgba(width, height, small.into_raw())
+    let small = shrunk(image, THUMBNAIL_SIDE)?;
+    Image::from_rgba(small.width, small.height, small.rgba)
 }
 
 impl Screenshots {
@@ -347,7 +343,7 @@ impl Screenshots {
         }
         let dir = self.destination_dir();
         let taken = jiff::Zoned::now().datetime();
-        match save(image.clone(), &dir, taken) {
+        match save(&image, &dir, taken) {
             Ok(path) => {
                 tracing::info!("saved {}", path.display());
                 self.show_thumbnail(window, &image, path, false);
@@ -487,13 +483,7 @@ impl Screenshots {
                 size.height,
             ),
         );
-        let appearance = window.appearance();
-        self.ui = Ui::new(
-            Box::new(layout),
-            Context::new(TextSystem::new(), appearance.palette()),
-        );
-        self.ui.context().keyboard_navigation = true;
-        self.ui.set_appearance(appearance);
+        self.ui = ui_with(window, layout);
         self.ui.handle(&unbound_toolkit::ui::Event::Key {
             key: unbound_toolkit::ui::Key::Tab,
             modifiers: Default::default(),
@@ -647,6 +637,7 @@ impl Screenshots {
             }
             UiRequest::PickColor { reply } => {
                 self.cancel(window);
+                self.hide_overlay(window);
                 let Some(shot) = self
                     .engine
                     .as_ref()
@@ -698,7 +689,7 @@ impl Screenshots {
     ) {
         let path = self.shoot(window, target).and_then(|image| {
             let dir = self.portal_dir();
-            save(image, &dir, jiff::Zoned::now().datetime())
+            save(&image, &dir, jiff::Zoned::now().datetime())
                 .inspect_err(|error| tracing::warn!("cannot save to {}: {error}", dir.display()))
                 .ok()
         });
@@ -1000,8 +991,16 @@ impl App for Screenshots {
                 for event in self.events.drain() {
                     match event {
                         EngineEvent::StreamEnded(stream) => {
-                            if let Some(casting) = &self.casting {
-                                casting.stream_ended(stream);
+                            let Some(casting) = &self.casting else {
+                                continue;
+                            };
+                            casting.stream_ended(stream);
+                            if self
+                                .recorder
+                                .as_ref()
+                                .is_some_and(|recorder| !casting.is_open(recorder.recording.node))
+                            {
+                                self.stop_recording(window);
                             }
                         }
                         EngineEvent::ShowOptions => self.show_palette(window),

@@ -492,7 +492,9 @@ impl Capture {
     }
 
     fn session(&mut self, id: u64) -> Option<&mut Session> {
-        self.sessions.iter_mut().find(|session| session.id == id)
+        self.sessions
+            .iter_mut()
+            .find(|session| session.id == id && !session.ended)
     }
 }
 

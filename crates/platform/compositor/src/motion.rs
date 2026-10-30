@@ -169,10 +169,7 @@ impl State {
         let (location, size) = window
             .pending_location
             .map(|(_, location)| {
-                let size = window
-                    .toplevel
-                    .with_pending_state(|pending| pending.size)
-                    .unwrap_or(geometry.size);
+                let size = window.requested_size().unwrap_or(geometry.size);
                 (location, size)
             })
             .unwrap_or((geometry.location, geometry.size));

@@ -5,8 +5,6 @@ use smithay::backend::input::{
     GesturePinchUpdateEvent, GestureSwipeUpdateEvent, InputBackend, InputEvent, KeyState,
     KeyboardKeyEvent, PointerAxisEvent, PointerButtonEvent, PointerMotionEvent,
 };
-use smithay::desktop::WindowSurfaceType;
-use smithay::desktop::utils::under_from_surface_tree;
 use smithay::input::keyboard::{FilterResult, Keycode, keysyms};
 use smithay::input::pointer::{AxisFrame, ButtonEvent, MotionEvent};
 use smithay::reexports::wayland_server::Resource;
@@ -14,6 +12,7 @@ use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Clock, Logical, Monotonic, Point, SERIAL_COUNTER};
 use unbound_protocols::server::unbound_shell_v1::{BrightnessKey, VolumeKey};
 
+use crate::frame::Target;
 use crate::gesture::Gesture;
 use crate::motion::DOCK_NAMESPACE;
 use crate::shell::toplevel_names;
@@ -119,11 +118,10 @@ impl State {
         &self,
         location: Point<f64, Logical>,
     ) -> Option<(WlSurface, Point<f64, Logical>)> {
-        self.stack().into_iter().find_map(|(surface, origin)| {
-            let origin: Point<i32, Logical> = (origin.x, origin.y).into();
-            under_from_surface_tree(&surface, location, origin, WindowSurfaceType::ALL)
-                .map(|(surface, at)| (surface, at.to_f64()))
-        })
+        match self.pointer_target(location)? {
+            Target::Surface(surface, at) => Some((surface, at)),
+            Target::Frame(..) => None,
+        }
     }
 
     pub(crate) fn refocus_pointer(&mut self) {
@@ -430,6 +428,9 @@ impl Headless {
         let Some(pointer) = state.seat.get_pointer() else {
             return;
         };
+        if !pointer.is_grabbed() {
+            state.point_at_frame(location, under.is_some());
+        }
         pointer.motion(
             state,
             under,
@@ -445,6 +446,9 @@ impl Headless {
     pub fn press_button(&mut self, button: u32, pressed: bool, time: u32) {
         self.state.note_activity();
         let state = &mut self.state;
+        if !pressed && state.release_frame(button) {
+            return;
+        }
         if !pressed && state.swallowed_button == Some(button) {
             state.swallowed_button = None;
             return;
@@ -463,16 +467,20 @@ impl Headless {
                 return;
             }
             if state.popup_grab.is_none() {
-                match under {
-                    Some((surface, _)) => {
-                        if let Some(focusable) = state
-                            .toplevel_of(&surface)
-                            .or_else(|| state.focusable_layer_of(&surface))
-                        {
-                            state.focus(Some(focusable));
+                match state.press_frame(button, time) {
+                    Some(true) => return,
+                    Some(false) => {}
+                    None => match under {
+                        Some((surface, _)) => {
+                            if let Some(focusable) = state
+                                .toplevel_of(&surface)
+                                .or_else(|| state.focusable_layer_of(&surface))
+                            {
+                                state.focus(Some(focusable));
+                            }
                         }
-                    }
-                    None => state.focus(None),
+                        None => state.focus(None),
+                    },
                 }
             }
         }

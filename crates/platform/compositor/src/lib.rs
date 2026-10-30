@@ -9,6 +9,7 @@ mod drag;
 mod drm;
 mod effect;
 mod environment;
+mod frame;
 mod gesture;
 mod grab;
 mod idle;
@@ -32,7 +33,7 @@ mod watchdog;
 mod window;
 mod workspace;
 
-pub use appearance::follow_reduced_motion;
+pub use appearance::{SystemAppearance, follow_appearance};
 pub use clock::{FrameClock, FrameOutput, FrameScheduler, Poll, SAFETY_MARGIN, Submission, Vblank};
 pub use cursor::{
     ARROW_FILL, ARROW_HEIGHT, ARROW_OUTLINE, ARROW_WIDTH, CursorTheme, DEFAULT_CURSOR_SIZE,

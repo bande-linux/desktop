@@ -53,7 +53,9 @@ use crate::L10N;
 use crate::access::Accessibility;
 use crate::appearance::AppearanceWatch;
 use crate::capture::Capture;
-use crate::chrome::{Chrome, Control, Frame, RESIZE_MARGIN, TITLE_BAR_HEIGHT, Zone};
+use crate::chrome::{
+    Chrome, Control, Frame, RESIZE_MARGIN, TITLE_BAR_HEIGHT, Zone, control_for_node,
+};
 use crate::clipboard::Clipboard;
 use crate::clipboard::{DragEvent, Transfer};
 use crate::effect::BackgroundEffect;
@@ -1254,7 +1256,7 @@ impl Window {
     }
 
     fn perform_chrome(&mut self, request: &ActionRequest) -> bool {
-        let Some(control) = Control::for_node(request.target_node) else {
+        let Some(control) = control_for_node(request.target_node) else {
             return false;
         };
         if self.chrome.is_none() || request.action != accesskit::Action::Click {

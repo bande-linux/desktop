@@ -3,7 +3,7 @@
 use std::sync::mpsc;
 use std::time::Duration;
 
-use unbound_compositor::follow_reduced_motion;
+use unbound_compositor::{SystemAppearance, follow_appearance};
 use unbound_test_bus::SessionBus;
 use zbus::object_server::SignalEmitter;
 use zbus::zvariant::{OwnedValue, Value};
@@ -35,7 +35,7 @@ impl Settings {
 }
 
 #[test]
-fn reduce_motion_follows_the_portals_reduced_motion_key() {
+fn reduce_motion_and_dark_mode_follow_the_portals_appearance_keys() {
     let bus = SessionBus::start().expect("session bus");
     let portal = bus.connect().expect("portal connection");
     portal
@@ -45,10 +45,9 @@ fn reduce_motion_follows_the_portals_reduced_motion_key() {
     portal.request_name(PORTAL).expect("portal name");
     let (sender, readings) = mpsc::channel();
 
-    follow_reduced_motion(
-        bus.connect().expect("compositor connection"),
-        move |reduce| sender.send(reduce).is_ok(),
-    )
+    follow_appearance(bus.connect().expect("compositor connection"), move |look| {
+        sender.send(look).is_ok()
+    })
     .expect("follow the portal");
     let first = readings.recv_timeout(TIMEOUT).expect("first reading");
     let emitter = SignalEmitter::new(portal.inner(), PORTAL_PATH).expect("emitter");
@@ -61,9 +60,25 @@ fn reduce_motion_follows_the_portals_reduced_motion_key() {
         ))
         .expect("signal");
     }
-    let changed = readings.recv_timeout(TIMEOUT).expect("change");
+    let dark = readings.recv_timeout(TIMEOUT).expect("dark");
+    let calm = readings.recv_timeout(TIMEOUT).expect("motion");
 
-    assert!(first);
-    assert!(!changed);
+    assert_eq!(
+        [first, dark, calm],
+        [
+            SystemAppearance {
+                reduce_motion: true,
+                dark: false
+            },
+            SystemAppearance {
+                reduce_motion: true,
+                dark: true
+            },
+            SystemAppearance {
+                reduce_motion: false,
+                dark: true
+            },
+        ]
+    );
     assert!(readings.recv_timeout(Duration::from_millis(200)).is_err());
 }

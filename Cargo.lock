@@ -3753,9 +3753,13 @@ name = "unbound-bar"
 version = "0.1.0"
 dependencies = [
  "accesskit",
+ "image",
  "jiff",
+ "smithay",
  "tracing",
+ "unbound-compositor",
  "unbound-config",
+ "unbound-controlcenter",
  "unbound-datetime",
  "unbound-dock-model",
  "unbound-fs",
@@ -3763,10 +3767,14 @@ dependencies = [
  "unbound-inbox",
  "unbound-keyboard",
  "unbound-l10n",
+ "unbound-launcher",
+ "unbound-notifications",
  "unbound-sound",
  "unbound-status",
+ "unbound-test-wayland",
  "unbound-toolkit",
  "unbound-xdg",
+ "wayland-client",
  "zbus",
 ]
 

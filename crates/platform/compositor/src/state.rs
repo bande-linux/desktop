@@ -1007,11 +1007,18 @@ impl State {
             && surface.as_ref() != Some(&exclusive.surface)
         {
             exclusive.previous = surface.clone();
+            let holder = exclusive.surface.clone();
             if let Some(index) = surface
                 .as_ref()
                 .and_then(|surface| self.window_index(surface))
             {
                 self.raise(index);
+            }
+            if self.popup_grab.is_none()
+                && let Some(keyboard) = self.seat.get_keyboard()
+                && keyboard.current_focus().as_ref() != Some(&holder)
+            {
+                keyboard.set_focus(self, Some(holder), SERIAL_COUNTER.next_serial());
             }
             self.sync_activated();
             return;

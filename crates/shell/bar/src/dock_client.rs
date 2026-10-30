@@ -89,6 +89,7 @@ pub struct Dock {
     zone: i32,
     menu: Option<MenuTarget>,
     confirming: bool,
+    swallow_release: bool,
     active: Option<String>,
     release_at: Option<Instant>,
     unresponsive: Vec<String>,
@@ -521,11 +522,7 @@ impl Dock {
     }
 
     fn menu_action(&mut self, window: &mut Window, action: &str) {
-        self.state.borrow_mut().set_menu_open(false, Instant::now());
-        if !self.state.borrow().is_navigating() {
-            self.release_at = Some(Instant::now() + KEYBOARD_GRACE);
-        }
-
+        self.set_menu_open(false);
         let Some(target) = self.menu.take() else {
             return;
         };
@@ -749,7 +746,24 @@ impl Dock {
     }
 
     pub fn set_menu_open(&mut self, open: bool) {
+        if !open && !self.state.borrow().is_navigating() {
+            self.release_at = Some(Instant::now() + KEYBOARD_GRACE);
+        }
         self.state.borrow_mut().set_menu_open(open, Instant::now());
+    }
+
+    fn menu_shown(&self) -> bool {
+        self.state.borrow().is_menu_open()
+    }
+
+    fn menu_closed(&mut self) {
+        self.menu = None;
+        self.confirming = false;
+        self.set_menu_open(false);
+    }
+
+    fn owns_open_menu_at(&self, point: Point) -> bool {
+        self.menu.is_some() && self.state.borrow().target_at(point) == self.menu
     }
 
     pub fn revealed(&self, now: Instant) -> f32 {
@@ -799,16 +813,27 @@ impl App for Dock {
                 window.request_redraw();
             }
             WindowEvent::Focus(true) => {
-                if !self.state.borrow().is_navigating() && self.menu.is_none() {
+                if !self.state.borrow().is_navigating() && !self.menu_shown() {
                     self.release_at = Some(Instant::now() + KEYBOARD_GRACE);
                 }
             }
             WindowEvent::Focus(false) => {
                 self.release_at = None;
-                if self.menu.is_none() {
+                if !self.menu_shown() {
                     self.state.borrow_mut().end_navigation(Instant::now());
                     window.request_redraw();
                 }
+            }
+            WindowEvent::Input(Event::PointerDown(pointer))
+                if self.owns_open_menu_at(pointer.position) =>
+            {
+                window.close_menu();
+                self.menu_closed();
+                self.swallow_release = true;
+                window.request_redraw();
+            }
+            WindowEvent::Input(Event::PointerUp(_)) if self.swallow_release => {
+                self.swallow_release = false;
             }
             WindowEvent::Input(input) => {
                 if self.ui.handle(&input) {
@@ -835,12 +860,7 @@ impl App for Dock {
                 window.request_redraw();
             }
             WindowEvent::MenuClosed => {
-                self.menu = None;
-                self.confirming = false;
-                if !self.state.borrow().is_navigating() {
-                    self.release_at = Some(Instant::now() + KEYBOARD_GRACE);
-                }
-                self.state.borrow_mut().set_menu_open(false, Instant::now());
+                self.menu_closed();
                 window.request_redraw();
             }
             WindowEvent::ActiveApp(app_id) => {
@@ -907,7 +927,7 @@ impl App for Dock {
     fn tick(&mut self, window: &mut Window, now: Instant) {
         if self.release_at.is_some_and(|at| now >= at) {
             self.release_at = None;
-            if self.menu.is_none() && !self.state.borrow().is_navigating() {
+            if !self.menu_shown() && !self.state.borrow().is_navigating() {
                 self.release_keyboard(window);
             }
         }
@@ -993,6 +1013,7 @@ impl Dock {
             zone: exclusive_zone(icon_size).round() as i32,
             menu: None,
             confirming: false,
+            swallow_release: false,
             active: None,
             release_at: None,
             unresponsive: Vec::new(),

@@ -160,7 +160,7 @@ writes a hex value, a corner radius or a font name of its own.
 - **Widgets.** `ui` holds the widget tree: `Stack` (rows and columns with spacing and padding; a
   column stretches its children across, a row centres them), `Label`, `Shortcut`, the controls
   below, `Table`, `ScrollView`, `Disclosure` and `FreeLayout`, laid out, painted into a `Scene`
-  and driven by `Ui`. Buttons and switches act on release inside, as in AppKit. Tab moves focus
+  and driven by `Ui`. `Ui::update_widget(id, |widget, cx| ...)` changes a widget from code with the context it needs (e.g. `SegmentedControl::set_selected`, `Slider::set_value`), so the change animates. Buttons and switches act on release inside, as in AppKit. Tab moves focus
   between text fields only unless `keyboard_navigation` is set, as macOS's Keyboard navigation
   setting (off by default) does; tabbing into a field selects its text. A widget opens a menu
   of its own (a pop-up button's choices) with `Context::show_menu`; the choice comes back to it

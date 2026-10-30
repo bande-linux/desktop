@@ -467,6 +467,23 @@ impl Ui {
         self.lookup_mut(id)?.as_any_mut().downcast_mut()
     }
 
+    pub fn update_widget<T: Widget + 'static>(
+        &mut self,
+        id: WidgetId,
+        update: impl FnOnce(&mut T, &Context),
+    ) -> bool {
+        self.cx.now = (self.clock)();
+        let widget = lookup_in(&mut self.root, &mut self.sheet, id)
+            .and_then(|widget| widget.as_any_mut().downcast_mut::<T>());
+        match widget {
+            Some(widget) => {
+                update(widget, &self.cx);
+                true
+            }
+            None => false,
+        }
+    }
+
     pub fn widget_ref<T: Widget + 'static>(&self, id: WidgetId) -> Option<&T> {
         self.lookup(id)?.as_any().downcast_ref()
     }

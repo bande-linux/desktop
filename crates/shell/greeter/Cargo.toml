@@ -26,7 +26,7 @@ tempfile.workspace = true
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
-depends = "$auto, fonts-inter, greetd, unbound-compositor"
+depends = "$auto, fonts-inter, greetd, systemd, unbound-compositor"
 extended-description = """\
 The login window of the Unbound desktop: greetd runs it as its greeter \
 inside unbound-compositor --greeter, and it lists the people who can \

@@ -10,8 +10,8 @@ use crate::file_chooser::{Dialog, FileChooserUi, Filter, Mode, Outcome, Pattern,
 use crate::request::Cancellation;
 
 pub const DIALOG_PROGRAM: &str = "/usr/libexec/unbound-file-chooser";
-pub const CHOSEN: i32 = 0;
-pub const CANCELLED: i32 = 1;
+pub const CHOSEN: u8 = 0;
+pub const CANCELLED: u8 = 1;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArgumentError(pub String);
@@ -239,8 +239,8 @@ impl FileChooserUi for DialogProcess {
         let status = child.wait().ok().and_then(|status| status.code());
         match status {
             _ if cancellation.is_cancelled() => Outcome::Cancelled,
-            Some(CHOSEN) => Outcome::Chosen(decode(&output, dialog)),
-            Some(CANCELLED) => Outcome::Cancelled,
+            Some(code) if code == i32::from(CHOSEN) => Outcome::Chosen(decode(&output, dialog)),
+            Some(code) if code == i32::from(CANCELLED) => Outcome::Cancelled,
             _ => Outcome::Unavailable,
         }
     }

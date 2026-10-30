@@ -82,8 +82,19 @@ graph LR
   `unbound-screenshot`.
 - `org.freedesktop.impl.portal.Settings`: colour scheme and accent colour for sandboxed and
   toolkit apps.
-- `org.freedesktop.impl.portal.FileChooser`: the Files column browser as the Open and Save
-  dialog.
+- `org.freedesktop.impl.portal.FileChooser`: the Unbound Open and Save dialogs. The portal
+  runs `/usr/libexec/unbound-file-chooser` (`crates/apps/file-chooser`) per request with the
+  dialog as arguments; it answers on standard output with the chosen paths and filter and
+  exits 0 when chosen and 1 when cancelled, and closing the request terminates it. If it cannot
+  start (not installed, no display, any other exit) the portal forwards the same call to
+  `xdg-desktop-portal-gtk`, forwarding a later Close too. The dialog: favourite places,
+  bookmarks and volumes in a sidebar (from Files), a path bar from the home folder, a sortable
+  Name, Date Modified and Size list with type-to-jump, folder icons from the accent icon
+  theme, the app's filters as a pop-up, Save As with the name selected up to its extension,
+  "Replace?" before overwriting, New Folder when saving or choosing folders, `Super+Up` and
+  `Super+Down` to move up and into folders, and the last folder remembered per app in
+  `$XDG_STATE_HOME/unbound/file-chooser-folders`. Choices are answered with their initial
+  values, and the dialog is not yet parented to the app window (xdg-foreign).
 - Implemented in `crates/services/portal`: `Settings` (version 2) publishes
   `org.freedesktop.appearance` from `org.unbound.Config`, with `color-scheme` 1 for dark and 2
   for light (Automatic is resolved by the portal: dark from sunset to sunrise at the main city
@@ -107,7 +118,7 @@ graph LR
   validation, PipeWire streams, `persist_mode` with restore data that skips the picker, closing
   stops the streams) are implemented over `FileChooserUi`, `ScreenshotUi` and
   `ScreenCastBackend` traits. `unbound-portals.conf` (picked when `XDG_CURRENT_DESKTOP=Unbound`)
-  sends Open and Save dialogs to the GTK backend, secrets to GNOME Keyring, Screenshot and
+  sends Open and Save dialogs to Unbound (GTK second), secrets to GNOME Keyring, Screenshot and
   ScreenCast to Unbound, and everything else to GTK.
 - **Capture lives in the screenshot tool.** The portal process has no Wayland connection: its
   `ScreenshotUi` and `ScreenCastBackend` forward to `org.unbound.Screenshot`, served by

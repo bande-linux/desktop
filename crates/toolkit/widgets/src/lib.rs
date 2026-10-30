@@ -453,6 +453,12 @@ impl Ui {
         self.cx.focus
     }
 
+    pub fn set_focus(&mut self, id: WidgetId) {
+        if self.accepts_focus(id) {
+            self.cx.focus = Some(id);
+        }
+    }
+
     pub fn clear_focus(&mut self) {
         self.cx.focus = None;
     }

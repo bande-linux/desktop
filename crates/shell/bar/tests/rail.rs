@@ -62,6 +62,20 @@ fn apps(scale: f64) -> Vec<DockApp> {
     ]
 }
 
+fn numbered(count: usize) -> Vec<DockApp> {
+    (0..count)
+        .map(|index| {
+            app(
+                &format!("org.example.App{index}"),
+                &format!("App {index}"),
+                true,
+                false,
+                1.0,
+            )
+        })
+        .collect()
+}
+
 fn tray_icon() -> Option<Image> {
     let size = 15;
     let pixels = (0..size * size)
@@ -279,23 +293,18 @@ fn the_tray_shows_two_per_row_and_folds_beyond_three_items_into_more() {
     assert!(view.slot_rect(Slot::Tray(3)).is_none());
     assert!(view.slot_rect(Slot::InputSource).is_none());
     assert!(view.slot_rect(Slot::TrayMore).is_some());
-    assert_eq!(view.shown_tray_items(), 3);
+    assert_eq!(view.hidden_tray(), [Slot::Tray(3), Slot::InputSource]);
+    rail.view.set_expanded(true);
+    rail.frame(1.0);
+    let view = &rail.view;
+    assert!(view.hidden_tray().is_empty());
+    assert!(view.slot_rect(Slot::TrayMore).is_none());
+    assert!(view.slot_rect(Slot::InputSource).is_some());
 }
 
 #[test]
 fn apps_shrink_once_and_then_fold_the_rest_into_a_more_cell_above_the_trash() {
-    let many: Vec<DockApp> = (0..14)
-        .map(|index| {
-            app(
-                &format!("org.example.App{index}"),
-                &format!("App {index}"),
-                true,
-                false,
-                1.0,
-            )
-        })
-        .collect();
-    let mut rail = Rail::new(Scheme::Light, 600, many);
+    let mut rail = Rail::new(Scheme::Light, 600, numbered(14));
     rail.frame(1.0);
     let rects = rail.state.borrow().icon_rects();
     let region = rail.view.apps_region(600.0);
@@ -599,4 +608,75 @@ fn the_open_cascade_keeps_the_pressed_header_and_offers_type_to_search() {
         let (rgba, size) = open_cascade(query);
         check_golden(name, size, rgba);
     }
+}
+
+#[test]
+fn the_keyboard_reaches_the_more_cell_between_the_apps_and_the_trash_and_opens_it() {
+    let mut rail = Rail::new(Scheme::Light, 600, numbered(14));
+    rail.frame(1.0);
+    let now = rail.clock.get();
+    let plain = Modifiers::default();
+    let mut state = rail.state.borrow_mut();
+    state.start_navigation(None, now);
+    assert!(state.navigate(Key::End, plain, now));
+    assert!(state.navigate(Key::Up, plain, now));
+    assert!(state.navigate(Key::Enter, plain, now));
+    let actions = state.take_actions();
+    let [
+        DockAction::Menu {
+            target: MenuTarget::More(hidden),
+            ..
+        },
+    ] = actions.as_slice()
+    else {
+        panic!("Enter on the more cell opens its list and keeps the keyboard, got {actions:?}");
+    };
+    assert!(!hidden.is_empty());
+    assert!(state.is_navigating());
+}
+
+fn shown_apps(rail: &Rail) -> Vec<(String, Rect)> {
+    rail.state.borrow().icon_rects()
+}
+
+#[test]
+fn an_app_leaving_a_full_rail_frees_room_before_the_next_one_comes_out_of_more() {
+    let height = 600;
+    let shown = {
+        let mut rail = Rail::new(Scheme::Light, height, numbered(14));
+        rail.frame(1.0);
+        shown_apps(&rail).len()
+    };
+    let mut rail = Rail::new(Scheme::Light, height, numbered(shown + 2));
+    rail.frame(1.0);
+    assert_eq!(shown_apps(&rail).len(), shown);
+    let region = rail.view.apps_region(height as f32);
+    let x = bar_width(ICON) / 2.0;
+    let trash_top = (region.top as i32..region.bottom as i32)
+        .map(|y| y as f32)
+        .find(|y| rail.state.borrow().drop_target(Point::new(x, *y)) == Some(MenuTarget::Trash))
+        .expect("the trash");
+    let start = rail.clock.get();
+    rail.state
+        .borrow_mut()
+        .set_apps(numbered(shown + 2).split_off(1), start);
+    let mut before: Vec<String> = Vec::new();
+    for frame in 0..40 {
+        rail.clock.set(start + Duration::from_millis(16 * frame));
+        rail.frame(1.0);
+        let now = shown_apps(&rail);
+        let names: Vec<String> = now.iter().map(|(id, _)| id.clone()).collect();
+        assert!(
+            before.iter().all(|id| names.contains(id)),
+            "frame {frame}: {before:?} went back into More as {names:?}"
+        );
+        assert!(
+            now.iter()
+                .all(|(_, rect)| rect.y + rect.height <= trash_top),
+            "frame {frame}: an app is drawn over the trash: {now:?} below {trash_top}"
+        );
+        before = names;
+    }
+    assert_eq!(before.len(), shown + 1);
+    assert!(before.contains(&format!("org.example.App{}", shown + 1)));
 }

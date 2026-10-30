@@ -19,7 +19,7 @@ use unbound_toolkit::{
     TextRole, TextStyle, TextSystem,
 };
 
-pub use backdrop::{BackdropSource, load_backdrop};
+pub use backdrop::{BackdropSource, Look, load_backdrop};
 pub use pam::{AuthError, authenticate};
 pub use unbound_inbox::Inbox;
 pub use unbound_wallpaper::Variant;
@@ -82,6 +82,8 @@ struct Model {
     now: Instant,
     backdrop: Option<Image>,
     backdrop_shown: Animated,
+    wallpaper: Option<Image>,
+    content_shown: Animated,
 }
 
 type Shared = Rc<RefCell<Model>>;
@@ -182,10 +184,21 @@ impl Widget for LockView {
             paint: cx.palette.chassis.into(),
         });
         let model = self.model.borrow();
+        let (shown, _) = model.content_shown.value_at(model.now);
+        let unveiling = match &model.wallpaper {
+            Some(wallpaper) if model.content_shown.target() < 1.0 => {
+                items.push(Item::Image {
+                    rect: self.frame,
+                    image: wallpaper.clone(),
+                });
+                shown
+            }
+            _ => 1.0,
+        };
         if let Some(image) = &model.backdrop {
             let (alpha, _) = model.backdrop_shown.value_at(model.now);
             items.push(Item::Opacity {
-                alpha,
+                alpha: alpha * unveiling,
                 items: vec![
                     Item::Image {
                         rect: self.frame,
@@ -199,6 +212,52 @@ impl Widget for LockView {
             });
         }
         drop(model);
+        let mut content = Vec::new();
+        self.paint_content(cx, &mut content);
+        match shown >= 1.0 {
+            true => items.extend(content),
+            false => items.push(Item::Opacity {
+                alpha: shown.max(0.0),
+                items: content,
+            }),
+        }
+    }
+
+    fn access(&self, _cx: &Context) -> Node {
+        let mut node = Node::new(Role::Window);
+        let model = self.model.borrow();
+        let locked = L10N.tr_args("locked", [("name", model.name.as_str().into())]);
+        let input_source = model
+            .input_source
+            .as_ref()
+            .map(|name| L10N.tr_args("input-source", [("name", name.as_str().into())]));
+        let (current, count) = model.position;
+        let position = (count > 1).then(|| {
+            L10N.tr_args(
+                "user-position",
+                [("index", (current + 1).into()), ("count", count.into())],
+            )
+        });
+        let label = [Some(locked), position, model.message.clone(), input_source]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join(" ");
+        node.set_label(label);
+        node
+    }
+
+    fn children(&self) -> &[Box<dyn Widget>] {
+        &self.children
+    }
+
+    fn children_mut(&mut self) -> &mut [Box<dyn Widget>] {
+        &mut self.children
+    }
+}
+
+impl LockView {
+    fn paint_content(&self, cx: &Context, items: &mut Vec<Item>) {
         let Some([date, time, initial, name]) = &self.paragraphs else {
             return;
         };
@@ -277,40 +336,6 @@ impl Widget for LockView {
         }
     }
 
-    fn access(&self, _cx: &Context) -> Node {
-        let mut node = Node::new(Role::Window);
-        let model = self.model.borrow();
-        let locked = L10N.tr_args("locked", [("name", model.name.as_str().into())]);
-        let input_source = model
-            .input_source
-            .as_ref()
-            .map(|name| L10N.tr_args("input-source", [("name", name.as_str().into())]));
-        let (current, count) = model.position;
-        let position = (count > 1).then(|| {
-            L10N.tr_args(
-                "user-position",
-                [("index", (current + 1).into()), ("count", count.into())],
-            )
-        });
-        let label = [Some(locked), position, model.message.clone(), input_source]
-            .into_iter()
-            .flatten()
-            .collect::<Vec<_>>()
-            .join(" ");
-        node.set_label(label);
-        node
-    }
-
-    fn children(&self) -> &[Box<dyn Widget>] {
-        &self.children
-    }
-
-    fn children_mut(&mut self) -> &mut [Box<dyn Widget>] {
-        &mut self.children
-    }
-}
-
-impl LockView {
     fn avatar(&self) -> Rect {
         Rect::new(
             self.frame.x + ((self.frame.width - AVATAR) / 2.0).round(),
@@ -371,6 +396,8 @@ impl LockScreen {
             now: Instant::now(),
             backdrop: None,
             backdrop_shown: Animated::new(0.0),
+            wallpaper: None,
+            content_shown: Animated::new(1.0),
         }));
         let submitted = model.clone();
         let field = SecureField::new(&L10N.tr("enter-password"), FIELD_FONT, move |password| {
@@ -503,9 +530,27 @@ impl LockScreen {
             .animate_at(now, false, 1.0, Spring::FADE);
     }
 
+    pub fn set_wallpaper(&mut self, image: Image) {
+        self.model.borrow_mut().wallpaper = Some(image);
+    }
+
+    pub fn leave(&mut self, now: Instant) {
+        self.model
+            .borrow_mut()
+            .content_shown
+            .animate_at(now, false, 0.0, Spring::STANDARD);
+    }
+
+    pub fn has_left(&self) -> bool {
+        let model = self.model.borrow();
+        let (shown, moving) = model.content_shown.value_at(model.now);
+        shown <= 0.0 && !moving
+    }
+
     pub fn is_animating(&self) -> bool {
         let model = self.model.borrow();
         model.backdrop_shown.value_at(model.now).1
+            || model.content_shown.value_at(model.now).1
             || model
                 .shake_from
                 .is_some_and(|from| model.now < from + SHAKE_DURATION)

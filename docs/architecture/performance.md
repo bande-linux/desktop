@@ -140,7 +140,12 @@ compositor (2.1 in the live session, all from the same pool) likewise.
 - **The clock by the minute.** The bar checked its clock every second. A `timerfd` on
   `CLOCK_REALTIME`, armed for the next whole minute with `TFD_TIMER_CANCEL_ON_SET`, now wakes it
   once a minute, at the minute, and at once when the clock is set or the machine resumes, so the
-  time is right after suspend even though the bar's own timers do not run during it.
+  time is right after suspend even though the bar's own timers do not run during it. The lock
+  screen redrew every second for the same clock; it now uses the same timer (`MinuteTimer` in
+  `unbound-datetime`), one frame a minute instead of sixty.
+- **Locking before sleep without polling.** `unbound-power` asked logind for `LockedHint` every
+  20 ms (up to 150 calls) while the lock screen came up before sleep; it now waits on the
+  property's change signal.
 - **Status notifier items by narrow match rules.** The tray host subscribed to every signal on
   the session bus; it now asks the bus only for status-item and watcher signals, the watcher's
   owner changes and the app-menu `LayoutUpdated`, so other apps' signals no longer wake the bar.

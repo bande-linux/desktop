@@ -223,6 +223,7 @@ pub struct State {
     pub(crate) keys: crate::access_keys::AccessKeys,
     pub(crate) keyboard_monitor: crate::keyboard_monitor::KeyboardMonitor,
     pub(crate) needs_redraw: bool,
+    pub(crate) reveal: crate::reveal::Reveal,
     pub(crate) pointer_location: Point<f64, Logical>,
     pub(crate) cursor_shown: bool,
     pub(crate) cursor_status: CursorImageStatus,
@@ -401,6 +402,7 @@ impl Headless {
             keys: crate::access_keys::AccessKeys::default(),
             keyboard_monitor: crate::keyboard_monitor::KeyboardMonitor::default(),
             needs_redraw: false,
+            reveal: crate::reveal::Reveal::default(),
             pointer_location: (center.w, center.h).into(),
             cursor_shown: false,
             cursor_status: CursorImageStatus::default_named(),
@@ -698,15 +700,29 @@ impl Headless {
         elements.extend(self.state.switcher_elements(renderer, screen, scale));
         elements.extend(self.state.assist_elements(renderer, screen, scale));
         let key = self.state.key_window();
+        let shell_opacity = self.state.shell_opacity();
+        let wallpapers: Vec<WlSurface> = match shell_opacity < 1.0 {
+            true => self
+                .state
+                .placed_layers(screen, Layer::Background)
+                .into_iter()
+                .map(|(surface, _)| surface)
+                .collect(),
+            false => Vec::new(),
+        };
         for placed in self.state.scene(true, screen) {
             match placed {
                 Placed::Surface(surface, location) => {
+                    let alpha = match wallpapers.contains(&surface) {
+                        true => 1.0,
+                        false => shell_opacity,
+                    };
                     elements.extend(render_elements_from_surface_tree(
                         renderer,
                         &surface,
                         location.to_f64().to_physical(scale).to_i32_round::<i32>(),
                         scale,
-                        1.0,
+                        alpha,
                         ElementKind::Unspecified,
                     ));
                     elements.extend(surface_blurs(
@@ -991,11 +1007,18 @@ impl State {
             && surface.as_ref() != Some(&exclusive.surface)
         {
             exclusive.previous = surface.clone();
+            let holder = exclusive.surface.clone();
             if let Some(index) = surface
                 .as_ref()
                 .and_then(|surface| self.window_index(surface))
             {
                 self.raise(index);
+            }
+            if self.popup_grab.is_none()
+                && let Some(keyboard) = self.seat.get_keyboard()
+                && keyboard.current_focus().as_ref() != Some(&holder)
+            {
+                keyboard.set_focus(self, Some(holder), SERIAL_COUNTER.next_serial());
             }
             self.sync_activated();
             return;

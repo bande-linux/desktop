@@ -18,6 +18,13 @@ pub fn config_home() -> Option<PathBuf> {
         .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
 }
 
+pub fn cache_home() -> Option<PathBuf> {
+    env::var_os("XDG_CACHE_HOME")
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache")))
+}
+
 pub fn config_dirs() -> Vec<PathBuf> {
     let system = env::var_os("XDG_CONFIG_DIRS")
         .filter(|value| !value.is_empty())

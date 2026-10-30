@@ -1,8 +1,9 @@
+use std::io;
 use std::time::Duration;
 
 use smithay::utils::Size;
 use unbound_compositor::{
-    FrameClock, FrameOutput, FrameScheduler, Headless, REFRESH, Renderer, SAFETY_MARGIN,
+    FrameClock, FrameOutput, FrameScheduler, Headless, Poll, REFRESH, Renderer, SAFETY_MARGIN,
     Submission, Vblank,
 };
 use unbound_test_wayland::{Presented, RED, ShmImage, TestClient};
@@ -209,49 +210,111 @@ fn a_wake_up_too_late_to_render_in_time_draws_at_once_for_the_next_vblank() {
     assert_eq!(presented.sequence, next.sequence + 1);
 }
 
-struct FlipNeverCompletes {
-    submits: usize,
+struct Display {
+    failing: bool,
+    submitted: usize,
 }
 
-impl FrameOutput for FlipNeverCompletes {
-    type Error = std::io::Error;
+impl FrameOutput for Display {
+    type Error = io::Error;
 
-    fn submit(&mut self, _: &mut Headless, _: &str) -> Result<Submission, Self::Error> {
-        self.submits += 1;
+    fn submit(&mut self, _: &mut Headless, _: &str) -> io::Result<Submission> {
+        if self.failing {
+            return Err(io::Error::other("the connector is gone"));
+        }
+        self.submitted += 1;
         Ok(Submission::AwaitingFlip)
     }
 }
 
-fn submit_once(
+fn poll_display(session: &mut Session, display: &mut Display, now: Duration) -> io::Result<Poll> {
+    session.scheduler.poll(|| now, &mut session.server, display)
+}
+
+fn submit_through(
     scheduler: &mut FrameScheduler,
     server: &mut Headless,
-    output: &mut FlipNeverCompletes,
+    display: &mut Display,
+    mut now: Duration,
 ) {
-    let before = output.submits;
-    let mut now = Duration::ZERO;
+    let before = display.submitted;
     loop {
-        let poll = scheduler.poll(|| now, server, output).expect("frame");
-        if output.submits != before {
+        let poll = scheduler.poll(|| now, server, display).expect("frame");
+        if display.submitted > before {
             return;
         }
         now = poll.wake_at.expect("a frame is due");
     }
 }
 
+fn submit_through_session(session: &mut Session, display: &mut Display, now: Duration) {
+    submit_through(&mut session.scheduler, &mut session.server, display, now);
+}
+
+#[test]
+fn a_flip_lost_in_sleep_stops_holding_back_frames_once_awake() {
+    let (mut session, last) = Session::with_a_window();
+    let mut display = Display {
+        failing: false,
+        submitted: 0,
+    };
+    session.commit_with_feedback();
+    submit_through_session(&mut session, &mut display, last.time);
+
+    session.commit_with_feedback();
+    let later = last.time + REFRESH * 10;
+    assert_eq!(
+        poll_display(&mut session, &mut display, later).expect("frame"),
+        Poll::default()
+    );
+
+    session.scheduler.resume();
+    submit_through_session(&mut session, &mut display, later);
+    assert_eq!(display.submitted, 2);
+}
+
+#[test]
+fn a_frame_the_display_refuses_is_dropped_instead_of_retried_every_refresh() {
+    let (mut session, last) = Session::with_a_window();
+    let mut display = Display {
+        failing: true,
+        submitted: 0,
+    };
+    session.commit_with_feedback();
+    let mut now = last.time;
+    while let Ok(poll) = poll_display(&mut session, &mut display, now) {
+        now = poll.wake_at.expect("a frame is due");
+    }
+
+    let later = now + REFRESH * 3;
+    assert_eq!(
+        poll_display(&mut session, &mut display, later).expect("idle"),
+        Poll::default()
+    );
+
+    display.failing = false;
+    session.commit_with_feedback();
+    submit_through_session(&mut session, &mut display, later);
+    assert_eq!(display.submitted, 1);
+}
+
 #[test]
 fn a_flip_lost_while_the_session_was_paused_does_not_stop_frames_after_it_resumes() {
     let mut server = Headless::new(Size::from((64, 64))).expect("headless compositor");
-    let mut output = FlipNeverCompletes { submits: 0 };
+    let mut display = Display {
+        failing: false,
+        submitted: 0,
+    };
     let mut scheduler = FrameScheduler::new(FrameClock::new(Duration::ZERO, REFRESH));
     scheduler.resume();
-    submit_once(&mut scheduler, &mut server, &mut output);
+    submit_through(&mut scheduler, &mut server, &mut display, Duration::ZERO);
 
     let waiting = scheduler
-        .poll(|| Duration::ZERO, &mut server, &mut output)
+        .poll(|| Duration::ZERO, &mut server, &mut display)
         .expect("frame");
     assert_eq!(waiting.wake_at, None);
 
     scheduler.resume();
-    submit_once(&mut scheduler, &mut server, &mut output);
-    assert_eq!(output.submits, 2);
+    submit_through(&mut scheduler, &mut server, &mut display, Duration::ZERO);
+    assert_eq!(display.submitted, 2);
 }

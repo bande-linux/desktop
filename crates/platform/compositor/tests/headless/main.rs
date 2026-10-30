@@ -28,6 +28,7 @@ mod pixels;
 mod popup;
 mod protocol;
 mod render;
+mod reveal;
 mod scale;
 mod shell;
 mod support;

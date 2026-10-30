@@ -15,6 +15,8 @@ use zbus::object_server::SignalEmitter;
 use zbus::zvariant::OwnedObjectPath;
 
 const WAIT: Duration = Duration::from_secs(5);
+const SHORT_WAIT: Duration = Duration::from_millis(300);
+const PROMPTLY: Duration = Duration::from_secs(1);
 const SESSION_PATH: &str = "/org/freedesktop/login1/session/_31";
 const MANAGER_PATH: &str = "/org/freedesktop/login1";
 
@@ -78,16 +80,22 @@ impl FakeManager {
 struct FakeSession {
     events: Events,
     locked: Arc<AtomicBool>,
-    confirms: bool,
 }
 
 #[zbus::interface(name = "org.freedesktop.login1.Session")]
 impl FakeSession {
     fn lock(&self) {
         send(&self.events, Event::Locked);
-        if self.confirms {
-            self.locked.store(true, Ordering::SeqCst);
-        }
+    }
+
+    async fn set_locked_hint(
+        &self,
+        locked: bool,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+    ) -> zbus::fdo::Result<()> {
+        self.locked.store(locked, Ordering::SeqCst);
+        self.locked_hint_changed(&emitter).await?;
+        Ok(())
     }
 
     #[zbus(property)]
@@ -103,7 +111,7 @@ struct Fixture {
     _bus: SessionBus,
 }
 
-fn start(already_locked: bool, lock_screen_confirms: bool) -> Fixture {
+fn start(already_locked: bool, lock_wait: Duration) -> Fixture {
     let bus = SessionBus::start().expect("dbus-daemon");
     let logind = bus.connect().expect("logind connection");
     let (sender, events) = mpsc::channel();
@@ -124,18 +132,14 @@ fn start(already_locked: bool, lock_screen_confirms: bool) -> Fixture {
             FakeSession {
                 events: shared,
                 locked: Arc::new(AtomicBool::new(already_locked)),
-                confirms: lock_screen_confirms,
             },
         )
         .expect("session");
     logind
         .request_name("org.freedesktop.login1")
         .expect("logind name");
-    let guard = SleepGuard::start(
-        &bus.connect().expect("guard connection"),
-        Duration::from_millis(200),
-    )
-    .expect("sleep guard");
+    let guard = SleepGuard::start(&bus.connect().expect("guard connection"), lock_wait)
+        .expect("sleep guard");
     Fixture {
         _guard: guard,
         logind,
@@ -147,6 +151,22 @@ fn start(already_locked: bool, lock_screen_confirms: bool) -> Fixture {
 impl Fixture {
     fn next(&self) -> Event {
         self.events.recv_timeout(WAIT).expect("event")
+    }
+
+    fn quiet_for(&self, time: Duration) -> bool {
+        self.events.recv_timeout(time).is_err()
+    }
+
+    fn lock_screen_shown(&self) {
+        self.logind
+            .call_method(
+                Some("org.freedesktop.login1"),
+                SESSION_PATH,
+                Some("org.freedesktop.login1.Session"),
+                "SetLockedHint",
+                &(true,),
+            )
+            .expect("SetLockedHint");
     }
 
     fn prepare_for_sleep(&self, start: bool) {
@@ -161,30 +181,33 @@ fn delay_sleep() -> Event {
 
 #[test]
 fn the_guard_delays_sleep_from_the_start() {
-    let fixture = start(false, true);
+    let fixture = start(false, SHORT_WAIT);
     assert_eq!(fixture.next(), delay_sleep());
 }
 
 #[test]
-fn the_session_locks_before_the_delay_is_released() {
-    let fixture = start(false, true);
+fn sleep_waits_until_the_lock_screen_is_on_screen() {
+    let fixture = start(false, WAIT);
     fixture.next();
     fixture.prepare_for_sleep(true);
     assert_eq!(fixture.next(), Event::Locked);
-    assert_eq!(fixture.next(), Event::Released);
+    assert!(fixture.quiet_for(SHORT_WAIT));
+
+    fixture.lock_screen_shown();
+    assert_eq!(fixture.events.recv_timeout(PROMPTLY), Ok(Event::Released));
 }
 
 #[test]
 fn a_locked_session_releases_the_delay_at_once() {
-    let fixture = start(true, true);
+    let fixture = start(true, WAIT);
     fixture.next();
     fixture.prepare_for_sleep(true);
-    assert_eq!(fixture.next(), Event::Released);
+    assert_eq!(fixture.events.recv_timeout(PROMPTLY), Ok(Event::Released));
 }
 
 #[test]
-fn a_lock_screen_that_never_confirms_does_not_hold_sleep_back() {
-    let fixture = start(false, false);
+fn a_lock_screen_that_never_shows_does_not_hold_sleep_back() {
+    let fixture = start(false, SHORT_WAIT);
     fixture.next();
     fixture.prepare_for_sleep(true);
     assert_eq!(fixture.next(), Event::Locked);
@@ -193,7 +216,7 @@ fn a_lock_screen_that_never_confirms_does_not_hold_sleep_back() {
 
 #[test]
 fn waking_up_takes_a_new_delay() {
-    let fixture = start(false, true);
+    let fixture = start(false, SHORT_WAIT);
     fixture.next();
     fixture.prepare_for_sleep(true);
     fixture.next();

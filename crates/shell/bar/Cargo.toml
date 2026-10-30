@@ -23,7 +23,15 @@ unbound-xdg.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]
+image.workspace = true
+smithay.workspace = true
+unbound-compositor.workspace = true
+unbound-controlcenter.workspace = true
 unbound-golden.workspace = true
+unbound-launcher.workspace = true
+unbound-notifications.workspace = true
+unbound-test-wayland.workspace = true
+wayland-client.workspace = true
 
 [lints]
 workspace = true

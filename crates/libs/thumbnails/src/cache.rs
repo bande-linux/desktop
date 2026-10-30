@@ -1,4 +1,3 @@
-use std::env;
 use std::fs::{self, DirBuilder, File, OpenOptions};
 use std::io::{self, BufReader, BufWriter};
 use std::os::unix::ffi::OsStrExt;
@@ -211,12 +210,7 @@ impl Cache {
     }
 
     pub fn for_user() -> Option<Self> {
-        let absolute = |path: &PathBuf| path.is_absolute();
-        let cache = env::var_os("XDG_CACHE_HOME")
-            .map(PathBuf::from)
-            .filter(absolute)
-            .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache")))?;
-        Some(Self::new(cache.join("thumbnails")))
+        unbound_xdg::cache_home().map(|cache| Self::new(cache.join("thumbnails")))
     }
 
     pub fn root(&self) -> &Path {

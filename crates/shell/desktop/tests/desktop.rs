@@ -11,8 +11,8 @@ use unbound_desktop_surface::{
 };
 use unbound_toolkit::ui::{Event, Key, Menu, Modifiers, Pointer, PointerButton};
 use unbound_toolkit::{
-    Appearance, Color, CpuRenderer, DragAction, Image, Point, Scheme, TextAlign, TextStyle,
-    TextSystem,
+    Appearance, Color, CpuRenderer, DragAction, Image, Item as SceneItem, Point, Scheme, TextAlign,
+    TextStyle, TextSystem,
 };
 use unbound_wallpaper::{Fit, render};
 use unbound_xdg::file_uri;
@@ -276,6 +276,10 @@ fn view_with_items(scheme: Scheme) -> DesktopView {
 }
 
 fn wallpaper(view: &mut DesktopView, scheme: Scheme) {
+    wallpaper_at(view, scheme, Instant::now() - Duration::from_secs(5));
+}
+
+fn wallpaper_at(view: &mut DesktopView, scheme: Scheme, now: Instant) {
     let name = match scheme {
         Scheme::Light => "drift-light.svg",
         Scheme::Dark => "drift-dark.svg",
@@ -297,7 +301,7 @@ fn wallpaper(view: &mut DesktopView, scheme: Scheme) {
             image,
             luma,
         },
-        Instant::now() - Duration::from_secs(5),
+        now,
     );
 }
 
@@ -681,4 +685,44 @@ fn dragging_several_icons_carries_a_count_badge_and_one_icon_does_not() {
     };
     assert!(badged(&["Notes.txt", "Projects"]));
     assert!(!badged(&["Notes.txt"]));
+}
+
+fn empty_view() -> DesktopView {
+    let mut view = DesktopView::new(Appearance::default(), Layouts::new(), TextSystem::new());
+    view.set_viewport(
+        SCREEN,
+        1.0,
+        Bounds::new(0.0, 0.0, SCREEN.0, SCREEN.1),
+        Instant::now(),
+    );
+    view
+}
+
+#[test]
+fn the_desktop_stays_see_through_until_its_first_wallpaper_which_shows_at_once() {
+    let mut view = empty_view();
+    let now = Instant::now();
+    assert_eq!(view.scene(now).background, Color::TRANSPARENT);
+    wallpaper_at(&mut view, Scheme::Light, now);
+    let scene = view.scene(now);
+    assert_eq!(scene.background.a, u8::MAX);
+    assert!(
+        matches!(scene.items.first(), Some(SceneItem::Image { .. })),
+        "the first wallpaper is drawn without fading in"
+    );
+    wallpaper_at(&mut view, Scheme::Dark, now);
+    assert!(
+        view.scene(now)
+            .items
+            .iter()
+            .any(|item| matches!(item, SceneItem::Opacity { .. })),
+        "a changed wallpaper still crossfades"
+    );
+}
+
+#[test]
+fn a_desktop_whose_wallpaper_cannot_be_shown_is_opaque() {
+    let mut view = empty_view();
+    view.wallpaper_unavailable();
+    assert_eq!(view.scene(Instant::now()).background.a, u8::MAX);
 }

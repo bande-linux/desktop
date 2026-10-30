@@ -233,7 +233,7 @@ impl RailView {
         };
     }
 
-    fn tray_cells(&self) -> Vec<Slot> {
+    fn tray_split(&self) -> (Vec<Slot>, Vec<Slot>) {
         let mut cells: Vec<Slot> = (0..self.tray.len()).map(Slot::Tray).collect();
         if self.status.input_sources.current().is_some() {
             cells.push(Slot::InputSource);
@@ -243,8 +243,13 @@ impl RailView {
         } else {
             TRAY_SHOWN
         };
-        if cells.len() > shown {
-            cells.truncate(shown);
+        let hidden = cells.split_off(shown.min(cells.len()));
+        (cells, hidden)
+    }
+
+    fn tray_cells(&self) -> Vec<Slot> {
+        let (mut cells, hidden) = self.tray_split();
+        if !hidden.is_empty() {
             cells.push(Slot::TrayMore);
         }
         cells
@@ -1138,7 +1143,7 @@ impl StatusView for RailView {
             (PointerButton::Secondary, Some(glyph), _) => Some(glyph),
             (_, Some(_), _) => Some(Slot::ControlCenter),
             (PointerButton::Secondary, None, found) => found.copied(),
-            (_, None, Some(Slot::System)) => Some(Slot::Launcher),
+            (_, None, Some(Slot::System)) if !self.expanded => Some(Slot::Launcher),
             (_, None, found) => found.copied(),
         }
     }
@@ -1192,11 +1197,8 @@ impl StatusView for RailView {
         changed
     }
 
-    fn shown_tray_items(&self) -> usize {
-        self.tray_cells()
-            .iter()
-            .filter(|slot| matches!(slot, Slot::Tray(_)))
-            .count()
+    fn hidden_tray(&self) -> Vec<Slot> {
+        self.tray_split().1
     }
 
     fn set_hovered(&mut self, slot: Option<Slot>) -> bool {

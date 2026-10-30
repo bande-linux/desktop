@@ -1,4 +1,5 @@
 title = System Settings
+menu-view = View
 search = Search
 not-changed = Not changed: { $error }
 

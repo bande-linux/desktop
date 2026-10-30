@@ -3921,6 +3921,7 @@ dependencies = [
  "unbound-fs",
  "unbound-l10n",
  "unbound-log",
+ "unbound-thumbnails",
  "unbound-toolkit",
  "unbound-volumes",
  "unbound-wallpaper",

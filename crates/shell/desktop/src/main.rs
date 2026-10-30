@@ -4,18 +4,19 @@ use std::os::fd::{AsFd, BorrowedFd};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdout, Command, ExitCode, Stdio};
 use std::thread;
-use std::time::Instant;
+use std::time::{Instant, SystemTime};
 
 use accesskit::TreeUpdate;
 use unbound_config::{BarEdge, Config, config_path};
 use unbound_desktop_surface::{
-    Bounds, CONFIRM_DELETE_FLAG, DesktopView, Item, Kind, Layer, Layouts, Luma, MenuApp, Request,
-    Selection, WallpaperKey, command, confirm_delete, desktop_menu, items_menu, layouts_path, list,
-    parse_layouts, save_layouts,
+    Artwork, Bounds, CONFIRM_DELETE_FLAG, DesktopView, Item, Kind, Layer, Layouts, Luma, MenuApp,
+    Request, Selection, WallpaperKey, command, confirm_delete, desktop_menu, items_menu,
+    layouts_path, list, parse_layouts, save_layouts,
 };
 use unbound_fs::{
     Action, Answer, Change, FolderWatch, Operations, Purpose, Resolution, Task, Trash,
 };
+use unbound_thumbnails::{Request as ThumbnailRequest, ThumbnailSize, Thumbnails};
 use unbound_toolkit::{
     App, DragAction, DragEvent, Edges, Image, KeyboardFocus, LayerKind, LayerOptions,
     MenuPlacement, Point, Role, Scene, Scheme, Transfer, Window, WindowEvent,
@@ -27,6 +28,7 @@ use unbound_xdg::{
     data_dirs, file_uri, find_icon, launch, launch_with, path_from_file_uri, user_dir,
 };
 
+const PDF: &str = "application/pdf";
 const SETTINGS_APP: &str = "org.unbound.Settings";
 const WALLPAPER_PANE: &str = "wallpaper";
 const FILES_INFO_FLAG: &str = "--info";
@@ -53,6 +55,8 @@ struct Surface {
     data_dirs: Vec<PathBuf>,
     home: Option<PathBuf>,
     icons: HashMap<(String, u32), Option<Image>>,
+    thumbnails: Option<Thumbnails>,
+    pictures: HashMap<PathBuf, (Option<SystemTime>, Option<Image>)>,
     layouts_file: Option<PathBuf>,
     bar_edge: BarEdge,
     combined_bar: bool,
@@ -170,6 +174,58 @@ impl Surface {
         names
     }
 
+    fn artwork(
+        &mut self,
+        item: &Item,
+        pixels: u32,
+        wanted: &mut Vec<ThumbnailRequest>,
+    ) -> Option<Artwork> {
+        let mime = match item.kind {
+            Kind::File => self.apps.mime_for(&item.path),
+            _ => String::new(),
+        };
+        if self.thumbnails.is_some() && (mime.starts_with("image/") || mime == PDF) {
+            let modified = std::fs::metadata(&item.path)
+                .and_then(|metadata| metadata.modified())
+                .ok();
+            match self.pictures.get(&item.path) {
+                Some((made, Some(picture))) if *made == modified => {
+                    return Some(Artwork::Thumbnail(picture.clone()));
+                }
+                Some((made, None)) if *made == modified => {}
+                _ => {
+                    self.pictures.insert(item.path.clone(), (modified, None));
+                    wanted.push(ThumbnailRequest {
+                        path: item.path.clone(),
+                        mime,
+                        size: ThumbnailSize::for_pixels(pixels),
+                    });
+                }
+            }
+        }
+        let names = self.icon_names(item);
+        self.icon(&names, pixels).map(Artwork::Icon)
+    }
+
+    fn thumbnails_ready(&mut self) {
+        let Some(thumbnails) = &self.thumbnails else {
+            return;
+        };
+        let done = thumbnails.take();
+        if done.is_empty() {
+            return;
+        }
+        for thumbnailed in done {
+            let picture = thumbnailed
+                .picture
+                .and_then(|picture| Image::from_rgba(picture.width, picture.height, picture.rgba));
+            if let Some((_, kept)) = self.pictures.get_mut(&thumbnailed.path) {
+                *kept = picture;
+            }
+        }
+        self.relist();
+    }
+
     fn relist(&mut self) {
         if self.wallpaper_only {
             return;
@@ -178,14 +234,17 @@ impl Surface {
         let volumes = mounted_volumes(&mountinfo, &self.media);
         let items = list(&mut self.apps, &self.desktop_dir, &volumes);
         let pixels = self.icon_pixels();
+        let mut wanted = Vec::new();
         let with_icons = items
             .into_iter()
             .map(|item| {
-                let names = self.icon_names(&item);
-                let icon = self.icon(&names, pixels);
-                (item, icon)
+                let artwork = self.artwork(&item, pixels, &mut wanted);
+                (item, artwork)
             })
             .collect();
+        if let Some(thumbnails) = self.thumbnails.as_ref().filter(|_| !wanted.is_empty()) {
+            thumbnails.want(wanted);
+        }
         self.view.set_items(with_icons, Instant::now());
         self.watch_folders();
         self.save_layouts();
@@ -693,6 +752,7 @@ impl App for Surface {
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
         let mut sources = vec![self.watch.fd(), self.choices.fd(), self.loaded.fd()];
+        sources.extend(self.thumbnails.as_ref().map(Thumbnails::fd));
         sources.extend(self.operations.fds());
         sources.extend(
             self.confirming
@@ -729,10 +789,18 @@ impl App for Surface {
                 }
                 self.refresh_wallpaper(window);
             }
-            index if index - 3 == self.operations.fds().len() => self.confirmed(),
-            index => {
-                self.poll_operation(index - 3);
+            3 if self.thumbnails.is_some() => {
+                self.thumbnails_ready();
                 window.request_redraw();
+            }
+            index => {
+                let first = 3 + usize::from(self.thumbnails.is_some());
+                if index - first == self.operations.fds().len() {
+                    self.confirmed();
+                } else {
+                    self.poll_operation(index - first);
+                    window.request_redraw();
+                }
             }
         }
     }
@@ -812,6 +880,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let (loaded, loader) = inbox()?;
     let appearance = window.appearance();
     let data_dirs = data_dirs();
+    let thumbnails = Thumbnails::for_user(&data_dirs);
     let mut surface = Surface {
         view: DesktopView::new(appearance, layouts),
         paste_moves: false,
@@ -825,6 +894,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         data_dirs,
         home,
         icons: HashMap::new(),
+        thumbnails,
+        pictures: HashMap::new(),
         layouts_file,
         bar_edge,
         combined_bar,

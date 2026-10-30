@@ -4,13 +4,13 @@ use std::path::PathBuf;
 
 use unbound_audio::{Device, Direction, Level, Snapshot};
 use unbound_keyboard::Layouts;
+use unbound_settings::SIDEBAR_WIDTH;
 use unbound_settings::{
     About, App, AppNotifications, BatteryState, Category, Charge, Display, LoginItems, Mode,
     Package, Pair, PaneId, PointingDevices, SettingId, SettingsView, SoftwareState, Storage,
     TimeState, Update, Value, thumbnail,
 };
 use unbound_toolkit::ui::{Event, Key, Modifiers};
-use unbound_settings::SIDEBAR_WIDTH;
 use unbound_toolkit::{
     CpuRenderer, FrameRegions, HEADER_HEIGHT, Palette, Scene, Scheme, TextSystem, framed_scene,
 };

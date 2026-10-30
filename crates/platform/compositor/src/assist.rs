@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use smithay::backend::renderer::element::Id;
 use smithay::input::keyboard::keysyms;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
@@ -8,7 +6,7 @@ use unbound_graphics::{Elevation, Palette, Radius};
 use unbound_render::VulkanRenderer;
 use unbound_spring::Spring;
 
-use crate::motion::{Look, Motion};
+use crate::motion::{Look, Motion, Tick};
 use crate::overview::{arrange, real_rect};
 use crate::scene::{Casting, FillElement, Shading, cast_shadows, premultiplied, rounded};
 use crate::state::{Headless, OutputElement, State};
@@ -259,7 +257,7 @@ impl State {
         }
     }
 
-    pub(crate) fn animate_assist(&mut self, time: Duration) {
+    pub(crate) fn animate_assist(&mut self, tick: Tick) {
         let still_tiled = self.assist.offer.as_ref().is_some_and(|offer| {
             self.window_index(&offer.tiled).is_some_and(|index| {
                 self.present(&self.windows[index])
@@ -271,9 +269,8 @@ impl State {
         if !still_tiled {
             self.dismiss_assist();
         }
-        let refresh = self.main_screen().refresh();
         if let Some(offer) = self.assist.offer.as_mut() {
-            offer.look.advance(time, refresh);
+            offer.look.advance(tick);
             if offer.closing && offer.look.is_settled() {
                 self.assist.offer = None;
             }

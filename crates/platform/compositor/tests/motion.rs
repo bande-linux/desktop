@@ -234,8 +234,27 @@ fn a_window_minimizes_into_its_apps_dock_icon() {
 
     minimize(&mut server, &mut editor);
     frame(&mut renderer, &mut server, start);
-    let arriving = reddish(&frame(&mut renderer, &mut server, start + ms(500))).expect("shown");
+    let arriving = reddish(&frame(&mut renderer, &mut server, start + ms(350))).expect("shown");
 
     assert!(arriving.0 >= 6 && arriving.2 <= 42, "{arriving:?}");
     assert!(arriving.1 >= 138 && arriving.3 <= 174, "{arriving:?}");
+}
+
+#[test]
+fn a_display_sampled_at_an_earlier_vblank_than_another_shows_that_earlier_moment() {
+    let mut alone = server();
+    let mut renderer = Renderer::new().expect("renderer");
+    let mut client = app(&mut alone);
+    roundtrip(&mut alone, &mut [&mut client]);
+    alone.animate(ms(8));
+    let expected = frame(&mut renderer, &mut alone, ms(16));
+
+    let mut shared = server();
+    let mut other = app(&mut shared);
+    roundtrip(&mut shared, &mut [&mut other]);
+    shared.animate(ms(8));
+    shared.animate(ms(24));
+    let sampled = frame(&mut renderer, &mut shared, ms(16));
+
+    assert_eq!(sampled.rgba, expected.rgba);
 }

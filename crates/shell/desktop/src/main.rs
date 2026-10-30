@@ -29,6 +29,7 @@ use unbound_xdg::{
 const ICON_THEMES: [&str; 1] = ["Adwaita"];
 const SETTINGS_APP: &str = "org.unbound.Settings";
 const WALLPAPER_PANE: &str = "appearance";
+const FILES_INFO_FLAG: &str = "--info";
 
 type Loaded = (WallpaperKey, Option<(Picture, Luma)>);
 
@@ -282,6 +283,31 @@ impl Surface {
         }
     }
 
+    fn show_info(&mut self, window: &mut Window, path: PathBuf) {
+        let Some(files) = self.files_app() else {
+            tracing::warn!("no app opens folders");
+            return;
+        };
+        let token = window.activation_token(files.app_id()).ok();
+        let launched =
+            files
+                .command()
+                .map_err(|error| error.to_string())
+                .and_then(|mut command| {
+                    command.push(FILES_INFO_FLAG.to_owned());
+                    command.push(path.to_string_lossy().into_owned());
+                    unbound_xdg::spawn_detached(
+                        &command,
+                        files.working_directory.as_deref(),
+                        token.as_deref(),
+                    )
+                    .map_err(|error| error.to_string())
+                });
+        if let Err(error) = launched {
+            tracing::warn!("cannot show the info of {}: {error}", path.display());
+        }
+    }
+
     fn common_mime(&self, paths: &[PathBuf]) -> String {
         let mimes: Vec<String> = paths
             .iter()
@@ -408,6 +434,7 @@ impl Surface {
                     Err(error) => tracing::warn!("cannot make a folder: {error}"),
                 },
                 Request::ShowInFiles(path) => self.show_in_files(window, path),
+                Request::ShowInfo(path) => self.show_info(window, path),
                 Request::OpenDesktopFolder => {
                     let folder = self.desktop_dir.clone();
                     self.show_in_files(window, folder);

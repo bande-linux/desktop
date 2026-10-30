@@ -50,6 +50,7 @@ pub enum Request {
         copy: bool,
     },
     ShowInFiles(PathBuf),
+    ShowInfo(PathBuf),
     OpenDesktopFolder,
     Undo,
     Redo,
@@ -677,7 +678,7 @@ impl DesktopView {
                 'c' if !selected.is_empty() => self.requests.push(Request::Copy(selected)),
                 'i' => {
                     if let Some(path) = selected.first() {
-                        self.requests.push(Request::ShowInFiles(path.clone()));
+                        self.requests.push(Request::ShowInfo(path.clone()));
                     }
                 }
                 'z' if modifiers.shift => self.requests.push(Request::Redo),
@@ -737,7 +738,7 @@ impl DesktopView {
                 paths: selected,
             },
             Command::Info => match selected.first() {
-                Some(path) => Request::ShowInFiles(path.clone()),
+                Some(path) => Request::ShowInfo(path.clone()),
                 None => return,
             },
             Command::Duplicate => Request::Duplicate(selected),

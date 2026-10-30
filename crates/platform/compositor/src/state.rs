@@ -5,7 +5,7 @@ use std::os::fd::OwnedFd;
 use std::os::unix::net::UnixStream;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::{Buffer, Format as DmabufFormat, Fourcc, Modifier};
@@ -224,6 +224,7 @@ pub struct State {
     cursor_arrow: Cursor,
     named_cursors: HashMap<CursorIcon, Option<Cursor>>,
     pub(crate) held_shortcut_keys: Vec<u32>,
+    pub(crate) typed_at: Option<Instant>,
     pub(crate) input_devices: usize,
     pub(crate) pending_captures: Vec<crate::capture::PendingCapture>,
 }
@@ -394,6 +395,7 @@ impl Headless {
             },
             named_cursors: HashMap::new(),
             held_shortcut_keys: Vec::new(),
+            typed_at: None,
             input_devices: 0,
             pending_captures: Vec::new(),
         };
@@ -863,6 +865,9 @@ impl State {
         if focused.client() == owner {
             return true;
         }
+        if self.would_interrupt_typing(surface, &focused) {
+            return false;
+        }
         !self.windows.iter().any(|window| {
             window.size.is_some()
                 && window.toplevel.wl_surface() != surface
@@ -1159,7 +1164,15 @@ impl State {
                 self.pending_activation = None;
                 self.focus(Some(surface.clone()));
             }
-            (false, true) => self.place_behind_frontmost(surface),
+            (false, true) => {
+                if self
+                    .focused()
+                    .is_some_and(|focused| self.would_interrupt_typing(surface, &focused))
+                {
+                    self.request_attention(shell::toplevel_names(surface).1);
+                }
+                self.place_behind_frontmost(surface);
+            }
             (true, false) => {
                 if let Some(index) = self.window_index(surface) {
                     self.close_window(index);

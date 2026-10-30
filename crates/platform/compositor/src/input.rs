@@ -494,8 +494,10 @@ impl Headless {
                 }
             },
         );
-        if let Some(Some(shortcut)) = action {
-            state.run(shortcut);
+        match action {
+            Some(Some(shortcut)) => state.run(shortcut),
+            None if pressed => state.note_typing(),
+            _ => {}
         }
     }
 }

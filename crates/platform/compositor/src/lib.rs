@@ -26,6 +26,7 @@ mod shell;
 mod state;
 mod sync;
 mod tile;
+mod typing;
 mod watchdog;
 mod window;
 

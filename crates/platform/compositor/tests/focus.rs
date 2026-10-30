@@ -123,3 +123,65 @@ fn a_background_apps_new_window_opens_behind_the_focused_window() {
     assert!(!background.has_keyboard_focus());
     assert_eq!(stacking_by_side(&server), vec![2, 3, 4]);
 }
+
+const KEY_A: u32 = 30;
+
+fn type_a_key(server: &mut Headless) {
+    server.key(KEY_A, true, 0);
+    server.key(KEY_A, false, 40);
+}
+
+#[test]
+fn an_app_opening_unasked_while_you_type_opens_behind_and_asks_for_attention() {
+    let mut server = server();
+    let mut dock = TestClient::connect_as_shell(&mut server);
+    dock.use_seat(&mut server);
+    dock.join_shell(&mut server);
+    let mut terminal = app(&mut server);
+    open_window(&mut server, &mut terminal, 2);
+    roundtrip(&mut server, &mut [&mut dock, &mut terminal]);
+    type_a_key(&mut server);
+
+    let mut intruder = app(&mut server);
+    open_window(&mut server, &mut intruder, 4);
+    roundtrip(&mut server, &mut [&mut dock, &mut terminal, &mut intruder]);
+
+    assert!(terminal.has_keyboard_focus());
+    assert!(!intruder.has_keyboard_focus());
+    assert_eq!(stacking_by_side(&server), vec![4, 2]);
+    assert_eq!(dock.attention_requests().len(), 1);
+}
+
+#[test]
+fn an_app_the_shell_opened_comes_forward_even_while_you_type() {
+    let mut server = server();
+    let mut launcher = TestClient::connect_as_shell(&mut server);
+    launcher.use_seat(&mut server);
+    launcher.join_shell(&mut server);
+    let mut terminal = app(&mut server);
+    open_window(&mut server, &mut terminal, 2);
+    roundtrip(&mut server, &mut [&mut launcher, &mut terminal]);
+    type_a_key(&mut server);
+    let token = launcher.activation_token(&mut server);
+
+    let mut opened = app(&mut server);
+    let pixels = quadrants(4, 4, 16);
+    opened.show_window_activated(
+        &mut server,
+        &ShmImage {
+            width: 4,
+            height: 4,
+            stride: 16,
+            format: Format::Argb8888,
+            bytes: &pixels,
+        },
+        &token,
+    );
+    roundtrip(
+        &mut server,
+        &mut [&mut launcher, &mut terminal, &mut opened],
+    );
+
+    assert!(opened.has_keyboard_focus());
+    assert!(!terminal.has_keyboard_focus());
+}

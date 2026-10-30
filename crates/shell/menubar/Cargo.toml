@@ -23,11 +23,14 @@ zbus.workspace = true
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
 depends = "$auto, fonts-inter"
+recommends = "upower, network-manager, bluez, pipewire, wireplumber, unbound-tray, unbound-notifications"
 extended-description = """\
-The menu bar of the Unbound desktop: a bar along the top of the screen \
-that names the active app in bold and shows the date and time at its \
-right end, as the macOS menu bar does. unbound-compositor starts it and \
-keeps it running."""
+The menu bar of the Unbound desktop: the system menu (About, System \
+Settings, Force Quit, Sleep, Restart, Shut Down, Lock Screen, Log Out) at \
+the left, the active app in bold with its menus, and at the right the \
+status notifier items of apps, Bluetooth, sound, Wi-Fi and battery with \
+their menus, Control Center and the clock, which opens the Notification \
+Center. unbound-compositor starts it and keeps it running."""
 
 [lints]
 workspace = true

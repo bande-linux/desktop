@@ -3604,7 +3604,10 @@ dependencies = [
  "unbound-l10n",
  "unbound-log",
  "unbound-network",
+ "unbound-notify",
+ "unbound-power",
  "unbound-toolkit",
+ "unbound-xdg",
  "zbus",
 ]
 

@@ -1,39 +1,52 @@
+use std::path::Path;
 use std::process::ExitCode;
 use std::time::Instant;
 
+use accesskit::TreeUpdate;
 use unbound_audio::{Audio, Level};
 use unbound_bluetooth::Bluetooth;
 use unbound_controlcenter::{
-    Change, Changes, HUD_DURATION, HUD_SIZE, PANEL_SIZE, Status, card, panel, volume_hud,
+    Change, Changes, EDGE, HUD_DURATION, HUD_SIZE, PANEL_WIDTH, Status, card, chooser_menu, panel,
+    scene, volume_hud,
 };
 use unbound_network::NetworkManager;
-use unbound_toolkit::ui::Ui;
+use unbound_notify::client::NotificationCenter;
+use unbound_power::backlight::{Backlight, SYSFS_BACKLIGHT};
+use unbound_power::logind::own_session;
+use unbound_toolkit::ui::{Animated, Event, Key, Pointer, Scroll, Spring, Ui};
 use unbound_toolkit::{
-    App, Color, Edges, KeyboardFocus, LayerKind, LayerOptions, Palette, Role, Scene, TextSystem,
-    VolumeKey, Window, WindowError, WindowEvent,
+    App, Edges, Item, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement, Palette, Point, Rect,
+    Role, Scene, TextSystem, VolumeKey, Window, WindowError, WindowEvent,
 };
-use zbus::blocking::{Connection, Proxy};
+use unbound_xdg::spawn_detached;
+use zbus::blocking::Connection;
 
-const NOTIFICATIONS: &str = "org.freedesktop.Notifications";
-const NOTIFICATIONS_PATH: &str = "/org/freedesktop/Notifications";
-const NOTIFICATION_CENTER: &str = "org.unbound.NotificationCenter";
+const JOIN: &str = "join:";
+const OUTPUT: &str = "output:";
+const SLIDE: f32 = 8.0;
 
 enum Mode {
     Hidden,
     Volume(Instant),
-    Panel(Box<Ui>),
+    Panel { ui: Box<Ui>, height: f32 },
 }
 
 struct ControlCenter {
     mode: Mode,
+    shown: Animated,
+    surface_shown: bool,
+    reduce_motion: bool,
     level: Level,
     palette: Palette,
     hud_text: TextSystem,
     changes: Changes,
+    pointer: Point,
     audio: Option<Audio>,
     network: Option<NetworkManager>,
     bluetooth: Option<Bluetooth>,
+    system: Option<Connection>,
     session: Option<Connection>,
+    backlight: Option<Backlight>,
 }
 
 fn report<E: std::fmt::Display>(what: &str, result: Result<(), E>) {
@@ -51,16 +64,55 @@ fn audio_key(key: VolumeKey) -> Option<unbound_audio::VolumeKey> {
     }
 }
 
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn unhex(text: &str) -> Option<Vec<u8>> {
+    (0..text.len())
+        .step_by(2)
+        .map(|at| u8::from_str_radix(text.get(at..at + 2)?, 16).ok())
+        .collect()
+}
+
+fn moved(event: &Event, offset: Point) -> Event {
+    let shift = |position: Point| Point::new(position.x - offset.x, position.y - offset.y);
+    let pointer = |pointer: &Pointer| Pointer {
+        position: shift(pointer.position),
+        ..*pointer
+    };
+    match event {
+        Event::PointerDown(found) => Event::PointerDown(pointer(found)),
+        Event::PointerMove(found) => Event::PointerMove(pointer(found)),
+        Event::PointerUp(found) => Event::PointerUp(pointer(found)),
+        Event::PointerEnter(found) => Event::PointerEnter(pointer(found)),
+        Event::Scroll(scroll) => Event::Scroll(Scroll {
+            position: shift(scroll.position),
+            ..*scroll
+        }),
+        other => other.clone(),
+    }
+}
+
+fn contains(rect: Rect, point: Point) -> bool {
+    point.x >= rect.x
+        && point.y >= rect.y
+        && point.x < rect.x + rect.width
+        && point.y < rect.y + rect.height
+}
+
 impl ControlCenter {
-    fn notification_center(&self) -> Option<Proxy<'_>> {
-        let session = self.session.as_ref()?;
-        Proxy::new(
-            session,
-            NOTIFICATIONS,
-            NOTIFICATIONS_PATH,
-            NOTIFICATION_CENTER,
-        )
-        .ok()
+    fn notification_center(&self) -> Option<NotificationCenter<'_>> {
+        NotificationCenter::new(self.session.as_ref()?).ok()
+    }
+
+    fn brightness(&self) -> Option<f32> {
+        let backlight = self.backlight.as_ref()?;
+        let maximum = backlight
+            .max_brightness()
+            .ok()
+            .filter(|maximum| *maximum > 0)?;
+        Some(backlight.brightness().ok()? as f32 / maximum as f32)
     }
 
     fn status(&self) -> Status {
@@ -71,6 +123,13 @@ impl ControlCenter {
                 .filter(|has| *has)
                 .and_then(|_| network.wifi_enabled().ok())
         });
+        let network = self
+            .network
+            .as_ref()
+            .filter(|_| wifi == Some(true))
+            .and_then(|network| network.networks().ok())
+            .and_then(|networks| networks.into_iter().find(|found| found.current))
+            .map(|current| current.name());
         let bluetooth = self.bluetooth.as_ref().and_then(|bluetooth| {
             bluetooth
                 .available()
@@ -80,28 +139,114 @@ impl ControlCenter {
         });
         let do_not_disturb = self
             .notification_center()
-            .and_then(|center| center.get_property::<bool>("DoNotDisturb").ok())
+            .and_then(|center| center.do_not_disturb().ok())
             .unwrap_or(false);
-        let volume = self.audio.as_ref().and_then(|audio| {
-            audio
-                .snapshot()
-                .default_output()
-                .map(|output| output.level.volume)
-        });
+        let snapshot = self.audio.as_ref().map(Audio::snapshot);
+        let output = snapshot
+            .as_ref()
+            .and_then(|snapshot| snapshot.default_output());
         Status {
             wifi,
+            network,
             bluetooth,
             do_not_disturb,
-            volume,
+            volume: output.map(|output| output.level.volume),
+            output: output
+                .filter(|_| {
+                    snapshot
+                        .as_ref()
+                        .is_some_and(|found| found.outputs.len() > 1)
+                })
+                .map(|output| output.description.clone()),
+            brightness: self.brightness(),
         }
     }
 
-    fn apply(&mut self, change: Change) {
+    fn panel_rect(&self, window: &Window, height: f32) -> Rect {
+        let (width, _) = window.size();
+        Rect::new(width as f32 - EDGE - PANEL_WIDTH, EDGE, PANEL_WIDTH, height)
+    }
+
+    fn show_menu(&self, window: &mut Window, choices: &[(String, String, bool)]) {
+        if choices.is_empty() {
+            return;
+        }
+        report(
+            "open the menu",
+            window.show_menu(chooser_menu(choices), MenuPlacement::AtPoint(self.pointer)),
+        );
+    }
+
+    fn choose_network(&self, window: &mut Window) {
+        let Some(network) = &self.network else {
+            return;
+        };
+        let _ = network.scan();
+        let choices: Vec<_> = network
+            .networks()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|found| {
+                (
+                    found.name(),
+                    format!("{JOIN}{}", hex(&found.ssid)),
+                    found.current,
+                )
+            })
+            .collect();
+        self.show_menu(window, &choices);
+    }
+
+    fn choose_output(&self, window: &mut Window) {
+        let Some(audio) = &self.audio else {
+            return;
+        };
+        let snapshot = audio.snapshot();
+        let choices: Vec<_> = snapshot
+            .outputs
+            .iter()
+            .map(|output| {
+                (
+                    output.description.clone(),
+                    format!("{OUTPUT}{}", output.name),
+                    snapshot.default_output.as_deref() == Some(output.name.as_str()),
+                )
+            })
+            .collect();
+        self.show_menu(window, &choices);
+    }
+
+    fn join(&mut self, window: &mut Window, ssid: &[u8]) {
+        let Some(network) = &self.network else {
+            return;
+        };
+        let Some(found) = network
+            .networks()
+            .unwrap_or_default()
+            .into_iter()
+            .find(|candidate| candidate.ssid == ssid)
+        else {
+            return;
+        };
+        if found.security.needs_password() && !found.known {
+            let token = window.activation_token("org.unbound.Settings").ok();
+            let command = ["unbound-settings".to_owned(), "wifi".to_owned()];
+            if let Err(error) = spawn_detached(&command, None, token.as_deref()) {
+                tracing::warn!("cannot open Wi-Fi settings: {error}");
+            }
+            self.dismiss(window);
+            return;
+        }
+        report("join the network", network.join(&found, None).map(|_| ()));
+    }
+
+    fn apply(&mut self, window: &mut Window, change: Change) {
         match change {
             Change::Wifi(on) => {
                 if let Some(network) = &self.network {
                     report("switch Wi-Fi", network.set_wifi_enabled(on));
                 }
+                self.rebuild();
             }
             Change::Bluetooth(on) => {
                 if let Some(bluetooth) = &self.bluetooth {
@@ -110,10 +255,7 @@ impl ControlCenter {
             }
             Change::DoNotDisturb(on) => {
                 if let Some(center) = self.notification_center() {
-                    report(
-                        "switch Do Not Disturb",
-                        center.set_property("DoNotDisturb", on),
-                    );
+                    report("switch Do Not Disturb", center.set_do_not_disturb(on));
                 }
             }
             Change::Volume(volume) => {
@@ -129,33 +271,90 @@ impl ControlCenter {
                     self.level = level;
                 }
             }
+            Change::Brightness(level) => {
+                if let (Some(system), Some(backlight)) = (&self.system, &self.backlight)
+                    && let Ok(maximum) = backlight.max_brightness()
+                {
+                    let value = ((level * maximum as f32).round() as u32).clamp(1, maximum);
+                    report(
+                        "set the brightness",
+                        own_session(system).and_then(|session| {
+                            session.set_brightness("backlight", &backlight.name, value)
+                        }),
+                    );
+                }
+            }
+            Change::ChooseNetwork => self.choose_network(window),
+            Change::ChooseOutput => self.choose_output(window),
         }
     }
 
-    fn show(&mut self, window: &mut Window, size: (u32, u32)) {
-        report("resize", window.set_layer_size(size));
-        report("show", window.show());
-        window.request_redraw();
-    }
-
-    fn hide(&mut self, window: &mut Window) {
-        self.mode = Mode::Hidden;
-        report("hide", window.hide());
-    }
-
-    fn toggle_panel(&mut self, window: &mut Window) {
-        if matches!(self.mode, Mode::Panel(_)) {
-            self.hide(window);
+    fn rebuild(&mut self) {
+        if !matches!(self.mode, Mode::Panel { .. }) {
             return;
         }
-        let ui = panel(
-            self.status(),
+        let (fresh, fresh_height) = panel(
+            &self.status(),
             self.palette,
             TextSystem::new(),
             &self.changes,
         );
-        self.mode = Mode::Panel(Box::new(ui));
-        self.show(window, PANEL_SIZE);
+        if let Mode::Panel { ui, height } = &mut self.mode {
+            **ui = fresh;
+            *height = fresh_height;
+        }
+    }
+
+    fn reveal(&mut self, window: &mut Window, keyboard: bool) {
+        report("show", window.show());
+        self.surface_shown = true;
+        if keyboard {
+            window.set_input_region(None);
+        } else {
+            window.set_input_region(Some(&[]));
+        }
+        report(
+            "change keyboard focus",
+            window.set_keyboard_focus(if keyboard {
+                KeyboardFocus::Exclusive
+            } else {
+                KeyboardFocus::None
+            }),
+        );
+        self.shown
+            .animate_at(Instant::now(), self.reduce_motion, 1.0, Spring::QUICK);
+        window.request_redraw();
+    }
+
+    fn dismiss(&mut self, window: &mut Window) {
+        self.mode = Mode::Hidden;
+        self.shown
+            .animate_at(Instant::now(), self.reduce_motion, 0.0, Spring::QUICK);
+        window.set_input_region(Some(&[]));
+        report(
+            "release the keyboard",
+            window.set_keyboard_focus(KeyboardFocus::None),
+        );
+        window.request_redraw();
+    }
+
+    fn toggle_panel(&mut self, window: &mut Window) {
+        if matches!(self.mode, Mode::Panel { .. }) {
+            self.dismiss(window);
+            return;
+        }
+        let (ui, height) = panel(
+            &self.status(),
+            self.palette,
+            TextSystem::new(),
+            &self.changes,
+        );
+        self.mode = Mode::Panel {
+            ui: Box::new(ui),
+            height,
+        };
+        self.shown.jump_to(0.0);
+        self.reveal(window, true);
     }
 
     fn volume_key(&mut self, window: &mut Window, key: VolumeKey, fine: bool) {
@@ -169,69 +368,168 @@ impl ControlCenter {
                 return;
             }
         }
-        if matches!(self.mode, Mode::Panel(_)) {
+        if let Mode::Panel { .. } = self.mode {
+            self.rebuild();
+            window.request_redraw();
             return;
         }
+        let fresh = matches!(self.mode, Mode::Hidden);
         self.mode = Mode::Volume(Instant::now() + HUD_DURATION);
-        self.show(window, HUD_SIZE);
+        if fresh {
+            self.shown.jump_to(0.0);
+        }
+        self.reveal(window, false);
+    }
+
+    fn input(&mut self, window: &mut Window, input: &Event) {
+        if let Event::PointerMove(pointer) | Event::PointerDown(pointer) = input {
+            self.pointer = pointer.position;
+        }
+        let Mode::Panel { height, .. } = &self.mode else {
+            return;
+        };
+        let rect = self.panel_rect(window, *height);
+        match input {
+            Event::Key {
+                key: Key::Escape, ..
+            } => {
+                self.dismiss(window);
+                return;
+            }
+            Event::PointerDown(pointer) if !contains(rect, pointer.position) => {
+                self.dismiss(window);
+                return;
+            }
+            _ => {}
+        }
+        if let Mode::Panel { ui, .. } = &mut self.mode
+            && ui.handle(&moved(input, Point::new(rect.x, rect.y)))
+        {
+            window.request_redraw();
+        }
+        self.run_changes(window);
+    }
+
+    fn run_changes(&mut self, window: &mut Window) {
+        let changes = std::mem::take(&mut *self.changes.borrow_mut());
+        for change in changes {
+            self.apply(window, change);
+        }
     }
 }
 
 impl App for ControlCenter {
     fn scene(&mut self, window: &mut Window) -> Scene {
         let (width, height) = window.size();
+        let now = Instant::now();
+        let (shown, _) = self.shown.value_at(now);
+        let mut items = Vec::new();
         match &mut self.mode {
-            Mode::Panel(ui) => {
-                let mut scene = ui.scene(width, height);
-                scene.background = Color::TRANSPARENT;
-                scene.items.insert(0, card(&self.palette, (width, height)));
-                scene
+            Mode::Panel {
+                ui,
+                height: panel_height,
+            } => {
+                let rect = Rect::new(
+                    width as f32 - EDGE - PANEL_WIDTH,
+                    EDGE,
+                    PANEL_WIDTH,
+                    *panel_height,
+                );
+                card(&self.palette, rect, &mut items);
+                let content = ui.scene(PANEL_WIDTH as u32, *panel_height as u32);
+                items.push(Item::Translate {
+                    offset: Point::new(rect.x, rect.y),
+                    items: content.items,
+                });
             }
-            Mode::Volume(_) => volume_hud(self.level, &self.palette, &mut self.hud_text),
-            Mode::Hidden => Scene {
-                width,
-                height,
-                background: Color::TRANSPARENT,
-                items: Vec::new(),
-            },
+            Mode::Volume(_) => {
+                items.push(Item::Translate {
+                    offset: Point::new(width as f32 - EDGE - HUD_SIZE.0, EDGE),
+                    items: volume_hud(self.level, &self.palette, &mut self.hud_text),
+                });
+            }
+            Mode::Hidden => {}
         }
+        scene(
+            width,
+            height,
+            vec![Item::Opacity {
+                alpha: shown.clamp(0.0, 1.0),
+                items: vec![Item::Translate {
+                    offset: Point::new(0.0, -SLIDE * (1.0 - shown)),
+                    items,
+                }],
+            }],
+        )
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
         match event {
             WindowEvent::ToggleControlCenter => self.toggle_panel(window),
             WindowEvent::VolumeKey { key, fine } => self.volume_key(window, key, fine),
-            WindowEvent::Input(input) => {
-                if let Mode::Panel(ui) = &mut self.mode
-                    && ui.handle(&input)
+            WindowEvent::Input(input) => self.input(window, &input),
+            WindowEvent::Accessibility(request) => {
+                if let Mode::Panel { ui, .. } = &mut self.mode
+                    && ui.perform(&request)
                 {
                     window.request_redraw();
                 }
-                let changes = std::mem::take(&mut *self.changes.borrow_mut());
-                for change in changes {
-                    self.apply(change);
+                self.run_changes(window);
+            }
+            WindowEvent::MenuAction(action) => {
+                if let Some(ssid) = action.strip_prefix(JOIN).and_then(unhex) {
+                    self.join(window, &ssid);
+                } else if let Some(name) = action.strip_prefix(OUTPUT)
+                    && let Some(audio) = &self.audio
+                    && let Some(device) = audio.snapshot().device(name).cloned()
+                {
+                    report("choose the output", audio.set_default(&device));
                 }
+                self.rebuild();
+                window.request_redraw();
             }
             WindowEvent::AppearanceChanged(appearance) => {
                 self.palette = appearance.palette();
-                if let Mode::Panel(ui) = &mut self.mode {
-                    ui.context().palette = self.palette;
+                self.reduce_motion = appearance.reduce_motion;
+                if let Mode::Panel { ui, .. } = &mut self.mode {
+                    ui.set_appearance(appearance);
                 }
             }
             _ => {}
         }
     }
 
+    fn animating(&self) -> bool {
+        let now = Instant::now();
+        self.shown.value_at(now).1
+            || matches!(&self.mode, Mode::Panel { ui, .. } if ui.is_animating())
+    }
+
     fn deadline(&self) -> Option<Instant> {
         match self.mode {
             Mode::Volume(until) => Some(until),
-            Mode::Hidden | Mode::Panel(_) => None,
+            Mode::Hidden if self.surface_shown && !self.shown.value_at(Instant::now()).1 => {
+                Some(Instant::now())
+            }
+            Mode::Hidden | Mode::Panel { .. } => None,
         }
     }
 
     fn tick(&mut self, window: &mut Window, now: Instant) {
-        if matches!(self.mode, Mode::Volume(until) if now >= until) {
-            self.hide(window);
+        match self.mode {
+            Mode::Volume(until) if now >= until => self.dismiss(window),
+            Mode::Hidden if self.surface_shown && !self.shown.value_at(now).1 => {
+                self.surface_shown = false;
+                report("hide", window.hide());
+            }
+            _ => {}
+        }
+    }
+
+    fn accessibility(&self) -> Option<TreeUpdate> {
+        match &self.mode {
+            Mode::Panel { ui, .. } => Some(ui.accessibility()),
+            _ => None,
         }
     }
 }
@@ -249,31 +547,34 @@ fn run() -> Result<(), WindowError> {
     let mut window = Window::open(
         Role::Layer(LayerOptions {
             layer: LayerKind::Overlay,
-            anchor: Edges {
-                top: true,
-                right: true,
-                left: false,
-                bottom: false,
-            },
+            anchor: Edges::ALL,
             exclusive_zone: 0,
             keyboard: KeyboardFocus::None,
             namespace: "control-center".to_owned(),
         }),
-        HUD_SIZE,
+        (0, 0),
     )?;
+    window.set_input_region(Some(&[]));
     window.hide()?;
+    let appearance = window.appearance();
     let mut center = ControlCenter {
         mode: Mode::Hidden,
+        shown: Animated::new(0.0),
+        surface_shown: false,
+        reduce_motion: appearance.reduce_motion,
         level: Level {
             volume: 0.0,
             muted: false,
         },
-        palette: window.appearance().palette(),
+        palette: appearance.palette(),
         hud_text: TextSystem::new(),
         changes: Changes::default(),
+        pointer: Point::new(0.0, 0.0),
         audio,
         network: system.as_ref().map(NetworkManager::new),
         bluetooth: system.as_ref().map(Bluetooth::new),
+        backlight: Backlight::find(Path::new(SYSFS_BACKLIGHT)),
+        system,
         session,
     };
     unbound_toolkit::run(&mut window, &mut center)

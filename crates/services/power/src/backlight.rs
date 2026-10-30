@@ -45,6 +45,10 @@ impl Backlight {
     pub fn brightness(&self) -> io::Result<u32> {
         read_number(&self.directory.join("brightness"))
     }
+
+    pub fn max_brightness(&self) -> io::Result<u32> {
+        read_number(&self.directory.join("max_brightness"))
+    }
 }
 
 pub fn dimmed(brightness: u32) -> Option<u32> {

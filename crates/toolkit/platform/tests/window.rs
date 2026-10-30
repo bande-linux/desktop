@@ -1,12 +1,16 @@
 use std::os::unix::net::UnixStream;
-use std::sync::mpsc;
+use std::sync::{Once, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use smithay::utils::Size;
 use unbound_compositor::{FrameClock, FrameScheduler, Headless, REFRESH, Renderer, SessionRole};
 use unbound_graphics::{Color, Item, Point, Scene, TextAlign, TextStyle, TextSystem};
-use unbound_toolkit_platform::{FramePath, HEADER_HEIGHT, Role, SHEET_INSET, Window};
+use unbound_test_wayland::{ShmImage, TestClient, quadrants};
+use unbound_toolkit_platform::{
+    FramePath, HEADER_HEIGHT, RENDERER_VARIABLE, Role, SHEET_INSET, Window,
+};
+use wayland_client::protocol::wl_shm::Format;
 
 const OUTPUT: (i32, i32) = (320, 240);
 const WINDOW: (u32, u32) = (200, 120);
@@ -16,6 +20,11 @@ const FRAMED: (i32, i32) = (
     (WINDOW.0 + 2 * SHEET_INSET) as i32,
     (WINDOW.1 + HEADER_HEIGHT + SHEET_INSET) as i32,
 );
+
+fn draw_on_the_gpu() {
+    static FORCED: Once = Once::new();
+    FORCED.call_once(|| unsafe { std::env::set_var(RENDERER_VARIABLE, "gpu") });
+}
 
 fn filled(color: Color) -> Scene {
     Scene {
@@ -28,6 +37,7 @@ fn filled(color: Color) -> Scene {
 
 #[test]
 fn the_first_frame_is_drawn_on_the_cpu_and_later_frames_on_the_gpu() {
+    draw_on_the_gpu();
     let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
     let (client_end, server_end) = UnixStream::pair().expect("socket pair");
     server.insert_client(server_end).expect("insert client");
@@ -231,6 +241,7 @@ fn on_a_2x_output_a_window_keeps_its_size_in_points_and_fills_twice_the_pixels()
 fn windows_sharing_the_gpu_resize_while_others_draw_and_stay_on_the_gpu() {
     const WINDOWS: usize = 4;
     const FRAMES: u32 = 30;
+    draw_on_the_gpu();
     let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
     let clients: Vec<_> = (0..WINDOWS)
         .map(|index| {
@@ -293,4 +304,87 @@ fn windows_sharing_the_gpu_resize_while_others_draw_and_stay_on_the_gpu() {
             "{paths:?}"
         );
     }
+}
+
+#[test]
+fn a_change_under_an_opaque_window_shades_only_the_window_on_top() {
+    const BELOW: (usize, usize) = (300, 220);
+    const TOOLKIT: &str = "unbound-toolkit-test";
+    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let mut below = TestClient::connect(&mut server);
+    let stride = BELOW.0 * 4;
+    let pixels = quadrants(BELOW.0, BELOW.1, stride);
+    let changed: Vec<u8> = pixels.iter().map(|channel| !channel).collect();
+    let image = |bytes| ShmImage {
+        width: BELOW.0 as i32,
+        height: BELOW.1 as i32,
+        stride: stride as i32,
+        format: Format::Xrgb8888,
+        bytes,
+    };
+    below.show_window(&mut server, &image(&pixels));
+
+    let (client_end, server_end) = UnixStream::pair().expect("socket pair");
+    server.insert_client(server_end).expect("insert client");
+    let (drawn, on_screen) = mpsc::channel();
+    let (checked, check_done) = mpsc::channel::<()>();
+    let client = thread::spawn(move || {
+        let mut window =
+            Window::open_on(client_end, Role::toplevel("toolkit test", TOOLKIT), WINDOW)
+                .expect("window");
+        window.draw(&filled(RED)).expect("frame");
+        window.wait_for_frame().expect("frame callback");
+        drawn.send(()).expect("report frame");
+        check_done.recv().expect("compositor checked the frame");
+    });
+
+    let mut renderer = Renderer::new().expect("Vulkan renderer");
+    let mut scheduler = FrameScheduler::new(FrameClock::new(Duration::ZERO, REFRESH));
+    let start = Instant::now();
+    let mut settle = |server: &mut Headless, renderer: &mut Renderer| {
+        server.dispatch().expect("server dispatch");
+        scheduler
+            .poll(|| start.elapsed(), server, renderer)
+            .expect("compositor frame");
+        thread::sleep(Duration::from_micros(200));
+    };
+    while on_screen.try_recv().is_err() {
+        assert!(
+            start.elapsed() < Duration::from_secs(60),
+            "the client stalled"
+        );
+        settle(&mut server, &mut renderer);
+    }
+    while server.is_animating() {
+        settle(&mut server, &mut renderer);
+    }
+    renderer.render(&mut server).expect("settled frame");
+
+    let above = server
+        .windows()
+        .iter()
+        .find(|window| window.app_id() == TOOLKIT)
+        .and_then(|window| window.geometry())
+        .expect("the toolkit window");
+    let under = server
+        .windows()
+        .iter()
+        .find(|window| window.app_id() != TOOLKIT)
+        .map(|window| window.location())
+        .expect("the window below");
+    let inset = 16;
+    let damage = (
+        above.location.x + inset - under.x,
+        above.location.y + HEADER_HEIGHT as i32 - under.y,
+        above.size.w - 2 * inset,
+        above.size.h - HEADER_HEIGHT as i32 - inset,
+    );
+    below.commit_buffer(0, &image(&changed), damage);
+    server.dispatch().expect("server dispatch");
+    let stats = renderer.render(&mut server).expect("frame");
+    checked.send(()).expect("release the client");
+    client.join().expect("client thread");
+
+    assert!(stats.repainted_pixels > 0, "{stats:?}");
+    assert_eq!(stats.shaded_pixels, stats.repainted_pixels, "{stats:?}");
 }

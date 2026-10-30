@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, mpsc};
+use std::sync::{Arc, Once, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -12,7 +12,7 @@ use smithay::utils::{Point, Size};
 use unbound_compositor::{FrameClock, FrameScheduler, Headless, REFRESH, Renderer};
 use unbound_graphics::Scene;
 use unbound_test_bus::SessionBus;
-use unbound_toolkit_platform::{App, Role, Window, WindowEvent, run};
+use unbound_toolkit_platform::{App, RENDERER_VARIABLE, Role, Window, WindowEvent, run};
 use unbound_widgets::Ui;
 use zbus::zvariant::{OwnedValue, Value};
 
@@ -145,7 +145,13 @@ pub struct Shot {
     pub popups: usize,
 }
 
+fn draw_on_the_gpu() {
+    static FORCED: Once = Once::new();
+    FORCED.call_once(|| unsafe { std::env::set_var(RENDERER_VARIABLE, "gpu") });
+}
+
 pub fn shot(name: &str, prepare: fn(&mut Window) -> Option<Ui>, shot: Shot) {
+    draw_on_the_gpu();
     let output = (
         (f64::from(OUTPUT.0) * shot.scale) as i32,
         (f64::from(OUTPUT.1) * shot.scale) as i32,

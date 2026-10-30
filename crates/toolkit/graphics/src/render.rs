@@ -9,6 +9,7 @@ pub enum RenderError {
     Adapter(wgpu::RequestAdapterError),
     Device(wgpu::RequestDeviceError),
     Gpu(String),
+    Software(String),
 }
 
 impl fmt::Display for RenderError {
@@ -21,6 +22,9 @@ impl fmt::Display for RenderError {
             Self::Adapter(error) => write!(f, "no usable Vulkan adapter: {error}"),
             Self::Device(error) => write!(f, "cannot open the Vulkan device: {error}"),
             Self::Gpu(error) => write!(f, "GPU rendering failed: {error}"),
+            Self::Software(adapter) => {
+                write!(f, "the only Vulkan device, {adapter}, renders on the CPU")
+            }
         }
     }
 }

@@ -4470,6 +4470,7 @@ dependencies = [
  "unbound-l10n",
  "unbound-protocols",
  "unbound-test-bus",
+ "unbound-test-wayland",
  "unbound-widgets",
  "wayland-backend",
  "wayland-client",

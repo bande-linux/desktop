@@ -1,4 +1,5 @@
 mod about;
+mod battery;
 mod client;
 mod clock;
 mod displays;
@@ -9,6 +10,7 @@ mod login;
 mod pages;
 mod pictures;
 mod pointing;
+mod power;
 mod services;
 mod state;
 mod storage;
@@ -21,6 +23,7 @@ use std::sync::LazyLock;
 use unbound_l10n::Localizer;
 
 pub use about::{About, AboutCommand, chip_name, memory_bytes, static_hostname, system_version};
+pub use battery::{BatteryCommand, BatteryState, Charge, charge_of, follow_battery};
 pub use client::{CONFIG_SETTINGS, SettingsClient};
 pub use displays::Displays;
 pub use follow::{Command, Feed, Services, Update, Updates, feed, follow_config, worker};
@@ -28,6 +31,7 @@ pub use idle::Idle;
 pub use login::{App, LoginCommand, LoginItems, login_items, login_matches};
 pub use pictures::{Pair, PictureCommand, bundled_pairs, thumbnail};
 pub use pointing::{PointingDevices, UDEV_DATA};
+pub use power::charge_text;
 pub use services::{
     AudioCommand, BluetoothCommand, NetworkCommand, follow_bluetooth, follow_network,
 };
@@ -38,6 +42,7 @@ pub use time::{
 };
 pub use unbound_settings_panes::{PaneId, SettingId, Value};
 pub use view::SettingsView;
+pub use widgets::bucket_levels;
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-settings.ftl");
 
@@ -56,6 +61,7 @@ mod tests {
             include_str!("general.rs"),
             include_str!("pages.rs"),
             include_str!("pictures.rs"),
+            include_str!("power.rs"),
             include_str!("view.rs"),
         ];
         assert_eq!(

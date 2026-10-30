@@ -5,8 +5,8 @@ use std::path::PathBuf;
 use unbound_audio::{Device, Direction, Level, Snapshot};
 use unbound_keyboard::Layouts;
 use unbound_settings::{
-    About, App, Category, Display, LoginItems, Mode, Pair, PaneId, PointingDevices, SettingId,
-    SettingsView, Storage, TimeState, Update, Value, thumbnail,
+    About, App, BatteryState, Category, Charge, Display, LoginItems, Mode, Pair, PaneId,
+    PointingDevices, SettingId, SettingsView, Storage, TimeState, Update, Value, thumbnail,
 };
 use unbound_toolkit::ui::{Event, Key, Modifiers};
 use unbound_toolkit::{CpuRenderer, Palette, Scheme, TextSystem};
@@ -342,6 +342,36 @@ fn the_login_items_pane_matches_its_goldens() {
             ],
             apps: Vec::new(),
         }));
+        view
+    });
+}
+
+#[test]
+fn the_battery_pane_matches_its_goldens() {
+    check_in_both_schemes_and_scales("battery", |scheme| {
+        let mut view = SettingsView::new(Palette::for_scheme(scheme), TextSystem::new());
+        let history = (0..=48u32)
+            .map(|step| {
+                let level = if step < 30 {
+                    95.0 - f64::from(step) * 2.0
+                } else {
+                    35.0 + f64::from(step - 30) * 3.0
+                };
+                (1_000_000 + step * 1800, level)
+            })
+            .collect();
+        view.apply(Update::Battery(Some(BatteryState {
+            percent: 89.0,
+            charge: Charge::Charging { minutes: Some(25) },
+            history,
+            profiles: ["power-saver", "balanced", "performance"]
+                .map(str::to_owned)
+                .to_vec(),
+            profile: Some("balanced".to_owned()),
+        })));
+        view.set_value(SettingId::LowPowerOnBattery, Value::Flag(true));
+        view.set_value(SettingId::LidOnPower, Value::Keyword("sleep".to_owned()));
+        view.select_pane(PaneId::Battery);
         view
     });
 }

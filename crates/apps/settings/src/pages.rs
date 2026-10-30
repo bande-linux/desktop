@@ -19,7 +19,9 @@ use crate::widgets::{
     Thumbnails, Tone,
 };
 use unbound_settings_panes::SettingHit;
-use unbound_settings_panes::{AUTOMATIC, Kind, List, PaneId, Section, Setting, SettingId, Value};
+use unbound_settings_panes::{
+    AUTOMATIC, Choice, Kind, List, PaneId, Section, Setting, SettingId, Value,
+};
 
 const PAGE_PADDING: f32 = Spacing::XL as f32;
 const PAGE_SPACING: f32 = Spacing::S as f32;
@@ -102,6 +104,16 @@ impl SettingsView {
         boxed(Column::new(2.0, 0.0, rows))
     }
 
+    fn offered(&self, id: SettingId) -> Option<Vec<String>> {
+        match id {
+            SettingId::PowerMode => self
+                .battery
+                .as_ref()
+                .map(|battery| battery.profiles.clone()),
+            _ => None,
+        }
+    }
+
     fn setting_intent(
         &self,
         id: SettingId,
@@ -129,9 +141,17 @@ impl SettingsView {
         let mut set = self.setting_intent(id, scope);
         let control: Box<dyn Widget> = match &setting.kind {
             Kind::Choices(choices) => {
+                let offered = self.offered(id);
+                let choices: Vec<&Choice> = choices
+                    .iter()
+                    .filter(|choice| match (&offered, &choice.value) {
+                        (Some(offered), Value::Keyword(keyword)) => offered.contains(keyword),
+                        _ => true,
+                    })
+                    .collect();
                 let selected = value
                     .as_ref()
-                    .and_then(|value| setting.kind.position(value));
+                    .and_then(|value| choices.iter().position(|choice| choice.value == *value));
                 let labels: Vec<String> =
                     choices.iter().map(|choice| choice.label.clone()).collect();
                 let values: Vec<Value> =
@@ -457,6 +477,7 @@ impl SettingsView {
             List::Clock => self.clock_rows(),
             List::TimeZones => self.zone_rows(),
             List::LoginItems => self.login_rows(),
+            List::BatteryHistory => self.battery_rows(),
         }
     }
 
@@ -683,6 +704,10 @@ impl SettingsView {
             SettingId::MouseNaturalScrolling | SettingId::MouseSpeed => self.pointing.mouse,
             SettingId::AutomaticTime => self.time.as_ref().is_some_and(|time| time.can_automatic),
             SettingId::DateAndTime | SettingId::TimeZone => self.time.is_some(),
+            SettingId::PowerMode | SettingId::LowPowerOnBattery => self
+                .battery
+                .as_ref()
+                .is_some_and(|battery| !battery.profiles.is_empty()),
             _ => true,
         })
     }

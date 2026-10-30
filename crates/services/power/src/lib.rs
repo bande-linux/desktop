@@ -1,3 +1,4 @@
+pub mod adapter;
 pub mod backlight;
 pub mod battery;
 pub mod controller;
@@ -21,6 +22,7 @@ mod tests {
         let sources = [
             include_str!("lib.rs"),
             include_str!("main.rs"),
+            include_str!("adapter.rs"),
             include_str!("backlight.rs"),
             include_str!("battery.rs"),
             include_str!("controller.rs"),

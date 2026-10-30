@@ -274,6 +274,31 @@ pub struct Mouse {
     pub speed: f64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LidOnPower {
+    #[default]
+    Sleep,
+    KeepRunning,
+}
+
+impl LidOnPower {
+    pub const ALL: [Self; 2] = [Self::Sleep, Self::KeepRunning];
+
+    pub fn keyword(self) -> &'static str {
+        match self {
+            Self::Sleep => "sleep",
+            Self::KeepRunning => "keep-running",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Power {
+    pub show_battery_percentage: bool,
+    pub low_power_on_battery: bool,
+    pub lid_on_power: LidOnPower,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WallpaperVariant {
     Light,
@@ -356,6 +381,7 @@ pub struct Config {
     pub keyboard: Keyboard,
     pub trackpad: Trackpad,
     pub mouse: Mouse,
+    pub power: Power,
     pub wallpaper: Wallpaper,
     pub outputs: BTreeMap<String, Output>,
 }
@@ -380,6 +406,7 @@ impl Default for Config {
             },
             trackpad: Trackpad::default(),
             mouse: Mouse::default(),
+            power: Power::default(),
             wallpaper: Wallpaper::default(),
             outputs: BTreeMap::new(),
         }
@@ -484,6 +511,7 @@ impl Parser<'_> {
                 "keyboard" => config.keyboard = self.keyboard(node, config.keyboard.clone())?,
                 "trackpad" => config.trackpad = self.trackpad(node)?,
                 "mouse" => config.mouse = self.mouse(node)?,
+                "power" => config.power = self.power(node)?,
                 "wallpaper" => config.wallpaper = self.wallpaper(node)?,
                 "output" => {
                     let (connector, output) = self.output(node)?;
@@ -756,6 +784,25 @@ impl Parser<'_> {
             }
         }
         Ok(trackpad)
+    }
+
+    fn power(&self, node: &KdlNode) -> Result<Power, ConfigError> {
+        self.no_arguments(node)?;
+        let mut power = Power::default();
+        for child in self.children(node)? {
+            match child.name().value() {
+                "show-battery-percentage" => power.show_battery_percentage = self.flag(child)?,
+                "low-power-on-battery" => power.low_power_on_battery = self.flag(child)?,
+                "lid-on-power" => {
+                    power.lid_on_power = self.keyword(
+                        child,
+                        &LidOnPower::ALL.map(|choice| (choice.keyword(), choice)),
+                    )?
+                }
+                _ => return Err(self.unknown_child("power", child)),
+            }
+        }
+        Ok(power)
     }
 
     fn mouse(&self, node: &KdlNode) -> Result<Mouse, ConfigError> {

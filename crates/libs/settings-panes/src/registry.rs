@@ -4,6 +4,7 @@ use crate::L10N;
 pub enum PaneId {
     Wifi,
     Bluetooth,
+    Battery,
     Notifications,
     Sound,
     Appearance,
@@ -21,9 +22,10 @@ pub enum PaneId {
 }
 
 impl PaneId {
-    const KEYWORDS: [(Self, &'static str); 16] = [
+    const KEYWORDS: [(Self, &'static str); 17] = [
         (Self::Wifi, "wifi"),
         (Self::Bluetooth, "bluetooth"),
+        (Self::Battery, "battery"),
         (Self::Notifications, "notifications"),
         (Self::Sound, "sound"),
         (Self::Appearance, "appearance"),
@@ -110,6 +112,10 @@ pub enum SettingId {
     TimeZone,
     Clock24Hour,
     LoginItems,
+    BatteryLevel,
+    PowerMode,
+    LowPowerOnBattery,
+    LidOnPower,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -139,6 +145,7 @@ pub enum List {
     Clock,
     TimeZones,
     LoginItems,
+    BatteryHistory,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -575,6 +582,58 @@ fn general_panes() -> Vec<Pane> {
     ]
 }
 
+fn battery_pane() -> Pane {
+    pane(
+        PaneId::Battery,
+        L10N.tr("battery"),
+        L10N.tr("battery-keywords"),
+        vec![
+            section(
+                None,
+                vec![setting(
+                    SettingId::BatteryLevel,
+                    L10N.tr("battery-level"),
+                    L10N.tr("battery-level-keywords"),
+                    Kind::List(List::BatteryHistory),
+                )],
+            ),
+            section(
+                None,
+                vec![
+                    setting(
+                        SettingId::PowerMode,
+                        L10N.tr("power-mode"),
+                        L10N.tr("power-mode-keywords"),
+                        Kind::Choices(keyword_choices(vec![
+                            (L10N.tr("power-saver"), "power-saver"),
+                            (L10N.tr("balanced"), "balanced"),
+                            (L10N.tr("performance"), "performance"),
+                        ])),
+                    ),
+                    setting(
+                        SettingId::LowPowerOnBattery,
+                        L10N.tr("low-power-on-battery"),
+                        L10N.tr("low-power-on-battery-keywords"),
+                        Kind::Switch,
+                    ),
+                ],
+            ),
+            section(
+                Some(L10N.tr("on-power-adapter")),
+                vec![setting(
+                    SettingId::LidOnPower,
+                    L10N.tr("lid-on-power"),
+                    L10N.tr("lid-on-power-keywords"),
+                    Kind::Menu(keyword_choices(vec![
+                        (L10N.tr("lid-sleep"), "sleep"),
+                        (L10N.tr("lid-keep-running"), "keep-running"),
+                    ])),
+                )],
+            ),
+        ],
+    )
+}
+
 fn date_time_pane() -> Pane {
     pane(
         PaneId::DateTime,
@@ -625,6 +684,7 @@ pub fn panes() -> Vec<Pane> {
     let mut panes = connectivity_panes();
     panes.extend(general_panes());
     panes.extend(desktop_panes());
+    panes.push(battery_pane());
     panes.push(keyboard_pane());
     panes.push(trackpad_mouse_pane());
     panes

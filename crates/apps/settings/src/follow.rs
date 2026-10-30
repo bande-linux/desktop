@@ -12,6 +12,7 @@ use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
 use crate::about::{About, AboutCommand, follow_about};
+use crate::battery::{BatteryCommand, BatteryState, follow_battery};
 use crate::client::{CONFIG_SETTINGS, SettingsClient};
 use crate::login::{LoginCommand, LoginItems, follow_login_items};
 use crate::pictures::{Pair, PictureCommand, follow_pictures};
@@ -41,6 +42,7 @@ pub enum Update {
     Storage(Storage),
     Time(Option<TimeState>),
     Login(LoginItems),
+    Battery(Option<BatteryState>),
     Failed(String),
 }
 
@@ -57,6 +59,7 @@ pub enum Command {
     Storage(StorageCommand),
     Time(TimeCommand),
     Login(LoginCommand),
+    Battery(BatteryCommand),
     Reveal(PathBuf),
 }
 
@@ -221,6 +224,7 @@ pub struct Services {
     storage: Sender<StorageCommand>,
     time: Option<Sender<TimeCommand>>,
     login: Sender<LoginCommand>,
+    battery: Option<Sender<BatteryCommand>>,
 }
 
 impl Services {
@@ -237,6 +241,7 @@ impl Services {
             storage: follow_storage(updates.clone()),
             time: system.map(|system| follow_time(system, updates.clone())),
             login: follow_login_items(updates.clone()),
+            battery: system.map(|system| follow_battery(system, updates.clone())),
         }
     }
 
@@ -267,6 +272,10 @@ impl Services {
                 .as_ref()
                 .is_some_and(|time| time.send(command).is_ok()),
             Command::Login(command) => self.login.send(command).is_ok(),
+            Command::Battery(command) => self
+                .battery
+                .as_ref()
+                .is_some_and(|battery| battery.send(command).is_ok()),
             Command::Reveal(_) => false,
         };
         if !sent {

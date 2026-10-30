@@ -5,13 +5,17 @@ use kdl::{KdlDocument, KdlEntry, KdlEntryFormat, KdlNode, KdlValue};
 
 use crate::{
     Appearance, CapsLock, ClockFormat, Config, ConfigError, DEFAULT_DOCK_ICON_SIZE, DockEdge,
-    InputSource, Mouse, Output, SecondaryClick, Suspend, Trackpad, WallpaperFit, WallpaperVariant,
+    InputSource, LidOnPower, Mouse, Output, SecondaryClick, Suspend, Trackpad, WallpaperFit,
+    WallpaperVariant,
 };
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Setting {
     Appearance(Appearance),
     Clock(ClockFormat),
+    ShowBatteryPercentage(bool),
+    LowPowerOnBattery(bool),
+    LidOnPower(LidOnPower),
     ReduceMotion(bool),
     DockEdge(DockEdge),
     DockApps(Vec<String>),
@@ -56,6 +60,24 @@ impl Setting {
                 None,
                 "clock",
                 (*format != ClockFormat::Automatic).then(|| format.keyword().into()),
+            ),
+            Self::ShowBatteryPercentage(on) => set(
+                &mut document,
+                Some("power"),
+                "show-battery-percentage",
+                on.then_some(KdlValue::Bool(true)),
+            ),
+            Self::LowPowerOnBattery(on) => set(
+                &mut document,
+                Some("power"),
+                "low-power-on-battery",
+                on.then_some(KdlValue::Bool(true)),
+            ),
+            Self::LidOnPower(action) => set(
+                &mut document,
+                Some("power"),
+                "lid-on-power",
+                (*action != LidOnPower::Sleep).then(|| action.keyword().into()),
             ),
             Self::ReduceMotion(reduce) => set(
                 &mut document,

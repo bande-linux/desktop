@@ -1475,3 +1475,126 @@ impl Widget for UsageBar {
         node
     }
 }
+
+const HISTORY_HEIGHT: f32 = 72.0;
+const HISTORY_BUCKETS: u32 = 48;
+const HISTORY_GAP: f32 = 2.0;
+const HISTORY_SPAN: u32 = 24 * 3600;
+
+pub fn bucket_levels(points: &[(u32, f64)], buckets: u32, span: u32) -> Vec<Option<f64>> {
+    let Some(end) = points.iter().map(|(time, _)| *time).max() else {
+        return vec![None; buckets as usize];
+    };
+    let start = end.saturating_sub(span);
+    (1..=buckets)
+        .map(|bucket| {
+            let until = start + span / buckets * bucket;
+            points
+                .iter()
+                .filter(|(time, _)| *time <= until)
+                .max_by_key(|(time, _)| *time)
+                .map(|(_, level)| level.clamp(0.0, 100.0))
+        })
+        .collect()
+}
+
+pub struct LevelHistory {
+    id: WidgetId,
+    label: String,
+    levels: Vec<Option<f64>>,
+    captions: Vec<Text>,
+    frame: Rect,
+}
+
+impl LevelHistory {
+    pub fn new(label: &str, points: Vec<(u32, f64)>, captions: [String; 3]) -> Self {
+        Self {
+            id: WidgetId::next(),
+            label: label.to_owned(),
+            levels: bucket_levels(&points, HISTORY_BUCKETS, HISTORY_SPAN),
+            captions: captions
+                .iter()
+                .map(|caption| Text::new(caption, Tone::Muted).caption())
+                .collect(),
+            frame: Rect::default(),
+        }
+    }
+}
+
+impl Widget for LevelHistory {
+    fn id(&self) -> WidgetId {
+        self.id
+    }
+
+    fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
+        let captions = self
+            .captions
+            .iter_mut()
+            .map(|caption| caption.measure(cx).height)
+            .fold(0.0, f32::max);
+        Size::new(
+            available.width,
+            (2.0 * Spacing::M as f32 + HISTORY_HEIGHT + Spacing::XS as f32 + captions).ceil(),
+        )
+    }
+
+    fn place(&mut self, _cx: &mut Context, frame: Rect) {
+        self.frame = frame;
+    }
+
+    fn frame(&self) -> Rect {
+        self.frame
+    }
+
+    fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
+        let chart = Rect::new(
+            self.frame.x + ROW_PADDING,
+            self.frame.y + Spacing::M as f32,
+            (self.frame.width - 2.0 * ROW_PADDING).max(0.0),
+            HISTORY_HEIGHT,
+        );
+        for fraction in [0.0, 0.5, 1.0] {
+            items.push(Item::Fill {
+                shape: Shape::rect(Rect::new(
+                    chart.x,
+                    (chart.y + chart.height * fraction).round(),
+                    chart.width,
+                    1.0,
+                )),
+                paint: cx.palette.separator_color.into(),
+            });
+        }
+        let count = self.levels.len().max(1) as f32;
+        let width = (chart.width - HISTORY_GAP * (count - 1.0)) / count;
+        for (index, level) in self.levels.iter().enumerate() {
+            let Some(level) = level else { continue };
+            let height = (chart.height * (*level as f32) / 100.0).max(1.0);
+            let x = chart.x + index as f32 * (width + HISTORY_GAP);
+            items.push(Item::Fill {
+                shape: Shape::rounded(
+                    Rect::new(x, chart.y + chart.height - height, width, height),
+                    1.0,
+                ),
+                paint: cx.palette.accent_color.into(),
+            });
+        }
+        let y = chart.y + chart.height + Spacing::XS as f32;
+        let last = self.captions.len().saturating_sub(1).max(1) as f32;
+        for (index, caption) in self.captions.iter().enumerate() {
+            let anchor = chart.x + chart.width * index as f32 / last;
+            let x = anchor - caption.size().width * index as f32 / last;
+            caption.paint(cx, Point::new(x, y), items);
+        }
+    }
+
+    fn access(&self, _cx: &Context) -> Node {
+        let mut node = Node::new(Role::Image);
+        let known: Vec<f64> = self.levels.iter().flatten().copied().collect();
+        let description = match (known.first(), known.last()) {
+            (Some(first), Some(last)) => format!("{}: {first:.0}% → {last:.0}%", self.label),
+            _ => self.label.clone(),
+        };
+        node.set_label(description);
+        node
+    }
+}

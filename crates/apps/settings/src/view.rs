@@ -13,6 +13,7 @@ use unbound_toolkit::{Image, Palette, Rect, Scene, TextSystem};
 
 use crate::L10N;
 use crate::about::{About, AboutCommand};
+use crate::battery::{BatteryCommand, BatteryState};
 use crate::follow::{Command, Update};
 use crate::idle::Idle;
 use crate::login::{LoginCommand, LoginItems, login_matches};
@@ -144,6 +145,7 @@ pub struct SettingsView {
     pub(crate) time: Option<TimeState>,
     pub(crate) picking: Option<(Picker, String)>,
     pub(crate) login: Option<LoginItems>,
+    pub(crate) battery: Option<BatteryState>,
     ui: Ui,
     root: WidgetId,
     search: WidgetId,
@@ -196,6 +198,7 @@ impl SettingsView {
             time: None,
             picking: None,
             login: None,
+            battery: None,
             ui: Ui::new(Box::new(root), cx),
             root: root_id,
             search,
@@ -329,6 +332,18 @@ impl SettingsView {
                 self.time = time;
             }
             Update::Login(login) => self.login = Some(login),
+            Update::Battery(battery) => {
+                match battery.as_ref().and_then(|battery| battery.profile.clone()) {
+                    Some(profile) => {
+                        self.values
+                            .insert(SettingId::PowerMode, Value::Keyword(profile));
+                    }
+                    None => {
+                        self.values.remove(&SettingId::PowerMode);
+                    }
+                }
+                self.battery = battery;
+            }
             Update::Storage(storage) => {
                 if storage.trash_items == 0 {
                     self.confirming_empty_trash = false;
@@ -412,6 +427,7 @@ impl SettingsView {
             PaneId::Sound => self.audio.is_some(),
             PaneId::Displays => !self.displays.is_empty(),
             PaneId::About => self.about.is_some(),
+            PaneId::Battery => self.battery.is_some(),
             PaneId::Appearance
             | PaneId::Wallpaper
             | PaneId::Dock
@@ -993,6 +1009,9 @@ impl SettingsView {
             (SettingId::WifiPower, Value::Flag(on)) => Command::Network(NetworkCommand::Power(on)),
             (SettingId::BluetoothPower, Value::Flag(on)) => {
                 Command::Bluetooth(BluetoothCommand::Power(on))
+            }
+            (SettingId::PowerMode, Value::Keyword(profile)) => {
+                Command::Battery(BatteryCommand::Profile(profile))
             }
             (SettingId::AutomaticTime, Value::Flag(on)) => {
                 Command::Time(TimeCommand::Automatic(on))

@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use unbound_config::{
-    Appearance, CapsLock, ClockFormat, Config, DockEdge, InputSource, Output, Setting, Suspend,
-    WallpaperFit, WallpaperVariant,
+    Appearance, CapsLock, ClockFormat, Config, DockEdge, InputSource, LidOnPower, Output, Setting,
+    Suspend, WallpaperFit, WallpaperVariant,
 };
 
 fn apply(setting: Setting, source: &str) -> String {
@@ -278,4 +278,24 @@ fn pointer_settings_equal_to_the_defaults_leave_no_trace() {
         &apply(Setting::TrackpadSpeed(0.0), &tapless),
     );
     assert_eq!(reset, "");
+}
+
+#[test]
+fn power_settings_live_in_one_section_and_defaults_leave_no_trace() {
+    let edited = apply(Setting::LowPowerOnBattery(true), "");
+    let edited = apply(Setting::LidOnPower(LidOnPower::KeepRunning), &edited);
+    let edited = apply(Setting::ShowBatteryPercentage(true), &edited);
+    let power = Config::parse(&edited).expect("valid").power;
+    assert!(power.low_power_on_battery && power.show_battery_percentage);
+    assert_eq!(power.lid_on_power, LidOnPower::KeepRunning);
+    assert!(edited.contains("lid-on-power \"keep-running\""));
+    let edited = apply(Setting::LowPowerOnBattery(false), &edited);
+    let edited = apply(Setting::LidOnPower(LidOnPower::Sleep), &edited);
+    let edited = apply(Setting::ShowBatteryPercentage(false), &edited);
+    assert_eq!(
+        Config::parse(&edited).expect("valid").power,
+        Default::default()
+    );
+    assert!(!edited.contains("low-power") && !edited.contains("lid"));
+    assert!(Config::parse("power { lid-on-power \"explode\" }").is_err());
 }

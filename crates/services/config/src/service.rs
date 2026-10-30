@@ -14,8 +14,8 @@ use zbus::object_server::SignalEmitter;
 use zbus::zvariant::{OwnedValue, Value};
 
 use crate::{
-    Appearance, CapsLock, ClockFormat, Config, ConfigStore, DockEdge, InputSource, Output,
-    ReloadError, SecondaryClick, Setting, Suspend, WallpaperFit, WallpaperVariant,
+    Appearance, CapsLock, ClockFormat, Config, ConfigStore, DockEdge, InputSource, LidOnPower,
+    Output, ReloadError, SecondaryClick, Setting, Suspend, WallpaperFit, WallpaperVariant,
     read_system_input_sources,
 };
 
@@ -146,6 +146,15 @@ fn publish_changes(
         }
         if before.clock != after.clock {
             let _ = guard.clock_format_changed(emitter).await;
+        }
+        if before.power.show_battery_percentage != after.power.show_battery_percentage {
+            let _ = guard.show_battery_percentage_changed(emitter).await;
+        }
+        if before.power.low_power_on_battery != after.power.low_power_on_battery {
+            let _ = guard.low_power_on_battery_changed(emitter).await;
+        }
+        if before.power.lid_on_power != after.power.lid_on_power {
+            let _ = guard.lid_on_power_changed(emitter).await;
         }
         if before.reduce_motion != after.reduce_motion {
             let _ = guard.reduce_motion_changed(emitter).await;
@@ -336,6 +345,37 @@ impl ConfigInterface {
     fn set_clock_format(&self, value: String) -> zbus::fdo::Result<()> {
         let format = keyword(&ClockFormat::ALL, ClockFormat::keyword, &value)?;
         self.write(&Setting::Clock(format))
+    }
+
+    #[zbus(property)]
+    fn show_battery_percentage(&self) -> bool {
+        self.store.current().power.show_battery_percentage
+    }
+
+    #[zbus(property)]
+    fn set_show_battery_percentage(&self, on: bool) -> zbus::fdo::Result<()> {
+        self.write(&Setting::ShowBatteryPercentage(on))
+    }
+
+    #[zbus(property)]
+    fn low_power_on_battery(&self) -> bool {
+        self.store.current().power.low_power_on_battery
+    }
+
+    #[zbus(property)]
+    fn set_low_power_on_battery(&self, on: bool) -> zbus::fdo::Result<()> {
+        self.write(&Setting::LowPowerOnBattery(on))
+    }
+
+    #[zbus(property)]
+    fn lid_on_power(&self) -> String {
+        self.store.current().power.lid_on_power.keyword().to_owned()
+    }
+
+    #[zbus(property)]
+    fn set_lid_on_power(&self, value: String) -> zbus::fdo::Result<()> {
+        let action = keyword(&LidOnPower::ALL, LidOnPower::keyword, &value)?;
+        self.write(&Setting::LidOnPower(action))
     }
 
     #[zbus(property)]

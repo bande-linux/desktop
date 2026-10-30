@@ -411,6 +411,11 @@ impl State {
         }
     }
 
+    pub(crate) fn cancel_snap(&mut self) {
+        self.snap = None;
+        self.hide_preview();
+    }
+
     pub(crate) fn finish_move(&mut self, surface: &WlSurface) {
         let shown = self
             .snap

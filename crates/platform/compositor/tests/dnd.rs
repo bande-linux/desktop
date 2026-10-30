@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use smithay::utils::{Point, Size};
 use unbound_compositor::{Headless, Renderer};
-use unbound_test_wayland::{BLUE, RED, ShmImage, TestClient, roundtrip};
+use unbound_test_wayland::{BLUE, GREEN, RED, ShmImage, TestClient, roundtrip};
 use wayland_client::protocol::wl_data_device_manager::DndAction;
 use wayland_client::protocol::wl_shm::Format;
 
@@ -116,4 +116,63 @@ fn a_refused_drop_slides_the_icon_back_to_where_the_drag_began() {
     assert_ne!(icon_pixel(&mut renderer, &mut server, START), DRAWN_BLUE);
     assert_eq!(client.cancelled_sources(), 1);
     assert_eq!(client.drops(), 0);
+}
+
+const KEY_ESC: u32 = 1;
+
+#[test]
+fn escape_cancels_a_drag_slides_the_icon_back_and_nothing_is_dropped() {
+    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let mut target = TestClient::connect(&mut server);
+    target.use_seat(&mut server);
+    target.join_seat(&mut server);
+    target.accept_drops(true);
+    let behind = image(GREEN, WINDOW);
+    target.show_window(&mut server, &shm(&behind, WINDOW));
+    target.set_maximized(&mut server, 0, true);
+    target.fill_configured_size(&mut server, 0, GREEN);
+    let mut source = TestClient::connect(&mut server);
+    source.use_seat(&mut server);
+    source.join_seat(&mut server);
+    let window = image(RED, WINDOW);
+    source.show_window(&mut server, &shm(&window, WINDOW));
+    server.move_pointer_to(at(START), 1);
+    server.press_button(BTN_LEFT, true, 2);
+    roundtrip(&mut server, &mut [&mut target, &mut source]);
+    let icon = image(BLUE, ICON);
+    source.start_drag(&mut server, &shm(&icon, ICON), (-ICON / 2, -ICON / 2));
+    let mut renderer = Renderer::new().expect("renderer");
+    server.move_pointer_to(at(AWAY), 10);
+    roundtrip(&mut server, &mut [&mut target, &mut source]);
+    assert_eq!(icon_pixel(&mut renderer, &mut server, AWAY), DRAWN_BLUE);
+
+    server.key(KEY_ESC, true, 20);
+    server.key(KEY_ESC, false, 21);
+    roundtrip(&mut server, &mut [&mut target, &mut source]);
+
+    assert_eq!(source.cancelled_sources(), 1);
+    assert_eq!(target.drag_leaves(), 1);
+    assert!(server.is_animating());
+    assert!(source.keys().is_empty() && target.keys().is_empty());
+    let mut time = Duration::from_secs(1);
+    let mut reached_start = false;
+    while server.is_animating() {
+        time += Duration::from_millis(16);
+        server.animate(time);
+        reached_start |= icon_pixel(&mut renderer, &mut server, START) == DRAWN_BLUE;
+    }
+    assert!(reached_start);
+
+    let pressed = target.buttons().len();
+    server.move_pointer_to(at((AWAY.0 + 5, AWAY.1)), 30);
+    server.press_button(BTN_LEFT, false, 31);
+    roundtrip(&mut server, &mut [&mut target, &mut source]);
+    assert_eq!(target.drops(), 0);
+    assert_eq!(target.buttons().len(), pressed);
+    assert!(!server.pointer_grabbed());
+
+    server.press_button(BTN_LEFT, true, 40);
+    server.press_button(BTN_LEFT, false, 41);
+    roundtrip(&mut server, &mut [&mut target, &mut source]);
+    assert_eq!(target.buttons().len(), pressed + 2);
 }

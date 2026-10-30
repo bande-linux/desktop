@@ -747,6 +747,7 @@ impl State {
     }
 
     fn prepare_overview(&mut self, app: Option<String>) {
+        self.close_menus();
         self.hide_desktop();
         self.overview.app = app;
         self.overview.filter.clear();

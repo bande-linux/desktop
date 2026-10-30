@@ -308,3 +308,49 @@ fn the_window_menu_can_tile_a_window_into_a_quarter_and_restore_it() {
     assert_eq!(quarter, rect(128, 96, 128, 96));
     assert_eq!(restored, before);
 }
+
+const KEY_ESC: u32 = 1;
+
+fn escape(server: &mut Headless, client: &mut TestClient) {
+    server.key(KEY_ESC, true, 1200);
+    server.key(KEY_ESC, false, 1201);
+    roundtrip(server, &mut [client]);
+}
+
+#[test]
+fn escape_while_the_snap_preview_shows_puts_the_window_back_untiled() {
+    let mut server = server();
+    let mut editor = app(&mut server, RED);
+    let before = settle(&mut server, &mut editor, RED);
+    grab(&mut server, &mut editor);
+    server.move_pointer_to(at(0, 96), 1000);
+    server.snap_tick(Duration::from_millis(1150));
+
+    escape(&mut server, &mut editor);
+    release(&mut server, &mut editor, 1300);
+
+    assert_eq!(settle(&mut server, &mut editor, RED), before);
+    assert!(editor.keys().is_empty());
+}
+
+#[test]
+fn escape_while_dragging_a_tiled_window_returns_it_to_its_tile() {
+    let mut server = server();
+    let mut editor = app(&mut server, RED);
+    chord(&mut server, &mut editor, KEY_LEFT);
+    let tiled = settle(&mut server, &mut editor, RED);
+    assert_eq!(tiled, rect(0, 0, 128, 192));
+    server.move_pointer_to(at(64, 96), 0);
+    server.press_button(BTN_LEFT, true, 0);
+    roundtrip(&mut server, &mut [&mut editor]);
+    editor.request_move(&mut server, 0);
+    server.move_pointer_to(at(150, 120), 10);
+    roundtrip(&mut server, &mut [&mut editor]);
+    assert_eq!(settle(&mut server, &mut editor, RED).size, WINDOW.into());
+
+    escape(&mut server, &mut editor);
+    release(&mut server, &mut editor, 1300);
+
+    assert_eq!(settle(&mut server, &mut editor, RED), tiled);
+    assert!(!editor.keys().iter().any(|(key, _)| *key == KEY_ESC));
+}

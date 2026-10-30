@@ -243,6 +243,7 @@ impl State {
 
     fn begin_desktop(&mut self, time: u32) -> Route {
         let was_shown = self.desktop.target != 0.0;
+        self.close_menus();
         self.desktop.settle = None;
         self.desktop.last = None;
         self.desktop.tracker = Some(Tracker::new(self.desktop.progress, time, 1.0));
@@ -303,6 +304,7 @@ impl State {
         if delta.x.hypot(delta.y) < AXIS_LOCK {
             return Route::Undecided { delta };
         }
+        self.close_menus();
         if delta.x.abs() >= delta.y.abs() {
             self.begin_workspace_swipe(time);
             self.track_workspace_swipe(delta.x, time);

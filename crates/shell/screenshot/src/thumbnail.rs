@@ -2,16 +2,19 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use unbound_toolkit::ui::{Animated, Event, Spring};
-use unbound_toolkit::{Color, Image, Item, Point, Rect, Scene, Shape};
+use unbound_toolkit::{
+    Color, Elevation, Image, Item, Palette, Point, Radius, Rect, Scene, Scheme, Shape,
+};
 
 const MOST_WIDTH: f32 = 192.0;
 const MOST_HEIGHT: f32 = 128.0;
 const MARGIN: f32 = 18.0;
 const BORDER: f32 = 3.0;
-const RADIUS: f32 = 6.0;
+const RADIUS: f32 = Radius::S;
 const SHOWN_FOR: Duration = Duration::from_secs(5);
 const DRAG_THRESHOLD: f32 = 4.0;
 const PLAY_RADIUS: f32 = 16.0;
+const PLAY_DISC: f32 = 0.7;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ThumbnailAction {
@@ -25,7 +28,7 @@ pub struct Thumbnail {
     image: Image,
     path: PathBuf,
     video: bool,
-    border: Color,
+    palette: Palette,
     reduce_motion: bool,
     shown: Animated,
     until: Instant,
@@ -39,7 +42,7 @@ impl Thumbnail {
         image: Image,
         path: PathBuf,
         video: bool,
-        border: Color,
+        palette: Palette,
         reduce_motion: bool,
         now: Instant,
     ) -> Self {
@@ -53,7 +56,7 @@ impl Thumbnail {
             image,
             path,
             video,
-            border,
+            palette,
             reduce_motion,
             shown,
             until: now + SHOWN_FOR,
@@ -175,16 +178,13 @@ impl Thumbnail {
 
     fn card(&self, frame: Rect) -> Vec<Item> {
         let picture = frame.inset(BORDER);
-        let mut items = vec![
-            Item::Shadow {
-                shape: Shape::rounded(frame, RADIUS),
-                offset: Point::new(0.0, 4.0),
-                blur_radius: 14.0,
-                color: Color::hex(0x000000).with_alpha(90),
-            },
+        let shape = Shape::rounded(frame, RADIUS);
+        let mut items =
+            Item::shadows(shape, Elevation::Overlay, self.palette.scheme, true).to_vec();
+        items.extend([
             Item::Fill {
-                shape: Shape::rounded(frame, RADIUS),
-                paint: self.border.into(),
+                shape,
+                paint: self.palette.overlay.into(),
             },
             Item::Clip {
                 shape: Shape::rounded(picture, RADIUS - BORDER / 2.0),
@@ -193,8 +193,9 @@ impl Thumbnail {
                     image: self.image.clone(),
                 }],
             },
-        ];
+        ]);
         if self.video {
+            let night = Palette::for_scheme(Scheme::Dark);
             let center = Point::new(
                 picture.x + picture.width / 2.0,
                 picture.y + picture.height / 2.0,
@@ -209,7 +210,7 @@ impl Thumbnail {
                     ),
                     PLAY_RADIUS,
                 ),
-                paint: Color::hex(0x000000).with_alpha(0x80).into(),
+                paint: night.chassis.with_opacity(PLAY_DISC).into(),
             });
             let path = unbound_graphics::Path::new()
                 .move_to(Point::new(center.x - 5.0, center.y - 8.0))
@@ -218,7 +219,7 @@ impl Thumbnail {
                 .close();
             items.push(Item::FillPath {
                 path,
-                paint: Color::hex(0xffffff).into(),
+                paint: night.ink.into(),
             });
         }
         items
@@ -257,7 +258,7 @@ mod tests {
             image,
             PathBuf::from("/tmp/shot.png"),
             false,
-            Color::hex(0xffffff),
+            Palette::for_scheme(Scheme::Light),
             false,
             now,
         )

@@ -2,8 +2,11 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use accesskit::{Action, ActionRequest, Node, Role};
-use unbound_toolkit::ui::{Context, Event, Key, Parts, Size, Widget, WidgetId};
-use unbound_toolkit::{Color, Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle};
+use unbound_toolkit::ui::{Context, Event, Key, Parts, Size, Widget, WidgetId, focus_ring_for};
+use unbound_toolkit::{
+    Color, Elevation, Item, Paragraph, Point, Radius, Rect, Scheme, Shape, TextAlign, TextRole,
+    TextStyle,
+};
 
 use crate::L10N;
 
@@ -12,10 +15,13 @@ const SEGMENT: f32 = 44.0;
 const PADDING: f32 = 6.0;
 const GAP: f32 = 2.0;
 const DIVIDER: f32 = 13.0;
-const RADIUS: f32 = 12.0;
+const RADIUS: f32 = Radius::XL;
+const SEGMENT_RADIUS: f32 = Radius::S;
+const HOVER_INK: f32 = 0.06;
+const CHOSEN_INK: f32 = 0.1;
+const PRESSED_INK: f32 = 0.14;
 const BUTTON_PADDING: f32 = 14.0;
-const BUTTON_HEIGHT: f32 = 30.0;
-const TEXT_SIZE: f32 = 13.0;
+const BUTTON_HEIGHT: f32 = 28.0;
 const STROKE: f32 = 1.6;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -218,7 +224,7 @@ impl Widget for Palette {
     }
 
     fn measure(&mut self, cx: &mut Context, _available: Size) -> Size {
-        let style = TextStyle::new(TEXT_SIZE, cx.palette.ink);
+        let style = TextStyle::role(TextRole::Body, cx.palette.ink);
         let options = cx.text.paragraph(
             &format!("{} ▾", L10N.tr("options")),
             style,
@@ -227,7 +233,7 @@ impl Widget for Palette {
         );
         let go = cx.text.paragraph(
             &self.go_title(),
-            TextStyle::new(TEXT_SIZE, Color::hex(0xffffff)).weight(TextStyle::MEDIUM),
+            TextStyle::role(TextRole::BodyStrong, cx.palette.on_accent),
             None,
             TextAlign::Start,
         );
@@ -279,21 +285,23 @@ impl Widget for Palette {
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
         let shape = Shape::rounded(self.frame, RADIUS);
-        items.push(Item::Shadow {
+        items.extend(Item::shadows(
             shape,
-            offset: Point::new(0.0, 6.0),
-            blur_radius: 20.0,
-            color: Color::hex(0x000000).with_alpha(80),
-        });
+            Elevation::Overlay,
+            cx.palette.scheme,
+            true,
+        ));
         items.push(Item::Fill {
             shape,
-            paint: cx.palette.overlay.with_alpha(0xf2).into(),
+            paint: cx.palette.overlay.into(),
         });
-        items.push(Item::Stroke {
-            shape: Shape::rounded(self.frame.inset(0.5), RADIUS - 0.5),
-            width: 1.0,
-            paint: cx.palette.hairline.into(),
-        });
+        if cx.palette.scheme == Scheme::Dark {
+            items.push(Item::Stroke {
+                shape: Shape::rounded(self.frame.inset(0.5), RADIUS - 0.5),
+                width: 1.0,
+                paint: cx.palette.hairline.into(),
+            });
+        }
         for divider in [1, 4, 6] {
             let x = self.frames[divider].x - (DIVIDER + GAP) / 2.0;
             items.push(Item::Fill {
@@ -308,12 +316,14 @@ impl Widget for Palette {
             let chosen = *segment == Segment::Mode(self.mode);
             let highlighted = self.pressed == Some(index) || self.hovered == Some(index);
             if chosen || highlighted {
-                let fill = match chosen {
-                    true => cx.palette.ink.with_alpha(0x26),
-                    false => cx.palette.ink.with_alpha(0x12),
+                let ink = match (self.pressed == Some(index), chosen) {
+                    (true, _) => PRESSED_INK,
+                    (false, true) => CHOSEN_INK,
+                    (false, false) => HOVER_INK,
                 };
+                let fill = cx.palette.overlay.mix(cx.palette.ink, ink);
                 items.push(Item::Fill {
-                    shape: Shape::rounded(frame, 8.0),
+                    shape: Shape::rounded(frame, SEGMENT_RADIUS),
                     paint: fill.into(),
                 });
             }
@@ -354,7 +364,7 @@ impl Widget for Palette {
                 }
                 Segment::Go => {
                     items.push(Item::Fill {
-                        shape: Shape::rounded(frame, 7.0),
+                        shape: Shape::rounded(frame, SEGMENT_RADIUS),
                         paint: cx.palette.accent.into(),
                     });
                     if let Some(text) = &self.go_text {
@@ -369,11 +379,7 @@ impl Widget for Palette {
                 }
             }
             if focused && index == self.cursor {
-                items.push(Item::Stroke {
-                    shape: Shape::rounded(frame.inset(-2.0), 9.0),
-                    width: 2.0,
-                    paint: cx.palette.accent.with_alpha(160).into(),
-                });
+                focus_ring_for(&cx.palette, Shape::rounded(frame, SEGMENT_RADIUS), items);
             }
         }
     }

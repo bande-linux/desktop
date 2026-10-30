@@ -3,10 +3,10 @@ use std::rc::Rc;
 
 use accesskit::{Action, ActionRequest, Node, Role};
 use unbound_graphics::Path;
-use unbound_toolkit::ui::{Context, Event, Key, Parts, Size, Widget, WidgetId};
+use unbound_toolkit::ui::{Context, Event, Key, Parts, Size, Widget, WidgetId, focus_ring_for};
 use unbound_toolkit::{
-    Color, CpuRenderer, Image, Item, Paragraph, Point, Rect, Scene, Shape, Snapshot, TextAlign,
-    TextStyle, TextSystem,
+    Color, CpuRenderer, Image, Item, Palette, Paragraph, Point, Radius, Rect, Scene, Scheme, Shape,
+    Snapshot, TextAlign, TextStyle, TextSystem,
 };
 
 use crate::L10N;
@@ -236,7 +236,7 @@ impl Markup {
                     items.push(Item::Stroke {
                         shape: Shape::rect(rect),
                         width: (self.unit() * 0.002).max(1.0),
-                        paint: Color::hex(0xffffff).into(),
+                        paint: Palette::for_scheme(Scheme::Light).overlay.into(),
                     });
                     None
                 }
@@ -373,7 +373,7 @@ impl Widget for Toolbar {
             .iter()
             .map(|command| {
                 let color = match command {
-                    Command::Done => Color::hex(0xffffff),
+                    Command::Done => cx.palette.on_accent,
                     _ => cx.palette.ink,
                 };
                 cx.text.paragraph(
@@ -435,12 +435,12 @@ impl Widget for Toolbar {
             let chosen = command == Command::Tool(self.tool);
             let fill = match (command, chosen || self.pressed == Some(index)) {
                 (Command::Done, _) => Some(cx.palette.accent),
-                (_, true) => Some(cx.palette.ink.with_alpha(0x22)),
+                (_, true) => Some(cx.palette.well),
                 _ => None,
             };
             if let Some(fill) = fill {
                 items.push(Item::Fill {
-                    shape: Shape::rounded(*frame, 6.0),
+                    shape: Shape::rounded(*frame, Radius::S),
                     paint: fill.into(),
                 });
             }
@@ -452,11 +452,7 @@ impl Widget for Toolbar {
                 paragraph: label.clone(),
             });
             if focused && index == self.cursor {
-                items.push(Item::Stroke {
-                    shape: Shape::rounded(frame.inset(-2.0), 8.0),
-                    width: 2.0,
-                    paint: cx.palette.accent.with_alpha(160).into(),
-                });
+                focus_ring_for(&cx.palette, Shape::rounded(*frame, Radius::S), items);
             }
         }
     }

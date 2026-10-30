@@ -160,6 +160,7 @@ struct LauncherShell {
     apps: Rc<RefCell<Apps>>,
     recently_used: PathBuf,
     skin_tone: PathBuf,
+    blurred: Option<(u32, u32)>,
 }
 
 fn load_skin_tone(path: &Path) -> Option<usize> {
@@ -324,6 +325,13 @@ impl LauncherShell {
 impl App for LauncherShell {
     fn scene(&mut self, window: &mut Window) -> Scene {
         let (width, height) = window.size();
+        if self.blurred != Some((width, height)) {
+            self.blurred = Some((width, height));
+            let screen = Rect::new(0.0, 0.0, width as f32, height as f32);
+            if let Err(error) = window.set_background_blur(&[screen]) {
+                tracing::info!("the launcher's backdrop is not blurred: {error}");
+            }
+        }
         let now = Instant::now();
         let scene = self.launcher.scene(width, height, now);
         if self.launcher.is_animating(now) {
@@ -512,6 +520,7 @@ fn run() -> Result<(), WindowError> {
         apps: apps_by_type,
         recently_used,
         skin_tone,
+        blurred: None,
     };
     unbound_toolkit::run(&mut window, &mut shell)
 }

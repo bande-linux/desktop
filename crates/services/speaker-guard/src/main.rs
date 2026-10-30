@@ -112,6 +112,18 @@ impl Guard {
                 }
                 Some(frames) => {
                     let samples = &buffer[..frames * self.channels];
+                    for (index, speaker) in self.model.speakers.iter().enumerate() {
+                        let (current, voltage) = speaker.sense.ranges(samples);
+                        tracing::debug!(
+                            speaker = index,
+                            frames,
+                            current_min = current.min,
+                            current_max = current.max,
+                            voltage_min = voltage.min,
+                            voltage_max = voltage.max,
+                            "sense period"
+                        );
+                    }
                     let readings = self
                         .model
                         .speakers

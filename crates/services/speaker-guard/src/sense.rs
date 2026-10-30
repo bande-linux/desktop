@@ -39,7 +39,29 @@ const MIN_IMPEDANCE_RATIO: f64 = 0.5;
 const MAX_IMPEDANCE_RATIO: f64 = 8.0;
 const NEGATIVE_POWER_TOLERANCE: f64 = -0.01;
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ChannelRange {
+    pub min: i16,
+    pub max: i16,
+}
+
 impl SenseLayout {
+    pub fn ranges(&self, frames: &[i16]) -> (ChannelRange, ChannelRange) {
+        let range = |channel: usize| {
+            frames.iter().skip(channel).step_by(self.channels).fold(
+                ChannelRange {
+                    min: i16::MAX,
+                    max: i16::MIN,
+                },
+                |r, &v| ChannelRange {
+                    min: r.min.min(v),
+                    max: r.max.max(v),
+                },
+            )
+        };
+        (range(self.current_channel), range(self.voltage_channel))
+    }
+
     pub fn read(&self, frames: &[i16]) -> Result<Reading, Fault> {
         let mut voltage_square = 0.0;
         let mut current_square = 0.0;

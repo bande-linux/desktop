@@ -173,6 +173,10 @@ pub enum WindowEvent {
         sources: Vec<String>,
         active: usize,
     },
+    Workspaces {
+        count: usize,
+        active: usize,
+    },
     Accessibility(ActionRequest),
 
     AppearanceChanged(Appearance),
@@ -859,6 +863,10 @@ impl Window {
     pub fn dispatch(&mut self) -> Result<(), WindowError> {
         self.queue.blocking_dispatch(&mut self.state)?;
         Ok(())
+    }
+
+    pub(crate) fn has_events(&self) -> bool {
+        !self.state.events.is_empty()
     }
 
     pub(crate) fn dispatch_pending(&mut self) -> Result<(), WindowError> {

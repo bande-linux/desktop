@@ -8,8 +8,8 @@ use std::time::Duration;
 
 use unbound_config::{
     Appearance, CapsLock, Config, ConfigError, ConfigStore, DEFAULT_DOCK_APPS, DisplaySettings,
-    DockEdge, InputSource, Placement, ReloadError, Rotation, SecondaryClick, Suspend, WallpaperFit,
-    WallpaperVariant, config_path, login_picture, system_input_sources,
+    DockEdge, InputSource, MenuBarPlacement, Placement, ReloadError, Rotation, SecondaryClick,
+    Suspend, WallpaperFit, WallpaperVariant, config_path, login_picture, system_input_sources,
 };
 
 fn error_at(source: &str) -> (usize, usize) {
@@ -150,6 +150,19 @@ fn the_dock_accepts_each_of_the_four_edges() {
         let config = Config::parse(&format!("dock {{\n    edge \"{name}\"\n}}\n"));
         assert_eq!(config.map(|config| config.dock.edge), Ok(edge));
     }
+}
+
+#[test]
+fn the_menu_bar_is_separate_unless_the_bar_combines_it() {
+    assert_eq!(
+        Config::parse("").map(|config| config.bar.menu_bar),
+        Ok(MenuBarPlacement::Separate)
+    );
+    assert_eq!(
+        Config::parse("bar {\n    menu-bar \"combined\"\n}\n").map(|config| config.bar.menu_bar),
+        Ok(MenuBarPlacement::Combined)
+    );
+    assert_eq!(error_at("bar {\n    menu-bar \"floating\"\n}\n"), (2, 14));
 }
 
 #[test]

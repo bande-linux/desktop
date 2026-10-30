@@ -178,7 +178,13 @@ fn sibling_surfaces_on_one_connection_each_get_only_their_own_input() {
 
     assert_eq!(
         pointer_events(&desktop.seen),
-        [(0, "enter"), (0, "down"), (0, "leave"), (1, "enter"), (1, "down")]
+        [
+            (0, "enter"),
+            (0, "down"),
+            (0, "leave"),
+            (1, "enter"),
+            (1, "down")
+        ]
     );
     let typed_in: Vec<usize> = desktop
         .seen

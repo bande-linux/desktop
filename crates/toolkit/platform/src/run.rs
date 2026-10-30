@@ -328,14 +328,9 @@ pub fn run_surfaces(app: &mut impl Surfaces) -> Result<(), WindowError> {
         if app.windows().is_empty() {
             return Ok(());
         }
-        let guard = loop {
-            if deliver(app)? {
-                return Ok(());
-            }
-            if let Some(guard) = app.windows_mut()[0].queue.prepare_read() {
-                break guard;
-            }
-        };
+        if deliver(app)? {
+            return Ok(());
+        }
         for index in 0..app.windows().len() {
             let frame_drawn = app.windows()[index].wants_frame();
             if frame_drawn {
@@ -354,6 +349,17 @@ pub fn run_surfaces(app: &mut impl Surfaces) -> Result<(), WindowError> {
             }
         }
         app.windows_mut()[0].flush()?;
+        let mut waiting = false;
+        for window in app.windows_mut() {
+            window.dispatch_pending()?;
+            waiting |= window.has_events();
+        }
+        if waiting {
+            continue;
+        }
+        let Some(guard) = app.windows_mut()[0].queue.prepare_read() else {
+            continue;
+        };
         let window_deadlines: Vec<Option<Instant>> =
             app.windows().iter().map(Window::deadline).collect();
         let app_deadline = app.deadline();

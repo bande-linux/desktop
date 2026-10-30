@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
@@ -44,6 +44,7 @@ jobs:
 
   test:
     name: ci/lavapipe-test
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/ci/')
     runs-on: [self-hosted, unbound]
     timeout-minutes: 30
     steps:
@@ -66,6 +67,7 @@ jobs:
 
   deb:
     name: ci/deb
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/ci/')
     runs-on: [self-hosted, unbound]
     timeout-minutes: 90
     env:
@@ -273,6 +275,7 @@ jobs:
 
   deb-all:
     name: ci/deb-all
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/ci/')
     runs-on: [self-hosted, unbound]
     timeout-minutes: 15
     steps:
@@ -339,6 +342,7 @@ jobs:
 
   vm:
     name: ci/vm
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/ci/')
     runs-on: [self-hosted, unbound-kvm]
     timeout-minutes: 90
     steps:
@@ -362,6 +366,7 @@ jobs:
 
   polkit:
     name: ci/polkit
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/ci/')
     runs-on: [self-hosted, unbound]
     timeout-minutes: 30
     steps:

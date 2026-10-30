@@ -383,7 +383,15 @@ impl Window {
                     );
                 }
                 let mut target = ShmTarget::default();
-                target.present(&mut self.cpu, shm, &handle, &surface, &icon.scene, scale)?;
+                target.present(
+                    &mut self.cpu,
+                    shm,
+                    &handle,
+                    &surface,
+                    &icon.scene,
+                    scale,
+                    None,
+                )?;
                 Some(Icon {
                     surface,
                     viewport,

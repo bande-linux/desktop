@@ -7,11 +7,12 @@ repository.workspace = true
 
 [dependencies]
 kdl.workspace = true
-notify.workspace = true
 tracing.workspace = true
+unbound-bus.workspace = true
 unbound-l10n.workspace = true
 unbound-log.workspace = true
 unbound-notify.workspace = true
+unbound-watch.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]

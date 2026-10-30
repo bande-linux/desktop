@@ -14,7 +14,10 @@ use unbound_files::{
 };
 use unbound_fs::{Sort, SortBy, Trash, list};
 use unbound_thumbnails::{Cache, Thumbnailers, Thumbnails};
-use unbound_toolkit::ui::{Event, Key, Menu, Modifiers, Pointer, PointerButton};
+use unbound_toolkit::ui::{
+    Event, HEADER_HEIGHT as LIST_HEADER, Key, Menu, Modifiers, Pointer, PointerButton,
+    ROW_HEIGHT as LIST_ROW,
+};
 use unbound_toolkit::{CpuRenderer, DragAction, Image, Item, Palette, Point, Scheme, TextSystem};
 use unbound_xdg::{Apps, file_uri};
 
@@ -1004,7 +1007,7 @@ fn the_list_view_selects_by_click_sorts_by_header_and_opens_on_double_click() {
     let row = |index: f32| {
         Point::new(
             SIDEBAR_WIDTH + 60.0,
-            TOOLBAR_HEIGHT + 26.0 + ROW_HEIGHT * (index + 0.5),
+            TOOLBAR_HEIGHT + LIST_HEADER + LIST_ROW * (index + 0.5),
         )
     };
     let click = |view: &mut FilesView, at: Point, count: u8| {
@@ -1097,7 +1100,7 @@ fn dragging_a_group_of_rows_in_the_list_view_drags_all_of_them() {
     let row = |index: f32| {
         Point::new(
             SIDEBAR_WIDTH + 60.0,
-            TOOLBAR_HEIGHT + 26.0 + ROW_HEIGHT * (index + 0.5),
+            TOOLBAR_HEIGHT + LIST_HEADER + LIST_ROW * (index + 0.5),
         )
     };
     let shift = Modifiers {
@@ -1535,7 +1538,7 @@ fn compressing_makes_an_undoable_zip_and_opening_it_extracts_beside_it() {
         &mut view,
         Point::new(
             SIDEBAR_WIDTH + 60.0,
-            TOOLBAR_HEIGHT + 26.0 + ROW_HEIGHT * 2.5,
+            TOOLBAR_HEIGHT + LIST_HEADER + LIST_ROW * 2.5,
         ),
     );
     assert!(titles(&menu).contains(&"Compress “notes.txt”".to_owned()));

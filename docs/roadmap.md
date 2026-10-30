@@ -24,8 +24,8 @@ The audit (2026-10-30) found the libraries lean and the weight in how we use the
 
 ## Wave D (now, top priority): Datum and the combined bar
 
-Adopted by the owner on 2026-10-30: the design language [Datum](design/datum.md) (circle "disc"
-app icons included) and the [combined bar](design/features/bar.md) with app menus as a cascade
+Adopted by the owner on 2026-10-30: the design language [Datum](design/datum.md) (with rounded-square app icons and the richer
+icon style of the bar mockups, per the owner's amendment in §10) and the [combined bar](design/features/bar.md) with app menus as a cascade
 from the app header. They replace the macOS-looking first draft. Two tracks run in parallel;
 feature work in waves A–B continues, using design tokens only (no hard-coded colours, radii or
 fonts) so it restyles for free.
@@ -36,7 +36,7 @@ fonts) so it restyles for free.
 |---|---|---|---|
 | D1 | Tokens and window chrome | `unbound-design` crate: OKLCH palette generator with 8 accents, radii (4/6/8/10/14, concentric rule), spacing and control sizes, type roles, elevation, contrast tests (WCAG + APCA) that fail CI; fonts (Inter features cv05/cv08/ss07/ss08/tnum, Manrope, JetBrains Mono); the 48 pt frame header with flush-left title and the left control pill in the toolkit and the compositor's server-side frame; corner radius 14; frame/sheet split | — |
 | D2 | Controls | Every widget on the tokens: buttons, fields, switches, checkbox, square radio, segmented, pop-up, stepper, fader slider, segmented progress, tooltips, tables with gliding selection, menus with the Super glyph, alerts with the footer tray, sheets, scroll bars | D1 |
-| D3 | Icons | The Unbound icon theme: disc app icons for our apps (and replacements for the default third-party apps), sheet+label file types, stone folders with an accent tab, the 16 pt symbol set; reproducible generators | — |
+| D3 | Icons | The Unbound icon theme: rounded-square app icons in the style of `design/bar/01-desktop-left-collapsed.png` for our apps (and replacements for the default third-party apps), sheet+label file types, stone folders with an accent tab, the 16 pt symbol set; reproducible generators | — |
 | D4 | Apps | Files, Settings, Terminal (JetBrains Mono, accent-derived ANSI), Activity Monitor on frame and sheet with the toolbar in the header | D2 |
 | D5 | Shell surfaces | Launcher, notifications, Control Center, lock, greeter, screenshot, overview and HUDs on the tokens (opaque, scrim + blur only where Datum allows) | D2 |
 | D6 | Everyone else and choice | GTK and Qt receive the palette (gtk.css accent and named colours, Qt colour scheme); Settings ▸ Appearance: Light/Dark/Auto, 8 accent swatches, tinted frame, Increase Contrast, larger text | D2 |

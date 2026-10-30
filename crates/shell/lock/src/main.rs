@@ -9,8 +9,8 @@ use accesskit::TreeUpdate;
 use unbound_datetime::DateFormats;
 use unbound_keyboard::Layouts;
 use unbound_lock::{
-    BackdropSource, Inbox, LockScreen, PAM_SERVICE, User, Variant, authenticate, current_user,
-    load_backdrop,
+    BackdropSource, Inbox, LockScreen, Look, PAM_SERVICE, User, Variant, authenticate,
+    current_user, load_backdrop,
 };
 use unbound_toolkit::ui::frame_time;
 use unbound_toolkit::{
@@ -34,7 +34,7 @@ struct Locker {
     verdicts: UnixStream,
     verdict_sender: UnixStream,
     next_clock: Instant,
-    backdrop: Option<Inbox<Image>>,
+    backdrop: Option<Inbox<(Look, Image)>>,
     backdrop_requested: bool,
     layouts: Layouts,
     unlocked: bool,
@@ -69,6 +69,7 @@ impl App for Locker {
                 BackdropSource::Session,
                 variant_of(window.appearance().scheme),
                 (width, height),
+                vec![Look::Blurred],
             ) {
                 Ok(inbox) => self.backdrop = Some(inbox),
                 Err(error) => tracing::warn!("cannot load the wallpaper: {error}"),
@@ -112,7 +113,7 @@ impl App for Locker {
 
     fn source_ready(&mut self, window: &mut Window, index: usize) {
         if index == 1 {
-            if let Some(image) = self.backdrop.take().and_then(|inbox| inbox.drain().pop()) {
+            if let Some((_, image)) = self.backdrop.take().and_then(|inbox| inbox.drain().pop()) {
                 self.screen.set_backdrop(image, frame_time().on_screen());
                 window.request_redraw();
             }

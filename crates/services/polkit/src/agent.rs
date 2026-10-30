@@ -197,13 +197,15 @@ fn converse(
                 None => return Ok(Outcome::Cancelled),
             }
         }
+        let mut answered = false;
         loop {
             match session.read_line().map_err(failed)? {
                 Some(Line::Prompt { text, echo }) => {
                     let response = conversation.respond(request, &text, echo);
                     match response {
                         Some(response) if lock(running).sessions.contains_key(cookie) => {
-                            session.respond(&response).map_err(failed)?
+                            session.respond(&response).map_err(failed)?;
+                            answered = true;
                         }
                         _ => return Ok(Outcome::Cancelled),
                     }
@@ -214,6 +216,11 @@ fn converse(
                 Some(Line::Failure) => {
                     if !lock(running).sessions.contains_key(cookie) {
                         return Ok(Outcome::Cancelled);
+                    }
+                    if !answered {
+                        return Err(AgentError::Failed(
+                            "the helper refused without asking for a password".to_owned(),
+                        ));
                     }
                     conversation.notice(request, Notice::WrongPassword);
                     break;

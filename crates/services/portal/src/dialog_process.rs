@@ -20,6 +20,16 @@ fn os(text: &str) -> OsString {
     OsString::from(text)
 }
 
+fn offered_filters(dialog: &Dialog) -> Vec<Filter> {
+    let mut filters = dialog.filters.clone();
+    if let Some(current) = &dialog.current_filter
+        && !filters.contains(current)
+    {
+        filters.push(current.clone());
+    }
+    filters
+}
+
 pub fn arguments(dialog: &Dialog) -> Vec<OsString> {
     let mut arguments = vec![
         os("--app-id"),
@@ -58,12 +68,7 @@ pub fn arguments(dialog: &Dialog) -> Vec<OsString> {
     if let Some(folder) = &dialog.folder {
         arguments.extend([os("--folder"), folder.clone().into_os_string()]);
     }
-    let mut filters = dialog.filters.clone();
-    if let Some(current) = &dialog.current_filter
-        && !filters.contains(current)
-    {
-        filters.push(current.clone());
-    }
+    let filters = offered_filters(dialog);
     for filter in &filters {
         arguments.extend([os("--filter"), os(&filter.name)]);
         for pattern in &filter.patterns {
@@ -176,7 +181,11 @@ pub fn encode(selection: &Selection, dialog: &Dialog) -> Vec<u8> {
     let filter = selection
         .filter
         .as_ref()
-        .and_then(|chosen| dialog.filters.iter().position(|filter| filter == chosen))
+        .and_then(|chosen| {
+            offered_filters(dialog)
+                .iter()
+                .position(|filter| filter == chosen)
+        })
         .map(|index| index.to_string())
         .unwrap_or_default();
     let mut bytes = filter.into_bytes();
@@ -193,7 +202,7 @@ pub fn decode(bytes: &[u8], dialog: &Dialog) -> Selection {
     let filter = records
         .next()
         .and_then(|index| std::str::from_utf8(index).ok()?.parse::<usize>().ok())
-        .and_then(|index| dialog.filters.get(index).cloned());
+        .and_then(|index| offered_filters(dialog).get(index).cloned());
     Selection {
         paths: records
             .filter(|record| !record.is_empty())

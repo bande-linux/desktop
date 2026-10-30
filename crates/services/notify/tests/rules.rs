@@ -94,3 +94,13 @@ fn rules_survive_a_restart_through_their_file() {
     assert_eq!(read_apps(&write_apps(&apps)), apps);
     assert!(read_apps("broken line\n").is_empty());
 }
+
+#[test]
+fn an_app_name_cannot_smuggle_a_rule_for_another_app_into_the_file() {
+    let apps = vec![App {
+        group: "Spam".to_owned(),
+        name: "Spam\norg.example.Chat\tChat\tfalse\toff\tfalse".to_owned(),
+        rule: AppRule::default(),
+    }];
+    assert!(read_apps(&write_apps(&apps)).is_empty());
+}

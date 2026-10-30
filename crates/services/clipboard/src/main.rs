@@ -11,7 +11,8 @@ use std::sync::{Arc, Mutex};
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use rustix::process::{DumpableBehavior, set_dumpable_behavior};
 use unbound_clipboard::{
-    BUS_NAME, ClipboardHistory, Contents, History, OBJECT_PATH, Shared, lock, now, state_dir,
+    BUS_NAME, ClipboardHistory, Contents, History, MAX_BYTES, OBJECT_PATH, Shared, is_sensitive,
+    lock, now, state_dir,
 };
 use wayland_client::backend::WaylandError;
 use wayland_client::globals::{GlobalListContents, registry_queue_init};
@@ -203,14 +204,20 @@ fn run() -> Result<(), Box<dyn Error>> {
             let Some(offer) = daemon.pending[selection.index()].take() else {
                 continue;
             };
-            let contents = read_offer(&connection, &offer)?;
+            let (contents, complete) = read_offer(&connection, &offer)?;
             offer.destroy();
             queue.roundtrip(&mut daemon)?;
-            if daemon.pending[selection.index()].is_some() || contents.is_empty() {
+            if daemon.pending[selection.index()].is_some()
+                || contents.is_empty()
+                || is_sensitive(&contents)
+            {
                 continue;
             }
             if selection == Selection::Clipboard {
                 lock(&history).record(contents.clone(), now());
+            }
+            if !complete {
+                continue;
             }
             take_over(&manager, &device, &qh, &mut daemon, selection, contents);
         }
@@ -225,25 +232,31 @@ fn run() -> Result<(), Box<dyn Error>> {
 fn read_offer(
     connection: &Connection,
     offer: &ExtDataControlOfferV1,
-) -> Result<Contents, Box<dyn Error>> {
+) -> Result<(Contents, bool), Box<dyn Error>> {
     let mimes = offer
         .data::<Mimes>()
         .and_then(|mimes| mimes.lock().ok().map(|mimes| mimes.clone()))
         .unwrap_or_default();
     let mut contents = Vec::with_capacity(mimes.len());
+    let mut complete = true;
+    let mut room = MAX_BYTES;
     for mime in mimes {
         let (reader, writer) = std::io::pipe()?;
         offer.receive(mime.clone(), writer.as_fd());
         connection.flush()?;
         drop(writer);
-        if let Some(bytes) = read_until_closed(reader)? {
-            contents.push((mime, bytes));
+        match read_until_closed(reader, room)? {
+            Some(bytes) => {
+                room -= bytes.len();
+                contents.push((mime, bytes));
+            }
+            None => complete = false,
         }
     }
-    Ok(contents)
+    Ok((contents, complete))
 }
 
-fn read_until_closed(mut reader: PipeReader) -> std::io::Result<Option<Vec<u8>>> {
+fn read_until_closed(mut reader: PipeReader, limit: usize) -> std::io::Result<Option<Vec<u8>>> {
     let mut bytes = Vec::new();
     let mut chunk = [0u8; 64 * 1024];
     loop {
@@ -253,6 +266,7 @@ fn read_until_closed(mut reader: PipeReader) -> std::io::Result<Option<Vec<u8>>>
         }
         match reader.read(&mut chunk) {
             Ok(0) => return Ok(Some(bytes)),
+            Ok(read) if bytes.len() + read > limit => return Ok(None),
             Ok(read) => bytes.extend_from_slice(&chunk[..read]),
             Err(error) if error.kind() == ErrorKind::Interrupted => {}
             Err(error) => return Err(error),

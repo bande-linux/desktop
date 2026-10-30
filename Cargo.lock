@@ -5436,6 +5436,7 @@ dependencies = [
  "unbound-log",
  "unbound-test-bus",
  "unbound-wallpaper",
+ "unbound-xdg",
  "zbus",
 ]
 

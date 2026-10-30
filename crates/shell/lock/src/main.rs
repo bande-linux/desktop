@@ -118,7 +118,11 @@ impl App for Locker {
             return;
         }
         if index == 2 {
-            if let Some(image) = self.backdrop.take().and_then(|inbox| inbox.drain().pop()) {
+            if let Some(image) = self
+                .backdrop
+                .take()
+                .and_then(|mut inbox| inbox.drain().pop())
+            {
                 self.screen.set_backdrop(image, frame_time().on_screen());
                 window.request_redraw();
             }

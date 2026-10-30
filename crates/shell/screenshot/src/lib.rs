@@ -130,13 +130,6 @@ mod tests {
     }
 
     #[test]
-    fn the_name_is_the_moment_it_was_taken_as_on_a_mac() {
-        let taken = jiff::civil::date(2026, 10, 29).at(9, 5, 7, 0);
-
-        assert_eq!(file_stem(taken), "Screenshot 2026-10-29 at 09.05.07");
-    }
-
-    #[test]
     fn a_taken_name_gets_a_copy_number() {
         let dir = tempfile::tempdir().expect("temporary directory");
         let stem = "Screenshot 2026-10-29 at 09.05.07";

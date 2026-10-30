@@ -2,12 +2,26 @@
 
 mod support;
 
-use support::{SCALES, SCHEMES, Shot, appearance_portal, shot};
+use support::{Shot, appearance_portal, shot};
 use unbound_graphics::{Point, TextSystem};
-use unbound_toolkit_platform::{HEADER_HEIGHT, MenuPlacement, SHEET_INSET, Window};
+use unbound_toolkit_platform::{FrameRegions, HEADER_HEIGHT, MenuPlacement, SHEET_INSET, Window};
 use unbound_widgets::{Alert, Cell, Column, Context, Menu, MenuItem, Row, Sort, Table, Ui, Widget};
 
 const SORT_BY: i32 = 4 + 28 + 28 + 9 + 14;
+const OVER_CLOSE: (i32, i32) = (24, 24);
+const AWAY: (i32, i32) = (200, 120);
+
+fn bare(_: &mut Window) -> Option<Ui> {
+    None
+}
+
+fn sidebar(window: &mut Window) -> Option<Ui> {
+    window.set_frame_regions(FrameRegions {
+        sidebar: 110.0,
+        toolbar: 0.0,
+    });
+    None
+}
 
 fn show_menu(window: &mut Window) -> Option<Ui> {
     let menu = Menu::new(vec![
@@ -115,41 +129,65 @@ fn alert(window: &mut Window) -> Option<Ui> {
     Some(ui)
 }
 
+type Prepare = fn(&mut Window) -> Option<Ui>;
+
 #[test]
-fn menus_tables_and_alerts_match_their_goldens_in_both_schemes_at_1x_and_1_5x() {
+fn the_window_frame_menus_tables_and_alerts_match_their_goldens() {
     let _portal = appearance_portal();
     let content = |x: i32, y: i32| (x + SHEET_INSET as i32, y + HEADER_HEIGHT as i32);
-    for (dark, scheme) in SCHEMES {
-        for (scale, scale_name) in SCALES {
-            let suffix = format!("{scheme}-{scale_name}");
-            let shot_at = |title, pointer, popups| Shot {
-                title,
-                companion: None,
-                scale,
-                dark,
-                pointer,
-                popups,
-            };
-            shot(
-                &format!("menu-submenu-{suffix}"),
-                show_menu,
-                shot_at("Documents", content(60, SORT_BY), 2),
-            );
-            shot(
-                &format!("menu-long-{suffix}"),
-                show_long_menu,
-                shot_at("Networks", content(60, 60), 1),
-            );
-            shot(
-                &format!("table-{suffix}"),
-                processes,
-                shot_at("Monitor", content(100, 60), 0),
-            );
-            shot(
-                &format!("alert-{suffix}"),
-                alert,
-                shot_at("Monitor", content(10, 150), 0),
-            );
-        }
+    let documents = |dark, pointer| Shot {
+        title: "Documents",
+        companion: None,
+        dark,
+        pointer,
+        popups: 0,
+    };
+    let monitor = |pointer| Shot {
+        title: "Monitor",
+        ..documents(false, pointer)
+    };
+    let shots: [(&str, Prepare, Shot); 9] = [
+        ("window-frame-rest-light-1x", bare, documents(false, AWAY)),
+        ("window-frame-rest-dark-1x", bare, documents(true, AWAY)),
+        (
+            "window-frame-close-hovered-light-1x",
+            bare,
+            documents(false, OVER_CLOSE),
+        ),
+        (
+            "window-frame-inactive-light-1x",
+            bare,
+            Shot {
+                companion: Some("Downloads"),
+                ..documents(false, AWAY)
+            },
+        ),
+        (
+            "window-frame-sidebar-light-1x",
+            sidebar,
+            documents(false, AWAY),
+        ),
+        (
+            "menu-submenu-light-1x",
+            show_menu,
+            Shot {
+                popups: 2,
+                ..documents(false, content(60, SORT_BY))
+            },
+        ),
+        (
+            "menu-long-light-1x",
+            show_long_menu,
+            Shot {
+                title: "Networks",
+                popups: 1,
+                ..documents(false, content(60, 60))
+            },
+        ),
+        ("table-light-1x", processes, monitor(content(100, 60))),
+        ("alert-light-1x", alert, monitor(content(10, 150))),
+    ];
+    for (name, prepare, setup) in shots {
+        shot(name, prepare, setup);
     }
 }

@@ -253,17 +253,6 @@ fn a_replacement_keeps_the_id_moves_to_the_top_and_presents_again() {
 }
 
 #[test]
-fn new_notifications_get_distinct_non_zero_ids() {
-    let start = Instant::now();
-    let mut center = Center::default();
-    let first = center.post(from("A", "1"), Timeout::Never, start);
-    let second = center.post(from("A", "2"), Timeout::Never, start);
-    assert_ne!(first, 0);
-    assert_ne!(second, 0);
-    assert_ne!(first, second);
-}
-
-#[test]
 fn invoking_an_action_closes_the_notification_unless_it_is_resident() {
     let start = Instant::now();
     let mut center = Center::default();

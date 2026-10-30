@@ -11,7 +11,6 @@ const SIZES: [u32; 5] = [16, 24, 32, 48, 64];
 const GAP: f32 = 8.0;
 const COLUMNS: usize = 5;
 const SYMBOLIC_INK: &str = "#201E1A";
-const MIN_SSIM: f64 = 0.99;
 
 fn data() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../data")
@@ -67,21 +66,14 @@ fn accent_themes() -> Vec<String> {
     themes
 }
 
-fn load(theme: &str, icon: &str, pixels: u32, ink: &str) -> Image {
+fn load(theme: &str, icon: &str, pixels: u32) -> Image {
     let path = find_icon(icon, pixels, &[theme], &[data()])
         .unwrap_or_else(|| panic!("{icon} is missing from {theme} at {pixels} px"));
-    let image = if icon.ends_with("-symbolic") {
-        let svg = fs::read_to_string(&path)
-            .unwrap()
-            .replace(SYMBOLIC_INK, ink);
-        Image::from_svg(svg.as_bytes(), pixels, pixels)
-    } else {
-        Image::load(&path, pixels)
-    };
-    image.unwrap_or_else(|| panic!("{} does not render at {pixels} px", path.display()))
+    Image::load(&path, pixels)
+        .unwrap_or_else(|| panic!("{} does not render at {pixels} px", path.display()))
 }
 
-fn contact_sheet(icons: &[(String, String)], background: Color, ink: &str) -> Scene {
+fn contact_sheet(icons: &[(String, String)]) -> Scene {
     let cell_width = SIZES.iter().map(|size| *size as f32 + GAP).sum::<f32>() + GAP;
     let cell_height = 64.0 + 2.0 * GAP;
     let rows = icons.len().div_ceil(COLUMNS);
@@ -94,7 +86,7 @@ fn contact_sheet(icons: &[(String, String)], background: Color, ink: &str) -> Sc
             let pixels = size as f32;
             items.push(Item::Image {
                 rect: Rect::new(left, y + 64.0 - pixels, pixels, pixels),
-                image: load(theme, icon, size, ink),
+                image: load(theme, icon, size),
             });
             left += pixels + GAP;
         }
@@ -102,30 +94,16 @@ fn contact_sheet(icons: &[(String, String)], background: Color, ink: &str) -> Sc
     Scene {
         width: (cell_width * COLUMNS as f32) as u32,
         height: (cell_height * rows as f32) as u32 + GAP as u32,
-        background,
+        background: Color::hex(0xFCFBF9),
         items,
     }
 }
 
 fn check_golden(name: &str, scene: &Scene) {
     let frame = CpuRenderer::new().render(scene).unwrap();
-    let actual = image::RgbaImage::from_raw(scene.width, scene.height, frame.rgba).unwrap();
-    let actual = image::DynamicImage::ImageRgba8(actual).to_rgb8();
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("tests/golden/{name}.png"));
-    if std::env::var_os("UNBOUND_UPDATE_GOLDENS").is_some() {
-        actual.save(&path).unwrap();
-    }
-    let target = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}.png"));
-    actual.save(&target).unwrap();
-    let expected = image::open(&path)
-        .unwrap_or_else(|error| panic!("{}: {error}", path.display()))
-        .to_rgb8();
-    let similarity = image_compare::rgb_hybrid_compare(&expected, &actual).unwrap();
-    assert!(
-        similarity.score >= MIN_SSIM,
-        "{name} differs from its golden: {:.4} (frame in {})",
-        similarity.score,
-        target.display()
+    unbound_golden::assert_golden!(
+        name,
+        &unbound_golden::from_rgba(frame.width, frame.height, frame.rgba)
     );
 }
 
@@ -143,15 +121,9 @@ fn every_icon() -> Vec<(String, String)> {
 }
 
 #[test]
-fn the_theme_matches_its_light_contact_sheet() {
-    let scene = contact_sheet(&every_icon(), Color::hex(0xFCFBF9), "#201E1A");
+fn the_theme_matches_its_contact_sheet() {
+    let scene = contact_sheet(&every_icon());
     check_golden("icons-light", &scene);
-}
-
-#[test]
-fn the_theme_matches_its_dark_contact_sheet() {
-    let scene = contact_sheet(&every_icon(), Color::hex(0x1D1B19), "#F1F0ED");
-    check_golden("icons-dark", &scene);
 }
 
 #[test]

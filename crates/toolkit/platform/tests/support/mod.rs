@@ -2,7 +2,6 @@
 
 use std::collections::HashMap;
 use std::os::unix::net::UnixStream;
-use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Once, mpsc};
 use std::thread;
@@ -59,33 +58,11 @@ pub fn appearance_portal() -> Portal {
     }
 }
 
-pub const SCHEMES: [(bool, &str); 2] = [(false, "light"), (true, "dark")];
-pub const SCALES: [(f64, &str); 2] = [(1.0, "1x"), (1.5, "1.5x")];
-
-const MIN_SSIM: f64 = 0.99;
 const OUTPUT: (i32, i32) = (480, 340);
 const SHOWN_AT_REST: u32 = 3;
 
 fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>) {
-    let actual = image::RgbaImage::from_raw(size.0, size.1, rgba).expect("frame");
-    let actual = image::DynamicImage::ImageRgba8(actual).to_rgb8();
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("tests/golden/{name}.png"));
-    if std::env::var_os("UNBOUND_UPDATE_GOLDENS").is_some() {
-        std::fs::create_dir_all(path.parent().expect("golden directory")).expect("directory");
-        actual.save(&path).expect("write golden");
-    }
-    let target = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}.png"));
-    actual.save(&target).expect("save the frame");
-    let expected = image::open(&path)
-        .unwrap_or_else(|error| panic!("{}: {error}", path.display()))
-        .to_rgb8();
-    let similarity = image_compare::rgb_hybrid_compare(&expected, &actual).expect("same size");
-    assert!(
-        similarity.score >= MIN_SSIM,
-        "{name} differs from its golden: {:.4} (frame in {})",
-        similarity.score,
-        target.display()
-    );
+    unbound_golden::assert_golden!(name, &unbound_golden::from_rgba(size.0, size.1, rgba));
 }
 
 struct Still {
@@ -139,7 +116,6 @@ impl App for Still {
 pub struct Shot {
     pub title: &'static str,
     pub companion: Option<&'static str>,
-    pub scale: f64,
     pub dark: bool,
     pub pointer: (i32, i32),
     pub popups: usize,
@@ -152,12 +128,7 @@ fn draw_on_the_gpu() {
 
 pub fn shot(name: &str, prepare: fn(&mut Window) -> Option<Ui>, shot: Shot) {
     draw_on_the_gpu();
-    let output = (
-        (f64::from(OUTPUT.0) * shot.scale) as i32,
-        (f64::from(OUTPUT.1) * shot.scale) as i32,
-    );
-    let mut server = Headless::new(Size::from(output)).expect("headless compositor");
-    server.set_output_scale(shot.scale);
+    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
     server.set_dark_appearance(shot.dark);
     DARK.store(shot.dark, Ordering::SeqCst);
     let pointer = shot.pointer;

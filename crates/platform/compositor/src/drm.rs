@@ -457,7 +457,7 @@ impl DrmBackend {
                 Ok(())
             }
             SessionEvent::ActivateSession => {
-                self.device.activate(true)?;
+                self.device.activate(false)?;
                 self.wake()
             }
         }

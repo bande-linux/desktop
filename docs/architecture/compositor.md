@@ -11,7 +11,10 @@ when they reach the screen is Unbound's own.
 - **Renderer**: Unbound's own Vulkan renderer on `ash` (`crates/platform/render`). The choice over
   `wgpu` and Smithay's GLES renderer, and the performance targets, are recorded in
   [`../decisions/0001-rendering.md`](../decisions/0001-rendering.md). Planned on top of it:
-  dual-pass Kawase blur, rounded-corner clipping and transforms.
+  dual-pass Kawase blur, rounded-corner clipping and transforms. When the Vulkan device is a
+  CPU (lavapipe in VMs and on machines without a usable GPU) the renderer reduces effects: a
+  blur region becomes a flat scrim of the sheet colour at 72 % that does not depend on what
+  lies beneath it, so moving something under the bar no longer redraws the bar.
 - **Motion**: a spring model ($\ddot{x} + 2\zeta\omega\dot{x} + \omega^2\Delta x = 0$) drives
   window snapping, minimizing to the Dock and moving between workspaces.
 
@@ -276,4 +279,4 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `zwp_keyboard_shortcuts_inhibit_v1` | Keyboard passthrough for VMs and remote desktop | P2 | not implemented |
 | `unbound_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Control Center, Dock icon rectangles, apps that stopped responding; for the Dock (v7): hide, quit and force quit an app, activate one window by its foreign-toplevel identifier, minimised windows, attention requests, rounded blur for shell surfaces, Super+F3 and Super+F2 keyboard focus for the Dock and menu bar; v9: workspaces, the workspace of each window and `show_windows` for the overview and App Exposé | P0 | implemented, shell clients only |
 | `unbound_app_v1` (own, in `unbound-shell-v1.xml`) | App-level requests: `quit_requested` on Super+Q instead of closing every window; v2 `place_window` (halves, quarters, restore) for the window menu; v3 `move_to_workspace` (previous, next) for the window menu | P0 | implemented, every client |
-| `ext-background-effect-v1` | Blur behind translucent menus, sidebars, Dock and menu bar | P1 | implemented: dual-filter Kawase blur (3 passes) clipped to the window's rounded shape, below the window's own shadow, redrawn when anything beneath it changes |
+| `ext-background-effect-v1` | Blur behind translucent menus, sidebars, Dock and menu bar | P1 | implemented: dual-filter Kawase blur (3 passes) clipped to the window's rounded shape, below the window's own shadow, redrawn when anything beneath it changes; a flat scrim on a CPU renderer |

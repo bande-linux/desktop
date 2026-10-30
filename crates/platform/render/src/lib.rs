@@ -107,6 +107,7 @@ impl From<ash::LoadingError> for RenderError {
 pub struct DeviceInfo {
     pub name: String,
     pub driver: String,
+    pub software: bool,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -259,6 +260,7 @@ pub struct VulkanRenderer {
     queue: vk::Queue,
     memory: vk::PhysicalDeviceMemoryProperties,
     info: DeviceInfo,
+    reduced_effects: bool,
     command_pool: vk::CommandPool,
     command_buffer: vk::CommandBuffer,
     fence: vk::Fence,
@@ -362,6 +364,7 @@ fn choose_device(instance: &ash::Instance) -> Result<Chosen, RenderError> {
             let info = DeviceInfo {
                 name: text(properties.device_name_as_c_str()),
                 driver: text(driver.driver_name_as_c_str()),
+                software: properties.device_type == vk::PhysicalDeviceType::CPU,
             };
             Some((
                 device_rank(properties.device_type),
@@ -451,6 +454,7 @@ impl VulkanRenderer {
             external_memory_fd: ash::khr::external_memory_fd::Device::new(&instance, &device),
             queue: unsafe { device.get_device_queue(chosen.family, 0) },
             memory: unsafe { instance.get_physical_device_memory_properties(chosen.physical) },
+            reduced_effects: chosen.info.software,
             info: chosen.info,
             command_pool: vk::CommandPool::null(),
             command_buffer: vk::CommandBuffer::null(),
@@ -661,6 +665,14 @@ impl VulkanRenderer {
 
     pub fn device_info(&self) -> &DeviceInfo {
         &self.info
+    }
+
+    pub fn reduced_effects(&self) -> bool {
+        self.reduced_effects
+    }
+
+    pub fn set_reduced_effects(&mut self, reduced: bool) {
+        self.reduced_effects = reduced;
     }
 
     pub fn take_counters(&mut self) -> Counters {

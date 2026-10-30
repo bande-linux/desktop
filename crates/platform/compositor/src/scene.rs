@@ -524,10 +524,43 @@ impl RenderElement<VulkanRenderer> for BlurElement {
     }
 }
 
+const SCRIM_OPACITY: f32 = 0.72;
+
+pub(crate) fn scrim(renderer: &VulkanRenderer, scheme: Scheme) -> Option<[f32; 4]> {
+    renderer.reduced_effects().then(|| {
+        let sheet = Palette::for_scheme(scheme).sheet;
+        let channel = |value: u8| f32::from(value) / 255.0 * SCRIM_OPACITY;
+        [
+            channel(sheet.r),
+            channel(sheet.g),
+            channel(sheet.b),
+            SCRIM_OPACITY,
+        ]
+    })
+}
+
+fn backdrop(
+    id: Id,
+    region: RoundedRect,
+    scale: f64,
+    alpha: f32,
+    scrim: Option<[f32; 4]>,
+) -> OutputElement {
+    match scrim {
+        Some(color) => OutputElement::Fill(FillElement::backdrop(
+            id,
+            region,
+            color.map(|channel| channel * alpha),
+        )),
+        None => OutputElement::Blur(BlurElement::new(id, region, scale, alpha)),
+    }
+}
+
 pub(crate) fn surface_blurs(
     surface: &WlSurface,
     location: Point<i32, Logical>,
     scale: f64,
+    scrim: Option<[f32; 4]>,
 ) -> Vec<OutputElement> {
     let Some(size) = mapped_size(surface) else {
         return Vec::new();
@@ -538,12 +571,13 @@ pub(crate) fn surface_blurs(
         .into_iter()
         .filter_map(|(id, rect)| {
             let rect = Rectangle::new(location + rect.loc, rect.size).intersection(bounds)?;
-            Some(OutputElement::Blur(BlurElement::new(
+            Some(backdrop(
                 id,
                 rounded(rect.to_f64().to_physical(scale), radius * scale),
                 scale,
                 1.0,
-            )))
+                scrim,
+            ))
         })
         .collect()
 }
@@ -584,9 +618,21 @@ pub struct FillElement {
     shape: RoundedRect,
     color: [f32; 4],
     commit: CommitCounter,
+    backdrop: bool,
 }
 
 impl FillElement {
+    fn backdrop(id: Id, shape: RoundedRect, color: [f32; 4]) -> Self {
+        Self {
+            backdrop: true,
+            ..Self::new(id, shape, color)
+        }
+    }
+
+    pub(crate) fn is_backdrop(&self) -> bool {
+        self.backdrop
+    }
+
     pub(crate) fn new(id: Id, shape: RoundedRect, color: [f32; 4]) -> Self {
         let mut hasher = DefaultHasher::new();
         for value in [shape.components(), color, [shape.radius, 0.0, 0.0, 0.0]].concat() {
@@ -597,6 +643,7 @@ impl FillElement {
             shape,
             color,
             commit: CommitCounter::from(hasher.finish() as usize),
+            backdrop: false,
         }
     }
 }
@@ -907,6 +954,7 @@ pub(crate) fn window_elements(
         .into_iter()
         .flatten();
     let origin = window.surface_origin().to_f64();
+    let scrim = scrim(renderer, shading.scheme);
     let blurs = blur_rects(window.surface())
         .into_iter()
         .filter_map(|(id, rect)| {
@@ -914,12 +962,7 @@ pub(crate) fn window_elements(
                 .to_physical(scale)
                 .intersection(area)?;
             let mapped = placement.map_area(rect);
-            Some(OutputElement::Blur(BlurElement::new(
-                id,
-                rounded(mapped, radius),
-                scale,
-                alpha,
-            )))
+            Some(backdrop(id, rounded(mapped, radius), scale, alpha, scrim))
         });
     let veil = hung.then(|| {
         OutputElement::Fill(FillElement::new(

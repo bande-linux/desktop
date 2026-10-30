@@ -36,7 +36,19 @@ fn row(snapshot: &Snapshot) -> Vec<u8> {
         .collect()
 }
 
-fn scene(blurred: bool) -> (Headless, Renderer, TestClient, TestClient) {
+fn renderer(effects: Effects) -> Renderer {
+    let mut renderer = Renderer::new().expect("renderer");
+    renderer.set_reduced_effects(effects == Effects::Reduced);
+    renderer
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Effects {
+    Full,
+    Reduced,
+}
+
+fn scene(blurred: bool, effects: Effects) -> (Headless, Renderer, TestClient, TestClient) {
     let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
     let mut below = TestClient::connect(&mut server);
     let pixels = below_pixels(BELOW.0 / 2);
@@ -51,13 +63,14 @@ fn scene(blurred: bool) -> (Headless, Renderer, TestClient, TestClient) {
         glass.blur_behind(&mut server, 0, (0, 0, GLASS, GLASS));
     }
     roundtrip(&mut server, &mut [&mut below, &mut glass]);
-    (server, Renderer::new().expect("renderer"), below, glass)
+    (server, renderer(effects), below, glass)
 }
 
 #[test]
 fn a_surface_that_asks_for_blur_shows_what_lies_behind_it_softened() {
-    let (mut sharp_server, mut sharp_renderer, _sharp_below, _sharp_glass) = scene(false);
-    let (mut server, mut renderer, _below, _glass) = scene(true);
+    let (mut sharp_server, mut sharp_renderer, _sharp_below, _sharp_glass) =
+        scene(false, Effects::Full);
+    let (mut server, mut renderer, _below, _glass) = scene(true, Effects::Full);
 
     sharp_renderer.render(&mut sharp_server).expect("frame");
     renderer.render(&mut server).expect("frame");
@@ -80,7 +93,7 @@ fn a_surface_that_asks_for_blur_shows_what_lies_behind_it_softened() {
 
 #[test]
 fn a_change_behind_the_blur_but_outside_it_redraws_the_blur() {
-    let (mut server, mut renderer, mut below, _glass) = scene(true);
+    let (mut server, mut renderer, mut below, _glass) = scene(true, Effects::Full);
     renderer.render(&mut server).expect("frame");
     let before = row(&renderer.snapshot(&server).expect("read back"))[2];
 
@@ -125,7 +138,7 @@ fn corner_and_middle(radius: Option<u32>) -> (u8, u8) {
     }
     dock.blur_behind_layer(&mut server, 0, (0, 0, GLASS * 2, GLASS * 2));
     roundtrip(&mut server, &mut [&mut below, &mut dock]);
-    let mut renderer = Renderer::new().expect("renderer");
+    let mut renderer = renderer(Effects::Full);
     renderer.render(&mut server).expect("frame");
     let snapshot = renderer.snapshot(&server).expect("read back");
     let red = |x: i32, y: i32| snapshot.rgba[((y * snapshot.size.w + x) * 4) as usize];
@@ -142,4 +155,28 @@ fn a_shell_surface_with_a_corner_radius_blurs_only_inside_its_rounded_shape() {
     assert!(blurred(square_corner), "{square_corner}");
     assert!(blurred(square_middle) && blurred(round_middle));
     assert!(round_corner == 0 || round_corner == 0xff, "{round_corner}");
+}
+
+#[test]
+fn with_reduced_effects_a_blur_region_is_a_flat_scrim_that_changes_outside_it_leave_alone() {
+    let (mut server, mut renderer, mut below, _glass) = scene(true, Effects::Reduced);
+    renderer.render(&mut server).expect("frame");
+    let veiled = row(&renderer.snapshot(&server).expect("read back"));
+
+    let brighter = below_pixels(24);
+    below.commit_buffer(
+        0,
+        &image(&brighter, BELOW.0, BELOW.1, Format::Xrgb8888),
+        (24, 0, 20, BELOW.1),
+    );
+    below.exchange(&mut server);
+    let stats = renderer.render(&mut server).expect("frame");
+
+    let distinct: std::collections::BTreeSet<u8> = veiled.iter().copied().collect();
+    assert_eq!(distinct.len(), 2, "{veiled:?}");
+    assert!(
+        veiled.iter().all(|value| *value != 0 && *value != 0xff),
+        "{veiled:?}"
+    );
+    assert_eq!(stats.repainted_pixels, 20 * BELOW.1 as u64, "{stats:?}");
 }

@@ -3,8 +3,7 @@ use std::rc::Rc;
 
 use accesskit::{Node, Role};
 use unbound_graphics::{
-    Color, Elevation, Image, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextRole,
-    TextStyle,
+    Elevation, Image, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextRole, TextStyle,
 };
 
 use super::{Animated, BUTTON_HEIGHT, Button, Context, Size, Widget, WidgetId};
@@ -52,16 +51,7 @@ impl Sheet {
             ),
         };
         let shape = Shape::rounded(panel, Radius::XL);
-        let mut content: Vec<Item> = Elevation::Frame
-            .shadows(cx.palette.scheme, true)
-            .into_iter()
-            .map(|shadow| Item::Shadow {
-                shape,
-                offset: Point::new(0.0, shadow.offset),
-                blur_radius: shadow.blur,
-                color: Color::BLACK.with_opacity(shadow.opacity),
-            })
-            .collect();
+        let mut content = Item::shadows(shape, Elevation::Frame, cx.palette.scheme, true).to_vec();
         content.push(Item::Fill {
             shape,
             paint: cx.palette.overlay.into(),

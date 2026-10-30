@@ -1,4 +1,5 @@
 pub mod media;
+mod modules;
 mod now_playing;
 mod person;
 
@@ -12,13 +13,14 @@ use std::time::Duration;
 use unbound_audio::{Level, VolumeKey};
 use unbound_l10n::Localizer;
 use unbound_toolkit::ui::{
-    Axis, BUTTON_HEIGHT, Button, Context, Label, LevelIndicator, Menu, MenuItem, PROGRESS_HEIGHT,
-    PopUpButton, SLIDER_HEIGHT, SWITCH_SIZE, Slider, Stack, Toggle, Ui, Widget,
+    Axis, Context, LevelIndicator, Menu, MenuItem, PopUpButton, Size, Slider, Stack, Ui, Widget,
 };
 use unbound_toolkit::{
-    Color, DisplayEdge, Image, Item, Palette, Point, Rect, Scene, Shape, TextAlign, TextStyle,
-    TextSystem,
+    Color, DisplayEdge, Elevation, Image, Item, Palette, Point, Radius, Rect, Scene, Scheme, Shape,
+    Spacing, TextAlign, TextRole, TextStyle, TextSystem,
 };
+
+use modules::{Caption, Module, Tile, TileSpec};
 
 use media::{Command, Player};
 pub use now_playing::clock;
@@ -28,18 +30,15 @@ const ENGLISH: &str = include_str!("../locales/en-US/unbound-controlcenter.ftl")
 pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
 pub const HUD_SIZE: (f32, f32) = (232.0, 64.0);
-pub const PANEL_WIDTH: f32 = 320.0;
+pub const PANEL_WIDTH: f32 = 344.0;
 pub const EDGE: f32 = 8.0;
 pub const HUD_DURATION: Duration = Duration::from_millis(1500);
 pub const SEGMENTS: usize = 16;
-const PADDING: f32 = 16.0;
-const SPACING: f32 = 12.0;
-const LABEL_HEIGHT: f32 = 16.0;
-const RADIUS: f32 = 14.0;
-const BLUR_BANDS: usize = 5;
+const PADDING: f32 = Spacing::M as f32;
+const GAP: f32 = Spacing::S as f32;
 const SEGMENT_GAP: f32 = 2.0;
 const SEGMENT_HEIGHT: f32 = 6.0;
-const TITLE_SIZE: f32 = 13.0;
+const SEGMENT_RADIUS: f32 = 1.0;
 const LEVEL_STEP: f64 = 1.0 / SEGMENTS as f64;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -126,26 +125,6 @@ pub enum Change {
 
 pub type Changes = Rc<RefCell<Vec<Change>>>;
 
-fn toggle(label: &str, on: bool, changes: &Changes, change: fn(bool) -> Change) -> Box<dyn Widget> {
-    let changes = Rc::clone(changes);
-    let switch = Toggle::new(label, on, move |on| {
-        changes.borrow_mut().push(change(on));
-    });
-    Box::new(Stack::new(
-        Axis::Horizontal,
-        SPACING,
-        0.0,
-        vec![Box::new(switch), Box::new(Label::new(label))],
-    ))
-}
-
-fn chooser(title: &str, changes: &Changes, change: Change) -> Box<dyn Widget> {
-    let changes = Rc::clone(changes);
-    Box::new(Button::new(title, move || {
-        changes.borrow_mut().push(change.clone());
-    }))
-}
-
 fn pop_up(
     label: &str,
     choices: &[Choice],
@@ -174,7 +153,7 @@ fn slider(
 ) -> Vec<Box<dyn Widget>> {
     let changes = Rc::clone(changes);
     vec![
-        Box::new(Label::new(label)),
+        Box::new(Caption::new(label)),
         Box::new(Slider::new(
             label,
             f64::from(value),
@@ -185,123 +164,182 @@ fn slider(
     ]
 }
 
+fn module(rows: Vec<Box<dyn Widget>>) -> Box<dyn Widget> {
+    Box::new(Module::new(Box::new(Stack::new(
+        Axis::Vertical,
+        Spacing::S as f32,
+        0.0,
+        rows,
+    ))))
+}
+
+fn on_off(on: bool) -> String {
+    L10N.tr(if on { "on" } else { "off" })
+}
+
+fn tiles(status: &Status, changes: &Changes) -> Vec<Box<dyn Widget>> {
+    let mut specs = Vec::new();
+    if let Some(on) = status.wifi {
+        specs.push(TileSpec {
+            title: L10N.tr("wifi"),
+            detail: match (&status.network, on) {
+                (Some(network), true) => network.clone(),
+                (None, true) => L10N.tr("not-connected"),
+                (_, false) => on_off(false),
+            },
+            symbol: if on {
+                "network-wireless-signal-excellent-symbolic"
+            } else {
+                "network-wireless-disabled-symbolic"
+            },
+            on,
+            toggle: Change::Wifi,
+            details: Some(Change::ChooseNetwork),
+        });
+    }
+    if let Some(on) = status.bluetooth {
+        specs.push(TileSpec {
+            title: L10N.tr("bluetooth"),
+            detail: on_off(on),
+            symbol: if on {
+                "bluetooth-active-symbolic"
+            } else {
+                "bluetooth-disabled-symbolic"
+            },
+            on,
+            toggle: Change::Bluetooth,
+            details: None,
+        });
+    }
+    specs.push(TileSpec {
+        title: L10N.tr("do-not-disturb"),
+        detail: on_off(status.do_not_disturb),
+        symbol: if status.do_not_disturb {
+            "notifications-disabled-symbolic"
+        } else {
+            "notifications-symbolic"
+        },
+        on: status.do_not_disturb,
+        toggle: Change::DoNotDisturb,
+        details: None,
+    });
+    if let Some(muted) = status.input_muted {
+        specs.push(TileSpec {
+            title: L10N.tr("microphone"),
+            detail: if muted {
+                L10N.tr("muted")
+            } else {
+                on_off(true)
+            },
+            symbol: if muted {
+                "microphone-disabled-symbolic"
+            } else {
+                "audio-input-microphone-symbolic"
+            },
+            on: !muted,
+            toggle: |on| Change::InputMuted(!on),
+            details: None,
+        });
+    }
+    let width = ((PANEL_WIDTH - 2.0 * PADDING - GAP) / 2.0).floor();
+    let mut tiles: Vec<Box<dyn Widget>> = specs
+        .into_iter()
+        .map(|spec| Box::new(Tile::new(spec, width, &status.icon_dirs, changes)) as Box<dyn Widget>)
+        .collect();
+    let mut rows = Vec::new();
+    while !tiles.is_empty() {
+        let pair: Vec<Box<dyn Widget>> = tiles.drain(..tiles.len().min(2)).collect();
+        rows.push(Box::new(Stack::new(Axis::Horizontal, GAP, 0.0, pair)) as Box<dyn Widget>);
+    }
+    rows
+}
+
 pub fn panel(status: &Status, palette: Palette, text: TextSystem, changes: &Changes) -> (Ui, f32) {
     let mut controls: Vec<Box<dyn Widget>> = Vec::new();
-    let mut heights = Vec::new();
     if let Some(name) = &status.person {
         controls.push(Box::new(person::PersonRow::new(
             name,
-            status.icon_dirs.clone(),
+            &status.icon_dirs,
             changes,
         )));
-        heights.push(person::HEIGHT);
     }
-    if let Some(on) = status.wifi {
-        controls.push(toggle(&L10N.tr("wifi"), on, changes, Change::Wifi));
-        heights.push(SWITCH_SIZE.height);
-        if on {
-            let title = status
-                .network
-                .clone()
-                .unwrap_or_else(|| L10N.tr("choose-network"));
-            controls.push(chooser(&title, changes, Change::ChooseNetwork));
-            heights.push(BUTTON_HEIGHT);
-        }
-    }
-    if let Some(on) = status.bluetooth {
-        controls.push(toggle(
-            &L10N.tr("bluetooth"),
-            on,
-            changes,
-            Change::Bluetooth,
-        ));
-        heights.push(SWITCH_SIZE.height);
-    }
-    controls.push(toggle(
-        &L10N.tr("do-not-disturb"),
-        status.do_not_disturb,
-        changes,
-        Change::DoNotDisturb,
-    ));
-    heights.push(SWITCH_SIZE.height);
-    if let Some(brightness) = status.brightness {
-        controls.extend(slider(
+    controls.extend(tiles(status, changes));
+    let mut brightness = Vec::new();
+    if let Some(level) = status.brightness {
+        brightness.extend(slider(
             &L10N.tr("display"),
-            brightness,
+            level,
             changes,
             Change::Brightness,
         ));
-        heights.extend([LABEL_HEIGHT, SLIDER_HEIGHT]);
     }
-    if let Some(brightness) = status.keyboard_brightness {
-        controls.extend(slider(
+    if let Some(level) = status.keyboard_brightness {
+        brightness.extend(slider(
             &L10N.tr("keyboard-brightness"),
-            brightness,
+            level,
             changes,
             Change::KeyboardBrightness,
         ));
-        heights.extend([LABEL_HEIGHT, SLIDER_HEIGHT]);
     }
+    if !brightness.is_empty() {
+        controls.push(module(brightness));
+    }
+    let mut sound = Vec::new();
     if let Some(volume) = status.volume {
-        controls.extend(slider(&L10N.tr("sound"), volume, changes, Change::Volume));
-        heights.extend([LABEL_HEIGHT, SLIDER_HEIGHT]);
+        sound.extend(slider(&L10N.tr("sound"), volume, changes, Change::Volume));
         if status.outputs.len() > 1 {
-            controls.push(pop_up(
+            sound.push(pop_up(
                 &L10N.tr("output"),
                 &status.outputs,
                 status.output.as_deref(),
                 changes,
                 Change::Output,
             ));
-            heights.push(BUTTON_HEIGHT);
         }
     }
-    if let Some(muted) = status.input_muted {
-        controls.push(toggle(&L10N.tr("microphone"), !muted, changes, |on| {
-            Change::InputMuted(!on)
-        }));
-        controls.push(Box::new(LevelIndicator::new(
+    if status.input_muted.is_some() {
+        sound.push(Box::new(Caption::new(&L10N.tr("input-level"))));
+        sound.push(Box::new(LevelIndicator::new(
             &L10N.tr("input-level"),
             Rc::clone(&status.input_level),
         )));
-        heights.extend([SWITCH_SIZE.height, PROGRESS_HEIGHT]);
         if status.inputs.len() > 1 {
-            controls.push(pop_up(
+            sound.push(pop_up(
                 &L10N.tr("input"),
                 &status.inputs,
                 status.input.as_deref(),
                 changes,
                 Change::Input,
             ));
-            heights.push(BUTTON_HEIGHT);
         }
     }
+    if !sound.is_empty() {
+        controls.push(module(sound));
+    }
     if let Some(player) = &status.player {
-        heights.push(now_playing::height(player));
-        controls.push(Box::new(now_playing::NowPlaying::new(
+        let mut playing: Vec<Box<dyn Widget>> = vec![Box::new(now_playing::NowPlaying::new(
             player.clone(),
             status.artwork.clone(),
             changes,
-        )));
+        ))];
         if status.players.len() > 1 {
-            controls.push(pop_up(
+            playing.push(pop_up(
                 &L10N.tr("player"),
                 &status.players,
                 Some(&player.bus_name),
                 changes,
                 Change::Player,
             ));
-            heights.push(BUTTON_HEIGHT);
         }
+        controls.push(module(playing));
     }
-    let height = 2.0 * PADDING
-        + heights.iter().sum::<f32>()
-        + SPACING * heights.len().saturating_sub(1) as f32;
-    let ui = Ui::new(
-        Box::new(Stack::new(Axis::Vertical, SPACING, PADDING, controls)),
-        Context::new(text, palette),
-    );
-    (ui, height.ceil())
+    let mut root = Stack::new(Axis::Vertical, GAP, PADDING, controls);
+    let mut cx = Context::new(text, palette);
+    cx.keyboard_navigation = true;
+    let height = root
+        .measure(&mut cx, Size::new(PANEL_WIDTH, f32::INFINITY))
+        .height;
+    (Ui::new(Box::new(root), cx), height.ceil())
 }
 
 pub fn chooser_menu(choices: &[(String, String, bool)]) -> Menu {
@@ -393,73 +431,74 @@ pub fn stepped(level: f32, up: bool, fine: bool) -> f32 {
     .volume
 }
 
-pub fn blur_rects(rect: Rect) -> Vec<Rect> {
-    Shape::rounded(rect, RADIUS).bands(BLUR_BANDS)
-}
-
-pub fn material(palette: Palette, translucent: bool) -> Palette {
-    Palette {
-        overlay: palette
-            .overlay
-            .with_alpha(if translucent { 214 } else { 248 }),
-        ..palette
+pub fn card(palette: &Palette, rect: Rect, items: &mut Vec<Item>) {
+    let shape = Shape::rounded(rect, Radius::XL);
+    items.extend(Item::shadows(
+        shape,
+        Elevation::Overlay,
+        palette.scheme,
+        true,
+    ));
+    items.push(Item::Fill {
+        shape,
+        paint: palette.chassis.into(),
+    });
+    if palette.scheme == Scheme::Dark {
+        items.push(Item::Stroke {
+            shape: Shape::rounded(rect.inset(0.5), Radius::XL - 0.5),
+            width: 1.0,
+            paint: palette.hairline.into(),
+        });
     }
 }
 
-pub fn card(palette: &Palette, rect: Rect, items: &mut Vec<Item>) {
-    let shape = Shape::rounded(rect, RADIUS);
-    items.push(Item::Shadow {
-        shape,
-        offset: Point::new(0.0, 6.0),
-        blur_radius: 24.0,
-        color: Color::hex(0).with_alpha(50),
+pub fn panel_items(ui: &mut Ui, palette: &Palette, rect: Rect) -> Vec<Item> {
+    let mut items = Vec::new();
+    card(palette, rect, &mut items);
+    let content = ui.scene(rect.width as u32, rect.height as u32);
+    items.push(Item::Translate {
+        offset: Point::new(rect.x, rect.y),
+        items: content.items,
     });
-    items.push(Item::Fill {
-        shape,
-        paint: palette.overlay.into(),
-    });
-    items.push(Item::Stroke {
-        shape,
-        width: 0.5,
-        paint: palette.hairline.into(),
-    });
+    items
 }
 
 pub fn hud(hud: Hud, palette: &Palette, text: &mut TextSystem) -> Vec<Item> {
     let (width, height) = HUD_SIZE;
+    let inset = Spacing::L as f32;
     let title = text.paragraph(
         &hud.title(),
-        TextStyle::new(TITLE_SIZE, palette.ink).weight(TextStyle::SEMIBOLD),
+        TextStyle::role(TextRole::BodyStrong, palette.ink),
         None,
         TextAlign::Start,
     );
-    let row = width - 2.0 * PADDING;
+    let row = width - 2.0 * inset;
     let segment = (row - SEGMENT_GAP * (SEGMENTS - 1) as f32) / SEGMENTS as f32;
-    let top = height - PADDING - SEGMENT_HEIGHT;
+    let top = height - inset - SEGMENT_HEIGHT;
     let mut items = Vec::new();
     card(palette, Rect::new(0.0, 0.0, width, height), &mut items);
     items.push(Item::Text {
-        origin: Point::new(PADDING, PADDING - 4.0),
+        origin: Point::new(inset, Spacing::M as f32),
         paragraph: title,
     });
     for (index, fill) in hud.segment_fills().into_iter().enumerate() {
         let rect = Rect::new(
-            PADDING + index as f32 * (segment + SEGMENT_GAP),
+            inset + index as f32 * (segment + SEGMENT_GAP),
             top,
             segment,
             SEGMENT_HEIGHT,
         );
-        let shape = Shape::rounded(rect, SEGMENT_HEIGHT / 2.0);
+        let shape = Shape::rounded(rect, SEGMENT_RADIUS);
         items.push(Item::Fill {
             shape,
-            paint: palette.hairline.into(),
+            paint: palette.well.into(),
         });
         if fill > 0.0 {
             items.push(Item::Clip {
                 shape: Shape::rect(Rect::new(rect.x, rect.y, rect.width * fill, rect.height)),
                 items: vec![Item::Fill {
                     shape,
-                    paint: palette.ink.into(),
+                    paint: palette.accent.into(),
                 }],
             });
         }

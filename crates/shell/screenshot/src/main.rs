@@ -26,8 +26,8 @@ use unbound_screenshot::{L10N, app_name, free_path, png, recording_stem, save};
 use unbound_toolkit::ui::{Alert, Context, FreeLayout, Menu, MenuItem, Size, Ui, Widget};
 use unbound_toolkit::{
     App, Color, DragAction, DragIcon, Edges, Image, Item, KeyboardFocus, LayerKind, LayerOptions,
-    MenuPlacement, Point, Rect, Role, Scene, Scheme, ScreenImage, Shape, TextAlign, TextStyle,
-    TextSystem, Transfer, Window, WindowError, WindowEvent,
+    MenuPlacement, Point, Rect, Role, Scene, ScreenImage, Shape, TextAlign, TextStyle, TextSystem,
+    Transfer, Window, WindowError, WindowEvent,
 };
 use unbound_xdg::{UserDir, file_uri, spawn_detached, user_dir};
 use zbus::blocking::Connection;
@@ -113,13 +113,6 @@ fn scaled(region: Region, scale: f64) -> Region {
         y: at(region.y),
         width: right - at(region.x),
         height: bottom - at(region.y),
-    }
-}
-
-fn scrim(scheme: Scheme) -> Color {
-    match scheme {
-        Scheme::Light => Color::hex(0x000000).with_alpha(46),
-        Scheme::Dark => Color::hex(0x000000).with_alpha(102),
     }
 }
 
@@ -377,7 +370,7 @@ impl Screenshots {
             picture,
             path,
             video,
-            appearance.palette().overlay,
+            appearance.palette(),
             appearance.reduce_motion,
             Instant::now(),
         ));
@@ -874,7 +867,10 @@ impl App for Screenshots {
             items: Vec::new(),
         };
         match &self.mode {
-            Mode::Area { selection, .. } => selection.scene(width, height, &mut self.text),
+            Mode::Area { selection, .. } => {
+                let palette = window.appearance().palette();
+                selection.scene(width, height, &palette, &mut self.text)
+            }
             Mode::Color(picker, _) => picker.scene(width, height, &mut self.text),
             Mode::Countdown(until, _) => {
                 let until = *until;
@@ -889,7 +885,7 @@ impl App for Screenshots {
                         0,
                         Item::Fill {
                             shape: Shape::rect(Rect::new(0.0, 0.0, width as f32, height as f32)),
-                            paint: scrim(window.appearance().scheme).into(),
+                            paint: window.appearance().palette().scrim.into(),
                         },
                     );
                 }

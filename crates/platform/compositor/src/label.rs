@@ -2,25 +2,35 @@ use smithay::backend::allocator::Fourcc;
 use smithay::backend::renderer::element::memory::MemoryRenderBuffer;
 use smithay::utils::{Logical, Size, Transform};
 use unbound_graphics::{
-    Color, CpuRenderer, Item, Paint, Point, Rect, Scene, Shape, TextAlign, TextStyle, TextSystem,
+    Color, CpuRenderer, Elevation, Item, Palette, Point, Radius, Rect, Scene, Scheme, Shape,
+    TextAlign, TextRole, TextStyle, TextSystem,
 };
 
 pub(crate) const TITLE: LabelStyle = LabelStyle {
-    text_size: 12.0,
-    padding: (10.0, 4.0),
+    role: TextRole::Callout,
+    padding: (8.0, 4.0),
+    look: Look::Tip,
 };
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Look {
+    Tip,
+    Card,
+}
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct LabelStyle {
-    pub(crate) text_size: f32,
+    pub(crate) role: TextRole,
     pub(crate) padding: (f32, f32),
+    pub(crate) look: Look,
 }
-const TEXT: Color = Color::hex(0xffffff);
-const BACKGROUND: Color = Color::hex(0x1c1c1e).with_alpha(0xd0);
+
+const CARD_MARGIN: f32 = 24.0;
 
 pub(crate) struct Label {
     pub(crate) text: String,
     pub(crate) scale: f64,
+    pub(crate) scheme: Scheme,
     pub(crate) size: Size<f64, Logical>,
     pub(crate) buffer: MemoryRenderBuffer,
 }
@@ -35,37 +45,64 @@ impl Labels {
     pub(crate) fn render(
         &mut self,
         text: &str,
-        LabelStyle { text_size, padding }: LabelStyle,
+        LabelStyle {
+            role,
+            padding,
+            look,
+        }: LabelStyle,
         max_width: f64,
+        scheme: Scheme,
         scale: f64,
     ) -> Option<Label> {
-        let style = TextStyle::new(text_size, TEXT).weight(TextStyle::SEMIBOLD);
-        let room = (max_width as f32 - 2.0 * padding.0).max(text_size);
+        let palette = Palette::for_scheme(scheme);
+        let (ink, fill, radius, margin) = match look {
+            Look::Tip => (palette.chassis, palette.ink, Radius::S, 0.0),
+            Look::Card => (palette.ink, palette.overlay, Radius::XL, CARD_MARGIN),
+        };
+        let style = match look {
+            Look::Tip => TextStyle::role(role, ink).weight(TextStyle::MEDIUM),
+            Look::Card => TextStyle::role(role, ink),
+        };
+        let spec = role.spec();
+        let room = (max_width as f32 - 2.0 * (padding.0 + margin)).max(spec.size);
         let paragraph = self
             .text
             .paragraph(text, style, Some(room), TextAlign::Start);
         let width = (paragraph.width().min(room) + 2.0 * padding.0).ceil();
-        let height = (paragraph.height().min(text_size * 1.6) + 2.0 * padding.1).ceil();
+        let height = (paragraph.height().min(spec.line_height) + 2.0 * padding.1).ceil();
+        let shape = Shape::rounded(Rect::new(margin, margin, width, height), radius);
+        let mut items = Vec::new();
+        if look == Look::Card {
+            items.extend(Item::shadows(shape, Elevation::Overlay, scheme, true));
+        }
+        items.push(Item::Fill {
+            shape,
+            paint: fill.into(),
+        });
+        if look == Look::Card && scheme == Scheme::Dark {
+            items.push(Item::Stroke {
+                shape: Shape::rounded(shape.rect.inset(0.5), radius - 0.5),
+                width: 1.0,
+                paint: palette.hairline.into(),
+            });
+        }
+        items.push(Item::Text {
+            origin: Point::new(margin + padding.0, margin + padding.1),
+            paragraph,
+        });
+        let (outer_width, outer_height) = (width + 2.0 * margin, height + 2.0 * margin);
         let scene = Scene {
-            width: width as u32,
-            height: height as u32,
+            width: outer_width as u32,
+            height: outer_height as u32,
             background: Color::TRANSPARENT,
-            items: vec![
-                Item::Fill {
-                    shape: Shape::rounded(Rect::new(0.0, 0.0, width, height), height / 2.0),
-                    paint: Paint::Solid(BACKGROUND),
-                },
-                Item::Text {
-                    origin: Point::new(padding.0, padding.1),
-                    paragraph,
-                },
-            ],
+            items,
         };
         let buffer = self.paint(&scene, scale)?;
         Some(Label {
             text: text.to_owned(),
             scale,
-            size: (f64::from(width), f64::from(height)).into(),
+            scheme,
+            size: (f64::from(outer_width), f64::from(outer_height)).into(),
             buffer,
         })
     }

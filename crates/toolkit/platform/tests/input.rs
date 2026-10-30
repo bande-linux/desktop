@@ -134,6 +134,14 @@ impl App for Forwarder {
         match command[0] {
             b'c' => window.copy("copied from the toolkit"),
             b'p' => window.paste().expect("paste"),
+            b'k' => window.copy_transfer(
+                Transfer::uris(vec![
+                    "file:///home/user/a.txt".to_owned(),
+                    "file:///home/user/b%20c.txt".to_owned(),
+                ])
+                .cut(),
+            ),
+            b'P' => window.paste_transfer().expect("paste files"),
             b'h' => window.hide().expect("hide"),
             b's' => window.show().expect("show"),
             b'b' => thread::sleep(BUSY),
@@ -651,6 +659,51 @@ fn text_copied_in_one_window_is_pasted_in_another() {
             .seen
             .contains(&WindowEvent::Pasted("copied from the toolkit".to_owned()))
     );
+}
+
+#[test]
+fn cut_files_reach_another_app_as_uris_marked_as_cut() {
+    let mut desktop = Desktop::new();
+    let mut source = desktop.open(Role::toplevel("source", "test.source"), false);
+    desktop.wait_for(
+        &mut [&mut source],
+        |events| events.contains(&WindowEvent::Focus(true)),
+        Desktop::mapped,
+    );
+    desktop.type_keys(&[KEY_A]);
+    desktop.wait_for(
+        &mut [&mut source],
+        |events| !typed(events).is_empty(),
+        |_| true,
+    );
+    source.send(b'k');
+    desktop.settle(&mut [&mut source]);
+    let mut target = desktop.open(Role::toplevel("target", "test.target"), false);
+    desktop.wait_for(
+        &mut [&mut target],
+        |events| events.contains(&WindowEvent::Focus(true)),
+        Desktop::mapped,
+    );
+    target.send(b'P');
+    desktop.wait_for(
+        &mut [&mut source, &mut target],
+        |events| {
+            events
+                .iter()
+                .any(|event| matches!(event, WindowEvent::PastedTransfer(_)))
+        },
+        |_| true,
+    );
+    let pasted = target.seen.iter().find_map(|event| match event {
+        WindowEvent::PastedTransfer(transfer) => Some(transfer.clone()),
+        _ => None,
+    });
+    let pasted = pasted.expect("files pasted");
+    assert_eq!(
+        pasted.uris,
+        ["file:///home/user/a.txt", "file:///home/user/b%20c.txt"]
+    );
+    assert!(pasted.cut);
 }
 
 #[test]

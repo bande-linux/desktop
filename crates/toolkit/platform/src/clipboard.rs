@@ -16,6 +16,7 @@ use crate::window::{ShmTarget, State, Window, WindowError, WindowEvent};
 
 const TEXT_TYPES: [&str; 3] = ["text/plain;charset=utf-8", "UTF8_STRING", "text/plain"];
 const URI_LIST: &str = "text/uri-list";
+const GNOME_FILES: &str = "x-special/gnome-copied-files";
 
 fn own_type() -> String {
     format!("application/x-unbound-toolkit-{}", std::process::id())
@@ -25,6 +26,7 @@ fn own_type() -> String {
 pub struct Transfer {
     pub text: String,
     pub uris: Vec<String>,
+    pub cut: bool,
 }
 
 impl Transfer {
@@ -32,6 +34,7 @@ impl Transfer {
         Self {
             text: text.to_owned(),
             uris: Vec::new(),
+            cut: false,
         }
     }
 
@@ -39,11 +42,17 @@ impl Transfer {
         Self {
             text: uris.join("\n"),
             uris,
+            cut: false,
         }
+    }
+
+    pub fn cut(self) -> Self {
+        Self { cut: true, ..self }
     }
 
     fn offer(&self, source: &WlDataSource) {
         if !self.uris.is_empty() {
+            source.offer(GNOME_FILES.to_owned());
             source.offer(URI_LIST.to_owned());
         }
         for mime in TEXT_TYPES {
@@ -54,6 +63,14 @@ impl Transfer {
 
     fn bytes(&self, mime: &str) -> Vec<u8> {
         match mime {
+            GNOME_FILES => {
+                let verb = if self.cut { "cut" } else { "copy" };
+                std::iter::once(verb)
+                    .chain(self.uris.iter().map(String::as_str))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+                    .into_bytes()
+            }
             URI_LIST => self
                 .uris
                 .iter()
@@ -67,6 +84,19 @@ impl Transfer {
     fn parse(mime: &str, bytes: &[u8]) -> Self {
         let text = String::from_utf8_lossy(bytes).into_owned();
         match mime {
+            GNOME_FILES => {
+                let mut lines = text.lines();
+                let cut = lines.next() == Some("cut");
+                Self {
+                    cut,
+                    ..Self::uris(
+                        lines
+                            .filter(|line| !line.is_empty())
+                            .map(str::to_owned)
+                            .collect(),
+                    )
+                }
+            }
             URI_LIST => Self::uris(
                 text.lines()
                     .map(str::trim)
@@ -184,7 +214,11 @@ fn offered_action(offer: &WlDataOffer) -> Option<DragAction> {
 }
 
 fn readable_type(types: &[String], uris: bool) -> Option<String> {
-    let preferred = uris.then_some(URI_LIST).into_iter().chain(TEXT_TYPES);
+    let preferred = uris
+        .then_some([GNOME_FILES, URI_LIST])
+        .into_iter()
+        .flatten()
+        .chain(TEXT_TYPES);
     preferred
         .into_iter()
         .find(|mime| types.iter().any(|offered| offered == mime))

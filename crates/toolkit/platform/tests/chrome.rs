@@ -12,7 +12,7 @@ use unbound_graphics::{Color, Palette, Scene, Scheme, TextSystem};
 use unbound_toolkit_platform::{
     App, MenuPlacement, Role, TITLE_BAR_HEIGHT, Window, WindowEvent, run,
 };
-use unbound_widgets::{Cell, Column, Context, Menu, MenuItem, Row, Sort, Table, Ui, Widget};
+use unbound_widgets::{Alert, Cell, Column, Context, Menu, MenuItem, Row, Sort, Table, Ui, Widget};
 
 const MIN_SSIM: f64 = 0.99;
 const SCALE: f64 = 2.0;
@@ -247,4 +247,23 @@ fn processes(_window: &mut Window) -> Option<Ui> {
 #[test]
 fn a_table_with_a_sorted_column_and_a_selection_matches_its_golden() {
     shot("table", processes, (100, TITLE_BAR_HEIGHT as i32 + 60));
+}
+
+fn alert(window: &mut Window) -> Option<Ui> {
+    let mut ui = processes(window)?;
+    ui.present_sheet(
+        Alert::new(
+            "Quit “Terminal”?",
+            "Its processes will stop and unsaved work will be lost.",
+            |_| {},
+        )
+        .cancel("Cancel", "cancel")
+        .primary("Quit", "quit"),
+    );
+    Some(ui)
+}
+
+#[test]
+fn an_alert_sheet_matches_its_golden() {
+    shot("alert", alert, (10, TITLE_BAR_HEIGHT as i32 + 150));
 }

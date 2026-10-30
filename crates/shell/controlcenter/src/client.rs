@@ -23,8 +23,8 @@ use unbound_status::session::full_name;
 use unbound_toolkit::ui::{Animated, Event, Key, Menu, MenuItem, Pointer, Scroll, Spring, Ui};
 use unbound_toolkit::{
     App, BrightnessKey, Edges, Image, Item, KeyboardFocus, LayerKind, LayerOptions, MediaKey,
-    MenuPlacement, Palette, Panel, Point, Rect, Role, Scene, TextSystem, VolumeKey, Window,
-    WindowEvent,
+    MenuPlacement, Palette, Panel, Point, Rect, Role, Scene, SessionEnd, TextSystem, VolumeKey,
+    Window, WindowEvent,
 };
 use unbound_xdg::{
     DesktopEntry, ICON_THEMES, current_desktops, data_dirs, find_icon, path_from_file_uri,
@@ -466,11 +466,14 @@ impl ControlCenter {
                 );
             }
         } else {
-            let shell = std::env::current_exe()
-                .ok()
-                .and_then(|path| path.to_str().map(str::to_owned))
-                .unwrap_or_else(|| "unbound-shell".to_owned());
-            self.launch(window, "", &[&shell, "--confirm", keyword]);
+            let ending = match keyword {
+                "restart" => SessionEnd::Restart,
+                "shut-down" => SessionEnd::ShutDown,
+                _ => SessionEnd::LogOut,
+            };
+            if let Err(error) = window.confirm_session_end(ending) {
+                tracing::warn!("cannot ask to end the session: {error}");
+            }
         }
         self.dismiss(window);
     }

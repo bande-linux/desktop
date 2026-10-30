@@ -9,6 +9,7 @@ repository.workspace = true
 image.workspace = true
 resvg.workspace = true
 tracing.workspace = true
+unbound-inbox.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]

@@ -16,6 +16,7 @@ use unbound_config::{BarEdge, Config};
 use unbound_fs::{
     Action, Answer, Change, FolderWatch, Operations, Purpose, Resolution, Task, Trash,
 };
+use unbound_inbox::{Inbox, Outbox};
 use unbound_thumbnails::{Request as ThumbnailRequest, ThumbnailSize, Thumbnails};
 use unbound_toolkit::ui::frame_time;
 use unbound_toolkit::{
@@ -23,7 +24,7 @@ use unbound_toolkit::{
     MenuPlacement, Point, Role, Scene, Scheme, TextSystem, Transfer, Window, WindowEvent,
 };
 use unbound_volumes::{eject, media_roots, mounted_volumes};
-use unbound_wallpaper::{Choice, Inbox, Outbox, Picture, Variant, choose, follow, inbox, render};
+use unbound_wallpaper::{Choice, Picture, Variant, choose, follow, render};
 use unbound_xdg::{
     Apps, DIRECTORY, DesktopEntry, ICON_THEMES, OCTET_STREAM, UserDir, config_dirs, config_home,
     data_dirs, file_uri, find_icon, launch, launch_with, path_from_file_uri, user_dir,
@@ -57,6 +58,7 @@ pub struct DesktopSurface {
     home: Option<PathBuf>,
     icons: HashMap<(String, u32), Option<Image>>,
     thumbnails: Option<Thumbnails>,
+    items: Vec<Item>,
     pictures: HashMap<PathBuf, (Option<SystemTime>, Option<Image>)>,
     layouts_file: Option<PathBuf>,
     bar_edge: BarEdge,
@@ -210,7 +212,7 @@ impl DesktopSurface {
     }
 
     fn thumbnails_ready(&mut self) {
-        let Some(thumbnails) = &self.thumbnails else {
+        let Some(thumbnails) = &mut self.thumbnails else {
             return;
         };
         let done = thumbnails.take();
@@ -225,7 +227,7 @@ impl DesktopSurface {
                 *kept = picture;
             }
         }
-        self.relist();
+        self.show_items();
     }
 
     fn relist(&mut self) {
@@ -234,10 +236,18 @@ impl DesktopSurface {
         }
         let mountinfo = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
         let volumes = mounted_volumes(&mountinfo, &self.media);
-        let items = list(&mut self.apps, &self.desktop_dir, &volumes);
+        self.items = list(&mut self.apps, &self.desktop_dir, &volumes);
+        self.show_items();
+        self.watch_folders();
+        self.save_layouts();
+    }
+
+    fn show_items(&mut self) {
         let pixels = self.icon_pixels();
         let mut wanted = Vec::new();
-        let with_icons = items
+        let with_icons = self
+            .items
+            .clone()
             .into_iter()
             .map(|item| {
                 let artwork = self.artwork(&item, pixels, &mut wanted);
@@ -248,8 +258,6 @@ impl DesktopSurface {
             thumbnails.want(wanted);
         }
         self.view.set_items(with_icons, frame_time().on_screen());
-        self.watch_folders();
-        self.save_layouts();
     }
 
     fn icon_pixels(&self) -> u32 {
@@ -885,9 +893,10 @@ impl DesktopSurface {
             .and_then(|path| std::fs::read_to_string(path).ok())
             .map(|text| parse_layouts(&text))
             .unwrap_or_default();
-        let (choices, choice_sender) = inbox()?;
-        follow(choice_sender);
-        let (loaded, loader) = inbox()?;
+        let choices = Inbox::new()?;
+        follow(choices.outbox());
+        let loaded = Inbox::new()?;
+        let loader = loaded.outbox();
         let appearance = window.appearance();
         let data_dirs = data_dirs();
         let thumbnails = Thumbnails::for_user(&data_dirs);
@@ -904,6 +913,7 @@ impl DesktopSurface {
             home,
             icons: HashMap::new(),
             thumbnails,
+            items: Vec::new(),
             pictures: HashMap::new(),
             layouts_file,
             bar_edge,

@@ -1,11 +1,9 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::io::Read;
-use std::os::fd::{AsFd, BorrowedFd};
-use std::os::unix::net::UnixStream;
+use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::mpsc::{Sender, channel};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{
@@ -14,6 +12,7 @@ use crate::{
 };
 use accesskit::TreeUpdate;
 use unbound_fs::Entry;
+use unbound_inbox::Inbox;
 use unbound_preview::{Preview, preview};
 use unbound_search::{FileIndex, Usage, recently_used_path, usage_path};
 use unbound_thumbnails::{Cache, ThumbnailSize, Thumbnailers, thumbnail};
@@ -90,17 +89,14 @@ impl Catalog for Library {
 
 struct Previewer {
     requests: Sender<PathBuf>,
-    results: Receiver<Loaded>,
-    wake: UnixStream,
+    results: Inbox<Loaded>,
 }
 
 impl Previewer {
     fn spawn() -> std::io::Result<Self> {
         let (requests, wanted) = channel::<PathBuf>();
-        let (sender, results) = channel();
-        let (wake, signal) = UnixStream::pair()?;
-        wake.set_nonblocking(true)?;
-        signal.set_nonblocking(true)?;
+        let results = Inbox::new()?;
+        let sender = results.outbox();
         std::thread::Builder::new()
             .name("preview".to_owned())
             .spawn(move || {
@@ -130,23 +126,12 @@ impl Previewer {
                     {
                         content = Preview::Image(image);
                     }
-                    if sender.send(Loaded { entry, content }).is_err() {
+                    if !sender.send(Loaded { entry, content }) {
                         return;
                     }
-                    let _ = std::io::Write::write(&mut &signal, &[1]);
                 }
             })?;
-        Ok(Self {
-            requests,
-            results,
-            wake,
-        })
-    }
-
-    fn take(&self) -> Vec<Loaded> {
-        let mut drained = [0; 64];
-        while matches!((&self.wake).read(&mut drained), Ok(read) if read > 0) {}
-        self.results.try_iter().collect()
+        Ok(Self { requests, results })
     }
 }
 
@@ -393,9 +378,9 @@ impl App for LauncherShell {
             .chain(
                 self.previewer
                     .iter()
-                    .map(|previewer| previewer.wake.as_fd()),
+                    .map(|previewer| previewer.results.fd()),
             )
-            .chain(self.clips.iter().map(|clips| clips.wake.as_fd()))
+            .chain(self.clips.iter().map(Clips::fd))
             .collect()
     }
 
@@ -403,10 +388,16 @@ impl App for LauncherShell {
         if let Some(results) = self.index.as_mut().and_then(FileIndex::take) {
             self.launcher.set_files(results);
         }
-        for loaded in self.previewer.iter().flat_map(Previewer::take) {
+        let previews = self
+            .previewer
+            .as_mut()
+            .map(|previewer| previewer.results.drain())
+            .unwrap_or_default();
+        for loaded in previews {
             self.launcher.set_preview(loaded);
         }
-        for reply in self.clips.iter().flat_map(Clips::take) {
+        let replies = self.clips.as_mut().map(Clips::take).unwrap_or_default();
+        for reply in replies {
             match reply {
                 Reply::Listed(clips) => self.launcher.set_clips(clips),
                 Reply::Picture(id, picture) => self.launcher.set_clip_picture(id, picture),

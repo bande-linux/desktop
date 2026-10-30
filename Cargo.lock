@@ -3775,6 +3775,7 @@ dependencies = [
 name = "unbound-bench"
 version = "0.1.0"
 dependencies = [
+ "rustix 1.1.6",
  "smithay",
  "tempfile",
  "tracing",
@@ -3901,6 +3902,7 @@ dependencies = [
  "icu_datetime",
  "icu_locale_core",
  "jiff",
+ "rustix 1.1.6",
 ]
 
 [[package]]
@@ -3918,6 +3920,7 @@ dependencies = [
  "unbound-bar",
  "unbound-config",
  "unbound-fs",
+ "unbound-inbox",
  "unbound-l10n",
  "unbound-thumbnails",
  "unbound-toolkit",
@@ -4073,6 +4076,7 @@ dependencies = [
  "tempfile",
  "tracing",
  "unbound-fs",
+ "unbound-inbox",
  "unbound-l10n",
  "unbound-preview",
  "unbound-search",
@@ -4096,6 +4100,7 @@ dependencies = [
  "rustix 1.1.6",
  "tracing",
  "unbound-datetime",
+ "unbound-inbox",
  "unbound-keyboard",
  "unbound-l10n",
  "unbound-log",
@@ -4295,6 +4300,7 @@ dependencies = [
  "jiff",
  "tempfile",
  "tracing",
+ "unbound-inbox",
  "unbound-watch",
  "unbound-xdg",
 ]
@@ -4444,6 +4450,7 @@ dependencies = [
  "png",
  "tempfile",
  "tracing",
+ "unbound-inbox",
  "unbound-xdg",
 ]
 
@@ -4521,6 +4528,7 @@ dependencies = [
  "resvg",
  "tempfile",
  "tracing",
+ "unbound-inbox",
  "zbus",
 ]
 

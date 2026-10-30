@@ -1,11 +1,11 @@
 use std::collections::{HashSet, VecDeque};
-use std::io::{self, Read, Write};
-use std::os::fd::{AsFd, BorrowedFd};
-use std::os::unix::net::UnixStream;
+use std::io;
+use std::os::fd::BorrowedFd;
 use std::path::PathBuf;
-use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::thread;
+
+use unbound_inbox::{Inbox, Outbox};
 
 use crate::cache::{Cache, Picture, ThumbnailSize};
 use crate::generate::{Thumbnailers, thumbnail};
@@ -48,16 +48,14 @@ impl Shared {
 
 pub struct Thumbnails {
     shared: Arc<Shared>,
-    results: Receiver<Thumbnailed>,
-    wake: UnixStream,
+    results: Inbox<Thumbnailed>,
 }
 
 struct Worker {
     shared: Arc<Shared>,
     cache: Arc<Cache>,
     thumbnailers: Arc<Thumbnailers>,
-    results: Sender<Thumbnailed>,
-    signal: Arc<UnixStream>,
+    results: Outbox<Thumbnailed>,
 }
 
 impl Worker {
@@ -97,40 +95,30 @@ impl Worker {
                 size: request.size,
                 picture,
             };
-            if self.results.send(done).is_err() {
+            if !self.results.send(done) {
                 return;
             }
-            let _ = (&*self.signal).write(&[1]);
         }
     }
 }
 
 impl Thumbnails {
     pub fn spawn(cache: Cache, thumbnailers: Thumbnailers) -> io::Result<Self> {
-        let (wake, signal) = UnixStream::pair()?;
-        wake.set_nonblocking(true)?;
-        signal.set_nonblocking(true)?;
-        let (sender, results) = mpsc::channel();
+        let results = Inbox::new()?;
         let shared = Arc::new(Shared::default());
-        let (cache, thumbnailers, signal) =
-            (Arc::new(cache), Arc::new(thumbnailers), Arc::new(signal));
+        let (cache, thumbnailers) = (Arc::new(cache), Arc::new(thumbnailers));
         for index in 0..WORKERS {
             let worker = Worker {
                 shared: shared.clone(),
                 cache: cache.clone(),
                 thumbnailers: thumbnailers.clone(),
-                results: sender.clone(),
-                signal: signal.clone(),
+                results: results.outbox(),
             };
             thread::Builder::new()
                 .name(format!("thumbnails {index}"))
                 .spawn(move || worker.run())?;
         }
-        Ok(Self {
-            shared,
-            results,
-            wake,
-        })
+        Ok(Self { shared, results })
     }
 
     pub fn for_user(data_dirs: &[PathBuf]) -> Option<Self> {
@@ -156,13 +144,11 @@ impl Thumbnails {
     }
 
     pub fn fd(&self) -> BorrowedFd<'_> {
-        self.wake.as_fd()
+        self.results.fd()
     }
 
-    pub fn take(&self) -> Vec<Thumbnailed> {
-        let mut drained = [0u8; 256];
-        while matches!((&self.wake).read(&mut drained), Ok(read) if read > 0) {}
-        self.results.try_iter().collect()
+    pub fn take(&mut self) -> Vec<Thumbnailed> {
+        self.results.drain()
     }
 }
 

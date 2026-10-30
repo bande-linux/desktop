@@ -222,7 +222,7 @@ pub struct State {
     pub(crate) needs_redraw: bool,
     pub(crate) pointer_location: Point<f64, Logical>,
     pub(crate) cursor_shown: bool,
-    cursor_status: CursorImageStatus,
+    pub(crate) cursor_status: CursorImageStatus,
     cursor_theme: CursorTheme,
     cursor_arrow: Cursor,
     named_cursors: HashMap<CursorIcon, Option<Cursor>>,
@@ -230,6 +230,7 @@ pub struct State {
     pub(crate) typed_at: Option<Instant>,
     pub(crate) input_devices: usize,
     pub(crate) pending_captures: Vec<crate::capture::PendingCapture>,
+    pub(crate) decorations: crate::frame::Decorations,
 }
 
 pub struct Headless {
@@ -403,6 +404,7 @@ impl Headless {
             typed_at: None,
             input_devices: 0,
             pending_captures: Vec::new(),
+            decorations: crate::frame::Decorations::default(),
         };
         Ok(Self {
             display,
@@ -526,6 +528,7 @@ impl Headless {
     }
 
     pub fn render_elements(&mut self, renderer: &mut VulkanRenderer) -> Vec<OutputElement> {
+        self.state.paint_title_bars(renderer);
         let (elements, drawn, icon) = self.compose(renderer, true);
         self.state.remember_drag_icon(icon);
         for window in &mut self.state.windows {
@@ -904,8 +907,8 @@ pub struct Rect {
 
 pub(crate) fn centered(area: Rect, window: Size<i32, Logical>) -> Point<i32, Logical> {
     (
-        area.location.x + (area.size.w - window.w) / 2,
-        area.location.y + (area.size.h - window.h) / 2,
+        area.location.x + ((area.size.w - window.w) / 2).max(0),
+        area.location.y + ((area.size.h - window.h) / 2).max(0),
     )
         .into()
 }
@@ -1046,7 +1049,7 @@ impl State {
         windows
             .iter()
             .flat_map(|window| {
-                self.popup_surfaces(window.surface(), window.location)
+                self.popup_surfaces(window.surface(), window.content_location())
                     .into_iter()
                     .map(|(surface, origin)| Placed::Surface(surface, origin))
                     .chain([Placed::Window(window)])
@@ -1266,6 +1269,7 @@ impl XdgShellHandler for State {
 
     fn title_changed(&mut self, toplevel: ToplevelSurface) {
         self.publish_toplevel(toplevel.wl_surface());
+        self.needs_redraw = true;
     }
 
     fn app_id_changed(&mut self, toplevel: ToplevelSurface) {

@@ -29,12 +29,26 @@ Recommends: unbound-term (= ${binary:Version}),
             unbound-settings (= ${binary:Version}),
             unbound-tray (= ${binary:Version}),
             unbound-automount (= ${binary:Version}),
+            unbound-monitor (= ${binary:Version}),
+            gnome-keyring,
+            libpam-gnome-keyring,
+            qt6-xdgdesktopportal-platformtheme,
+            firefox-esr,
+            gnome-text-editor,
+            loupe,
+            papers,
+            showtime,
+            gnome-calculator,
             fonts-inter,
             xdg-user-dirs,
             upower,
             udisks2
-Suggests: firefox-esr
+Suggests: gnome-clocks
 Description: Unbound desktop environment
  The Unbound desktop: a pure Wayland desktop with its own compositor, shell,
  session services and applications. Installing this package adds "Unbound"
  to the sessions a display manager such as GDM, SDDM or greetd offers.
+ .
+ It recommends a browser, text editor, image viewer, PDF viewer, calculator
+ and video player, and opens files in them by default, and an unlocked
+ keyring for the passwords browsers and editors keep.

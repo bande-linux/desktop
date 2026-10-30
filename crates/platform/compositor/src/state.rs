@@ -170,6 +170,7 @@ pub struct State {
     _virtual_keyboard_state: VirtualKeyboardManagerState,
     pending_activation: Option<WlSurface>,
     pub(crate) windowless_app: Option<(Client, String)>,
+    pub(crate) key_behind_layer: Option<WlSurface>,
     pub(crate) shell_resources: Vec<UnboundShellV1>,
     pub(crate) capture_resources:
         Vec<unbound_protocols::server::unbound_capture_v1::UnboundCaptureV1>,
@@ -342,6 +343,7 @@ impl Headless {
             }),
             pending_activation: None,
             windowless_app: None,
+            key_behind_layer: None,
             shell_resources: Vec::new(),
             capture_resources: Vec::new(),
             pending_insert: None,
@@ -942,7 +944,13 @@ impl State {
         if self.popup_grab.is_some() && surface != self.menu_root() {
             self.close_menus();
         }
-        self.windowless_app = None;
+        let onto_layer = surface
+            .as_ref()
+            .is_some_and(|surface| self.toplevel_of(surface).is_none());
+        self.key_behind_layer = self.key_window().filter(|_| onto_layer);
+        if !onto_layer {
+            self.windowless_app = None;
+        }
         self.typed_at = None;
         if let Some(surface) = &surface
             && self.window_index(surface).is_some()

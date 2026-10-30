@@ -7,9 +7,9 @@ use std::thread;
 use std::time::Duration;
 
 use unbound_config::{
-    Appearance, CapsLock, Config, ConfigError, ConfigStore, DEFAULT_DOCK_APPS, DockEdge,
-    InputSource, Output, ReloadError, SecondaryClick, Suspend, WallpaperFit, WallpaperVariant,
-    config_path, login_picture, system_input_sources,
+    AlertSound, Appearance, CapsLock, Config, ConfigError, ConfigStore, DEFAULT_DOCK_APPS,
+    DockEdge, InputSource, Output, ReloadError, SecondaryClick, Suspend, WallpaperFit,
+    WallpaperVariant, config_path, login_picture, system_input_sources,
 };
 
 fn error_at(source: &str) -> (usize, usize) {
@@ -471,4 +471,21 @@ fn trackpad_and_mouse_settings_are_read_with_mac_like_defaults() {
     assert!(config.mouse.natural_scrolling);
     assert_eq!(config.mouse.speed, -1.0);
     assert_eq!(error_at("mouse {\n    speed 2\n}\n"), (2, 11));
+}
+
+#[test]
+fn sound_settings_default_to_effects_and_feedback_on_and_reject_a_loud_alert() {
+    let defaults = Config::parse("").expect("empty").sound;
+    assert!(defaults.effects && defaults.volume_feedback);
+    assert_eq!(defaults.alert, AlertSound::Mallet);
+    let sound = Config::parse(
+        "sound {\n    effects #false\n    volume-feedback #false\n    alert \"knock\"\n    alert-volume 0.4\n}\n",
+    )
+    .expect("valid")
+    .sound;
+    assert!(!sound.effects && !sound.volume_feedback);
+    assert_eq!(sound.alert, AlertSound::Knock);
+    assert_eq!(sound.alert_volume, 0.4);
+    assert_eq!(error_at("sound {\n    alert-volume 2\n}\n"), (2, 18));
+    assert_eq!(error_at("sound {\n    alert \"gong\"\n}\n"), (2, 11));
 }

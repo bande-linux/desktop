@@ -1,0 +1,38 @@
+[package]
+name = "unbound-sound"
+description = "Unbound event sounds: an original sound theme played through PipeWire"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+tracing.workspace = true
+unbound-audio.workspace = true
+unbound-log.workspace = true
+zbus.workspace = true
+
+[dev-dependencies]
+unbound-config.workspace = true
+unbound-test-bus.workspace = true
+
+[package.metadata.deb]
+maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+section = "sound"
+depends = "$auto, dbus-session-bus | default-dbus-session-bus, init-system-helpers (>= 1.66)"
+recommends = "pipewire, wireplumber, unbound-config"
+extended-description = """\
+Plays the Unbound desktop's event sounds (alerts, notifications, the \
+volume tick, screenshots, emptying the Trash, plugging in power and low \
+battery) through PipeWire, following the sound settings in config.kdl, \
+and installs them as the Unbound XDG sound theme for other apps."""
+maintainer-scripts = "debian/"
+assets = [
+    ["target/release/unbound-sound", "usr/bin/", "755"],
+    ["data/unbound-sound.service", "usr/lib/systemd/user/", "644"],
+    ["data/org.unbound.Sound.service", "usr/share/dbus-1/services/", "644"],
+    ["../../../data/sounds/Unbound/index.theme", "usr/share/sounds/Unbound/", "644"],
+    ["../../../data/sounds/Unbound/stereo/*.wav", "usr/share/sounds/Unbound/stereo/", "644"],
+]
+
+[lints]
+workspace = true

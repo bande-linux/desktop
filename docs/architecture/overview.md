@@ -190,6 +190,12 @@ control writes to it, and it can be edited by hand while the session runs.
       natural-scrolling #false
       speed 0.0                 // -1.0 to 1.0
   }
+  sound {
+      effects #true             // screenshot, Trash, power and battery sounds
+      volume-feedback #true     // a tick on each volume key press
+      alert "mallet"            // "mallet" | "knock" | "low" | "tick"
+      alert-volume 0.75         // 0.0 to 1.0, scales every event sound
+  }
   wallpaper {                   // absolute path or "~/..."; unset means the built-in picture
       light "/usr/share/backgrounds/unbound/day.jpg"
       dark "~/Pictures/night.jpg"
@@ -200,7 +206,7 @@ control writes to it, and it can be edited by hand while the session runs.
       variable-refresh-rate #true
   }
   ```
-  The values shown for `appearance`, `dock`, `idle`, `keyboard` (except `input-sources`), `trackpad` and `mouse` are the defaults. The
+  The values shown for `appearance`, `dock`, `idle`, `keyboard` (except `input-sources`), `trackpad`, `mouse` and `sound` are the defaults. The
   wallpaper used is the one matching the current appearance; the desktop expands a leading `~/`.
   A section left empty by a Settings write is removed from the file. A valid file is parsed
   into a shadow `Config` and swapped in as one `Arc`, so readers see either the old or the new

@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use unbound_config::{
-    Appearance, CapsLock, Config, DockEdge, InputSource, Output, Setting, Suspend, WallpaperFit,
-    WallpaperVariant,
+    AlertSound, Appearance, CapsLock, Config, DockEdge, InputSource, Output, Setting, Suspend,
+    WallpaperFit, WallpaperVariant,
 };
 
 fn apply(setting: Setting, source: &str) -> String {
@@ -260,4 +260,18 @@ fn pointer_settings_equal_to_the_defaults_leave_no_trace() {
         &apply(Setting::TrackpadSpeed(0.0), &tapless),
     );
     assert_eq!(reset, "");
+}
+
+#[test]
+fn sound_settings_are_written_only_when_they_differ_from_the_defaults() {
+    let edited = apply(Setting::AlertSound(AlertSound::Low), "");
+    let edited = apply(Setting::AlertVolume(0.5), &edited);
+    let edited = apply(Setting::SoundEffects(false), &edited);
+    assert_eq!(
+        edited,
+        "sound {\n    alert \"low\"\n    alert-volume 0.5\n    effects #false\n}\n"
+    );
+    let edited = apply(Setting::SoundEffects(true), &edited);
+    let edited = apply(Setting::AlertSound(AlertSound::Mallet), &edited);
+    assert_eq!(edited, "sound {\n    alert-volume 0.5\n}\n");
 }

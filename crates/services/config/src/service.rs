@@ -14,8 +14,9 @@ use zbus::object_server::SignalEmitter;
 use zbus::zvariant::{OwnedValue, Value};
 
 use crate::{
-    Appearance, CapsLock, Config, ConfigStore, DockEdge, InputSource, Output, ReloadError,
-    SecondaryClick, Setting, Suspend, WallpaperFit, WallpaperVariant, read_system_input_sources,
+    AlertSound, Appearance, CapsLock, Config, ConfigStore, DockEdge, InputSource, Output,
+    ReloadError, SecondaryClick, Setting, Suspend, WallpaperFit, WallpaperVariant,
+    read_system_input_sources,
 };
 
 pub const BUS_NAME: &str = "org.unbound.Config";
@@ -204,6 +205,18 @@ fn publish_changes(
         }
         if before.mouse.speed != after.mouse.speed {
             let _ = guard.mouse_speed_changed(emitter).await;
+        }
+        if before.sound.effects != after.sound.effects {
+            let _ = guard.sound_effects_changed(emitter).await;
+        }
+        if before.sound.volume_feedback != after.sound.volume_feedback {
+            let _ = guard.volume_feedback_changed(emitter).await;
+        }
+        if before.sound.alert != after.sound.alert {
+            let _ = guard.alert_sound_changed(emitter).await;
+        }
+        if before.sound.alert_volume != after.sound.alert_volume {
+            let _ = guard.alert_volume_changed(emitter).await;
         }
         if before.wallpaper.light != after.wallpaper.light {
             let _ = guard.wallpaper_light_changed(emitter).await;
@@ -592,6 +605,47 @@ impl ConfigInterface {
     #[zbus(property)]
     fn set_mouse_natural_scrolling(&self, on: bool) -> zbus::fdo::Result<()> {
         self.write(&Setting::MouseNaturalScrolling(on))
+    }
+
+    #[zbus(property)]
+    fn sound_effects(&self) -> bool {
+        self.store.current().sound.effects
+    }
+
+    #[zbus(property)]
+    fn set_sound_effects(&self, on: bool) -> zbus::fdo::Result<()> {
+        self.write(&Setting::SoundEffects(on))
+    }
+
+    #[zbus(property)]
+    fn volume_feedback(&self) -> bool {
+        self.store.current().sound.volume_feedback
+    }
+
+    #[zbus(property)]
+    fn set_volume_feedback(&self, on: bool) -> zbus::fdo::Result<()> {
+        self.write(&Setting::VolumeFeedback(on))
+    }
+
+    #[zbus(property)]
+    fn alert_sound(&self) -> String {
+        self.store.current().sound.alert.keyword().to_owned()
+    }
+
+    #[zbus(property)]
+    fn set_alert_sound(&self, value: String) -> zbus::fdo::Result<()> {
+        let alert = keyword(&AlertSound::ALL, AlertSound::keyword, &value)?;
+        self.write(&Setting::AlertSound(alert))
+    }
+
+    #[zbus(property)]
+    fn alert_volume(&self) -> f64 {
+        self.store.current().sound.alert_volume
+    }
+
+    #[zbus(property)]
+    fn set_alert_volume(&self, volume: f64) -> zbus::fdo::Result<()> {
+        self.write(&Setting::AlertVolume(volume))
     }
 
     #[zbus(property)]

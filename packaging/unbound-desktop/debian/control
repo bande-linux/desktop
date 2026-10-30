@@ -11,6 +11,7 @@ Architecture: all
 Depends: unbound-compositor (= ${binary:Version}),
          unbound-config (= ${binary:Version}),
          unbound-power (= ${binary:Version}),
+         unbound-sound (= ${binary:Version}),
          unbound-notify (= ${binary:Version}),
          unbound-clipboard (= ${binary:Version}),
          unbound-desktop-surface (= ${binary:Version}),

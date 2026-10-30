@@ -4,7 +4,7 @@ set -euo pipefail
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 cargo=${REVIEW_CARGO:-cargo}
 packages=(
-    unbound-compositor unbound-notify unbound-clipboard unbound-config unbound-power
+    unbound-compositor unbound-notify unbound-clipboard unbound-config unbound-power unbound-sound
     xdg-desktop-portal-unbound unbound-tray unbound-automount
     unbound-desktop-surface unbound-dock unbound-launcher unbound-term unbound-lock unbound-screenshot unbound-files
     unbound-settings unbound-monitor unbound-greeter unbound-menubar unbound-controlcenter unbound-notifications
@@ -56,7 +56,7 @@ if [ "$build" = 1 ]; then
     done
     sudo apt-get install -y --allow-downgrades --reinstall "${debs[@]}"
     systemctl --user daemon-reload
-    systemctl --user try-restart unbound-config unbound-power unbound-tray unbound-automount \
+    systemctl --user try-restart unbound-config unbound-power unbound-sound unbound-tray unbound-automount \
         xdg-desktop-portal-unbound
     pkill -u "$(id -u)" -x unbound-notify || true
 fi

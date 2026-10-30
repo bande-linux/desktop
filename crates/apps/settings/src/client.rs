@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 
-use unbound_config::Output;
+use unbound_config::{ArrangedDisplay, DisplaySettings, Placement, Rotation};
+
 use zbus::blocking::Connection;
 use zbus::proxy::CacheProperties;
 use zbus::zvariant::OwnedValue;
@@ -122,12 +123,15 @@ pub trait Config {
     #[zbus(property)]
     fn set_volume_feedback(&self, on: bool) -> zbus::Result<()>;
     #[zbus(property)]
-    fn outputs(&self) -> zbus::Result<HashMap<String, HashMap<String, OwnedValue>>>;
-    fn set_output(
+    fn displays(&self) -> zbus::Result<HashMap<String, HashMap<String, OwnedValue>>>;
+    fn set_display(
         &self,
-        connector: &str,
+        identity: &str,
         settings: HashMap<&str, zbus::zvariant::Value<'_>>,
     ) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn arrangements(&self) -> zbus::Result<Vec<Vec<ArrangedDisplay>>>;
+    fn set_arrangement(&self, displays: Vec<ArrangedDisplay>) -> zbus::Result<()>;
 }
 
 #[zbus::proxy(
@@ -142,15 +146,23 @@ pub trait NotificationCenter {
     fn set_do_not_disturb(&self, enabled: bool) -> zbus::Result<()>;
 }
 
-fn output(settings: &HashMap<String, OwnedValue>) -> Output {
+fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
     let number = |key: &str| {
         settings
             .get(key)
             .and_then(|value| f64::try_from(value).ok())
     };
-    Output {
+    DisplaySettings {
+        resolution: settings
+            .get("resolution")
+            .and_then(|value| value.try_clone().ok())
+            .and_then(|value| <(u32, u32)>::try_from(value).ok()),
         scale: number("scale"),
         refresh_rate: number("refresh-rate"),
+        rotation: settings
+            .get("rotation")
+            .and_then(|value| u32::try_from(value).ok())
+            .and_then(Rotation::from_degrees),
         variable_refresh_rate: settings
             .get("variable-refresh-rate")
             .and_then(|value| bool::try_from(value).ok()),
@@ -212,27 +224,70 @@ impl SettingsClient {
         })
     }
 
-    pub fn outputs(&self) -> zbus::Result<BTreeMap<String, Output>> {
+    pub fn displays(&self) -> zbus::Result<BTreeMap<String, DisplaySettings>> {
         Ok(self
             .config
-            .outputs()?
+            .displays()?
             .iter()
-            .map(|(connector, settings)| (connector.clone(), output(settings)))
+            .map(|(identity, settings)| (identity.clone(), display_settings(settings)))
             .collect())
     }
 
-    pub fn set_output(&self, connector: &str, output: &Output) -> zbus::Result<()> {
+    pub fn set_display(&self, identity: &str, display: &DisplaySettings) -> zbus::Result<()> {
         let mut settings = HashMap::new();
-        if let Some(scale) = output.scale {
+        if let Some(resolution) = display.resolution {
+            settings.insert("resolution", resolution.into());
+        }
+        if let Some(scale) = display.scale {
             settings.insert("scale", scale.into());
         }
-        if let Some(rate) = output.refresh_rate {
+        if let Some(rate) = display.refresh_rate {
             settings.insert("refresh-rate", rate.into());
         }
-        if let Some(enabled) = output.variable_refresh_rate {
+        if let Some(rotation) = display.rotation {
+            settings.insert("rotation", rotation.degrees().into());
+        }
+        if let Some(enabled) = display.variable_refresh_rate {
             settings.insert("variable-refresh-rate", enabled.into());
         }
-        self.config.set_output(connector, settings)
+        self.config.set_display(identity, settings)
+    }
+
+    pub fn arrangements(&self) -> zbus::Result<Vec<Vec<Placement>>> {
+        Ok(self
+            .config
+            .arrangements()?
+            .into_iter()
+            .map(|arranged| {
+                arranged
+                    .into_iter()
+                    .map(|(display, x, y, main, mirror)| Placement {
+                        display,
+                        x,
+                        y,
+                        main,
+                        mirror: (!mirror.is_empty()).then_some(mirror),
+                    })
+                    .collect()
+            })
+            .collect())
+    }
+
+    pub fn set_arrangement(&self, placements: &[Placement]) -> zbus::Result<()> {
+        self.config.set_arrangement(
+            placements
+                .iter()
+                .map(|placement| {
+                    (
+                        placement.display.clone(),
+                        placement.x,
+                        placement.y,
+                        placement.main,
+                        placement.mirror.clone().unwrap_or_default(),
+                    )
+                })
+                .collect(),
+        )
     }
 
     pub fn get(&self, id: SettingId) -> zbus::Result<Value> {

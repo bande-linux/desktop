@@ -7,8 +7,11 @@ pub enum Action {
     Duplicate,
     Rename,
     NewFolder,
+    NewDocument,
     Trash,
     PutBack,
+    Compress,
+    Extract,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

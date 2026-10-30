@@ -1,18 +1,21 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use tempfile::TempDir;
 use unbound_files::{
-    Browser, FilesView, Location, ROW_HEIGHT, Request, Row, SIDEBAR_WIDTH, Sheet, permissions,
-    rows, with_volumes, without_bookmark,
+    Browser, FilesView, Location, PATH_BAR_HEIGHT, ROW_HEIGHT, Request, Row, SIDEBAR_WIDTH, Sheet,
+    TAB_BAR_HEIGHT, TOOLBAR_HEIGHT, ViewMemory, ViewMode, permissions, rows, with_bookmarks,
+    with_volumes, without_bookmark,
 };
 use unbound_fs::{Sort, SortBy, Trash, list};
+use unbound_thumbnails::{Cache, Thumbnailers, Thumbnails};
 use unbound_toolkit::ui::{Event, Key, Menu, Modifiers, Pointer, PointerButton};
-use unbound_toolkit::{DragAction, Item, Palette, Point, Scheme, TextSystem};
+use unbound_toolkit::{CpuRenderer, DragAction, Image, Item, Palette, Point, Scheme, TextSystem};
 use unbound_xdg::{Apps, file_uri};
 
 fn names(folder: &Path, show_hidden: bool) -> Vec<String> {
@@ -56,7 +59,7 @@ impl Place {
         fs::create_dir_all(data.join("mime")).expect("mime");
         fs::write(
             data.join("mime/globs2"),
-            "50:text/plain:*.txt\n50:image/png:*.png\n",
+            "50:text/plain:*.txt\n50:image/png:*.png\n50:application/pdf:*.pdf\n",
         )
         .expect("globs");
         fs::create_dir_all(data.join("applications")).expect("applications");
@@ -309,6 +312,7 @@ fn the_sidebar_lists_existing_user_folders_bookmarks_and_the_trash() {
     assert_eq!(
         places,
         [
+            ("Recents", Location::Recents),
             ("home", Location::Folder(home.clone())),
             ("Documents", Location::Folder(home.join("Documents"))),
             ("Bilder", Location::Folder(home.join("Bilder"))),
@@ -599,7 +603,10 @@ fn go_to_folder_accepts_relative_paths_and_reveals_files() {
 }
 
 fn click_row(view: &mut FilesView, row: usize, count: u8, modifiers: Modifiers) {
-    let at = Point::new(SIDEBAR_WIDTH + 60.0, 6.0 + ROW_HEIGHT * (row as f32 + 0.5));
+    let at = Point::new(
+        SIDEBAR_WIDTH + 60.0,
+        TOOLBAR_HEIGHT + 6.0 + ROW_HEIGHT * (row as f32 + 0.5),
+    );
     view.handle(&Event::PointerDown(
         Pointer::at(at).with_count(count).with_modifiers(modifiers),
     ));
@@ -649,34 +656,85 @@ fn clicks_select_extend_toggle_and_open() {
     );
 }
 
+fn type_text(view: &mut FilesView, text: &str) {
+    for character in text.chars() {
+        view.handle(&press(Key::Character(character)));
+    }
+}
+
+fn shown(view: &FilesView) -> Vec<String> {
+    view.browser().columns()[0]
+        .entries
+        .iter()
+        .map(|entry| entry.name.clone())
+        .collect()
+}
+
 #[test]
-fn filtering_narrows_the_folder_and_escape_restores_it() {
+fn searching_finds_names_below_the_folder_and_escape_returns() {
     let place = Place::new();
+    fs::write(place.home().join("Documents/Reports/q3 report.txt"), "q3").expect("file");
     let mut view = place.view();
-    let shown = |view: &FilesView| {
-        view.browser().columns()[0]
-            .entries
-            .iter()
-            .map(|entry| entry.name.clone())
-            .collect::<Vec<_>>()
-    };
+    view.handle(&press(Key::Down));
 
     view.handle(&command(Key::Character('f'), false));
-    view.handle(&press(Key::Character('N')));
-    view.handle(&press(Key::Character('o')));
+    type_text(&mut view, "report");
+    run_until(&mut view, |view| shown(view).len() == 2);
+    assert_eq!(shown(&view), ["Reports", "q3 report.txt"]);
+    assert_eq!(view.searching(), Some("report"));
+    assert_eq!(view.mode(), ViewMode::List);
+    assert_eq!(view.title(), "Searching “home”");
 
-    assert_eq!(shown(&view), ["notes.txt"]);
+    view.handle(&press(Key::Down));
+    view.handle(&press(Key::Down));
     assert_eq!(
-        view.browser().selected().map(|entry| entry.name.as_str()),
-        Some("notes.txt")
+        selected_name(view.browser()).as_deref(),
+        Some("q3 report.txt")
     );
+    assert!(view.menu_action("show-in-enclosing-folder"));
+    assert_eq!(view.searching(), None);
+    assert_eq!(
+        view.browser().active_folder(),
+        Some(place.home().join("Documents/Reports").as_path())
+    );
+    assert_eq!(
+        selected_name(view.browser()).as_deref(),
+        Some("q3 report.txt")
+    );
+
+    view.handle(&command(Key::Character('f'), false));
+    type_text(&mut view, "q3");
+    run_until(&mut view, |view| shown(view) == ["q3 report.txt"]);
     view.handle(&press(Key::Escape));
-    assert!(view.search().is_none());
-    assert_eq!(shown(&view), ["Documents", "Empty", "notes.txt"]);
+    assert_eq!(view.searching(), None);
+    assert_eq!(view.mode(), ViewMode::Columns);
     assert_eq!(
-        view.browser().selected().map(|entry| entry.name.as_str()),
-        Some("notes.txt")
+        view.browser().active_folder(),
+        Some(place.home().join("Documents/Reports").as_path())
     );
+}
+
+#[test]
+fn recents_list_recently_used_files_newest_first() {
+    let place = Place::new();
+    let notes = place.home().join("notes.txt");
+    let first = place.home().join("Documents/a.txt");
+    let xbel = place.root.path().join("recently-used.xbel");
+    fs::write(
+        &xbel,
+        format!(
+            "<xbel><bookmark href=\"{}\" visited=\"2026-02-01T08:00:00Z\"/><bookmark href=\"{}\" visited=\"2026-03-01T08:00:00Z\"/></xbel>",
+            file_uri(&notes),
+            file_uri(&first)
+        ),
+    )
+    .expect("recents");
+    let mut view = place.view();
+    view.set_recents_sources(xbel, place.root.path().join("usage"));
+    view.handle(&command(Key::Character('f'), true));
+    assert_eq!(view.browser().root(), &Location::Recents);
+    assert_eq!(view.title(), "Recents");
+    assert_eq!(shown(&view), ["a.txt", "notes.txt"]);
 }
 
 fn right_click(view: &mut FilesView, at: Point) -> Menu {
@@ -689,11 +747,11 @@ fn right_click(view: &mut FilesView, at: Point) -> Menu {
     }
 }
 
-fn titles(menu: &Menu) -> Vec<&str> {
+fn titles(menu: &Menu) -> Vec<String> {
     menu.items
         .iter()
         .filter(|item| !item.separator)
-        .map(|item| item.title.as_str())
+        .map(|item| item.title.replace(['\u{2068}', '\u{2069}'], ""))
         .collect()
 }
 
@@ -704,7 +762,10 @@ fn right_clicking_an_item_selects_it_and_its_menu_acts_on_it() {
 
     let menu = right_click(
         &mut view,
-        Point::new(SIDEBAR_WIDTH + 60.0, 6.0 + ROW_HEIGHT * 2.5),
+        Point::new(
+            SIDEBAR_WIDTH + 60.0,
+            TOOLBAR_HEIGHT + 6.0 + ROW_HEIGHT * 2.5,
+        ),
     );
 
     assert_eq!(selected_name(view.browser()).as_deref(), Some("notes.txt"));
@@ -717,6 +778,7 @@ fn right_clicking_an_item_selects_it_and_its_menu_acts_on_it() {
             "Get Info",
             "Rename",
             "Duplicate",
+            "Compress “notes.txt”",
             "Cut",
             "Copy",
             "Move to Trash"
@@ -748,7 +810,10 @@ fn right_clicking_an_item_selects_it_and_its_menu_acts_on_it() {
 
     right_click(
         &mut view,
-        Point::new(SIDEBAR_WIDTH + 60.0, 6.0 + ROW_HEIGHT * 2.5),
+        Point::new(
+            SIDEBAR_WIDTH + 60.0,
+            TOOLBAR_HEIGHT + 6.0 + ROW_HEIGHT * 2.5,
+        ),
     );
     assert!(view.menu_action("info"));
     assert_eq!(
@@ -787,7 +852,10 @@ fn the_trash_menus_put_back_and_ask_before_emptying() {
 
     let item = right_click(
         &mut view,
-        Point::new(SIDEBAR_WIDTH + 60.0, 6.0 + ROW_HEIGHT * 0.5),
+        Point::new(
+            SIDEBAR_WIDTH + 60.0,
+            TOOLBAR_HEIGHT + 6.0 + ROW_HEIGHT * 0.5,
+        ),
     );
     assert_eq!(titles(&item)[..2], ["Put Back", "Delete Immediately…"]);
     assert!(view.menu_action("put-back"));
@@ -809,9 +877,11 @@ fn the_empty_space_menu_sorts_and_shows_hidden_files() {
             "New Folder",
             "Paste",
             "Get Info",
+            "Open in Terminal",
             "Sort By",
-            "as Columns",
+            "as Icons",
             "as List",
+            "as Columns",
             "Show Hidden Files"
         ]
     );
@@ -832,7 +902,10 @@ fn the_empty_space_menu_sorts_and_shows_hidden_files() {
 fn the_space_beside_the_columns_and_the_info_pane_have_menus() {
     let place = Place::new();
     let mut view = place.view();
-    let documents = Point::new(SIDEBAR_WIDTH + 60.0, 6.0 + ROW_HEIGHT * 0.5);
+    let documents = Point::new(
+        SIDEBAR_WIDTH + 60.0,
+        TOOLBAR_HEIGHT + 6.0 + ROW_HEIGHT * 0.5,
+    );
     view.handle(&Event::PointerDown(Pointer::at(documents)));
     view.handle(&Event::PointerUp(Pointer::at(documents)));
     view.scene(1000, 600);
@@ -851,10 +924,13 @@ fn the_space_beside_the_columns_and_the_info_pane_have_menus() {
     let info = right_click(&mut view, Point::new(900.0, 100.0));
     assert_eq!(
         titles(&info)[..4],
-        ["New Folder", "Paste", "Get Info", "Sort By"]
+        ["New Folder", "Paste", "Get Info", "Open in Terminal"]
     );
 
-    let notes = Point::new(SIDEBAR_WIDTH + 60.0, 6.0 + ROW_HEIGHT * 2.5);
+    let notes = Point::new(
+        SIDEBAR_WIDTH + 60.0,
+        TOOLBAR_HEIGHT + 6.0 + ROW_HEIGHT * 2.5,
+    );
     view.handle(&Event::PointerDown(Pointer::at(notes)));
     view.handle(&Event::PointerUp(Pointer::at(notes)));
     view.scene(1000, 600);
@@ -872,8 +948,11 @@ fn a_bookmark_is_removed_from_the_sidebar_but_not_from_the_disk() {
     view.set_sidebar(rows(&place.home(), None, Some(&bookmarks)));
     view.scene(1000, 600);
 
-    let menu = right_click(&mut view, Point::new(40.0, 38.0 + 26.0 * 2.5));
-    assert_eq!(titles(&menu), ["Open", "Remove from Sidebar"]);
+    let menu = right_click(&mut view, Point::new(40.0, 38.0 + 26.0 * 3.5));
+    assert_eq!(
+        titles(&menu),
+        ["Open", "Open in New Tab", "Remove from Sidebar"]
+    );
     assert!(view.menu_action("remove-from-sidebar"));
     assert_eq!(
         view.take_requests(),
@@ -903,7 +982,14 @@ fn mounted_volumes_are_listed_under_locations_before_the_trash() {
     };
     assert_eq!(
         names(&shown),
-        ["Favourites", "ada", "Locations", "Stick", "Trash"]
+        [
+            "Favourites",
+            "Recents",
+            "ada",
+            "Locations",
+            "Stick",
+            "Trash"
+        ]
     );
     assert_eq!(with_volumes(&shown, &[]), favourites);
 }
@@ -915,7 +1001,12 @@ fn the_list_view_selects_by_click_sorts_by_header_and_opens_on_double_click() {
     let mut view = place.view();
     view.handle(&command(Key::Character('2'), false));
     view.scene(1000, 600);
-    let row = |index: f32| Point::new(SIDEBAR_WIDTH + 60.0, 26.0 + ROW_HEIGHT * (index + 0.5));
+    let row = |index: f32| {
+        Point::new(
+            SIDEBAR_WIDTH + 60.0,
+            TOOLBAR_HEIGHT + 26.0 + ROW_HEIGHT * (index + 0.5),
+        )
+    };
     let click = |view: &mut FilesView, at: Point, count: u8| {
         view.handle(&Event::PointerDown(Pointer::at(at).with_count(count)));
         view.handle(&Event::PointerUp(Pointer::at(at)));
@@ -925,7 +1016,11 @@ fn the_list_view_selects_by_click_sorts_by_header_and_opens_on_double_click() {
     click(&mut view, row(2.0), 1);
     assert_eq!(selected_name(view.browser()).as_deref(), Some("big.txt"));
 
-    click(&mut view, Point::new(SIDEBAR_WIDTH + 470.0, 10.0), 1);
+    click(
+        &mut view,
+        Point::new(SIDEBAR_WIDTH + 470.0, TOOLBAR_HEIGHT + 10.0),
+        1,
+    );
     assert_eq!(
         view.browser().sort(),
         Sort {
@@ -948,7 +1043,12 @@ fn the_list_view_selects_by_click_sorts_by_header_and_opens_on_double_click() {
 fn dragging_a_selection_starts_a_drag_and_dropping_on_a_folder_moves_it_there() {
     let place = Place::new();
     let mut view = place.view();
-    let row = |index: f32| Point::new(SIDEBAR_WIDTH + 60.0, 6.0 + ROW_HEIGHT * (index + 0.5));
+    let row = |index: f32| {
+        Point::new(
+            SIDEBAR_WIDTH + 60.0,
+            TOOLBAR_HEIGHT + 6.0 + ROW_HEIGHT * (index + 0.5),
+        )
+    };
     click_row(&mut view, 1, 1, Modifiers::default());
     view.handle(&Event::PointerUp(Pointer::at(row(1.0))));
     click_row(
@@ -994,7 +1094,12 @@ fn dragging_a_group_of_rows_in_the_list_view_drags_all_of_them() {
     let mut view = place.view();
     view.handle(&command(Key::Character('2'), false));
     view.scene(1000, 600);
-    let row = |index: f32| Point::new(SIDEBAR_WIDTH + 60.0, 26.0 + ROW_HEIGHT * (index + 0.5));
+    let row = |index: f32| {
+        Point::new(
+            SIDEBAR_WIDTH + 60.0,
+            TOOLBAR_HEIGHT + 26.0 + ROW_HEIGHT * (index + 0.5),
+        )
+    };
     let shift = Modifiers {
         shift: true,
         ..Modifiers::default()
@@ -1024,4 +1129,600 @@ fn dragging_a_group_of_rows_in_the_list_view_drags_all_of_them() {
         "grabbed by the name, the icon sits left of the pointer: {:?}",
         icon.hotspot
     );
+}
+
+fn names_of(entries: Vec<&unbound_fs::Entry>) -> Vec<String> {
+    entries
+        .into_iter()
+        .map(|entry| entry.name.clone())
+        .collect()
+}
+
+fn shift(key: Key) -> Event {
+    Event::Key {
+        key,
+        modifiers: Modifiers {
+            shift: true,
+            ..Modifiers::default()
+        },
+    }
+}
+
+#[test]
+fn the_icon_view_moves_in_two_dimensions_and_is_remembered_per_folder() {
+    let place = Place::new();
+    for index in 1..=10 {
+        fs::write(place.home().join(format!("f{index:02}.txt")), "x").expect("file");
+    }
+    let memory = place.root.path().join("state/files-views");
+    let mut view = place.view();
+    view.set_view_memory(ViewMemory::load(memory.clone()));
+    view.handle(&command(Key::Character('1'), false));
+    assert_eq!(view.mode(), ViewMode::Icons);
+    view.scene(1000, 600);
+
+    let selected = |view: &FilesView| names_of(view.browser().selection());
+    view.handle(&press(Key::Right));
+    assert_eq!(selected(&view), ["Documents"]);
+    view.handle(&press(Key::Down));
+    assert_eq!(selected(&view), ["f06.txt"]);
+    view.handle(&press(Key::Right));
+    view.handle(&press(Key::Down));
+    assert_eq!(selected(&view), ["f07.txt"]);
+    view.handle(&press(Key::Up));
+    assert_eq!(selected(&view), ["Empty"]);
+    view.handle(&shift(Key::Right));
+    assert_eq!(selected(&view), ["Empty", "f01.txt"]);
+
+    view.handle(&press(Key::Home));
+    view.handle(&press(Key::Enter));
+    assert_eq!(
+        view.browser().root(),
+        &Location::Folder(place.home().join("Documents"))
+    );
+    assert_eq!(view.mode(), ViewMode::Icons);
+    view.handle(&command(Key::Character('3'), false));
+    view.handle(&command(Key::Character('['), false));
+    assert_eq!(view.browser().root(), &Location::Folder(place.home()));
+    assert_eq!(view.mode(), ViewMode::Icons);
+    view.handle(&command(Key::Character('='), false));
+    assert_eq!(view.icon_size(), 80);
+
+    let remembered = ViewMemory::load(memory);
+    let home = remembered.get(&place.home()).expect("home is remembered");
+    assert_eq!((home.mode, home.icon_size), (ViewMode::Icons, 80));
+    let documents = remembered
+        .get(&place.home().join("Documents"))
+        .expect("documents are remembered");
+    assert_eq!(documents.mode, ViewMode::Columns);
+}
+
+#[test]
+fn dragging_on_empty_space_in_the_icon_view_selects_the_icons_it_touches() {
+    let place = Place::new();
+    let mut view = place.view();
+    view.handle(&command(Key::Character('1'), false));
+    view.scene(1000, 600);
+
+    view.handle(&Event::PointerDown(Pointer::at(Point::new(
+        SIDEBAR_WIDTH + 4.0,
+        TOOLBAR_HEIGHT + 4.0,
+    ))));
+    view.handle(&Event::PointerMove(Pointer::at(Point::new(
+        SIDEBAR_WIDTH + 200.0,
+        TOOLBAR_HEIGHT + 60.0,
+    ))));
+    assert_eq!(names_of(view.browser().selection()), ["Documents", "Empty"]);
+    view.handle(&Event::PointerMove(Pointer::at(Point::new(
+        SIDEBAR_WIDTH + 100.0,
+        TOOLBAR_HEIGHT + 60.0,
+    ))));
+    assert_eq!(names_of(view.browser().selection()), ["Documents"]);
+    view.handle(&Event::PointerUp(Pointer::at(Point::new(
+        SIDEBAR_WIDTH + 100.0,
+        TOOLBAR_HEIGHT + 60.0,
+    ))));
+
+    view.handle(&Event::PointerDown(
+        Pointer::at(Point::new(SIDEBAR_WIDTH + 400.0, 400.0)).with_button(PointerButton::Secondary),
+    ));
+    assert!(matches!(
+        view.take_requests().as_slice(),
+        [Request::ShowMenu { .. }]
+    ));
+}
+
+const GOLDEN_SIZE: (u32, u32) = (900, 560);
+const MIN_SSIM: f64 = 0.99;
+
+fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>, scale: f64) {
+    let actual = image::RgbaImage::from_raw(size.0, size.1, rgba).expect("frame");
+    let steady = size.1 - (f64::from(PATH_BAR_HEIGHT) * scale).round() as u32;
+    let whole = image::DynamicImage::ImageRgba8(actual);
+    whole
+        .save(PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}-whole.png")))
+        .expect("save the whole frame");
+    let actual = whole.crop_imm(0, 0, size.0, steady).to_rgb8();
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("tests/golden/{name}.png"));
+    if std::env::var_os("UNBOUND_UPDATE_GOLDENS").is_some() {
+        fs::create_dir_all(path.parent().expect("golden directory")).expect("directory");
+        actual.save(&path).expect("write golden");
+    }
+    let target = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}.png"));
+    actual.save(&target).expect("save the frame");
+    let expected = image::open(&path)
+        .unwrap_or_else(|error| panic!("{}: {error}", path.display()))
+        .to_rgb8();
+    let similarity = image_compare::rgb_hybrid_compare(&expected, &actual).expect("same size");
+    assert!(
+        similarity.score >= MIN_SSIM,
+        "{name} differs from its golden: {:.4} (frame in {})",
+        similarity.score,
+        target.display()
+    );
+}
+
+const FOLDER_SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><path d="M6 14a4 4 0 0 1 4-4h14l5 5h25a4 4 0 0 1 4 4v31a4 4 0 0 1-4 4H10a4 4 0 0 1-4-4z" fill="#3D8AE0"/><path d="M6 22h52v28a4 4 0 0 1-4 4H10a4 4 0 0 1-4-4z" fill="#5FA2EC"/></svg>"##;
+const DOCUMENT_SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><path d="M14 6h26l12 12v38a2 2 0 0 1-2 2H14a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" fill="#F4F5F7" stroke="#9AA0A8" stroke-width="1.5"/><path d="M40 6v12h12" fill="#DCE0E5"/><path d="M20 28h24M20 34h24M20 40h16" stroke="#9AA0A8" stroke-width="2"/></svg>"##;
+
+impl Place {
+    fn themed_view(&self, scheme: Scheme) -> FilesView {
+        let apps = self.apps();
+        let data = self.root.path().join("data");
+        fs::create_dir_all(data.join("pixmaps")).expect("pixmaps");
+        fs::write(data.join("pixmaps/folder.svg"), FOLDER_SVG).expect("folder icon");
+        for name in ["text-x-generic", "image-x-generic"] {
+            fs::write(data.join(format!("pixmaps/{name}.svg")), DOCUMENT_SVG).expect("icon");
+        }
+        let mut view = FilesView::new(
+            self.browser(),
+            rows(&self.home(), None, None),
+            apps,
+            Palette::for_scheme(scheme),
+            TextSystem::new(),
+        )
+        .expect("view");
+        view.set_thumbnails(
+            Thumbnails::spawn(
+                Cache::new(self.root.path().join("cache")),
+                Thumbnailers::default(),
+            )
+            .expect("thumbnails"),
+        );
+        view
+    }
+}
+
+fn images(items: &[Item], found: &mut Vec<Image>) {
+    for item in items {
+        match item {
+            Item::Image { image, .. } => found.push(image.clone()),
+            Item::Clip { items, .. } | Item::Opacity { items, .. } => images(items, found),
+            _ => {}
+        }
+    }
+}
+
+fn settle_thumbnails(view: &mut FilesView, size: (u32, u32), thumbnails: usize) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let scene = view.scene(size.0, size.1);
+        let mut found = Vec::new();
+        images(&scene.items, &mut found);
+        if found
+            .iter()
+            .filter(|image| image.width() != image.height())
+            .count()
+            >= thumbnails
+        {
+            return;
+        }
+        assert!(Instant::now() < deadline, "the thumbnails did not arrive");
+        std::thread::sleep(Duration::from_millis(20));
+        for index in (0..view.fds().len()).rev() {
+            view.source_ready(index);
+        }
+    }
+}
+
+fn picture(path: &Path, width: u32, height: u32) {
+    image::RgbaImage::from_fn(width, height, |x, y| match y < height * 3 / 5 {
+        true => image::Rgba([90, 150 + (y * 60 / height) as u8, 230, 255]),
+        false => image::Rgba([60 + (x * 80 / width) as u8, 150, 70, 255]),
+    })
+    .save(path)
+    .expect("picture");
+}
+
+#[test]
+fn the_icon_view_matches_its_golden_with_thumbnails_and_long_names() {
+    let place = Place::new();
+    picture(&place.home().join("Holiday.png"), 640, 400);
+    picture(&place.home().join("Portrait.png"), 300, 450);
+    fs::write(
+        place
+            .home()
+            .join("A very long document name that needs two lines to show.txt"),
+        "long",
+    )
+    .expect("file");
+    for scheme in [Scheme::Light, Scheme::Dark] {
+        let mut view = place.themed_view(scheme);
+        view.handle(&command(Key::Character('1'), false));
+        view.scene(GOLDEN_SIZE.0, GOLDEN_SIZE.1);
+        view.handle(&press(Key::Right));
+        view.handle(&press(Key::Right));
+        view.handle(&press(Key::Right));
+        settle_thumbnails(&mut view, GOLDEN_SIZE, 2);
+        shoot("icons", scheme, &mut view);
+    }
+}
+
+fn shoot(name: &str, scheme: Scheme, view: &mut FilesView) {
+    let scene = view.scene(GOLDEN_SIZE.0, GOLDEN_SIZE.1);
+    let scheme_name = match scheme {
+        Scheme::Light => "light",
+        Scheme::Dark => "dark",
+    };
+    for (scale, scale_name) in [(1.0, "1x"), (1.5, "1.5x")] {
+        let (width, height) = (
+            (f64::from(GOLDEN_SIZE.0) * scale).round() as u32,
+            (f64::from(GOLDEN_SIZE.1) * scale).round() as u32,
+        );
+        let mut rgba = vec![0; (width * height * 4) as usize];
+        CpuRenderer::new()
+            .render_into(&scene, scale, &mut rgba)
+            .expect("render");
+        check_golden(
+            &format!("{name}-{scheme_name}-{scale_name}"),
+            (width, height),
+            rgba,
+            scale,
+        );
+    }
+}
+
+#[test]
+fn the_list_view_with_tabs_matches_its_golden() {
+    let place = Place::new();
+    fs::write(place.home().join("Budget.txt"), "x".repeat(48_000)).expect("file");
+    let noon = std::time::UNIX_EPOCH + Duration::from_secs(1_773_489_600);
+    for entry in fs::read_dir(place.home()).expect("home") {
+        fs::File::open(entry.expect("entry").path())
+            .and_then(|file| file.set_modified(noon))
+            .expect("set the date");
+    }
+    for scheme in [Scheme::Light, Scheme::Dark] {
+        let mut view = place.themed_view(scheme);
+        view.handle(&command(Key::Character('2'), false));
+        view.handle(&command(Key::Character('t'), false));
+        view.handle(&press(Key::Down));
+        view.handle(&press(Key::Down));
+        view.scene(GOLDEN_SIZE.0, GOLDEN_SIZE.1);
+        view.handle(&Event::PointerMove(Pointer::at(Point::new(
+            SIDEBAR_WIDTH + 100.0,
+            TOOLBAR_HEIGHT + TAB_BAR_HEIGHT / 2.0,
+        ))));
+        shoot("tabs-list", scheme, &mut view);
+    }
+}
+
+#[test]
+fn tabs_keep_their_own_folders_and_close_back_to_one() {
+    let place = Place::new();
+    let mut view = place.view();
+    view.handle(&command(Key::Character('t'), false));
+    assert_eq!((view.tab_count(), view.active_tab()), (2, 1));
+    view.handle(&press(Key::Down));
+    view.handle(&command(Key::Down, false));
+    assert_eq!(
+        view.browser().root(),
+        &Location::Folder(place.home().join("Documents"))
+    );
+    assert_eq!(view.tab_titles(), ["home", "Documents"]);
+    assert_eq!(view.title(), "Documents");
+
+    view.handle(&command(Key::Character('['), true));
+    assert_eq!(view.active_tab(), 0);
+    assert_eq!(view.browser().root(), &Location::Folder(place.home()));
+    view.handle(&command(Key::Character(']'), true));
+    assert_eq!(view.active_tab(), 1);
+
+    view.scene(1000, 600);
+    view.handle(&Event::PointerDown(
+        Pointer::at(Point::new(
+            SIDEBAR_WIDTH + 100.0,
+            TAB_BAR_HEIGHT + TOOLBAR_HEIGHT + 6.0 + ROW_HEIGHT * 0.5,
+        ))
+        .with_button(PointerButton::Middle),
+    ));
+    assert_eq!(view.tab_count(), 3);
+    assert_eq!(view.tab_titles(), ["home", "Documents", "Reports"]);
+
+    assert!(view.close_tab(view.active_tab()));
+    assert_eq!(view.tab_titles(), ["home", "Documents"]);
+    assert_eq!(view.title(), "Documents");
+    assert!(view.close_tab(0));
+    assert_eq!(view.tab_count(), 1);
+    assert!(!view.close_tab(0));
+    assert_eq!(
+        view.browser().root(),
+        &Location::Folder(place.home().join("Documents"))
+    );
+}
+
+#[test]
+fn files_dropped_on_a_tab_move_into_its_folder_and_hovering_springs_it_open() {
+    let place = Place::new();
+    let mut view = place.view();
+    view.handle(&press(Key::Down));
+    assert_eq!(
+        titles(&right_click(
+            &mut view,
+            Point::new(
+                SIDEBAR_WIDTH + 60.0,
+                TOOLBAR_HEIGHT + 6.0 + ROW_HEIGHT * 0.5
+            )
+        ))[..2],
+        ["Open", "Open in New Tab"]
+    );
+    assert!(view.menu_action("open-in-new-tab"));
+    assert_eq!(view.tab_titles(), ["home", "Documents"]);
+    view.scene(1000, 600);
+
+    let notes = place.home().join("notes.txt");
+    let uris = [file_uri(&notes)];
+    let over_documents = Point::new(SIDEBAR_WIDTH + 600.0, TOOLBAR_HEIGHT + TAB_BAR_HEIGHT / 2.0);
+    let over_home = Point::new(SIDEBAR_WIDTH + 200.0, TOOLBAR_HEIGHT + TAB_BAR_HEIGHT / 2.0);
+    assert_eq!(
+        view.drag_entered(over_documents, &uris),
+        Some(DragAction::Move)
+    );
+    view.handle(&command(Key::Character('['), true));
+    view.scene(1000, 600);
+    assert_eq!(view.drag_moved(over_documents), Some(DragAction::Move));
+    assert!(view.dropped(over_documents, &uris, Some(DragAction::Move)));
+    run_until(&mut view, idle);
+    assert!(place.home().join("Documents/notes.txt").exists());
+
+    let uris = [file_uri(&place.home().join("Empty"))];
+    view.drag_entered(over_home, &uris);
+    assert_eq!(view.active_tab(), 0);
+    view.drag_moved(over_documents);
+    view.tick(Instant::now() + Duration::from_secs(2));
+    assert_eq!(view.active_tab(), 1);
+}
+
+fn date_everything(folder: &Path) {
+    let noon = std::time::UNIX_EPOCH + Duration::from_secs(1_773_489_600);
+    for entry in fs::read_dir(folder).expect("folder") {
+        let path = entry.expect("entry").path();
+        if path.is_dir() {
+            date_everything(&path);
+        }
+        fs::File::open(&path)
+            .and_then(|file| file.set_modified(noon))
+            .expect("set the date");
+    }
+}
+
+#[test]
+fn search_results_match_their_golden() {
+    let place = Place::new();
+    fs::write(place.home().join("Documents/Reports/q3 report.txt"), "q3").expect("file");
+    fs::write(place.home().join("Report card.txt"), "card").expect("file");
+    date_everything(&place.home());
+    for scheme in [Scheme::Light, Scheme::Dark] {
+        let mut view = place.themed_view(scheme);
+        view.scene(GOLDEN_SIZE.0, GOLDEN_SIZE.1);
+        view.handle(&command(Key::Character('f'), false));
+        type_text(&mut view, "report");
+        run_until(&mut view, |view| shown(view).len() == 3);
+        view.handle(&press(Key::Down));
+        shoot("search", scheme, &mut view);
+    }
+}
+
+#[test]
+fn compressing_makes_an_undoable_zip_and_opening_it_extracts_beside_it() {
+    let place = Place::new();
+    let mut view = place.view();
+    view.handle(&command(Key::Character('2'), false));
+    view.scene(1000, 600);
+    view.handle(&press(Key::End));
+    assert_eq!(selected_name(view.browser()).as_deref(), Some("notes.txt"));
+    let menu = right_click(
+        &mut view,
+        Point::new(
+            SIDEBAR_WIDTH + 60.0,
+            TOOLBAR_HEIGHT + 26.0 + ROW_HEIGHT * 2.5,
+        ),
+    );
+    assert!(titles(&menu).contains(&"Compress “notes.txt”".to_owned()));
+    assert!(view.menu_action("compress"));
+    run_until(&mut view, idle);
+    let archive = place.home().join("notes.txt.zip");
+    assert!(archive.exists());
+    assert_eq!(
+        selected_name(view.browser()).as_deref(),
+        Some("notes.txt.zip")
+    );
+
+    view.handle(&command(Key::Down, false));
+    run_until(&mut view, idle);
+    let extracted = place.home().join("notes 2.txt");
+    assert_eq!(
+        fs::read_to_string(&extracted).expect("extracted"),
+        "notes\n"
+    );
+    assert_eq!(
+        selected_name(view.browser()).as_deref(),
+        Some("notes 2.txt")
+    );
+    assert!(view.take_requests().is_empty());
+
+    view.handle(&command(Key::Character('z'), false));
+    run_until(&mut view, idle);
+    assert!(!extracted.exists());
+    view.handle(&command(Key::Character('z'), false));
+    run_until(&mut view, idle);
+    assert!(!archive.exists());
+}
+
+#[test]
+fn quick_look_shows_documents_through_installed_thumbnailers() {
+    let place = Place::new();
+    let sample = place.root.path().join("page.png");
+    picture(&sample, 600, 800);
+    let script = place.root.path().join("pdf-thumbnailer");
+    fs::write(
+        &script,
+        format!("#!/bin/sh\ncp {} \"$2\"\n", sample.display()),
+    )
+    .expect("script");
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).expect("executable");
+    let thumbnailers = place.root.path().join("thumbnailers-data");
+    fs::create_dir_all(thumbnailers.join("thumbnailers")).expect("folder");
+    fs::write(
+        thumbnailers.join("thumbnailers/pdf.thumbnailer"),
+        format!(
+            "[Thumbnailer Entry]\nExec={} %i %o\nMimeType=application/pdf;\n",
+            script.display()
+        ),
+    )
+    .expect("thumbnailer");
+    fs::write(place.home().join("paper.pdf"), b"%PDF-1.7\n\0binary").expect("pdf");
+    let mut view = place.view();
+    view.set_thumbnails(
+        Thumbnails::spawn(
+            Cache::new(place.root.path().join("cache")),
+            Thumbnailers::load(&[thumbnailers]),
+        )
+        .expect("thumbnails"),
+    );
+    view.handle(&press(Key::Up));
+    assert_eq!(selected_name(view.browser()).as_deref(), Some("paper.pdf"));
+
+    view.handle(&press(Key::Space));
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let scene = view.scene(1000, 600);
+        let mut found = Vec::new();
+        images(&scene.items, &mut found);
+        if found
+            .iter()
+            .any(|image| (image.width(), image.height()) == (384, 512))
+        {
+            break;
+        }
+        assert!(Instant::now() < deadline, "the page did not arrive");
+        std::thread::sleep(Duration::from_millis(20));
+        for index in (0..view.fds().len()).rev() {
+            view.source_ready(index);
+        }
+    }
+
+    view.handle(&press(Key::Up));
+    assert_eq!(
+        view.quick_look().map(|shown| shown.entry.name.as_str()),
+        Some("notes.txt")
+    );
+}
+
+#[test]
+fn bookmarks_are_added_before_a_favourite_or_moved_keeping_their_label() {
+    let text = "file:///srv/a A\nfile:///srv/b\nsftp://host/x\n";
+    assert_eq!(
+        with_bookmarks(text, &[PathBuf::from("/srv/new")], None),
+        "file:///srv/a A\nfile:///srv/b\nsftp://host/x\nfile:///srv/new\n"
+    );
+    assert_eq!(
+        with_bookmarks(text, &[PathBuf::from("/srv/b")], Some(Path::new("/srv/a"))),
+        "file:///srv/b\nfile:///srv/a A\nsftp://host/x\n"
+    );
+    assert_eq!(
+        with_bookmarks(text, &[PathBuf::from("/srv/a")], None),
+        "file:///srv/b\nsftp://host/x\nfile:///srv/a A\n"
+    );
+}
+
+#[test]
+fn folders_dropped_between_favourites_and_dragged_bookmarks_join_the_sidebar() {
+    let place = Place::new();
+    let reports = place.home().join("Documents/Reports");
+    let empty = place.home().join("Empty");
+    let bookmarks = format!("file://{}\nfile://{}\n", reports.display(), empty.display());
+    let mut view = place.view();
+    view.set_sidebar(rows(&place.home(), None, Some(&bookmarks)));
+    view.scene(1000, 600);
+    let row_top = |row: f32| 38.0 + 26.0 * row;
+
+    let uris = [file_uri(&place.home().join("Documents"))];
+    let between_home_and_documents = Point::new(60.0, row_top(2.0));
+    assert_eq!(
+        view.drag_entered(between_home_and_documents, &uris),
+        Some(DragAction::Copy)
+    );
+    assert!(view.dropped(between_home_and_documents, &uris, Some(DragAction::Copy)));
+    assert_eq!(
+        view.take_requests(),
+        [Request::AddBookmarks {
+            folders: vec![place.home().join("Documents")],
+            before: Some(reports.clone()),
+        }]
+    );
+    let notes = [file_uri(&place.home().join("notes.txt"))];
+    view.drag_entered(between_home_and_documents, &notes);
+    assert!(view.dropped(between_home_and_documents, &notes, Some(DragAction::Move)));
+    run_until(&mut view, idle);
+    assert!(place.home().join("Documents/notes.txt").exists());
+    view.take_requests();
+
+    let on_reports = Point::new(60.0, row_top(3.5));
+    view.handle(&Event::PointerDown(Pointer::at(on_reports)));
+    view.handle(&Event::PointerMove(Pointer::at(Point::new(
+        60.0,
+        row_top(5.0) + 4.0,
+    ))));
+    view.handle(&Event::PointerUp(Pointer::at(Point::new(
+        60.0,
+        row_top(5.0) + 4.0,
+    ))));
+    assert_eq!(
+        view.take_requests(),
+        [Request::AddBookmarks {
+            folders: vec![reports],
+            before: None,
+        }]
+    );
+}
+
+#[test]
+fn templates_make_new_documents_and_folders_open_in_the_terminal() {
+    let place = Place::new();
+    let templates = place.root.path().join("Templates");
+    fs::create_dir(&templates).expect("templates");
+    fs::write(templates.join("Letter.txt"), "Dear\n").expect("template");
+    let mut view = place.view();
+    view.set_templates(templates);
+
+    let menu = right_click(&mut view, Point::new(SIDEBAR_WIDTH + 60.0, 400.0));
+    let titles = titles(&menu);
+    assert_eq!(titles[..2], ["New Folder", "New Document"]);
+    assert!(titles.contains(&"Open in Terminal".to_owned()));
+    assert!(view.menu_action("open-in-terminal"));
+    assert_eq!(view.take_requests(), [Request::OpenTerminal(place.home())]);
+
+    assert!(view.menu_action("new-document:Letter.txt"));
+    let letter = place.home().join("Letter.txt");
+    assert_eq!(fs::read_to_string(&letter).expect("letter"), "Dear\n");
+    assert_eq!(view.renaming(), Some(letter.as_path()));
+    view.handle(&press(Key::Escape));
+    view.handle(&command(Key::Character('z'), false));
+    run_until(&mut view, idle);
+    assert!(!letter.exists());
+
+    let height = view.content_frame().height;
+    view.handle(&command(Key::Character('/'), false));
+    assert_eq!(view.content_frame().height, height + PATH_BAR_HEIGHT);
 }

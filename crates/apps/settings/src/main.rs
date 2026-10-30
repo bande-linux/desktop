@@ -1,6 +1,7 @@
 use std::os::fd::BorrowedFd;
 use std::path::Path;
 use std::process::ExitCode;
+use std::time::Instant;
 
 use unbound_app_menu::{AppMenu, Entry, Standard, app_submenu, window_submenu};
 use unbound_settings::{
@@ -69,6 +70,16 @@ impl App for Settings {
     fn scene(&mut self, window: &mut Window) -> Scene {
         let (width, height) = window.size();
         self.view.scene(width, height)
+    }
+
+    fn deadline(&self) -> Option<Instant> {
+        self.view.deadline()
+    }
+
+    fn tick(&mut self, window: &mut Window, now: Instant) {
+        self.view.tick(now);
+        self.send_commands();
+        window.request_redraw();
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {

@@ -53,6 +53,7 @@ impl KeyboardSettings {
 
 struct Hud {
     label: Label,
+    screen: usize,
     shown_at: Duration,
 }
 
@@ -207,8 +208,12 @@ impl State {
         let Some(name) = self.source_name(active).filter(|name| !name.is_empty()) else {
             return;
         };
-        let width = f64::from(self.logical_output_size().w);
-        let scale = self.output_scale;
+        let screen = self.focused().map_or_else(
+            || self.pointer_screen(),
+            |focused| self.screen_of_surface(&focused),
+        );
+        let width = f64::from(self.screen_rect(screen).size.w);
+        let scale = self.screens[screen].scale();
         let label = self
             .input_sources
             .labels
@@ -216,6 +221,7 @@ impl State {
             .render(&name, HUD_STYLE, width, scale);
         self.input_sources.hud = label.map(|label| Hud {
             label,
+            screen,
             shown_at: now(),
         });
         self.needs_redraw = true;
@@ -233,14 +239,19 @@ impl State {
     pub(crate) fn source_hud_element(
         &self,
         renderer: &mut VulkanRenderer,
+        screen: usize,
+        scale: f64,
     ) -> Option<OutputElement> {
-        let hud = self.input_sources.hud.as_ref()?;
+        let hud = self
+            .input_sources
+            .hud
+            .as_ref()
+            .filter(|hud| hud.screen == screen)?;
         let opacity = hud_opacity(now().saturating_sub(hud.shown_at))?;
-        let output = self.logical_output_size().to_f64();
-        let scale = self.output_scale;
+        let output = self.screen_rect(screen);
         let location = Point::<f64, Logical>::from((
-            (output.w - hud.label.size.w) / 2.0,
-            (output.h - hud.label.size.h) / 2.0,
+            f64::from(output.location.x) + (f64::from(output.size.w) - hud.label.size.w) / 2.0,
+            f64::from(output.location.y) + (f64::from(output.size.h) - hud.label.size.h) / 2.0,
         ))
         .to_physical(scale)
         .to_i32_round::<i32>()

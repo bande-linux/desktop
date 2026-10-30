@@ -49,7 +49,16 @@ volume-feedback = Play feedback when volume is changed
 volume-feedback-keywords = volume keys, tick, click
 displays = Displays
 displays-keywords = monitor, screen, resolution
+display-use = Use as
+display-use-keywords = main display, mirror, extend, primary, menu bar, dock
+display-resolution = Resolution
+display-resolution-keywords = pixels, size, mode, sharp
+display-rotation = Rotation
+display-rotation-keywords = rotate, portrait, landscape, orientation, turn
+rotation-standard = Standard
+degrees = { $value }°
 display-scale = Size of text and controls
+
 display-scale-keywords = scale, zoom, resolution, hidpi, retina, bigger, smaller
 scale-automatic = Auto
 percent = { $value }%

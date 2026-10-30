@@ -16,12 +16,11 @@ use smithay::reexports::wayland_protocols::ext::image_copy_capture::v1::server::
     ext_image_copy_capture_session_v1::{self, ExtImageCopyCaptureSessionV1},
 };
 use smithay::reexports::wayland_server::protocol::wl_buffer::WlBuffer;
-use smithay::reexports::wayland_server::protocol::wl_output::Transform as WlTransform;
 use smithay::reexports::wayland_server::protocol::wl_shm::Format;
 use smithay::reexports::wayland_server::{
     Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource, WEnum,
 };
-use smithay::utils::{Clock, Monotonic, Size, Transform};
+use smithay::utils::{Clock, Monotonic, Size};
 use smithay::wayland::shm::with_buffer_contents_mut;
 use unbound_render::{RenderError, VulkanRenderer};
 
@@ -36,14 +35,15 @@ pub(crate) struct PendingCapture {
     frame: ExtImageCopyCaptureFrameV1,
     buffer: WlBuffer,
     paint_cursors: bool,
+    output: String,
 }
 
 pub(crate) struct SourceData {
-    shows_output: bool,
+    output: Option<String>,
 }
 
 pub(crate) struct SessionData {
-    live: bool,
+    output: Option<String>,
     paint_cursors: bool,
     frames: AtomicUsize,
 }
@@ -66,11 +66,20 @@ impl State {
 }
 
 impl Headless {
-    pub(crate) fn copy_captures(&mut self, renderer: &mut VulkanRenderer) {
-        let pending = std::mem::take(&mut self.state.pending_captures);
+    pub(crate) fn copy_captures(&mut self, renderer: &mut VulkanRenderer, output: &str) {
+        let Some(screen) = self.state.screen_named(output) else {
+            return;
+        };
+        let (pending, others): (Vec<PendingCapture>, Vec<PendingCapture>) =
+            std::mem::take(&mut self.state.pending_captures)
+                .into_iter()
+                .partition(|capture| capture.output == output);
+        self.state.pending_captures = others;
         if pending.is_empty() {
             return;
         }
+        let size = self.state.screens[screen].mode_size();
+        let transform = self.state.screens[screen].settings.transform;
         let mut without_cursor = None;
         let mut with_cursor = None;
         for capture in pending {
@@ -80,18 +89,17 @@ impl Headless {
                 &mut without_cursor
             };
             if image.is_none() {
-                *image = Some(self.capture_image(renderer, capture.paint_cursors));
+                *image = Some(self.capture_image(renderer, screen, capture.paint_cursors));
             }
             let outcome = match image {
-                Some(Ok(pixels)) => write_into(&capture.buffer, self.output_size(), pixels),
+                Some(Ok(pixels)) => write_into(&capture.buffer, size, pixels),
                 _ => Err(FailureReason::Unknown),
             };
             match outcome {
                 Ok(()) => {
-                    let size = self.output_size();
                     let now = Duration::from(Clock::<Monotonic>::new().now());
                     let seconds = now.as_secs();
-                    capture.frame.transform(WlTransform::Normal);
+                    capture.frame.transform(transform.into());
                     capture.frame.damage(0, 0, size.w, size.h);
                     capture.frame.presentation_time(
                         (seconds >> 32) as u32,
@@ -108,12 +116,15 @@ impl Headless {
     fn capture_image(
         &self,
         renderer: &mut VulkanRenderer,
+        screen: usize,
         paint_cursors: bool,
     ) -> Result<Vec<u8>, RenderError> {
-        let size = self.output_size();
-        let elements = self.scene_elements(renderer, paint_cursors);
+        let shown = &self.state.screens[screen];
+        let size = shown.mode_size();
+        let (scale, transform) = (shown.scale(), shown.settings.transform);
+        let elements = self.scene_elements(renderer, screen, paint_cursors);
         let mut target = renderer.create_buffer(Fourcc::Argb8888, Size::from((size.w, size.h)))?;
-        let mut damage = OutputDamageTracker::new(size, self.output_scale(), Transform::Normal);
+        let mut damage = OutputDamageTracker::new(size, scale, transform);
         {
             let mut framebuffer = smithay::backend::renderer::Bind::bind(renderer, &mut target)?;
             damage
@@ -189,8 +200,12 @@ impl Dispatch<ExtOutputImageCaptureSourceManagerV1, ()> for State {
             output,
         } = request
         {
-            let shows_output = state.output.owns(&output);
-            data_init.init(source, SourceData { shows_output });
+            let output = state
+                .screens
+                .iter()
+                .find(|screen| screen.output.owns(&output))
+                .map(|screen| screen.name());
+            data_init.init(source, SourceData { output });
         }
     }
 }
@@ -228,23 +243,26 @@ impl GlobalDispatch<ExtImageCopyCaptureManagerV1, ()> for State {
 fn start_session(
     state: &State,
     session: New<ExtImageCopyCaptureSessionV1>,
-    live: bool,
+    output: Option<String>,
     paint_cursors: bool,
     data_init: &mut DataInit<'_, State>,
 ) {
+    let size = output
+        .as_deref()
+        .and_then(|output| state.screen_named(output))
+        .map(|screen| state.screens[screen].mode_size());
     let session = data_init.init(
         session,
         SessionData {
-            live,
+            output,
             paint_cursors,
             frames: AtomicUsize::new(0),
         },
     );
-    if !live {
+    let Some(size) = size else {
         session.stopped();
         return;
-    }
-    let size = state.output_size;
+    };
     session.buffer_size(size.w.unsigned_abs(), size.h.unsigned_abs());
     for format in SHM_FORMATS {
         session.shm_format(format);
@@ -275,11 +293,11 @@ impl Dispatch<ExtImageCopyCaptureManagerV1, ()> for State {
                     );
                     return;
                 };
-                let live = source
+                let output = source
                     .data::<SourceData>()
-                    .is_some_and(|source| source.shows_output);
+                    .and_then(|source| source.output.clone());
                 let paint_cursors = options.contains(Options::PaintCursors);
-                start_session(state, session, live, paint_cursors, data_init);
+                start_session(state, session, output, paint_cursors, data_init);
             }
             ext_image_copy_capture_manager_v1::Request::CreatePointerCursorSession {
                 session,
@@ -317,7 +335,7 @@ impl Dispatch<ExtImageCopyCaptureCursorSessionV1, CursorSessionData> for State {
                 );
                 return;
             }
-            start_session(state, session, false, false, data_init);
+            start_session(state, session, None, false, data_init);
         }
     }
 }
@@ -407,14 +425,16 @@ impl Dispatch<ExtImageCopyCaptureFrameV1, FrameData> for State {
                 let Some(session) = data.session.data::<SessionData>() else {
                     return resource.failed(FailureReason::Unknown);
                 };
-                if !session.live {
+                let Some(output) = session.output.clone() else {
                     return resource.failed(FailureReason::Stopped);
-                }
+                };
                 state.pending_captures.push(PendingCapture {
                     frame: resource.clone(),
                     buffer,
                     paint_cursors: session.paint_cursors,
+                    output,
                 });
+
                 state.needs_redraw = true;
             }
             _ => {}

@@ -658,35 +658,81 @@ fn files_drills_into_a_folder_and_quick_looks_a_picture() {
 }
 
 const GREETER_USER: &str = "ada:x:1000:1000:Ada Lovelace,,,:/root:/bin/bash";
+const SYSTEM_KEYBOARD: &str = "/etc/default/keyboard";
+const KEY_1: u16 = 2;
+const KEY_K: u16 = 37;
+const KEY_SEMICOLON: u16 = 39;
+const KEY_APOSTROPHE: u16 = 40;
+const KEY_LEFTBRACE: u16 = 26;
+
+struct SystemKeyboard(Option<String>);
+
+impl SystemKeyboard {
+    fn swedish() -> Self {
+        let previous = fs::read_to_string(SYSTEM_KEYBOARD).ok();
+        fs::create_dir_all("/etc/default").expect("/etc/default");
+        fs::write(
+            SYSTEM_KEYBOARD,
+            "XKBMODEL=\"pc105\"\nXKBLAYOUT=\"se\"\nXKBVARIANT=\"\"\n",
+        )
+        .expect("a Swedish system keyboard");
+        Self(previous)
+    }
+}
+
+impl Drop for SystemKeyboard {
+    fn drop(&mut self) {
+        let _ = match &self.0 {
+            Some(previous) => fs::write(SYSTEM_KEYBOARD, previous),
+            None => fs::remove_file(SYSTEM_KEYBOARD),
+        };
+    }
+}
 
 #[test]
 #[ignore = "needs the ci/vm guest"]
-fn the_greeter_signs_in_through_greetd_and_hands_over() {
+fn the_greeter_takes_a_password_typed_in_the_system_layout_after_a_refusal_and_hands_over() {
     use std::os::unix::net::UnixListener;
-    use unbound_greeter::{AuthMessageType, Request, Response, read_message, write_message};
+    use std::sync::mpsc;
+    use unbound_greeter::{
+        AuthMessageType, ErrorType, Request, Response, SESSION, SESSION_ENVIRONMENT, read_message,
+        write_message,
+    };
 
     let passwd = fs::read_to_string("/etc/passwd").expect("passwd");
     if !passwd.contains(GREETER_USER) {
         fs::write("/etc/passwd", format!("{passwd}{GREETER_USER}\n")).expect("add a user");
     }
+    let _keyboard_layout = SystemKeyboard::swedish();
     let socket = Path::new(RUNTIME_DIR).join("greetd.sock");
     fs::create_dir_all(RUNTIME_DIR).expect("runtime directory");
     let _ = fs::remove_file(&socket);
     let listener = UnixListener::bind(&socket).expect("greetd socket");
+    let (cancelled, cancel_seen) = mpsc::channel();
     let greetd = thread::spawn(move || {
-        let (mut greeter, _) = listener.accept().expect("the greeter connects");
-        let mut requests = Vec::new();
-        let replies = [
-            Response::AuthMessage {
-                auth_message_type: AuthMessageType::Secret,
-                auth_message: "Password: ".to_owned(),
-            },
-            Response::Success,
-            Response::Success,
+        let password_prompt = || Response::AuthMessage {
+            auth_message_type: AuthMessageType::Secret,
+            auth_message: "Password: ".to_owned(),
+        };
+        let attempts = [
+            vec![
+                password_prompt(),
+                Response::Error {
+                    error_type: ErrorType::AuthError,
+                    description: "Authentication failure".to_owned(),
+                },
+                Response::Success,
+            ],
+            vec![password_prompt(), Response::Success, Response::Success],
         ];
-        for reply in replies {
-            requests.push(read_message::<Request>(&mut greeter).expect("request"));
-            write_message(&mut greeter, &reply).expect("reply");
+        let mut requests = Vec::new();
+        for replies in attempts {
+            let (mut greeter, _) = listener.accept().expect("the greeter connects");
+            for reply in replies {
+                requests.push(read_message::<Request>(&mut greeter).expect("request"));
+                write_message(&mut greeter, &reply).expect("reply");
+            }
+            let _ = cancelled.send(());
         }
         requests
     });
@@ -704,20 +750,40 @@ fn the_greeter_signs_in_through_greetd_and_hands_over() {
     scanout().save("m24-greeter");
     assert!(!running("unbound-dock"), "the greeter session has no panel");
 
-    keyboard.type_text("secret\n");
+    keyboard.type_text("fel\n");
+    cancel_seen
+        .recv_timeout(STARTUP)
+        .expect("greetd sees the refused attempt cancelled");
+    thread::sleep(Duration::from_secs(1));
+    scanout().save("m24-greeter-refused");
+    for key in [
+        KEY_K,
+        KEY_LEFTBRACE,
+        KEY_APOSTROPHE,
+        KEY_SEMICOLON,
+        KEY_1,
+        KEY_ENTER,
+    ] {
+        keyboard.tap(key);
+    }
     let requests = greetd.join().expect("greetd");
+    let create = Request::CreateSession {
+        username: "ada".to_owned(),
+    };
+    let answer = |password: &str| Request::PostAuthMessageResponse {
+        response: Some(password.to_owned()),
+    };
     assert_eq!(
         requests,
         [
-            Request::CreateSession {
-                username: "ada".to_owned()
-            },
-            Request::PostAuthMessageResponse {
-                response: Some("secret".to_owned())
-            },
+            create.clone(),
+            answer("fel"),
+            Request::CancelSession,
+            create,
+            answer("kåäö1"),
             Request::StartSession {
-                cmd: vec!["unbound-compositor".to_owned()],
-                env: Vec::new()
+                cmd: vec![SESSION.to_owned()],
+                env: SESSION_ENVIRONMENT.map(str::to_owned).to_vec(),
             },
         ]
     );

@@ -21,6 +21,7 @@ zbus.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+unbound-config = { workspace = true, features = ["service"] }
 unbound-test-bus.workspace = true
 
 [package.metadata.deb]

@@ -4,12 +4,11 @@ use std::thread;
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
+use unbound_config::client::ConfigProxy;
+use unbound_config::{BUS_NAME, OBJECT_PATH};
 use unbound_inbox::Outbox;
 
 pub const DEFAULT_WALLPAPER: &str = "drift";
-
-const CONFIG_BUS_NAME: &str = "org.unbound.Config";
-const CONFIG_PATH: &str = "/org/unbound/Config";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Variant {
@@ -75,24 +74,6 @@ impl Choice {
     }
 }
 
-#[zbus::proxy(
-    interface = "org.unbound.Config",
-    default_service = "org.unbound.Config",
-    default_path = "/org/unbound/Config"
-)]
-trait Config {
-    #[zbus(property)]
-    fn wallpaper_light(&self) -> zbus::Result<String>;
-    #[zbus(property)]
-    fn set_wallpaper_light(&self, path: &str) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn wallpaper_dark(&self) -> zbus::Result<String>;
-    #[zbus(property)]
-    fn set_wallpaper_dark(&self, path: &str) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn wallpaper_fit(&self) -> zbus::Result<String>;
-}
-
 fn configured(value: zbus::Result<String>) -> Option<PathBuf> {
     value
         .ok()
@@ -100,7 +81,7 @@ fn configured(value: zbus::Result<String>) -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
-fn read_with(config: &ConfigProxyBlocking<'_>) -> Choice {
+fn read_with(config: &ConfigProxy<'_>) -> Choice {
     Choice {
         light: configured(config.wallpaper_light()),
         dark: configured(config.wallpaper_dark()),
@@ -111,8 +92,8 @@ fn read_with(config: &ConfigProxyBlocking<'_>) -> Choice {
     }
 }
 
-fn proxy(session: &Connection) -> zbus::Result<ConfigProxyBlocking<'static>> {
-    ConfigProxyBlocking::builder(session)
+fn proxy(session: &Connection) -> zbus::Result<ConfigProxy<'static>> {
+    ConfigProxy::builder(session)
         .cache_properties(zbus::proxy::CacheProperties::No)
         .build()
 }
@@ -128,8 +109,8 @@ pub fn follow(session: &Connection, choices: Outbox<Choice>) {
         let mut follow = || -> zbus::Result<()> {
             let config = proxy(&session)?;
             let changes = PropertiesProxy::builder(&session)
-                .destination(CONFIG_BUS_NAME)?
-                .path(CONFIG_PATH)?
+                .destination(BUS_NAME)?
+                .path(OBJECT_PATH)?
                 .build()?
                 .receive_properties_changed()?;
             let mut last = read_with(&config);

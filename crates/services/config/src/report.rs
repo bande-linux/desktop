@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, LazyLock, Mutex, MutexGuard, PoisonError};
 use std::thread;
 
 use unbound_notify::client::{self, Request};
@@ -7,7 +7,13 @@ use unbound_notify::{BUS_NAME as NOTIFICATIONS, OBJECT_PATH as NOTIFICATIONS_PAT
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::{MatchRule, message};
 
-use crate::{ConfigError, L10N, ReloadError};
+use unbound_l10n::Localizer;
+
+use crate::{ConfigError, ReloadError};
+
+const ENGLISH: &str = include_str!("../locales/en-US/unbound-config.ftl");
+
+static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
 pub const EDIT_ACTION: &str = "edit";
 
@@ -160,4 +166,24 @@ fn located(error: &ConfigError) -> String {
             ("message", error.message.as_str().into()),
         ],
     )
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn every_message_id_used_in_code_is_in_the_english_file() {
+        let sources = [
+            include_str!("lib.rs"),
+            include_str!("main.rs"),
+            include_str!("login_picture.rs"),
+            include_str!("edit.rs"),
+            include_str!("report.rs"),
+            include_str!("service.rs"),
+            include_str!("store.rs"),
+        ];
+        assert_eq!(
+            unbound_l10n::missing_ids(super::ENGLISH, &sources),
+            Vec::<&str>::new()
+        );
+    }
 }

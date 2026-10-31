@@ -5,15 +5,23 @@ version.workspace = true
 edition.workspace = true
 repository.workspace = true
 
+[features]
+default = ["service"]
+service = ["dep:unbound-bus", "dep:unbound-l10n", "dep:unbound-log", "dep:unbound-notify", "dep:unbound-watch"]
+
+[[bin]]
+name = "unbound-config"
+required-features = ["service"]
+
 [dependencies]
 kdl.workspace = true
 tracing.workspace = true
-unbound-bus.workspace = true
+unbound-bus = { workspace = true, optional = true }
 unbound-design.workspace = true
-unbound-l10n.workspace = true
-unbound-log.workspace = true
-unbound-notify.workspace = true
-unbound-watch.workspace = true
+unbound-l10n = { workspace = true, optional = true }
+unbound-log = { workspace = true, optional = true }
+unbound-notify = { workspace = true, optional = true }
+unbound-watch = { workspace = true, optional = true }
 zbus.workspace = true
 
 [dev-dependencies]

@@ -78,7 +78,7 @@ unbound-bluetooth = { path = "crates/libs/bluetooth" }
 unbound-bus = { path = "crates/libs/bus" }
 unbound-clipboard = { path = "crates/services/clipboard" }
 unbound-compositor = { path = "crates/platform/compositor" }
-unbound-config = { path = "crates/services/config" }
+unbound-config = { path = "crates/services/config", default-features = false }
 unbound-controlcenter = { path = "crates/shell/controlcenter" }
 unbound-datetime = { path = "crates/libs/datetime" }
 unbound-design = { path = "crates/toolkit/design" }

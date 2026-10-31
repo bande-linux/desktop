@@ -2,6 +2,7 @@ use std::os::fd::OwnedFd;
 use std::sync::mpsc;
 use std::thread;
 
+use unbound_config::client::ConfigProxy;
 use zbus::blocking::Connection;
 
 use crate::L10N;
@@ -30,18 +31,6 @@ trait PowerProfiles {
     fn active_profile(&self) -> zbus::Result<String>;
     #[zbus(property)]
     fn set_active_profile(&self, profile: &str) -> zbus::Result<()>;
-}
-
-#[zbus::proxy(
-    interface = "org.unbound.Config",
-    default_service = "org.unbound.Config",
-    default_path = "/org/unbound/Config"
-)]
-trait Config {
-    #[zbus(property)]
-    fn low_power_on_battery(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn lid_on_power(&self) -> zbus::Result<String>;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -77,7 +66,7 @@ impl AdapterPolicy {
     }
 }
 
-fn situation(upower: &UPowerProxyBlocking<'_>, config: &ConfigProxyBlocking<'_>) -> Situation {
+fn situation(upower: &UPowerProxyBlocking<'_>, config: &ConfigProxy<'_>) -> Situation {
     Situation {
         on_battery: upower.on_battery().unwrap_or(false),
         low_power_on_battery: config.low_power_on_battery().unwrap_or(false),
@@ -89,7 +78,7 @@ fn situation(upower: &UPowerProxyBlocking<'_>, config: &ConfigProxyBlocking<'_>)
 
 pub fn follow(system: &Connection, session: &Connection) -> zbus::Result<()> {
     let upower = UPowerProxyBlocking::new(system)?;
-    let config = ConfigProxyBlocking::new(session)?;
+    let config = ConfigProxy::new(session)?;
     let profiles = PowerProfilesProxyBlocking::new(system)?;
     let (changed, changes) = mpsc::channel();
     let battery = upower.receive_on_battery_changed();

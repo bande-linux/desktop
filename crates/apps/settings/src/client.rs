@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 
-use unbound_config::{ArrangedDisplay, DisplaySettings, Placement, Rotation};
+use unbound_config::client::ConfigProxy;
+use unbound_config::{DisplaySettings, Placement, Rotation};
 use unbound_datetime::DateFormats;
 use unbound_notify::client::NotificationCenter;
 use zbus::blocking::Connection;
@@ -8,196 +9,6 @@ use zbus::proxy::CacheProperties;
 use zbus::zvariant::OwnedValue;
 
 use unbound_settings_panes::{POINTER_SPEEDS, SettingId, Value, WITH_DISPLAY};
-
-#[zbus::proxy(
-    interface = "org.unbound.Config",
-    default_service = "org.unbound.Config",
-    default_path = "/org/unbound/Config"
-)]
-pub trait Config {
-    #[zbus(property)]
-    fn appearance(&self) -> zbus::Result<String>;
-    #[zbus(property)]
-    fn set_appearance(&self, value: &str) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn accent(&self) -> zbus::Result<String>;
-    #[zbus(property)]
-    fn set_accent(&self, value: &str) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn tinted_frame(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn set_tinted_frame(&self, tinted: bool) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn clock_format(&self) -> zbus::Result<String>;
-    #[zbus(property)]
-    fn set_clock_format(&self, value: &str) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn low_power_on_battery(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn set_low_power_on_battery(&self, on: bool) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn lid_on_power(&self) -> zbus::Result<String>;
-    #[zbus(property)]
-    fn set_lid_on_power(&self, value: &str) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn screen_reader(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn set_screen_reader(&self, on: bool) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn zoom(&self) -> zbus::Result<f64>;
-    #[zbus(property)]
-    fn set_zoom(&self, zoom: f64) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn increase_contrast(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn set_increase_contrast(&self, on: bool) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn reduce_transparency(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn set_reduce_transparency(&self, on: bool) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn reduce_motion(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn set_reduce_motion(&self, reduce: bool) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn cursor_size(&self) -> zbus::Result<u32>;
-    #[zbus(property)]
-    fn set_cursor_size(&self, size: u32) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn flash_screen(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn set_flash_screen(&self, on: bool) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn sticky_keys(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn set_sticky_keys(&self, on: bool) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn slow_keys(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn set_slow_keys(&self, on: bool) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn bounce_keys(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn set_bounce_keys(&self, on: bool) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn wallpaper_light(&self) -> zbus::Result<String>;
-    #[zbus(property)]
-    fn set_wallpaper_light(&self, path: &str) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn wallpaper_dark(&self) -> zbus::Result<String>;
-    #[zbus(property)]
-    fn set_wallpaper_dark(&self, path: &str) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn wallpaper_fit(&self) -> zbus::Result<String>;
-    #[zbus(property)]
-    fn set_wallpaper_fit(&self, value: &str) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn bar_icon_size(&self) -> zbus::Result<u32>;
-    #[zbus(property)]
-    fn set_bar_icon_size(&self, size: u32) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn bar_auto_hide(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn set_bar_auto_hide(&self, auto_hide: bool) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn bar_names(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn set_bar_names(&self, names: bool) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn bar_edge(&self) -> zbus::Result<String>;
-    #[zbus(property)]
-    fn set_bar_edge(&self, value: &str) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn bar_menu_bar(&self) -> zbus::Result<String>;
-    #[zbus(property)]
-    fn set_bar_menu_bar(&self, value: &str) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn idle_dim_after(&self) -> zbus::Result<u64>;
-    #[zbus(property)]
-    fn set_idle_dim_after(&self, seconds: u64) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn idle_lock_after(&self) -> zbus::Result<u64>;
-    #[zbus(property)]
-    fn set_idle_lock_after(&self, seconds: u64) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn idle_suspend_after(&self) -> zbus::Result<u64>;
-    #[zbus(property)]
-    fn set_idle_suspend_after(&self, seconds: u64) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn idle_suspend_with_display(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn set_idle_suspend_with_display(&self, with_display: bool) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn key_repeat_rate(&self) -> zbus::Result<u32>;
-    #[zbus(property)]
-    fn set_key_repeat_rate(&self, rate: u32) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn key_repeat_delay(&self) -> zbus::Result<u32>;
-    #[zbus(property)]
-    fn set_key_repeat_delay(&self, milliseconds: u32) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn input_sources(&self) -> zbus::Result<Vec<String>>;
-    #[zbus(property)]
-    fn set_input_sources(&self, codes: Vec<String>) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn caps_lock(&self) -> zbus::Result<String>;
-    #[zbus(property)]
-    fn set_caps_lock(&self, value: &str) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn trackpad_tap_to_click(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn set_trackpad_tap_to_click(&self, on: bool) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn trackpad_natural_scrolling(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn set_trackpad_natural_scrolling(&self, on: bool) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn trackpad_speed(&self) -> zbus::Result<f64>;
-    #[zbus(property)]
-    fn set_trackpad_speed(&self, speed: f64) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn trackpad_secondary_click(&self) -> zbus::Result<String>;
-    #[zbus(property)]
-    fn set_trackpad_secondary_click(&self, value: &str) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn trackpad_disable_while_typing(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn set_trackpad_disable_while_typing(&self, on: bool) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn mouse_natural_scrolling(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn set_mouse_natural_scrolling(&self, on: bool) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn mouse_speed(&self) -> zbus::Result<f64>;
-    #[zbus(property)]
-    fn set_mouse_speed(&self, speed: f64) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn alert_sound(&self) -> zbus::Result<String>;
-    #[zbus(property)]
-    fn set_alert_sound(&self, value: &str) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn alert_volume(&self) -> zbus::Result<f64>;
-    #[zbus(property)]
-    fn set_alert_volume(&self, volume: f64) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn sound_effects(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn set_sound_effects(&self, on: bool) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn volume_feedback(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn set_volume_feedback(&self, on: bool) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn displays(&self) -> zbus::Result<HashMap<String, HashMap<String, OwnedValue>>>;
-    fn set_display(
-        &self,
-        identity: &str,
-        settings: HashMap<&str, zbus::zvariant::Value<'_>>,
-    ) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn arrangements(&self) -> zbus::Result<Vec<Vec<ArrangedDisplay>>>;
-    fn set_arrangement(&self, displays: Vec<ArrangedDisplay>) -> zbus::Result<()>;
-}
 
 fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
     let number = |key: &str| {
@@ -279,14 +90,14 @@ pub fn stop_speed(stop: u32) -> f64 {
 }
 
 pub struct SettingsClient {
-    config: ConfigProxyBlocking<'static>,
+    config: ConfigProxy<'static>,
     notifications: NotificationCenter<'static>,
 }
 
 impl SettingsClient {
     pub fn connect(connection: &Connection) -> zbus::Result<Self> {
         Ok(Self {
-            config: ConfigProxyBlocking::builder(connection)
+            config: ConfigProxy::builder(connection)
                 .cache_properties(CacheProperties::No)
                 .build()?,
             notifications: NotificationCenter::builder(connection)
@@ -510,9 +321,7 @@ impl SettingsClient {
             (SettingId::KeyRepeatDelay, Value::Number(milliseconds)) => {
                 self.config.set_key_repeat_delay(*milliseconds)
             }
-            (SettingId::InputSources, Value::Codes(codes)) => {
-                self.config.set_input_sources(codes.clone())
-            }
+            (SettingId::InputSources, Value::Codes(codes)) => self.config.set_input_sources(codes),
             (SettingId::CapsLock, Value::Keyword(keyword)) => self.config.set_caps_lock(keyword),
             (SettingId::AlertSound, Value::Keyword(keyword)) => {
                 self.config.set_alert_sound(keyword)?;

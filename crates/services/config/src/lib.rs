@@ -1,6 +1,9 @@
+pub mod client;
 mod edit;
 mod login_picture;
+#[cfg(feature = "service")]
 mod report;
+#[cfg(feature = "service")]
 mod service;
 mod store;
 
@@ -8,25 +11,22 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
-use std::sync::LazyLock;
 use std::time::Duration;
 
 use kdl::{KdlDocument, KdlEntry, KdlNode, KdlValue};
 pub use unbound_design::Accent;
-use unbound_l10n::Localizer;
 
+pub use client::{ArrangedDisplay, BUS_NAME, OBJECT_PATH};
 pub use edit::Setting;
 pub use login_picture::{
     LOGIN_PICTURE_LIMIT, LOGIN_PICTURES, copy_login_picture, login_picture, login_picture_file,
     share_login_picture,
 };
+#[cfg(feature = "service")]
 pub use report::{EDIT_ACTION, ErrorNotifier};
-pub use service::{ArrangedDisplay, BUS_NAME, ConfigService, OBJECT_PATH, ServiceError};
+#[cfg(feature = "service")]
+pub use service::{ConfigService, ServiceError};
 pub use store::{ConfigStore, Loaded, ReloadError};
-
-const ENGLISH: &str = include_str!("../locales/en-US/unbound-config.ftl");
-
-static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
 const SCALE_RANGE: (f64, f64) = (1.0, 3.0);
 const REFRESH_RATE_RANGE: (f64, f64) = (60.0, 240.0);
@@ -1518,21 +1518,4 @@ impl Parser<'_> {
 }
 
 #[cfg(test)]
-mod tests {
-    #[test]
-    fn every_message_id_used_in_code_is_in_the_english_file() {
-        let sources = [
-            include_str!("lib.rs"),
-            include_str!("main.rs"),
-            include_str!("login_picture.rs"),
-            include_str!("edit.rs"),
-            include_str!("report.rs"),
-            include_str!("service.rs"),
-            include_str!("store.rs"),
-        ];
-        assert_eq!(
-            unbound_l10n::missing_ids(super::ENGLISH, &sources),
-            Vec::<&str>::new()
-        );
-    }
-}
+mod tests {}

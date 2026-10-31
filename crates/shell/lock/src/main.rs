@@ -6,6 +6,7 @@ use std::sync::mpsc::Sender;
 use std::thread;
 
 use accesskit::TreeUpdate;
+use unbound_config::client::ConfigProxy;
 use unbound_datetime::{DateFormats, MinuteTimer};
 use unbound_keyboard::Layouts;
 use unbound_lock::{
@@ -184,13 +185,10 @@ impl App for Locker {
 
 fn clock_format() -> zbus::Result<String> {
     let session = zbus::blocking::Connection::session()?;
-    zbus::blocking::Proxy::new(
-        &session,
-        "org.unbound.Config",
-        "/org/unbound/Config",
-        "org.unbound.Config",
-    )?
-    .get_property("ClockFormat")
+    ConfigProxy::builder(&session)
+        .cache_properties(zbus::proxy::CacheProperties::No)
+        .build()?
+        .clock_format()
 }
 
 fn follow_status() -> Option<(Inbox<Update>, Sender<Control>)> {

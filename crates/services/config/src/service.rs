@@ -12,6 +12,7 @@ use zbus::fdo::Error::{Failed, InvalidArgs};
 use zbus::object_server::SignalEmitter;
 use zbus::zvariant::{OwnedValue, Value};
 
+use crate::client::{ArrangedDisplay, BUS_NAME, OBJECT_PATH};
 use crate::{
     ACCENTS, Accessibility, AlertSound, Appearance, BarEdge, CURSOR_SIZE_RANGE, CapsLock,
     ClockFormat, Config, ConfigStore, DisplaySettings, InputSource, LidOnPower, Loaded,
@@ -19,11 +20,6 @@ use crate::{
     TEXT_SIZE_RANGE, WallpaperFit, WallpaperVariant, ZOOM_RANGE, accent_keyword,
     read_system_input_sources,
 };
-
-pub type ArrangedDisplay = (String, i32, i32, bool, String);
-
-pub const BUS_NAME: &str = "org.unbound.Config";
-pub const OBJECT_PATH: &str = "/org/unbound/Config";
 
 const STAGING_NAME: &str = ".config.kdl.new";
 

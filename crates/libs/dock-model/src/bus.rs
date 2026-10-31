@@ -2,17 +2,18 @@ use std::collections::HashMap;
 use std::sync::mpsc::{self, Sender};
 use std::thread;
 
+use unbound_config::client::ConfigProxy;
 use unbound_config::{BUS_NAME, BarEdge, OBJECT_PATH};
 use unbound_inbox::Outbox;
 use zbus::blocking::fdo::PropertiesProxy;
-use zbus::blocking::{Connection, MessageIterator, Proxy};
+use zbus::blocking::{Connection, MessageIterator};
+use zbus::proxy::CacheProperties;
 use zbus::zvariant::OwnedValue;
 use zbus::{MatchRule, message};
 
 use crate::LauncherUpdate;
 
 const LAUNCHER_INTERFACE: &str = "com.canonical.Unity.LauncherEntry";
-const CONFIG_INTERFACE: &str = "org.unbound.Config";
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum BusEvent {
@@ -89,35 +90,39 @@ fn follow_launcher_entries(session: Connection, outbox: Outbox<BusEvent>) {
     });
 }
 
-fn bar_settings(config: &Proxy<'_>) -> zbus::Result<Vec<BusEvent>> {
+fn config(session: &Connection) -> zbus::Result<ConfigProxy<'static>> {
+    ConfigProxy::builder(session)
+        .cache_properties(CacheProperties::No)
+        .build()
+}
+
+fn bar_settings(config: &ConfigProxy<'_>) -> zbus::Result<Vec<BusEvent>> {
     let mut events = Vec::new();
-    if let Ok(size) = config.get_property::<u32>("BarIconSize") {
+    if let Ok(size) = config.bar_icon_size() {
         events.push(BusEvent::IconSize(size));
     }
-    if let Ok(auto_hide) = config.get_property::<bool>("BarAutoHide") {
+    if let Ok(auto_hide) = config.bar_auto_hide() {
         events.push(BusEvent::AutoHide(auto_hide));
     }
-    if let Ok(names) = config.get_property::<bool>("BarNames") {
+    if let Ok(names) = config.bar_names() {
         events.push(BusEvent::Names(names));
     }
     if let Some(edge) = config
-        .get_property::<String>("BarEdge")
+        .bar_edge()
         .ok()
         .as_deref()
         .and_then(BarEdge::from_keyword)
     {
         events.push(BusEvent::Edge(edge));
     }
-    events.push(BusEvent::Apps(
-        config.get_property::<Vec<String>>("BarApps")?,
-    ));
+    events.push(BusEvent::Apps(config.bar_apps()?));
     Ok(events)
 }
 
 fn follow_bar_settings(session: Connection, outbox: Outbox<BusEvent>) {
     spawn("bar-settings", move || {
         let follow = || -> zbus::Result<()> {
-            let config = Proxy::new(&session, BUS_NAME, OBJECT_PATH, CONFIG_INTERFACE)?;
+            let config = config(&session)?;
             let changes = PropertiesProxy::builder(&session)
                 .destination(BUS_NAME)?
                 .path(OBJECT_PATH)?
@@ -158,8 +163,7 @@ fn follow_bar_settings(session: Connection, outbox: Outbox<BusEvent>) {
 pub fn keep_writer(session: Connection) -> Sender<Vec<String>> {
     let (sender, receiver) = mpsc::channel::<Vec<String>>();
     spawn("bar-keep", move || {
-        let config = Proxy::new(&session, BUS_NAME, OBJECT_PATH, CONFIG_INTERFACE);
-        let config = match config {
+        let config = match config(&session) {
             Ok(config) => config,
             Err(error) => {
                 tracing::warn!("cannot reach org.unbound.Config to keep apps: {error}");
@@ -168,7 +172,7 @@ pub fn keep_writer(session: Connection) -> Sender<Vec<String>> {
         };
         while let Ok(first) = receiver.recv() {
             let apps = receiver.try_iter().last().unwrap_or(first);
-            if let Err(error) = config.set_property("BarApps", apps) {
+            if let Err(error) = config.set_bar_apps(&apps) {
                 tracing::warn!("cannot change the apps kept in the bar: {error}");
             }
         }
@@ -178,8 +182,7 @@ pub fn keep_writer(session: Connection) -> Sender<Vec<String>> {
 
 pub fn write_names(session: Connection, names: bool) {
     spawn("bar-names", move || {
-        let written = Proxy::new(&session, BUS_NAME, OBJECT_PATH, CONFIG_INTERFACE)
-            .and_then(|config| config.set_property("BarNames", names).map_err(Into::into));
+        let written = config(&session).and_then(|config| config.set_bar_names(names));
         if let Err(error) = written {
             tracing::warn!("cannot save whether the bar shows names: {error}");
         }

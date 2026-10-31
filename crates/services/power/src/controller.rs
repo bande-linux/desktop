@@ -5,27 +5,12 @@ use std::time::Duration;
 use std::io::{self, Write};
 use std::os::unix::net::UnixStream;
 
+use unbound_config::client::ConfigProxy;
 use zbus::blocking::Connection;
 
 use crate::backlight::{Backlight, dimmed};
 use crate::idle::{Command, IdleMachine, Policy};
 use crate::logind::{self, ManagerProxyBlocking, SessionProxyBlocking};
-
-#[zbus::proxy(
-    interface = "org.unbound.Config",
-    default_service = "org.unbound.Config",
-    default_path = "/org/unbound/Config"
-)]
-pub trait Config {
-    #[zbus(property)]
-    fn idle_dim_after(&self) -> zbus::Result<u64>;
-
-    #[zbus(property)]
-    fn idle_lock_after(&self) -> zbus::Result<u64>;
-
-    #[zbus(property)]
-    fn idle_suspend_after(&self) -> zbus::Result<u64>;
-}
 
 type Executor = Box<dyn Fn(Command) + Send + Sync>;
 
@@ -103,7 +88,7 @@ impl IdleController {
     }
 }
 
-fn policy(config: &ConfigProxyBlocking<'_>) -> zbus::Result<Policy> {
+fn policy(config: &ConfigProxy<'_>) -> zbus::Result<Policy> {
     let suspend_after = config.idle_suspend_after()?;
     Ok(Policy {
         dim_after: Duration::from_secs(config.idle_dim_after()?),
@@ -113,11 +98,11 @@ fn policy(config: &ConfigProxyBlocking<'_>) -> zbus::Result<Policy> {
 }
 
 pub fn configured_policy(session: &Connection) -> zbus::Result<Policy> {
-    policy(&ConfigProxyBlocking::new(session)?)
+    policy(&ConfigProxy::new(session)?)
 }
 
 pub fn follow_config(session: &Connection, controller: &Arc<IdleController>) -> zbus::Result<()> {
-    let config = ConfigProxyBlocking::new(session)?;
+    let config = ConfigProxy::new(session)?;
     let changes = [
         config.receive_idle_dim_after_changed(),
         config.receive_idle_lock_after_changed(),

@@ -11,6 +11,7 @@ use rustix::time::{
     Itimerspec, TimerfdClockId, TimerfdFlags, TimerfdTimerFlags, Timespec, timerfd_create,
     timerfd_settime,
 };
+use unbound_config::client::ConfigProxy;
 use unbound_config::{ACCENTS, Accent};
 use unbound_design::{Color, Scheme, Typeface};
 use unbound_wallpaper::{Choice, Variant};
@@ -31,8 +32,6 @@ pub const SOUND_THEME: &str = "Unbound";
 pub const ICON_THEME: &str = "Unbound";
 pub const VERSION: u32 = 2;
 
-const CONFIG_BUS_NAME: &str = "org.unbound.Config";
-const CONFIG_PATH: &str = "/org/unbound/Config";
 const TINT_SAMPLE: u32 = 24;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -123,32 +122,6 @@ struct Look {
     effects: bool,
 }
 
-#[zbus::proxy(
-    interface = "org.unbound.Config",
-    default_service = "org.unbound.Config",
-    default_path = "/org/unbound/Config"
-)]
-trait Config {
-    #[zbus(property)]
-    fn appearance(&self) -> zbus::Result<String>;
-    #[zbus(property)]
-    fn accent(&self) -> zbus::Result<String>;
-    #[zbus(property)]
-    fn tinted_frame(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn increase_contrast(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn reduce_transparency(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn reduce_motion(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn text_size(&self) -> zbus::Result<u32>;
-    #[zbus(property)]
-    fn cursor_size(&self) -> zbus::Result<u32>;
-    #[zbus(property)]
-    fn sound_effects(&self) -> zbus::Result<bool>;
-}
-
 pub fn average(rgba: &[u8]) -> Option<Color> {
     let pixels = rgba.as_chunks::<4>().0;
     let count = u64::try_from(pixels.len())
@@ -208,7 +181,7 @@ impl TintCache {
 
 struct Reader {
     connection: Connection,
-    config: ConfigProxyBlocking<'static>,
+    config: ConfigProxy<'static>,
     tints: TintCache,
 }
 
@@ -216,7 +189,7 @@ impl Reader {
     fn new(connection: &Connection) -> zbus::Result<Self> {
         Ok(Self {
             connection: connection.clone(),
-            config: ConfigProxyBlocking::builder(connection)
+            config: ConfigProxy::builder(connection)
                 .cache_properties(CacheProperties::No)
                 .build()?,
             tints: TintCache::default(),
@@ -432,8 +405,8 @@ impl Settings {
         gtk_home: Option<PathBuf>,
     ) -> zbus::Result<()> {
         let changes = PropertiesProxy::builder(connection)
-            .destination(CONFIG_BUS_NAME)?
-            .path(CONFIG_PATH)?
+            .destination(unbound_config::BUS_NAME)?
+            .path(unbound_config::OBJECT_PATH)?
             .build()?
             .receive_properties_changed()?;
         let mut reader = Reader::new(connection)?;

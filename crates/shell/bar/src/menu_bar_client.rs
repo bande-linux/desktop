@@ -12,6 +12,7 @@ use crate::menus::{
     AppMenus, app_menu, battery_menu, bluetooth_menu, cascade, input_source_menu, sound_menu,
     system_menu, wifi_menu,
 };
+use unbound_config::client::ConfigProxy;
 use unbound_config::{BUS_NAME, BarEdge, MenuBarPlacement, OBJECT_PATH};
 use unbound_datetime::DateFormats;
 use unbound_inbox::{Inbox, Outbox};
@@ -46,7 +47,6 @@ const BRING_TO_FRONT: &str = "bring-to-front";
 const TRAY_ITEM: &str = "tray-item:";
 const MENU_BAR_NAMESPACE: &str = "menubar";
 const HEADER_ICON: f32 = 24.0;
-const CONFIG_INTERFACE: &str = "org.unbound.Config";
 
 pub type Restart = Rc<Cell<bool>>;
 
@@ -204,9 +204,8 @@ impl<V: StatusView> MenuBarClient<V> {
                 self.bar.set_battery_percentage(shown);
                 if let Some(session) = self.session.clone() {
                     thread::spawn(move || {
-                        let written = config(&session).and_then(|config| {
-                            Ok(config.set_property("ShowBatteryPercentage", shown)?)
-                        });
+                        let written = config(&session)
+                            .and_then(|config| config.set_show_battery_percentage(shown));
                         if let Err(error) = written {
                             tracing::warn!("cannot save the battery percentage setting: {error}");
                         }
@@ -794,11 +793,8 @@ pub fn status_hub(
     Ok(hub)
 }
 
-fn config(session: &Connection) -> zbus::Result<zbus::blocking::Proxy<'static>> {
-    zbus::blocking::proxy::Builder::new(session)
-        .destination(BUS_NAME)?
-        .path(OBJECT_PATH)?
-        .interface(CONFIG_INTERFACE)?
+fn config(session: &Connection) -> zbus::Result<ConfigProxy<'static>> {
+    ConfigProxy::builder(session)
         .cache_properties(zbus::proxy::CacheProperties::No)
         .build()
 }
@@ -811,13 +807,14 @@ fn follow_config(session: &Connection, outbox: &Outbox<Update>) -> zbus::Result<
         .build()?
         .receive_properties_changed()?;
     let publish = || -> zbus::Result<bool> {
-        Ok(outbox.send(Update::BatteryPercentage(
-            config.get_property("ShowBatteryPercentage")?,
-        )) && outbox.send(Update::ClockFormat(config.get_property("ClockFormat")?))
-            && outbox.send(Update::BarLayout {
-                menu_bar: config.get_property("BarMenuBar")?,
-                edge: config.get_property("BarEdge")?,
-            }))
+        Ok(
+            outbox.send(Update::BatteryPercentage(config.show_battery_percentage()?))
+                && outbox.send(Update::ClockFormat(config.clock_format()?))
+                && outbox.send(Update::BarLayout {
+                    menu_bar: config.bar_menu_bar()?,
+                    edge: config.bar_edge()?,
+                }),
+        )
     };
     if !publish()? {
         return Ok(());

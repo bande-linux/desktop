@@ -33,6 +33,7 @@ zbus.workspace = true
 [dev-dependencies]
 tempfile.workspace = true
 unbound-compositor.workspace = true
+unbound-config = { workspace = true, features = ["service"] }
 unbound-golden.workspace = true
 unbound-test-bus.workspace = true
 

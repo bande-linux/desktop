@@ -4126,6 +4126,7 @@ dependencies = [
  "rustix 1.1.6",
  "tracing",
  "unbound-bar",
+ "unbound-config",
  "unbound-datetime",
  "unbound-golden",
  "unbound-inbox",
@@ -4569,6 +4570,7 @@ dependencies = [
  "resvg",
  "tempfile",
  "tracing",
+ "unbound-config",
  "unbound-inbox",
  "zbus",
 ]
@@ -4602,6 +4604,7 @@ dependencies = [
  "rustix 1.1.6",
  "tempfile",
  "tracing",
+ "unbound-inbox",
  "unbound-l10n",
  "unbound-notify",
  "unbound-test-bus",

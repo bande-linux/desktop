@@ -3893,7 +3893,6 @@ name = "unbound-controlcenter"
 version = "0.1.0"
 dependencies = [
  "accesskit",
- "tempfile",
  "tracing",
  "unbound-audio",
  "unbound-bluetooth",

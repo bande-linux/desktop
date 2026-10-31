@@ -7,7 +7,7 @@ use std::os::unix::net::UnixStream;
 
 use zbus::blocking::Connection;
 
-use crate::backlight::{Backlight, dimmed};
+use crate::backlight::{Backlight, KeyboardLight, dimmed};
 use crate::idle::{Command, IdleMachine, Policy};
 use crate::logind::{self, ManagerProxyBlocking, SessionProxyBlocking};
 
@@ -147,11 +147,17 @@ pub fn logind_executor(
     manager: ManagerProxyBlocking<'static>,
     session: SessionProxyBlocking<'static>,
     backlight: Option<Backlight>,
+    keyboard: Option<KeyboardLight>,
 ) -> impl Fn(Command) + Send + Sync + 'static {
     let undimmed = Mutex::new(None);
+    let keyboard_lit = Mutex::new(None);
     move |command| {
         let set_backlight = |level: u32| match &backlight {
             Some(backlight) => session.set_brightness("backlight", &backlight.name, level),
+            None => Ok(()),
+        };
+        let set_keyboard = |level: u32| match &keyboard {
+            Some(keyboard) => session.set_brightness("leds", &keyboard.name, level),
             None => Ok(()),
         };
         let result = match command {
@@ -161,23 +167,38 @@ pub fn logind_executor(
                 Ok(_) => Ok(()),
                 Err(error) => Err(error),
             },
-            Command::Dim => match backlight.as_ref().map(Backlight::brightness) {
-                Some(Ok(level)) => match dimmed(level) {
-                    Some(dim) => {
-                        *undimmed.lock().unwrap_or_else(PoisonError::into_inner) = Some(level);
-                        set_backlight(dim)
-                    }
+            Command::Dim => {
+                let lit = keyboard
+                    .as_ref()
+                    .and_then(|keyboard| keyboard.brightness().ok())
+                    .filter(|level| *level > 0);
+                *keyboard_lit.lock().unwrap_or_else(PoisonError::into_inner) = lit;
+                let keyboard_off = lit.map_or(Ok(()), |_| set_keyboard(0));
+                match backlight.as_ref().map(Backlight::brightness) {
+                    Some(Ok(level)) => match dimmed(level) {
+                        Some(dim) => {
+                            *undimmed.lock().unwrap_or_else(PoisonError::into_inner) = Some(level);
+                            set_backlight(dim)
+                        }
+                        None => Ok(()),
+                    },
+                    Some(Err(error)) => Err(zbus::Error::InputOutput(error.into())),
                     None => Ok(()),
-                },
-                Some(Err(error)) => Err(zbus::Error::InputOutput(error.into())),
-                None => Ok(()),
-            },
+                }
+                .and(keyboard_off)
+            }
             Command::Undim => {
                 let level = undimmed
                     .lock()
                     .unwrap_or_else(PoisonError::into_inner)
                     .take();
-                level.map_or(Ok(()), set_backlight)
+                let lit = keyboard_lit
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .take();
+                level
+                    .map_or(Ok(()), set_backlight)
+                    .and(lit.map_or(Ok(()), set_keyboard))
             }
             Command::RestartIdleTimers => Ok(()),
         };

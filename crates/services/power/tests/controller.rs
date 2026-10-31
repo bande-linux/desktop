@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use unbound_config::{ConfigService, ConfigStore};
-use unbound_power::backlight::Backlight;
+use unbound_power::backlight::{Backlight, KeyboardLight};
 use unbound_power::controller::{self, IdleController};
 use unbound_power::logind::{self, ManagerProxyBlocking};
 use unbound_test_bus::SessionBus;
@@ -84,10 +84,15 @@ struct Fixture {
 }
 
 fn start(config: &str, can_suspend: &str) -> Fixture {
-    start_with_backlight(config, can_suspend, None)
+    start_with_lights(config, can_suspend, None, None)
 }
 
-fn start_with_backlight(config: &str, can_suspend: &str, backlight: Option<Backlight>) -> Fixture {
+fn start_with_lights(
+    config: &str,
+    can_suspend: &str,
+    backlight: Option<Backlight>,
+    keyboard: Option<KeyboardLight>,
+) -> Fixture {
     let bus = SessionBus::start().expect("dbus-daemon");
     let (sender, calls) = mpsc::channel();
     let shared: Calls = Arc::new(Mutex::new(sender));
@@ -128,6 +133,7 @@ fn start_with_backlight(config: &str, can_suspend: &str, backlight: Option<Backl
             ManagerProxyBlocking::new(&power).expect("manager proxy"),
             logind::own_session(&power).expect("session proxy"),
             backlight,
+            keyboard,
         ),
     ));
     controller::follow_config(&power, &idle).expect("follow config");
@@ -222,7 +228,7 @@ fn the_firmware_backlight_is_preferred_over_raw_and_platform_ones() {
 fn the_display_dims_before_it_locks_and_activity_restores_its_brightness() {
     let class = tempfile::tempdir().expect("backlight class");
     fake_backlight(class.path(), "apple-panel-bl", "firmware", 800);
-    let fixture = start_with_backlight("", "yes", Backlight::find(class.path()));
+    let fixture = start_with_lights("", "yes", Backlight::find(class.path()), None);
     let brightness = |level| Call::Brightness("backlight".into(), "apple-panel-bl".into(), level);
 
     fixture.idle.idle_for(5 * MINUTE);
@@ -230,4 +236,49 @@ fn the_display_dims_before_it_locks_and_activity_restores_its_brightness() {
     fixture.idle.resumed();
     assert_eq!(fixture.next(), brightness(800));
     fixture.quiet();
+}
+
+#[test]
+fn a_lit_keyboard_goes_dark_with_the_display_and_lights_up_again_on_activity() {
+    let leds = tempfile::tempdir().expect("leds class");
+    let light = leds.path().join("kbd_backlight");
+    std::fs::create_dir_all(&light).expect("light directory");
+    std::fs::write(light.join("brightness"), "96\n").expect("brightness");
+    let fixture = start_with_lights("", "yes", None, KeyboardLight::find(leds.path()));
+    let keyboard = |level| Call::Brightness("leds".into(), "kbd_backlight".into(), level);
+
+    fixture.idle.idle_for(5 * MINUTE);
+    assert_eq!(fixture.next(), keyboard(0));
+    fixture.idle.resumed();
+    assert_eq!(fixture.next(), keyboard(96));
+    fixture.quiet();
+}
+
+#[test]
+fn a_keyboard_that_is_already_dark_is_left_alone() {
+    let leds = tempfile::tempdir().expect("leds class");
+    let light = leds.path().join("kbd_backlight");
+    std::fs::create_dir_all(&light).expect("light directory");
+    std::fs::write(light.join("brightness"), "0\n").expect("brightness");
+    let fixture = start_with_lights("", "yes", None, KeyboardLight::find(leds.path()));
+
+    fixture.idle.idle_for(5 * MINUTE);
+    fixture.idle.resumed();
+    fixture.quiet();
+}
+
+#[test]
+fn the_keyboard_backlight_is_found_among_the_leds() {
+    let leds = tempfile::tempdir().expect("temporary directory");
+    for (name, brightness) in [("input3::capslock", "1"), ("kbd_backlight", "128")] {
+        let directory = leds.path().join(name);
+        std::fs::create_dir_all(&directory).expect("directory");
+        std::fs::write(directory.join("brightness"), brightness).expect("brightness");
+        std::fs::write(directory.join("max_brightness"), "255\n").expect("maximum");
+    }
+
+    let light = KeyboardLight::find(leds.path()).expect("a keyboard backlight");
+    assert_eq!(light.name, "kbd_backlight");
+    assert_eq!(light.level(), Some(128.0 / 255.0));
+    assert_eq!(KeyboardLight::find(&leds.path().join("missing")), None);
 }

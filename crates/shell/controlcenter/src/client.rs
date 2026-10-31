@@ -7,9 +7,8 @@ use std::time::{Duration, Instant};
 
 use crate::media::{self, Command, Playback, Player, Players};
 use crate::{
-    Anchor, Change, Changes, Choice, HUD_DURATION, HUD_SIZE, Hud, KeyboardLight, L10N, PANEL_WIDTH,
-    SYSFS_LEDS, Status, chooser_menu, hud, panel, panel_items, place_beside, scene, slide_from,
-    stepped,
+    Anchor, Change, Changes, Choice, HUD_DURATION, HUD_SIZE, Hud, L10N, PANEL_WIDTH, Status,
+    chooser_menu, hud, panel, panel_items, place_beside, scene, slide_from, stepped,
 };
 use accesskit::TreeUpdate;
 use unbound_audio::{Audio, Level, Meter, meter_level};
@@ -17,7 +16,7 @@ use unbound_bluetooth::Bluetooth;
 use unbound_inbox::Inbox;
 use unbound_network::NetworkManager;
 use unbound_notify::client::NotificationCenter;
-use unbound_power::backlight::{Backlight, SYSFS_BACKLIGHT};
+use unbound_power::backlight::{Backlight, KeyboardLight, SYSFS_BACKLIGHT, SYSFS_LEDS};
 use unbound_power::logind::own_session;
 use unbound_status::captive::open_page;
 use unbound_status::session::full_name;

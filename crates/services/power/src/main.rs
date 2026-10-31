@@ -6,7 +6,7 @@ use std::time::Duration;
 use std::path::Path;
 
 use unbound_power::adapter;
-use unbound_power::backlight::{Backlight, SYSFS_BACKLIGHT};
+use unbound_power::backlight::{Backlight, KeyboardLight, SYSFS_BACKLIGHT, SYSFS_LEDS};
 use unbound_power::battery::{self, BatteryNotifier};
 use unbound_power::controller::{self, IdleController};
 use unbound_power::logind::{self, ManagerProxyBlocking, SleepGuard};
@@ -37,6 +37,7 @@ fn serve() -> Result<Services, Box<dyn Error>> {
             ManagerProxyBlocking::new(&system)?,
             logind::own_session(&system)?,
             Backlight::find(Path::new(SYSFS_BACKLIGHT)),
+            KeyboardLight::find(Path::new(SYSFS_LEDS)),
         ),
     ));
     let logind = system.clone();

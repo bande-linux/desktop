@@ -3,6 +3,8 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 pub const SYSFS_BACKLIGHT: &str = "/sys/class/backlight";
+pub const SYSFS_LEDS: &str = "/sys/class/leds";
+const KEYBOARD_LIGHT: &str = "kbd_backlight";
 const DIMMED_SHARE: u32 = 4;
 const PREFERRED_TYPES: [&str; 3] = ["firmware", "platform", "raw"];
 
@@ -48,6 +50,44 @@ impl Backlight {
 
     pub fn max_brightness(&self) -> io::Result<u32> {
         read_number(&self.directory.join("max_brightness"))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KeyboardLight {
+    pub name: String,
+    directory: PathBuf,
+}
+
+impl KeyboardLight {
+    pub fn find(leds: &Path) -> Option<Self> {
+        let mut names: Vec<String> = fs::read_dir(leds)
+            .ok()?
+            .filter_map(Result::ok)
+            .filter_map(|entry| entry.file_name().into_string().ok())
+            .filter(|name| name.contains(KEYBOARD_LIGHT))
+            .collect();
+        names.sort();
+        let name = names.into_iter().next()?;
+        Some(Self {
+            directory: leds.join(&name),
+            name,
+        })
+    }
+
+    pub fn brightness(&self) -> io::Result<u32> {
+        read_number(&self.directory.join("brightness"))
+    }
+
+    pub fn maximum(&self) -> Option<u32> {
+        read_number(&self.directory.join("max_brightness"))
+            .ok()
+            .filter(|maximum| *maximum > 0)
+    }
+
+    pub fn level(&self) -> Option<f32> {
+        let maximum = self.maximum()?;
+        Some(self.brightness().ok()? as f32 / maximum as f32)
     }
 }
 

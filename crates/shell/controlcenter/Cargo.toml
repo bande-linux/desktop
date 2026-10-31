@@ -22,7 +22,6 @@ unbound-xdg.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]
-tempfile.workspace = true
 unbound-golden.workspace = true
 unbound-test-bus.workspace = true
 

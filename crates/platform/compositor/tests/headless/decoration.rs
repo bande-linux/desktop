@@ -232,6 +232,87 @@ fn dragging_the_edge_resizes_the_app_without_its_title_bar() {
     );
 }
 
+fn drag(server: &mut Compositor, client: &mut TestClient, from: (i32, i32), by: (i32, i32)) {
+    server.move_pointer_to(at(from.0, from.1), 10);
+    server.press_button(BTN_LEFT, true, 10);
+    server.move_pointer_to(at(from.0 + by.0, from.1 + by.1), 11);
+    roundtrip(server, &mut [client]);
+}
+
+fn configured_size(client: &TestClient) -> Option<(i32, i32)> {
+    client
+        .configured(0)
+        .map(|configured| (configured.width, configured.height))
+}
+
+#[test]
+fn dragging_just_inside_the_content_edge_resizes_without_a_press_in_the_app() {
+    let mut server = server();
+    let mut client = decorated(&mut server, Some(DecorationMode::ServerSide));
+    let top_left = origin(&server);
+
+    drag(
+        &mut server,
+        &mut client,
+        (top_left.0 + WINDOW.0 - 2, top_left.1 + BAR + 20),
+        (30, 0),
+    );
+
+    assert_eq!(configured_size(&client), Some((WINDOW.0 + 30, WINDOW.1)));
+    assert!(client.buttons().is_empty());
+}
+
+#[test]
+fn dragging_the_wedge_of_the_bottom_right_corner_resizes_both_ways() {
+    let mut server = server();
+    let mut client = decorated(&mut server, Some(DecorationMode::ServerSide));
+    let top_left = origin(&server);
+
+    drag(
+        &mut server,
+        &mut client,
+        (top_left.0 + WINDOW.0 - 1, top_left.1 + BAR + WINDOW.1 - 1),
+        (30, 20),
+    );
+
+    assert_eq!(
+        configured_size(&client),
+        Some((WINDOW.0 + 30, WINDOW.1 + 20))
+    );
+}
+
+#[test]
+fn dragging_the_top_edge_of_the_title_bar_resizes_instead_of_moving() {
+    let mut server = server();
+    let mut client = decorated(&mut server, Some(DecorationMode::ServerSide));
+    let top_left = origin(&server);
+
+    drag(
+        &mut server,
+        &mut client,
+        (top_left.0 + 90, top_left.1 + 1),
+        (0, -20),
+    );
+
+    assert_eq!(configured_size(&client), Some((WINDOW.0, WINDOW.1 + 20)));
+}
+
+#[test]
+fn a_press_ten_points_outside_the_edge_does_not_resize() {
+    let mut server = server();
+    let mut client = decorated(&mut server, Some(DecorationMode::ServerSide));
+    let top_left = origin(&server);
+
+    drag(
+        &mut server,
+        &mut client,
+        (top_left.0 + WINDOW.0 + 10, top_left.1 + BAR + 20),
+        (30, 0),
+    );
+
+    assert_ne!(configured_size(&client), Some((WINDOW.0 + 30, WINDOW.1)));
+}
+
 #[test]
 fn double_clicking_the_title_bar_zooms_the_window_to_fill_the_screen_with_its_title_bar() {
     let mut server = server();

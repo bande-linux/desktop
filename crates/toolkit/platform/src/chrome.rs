@@ -1,7 +1,7 @@
 use accesskit::{Action, Affine, Node, NodeId, Role, TreeUpdate};
 use bande_graphics::{
     Color, Item, Palette, Paragraph, Point, Radius, Rect, ResizeEdge, Scene, Scheme, Shape,
-    TextAlign, TextStyle, TextSystem, TitleBar, resize_edge, title_style, window_controls_area,
+    TextAlign, TextStyle, TextSystem, TitleBar, resize_zone, title_style, window_controls_area,
 };
 
 use std::time::Instant;
@@ -14,7 +14,6 @@ pub(crate) use bande_graphics::RESIZE_MARGIN;
 pub use bande_graphics::WINDOW_HEADER_HEIGHT;
 pub const SHEET_INSET: u32 = 6;
 pub(crate) use bande_graphics::WindowControl as Control;
-const RESIZE_BAND: f32 = RESIZE_MARGIN as f32;
 const TITLE_TRAILING_GAP: f32 = 12.0;
 
 const WINDOW_NODE: NodeId = NodeId(u64::MAX);
@@ -94,6 +93,7 @@ impl Header {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct Frame {
     pub(crate) margin: f32,
+    pub(crate) resize_radius: Option<f32>,
     pub(crate) title: f32,
     pub(crate) inset: f32,
     pub(crate) regions: Option<FrameRegions>,
@@ -158,6 +158,12 @@ impl Frame {
 
     pub(crate) fn zone_at(&self, point: Point) -> Zone {
         let window = self.window();
+        if let Some(edge) = self
+            .resize_radius
+            .and_then(|radius| resize_zone(window, radius, self.margin, point))
+        {
+            return Zone::Resize(edge);
+        }
         if window.contains(point) {
             let local = Point::new(point.x - window.x, point.y - window.y);
             if local.y < self.title {
@@ -169,14 +175,11 @@ impl Frame {
                 Zone::TitleBar
             };
         }
-        if self.margin == 0.0 || !window.inset(-RESIZE_BAND).contains(point) {
-            return Zone::Outside;
-        }
-        Zone::Resize(resize_edge(window, point))
+        Zone::Outside
     }
 
     pub(crate) fn input_area(&self) -> Rect {
-        self.window().inset(-RESIZE_BAND)
+        self.window().inset(-self.margin)
     }
 }
 
@@ -439,6 +442,7 @@ pub fn framed_scene(
     };
     let frame = Frame {
         margin: 0.0,
+        resize_radius: None,
         title: header_height,
         inset,
         regions,

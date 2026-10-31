@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use bande_graphics::{
     Color, DOUBLE_CLICK_INTERVAL, Palette, RESIZE_MARGIN, Rect, ResizeEdge, Scene, Scheme,
-    TextAlign, TitleBar, WindowControl, resize_edge, title_style, window_controls_area,
+    TextAlign, TitleBar, WindowControl, resize_zone, title_style, window_controls_area,
 };
 use bande_render::{VulkanRenderer, VulkanTexture};
 use smithay::backend::allocator::Fourcc;
@@ -16,9 +16,10 @@ use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Buffer as BufferCoords, Logical, Physical, Point, Rectangle};
 
 use crate::label::Labels;
-use crate::scene::Piece;
+use crate::scene::{CORNER_RADIUS, Piece};
 use crate::shell::toplevel_names;
 use crate::state::{Compositor, Placed, State};
+use crate::tile::TILED;
 use crate::window::Window;
 
 const BTN_LEFT: u32 = 0x110;
@@ -92,19 +93,23 @@ fn zone_at(window: &Window, location: Point<f64, Logical>) -> Option<Zone> {
     let rect = window.geometry()?;
     let point = local_point(rect, location);
     let frame = Rect::new(0.0, 0.0, rect.size.w as f32, rect.size.h as f32);
-    if frame.contains(point) {
-        if point.y >= bar as f32 {
-            return None;
-        }
-        return Some(WindowControl::at(point, bar as f32).map_or(Zone::TitleBar, Zone::Control));
+    if let Some(edge) = resize_band(window, frame, point) {
+        return Some(Zone::Resize(edge));
     }
-    if !frame.inset(-(RESIZE_MARGIN as f32)).contains(point)
-        || window.has_state(xdg_toplevel::State::Maximized)
+    (frame.contains(point) && point.y < bar as f32)
+        .then(|| WindowControl::at(point, bar as f32).map_or(Zone::TitleBar, Zone::Control))
+}
+
+fn resize_band(window: &Window, frame: Rect, point: bande_graphics::Point) -> Option<ResizeEdge> {
+    if window.has_state(xdg_toplevel::State::Maximized)
         || window.has_state(xdg_toplevel::State::Fullscreen)
     {
         return None;
     }
-    Some(Zone::Resize(resize_edge(frame, point)))
+    if TILED.into_iter().any(|state| window.has_state(state)) {
+        return resize_zone(frame, 0.0, 0.0, point);
+    }
+    resize_zone(frame, CORNER_RADIUS as f32, RESIZE_MARGIN as f32, point)
 }
 
 fn local_point(

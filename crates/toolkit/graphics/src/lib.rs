@@ -28,6 +28,6 @@ pub use text::{
     Cut, GlyphRun, Paragraph, PositionedGlyph, TextAlign, TextStyle, TextSystem, shortened,
 };
 pub use title_bar::{
-    FRAME_HEADER_HEIGHT, RESIZE_CORNER, RESIZE_MARGIN, ResizeEdge, TitleBar, WINDOW_HEADER_HEIGHT,
-    WindowControl, resize_edge, title_style, window_controls_area,
+    FRAME_HEADER_HEIGHT, RESIZE_MARGIN, ResizeEdge, TitleBar, WINDOW_HEADER_HEIGHT, WindowControl,
+    resize_zone, title_style, window_controls_area,
 };

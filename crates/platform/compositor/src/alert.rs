@@ -157,7 +157,13 @@ impl Headless {
     pub fn report_start_failure(&mut self, executable: &Path, error: &io::Error) {
         self.state.raise_alert(
             executable,
-            format!("Cannot start {}: {error}", executable.display()),
+            crate::L10N.tr_args(
+                "cannot-start",
+                [
+                    ("program", executable.display().to_string().into()),
+                    ("error", error.to_string().into()),
+                ],
+            ),
         );
     }
 }

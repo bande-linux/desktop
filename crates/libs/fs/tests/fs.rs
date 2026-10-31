@@ -7,6 +7,7 @@ use std::time::{Duration, Instant, SystemTime};
 
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use tempfile::TempDir;
+use unbound_datetime::{DateFormats, posix_locale};
 use unbound_fs::{
     Action, Answer, Change, Entry, FolderChanges, FolderWatch, History, Job, Outcome, RenameError,
     Report, Resolution, Sort, Task, Trash, TrashDir, duplicate_name, format_size, keep_both_name,
@@ -223,7 +224,28 @@ fn copying_into_the_same_folder_duplicates_and_into_itself_fails() {
     });
     assert!(outcome.changes.is_empty());
     assert_eq!(outcome.failures.len(), 1);
+    assert_eq!(
+        outcome.failures[0].error.to_string(),
+        "A folder can’t be copied into itself."
+    );
     assert!(!folder.join("inner/folder").exists());
+}
+
+#[test]
+fn failures_from_the_system_read_as_sentences_in_the_language() {
+    let place = Place::new();
+    let locked = place.file("locked.txt", "secret");
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).expect("lock");
+    let outcome = place.run(Task::Copy {
+        sources: vec![locked],
+        destination: place.dir.path().to_path_buf(),
+    });
+    let messages: Vec<_> = outcome
+        .failures
+        .iter()
+        .map(|failure| failure.error.to_string())
+        .collect();
+    assert_eq!(messages, ["You don’t have permission."]);
 }
 
 #[test]
@@ -583,26 +605,32 @@ fn a_sorted_chunk_merges_into_the_listing_and_reports_where_rows_moved() {
 }
 
 #[test]
-fn list_dates_read_today_yesterday_this_year_and_older() {
+fn list_dates_read_today_yesterday_this_year_and_older_in_the_locale() {
     let at = |text: &str| SystemTime::from(text.parse::<jiff::Timestamp>().expect("timestamp"));
     let now = at("2026-10-30T12:00:00Z");
     let utc = jiff::tz::TimeZone::UTC;
+    let british = DateFormats::for_locale(&posix_locale("en_GB.UTF-8"));
+    let german = DateFormats::for_locale(&posix_locale("de_DE.UTF-8"));
 
     assert_eq!(
-        list_date(at("2026-10-30T09:12:00Z"), now, &utc),
+        list_date(at("2026-10-30T09:12:00Z"), now, &utc, &british),
         "Today, 09:12"
     );
     assert_eq!(
-        list_date(at("2026-10-29T21:03:00Z"), now, &utc),
+        list_date(at("2026-10-29T21:03:00Z"), now, &utc, &british),
         "Yesterday, 21:03"
     );
     assert_eq!(
-        list_date(at("2026-10-28T16:20:00Z"), now, &utc),
+        list_date(at("2026-10-28T16:20:00Z"), now, &utc, &british),
         "28 Oct, 16:20"
     );
     assert_eq!(
-        list_date(at("2025-12-31T23:59:00Z"), now, &utc),
+        list_date(at("2025-12-31T23:59:00Z"), now, &utc, &british),
         "31 Dec 2025, 23:59"
+    );
+    assert_eq!(
+        list_date(at("2025-12-31T23:59:00Z"), now, &utc, &german),
+        "31.12.2025, 23:59"
     );
 }
 

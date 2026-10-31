@@ -6,6 +6,7 @@ mod trash;
 mod undo;
 mod watch;
 
+use std::io;
 use std::sync::LazyLock;
 
 use unbound_l10n::Localizer;
@@ -28,18 +29,26 @@ const ENGLISH: &str = include_str!("../locales/en-US/unbound-fs.ftl");
 
 static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn every_message_id_used_in_code_is_in_the_english_file() {
-        let sources = [
-            include_str!("listing.rs"),
-            include_str!("naming.rs"),
-            include_str!("ops/archive.rs"),
-        ];
-        assert_eq!(
-            unbound_l10n::missing_ids(super::ENGLISH, &sources),
-            Vec::<&str>::new()
-        );
+fn user_error(kind: io::ErrorKind, message: &str) -> io::Error {
+    io::Error::new(kind, L10N.tr(message))
+}
+
+fn described(error: io::Error) -> io::Error {
+    if error.raw_os_error().is_none() {
+        return error;
     }
+    let message = match error.kind() {
+        io::ErrorKind::NotFound => "error-not-found",
+        io::ErrorKind::PermissionDenied => "error-permission-denied",
+        io::ErrorKind::AlreadyExists => "error-name-taken",
+        io::ErrorKind::StorageFull => "error-storage-full",
+        io::ErrorKind::QuotaExceeded => "error-storage-full",
+        io::ErrorKind::ReadOnlyFilesystem => "error-read-only",
+        io::ErrorKind::DirectoryNotEmpty => "error-folder-not-empty",
+        io::ErrorKind::FileTooLarge => "error-too-large",
+        io::ErrorKind::ResourceBusy => "error-busy",
+        io::ErrorKind::InvalidFilename => "error-invalid-name",
+        _ => return error,
+    };
+    user_error(error.kind(), message)
 }

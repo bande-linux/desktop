@@ -29,6 +29,7 @@ smithay.workspace = true
 unbound-compositor.workspace = true
 unbound-controlcenter.workspace = true
 unbound-golden.workspace = true
+unbound-l10n = { workspace = true, features = ["pseudo"] }
 unbound-launcher.workspace = true
 unbound-notifications.workspace = true
 unbound-test-wayland.workspace = true

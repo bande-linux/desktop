@@ -4,26 +4,26 @@ pub fn format_bytes(bytes: u64) -> String {
     if bytes < 1_000 {
         return L10N.tr_args("size-bytes", [("count", bytes.into())]);
     }
-    let kilobytes = (bytes as f64 / 1e3).round();
-    if kilobytes < 1e3 {
-        return L10N.tr_args("size-kilobytes", [("value", kilobytes.to_string().into())]);
-    }
-    let units = [(1e6, 1), (1e9, 2), (1e12, 2)];
-    let (unit, (scale, decimals)) = units
+    let units = [
+        ("size-kilobytes", 1e3, 0_usize),
+        ("size-megabytes", 1e6, 1),
+        ("size-gigabytes", 1e9, 2),
+        ("size-terabytes", 1e12, 2),
+    ];
+    let (id, scale, decimals) = units
         .into_iter()
-        .enumerate()
-        .find(|(_, (scale, decimals))| {
-            (bytes as f64 / scale * 10f64.powi(*decimals)).round() < 1e3 * 10f64.powi(*decimals)
+        .find(|(_, scale, decimals)| {
+            let shift = 10f64.powi(*decimals as i32);
+            (bytes as f64 / scale * shift).round() < 1e3 * shift
         })
-        .unwrap_or((2, units[2]));
-    let value = format!("{:.*}", decimals as usize, bytes as f64 / scale);
-    let value = value.trim_end_matches('0').trim_end_matches('.').to_owned();
-    let args = [("value", value.into())];
-    match unit {
-        0 => L10N.tr_args("size-megabytes", args),
-        1 => L10N.tr_args("size-gigabytes", args),
-        _ => L10N.tr_args("size-terabytes", args),
-    }
+        .unwrap_or(units[3]);
+    L10N.tr_args(
+        id,
+        [(
+            "value",
+            unbound_l10n::number(bytes as f64 / scale, decimals),
+        )],
+    )
 }
 
 pub fn format_rate(bytes_per_second: f64) -> String {
@@ -34,7 +34,7 @@ pub fn format_rate(bytes_per_second: f64) -> String {
 }
 
 pub fn format_percent(percent: f64) -> String {
-    format!("{percent:.1}")
+    L10N.decimal(percent, 1)
 }
 
 pub fn format_cpu_time(seconds: f64) -> String {

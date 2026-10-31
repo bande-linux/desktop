@@ -206,7 +206,7 @@ struct Worker {
 
 fn name_of(path: &Path) -> io::Result<&std::ffi::OsStr> {
     path.file_name()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "the item has no name"))
+        .ok_or_else(|| crate::user_error(io::ErrorKind::InvalidInput, "error-no-name"))
 }
 
 fn tree_size(path: &Path) -> (u64, u64) {
@@ -268,7 +268,7 @@ impl Worker {
     fn fail(&mut self, path: &Path, error: io::Error) {
         self.outcome.failures.push(Failure {
             path: path.to_path_buf(),
-            error,
+            error: crate::described(error),
         });
     }
 
@@ -428,10 +428,7 @@ impl Worker {
                 if source.starts_with(&target) {
                     self.fail(
                         source,
-                        io::Error::new(
-                            io::ErrorKind::InvalidInput,
-                            "an item can't replace the folder that contains it",
-                        ),
+                        crate::user_error(io::ErrorKind::InvalidInput, "error-replace-own-folder"),
                     );
                     return Ok(None);
                 }
@@ -454,10 +451,7 @@ impl Worker {
         if destination.starts_with(source) {
             self.fail(
                 source,
-                io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "a folder can't be copied into itself",
-                ),
+                crate::user_error(io::ErrorKind::InvalidInput, "error-copy-into-itself"),
             );
             return Ok(());
         }
@@ -510,7 +504,7 @@ impl Worker {
         let (Some(folder), Ok(name)) = (source.parent(), name_of(source)) else {
             self.fail(
                 source,
-                io::Error::new(io::ErrorKind::InvalidInput, "the item has no folder"),
+                crate::user_error(io::ErrorKind::InvalidInput, "error-no-folder"),
             );
             return Ok(());
         };
@@ -540,9 +534,9 @@ impl Worker {
         } else if file_type.is_file() {
             self.copy_file(source, target, &metadata)?
         } else {
-            Err(io::Error::new(
+            Err(crate::user_error(
                 io::ErrorKind::Unsupported,
-                "special files can't be copied",
+                "error-special-file",
             ))
         };
         if let Err(error) = copied {
@@ -663,10 +657,7 @@ impl Worker {
         if destination.starts_with(source) {
             self.fail(
                 source,
-                io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "a folder can't be moved into itself",
-                ),
+                crate::user_error(io::ErrorKind::InvalidInput, "error-move-into-itself"),
             );
             return Ok(());
         }
@@ -722,10 +713,7 @@ impl Worker {
                 if from.symlink_metadata().is_ok() {
                     self.fail(
                         from,
-                        io::Error::new(
-                            io::ErrorKind::AlreadyExists,
-                            "an item with that name already exists",
-                        ),
+                        crate::user_error(io::ErrorKind::AlreadyExists, "error-name-taken"),
                     );
                 } else if self.relocate(to, from)? {
                     self.outcome.changes.push(Change::Moved {

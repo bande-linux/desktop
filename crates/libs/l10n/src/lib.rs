@@ -1,8 +1,20 @@
+#[cfg(any(test, feature = "pseudo"))]
+mod pseudo;
+
+use std::borrow::Cow;
 use std::collections::HashSet;
+use std::convert::Infallible;
 use std::sync::Mutex;
 
 use fluent_bundle::concurrent::FluentBundle;
+use fluent_bundle::memoizer::MemoizerKind;
+use fluent_bundle::types::{FluentNumber, FluentNumberOptions};
 use fluent_bundle::{FluentArgs, FluentResource, FluentValue};
+use icu_decimal::DecimalFormatter;
+use icu_decimal::input::Decimal;
+use icu_decimal::options::{DecimalFormatterOptions, GroupingStrategy};
+use icu_locale_core::Locale;
+use intl_memoizer::Memoizable;
 use unic_langid::LanguageIdentifier;
 
 const FALLBACK: &str = "en-US";
@@ -36,9 +48,10 @@ impl Localizer {
             .iter()
             .map(|(language, _)| language.clone())
             .collect::<Vec<_>>();
+        let transform = transform_for(requested);
         let bundles = bundle_order(requested, &languages)
             .into_iter()
-            .map(|index| bundle(available[index].0.clone(), available[index].1))
+            .map(|index| bundle(available[index].0.clone(), available[index].1, transform))
             .collect();
         Self {
             bundles,
@@ -56,6 +69,22 @@ impl Localizer {
         args: impl IntoIterator<Item = (&'a str, FluentValue<'a>)>,
     ) -> String {
         self.format(id, Some(&args.into_iter().collect()))
+    }
+
+    pub fn decimal(&self, value: f64, fraction_digits: usize) -> String {
+        let number = FluentNumber::new(
+            value,
+            FluentNumberOptions {
+                minimum_fraction_digits: Some(fraction_digits),
+                maximum_fraction_digits: Some(fraction_digits),
+                ..FluentNumberOptions::default()
+            },
+        );
+        self.bundles
+            .first()
+            .and_then(|bundle| bundle.locales.first())
+            .and_then(|language| format_decimal(&locale_of(language), &number))
+            .unwrap_or_else(|| format!("{value:.fraction_digits$}"))
     }
 
     fn format(&self, id: &str, args: Option<&FluentArgs>) -> String {
@@ -77,34 +106,82 @@ impl Localizer {
             id.to_owned()
         })
     }
+}
 
-    fn has(&self, id: &str) -> bool {
-        self.bundles.iter().any(|bundle| bundle.has_message(id))
+type Transform = fn(&str) -> Cow<'_, str>;
+
+#[cfg(any(test, feature = "pseudo"))]
+fn transform_for(requested: &[LanguageIdentifier]) -> Option<Transform> {
+    requested
+        .first()
+        .is_some_and(pseudo::is_requested)
+        .then_some(pseudo::accented as Transform)
+}
+
+#[cfg(not(any(test, feature = "pseudo")))]
+fn transform_for(_requested: &[LanguageIdentifier]) -> Option<Transform> {
+    None
+}
+
+struct NumberLocale(Locale);
+
+impl Memoizable for NumberLocale {
+    type Args = ();
+    type Error = Infallible;
+
+    fn construct(language: LanguageIdentifier, _: ()) -> Result<Self, Infallible> {
+        Ok(Self(locale_of(&language)))
     }
 }
 
-pub fn missing_ids<'a>(english: &str, sources: &[&'a str]) -> Vec<&'a str> {
-    let localizer = Localizer::negotiated(&[(FALLBACK, english)], &[]);
-    sources
-        .iter()
-        .flat_map(|source| used_ids(source))
-        .filter(|id| !localizer.has(id))
-        .collect()
+fn locale_of(language: &LanguageIdentifier) -> Locale {
+    language
+        .to_string()
+        .parse()
+        .unwrap_or(icu_locale_core::locale!("en-US"))
 }
 
-fn used_ids(source: &str) -> impl Iterator<Item = &str> {
-    ["tr(\"", "tr_args(\""].into_iter().flat_map(move |call| {
-        source
-            .match_indices(call)
-            .filter(|(start, _)| {
-                !source[..*start]
-                    .ends_with(|letter: char| letter.is_alphanumeric() || letter == '_')
-            })
-            .filter_map(move |(start, _)| source[start + call.len()..].split('"').next())
-    })
+fn format_number<M: MemoizerKind>(value: &FluentValue, memoizer: &M) -> Option<String> {
+    let FluentValue::Number(number) = value else {
+        return None;
+    };
+    memoizer
+        .with_try_get_threadsafe::<NumberLocale, _, _>((), |locale| {
+            format_decimal(&locale.0, number)
+        })
+        .ok()
+        .flatten()
 }
 
-fn bundle(language: LanguageIdentifier, source: &str) -> FluentBundle<FluentResource> {
+fn format_decimal(locale: &Locale, number: &FluentNumber) -> Option<String> {
+    let decimal = decimal(number)?;
+    let mut options = DecimalFormatterOptions::default();
+    options.grouping_strategy = Some(match number.options.use_grouping {
+        true => GroupingStrategy::Auto,
+        false => GroupingStrategy::Never,
+    });
+    let formatter = DecimalFormatter::try_new(locale.into(), options).ok()?;
+    Some(formatter.format(&decimal).to_string())
+}
+
+fn decimal(number: &FluentNumber) -> Option<Decimal> {
+    let mut decimal = number.value.to_string().parse::<Decimal>().ok()?;
+    let position = |digits: usize| -i16::try_from(digits).unwrap_or(i16::MAX);
+    if let Some(most) = number.options.maximum_fraction_digits {
+        decimal.round(position(most));
+        decimal.trim_end();
+    }
+    if let Some(least) = number.options.minimum_fraction_digits {
+        decimal.pad_end(position(least));
+    }
+    Some(decimal)
+}
+
+fn bundle(
+    language: LanguageIdentifier,
+    source: &str,
+    transform: Option<Transform>,
+) -> FluentBundle<FluentResource> {
     let resource =
         FluentResource::try_new(source.to_owned()).unwrap_or_else(|(resource, errors)| {
             tracing::warn!("errors in the {language} translation: {errors:?}");
@@ -112,10 +189,22 @@ fn bundle(language: LanguageIdentifier, source: &str) -> FluentBundle<FluentReso
         });
     let mut bundle = FluentBundle::new_concurrent(vec![language]);
     bundle.set_use_isolating(false);
+    bundle.set_transform(transform);
+    bundle.set_formatter(Some(format_number));
     if let Err(errors) = bundle.add_resource(resource) {
         tracing::warn!("errors in the translation: {errors:?}");
     }
     bundle
+}
+
+pub fn number(value: f64, most_fraction_digits: usize) -> FluentValue<'static> {
+    FluentValue::Number(FluentNumber::new(
+        value,
+        FluentNumberOptions {
+            maximum_fraction_digits: Some(most_fraction_digits),
+            ..FluentNumberOptions::default()
+        },
+    ))
 }
 
 fn requested_languages(var: impl Fn(&str) -> Option<String>) -> Vec<LanguageIdentifier> {
@@ -165,7 +254,7 @@ mod tests {
     const ENGLISH: &str = "greeting = Hello, { $name }!\n\
         items = { $count ->\n    [one] 1 item\n   *[other] { $count } items\n}\n\
         only-english = Only in English\n";
-    const GERMAN: &str = "greeting = Hallo, { $name }!\n";
+    const GERMAN: &str = "greeting = Hallo, { $name }!\nsize = { $value } GB\n";
 
     fn environment(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> {
         let pairs = pairs
@@ -257,10 +346,28 @@ mod tests {
     }
 
     #[test]
-    fn ids_used_in_code_are_checked_against_the_english_file() {
-        let source = "let a = L10N.tr(\"greeting\");\n\
-            let b = L10N.tr_args(\"unknown\", [(\"count\", 1.into())]);\n\
-            let c = attr(\"not-an-id\");";
-        assert_eq!(missing_ids(ENGLISH, &[source]), ["unknown"]);
+    fn numbers_are_written_the_way_the_language_writes_them() {
+        let size = |localizer: &Localizer, value: f64| {
+            localizer.tr_args("size", [("value", number(value, 1))])
+        };
+        let german = localizer(&[("LANG", "de_DE.UTF-8")]);
+        assert_eq!(size(&german, 1234.56), "1.234,6 GB");
+        assert_eq!(size(&german, 2.0), "2 GB");
+        let english = localizer(&[]);
+        assert_eq!(
+            english.tr_args("items", [("count", 12345.into())]),
+            "12,345 items"
+        );
+        assert_eq!(german.decimal(12.345, 1), "12,3");
+        assert_eq!(english.decimal(7.0, 1), "7.0");
+    }
+
+    #[test]
+    fn the_pseudo_language_accents_the_english_text_but_not_its_arguments() {
+        let pseudo = localizer(&[("LANGUAGE", "en-XA"), ("LANG", "en_US.UTF-8")]);
+        assert_eq!(
+            pseudo.tr_args("greeting", [("name", "Ada".into())]),
+            "Ħḗḗŀŀǿǿ, Ada!"
+        );
     }
 }

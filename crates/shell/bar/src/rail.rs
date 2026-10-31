@@ -50,6 +50,7 @@ const NODE_BASE: u64 = 1 << 40;
 const CONTROL_CENTER_GLYPH: &str = "unbound-control-center-symbolic";
 const MARK_GLYPH: &str = "unbound-symbolic";
 const SEARCH_GLYPH: &str = "system-search-symbolic";
+const HINT_GAP: f32 = 8.0;
 pub const EXPANDED_WIDTH: f32 = 248.0;
 const ROW_INSET: f32 = 8.0;
 const SEARCH_HEIGHT: f32 = 32.0;
@@ -763,10 +764,17 @@ impl RailView {
             &L10N.tr("search-shortcut"),
             TextStyle::new(CAPTION_SIZE, palette.ink2),
         );
-        let hint_x = rect.x + rect.width - 10.0 - hint.width();
-        let label = self.paragraph(&L10N.tr("search"), TextStyle::new(MENU_TEXT, palette.ink2));
-        Self::centered_text(rect, rect.x + 8.0 + GRID_CELL, label, items);
-        Self::centered_text(rect, hint_x, hint, items);
+        let label_x = rect.x + 8.0 + GRID_CELL;
+        let end = rect.x + rect.width - 10.0;
+        let style = TextStyle::new(MENU_TEXT, palette.ink2);
+        let label = self.paragraph(&L10N.tr("search"), style);
+        if label_x + label.width() + HINT_GAP + hint.width() <= end {
+            Self::centered_text(rect, label_x, label, items);
+            Self::centered_text(rect, end - hint.width(), hint, items);
+        } else {
+            let label = self.fitted(&L10N.tr("search"), style, end - label_x);
+            Self::centered_text(rect, label_x, label, items);
+        }
     }
 
     fn paint_menu_row(&mut self, rect: Rect, index: usize, items: &mut Vec<Item>) {

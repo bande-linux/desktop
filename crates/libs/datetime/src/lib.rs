@@ -120,15 +120,16 @@ impl DateFormats {
         .unwrap_or_else(|| at.strftime("%a %-d %b %H:%M").to_string())
     }
 
+    pub fn short_time(&self, at: &Zoned) -> String {
+        FixedCalendarDateTimeFormatter::<Gregorian, _>::try_new(self.preferences, T::hm())
+            .ok()
+            .zip(date_of(at).zip(time_of(at)))
+            .map(|(formatter, (date, time))| formatter.format(&DateTime { date, time }).to_string())
+            .unwrap_or_else(|| at.strftime("%H:%M").to_string())
+    }
+
     pub fn time(&self, at: &Zoned) -> (String, Option<String>) {
-        let formatted =
-            FixedCalendarDateTimeFormatter::<Gregorian, _>::try_new(self.preferences, T::hm())
-                .ok()
-                .zip(date_of(at).zip(time_of(at)))
-                .map(|(formatter, (date, time))| {
-                    formatter.format(&DateTime { date, time }).to_string()
-                })
-                .unwrap_or_else(|| at.strftime("%H:%M").to_string());
+        let formatted = self.short_time(at);
         let digits = |character: char| character.is_ascii_digit() || character == ':';
         let start = formatted.find(digits).unwrap_or(0);
         let end = formatted
@@ -179,5 +180,27 @@ impl DateFormats {
                 .map(|(formatter, date)| formatter.format(&date).to_string())
         };
         formatted.unwrap_or_else(|| at.strftime("%-d %b %Y").to_string())
+    }
+
+    pub fn date_time(&self, at: &Zoned, with_year: bool) -> String {
+        let moment = date_of(at).zip(time_of(at));
+        let formatted = if with_year {
+            FixedCalendarDateTimeFormatter::<Gregorian, _>::try_new(
+                self.preferences,
+                YMD::medium().with_time_hm(),
+            )
+            .ok()
+            .zip(moment)
+            .map(|(formatter, (date, time))| formatter.format(&DateTime { date, time }).to_string())
+        } else {
+            FixedCalendarDateTimeFormatter::<Gregorian, _>::try_new(
+                self.preferences,
+                MD::medium().with_time_hm(),
+            )
+            .ok()
+            .zip(moment)
+            .map(|(formatter, (date, time))| formatter.format(&DateTime { date, time }).to_string())
+        };
+        formatted.unwrap_or_else(|| at.strftime("%-d %b %Y, %H:%M").to_string())
     }
 }

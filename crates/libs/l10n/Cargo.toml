@@ -5,10 +5,19 @@ version.workspace = true
 edition.workspace = true
 repository.workspace = true
 
+[features]
+pseudo = []
+
 [dependencies]
 fluent-bundle.workspace = true
+icu_decimal.workspace = true
+icu_locale_core.workspace = true
+intl-memoizer.workspace = true
 tracing.workspace = true
 unic-langid.workspace = true
+
+[dev-dependencies]
+fluent-syntax.workspace = true
 
 [lints]
 workspace = true

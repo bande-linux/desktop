@@ -42,29 +42,3 @@ pub use views::{
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-files.ftl");
 
 pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn every_message_id_used_in_code_is_in_the_english_file() {
-        let sources = [
-            include_str!("lib.rs"),
-            include_str!("main.rs"),
-            include_str!("menu_bar.rs"),
-            include_str!("menus.rs"),
-            include_str!("browser.rs"),
-            include_str!("controls.rs"),
-            include_str!("paint.rs"),
-            include_str!("sidebar.rs"),
-            include_str!("view.rs"),
-            include_str!("grid.rs"),
-            include_str!("tabs.rs"),
-            include_str!("search.rs"),
-            include_str!("toolbar.rs"),
-        ];
-        assert_eq!(
-            unbound_l10n::missing_ids(super::ENGLISH, &sources),
-            Vec::<&str>::new()
-        );
-    }
-}

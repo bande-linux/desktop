@@ -139,23 +139,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn every_message_id_used_in_code_is_in_the_english_file() {
-        let sources = [
-            include_str!("lib.rs"),
-            include_str!("main.rs"),
-            include_str!("area.rs"),
-            include_str!("picker.rs"),
-            include_str!("service.rs"),
-            include_str!("palette.rs"),
-            include_str!("markup.rs"),
-        ];
-        assert_eq!(
-            unbound_l10n::missing_ids(ENGLISH, &sources),
-            Vec::<&str>::new()
-        );
-    }
-
-    #[test]
     fn a_taken_name_gets_a_copy_number() {
         let dir = tempfile::tempdir().expect("temporary directory");
         let stem = "Screenshot 2026-10-29 at 09.05.07";

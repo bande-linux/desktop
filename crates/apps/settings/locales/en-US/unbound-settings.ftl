@@ -118,6 +118,10 @@ back-tooltip = Go back (Super+[)
 available-of = { $available } available of { $capacity }
 about-model = Model
 about-chip = Chip
+about-chip-cores = { $chip } ({ $cores ->
+    [one] { $cores } core
+   *[other] { $cores } cores
+})
 about-memory = Memory
 about-unbound = Unbound
 about-system = System
@@ -248,3 +252,5 @@ screenshots-none = No app has asked to take screenshots yet.
 screen-sharing-none = No app remembers what it may share.
 location-none = No app has asked for your location yet.
 forget-share-warning = It asks again before it shares your screen or a window.
+software-stopped = Software Update stopped unexpectedly (code { $code }).
+chart-levels = { $chart }: { $first }% → { $last }%

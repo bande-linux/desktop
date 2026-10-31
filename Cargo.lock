@@ -4014,6 +4014,7 @@ dependencies = [
  "ruzstd",
  "tar",
  "tempfile",
+ "unbound-datetime",
  "unbound-l10n",
  "unbound-xdg",
  "zip",
@@ -4025,6 +4026,7 @@ version = "0.1.0"
 dependencies = [
  "image",
  "image-compare",
+ "unbound-graphics",
 ]
 
 [[package]]
@@ -4090,6 +4092,10 @@ name = "unbound-l10n"
 version = "0.1.0"
 dependencies = [
  "fluent-bundle",
+ "fluent-syntax",
+ "icu_decimal",
+ "icu_locale_core",
+ "intl-memoizer",
  "tracing",
  "unic-langid",
 ]

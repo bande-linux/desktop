@@ -3,7 +3,7 @@ use unbound_graphics::{
     Color, Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle, TextSystem,
 };
 
-use super::{Context, Size, Widget, WidgetId};
+use super::{Context, L10N, Size, Widget, WidgetId};
 
 const MODIFIER_SYMBOLS: [(&[&str], char); 3] = [
     (&["Ctrl", "Control"], '⌃'),
@@ -27,6 +27,11 @@ const KEY_SYMBOLS: [(&str, &str); 14] = [
     ("PageDown", "⇟"),
     ("Home", "↖"),
     ("End", "↘"),
+];
+
+const KEY_NAMES: [(&str, &str); 2] = [
+    ("Space", "key-space"),
+    ("Mission Control", "key-mission-control"),
 ];
 
 const BODY_SIZE: f32 = 13.0;
@@ -61,7 +66,10 @@ pub fn shortcut_keys(shortcut: &str) -> ShortcutKeys {
     {
         Some((_, symbol)) => (*symbol).to_owned(),
         None if key.chars().count() == 1 => key.chars().flat_map(char::to_uppercase).collect(),
-        None => key.to_owned(),
+        None => KEY_NAMES
+            .iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case(key))
+            .map_or_else(|| key.to_owned(), |(_, message)| L10N.tr(message)),
     };
     ShortcutKeys {
         modifiers: MODIFIER_SYMBOLS
@@ -231,5 +239,9 @@ mod tests {
         assert_eq!(shortcut_keys("Shift+Super+."), keys("⇧", true, "."));
         assert_eq!(shortcut_keys("F2"), keys("", false, "F2"));
         assert_eq!(shortcut_keys("Space"), keys("", false, "Space"));
+        assert_eq!(
+            shortcut_keys("Super+Mission Control"),
+            keys("", true, "Mission Control")
+        );
     }
 }

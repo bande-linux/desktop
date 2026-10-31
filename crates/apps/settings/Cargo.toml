@@ -35,6 +35,7 @@ zbus.workspace = true
 tempfile.workspace = true
 unbound-compositor.workspace = true
 unbound-golden.workspace = true
+unbound-l10n = { workspace = true, features = ["pseudo"] }
 unbound-test-bus.workspace = true
 
 [package.metadata.deb]

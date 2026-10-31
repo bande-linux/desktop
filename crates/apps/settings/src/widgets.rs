@@ -12,6 +12,8 @@ use unbound_toolkit::{
     TextAlign, TextRole, TextSize, TextStyle,
 };
 
+use crate::L10N;
+
 const SIDEBAR_WIDTH: f32 = 220.0;
 const SIDEBAR_GROWTH: f32 = 60.0;
 
@@ -2040,7 +2042,14 @@ impl Widget for LevelHistory {
         let mut node = Node::new(Role::Image);
         let known: Vec<f64> = self.levels.iter().flatten().copied().collect();
         let description = match (known.first(), known.last()) {
-            (Some(first), Some(last)) => format!("{}: {first:.0}% → {last:.0}%", self.label),
+            (Some(first), Some(last)) => L10N.tr_args(
+                "chart-levels",
+                [
+                    ("chart", self.label.clone().into()),
+                    ("first", first.round().into()),
+                    ("last", last.round().into()),
+                ],
+            ),
             _ => self.label.clone(),
         };
         node.set_label(description);

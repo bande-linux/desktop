@@ -38,14 +38,3 @@ pub enum Update {
     Unread(bool),
     BarLayout { menu_bar: String, edge: String },
 }
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn every_message_id_used_in_code_is_in_the_english_file() {
-        assert_eq!(
-            unbound_l10n::missing_ids(super::ENGLISH, &[include_str!("session.rs")]),
-            Vec::<&str>::new()
-        );
-    }
-}

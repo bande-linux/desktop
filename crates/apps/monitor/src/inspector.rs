@@ -123,7 +123,10 @@ pub struct InspectorView {
 fn named(pid: u32, name: &str) -> String {
     L10N.tr_args(
         "inspector-process",
-        [("name", name.to_owned().into()), ("pid", pid.into())],
+        [
+            ("name", name.to_owned().into()),
+            ("pid", pid.to_string().into()),
+        ],
     )
 }
 

@@ -198,15 +198,14 @@ impl TextSystem {
             TextAlign::End => Alignment::End,
         };
         layout.align(alignment, AlignmentOptions::default());
-        Paragraph {
-            layout: Arc::new(layout),
-        }
+        Paragraph::from_layout(layout, &text)
     }
 }
 
 #[derive(Clone)]
 pub struct Paragraph {
     layout: Arc<Layout<Color>>,
+    text: Arc<str>,
 }
 
 impl fmt::Debug for Paragraph {
@@ -272,10 +271,15 @@ impl GlyphRun {
 }
 
 impl Paragraph {
-    pub fn from_layout(layout: Layout<Color>) -> Self {
+    pub fn from_layout(layout: Layout<Color>, text: &str) -> Self {
         Self {
             layout: Arc::new(layout),
+            text: Arc::from(text),
         }
+    }
+
+    pub fn text(&self) -> &str {
+        &self.text
     }
 
     pub fn layout(&self) -> &Layout<Color> {

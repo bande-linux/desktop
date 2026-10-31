@@ -1,6 +1,10 @@
+mod pseudo;
+mod text;
+
 use std::path::Path;
 
 pub use image::RgbImage;
+pub use pseudo::{review_pseudo, use_pseudo_locale};
 
 const MIN_SIMILARITY: f64 = 0.99;
 

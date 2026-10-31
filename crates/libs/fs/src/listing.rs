@@ -5,11 +5,16 @@ use std::iter::Peekable;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::str::Chars;
+use std::sync::LazyLock;
 use std::time::SystemTime;
+
+use unbound_datetime::DateFormats;
 
 use crate::trash::{Trash, TrashItem};
 
 use crate::L10N;
+
+static LOCAL_FORMATS: LazyLock<DateFormats> = LazyLock::new(DateFormats::from_env);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
@@ -242,33 +247,43 @@ pub fn format_size(bytes: u64) -> String {
     if bytes < 1_000 {
         return L10N.tr_args("size-bytes", [("count", bytes.into())]);
     }
-    let kilobytes = (bytes as f64 / 1e3).round();
-    if kilobytes < 1e3 {
-        return L10N.tr_args("size-kilobytes", [("value", kilobytes.to_string().into())]);
-    }
-    let units = [(1e6, 1), (1e9, 2), (1e12, 2)];
-    let (unit, (scale, decimals)) = units
+    let units = [
+        ("size-kilobytes", 1e3, 0_usize),
+        ("size-megabytes", 1e6, 1),
+        ("size-gigabytes", 1e9, 2),
+        ("size-terabytes", 1e12, 2),
+    ];
+    let (id, scale, decimals) = units
         .into_iter()
-        .enumerate()
-        .find(|(_, (scale, decimals))| {
-            (bytes as f64 / scale * 10f64.powi(*decimals)).round() < 1e3 * 10f64.powi(*decimals)
+        .find(|(_, scale, decimals)| {
+            let shift = 10f64.powi(*decimals as i32);
+            (bytes as f64 / scale * shift).round() < 1e3 * shift
         })
-        .unwrap_or((2, units[2]));
-    let value = format!("{:.*}", decimals as usize, bytes as f64 / scale);
-    let value = value.trim_end_matches('0').trim_end_matches('.').to_owned();
-    let args = [("value", value.into())];
-    match unit {
-        0 => L10N.tr_args("size-megabytes", args),
-        1 => L10N.tr_args("size-gigabytes", args),
-        _ => L10N.tr_args("size-terabytes", args),
-    }
+        .unwrap_or(units[3]);
+    L10N.tr_args(
+        id,
+        [(
+            "value",
+            unbound_l10n::number(bytes as f64 / scale, decimals),
+        )],
+    )
 }
 
 pub fn format_list_date(time: SystemTime) -> String {
-    list_date(time, SystemTime::now(), &jiff::tz::TimeZone::system())
+    list_date(
+        time,
+        SystemTime::now(),
+        &jiff::tz::TimeZone::system(),
+        &LOCAL_FORMATS,
+    )
 }
 
-pub fn list_date(time: SystemTime, now: SystemTime, zone: &jiff::tz::TimeZone) -> String {
+pub fn list_date(
+    time: SystemTime,
+    now: SystemTime,
+    zone: &jiff::tz::TimeZone,
+    formats: &DateFormats,
+) -> String {
     let (Ok(time), Ok(now)) = (
         jiff::Timestamp::try_from(time),
         jiff::Timestamp::try_from(now),
@@ -276,30 +291,25 @@ pub fn list_date(time: SystemTime, now: SystemTime, zone: &jiff::tz::TimeZone) -
         return String::new();
     };
     let (time, now) = (time.to_zoned(zone.clone()), now.to_zoned(zone.clone()));
-    let clock = time.strftime("%H:%M").to_string();
     let day = time.date();
+    let clock = || formats.short_time(&time).into();
     if day == now.date() {
-        L10N.tr_args("date-today", [("time", clock.into())])
+        L10N.tr_args("date-today", [("time", clock())])
     } else if now
         .date()
         .yesterday()
         .is_ok_and(|yesterday| yesterday == day)
     {
-        L10N.tr_args("date-yesterday", [("time", clock.into())])
-    } else if day.year() == now.date().year() {
-        time.strftime("%-d %b, %H:%M").to_string()
+        L10N.tr_args("date-yesterday", [("time", clock())])
     } else {
-        time.strftime("%-d %b %Y, %H:%M").to_string()
+        formats.date_time(&time, day.year() != now.date().year())
     }
 }
 
 pub fn format_date(time: SystemTime) -> String {
     jiff::Timestamp::try_from(time)
         .map(|timestamp| {
-            timestamp
-                .to_zoned(jiff::tz::TimeZone::system())
-                .strftime("%-d %b %Y, %H:%M")
-                .to_string()
+            LOCAL_FORMATS.date_time(&timestamp.to_zoned(jiff::tz::TimeZone::system()), true)
         })
         .unwrap_or_default()
 }

@@ -4,6 +4,7 @@ use std::sync::mpsc::{self, Sender};
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
+use crate::L10N;
 use crate::failure::failed;
 use crate::follow::{Update, Updates, spawn};
 use crate::storage::disk;
@@ -92,7 +93,10 @@ pub fn chip_name(compatible: &str, cpuinfo: &str) -> String {
         None => std::env::consts::ARCH.to_owned(),
     };
     if cores > 1 {
-        format!("{family} ({cores} cores)")
+        L10N.tr_args(
+            "about-chip-cores",
+            [("chip", family.into()), ("cores", cores.into())],
+        )
     } else {
         family
     }

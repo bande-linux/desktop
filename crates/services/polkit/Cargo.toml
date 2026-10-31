@@ -24,6 +24,7 @@ zeroize.workspace = true
 [dev-dependencies]
 tempfile.workspace = true
 unbound-golden.workspace = true
+unbound-l10n = { workspace = true, features = ["pseudo"] }
 unbound-test-bus.workspace = true
 
 [package.metadata.deb]

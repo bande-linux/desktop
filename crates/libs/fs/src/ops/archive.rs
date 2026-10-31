@@ -296,7 +296,7 @@ impl Worker {
         let Some((packing, stem)) = packing(archive) else {
             self.fail(
                 archive,
-                io::Error::new(io::ErrorKind::InvalidInput, "the file is not an archive"),
+                crate::user_error(io::ErrorKind::InvalidInput, "error-not-an-archive"),
             );
             return Ok(());
         };
@@ -376,9 +376,9 @@ impl Worker {
                 continue;
             };
             if passes_through_link(into, &relative) {
-                return Err(Stop::Io(io::Error::new(
+                return Err(Stop::Io(crate::user_error(
                     io::ErrorKind::InvalidData,
-                    "the archive writes through a link",
+                    "error-archive-through-link",
                 )));
             }
             let target = into.join(relative);
@@ -410,9 +410,9 @@ impl Worker {
 
     fn run_tool(&mut self, archive: &Path, into: &Path) -> Result<(), Stop> {
         let Some(command) = seven_zip_tool(archive, into) else {
-            return Err(Stop::Io(io::Error::new(
+            return Err(Stop::Io(crate::user_error(
                 io::ErrorKind::Unsupported,
-                "no program to open 7-Zip archives is installed",
+                "error-no-7-zip",
             )));
         };
         let mut child = Command::new(&command[0])
@@ -425,9 +425,9 @@ impl Worker {
             if let Some(status) = child.try_wait()? {
                 return match status.success() {
                     true => Ok(()),
-                    false => Err(Stop::Io(io::Error::other(format!(
-                        "{} could not open the archive",
-                        command[0]
+                    false => Err(Stop::Io(io::Error::other(L10N.tr_args(
+                        "error-archive-program",
+                        [("program", command[0].clone().into())],
                     )))),
                 };
             }

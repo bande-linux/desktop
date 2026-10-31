@@ -82,3 +82,21 @@ fn the_bar_clock_stacks_the_time_over_the_day_with_any_day_period_apart() {
     );
     assert_eq!(formats("en_GB.UTF-8").short_day(&afternoon), "Fri 30");
 }
+
+#[test]
+fn dates_with_times_follow_the_locale_with_or_without_the_year() {
+    let afternoon = at("2025-12-31T14:05:00");
+    assert_eq!(
+        formats("en_GB.UTF-8").date_time(&afternoon, true),
+        "31 Dec 2025, 14:05"
+    );
+    assert_eq!(
+        formats("en_US.UTF-8").date_time(&afternoon, false),
+        "Dec 31, 2:05\u{202f}PM"
+    );
+    assert_eq!(
+        formats("de_DE.UTF-8").date_time(&afternoon, true),
+        "31.12.2025, 14:05"
+    );
+    assert_eq!(formats("de_DE.UTF-8").short_time(&afternoon), "14:05");
+}

@@ -49,7 +49,7 @@ impl TrashItem {
 }
 
 fn not_found(message: &str) -> io::Error {
-    io::Error::new(io::ErrorKind::NotFound, message)
+    crate::user_error(io::ErrorKind::NotFound, message)
 }
 
 fn create_private_dir(path: &Path) -> io::Result<()> {
@@ -83,9 +83,9 @@ impl TrashDir {
         create_private_dir(&root)?;
         let metadata = fs::symlink_metadata(&root)?;
         if !metadata.is_dir() || metadata.uid() != uid {
-            return Err(io::Error::new(
+            return Err(crate::user_error(
                 io::ErrorKind::PermissionDenied,
-                "the volume's trash folder is not usable",
+                "error-trash-unusable",
             ));
         }
         Ok(Self {
@@ -131,7 +131,7 @@ impl TrashDir {
         create_private_dir(&self.files())?;
         let name = original
             .file_name()
-            .ok_or_else(|| not_found("the item has no name"))?
+            .ok_or_else(|| not_found("error-no-name"))?
             .to_os_string();
         let contents = format!(
             "{INFO_HEADER}\nPath={}\nDeletionDate={}\n",
@@ -159,7 +159,10 @@ impl TrashDir {
                 Err(error) => return Err(error),
             }
         }
-        Err(io::Error::other("no free name in the trash"))
+        Err(crate::user_error(
+            io::ErrorKind::Other,
+            "error-trash-no-free-name",
+        ))
     }
 
     pub fn put(&self, path: &Path, deleted: DateTime) -> io::Result<TrashItem> {
@@ -258,10 +261,7 @@ fn mount_of(directory: &OwnedFd) -> io::Result<MountKey> {
 }
 
 fn crossing_mounts() -> io::Error {
-    io::Error::new(
-        io::ErrorKind::CrossesDevices,
-        "refusing to delete across a mount point",
-    )
+    crate::user_error(io::ErrorKind::CrossesDevices, "error-across-mount")
 }
 
 fn remove_tree(parent: &OwnedFd, name: &OsStr, mount: MountKey) -> io::Result<()> {
@@ -334,7 +334,7 @@ fn topdir(path: &Path) -> io::Result<PathBuf> {
     let device = fs::symlink_metadata(path)?.dev();
     let mut top = path
         .parent()
-        .ok_or_else(|| not_found("the item has no folder"))?
+        .ok_or_else(|| not_found("error-no-folder"))?
         .to_path_buf();
     while let Some(parent) = top.parent() {
         if fs::metadata(parent)?.dev() != device {
@@ -394,9 +394,9 @@ impl Trash {
 
     pub fn put(&self, path: &Path) -> io::Result<TrashItem> {
         if self.contains(path) {
-            return Err(io::Error::new(
+            return Err(crate::user_error(
                 io::ErrorKind::InvalidInput,
-                "the item is already in the trash",
+                "error-already-in-trash",
             ));
         }
         let path = std::path::absolute(path)?;
@@ -440,9 +440,9 @@ impl Trash {
 
 pub fn restore_to(item: &TrashItem, destination: &Path) -> io::Result<()> {
     if destination.symlink_metadata().is_ok() {
-        return Err(io::Error::new(
+        return Err(crate::user_error(
             io::ErrorKind::AlreadyExists,
-            "an item with that name already exists",
+            "error-name-taken",
         ));
     }
     if let Some(parent) = destination.parent() {

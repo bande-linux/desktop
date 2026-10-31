@@ -8,3 +8,5 @@ emoji-and-symbols = Emoji & Symbols…
 clear-search = Clear
 show-choices = Show Choices
 caps-lock-on = Caps Lock is on
+key-space = Space
+key-mission-control = Mission Control

@@ -75,38 +75,3 @@ pub use widgets::{bucket_levels, sidebar_width};
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-settings.ftl");
 
 pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn every_message_id_used_in_code_is_in_the_english_file() {
-        let sources = [
-            include_str!("lib.rs"),
-            include_str!("main.rs"),
-            include_str!("client.rs"),
-            include_str!("clock.rs"),
-            include_str!("follow.rs"),
-            include_str!("general.rs"),
-            include_str!("header.rs"),
-            include_str!("defaults.rs"),
-            include_str!("failure.rs"),
-            include_str!("privacy.rs"),
-            include_str!("night.rs"),
-            include_str!("permissions.rs"),
-            include_str!("brightness.rs"),
-            include_str!("language.rs"),
-            include_str!("network.rs"),
-            include_str!("notifications.rs"),
-            include_str!("pages.rs"),
-            include_str!("pictures.rs"),
-            include_str!("software.rs"),
-            include_str!("power.rs"),
-            include_str!("updates.rs"),
-            include_str!("view.rs"),
-        ];
-        assert_eq!(
-            unbound_l10n::missing_ids(super::ENGLISH, &sources),
-            Vec::<&str>::new()
-        );
-    }
-}

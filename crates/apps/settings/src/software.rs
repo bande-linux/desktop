@@ -159,7 +159,8 @@ fn run(
                     && exit != EXIT_SUCCESS
                     && outcome.error.is_none()
                 {
-                    outcome.error = Some(format!("PackageKit stopped with code {exit}"));
+                    outcome.error =
+                        Some(L10N.tr_args("software-stopped", [("code", exit.to_string().into())]));
                 }
                 break;
             }

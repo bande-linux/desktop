@@ -447,14 +447,3 @@ impl AppMenu {
         self.actions.drain()
     }
 }
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn every_message_id_used_in_code_is_in_the_english_file() {
-        assert_eq!(
-            unbound_l10n::missing_ids(super::ENGLISH, &[include_str!("lib.rs")]),
-            Vec::<&str>::new()
-        );
-    }
-}

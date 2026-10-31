@@ -9,3 +9,4 @@ publish = false
 [dependencies]
 image.workspace = true
 image-compare.workspace = true
+unbound-graphics.workspace = true

@@ -23,12 +23,15 @@ blocking = "=1.6.2"
 bzip2 = "=0.6.1"
 flate2 = "=1.1.10"
 fluent-bundle = "=0.16.0"
+fluent-syntax = "=0.12.0"
 fontique = { version = "=0.12.0", features = ["fontconfig-dlopen"] }
 icu_calendar = "=2.4.0"
 icu_datetime = "=2.4.0"
+icu_decimal = "=2.4.0"
 icu_locale_core = "=2.4.0"
 image = { version = "=0.25.10", default-features = false, features = ["jpeg", "png"] }
 image-compare = "=0.5.0"
+intl-memoizer = "=0.5.3"
 jiff = "=0.2.38"
 kdl = { version = "=6.7.1", default-features = false, features = ["span"] }
 libc = "=0.2.191"

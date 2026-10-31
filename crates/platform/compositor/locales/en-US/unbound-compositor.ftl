@@ -26,3 +26,4 @@ move-to-desktop = Move to Desktop
 desktop-number = Desktop { $number }
 new-desktop = New Desktop
 remember-apps-before-shutdown = Remember the open apps to reopen them at the next login
+cannot-start = { $program } can’t start: { $error }

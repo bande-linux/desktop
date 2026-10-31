@@ -581,7 +581,7 @@ impl Editor {
         let mut layout: Layout<Color> = builder.build(&content);
         layout.break_all_lines(self.width);
         layout.align(Alignment::Start, AlignmentOptions::default());
-        Paragraph::from_layout(layout)
+        Paragraph::from_layout(layout, &content)
     }
 
     fn ensure(&mut self, text: &mut TextSystem, paragraph: usize) {

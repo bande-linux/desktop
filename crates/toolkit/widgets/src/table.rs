@@ -265,6 +265,8 @@ pub struct Table {
     menu_keys: Vec<String>,
     on_drag: Option<DragStart>,
     offset: f32,
+    grown: f32,
+    scale: f32,
     pending_reveal: Option<usize>,
     glide: Option<Glide>,
 }
@@ -307,6 +309,8 @@ impl Table {
             menu_keys: Vec::new(),
             on_drag: None,
             offset: 0.0,
+            grown: 0.0,
+            scale: 1.0,
             pending_reveal: None,
             glide: None,
         }
@@ -714,11 +718,19 @@ impl Table {
         point.x >= x - 2.0 && point.x < x + DISCLOSURE_WIDTH
     }
 
-    fn header_height(&self) -> f32 {
+    pub fn header_height(&self) -> f32 {
         match self.header {
-            true => HEADER_HEIGHT,
+            true => self.header_bar(),
             false => 0.0,
         }
+    }
+
+    fn header_bar(&self) -> f32 {
+        HEADER_HEIGHT + self.grown
+    }
+
+    fn row_height(&self) -> f32 {
+        ROW_HEIGHT + self.grown
     }
 
     fn body(&self) -> Rect {
@@ -744,14 +756,14 @@ impl Table {
             .iter()
             .enumerate()
             .filter(|(index, _)| *index != stretched)
-            .map(|(_, column)| column.width)
+            .map(|(_, column)| column.width * self.scale)
             .sum();
         self.columns
             .iter()
             .enumerate()
             .map(|(index, column)| match index == stretched {
                 true => (self.frame.width - fixed).max(column.width.min(MIN_COLUMN * 2.0)),
-                false => column.width,
+                false => column.width * self.scale,
             })
             .collect()
     }
@@ -777,9 +789,9 @@ impl Table {
         (index < self.shown.len()).then(|| {
             Rect::new(
                 body.x,
-                body.y + index as f32 * ROW_HEIGHT - self.offset,
+                body.y + index as f32 * self.row_height() - self.offset,
                 body.width,
-                ROW_HEIGHT,
+                self.row_height(),
             )
         })
     }
@@ -808,7 +820,7 @@ impl Table {
             return None;
         }
         let y = point.y - body.y + offset;
-        let index = (y / ROW_HEIGHT).floor();
+        let index = (y / self.row_height()).floor();
         (index >= 0.0 && (index as usize) < self.shown.len()).then_some(index as usize)
     }
 
@@ -822,8 +834,8 @@ impl Table {
     }
 
     fn reveal_row(&mut self, cx: &Context, index: usize) {
-        let top = index as f32 * ROW_HEIGHT;
-        self.scroll.reveal(cx, top, top + ROW_HEIGHT);
+        let top = index as f32 * self.row_height();
+        self.scroll.reveal(cx, top, top + self.row_height());
     }
 
     fn select_only(&mut self, index: usize) {
@@ -890,7 +902,7 @@ impl Table {
     }
 
     fn page_rows(&self) -> usize {
-        ((self.body().height / ROW_HEIGHT).floor() as usize).max(1)
+        ((self.body().height / self.row_height()).floor() as usize).max(1)
     }
 
     fn key(&mut self, cx: &mut Context, key: Key, modifiers: Modifiers) -> bool {
@@ -1046,7 +1058,7 @@ impl Table {
                 self.drag = Some(Drag::Resize {
                     column,
                     from: pointer.position.x,
-                    width: self.columns[column].width,
+                    width: self.columns[column].width * self.scale,
                     inverted,
                 });
                 return true;
@@ -1142,7 +1154,7 @@ impl Table {
                     true => from - point.x,
                     false => point.x - from,
                 };
-                self.columns[column].width = (width + moved).max(MIN_COLUMN);
+                self.columns[column].width = (width + moved).max(MIN_COLUMN) / self.scale;
                 true
             }
             Some(Drag::Press { from, row, .. }) => self.press_moved(cx, from, row, point),
@@ -1152,9 +1164,9 @@ impl Table {
                     Point::new(point.x, point.y.clamp(body.y, body.y + body.height - 1.0));
                 if point.y < body.y || point.y > body.y + body.height {
                     let edge = if point.y < body.y {
-                        -ROW_HEIGHT
+                        -self.row_height()
                     } else {
-                        ROW_HEIGHT
+                        self.row_height()
                     };
                     let offset = self.scroll.offset(cx);
                     self.scroll.scroll_to(cx, offset + edge);
@@ -1279,8 +1291,8 @@ impl Table {
 
     fn visible_rows(&self, cx: &Context) -> (usize, usize) {
         let offset = self.scroll.offset(cx).max(0.0);
-        let first = (offset / ROW_HEIGHT).floor() as usize;
-        let count = (self.body().height / ROW_HEIGHT).ceil() as usize + 2;
+        let first = (offset / self.row_height()).floor() as usize;
+        let count = (self.body().height / self.row_height()).ceil() as usize + 2;
         (
             first.min(self.shown.len()),
             (first + count).min(self.shown.len()),
@@ -1288,7 +1300,12 @@ impl Table {
     }
 
     fn paint_header(&self, cx: &Context, items: &mut Vec<Item>) {
-        let header = Rect::new(self.frame.x, self.frame.y, self.frame.width, HEADER_HEIGHT);
+        let header = Rect::new(
+            self.frame.x,
+            self.frame.y,
+            self.frame.width,
+            self.header_bar(),
+        );
         items.push(Item::Fill {
             shape: Shape::rect(header),
             paint: cx.palette.sheet.into(),
@@ -1305,13 +1322,13 @@ impl Table {
                 true => x + width - CELL_PADDING - paragraph.width(),
                 false => x + CELL_PADDING,
             };
-            let text_y = self.frame.y + ((HEADER_HEIGHT - paragraph.height()) / 2.0).round();
+            let text_y = self.frame.y + ((self.header_bar() - paragraph.height()) / 2.0).round();
             if let Some(sort) = sorted {
                 let arrow_x = match self.columns[column].numeric {
                     true => text_x - 10.0,
                     false => text_x + paragraph.width() + 6.0,
                 };
-                let middle = self.frame.y + HEADER_HEIGHT / 2.0;
+                let middle = self.frame.y + self.header_bar() / 2.0;
                 let (tip, base) = if sort.ascending {
                     (-2.0, 2.0)
                 } else {
@@ -1332,10 +1349,10 @@ impl Table {
             });
         }
         items.push(Item::Line {
-            from: Point::new(self.frame.x, self.frame.y + HEADER_HEIGHT - 0.5),
+            from: Point::new(self.frame.x, self.frame.y + self.header_bar() - 0.5),
             to: Point::new(
                 self.frame.x + self.frame.width,
-                self.frame.y + HEADER_HEIGHT - 0.5,
+                self.frame.y + self.header_bar() - 0.5,
             ),
             width: 1.0,
             paint: cx.palette.hairline.into(),
@@ -1357,7 +1374,7 @@ impl Table {
     fn lit(&self, cx: &Context, index: usize) -> bool {
         match &self.glide {
             Some(glide) => {
-                let centre = (index as f32 + 0.5) * ROW_HEIGHT;
+                let centre = (index as f32 + 0.5) * self.row_height();
                 glide.top.value(cx) <= centre && centre < glide.bottom.value(cx)
             }
             None => self.selected.get(index).copied().unwrap_or(false),
@@ -1370,7 +1387,10 @@ impl Table {
             self.glide = None;
             return;
         };
-        let (top, bottom) = (run.0 as f32 * ROW_HEIGHT, run.1 as f32 * ROW_HEIGHT);
+        let (top, bottom) = (
+            run.0 as f32 * self.row_height(),
+            run.1 as f32 * self.row_height(),
+        );
         match &mut self.glide {
             Some(glide) if glide.run == run => {}
             Some(glide) => {
@@ -1405,7 +1425,12 @@ impl Table {
             None => self
                 .runs()
                 .into_iter()
-                .map(|(first, last)| (first as f32 * ROW_HEIGHT, last as f32 * ROW_HEIGHT))
+                .map(|(first, last)| {
+                    (
+                        first as f32 * self.row_height(),
+                        last as f32 * self.row_height(),
+                    )
+                })
                 .collect(),
         };
         for (top, bottom) in spans {
@@ -1434,7 +1459,7 @@ impl Table {
                 x,
                 self.frame.y,
                 width,
-                HEADER_HEIGHT,
+                self.header_bar(),
             )));
             if let Some(sort) = self.sort.filter(|sort| sort.column == column) {
                 title.set_sort_direction(match sort.ascending {
@@ -1508,7 +1533,14 @@ impl Widget for Table {
         self.id
     }
 
-    fn measure(&mut self, _cx: &mut Context, available: Size) -> Size {
+    fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
+        let grown = cx.grown_line();
+        if grown != self.grown {
+            self.grown = grown;
+            self.glide = None;
+            self.texts.get_mut().clear();
+        }
+        self.scale = cx.text.scale();
         available
     }
 
@@ -1516,7 +1548,7 @@ impl Widget for Table {
         self.frame = frame;
         let body = self.body();
         self.scroll
-            .set_extent(self.shown.len() as f32 * ROW_HEIGHT, body.height);
+            .set_extent(self.shown.len() as f32 * self.row_height(), body.height);
         if let Some(index) = self.pending_reveal.take() {
             self.reveal_row(cx, index);
         }
@@ -1563,7 +1595,7 @@ impl Widget for Table {
         let mut rows = Vec::new();
         self.paint_selection(cx, body, offset, focused, &mut rows);
         for index in first..last {
-            let y = body.y + index as f32 * ROW_HEIGHT - offset;
+            let y = body.y + index as f32 * self.row_height() - offset;
             let lit = focused && self.lit(cx, index);
             let Some(line) = self.line(index) else {
                 continue;
@@ -1575,7 +1607,7 @@ impl Widget for Table {
                         + line.depth as f32 * INDENT
                         + DISCLOSURE_WIDTH / 2.0
                         - 2.0,
-                    y + ROW_HEIGHT / 2.0,
+                    y + self.row_height() / 2.0,
                 );
                 let color = match lit {
                     true => cx.palette.on_accent,
@@ -1593,7 +1625,7 @@ impl Widget for Table {
                     rows.push(Item::Image {
                         rect: Rect::new(
                             text_x,
-                            y + (ROW_HEIGHT - ICON_SIZE) / 2.0,
+                            y + (self.row_height() - ICON_SIZE) / 2.0,
                             ICON_SIZE,
                             ICON_SIZE,
                         ),
@@ -1611,7 +1643,7 @@ impl Widget for Table {
                 rows.push(Item::Text {
                     origin: Point::new(
                         text_x,
-                        y + ((ROW_HEIGHT - paragraph.height()) / 2.0).round(),
+                        y + ((self.row_height() - paragraph.height()) / 2.0).round(),
                     ),
                     paragraph: paragraph.clone(),
                 });
@@ -1667,9 +1699,9 @@ impl Widget for Table {
             };
             let bounds = Rect::new(
                 body.x,
-                body.y + index as f32 * ROW_HEIGHT - offset,
+                body.y + index as f32 * self.row_height() - offset,
                 body.width,
-                ROW_HEIGHT,
+                self.row_height(),
             );
             self.row_node(index, row, &mut parts, bounds);
         }

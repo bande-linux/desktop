@@ -3,6 +3,7 @@ use std::time::{Duration, Instant};
 use crate::support::*;
 use smithay::utils::{Logical, Point, Size};
 use unbound_compositor::{Headless, Renderer};
+use unbound_graphics::TextSize;
 use unbound_test_wayland::{BLUE, DecorationMode, TestClient, ToplevelState, roundtrip};
 
 const SCREEN: (i32, i32) = (640, 480);
@@ -230,6 +231,36 @@ fn the_window_menu_matches_its_golden() {
     let snapshot = renderer.snapshot(&server).expect("read back");
     unbound_golden::assert_golden!(
         "window-menu",
+        &unbound_golden::from_rgba(
+            snapshot.size.w.unsigned_abs(),
+            snapshot.size.h.unsigned_abs(),
+            snapshot.rgba,
+        )
+    );
+}
+
+#[test]
+fn the_window_menu_follows_the_text_size_and_matches_its_golden() {
+    let mut server = server();
+    server.set_text_size(TextSize::from_percent(150));
+    let mut renderer = Renderer::new().expect("renderer");
+    let _client = decorated(&mut server);
+
+    open_window_menu(&mut server);
+    let minimize = server
+        .window_menu_item("Minimize")
+        .expect("a Minimize item");
+    let zoom = server.window_menu_item("Zoom").expect("a Zoom item");
+    assert_eq!(zoom.y - minimize.y, 37.0);
+    choose(&mut server, "Move & Resize");
+    let left = server.window_menu_item("Left").expect("a Left item");
+    server.move_pointer_to(left, 20);
+    settle(&mut server, 0);
+
+    renderer.render(&mut server).expect("frame");
+    let snapshot = renderer.snapshot(&server).expect("read back");
+    unbound_golden::assert_golden!(
+        "window-menu-150",
         &unbound_golden::from_rgba(
             snapshot.size.w.unsigned_abs(),
             snapshot.size.h.unsigned_abs(),

@@ -2,6 +2,7 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use unbound_compositor::{SystemAppearance, follow_appearance};
+use unbound_graphics::TextSize;
 use unbound_test_bus::SessionBus;
 use zbus::object_server::SignalEmitter;
 use zbus::zvariant::{OwnedValue, Value};
@@ -9,6 +10,7 @@ use zbus::zvariant::{OwnedValue, Value};
 const PORTAL: &str = "org.freedesktop.portal.Desktop";
 const PORTAL_PATH: &str = "/org/freedesktop/portal/desktop";
 const APPEARANCE: &str = "org.freedesktop.appearance";
+const UNBOUND_APPEARANCE: &str = "org.unbound.appearance";
 const TIMEOUT: Duration = Duration::from_secs(10);
 
 struct Settings;
@@ -33,7 +35,7 @@ impl Settings {
 }
 
 #[test]
-fn reduce_motion_and_dark_mode_follow_the_portals_appearance_keys() {
+fn reduce_motion_dark_mode_and_text_size_follow_the_portals_appearance_keys() {
     let bus = SessionBus::start().expect("session bus");
     let portal = bus.connect().expect("portal connection");
     portal
@@ -49,10 +51,14 @@ fn reduce_motion_and_dark_mode_follow_the_portals_appearance_keys() {
     .expect("follow the portal");
     let first = readings.recv_timeout(TIMEOUT).expect("first reading");
     let emitter = SignalEmitter::new(portal.inner(), PORTAL_PATH).expect("emitter");
-    for (key, value) in [("color-scheme", 1u32), ("reduced-motion", 0u32)] {
+    for (namespace, key, value) in [
+        (APPEARANCE, "color-scheme", 1u32),
+        (APPEARANCE, "reduced-motion", 0u32),
+        (UNBOUND_APPEARANCE, "text-size", 150u32),
+    ] {
         zbus::block_on(Settings::setting_changed(
             &emitter,
-            APPEARANCE,
+            namespace,
             key,
             Value::from(value),
         ))
@@ -60,21 +66,31 @@ fn reduce_motion_and_dark_mode_follow_the_portals_appearance_keys() {
     }
     let dark = readings.recv_timeout(TIMEOUT).expect("dark");
     let calm = readings.recv_timeout(TIMEOUT).expect("motion");
+    let larger = readings.recv_timeout(TIMEOUT).expect("text size");
 
+    let regular = TextSize::DEFAULT;
     assert_eq!(
-        [first, dark, calm],
+        [first, dark, calm, larger],
         [
             SystemAppearance {
                 reduce_motion: true,
-                dark: false
+                dark: false,
+                text_size: regular,
             },
             SystemAppearance {
                 reduce_motion: true,
-                dark: true
+                dark: true,
+                text_size: regular,
             },
             SystemAppearance {
                 reduce_motion: false,
-                dark: true
+                dark: true,
+                text_size: regular,
+            },
+            SystemAppearance {
+                reduce_motion: false,
+                dark: true,
+                text_size: TextSize::from_percent(150),
             },
         ]
     );

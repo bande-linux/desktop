@@ -400,6 +400,7 @@ fn follow_session_bus<O: 'static>(
                 if let Event::Msg(look) = event {
                     app.compositor.set_reduce_motion(look.reduce_motion);
                     app.compositor.set_dark_appearance(look.dark);
+                    app.compositor.set_text_size(look.text_size);
                 }
             })?;
         }

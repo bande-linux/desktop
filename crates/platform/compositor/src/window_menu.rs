@@ -13,13 +13,14 @@ use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Point, Rectangle, Size};
 use smithay::wayland::shell::xdg::PositionerState;
-use unbound_graphics::{Key, Modifiers, Palette, Scheme, WindowControl};
+use unbound_graphics::{Key, Modifiers, Palette, Scheme, TextSize, TextSystem, WindowControl};
 use unbound_protocols::server::unbound_app_v1::Placement;
 use unbound_render::VulkanRenderer;
 use unbound_spring::Spring;
 use unbound_widgets::{MENU_SHADOW_MARGIN, Menu, MenuItem, MenuOutcome, MenuPanel, MenuTracker};
 
 use crate::L10N;
+use crate::label::Labels;
 use crate::motion::{Look, Motion, Tick};
 use crate::state::{Headless, OutputElement, Rect, State};
 
@@ -59,6 +60,8 @@ struct Open {
 #[derive(Default)]
 pub(crate) struct WindowMenus {
     open: Option<Open>,
+    labels: Option<Labels>,
+    text_size: TextSize,
     on_zoom: Option<WlSurface>,
     rest: Option<(WlSurface, Instant)>,
 }
@@ -73,6 +76,12 @@ impl WindowMenus {
             open.tracker.is_flashing() || open.panels.iter().any(|panel| !panel.motion.is_settled())
         })
     }
+}
+
+fn menu_text(labels: &mut Option<Labels>, size: TextSize) -> &mut TextSystem {
+    let text = labels.get_or_insert_with(Labels::default).text();
+    text.set_size(size);
+    text
 }
 
 enum Anchored {
@@ -320,7 +329,12 @@ impl State {
         let screen = self.screen_of(&self.windows[index]);
         let area = self.usable_area(screen);
         let palette = Palette::for_scheme(self.decorations.scheme);
-        let panel = MenuPanel::new(menu, self.labels.get_mut().text(), &palette);
+        let menus = &mut self.window_menus;
+        let panel = MenuPanel::new(
+            menu,
+            menu_text(&mut menus.labels, menus.text_size),
+            &palette,
+        );
         let geometry = root_placement(&anchored, whole_size(&panel), area);
         let mut tracker = MenuTracker::new(panel, from_keyboard);
         tracker.placed(0, geometry.size.h as f32, false);
@@ -357,8 +371,12 @@ impl State {
             return;
         };
         let area = self.usable_area(screen);
-        let labels = self.labels.get_mut();
-        let open = &mut self.window_menus.open;
+        let WindowMenus {
+            open,
+            labels,
+            text_size,
+            ..
+        } = &mut self.window_menus;
         let Some(open) = open.as_mut() else {
             return;
         };
@@ -371,8 +389,7 @@ impl State {
         open.panels.truncate(level + 1);
         open.tracker.truncate(level + 1);
         let row = open.tracker.panels()[level].row_rect(index);
-        let text = labels.text();
-        let panel = MenuPanel::new(menu, text, &palette);
+        let panel = MenuPanel::new(menu, menu_text(labels, *text_size), &palette);
         let geometry = submenu_placement(parent, row, whole_size(&panel), area);
         let beside_left = f64::from(geometry.loc.x) < parent.loc.x;
         open.tracker.opened_submenu(panel, from_keyboard);
@@ -627,8 +644,7 @@ impl State {
         let scheme = self.decorations.scheme;
         let palette = Palette::for_scheme(scheme);
         let now = Instant::now();
-        let labels = self.labels.get_mut();
-        let open = &mut self.window_menus.open;
+        let WindowMenus { open, labels, .. } = &mut self.window_menus;
         let Some(open) = open.as_mut().filter(|open| open.screen == screen) else {
             return;
         };
@@ -657,7 +673,10 @@ impl State {
                 continue;
             }
             let scene = panel.scene(&palette, show_highlight);
-            shown.painted = labels.paint(&scene, scale).map(|buffer| (look, buffer));
+            shown.painted = labels
+                .get_or_insert_with(Labels::default)
+                .paint(&scene, scale)
+                .map(|buffer| (look, buffer));
         }
     }
 
@@ -708,6 +727,10 @@ impl State {
 }
 
 impl Headless {
+    pub fn set_text_size(&mut self, size: TextSize) {
+        self.state.window_menus.text_size = size;
+    }
+
     pub fn window_menu_tick(&mut self, now: Instant) -> Option<Instant> {
         self.state.window_menu_due(now)
     }

@@ -4,7 +4,7 @@ use unbound_graphics::{
 };
 
 use super::control::{chevron_down, focus_ring};
-use super::menu::{ROW_HEIGHT, TEXT_START, VERTICAL_PADDING};
+use super::menu::{TEXT_START, VERTICAL_PADDING, row_height};
 use super::{Context, Event, Key, Menu, MenuItem, Size, Widget, WidgetId};
 
 const PADDING: f32 = 10.0;
@@ -67,10 +67,11 @@ impl PopUpButton {
                 })
                 .collect(),
         );
-        let row = VERTICAL_PADDING + self.selected as f32 * ROW_HEIGHT;
+        let row_height = row_height(cx.text.size());
+        let row = VERTICAL_PADDING + self.selected as f32 * row_height;
         let at = Point::new(
             self.frame.x + PADDING - TEXT_START,
-            self.frame.y + ((self.frame.height - ROW_HEIGHT) / 2.0).round() - row,
+            self.frame.y + ((self.frame.height - row_height) / 2.0).round() - row,
         );
         cx.show_menu(menu, at);
     }

@@ -374,6 +374,12 @@ fn for_role(role: &ShellSurface, appearance: Appearance) -> Appearance {
     }
 }
 
+fn menu_text(text: &mut Option<TextSystem>, appearance: Appearance) -> &mut TextSystem {
+    let text = text.get_or_insert_with(TextSystem::new);
+    text.set_size(appearance.text_size);
+    text
+}
+
 pub struct Window {
     gpu: Gpu,
     pub(crate) cpu: CpuRenderer,
@@ -1071,11 +1077,12 @@ impl Window {
             opacity
         });
         let handle = self.queue.handle();
+        let appearance = self.appearance();
         let opening = Opening {
             state: &mut self.state,
             handle: &handle,
-            text: self.text.get_or_insert_with(TextSystem::new),
-            palette: self.appearance.borrow().current().palette(),
+            text: menu_text(&mut self.text, appearance),
+            palette: appearance.palette(),
         };
         let menus = Menus::open(opening, menu, parent, placement, opacity)?;
         self.menus = Some(menus);
@@ -1383,13 +1390,13 @@ impl Window {
             }
             MenuOutcome::Search(menu) => {
                 let handle = self.queue.handle();
-                let palette = self.appearance.borrow().current().palette();
+                let appearance = self.appearance();
                 if let Some(menus) = &mut self.menus {
                     let opening = Opening {
                         state: &mut self.state,
                         handle: &handle,
-                        text: self.text.get_or_insert_with(TextSystem::new),
-                        palette,
+                        text: menu_text(&mut self.text, appearance),
+                        palette: appearance.palette(),
                     };
                     if let Err(error) = menus.search(opening, menu) {
                         tracing::warn!(%error, "cannot resize the searched menu");
@@ -1399,13 +1406,13 @@ impl Window {
             }
             MenuOutcome::OpenSubmenu { level, index } => {
                 let handle = self.queue.handle();
-                let palette = self.appearance.borrow().current().palette();
+                let appearance = self.appearance();
                 if let Some(menus) = &mut self.menus {
                     let opening = Opening {
                         state: &mut self.state,
                         handle: &handle,
-                        text: self.text.get_or_insert_with(TextSystem::new),
-                        palette,
+                        text: menu_text(&mut self.text, appearance),
+                        palette: appearance.palette(),
                     };
                     let _ = menus.open_submenu(opening, level, index, keyboard);
                 }

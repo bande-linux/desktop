@@ -2,7 +2,7 @@
 
 use std::time::{Duration, Instant};
 
-use unbound_graphics::{Key, Modifiers, Palette, Point, Scheme, TextSystem};
+use unbound_graphics::{Key, Modifiers, Palette, Point, Scheme, TextSize, TextSystem};
 use unbound_widgets::{Menu, MenuItem, MenuOutcome, MenuPanel, MenuTracker};
 
 fn app_menus() -> Menu {
@@ -275,19 +275,40 @@ fn a_menu_that_fits_does_not_scroll() {
     assert_eq!(tracker.scroll(0, 40.0), MenuOutcome::Nothing);
 }
 
-#[test]
-fn a_menu_is_never_shortened_below_three_rows() {
+fn rows_left_on_a_tiny_screen(text_size: TextSize) -> usize {
     let mut text = TextSystem::new();
+    text.set_size(text_size);
     let mut tracker = tracker(long_menu(), &mut text);
     tracker.placed(0, 20.0, false);
-    let visible = (0..LONG_MENU_ROWS)
+    (0..LONG_MENU_ROWS)
         .filter(|index| {
-            tracker.panels()[0]
-                .item_at(row_centre(&tracker, *index))
-                .is_some()
+            let row = tracker.panels()[0].row_rect(*index);
+            [row.y + 1.0, row.y + row.height - 1.0]
+                .into_iter()
+                .all(|y| tracker.panels()[0].item_at(Point::new(40.0, y)) == Some(*index))
         })
-        .count();
-    assert!(visible >= 3, "{visible} rows remain");
+        .count()
+}
+
+#[test]
+fn a_menu_is_never_shortened_below_three_whole_rows_at_any_text_size() {
+    for percent in [100, 150, 200] {
+        let visible = rows_left_on_a_tiny_screen(TextSize::from_percent(percent));
+        assert!(visible >= 3, "{visible} whole rows remain at {percent} %");
+    }
+}
+
+#[test]
+fn larger_text_makes_menu_rows_taller_and_the_menu_wider() {
+    let panel = |percent: u32| {
+        let mut text = TextSystem::new();
+        text.set_size(TextSize::from_percent(percent));
+        MenuPanel::new(long_menu(), &mut text, &Palette::for_scheme(Scheme::Light))
+    };
+    let (regular, larger) = (panel(100), panel(150));
+    assert_eq!(regular.row_rect(0).height, 28.0);
+    assert_eq!(larger.row_rect(0).height, 37.0);
+    assert!(larger.size().width > regular.size().width);
 }
 
 #[test]

@@ -1,5 +1,6 @@
 use std::thread;
 
+use unbound_graphics::TextSize;
 use zbus::blocking::{Connection, Proxy};
 use zbus::zvariant::OwnedValue;
 
@@ -7,22 +8,30 @@ const PORTAL: &str = "org.freedesktop.portal.Desktop";
 const PORTAL_PATH: &str = "/org/freedesktop/portal/desktop";
 const SETTINGS: &str = "org.freedesktop.portal.Settings";
 const NAMESPACE: &str = "org.freedesktop.appearance";
+const UNBOUND_NAMESPACE: &str = "org.unbound.appearance";
 const REDUCED_MOTION: &str = "reduced-motion";
 const COLOR_SCHEME: &str = "color-scheme";
+const TEXT_SIZE: &str = "text-size";
 const PREFER_DARK: u32 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct SystemAppearance {
     pub reduce_motion: bool,
     pub dark: bool,
+    pub text_size: TextSize,
 }
 
 impl SystemAppearance {
-    fn apply(&mut self, key: &str, value: &OwnedValue) {
+    fn apply(&mut self, namespace: &str, key: &str, value: &OwnedValue) {
         let value = u32::try_from(value).ok();
-        match key {
-            REDUCED_MOTION => self.reduce_motion = value.is_some_and(|reduce| reduce != 0),
-            COLOR_SCHEME => self.dark = value == Some(PREFER_DARK),
+        match (namespace, key) {
+            (NAMESPACE, REDUCED_MOTION) => {
+                self.reduce_motion = value.is_some_and(|reduce| reduce != 0);
+            }
+            (NAMESPACE, COLOR_SCHEME) => self.dark = value == Some(PREFER_DARK),
+            (UNBOUND_NAMESPACE, TEXT_SIZE) => {
+                self.text_size = value.map_or(TextSize::DEFAULT, TextSize::from_percent);
+            }
             _ => {}
         }
     }
@@ -36,9 +45,13 @@ pub fn follow_appearance(
     let changes = settings.receive_signal("SettingChanged")?;
     thread::spawn(move || {
         let mut appearance = SystemAppearance::default();
-        for key in [REDUCED_MOTION, COLOR_SCHEME] {
-            if let Ok(value) = settings.call::<_, _, OwnedValue>("ReadOne", &(NAMESPACE, key)) {
-                appearance.apply(key, &value);
+        for (namespace, key) in [
+            (NAMESPACE, REDUCED_MOTION),
+            (NAMESPACE, COLOR_SCHEME),
+            (UNBOUND_NAMESPACE, TEXT_SIZE),
+        ] {
+            if let Ok(value) = settings.call::<_, _, OwnedValue>("ReadOne", &(namespace, key)) {
+                appearance.apply(namespace, key, &value);
             }
         }
         if !publish(appearance) {
@@ -50,11 +63,8 @@ pub fn follow_appearance(
             else {
                 continue;
             };
-            if namespace != NAMESPACE {
-                continue;
-            }
             let before = appearance;
-            appearance.apply(&key, &value);
+            appearance.apply(&namespace, &key, &value);
             if appearance != before && !publish(appearance) {
                 return;
             }

@@ -3,14 +3,14 @@ use std::time::{Duration, Instant};
 use accesskit::{Action, Node, NodeId, Role, Toggled};
 use unbound_graphics::{
     Color, Elevation, Item, Palette, Paragraph, Path, Point, Radius, Rect, Scene, Shape, TextAlign,
-    TextStyle, TextSystem,
+    TextSize, TextStyle, TextSystem, grown_line,
 };
 
 use super::control::square_capped;
 use super::shortcut::ShortcutText;
 use super::{Key, Modifiers, Size};
 
-pub(crate) const ROW_HEIGHT: f32 = 28.0;
+const ROW_HEIGHT: f32 = 28.0;
 const SEPARATOR_HEIGHT: f32 = 9.0;
 pub(crate) const VERTICAL_PADDING: f32 = 4.0;
 const HIGHLIGHT_INSET: f32 = 4.0;
@@ -27,8 +27,6 @@ const MARK_STROKE: f32 = 1.6;
 const SUBMENU_DELAY: Duration = Duration::from_millis(200);
 const SAFE_DELAY: Duration = Duration::from_millis(300);
 const SAFE_MARGIN: f32 = 6.0;
-const SEARCH_LINE: f32 = ROW_HEIGHT + SEPARATOR_HEIGHT;
-const FOOTER_HEIGHT: f32 = 28.0;
 const FOOTER_FONT_SIZE: f32 = 12.0;
 const SEARCH_WIDTH: f32 = 220.0;
 const MAGNIFIER_RADIUS: f32 = 4.0;
@@ -44,6 +42,10 @@ const SCROLL_SPEED: f32 = 300.0;
 const SCROLL_STEP: Duration = Duration::from_millis(16);
 const CHEVRON_HALF_WIDTH: f32 = 4.0;
 const CHEVRON_RISE: f32 = 2.0;
+
+pub(crate) fn row_height(text: TextSize) -> f32 {
+    ROW_HEIGHT + grown_line(text)
+}
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Menu {
@@ -223,6 +225,7 @@ pub struct MenuPanel {
     rows: [Vec<Row>; 2],
     alternates: bool,
     size: Size,
+    row_height: f32,
     content_height: f32,
     scrolled: f32,
     submenus_open_left: bool,
@@ -238,6 +241,9 @@ enum SearchLook {
 impl MenuPanel {
     pub fn new(menu: Menu, text: &mut TextSystem, palette: &Palette) -> Self {
         let on_accent = palette.on_accent;
+        let row_height = row_height(text.size());
+        let scale = text.scale();
+        let widen = |width: f32| (width * scale).round();
         let paragraphs = |text: &mut TextSystem, content: &str, normal: Color, strong: bool| {
             [normal, on_accent].map(|color| {
                 let style = TextStyle::new(FONT_SIZE, color);
@@ -286,12 +292,12 @@ impl MenuPanel {
         let (header, footer, minimum_width) = match &search {
             Some(SearchLook::Hint(hint, shortcut)) => (
                 0.0,
-                FOOTER_HEIGHT,
+                row_height,
                 (TEXT_START + hint.width() + SHORTCUT_GAP + shortcut.width() + TRAILING_PADDING)
-                    .max(SEARCH_WIDTH),
+                    .max(widen(SEARCH_WIDTH)),
             ),
-            Some(SearchLook::Query(_)) => (SEARCH_LINE, 0.0, SEARCH_WIDTH),
-            None => (0.0, 0.0, MINIMUM_WIDTH),
+            Some(SearchLook::Query(_)) => (row_height + SEPARATOR_HEIGHT, 0.0, widen(SEARCH_WIDTH)),
+            None => (0.0, 0.0, widen(MINIMUM_WIDTH)),
         };
         let rows = [&menu, &alternate].map(|menu| {
             let mut top = VERTICAL_PADDING + header;
@@ -301,7 +307,7 @@ impl MenuPanel {
                     let height = if item.separator {
                         SEPARATOR_HEIGHT
                     } else {
-                        ROW_HEIGHT
+                        row_height
                     };
                     let label_color = if item.enabled {
                         palette.ink
@@ -349,6 +355,7 @@ impl MenuPanel {
             rows,
             alternates: false,
             size: Size::new(width, height),
+            row_height,
             content_height: height,
             scrolled: 0.0,
             submenus_open_left: false,
@@ -367,7 +374,7 @@ impl MenuPanel {
     fn fit_height(&mut self, height: f32) {
         let (header, footer) = self.header_and_footer();
         let fewest = 2.0 * VERTICAL_PADDING + header + footer + 2.0 * SCROLL_ZONE;
-        let fewest = fewest + FEWEST_ROWS * ROW_HEIGHT;
+        let fewest = fewest + FEWEST_ROWS * self.row_height;
         self.size.height = height
             .max(fewest.min(self.content_height))
             .min(self.content_height);
@@ -391,8 +398,8 @@ impl MenuPanel {
 
     fn header_and_footer(&self) -> (f32, f32) {
         match &self.search {
-            Some(SearchLook::Query(_)) => (SEARCH_LINE, 0.0),
-            Some(SearchLook::Hint(..)) => (0.0, FOOTER_HEIGHT),
+            Some(SearchLook::Query(_)) => (self.row_height + SEPARATOR_HEIGHT, 0.0),
+            Some(SearchLook::Hint(..)) => (0.0, self.row_height),
             None => (0.0, 0.0),
         }
     }
@@ -673,7 +680,7 @@ impl MenuPanel {
     }
 
     fn paint_query(&self, query: &Paragraph, palette: &Palette, items: &mut Vec<Item>) {
-        let centre = VERTICAL_PADDING + ROW_HEIGHT / 2.0;
+        let centre = VERTICAL_PADDING + self.row_height / 2.0;
         magnifier(Point::new(MAGNIFIER_CENTRE, centre), palette.ink2, items);
         let y = (centre - query.height() / 2.0).round();
         items.push(Item::Text {
@@ -690,7 +697,7 @@ impl MenuPanel {
         items.push(Item::Fill {
             shape: Shape::rect(Rect::new(
                 0.0,
-                (VERTICAL_PADDING + ROW_HEIGHT + SEPARATOR_HEIGHT / 2.0).round() - 0.5,
+                (VERTICAL_PADDING + self.row_height + SEPARATOR_HEIGHT / 2.0).round() - 0.5,
                 self.size.width,
                 1.0,
             )),
@@ -708,9 +715,9 @@ impl MenuPanel {
     ) {
         let tray = Rect::new(
             0.0,
-            self.size.height - FOOTER_HEIGHT,
+            self.size.height - self.row_height,
             self.size.width,
-            FOOTER_HEIGHT,
+            self.row_height,
         );
         let centre = tray.y + tray.height / 2.0;
         let mut footer = vec![

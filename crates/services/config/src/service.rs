@@ -14,10 +14,11 @@ use zbus::zvariant::{OwnedValue, Value};
 
 use crate::{
     ACCENTS, Accessibility, AlertSound, Appearance, BarEdge, CURSOR_SIZE_RANGE, CapsLock,
-    ClockFormat, ClockTime, Config, ConfigStore, DisplaySettings, InputSource, LidOnPower, Loaded,
-    MenuBarPlacement, NIGHT_LIGHT_WARMTH_RANGE, NightLight, NightSchedule, Placement, ReloadError,
-    Rotation, SecondaryClick, Setting, Suspend, TEXT_SIZE_RANGE, WallpaperFit, WallpaperVariant,
-    ZOOM_RANGE, accent_keyword, read_system_input_sources,
+    ClockFormat, ClockTime, Config, ConfigStore, DisplaySettings, Dragging, InputSource,
+    LidOnPower, Loaded, MenuBarPlacement, NIGHT_LIGHT_WARMTH_RANGE, NightLight, NightSchedule,
+    Placement, PrimaryButton, ReloadError, Rotation, ScrollMethod, SecondaryClick, Setting,
+    Suspend, TEXT_SIZE_RANGE, WallpaperFit, WallpaperVariant, ZOOM_RANGE, accent_keyword,
+    read_system_input_sources,
 };
 
 pub type ArrangedDisplay = (String, i32, i32, bool, String);
@@ -261,6 +262,21 @@ fn publish_changes(
         }
         if before.mouse.speed != after.mouse.speed {
             let _ = guard.mouse_speed_changed(emitter).await;
+        }
+        if before.trackpad.acceleration != after.trackpad.acceleration {
+            let _ = guard.trackpad_acceleration_changed(emitter).await;
+        }
+        if before.trackpad.dragging != after.trackpad.dragging {
+            let _ = guard.trackpad_dragging_changed(emitter).await;
+        }
+        if before.trackpad.scroll_method != after.trackpad.scroll_method {
+            let _ = guard.trackpad_scroll_method_changed(emitter).await;
+        }
+        if before.mouse.primary_button != after.mouse.primary_button {
+            let _ = guard.mouse_primary_button_changed(emitter).await;
+        }
+        if before.mouse.acceleration != after.mouse.acceleration {
+            let _ = guard.mouse_acceleration_changed(emitter).await;
         }
         if before.sound.effects != after.sound.effects {
             let _ = guard.sound_effects_changed(emitter).await;
@@ -883,6 +899,69 @@ impl ConfigInterface {
     #[zbus(property)]
     fn set_trackpad_disable_while_typing(&self, on: bool) -> zbus::fdo::Result<()> {
         self.write(&Setting::TrackpadDisableWhileTyping(on))
+    }
+
+    #[zbus(property)]
+    fn trackpad_acceleration(&self) -> bool {
+        self.store.current().trackpad.acceleration
+    }
+
+    #[zbus(property)]
+    fn set_trackpad_acceleration(&self, on: bool) -> zbus::fdo::Result<()> {
+        self.write(&Setting::TrackpadAcceleration(on))
+    }
+
+    #[zbus(property)]
+    fn trackpad_dragging(&self) -> String {
+        self.store.current().trackpad.dragging.keyword().to_owned()
+    }
+
+    #[zbus(property)]
+    fn set_trackpad_dragging(&self, value: String) -> zbus::fdo::Result<()> {
+        let dragging = keyword(&Dragging::ALL, Dragging::keyword, &value)?;
+        self.write(&Setting::TrackpadDragging(dragging))
+    }
+
+    #[zbus(property)]
+    fn trackpad_scroll_method(&self) -> String {
+        self.store
+            .current()
+            .trackpad
+            .scroll_method
+            .keyword()
+            .to_owned()
+    }
+
+    #[zbus(property)]
+    fn set_trackpad_scroll_method(&self, value: String) -> zbus::fdo::Result<()> {
+        let method = keyword(&ScrollMethod::ALL, ScrollMethod::keyword, &value)?;
+        self.write(&Setting::TrackpadScrollMethod(method))
+    }
+
+    #[zbus(property)]
+    fn mouse_primary_button(&self) -> String {
+        self.store
+            .current()
+            .mouse
+            .primary_button
+            .keyword()
+            .to_owned()
+    }
+
+    #[zbus(property)]
+    fn set_mouse_primary_button(&self, value: String) -> zbus::fdo::Result<()> {
+        let button = keyword(&PrimaryButton::ALL, PrimaryButton::keyword, &value)?;
+        self.write(&Setting::MousePrimaryButton(button))
+    }
+
+    #[zbus(property)]
+    fn mouse_acceleration(&self) -> bool {
+        self.store.current().mouse.acceleration
+    }
+
+    #[zbus(property)]
+    fn set_mouse_acceleration(&self, on: bool) -> zbus::fdo::Result<()> {
+        self.write(&Setting::MouseAcceleration(on))
     }
 
     #[zbus(property)]

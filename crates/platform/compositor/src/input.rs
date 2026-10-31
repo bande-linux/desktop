@@ -625,7 +625,7 @@ impl Headless {
         if state.overview.is_open() && state.popup_grab.is_none() {
             let under = state.surface_under(state.pointer_location);
             if !under.is_some_and(|(surface, _)| state.is_above_windows(&surface)) {
-                state.overview_button(pressed);
+                state.overview_button(button, pressed);
                 return;
             }
         }

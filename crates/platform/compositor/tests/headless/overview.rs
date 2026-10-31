@@ -69,6 +69,30 @@ fn the_overview_spreads_overlapping_windows_and_a_click_picks_one() {
 }
 
 #[test]
+fn a_middle_click_in_the_overview_closes_that_window_and_keeps_the_overview_open() {
+    const BTN_MIDDLE: u32 = 0x112;
+    let mut server = server();
+    let mut renderer = Renderer::new().expect("renderer");
+    let mut editor = app(&mut server, RED, EDITOR);
+    let mut viewer = app(&mut server, BLUE, VIEWER);
+    let end = settle(&mut server, 0);
+
+    open_with_keys(&mut server);
+    settle(&mut server, end);
+    let spread = snapshot(&mut renderer, &mut server);
+    let red = find(&spread, [0xff, 0, 0]).expect("the editor is shown");
+    server.move_pointer_to(red.into(), 10);
+    server.press_button(BTN_MIDDLE, true, 10);
+    server.press_button(BTN_MIDDLE, false, 11);
+    roundtrip(&mut server, &mut [&mut editor, &mut viewer]);
+
+    assert!(editor.close_requested(0));
+    assert!(!viewer.close_requested(0));
+    assert!(server.overview_shown());
+    assert!(editor.buttons().is_empty());
+}
+
+#[test]
 fn keys_typed_in_the_overview_stay_out_of_the_app_and_escape_closes_it() {
     let mut server = server();
     let mut editor = app(&mut server, RED, EDITOR);

@@ -62,11 +62,14 @@ enum Hit {
     Nothing,
 }
 
+const BTN_MIDDLE: u32 = 0x112;
+
 #[derive(Debug, Clone)]
 struct Press {
     hit: Hit,
     at: Point<f64, Logical>,
     dragging: bool,
+    closes: bool,
 }
 
 #[derive(Default)]
@@ -981,6 +984,7 @@ impl State {
         if let Some(press) = &mut self.overview.press
             && matches!(press.hit, Hit::Window(_))
             && !press.dragging
+            && !press.closes
             && (at - press.at).x.hypot((at - press.at).y) > DRAG_START
         {
             press.dragging = true;
@@ -996,13 +1000,14 @@ impl State {
         self.needs_redraw = true;
     }
 
-    pub(crate) fn overview_button(&mut self, pressed: bool) {
+    pub(crate) fn overview_button(&mut self, button: u32, pressed: bool) {
         let at = self.overview.pointer;
         if pressed {
             self.overview.press = Some(Press {
                 hit: self.hit(at),
                 at,
                 dragging: false,
+                closes: button == BTN_MIDDLE,
             });
             return;
         }
@@ -1011,6 +1016,13 @@ impl State {
         };
         let released = self.hit(at);
         match (press.hit, press.dragging) {
+            (Hit::Window(surface), _) if press.closes => {
+                if released == Hit::Window(surface.clone())
+                    && let Some(index) = self.window_index(&surface)
+                {
+                    self.windows[index].toplevel.send_close();
+                }
+            }
             (Hit::Window(surface), true) => self.drop_in_overview(surface, released, at, press.at),
             (Hit::Window(surface), false) if released == Hit::Window(surface.clone()) => {
                 self.pick(surface);

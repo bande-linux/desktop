@@ -8,11 +8,12 @@ use std::time::{Duration, Instant};
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use tempfile::TempDir;
 use unbound_files::{
-    BookmarkEdit, Browser, FilesView, Location, PATH_BAR_HEIGHT, ROW_HEIGHT, Request, Row,
-    SIDEBAR_WIDTH, Sheet, SidebarEdit, TAB_BAR_HEIGHT, TOOLBAR_HEIGHT, ViewMemory, ViewMode,
+    BookmarkEdit, Browser, FilesView, ListColumn, Location, PATH_BAR_HEIGHT, ROW_HEIGHT, Request,
+    Row, SIDEBAR_WIDTH, Sheet, SidebarEdit, TAB_BAR_HEIGHT, TOOLBAR_HEIGHT, ViewMemory, ViewMode,
     hidden_places, permissions, rows, with_bookmarks, with_volumes, without_bookmark,
 };
 use unbound_fs::{FolderChanges, Sort, SortBy, Trash, list};
+use unbound_preview::Preview;
 use unbound_thumbnails::{Cache, Thumbnailers, Thumbnails};
 use unbound_toolkit::ui::{
     Event, HEADER_HEIGHT as LIST_HEADER, Key, Menu, Modifiers, Pointer, PointerButton,
@@ -1419,26 +1420,30 @@ fn the_icon_view_matches_its_golden_with_thumbnails_and_long_names() {
 }
 
 fn shoot(name: &str, view: &mut FilesView) {
-    let scene = view.scene(GOLDEN_SIZE.0, GOLDEN_SIZE.1);
-    let scene = framed_scene(
-        &scene,
-        &view.title(),
-        Some(FrameRegions {
-            sidebar: SIDEBAR_WIDTH,
-            toolbar: 0.0,
-        }),
-        Some(view.header()),
-        &Palette::for_scheme(Scheme::Light),
-    );
-    let frame = CpuRenderer::new().render(&scene).expect("render");
-    check_golden(name, frame.rgba);
+    for (scheme, suffix) in [(Scheme::Light, ""), (Scheme::Dark, "-dark")] {
+        let palette = Palette::for_scheme(scheme);
+        view.set_palette(palette);
+        let scene = view.scene(GOLDEN_SIZE.0, GOLDEN_SIZE.1);
+        let scene = framed_scene(
+            &scene,
+            &view.title(),
+            Some(FrameRegions {
+                sidebar: SIDEBAR_WIDTH,
+                toolbar: 0.0,
+            }),
+            Some(view.header()),
+            &palette,
+        );
+        let frame = CpuRenderer::new().render(&scene).expect("render");
+        check_golden(&format!("{name}{suffix}"), frame.rgba);
+    }
 }
 
 #[test]
 fn the_list_view_with_tabs_matches_its_golden() {
     let place = Place::new();
     fs::write(place.home().join("Budget.txt"), "x".repeat(48_000)).expect("file");
-    let noon = std::time::UNIX_EPOCH + Duration::from_secs(1_773_489_600);
+    let noon = std::time::UNIX_EPOCH + Duration::from_secs(1_741_953_600);
     for entry in fs::read_dir(place.home()).expect("home") {
         fs::File::open(entry.expect("entry").path())
             .and_then(|file| file.set_modified(noon))
@@ -1460,11 +1465,13 @@ fn the_list_view_with_tabs_matches_its_golden() {
 #[test]
 fn the_column_view_matches_its_golden() {
     let place = Place::new();
+    date_files(&[place.home().join("Documents/a.txt")]);
     let mut view = place.themed_view();
     view.handle(&command(Key::Character('3'), false));
     view.handle(&press(Key::Down));
     view.handle(&press(Key::Right));
     view.handle(&press(Key::Down));
+    run_until(&mut view, previewed);
     shoot("columns", &mut view);
 }
 
@@ -1555,7 +1562,7 @@ fn files_dropped_on_a_tab_move_into_its_folder_and_hovering_springs_it_open() {
 }
 
 fn date_everything(folder: &Path) {
-    let noon = std::time::UNIX_EPOCH + Duration::from_secs(1_773_489_600);
+    let noon = std::time::UNIX_EPOCH + Duration::from_secs(1_741_953_600);
     for entry in fs::read_dir(folder).expect("folder") {
         let path = entry.expect("entry").path();
         if path.is_dir() {
@@ -2055,4 +2062,346 @@ fn select_all_in_the_list_view_of_a_big_folder_marks_every_row_once() {
 
     view.handle(&press(Key::Up));
     assert_eq!(view.browser().selection().len(), 1);
+}
+
+fn date_files(paths: &[PathBuf]) {
+    let noon = std::time::UNIX_EPOCH + Duration::from_secs(1_741_953_600);
+    for path in paths {
+        fs::File::open(path)
+            .and_then(|file| file.set_modified(noon))
+            .expect("set the date");
+    }
+}
+
+fn previewed(view: &FilesView) -> bool {
+    view.column_preview()
+        .is_some_and(|shown| shown.preview.is_some())
+}
+
+#[test]
+fn a_selected_file_gets_a_preview_column_with_its_kind_and_size() {
+    let place = Place::new();
+    let mut view = place.view();
+
+    view.handle(&press(Key::Down));
+    assert!(view.column_preview().is_none());
+    assert_eq!(view.browser().columns().len(), 2);
+
+    view.handle(&press(Key::Down));
+    view.handle(&press(Key::Down));
+    run_until(&mut view, previewed);
+    let shown = view.column_preview().expect("a preview column");
+    let entry = shown.entry.as_ref().expect("one file");
+    assert_eq!(entry.name, "notes.txt");
+    assert_eq!(entry.size, 6);
+    assert!(!shown.kind.is_empty());
+    assert!(matches!(&shown.preview, Some(Preview::Text(text)) if text == "notes\n"));
+    assert_eq!(view.browser().columns().len(), 1);
+}
+
+#[test]
+fn several_selected_files_preview_as_a_count_and_total_size() {
+    let place = Place::new();
+    fs::write(place.home().join("other.txt"), "four").expect("file");
+    let mut view = place.view();
+    view.handle(&press(Key::Down));
+    view.handle(&press(Key::Down));
+    view.handle(&press(Key::Down));
+
+    view.handle(&Event::Key {
+        key: Key::Down,
+        modifiers: Modifiers {
+            shift: true,
+            ..Modifiers::default()
+        },
+    });
+
+    let shown = view.column_preview().expect("a preview column");
+    assert!(shown.entry.is_none());
+    assert_eq!((shown.count, shown.bytes), (2, 10));
+}
+
+#[test]
+fn left_from_a_previewed_file_returns_to_its_folder() {
+    let place = Place::new();
+    let mut view = place.view();
+    view.handle(&press(Key::Down));
+    view.handle(&press(Key::Right));
+    view.handle(&press(Key::Down));
+    assert!(view.column_preview().is_some());
+
+    view.handle(&press(Key::Right));
+    assert_eq!(selected_name(view.browser()).as_deref(), Some("a.txt"));
+    assert!(view.column_preview().is_some());
+
+    view.handle(&press(Key::Left));
+    assert_eq!(selected_name(view.browser()).as_deref(), Some("Documents"));
+    assert!(view.column_preview().is_none());
+}
+
+#[test]
+fn column_rows_are_thirty_two_points_apart() {
+    let place = Place::new();
+    for name in ["b.txt", "c.txt", "d.txt"] {
+        fs::write(place.home().join(name), "x").expect("file");
+    }
+    let mut view = place.view();
+    let at = Point::new(
+        SIDEBAR_WIDTH + 60.0,
+        TOOLBAR_HEIGHT + 6.0 + 32.0 * 3.0 + 26.0,
+    );
+
+    view.handle(&Event::PointerDown(Pointer::at(at)));
+    view.handle(&Event::PointerUp(Pointer::at(at)));
+
+    assert_eq!(selected_name(view.browser()).as_deref(), Some("c.txt"));
+}
+
+#[test]
+fn the_preview_column_matches_its_golden() {
+    let place = Place::new();
+    picture(&place.home().join("Holiday.png"), 640, 400);
+    date_files(&[place.home().join("Holiday.png")]);
+    let mut view = place.themed_view();
+    view.handle(&command(Key::Character('3'), false));
+    view.handle(&press(Key::Down));
+    view.handle(&press(Key::Down));
+    view.handle(&press(Key::Down));
+    run_until(&mut view, previewed);
+    assert_eq!(
+        selected_name(view.browser()).as_deref(),
+        Some("Holiday.png")
+    );
+    shoot("columns-preview", &mut view);
+}
+
+#[test]
+fn sorting_by_kind_groups_kinds_then_names() {
+    let place = Place::new();
+    for name in ["z.png", "a.txt", "b.png"] {
+        fs::write(place.home().join(name), "x").expect("file");
+    }
+    let mut browser = place.browser();
+
+    browser.set_sort(Sort {
+        by: SortBy::Kind,
+        descending: false,
+    });
+
+    assert_eq!(
+        shown_names(&browser),
+        ["Documents", "Empty", "b.png", "z.png", "a.txt", "notes.txt"]
+    );
+}
+
+#[test]
+fn each_folder_keeps_its_own_sort_across_restarts() {
+    let place = Place::new();
+    let downloads = place.home().join("Downloads");
+    fs::create_dir(&downloads).expect("downloads");
+    let memory = place.root.path().join("state/files-views");
+    let go = |view: &mut FilesView, folder: &Path| {
+        view.handle(&command(Key::Character('G'), true));
+        view.handle(&Event::Commit(folder.display().to_string()));
+        view.handle(&press(Key::Enter));
+    };
+    let mut view = place.view();
+    view.set_view_memory(ViewMemory::load(memory.clone()));
+    view.handle(&command(Key::Character('2'), false));
+    go(&mut view, &downloads);
+    assert!(view.menu_action("sort:modified"));
+    go(&mut view, &place.home().join("Documents"));
+    assert!(view.menu_action("sort:name"));
+
+    let mut view = place.view();
+    view.set_view_memory(ViewMemory::load(memory));
+    go(&mut view, &downloads);
+    assert_eq!(view.browser().sort().by, SortBy::Modified);
+    go(&mut view, &place.home().join("Documents"));
+    assert_eq!(view.browser().sort().by, SortBy::Name);
+}
+
+#[test]
+fn a_hidden_list_column_stays_hidden_in_a_new_window() {
+    let place = Place::new();
+    let file = place.root.path().join("state/files-columns");
+    let mut view = place.view();
+    view.set_list_columns_file(file.clone());
+    assert_eq!(view.list_columns(), ListColumn::DEFAULT);
+
+    assert!(view.menu_action("column:size"));
+    assert!(view.menu_action("column:created"));
+
+    let mut again = place.view();
+    again.set_list_columns_file(file);
+    assert_eq!(
+        again.list_columns(),
+        [ListColumn::Modified, ListColumn::Created, ListColumn::Kind]
+    );
+}
+
+#[test]
+fn right_clicking_the_list_header_offers_the_columns() {
+    let place = Place::new();
+    let mut view = place.view();
+    view.handle(&command(Key::Character('2'), false));
+    view.scene(1000, 600);
+
+    view.handle(&Event::PointerDown(
+        Pointer::at(Point::new(
+            SIDEBAR_WIDTH + 100.0,
+            TOOLBAR_HEIGHT + LIST_HEADER / 2.0,
+        ))
+        .with_button(PointerButton::Secondary),
+    ));
+
+    let requests = view.take_requests();
+    let Some(Request::ShowMenu { menu, .. }) = requests.first() else {
+        panic!("no menu: {requests:?}");
+    };
+    let columns = menu
+        .items
+        .iter()
+        .map(|item| (item.action.as_str(), item.checked))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        columns,
+        [
+            ("column:modified", true),
+            ("column:created", false),
+            ("column:size", true),
+            ("column:kind", true),
+        ]
+    );
+}
+
+fn outline(view: &FilesView) -> Vec<(String, u8)> {
+    let column = &view.browser().columns()[0];
+    column
+        .entries
+        .iter()
+        .enumerate()
+        .map(|(row, entry)| {
+            (
+                entry.name.clone(),
+                column.depths.get(row).copied().unwrap_or_default(),
+            )
+        })
+        .collect()
+}
+
+fn list_row(index: f32) -> Point {
+    Point::new(
+        SIDEBAR_WIDTH + 60.0,
+        TOOLBAR_HEIGHT + LIST_HEADER + LIST_ROW * (index + 0.5),
+    )
+}
+
+fn expanded_documents(place: &Place) -> FilesView {
+    let mut view = place.view();
+    view.handle(&command(Key::Character('2'), false));
+    view.scene(1000, 600);
+    view.handle(&press(Key::Down));
+    view.handle(&press(Key::Right));
+    view.scene(1000, 600);
+    view
+}
+
+#[test]
+fn right_on_a_folder_in_the_list_shows_its_children_and_left_hides_them() {
+    let place = Place::new();
+    let mut view = expanded_documents(&place);
+
+    assert_eq!(
+        outline(&view),
+        [
+            ("Documents".to_owned(), 0),
+            ("Reports".to_owned(), 1),
+            ("a.txt".to_owned(), 1),
+            ("Empty".to_owned(), 0),
+            ("notes.txt".to_owned(), 0),
+        ]
+    );
+    assert_eq!(selected_name(view.browser()).as_deref(), Some("Documents"));
+
+    view.handle(&press(Key::Left));
+    assert_eq!(
+        outline(&view),
+        [
+            ("Documents".to_owned(), 0),
+            ("Empty".to_owned(), 0),
+            ("notes.txt".to_owned(), 0),
+        ]
+    );
+}
+
+#[test]
+fn a_new_file_in_an_expanded_folder_appears_without_collapsing_it() {
+    let place = Place::new();
+    let mut view = expanded_documents(&place);
+
+    fs::write(place.home().join("Documents/b.txt"), "new").expect("file");
+    run_until(&mut view, |view| {
+        outline(view).contains(&("b.txt".to_owned(), 1))
+    });
+
+    assert_eq!(outline(&view)[3], ("b.txt".to_owned(), 1));
+    assert_eq!(outline(&view)[4], ("Empty".to_owned(), 0));
+}
+
+#[test]
+fn a_selection_across_levels_drags_all_its_paths() {
+    let place = Place::new();
+    let mut view = expanded_documents(&place);
+
+    view.handle(&Event::PointerDown(Pointer::at(list_row(2.0))));
+    view.handle(&Event::PointerUp(Pointer::at(list_row(2.0))));
+    let logo = Modifiers {
+        logo: true,
+        ..Modifiers::default()
+    };
+    view.handle(&Event::PointerDown(
+        Pointer::at(list_row(4.0)).with_modifiers(logo),
+    ));
+    view.handle(&Event::PointerUp(Pointer::at(list_row(4.0))));
+    view.scene(1000, 600);
+    view.handle(&Event::PointerDown(Pointer::at(list_row(4.0))));
+    view.handle(&Event::PointerMove(Pointer::at(Point::new(
+        SIDEBAR_WIDTH + 70.0,
+        list_row(4.0).y + 12.0,
+    ))));
+
+    let dragged = vec![
+        place.home().join("Documents/a.txt"),
+        place.home().join("notes.txt"),
+    ];
+    assert!(matches!(
+        view.take_requests().as_slice(),
+        [Request::StartDrag { paths, .. }] if *paths == dragged
+    ));
+}
+
+#[test]
+fn the_list_with_an_open_folder_matches_its_golden() {
+    let place = Place::new();
+    let noon = std::time::UNIX_EPOCH + Duration::from_secs(1_741_953_600);
+    for path in [
+        place.home().join("Documents"),
+        place.home().join("Documents/Reports"),
+        place.home().join("Documents/a.txt"),
+        place.home().join("Empty"),
+        place.home().join("notes.txt"),
+    ] {
+        fs::File::open(path)
+            .and_then(|file| file.set_modified(noon))
+            .expect("set the date");
+    }
+    let mut view = place.themed_view();
+    view.handle(&command(Key::Character('2'), false));
+    view.scene(GOLDEN_SIZE.0, GOLDEN_SIZE.1);
+    view.handle(&press(Key::Down));
+    view.handle(&press(Key::Right));
+    view.handle(&press(Key::Down));
+    view.handle(&press(Key::Down));
+    shoot("list-expanded", &mut view);
 }

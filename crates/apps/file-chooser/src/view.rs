@@ -608,7 +608,7 @@ impl ChooserView {
         let order = self.chooser.sort();
         table.set_sort(Some(Sort {
             column: match order.by {
-                SortBy::Name => 0,
+                SortBy::Name | SortBy::Kind | SortBy::Created => 0,
                 SortBy::Modified => 1,
                 SortBy::Size => 2,
             },

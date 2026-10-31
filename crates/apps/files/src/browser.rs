@@ -1,10 +1,10 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use unbound_fs::{
-    Entry, FolderChanges, Listing, Sort, Trash, compare, is_hidden, list_trash, merge, sort,
+    Entry, FolderChanges, Listing, Sort, Trash, compare, is_hidden, list, list_trash, merge, sort,
 };
 
 use crate::lister::{FIRST_CHUNK, Lister, Ticket};
@@ -26,6 +26,7 @@ pub struct Column {
     pub anchor: Option<usize>,
     pub revision: u64,
     pub edits: Vec<RowEdit>,
+    pub depths: Vec<u8>,
     listing: Option<Ticket>,
     awaited: Vec<PathBuf>,
 }
@@ -37,6 +38,7 @@ pub enum RowEdit {
 }
 
 const MAX_EDITS: usize = 512;
+const MAX_EXPANDED: usize = 1_000;
 
 fn next_revision() -> u64 {
     static NEXT: AtomicU64 = AtomicU64::new(1);
@@ -48,6 +50,7 @@ impl Column {
         Self {
             revision: next_revision(),
             edits: Vec::new(),
+            depths: Vec::new(),
             location,
             entries,
             selected: None,
@@ -60,6 +63,10 @@ impl Column {
 
     pub fn is_listing(&self) -> bool {
         self.listing.is_some()
+    }
+
+    pub fn is_nested(&self) -> bool {
+        !self.depths.is_empty()
     }
 
     fn replaced(&mut self) {
@@ -244,6 +251,8 @@ pub struct Browser {
     found: Vec<PathBuf>,
     recents: Vec<PathBuf>,
     lister: Option<Lister>,
+    nesting: bool,
+    expanded: BTreeSet<PathBuf>,
 }
 
 fn entries(paths: &[PathBuf]) -> Vec<Entry> {
@@ -275,6 +284,8 @@ impl Browser {
                     tracing::warn!("cannot list folders in the background: {error}")
                 })
                 .ok(),
+            nesting: false,
+            expanded: BTreeSet::new(),
         };
         browser.show(location);
         browser
@@ -341,6 +352,9 @@ impl Browser {
                 let column = &mut self.columns[index];
                 column.listing = None;
                 column.awaited.clear();
+                if index == 0 {
+                    self.nest_root();
+                }
             }
         }
         (changed, selected)
@@ -455,6 +469,137 @@ impl Browser {
         let entries = self.read(&location);
         self.columns = vec![Column::new(location, entries)];
         self.active = 0;
+        self.nest_root();
+    }
+
+    fn nests(&self) -> bool {
+        self.nesting && self.single && !self.expanded.is_empty()
+    }
+
+    fn nest_into(
+        &self,
+        roots: Vec<Entry>,
+        depth: u8,
+        entries: &mut Vec<Entry>,
+        depths: &mut Vec<u8>,
+    ) {
+        for entry in roots {
+            let open = entry.is_folder() && self.expanded.contains(&entry.path);
+            let folder = entry.path.clone();
+            entries.push(entry);
+            depths.push(depth);
+            if open {
+                let children = list(&folder, self.show_hidden, self.sort).unwrap_or_default();
+                self.nest_into(children, depth.saturating_add(1), entries, depths);
+            }
+        }
+    }
+
+    fn nested(&self, roots: Vec<Entry>) -> (Vec<Entry>, Vec<u8>) {
+        if !self.nests() {
+            return (roots, Vec::new());
+        }
+        let mut entries = Vec::with_capacity(roots.len());
+        let mut depths = Vec::with_capacity(roots.len());
+        self.nest_into(roots, 0, &mut entries, &mut depths);
+        if depths.iter().all(|depth| *depth == 0) {
+            depths.clear();
+        }
+        (entries, depths)
+    }
+
+    fn nest_root(&mut self) {
+        let Some(column) = self.columns.first() else {
+            return;
+        };
+        if column.folder().is_none()
+            || column.is_listing()
+            || (!column.is_nested() && !self.nests())
+        {
+            return;
+        }
+        let column = &mut self.columns[0];
+        let marked = column
+            .selection()
+            .iter()
+            .map(|entry| entry.path.clone())
+            .collect::<Vec<_>>();
+        let selected = column.selected_entry().map(|entry| entry.path.clone());
+        let anchor = column
+            .anchor
+            .and_then(|row| column.entries.get(row))
+            .map(|entry| entry.path.clone());
+        let entries = std::mem::take(&mut column.entries);
+        let depths = std::mem::take(&mut column.depths);
+        let mut roots = entries
+            .into_iter()
+            .zip(depths.into_iter().chain(std::iter::repeat(0)))
+            .filter(|(_, depth)| *depth == 0)
+            .map(|(entry, _)| entry)
+            .collect::<Vec<_>>();
+        sort(&mut roots, self.sort);
+        let (entries, depths) = self.nested(roots);
+        let rows = entries
+            .iter()
+            .enumerate()
+            .map(|(row, entry)| (entry.path.clone(), row))
+            .collect::<HashMap<_, _>>();
+        let find = |path: &PathBuf| rows.get(path).copied();
+        let column = &mut self.columns[0];
+        column.marked = marked.iter().filter_map(find).collect();
+        column.marked.sort_unstable();
+        column.selected = selected.as_ref().and_then(find);
+        column.anchor = anchor.as_ref().and_then(find).or(column.selected);
+        column.entries = entries;
+        column.depths = depths;
+        column.replaced();
+    }
+
+    pub fn set_nesting(&mut self, nesting: bool) {
+        if self.nesting != nesting {
+            self.nesting = nesting;
+            self.nest_root();
+        }
+    }
+
+    pub fn is_expanded(&self, folder: &Path) -> bool {
+        self.expanded.contains(folder)
+    }
+
+    pub fn set_expanded(&mut self, folders: &[PathBuf], expanded: bool, all: bool) {
+        if !self.nesting || !self.single || self.columns[0].is_listing() {
+            return;
+        }
+        for folder in folders {
+            if expanded {
+                self.expanded.insert(folder.clone());
+                if all {
+                    self.expand_below(folder);
+                }
+            } else {
+                self.expanded.remove(folder);
+                if all {
+                    self.expanded.retain(|known| !known.starts_with(folder));
+                }
+            }
+        }
+        self.nest_root();
+    }
+
+    fn expand_below(&mut self, folder: &Path) {
+        let mut pending = vec![folder.to_path_buf()];
+        let mut added = 0;
+        while let Some(next) = pending.pop() {
+            let children = list(&next, self.show_hidden, self.sort).unwrap_or_default();
+            for child in children.into_iter().filter(Entry::is_folder) {
+                if added >= MAX_EXPANDED {
+                    return;
+                }
+                added += 1;
+                self.expanded.insert(child.path.clone());
+                pending.push(child.path);
+            }
+        }
     }
 
     pub fn go_back(&mut self) -> bool {
@@ -486,10 +631,11 @@ impl Browser {
     pub fn set_sort(&mut self, sort: Sort) {
         self.sort = sort;
         for column in &mut self.columns {
-            if column.location != Location::Recents && !column.is_listing() {
+            if column.location != Location::Recents && !column.is_listing() && !column.is_nested() {
                 column.resort(sort);
             }
         }
+        self.nest_root();
         self.reload_where(|location| *location == Location::Recents);
         for index in 0..self.columns.len() {
             if self.columns.get(index).is_some_and(Column::is_listing) {
@@ -727,13 +873,27 @@ impl Browser {
     }
 
     pub fn watched(&self) -> Vec<PathBuf> {
-        self.columns
+        let mut watched = self
+            .columns
             .iter()
             .flat_map(|column| match &column.location {
                 Location::Folder(folder) => vec![folder.clone()],
                 Location::Trash => self.trash_info_dirs(),
                 Location::Recents | Location::Search(_) => Vec::new(),
             })
+            .collect::<Vec<_>>();
+        watched.extend(self.open_subfolders());
+        watched
+    }
+
+    fn open_subfolders(&self) -> Vec<PathBuf> {
+        let column = &self.columns[0];
+        column
+            .depths
+            .iter()
+            .zip(&column.entries)
+            .filter(|(_, entry)| entry.is_folder() && self.expanded.contains(&entry.path))
+            .map(|(_, entry)| entry.path.clone())
             .collect()
     }
 
@@ -756,6 +916,10 @@ impl Browser {
         let previous_row = column.selected;
         let location = column.location.clone();
         let (entries, listing) = self.read(&location);
+        let (entries, depths) = match (index, &listing) {
+            (0, None) => self.nested(entries),
+            _ => (entries, Vec::new()),
+        };
         let rows = entries
             .iter()
             .enumerate()
@@ -788,6 +952,7 @@ impl Browser {
         }
         column.listing = listing;
         column.awaited = awaited;
+        column.depths = depths;
         column.marked = marked;
         column.selected = selected;
         column.anchor = anchor;
@@ -847,6 +1012,20 @@ impl Browser {
 
     pub fn apply(&mut self, changes: &FolderChanges) {
         let mut whole = changes.folders.clone();
+        let open = self.open_subfolders();
+        if let Some(root) = self.columns[0].folder().map(Path::to_path_buf)
+            && self.columns[0].is_nested()
+        {
+            let touched = changes
+                .entries
+                .iter()
+                .filter_map(|path| path.parent())
+                .chain(changes.folders.iter().map(PathBuf::as_path))
+                .any(|folder| folder == root || open.iter().any(|known| known == folder));
+            if touched {
+                whole.push(root);
+            }
+        }
         let info_dirs = self.trash_info_dirs();
         whole.extend(
             changes
@@ -899,6 +1078,13 @@ impl Browser {
     }
 
     pub fn refresh(&mut self, changed: &[PathBuf]) {
+        let open = self.open_subfolders();
+        let mut changed = changed.to_vec();
+        if changed.iter().any(|folder| open.contains(folder))
+            && let Some(root) = self.columns[0].folder().map(Path::to_path_buf)
+        {
+            changed.push(root);
+        }
         let trash_changed = self
             .trash_info_dirs()
             .iter()

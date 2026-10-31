@@ -8,9 +8,9 @@ use std::time::{Instant, SystemTime};
 use accesskit::{Action, ActionRequest, TreeId};
 use unbound_fs::{Entry, Sort, SortBy, format_date, format_list_date, format_size};
 use unbound_toolkit::ui::{
-    Alert, Cell, Column, Event, FreeLayout, HEADER_HEIGHT, Key, Modifiers, Pointer, PointerButton,
-    Row, SLIDER_HEIGHT, Size, Slider, Sort as TableSort, Table, TextField, Toggle, Widget,
-    WidgetId,
+    Alert, Cell, Column, Event, FreeLayout, HEADER_HEIGHT, Key, Menu, MenuItem, Modifiers, Pointer,
+    PointerButton, Row, SLIDER_HEIGHT, Size, Slider, Sort as TableSort, Table, TextField, Toggle,
+    Widget, WidgetId,
 };
 use unbound_toolkit::{Image, Point, Rect};
 
@@ -21,7 +21,9 @@ use crate::view::{
     COLUMN_WIDTH, FilesView, PATH_BAR_HEIGHT, ROW_HEIGHT, Rename, Request, SLOW_CLICK_RENAME,
     Sheet, contains,
 };
-use crate::views::{ICON_SIZES, ViewMode};
+use crate::views::{ICON_SIZES, ListColumn, ViewMode, save_list_columns};
+
+pub(crate) const COLUMN_ACTION: &str = "column:";
 
 #[derive(Default)]
 pub(crate) struct Formats {
@@ -31,19 +33,6 @@ pub(crate) struct Formats {
 }
 
 const NAME_SIZE: f32 = 13.0;
-const TABLE_SORTS: [Option<SortBy>; 4] = [
-    Some(SortBy::Name),
-    Some(SortBy::Modified),
-    Some(SortBy::Size),
-    None,
-];
-const FOUND_SORTS: [Option<SortBy>; 5] = [
-    Some(SortBy::Name),
-    None,
-    Some(SortBy::Modified),
-    Some(SortBy::Size),
-    None,
-];
 const ROW_INSET: f32 = 6.0;
 const NAME_INSET: f32 = 28.0;
 const TABLE_TEXT_INSET: f32 = 6.0 + 16.0 + 6.0;
@@ -65,6 +54,7 @@ pub(crate) enum Signal {
     Scope(bool),
     Back,
     Forward,
+    Expand(Vec<String>, bool, bool),
 }
 
 pub(crate) type Signals = Rc<RefCell<Vec<Signal>>>;
@@ -94,46 +84,108 @@ pub(crate) fn sender(signals: &Signals) -> impl Fn(Signal) + 'static {
 }
 
 pub(crate) fn table(signals: &Signals) -> Table {
-    let (selection, activate, sort, drag) = (
+    let (selection, activate, sort, drag, expand) = (
+        sender(signals),
         sender(signals),
         sender(signals),
         sender(signals),
         sender(signals),
     );
-    Table::new(table_columns(false))
+    Table::new(table_columns(false, &ListColumn::DEFAULT))
         .on_selection(move |_| selection(Signal::Selection))
         .on_activate(move |_| activate(Signal::Activate))
         .on_sort(move |order| sort(Signal::Sort(order)))
         .on_drag(move |_, at| drag(Signal::Drag(at)))
+        .on_expand(move |keys, expanded, all| expand(Signal::Expand(keys.to_vec(), expanded, all)))
 }
 
-fn table_columns(found: bool) -> Vec<Column> {
-    let name = L10N.tr("column-name");
-    let modified = L10N.tr("column-modified");
-    let size = L10N.tr("column-size");
-    let kind = L10N.tr("column-kind");
-    match found {
-        false => vec![
-            Column::new(&name, 280.0),
-            Column::new(&modified, 170.0),
-            Column::new(&size, 80.0).numeric(),
-            Column::new(&kind, 160.0).unsortable(),
-        ],
+fn nested_rows(rows: Vec<Row>, depths: &[u8]) -> Vec<Row> {
+    fn close(open: &mut Vec<Row>, roots: &mut Vec<Row>) {
+        if let Some(done) = open.pop() {
+            match open.last_mut() {
+                Some(parent) => parent.children.push(done),
+                None => roots.push(done),
+            }
+        }
+    }
+    let mut roots = Vec::new();
+    let mut open: Vec<Row> = Vec::new();
+    for (row, depth) in rows.into_iter().zip(depths) {
+        while open.len() > usize::from(*depth) {
+            close(&mut open, &mut roots);
+        }
+        open.push(row);
+    }
+    while !open.is_empty() {
+        close(&mut open, &mut roots);
+    }
+    roots
+}
+
+fn column_title(column: ListColumn) -> String {
+    L10N.tr(match column {
+        ListColumn::Modified => "column-modified",
+        ListColumn::Created => "column-created",
+        ListColumn::Size => "column-size",
+        ListColumn::Kind => "column-kind",
+    })
+}
+
+fn table_columns(found: bool, shown: &[ListColumn]) -> Vec<Column> {
+    let mut columns = match found {
+        false => vec![Column::new(&L10N.tr("column-name"), 280.0)],
         true => vec![
-            Column::new(&name, 200.0).flexible(),
+            Column::new(&L10N.tr("column-name"), 200.0).flexible(),
             Column::new(&L10N.tr("column-where"), 170.0).unsortable(),
-            Column::new(&modified, 150.0),
-            Column::new(&size, 70.0).numeric(),
-            Column::new(&kind, 120.0).unsortable(),
         ],
-    }
+    };
+    columns.extend(shown.iter().map(|column| {
+        let title = column_title(*column);
+        match (column, found) {
+            (ListColumn::Modified | ListColumn::Created, false) => Column::new(&title, 170.0),
+            (ListColumn::Modified | ListColumn::Created, true) => Column::new(&title, 150.0),
+            (ListColumn::Size, false) => Column::new(&title, 80.0).numeric(),
+            (ListColumn::Size, true) => Column::new(&title, 70.0).numeric(),
+            (ListColumn::Kind, false) => Column::new(&title, 160.0),
+            (ListColumn::Kind, true) => Column::new(&title, 120.0),
+        }
+    }));
+    columns
 }
 
-fn table_sorts(found: bool) -> &'static [Option<SortBy>] {
-    match found {
-        true => &FOUND_SORTS,
-        false => &TABLE_SORTS,
+fn table_sorts(found: bool, shown: &[ListColumn]) -> Vec<Option<SortBy>> {
+    let mut sorts = vec![Some(SortBy::Name)];
+    if found {
+        sorts.push(None);
     }
+    sorts.extend(shown.iter().map(|column| Some(column.sort())));
+    sorts
+}
+
+fn cached_date(time: SystemTime, formats: &mut Formats) -> String {
+    let minute = time
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map_or(0, |since| since.as_secs() / 60);
+    formats
+        .dates
+        .entry(minute)
+        .or_insert_with(|| format_list_date(time))
+        .clone()
+}
+
+pub(crate) fn columns_menu(shown: &[ListColumn]) -> Menu {
+    Menu::new(
+        ListColumn::ALL
+            .iter()
+            .map(|column| {
+                MenuItem::new(
+                    &column_title(*column),
+                    &format!("{COLUMN_ACTION}{}", column.name()),
+                )
+                .checked(shown.contains(column))
+            })
+            .collect(),
+    )
 }
 
 fn shown_folder(folder: &Path, scope: &Path) -> String {
@@ -360,6 +412,13 @@ impl FilesView {
 
     fn table_down(&mut self, event: &Event, pointer: &Pointer, table: Rect) -> bool {
         let at = pointer.position;
+        let menu = pointer.button == PointerButton::Secondary
+            || (pointer.is_primary() && pointer.modifiers.control);
+        if at.y < table.y + HEADER_HEIGHT && menu && !self.browser.searching() {
+            let menu = columns_menu(&self.list_columns);
+            self.show_menu(menu, at);
+            return true;
+        }
         if at.y < table.y + HEADER_HEIGHT {
             self.press = Some(Press::Ui);
             return self.ui.handle(event);
@@ -467,6 +526,11 @@ impl FilesView {
                 match signal {
                     Signal::Choice(action) => self.choose(&action),
                     Signal::Selection => self.table_selected(),
+                    Signal::Expand(keys, expanded, all) => {
+                        let folders = keys.iter().map(PathBuf::from).collect::<Vec<_>>();
+                        self.browser.set_expanded(&folders, expanded, all);
+                        self.selection_changed();
+                    }
                     Signal::Activate => self.open(),
                     Signal::Sort(order) => self.table_sorted(order),
                     Signal::Search(text) => self.search_changed(&text),
@@ -498,10 +562,21 @@ impl FilesView {
         if self.mode != ViewMode::List {
             return;
         }
-        let rows = self
-            .shown_table()
-            .map(Table::selected_rows)
-            .unwrap_or_default();
+        let column = &self.browser.columns()[0];
+        let rows = match self.shown_table() {
+            Some(table) if table.row_count() == column.entries.len() => table.selected_rows(),
+            Some(table) => {
+                let keys = table.selection();
+                column
+                    .entries
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, entry)| keys.contains(&key_of(&entry.path)))
+                    .map(|(row, _)| row)
+                    .collect()
+            }
+            None => Vec::new(),
+        };
         self.browser.mark(0, rows);
         self.table_revealed = self.browser.active_column().selected;
         self.selection_changed();
@@ -509,13 +584,15 @@ impl FilesView {
 
     fn table_sorted(&mut self, order: TableSort) {
         let found = self.browser.searching();
-        let Some(by) = table_sorts(found).get(order.column).copied().flatten() else {
+        let sorts = table_sorts(found, &self.list_columns);
+        let Some(by) = sorts.get(order.column).copied().flatten() else {
             return;
         };
         self.browser.set_sort(Sort {
             by,
             descending: !order.ascending,
         });
+        self.remember_view();
         self.selection_changed();
     }
 
@@ -525,6 +602,25 @@ impl FilesView {
 
     pub(crate) fn shown_table(&self) -> Option<&Table> {
         self.ui.widget_ref::<Table>(self.table)
+    }
+
+    pub(crate) fn toggle_list_column(&mut self, column: ListColumn) {
+        match self.list_columns.iter().position(|shown| *shown == column) {
+            Some(index) => {
+                self.list_columns.remove(index);
+            }
+            None => {
+                self.list_columns.push(column);
+                self.list_columns
+                    .sort_by_key(|shown| ListColumn::ALL.iter().position(|known| known == shown));
+            }
+        }
+        if let Some(file) = &self.list_columns_file
+            && let Err(error) = save_list_columns(file, &self.list_columns)
+        {
+            tracing::warn!("cannot remember the list columns: {error}");
+        }
+        self.sync_table();
     }
 
     fn table_row(&mut self, entry: &Entry, scope: Option<&Path>, formats: &mut Formats) -> Row {
@@ -551,23 +647,21 @@ impl FilesView {
         };
         let modified = entry
             .modified
-            .map(|time| {
-                let minute = time
-                    .duration_since(SystemTime::UNIX_EPOCH)
-                    .map_or(0, |since| since.as_secs() / 60);
-                formats
-                    .dates
-                    .entry(minute)
-                    .or_insert_with(|| format_list_date(time))
-                    .clone()
-            })
+            .map(|time| cached_date(time, formats))
             .unwrap_or_default();
-        let mut cells = vec![
-            Cell::new(entry.name.clone()).icon(icon),
-            Cell::new(modified).muted(),
-            Cell::new(size).muted(),
-            Cell::new(kind).muted(),
-        ];
+        let mut cells = vec![Cell::new(entry.name.clone()).icon(icon)];
+        for column in &self.list_columns {
+            let text = match column {
+                ListColumn::Modified => modified.clone(),
+                ListColumn::Created => entry
+                    .created
+                    .map(|time| cached_date(time, formats))
+                    .unwrap_or_default(),
+                ListColumn::Size => size.clone(),
+                ListColumn::Kind => kind.clone(),
+            };
+            cells.push(Cell::new(text).muted());
+        }
         if let Some(scope) = scope {
             let folder = entry
                 .path
@@ -576,7 +670,11 @@ impl FilesView {
                 .unwrap_or_default();
             cells.insert(1, Cell::new(folder).muted());
         }
-        Row::new(key_of(&entry.path), cells)
+        let row = Row::new(key_of(&entry.path), cells);
+        match folder && matches!(self.browser.root(), Location::Folder(_)) {
+            true => row.expandable(),
+            false => row,
+        }
     }
 
     fn table_rows(&mut self, rows: impl IntoIterator<Item = usize>) -> Vec<(usize, Row)> {
@@ -601,13 +699,30 @@ impl FilesView {
     fn update_table_rows(&mut self) {
         let column = &self.browser.columns()[0];
         let (revision, edits) = (column.revision, column.edits.len());
-        let patchable = matches!(self.table_synced, Some((shown, applied)) if shown == revision && applied <= edits);
+        let patchable = !column.is_nested()
+            && matches!(self.table_synced, Some((shown, applied)) if shown == revision && applied <= edits);
         if !patchable {
             self.table_formats = Formats::default();
             let count = self.browser.columns()[0].entries.len();
-            let rows = self.table_rows(0..count);
+            let rows = self
+                .table_rows(0..count)
+                .into_iter()
+                .map(|(_, row)| row)
+                .collect::<Vec<_>>();
+            let column = &self.browser.columns()[0];
+            let rows = match column.is_nested() {
+                true => nested_rows(rows, &column.depths),
+                false => rows,
+            };
+            let expanded = column
+                .entries
+                .iter()
+                .filter(|entry| entry.is_folder() && self.browser.is_expanded(&entry.path))
+                .map(|entry| key_of(&entry.path))
+                .collect::<Vec<_>>();
             if let Some(table) = self.table() {
-                table.set_rows(rows.into_iter().map(|(_, row)| row).collect());
+                table.set_expanded_rows(expanded);
+                table.set_rows(rows);
             }
             self.table_revealed = None;
         } else if let Some((_, applied)) = self.table_synced {
@@ -639,11 +754,13 @@ impl FilesView {
             return;
         }
         let found = self.browser.searching();
-        if found != self.table_found {
-            self.table_found = found;
+        let shape = (found, self.list_columns.clone());
+        if self.table_shape != shape {
             self.table_synced = None;
+            let columns = table_columns(found, &shape.1);
+            self.table_shape = shape;
             if let Some(table) = self.table() {
-                table.set_columns(table_columns(found));
+                table.set_columns(columns);
             }
         }
         self.update_table_rows();
@@ -651,7 +768,7 @@ impl FilesView {
         let column = &self.browser.columns()[0];
         let cursor = column.selected;
         let wanted = column.marked.clone();
-        let shown = table_sorts(found)
+        let shown = table_sorts(found, &self.list_columns)
             .iter()
             .position(|by| *by == Some(sort.by))
             .filter(|_| *self.browser.root() != Location::Recents)

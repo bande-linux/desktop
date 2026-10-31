@@ -9,8 +9,8 @@ use accesskit::TreeUpdate;
 use unbound_app_menu::{AppMenu, Standard};
 use unbound_files::{
     BookmarkEdit, Browser, FilesView, Location, Request, Row, SIDEBAR_WIDTH, SidebarEdit,
-    TOOLBAR_HEIGHT, ViewMemory, hidden_places, rows, sidebar_file, status_bar_file, views_file,
-    with_bookmarks, without_bookmark,
+    TOOLBAR_HEIGHT, ViewMemory, hidden_places, list_columns_file, rows, sidebar_file,
+    status_bar_file, views_file, with_bookmarks, without_bookmark,
 };
 use unbound_fs::Trash;
 use unbound_search::{recently_used_path, usage_path};
@@ -439,6 +439,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let state_home = std::env::var_os("XDG_STATE_HOME").map(PathBuf::from);
     view.set_view_memory(ViewMemory::load(views_file(state_home.as_deref(), &home)));
     view.set_status_bar_file(status_bar_file(state_home.as_deref(), &home));
+    view.set_list_columns_file(list_columns_file(state_home.as_deref(), &home));
     let data_home = std::env::var_os("XDG_DATA_HOME").map(PathBuf::from);
     if let Some(usage) = usage_path(state_home.as_deref(), Some(&home)) {
         view.set_recents_sources(recently_used_path(data_home.as_deref(), &home), usage);

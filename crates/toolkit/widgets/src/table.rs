@@ -113,6 +113,7 @@ pub struct Row {
     pub key: String,
     pub cells: Vec<Cell>,
     pub children: Vec<Row>,
+    pub expandable: bool,
 }
 
 impl Row {
@@ -121,11 +122,19 @@ impl Row {
             key: key.into(),
             cells,
             children: Vec::new(),
+            expandable: false,
         }
     }
 
     pub fn children(self, children: Vec<Row>) -> Self {
         Self { children, ..self }
+    }
+
+    pub fn expandable(self) -> Self {
+        Self {
+            expandable: true,
+            ..self
+        }
     }
 }
 
@@ -142,7 +151,7 @@ fn flatten(rows: Vec<Row>, depth: usize, lines: &mut Vec<Line>) -> usize {
     let mut added = 0;
     for row in rows {
         let at = lines.len();
-        let branch = !row.children.is_empty();
+        let branch = row.expandable || !row.children.is_empty();
         lines.push(Line {
             key: row.key,
             cells: row.cells,
@@ -163,7 +172,6 @@ pub struct Sort {
     pub ascending: bool,
 }
 
-#[derive(Default)]
 struct Remembered {
     selected: Vec<String>,
     cursor: Option<String>,
@@ -195,6 +203,7 @@ struct TextKey {
 }
 
 type KeysCallback = Box<dyn FnMut(&[String])>;
+type ExpandCallback = Box<dyn FnMut(&[String], bool, bool)>;
 type MenuSource = Box<dyn FnMut(&[String]) -> Option<Menu>>;
 type MenuChoice = Box<dyn FnMut(&str, &[String])>;
 type DragStart = Box<dyn FnMut(&[String], Point)>;
@@ -223,6 +232,7 @@ pub struct Table {
     on_sort: Box<dyn FnMut(Sort)>,
     on_selection: KeysCallback,
     on_activate: KeysCallback,
+    on_expand: ExpandCallback,
     menu: MenuSource,
     on_menu_action: MenuChoice,
     menu_keys: Vec<String>,
@@ -264,6 +274,7 @@ impl Table {
             on_sort: Box::new(|_| {}),
             on_selection: Box::new(|_| {}),
             on_activate: Box::new(|_| {}),
+            on_expand: Box::new(|_, _, _| {}),
             menu: Box::new(|_| None),
             on_menu_action: Box::new(|_, _| {}),
             menu_keys: Vec::new(),
@@ -299,6 +310,22 @@ impl Table {
         Self {
             on_activate: Box::new(callback),
             ..self
+        }
+    }
+
+    pub fn on_expand(self, callback: impl FnMut(&[String], bool, bool) + 'static) -> Self {
+        Self {
+            on_expand: Box::new(callback),
+            ..self
+        }
+    }
+
+    pub fn set_expanded_rows(&mut self, keys: impl IntoIterator<Item = String>) {
+        let expanded = keys.into_iter().collect::<HashSet<_>>();
+        if expanded != self.expanded {
+            let kept = self.remembered();
+            self.expanded = expanded;
+            self.reshow(kept);
         }
     }
 
@@ -344,12 +371,16 @@ impl Table {
         self.reshow(kept);
     }
 
+    fn is_flat(&self) -> bool {
+        self.shown.len() == self.lines.len()
+    }
+
     pub fn insert_row(&mut self, index: usize, row: Row) {
-        let kept = self.outline.then(|| self.remembered());
         let mut lines = Vec::new();
         flatten(vec![row], 0, &mut lines);
         let index = index.min(self.lines.len());
         let added = lines.len();
+        let kept = (!self.is_flat() || added > 1).then(|| self.remembered());
         self.outline |= lines.iter().any(|line| line.branch);
         self.named_icons |= lines
             .iter()
@@ -357,12 +388,10 @@ impl Table {
         self.lines.splice(index..index, lines);
         match kept {
             Some(kept) => self.reshow(kept),
-            None if self.outline => self.reshow(Remembered::default()),
             None => {
-                self.shown.extend(self.shown.len()..self.lines.len());
-                self.selected
-                    .splice(index..index, std::iter::repeat_n(false, added));
-                let shift = |at: usize| if at >= index { at + added } else { at };
+                self.shown.push(self.shown.len());
+                self.selected.insert(index, false);
+                let shift = |at: usize| if at >= index { at + 1 } else { at };
                 self.cursor = self.cursor.map(shift);
                 self.anchor = self.anchor.map(shift);
             }
@@ -374,7 +403,7 @@ impl Table {
             return;
         };
         let removed = 1 + line.descendants;
-        if self.outline {
+        if !self.is_flat() || removed > 1 {
             let kept = self.remembered();
             self.lines.drain(index..index + removed);
             self.reshow(kept);
@@ -401,6 +430,10 @@ impl Table {
         }
         self.cursor = rows.first().copied().filter(|row| *row < self.shown.len());
         self.anchor = self.cursor;
+    }
+
+    pub fn row_count(&self) -> usize {
+        self.shown.len()
     }
 
     pub fn selected_rows(&self) -> Vec<usize> {
@@ -525,6 +558,7 @@ impl Table {
             self.turns.insert(key.clone(), turn);
         }
         self.change_expansion(at, &changed, expanded);
+        (self.on_expand)(&changed, expanded, all);
         true
     }
 

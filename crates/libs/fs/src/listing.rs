@@ -24,6 +24,7 @@ pub struct Entry {
     pub kind: Kind,
     pub size: u64,
     pub modified: Option<SystemTime>,
+    pub created: Option<SystemTime>,
     pub link: bool,
     pub trashed: Option<TrashItem>,
 }
@@ -40,7 +41,10 @@ impl Entry {
                 Kind::File
             },
             size: metadata.as_ref().map_or(0, fs::Metadata::len),
-            modified: metadata.and_then(|metadata| metadata.modified().ok()),
+            modified: metadata
+                .as_ref()
+                .and_then(|metadata| metadata.modified().ok()),
+            created: metadata.and_then(|metadata| metadata.created().ok()),
             link,
             path,
             trashed: None,
@@ -62,6 +66,8 @@ pub enum SortBy {
     Name,
     Modified,
     Size,
+    Kind,
+    Created,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -75,6 +81,11 @@ pub fn compare(a: &Entry, b: &Entry, sort: Sort) -> Ordering {
         SortBy::Name => finder_order(&a.name, &b.name),
         SortBy::Modified => b.modified.cmp(&a.modified),
         SortBy::Size => b.size.cmp(&a.size),
+        SortBy::Kind => kind_key(a)
+            .chars()
+            .flat_map(char::to_lowercase)
+            .cmp(kind_key(b).chars().flat_map(char::to_lowercase)),
+        SortBy::Created => b.created.cmp(&a.created),
     }
     .then_with(|| finder_order(&a.name, &b.name));
     b.is_folder().cmp(&a.is_folder()).then(if sort.descending {
@@ -82,6 +93,13 @@ pub fn compare(a: &Entry, b: &Entry, sort: Sort) -> Ordering {
     } else {
         order
     })
+}
+
+fn kind_key(entry: &Entry) -> &str {
+    match entry.name.rsplit_once('.') {
+        Some((stem, extension)) if !entry.is_folder() && !stem.is_empty() => extension,
+        _ => "",
+    }
 }
 
 pub fn sort(entries: &mut [Entry], order: Sort) {

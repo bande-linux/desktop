@@ -43,6 +43,18 @@ checked by `ci/perf`; this page tracks memory, CPU per interaction and size.
   Other developers' builds share the VM's ten cores, so wall-clock frame times move with the
   load average the tool prints; compare runs taken back to back, and the CPU columns, which
   move less.
+- **Files at 100 000 items:** `unbound-files-bench` (`crates/testing/bench`) creates a folder of
+  100 000 files and drives `FilesView` in-process, without a compositor: it opens the folder in
+  the column view, switches to the list view, scrolls it 120 times, selects all and writes one
+  new file into the folder, five times over. Every number is UI-thread time: the work between
+  two frames, including building the scene. Background listing is waited for with `poll` and
+  not counted, so "open to fully listed" is wall-clock.
+
+  ```sh
+  cargo build --release -p unbound-bench --bin unbound-files-bench
+  dbus-run-session --config-file=crates/testing/test-bus/data/session.conf -- \
+      target/release/unbound-files-bench
+  ```
 - **Idle wake-ups:** sum the `voluntary_ctxt_switches` and `nonvoluntary_ctxt_switches` of every
   thread in `/proc/<pid>/task/*/status` twice, some seconds apart, and divide the difference by
   the interval; the per-thread `comm` names show which thread wakes. Run the services inside the
@@ -56,6 +68,27 @@ checked by `ci/perf`; this page tracks memory, CPU per interaction and size.
 All numbers below are from the development VM: 10 cores, lavapipe (Mesa 25.0.7, Vulkan on the
 CPU), so GPU memory shows up as process memory. On Apple Silicon GPU memory is also system
 memory, so the device-memory savings carry over.
+
+## 2026-10-31: Files with 100 000 items
+
+Before, Files read every folder on the UI thread (two `stat` calls per entry, then a sort), read
+the whole folder again on every settled inotify batch, built every list row with a time-zone
+conversion and a Fluent call, kept marks in a vector searched linearly and passed the selection to
+the list as path strings. After: the first 2 000 entries are read at once and the rest on a
+listing thread in doubling chunks; inotify names are applied as row edits; marks are bisected and
+passed as row indices; sizes and dates are formatted once per value; sorting re-orders in memory.
+`unbound-files-bench`, medians of five runs (worst in brackets), release build, same VM, other
+developers' builds running:
+
+| Action | before | after |
+| :--- | ---: | ---: |
+| Open to first frame | BEFORE_OPEN | AFTER_OPEN |
+| Open to fully listed (wall-clock; after: in the background) | BEFORE_LISTED | AFTER_LISTED |
+| Longest UI stall while the rest is listed | — | AFTER_STALL |
+| Switch to the list view | BEFORE_SWITCH | AFTER_SWITCH |
+| Frame while scrolling the list, p99 | BEFORE_SCROLL | AFTER_SCROLL |
+| Select All in the list view | BEFORE_ALL | AFTER_ALL |
+| One file written into the folder (UI work) | BEFORE_CHANGE | AFTER_CHANGE |
 
 ## 2026-10-30: menus, launcher and banners in motion
 

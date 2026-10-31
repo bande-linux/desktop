@@ -117,7 +117,7 @@ struct Fixture {
     agent_name: String,
     release: Option<Sender<()>>,
     _directory: tempfile::TempDir,
-    _bus: SessionBus,
+    bus: SessionBus,
 }
 
 fn start(answers: &[Option<&str>], hold: bool) -> Fixture {
@@ -167,13 +167,17 @@ fn start(answers: &[Option<&str>], hold: bool) -> Fixture {
         agent_name: registration.agent,
         release: hold.then_some(release),
         _directory: directory,
-        _bus: bus,
+        bus,
     }
 }
 
 impl Fixture {
     fn begin(&self) -> std::thread::JoinHandle<zbus::Result<()>> {
-        let polkitd = self.polkitd.clone();
+        self.begin_from(&self.polkitd)
+    }
+
+    fn begin_from(&self, caller: &Connection) -> std::thread::JoinHandle<zbus::Result<()>> {
+        let polkitd = caller.clone();
         let agent_name = self.agent_name.clone();
         std::thread::spawn(move || {
             let uid = Value::from(rustix::process::getuid().as_raw());
@@ -214,6 +218,20 @@ fn assert_info(seen: Seen) {
     assert!(
         matches!(&seen, Seen::Notice(Notice::Info(text)) if text.starts_with("Authenticating ")),
         "{seen:?}"
+    );
+}
+
+#[test]
+fn only_polkitd_can_start_an_authentication() {
+    let fixture = start(&[Some("right")], false);
+    let impostor = fixture.bus.connect().expect("impostor connection");
+    let result = fixture.begin_from(&impostor).join().expect("caller");
+    assert!(result.is_err());
+    assert!(
+        fixture
+            .seen
+            .recv_timeout(Duration::from_millis(300))
+            .is_err()
     );
 }
 

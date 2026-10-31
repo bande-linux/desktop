@@ -55,6 +55,7 @@ pub trait App {
 }
 
 const BUILT_IN_SOURCES: usize = 3;
+const SOURCE_EVENTS: PollFlags = PollFlags::IN.union(PollFlags::PRI);
 
 fn earliest(deadlines: impl IntoIterator<Item = Option<Instant>>) -> Option<Instant> {
     deadlines.into_iter().flatten().min()
@@ -142,8 +143,11 @@ pub fn run(window: &mut Window, app: &mut impl App) -> Result<(), WindowError> {
             fds.push(PollFd::new(&connection, PollFlags::IN));
             fds.push(PollFd::new(&accessibility, PollFlags::IN));
             fds.push(PollFd::new(&appearance, PollFlags::IN));
-            for fd in pastes.iter().chain(&sources) {
+            for fd in &pastes {
                 fds.push(PollFd::new(fd, PollFlags::IN));
+            }
+            for fd in &sources {
+                fds.push(PollFd::new(fd, SOURCE_EVENTS));
             }
             let timeout = deadline.map(|deadline| {
                 let wait = deadline.saturating_duration_since(Instant::now());
@@ -317,12 +321,11 @@ fn wait(
     let mut fds = Vec::with_capacity(2 + count + pastes.len() + sources.len());
     fds.push(PollFd::new(&connection, PollFlags::IN));
     fds.push(PollFd::new(&appearance, PollFlags::IN));
-    for fd in accessibility
-        .iter()
-        .chain(pastes.iter().map(|(_, fd)| fd))
-        .chain(&sources)
-    {
+    for fd in accessibility.iter().chain(pastes.iter().map(|(_, fd)| fd)) {
         fds.push(PollFd::new(fd, PollFlags::IN));
+    }
+    for fd in &sources {
+        fds.push(PollFd::new(fd, SOURCE_EVENTS));
     }
     let timeout = deadline.map(|deadline| {
         let wait = deadline.saturating_duration_since(Instant::now());

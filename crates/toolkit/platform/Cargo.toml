@@ -25,6 +25,7 @@ zbus.workspace = true
 
 [dev-dependencies]
 atspi-common.workspace = true
+rustix = { workspace = true, features = ["net"] }
 serde.workspace = true
 smithay.workspace = true
 unbound-compositor.workspace = true

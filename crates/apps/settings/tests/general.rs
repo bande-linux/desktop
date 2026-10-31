@@ -9,12 +9,12 @@ use support::{SIZE, click, find, has_text, nodes};
 use unbound_settings::{
     About, AboutCommand, App, Category, Command, DefaultAppCommand, InstalledLocale, LocaleState,
     LoginCommand, LoginItems, NetworkCommand, Package, PaneId, SettingId, SettingsView,
-    SoftwareState, Storage, StorageCommand, Update, Value, assignments, categorize, chip_name,
-    installed_locales, locale_name, login_items, login_matches, memory_bytes, parse_assignments,
-    static_hostname, system_version, tally,
+    SoftwareState, Storage, StorageCommand, Update, Value, WifiState, assignments, categorize,
+    chip_name, installed_locales, locale_name, login_items, login_matches, memory_bytes,
+    parse_assignments, static_hostname, system_version, tally,
 };
 use unbound_toolkit::ui::{Event, Key, Modifiers};
-use unbound_toolkit::{Palette, Scheme, TextSystem};
+use unbound_toolkit::{Item, Palette, Scheme, TextSystem};
 use unbound_xdg::DesktopEntry;
 
 fn key(view: &mut SettingsView, key: Key, modifiers: Modifiers) {
@@ -583,4 +583,42 @@ fn languages_come_from_installed_locales_and_write_lang_language_and_formats() {
     });
     assert_eq!(view.focused_setting(), Some(SettingId::Region));
     assert!(has_text(&mut view, "Sat 14 Mar, 13:45"));
+}
+
+fn crossfade(items: &[Item]) -> Vec<f32> {
+    items
+        .iter()
+        .flat_map(|item| match item {
+            Item::Opacity { alpha, items } if !items.is_empty() => vec![*alpha],
+            Item::Clip { items, .. } | Item::Translate { items, .. } => crossfade(items),
+            _ => Vec::new(),
+        })
+        .collect()
+}
+
+#[test]
+fn turning_wifi_off_cross_fades_the_page_into_the_off_state_but_changing_panes_does_not() {
+    let mut view = general_view();
+    view.apply(Update::Wifi(Some(WifiState {
+        enabled: true,
+        networks: Vec::new(),
+    })));
+    view.select_pane(PaneId::Wifi);
+    assert!(crossfade(&view.scene(SIZE.0, SIZE.1).items).is_empty());
+
+    view.apply(Update::Wifi(Some(WifiState {
+        enabled: false,
+        networks: Vec::new(),
+    })));
+    let alphas = crossfade(&view.scene(SIZE.0, SIZE.1).items);
+    assert_eq!(
+        alphas.len(),
+        2,
+        "the old page fades out while the off state fades in"
+    );
+    assert!((alphas[0] + alphas[1] - 1.0).abs() < 1e-4);
+    assert!(has_text(&mut view, "Wi-Fi is off"));
+
+    view.select_pane(PaneId::About);
+    assert!(crossfade(&view.scene(SIZE.0, SIZE.1).items).is_empty());
 }

@@ -1,9 +1,12 @@
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::ops::Range;
 use std::rc::Rc;
+use std::time::Instant;
 
 use accesskit::{Action, ActionRequest, Node, Role};
-use unbound_toolkit::ui::{Context, Event, Key, Size, Widget, WidgetId, focus_ring};
+use unbound_toolkit::ui::{
+    Animated, Context, Event, Key, Size, Spring, Widget, WidgetId, focus_ring,
+};
 use unbound_toolkit::{
     Color, Image, Item, Paragraph, Point, Radius, Rect, SHEET_INSET, Scheme, Shape, Spacing,
     TextAlign, TextRole, TextStyle,
@@ -2034,5 +2037,103 @@ impl Widget for LevelHistory {
         };
         node.set_label(description);
         node
+    }
+}
+
+#[derive(Default)]
+pub struct Crossfade {
+    progress: Option<Animated>,
+    before: Vec<Item>,
+}
+
+impl Crossfade {
+    pub fn start(&mut self, now: Instant) {
+        let mut progress = Animated::new(0.0);
+        progress.animate_at(now, false, 1.0, Spring::FADE);
+        self.progress = Some(progress);
+    }
+
+    pub fn stop(&mut self) {
+        self.progress = None;
+    }
+}
+
+pub struct Fade {
+    id: WidgetId,
+    children: Vec<Box<dyn Widget>>,
+    crossfade: Rc<RefCell<Crossfade>>,
+    frame: Rect,
+}
+
+impl Fade {
+    pub fn new(child: Box<dyn Widget>, crossfade: Rc<RefCell<Crossfade>>) -> Self {
+        Self {
+            id: WidgetId::next(),
+            children: vec![child],
+            crossfade,
+            frame: Rect::default(),
+        }
+    }
+}
+
+impl Widget for Fade {
+    fn id(&self) -> WidgetId {
+        self.id
+    }
+
+    fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
+        self.children
+            .iter_mut()
+            .map(|child| child.measure(cx, available))
+            .next()
+            .unwrap_or_default()
+    }
+
+    fn place(&mut self, cx: &mut Context, frame: Rect) {
+        self.frame = frame;
+        for child in &mut self.children {
+            child.place(cx, frame);
+        }
+    }
+
+    fn frame(&self) -> Rect {
+        self.frame
+    }
+
+    fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
+        let mut after = Vec::new();
+        for child in &self.children {
+            child.paint(cx, &mut after);
+        }
+        let mut crossfade = self.crossfade.borrow_mut();
+        let alpha = crossfade
+            .progress
+            .map_or(1.0, |progress| progress.value(cx).clamp(0.0, 1.0));
+        if alpha >= 1.0 {
+            crossfade.progress = None;
+            crossfade.before.clone_from(&after);
+            items.extend(after);
+            return;
+        }
+        items.push(Item::Opacity {
+            alpha: 1.0 - alpha,
+            items: crossfade.before.clone(),
+        });
+        items.push(Item::Opacity {
+            alpha,
+            items: after,
+        });
+    }
+
+    fn access(&self, _cx: &Context) -> Node {
+        Node::new(Role::GenericContainer)
+    }
+
+    fn children(&self) -> &[Box<dyn Widget>] {
+        &self.children
+    }
+
+    fn children_mut(&mut self) -> &mut [Box<dyn Widget>] {
+        &mut self.children
     }
 }

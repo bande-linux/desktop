@@ -7,6 +7,7 @@ mod defaults;
 mod displays;
 mod failure;
 mod follow;
+mod forget;
 mod general;
 mod header;
 mod idle;

@@ -4,7 +4,7 @@ use accesskit::{Action, ActionRequest, Node, Role};
 use unbound_graphics::{Item, Point, Rect, Scroll, ScrollPhase, ScrollSource, Shape};
 use unbound_spring::Spring;
 
-use super::{Animated, Context, Event, Size, Widget, WidgetId, contains};
+use super::{Animated, Context, Event, Size, Widget, WidgetId};
 
 const FLING_TIME_CONSTANT: f32 = 0.325;
 const FLING_MIN_SPEED: f32 = 60.0;
@@ -303,7 +303,7 @@ impl ScrollState {
     }
 
     pub fn claims(&self, frame: Rect, point: Point) -> bool {
-        self.limit() > 0.0 && contains(Self::strip(frame), point)
+        self.limit() > 0.0 && Self::strip(frame).contains(point)
     }
 
     pub fn pointer(&mut self, cx: &Context, frame: Rect, event: &Event) -> bool {

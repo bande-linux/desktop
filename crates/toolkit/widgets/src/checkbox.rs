@@ -2,7 +2,7 @@ use accesskit::{Action, ActionRequest, Node, Role, Toggled};
 use unbound_graphics::{Color, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextStyle};
 
 use super::control::square_capped;
-use super::{Animated, Context, Event, Key, Size, Spring, Widget, WidgetId, contains};
+use super::{Animated, Context, Event, Key, Size, Spring, Widget, WidgetId};
 
 pub const CHECKBOX_SIZE: f32 = 16.0;
 const GAP: f32 = 8.0;
@@ -190,10 +190,10 @@ impl Widget for Checkbox {
         match event {
             Event::PointerDown(pointer) if pointer.is_primary() => self.pressed = true,
             Event::PointerMove(pointer) if self.pressed => {
-                self.pressed = contains(self.frame, pointer.position);
+                self.pressed = self.frame.contains(pointer.position);
             }
             Event::PointerUp(pointer) if pointer.is_primary() => {
-                let activate = self.pressed && contains(self.frame, pointer.position);
+                let activate = self.pressed && self.frame.contains(pointer.position);
                 self.pressed = false;
                 if activate {
                     self.toggle(cx);

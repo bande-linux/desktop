@@ -2,7 +2,7 @@ use accesskit::{Action, ActionRequest, Node, Role};
 use unbound_graphics::{Color, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextStyle};
 use unbound_spring::Spring;
 
-use super::{Animated, Context, Event, Key, Size, Widget, WidgetId, contains};
+use super::{Animated, Context, Event, Key, Size, Widget, WidgetId};
 
 pub const DISCLOSURE_HEIGHT: f32 = 22.0;
 const CHEVRON_SPACE: f32 = 18.0;
@@ -174,7 +174,7 @@ impl Widget for Disclosure {
     fn handle(&mut self, cx: &mut Context, event: &Event) -> bool {
         match event {
             Event::PointerDown(pointer)
-                if pointer.is_primary() && contains(self.header(), pointer.position) =>
+                if pointer.is_primary() && self.header().contains(pointer.position) =>
             {
                 let expanded = !self.expanded;
                 self.set_expanded(cx, expanded)
@@ -209,7 +209,7 @@ impl Widget for Disclosure {
     }
 
     fn hit_children(&self, point: Point) -> bool {
-        self.expanded && !contains(self.header(), point)
+        self.expanded && !self.header().contains(point)
     }
 
     fn children(&self) -> &[Box<dyn Widget>] {

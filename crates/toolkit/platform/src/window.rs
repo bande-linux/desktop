@@ -21,7 +21,7 @@ use raw_window_handle::{
 use rustix::fs::{MemfdFlags, memfd_create};
 use unbound_graphics::{
     Appearance, CpuRenderer, Cursor, Event, GpuDevice, GpuRenderer, Point, Pointer, PointerButton,
-    Rect, Region, RenderError, Scene, TextSystem, damage, pixels,
+    Rect, Region, RenderError, ResizeEdge, Scene, TextSystem, damage, pixels,
 };
 use unbound_protocols::client::unbound_shell_v1::{
     BrightnessKey, Edge as DisplayEdge, LauncherMode, MediaKey, Panel, VolumeKey,
@@ -266,43 +266,29 @@ pub struct ToplevelState {
     pub tiled: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ResizeEdge {
-    Top,
-    Bottom,
-    Left,
-    Right,
-    TopLeft,
-    TopRight,
-    BottomLeft,
-    BottomRight,
+fn resize_cursor(edge: ResizeEdge) -> Cursor {
+    match edge {
+        ResizeEdge::Top => Cursor::ResizeTop,
+        ResizeEdge::Bottom => Cursor::ResizeBottom,
+        ResizeEdge::Left => Cursor::ResizeLeft,
+        ResizeEdge::Right => Cursor::ResizeRight,
+        ResizeEdge::TopLeft => Cursor::ResizeTopLeft,
+        ResizeEdge::TopRight => Cursor::ResizeTopRight,
+        ResizeEdge::BottomLeft => Cursor::ResizeBottomLeft,
+        ResizeEdge::BottomRight => Cursor::ResizeBottomRight,
+    }
 }
 
-impl ResizeEdge {
-    fn cursor(self) -> Cursor {
-        match self {
-            Self::Top => Cursor::ResizeTop,
-            Self::Bottom => Cursor::ResizeBottom,
-            Self::Left => Cursor::ResizeLeft,
-            Self::Right => Cursor::ResizeRight,
-            Self::TopLeft => Cursor::ResizeTopLeft,
-            Self::TopRight => Cursor::ResizeTopRight,
-            Self::BottomLeft => Cursor::ResizeBottomLeft,
-            Self::BottomRight => Cursor::ResizeBottomRight,
-        }
-    }
-
-    fn protocol(self) -> xdg_toplevel::ResizeEdge {
-        match self {
-            Self::Top => xdg_toplevel::ResizeEdge::Top,
-            Self::Bottom => xdg_toplevel::ResizeEdge::Bottom,
-            Self::Left => xdg_toplevel::ResizeEdge::Left,
-            Self::Right => xdg_toplevel::ResizeEdge::Right,
-            Self::TopLeft => xdg_toplevel::ResizeEdge::TopLeft,
-            Self::TopRight => xdg_toplevel::ResizeEdge::TopRight,
-            Self::BottomLeft => xdg_toplevel::ResizeEdge::BottomLeft,
-            Self::BottomRight => xdg_toplevel::ResizeEdge::BottomRight,
-        }
+fn resize_protocol(edge: ResizeEdge) -> xdg_toplevel::ResizeEdge {
+    match edge {
+        ResizeEdge::Top => xdg_toplevel::ResizeEdge::Top,
+        ResizeEdge::Bottom => xdg_toplevel::ResizeEdge::Bottom,
+        ResizeEdge::Left => xdg_toplevel::ResizeEdge::Left,
+        ResizeEdge::Right => xdg_toplevel::ResizeEdge::Right,
+        ResizeEdge::TopLeft => xdg_toplevel::ResizeEdge::TopLeft,
+        ResizeEdge::TopRight => xdg_toplevel::ResizeEdge::TopRight,
+        ResizeEdge::BottomLeft => xdg_toplevel::ResizeEdge::BottomLeft,
+        ResizeEdge::BottomRight => xdg_toplevel::ResizeEdge::BottomRight,
     }
 }
 
@@ -889,7 +875,7 @@ impl Window {
 
     fn start_resize(&mut self, edge: ResizeEdge) -> Result<(), WindowError> {
         let (seat, serial) = self.grab()?;
-        self.toplevel()?.resize(seat, serial, edge.protocol());
+        self.toplevel()?.resize(seat, serial, resize_protocol(edge));
         self.flush()
     }
 
@@ -1453,7 +1439,7 @@ impl Window {
                 }
                 let cursor = match zone {
                     _ if content => self.app_cursor,
-                    Zone::Resize(edge) => edge.cursor(),
+                    Zone::Resize(edge) => resize_cursor(edge),
                     _ => Cursor::Default,
                 };
                 self.show_cursor(cursor);

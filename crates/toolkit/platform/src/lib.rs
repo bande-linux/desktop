@@ -26,10 +26,11 @@ pub use clipboard::{DragAction, DragEvent, DragIcon, Transfer};
 pub use popup::MenuPlacement;
 pub use run::{App, Surfaces, run, run_surfaces};
 pub use shell::AppWindow;
+pub use unbound_graphics::ResizeEdge;
 pub use unbound_protocols::client::unbound_shell_v1::{
     BrightnessKey, Edge as DisplayEdge, LauncherMode, MediaKey, Panel, SessionEnd, VolumeKey,
 };
 pub use window::{
     ACTIVATION_TOKEN_VARIABLE, Edges, FramePath, KeyboardFocus, LayerKind, LayerOptions,
-    RENDERER_VARIABLE, ResizeEdge, Role, ToplevelState, Window, WindowError, WindowEvent,
+    RENDERER_VARIABLE, Role, ToplevelState, Window, WindowError, WindowEvent,
 };

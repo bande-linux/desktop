@@ -4,7 +4,7 @@ use unbound_graphics::{Item, Point, Rect};
 use super::control::chevron_down;
 use super::{
     Context, Cursor, DragAction, Event, Key, Menu, MenuItem, Parts, Size, TextField, Widget,
-    WidgetId, contains,
+    WidgetId,
 };
 use crate::L10N;
 
@@ -129,7 +129,7 @@ impl Widget for ComboBox {
     fn handle(&mut self, cx: &mut Context, event: &Event) -> bool {
         match event {
             Event::PointerDown(pointer)
-                if pointer.is_primary() && contains(self.button(), pointer.position) =>
+                if pointer.is_primary() && self.button().contains(pointer.position) =>
             {
                 self.open(cx);
                 true
@@ -162,7 +162,7 @@ impl Widget for ComboBox {
     }
 
     fn cursor(&self, point: Point) -> Option<Cursor> {
-        match contains(self.button(), point) {
+        match self.button().contains(point) {
             true => Some(Cursor::Default),
             false => self.field.cursor(point),
         }

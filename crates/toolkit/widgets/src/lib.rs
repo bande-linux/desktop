@@ -1145,7 +1145,8 @@ impl Ui {
         self.reveal_focus();
     }
 
-    fn reveal_focus(&mut self) {
+    pub fn reveal_focus(&mut self) {
+        self.sync_event_clock();
         let Some(focus) = self.cx.focus else {
             return;
         };

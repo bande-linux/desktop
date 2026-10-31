@@ -1,13 +1,13 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use unbound_graphics::{Palette, Point, Scheme, TextSystem};
 use unbound_widgets::{
-    Axis, Context, Event, Key, Modifiers, Pointer, Scroll, ScrollPhase, ScrollSource, ScrollView,
-    Size, Stack, TEXT_FIELD_HEIGHT, TextField, Ui, Widget, WidgetId,
+    Axis, Context, Event, Key, Modifiers, Pointer, Scroll, ScrollPhase, ScrollSource, ScrollState,
+    ScrollView, Size, Stack, TEXT_FIELD_HEIGHT, TextField, Ui, Widget, WidgetId,
 };
 
 const VIEWPORT: Size = Size::new(200.0, 100.0);
@@ -16,29 +16,38 @@ struct Scrolling {
     ui: Ui,
     now: Rc<Cell<Instant>>,
     epoch: Instant,
+    root: WidgetId,
+    state: Rc<RefCell<ScrollState>>,
     view: WidgetId,
     fields: Vec<WidgetId>,
 }
 
+fn scroll_view(count: usize, state: &Rc<RefCell<ScrollState>>) -> (ScrollView, Vec<WidgetId>) {
+    let fields = (0..count)
+        .map(|index| TextField::new(&format!("Field {index}"), "", |_| {}))
+        .collect::<Vec<_>>();
+    let ids = fields.iter().map(Widget::id).collect();
+    let stack = Stack::new(
+        Axis::Vertical,
+        0.0,
+        0.0,
+        fields
+            .into_iter()
+            .map(|field| Box::new(field) as Box<dyn Widget>)
+            .collect(),
+    );
+    (ScrollView::shared(Box::new(stack), Rc::clone(state)), ids)
+}
+
 impl Scrolling {
     fn new(count: usize) -> Self {
-        let fields = (0..count)
-            .map(|index| TextField::new(&format!("Field {index}"), "", |_| {}))
-            .collect::<Vec<_>>();
-        let ids = fields.iter().map(Widget::id).collect();
-        let stack = Stack::new(
-            Axis::Vertical,
-            0.0,
-            0.0,
-            fields
-                .into_iter()
-                .map(|field| Box::new(field) as Box<dyn Widget>)
-                .collect(),
-        );
-        let view = ScrollView::new(stack);
+        let state = Rc::default();
+        let (view, fields) = scroll_view(count, &state);
         let view_id = view.id();
+        let root = Stack::new(Axis::Vertical, 0.0, 0.0, vec![Box::new(view)]);
+        let root_id = root.id();
         let mut ui = Ui::new(
-            Box::new(view),
+            Box::new(root),
             Context::new(TextSystem::new(), Palette::for_scheme(Scheme::Light)),
         );
         let now = Rc::new(Cell::new(Instant::now()));
@@ -49,11 +58,21 @@ impl Scrolling {
             ui,
             now,
             epoch,
+            root: root_id,
+            state,
             view: view_id,
-            fields: ids,
+            fields,
         };
         scrolling.frame();
         scrolling
+    }
+
+    fn rebuild(&mut self) {
+        let (view, fields) = scroll_view(self.fields.len(), &self.state);
+        self.view = view.id();
+        self.fields = fields;
+        let root = self.ui.widget(self.root).expect("root");
+        root.children_mut()[0] = Box::new(view);
     }
 
     fn frame(&mut self) {
@@ -246,4 +265,32 @@ fn dragging_the_scrollbar_knob_scrolls_in_proportion() {
         .handle(&Event::PointerUp(Pointer::at(Point::new(strip_x, 200.0))));
     assert!(start < 2.0);
     assert_eq!(view.offset(), view.limit());
+}
+
+#[test]
+fn a_rebuilt_view_over_the_same_state_keeps_the_offset() {
+    let mut view = Scrolling::new(10);
+    view.scroll(40.0, ScrollSource::Wheel, ScrollPhase::Changed);
+    view.advance(600);
+    view.rebuild();
+    assert_eq!(view.offset(), 40.0);
+}
+
+#[test]
+fn a_pull_past_the_end_springs_back_on_a_rebuilt_view() {
+    let mut view = Scrolling::new(10);
+    let limit = view.limit();
+    view.scroll(limit + 50.0, ScrollSource::Finger, ScrollPhase::Began);
+    view.scroll(50.0, ScrollSource::Finger, ScrollPhase::Changed);
+    view.rebuild();
+    let pulled = view.offset();
+    assert!(
+        pulled > limit && pulled < limit + 100.0,
+        "rubber band: {pulled}"
+    );
+    view.advance(300);
+    view.scroll(0.0, ScrollSource::Finger, ScrollPhase::Ended);
+    view.rebuild();
+    view.advance(800);
+    assert_eq!(view.offset(), limit);
 }

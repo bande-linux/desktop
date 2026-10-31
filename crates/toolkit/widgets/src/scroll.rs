@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Node, Role};
@@ -394,24 +396,24 @@ impl ScrollState {
 pub struct ScrollView {
     id: WidgetId,
     child: [Box<dyn Widget>; 1],
-    state: ScrollState,
+    state: Rc<RefCell<ScrollState>>,
     content: Size,
     frame: Rect,
 }
 
 impl ScrollView {
     pub fn new(child: impl Widget + 'static) -> Self {
+        Self::shared(Box::new(child), Rc::default())
+    }
+
+    pub fn shared(child: Box<dyn Widget>, state: Rc<RefCell<ScrollState>>) -> Self {
         Self {
             id: WidgetId::next(),
-            child: [Box::new(child)],
-            state: ScrollState::default(),
+            child: [child],
+            state,
             content: Size::default(),
             frame: Rect::default(),
         }
-    }
-
-    pub fn offset(&self, cx: &Context) -> f32 {
-        self.state.offset(cx)
     }
 }
 
@@ -427,8 +429,11 @@ impl Widget for ScrollView {
 
     fn place(&mut self, cx: &mut Context, frame: Rect) {
         self.frame = frame;
-        self.state.set_extent(self.content.height, frame.height);
-        let offset = self.state.offset(cx);
+        let offset = {
+            let mut state = self.state.borrow_mut();
+            state.set_extent(self.content.height, frame.height);
+            state.offset(cx)
+        };
         self.child[0].place(
             cx,
             Rect::new(
@@ -451,34 +456,35 @@ impl Widget for ScrollView {
             shape: Shape::rect(self.frame),
             items: inner,
         });
-        self.state.paint_scrollbar(cx, self.frame, items);
+        self.state.borrow().paint_scrollbar(cx, self.frame, items);
     }
 
     fn access(&self, cx: &Context) -> Node {
         let mut node = Node::new(Role::ScrollView);
-        self.state.describe(cx, &mut node);
+        self.state.borrow().describe(cx, &mut node);
         node
     }
 
     fn handle(&mut self, cx: &mut Context, event: &Event) -> bool {
+        let mut state = self.state.borrow_mut();
         match event {
-            Event::Scroll(scroll) => self.state.scroll(cx, scroll),
-            _ => self.state.pointer(cx, self.frame, event),
+            Event::Scroll(scroll) => state.scroll(cx, scroll),
+            _ => state.pointer(cx, self.frame, event),
         }
     }
 
     fn perform(&mut self, cx: &mut Context, request: &ActionRequest) -> bool {
-        self.state.perform(cx, request)
+        self.state.borrow_mut().perform(cx, request)
     }
 
     fn hit_children(&self, point: Point) -> bool {
-        !self.state.claims(self.frame, point)
+        !self.state.borrow().claims(self.frame, point)
     }
 
     fn reveal(&mut self, cx: &mut Context, rect: Rect) -> bool {
-        let offset = self.state.offset(cx);
-        let top = rect.y - self.frame.y + offset;
-        self.state.reveal(cx, top, top + rect.height)
+        let mut state = self.state.borrow_mut();
+        let top = rect.y - self.frame.y + state.offset(cx);
+        state.reveal(cx, top, top + rect.height)
     }
 
     fn children(&self) -> &[Box<dyn Widget>] {

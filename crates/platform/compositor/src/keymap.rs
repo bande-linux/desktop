@@ -9,7 +9,7 @@ use unbound_graphics::TextRole;
 use unbound_render::VulkanRenderer;
 use unbound_spring::{Animation, Spring, State as Phase};
 
-use crate::label::{Label, LabelStyle, Labels, Look};
+use crate::label::{Label, LabelStyle, Look};
 use crate::state::{Headless, OutputElement, State};
 
 const HUD_STYLE: LabelStyle = LabelStyle {
@@ -68,7 +68,6 @@ pub(crate) struct InputSources {
     previous: usize,
     cycling: bool,
     hud: Option<Hud>,
-    labels: Option<Labels>,
 }
 
 fn hud_opacity(elapsed: Duration) -> Option<f32> {
@@ -220,11 +219,10 @@ impl State {
         );
         let width = f64::from(self.screen_rect(screen).size.w);
         let scale = self.screens[screen].scale();
-        let label = self
-            .input_sources
-            .labels
-            .get_or_insert_with(Labels::default)
-            .render(&name, HUD_STYLE, width, self.decorations.scheme, scale);
+        let label =
+            self.labels
+                .get_mut()
+                .render(&name, HUD_STYLE, width, self.decorations.scheme, scale);
         self.input_sources.hud = label.map(|label| Hud {
             label,
             screen,

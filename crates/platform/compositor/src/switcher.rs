@@ -211,11 +211,36 @@ struct Card {
     shadow: Casting,
 }
 
+fn placeholder(labels: &mut Labels, app: &App, rect: Rect, palette: Palette) -> Vec<Item> {
+    let initial = app
+        .name
+        .chars()
+        .next()
+        .map(|character| character.to_uppercase().collect::<String>())
+        .unwrap_or_default();
+    let paragraph = labels.text().paragraph(
+        &initial,
+        TextStyle::new(rect.height * INITIAL_SHARE, palette.overlay).weight(TextStyle::SEMIBOLD),
+        Some(rect.width),
+        TextAlign::Center,
+    );
+    let top = rect.y + (rect.height - paragraph.height()) / 2.0;
+    vec![
+        Item::Fill {
+            shape: Shape::rounded(rect, rect.width * ICON_ROUNDING),
+            paint: Paint::Solid(palette.ink2),
+        },
+        Item::Text {
+            origin: unbound_graphics::Point::new(rect.x, top),
+            paragraph,
+        },
+    ]
+}
+
 #[derive(Default)]
 pub(crate) struct Switcher {
     session: Option<Session>,
     card: Option<Card>,
-    labels: Option<Labels>,
     entries: Option<(Instant, Vec<DesktopEntry>)>,
     known: HashMap<String, App>,
     images: HashMap<(String, u32), Option<Image>>,
@@ -290,7 +315,7 @@ impl Switcher {
             .clone()
     }
 
-    fn paint_icons(&mut self, palette: Palette, scale: f64) {
+    fn paint_icons(&mut self, labels: &mut Labels, palette: Palette, scale: f64) {
         let Some(card) = self.card.as_ref() else {
             return;
         };
@@ -326,7 +351,7 @@ impl Switcher {
                 .and_then(|icon| self.image(icon, pixels))
             {
                 Some(image) => items.push(Item::Image { rect, image }),
-                None => items.extend(self.placeholder(app, rect, palette)),
+                None => items.extend(placeholder(labels, app, rect, palette)),
             }
         }
         let scene = Scene {
@@ -335,10 +360,7 @@ impl Switcher {
             background: Color::TRANSPARENT,
             items,
         };
-        let buffer = self
-            .labels
-            .get_or_insert_with(Labels::default)
-            .paint(&scene, scale);
+        let buffer = labels.paint(&scene, scale);
         if let Some(card) = self.card.as_mut() {
             card.icons = buffer.map(|buffer| Painted {
                 buffer,
@@ -348,38 +370,7 @@ impl Switcher {
         }
     }
 
-    fn placeholder(&mut self, app: &App, rect: Rect, palette: Palette) -> Vec<Item> {
-        let initial = app
-            .name
-            .chars()
-            .next()
-            .map(|character| character.to_uppercase().collect::<String>())
-            .unwrap_or_default();
-        let paragraph = self
-            .labels
-            .get_or_insert_with(Labels::default)
-            .text()
-            .paragraph(
-                &initial,
-                TextStyle::new(rect.height * INITIAL_SHARE, palette.overlay)
-                    .weight(TextStyle::SEMIBOLD),
-                Some(rect.width),
-                TextAlign::Center,
-            );
-        let top = rect.y + (rect.height - paragraph.height()) / 2.0;
-        vec![
-            Item::Fill {
-                shape: Shape::rounded(rect, rect.width * ICON_ROUNDING),
-                paint: Paint::Solid(palette.ink2),
-            },
-            Item::Text {
-                origin: unbound_graphics::Point::new(rect.x, top),
-                paragraph,
-            },
-        ]
-    }
-
-    fn paint_name(&mut self, text: String, palette: Palette, scale: f64) {
+    fn paint_name(&mut self, labels: &mut Labels, text: String, palette: Palette, scale: f64) {
         let Some(card) = self.card.as_ref() else {
             return;
         };
@@ -391,7 +382,6 @@ impl Switcher {
             return;
         }
         let row = card.layout.name;
-        let labels = self.labels.get_or_insert_with(Labels::default);
         let paragraph = labels.text().paragraph(
             &text,
             TextStyle::role(TextRole::BodyStrong, palette.ink),
@@ -1006,8 +996,9 @@ impl State {
         let scale = self.screens[screen].scale();
         let palette = Palette::for_scheme(self.decorations.scheme);
         let name = self.selected_name();
-        self.switcher.paint_icons(palette, scale);
-        self.switcher.paint_name(name, palette, scale);
+        let labels = self.labels.get_mut();
+        self.switcher.paint_icons(labels, palette, scale);
+        self.switcher.paint_name(labels, name, palette, scale);
     }
 
     pub(crate) fn switcher_elements(

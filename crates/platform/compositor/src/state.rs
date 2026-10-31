@@ -302,6 +302,7 @@ pub struct State {
     pub(crate) pending_captures: Vec<crate::capture::PendingCapture>,
     pub(crate) decorations: crate::frame::Decorations,
     pub(crate) alerts: crate::alert::Alerts,
+    pub(crate) labels: std::cell::RefCell<crate::label::Labels>,
 }
 
 pub struct Headless {
@@ -490,6 +491,7 @@ impl Headless {
             pending_captures: Vec::new(),
             decorations: crate::frame::Decorations::default(),
             alerts: crate::alert::Alerts::default(),
+            labels: std::cell::RefCell::default(),
         };
         Ok(Self {
             display,

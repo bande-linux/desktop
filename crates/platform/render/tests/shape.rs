@@ -146,6 +146,32 @@ fn an_unclipped_texture_is_copied_exactly() {
 }
 
 #[test]
+fn rgba_memory_is_drawn_without_swapping_channels() {
+    let pixels = render(|renderer| {
+        let texture = renderer
+            .import_memory(&RED.repeat(16), Fourcc::Abgr8888, Size::from((4, 4)), false)
+            .expect("texture");
+        let draw: Step = Box::new(move |frame| {
+            frame
+                .render_texture_from_to(
+                    &texture,
+                    Rectangle::from_size(Size::from((4, 4))).to_f64(),
+                    Rectangle::new((10, 10).into(), (20, 20).into()),
+                    &[Rectangle::from_size(Size::from((20, 20)))],
+                    &[],
+                    Transform::Normal,
+                    1.0,
+                )
+                .expect("draw texture");
+        });
+        vec![clear([0.0, 0.0, 1.0, 1.0]), draw]
+    });
+
+    assert_eq!(at(&pixels, 20, 20), RED);
+    assert_eq!(at(&pixels, 40, 40), BLUE);
+}
+
+#[test]
 fn a_scaled_texture_is_filtered_rather_than_repeated() {
     let pixels = render(|renderer| {
         let black_then_white = [[0, 0, 0, 255], [255, 255, 255, 255]].concat();

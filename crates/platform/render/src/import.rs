@@ -18,6 +18,7 @@ use smithay::wayland::shm::with_buffer_contents;
 use crate::{
     BYTES_PER_PIXEL, PendingCopy, Rect, RenderError, Resource, TEXTURE_FOURCCS, TextureImage,
     VulkanRenderer, VulkanTexture, alpha_swizzle, disjoint, is_opaque, linear_formats,
+    target_format,
 };
 
 pub(crate) struct PlaneLayout<'a> {
@@ -96,13 +97,14 @@ impl VulkanRenderer {
         format: Fourcc,
     ) -> Result<VulkanTexture, RenderError> {
         let opaque = is_opaque(format).ok_or(RenderError::UnsupportedFormat)?;
+        let texel = target_format(format).ok_or(RenderError::UnsupportedFormat)?;
         if width <= 0 || height <= 0 {
             return Err(RenderError::UnsupportedFormat);
         }
         let image = self.create_image(
             width,
             height,
-            vk::Format::B8G8R8A8_UNORM,
+            texel,
             vk::ImageUsageFlags::SAMPLED | vk::ImageUsageFlags::TRANSFER_DST,
             alpha_swizzle(opaque),
         )?;

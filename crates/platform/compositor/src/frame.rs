@@ -10,12 +10,12 @@ use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Buffer as BufferCoords, Logical, Physical, Point, Rectangle};
 use unbound_graphics::{
-    Color, CpuRenderer, DOUBLE_CLICK_INTERVAL, Palette, RESIZE_MARGIN, Rect, ResizeEdge, Scene,
-    Scheme, TextAlign, TextSystem, TitleBar, WindowControl, resize_edge, title_style,
-    window_controls_area,
+    Color, DOUBLE_CLICK_INTERVAL, Palette, RESIZE_MARGIN, Rect, ResizeEdge, Scene, Scheme,
+    TextAlign, TitleBar, WindowControl, resize_edge, title_style, window_controls_area,
 };
 use unbound_render::{VulkanRenderer, VulkanTexture};
 
+use crate::label::Labels;
 use crate::scene::Piece;
 use crate::shell::toplevel_names;
 use crate::state::{Headless, Placed, State};
@@ -78,8 +78,6 @@ pub(crate) struct Frame {
 
 #[derive(Default)]
 pub(crate) struct Decorations {
-    text: TextSystem,
-    renderer: CpuRenderer,
     pub(crate) scheme: Scheme,
     pointed: Option<(WlSurface, Zone)>,
     last_click: Option<(WlSurface, u32)>,
@@ -334,7 +332,7 @@ impl State {
         let scheme = self.decorations.scheme;
         let palette = Palette::for_scheme(scheme);
         let context = renderer.context_id();
-        let decorations = &mut self.decorations;
+        let labels = self.labels.get_mut();
         for (window, scale) in self.windows.iter_mut().zip(scales) {
             let bar = window.title_bar_height();
             let Some(rect) = window.geometry().filter(|_| bar > 0) else {
@@ -360,7 +358,7 @@ impl State {
             {
                 continue;
             }
-            match decorations.paint(&look, bar, &palette, renderer) {
+            match paint_title_bar(labels, &look, bar, &palette, renderer) {
                 Some(texture) => {
                     window.frame.painted = Some(Painted {
                         look,
@@ -382,65 +380,46 @@ impl Headless {
     }
 }
 
-impl Decorations {
-    fn paint(
-        &mut self,
-        look: &Look,
-        bar: i32,
-        palette: &Palette,
-        renderer: &mut VulkanRenderer,
-    ) -> Option<VulkanTexture> {
-        let title = self.text.paragraph(
-            &look.title,
-            title_style(palette, look.active),
-            None,
-            TextAlign::Start,
-        );
-        let scene = Scene {
-            width: look.width.unsigned_abs(),
-            height: bar.unsigned_abs(),
-            background: Color::TRANSPARENT,
-            items: TitleBar {
-                width: look.width as f32,
-                height: bar as f32,
-                title,
-                palette,
-                active: look.active,
-                hover: if look.hovered.is_some() { 1.0 } else { 0.0 },
-                close_hover: if look.hovered == Some(Some(WindowControl::Close)) {
-                    1.0
-                } else {
-                    0.0
-                },
-                pressed: look.pressed,
-                zoomed: look.zoomed,
-                alternate: look.alternate && look.active,
-            }
-            .items(),
-        };
-        let scale = f64::from_bits(look.scale);
-        let pixels = (
-            unbound_graphics::pixels(scene.width, scale),
-            unbound_graphics::pixels(scene.height, scale),
-        );
-        let mut rgba = vec![0; pixels.0 as usize * pixels.1 as usize * 4];
-        if let Err(error) = self.renderer.render_into(&scene, scale, &mut rgba) {
-            tracing::warn!("cannot draw a title bar: {error}");
-            return None;
+fn paint_title_bar(
+    labels: &mut Labels,
+    look: &Look,
+    bar: i32,
+    palette: &Palette,
+    renderer: &mut VulkanRenderer,
+) -> Option<VulkanTexture> {
+    let title = labels.text().paragraph(
+        &look.title,
+        title_style(palette, look.active),
+        None,
+        TextAlign::Start,
+    );
+    let scene = Scene {
+        width: look.width.unsigned_abs(),
+        height: bar.unsigned_abs(),
+        background: Color::TRANSPARENT,
+        items: TitleBar {
+            width: look.width as f32,
+            height: bar as f32,
+            title,
+            palette,
+            active: look.active,
+            hover: if look.hovered.is_some() { 1.0 } else { 0.0 },
+            close_hover: if look.hovered == Some(Some(WindowControl::Close)) {
+                1.0
+            } else {
+                0.0
+            },
+            pressed: look.pressed,
+            zoomed: look.zoomed,
+            alternate: look.alternate && look.active,
         }
-        for pixel in rgba.as_chunks_mut::<4>().0 {
-            pixel.swap(0, 2);
-        }
-        renderer
-            .import_memory(
-                &rgba,
-                Fourcc::Argb8888,
-                (pixels.0 as i32, pixels.1 as i32).into(),
-                false,
-            )
-            .inspect_err(|error| tracing::warn!("cannot upload a title bar: {error}"))
-            .ok()
-    }
+        .items(),
+    };
+    let (rgba, size) = labels.rasterise(&scene, f64::from_bits(look.scale))?;
+    renderer
+        .import_memory(&rgba, Fourcc::Abgr8888, size.into(), false)
+        .inspect_err(|error| tracing::warn!("cannot upload a title bar: {error}"))
+        .ok()
 }
 
 impl Window {

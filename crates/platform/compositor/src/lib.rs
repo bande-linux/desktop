@@ -10,6 +10,7 @@ mod capture;
 mod capture_shell;
 mod cascade;
 mod clock;
+mod constraint;
 mod cursor;
 mod decoration;
 mod displays;

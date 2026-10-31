@@ -1,5 +1,5 @@
 use crate::support::*;
-use smithay::utils::{Point, Size};
+use smithay::utils::{Logical, Point, Size};
 use unbound_compositor::{ARROW_FILL, ARROW_OUTLINE, BACKGROUND, Headless, Renderer};
 use unbound_test_wayland::{RED, TestClient, roundtrip};
 
@@ -328,4 +328,55 @@ fn the_compositor_draws_an_arrow_where_the_pointer_is_once_it_moves() {
     let bgr = |bgra: [u8; 4]| [bgra[2], bgra[1], bgra[0]];
     assert_eq!(rgba(&after, 40, 50), bgr(ARROW_OUTLINE));
     assert_eq!(rgba(&after, 41, 55), bgr(ARROW_FILL));
+}
+
+fn game_under_pointer(server: &mut Headless) -> (TestClient, Point<f64, Logical>) {
+    let mut game = client_with_window(server, 64);
+    game.use_relative_pointer(server);
+    let centre = (geometry(server).location + Point::from((32, 32))).to_f64();
+    server.move_pointer_to(centre, 0);
+    game.exchange(server);
+    (game, centre)
+}
+
+#[test]
+fn a_locked_pointer_stays_put_while_the_game_gets_relative_motion() {
+    let mut server = server();
+    let (mut game, centre) = game_under_pointer(&mut server);
+    game.lock_pointer(&mut server, 0);
+    assert!(game.pointer_constrained());
+
+    server.move_pointer_by(Point::from((40.0, 0.0)), Point::from((30.0, 0.0)), 1_000);
+    game.exchange(&mut server);
+
+    assert_eq!(server.pointer_location(), centre);
+    assert_eq!(game.relative_motions().last(), Some(&(30.0, 0.0)));
+}
+
+#[test]
+fn a_confined_pointer_slides_along_the_window_edge() {
+    let mut server = server();
+    let (mut game, centre) = game_under_pointer(&mut server);
+    game.confine_pointer(&mut server, 0);
+    assert!(game.pointer_constrained());
+
+    server.move_pointer_by(Point::from((100.0, 5.0)), Point::from((100.0, 5.0)), 1_000);
+    game.exchange(&mut server);
+
+    assert_eq!(server.pointer_location(), centre + Point::from((0.0, 5.0)));
+}
+
+#[test]
+fn a_new_window_in_front_frees_a_locked_pointer() {
+    let mut server = server();
+    let (mut game, centre) = game_under_pointer(&mut server);
+    game.lock_pointer(&mut server, 0);
+    let mut other = client_with_window(&mut server, 32);
+    roundtrip(&mut server, &mut [&mut game, &mut other]);
+
+    server.move_pointer_by(Point::from((10.0, 0.0)), Point::from((10.0, 0.0)), 1_000);
+    game.exchange(&mut server);
+
+    assert_eq!(server.pointer_location(), centre + Point::from((10.0, 0.0)));
+    assert!(!game.pointer_constrained());
 }

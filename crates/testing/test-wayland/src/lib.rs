@@ -15,6 +15,7 @@ pub use unbound_protocols::client::unbound_shell_v1::{
 pub use wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment;
 pub use wayland_protocols::xdg::shell::client::xdg_toplevel::{ResizeEdge, State as ToplevelState};
 mod capture;
+mod constraint;
 mod cursor;
 mod decoration;
 mod dnd;
@@ -126,6 +127,7 @@ struct Globals {
     lock: lock::SessionLock,
     capture: capture::Capture,
     idle: idle::Idle,
+    constraint: constraint::Constraint,
     decoration_modes: Vec<decoration::DecorationMode>,
     text_input: ime::TextInput,
     input_method: ime::InputMethod,

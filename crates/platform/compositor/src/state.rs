@@ -215,6 +215,8 @@ pub struct State {
     _idle_inhibit_state: smithay::wayland::idle_inhibit::IdleInhibitManagerState,
     pub(crate) shortcuts_inhibit_state:
         smithay::wayland::keyboard_shortcuts_inhibit::KeyboardShortcutsInhibitState,
+    _pointer_constraints_state: smithay::wayland::pointer_constraints::PointerConstraintsState,
+    _relative_pointer_state: smithay::wayland::relative_pointer::RelativePointerManagerState,
     pub(crate) lock_states: Option<std::sync::mpsc::Sender<bool>>,
     pub(crate) lock: Option<Lock>,
     pub(crate) session_lock_state: SessionLockManagerState,
@@ -405,6 +407,14 @@ impl Headless {
                 smithay::wayland::keyboard_shortcuts_inhibit::KeyboardShortcutsInhibitState::new::<
                     State,
                 >(&handle),
+            _pointer_constraints_state:
+                smithay::wayland::pointer_constraints::PointerConstraintsState::new::<State>(
+                    &handle,
+                ),
+            _relative_pointer_state:
+                smithay::wayland::relative_pointer::RelativePointerManagerState::new::<State>(
+                    &handle,
+                ),
             lock_states: None,
             lock: None,
             session_lock_state: SessionLockManagerState::new::<State, _>(&handle, shell::is_shell),

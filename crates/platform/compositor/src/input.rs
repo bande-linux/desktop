@@ -445,8 +445,7 @@ impl Headless {
                 self.key(keycode, pressed, event.time_msec());
             }
             InputEvent::PointerMotion { event } => {
-                let location = self.state.pointer_location + event.delta();
-                self.move_pointer_to(location, event.time_msec());
+                self.move_pointer_by(event.delta(), event.delta_unaccel(), event.time());
             }
             InputEvent::PointerMotionAbsolute { event } => {
                 let bounds = self.state.bounding_rect();

@@ -13,6 +13,7 @@ pub const HEADPHONES: &str = "/org/bluez/hci0/dev_00_1B_66_01_02_03";
 pub const MOUSE: &str = "/org/bluez/hci0/dev_F0_99_B6_04_05_06";
 pub const PHONE: &str = "/org/bluez/hci0/dev_5C_F9_38_07_08_09";
 pub const KEYBOARD: &str = "/org/bluez/hci0/dev_E8_06_88_0A_0B_0C";
+pub const NAMELESS: &str = "/org/bluez/hci0/dev_4C_87_5D_0D_0E_0F";
 pub const PHONE_PASSKEY: u32 = 123_456;
 pub const KEYBOARD_PASSKEY: u32 = 4_207;
 
@@ -110,8 +111,9 @@ impl Battery {
 
 struct Device {
     address: &'static str,
+    name: Option<&'static str>,
     alias: &'static str,
-    icon: &'static str,
+    icon: Option<&'static str>,
     paired: AtomicBool,
     trusted: bool,
     connected: bool,
@@ -141,7 +143,7 @@ impl Device {
             .ok_or_else(|| BluezError::AuthenticationRejected("no agent".into()))?;
         let agent = zbus::Proxy::new(bus, sender, agent, "org.bluez.Agent1").await?;
         let device = OwnedObjectPath::try_from(self.path).map_err(zbus::Error::from)?;
-        let reply = if self.icon == "input-keyboard" {
+        let reply = if self.icon == Some("input-keyboard") {
             agent
                 .call_method("DisplayPasskey", &(device, KEYBOARD_PASSKEY, 0u16))
                 .await
@@ -162,13 +164,18 @@ impl Device {
     }
 
     #[zbus(property)]
+    fn name(&self) -> zbus::fdo::Result<&str> {
+        self.name.ok_or_else(|| unknown_property("Name"))
+    }
+
+    #[zbus(property)]
     fn alias(&self) -> &str {
         self.alias
     }
 
     #[zbus(property)]
-    fn icon(&self) -> &str {
-        self.icon
+    fn icon(&self) -> zbus::fdo::Result<&str> {
+        self.icon.ok_or_else(|| unknown_property("Icon"))
     }
 
     #[zbus(property)]
@@ -190,6 +197,10 @@ impl Device {
     fn connected(&self) -> bool {
         self.connected
     }
+}
+
+fn unknown_property(name: &str) -> zbus::fdo::Error {
+    zbus::fdo::Error::UnknownProperty(format!("{name} is not known"))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -229,34 +240,55 @@ impl FakeBluez {
             (
                 HEADPHONES,
                 "00:1B:66:01:02:03",
+                Some("WH-1000XM4"),
                 "Studio Headphones",
-                "audio-headphones",
+                Some("audio-headphones"),
                 true,
                 true,
             ),
             (
                 MOUSE,
                 "F0:99:B6:04:05:06",
+                Some("mouse"),
                 "mouse",
-                "input-mouse",
+                Some("input-mouse"),
                 true,
                 false,
             ),
-            (PHONE, "5C:F9:38:07:08:09", "Phone", "phone", false, false),
+            (
+                PHONE,
+                "5C:F9:38:07:08:09",
+                Some("Phone"),
+                "Phone",
+                Some("phone"),
+                false,
+                false,
+            ),
             (
                 KEYBOARD,
                 "E8:06:88:0A:0B:0C",
+                None,
                 "Keyboard",
-                "input-keyboard",
+                Some("input-keyboard"),
+                false,
+                false,
+            ),
+            (
+                NAMELESS,
+                "4C:87:5D:0D:0E:0F",
+                None,
+                "4C-87-5D-0D-0E-0F",
+                None,
                 false,
                 false,
             ),
         ];
-        for (path, address, alias, icon, paired, connected) in devices {
+        for (path, address, name, alias, icon, paired, connected) in devices {
             server.at(
                 path,
                 Device {
                     address,
+                    name,
                     alias,
                     icon,
                     paired: AtomicBool::new(paired),

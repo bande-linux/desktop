@@ -2,9 +2,9 @@
 
 use std::sync::{Arc, Mutex};
 
-use unbound_bluetooth::{Bluetooth, PairingPrompt, register_agent};
+use unbound_bluetooth::{Bluetooth, Kind, PairingPrompt, register_agent};
 use unbound_test_bus::SessionBus;
-use unbound_test_bus::bluez::{FakeBluez, HEADPHONES, MOUSE, PHONE};
+use unbound_test_bus::bluez::{FakeBluez, HEADPHONES, MOUSE, NAMELESS, PHONE};
 
 #[derive(Default)]
 struct Prompt {
@@ -102,32 +102,40 @@ fn turning_bluetooth_off_and_on_writes_the_adapter_power() {
 #[test]
 fn paired_devices_list_connected_first_then_by_name() {
     let fixture = start(true);
-    let paired: Vec<(String, bool, Option<String>)> = fixture
+    let paired: Vec<(String, bool, Kind)> = fixture
         .client
         .paired_devices()
         .expect("paired")
         .into_iter()
-        .map(|device| (device.name, device.connected, device.icon))
+        .map(|device| (device.name, device.connected, device.kind))
         .collect();
     assert_eq!(
         paired,
         [
-            (
-                "Studio Headphones".to_owned(),
-                true,
-                Some("audio-headphones".to_owned())
-            ),
-            ("mouse".to_owned(), false, Some("input-mouse".to_owned())),
+            ("Studio Headphones".to_owned(), true, Kind::Headphones),
+            ("mouse".to_owned(), false, Kind::Mouse),
         ]
     );
-    let nearby: Vec<String> = fixture
+}
+
+#[test]
+fn nearby_devices_without_a_name_are_left_out() {
+    let fixture = start(true);
+    let nearby: Vec<(String, bool, Kind)> = fixture
         .client
         .nearby_devices()
         .expect("nearby")
         .into_iter()
-        .map(|device| device.address)
+        .map(|device| (device.address, device.named, device.kind))
         .collect();
-    assert_eq!(nearby, ["E8:06:88:0A:0B:0C", "5C:F9:38:07:08:09"]);
+    assert_eq!(
+        nearby,
+        [
+            ("E8:06:88:0A:0B:0C".to_owned(), true, Kind::Keyboard),
+            ("5C:F9:38:07:08:09".to_owned(), true, Kind::Phone),
+        ]
+    );
+    assert!(fixture.fake.has_device(NAMELESS));
 }
 
 #[test]

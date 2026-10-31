@@ -40,11 +40,67 @@ trait Device {
     fn set_trusted(&self, trusted: bool) -> zbus::Result<()>;
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Kind {
+    Mouse,
+    Keyboard,
+    Tablet,
+    GameController,
+    Headphones,
+    Headset,
+    Speaker,
+    Phone,
+    Computer,
+    Camera,
+    Printer,
+    Display,
+    Other,
+}
+
+impl Kind {
+    fn from_icon(icon: &str) -> Self {
+        match icon {
+            "input-mouse" => Self::Mouse,
+            "input-keyboard" => Self::Keyboard,
+            "input-tablet" => Self::Tablet,
+            "input-gaming" => Self::GameController,
+            "audio-headphones" => Self::Headphones,
+            "audio-headset" => Self::Headset,
+            "audio-card" => Self::Speaker,
+            "phone" => Self::Phone,
+            "computer" => Self::Computer,
+            "camera-photo" | "camera-video" => Self::Camera,
+            "printer" => Self::Printer,
+            "video-display" => Self::Display,
+            _ => Self::Other,
+        }
+    }
+
+    pub fn symbol(self) -> &'static str {
+        match self {
+            Self::Mouse => "input-mouse-symbolic",
+            Self::Keyboard => "input-keyboard-symbolic",
+            Self::Tablet => "input-tablet-symbolic",
+            Self::GameController => "input-gaming-symbolic",
+            Self::Headphones => "audio-headphones-symbolic",
+            Self::Headset => "audio-headset-symbolic",
+            Self::Speaker => "audio-card-symbolic",
+            Self::Phone => "phone-symbolic",
+            Self::Computer => "computer-symbolic",
+            Self::Camera => "camera-photo-symbolic",
+            Self::Printer => "printer-symbolic",
+            Self::Display => "video-display-symbolic",
+            Self::Other => "bluetooth-symbolic",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Device {
     pub address: String,
     pub name: String,
-    pub icon: Option<String>,
+    pub named: bool,
+    pub kind: Kind,
     pub paired: bool,
     pub connected: bool,
     pub battery: Option<u8>,
@@ -72,9 +128,14 @@ impl Device {
         };
         let properties = of(DEVICE)?;
         let address: String = property(properties, "Address")?;
+        let alias = property::<String>(properties, "Alias")
+            .filter(|alias| *alias != address.replace(':', "-"));
+        let named = alias.is_some() || properties.contains_key("Name");
+        let icon: Option<String> = property(properties, "Icon");
         Some(Self {
-            name: property(properties, "Alias").unwrap_or_else(|| address.clone()),
-            icon: property(properties, "Icon"),
+            name: alias.unwrap_or_else(|| address.clone()),
+            named,
+            kind: icon.as_deref().map_or(Kind::Other, Kind::from_icon),
             paired: property(properties, "Paired").unwrap_or(false),
             connected: property(properties, "Connected").unwrap_or(false),
             battery: of(BATTERY).and_then(|battery| property(battery, "Percentage")),
@@ -166,7 +227,9 @@ impl Bluetooth {
     }
 
     pub fn nearby_devices(&self) -> zbus::Result<Vec<Device>> {
-        self.devices(false)
+        let mut devices = self.devices(false)?;
+        devices.retain(|device| device.named);
+        Ok(devices)
     }
 
     pub fn set_discovering(&self, discovering: bool) -> zbus::Result<()> {
@@ -206,5 +269,17 @@ impl Bluetooth {
         proxy.pair()?;
         proxy.set_trusted(true)?;
         proxy.connect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Kind;
+
+    #[test]
+    fn icons_bluez_names_map_to_kinds_and_the_rest_to_other() {
+        assert_eq!(Kind::from_icon("camera-video"), Kind::Camera);
+        assert_eq!(Kind::from_icon("audio-card"), Kind::Speaker);
+        assert_eq!(Kind::from_icon("modem"), Kind::Other);
     }
 }

@@ -121,6 +121,7 @@ fn wifi(network: &NetworkManager) -> Option<Wifi> {
         } else {
             Vec::new()
         },
+        sign_in: matches!(network.sign_in_page(), Ok(Some(_))),
     })
 }
 
@@ -139,6 +140,7 @@ fn bluetooth(bluez: &BlueZ) -> Option<Bluetooth> {
                 address: device.address,
                 name: device.name,
                 connected: device.connected,
+                battery: device.battery,
             })
             .collect(),
     })
@@ -166,6 +168,14 @@ fn report<E: std::fmt::Display>(what: &str, result: Result<(), E>) {
     }
 }
 
+fn paired(bluez: &BlueZ, address: &str) -> Option<unbound_bluetooth::Device> {
+    bluez
+        .paired_devices()
+        .unwrap_or_default()
+        .into_iter()
+        .find(|device| device.address == address)
+}
+
 fn run(system: &Connection, network: &NetworkManager, bluez: &BlueZ, command: Command) {
     match command {
         Command::SetWifi(on) => report("switch Wi-Fi", network.set_wifi_enabled(on)),
@@ -180,13 +190,18 @@ fn run(system: &Connection, network: &NetworkManager, bluez: &BlueZ, command: Co
             }
         }
         Command::SetBluetooth(on) => report("switch Bluetooth", bluez.set_powered(on)),
+        Command::SignIn => match network.sign_in_page() {
+            Ok(Some(page)) => crate::captive::open_page(&page),
+            Ok(None) => {}
+            Err(error) => tracing::warn!("cannot find the sign-in page: {error}"),
+        },
+        Command::ForgetGadget(address) => {
+            if let Some(device) = paired(bluez, &address) {
+                report("forget the device", bluez.forget(&device));
+            }
+        }
         Command::ToggleGadget(address) => {
-            let device = bluez
-                .paired_devices()
-                .unwrap_or_default()
-                .into_iter()
-                .find(|device| device.address == address);
-            if let Some(device) = device {
+            if let Some(device) = paired(bluez, &address) {
                 let result = if device.connected {
                     bluez.disconnect(&device)
                 } else {

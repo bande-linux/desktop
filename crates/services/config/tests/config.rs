@@ -55,6 +55,14 @@ fn a_file_from_before_displays_were_named_still_applies_every_setting() {
 }
 
 #[test]
+fn apps_reopen_at_login_unless_turned_off() {
+    assert!(Config::default().reopen_apps);
+    let (config, problems) = Config::load("reopen-apps #false\n").expect("well-formed KDL");
+    assert_eq!(problems, []);
+    assert!(!config.reopen_apps);
+}
+
+#[test]
 fn a_named_display_wins_over_its_old_connector_block() {
     let config = Config::parse(
         "output \"DP-1\" {\n    scale 2\n}\ndisplay \"Dell U2720Q\" {\n    scale 1.5\n}\n",

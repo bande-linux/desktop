@@ -10,7 +10,10 @@ use unbound_toolkit::{
     App, Image, Item, Palette, Point, Rect, Role, Scene, TextAlign, TextStyle, TextSystem, Window,
     WindowEvent,
 };
-use unbound_xdg::{Locale, applications, current_desktops, data_dirs, find_app, find_icon};
+use unbound_xdg::{
+    Locale, applications, current_desktops, data_dirs, find_app, find_icon, reopen_file,
+    take_apps_to_reopen,
+};
 use zbus::blocking::Connection;
 
 pub const DIALOGS: &str = "org.unbound.MenuBar";
@@ -138,7 +141,14 @@ impl Dialog {
     fn decide(&mut self, window: &mut Window) {
         match self.choice.get() {
             Choice::Undecided => {}
-            Choice::Cancel => window.close(),
+            Choice::Cancel => {
+                if self.ending.is_some()
+                    && let Some(file) = reopen_file()
+                {
+                    take_apps_to_reopen(&file);
+                }
+                window.close();
+            }
             Choice::Confirm => {
                 if let Some((ending, _)) = self.ending {
                     let result =

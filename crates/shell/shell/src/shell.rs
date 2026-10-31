@@ -3,16 +3,24 @@ use std::error::Error;
 use std::os::fd::BorrowedFd;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Instant;
 
 use accesskit::TreeUpdate;
+use unbound_bar::pairing::PairingDialogs;
 use unbound_bar::surfaces::{self, Display, Restart, Services};
+use unbound_bluetooth::register_agent;
 use unbound_config::{Config, config_path};
 use unbound_controlcenter::ControlCenter;
 use unbound_desktop_surface::DesktopSurface;
 use unbound_launcher::LauncherShell;
 use unbound_notifications::Notifications;
+use unbound_status::captive::{follow_captive_portal, open_page};
 use unbound_toolkit::{App, Rect, Scene, Surfaces, TextSystem, Window, WindowEvent};
+use unbound_xdg::{
+    Locale, applications, current_desktops, data_dirs, find_app, launch, reopen_file,
+    take_apps_to_reopen,
+};
 use zbus::blocking::Connection;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -314,6 +322,28 @@ fn bus(connection: zbus::Result<Connection>, name: &str) -> Option<Connection> {
         .ok()
 }
 
+fn reopen_apps(wanted: bool) {
+    let Some(file) = reopen_file() else {
+        return;
+    };
+    let apps = take_apps_to_reopen(&file);
+    if !wanted || apps.is_empty() {
+        return;
+    }
+    let entries = applications(
+        &data_dirs(),
+        Locale::from_env().as_ref(),
+        &current_desktops(),
+    );
+    for app in apps {
+        if let Some(entry) = find_app(&entries, &app)
+            && let Err(error) = launch(entry, None)
+        {
+            tracing::warn!("cannot reopen {app}: {error}");
+        }
+    }
+}
+
 pub fn run() -> Result<(), Box<dyn Error>> {
     let context = Context {
         text: TextSystem::new(),
@@ -323,6 +353,15 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         home: std::env::var_os("HOME").map(PathBuf::from),
         notification_center: Rc::new(RefCell::new(Box::new(|| {}))),
     };
+    reopen_apps(context.config().reopen_apps);
+    if let Some(system) = &context.system {
+        if let Err(error) = register_agent(system, Arc::new(PairingDialogs::default())) {
+            tracing::warn!("Bluetooth devices can pair only from Settings: {error}");
+        }
+        if let Some(session) = &context.session {
+            follow_captive_portal(system, session, open_page);
+        }
+    }
     let mut root = Window::open(unbound_notifications::role(), (0, 0))?;
     let notifications = context.notifications(&mut root)?;
     let mut shell = Shell {

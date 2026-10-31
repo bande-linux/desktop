@@ -32,7 +32,7 @@ use unbound_toolkit::{
 };
 use unbound_xdg::{
     DesktopEntry, ICON_THEMES, Locale, app_name, applications, current_desktops, data_dirs,
-    find_app, find_icon, launch_action, spawn_detached,
+    find_app, find_icon, launch_action, remember_running_apps, spawn_detached,
 };
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
@@ -155,6 +155,11 @@ impl<V: StatusView> MenuBarClient<V> {
         }
     }
 
+    fn confirm(&self, window: &mut Window, myself: &str, ending: &str) {
+        remember_running_apps(&window.running_apps());
+        self.launch(window, DIALOGS, &[myself, "--confirm", ending]);
+    }
+
     fn myself(&self) -> String {
         std::env::current_exe()
             .ok()
@@ -179,9 +184,9 @@ impl<V: StatusView> MenuBarClient<V> {
             Command::ForceQuit => {
                 self.launch(window, MONITOR, &["unbound-monitor", "--force-quit"]);
             }
-            Command::Restart => self.launch(window, DIALOGS, &[&myself, "--confirm", "restart"]),
-            Command::ShutDown => self.launch(window, DIALOGS, &[&myself, "--confirm", "shut-down"]),
-            Command::LogOut => self.launch(window, DIALOGS, &[&myself, "--confirm", "log-out"]),
+            Command::Restart => self.confirm(window, &myself, "restart"),
+            Command::ShutDown => self.confirm(window, &myself, "shut-down"),
+            Command::LogOut => self.confirm(window, &myself, "log-out"),
             Command::SetMuted(muted) => {
                 let _ = self.sound.send(SoundControl::SetMuted(muted));
             }

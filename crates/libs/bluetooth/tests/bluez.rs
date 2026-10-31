@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use unbound_bluetooth::{Bluetooth, PairingPrompt, register_agent};
 use unbound_test_bus::SessionBus;
-use unbound_test_bus::bluez::{FakeBluez, HEADPHONES, MOUSE, PHONE};
+use unbound_test_bus::bluez::{FakeBluez, HEADPHONES, HEADPHONES_BATTERY, MOUSE, PHONE};
 
 #[derive(Default)]
 struct Prompt {
@@ -194,4 +194,33 @@ fn declining_the_passkey_leaves_the_device_unpaired() {
     assert!(fixture.client.pair(&fixture.named("Phone")).is_err());
     let phone = fixture.fake.device(PHONE).expect("phone");
     assert!(!phone.paired && !phone.trusted && !phone.connected);
+}
+
+#[test]
+fn a_device_reporting_its_battery_carries_the_percentage() {
+    let fixture = start(true);
+    assert_eq!(
+        fixture.named("Studio Headphones").battery,
+        Some(HEADPHONES_BATTERY)
+    );
+    assert_eq!(fixture.named("mouse").battery, None);
+}
+
+#[test]
+fn forgetting_a_device_removes_it_from_the_adapter() {
+    let fixture = start(true);
+    fixture
+        .client
+        .forget(&fixture.named("Studio Headphones"))
+        .expect("forget");
+    assert!(!fixture.fake.knows(HEADPHONES));
+    assert!(fixture.fake.knows(MOUSE));
+    let paired: Vec<String> = fixture
+        .client
+        .paired_devices()
+        .expect("paired")
+        .into_iter()
+        .map(|device| device.name)
+        .collect();
+    assert_eq!(paired, ["mouse"]);
 }

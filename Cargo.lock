@@ -3739,12 +3739,15 @@ dependencies = [
 name = "unbound-automount"
 version = "0.1.0"
 dependencies = [
+ "rustix 1.1.6",
  "tracing",
  "unbound-bus",
+ "unbound-fs",
  "unbound-l10n",
  "unbound-log",
  "unbound-notify",
  "unbound-test-bus",
+ "unbound-xdg",
  "zbus",
 ]
 
@@ -3757,6 +3760,7 @@ dependencies = [
  "jiff",
  "smithay",
  "tracing",
+ "unbound-bluetooth",
  "unbound-compositor",
  "unbound-config",
  "unbound-controlcenter",
@@ -4362,6 +4366,7 @@ dependencies = [
  "accesskit",
  "tracing",
  "unbound-bar",
+ "unbound-bluetooth",
  "unbound-config",
  "unbound-controlcenter",
  "unbound-desktop-surface",
@@ -4370,6 +4375,7 @@ dependencies = [
  "unbound-notifications",
  "unbound-status",
  "unbound-toolkit",
+ "unbound-xdg",
  "zbus",
 ]
 
@@ -4405,6 +4411,7 @@ dependencies = [
  "unbound-network",
  "unbound-notify",
  "unbound-test-bus",
+ "unbound-xdg",
  "zbus",
 ]
 

@@ -270,6 +270,18 @@ fn switching_a_control_or_choosing_a_network_asks_for_that_change() {
     );
 }
 
+#[test]
+fn behind_a_captive_portal_the_wifi_tile_asks_to_sign_in() {
+    let (ui, _, _) = open(&Status {
+        wifi: Some(true),
+        network: Some("Cafe".to_owned()),
+        sign_in: true,
+        ..Status::default()
+    });
+    let (_, node) = control(&ui, "Wi-Fi").expect("a Wi-Fi switch");
+    assert_eq!(node.description(), Some("Sign in required"));
+}
+
 fn filled(hud: Hud) -> f32 {
     hud.segment_fills().iter().sum()
 }

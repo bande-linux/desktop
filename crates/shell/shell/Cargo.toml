@@ -9,6 +9,7 @@ repository.workspace = true
 accesskit.workspace = true
 tracing.workspace = true
 unbound-bar.workspace = true
+unbound-bluetooth.workspace = true
 unbound-config.workspace = true
 unbound-controlcenter.workspace = true
 unbound-desktop-surface.workspace = true
@@ -17,6 +18,7 @@ unbound-log.workspace = true
 unbound-notifications.workspace = true
 unbound-status.workspace = true
 unbound-toolkit.workspace = true
+unbound-xdg.workspace = true
 zbus.workspace = true
 
 [package.metadata.deb]
@@ -25,7 +27,7 @@ section = "misc"
 depends = "$auto, fonts-inter, fonts-noto-color-emoji, unbound-notify"
 conflicts = "unbound-bar, unbound-desktop-surface, unbound-launcher, unbound-notifications, unbound-controlcenter"
 replaces = "unbound-bar, unbound-desktop-surface, unbound-launcher, unbound-notifications, unbound-controlcenter"
-recommends = "upower, network-manager, bluez, pipewire, wireplumber, unbound-tray, xdg-user-dirs, adwaita-icon-theme"
+recommends = "upower, network-manager, network-manager-config-connectivity-debian, bluez, pipewire, wireplumber, unbound-tray, xdg-user-dirs, adwaita-icon-theme"
 assets = [
     ["target/release/unbound-shell", "usr/bin/", "755"],
     ["../../../data/wallpapers/*.svg", "usr/share/unbound/wallpapers/", "644"],

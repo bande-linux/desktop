@@ -21,6 +21,9 @@ const RSN_SAE: u32 = 0x400 | 0x8 | 0x80;
 const RSN_EAP: u32 = 0x200 | 0x8 | 0x80;
 const PRIVACY: u32 = 0x1;
 const ACTIVATION_DELAY: Duration = Duration::from_millis(100);
+const CONNECTIVITY_FULL: u32 = 4;
+pub const CONNECTIVITY_PORTAL: u32 = 2;
+pub const CHECK_URI: &str = "http://check.example/";
 
 #[derive(Default)]
 struct World {
@@ -58,6 +61,7 @@ fn psk_of(settings: &Settings) -> Option<String> {
 struct Manager {
     world: Shared,
     wireless_enabled: bool,
+    connectivity: u32,
 }
 
 impl Manager {
@@ -159,6 +163,16 @@ impl Manager {
     #[zbus(property)]
     fn set_wireless_enabled(&mut self, enabled: bool) {
         self.wireless_enabled = enabled;
+    }
+
+    #[zbus(property)]
+    fn connectivity(&self) -> u32 {
+        self.connectivity
+    }
+
+    #[zbus(property)]
+    fn connectivity_check_uri(&self) -> &str {
+        CHECK_URI
     }
 }
 
@@ -401,6 +415,7 @@ impl FakeNetworkManager {
             Manager {
                 world: world.clone(),
                 wireless_enabled: true,
+                connectivity: CONNECTIVITY_FULL,
             },
         )?;
         server.at(
@@ -454,6 +469,12 @@ impl FakeNetworkManager {
             .interface::<_, Manager>(ROOT)?
             .get()
             .wireless_enabled)
+    }
+
+    pub fn set_connectivity(&self, connectivity: u32) -> zbus::Result<()> {
+        let manager = self.daemon.object_server().interface::<_, Manager>(ROOT)?;
+        manager.get_mut().connectivity = connectivity;
+        zbus::block_on(manager.get().connectivity_changed(manager.signal_emitter()))
     }
 
     pub fn scans(&self) -> u32 {

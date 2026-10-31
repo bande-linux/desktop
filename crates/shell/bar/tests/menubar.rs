@@ -5,14 +5,14 @@ use std::time::Duration;
 
 use unbound_bar::menubar::{MenuBar, Slot};
 use unbound_bar::menus::{
-    app_menu, battery_menu, bluetooth_menu, input_source_menu, sound_menu, system_menu,
+    app_menu, battery_menu, bluetooth_menu, input_source_menu, sound_menu, system_menu, wifi_menu,
 };
 use unbound_status::Command;
 use unbound_status::dbusmenu::{Node, tree, without_mnemonics};
 use unbound_status::devices::battery_of;
 use unbound_status::session::{Ending, facts};
 use unbound_status::status::{
-    Battery, Bluetooth, Gadget, InputSource, InputSources, Output, Power, Sound,
+    Battery, Bluetooth, Gadget, InputSource, InputSources, Output, Power, Sound, Wifi,
 };
 use unbound_status::tray::{TrayIcon, pixmap_rgba, split};
 use unbound_toolkit::ui::{Menu, MenuItem};
@@ -137,6 +137,8 @@ fn every_command_survives_its_trip_through_a_menu_action() {
         Command::UseOutput("alsa_output.usb".to_owned()),
         Command::SetBluetooth(true),
         Command::ToggleGadget("AA:BB:CC:DD:EE:FF".to_owned()),
+        Command::ForgetGadget("AA:BB:CC:DD:EE:FF".to_owned()),
+        Command::SignIn,
         Command::Item {
             item: ":1.42/MenuBar".to_owned(),
             id: 7,
@@ -264,6 +266,7 @@ fn the_bluetooth_menu_lists_devices_only_while_bluetooth_is_on() {
         address: "AA:BB".to_owned(),
         name: "Headphones".to_owned(),
         connected: true,
+        battery: None,
     };
     let on = Bluetooth {
         powered: true,
@@ -284,6 +287,65 @@ fn the_bluetooth_menu_lists_devices_only_while_bluetooth_is_on() {
         !titles(&bluetooth_menu(&off))
             .iter()
             .any(|item| item.0 == "Headphones")
+    );
+}
+
+#[test]
+fn the_bluetooth_menu_shows_device_batteries_and_forgets_a_device() {
+    let gadget = |address: &str, name: &str, battery| Gadget {
+        address: address.to_owned(),
+        name: name.to_owned(),
+        connected: true,
+        battery,
+    };
+    let menu = bluetooth_menu(&Bluetooth {
+        powered: true,
+        devices: vec![
+            gadget("AA:BB", "Headphones", Some(80)),
+            gadget("CC:DD", "Mouse", None),
+        ],
+    });
+    assert_eq!(
+        Command::parse(action_of(&menu, "Headphones · 80%")),
+        Some(Command::ToggleGadget("AA:BB".to_owned()))
+    );
+    assert!(titles(&menu).contains(&("Mouse".to_owned(), true, true)));
+    let forget = menu
+        .items
+        .iter()
+        .find_map(|item| {
+            item.submenu
+                .as_ref()
+                .filter(|_| item.title == "Forget Device")
+        })
+        .expect("Forget Device submenu");
+    assert_eq!(
+        Command::parse(action_of(forget, "Headphones")),
+        Some(Command::ForgetGadget("AA:BB".to_owned()))
+    );
+    assert_eq!(
+        Command::parse(action_of(forget, "Mouse")),
+        Some(Command::ForgetGadget("CC:DD".to_owned()))
+    );
+}
+
+#[test]
+fn the_wifi_menu_offers_to_sign_in_only_behind_a_captive_portal() {
+    let wifi = |sign_in| Wifi {
+        enabled: true,
+        networks: Vec::new(),
+        sign_in,
+    };
+    let portal = wifi_menu(&wifi(true));
+    assert!(titles(&portal).contains(&("Sign in required".to_owned(), false, false)));
+    assert_eq!(
+        Command::parse(action_of(&portal, "Sign In…")),
+        Some(Command::SignIn)
+    );
+    assert!(
+        !titles(&wifi_menu(&wifi(false)))
+            .iter()
+            .any(|item| item.0.starts_with("Sign"))
     );
 }
 

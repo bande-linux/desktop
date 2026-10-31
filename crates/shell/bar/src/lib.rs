@@ -7,6 +7,7 @@ pub mod menu_search;
 mod menu_search_client;
 pub mod menubar;
 pub mod menus;
+pub mod pairing;
 pub mod rail;
 pub mod surfaces;
 mod symbols;
@@ -33,6 +34,7 @@ mod tests {
             include_str!("dialogs.rs"),
             include_str!("dock_client.rs"),
             include_str!("menu_bar_client.rs"),
+            include_str!("pairing.rs"),
         ];
         assert_eq!(
             unbound_l10n::missing_ids(super::ENGLISH, &sources),

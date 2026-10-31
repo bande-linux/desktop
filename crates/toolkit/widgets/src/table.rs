@@ -16,7 +16,6 @@ use super::{
 };
 
 pub const ROW_HEIGHT: f32 = 32.0;
-pub const HEADER_HEIGHT: f32 = 28.0;
 const CELL_PADDING: f32 = 8.0;
 const SELECTION_INSET: (f32, f32) = (4.0, 1.0);
 const ICON_SIZE: f32 = 16.0;
@@ -278,6 +277,8 @@ struct Glide {
 }
 
 impl Table {
+    pub const HEADER_HEIGHT: f32 = 28.0;
+
     pub fn new(columns: Vec<Column>) -> Self {
         Self {
             id: WidgetId::next(),
@@ -726,7 +727,7 @@ impl Table {
     }
 
     fn header_bar(&self) -> f32 {
-        HEADER_HEIGHT + self.grown
+        Self::HEADER_HEIGHT + self.grown
     }
 
     fn row_height(&self) -> f32 {
@@ -1661,7 +1662,7 @@ impl Widget for Table {
                     self.frame.x,
                     self.frame.y,
                     self.frame.width,
-                    HEADER_HEIGHT,
+                    Self::HEADER_HEIGHT,
                 )),
                 items: header,
             });

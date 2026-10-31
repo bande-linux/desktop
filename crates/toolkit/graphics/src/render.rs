@@ -3,7 +3,7 @@ use std::fmt;
 use crate::scene::Scene;
 
 #[derive(Debug)]
-pub enum RenderError {
+pub enum DrawError {
     TooLarge {
         width: u32,
         height: u32,
@@ -19,7 +19,7 @@ pub enum RenderError {
     Software(String),
 }
 
-impl fmt::Display for RenderError {
+impl fmt::Display for DrawError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::TooLarge { width, height } => {
@@ -40,7 +40,7 @@ impl fmt::Display for RenderError {
     }
 }
 
-impl std::error::Error for RenderError {}
+impl std::error::Error for DrawError {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Snapshot {
@@ -49,9 +49,9 @@ pub struct Snapshot {
     pub rgba: Vec<u8>,
 }
 
-pub(crate) fn extent(scene: &Scene, scale: f64) -> Result<(u16, u16), RenderError> {
+pub(crate) fn extent(scene: &Scene, scale: f64) -> Result<(u16, u16), DrawError> {
     let (width, height) = (pixels(scene.width, scale), pixels(scene.height, scale));
-    let too_large = || RenderError::TooLarge { width, height };
+    let too_large = || DrawError::TooLarge { width, height };
     Ok((
         u16::try_from(width).map_err(|_| too_large())?,
         u16::try_from(height).map_err(|_| too_large())?,

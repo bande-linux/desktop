@@ -13,7 +13,7 @@ use unbound_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Render
 use unbound_test_wayland::{RED, ShmImage, TestClient};
 use unbound_toolkit::ui::{Context, Event, TextField, Ui, Widget};
 use unbound_toolkit::{
-    App, HEADER_HEIGHT, Palette, Rect, Role, SHEET_INSET, Scene, Scheme, TextSystem, Window,
+    App, Palette, Rect, Role, SHEET_INSET, Scene, Scheme, TextSystem, WINDOW_HEADER_HEIGHT, Window,
     WindowEvent,
 };
 use wayland_client::protocol::wl_shm::Format;
@@ -170,7 +170,7 @@ fn an_input_method_composes_in_place_with_candidates_below_the_text_and_commits(
     let area = composition.area;
     let below = (
         window.x + SHEET_INSET as i32 + area.x.round() as i32 + 4,
-        window.y + HEADER_HEIGHT as i32 + (area.y + area.height).round() as i32 + 4,
+        window.y + WINDOW_HEADER_HEIGHT as i32 + (area.y + area.height).round() as i32 + 4,
     );
     let mut renderer = Renderer::new().expect("Vulkan renderer");
     assert_eq!(

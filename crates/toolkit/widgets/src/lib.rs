@@ -61,7 +61,7 @@ pub use shortcut::{Shortcut, ShortcutKeys, ShortcutText, shortcut_keys};
 pub use slider::{SLIDER_HEIGHT, Slider};
 pub use stack::{Axis, Stack};
 pub use stepper::{STEPPER_SIZE, Stepper};
-pub use table::{Cell, Column, HEADER_HEIGHT, ROW_HEIGHT, Row, Sort, Table};
+pub use table::{Cell, Column, ROW_HEIGHT, Row, Sort, Table};
 pub use text_field::{TEXT_FIELD_HEIGHT, TextField};
 pub use text_view::TextView;
 pub use toggle::{SWITCH_SIZE, Toggle};

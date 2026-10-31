@@ -17,9 +17,8 @@ mod displays;
 mod dock;
 mod drag;
 mod drm;
-mod element;
-
 mod effect;
+mod element;
 mod environment;
 mod family;
 mod frame;

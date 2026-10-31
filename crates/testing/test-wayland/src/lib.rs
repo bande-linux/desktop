@@ -1,3 +1,5 @@
+#![allow(clippy::expect_used, clippy::panic)]
+
 pub mod clipboard;
 pub use capture::{CaptureConstraints, CaptureOutcome};
 pub use cursor::CursorShape;

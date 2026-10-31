@@ -8,9 +8,9 @@ use std::time::{Instant, SystemTime};
 use accesskit::{Action, ActionRequest, TreeId};
 use unbound_fs::{Entry, Sort, SortBy, format_date, format_list_date, format_size};
 use unbound_toolkit::ui::{
-    Alert, Cell, Column, Event, FreeLayout, HEADER_HEIGHT, Key, Menu, MenuItem, Modifiers, Pointer,
-    PointerButton, Row, SLIDER_HEIGHT, Size, Slider, Sort as TableSort, Table, TextField, Toggle,
-    Widget, WidgetId,
+    Alert, Cell, Column, Event, FreeLayout, Key, Menu, MenuItem, Modifiers, Pointer, PointerButton,
+    Row, SLIDER_HEIGHT, Size, Slider, Sort as TableSort, Table, TextField, Toggle, Widget,
+    WidgetId,
 };
 use unbound_toolkit::{Image, Point, Rect};
 
@@ -440,12 +440,12 @@ impl FilesView {
         let at = pointer.position;
         let menu = pointer.button == PointerButton::Secondary
             || (pointer.is_primary() && pointer.modifiers.control);
-        if at.y < table.y + HEADER_HEIGHT && menu && !self.browser.searching() {
+        if at.y < table.y + Table::HEADER_HEIGHT && menu && !self.browser.searching() {
             let menu = columns_menu(&self.list_columns);
             self.show_menu(menu, at);
             return true;
         }
-        if at.y < table.y + HEADER_HEIGHT {
+        if at.y < table.y + Table::HEADER_HEIGHT {
             self.press = Some(Press::Ui);
             return self.ui.handle(event);
         }

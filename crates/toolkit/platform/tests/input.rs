@@ -15,8 +15,8 @@ use unbound_graphics::{
     ScrollPhase, ScrollSource, TextSystem,
 };
 use unbound_toolkit_platform::{
-    App, Edges, FrameRegions, HEADER_HEIGHT, Header, KeyboardFocus, LayerKind, LayerOptions,
-    MenuPlacement, Role, SHEET_INSET, Transfer, Window, WindowEvent,
+    App, Edges, FrameRegions, Header, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement, Role,
+    SHEET_INSET, Transfer, WINDOW_HEADER_HEIGHT, Window, WindowEvent,
 };
 use unbound_widgets::{Context, ContextMenu, Label, Menu, MenuItem, Ui};
 
@@ -201,7 +201,7 @@ impl Desktop {
     }
 
     fn point_into_content(&mut self, x: i32, y: i32) {
-        self.point_into_window(x + SHEET_INSET as i32, y + HEADER_HEIGHT as i32);
+        self.point_into_window(x + SHEET_INSET as i32, y + WINDOW_HEADER_HEIGHT as i32);
     }
 
     fn point_into_window(&mut self, x: i32, y: i32) {

@@ -46,7 +46,7 @@ enum Shortcut {
     LockScreen,
     ForceQuit,
     FocusShell(&'static str),
-    ToggleFullscreen,
+    ToggleFullScreen,
     Place(Direction),
     CaptureScreen,
     CaptureArea,
@@ -151,7 +151,7 @@ fn shortcut(
         Some(keysyms::KEY_slash) if shift && !ctrl && !alt => {
             return Some(Shortcut::FocusShell(MENU_SEARCH_NAMESPACE));
         }
-        Some(keysyms::KEY_f) if ctrl => return Some(Shortcut::ToggleFullscreen),
+        Some(keysyms::KEY_f) if ctrl => return Some(Shortcut::ToggleFullScreen),
         Some(keysyms::KEY_q) if ctrl => return Some(Shortcut::LockScreen),
         Some(keysyms::KEY_m) => return Some(Shortcut::MinimizeWindow),
         Some(keysyms::KEY_w) => return Some(Shortcut::CloseWindow),
@@ -395,7 +395,7 @@ impl State {
             Shortcut::Place(direction) => self.place_with_key(&focused, direction),
             Shortcut::CarryWindow(forward) => self.move_to_workspace(&focused, forward, true),
             Shortcut::MoveToDisplay(dx, dy) => self.move_to_screen_beside(&focused, (dx, dy)),
-            Shortcut::ToggleFullscreen => self.toggle_fullscreen(&focused),
+            Shortcut::ToggleFullScreen => self.toggle_fullscreen(&focused),
             Shortcut::ShowLauncher
             | Shortcut::OpenLauncher(_)
             | Shortcut::LockScreen
@@ -918,7 +918,7 @@ mod tests {
         match action {
             Action::CloseWindow => Shortcut::CloseWindow,
             Action::MinimizeWindow => Shortcut::MinimizeWindow,
-            Action::ToggleFullScreen => Shortcut::ToggleFullscreen,
+            Action::ToggleFullScreen => Shortcut::ToggleFullScreen,
             Action::TileWindow => Shortcut::Place(Direction::Left),
             Action::NextApp => Shortcut::NextApp { backwards: false },
             Action::NextWindow => Shortcut::NextWindow { backwards: false },

@@ -596,12 +596,15 @@ fn layer_surfaces_receive_frame_callbacks() {
     );
     shell.request_layer_frame(&mut server, 0);
 
-    server.latch();
+    server.latch_on(&server.main_output());
     server
-        .present(unbound_compositor::Vblank {
-            time: std::time::Duration::from_millis(8),
-            sequence: 1,
-        })
+        .present_on(
+            &server.main_output(),
+            unbound_compositor::Vblank {
+                time: std::time::Duration::from_millis(8),
+                sequence: 1,
+            },
+        )
         .expect("present");
     shell.exchange(&mut server);
 

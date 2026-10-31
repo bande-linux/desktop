@@ -4,7 +4,9 @@ mod support;
 
 use support::{Shot, appearance_portal, shot};
 use unbound_graphics::{Point, TextSystem};
-use unbound_toolkit_platform::{FrameRegions, HEADER_HEIGHT, MenuPlacement, SHEET_INSET, Window};
+use unbound_toolkit_platform::{
+    FrameRegions, MenuPlacement, SHEET_INSET, WINDOW_HEADER_HEIGHT, Window,
+};
 use unbound_widgets::{Alert, Cell, Column, Context, Menu, MenuItem, Row, Sort, Table, Ui, Widget};
 
 const SORT_BY: i32 = 4 + 28 + 28 + 9 + 14;
@@ -136,7 +138,7 @@ type Prepare = fn(&mut Window) -> Option<Ui>;
 #[test]
 fn the_window_frame_menus_tables_and_alerts_match_their_goldens() {
     let _portal = appearance_portal();
-    let content = |x: i32, y: i32| (x + SHEET_INSET as i32, y + HEADER_HEIGHT as i32);
+    let content = |x: i32, y: i32| (x + SHEET_INSET as i32, y + WINDOW_HEADER_HEIGHT as i32);
     let documents = |dark, pointer| Shot {
         title: "Documents",
         companion: None,

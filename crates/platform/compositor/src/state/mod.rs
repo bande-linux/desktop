@@ -343,10 +343,6 @@ impl Compositor {
         self.display.backend().poll_fd().try_clone_to_owned()
     }
 
-    pub fn take_redraw(&mut self) -> bool {
-        self.take_screen_redraw(0)
-    }
-
     pub fn take_redraw_on(&mut self, output: &str) -> bool {
         self.state
             .screen_named(output)
@@ -360,14 +356,6 @@ impl Compositor {
             }
         }
         std::mem::take(&mut self.state.screens[screen].redraw)
-    }
-
-    pub fn latch(&mut self) {
-        self.latch_screen(0);
-    }
-
-    pub fn present(&mut self, vblank: Vblank) -> io::Result<()> {
-        self.present_screen(0, vblank)
     }
 
     pub fn latch_on(&mut self, output: &str) {

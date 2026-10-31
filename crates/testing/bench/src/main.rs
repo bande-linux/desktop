@@ -268,7 +268,7 @@ fn frame_times(repaint: Repaint) -> Result<(Vec<Duration>, FrameStats), Box<dyn 
         }
         let composed = Instant::now();
         server.dispatch()?;
-        if server.take_redraw() {
+        if server.take_redraw_on(&server.main_output()) {
             let stats = renderer.render(&mut server)?;
             most.uploaded_bytes = most.uploaded_bytes.max(stats.uploaded_bytes);
             most.repainted_pixels = most.repainted_pixels.max(stats.repainted_pixels);

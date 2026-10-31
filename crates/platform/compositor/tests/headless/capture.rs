@@ -107,13 +107,16 @@ fn a_locked_screen_captures_only_the_lock_surface() {
     let mut app = red_window(&mut server);
     let mut shell = TestClient::connect_as_shell(&mut server);
     shell.lock_session(&mut server);
-    server.take_redraw();
-    server.latch();
+    server.take_redraw_on(&server.main_output());
+    server.latch_on(&server.main_output());
     server
-        .present(Vblank {
-            sequence: 1,
-            time: Duration::from_millis(8),
-        })
+        .present_on(
+            &server.main_output(),
+            Vblank {
+                sequence: 1,
+                time: Duration::from_millis(8),
+            },
+        )
         .expect("presented");
     shell.show_lock_surface(&mut server, BLUE);
     roundtrip(&mut server, &mut [&mut app, &mut shell]);
@@ -264,14 +267,14 @@ fn a_stream_frame_waits_for_something_to_change_after_the_first() {
     let mut shell = TestClient::connect_as_shell(&mut server);
     roundtrip(&mut server, &mut [&mut app, &mut shell]);
     shell.start_screen_capture(&mut server, false);
-    server.take_redraw();
+    server.take_redraw_on(&server.main_output());
 
     shell.capture_frame(&mut server, OUTPUT);
-    let first_redraws = server.take_redraw();
+    let first_redraws = server.take_redraw_on(&server.main_output());
     renderer.render(&mut server).expect("frame");
     shell.exchange(&mut server);
     shell.capture_frame(&mut server, OUTPUT);
-    let second_redraws = server.take_redraw();
+    let second_redraws = server.take_redraw_on(&server.main_output());
 
     assert!(first_redraws);
     assert!(!second_redraws);

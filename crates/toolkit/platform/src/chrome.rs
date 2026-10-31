@@ -10,8 +10,8 @@ use unbound_widgets::{Animated, Spring};
 
 use crate::L10N;
 
-pub use unbound_graphics::HEADER_HEIGHT;
 pub(crate) use unbound_graphics::RESIZE_MARGIN;
+pub use unbound_graphics::WINDOW_HEADER_HEIGHT;
 pub const SHEET_INSET: u32 = 6;
 pub(crate) use unbound_graphics::WindowControl as Control;
 const RESIZE_BAND: f32 = RESIZE_MARGIN as f32;
@@ -86,7 +86,7 @@ impl Header {
             self.title_x,
             0.0,
             (end - self.title_x - TITLE_TRAILING_GAP).max(0.0),
-            HEADER_HEIGHT as f32,
+            WINDOW_HEADER_HEIGHT as f32,
         )
     }
 }
@@ -429,7 +429,7 @@ pub fn framed_scene(
     header: Option<Header>,
     palette: &Palette,
 ) -> Scene {
-    let header_height = HEADER_HEIGHT as f32;
+    let header_height = WINDOW_HEADER_HEIGHT as f32;
     let inset = SHEET_INSET as f32;
     let (width, height) = (content.width as f32, content.height as f32);
     let (width, height) = match (&header, regions) {

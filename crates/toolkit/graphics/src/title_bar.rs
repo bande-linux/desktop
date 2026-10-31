@@ -2,7 +2,7 @@ use unbound_design::{Color, Palette, Radius, TextRole};
 
 use crate::{Item, Paragraph, Path, Point, Rect, Shape, TextStyle};
 
-pub const HEADER_HEIGHT: u32 = 48;
+pub const WINDOW_HEADER_HEIGHT: u32 = 48;
 pub const FRAME_HEADER_HEIGHT: u32 = 40;
 pub const RESIZE_MARGIN: u32 = 6;
 pub const RESIZE_CORNER: f32 = Radius::XL;

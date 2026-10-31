@@ -68,15 +68,18 @@ fn frame_callback_is_done_once_the_frame_is_presented() {
         },
     );
     client.request_frame(&mut server);
-    assert!(server.take_redraw());
+    assert!(server.take_redraw_on(&server.main_output()));
     assert_eq!(client.frames_done(), 0);
 
-    server.latch();
+    server.latch_on(&server.main_output());
     server
-        .present(Vblank {
-            sequence: 2,
-            time: Duration::from_millis(16),
-        })
+        .present_on(
+            &server.main_output(),
+            Vblank {
+                sequence: 2,
+                time: Duration::from_millis(16),
+            },
+        )
         .expect("presented");
     client.exchange(&mut server);
 

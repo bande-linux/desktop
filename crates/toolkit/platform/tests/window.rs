@@ -8,7 +8,7 @@ use unbound_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Render
 use unbound_graphics::{Color, Item, Point, Scene, TextAlign, TextStyle, TextSystem};
 use unbound_test_wayland::{ShmImage, TestClient, quadrants};
 use unbound_toolkit_platform::{
-    FramePath, HEADER_HEIGHT, RENDERER_VARIABLE, Role, SHEET_INSET, Window,
+    FramePath, RENDERER_VARIABLE, Role, SHEET_INSET, WINDOW_HEADER_HEIGHT, Window,
 };
 use wayland_client::protocol::wl_shm::Format;
 
@@ -18,7 +18,7 @@ const RED: Color = Color::hex(0xD03030);
 const BLUE: Color = Color::hex(0x2F6FEB);
 const FRAMED: (i32, i32) = (
     (WINDOW.0 + 2 * SHEET_INSET) as i32,
-    (WINDOW.1 + HEADER_HEIGHT + SHEET_INSET) as i32,
+    (WINDOW.1 + WINDOW_HEADER_HEIGHT + SHEET_INSET) as i32,
 );
 
 fn draw_on_the_gpu() {
@@ -222,7 +222,7 @@ fn on_a_2x_output_a_window_keeps_its_size_in_points_and_fills_twice_the_pixels()
             };
             let inset = SHEET_INSET as i32;
             let left = (location.x + inset) * 2;
-            let middle = (location.y + HEADER_HEIGHT as i32 + WINDOW.1 as i32 / 2) * 2;
+            let middle = (location.y + WINDOW_HEADER_HEIGHT as i32 + WINDOW.1 as i32 / 2) * 2;
             let right = left + WINDOW.0 as i32 * 2 - 1;
             assert_eq!(at(left, middle), [RED.r, RED.g, RED.b]);
             assert_eq!(at(right, middle), [RED.r, RED.g, RED.b]);
@@ -375,9 +375,9 @@ fn a_change_under_an_opaque_window_shades_only_the_window_on_top() {
     let inset = 16;
     let damage = (
         above.location.x + inset - under.x,
-        above.location.y + HEADER_HEIGHT as i32 - under.y,
+        above.location.y + WINDOW_HEADER_HEIGHT as i32 - under.y,
         above.size.w - 2 * inset,
-        above.size.h - HEADER_HEIGHT as i32 - inset,
+        above.size.h - WINDOW_HEADER_HEIGHT as i32 - inset,
     );
     below.commit_buffer(0, &image(&changed), damage);
     server.dispatch().expect("server dispatch");

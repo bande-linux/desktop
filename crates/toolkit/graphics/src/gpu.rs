@@ -12,7 +12,7 @@ use vello_gpu::{
 use crate::damage::Region;
 use crate::draw::{self, Canvas, ImageIds};
 use crate::outline::GlyphOutlines;
-use crate::render::{RenderError, Snapshot};
+use crate::render::{DrawError, Snapshot};
 use crate::scene::{Image, Scene};
 use crate::text::GlyphRun;
 
@@ -41,11 +41,11 @@ fn is_software(info: &wgpu::AdapterInfo) -> bool {
 }
 
 impl GpuDevice {
-    fn offscreen() -> Result<Self, RenderError> {
+    fn offscreen() -> Result<Self, DrawError> {
         let instance = vulkan_instance();
         let adapter =
             pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
-                .map_err(RenderError::Adapter)?;
+                .map_err(DrawError::Adapter)?;
         Self::open(instance, adapter)
     }
 
@@ -59,13 +59,13 @@ impl GpuDevice {
     pub unsafe fn shared_for(
         target: wgpu::SurfaceTargetUnsafe,
         allow_software: bool,
-    ) -> Result<(Arc<Self>, wgpu::Surface<'static>), RenderError> {
+    ) -> Result<(Arc<Self>, wgpu::Surface<'static>), DrawError> {
         let mut shared = SHARED.lock().unwrap_or_else(PoisonError::into_inner);
         if let Some(gpu) = shared.upgrade() {
             let surface = unsafe { gpu.instance.create_surface_unsafe(target) }
-                .map_err(|error| RenderError::Gpu(error.to_string()))?;
+                .map_err(|error| DrawError::Gpu(error.to_string()))?;
             if !gpu.adapter.is_surface_supported(&surface) {
-                return Err(RenderError::Gpu(
+                return Err(DrawError::Gpu(
                     "the shared device cannot present to this surface".to_owned(),
                 ));
             }
@@ -73,26 +73,26 @@ impl GpuDevice {
         }
         let instance = vulkan_instance();
         let surface = unsafe { instance.create_surface_unsafe(target) }
-            .map_err(|error| RenderError::Gpu(error.to_string()))?;
+            .map_err(|error| DrawError::Gpu(error.to_string()))?;
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             compatible_surface: Some(&surface),
             ..wgpu::RequestAdapterOptions::default()
         }))
-        .map_err(RenderError::Adapter)?;
+        .map_err(DrawError::Adapter)?;
         let info = adapter.get_info();
         if !allow_software && is_software(&info) {
             SOFTWARE_ONLY.store(true, Ordering::Relaxed);
-            return Err(RenderError::Software(info.name));
+            return Err(DrawError::Software(info.name));
         }
         let gpu = Arc::new(Self::open(instance, adapter)?);
         *shared = Arc::downgrade(&gpu);
         Ok((gpu, surface))
     }
 
-    fn open(instance: wgpu::Instance, adapter: wgpu::Adapter) -> Result<Self, RenderError> {
+    fn open(instance: wgpu::Instance, adapter: wgpu::Adapter) -> Result<Self, DrawError> {
         let (device, queue) =
             pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default()))
-                .map_err(RenderError::Device)?;
+                .map_err(DrawError::Device)?;
         device.on_uncaptured_error(Arc::new(|error| tracing::error!(%error, "GPU error")));
         Ok(Self {
             instance,
@@ -107,12 +107,12 @@ impl GpuDevice {
         &self,
         surface: &wgpu::Surface<'static>,
         config: &wgpu::SurfaceConfiguration,
-    ) -> Result<(), RenderError> {
+    ) -> Result<(), DrawError> {
         let _submitting = self.submitting();
         let scope = self.device.push_error_scope(wgpu::ErrorFilter::Validation);
         surface.configure(&self.device, config);
         match pollster::block_on(scope.pop()) {
-            Some(error) => Err(RenderError::Gpu(error.to_string())),
+            Some(error) => Err(DrawError::Gpu(error.to_string())),
             None => Ok(()),
         }
     }
@@ -192,7 +192,7 @@ fn renderer(
 }
 
 impl GpuRenderer {
-    pub fn new() -> Result<Self, RenderError> {
+    pub fn new() -> Result<Self, DrawError> {
         Ok(Self::with_device(
             Arc::new(GpuDevice::offscreen()?),
             OFFSCREEN_FORMAT,
@@ -227,7 +227,7 @@ impl GpuRenderer {
         self.gpu.adapter.get_info()
     }
 
-    pub fn render(&mut self, scene: &Scene) -> Result<Snapshot, RenderError> {
+    pub fn render(&mut self, scene: &Scene) -> Result<Snapshot, DrawError> {
         let gpu = Arc::clone(&self.gpu);
         let _submitting = gpu.submitting();
         let target = self.gpu.device.create_texture(&wgpu::TextureDescriptor {
@@ -259,11 +259,11 @@ impl GpuRenderer {
         scale: f64,
         surface: &wgpu::Surface<'static>,
         damage: Option<&[Region]>,
-    ) -> Result<(), RenderError> {
+    ) -> Result<(), DrawError> {
         let output = match surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(output)
             | wgpu::CurrentSurfaceTexture::Suboptimal(output) => output,
-            other => return Err(RenderError::Gpu(format!("no surface texture: {other:?}"))),
+            other => return Err(DrawError::Gpu(format!("no surface texture: {other:?}"))),
         };
         let gpu = Arc::clone(&self.gpu);
         let _submitting = gpu.submitting();
@@ -287,7 +287,7 @@ impl GpuRenderer {
         let frame = self
             .frame
             .clone()
-            .ok_or_else(|| RenderError::Gpu("no frame texture".to_owned()))?;
+            .ok_or_else(|| DrawError::Gpu("no frame texture".to_owned()))?;
         let damage = damage.filter(|_| kept);
         let mut encoder = match damage {
             Some([]) => self
@@ -312,7 +312,7 @@ impl GpuRenderer {
         scale: f64,
         target: &wgpu::Texture,
         damage: Option<&[Region]>,
-    ) -> Result<wgpu::CommandEncoder, RenderError> {
+    ) -> Result<wgpu::CommandEncoder, DrawError> {
         let (width, height) = crate::render::extent(scene, scale)?;
         self.scene.reset_and_resize(width, height);
         self.upload_images(scene);
@@ -386,7 +386,7 @@ impl GpuRenderer {
                 &TextureBindings::new(),
                 TargetInit::Clear(clear),
             )
-            .map_err(|error| RenderError::Gpu(error.to_string()))?;
+            .map_err(|error| DrawError::Gpu(error.to_string()))?;
         Ok(encoder)
     }
 
@@ -463,7 +463,7 @@ impl GpuRenderer {
         &self,
         mut encoder: wgpu::CommandEncoder,
         target: &wgpu::Texture,
-    ) -> Result<Vec<u8>, RenderError> {
+    ) -> Result<Vec<u8>, DrawError> {
         let extent = target.size();
         let row_bytes = extent.width * 4;
         let padded_row_bytes = row_bytes.next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
@@ -492,7 +492,7 @@ impl GpuRenderer {
         slice.map_async(wgpu::MapMode::Read, move |result| {
             let _ = sender.send(result);
         });
-        let failed = |error: &dyn std::fmt::Display| RenderError::Gpu(error.to_string());
+        let failed = |error: &dyn std::fmt::Display| DrawError::Gpu(error.to_string());
         self.gpu
             .device
             .poll(wgpu::PollType::wait_indefinitely())

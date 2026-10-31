@@ -16,8 +16,8 @@ use unbound_fs::{FolderChanges, Sort, SortBy, Trash, list};
 use unbound_preview::Preview;
 use unbound_thumbnails::{Cache, Thumbnailers, Thumbnails};
 use unbound_toolkit::ui::{
-    ClipboardRequest, Event, HEADER_HEIGHT as LIST_HEADER, Key, Menu, Modifiers, Pointer,
-    PointerButton, ROW_HEIGHT as LIST_ROW,
+    ClipboardRequest, Event, Key, Menu, Modifiers, Pointer, PointerButton, ROW_HEIGHT as LIST_ROW,
+    Table,
 };
 use unbound_toolkit::{
     CpuRenderer, DragAction, FrameRegions, Image, Item, Palette, Point, SHEET_INSET, Scheme,
@@ -1077,7 +1077,7 @@ fn the_list_view_selects_by_click_sorts_by_header_and_opens_on_double_click() {
     let row = |index: f32| {
         Point::new(
             SIDEBAR_WIDTH + 60.0,
-            TOOLBAR_HEIGHT + LIST_HEADER + LIST_ROW * (index + 0.5),
+            TOOLBAR_HEIGHT + Table::HEADER_HEIGHT + LIST_ROW * (index + 0.5),
         )
     };
     let click = |view: &mut FilesView, at: Point, count: u8| {
@@ -1170,7 +1170,7 @@ fn dragging_a_group_of_rows_in_the_list_view_drags_all_of_them() {
     let row = |index: f32| {
         Point::new(
             SIDEBAR_WIDTH + 60.0,
-            TOOLBAR_HEIGHT + LIST_HEADER + LIST_ROW * (index + 0.5),
+            TOOLBAR_HEIGHT + Table::HEADER_HEIGHT + LIST_ROW * (index + 0.5),
         )
     };
     let shift = Modifiers {
@@ -1602,7 +1602,7 @@ fn compressing_makes_an_undoable_zip_and_opening_it_extracts_beside_it() {
         &mut view,
         Point::new(
             SIDEBAR_WIDTH + 60.0,
-            TOOLBAR_HEIGHT + LIST_HEADER + LIST_ROW * 2.5,
+            TOOLBAR_HEIGHT + Table::HEADER_HEIGHT + LIST_ROW * 2.5,
         ),
     );
     assert!(titles(&menu).contains(&"Compress “notes.txt”".to_owned()));
@@ -2251,7 +2251,7 @@ fn right_clicking_the_list_header_offers_the_columns() {
     view.handle(&Event::PointerDown(
         Pointer::at(Point::new(
             SIDEBAR_WIDTH + 100.0,
-            TOOLBAR_HEIGHT + LIST_HEADER / 2.0,
+            TOOLBAR_HEIGHT + Table::HEADER_HEIGHT / 2.0,
         ))
         .with_button(PointerButton::Secondary),
     ));
@@ -2294,7 +2294,7 @@ fn outline(view: &FilesView) -> Vec<(String, u8)> {
 fn list_row(index: f32) -> Point {
     Point::new(
         SIDEBAR_WIDTH + 60.0,
-        TOOLBAR_HEIGHT + LIST_HEADER + LIST_ROW * (index + 0.5),
+        TOOLBAR_HEIGHT + Table::HEADER_HEIGHT + LIST_ROW * (index + 0.5),
     )
 }
 

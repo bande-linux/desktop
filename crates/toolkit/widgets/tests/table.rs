@@ -7,11 +7,11 @@ use std::time::{Duration, Instant};
 use accesskit::{Action, ActionRequest, NodeId, Role, TreeId};
 use unbound_graphics::{Color, Item, Paint, Palette, Point, Scheme, TextSystem};
 use unbound_widgets::{
-    Cell, ClipboardRequest, Column, Context, Event, HEADER_HEIGHT, Key, Menu, MenuItem, Modifiers,
-    Pointer, PointerButton, ROW_HEIGHT, Row, Size, Sort, Table, Ui, Widget, WidgetId,
+    Cell, ClipboardRequest, Column, Context, Event, Key, Menu, MenuItem, Modifiers, Pointer,
+    PointerButton, ROW_HEIGHT, Row, Size, Sort, Table, Ui, Widget, WidgetId,
 };
 
-const AREA: Size = Size::new(400.0, HEADER_HEIGHT + 10.0 * ROW_HEIGHT);
+const AREA: Size = Size::new(400.0, Table::HEADER_HEIGHT + 10.0 * ROW_HEIGHT);
 const NONE: Modifiers = Modifiers {
     shift: false,
     alt: false,
@@ -99,7 +99,7 @@ impl Fixture {
     fn row_point(index: usize) -> Point {
         Point::new(
             40.0,
-            HEADER_HEIGHT + index as f32 * ROW_HEIGHT + ROW_HEIGHT / 2.0,
+            Table::HEADER_HEIGHT + index as f32 * ROW_HEIGHT + ROW_HEIGHT / 2.0,
         )
     }
 
@@ -223,8 +223,8 @@ fn new_rows_keep_the_selection_by_key() {
 #[test]
 fn header_clicks_sort_and_a_second_click_reverses() {
     let mut fixture = Fixture::new(&NAMES);
-    let name = Point::new(40.0, HEADER_HEIGHT / 2.0);
-    let size = Point::new(300.0, HEADER_HEIGHT / 2.0);
+    let name = Point::new(40.0, Table::HEADER_HEIGHT / 2.0);
+    let size = Point::new(300.0, Table::HEADER_HEIGHT / 2.0);
     for at in [name, name, size] {
         fixture.ui.handle(&Event::PointerDown(Pointer::at(at)));
         fixture.ui.handle(&Event::PointerUp(Pointer::at(at)));
@@ -304,7 +304,7 @@ fn rows_and_headers_are_exposed_to_assistive_technology() {
 #[test]
 fn dragging_a_header_divider_resizes_the_column() {
     let mut fixture = Fixture::new(&NAMES);
-    let divider = Point::new(200.0, HEADER_HEIGHT / 2.0);
+    let divider = Point::new(200.0, Table::HEADER_HEIGHT / 2.0);
     fixture.ui.handle(&Event::PointerDown(Pointer::at(divider)));
     fixture
         .ui
@@ -392,7 +392,7 @@ fn rows_report_where_they_are_after_scrolling() {
     let table = fixture.table();
     assert!(table.scroll_offset() > 0.0);
     let bounds = table.row_bounds(30).expect("row 30");
-    assert!(bounds.y >= HEADER_HEIGHT && bounds.y + bounds.height <= AREA.height + 0.5);
+    assert!(bounds.y >= Table::HEADER_HEIGHT && bounds.y + bounds.height <= AREA.height + 0.5);
     let middle = Point::new(10.0, bounds.y + bounds.height / 2.0);
     assert_eq!(table.row_at(middle), Some(30));
     assert_eq!(table.cell_bounds(30, 1).expect("size cell").x, 200.0);
@@ -527,8 +527,8 @@ fn a_flexible_column_takes_the_spare_width_and_its_divider_follows_the_pointer()
     fixture.ui.scene(AREA.width as u32, AREA.height as u32);
     let size = fixture.table().cell_bounds(0, 1).expect("size cell");
     assert_eq!((size.x, size.width), (220.0, 100.0));
-    let divider = Point::new(220.0, HEADER_HEIGHT / 2.0);
-    let moved = Point::new(180.0, HEADER_HEIGHT / 2.0);
+    let divider = Point::new(220.0, Table::HEADER_HEIGHT / 2.0);
+    let moved = Point::new(180.0, Table::HEADER_HEIGHT / 2.0);
     fixture.ui.handle(&Event::PointerDown(Pointer::at(divider)));
     fixture.ui.handle(&Event::PointerMove(Pointer::at(moved)));
     fixture.ui.handle(&Event::PointerUp(Pointer::at(moved)));
@@ -542,7 +542,7 @@ fn a_flexible_column_takes_the_spare_width_and_its_divider_follows_the_pointer()
 fn body_texts(items: &[Item], found: &mut Vec<(f32, f32, f32, f32)>) {
     for item in items {
         match item {
-            Item::Text { origin, paragraph } if origin.y >= HEADER_HEIGHT => {
+            Item::Text { origin, paragraph } if origin.y >= Table::HEADER_HEIGHT => {
                 found.push((origin.y, origin.x, paragraph.width(), paragraph.height()))
             }
             Item::Clip { items, .. } => body_texts(items, found),

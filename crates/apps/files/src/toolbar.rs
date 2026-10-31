@@ -2,14 +2,14 @@ use unbound_toolkit::ui::{
     BUTTON_HEIGHT, Button, SEGMENTED_HEIGHT, SearchField, SegmentedControl, TEXT_FIELD_HEIGHT,
     WidgetId,
 };
-use unbound_toolkit::{HEADER_HEIGHT, Header, Rect, window_controls_area};
+use unbound_toolkit::{Header, Rect, WINDOW_HEADER_HEIGHT, window_controls_area};
 
 use crate::L10N;
 use crate::controls::{Signal, sender};
 use crate::view::FilesView;
 use crate::views::ViewMode;
 
-pub const TOOLBAR_HEIGHT: f32 = HEADER_HEIGHT as f32;
+pub const TOOLBAR_HEIGHT: f32 = WINDOW_HEADER_HEIGHT as f32;
 const CONTROLS_GAP: f32 = 16.0;
 const TITLE_GAP: f32 = 12.0;
 const TRAILING_INSET: f32 = 12.0;

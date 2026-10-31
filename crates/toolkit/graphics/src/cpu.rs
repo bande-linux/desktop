@@ -6,7 +6,7 @@ use vello_cpu::{
 use crate::damage::Region;
 use crate::draw::{self, Canvas, ImageIds};
 use crate::outline::GlyphOutlines;
-use crate::render::{RenderError, Snapshot};
+use crate::render::{DrawError, Snapshot};
 use crate::scene::Scene;
 use crate::text::GlyphRun;
 
@@ -33,7 +33,7 @@ impl CpuRenderer {
         }
     }
 
-    pub fn render(&mut self, scene: &Scene) -> Result<Snapshot, RenderError> {
+    pub fn render(&mut self, scene: &Scene) -> Result<Snapshot, DrawError> {
         let mut rgba = vec![0; scene.width as usize * scene.height as usize * 4];
         self.render_into(scene, 1.0, &mut rgba)?;
         Ok(Snapshot {
@@ -48,7 +48,7 @@ impl CpuRenderer {
         scene: &Scene,
         scale: f64,
         rgba: &mut [u8],
-    ) -> Result<(), RenderError> {
+    ) -> Result<(), DrawError> {
         let (width, height) = crate::render::extent(scene, scale)?;
         let whole = Region {
             x: 0,
@@ -65,9 +65,9 @@ impl CpuRenderer {
         scale: f64,
         region: Region,
         rgba: &mut [u8],
-    ) -> Result<(), RenderError> {
+    ) -> Result<(), DrawError> {
         crate::render::extent(scene, scale)?;
-        let too_large = || RenderError::TooLarge {
+        let too_large = || DrawError::TooLarge {
             width: region.width,
             height: region.height,
         };
@@ -98,7 +98,7 @@ impl CpuRenderer {
         );
         self.outlines.end_frame();
         self.context.flush();
-        let target = PixmapMut::new(width, height, rgba).ok_or(RenderError::BufferSize)?;
+        let target = PixmapMut::new(width, height, rgba).ok_or(DrawError::BufferSize)?;
         self.context.render_with(
             target,
             &mut self.resources,

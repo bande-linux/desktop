@@ -20,8 +20,8 @@ use raw_window_handle::{
 };
 use rustix::fs::{MemfdFlags, memfd_create};
 use unbound_graphics::{
-    Appearance, CpuRenderer, Cursor, Event, GpuDevice, GpuRenderer, Point, Pointer, PointerButton,
-    Rect, Region, RenderError, ResizeEdge, Scene, TextSize, TextSystem, damage, pixels,
+    Appearance, CpuRenderer, Cursor, DrawError, Event, GpuDevice, GpuRenderer, Point, Pointer,
+    PointerButton, Rect, Region, ResizeEdge, Scene, TextSize, TextSystem, damage, pixels,
 };
 use unbound_protocols::client::unbound_shell_v1::{
     BrightnessKey, Edge as DisplayEdge, LauncherMode, MediaKey, Panel, VolumeKey,
@@ -57,8 +57,8 @@ use crate::L10N;
 use crate::access::Accessibility;
 use crate::appearance::AppearanceWatch;
 use crate::chrome::{
-    Chrome, Control, Frame, FrameRegions, HEADER_HEIGHT, Header, Look, RESIZE_MARGIN, SHEET_INSET,
-    Zone, control_for_node,
+    Chrome, Control, Frame, FrameRegions, Header, Look, RESIZE_MARGIN, SHEET_INSET,
+    WINDOW_HEADER_HEIGHT, Zone, control_for_node,
 };
 use crate::clipboard::Clipboard;
 use crate::clipboard::{DragAction, DragEvent, DragIcon, Transfer};
@@ -215,7 +215,7 @@ pub enum WindowError {
     Wayland(WaylandError),
     Missing(&'static str),
     Io(io::Error),
-    Render(RenderError),
+    Render(DrawError),
     LockRefused,
 }
 
@@ -253,8 +253,8 @@ impl From<io::Error> for WindowError {
     }
 }
 
-impl From<RenderError> for WindowError {
-    fn from(error: RenderError) -> Self {
+impl From<DrawError> for WindowError {
+    fn from(error: DrawError) -> Self {
         Self::Render(error)
     }
 }
@@ -352,7 +352,7 @@ struct GpuSurface {
 }
 
 enum Gpu {
-    Starting(Receiver<Result<GpuSurface, RenderError>>),
+    Starting(Receiver<Result<GpuSurface, DrawError>>),
     Ready(Box<GpuSurface>),
     Released,
     Unavailable,
@@ -585,7 +585,7 @@ impl Window {
         }
 
         let (extra_width, extra_height) = if chrome.is_some() {
-            (2 * SHEET_INSET, HEADER_HEIGHT + SHEET_INSET)
+            (2 * SHEET_INSET, WINDOW_HEADER_HEIGHT + SHEET_INSET)
         } else {
             (0, 0)
         };
@@ -685,7 +685,7 @@ impl Window {
 
     fn title_height(&self) -> u32 {
         match &self.chrome {
-            Some(_) if !self.state.toplevel.fullscreen => HEADER_HEIGHT,
+            Some(_) if !self.state.toplevel.fullscreen => WINDOW_HEADER_HEIGHT,
             _ => 0,
         }
     }
@@ -2268,7 +2268,7 @@ impl GpuSurface {
         scene: &Scene,
         scale: f64,
         damage: Option<&[Region]>,
-    ) -> Result<(), RenderError> {
+    ) -> Result<(), DrawError> {
         let size = (pixels(scene.width, scale), pixels(scene.height, scale));
         if self.configured != Some(size) {
             self.config.width = size.0;
@@ -2312,7 +2312,7 @@ fn start_gpu(connection: &Connection, surface: &WlSurface, atlas: (u32, u32)) ->
     let (sender, receiver) = mpsc::channel();
     thread::spawn(move || {
         let opened = open_gpu(display, wl_surface, atlas, allow_software);
-        if let Err(error @ RenderError::Software(_)) = &opened {
+        if let Err(error @ DrawError::Software(_)) = &opened {
             tracing::info!("drawing on the CPU: {error}");
         }
         let _ = sender.send(opened);
@@ -2325,8 +2325,8 @@ fn open_gpu(
     surface: usize,
     atlas: (u32, u32),
     allow_software: bool,
-) -> Result<GpuSurface, RenderError> {
-    let missing = || RenderError::Gpu("the Wayland surface has no libwayland pointer".to_owned());
+) -> Result<GpuSurface, DrawError> {
+    let missing = || DrawError::Gpu("the Wayland surface has no libwayland pointer".to_owned());
     let display = NonNull::new(display as *mut c_void).ok_or_else(missing)?;
     let window = NonNull::new(surface as *mut c_void).ok_or_else(missing)?;
     let target = wgpu::SurfaceTargetUnsafe::RawHandle {
@@ -2347,7 +2347,7 @@ fn open_gpu(
                 wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Rgba8Unorm
             )
         })
-        .ok_or_else(|| RenderError::Gpu("the surface offers no 8-bit UNORM format".to_owned()))?;
+        .ok_or_else(|| DrawError::Gpu("the surface offers no 8-bit UNORM format".to_owned()))?;
     let alpha_mode = if capabilities
         .alpha_modes
         .contains(&wgpu::CompositeAlphaMode::PreMultiplied)
@@ -2365,7 +2365,7 @@ fn open_gpu(
         wgpu::PresentMode::Fifo
     };
     if !capabilities.usages.contains(wgpu::TextureUsages::COPY_DST) {
-        return Err(RenderError::Gpu(
+        return Err(DrawError::Gpu(
             "the surface cannot receive copied frames".to_owned(),
         ));
     }

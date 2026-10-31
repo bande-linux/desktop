@@ -19,13 +19,16 @@ fn locker(server: &mut Compositor) -> TestClient {
 }
 
 fn present_frame(server: &mut Compositor, sequence: u64) {
-    server.take_redraw();
-    server.latch();
+    server.take_redraw_on(&server.main_output());
+    server.latch_on(&server.main_output());
     server
-        .present(Vblank {
-            sequence,
-            time: Duration::from_millis(8 * sequence),
-        })
+        .present_on(
+            &server.main_output(),
+            Vblank {
+                sequence,
+                time: Duration::from_millis(8 * sequence),
+            },
+        )
         .expect("presented");
 }
 

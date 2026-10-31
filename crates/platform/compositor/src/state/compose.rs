@@ -101,10 +101,6 @@ fn relocated(elements: Vec<OutputElement>, by: Point<i32, Physical>) -> Vec<Scre
 }
 
 impl Compositor {
-    pub fn render_elements(&mut self, renderer: &mut VulkanRenderer) -> Vec<ScreenElement> {
-        self.render_screen(renderer, 0)
-    }
-
     pub fn render_elements_on(
         &mut self,
         renderer: &mut VulkanRenderer,

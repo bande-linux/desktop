@@ -17,14 +17,14 @@ use unbound_settings::{
 use unbound_settings_panes::Permission;
 use unbound_toolkit::ui::{Event, Key, Modifiers};
 use unbound_toolkit::{
-    Appearance, CpuRenderer, FrameRegions, HEADER_HEIGHT, Palette, Scene, Scheme, TextSize,
-    TextSystem, framed_scene,
+    Appearance, CpuRenderer, FrameRegions, Palette, Scene, Scheme, TextSize, TextSystem,
+    WINDOW_HEADER_HEIGHT, framed_scene,
 };
 
 type Build = fn(Scheme) -> SettingsView;
 
 fn framed(view: &mut SettingsView, scheme: Scheme, text: TextSize, size: (u32, u32)) -> Scene {
-    let content = view.scene(size.0, size.1 - HEADER_HEIGHT);
+    let content = view.scene(size.0, size.1 - WINDOW_HEADER_HEIGHT);
     framed_scene(
         &content,
         "Settings",

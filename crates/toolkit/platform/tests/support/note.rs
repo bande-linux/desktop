@@ -6,7 +6,7 @@ use std::sync::mpsc::Sender;
 
 use smithay::utils::{Logical, Point};
 use unbound_graphics::{Color, Event, Palette, Scene, Scheme, TextSystem};
-use unbound_toolkit_platform::{App, HEADER_HEIGHT, Role, SHEET_INSET, Window, WindowEvent};
+use unbound_toolkit_platform::{App, Role, SHEET_INSET, WINDOW_HEADER_HEIGHT, Window, WindowEvent};
 use unbound_widgets::{Context, TextField, Ui};
 
 use crate::desktop::{Client, Desktop};
@@ -144,7 +144,7 @@ impl Desktop {
         let origin = self.window_of(&format!("test.{name}")).expect("mapped");
         at(
             origin.x + SHEET_INSET as i32 + x,
-            origin.y + HEADER_HEIGHT as i32 + y,
+            origin.y + WINDOW_HEADER_HEIGHT as i32 + y,
         )
     }
 

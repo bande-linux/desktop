@@ -261,8 +261,8 @@ impl SettingsView {
                 return None;
             };
             let setting = pane.settings().find(|setting| setting.id == id)?;
-            let mut set = intent(&self.intents, move |on| Intent::Set(id, Value::Flag(on)));
-            let toggle = Toggle::new(&setting.label, *on, move |on| set(on));
+            let set = intent(&self.intents, move |on| Intent::Set(id, Value::Flag(on)));
+            let toggle = Toggle::new(&setting.label, *on, set);
             self.anchors
                 .push((crate::view::Anchor::Setting(id, None), toggle.id()));
             Some(boxed(toggle))

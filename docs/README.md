@@ -8,6 +8,7 @@
 | [`design/catalogue.md`](design/catalogue.md) | The first curated feature list, kept for reference; the proposals supersede it. |
 | [`architecture/`](architecture/) | How the desktop is built: [overview](architecture/overview.md), [compositor](architecture/compositor.md), [toolkit](architecture/toolkit.md), [session services](architecture/session.md), [behaviour decisions](architecture/behaviour.md), [CI](architecture/ci.md), [packaging](architecture/packaging.md). |
 | [`decisions/`](decisions/) | Decision records, numbered: [0001 rendering](decisions/0001-rendering.md), [0002 toolkit](decisions/0002-toolkit.md), [0003 repository layout](decisions/0003-repository-layout.md). A decision is changed by a new record, not by editing an accepted one. |
+| [`experience/`](experience/) | Audits of the whole desktop and of single apps against mature desktops, with gaps ranked into agent-sized tasks and their status: [maturity gaps](experience/maturity-gaps.md), [Files](experience/files.md), [Activity Monitor](experience/monitor.md), [Settings](experience/settings.md), [app polish](experience/apps-polish.md). |
 | [`parity.md`](parity.md) | How close Unbound is to macOS, feature by feature, with the milestone that closes each gap. |
 | [`debian-readiness.md`](debian-readiness.md) | How far the repository is from the official Debian archive (dependencies, packaging, licensing, lintian, build hygiene), with a roadmap. |
 

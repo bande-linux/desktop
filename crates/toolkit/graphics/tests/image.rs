@@ -24,6 +24,37 @@ fn svg_images_are_rendered_at_the_requested_size() {
     );
 }
 
+fn save_halves(path: &std::path::Path, width: u32, height: u32) {
+    image::RgbaImage::from_fn(width, height, |x, _| {
+        image::Rgba(if x < width / 2 {
+            [255, 0, 0, 255]
+        } else {
+            [0, 0, 255, 255]
+        })
+    })
+    .save(path)
+    .expect("png");
+}
+
+#[test]
+fn a_large_png_is_scaled_down_once_to_cover_the_requested_size() {
+    let dir = TempDir::new().expect("dir");
+    let large = dir.path().join("large.png");
+    let small = dir.path().join("small.png");
+    save_halves(&large, 256, 128);
+    save_halves(&small, 32, 32);
+
+    let image = Image::load(&large, 32).expect("image");
+    let pixels = image.premultiplied_rgba();
+    let row = |x: usize| &pixels[x * 4..x * 4 + 4];
+
+    assert_eq!((image.width(), image.height()), (64, 32));
+    assert_eq!(row(0), [255, 0, 0, 255]);
+    assert_eq!(row(63), [0, 0, 255, 255]);
+    let kept = Image::load(&small, 64).expect("image");
+    assert_eq!((kept.width(), kept.height()), (32, 32));
+}
+
 #[test]
 fn an_unreadable_file_gives_no_image() {
     let dir = TempDir::new().expect("dir");

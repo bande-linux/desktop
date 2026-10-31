@@ -177,6 +177,20 @@ impl Image {
         }
         let decoded = image::load_from_memory(&bytes).ok()?.to_rgba8();
         let (width, height) = decoded.dimensions();
+        let shorter = width.min(height);
+        let decoded = if shorter > size {
+            let scale = f64::from(size) / f64::from(shorter);
+            let scaled = |side: u32| ((f64::from(side) * scale).round() as u32).max(1);
+            image::imageops::resize(
+                &decoded,
+                scaled(width),
+                scaled(height),
+                image::imageops::FilterType::Lanczos3,
+            )
+        } else {
+            decoded
+        };
+        let (width, height) = decoded.dimensions();
         Self::from_rgba(width, height, decoded.into_raw())
     }
 

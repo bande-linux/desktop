@@ -417,6 +417,55 @@ fn settings_are_writable_properties_within_their_limits() {
 }
 
 #[test]
+fn night_light_is_written_whole_and_rejects_a_bad_time_schedule_or_warmth() {
+    let fixture = start("");
+    let changes = watch_changes(&fixture.client);
+    let night = |on: bool, schedule: &'static str, from: &'static str, warmth: u32| {
+        Value::from((on, schedule, from, "07:00", warmth))
+    };
+
+    set(
+        &fixture.client,
+        "NightLight",
+        night(true, "custom", "21:30", 70),
+    )
+    .expect("Set");
+
+    assert_eq!(
+        <(bool, String, String, String, u32)>::try_from(get(&fixture.client, "NightLight"))
+            .expect("night light"),
+        (
+            true,
+            "custom".to_owned(),
+            "21:30".to_owned(),
+            "07:00".to_owned(),
+            70
+        )
+    );
+    let written = std::fs::read_to_string(&fixture.path).expect("read");
+    assert!(written.contains("from \"21:30\""), "{written}");
+    let changed = changes
+        .recv_timeout(SIGNAL_WAIT)
+        .expect("PropertiesChanged");
+    assert!(changed.contains_key("NightLight"));
+    for rejected in [
+        night(true, "custom", "25:00", 70),
+        night(true, "always", "21:30", 70),
+        night(true, "custom", "21:30", 101),
+    ] {
+        let result = set(&fixture.client, "NightLight", rejected);
+        assert!(
+            matches!(result, Err(zbus::fdo::Error::InvalidArgs(_))),
+            "{result:?}"
+        );
+    }
+    assert_eq!(
+        std::fs::read_to_string(&fixture.path).expect("read"),
+        written
+    );
+}
+
+#[test]
 fn the_dock_apps_size_auto_hide_and_wallpaper_fit_are_writable_and_signalled() {
     let fixture = start("bar {\n    apps \"org.unbound.Files\" // mine\n}\n");
     let changes = watch_changes(&fixture.client);

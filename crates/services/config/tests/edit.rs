@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use unbound_config::{
     Accent, Accessibility, AlertSound, Appearance, BarEdge, CapsLock, ClockFormat, Config,
-    DisplaySettings, InputSource, LidOnPower, Placement, Rotation, Setting, Suspend, WallpaperFit,
-    WallpaperVariant,
+    DisplaySettings, InputSource, LidOnPower, NightLight, NightSchedule, Placement, Rotation,
+    Setting, Suspend, WallpaperFit, WallpaperVariant,
 };
 
 fn apply(setting: Setting, source: &str) -> String {
@@ -413,4 +413,26 @@ fn sound_settings_are_written_only_when_they_differ_from_the_defaults() {
     let edited = apply(Setting::SoundEffects(true), &edited);
     let edited = apply(Setting::AlertSound(AlertSound::Mallet), &edited);
     assert_eq!(edited, "sound {\n    alert-volume 0.5\n}\n");
+}
+
+#[test]
+fn night_light_round_trips_and_its_defaults_leave_no_trace() {
+    let mut night = NightLight {
+        on: true,
+        schedule: NightSchedule::Custom,
+        warmth: 80,
+        ..NightLight::default()
+    };
+    night.from.hour = 21;
+    night.from.minute = 30;
+    let edited = apply(Setting::NightLight(night), "appearance \"dark\"\n");
+    assert_eq!(
+        edited,
+        "appearance \"dark\"\nnight-light {\n    on #true\n    schedule \"custom\"\n    from \"21:30\"\n    warmth 80\n}\n"
+    );
+    assert_eq!(Config::parse(&edited).expect("parse").night_light, night);
+    assert_eq!(
+        apply(Setting::NightLight(NightLight::default()), &edited),
+        "appearance \"dark\"\n"
+    );
 }

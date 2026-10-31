@@ -690,7 +690,7 @@ impl FilesView {
             .map(|time| cached_date(time, formats))
             .unwrap_or_default();
         let mut cells = Vec::with_capacity(self.list_columns.len() + 2);
-        cells.push(Cell::new(entry.name.as_str()).icon(icon));
+        cells.push(Cell::new(entry.name.as_str()).icon(icon).cut_in_middle());
         for column in &self.list_columns {
             let text = match column {
                 ListColumn::Modified => modified.clone(),

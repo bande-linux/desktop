@@ -17,9 +17,6 @@ const LABEL_SIZE: f32 = 12.0;
 const LABEL_LINE: f32 = 16.0;
 const LABEL_GAP: f32 = 4.0;
 const LABEL_INSET: f32 = 4.0;
-const ELLIPSIS: char = '\u{2026}';
-const KEPT_TAIL: usize = 7;
-const LABELS_KEPT: usize = 4000;
 const SELECTION_RADIUS: f32 = Radius::S;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -129,15 +126,6 @@ fn intersects(a: Rect, b: Rect) -> bool {
 
 fn offset(rect: Rect, by: Point) -> Rect {
     Rect::new(rect.x + by.x, rect.y + by.y, rect.width, rect.height)
-}
-
-fn middle_truncated(chars: &[char], kept: usize) -> String {
-    let tail = KEPT_TAIL.min(chars.len() / 3);
-    chars[..kept.min(chars.len() - tail)]
-        .iter()
-        .chain([&ELLIPSIS])
-        .chain(&chars[chars.len() - tail..])
-        .collect()
 }
 
 impl FilesView {
@@ -282,41 +270,7 @@ impl FilesView {
     }
 
     fn grid_label(&mut self, name: &str, width: f32, color: Color) -> Paragraph {
-        let key = (name.to_owned(), width.to_bits());
-        let shown = match self.labels.get(&key) {
-            Some(shown) => shown.clone(),
-            None => {
-                let fits = |view: &mut Self, text: &str| {
-                    let paragraph = view.text().paragraph(
-                        text,
-                        TextStyle::new(LABEL_SIZE, color),
-                        Some(width),
-                        TextAlign::Center,
-                    );
-                    paragraph.line_count() <= 2 && paragraph.width() <= width + 0.5
-                };
-                let shown = if fits(self, name) {
-                    name.to_owned()
-                } else {
-                    let chars = name.chars().collect::<Vec<_>>();
-                    let (mut low, mut high) = (0, chars.len());
-                    while low < high {
-                        let middle = (low + high).div_ceil(2);
-                        if fits(self, &middle_truncated(&chars, middle)) {
-                            low = middle;
-                        } else {
-                            high = middle - 1;
-                        }
-                    }
-                    middle_truncated(&chars, low)
-                };
-                if self.labels.len() > LABELS_KEPT {
-                    self.labels.clear();
-                }
-                self.labels.insert(key, shown.clone());
-                shown
-            }
-        };
+        let shown = self.fitted_name(name, LABEL_SIZE, width, 2);
         self.text().paragraph(
             &shown,
             TextStyle::new(LABEL_SIZE, color),

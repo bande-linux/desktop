@@ -6,8 +6,8 @@ use bande_preview::Preview;
 use bande_thumbnails::ThumbnailSize;
 use bande_toolkit::ui::{BUTTON_HEIGHT as CONTROL_HEIGHT, SWITCH_SIZE, Size};
 use bande_toolkit::{
-    Color, Elevation, Image, Item, Paragraph, Point, Radius, Rect, Scene, Shape, TextAlign,
-    TextRole, TextStyle,
+    Color, Cut, Elevation, Image, Item, Paragraph, Point, Radius, Rect, Scene, Shape, TextAlign,
+    TextRole, TextStyle, shortened,
 };
 
 use crate::L10N;
@@ -41,6 +41,7 @@ const TOP_GAP: f32 = 8.0;
 const FACT_LABEL: f32 = 96.0;
 const PAGE_PADDING: f32 = 10.0;
 const FACT_COLUMN: f32 = 90.0;
+const NAMES_KEPT: usize = 4000;
 
 pub fn permissions(mode: u32) -> String {
     (0..9)
@@ -83,6 +84,30 @@ impl FilesView {
 
     fn label(&mut self, text: &str, size: f32, color: Color) -> Paragraph {
         self.paragraph(text, size, color, TextStyle::REGULAR)
+    }
+
+    pub(crate) fn fitted_name(
+        &mut self,
+        name: &str,
+        size: f32,
+        width: f32,
+        lines: usize,
+    ) -> String {
+        let key = (name.to_owned(), width.to_bits(), lines);
+        if let Some(shown) = self.labels.get(&key) {
+            return shown.clone();
+        }
+        let style = TextStyle::new(size, self.palette.ink);
+        let text = self.text();
+        let shown = shortened(name, Cut::Middle, |candidate| {
+            let paragraph = text.paragraph(candidate, style, Some(width), TextAlign::Start);
+            paragraph.line_count() <= lines && paragraph.width() <= width + 0.5
+        });
+        if self.labels.len() > NAMES_KEPT {
+            self.labels.clear();
+        }
+        self.labels.insert(key, shown.clone());
+        shown
     }
 
     fn line(&mut self, text: &str, size: f32, color: Color, x: f32, y: f32, height: f32) -> Item {
@@ -540,11 +565,8 @@ impl FilesView {
                 continue;
             }
             let name_width = row.width - 28.0 - if entry.is_folder() { 22.0 } else { 6.0 };
-            let name = self.line(&entry.name, NAME_SIZE, color, name_x, y, ROW_HEIGHT);
-            rows.push(Item::Clip {
-                shape: Shape::rect(Rect::new(name_x, y, name_width, ROW_HEIGHT)),
-                items: vec![name],
-            });
+            let shown = self.fitted_name(&entry.name, NAME_SIZE, name_width, 1);
+            rows.push(self.line(&shown, NAME_SIZE, color, name_x, y, ROW_HEIGHT));
             if entry.is_folder() {
                 let chevron_color = match marked && active {
                     true => color,

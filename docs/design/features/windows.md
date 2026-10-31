@@ -90,9 +90,9 @@ Motion: the frame interpolates position and size with a critically damped spring
 **Tiling** — halves and quarters of the visible area, with no gaps by default. Dragging a
 tiled window away, or Return to Previous Size, restores its earlier size [4]. Two windows
 tiled side by side share their edge: dragging it resizes both (KDE [19]).
-Inputs: drag to the left or right edge for halves and to a corner for quarters. A
-translucent outline previews the target after the pointer rests for about 150 ms, so
-fast drags past an edge do not tile. This answers the accidental-tile complaint in [4].
+Inputs: drag to the left or right edge of the visible area for halves (a taskbar on that
+side counts as edge) and to a corner for quarters. A translucent outline previews the
+target after the pointer rests for about 150 ms, so fast drags past an edge do not tile. This answers the accidental-tile complaint in [4].
 Keyboard: `Ctrl+Super+Left/Right` for halves. Pressing `Ctrl+Super+Up/Down` on a half then
 gives its top or bottom quarter. `Ctrl+Super+Down` on an untiled or zoomed window returns
 it to its previous size. Every tile is also in the window menu.

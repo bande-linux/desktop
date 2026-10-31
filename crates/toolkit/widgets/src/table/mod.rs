@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Node, Role, SortDirection};
-use bande_graphics::{Item, Paragraph, Point, Rect, Shape, TextRole, TextStyle};
+use bande_graphics::{Cut, Item, Paragraph, Point, Rect, Shape, TextRole, TextStyle};
 
 pub use self::model::{Cell, Column, Row, Sort};
 use self::model::{Line, flatten};
@@ -1134,6 +1134,7 @@ impl Widget for Table {
                     &title,
                     style,
                     (width - 2.0 * CELL_PADDING - if sorted { 12.0 } else { 0.0 }).max(0.0),
+                    Cut::End,
                 )
             })
             .collect();

@@ -216,7 +216,7 @@ pub struct FilesView {
     pub(crate) shown_root: Option<Location>,
     pub(crate) grid_scroll: (Option<Location>, ScrollState),
     pub(crate) band: Option<Band>,
-    pub(crate) labels: HashMap<(String, u32), String>,
+    pub(crate) labels: HashMap<(String, u32, usize), String>,
     pub(crate) grid_wanted: Vec<Entry>,
     pub(crate) size_slider: Option<WidgetId>,
     pub(crate) requests: Vec<Request>,

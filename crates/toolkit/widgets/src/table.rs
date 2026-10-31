@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Node, Role, SortDirection};
@@ -73,14 +74,14 @@ impl Column {
 
 #[derive(Debug, Clone)]
 pub struct Cell {
-    pub text: String,
+    pub text: Rc<str>,
     pub icon: Option<Image>,
     pub muted: bool,
     pub tint: Option<Color>,
 }
 
 impl Cell {
-    pub fn new(text: impl Into<String>) -> Self {
+    pub fn new(text: impl Into<Rc<str>>) -> Self {
         Self {
             text: text.into(),
             icon: None,
@@ -196,7 +197,7 @@ enum Drag {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct TextKey {
-    text: String,
+    text: Rc<str>,
     column: usize,
     color: Color,
     width: u32,
@@ -867,7 +868,7 @@ impl Table {
                         self.lines[*line]
                             .cells
                             .iter()
-                            .map(|cell| cell.text.as_str())
+                            .map(|cell| cell.text.as_ref())
                             .collect::<Vec<_>>()
                             .join("\t")
                     })
@@ -1404,14 +1405,14 @@ impl Table {
                 .id
                 .part(index as u64 * (self.columns.len() as u64 + 1) + column as u64 + 1);
             let mut cell_node = Node::new(Role::Cell);
-            cell_node.set_label(cell.text.clone());
+            cell_node.set_label(cell.text.as_ref());
             cell_node.set_column_index(column);
             cell_node.set_row_index(index);
             cells.push(cell_id);
             parts.nodes.push((cell_id, cell_node));
         }
         if let Some(name) = row.cells.first() {
-            node.set_label(name.text.clone());
+            node.set_label(name.text.as_ref());
         }
         node.set_children(cells);
         parts.children.push(row_id);

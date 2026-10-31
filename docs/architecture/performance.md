@@ -82,16 +82,18 @@ developers' builds running:
 
 | Action | before | after |
 | :--- | ---: | ---: |
-| Open to first frame | 199.9 ms (240.3) | 22.6 ms (33.6) |
-| Open to fully listed (wall-clock; after: in the background) | 199.9 ms (240.3) | 213.9 ms (219.4) |
-| Longest UI stall while the rest is listed | — | 6.1 ms (11.0) |
-| Switch to the list view | 105.0 ms (183.0) | 27.1 ms (61.4) |
-| Frame while scrolling the list, p99 | 0.4 ms (0.5) | 0.4 ms (0.5) |
-| Select All in the list view | 34.0 ms (47.8) | 5.7 ms (13.3) |
-| One file written into the folder (UI work) | 394.8 ms (491.6) | 4.9 ms (15.6) |
+| Open to first frame | 199.9 ms (240.3) | 25.4 ms (49.2) |
+| Open to fully listed (wall-clock; after: in the background) | 199.9 ms (240.3) | 158.9 ms (191.7) |
+| Longest UI stall while the rest is listed | — | 5.0 ms (9.4) |
+| Switch to the list view | 105.0 ms (183.0) | 12.4 ms (49.7) |
+| Frame while scrolling the list, p99 | 0.4 ms (0.5) | 0.3 ms (0.4) |
+| Select All in the list view | 34.0 ms (47.8) | 4.3 ms (11.8) |
+| One file written into the folder (UI work) | 394.8 ms (491.6) | 3.3 ms (5.7) |
 
-The list view still builds all 100 000 rows when it is shown (27 ms): the next step is a `Table`
-that asks for the cells of the visible rows only.
+Table cells hold their text as `Rc<str>`, so the list view shares one string per kind, size and
+minute instead of allocating three per row; that took the switch to the list view from 27 ms to
+12 ms. Its worst case (the first run, cold caches) is still 50 ms: all 100 000 rows are built
+when the list is shown. The next step is a `Table` that asks for the cells of visible rows only.
 
 ## 2026-10-30: menus, launcher and banners in motion
 

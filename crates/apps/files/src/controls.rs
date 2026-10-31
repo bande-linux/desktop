@@ -27,9 +27,10 @@ pub(crate) const COLUMN_ACTION: &str = "column:";
 
 #[derive(Default)]
 pub(crate) struct Formats {
-    types: HashMap<String, (Option<Image>, String)>,
-    sizes: HashMap<u64, String>,
-    dates: HashMap<u64, String>,
+    types: HashMap<String, (Option<Image>, Rc<str>)>,
+    sizes: HashMap<u64, Rc<str>>,
+    dates: HashMap<u64, Rc<str>>,
+    dash: Option<Rc<str>>,
 }
 
 const NAME_SIZE: f32 = 13.0;
@@ -162,14 +163,14 @@ fn table_sorts(found: bool, shown: &[ListColumn]) -> Vec<Option<SortBy>> {
     sorts
 }
 
-fn cached_date(time: SystemTime, formats: &mut Formats) -> String {
+fn cached_date(time: SystemTime, formats: &mut Formats) -> Rc<str> {
     let minute = time
         .duration_since(SystemTime::UNIX_EPOCH)
         .map_or(0, |since| since.as_secs() / 60);
     formats
         .dates
         .entry(minute)
-        .or_insert_with(|| format_list_date(time))
+        .or_insert_with(|| Rc::from(format_list_date(time)))
         .clone()
 }
 
@@ -631,25 +632,29 @@ impl FilesView {
             None => {
                 let known = (
                     self.entry_icon(entry, 32),
-                    self.apps.kind_for_name(&entry.name, folder),
+                    Rc::from(self.apps.kind_for_name(&entry.name, folder)),
                 );
                 formats.types.insert(type_key.into_owned(), known.clone());
                 known
             }
         };
         let size = match folder {
-            true => "\u{2014}".to_owned(),
+            true => formats
+                .dash
+                .get_or_insert_with(|| Rc::from("\u{2014}"))
+                .clone(),
             false => formats
                 .sizes
                 .entry(entry.size)
-                .or_insert_with(|| format_size(entry.size))
+                .or_insert_with(|| Rc::from(format_size(entry.size)))
                 .clone(),
         };
         let modified = entry
             .modified
             .map(|time| cached_date(time, formats))
             .unwrap_or_default();
-        let mut cells = vec![Cell::new(entry.name.clone()).icon(icon)];
+        let mut cells = Vec::with_capacity(self.list_columns.len() + 2);
+        cells.push(Cell::new(entry.name.as_str()).icon(icon));
         for column in &self.list_columns {
             let text = match column {
                 ListColumn::Modified => modified.clone(),

@@ -509,11 +509,11 @@ impl ChooserView {
             .filter_map(|(index, row)| match row {
                 SidebarRow::Heading(title) => Some(Row::new(
                     format!("heading:{index}"),
-                    vec![Cell::new(title).muted()],
+                    vec![Cell::new(title.as_str()).muted()],
                 )),
                 SidebarRow::Place(place) => place_key(place).map(|key| {
                     let icon = self.icons.first(&[place.icon.to_owned()]);
-                    Row::new(key, vec![Cell::new(&place.name).icon(icon)])
+                    Row::new(key, vec![Cell::new(place.name.as_str()).icon(icon)])
                 }),
             })
             .collect();
@@ -579,7 +579,7 @@ impl ChooserView {
         Row::new(
             entry.path.to_string_lossy().into_owned(),
             vec![
-                Cell::new(&entry.name).icon(icon),
+                Cell::new(entry.name.as_str()).icon(icon),
                 Cell::new(entry.modified.map(format_date).unwrap_or_default()).muted(),
                 size,
             ],

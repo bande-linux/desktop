@@ -22,6 +22,7 @@ use crate::state::{Headless, Placed, State};
 use crate::window::Window;
 
 const BTN_LEFT: u32 = 0x110;
+const BTN_RIGHT: u32 = 0x111;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Zone {
@@ -71,8 +72,8 @@ struct Painted {
 
 #[derive(Debug, Default)]
 pub(crate) struct Frame {
-    hovered: Option<Option<WindowControl>>,
-    pressed: Option<WindowControl>,
+    pub(crate) hovered: Option<Option<WindowControl>>,
+    pub(crate) pressed: Option<WindowControl>,
     painted: Option<Painted>,
 }
 
@@ -192,6 +193,12 @@ impl State {
                 self.needs_redraw = true;
             }
         }
+        let on_zoom = self
+            .windows
+            .iter()
+            .find(|window| window.frame.hovered == Some(Some(WindowControl::Zoom)))
+            .map(|window| window.surface().clone());
+        self.rest_on_zoom(on_zoom);
         let previous = std::mem::replace(&mut self.decorations.pointed, pointed.clone());
         match pointed {
             Some((_, zone)) => {
@@ -204,7 +211,7 @@ impl State {
         }
     }
 
-    fn show_cursor(&mut self, icon: CursorIcon) {
+    pub(crate) fn show_cursor(&mut self, icon: CursorIcon) {
         self.load_named_cursor(icon);
         self.cursor_status = CursorImageStatus::Named(icon);
         self.needs_redraw = true;
@@ -215,6 +222,9 @@ impl State {
         self.focus(Some(surface.clone()));
         if button != BTN_LEFT {
             self.swallowed_button = Some(button);
+            if button == BTN_RIGHT && matches!(zone, Zone::Control(_) | Zone::TitleBar) {
+                self.open_window_menu(&surface);
+            }
             return Some(true);
         }
         match zone {
@@ -222,6 +232,9 @@ impl State {
                 if let Some(index) = self.window_index(&surface) {
                     self.windows[index].frame.pressed = Some(control);
                     self.needs_redraw = true;
+                }
+                if control == WindowControl::Zoom {
+                    self.press_zoom(&surface);
                 }
                 Some(true)
             }
@@ -281,7 +294,7 @@ impl State {
         true
     }
 
-    fn toggle_zoom(&mut self, surface: &WlSurface) {
+    pub(crate) fn toggle_zoom(&mut self, surface: &WlSurface) {
         let Some(index) = self.window_index(surface) else {
             return;
         };

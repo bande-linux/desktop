@@ -245,6 +245,7 @@ pub struct State {
     pub(crate) pointing: crate::pointing::Pointing,
     pub(crate) pending_captures: Vec<crate::capture::PendingCapture>,
     pub(crate) decorations: crate::frame::Decorations,
+    pub(crate) window_menus: crate::window_menu::WindowMenus,
     pub(crate) alerts: crate::alert::Alerts,
 }
 
@@ -433,6 +434,7 @@ impl Headless {
             pointing: crate::pointing::Pointing::default(),
             pending_captures: Vec::new(),
             decorations: crate::frame::Decorations::default(),
+            window_menus: crate::window_menu::WindowMenus::default(),
             alerts: crate::alert::Alerts::default(),
         };
         Ok(Self {
@@ -621,6 +623,7 @@ impl Headless {
     ) -> Vec<ScreenElement> {
         self.state.paint_title_bars(renderer);
         self.state.prepare_switcher(screen);
+        self.state.prepare_window_menu(screen);
         let (elements, drawn, icon) = self.compose(renderer, screen, true);
         if self.state.pointer_screen() == screen {
             self.state.remember_drag_icon(icon);
@@ -710,6 +713,7 @@ impl Headless {
         elements.extend(self.state.source_hud_element(renderer, screen, scale));
         elements.extend(self.state.switcher_elements(renderer, screen, scale));
         elements.extend(self.state.assist_elements(renderer, screen, scale));
+        elements.extend(self.state.window_menu_elements(renderer, screen, scale));
         let key = self.state.key_window();
         let shell_opacity = self.state.shell_opacity();
         let wallpapers: Vec<WlSurface> = match shell_opacity < 1.0 {
@@ -1002,6 +1006,7 @@ impl State {
         if self.popup_grab.is_some() && surface != self.menu_root() {
             self.close_menus();
         }
+        self.dismiss_window_menu_unless_on(surface.as_ref());
         let onto_layer = surface
             .as_ref()
             .is_some_and(|surface| self.toplevel_of(surface).is_none());

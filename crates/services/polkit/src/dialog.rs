@@ -4,8 +4,8 @@ use std::sync::mpsc::Sender;
 
 use accesskit::{Action, ActionData, ActionRequest, Node, NodeId, Role, TreeId};
 use unbound_toolkit::ui::{
-    Animated, BUTTON_HEIGHT, Button, Context, Event, FreeLayout, Key, Modifiers, SecureField, Size,
-    Spring, Ui, Widget, WidgetId,
+    Animated, BUTTON_HEIGHT, Button, Context, Event, FreeLayout, Key, Modifiers, PopUpButton,
+    SecureField, Size, Spring, Ui, Widget, WidgetId,
 };
 use unbound_toolkit::{
     Appearance, Color, Item, Paragraph, Path, Point, Radius, Rect, Scene, Shape, TextAlign,
@@ -14,7 +14,7 @@ use unbound_toolkit::{
 use zeroize::Zeroizing;
 
 use crate::L10N;
-use crate::agent::Notice;
+use crate::agent::{Answer, Identity, Notice};
 
 const WIDTH: f32 = 400.0;
 const PADDING: f32 = 24.0;
@@ -30,19 +30,39 @@ const BUTTON_MIN_WIDTH: f32 = 96.0;
 const FIELD_FONT: f32 = 13.0;
 const SHAKE_DISTANCE: f32 = 14.0;
 const SHACKLE_WIDTH: f32 = 3.0;
+const AVATAR_SIZE: f32 = 24.0;
+const AVATAR_GAP: f32 = 8.0;
+const AVATAR_FONT: f32 = 12.0;
+const FIELD: usize = 0;
+const AUTHENTICATE: usize = 2;
+const PICKER: usize = 3;
 
 pub type Password = Zeroizing<String>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Prompt {
     pub message: String,
+    pub identities: Vec<Identity>,
     pub user: String,
+}
+
+impl Prompt {
+    fn name(&self) -> &str {
+        self.identities
+            .iter()
+            .find(|identity| identity.login == self.user)
+            .map_or(self.user.as_str(), |identity| identity.name.as_str())
+    }
+
+    fn asking(&self) -> String {
+        L10N.tr_args("enter-password", [("user", self.name().into())])
+    }
 }
 
 pub enum Message {
     Prompt {
         prompt: Prompt,
-        reply: Sender<Option<Password>>,
+        reply: Sender<Answer>,
     },
     Notice(Notice),
     Close,
@@ -50,6 +70,7 @@ pub enum Message {
 
 enum Choice {
     Authenticate(Password),
+    SwitchTo(String),
     Cancel,
 }
 
@@ -75,6 +96,8 @@ struct Authorization {
     shake: Animated,
     title: Option<Paragraph>,
     message: Option<Paragraph>,
+    initial: Option<Paragraph>,
+    picker_height: f32,
     note_text: Option<Paragraph>,
     note_height: f32,
     button_sizes: Vec<Size>,
@@ -103,15 +126,49 @@ impl Authorization {
             requested.borrow_mut().submit = true;
         })
         .primary();
+        let mut children: Vec<Box<dyn Widget>> =
+            vec![Box::new(field), Box::new(cancel), Box::new(authenticate)];
+        if prompt.identities.len() > 1 {
+            let names: Vec<&str> = prompt
+                .identities
+                .iter()
+                .map(|identity| identity.name.as_str())
+                .collect();
+            let logins: Vec<String> = prompt
+                .identities
+                .iter()
+                .map(|identity| identity.login.clone())
+                .collect();
+            let selected = logins
+                .iter()
+                .position(|login| *login == prompt.user)
+                .unwrap_or_default();
+            let switched = Rc::clone(&shared);
+            children.push(Box::new(PopUpButton::new(
+                &L10N.tr("user"),
+                &names,
+                selected,
+                move |index| {
+                    if let Some(login) = logins.get(index) {
+                        switched
+                            .borrow_mut()
+                            .choices
+                            .push(Choice::SwitchTo(login.clone()));
+                    }
+                },
+            )));
+        }
         let dialog = Self {
             id: WidgetId::next(),
             prompt,
             note: None,
             shared,
-            children: vec![Box::new(field), Box::new(cancel), Box::new(authenticate)],
+            children,
             shake: Animated::new(0.0),
             title: None,
             message: None,
+            initial: None,
+            picker_height: 0.0,
             note_text: None,
             note_height: 0.0,
             button_sizes: Vec::new(),
@@ -172,15 +229,29 @@ impl Widget for Authorization {
             TextAlign::Start,
         );
         let message = cx.text.paragraph(
-            &L10N.tr_args(
-                "enter-password",
-                [("user", self.prompt.user.as_str().into())],
-            ),
+            &self.prompt.asking(),
             TextStyle::role(TextRole::Body, cx.palette.ink2),
             Some(text_width),
             TextAlign::Start,
         );
-        let field = self.children.first_mut().map_or(0.0, |field| {
+        let initial: String = self
+            .prompt
+            .name()
+            .chars()
+            .next()
+            .map(|first| first.to_uppercase().collect())
+            .unwrap_or_default();
+        self.initial = Some(cx.text.paragraph(
+            &initial,
+            TextStyle::new(AVATAR_FONT, cx.palette.on_accent).weight(TextStyle::SEMIBOLD),
+            Some(AVATAR_SIZE),
+            TextAlign::Center,
+        ));
+        self.picker_height = self.children.get_mut(PICKER).map_or(0.0, |picker| {
+            let room = Size::new(text_width - AVATAR_SIZE - AVATAR_GAP, available.height);
+            picker.measure(cx, room).height.max(AVATAR_SIZE) + FIELD_GAP
+        });
+        let field = self.children.get_mut(FIELD).map_or(0.0, |field| {
             field
                 .measure(cx, Size::new(text_width, available.height))
                 .height
@@ -213,6 +284,7 @@ impl Widget for Authorization {
         self.button_sizes = self
             .children
             .iter_mut()
+            .take(PICKER)
             .skip(1)
             .map(|button| {
                 let size = button.measure(cx, available);
@@ -223,6 +295,7 @@ impl Widget for Authorization {
             + TITLE_GAP
             + message.height()
             + FIELD_GAP
+            + self.picker_height
             + field
             + NOTE_GAP
             + self.note_height;
@@ -245,14 +318,24 @@ impl Widget for Authorization {
             + TITLE_GAP
             + self.message.as_ref().map_or(0.0, Paragraph::height)
             + FIELD_GAP;
-        if let Some(field) = self.children.first_mut() {
-            field.place(cx, Rect::new(x, y, width, 0.0));
+        if let Some(picker) = self.children.get_mut(PICKER) {
+            let row = self.picker_height - FIELD_GAP;
+            let top = y + ((row - BUTTON_HEIGHT) / 2.0).round();
+            let left = x + AVATAR_SIZE + AVATAR_GAP;
+            picker.place(
+                cx,
+                Rect::new(left, top, width - AVATAR_SIZE - AVATAR_GAP, 0.0),
+            );
+        }
+        if let Some(field) = self.children.get_mut(FIELD) {
+            field.place(cx, Rect::new(x, y + self.picker_height, width, 0.0));
         }
         let top = frame.y + frame.height - FOOTER_PADDING - BUTTON_HEIGHT;
         let mut right = frame.x + frame.width - FOOTER_INSET;
         for (button, size) in self
             .children
             .iter_mut()
+            .take(PICKER)
             .skip(1)
             .zip(&self.button_sizes)
             .rev()
@@ -288,7 +371,22 @@ impl Widget for Authorization {
             });
             y += paragraph.height() + TITLE_GAP;
         }
-        if let (Some(note), Some(field)) = (&self.note_text, self.children.first()) {
+        if let (Some(picker), Some(initial)) = (self.children.get(PICKER), &self.initial) {
+            let row = picker.frame();
+            let top = row.y + ((row.height - AVATAR_SIZE) / 2.0).round();
+            items.push(Item::Fill {
+                shape: Shape::rounded(
+                    Rect::new(x, top, AVATAR_SIZE, AVATAR_SIZE),
+                    AVATAR_SIZE / 2.0,
+                ),
+                paint: cx.palette.accent.into(),
+            });
+            items.push(Item::Text {
+                origin: Point::new(x, top + ((AVATAR_SIZE - initial.height()) / 2.0).round()),
+                paragraph: initial.clone(),
+            });
+        }
+        if let (Some(note), Some(field)) = (&self.note_text, self.children.get(FIELD)) {
             let field = field.frame();
             items.push(Item::Text {
                 origin: Point::new(x, field.y + field.height + NOTE_GAP),
@@ -305,10 +403,7 @@ impl Widget for Authorization {
         node.set_label(self.prompt.message.clone());
         let description = match &self.note {
             Some(Note::Info(text) | Note::Error(text)) => text.clone(),
-            None => L10N.tr_args(
-                "enter-password",
-                [("user", self.prompt.user.as_str().into())],
-            ),
+            None => self.prompt.asking(),
         };
         node.set_description(description);
         node.set_modal();
@@ -333,14 +428,15 @@ pub struct Dialog {
     shared: Rc<RefCell<Shared>>,
     dialog: WidgetId,
     field: WidgetId,
-    reply: Option<Sender<Option<Password>>>,
+    reply: Option<Sender<Answer>>,
+    switch_to: Option<String>,
     declined: bool,
 }
 
 impl Dialog {
     pub fn new(
         prompt: Prompt,
-        reply: Sender<Option<Password>>,
+        reply: Sender<Answer>,
         text: TextSystem,
         appearance: Appearance,
     ) -> Self {
@@ -359,6 +455,7 @@ impl Dialog {
             dialog,
             field,
             reply: Some(reply),
+            switch_to: None,
             declined: false,
         }
     }
@@ -395,7 +492,7 @@ impl Dialog {
         self.settle_choices() || changed
     }
 
-    fn settle_choices(&mut self) -> bool {
+    pub fn settle_choices(&mut self) -> bool {
         let submit = std::mem::take(&mut self.shared.borrow_mut().submit);
         let changed = submit && {
             self.ui.set_focus(self.field);
@@ -410,7 +507,17 @@ impl Dialog {
 
     pub fn receive(&mut self, message: Message) {
         match message {
-            Message::Prompt { reply, .. } => {
+            Message::Prompt { prompt, reply } => {
+                if let Some(login) = self.switch_to.take()
+                    && login != prompt.user
+                {
+                    let _ = reply.send(Answer::SwitchTo(login));
+                    return;
+                }
+                self.ui
+                    .update_widget::<Authorization>(self.dialog, |dialog, _| {
+                        dialog.prompt = prompt
+                    });
                 self.reply = Some(reply);
                 self.set_waiting(false);
                 self.answer();
@@ -442,7 +549,7 @@ impl Dialog {
     pub fn cancel(&mut self) {
         self.declined = true;
         if let Some(reply) = self.reply.take() {
-            let _ = reply.send(None);
+            let _ = reply.send(Answer::Cancel);
         }
     }
 
@@ -452,12 +559,29 @@ impl Dialog {
             match choice {
                 Choice::Authenticate(password) => {
                     if let Some(reply) = self.reply.take() {
-                        let _ = reply.send(Some(password));
+                        let _ = reply.send(Answer::Password(password));
                         self.set_waiting(true);
                     }
                 }
+                Choice::SwitchTo(login) => self.switch_to(login),
                 Choice::Cancel => self.cancel(),
             }
+        }
+    }
+
+    fn switch_to(&mut self, login: String) {
+        self.ui
+            .update_widget::<Authorization>(self.dialog, |dialog, _| {
+                dialog.prompt.user = login.clone();
+                dialog.note = None;
+            });
+        self.clear_field();
+        match self.reply.take() {
+            Some(reply) => {
+                let _ = reply.send(Answer::SwitchTo(login));
+                self.set_waiting(true);
+            }
+            None => self.switch_to = Some(login),
         }
     }
 
@@ -471,7 +595,7 @@ impl Dialog {
     fn authenticate_button(&self) -> WidgetId {
         self.ui
             .widget_ref::<Authorization>(self.dialog)
-            .and_then(|dialog| dialog.children.last())
+            .and_then(|dialog| dialog.children.get(AUTHENTICATE))
             .map_or(self.dialog, |button| button.id())
     }
 

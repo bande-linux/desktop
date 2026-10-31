@@ -11,6 +11,7 @@ use crate::element::ScreenElement;
 use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::{Buffer, Format as DmabufFormat, Fourcc, Modifier};
 use smithay::backend::drm::DrmNode;
+use smithay::backend::renderer::Renderer as _;
 use smithay::backend::renderer::element::Kind as ElementKind;
 use smithay::backend::renderer::element::memory::MemoryRenderBufferRenderElement;
 use smithay::backend::renderer::element::surface::{
@@ -756,7 +757,7 @@ impl Headless {
                     elements.extend(shown);
                     elements.extend(self.state.overview_ring(window, scale));
                     if let (Some(ghost), Some(look)) = (self.state.overview_ghost(window), &look) {
-                        elements.extend(look.ghost(ghost, scale));
+                        elements.extend(look.ghost(ghost, scale, &renderer.context_id()));
                     }
                     drawn.push((window.surface().clone(), look));
                     if let Some(preview) = &self.state.preview
@@ -769,7 +770,9 @@ impl Headless {
                         ));
                     }
                 }
-                Placed::Closing(closing) => elements.extend(closing.render_elements(scale)),
+                Placed::Closing(closing) => {
+                    elements.extend(closing.render_elements(scale, &renderer.context_id()));
+                }
                 Placed::Overview(screen) => {
                     elements.extend(self.state.overview_elements(renderer, screen, scale));
                 }

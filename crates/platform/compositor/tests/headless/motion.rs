@@ -157,6 +157,21 @@ fn a_closed_window_fades_out_from_its_last_frame() {
 }
 
 #[test]
+fn a_window_closed_after_another_renderer_drew_it_still_renders() {
+    let (mut server, mut renderer, mut editor) = settled_window();
+    let mut other = Renderer::new().expect("second renderer");
+    frame(&mut other, &mut server, SETTLED + ms(8));
+
+    editor.close_window(&mut server, 0);
+    frame(&mut renderer, &mut server, SETTLED + ms(16));
+    frame(&mut other, &mut server, SETTLED + ms(24));
+    assert_eq!(
+        reddish(&frame(&mut renderer, &mut server, SETTLED * 2)),
+        None
+    );
+}
+
+#[test]
 fn with_reduce_motion_minimizing_fades_in_place() {
     let (mut server, mut renderer, mut editor) = settled_window();
     server.set_reduce_motion(true);

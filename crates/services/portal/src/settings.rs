@@ -1,13 +1,18 @@
 use std::collections::HashMap;
+use std::os::fd::OwnedFd;
 use std::path::PathBuf;
-use std::sync::mpsc::{self, RecvTimeoutError};
+use std::sync::mpsc;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
-use std::time::Duration;
 
 use jiff::{Timestamp, Zoned};
+use rustix::io::{Errno, read};
+use rustix::time::{
+    Itimerspec, TimerfdClockId, TimerfdFlags, TimerfdTimerFlags, Timespec, timerfd_create,
+    timerfd_settime,
+};
 use unbound_config::{ACCENTS, Accent};
-use unbound_design::{Color, Scheme};
+use unbound_design::{Color, Scheme, Typeface};
 use unbound_wallpaper::{Choice, Variant};
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
@@ -28,7 +33,6 @@ pub const VERSION: u32 = 2;
 
 const CONFIG_BUS_NAME: &str = "org.unbound.Config";
 const CONFIG_PATH: &str = "/org/unbound/Config";
-const RECHECK: Duration = Duration::from_secs(60);
 const TINT_SAMPLE: u32 = 24;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,6 +55,15 @@ impl ColorScheme {
             Self::PreferLight => "prefer-light",
         }
     }
+
+    fn gtk_theme(self, increase_contrast: bool) -> &'static str {
+        match (self, increase_contrast) {
+            (Self::PreferLight, false) => "Adwaita",
+            (Self::PreferDark, false) => "Adwaita-dark",
+            (Self::PreferLight, true) => "HighContrast",
+            (Self::PreferDark, true) => "HighContrastInverse",
+        }
+    }
 }
 
 impl From<Scheme> for ColorScheme {
@@ -60,6 +73,10 @@ impl From<Scheme> for ColorScheme {
             Scheme::Light => Self::PreferLight,
         }
     }
+}
+
+fn font(typeface: Typeface, points: u32) -> String {
+    format!("{} {points}", typeface.family())
 }
 
 fn fractions(color: Color) -> (f64, f64, f64) {
@@ -293,6 +310,20 @@ fn namespaces(look: Look, cursor: &CursorSettings) -> Namespaces {
                     "color-scheme",
                     Value::from(look.scheme.gnome_color_scheme()),
                 ),
+                (
+                    "gtk-theme",
+                    Value::from(look.scheme.gtk_theme(look.increase_contrast)),
+                ),
+                ("font-name", Value::from(font(Typeface::Interface, 10))),
+                (
+                    "document-font-name",
+                    Value::from(font(Typeface::Interface, 11)),
+                ),
+                (
+                    "monospace-font-name",
+                    Value::from(font(Typeface::Monospace, 10)),
+                ),
+                ("enable-animations", Value::from(!look.reduce_motion)),
                 ("icon-theme", Value::from(icon_theme(look.accent))),
                 ("cursor-theme", Value::from(cursor.theme.as_str())),
                 (
@@ -349,14 +380,44 @@ fn signal_changes(connection: &Connection, old: Look, new: Look, cursor: &Cursor
     }
 }
 
-fn wait_for(next: Option<Timestamp>) -> Duration {
-    next.and_then(|next| {
-        let seconds = next
-            .as_second()
-            .saturating_sub(Timestamp::now().as_second());
-        u64::try_from(seconds).ok().map(Duration::from_secs)
-    })
-    .map_or(RECHECK, |until| until.min(RECHECK))
+const DISARMED: Timespec = Timespec {
+    tv_sec: 0,
+    tv_nsec: 0,
+};
+
+fn wake_at(timer: &OwnedFd, next: Option<Timestamp>) {
+    let it_value = next.map_or(DISARMED, |next| Timespec {
+        tv_sec: next.as_second().max(1),
+        tv_nsec: 0,
+    });
+    let armed = timerfd_settime(
+        timer,
+        TimerfdTimerFlags::ABSTIME | TimerfdTimerFlags::CANCEL_ON_SET,
+        &Itimerspec {
+            it_interval: DISARMED,
+            it_value,
+        },
+    );
+    if let Err(error) = armed {
+        tracing::warn!("cannot wait for the next change of appearance: {error}");
+    }
+}
+
+fn follow_timer(timer: Arc<OwnedFd>, wake: mpsc::Sender<()>) {
+    let mut expirations = [0; 8];
+    loop {
+        match read(&*timer, &mut expirations) {
+            Ok(_) | Err(Errno::CANCELED) => {}
+            Err(Errno::INTR) => continue,
+            Err(error) => {
+                tracing::warn!("the automatic appearance stopped following the time: {error}");
+                return;
+            }
+        }
+        if wake.send(()).is_err() {
+            return;
+        }
+    }
 }
 
 pub struct Settings {
@@ -376,7 +437,7 @@ impl Settings {
             .build()?
             .receive_properties_changed()?;
         let mut reader = Reader::new(connection)?;
-        let (first, mut next) = reader.read(&Zoned::now());
+        let (first, next) = reader.read(&Zoned::now());
         let style_gtk = move |look: Look| {
             if let Some(home) = &gtk_home
                 && let Err(error) = gtk::install(home, look.accent, look.scheme.scheme())
@@ -394,6 +455,13 @@ impl Settings {
             },
         )?;
         let (wake, woken) = mpsc::channel();
+        let timer = Arc::new(
+            timerfd_create(TimerfdClockId::Realtime, TimerfdFlags::CLOEXEC)
+                .map_err(|error| zbus::Error::from(std::io::Error::from(error)))?,
+        );
+        wake_at(&timer, next);
+        let (waiting, timer_wake) = (Arc::clone(&timer), wake.clone());
+        thread::spawn(move || follow_timer(waiting, timer_wake));
         thread::spawn(move || {
             for _ in changes {
                 if wake.send(()).is_err() {
@@ -403,12 +471,9 @@ impl Settings {
         });
         let connection = connection.clone();
         thread::spawn(move || {
-            while !matches!(
-                woken.recv_timeout(wait_for(next)),
-                Err(RecvTimeoutError::Disconnected)
-            ) {
-                let (new, after) = reader.read(&Zoned::now());
-                next = after;
+            while woken.recv().is_ok() {
+                let (new, next) = reader.read(&Zoned::now());
+                wake_at(&timer, next);
                 let old = std::mem::replace(
                     &mut *look.lock().unwrap_or_else(PoisonError::into_inner),
                     new,

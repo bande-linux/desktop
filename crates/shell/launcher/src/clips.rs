@@ -1,7 +1,7 @@
-use std::io::{Read, Write};
-use std::os::unix::net::UnixStream;
-use std::sync::mpsc::{Receiver, Sender, channel};
+use std::os::fd::BorrowedFd;
+use std::sync::mpsc::{Sender, channel};
 
+use unbound_inbox::Inbox;
 use unbound_preview::Preview;
 use unbound_toolkit::Image;
 
@@ -38,8 +38,7 @@ pub enum Reply {
 
 pub struct Clips {
     requests: Sender<Request>,
-    replies: Receiver<Reply>,
-    pub wake: UnixStream,
+    replies: Inbox<Reply>,
 }
 
 fn decode(bytes: &[u8]) -> Option<Image> {
@@ -92,10 +91,8 @@ fn answer(proxy: &ClipboardProxyBlocking<'_>, request: Request) -> zbus::Result<
 impl Clips {
     pub fn spawn(session: zbus::blocking::Connection) -> std::io::Result<Self> {
         let (requests, wanted) = channel::<Request>();
-        let (sender, replies) = channel();
-        let (wake, signal) = UnixStream::pair()?;
-        wake.set_nonblocking(true)?;
-        signal.set_nonblocking(true)?;
+        let replies = Inbox::new()?;
+        let sender = replies.outbox();
         std::thread::Builder::new()
             .name("clipboard".to_owned())
             .spawn(move || {
@@ -104,30 +101,27 @@ impl Clips {
                         .and_then(|proxy| answer(&proxy, request.clone()));
                     match answered {
                         Ok(Some(reply)) => {
-                            if sender.send(reply).is_err() {
+                            if !sender.send(reply) {
                                 return;
                             }
-                            let _ = (&signal).write(&[1]);
                         }
                         Ok(None) => {}
                         Err(error) => tracing::warn!("clipboard history {request:?}: {error}"),
                     }
                 }
             })?;
-        Ok(Self {
-            requests,
-            replies,
-            wake,
-        })
+        Ok(Self { requests, replies })
     }
 
     pub fn ask(&self, request: Request) {
         let _ = self.requests.send(request);
     }
 
-    pub fn take(&self) -> Vec<Reply> {
-        let mut drained = [0; 64];
-        while matches!((&self.wake).read(&mut drained), Ok(read) if read > 0) {}
-        self.replies.try_iter().collect()
+    pub fn fd(&self) -> BorrowedFd<'_> {
+        self.replies.fd()
+    }
+
+    pub fn take(&mut self) -> Vec<Reply> {
+        self.replies.drain()
     }
 }

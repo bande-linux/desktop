@@ -1,7 +1,10 @@
-use std::time::{Duration, Instant};
+use std::sync::mpsc;
+use std::time::Duration;
 
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use unbound_inbox::Inbox;
+
+const SENDS: u32 = 200_000;
 
 fn wait_readable(inbox: &Inbox<u32>) -> bool {
     let fd = inbox.fd();
@@ -31,16 +34,16 @@ fn values_sent_from_another_thread_wake_the_loop_and_arrive_in_order() {
 }
 
 #[test]
-fn a_watch_reports_only_changes() {
+fn a_loop_that_is_not_draining_never_blocks_the_sender() {
     let mut inbox = Inbox::new().expect("inbox");
-    let started = Instant::now();
-    inbox.outbox().watch(Duration::from_millis(5), move || {
-        u32::from(started.elapsed() > Duration::from_millis(60))
+    let outbox = inbox.outbox();
+    let (finished, sent) = mpsc::channel();
+    std::thread::spawn(move || {
+        let delivered = (0..SENDS).all(|value| outbox.send(value));
+        let _ = finished.send(delivered);
     });
 
-    let mut seen = Vec::new();
-    while seen.len() < 2 && wait_readable(&inbox) {
-        seen.extend(inbox.drain());
-    }
-    assert_eq!(seen, [0, 1]);
+    assert_eq!(sent.recv_timeout(Duration::from_secs(5)), Ok(true));
+    assert!(wait_readable(&inbox));
+    assert_eq!(inbox.drain().len(), SENDS as usize);
 }

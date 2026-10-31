@@ -383,11 +383,12 @@ impl State {
         };
         let (title, app_id) = toplevel_names(surface);
         match &self.windows[index].foreign {
-            Some(handle) => {
+            Some(handle) if handle.title() != title || handle.app_id() != app_id => {
                 handle.send_title(&title);
                 handle.send_app_id(&app_id);
                 handle.send_done();
             }
+            Some(_) => {}
             None if self.windows[index].size.is_some() => {
                 let handle = self
                     .foreign_toplevel_state

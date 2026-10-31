@@ -7,16 +7,18 @@ use std::time::{Duration, Instant};
 
 use crate::{Request, Screen, Sender};
 use unbound_inbox::{Inbox, Outbox};
-use unbound_notify::Presentation;
 use unbound_notify::client::NotificationCenter;
+use unbound_notify::{BUS_NAME, Presentation};
 use unbound_toolkit::{
     App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Panel, Rect, Role, Scene,
     TextSystem, Window, WindowEvent,
 };
 use unbound_xdg::{
-    DesktopEntry, Locale, applications, current_desktops, data_dirs, find_icon, launch,
+    DesktopEntry, Locale, applications, current_desktops, data_dirs, find_app, find_icon, launch,
+    running_app,
 };
 use zbus::blocking::Connection;
+use zbus::blocking::fdo::DBusProxy;
 
 const ICON_PIXELS: u32 = 64;
 const AGE_REFRESH: Duration = Duration::from_secs(30);
@@ -60,8 +62,10 @@ fn sender_lookup(
     let mut icons: HashMap<String, Option<Image>> = HashMap::new();
     let directories = data_dirs();
     move |notification, group| {
-        let entry = entries.iter().find(|entry| {
-            entry.app_id() == group || entry.name.eq_ignore_ascii_case(&notification.app_name)
+        let entry = find_app(&entries, group).or_else(|| {
+            entries
+                .iter()
+                .find(|entry| entry.name.eq_ignore_ascii_case(&notification.app_name))
         });
         let name = entry.map_or_else(
             || {
@@ -145,11 +149,11 @@ impl Notifications {
     }
 
     fn focus(&self, window: &mut Window, app: &str, token: &str) {
-        if window.running_apps().iter().any(|running| running == app) {
-            report("bring the app forward", window.activate_app(app));
+        if let Some(running) = running_app(&self.entries, &window.running_apps(), app) {
+            report("bring the app forward", window.activate_app(running));
             return;
         }
-        if let Some(entry) = self.entries.iter().find(|entry| entry.app_id() == app) {
+        if let Some(entry) = find_app(&self.entries, app) {
             let token = Some(token).filter(|token| !token.is_empty());
             if let Err(error) = launch(entry, token) {
                 tracing::warn!("cannot open {}: {error}", entry.name);
@@ -258,6 +262,23 @@ fn follow(connection: &Connection, outbox: &Outbox<Message>) -> zbus::Result<()>
     Ok(())
 }
 
+fn follow_while_present(connection: &Connection, outbox: &Outbox<Message>) -> zbus::Result<()> {
+    let mut owners =
+        DBusProxy::new(connection)?.receive_name_owner_changed_with_args(&[(0, BUS_NAME)])?;
+    while let Err(error) = follow(connection, outbox) {
+        tracing::warn!("cannot follow the notifications until their daemon appears: {error}");
+        let appeared = owners.any(|change| {
+            change
+                .args()
+                .is_ok_and(|arguments| arguments.new_owner().is_some())
+        });
+        if !appeared {
+            return Ok(());
+        }
+    }
+    Ok(())
+}
+
 fn serve(connection: &Connection, outgoing: &Receiver<Outgoing>, outbox: &Outbox<Message>) {
     let center = match NotificationCenter::new(connection) {
         Ok(center) => center,
@@ -315,9 +336,8 @@ impl Notifications {
         if let Some(connection) = session {
             let following = (connection.clone(), inbox.outbox());
             thread::spawn(move || {
-                while let Err(error) = follow(&following.0, &following.1) {
+                if let Err(error) = follow_while_present(&following.0, &following.1) {
                     tracing::warn!("cannot follow the notifications: {error}");
-                    thread::sleep(Duration::from_secs(2));
                 }
             });
             let serving = (connection.clone(), inbox.outbox());

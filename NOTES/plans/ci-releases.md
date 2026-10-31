@@ -13,6 +13,82 @@ Plan: a new `release.yml` on GitHub-hosted runners, with native `ubuntu-24.04-ar
 out of the release gate. The APT tooling learns amd64 and checks each architecture after every
 publish.
 
+## Status (2026-11-01)
+
+Everything that can be checked without CI is done. The first tag (below, "Cutting the first
+release") is the first CI run of the whole path. What was built differs from the plan below in
+places:
+
+- **One suite, no channels.** The archive is one suite, `rolling`, for Debian testing; there
+  is no `trixie` stable suite and no `trixie-testing` channel. All jobs build in
+  `debian:testing`, not `debian:trixie`.
+- **apt pulls, desktop does not push.** apt's `publish.yml` runs every 30 minutes and takes the
+  green `release.yml` push of the highest `vX.Y.Z` tag. desktop has no `publish` or `release`
+  job and makes no GitHub release; apt downloads the run's artifacts.
+- **No approval step.** The `apt-publish` environment has a branch policy only, so a green tag
+  publishes on its own.
+- **`bande-linux/desktop` is public** (decision 1 is settled): 4 vCPU, 16 GB, free minutes.
+- **The site is live** since 2026-10-31 21:44 with the repository packages (1.3, both
+  architectures) and the kernel (`apple`, arm64). No desktop yet.
+
+| Milestone | State |
+|---|---|
+| D1-D3, D5 | done on `main` (release.yml, `ci/release/*.sh`, extended.yml, ci.yml gone, polkit exempt and in Recommends) |
+| D1 peak RSS | not measured: needs a dist cargo build and the disk is tight; the tag run's `debs` job prints disk and memory |
+| D4 | done as "apt pulls" above. The `dch` changelog stanza is not done. Decided overnight 2026-11-01: keep `DEB_VERSION_OVERRIDE` with `dh_gencontrol -v`; lintian is clean at 0.1.0 and nothing reads the changelog version (plan recommendation was dch; owner may revisit) |
+| A1, A2 | done on apt `main`; `tests/run-all.sh` green on the mini (240 checks) |
+| A3 | done, apt `5fc022d`: `verify` waits until the site serves the desktop version the build just put in, installs `bande-desktop` on amd64 and arm64, checks every installed `bande-*` package is that architecture or `all` at that version, starts the compositor headless. Checked against a fixture archive; it runs in CI with the first desktop publish |
+| I1 | done, images `ecdcaaf` on `prep/os-installable` (images has no `main`): `build.yml` fetches the desktop from the archive with `fetch-desktop.sh` (signature, index and package checksums, the desktop's and apt's packages from `state/owners`, optional `desktop-version` input) instead of the expired run 40739365836. Checked against fixture archives and the live site |
+| R1 | not done (optional) |
+| M-final | waits for the owner's tag |
+
+Dry review of tag -> build -> publish, overnight, without CI: `version-test.sh`;
+`check-debs.sh` and `smoke.sh` against the mini's 19 arm64 debs (fixed: `check-debs.sh` read
+the control archive through a pipe that `grep -q` broke, exit 141); `build-all.sh` with
+lintian at 0.1.0; every arch package is reachable from `bande-desktop` or `bande-os`;
+shellcheck of every workflow `run:` block; the action versions, cargo-deb 3.8.0 and actionlint
+1.7.12 exist; fetch-run's per-architecture completeness and version checks; `all` packages in
+both indices. actionlint itself is not packaged for Debian, so only the `lint` job runs it.
+
+Still open:
+- **Image suite (owner).** The image is Debian 13 (`trixie`), the archive's packages are built
+  for Debian testing (`bande-os` says "Debian testing installation"). dpkg-shlibdeps minimum
+  versions usually still fit trixie, but a library only testing has makes the image build fail
+  at `apt-get install`, and installed images follow `rolling` for updates. Move the image to
+  testing, or build a trixie set as well?
+- **D5 leftover.** `origin/wip/userland-efficiency` still carries the old `ci.yml` with
+  `push: branches: '**'`, so a push to it starts self-hosted runs. Nine other unmerged branches
+  carry the tag-only `ci.yml`, which is harmless since tags are cut on `main`. Not deleted:
+  they are other agents' work.
+
+## Cutting the first release
+
+1. On the mini, `main` is what you want to ship and its gate is green, and `Cargo.toml` says
+   `[workspace.package] version = "0.1.0"` (it does).
+2. Optional, recommended: warm the caches with a test build of `main` (free, never published):
+   `gh workflow run release.yml -R bande-linux/desktop --ref main`. It also shows the job
+   times and whether the fat-LTO links fit in memory before a tag depends on it.
+3. Tag and push: `git tag v0.1.0 origin/main && git push origin v0.1.0`.
+4. Watch `release.yml` for the tag: `gh run list -R bande-linux/desktop -w release.yml -e push`,
+   then `gh run watch -R bande-linux/desktop <id>`. All seven jobs must be green (lint, test,
+   debs arm64 and amd64, deb-all, install arm64 and amd64): apt takes only a fully green run.
+   - A flake: `gh run rerun <id> --failed`. Same run id, apt still takes it.
+   - `signal 9` / exit 137 in `debs`: the fat-LTO link ran out of memory; set
+     `lto = "thin"` for the `dist` profile, then release 0.1.1.
+   - A code fix: bump to 0.1.1, merge, tag `v0.1.1`. Never move a published tag.
+5. Within 30 minutes apt's `publish` takes it (`gh run list -R bande-linux/apt -w publish.yml`),
+   or start it at once: `gh workflow run publish.yml -R bande-linux/apt -f repo=desktop -f run_id=<id>`.
+   Watch find, build (its log says `bande-desktop 0.1.0`), deploy, release and both `verify`
+   jobs (`ubuntu-24.04`, `ubuntu-24.04-arm`): they install `bande-desktop` from the live site
+   and check the architecture and version. A `verify` that times out on "Pages serves
+   bande-desktop none yet" is slow propagation: rerun it.
+6. Check by hand: `curl -s https://bande-linux.github.io/apt/dists/rolling/main/binary-amd64/Packages | grep -A3 '^Package: bande-compositor$'`
+   shows `Architecture: amd64` and `Version: 0.1.0`; the same with `arm64`.
+7. On the mini, if it should follow the archive: install `bande-archive-keyring` and
+   `bande-apt-source` as the site describes, `apt update`, `apt policy bande-desktop`.
+   Local builds after the tag are `0.1.0+git...`, which sorts above `0.1.0`, so
+   `rebuild-desktop` builds still win over the archive until the next tag.
+
 ## What the owner sees
 
 - "Only starts on tags but still has not run successfully": it has never started. No tags or
@@ -336,14 +412,23 @@ first tag (M-final).
 
 1. Make `bande-linux/desktop` public (4 vCPU, 16 GB, free minutes), or keep it private and
    use 2-vCPU hosted runners with paid minutes beyond 2000 per month?
+   Settled: the repository is public.
 2. Release gate: lint, lavapipe tests, packages and install tests, with the KVM guest, perf
    and polkit moved to a non-gating dispatch workflow. Agree?
+   Done that way (D5; plan recommendation; owner may revisit).
 3. Testing channel: manual `main` dispatch only, or also nightly when `main` changed?
+   Superseded: one `rolling` suite fed by tags only; a `main` dispatch is a test build that
+   is never published.
 4. `dist` profile: keep fat LTO if it fits in memory, or switch to thin LTO for reliable builds
    on 8 GB runners?
+   Decided overnight 2026-11-01: keep fat LTO, since the public runners have 16 GB; switch to
+   thin if the first tag's `debs` job is killed (plan recommendation; owner may revisit).
 5. `bande-polkit` and the lint rule: exempt it as an agent with UI, or move the crate under
    `crates/shell/`?
+   Done: exempted in `ci/release/lint.sh` (plan default).
 6. Keep the reviewer approval for every stable publish?
+   Open: there is no approval today; a green tag publishes on its own. Add a required reviewer
+   to apt's `apt-publish` environment to get one back.
 
 Sources:
 - GitHub-hosted runner specs (private repos: 2 vCPU, 8 GB, 14 GB; arm64 available):

@@ -3,7 +3,7 @@ use std::time::Duration;
 use jiff::civil::Time;
 use jiff::{Timestamp, Zoned};
 use unbound_config::{ClockTime, NightLight as Settings, NightSchedule};
-use unbound_datetime::daylight::{Place, Sky, sky, system_place};
+use unbound_datetime::daylight::{Place, Sky, sky, system_place, within_daily};
 
 use crate::state::Headless;
 
@@ -13,6 +13,8 @@ const MOST_WARM: f64 = 2700.0;
 const SCHEDULED_FADE: Duration = Duration::from_secs(60);
 const SWITCHED_FADE: Duration = Duration::from_millis(1500);
 const FADE_STEP: Duration = Duration::from_millis(50);
+const PREVIEW_FADE: Duration = Duration::from_millis(250);
+const PREVIEW_HOLD: Duration = Duration::from_secs(3);
 const RECHECK: Duration = Duration::from_secs(15 * 60);
 
 fn temperature(warmth: u32) -> f64 {
@@ -62,37 +64,14 @@ pub(crate) fn ramp(size: usize, kelvin: f64) -> [Vec<u16>; 3] {
     })
 }
 
-fn at(now: &Zoned, days: i64, clock: ClockTime) -> Option<Timestamp> {
-    let date = now.date().checked_add(jiff::Span::new().days(days)).ok()?;
-    let time = Time::new(
+fn time(clock: ClockTime) -> Option<Time> {
+    Time::new(
         i8::try_from(clock.hour).ok()?,
         i8::try_from(clock.minute).ok()?,
         0,
         0,
     )
-    .ok()?;
-    date.to_datetime(time)
-        .to_zoned(now.time_zone().clone())
-        .ok()
-        .map(|zoned| zoned.timestamp())
-}
-
-fn custom_night(now: &Zoned, from: ClockTime, to: ClockTime) -> Option<(bool, Timestamp)> {
-    let minutes = |clock: ClockTime| u16::from(clock.hour) * 60 + u16::from(clock.minute);
-    let current = u16::try_from(now.hour()).ok()? * 60 + u16::try_from(now.minute()).ok()?;
-    let (start, end) = (minutes(from), minutes(to));
-    let night = if start <= end {
-        (start..end).contains(&current)
-    } else {
-        current >= start || current < end
-    };
-    let instant = now.timestamp();
-    [(0, from), (0, to), (1, from), (1, to)]
-        .into_iter()
-        .filter_map(|(days, clock)| at(now, days, clock))
-        .filter(|boundary| *boundary > instant)
-        .min()
-        .map(|next| (night, next))
+    .ok()
 }
 
 fn scheduled_night(
@@ -102,7 +81,7 @@ fn scheduled_night(
 ) -> Option<(bool, Timestamp)> {
     match settings.schedule {
         NightSchedule::Sunset => sky(now, place).map(|(sky, next)| (sky == Sky::Night, next)),
-        NightSchedule::Custom => custom_night(now, settings.from, settings.to),
+        NightSchedule::Custom => within_daily(now, time(settings.from)?, time(settings.to)?),
     }
 }
 
@@ -140,6 +119,8 @@ pub(crate) struct NightLight {
     switched: bool,
     started: bool,
     applied: Option<f64>,
+    previewing: bool,
+    preview_until: Option<Duration>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -153,6 +134,7 @@ impl NightLight {
         if settings == self.settings && self.started {
             return;
         }
+        self.previewing |= self.started && settings.warmth != self.settings.warmth;
         self.switched |= settings.on != self.settings.on
             || settings.schedule != self.settings.schedule
             || settings.from != self.settings.from
@@ -204,9 +186,24 @@ impl NightLight {
         now: Duration,
         wall: impl FnOnce() -> (Zoned, Option<Place>),
     ) -> NightTick {
+        if self.preview_until.is_some_and(|until| until <= now) {
+            self.preview_until = None;
+            self.switched = true;
+            self.check_at = Some(now);
+        }
         if self.check_at.is_some_and(|at| at <= now) {
             let (wall, place) = wall();
             self.check(now, &wall, place);
+        }
+        if std::mem::take(&mut self.previewing) {
+            self.preview_until = Some(now + PREVIEW_HOLD);
+            self.fade = Some(Fade {
+                from: self.strength,
+                to: 1.0,
+                start: now,
+                length: PREVIEW_FADE,
+            });
+            self.target = 1.0;
         }
         if let Some(fade) = self.fade {
             self.strength = fade.at(now);
@@ -228,6 +225,7 @@ impl NightLight {
                 .map(|_| now + FADE_STEP)
                 .into_iter()
                 .chain(self.check_at)
+                .chain(self.preview_until)
                 .min(),
         }
     }
@@ -249,9 +247,7 @@ mod tests {
     use unbound_config::{ClockTime, NightLight as Settings, NightSchedule};
     use unbound_datetime::daylight::Place;
 
-    use super::{
-        NEUTRAL, NightLight, NightTick, custom_night, matrix, ramp, scheduled_night, temperature,
-    };
+    use super::{NEUTRAL, NightLight, NightTick, matrix, ramp, scheduled_night, temperature};
 
     fn zoned(text: &str) -> Zoned {
         text.parse().expect("zoned")
@@ -301,28 +297,41 @@ mod tests {
     }
 
     #[test]
-    fn a_custom_schedule_spans_midnight_and_names_the_next_change() {
-        let evening = "2026-10-31T23:10[Europe/Stockholm]";
-        let (night, next) =
-            custom_night(&zoned(evening), clock(22, 0), clock(7, 0)).expect("night");
-        assert!(night);
-        assert_eq!(local(evening, next), "01 07:00");
-
-        let noon = "2026-10-31T12:00[Europe/Stockholm]";
-        let (night, next) = custom_night(&zoned(noon), clock(22, 0), clock(7, 0)).expect("day");
-        assert!(!night);
-        assert_eq!(local(noon, next), "31 22:00");
-
-        let dawn = "2026-10-31T06:59[Europe/Stockholm]";
+    fn changing_the_warmth_by_day_previews_it_and_then_fades_back() {
+        let mut light = NightLight::default();
+        let day_settings = Settings {
+            on: true,
+            schedule: NightSchedule::Custom,
+            from: clock(22, 0),
+            to: clock(7, 0),
+            ..Settings::default()
+        };
+        let noon = || (zoned("2026-10-31T12:00[Europe/Stockholm]"), None);
+        light.configure(day_settings);
         assert_eq!(
-            custom_night(&zoned(dawn), clock(22, 0), clock(7, 0)).map(|(night, _)| night),
-            Some(true)
+            light.advance(Duration::from_secs(10), noon).kelvin,
+            Some(NEUTRAL)
         );
-        let afternoon = "2026-10-31T15:00[Europe/Stockholm]";
-        let (night, next) =
-            custom_night(&zoned(afternoon), clock(13, 0), clock(16, 30)).expect("nap");
-        assert!(night);
-        assert_eq!(local(afternoon, next), "31 16:30");
+
+        light.configure(Settings {
+            warmth: 100,
+            ..day_settings
+        });
+        let preview = light.advance(Duration::from_secs(11), noon);
+        assert!(preview.wake_at.is_some());
+        assert_eq!(
+            light.advance(Duration::from_millis(11_300), noon).kelvin,
+            Some(temperature(100))
+        );
+        assert_eq!(
+            light.advance(Duration::from_secs(13), noon).wake_at,
+            Some(Duration::from_secs(14))
+        );
+        light.advance(Duration::from_secs(14), noon);
+        assert_eq!(
+            light.advance(Duration::from_secs(16), noon).kelvin,
+            Some(NEUTRAL)
+        );
     }
 
     #[test]

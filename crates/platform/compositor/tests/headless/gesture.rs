@@ -147,3 +147,30 @@ fn activating_an_app_while_the_desktop_shows_brings_the_windows_back() {
     assert!(!server.shows_desktop());
     assert_eq!(pixel(&mut renderer, &mut server, 110, 80), [0xff, 0, 0]);
 }
+
+#[test]
+fn super_f11_shows_the_desktop_and_brings_the_windows_back() {
+    const KEY_F11: u32 = 87;
+    let mut server = server();
+    let mut renderer = Renderer::new().expect("renderer");
+    let mut client = app(&mut server);
+    client.exchange(&mut server);
+
+    chord(&mut server, &[KEY_LEFTMETA, KEY_F11]);
+    let end = settle(&mut server, 0);
+    let aside = pixel(&mut renderer, &mut server, 110, 80);
+    let shown = server.shows_desktop();
+    client.exchange(&mut server);
+    let typing_while_shown = client.keyboard_focus_on(0);
+
+    chord(&mut server, &[KEY_LEFTMETA, KEY_F11]);
+    settle(&mut server, end);
+    client.exchange(&mut server);
+
+    assert!(shown);
+    assert_eq!(aside, BACKGROUND);
+    assert!(!typing_while_shown);
+    assert!(!server.shows_desktop());
+    assert_eq!(pixel(&mut renderer, &mut server, 110, 80), [0xff, 0, 0]);
+    assert!(client.keyboard_focus_on(0));
+}

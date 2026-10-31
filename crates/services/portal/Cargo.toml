@@ -12,6 +12,7 @@ rustix = { workspace = true, features = ["time"] }
 tracing.workspace = true
 unbound-bus.workspace = true
 unbound-config.workspace = true
+unbound-datetime.workspace = true
 unbound-design.workspace = true
 unbound-log.workspace = true
 unbound-wallpaper.workspace = true

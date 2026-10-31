@@ -1,4 +1,5 @@
 use std::rc::Rc;
+use std::time::Instant;
 
 use unbound_audio::Direction;
 use unbound_config::{ACCENTS, MAX_INPUT_SOURCES};
@@ -12,13 +13,14 @@ use unbound_toolkit::{Scheme, Spacing, TextRole};
 use crate::L10N;
 use crate::arrangement::{Area, Arrangement, Screen};
 use crate::follow::Command;
+use crate::forget::Forget;
 use crate::pictures::{Pair, PictureCommand, expand};
 use crate::state::{Answer, Display, Question};
 use crate::view::{
     Anchor, Intent, Intents, MIRROR_PREFIX, SettingsView, USE_EXTENDED, USE_MAIN, intent,
 };
 use crate::widgets::{
-    Caption, Captioned, Card, Check, Column, Row, Scroll, Signal, Swatch, Swatches, Text,
+    Caption, Captioned, Card, Check, Column, Fade, Row, Scroll, Signal, Swatch, Swatches, Text,
     Thumbnail, Thumbnails, Tone,
 };
 use unbound_config::Placement;
@@ -497,6 +499,11 @@ impl SettingsView {
         let mut rows = Vec::new();
         for network in wifi.networks {
             let name = network.name();
+            if self.forgetting.as_ref() == Some(&Forget::Network(network.ssid.clone())) {
+                let row = self.forget_row(&name, &L10N.tr("forget-network-warning"));
+                rows.push(row);
+                continue;
+            }
             let status = if network.current {
                 Some(L10N.tr("connected"))
             } else if self.join.joining.as_ref() == Some(&network.ssid) {
@@ -506,13 +513,24 @@ impl SettingsView {
             } else {
                 None
             };
-            let mut row = Row::new(
-                Text::new(&name, Tone::Primary),
-                Some(boxed(Signal::new(
-                    network.strength,
-                    network.security.needs_password(),
-                ))),
-            );
+            let signal = boxed(Signal::new(
+                network.strength,
+                network.security.needs_password(),
+            ));
+            let control = if network.known {
+                boxed(Stack::new(
+                    Axis::Horizontal,
+                    Spacing::S as f32,
+                    0.0,
+                    vec![
+                        self.forget_button(Forget::Network(network.ssid.clone())),
+                        signal,
+                    ],
+                ))
+            } else {
+                signal
+            };
+            let mut row = Row::new(Text::new(&name, Tone::Primary), Some(control));
             if let Some(status) = status {
                 row = row.detail(Text::new(&status, Tone::Muted).caption());
             }
@@ -568,6 +586,9 @@ impl SettingsView {
         devices
             .into_iter()
             .map(|device| {
+                if self.forgetting.as_ref() == Some(&Forget::Device(device.address.clone())) {
+                    return self.forget_row(&device.name, &L10N.tr("forget-device-warning"));
+                }
                 let busy = self.busy.contains(&device.address);
                 let (status, action, make): (String, String, fn(String) -> Intent) =
                     match (paired, device.connected) {
@@ -592,10 +613,30 @@ impl SettingsView {
                 } else {
                     status
                 };
+                let status = match device.battery {
+                    Some(level) if paired && !busy => L10N.tr_args(
+                        "status-with-battery",
+                        [("status", status.into()), ("level", level.into())],
+                    ),
+                    _ => status,
+                };
                 let control = (!busy).then(|| {
                     let mut act = intent(&self.intents, make);
                     let address = device.address.clone();
-                    boxed(Button::new(&action, move || act(address.clone())))
+                    let button = boxed(Button::new(&action, move || act(address.clone())));
+                    if paired {
+                        boxed(Stack::new(
+                            Axis::Horizontal,
+                            Spacing::S as f32,
+                            0.0,
+                            vec![
+                                button,
+                                self.forget_button(Forget::Device(device.address.clone())),
+                            ],
+                        ))
+                    } else {
+                        button
+                    }
                 });
                 let mut row = Row::new(Text::new(&device.name, Tone::Primary), control);
                 if !status.is_empty() {
@@ -1152,13 +1193,13 @@ impl SettingsView {
         {
             page.extend(card);
         }
-        if let Some(notice) = self.notice(&pane) {
-            page.push(notice);
-            return self.page(page);
-        }
-        for section in &pane.sections {
+        let notice = self.notice(&pane);
+        self.crossfade_on(pane.id, notice.is_some());
+        let mut body: Widgets = notice.into_iter().collect();
+        let sections: &[Section] = if body.is_empty() { &pane.sections } else { &[] };
+        for section in sections {
             if pane.id == PaneId::Displays {
-                page.extend(self.display_sections(section, &matched));
+                body.extend(self.display_sections(section, &matched));
                 continue;
             }
             if !self.section_shown(section) {
@@ -1180,11 +1221,11 @@ impl SettingsView {
             }
             if let Some(title) = &section.title {
                 let highlights = listed.map(|hit| hit.label).unwrap_or_default();
-                page.push(boxed(Caption::new(
+                body.push(boxed(Caption::new(
                     Text::label(title).highlighted(highlights),
                 )));
             }
-            page.push(boxed(Card::new(rows)));
+            body.push(boxed(Card::new(rows)));
             if section
                 .settings
                 .iter()
@@ -1192,13 +1233,27 @@ impl SettingsView {
                 && self.join.asking.is_none()
                 && let Some(error) = &self.join.error
             {
-                page.push(boxed(Caption::new(Text::new(error, Tone::Muted))));
+                body.push(boxed(Caption::new(Text::new(error, Tone::Muted))));
             }
         }
         if let Some(message) = &self.message {
-            page.push(boxed(Caption::new(Text::new(message, Tone::Muted))));
+            body.push(boxed(Caption::new(Text::new(message, Tone::Muted))));
         }
+        page.push(boxed(Fade::new(
+            boxed(Column::new(PAGE_SPACING, 0.0, body)),
+            Rc::clone(&self.crossfade),
+        )));
         self.page(page)
+    }
+
+    fn crossfade_on(&mut self, pane: PaneId, off: bool) {
+        match self.shown.replace((pane, off)) {
+            Some(shown) if shown == (pane, !off) => {
+                self.crossfade.borrow_mut().start(Instant::now());
+            }
+            Some((shown, _)) if shown != pane => self.crossfade.borrow_mut().stop(),
+            _ => {}
+        }
     }
 
     fn page(&self, page: Widgets) -> Box<dyn Widget> {

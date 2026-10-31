@@ -285,6 +285,8 @@ fn a_scale_follows_the_displays_pixel_density() {
 }
 
 const KEY_V: u32 = 47;
+const KEY_N: u32 = 49;
+const KEY_C: u32 = 46;
 const KEY_3: u32 = 4;
 const KEY_4: u32 = 5;
 const KEY_MUTE: u32 = 113;
@@ -726,7 +728,31 @@ fn the_menu_bar_toggles_control_center_through_the_compositor() {
     menu_bar.toggle_control_center(&mut server);
     roundtrip(&mut server, &mut [&mut menu_bar, &mut control_center]);
 
-    assert_eq!(control_center.control_center_toggles(), 1);
+    assert_eq!(control_center.panel_toggles(), [Panel::ControlCenter]);
+}
+
+#[test]
+fn alt_super_n_and_alt_super_c_toggle_the_notification_center_and_control_center() {
+    let mut server = server();
+    let mut app = focused_app(&mut server);
+    let mut shell = TestClient::connect_as_shell(&mut server);
+    shell.join_shell(&mut server);
+
+    chord(&mut server, &[KEY_LEFTMETA, KEY_LEFTALT, KEY_N]);
+    chord(&mut server, &[KEY_LEFTMETA, KEY_LEFTALT, KEY_C]);
+    roundtrip(&mut server, &mut [&mut app, &mut shell]);
+
+    assert_eq!(
+        shell.panel_toggles(),
+        [Panel::NotificationCenter, Panel::ControlCenter]
+    );
+    assert!(
+        app.keys()
+            .iter()
+            .all(|(key, _)| [KEY_LEFTMETA, KEY_LEFTALT].contains(key)),
+        "the app saw {:?}",
+        app.keys()
+    );
 }
 
 #[test]

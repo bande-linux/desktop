@@ -8,9 +8,9 @@ use std::time::Duration;
 
 use unbound_config::{
     AlertSound, Appearance, BarEdge, CapsLock, Config, ConfigError, ConfigStore, DEFAULT_BAR_APPS,
-    DisplaySettings, InputSource, MenuBarPlacement, Placement, ReloadError, Rotation,
-    SecondaryClick, Suspend, WallpaperFit, WallpaperVariant, config_path, copy_login_picture,
-    login_picture, login_picture_file, system_input_sources,
+    DisplaySettings, InputSource, MenuBarPlacement, NightLight, NightSchedule, Placement,
+    ReloadError, Rotation, SecondaryClick, Suspend, WallpaperFit, WallpaperVariant, config_path,
+    copy_login_picture, login_picture, login_picture_file, system_input_sources,
 };
 
 fn problems(source: &str) -> Vec<ConfigError> {
@@ -685,4 +685,25 @@ fn only_the_left_edge_combines_the_menus_into_the_bar_for_now() {
     assert!(MenuBarPlacement::InBar.combines(BarEdge::Left));
     assert!(!MenuBarPlacement::InBar.combines(BarEdge::Bottom));
     assert!(!MenuBarPlacement::Separate.combines(BarEdge::Left));
+}
+
+#[test]
+fn night_light_reads_its_schedule_and_warmth_and_reports_a_bad_time() {
+    let (config, found) = Config::load(
+        "night-light {\n    on #true\n    schedule \"custom\"\n    from \"21:30\"\n    to \"6:00\"\n    warmth 80\n}\n",
+    )
+    .expect("KDL");
+    let night = config.night_light;
+
+    assert!(night.on);
+    assert_eq!(night.schedule, NightSchedule::Custom);
+    assert_eq!(night.from.text(), "21:30");
+    assert_eq!(night.to, NightLight::default().to);
+    assert_eq!(night.warmth, 80);
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].line, 5);
+    assert_eq!(
+        Config::default().night_light.schedule,
+        NightSchedule::Sunset
+    );
 }

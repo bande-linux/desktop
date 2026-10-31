@@ -50,7 +50,7 @@ pub(crate) struct Shell {
     volume_keys: Vec<(unbound_shell_v1::VolumeKey, bool)>,
     brightness_keys: Vec<(unbound_shell_v1::BrightnessKey, bool)>,
     media_keys: Vec<unbound_shell_v1::MediaKey>,
-    control_center_toggles: usize,
+    panel_toggles: Vec<unbound_shell_v1::Panel>,
     responding: Vec<(i32, String, bool)>,
     minimized: Vec<(String, bool)>,
     attention: Vec<String>,
@@ -173,7 +173,7 @@ impl TestClient {
     }
 
     pub fn join_shell(&mut self, server: &mut Headless) {
-        let shell: UnboundShellV1 = self.bind("unbound_shell_v1", 17);
+        let shell: UnboundShellV1 = self.bind("unbound_shell_v1", 18);
         self.globals.shell.shell = Some(shell);
         let _: ExtForeignToplevelListV1 = self.bind("ext_foreign_toplevel_list_v1", 1);
         self.exchange(server);
@@ -233,8 +233,8 @@ impl TestClient {
         &self.globals.shell.media_keys
     }
 
-    pub fn control_center_toggles(&self) -> usize {
-        self.globals.shell.control_center_toggles
+    pub fn panel_toggles(&self) -> &[unbound_shell_v1::Panel] {
+        &self.globals.shell.panel_toggles
     }
 
     pub fn toggle_control_center(&mut self, server: &mut Headless) {
@@ -286,7 +286,7 @@ impl TestClient {
     }
 
     pub fn place_window(&mut self, server: &mut Headless, index: usize, placement: Placement) {
-        let app: UnboundAppV1 = self.bind("unbound_app_v1", 2);
+        let app: UnboundAppV1 = self.bind("unbound_app_v1", 6);
         app.place_window(&self.windows[index].2, placement);
         self.exchange(server);
     }
@@ -586,9 +586,9 @@ impl Dispatch<UnboundShellV1, ()> for Globals {
             unbound_shell_v1::Event::MediaKey {
                 key: WEnum::Value(key),
             } => globals.shell.media_keys.push(key),
-            unbound_shell_v1::Event::ToggleControlCenter => {
-                globals.shell.control_center_toggles += 1;
-            }
+            unbound_shell_v1::Event::TogglePanel {
+                panel: WEnum::Value(panel),
+            } => globals.shell.panel_toggles.push(panel),
             unbound_shell_v1::Event::WindowMinimized {
                 identifier,
                 minimized,

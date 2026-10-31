@@ -148,6 +148,16 @@ fn a_known_network_rejoins_with_its_saved_password_or_a_new_one() {
 }
 
 #[test]
+fn forgetting_a_network_deletes_its_saved_connection() {
+    let fixture = start();
+    let studio = fixture.network("Studio");
+    assert!(studio.known);
+    fixture.client.forget(&studio).expect("forget");
+    assert!(fixture.fake.saved_ssids().is_empty());
+    assert!(!fixture.network("Studio").known);
+}
+
+#[test]
 fn enterprise_networks_are_not_joined_with_a_personal_password() {
     let fixture = start();
     let office = fixture.network("Office");

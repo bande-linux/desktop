@@ -1396,3 +1396,26 @@ fn a_menu_taller_than_the_screen_is_shortened_and_reaches_every_item_by_keyboard
         .expect("a network");
     assert!(index >= 30, "the wheel left {action} in the middle");
 }
+
+#[test]
+fn holding_the_zoom_control_opens_the_tiling_menu_instead_of_zooming() {
+    let mut desktop = Desktop::new();
+    let mut client = pointed_window(&mut desktop, "zoom hold");
+    desktop.point_into_window(66, 24);
+    desktop.server.press_button(BTN_LEFT, true, 0);
+    desktop.wait_for(
+        &mut [&mut client],
+        |_| true,
+        |desktop| desktop.server.popup_count() == 1,
+    );
+    desktop.server.press_button(BTN_LEFT, false, 0);
+    desktop.settle(&mut [&mut client]);
+
+    assert_eq!(desktop.server.popup_count(), 1);
+    assert!(
+        !client
+            .seen
+            .iter()
+            .any(|event| matches!(event, WindowEvent::ToplevelChanged(state) if state.maximized))
+    );
+}

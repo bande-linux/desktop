@@ -11,12 +11,15 @@ use zbus::zvariant::{OwnedObjectPath, OwnedValue};
 const SERVICE: &str = "org.bluez";
 const ADAPTER: &str = "org.bluez.Adapter1";
 const DEVICE: &str = "org.bluez.Device1";
+const BATTERY: &str = "org.bluez.Battery1";
 
 #[zbus::proxy(interface = "org.bluez.Adapter1", default_service = "org.bluez")]
 trait Adapter {
     fn start_discovery(&self) -> zbus::Result<()>;
 
     fn stop_discovery(&self) -> zbus::Result<()>;
+
+    fn remove_device(&self, device: &zbus::zvariant::ObjectPath<'_>) -> zbus::Result<()>;
 
     #[zbus(property)]
     fn powered(&self) -> zbus::Result<bool>;
@@ -44,6 +47,7 @@ pub struct Device {
     pub icon: Option<String>,
     pub paired: bool,
     pub connected: bool,
+    pub battery: Option<u8>,
     path: OwnedObjectPath,
 }
 
@@ -59,16 +63,21 @@ fn property<T: TryFrom<OwnedValue>>(
 }
 
 impl Device {
-    fn from_properties(
-        path: OwnedObjectPath,
-        properties: &HashMap<String, OwnedValue>,
-    ) -> Option<Self> {
+    fn from_interfaces(path: OwnedObjectPath, interfaces: &Interfaces) -> Option<Self> {
+        let of = |interface: &str| {
+            interfaces
+                .iter()
+                .find(|(name, _)| name.as_str() == interface)
+                .map(|(_, properties)| properties)
+        };
+        let properties = of(DEVICE)?;
         let address: String = property(properties, "Address")?;
         Some(Self {
             name: property(properties, "Alias").unwrap_or_else(|| address.clone()),
             icon: property(properties, "Icon"),
             paired: property(properties, "Paired").unwrap_or(false),
             connected: property(properties, "Connected").unwrap_or(false),
+            battery: of(BATTERY).and_then(|battery| property(battery, "Percentage")),
             address,
             path,
         })
@@ -140,12 +149,7 @@ impl Bluetooth {
         let mut devices: Vec<Device> = self
             .objects()?
             .into_iter()
-            .filter_map(|(path, interfaces)| {
-                let (_, properties) = interfaces
-                    .iter()
-                    .find(|(name, _)| name.as_str() == DEVICE)?;
-                Device::from_properties(path, properties)
-            })
+            .filter_map(|(path, interfaces)| Device::from_interfaces(path, &interfaces))
             .filter(|device| device.paired == paired)
             .collect();
         devices.sort_by(|a, b| {
@@ -188,6 +192,13 @@ impl Bluetooth {
 
     pub fn disconnect(&self, device: &Device) -> zbus::Result<()> {
         self.device(device)?.disconnect()
+    }
+
+    pub fn forget(&self, device: &Device) -> zbus::Result<()> {
+        match self.adapter()? {
+            Some(adapter) => adapter.remove_device(&device.path),
+            None => Ok(()),
+        }
     }
 
     pub fn pair(&self, device: &Device) -> zbus::Result<()> {

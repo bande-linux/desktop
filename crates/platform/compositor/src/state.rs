@@ -147,6 +147,7 @@ pub struct State {
     pub(crate) screens: Vec<Screen>,
     pub(crate) departed: Vec<crate::displays::Departed>,
     pub(crate) display_config: unbound_config::Config,
+    pub(crate) night_light: crate::night::NightLight,
     pub(crate) output_managers: Vec<crate::management::Manager>,
     pub(crate) output_serial: u32,
     pub(crate) announced_workspaces: (usize, usize),
@@ -304,8 +305,8 @@ impl Headless {
         };
         let center = settings.logical_size().to_f64().downscale(2.0);
         let screen = Screen::new(&handle, config, settings);
-        handle.create_global::<State, UnboundShellV1, ()>(17, ());
-        handle.create_global::<State, UnboundAppV1, ()>(5, ());
+        handle.create_global::<State, UnboundShellV1, ()>(18, ());
+        handle.create_global::<State, UnboundAppV1, ()>(6, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
         handle.create_global::<State, smithay::reexports::wayland_protocols_wlr::output_management::v1::server::zwlr_output_manager_v1::ZwlrOutputManagerV1, ()>(crate::management::MANAGER_VERSION, ());
         State::create_capture_globals(&handle);
@@ -317,6 +318,7 @@ impl Headless {
             screens: vec![screen],
             departed: Vec::new(),
             display_config: unbound_config::Config::default(),
+            night_light: crate::night::NightLight::default(),
             output_managers: Vec::new(),
             output_serial: 0,
             announced_workspaces: (1, 0),

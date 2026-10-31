@@ -227,6 +227,10 @@ impl App for Notifications {
                     .set_appearance(appearance.palette(), appearance.reduce_motion, now);
                 window.request_redraw();
             }
+            WindowEvent::TogglePanel(Panel::NotificationCenter) => {
+                self.screen.toggle(now);
+                self.carry_out(window);
+            }
             WindowEvent::PanelAnchor {
                 panel: Panel::NotificationCenter,
                 edge,

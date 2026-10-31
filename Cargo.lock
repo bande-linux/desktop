@@ -3826,6 +3826,7 @@ dependencies = [
  "unbound-log",
  "unbound-test-bus",
  "unbound-test-wayland",
+ "unbound-xdg",
  "wayland-backend",
  "wayland-client",
  "wayland-protocols",
@@ -4061,6 +4062,7 @@ dependencies = [
  "unbound-status",
  "unbound-toolkit",
  "zbus",
+ "zeroize",
 ]
 
 [[package]]
@@ -4131,6 +4133,7 @@ dependencies = [
  "unbound-wallpaper",
  "unbound-xdg",
  "zbus",
+ "zeroize",
 ]
 
 [[package]]
@@ -4572,6 +4575,7 @@ dependencies = [
  "unbound-graphics",
  "unbound-l10n",
  "unbound-spring",
+ "zeroize",
 ]
 
 [[package]]
@@ -5671,6 +5675,15 @@ dependencies = [
  "quote",
  "syn 3.0.9",
  "synstructure",
+]
+
+[[package]]
+name = "zeroize"
+version = "1.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ced3678a2879b30306d323f4542626697a464a97c0a07c9aebf7ebca65cd4dde"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

@@ -853,7 +853,7 @@ fn the_greeter_takes_a_password_typed_in_the_system_layout_after_a_refusal_and_h
         username: "ada".to_owned(),
     };
     let answer = |password: &str| Request::PostAuthMessageResponse {
-        response: Some(password.to_owned()),
+        response: Some(password.to_owned().into()),
     };
     assert_eq!(
         requests,

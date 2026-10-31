@@ -11,6 +11,7 @@ parley.workspace = true
 unbound-graphics.workspace = true
 unbound-l10n.workspace = true
 unbound-spring.workspace = true
+zeroize.workspace = true
 
 [dev-dependencies]
 unbound-golden.workspace = true

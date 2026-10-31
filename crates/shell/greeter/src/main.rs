@@ -21,6 +21,7 @@ use unbound_toolkit::{
     App, Appearance, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Role, Scene, TextSystem,
     Window, WindowEvent,
 };
+use zeroize::Zeroizing;
 
 const CLOCK_TICK: Duration = Duration::from_secs(1);
 
@@ -34,7 +35,7 @@ struct Conversation {
 }
 
 impl Conversation {
-    fn open(login: &str, password: String) -> std::io::Result<Self> {
+    fn open(login: &str, password: Zeroizing<String>) -> std::io::Result<Self> {
         let socket = std::env::var_os("GREETD_SOCK")
             .ok_or_else(|| std::io::Error::other("GREETD_SOCK is not set"))?;
         let mut greetd = UnixStream::connect(socket)?;
@@ -111,7 +112,7 @@ impl Greeter {
         true
     }
 
-    fn sign_in(&mut self, password: String) {
+    fn sign_in(&mut self, password: Zeroizing<String>) {
         self.screen.set_message(None);
         let sent = match &mut self.conversation {
             Some(conversation) if conversation.asking => {

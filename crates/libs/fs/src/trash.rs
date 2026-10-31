@@ -1,11 +1,15 @@
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
+use std::os::fd::OwnedFd;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 
 use jiff::civil::DateTime;
+use rustix::fs::{
+    AtFlags, CWD, Dir, FileType, Mode, OFlags, StatxFlags, openat, statat, statx, unlinkat,
+};
 use unbound_xdg::{percent_decode, percent_encode};
 
 const INFO_SUFFIX: &str = ".trashinfo";
@@ -145,7 +149,10 @@ impl TrashDir {
             }
             match OpenOptions::new().write(true).create_new(true).open(&info) {
                 Ok(mut file) => {
-                    file.write_all(contents.as_bytes())?;
+                    if let Err(error) = file.write_all(contents.as_bytes()) {
+                        let _ = fs::remove_file(&info);
+                        return Err(error);
+                    }
                     return Ok((id, info));
                 }
                 Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
@@ -214,12 +221,74 @@ fn parse_info(text: &str) -> Option<(PathBuf, Option<DateTime>)> {
 }
 
 pub fn remove_all(path: &Path) -> io::Result<()> {
-    let metadata = fs::symlink_metadata(path)?;
-    if metadata.is_dir() {
-        fs::remove_dir_all(path)
-    } else {
-        fs::remove_file(path)
+    if !fs::symlink_metadata(path)?.is_dir() {
+        return fs::remove_file(path);
     }
+    let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
+        return Err(crossing_mounts());
+    };
+    let parent = if parent.as_os_str().is_empty() {
+        Path::new(".")
+    } else {
+        parent
+    };
+    let parent = openat(
+        CWD,
+        parent,
+        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC,
+        Mode::empty(),
+    )?;
+    remove_tree(&parent, name, mount_of(&parent)?)
+}
+
+type MountKey = (u64, u32, u32);
+
+fn mount_of(directory: &OwnedFd) -> io::Result<MountKey> {
+    let status = statx(
+        directory,
+        c"",
+        AtFlags::EMPTY_PATH,
+        StatxFlags::MNT_ID | StatxFlags::TYPE,
+    )?;
+    Ok((
+        status.stx_mnt_id,
+        status.stx_dev_major,
+        status.stx_dev_minor,
+    ))
+}
+
+fn crossing_mounts() -> io::Error {
+    io::Error::new(
+        io::ErrorKind::CrossesDevices,
+        "refusing to delete across a mount point",
+    )
+}
+
+fn remove_tree(parent: &OwnedFd, name: &OsStr, mount: MountKey) -> io::Result<()> {
+    let directory = openat(
+        parent,
+        name,
+        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+        Mode::empty(),
+    )?;
+    if mount_of(&directory)? != mount {
+        return Err(crossing_mounts());
+    }
+    for entry in Dir::read_from(&directory)? {
+        let entry = entry?;
+        let child = OsStr::from_bytes(entry.file_name().to_bytes());
+        if child == "." || child == ".." {
+            continue;
+        }
+        let status = statat(&directory, child, AtFlags::SYMLINK_NOFOLLOW)?;
+        if FileType::from_raw_mode(status.st_mode) == FileType::Directory {
+            remove_tree(&directory, child, mount)?;
+        } else {
+            unlinkat(&directory, child, AtFlags::empty())?;
+        }
+    }
+    unlinkat(parent, name, AtFlags::REMOVEDIR)?;
+    Ok(())
 }
 
 #[derive(Debug, Clone)]

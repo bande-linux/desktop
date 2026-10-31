@@ -20,6 +20,7 @@ unbound-log.workspace = true
 unbound-status.workspace = true
 unbound-toolkit.workspace = true
 zbus.workspace = true
+zeroize.workspace = true
 
 [dev-dependencies]
 rustix.workspace = true

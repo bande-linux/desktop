@@ -54,8 +54,9 @@ struct Request {
 
 #[zbus::interface(name = "org.freedesktop.impl.portal.Request")]
 impl Request {
-    fn close(&self) {
-        self.cancellation.cancel();
+    async fn close(&self) {
+        let cancellation = self.cancellation.clone();
+        blocking::unblock(move || cancellation.cancel()).await;
     }
 }
 

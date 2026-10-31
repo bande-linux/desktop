@@ -4,6 +4,9 @@ use std::process::Command;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use zbus::blocking::Connection;
+use zbus::fdo::DBusProxy;
+use zbus::message::Header;
+use zbus::names::{BusName, UniqueName};
 use zbus::zvariant::{OwnedValue, Value};
 
 use crate::helper::{Canceller, HelperSession, Line};
@@ -231,6 +234,24 @@ fn converse(
     }
 }
 
+async fn from_polkitd(
+    connection: &zbus::Connection,
+    header: &Header<'_>,
+) -> Result<(), AgentError> {
+    let owner = DBusProxy::new(connection)
+        .await?
+        .get_name_owner(BusName::from_static_str(AUTHORITY).map_err(zbus::Error::from)?)
+        .await
+        .map_err(zbus::Error::from)?;
+    if header.sender().map(UniqueName::as_str) == Some(owner.as_str()) {
+        Ok(())
+    } else {
+        Err(AgentError::Failed(
+            "only polkitd may ask for authentication".to_owned(),
+        ))
+    }
+}
+
 struct AuthenticationAgent {
     conversation: Arc<dyn Conversation>,
     helper: PathBuf,
@@ -248,7 +269,10 @@ impl AuthenticationAgent {
         details: HashMap<String, String>,
         cookie: String,
         identities: Vec<Identity>,
+        #[zbus(connection)] connection: &zbus::Connection,
+        #[zbus(header)] header: Header<'_>,
     ) -> Result<(), AgentError> {
+        from_polkitd(connection, &header).await?;
         let user = choose_user(&identities)
             .ok_or_else(|| AgentError::Failed("no user to authenticate as".to_owned()))?;
         let request = Request {
@@ -280,7 +304,13 @@ impl AuthenticationAgent {
         }
     }
 
-    fn cancel_authentication(&self, cookie: String) -> Result<(), AgentError> {
+    async fn cancel_authentication(
+        &self,
+        cookie: String,
+        #[zbus(connection)] connection: &zbus::Connection,
+        #[zbus(header)] header: Header<'_>,
+    ) -> Result<(), AgentError> {
+        from_polkitd(connection, &header).await?;
         let session = lock(&self.running).sessions.remove(&cookie);
         match session {
             Some((request, canceller)) => {

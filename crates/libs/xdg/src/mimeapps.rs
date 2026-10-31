@@ -11,25 +11,27 @@ const DEFAULTS: &str = "Default Applications";
 const ADDED: &str = "Added Associations";
 const REMOVED: &str = "Removed Associations";
 
-pub fn config_home() -> Option<PathBuf> {
-    env::var_os("XDG_CONFIG_HOME")
+fn base_dir(variable: &str, fallback: &str) -> Option<PathBuf> {
+    env::var_os(variable)
         .map(PathBuf::from)
         .filter(|path| path.is_absolute())
-        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
+        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(fallback)))
+}
+
+pub fn config_home() -> Option<PathBuf> {
+    base_dir("XDG_CONFIG_HOME", ".config")
 }
 
 pub fn data_home() -> Option<PathBuf> {
-    env::var_os("XDG_DATA_HOME")
-        .map(PathBuf::from)
-        .filter(|path| path.is_absolute())
-        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/share")))
+    base_dir("XDG_DATA_HOME", ".local/share")
 }
 
 pub fn cache_home() -> Option<PathBuf> {
-    env::var_os("XDG_CACHE_HOME")
-        .map(PathBuf::from)
-        .filter(|path| path.is_absolute())
-        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache")))
+    base_dir("XDG_CACHE_HOME", ".cache")
+}
+
+pub fn state_home() -> Option<PathBuf> {
+    base_dir("XDG_STATE_HOME", ".local/state")
 }
 
 pub fn config_dirs() -> Vec<PathBuf> {

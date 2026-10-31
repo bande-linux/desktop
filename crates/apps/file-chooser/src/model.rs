@@ -2,7 +2,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use unbound_fs::{Entry, Sort, list, sort};
-use unbound_xdg::MimeDatabase;
+use unbound_xdg::{MimeDatabase, file_uri, path_from_file_uri};
 use xdg_desktop_portal_unbound::file_chooser::{Dialog, Filter, Mode, Pattern, Selection};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -65,7 +65,7 @@ pub fn remembered_folder(memory: &str, app_id: &str) -> Option<PathBuf> {
         .lines()
         .filter_map(|line| line.split_once('\t'))
         .find(|(app, _)| *app == app_id)
-        .map(|(_, folder)| PathBuf::from(folder))
+        .and_then(|(_, folder)| path_from_file_uri(folder))
 }
 
 pub fn remember(memory: &str, app_id: &str, folder: &Path) -> String {
@@ -74,7 +74,7 @@ pub fn remember(memory: &str, app_id: &str, folder: &Path) -> String {
         .filter(|line| line.split_once('\t').is_none_or(|(app, _)| app != app_id))
         .map(str::to_owned)
         .collect();
-    lines.push(format!("{app_id}\t{}", folder.display()));
+    lines.push(format!("{app_id}\t{}", file_uri(folder)));
     lines.join("\n") + "\n"
 }
 

@@ -17,7 +17,7 @@ use unbound_volumes::{media_roots, mounted_volumes};
 use unbound_wallpaper::Fit;
 use unbound_xdg::{
     Locale, MimeDatabase, UserDir, app_name, applications, config_home, current_desktops,
-    data_dirs, user_dir,
+    data_dirs, state_home, user_dir,
 };
 use xdg_desktop_portal_unbound::dialog_process::{CANCELLED, CHOSEN, SET_WALLPAPER, encode, parse};
 use xdg_desktop_portal_unbound::file_chooser::{Dialog, Mode, Selection};
@@ -84,11 +84,7 @@ impl App for FileDialog {
 }
 
 fn memory_file() -> Option<PathBuf> {
-    std::env::var_os("XDG_STATE_HOME")
-        .map(PathBuf::from)
-        .filter(|state| state.is_absolute())
-        .or_else(|| std::env::home_dir().map(|home| home.join(".local/state")))
-        .map(|state| state.join("unbound/file-chooser-folders"))
+    unbound_xdg::state_home().map(|state| state.join("unbound/file-chooser-folders"))
 }
 
 fn read(path: Option<PathBuf>) -> Option<String> {
@@ -172,8 +168,7 @@ fn run(dialog: Dialog) -> ExitCode {
         &std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default(),
         &media_roots(&user),
     );
-    let state_home = std::env::var_os("XDG_STATE_HOME").map(PathBuf::from);
-    let layout = std::fs::read_to_string(sidebar_file(state_home.as_deref(), &home)).ok();
+    let layout = std::fs::read_to_string(sidebar_file(state_home().as_deref(), &home)).ok();
     let places = with_volumes(
         &rows(
             &home,

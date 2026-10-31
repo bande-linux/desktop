@@ -478,14 +478,13 @@ impl LauncherShell {
             })
             .collect();
         let home = std::env::var_os("HOME").map_or_else(|| PathBuf::from("/"), PathBuf::from);
-        let state_home = std::env::var_os("XDG_STATE_HOME").map(PathBuf::from);
         let recently_used = recently_used_path(
             std::env::var_os("XDG_DATA_HOME")
                 .map(PathBuf::from)
                 .as_deref(),
             &home,
         );
-        let usage_file = usage_path(state_home.as_deref(), Some(&home));
+        let usage_file = usage_path(unbound_xdg::state_home().as_deref(), Some(&home));
         let skin_tone = usage_file
             .as_deref()
             .and_then(Path::parent)

@@ -117,11 +117,7 @@ fn run_headless(session: Session, started: Duration) -> Result<(), Box<dyn Error
 }
 
 fn window_memory() -> Option<PathBuf> {
-    std::env::var_os("XDG_STATE_HOME")
-        .map(PathBuf::from)
-        .filter(|state| state.is_absolute())
-        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/state")))
-        .map(|state| state.join("unbound/windows"))
+    unbound_xdg::state_home().map(|state| state.join("unbound/windows"))
 }
 
 fn display_config() -> Config {

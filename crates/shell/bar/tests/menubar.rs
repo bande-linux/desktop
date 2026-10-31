@@ -282,7 +282,10 @@ fn the_sound_menu_names_the_apps_using_the_microphone_or_camera_first() {
         senses: vec![Sense::Camera],
     }];
     let shown = titles(&sound_menu(&sound, &capturing));
-    assert_eq!(shown[0], ("Meet is using the camera".to_owned(), false, false));
+    assert_eq!(
+        shown[0],
+        ("Meet is using the camera".to_owned(), false, false)
+    );
     assert!(
         titles(&sound_menu(&sound, &[]))
             .iter()

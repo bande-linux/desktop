@@ -331,7 +331,7 @@ fn serve(connection: &Connection, outgoing: &Receiver<Outgoing>, outbox: &Outbox
 
 pub fn role() -> Role {
     Role::Layer(LayerOptions {
-        layer: LayerKind::Overlay,
+        layer: LayerKind::Top,
         anchor: Edges::ALL,
         exclusive_zone: 0,
         keyboard: KeyboardFocus::None,

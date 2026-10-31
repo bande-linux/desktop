@@ -1357,6 +1357,9 @@ impl State {
         let Some(layer) = self.exclusive_layer.take() else {
             return;
         };
+        if self.menu_root().is_some() {
+            return;
+        }
         let previous = layer.previous.filter(|previous| {
             self.windows
                 .iter()

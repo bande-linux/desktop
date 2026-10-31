@@ -10,9 +10,10 @@ use unbound_toolkit::{
     App, Image, Item, Palette, Point, Rect, Role, Scene, TextAlign, TextStyle, TextSystem, Window,
     WindowEvent,
 };
-use unbound_xdg::{DesktopEntry, Locale, applications, current_desktops, data_dirs, find_icon};
+use unbound_xdg::{Locale, applications, current_desktops, data_dirs, find_app, find_icon};
 use zbus::blocking::Connection;
 
+pub const DIALOGS: &str = "org.unbound.MenuBar";
 pub const CONFIRMATION_SIZE: (u32, u32) = (420, 130);
 const ABOUT_SIZE: (u32, u32) = (280, 190);
 const ABOUT_ICON: f32 = 64.0;
@@ -27,18 +28,13 @@ fn report<E: std::fmt::Display>(what: &str, result: Result<(), E>) {
     }
 }
 
-fn app_entry(app_id: &str, directories: &[std::path::PathBuf]) -> Option<DesktopEntry> {
-    applications(
-        directories,
+fn app_name(app_id: &str) -> String {
+    let entries = applications(
+        &data_dirs(),
         Locale::from_env().as_ref(),
         &current_desktops(),
-    )
-    .into_iter()
-    .find(|entry| entry.app_id() == app_id)
-}
-
-fn app_name(app_id: &str) -> String {
-    app_entry(app_id, &data_dirs()).map_or_else(|| app_id.to_owned(), |entry| entry.name)
+    );
+    find_app(&entries, app_id).map_or_else(|| app_id.to_owned(), |entry| entry.name.clone())
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -221,10 +217,7 @@ impl App for Confirmation {
 }
 
 pub fn run_confirmation(ending: Ending) -> Result<(), Box<dyn std::error::Error>> {
-    let mut window = Window::open(
-        Role::toplevel(&ending.button(), "org.unbound.MenuBar"),
-        CONFIRMATION_SIZE,
-    )?;
+    let mut window = Window::open(Role::toplevel(&ending.button(), DIALOGS), CONFIRMATION_SIZE)?;
     report("keep the dialog in front", window.set_keep_on_top(true));
     let now = Instant::now();
     let mut confirmation = Confirmation {
@@ -282,10 +275,7 @@ pub fn run_about() -> Result<(), Box<dyn std::error::Error>> {
         &read("/proc/cpuinfo"),
         &read("/proc/meminfo"),
     );
-    let mut window = Window::open(
-        Role::toplevel(&L10N.tr("about-title"), "org.unbound.MenuBar"),
-        (360, 210),
-    )?;
+    let mut window = Window::open(Role::toplevel(&L10N.tr("about-title"), DIALOGS), (360, 210))?;
     let row = |label: &str, value: &str| -> Box<dyn Widget> {
         Box::new(Label::new(&format!("{label}    {value}")))
     };
@@ -378,14 +368,19 @@ impl App for AppAbout {
 
 pub fn run_about_app(app_id: &str, version: &str) -> Result<(), Box<dyn std::error::Error>> {
     let directories = data_dirs();
-    let entry = app_entry(app_id, &directories);
+    let entries = applications(
+        &directories,
+        Locale::from_env().as_ref(),
+        &current_desktops(),
+    );
+    let entry = find_app(&entries, app_id).cloned();
     let name = entry
         .as_ref()
         .map_or_else(|| app_id.to_owned(), |entry| entry.name.clone());
     let mut window = Window::open(
         Role::toplevel(
             &L10N.tr_args("about-app-title", [("app", name.clone().into())]),
-            "org.unbound.MenuBar",
+            DIALOGS,
         ),
         ABOUT_SIZE,
     )?;

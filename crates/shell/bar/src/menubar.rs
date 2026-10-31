@@ -27,13 +27,6 @@ const BADGE_MIN_WIDTH: f32 = 22.0;
 const BADGE_HEIGHT: f32 = 15.0;
 const BADGE_MARGIN: f32 = 5.0;
 
-pub fn app_name<'a>(app_id: &'a str, names: &'a [(String, String)]) -> &'a str {
-    names
-        .iter()
-        .find(|(id, _)| id == app_id)
-        .map_or(app_id, |(_, name)| name.as_str())
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Slot {
     System,

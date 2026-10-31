@@ -27,8 +27,8 @@ use unbound_toolkit::{
     Window, WindowEvent,
 };
 use unbound_xdg::{
-    DesktopEntry, ICON_THEMES, current_desktops, data_dirs, find_icon, path_from_file_uri,
-    spawn_detached,
+    DesktopEntry, ICON_THEMES, applications, current_desktops, data_dirs, find_icon,
+    path_from_file_uri, running_app, spawn_detached,
 };
 use zbus::blocking::Connection;
 
@@ -452,7 +452,7 @@ impl ControlCenter {
     fn launch(&self, window: &mut Window, app_id: &str, command: &[&str]) {
         let token = window.activation_token(app_id).ok();
         let command: Vec<String> = command.iter().map(|part| (*part).to_owned()).collect();
-        if let Err(error) = spawn_detached(&command, None, token.as_deref()) {
+        if let Err(error) = spawn_detached(app_id, &command, None, token.as_deref()) {
             tracing::warn!("cannot start {}: {error}", command.join(" "));
         }
     }
@@ -479,10 +479,12 @@ impl ControlCenter {
         let Some(player) = self.players.current() else {
             return;
         };
+        let entries = applications(&data_dirs(), None, &current_desktops());
+        let windows = window.running_apps();
         let running = player
             .desktop_entry
             .as_deref()
-            .filter(|entry| window.running_apps().iter().any(|app| app == entry))
+            .and_then(|entry| running_app(&entries, &windows, entry))
             .map(str::to_owned);
         match running {
             Some(app_id) => report("bring the player forward", window.activate_app(&app_id)),

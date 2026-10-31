@@ -559,6 +559,27 @@ fn the_shell_sees_running_apps_and_brings_one_forward() {
 }
 
 #[test]
+fn the_window_list_hears_of_a_window_again_only_when_its_title_or_app_changes() {
+    let mut server = server();
+    let mut shell = TestClient::connect_as_shell(&mut server);
+    shell.join_shell(&mut server);
+    let mut app = window_of(&mut server, RED, (32, 32), EDITOR);
+    roundtrip(&mut server, &mut [&mut shell, &mut app]);
+    let announced = shell.toplevel_updates();
+    let pixels = solid(RED, (32, 32));
+
+    for _ in 0..5 {
+        app.commit_buffer(0, &xrgb(&pixels, (32, 32)), (0, 0, 32, 32));
+        roundtrip(&mut server, &mut [&mut shell, &mut app]);
+    }
+    assert_eq!(shell.toplevel_updates(), announced);
+
+    app.set_app_id(&mut server, 0, "org.example.Writer");
+    roundtrip(&mut server, &mut [&mut shell, &mut app]);
+    assert_eq!(shell.toplevel_updates(), announced + 1);
+}
+
+#[test]
 fn layer_surfaces_receive_frame_callbacks() {
     let mut server = server();
     let mut shell = TestClient::connect_as_shell(&mut server);

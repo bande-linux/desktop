@@ -38,8 +38,10 @@ the `ci-builder` image below exists.
 
 ## Workflow (`.github/workflows/ci.yml`)
 
-Runs on every push to any branch, on pull requests and on manual dispatch. Job names are the
-status-check contexts:
+Pushes to `main` and to branches named `ci/**`, pull requests and manual dispatch
+(`gh workflow run ci.yml --ref <branch>`) run every job below; a push to any other branch runs
+only `ci/lint`. A newer push to a branch cancels that branch's run in progress; a `main` run is
+never cancelled. Job names are the status-check contexts:
 
 - `ci/lint`: `cargo fmt --all --check` and
   `cargo clippy --workspace --all-targets --locked -- -D warnings`.

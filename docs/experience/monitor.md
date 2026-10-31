@@ -1,7 +1,8 @@
 # Activity Monitor: depth and polish
 
-Status: research and build plan of 2026-10-30, branch `night/files-monitor-spec`. Nothing was
-built or run for it. It reads with the principles in [`../design/DESIGN.md`](../design/DESIGN.md)
+Status: research and build plan of 2026-10-30, branch `night/files-monitor-spec`. Built on
+2026-10-31 in `night/monitor-depth`: M2 to M6, M8, M9, the request plumbing of M7 and the redraw
+part of M1 (see §9). It reads with the principles in [`../design/DESIGN.md`](../design/DESIGN.md)
 and the design language [`../design/datum.md`](../design/datum.md). There is no feature proposal
 for Activity Monitor; roadmap item C6 (inspector, GPU tab, column chooser) is done.
 
@@ -22,7 +23,7 @@ Checked in `crates/apps/monitor/src` and its goldens.
 | :--- | :--- | :--- |
 | Tabs | CPU, Memory, Disk, Network, and GPU once DRM `fdinfo` reports use; Super+1 to Super+5 | `model.rs`, `monitor_view.rs` |
 | Rows | Processes grouped by app (desktop entry or systemd unit), expandable to their processes; kernel threads in one group; other users' processes included | `apps.rs`, `model.rs` |
-| Columns | Per tab, chosen by right-clicking the header, remembered in `~/.local/state/unbound/monitor-columns`; sort by header, the selection stays on its row while numbers reorder | `model.rs`, `menu.rs` |
+| Columns | Per tab, chosen by right-clicking the header, remembered in `~/.local/state/unbound/monitor`; sort by header, the selection stays on its row while numbers reorder | `model.rs`, `menu.rs` |
 | Measures | % CPU, CPU time, threads, PID, user, proportional memory (only while shown), resident, disk read and write per second and in total, GPU %, GPU time, GPU memory; network per interface | `sampler.rs`, `system.rs`, `proc.rs` |
 | Footer | Up to three rows of label and value per column (CPU: System, User, Idle, Processes, Threads; Memory: Physical, Used, Cached Files, Swap, Compressed (zram), Pressure as a %) and a 240 × 88 pt bar graph of the last 60 samples | `monitor_view.rs` |
 | Actions | Quit (SIGTERM to the group's roots) and Force Quit (SIGKILL to all, Alt) with an alert; several rows at once; other users' processes refused; Inspect (Super+I, double click); Show in Files (Shift+Super+R, starts `unbound-files <path>`); Copy Name, Copy PID; Super+F searches names and PIDs | `menu.rs`, `signal.rs`, `view.rs` |
@@ -332,6 +333,37 @@ or inspect a process, Escape to close the inspector) gets one end-to-end test so
 - `libs/status`: UPower history, moved from `apps/settings` (M10).
 - `shell/bar` (later): a way for an app to draw a live bar icon.
 - `libs/xdg` (later): apps in their own systemd scopes, for priority control.
+
+## 9. Built on 2026-10-31
+
+- **M2.** Readouts in the Label role with tabular values, column width measured from the widest
+  readout, three to two to one columns before anything clips; the graph is a well with grid lines,
+  the scale and "2 min", `accent` line over `accent_soft` and an `ink2` secondary line; the footer
+  publishes its readouts and the graph's description to the accessibility tree. The graph keeps at
+  least 160 pt (not 200) so the Memory readouts still fit in two columns at 600 pt.
+- **M3.** Memory Pressure graph coloured by PSI state (thresholds in `Pressure::level`); App
+  Memory, Kernel, Compressed, Cached Files and Swap Used with a stacked bar under Memory Used and
+  colour keys on the readouts it explains.
+- **M4.** View ▸ Show CPU Cores, a click on the CPU graph or the same command again (or Escape)
+  opens and closes one strip per core on the `standard` spring, grouped by `cpu_capacity` into
+  Performance and Efficiency; remembered. Dragging the footer edge is not built.
+- **M5.** The inspector's Info groups into Process (with the systemd unit), Parent and Children,
+  Command and Resources as disclosure sections; Super+C copies the selected values; activating the
+  executable shows it in Files. The values are table cells, so the Label role and tabular figures
+  wait for a cell style in the toolkit's table.
+- **M6.** View ▸ All Processes, My Processes, Apps; remembered. The filter is named in the search
+  field's placeholder ("Search My Processes") instead of a label beside it: a label there pushed
+  the tabs into the window title at 860 pt. The View menu shows them as plain items because
+  `unbound-app-menu` has no radio items yet.
+- **M7.** Quit on an app row asks the compositor to quit the app (`Window::quit_app`) and falls back
+  to SIGTERM of its roots when the window has no `unbound_shell_v1`, which is the case for the main
+  window today; process rows still get SIGTERM. The compositor side (§8) is open.
+- **M8.** Wake-ups/s from `voluntary_ctxt_switches` of every task, read only while a column needs
+  it; Energy tab when `/sys/class/power_supply` has a battery; Energy Impact as decision 3.
+- **M9.** logind `ListInhibitors` on a worker thread, asked once per sample and only while the
+  Preventing Sleep column or an inspector shows; the reason appears in the inspector.
+- **M1.** A tick between samples now redraws only the window whose own timer is due; before, every
+  wake redrew every window. Sampling less while hidden still needs the toolkit's hidden signal (§8).
 
 ## Sources
 

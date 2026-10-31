@@ -5,7 +5,7 @@ use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Point, Rectangle};
-use unbound_protocols::server::unbound_shell_v1::{self, UnboundShellV1};
+use unbound_protocols::server::unbound_shell_v1::UnboundShellV1;
 use unbound_spring::{Animation, Spring, State as Phase};
 
 use crate::gesture::Tracker;
@@ -689,10 +689,8 @@ impl State {
     }
 
     pub(crate) fn send_workspaces(&self, shell: &UnboundShellV1) {
-        if shell.version() >= unbound_shell_v1::EVT_WORKSPACES_SINCE {
-            let (count, active) = self.announced_workspaces;
-            shell.workspaces(count as u32, active as u32);
-        }
+        let (count, active) = self.announced_workspaces;
+        shell.workspaces(count as u32, active as u32);
     }
 }
 

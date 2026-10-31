@@ -71,17 +71,17 @@ pub(crate) fn toplevel_names(surface: &WlSurface) -> (String, String) {
 }
 
 impl State {
+    pub(crate) fn each_shell(&self, send: impl Fn(&UnboundShellV1)) {
+        self.shell_resources.iter().for_each(send);
+    }
+
     pub(crate) fn show_launcher(&mut self) {
-        for shell in &self.shell_resources {
-            shell.show_launcher();
-        }
+        self.each_shell(|shell| shell.show_launcher());
     }
 
     pub(crate) fn scrim_pressed(&self, owner: &WlSurface) {
         for shell in &self.shell_resources {
-            if shell.version() >= unbound_shell_v1::EVT_SCRIM_PRESSED_SINCE
-                && shell.client() == owner.client()
-            {
+            if shell.client() == owner.client() {
                 shell.scrim_pressed(owner);
             }
         }
@@ -92,11 +92,7 @@ impl State {
         self.seat
             .text_input()
             .with_active_text_input(|_, _| text_field = true);
-        for shell in &self.shell_resources {
-            if shell.version() >= unbound_shell_v1::EVT_OPEN_LAUNCHER_SINCE {
-                shell.open_launcher(mode, u32::from(text_field));
-            }
-        }
+        self.each_shell(|shell| shell.open_launcher(mode, u32::from(text_field)));
     }
 
     pub(crate) fn insert_text(&mut self, text: String, requester: ClientId) {
@@ -131,51 +127,27 @@ impl State {
     }
 
     pub(crate) fn capture_screen(&mut self) {
-        for shell in &self.shell_resources {
-            if shell.version() >= unbound_shell_v1::EVT_CAPTURE_SCREEN_SINCE {
-                shell.capture_screen();
-            }
-        }
+        self.each_shell(|shell| shell.capture_screen());
     }
 
     pub(crate) fn capture_area(&mut self) {
-        for shell in &self.shell_resources {
-            if shell.version() >= unbound_shell_v1::EVT_CAPTURE_AREA_SINCE {
-                shell.capture_area();
-            }
-        }
+        self.each_shell(|shell| shell.capture_area());
     }
 
     pub(crate) fn volume_key(&mut self, key: unbound_shell_v1::VolumeKey, fine: bool) {
-        for shell in &self.shell_resources {
-            if shell.version() >= unbound_shell_v1::EVT_VOLUME_KEY_SINCE {
-                shell.volume_key(key, u32::from(fine));
-            }
-        }
+        self.each_shell(|shell| shell.volume_key(key, u32::from(fine)));
     }
 
     pub(crate) fn brightness_key(&mut self, key: unbound_shell_v1::BrightnessKey, fine: bool) {
-        for shell in &self.shell_resources {
-            if shell.version() >= unbound_shell_v1::EVT_BRIGHTNESS_KEY_SINCE {
-                shell.brightness_key(key, u32::from(fine));
-            }
-        }
+        self.each_shell(|shell| shell.brightness_key(key, u32::from(fine)));
     }
 
     pub(crate) fn media_key(&mut self, key: unbound_shell_v1::MediaKey) {
-        for shell in &self.shell_resources {
-            if shell.version() >= unbound_shell_v1::EVT_MEDIA_KEY_SINCE {
-                shell.media_key(key);
-            }
-        }
+        self.each_shell(|shell| shell.media_key(key));
     }
 
     pub(crate) fn toggle_panel(&mut self, panel: unbound_shell_v1::Panel) {
-        for shell in &self.shell_resources {
-            if shell.version() >= unbound_shell_v1::EVT_TOGGLE_PANEL_SINCE {
-                shell.toggle_panel(panel);
-            }
-        }
+        self.each_shell(|shell| shell.toggle_panel(panel));
     }
 
     fn set_panel_anchor(
@@ -249,11 +221,7 @@ impl State {
             return;
         }
         let names = displays.join(",");
-        for shell in &self.shell_resources {
-            if shell.version() >= unbound_shell_v1::EVT_DISPLAYS_SINCE {
-                shell.displays(names.clone());
-            }
-        }
+        self.each_shell(|shell| shell.displays(names.clone()));
         self.announced_displays = displays;
     }
 
@@ -273,11 +241,7 @@ impl State {
             if self.announced_full_screen.contains(state) {
                 continue;
             }
-            for shell in &self.shell_resources {
-                if shell.version() >= unbound_shell_v1::EVT_FULL_SCREEN_SINCE {
-                    shell.full_screen(state.0.clone(), u32::from(state.1));
-                }
-            }
+            self.each_shell(|shell| shell.full_screen(state.0.clone(), u32::from(state.1)));
         }
         self.announced_full_screen = states;
     }
@@ -296,21 +260,13 @@ impl State {
             .map(|index| self.screens[self.screen_of(&self.windows[index])].name())
             .unwrap_or_default();
         if output != self.active_output {
-            for shell in &self.shell_resources {
-                if shell.version() >= unbound_shell_v1::EVT_ACTIVE_OUTPUT_SINCE {
-                    shell.active_output(output.clone());
-                }
-            }
+            self.each_shell(|shell| shell.active_output(output.clone()));
             self.active_output = output;
         }
         if app_id == self.active_app {
             return;
         }
-        for shell in &self.shell_resources {
-            if shell.version() >= unbound_shell_v1::EVT_ACTIVE_APP_SINCE {
-                shell.active_app(app_id.clone());
-            }
-        }
+        self.each_shell(|shell| shell.active_app(app_id.clone()));
         self.active_app = app_id;
     }
 
@@ -414,10 +370,8 @@ impl State {
 
 impl State {
     pub(crate) fn announce_input_sources_to(&self, shell: &UnboundShellV1) {
-        if shell.version() >= unbound_shell_v1::EVT_INPUT_SOURCES_SINCE {
-            let sources = &self.input_sources;
-            shell.input_sources(sources.codes().join(","), sources.active() as u32);
-        }
+        let sources = &self.input_sources;
+        shell.input_sources(sources.codes().join(","), sources.active() as u32);
     }
 
     pub(crate) fn announce_input_sources(&self) {
@@ -437,12 +391,8 @@ impl GlobalDispatch<UnboundShellV1, ()> for State {
         data_init: &mut DataInit<'_, Self>,
     ) {
         let shell = data_init.init(resource, ());
-        if shell.version() >= unbound_shell_v1::EVT_ACTIVE_APP_SINCE {
-            shell.active_app(state.active_app.clone());
-        }
-        if shell.version() >= unbound_shell_v1::EVT_ACTIVE_OUTPUT_SINCE {
-            shell.active_output(state.active_output.clone());
-        }
+        shell.active_app(state.active_app.clone());
+        shell.active_output(state.active_output.clone());
         state.announce_unresponsive(Some(&shell), None);
         state.announce_minimized_windows(&shell);
         state.send_workspaces(&shell);
@@ -450,14 +400,10 @@ impl GlobalDispatch<UnboundShellV1, ()> for State {
         for anchor in &state.panel_anchors {
             send_panel_anchor(&shell, anchor);
         }
-        if shell.version() >= unbound_shell_v1::EVT_FULL_SCREEN_SINCE {
-            for (output, full_screen) in &state.announced_full_screen {
-                shell.full_screen(output.clone(), u32::from(*full_screen));
-            }
+        for (output, full_screen) in &state.announced_full_screen {
+            shell.full_screen(output.clone(), u32::from(*full_screen));
         }
-        if shell.version() >= unbound_shell_v1::EVT_DISPLAYS_SINCE {
-            shell.displays(state.shown_displays().join(","));
-        }
+        shell.displays(state.shown_displays().join(","));
         state.shell_resources.push(shell);
     }
 
@@ -562,17 +508,15 @@ impl Dispatch<UnboundShellV1, ()> for State {
 }
 
 fn send_panel_anchor(shell: &UnboundShellV1, anchor: &PanelAnchor) {
-    if shell.version() >= unbound_shell_v1::EVT_PANEL_ANCHOR_SINCE {
-        shell.panel_anchor(
-            anchor.panel,
-            anchor.output.clone(),
-            anchor.edge,
-            anchor.rect.loc.x - anchor.zone.x,
-            anchor.rect.loc.y - anchor.zone.y,
-            anchor.rect.size.w,
-            anchor.rect.size.h,
-        );
-    }
+    shell.panel_anchor(
+        anchor.panel,
+        anchor.output.clone(),
+        anchor.edge,
+        anchor.rect.loc.x - anchor.zone.x,
+        anchor.rect.loc.y - anchor.zone.y,
+        anchor.rect.size.w,
+        anchor.rect.size.h,
+    );
 }
 
 impl ForeignToplevelListHandler for State {

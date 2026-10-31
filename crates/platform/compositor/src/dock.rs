@@ -3,7 +3,7 @@ use smithay::desktop::layer_map_for_output;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{Client, Resource};
 use smithay::wayland::shell::wlr_layer::KeyboardInteractivity;
-use unbound_protocols::server::unbound_shell_v1::{self, UnboundShellV1};
+use unbound_protocols::server::unbound_shell_v1::UnboundShellV1;
 use unbound_spring::Spring;
 
 use crate::motion::{BAR_NAMESPACE, DOCK_NAMESPACE, Look};
@@ -127,17 +127,10 @@ impl State {
         let Some(handle) = &self.windows[index].foreign else {
             return;
         };
-        for shell in &self.shell_resources {
-            if shell.version() >= unbound_shell_v1::EVT_WINDOW_MINIMIZED_SINCE {
-                shell.window_minimized(handle.identifier(), u32::from(minimized));
-            }
-        }
+        self.each_shell(|shell| shell.window_minimized(handle.identifier(), u32::from(minimized)));
     }
 
     pub(crate) fn announce_minimized_windows(&self, shell: &UnboundShellV1) {
-        if shell.version() < unbound_shell_v1::EVT_WINDOW_MINIMIZED_SINCE {
-            return;
-        }
         for window in self
             .windows
             .iter()
@@ -150,11 +143,7 @@ impl State {
     }
 
     pub(crate) fn request_attention(&self, app_id: String) {
-        for shell in &self.shell_resources {
-            if shell.version() >= unbound_shell_v1::EVT_ATTENTION_REQUESTED_SINCE {
-                shell.attention_requested(app_id.clone());
-            }
-        }
+        self.each_shell(|shell| shell.attention_requested(app_id.clone()));
     }
 
     pub(crate) fn focus_shell(&mut self, namespace: &str) {
@@ -187,8 +176,7 @@ impl State {
         let owner = surface.client();
         self.focus(Some(surface));
         for shell in &self.shell_resources {
-            if shell.client() == owner && shell.version() >= unbound_shell_v1::EVT_FOCUS_SHELL_SINCE
-            {
+            if shell.client() == owner {
                 shell.focus_shell(namespace.to_owned());
             }
         }

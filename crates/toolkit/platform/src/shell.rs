@@ -2,7 +2,7 @@ use unbound_protocols::client::unbound_app_control_v1::{self, UnboundAppControlV
 use unbound_protocols::client::unbound_app_v1::{self, Placement, UnboundAppV1};
 use unbound_protocols::client::unbound_shell_v1::{self, SessionEnd, UnboundShellV1};
 use wayland_client::protocol::wl_registry::WlRegistry;
-use wayland_client::{Connection, Dispatch, Proxy, QueueHandle, WEnum, event_created_child};
+use wayland_client::{Connection, Dispatch, QueueHandle, WEnum, event_created_child};
 use wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_handle_v1::{
     self, ExtForeignToplevelHandleV1,
 };
@@ -46,13 +46,20 @@ pub(crate) struct Shell {
 }
 
 impl Window {
-    fn shell_since(&self, version: u32) -> Result<&UnboundShellV1, WindowError> {
+    fn shell(&self) -> Result<&UnboundShellV1, WindowError> {
         self.state
             .shell
             .protocol
             .as_ref()
-            .filter(|protocol| protocol.version() >= version)
-            .ok_or(WindowError::Missing("a newer unbound_shell_v1"))
+            .ok_or(WindowError::Missing("unbound_shell_v1"))
+    }
+
+    fn app(&self) -> Result<&UnboundAppV1, WindowError> {
+        self.state
+            .shell
+            .app
+            .as_ref()
+            .ok_or(WindowError::Missing("unbound_app_v1"))
     }
 
     pub fn displays(&self) -> &[String] {
@@ -75,19 +82,17 @@ impl Window {
     }
 
     pub fn hide_app(&mut self, app_id: &str) -> Result<(), WindowError> {
-        self.shell_since(unbound_shell_v1::REQ_HIDE_APP_SINCE)?
-            .hide_app(app_id.to_owned());
+        self.shell()?.hide_app(app_id.to_owned());
         self.flush()
     }
 
     pub fn show_app(&mut self, app_id: &str) -> Result<(), WindowError> {
-        self.shell_since(unbound_shell_v1::REQ_SHOW_APP_SINCE)?
-            .show_app(app_id.to_owned());
+        self.shell()?.show_app(app_id.to_owned());
         self.flush()
     }
 
     pub fn quit_app(&mut self, app_id: &str) -> Result<(), WindowError> {
-        if let Ok(shell) = self.shell_since(unbound_shell_v1::REQ_QUIT_APP_SINCE) {
+        if let Ok(shell) = self.shell() {
             shell.quit_app(app_id.to_owned());
         } else {
             self.app_control()?.quit_app(app_id.to_owned());
@@ -96,10 +101,7 @@ impl Window {
     }
 
     pub fn watch_apps(&mut self) -> Result<(), WindowError> {
-        if self
-            .shell_since(unbound_shell_v1::EVT_APP_RESPONDING_SINCE)
-            .is_ok()
-        {
+        if self.shell().is_ok() {
             return Ok(());
         }
         self.app_control()?;
@@ -123,49 +125,43 @@ impl Window {
     }
 
     pub fn force_quit_app(&mut self, app_id: &str) -> Result<(), WindowError> {
-        self.shell_since(unbound_shell_v1::REQ_FORCE_QUIT_APP_SINCE)?
-            .force_quit_app(app_id.to_owned());
+        self.shell()?.force_quit_app(app_id.to_owned());
         self.flush()
     }
 
     pub fn activate_window(&mut self, identifier: &str) -> Result<(), WindowError> {
-        self.shell_since(unbound_shell_v1::REQ_ACTIVATE_WINDOW_SINCE)?
-            .activate_window(identifier.to_owned());
+        self.shell()?.activate_window(identifier.to_owned());
         self.flush()
     }
 
     pub fn confirm_session_end(&mut self, ending: SessionEnd) -> Result<(), WindowError> {
-        self.shell_since(unbound_shell_v1::REQ_CONFIRM_SESSION_END_SINCE)?
-            .confirm_session_end(ending);
+        self.shell()?.confirm_session_end(ending);
         self.flush()
     }
 
     pub fn quit_all_apps(&mut self) -> Result<(), WindowError> {
-        self.shell_since(unbound_shell_v1::REQ_QUIT_ALL_APPS_SINCE)?
-            .quit_all_apps();
+        self.shell()?.quit_all_apps();
         self.flush()
     }
 
     pub fn show_launcher(&mut self) -> Result<(), WindowError> {
-        self.shell_since(unbound_shell_v1::REQ_SHOW_LAUNCHER_SINCE)?
-            .show_launcher();
+        self.shell()?.show_launcher();
         self.flush()
     }
 
     pub fn show_windows(&mut self, app_id: &str) -> Result<(), WindowError> {
-        self.shell_since(unbound_shell_v1::REQ_SHOW_WINDOWS_SINCE)?
-            .show_windows(app_id.to_owned());
+        self.shell()?.show_windows(app_id.to_owned());
         self.flush()
     }
 
     pub fn select_input_source(&mut self, index: usize) -> Result<(), WindowError> {
-        self.shell_since(unbound_shell_v1::REQ_SELECT_INPUT_SOURCE_SINCE)?
+        self.shell()?
             .select_input_source(u32::try_from(index).unwrap_or(u32::MAX));
         self.flush()
     }
 
     pub fn switch_workspace(&mut self, index: usize) -> Result<(), WindowError> {
-        self.shell_since(unbound_shell_v1::REQ_SWITCH_WORKSPACE_SINCE)?
+        self.shell()?
             .switch_workspace(u32::try_from(index).unwrap_or(u32::MAX));
         self.flush()
     }
@@ -176,45 +172,35 @@ impl Window {
         edge: unbound_shell_v1::Edge,
         rect: Rect,
     ) -> Result<(), WindowError> {
-        self.shell_since(unbound_shell_v1::REQ_SET_PANEL_ANCHOR_SINCE)?
-            .set_panel_anchor(
-                &self.surface,
-                panel,
-                edge,
-                rect.x.round() as i32,
-                rect.y.round() as i32,
-                rect.width.round() as i32,
-                rect.height.round() as i32,
-            );
+        self.shell()?.set_panel_anchor(
+            &self.surface,
+            panel,
+            edge,
+            rect.x.round() as i32,
+            rect.y.round() as i32,
+            rect.width.round() as i32,
+            rect.height.round() as i32,
+        );
         self.flush()
     }
 
     pub fn insert_text(&mut self, text: &str) -> Result<(), WindowError> {
-        self.shell_since(unbound_shell_v1::REQ_INSERT_TEXT_SINCE)?
-            .insert_text(text.to_owned());
+        self.shell()?.insert_text(text.to_owned());
         self.flush()
     }
 
     pub fn show_emoji_picker(&mut self) -> Result<(), WindowError> {
-        self.state
-            .shell
-            .app
-            .as_ref()
-            .filter(|app| app.version() >= unbound_app_v1::REQ_SHOW_EMOJI_PICKER_SINCE)
-            .ok_or(WindowError::Missing("a newer unbound_app_v1"))?
-            .show_emoji_picker();
+        self.app()?.show_emoji_picker();
         self.flush()
     }
 
     pub fn set_scrim(&mut self, opacity: f32) -> Result<(), WindowError> {
-        self.shell_since(unbound_shell_v1::REQ_SET_SCRIM_SINCE)?
-            .set_scrim(&self.surface, f64::from(opacity));
+        self.shell()?.set_scrim(&self.surface, f64::from(opacity));
         Ok(())
     }
 
     pub fn set_corner_radius(&mut self, radius: u32) -> Result<(), WindowError> {
-        self.shell_since(unbound_shell_v1::REQ_SET_CORNER_RADIUS_SINCE)?
-            .set_corner_radius(&self.surface, radius);
+        self.shell()?.set_corner_radius(&self.surface, radius);
         self.flush()
     }
     pub fn running_apps(&self) -> Vec<String> {
@@ -228,39 +214,17 @@ impl Window {
     }
 
     pub fn activate_app(&mut self, app_id: &str) -> Result<(), WindowError> {
-        let protocol = self
-            .state
-            .shell
-            .protocol
-            .as_ref()
-            .ok_or(WindowError::Missing("unbound_shell_v1"))?;
-        protocol.activate_app(app_id.to_owned());
+        self.shell()?.activate_app(app_id.to_owned());
         self.flush()
     }
 
     pub fn toggle_control_center(&mut self) -> Result<(), WindowError> {
-        let protocol = self
-            .state
-            .shell
-            .protocol
-            .as_ref()
-            .filter(|protocol| {
-                protocol.version() >= unbound_shell_v1::REQ_TOGGLE_CONTROL_CENTER_SINCE
-            })
-            .ok_or(WindowError::Missing("unbound_shell_v1 version 4"))?;
-        protocol.toggle_control_center();
+        self.shell()?.toggle_control_center();
         self.flush()
     }
 
     pub fn set_icon_rect(&mut self, app_id: &str, rect: Rect) -> Result<(), WindowError> {
-        let protocol = self
-            .state
-            .shell
-            .protocol
-            .as_ref()
-            .filter(|protocol| protocol.version() >= unbound_shell_v1::REQ_SET_ICON_RECT_SINCE)
-            .ok_or(WindowError::Missing("unbound_shell_v1 version 5"))?;
-        protocol.set_icon_rect(
+        self.shell()?.set_icon_rect(
             app_id.to_owned(),
             &self.surface,
             rect.x.round() as i32,
@@ -299,42 +263,21 @@ impl Window {
 
 impl Window {
     pub(crate) fn can_place(&self) -> bool {
-        self.state
-            .shell
-            .app
-            .as_ref()
-            .is_some_and(|app| app.version() >= unbound_app_v1::REQ_PLACE_WINDOW_SINCE)
+        self.app().is_ok()
     }
 
     pub(crate) fn place(&mut self, placement: Placement) -> Result<(), WindowError> {
-        let app = self
-            .state
-            .shell
-            .app
-            .as_ref()
-            .filter(|app| app.version() >= unbound_app_v1::REQ_PLACE_WINDOW_SINCE)
-            .ok_or(WindowError::Missing("unbound_app_v1 version 2"))?;
-        app.place_window(self.toplevel()?, placement);
+        self.app()?.place_window(self.toplevel()?, placement);
         self.flush()
     }
 
     pub(crate) fn can_keep_on_top(&self) -> bool {
-        self.state
-            .shell
-            .app
-            .as_ref()
-            .is_some_and(|app| app.version() >= unbound_app_v1::REQ_SET_KEEP_ON_TOP_SINCE)
+        self.app().is_ok()
     }
 
     pub fn set_keep_on_top(&mut self, keep: bool) -> Result<(), WindowError> {
-        let app = self
-            .state
-            .shell
-            .app
-            .as_ref()
-            .filter(|app| app.version() >= unbound_app_v1::REQ_SET_KEEP_ON_TOP_SINCE)
-            .ok_or(WindowError::Missing("unbound_app_v1 version 4"))?;
-        app.set_keep_on_top(self.toplevel()?, u32::from(keep));
+        self.app()?
+            .set_keep_on_top(self.toplevel()?, u32::from(keep));
         self.flush()
     }
 }

@@ -74,7 +74,6 @@ pub const RENDERER_VARIABLE: &str = "UNBOUND_RENDERER";
 pub const ACTIVATION_TOKEN_VARIABLE: &str = "XDG_ACTIVATION_TOKEN";
 const RELEASE_HIDDEN_AFTER: Duration = Duration::from_secs(30);
 const TILING_MENU_AFTER: Duration = Duration::from_millis(500);
-const NEXT_DISPLAY_SINCE: u32 = 6;
 const MAX_STALE_REGIONS: usize = 64;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -772,13 +771,7 @@ impl Window {
             MenuItem::separator(),
             place("place-fill").enabled(!toplevel.maximized),
         ];
-        let next_display = self
-            .state
-            .shell
-            .app
-            .as_ref()
-            .is_some_and(|app| app.version() >= NEXT_DISPLAY_SINCE);
-        if next_display && self.state.outputs.len() > 1 {
+        if self.can_place() && self.state.outputs.len() > 1 {
             items.push(place("place-next-display").shortcut("Alt+Shift+Super+Right"));
         }
         items.extend([
@@ -2427,10 +2420,10 @@ impl Dispatch<WlRegistry, ()> for State {
                     }
                 }
                 "unbound_shell_v1" => {
-                    state.shell.protocol = Some(registry.bind(name, version.min(18), handle, ()));
+                    state.shell.protocol = Some(registry.bind(name, 1, handle, ()));
                 }
                 "unbound_app_v1" => {
-                    state.shell.app = Some(registry.bind(name, version.min(6), handle, ()));
+                    state.shell.app = Some(registry.bind(name, 1, handle, ()));
                 }
                 "unbound_app_control_v1" => {
                     state.shell.app_control_global = Some((registry.clone(), name));

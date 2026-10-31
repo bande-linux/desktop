@@ -7,7 +7,7 @@ use smithay::reexports::wayland_server::backend::ClientId;
 use smithay::utils::SERIAL_COUNTER;
 use smithay::wayland::shell::xdg::ShellClient;
 use unbound_protocols::server::unbound_app_control_v1::UnboundAppControlV1;
-use unbound_protocols::server::unbound_shell_v1::{self, UnboundShellV1};
+use unbound_protocols::server::unbound_shell_v1::UnboundShellV1;
 
 use crate::shell::toplevel_names;
 use crate::state::{Headless, State};
@@ -59,9 +59,7 @@ fn announce(
     responding: bool,
 ) {
     for shell in shells {
-        if shell.version() >= unbound_shell_v1::EVT_APP_RESPONDING_SINCE {
-            shell.app_responding(ping.pid, ping.app_id.clone(), u32::from(responding));
-        }
+        shell.app_responding(ping.pid, ping.app_id.clone(), u32::from(responding));
     }
     for control in controls {
         control.app_responding(ping.pid, ping.app_id.clone(), u32::from(responding));

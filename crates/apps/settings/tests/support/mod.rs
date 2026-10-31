@@ -5,7 +5,7 @@ use std::time::Duration;
 use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId};
 use unbound_settings::SettingsView;
 
-pub const SIZE: (u32, u32) = (900, 600);
+pub const SIZE: (u32, u32) = (900, 720);
 pub const WAIT: Duration = Duration::from_secs(5);
 
 pub fn nodes(view: &mut SettingsView) -> Vec<(NodeId, Node)> {

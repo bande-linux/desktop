@@ -63,5 +63,7 @@ fn edits_from_anywhere_arrive_live_and_failed_writes_are_reported() {
     commands
         .send(Command::Set(SettingId::KeyRepeatRate, Value::Number(500)))
         .expect("worker");
-    wait_for(&feed, |update| matches!(update, Update::Failed(_)));
+    wait_for(&feed, |update| {
+        matches!(update, Update::Failed(Some(SettingId::KeyRepeatRate), _))
+    });
 }

@@ -571,7 +571,7 @@ notifications per app.
 | Dim, display off and lock, sleep timers | M W G K | under Lock Screen | now (slice 1) | moved to Power ▸ When inactive |
 | Separate timers on battery and on the adapter | M W G K | one set | later | `services/power`, config |
 | Charge limit | M G K | missing | later | Asahi `charge_control_end_threshold` needs root |
-| Power button action | W G K | — | never | the power key locks (maturity gaps #1); no choice needed |
+| Power button action | W G K | — | never | the power key suspends (logind drop-in); no choice needed |
 | Battery percentage in the bar | M W G K | battery menu | never in Settings | roadmap decision |
 | Camera permission per app | M W G K | missing | now (slice 3) | permission store table `devices`, id `camera` |
 | Screenshot permission per app | M W | missing | now (slice 3) | table `screenshot`, id `screenshot` |
@@ -834,11 +834,51 @@ Owns `toolkit/graphics`, `toolkit/widgets` and `apps/settings`.
    badges.
 8. Night Light is one setting for all displays, as on every reference. It is not set per
    display.
-9. No power button choice: the key locks (maturity gaps #1).
+9. No power button choice: the key suspends (the logind drop-in of the sleep and wake work), and
+   nobody needs another answer.
 
 Left for later, by the owner: a "You" card at the top of the sidebar for Users (name, picture,
 password), once AccountsService work is planned. Also later: whether a right-click on a row
 should offer "Restore Default", as Plasma's highlighting of changed settings suggests.
+
+## 9. Built on 2026-10-31 (branch `night/settings-structure`)
+
+**Slice 1.** The registry carries `Group`, a symbol per pane, a static summary, the master
+switch and `Kind::Page`. The sidebar shows the four groups with symbols and the attention row;
+while searching it is one ranked list with "About › Storage" paths. Every page opens with the
+header tile, title and live summary; Wi-Fi and Bluetooth carry their switch there and show the
+off state; a pane without its device or service shows the unavailable state instead of jumping
+away; a search without hits says so. General, Wallpaper, Lock Screen, Battery, Date & Time,
+Language & Region and Login Items are gone; Power, Apps, Language & Time and Keyboard Shortcuts
+are new. Five or more choices are pop-ups. Sound runs Output, Input, Sound effects, Apps. The
+input source hint shows the real keys. Super+F focuses search, the View menu is grouped, the
+window opens at 900×720 and the desktop's "Change Wallpaper…" opens Appearance.
+
+**Slice 2.** `data/50-unbound-settings.rules` lets local, active members of `sudo` change the time
+zone, automatic and manual time, the language, the computer name and install updates.
+Settings asks polkit once at start (without interaction) and shows the rows it may not change as
+values with "Only an administrator can change this." Failures show at their row in plain
+words; the raw D-Bus text goes to the journal.
+
+**Slice 3, in part.** Apps opens with Default apps: one pop-up per role (Web browser, Mail,
+Music, Video, Pictures, PDF, Text), and choosing an app writes every type of the role that the
+app opens. Privacy & Security joins System with the Screen lock link ("Automatic lock: After
+10 min ›", which opens Power) and Clear History… for the clipboard, confirmed inline. Each
+notifying app opens its own page; the inline expander is gone.
+
+**Decisions.**
+
+- A polkit challenge counts as refused: Unbound ships no polkit agent yet, so nobody could
+  answer it.
+- Search ties go to the setting whose pane is also about the word ("lock" finds the lock timer
+  in Power before the Caps Lock key).
+- The Power pane's sections are Battery, Energy, When inactive and On power adapter; the lid
+  row shows only with a battery.
+- Settings checks for updates once when it opens, so the attention row can appear.
+
+**Open.** The app permission pages of Privacy & Security (Camera, Screenshots, Screen Sharing
+from the portal permission store); slice 4; the cross-fade into the off state; the guest
+`pkcheck` test of the rules (no polkitd in the VM image tonight).
 
 ## Sources
 

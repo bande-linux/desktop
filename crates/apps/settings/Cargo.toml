@@ -41,13 +41,16 @@ maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
 depends = "$auto, fonts-inter, unbound-config"
 extended-description = """\
-System Settings of the Unbound desktop: Wi-Fi, Bluetooth, network, \
-battery, notifications per app, sound, appearance, the dock, displays, \
-the lock screen, the keyboard and General (about this computer, storage, \
-software update, date and time, language and region, login items), \
-with a search field that ranks the matching settings and marks them. \
-Every pane follows changes made elsewhere while it is open. Desktop \
-settings go through org.unbound.Config, which writes config.kdl."""
+System Settings of the Unbound desktop in four groups: Connections \
+(Wi-Fi, Bluetooth, network), Desktop (appearance and wallpaper, the bar, \
+notifications per app, accessibility), Devices (displays, sound, keyboard, \
+trackpad and mouse) and System (power, apps that open at login, language \
+and time, about this computer with storage and software update), with a \
+search field that ranks the matching settings and marks them. Every pane \
+follows changes made elsewhere while it is open. Desktop settings go \
+through org.unbound.Config, which writes config.kdl. A polkit rule lets \
+administrators (members of sudo) change the time, language, computer \
+name and install updates without a password prompt."""
 recommends = "network-manager, bluez, pipewire, wireplumber, unbound-notify, packagekit, power-profiles-daemon, upower"
 maintainer-scripts = "debian/"
 assets = [
@@ -56,6 +59,7 @@ assets = [
     ["data/org.unbound.Settings.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
     ["data/unbound-update-check.service", "usr/lib/systemd/user/", "644"],
     ["data/unbound-update-check.timer", "usr/lib/systemd/user/", "644"],
+    ["data/50-unbound-settings.rules", "usr/share/polkit-1/rules.d/", "644"],
 ]
 
 [lints]

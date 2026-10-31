@@ -5,12 +5,19 @@ mod support;
 use std::time::{Duration, Instant};
 
 use accesskit::Role;
-use support::{WAIT, click, find};
+use support::{WAIT, click, find, nodes};
 use unbound_notify::client::{Request, notify};
 use unbound_notify::{Banners, NotificationServer, Urgency};
 use unbound_settings::{Command, Feed, PaneId, SettingsView, feed, follow_app_notifications};
 use unbound_test_bus::SessionBus;
 use unbound_toolkit::{Palette, Scheme, TextSystem};
+
+fn app_summary(view: &mut SettingsView) -> Option<String> {
+    nodes(view)
+        .into_iter()
+        .find(|(_, node)| node.role() == Role::Heading && node.label() == Some("Mail"))
+        .and_then(|(_, node)| node.value().map(str::to_owned))
+}
 
 fn pump(
     view: &mut SettingsView,
@@ -74,6 +81,8 @@ fn each_app_that_notified_gets_its_own_rules() {
     });
     let mail = find(&mut view, Role::Button, "Mail").expect("Mail row");
     click(&mut view, mail);
+    assert!(find(&mut view, Role::Button, "‹ Notifications").is_some());
+    assert!(find(&mut view, Role::Switch, "Do Not Disturb").is_none());
     let persistent = find(&mut view, Role::RadioButton, "Persistent").expect("Persistent");
     click(&mut view, persistent);
     pump(&mut view, &feed, &sender, |_| {
@@ -85,12 +94,19 @@ fn each_app_that_notified_gets_its_own_rules() {
     let center = find(&mut view, Role::Switch, "Show in Notification Center").expect("switch");
     click(&mut view, center);
     pump(&mut view, &feed, &sender, |view| {
-        !server.apps()[0].rule.in_center && find(view, Role::Button, "Mail, Persistent").is_some()
+        !server.apps()[0].rule.in_center
+            && app_summary(view).as_deref() == Some("Persistent banners")
     });
     let allow = find(&mut view, Role::Switch, "Allow notifications").expect("allow");
     click(&mut view, allow);
     pump(&mut view, &feed, &sender, |view| {
-        !server.apps()[0].rule.allow && find(view, Role::Button, "Mail, Off").is_some()
+        !server.apps()[0].rule.allow && app_summary(view).as_deref() == Some("Off")
     });
     assert!(find(&mut view, Role::RadioButton, "Persistent").is_none());
+
+    let back = find(&mut view, Role::Button, "‹ Notifications").expect("back");
+    click(&mut view, back);
+    assert_eq!(view.selected_pane(), PaneId::Notifications);
+    assert_eq!(view.focused_item().as_deref(), Some("app:Mail"));
+    assert!(find(&mut view, Role::Switch, "Do Not Disturb").is_some());
 }

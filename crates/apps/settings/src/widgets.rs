@@ -15,7 +15,15 @@ const SIDEBAR_INSET: f32 = Spacing::S as f32;
 const BODY_SIZE: f32 = 13.0;
 const CAPTION_SIZE: f32 = 11.0;
 const SIDEBAR_ROW_HEIGHT: f32 = 28.0;
-const SIDEBAR_TEXT_INSET: f32 = 12.0;
+const SIDEBAR_SYMBOL_INSET: f32 = 8.0;
+pub(crate) const SIDEBAR_SYMBOL: f32 = 16.0;
+const SIDEBAR_TEXT_INSET: f32 = SIDEBAR_SYMBOL_INSET + SIDEBAR_SYMBOL + 8.0;
+const SIDEBAR_LABEL_GAP: f32 = 10.0;
+const HEADER_TILE: f32 = 40.0;
+pub(crate) const HEADER_SYMBOL: f32 = 24.0;
+const HEADER_GAP: f32 = Spacing::S as f32;
+pub(crate) const NOTICE_SYMBOL: f32 = 48.0;
+const NOTICE_PADDING: f32 = Spacing::XL as f32;
 const ROW_PADDING: f32 = Spacing::M as f32;
 const ROW_MIN_HEIGHT: f32 = 44.0;
 const CONTROL_WIDTH: f32 = 320.0;
@@ -44,6 +52,7 @@ pub enum Tone {
     Primary,
     Muted,
     Faint,
+    Danger,
 }
 
 pub struct Text {
@@ -119,6 +128,7 @@ impl Text {
             Tone::Primary => cx.palette.ink,
             Tone::Muted => cx.palette.ink2,
             Tone::Faint => cx.palette.ink3,
+            Tone::Danger => cx.palette.danger,
         };
         let mut x = 0.0;
         let mut height: f32 = 0.0;
@@ -379,6 +389,7 @@ impl Widget for Column {
 pub struct Caption {
     id: WidgetId,
     text: Text,
+    inset: f32,
     frame: Rect,
 }
 
@@ -387,8 +398,14 @@ impl Caption {
         Self {
             id: WidgetId::next(),
             text,
+            inset: 0.0,
             frame: Rect::default(),
         }
+    }
+
+    pub fn inset(mut self, inset: f32) -> Self {
+        self.inset = inset;
+        self
     }
 }
 
@@ -410,8 +427,11 @@ impl Widget for Caption {
     }
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
-        self.text
-            .paint(cx, Point::new(self.frame.x, self.frame.y), items);
+        self.text.paint(
+            cx,
+            Point::new(self.frame.x + self.inset, self.frame.y),
+            items,
+        );
     }
 
     fn access(&self, _cx: &Context) -> Node {
@@ -421,9 +441,60 @@ impl Widget for Caption {
     }
 }
 
+pub struct SidebarLabel {
+    id: WidgetId,
+    text: Text,
+    frame: Rect,
+}
+
+impl SidebarLabel {
+    pub fn new(label: &str) -> Self {
+        Self {
+            id: WidgetId::next(),
+            text: Text::label(label),
+            frame: Rect::default(),
+        }
+    }
+}
+
+impl Widget for SidebarLabel {
+    fn id(&self) -> WidgetId {
+        self.id
+    }
+
+    fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
+        let height = self.text.measure(cx).height;
+        Size::new(available.width, height + SIDEBAR_LABEL_GAP)
+    }
+
+    fn place(&mut self, _cx: &mut Context, frame: Rect) {
+        self.frame = frame;
+    }
+
+    fn frame(&self) -> Rect {
+        self.frame
+    }
+
+    fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
+        let y = self.frame.y + self.frame.height - self.text.size().height - 2.0;
+        self.text.paint(
+            cx,
+            Point::new(self.frame.x + SIDEBAR_SYMBOL_INSET, y),
+            items,
+        );
+    }
+
+    fn access(&self, _cx: &Context) -> Node {
+        let mut node = Node::new(Role::Heading);
+        node.set_label(self.text.as_str().to_owned());
+        node
+    }
+}
+
 pub struct SidebarRow {
     id: WidgetId,
     text: Text,
+    symbol: Option<Image>,
     selected: bool,
     on_select: Box<dyn FnMut()>,
     on_step: Box<dyn FnMut(isize)>,
@@ -433,6 +504,7 @@ pub struct SidebarRow {
 impl SidebarRow {
     pub fn new(
         text: Text,
+        symbol: Option<Image>,
         selected: bool,
         on_select: impl FnMut() + 'static,
         on_step: impl FnMut(isize) + 'static,
@@ -440,11 +512,209 @@ impl SidebarRow {
         Self {
             id: WidgetId::next(),
             text,
+            symbol,
             selected,
             on_select: Box::new(on_select),
             on_step: Box::new(on_step),
             frame: Rect::default(),
         }
+    }
+}
+
+fn symbol_rect(center: Point, size: f32) -> Rect {
+    Rect::new(
+        (center.x - size / 2.0).round(),
+        (center.y - size / 2.0).round(),
+        size,
+        size,
+    )
+}
+
+pub struct Header {
+    id: WidgetId,
+    symbol: Option<Image>,
+    title: Text,
+    summary: Text,
+    children: Vec<Box<dyn Widget>>,
+    control: Size,
+    frame: Rect,
+}
+
+impl Header {
+    pub fn new(
+        symbol: Option<Image>,
+        title: Text,
+        summary: &str,
+        master: Option<Box<dyn Widget>>,
+    ) -> Self {
+        Self {
+            id: WidgetId::next(),
+            symbol,
+            title,
+            summary: Text::new(summary, Tone::Muted).role(TextRole::Callout),
+            children: master.into_iter().collect(),
+            control: Size::default(),
+            frame: Rect::default(),
+        }
+    }
+
+    fn text_height(&self) -> f32 {
+        self.title.size().height + self.summary.size().height
+    }
+}
+
+impl Widget for Header {
+    fn id(&self) -> WidgetId {
+        self.id
+    }
+
+    fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
+        self.title.measure(cx);
+        self.summary.measure(cx);
+        self.control = self
+            .children
+            .iter_mut()
+            .map(|child| child.measure(cx, Size::new(CONTROL_WIDTH, UNBOUNDED)))
+            .next()
+            .unwrap_or_default();
+        let height = HEADER_TILE.max(self.text_height()).max(self.control.height);
+        Size::new(available.width, height.ceil() + HEADER_GAP)
+    }
+
+    fn place(&mut self, cx: &mut Context, frame: Rect) {
+        self.frame = frame;
+        let size = self.control;
+        let height = frame.height - HEADER_GAP;
+        for child in &mut self.children {
+            child.place(
+                cx,
+                Rect::new(
+                    (frame.x + frame.width - ROW_PADDING - size.width).round(),
+                    (frame.y + (height - size.height) / 2.0).round(),
+                    size.width,
+                    size.height,
+                ),
+            );
+        }
+    }
+
+    fn frame(&self) -> Rect {
+        self.frame
+    }
+
+    fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
+        let height = self.frame.height - HEADER_GAP;
+        let tile = Rect::new(
+            self.frame.x,
+            (self.frame.y + (height - HEADER_TILE) / 2.0).round(),
+            HEADER_TILE,
+            HEADER_TILE,
+        );
+        items.push(Item::Fill {
+            shape: Shape::rounded(tile, Radius::L),
+            paint: cx.palette.well.into(),
+        });
+        if let Some(symbol) = &self.symbol {
+            items.push(Item::Image {
+                rect: symbol_rect(
+                    Point::new(tile.x + HEADER_TILE / 2.0, tile.y + HEADER_TILE / 2.0),
+                    HEADER_SYMBOL,
+                ),
+                image: symbol.clone(),
+            });
+        }
+        let x = tile.x + HEADER_TILE + Spacing::M as f32;
+        let y = self.frame.y + (height - self.text_height()) / 2.0;
+        self.title.paint(cx, Point::new(x, y), items);
+        self.summary
+            .paint(cx, Point::new(x, y + self.title.size().height), items);
+        for child in &self.children {
+            child.paint(cx, items);
+        }
+    }
+
+    fn access(&self, _cx: &Context) -> Node {
+        let mut node = Node::new(Role::Heading);
+        node.set_label(self.title.as_str().to_owned());
+        node.set_value(self.summary.as_str().to_owned());
+        node
+    }
+
+    fn children(&self) -> &[Box<dyn Widget>] {
+        &self.children
+    }
+
+    fn children_mut(&mut self) -> &mut [Box<dyn Widget>] {
+        &mut self.children
+    }
+}
+
+pub struct Notice {
+    id: WidgetId,
+    symbol: Option<Image>,
+    heading: Text,
+    line: Text,
+    frame: Rect,
+}
+
+impl Notice {
+    pub fn new(symbol: Option<Image>, heading: &str, line: &str) -> Self {
+        Self {
+            id: WidgetId::next(),
+            symbol,
+            heading: Text::new(heading, Tone::Primary).role(TextRole::Heading),
+            line: Text::new(line, Tone::Muted).role(TextRole::Callout),
+            frame: Rect::default(),
+        }
+    }
+}
+
+impl Widget for Notice {
+    fn id(&self) -> WidgetId {
+        self.id
+    }
+
+    fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
+        let text = self.heading.measure(cx).height + self.line.measure(cx).height;
+        Size::new(
+            available.width,
+            NOTICE_PADDING * 2.0 + NOTICE_SYMBOL + Spacing::M as f32 + text,
+        )
+    }
+
+    fn place(&mut self, _cx: &mut Context, frame: Rect) {
+        self.frame = frame;
+    }
+
+    fn frame(&self) -> Rect {
+        self.frame
+    }
+
+    fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
+        let center = self.frame.x + self.frame.width / 2.0;
+        let top = self.frame.y + NOTICE_PADDING;
+        if let Some(symbol) = &self.symbol {
+            items.push(Item::Image {
+                rect: symbol_rect(Point::new(center, top + NOTICE_SYMBOL / 2.0), NOTICE_SYMBOL),
+                image: symbol.clone(),
+            });
+        }
+        let y = top + NOTICE_SYMBOL + Spacing::M as f32;
+        let heading = self.heading.size();
+        self.heading
+            .paint(cx, Point::new(center - heading.width / 2.0, y), items);
+        self.line.paint(
+            cx,
+            Point::new(center - self.line.size().width / 2.0, y + heading.height),
+            items,
+        );
+    }
+
+    fn access(&self, _cx: &Context) -> Node {
+        let mut node = Node::new(Role::Label);
+        node.set_label(self.heading.as_str().to_owned());
+        node.set_value(self.line.as_str().to_owned());
+        node
     }
 }
 
@@ -477,13 +747,23 @@ impl Widget for SidebarRow {
         if cx.is_focused(self.id) {
             focus_ring(cx, shape, items);
         }
+        let middle = self.frame.y + self.frame.height / 2.0;
+        if let Some(symbol) = &self.symbol {
+            items.push(Item::Image {
+                rect: symbol_rect(
+                    Point::new(
+                        self.frame.x + SIDEBAR_SYMBOL_INSET + SIDEBAR_SYMBOL / 2.0,
+                        middle,
+                    ),
+                    SIDEBAR_SYMBOL,
+                ),
+                image: symbol.clone(),
+            });
+        }
         let height = self.text.size().height;
         self.text.paint(
             cx,
-            Point::new(
-                self.frame.x + SIDEBAR_TEXT_INSET,
-                self.frame.y + (self.frame.height - height) / 2.0,
-            ),
+            Point::new(self.frame.x + SIDEBAR_TEXT_INSET, middle - height / 2.0),
             items,
         );
     }

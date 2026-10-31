@@ -2,9 +2,9 @@ use std::rc::Rc;
 
 use unbound_audio::Direction;
 use unbound_config::{ACCENTS, MAX_INPUT_SOURCES};
-use unbound_keyboard::{Action, shortcuts_in};
+use unbound_keyboard::{Action, SHORTCUTS, shortcuts_in};
 use unbound_toolkit::ui::{
-    Axis, Button, LevelIndicator, PopUpButton, SearchField, SecureField, SegmentedControl,
+    Axis, Button, Label, LevelIndicator, PopUpButton, SearchField, SecureField, SegmentedControl,
     Shortcut, Slider, Stack, TextField, Toggle, Widget, WidgetId,
 };
 use unbound_toolkit::{Scheme, Spacing, TextRole};
@@ -18,17 +18,18 @@ use crate::view::{
     Anchor, Intent, Intents, MIRROR_PREFIX, SettingsView, USE_EXTENDED, USE_MAIN, intent,
 };
 use crate::widgets::{
-    Caption, Captioned, Card, Check, Column, Row, Scroll, SidebarRow, Signal, Swatch, Swatches,
-    Text, Thumbnail, Thumbnails, Tone,
+    Caption, Captioned, Card, Check, Column, Row, Scroll, Signal, Swatch, Swatches, Text,
+    Thumbnail, Thumbnails, Tone,
 };
 use unbound_config::Placement;
 use unbound_settings_panes::SettingHit;
 use unbound_settings_panes::{
-    AUTOMATIC, Choice, Kind, List, PaneId, Section, Setting, SettingId, Value,
+    AUTOMATIC, Choice, Kind, List, MAX_SEGMENTS, PaneId, Section, Setting, SettingId, Value,
 };
 
 const PAGE_PADDING: f32 = Spacing::XL as f32;
 const PAGE_SPACING: f32 = Spacing::S as f32;
+const ROW_INSET: f32 = Spacing::M as f32;
 const VOLUME_STEP: f64 = 1.0 / 16.0;
 const FIELD_SIZE: f32 = 13.0;
 const SOURCE_RESULTS: usize = 8;
@@ -97,29 +98,25 @@ fn display_value(
     })
 }
 
-impl SettingsView {
-    pub(crate) fn sidebar(&mut self) -> Box<dyn Widget> {
-        let rows = self
-            .visible_panes()
-            .into_iter()
-            .filter_map(|id| {
-                let pane = self.panes.iter().find(|pane| pane.id == id)?;
-                let selected = id == self.pane || self.pane.parent() == Some(id);
-                let highlights = self.hit(id).map(|hit| hit.name.clone()).unwrap_or_default();
-                let mut select = intent(&self.intents, Intent::SelectPane);
-                let row = SidebarRow::new(
-                    Text::new(&pane.name, Tone::Primary).highlighted(highlights),
-                    selected,
-                    move || select(id),
-                    intent(&self.intents, Intent::StepPane),
-                );
-                self.anchors.push((Anchor::Pane(id), row.id()));
-                Some(boxed(row))
-            })
-            .collect();
-        boxed(Column::new(2.0, 0.0, rows))
+fn choice_control(
+    label: &str,
+    labels: &[String],
+    selected: Option<usize>,
+    on_select: impl FnMut(usize) + 'static,
+) -> Box<dyn Widget> {
+    if labels.len() > MAX_SEGMENTS {
+        boxed(PopUpButton::new(
+            label,
+            labels,
+            selected.unwrap_or(0),
+            on_select,
+        ))
+    } else {
+        boxed(SegmentedControl::new(label, labels, selected, on_select))
     }
+}
 
+impl SettingsView {
     fn offered(&self, id: SettingId) -> Option<Vec<String>> {
         match id {
             SettingId::PowerMode => self
@@ -174,16 +171,11 @@ impl SettingsView {
                     choices.iter().map(|choice| choice.label.clone()).collect();
                 let values: Vec<Value> =
                     choices.iter().map(|choice| choice.value.clone()).collect();
-                boxed(SegmentedControl::new(
-                    &setting.label,
-                    &labels,
-                    selected,
-                    move |index| {
-                        if let Some(value) = values.get(index) {
-                            set(value.clone());
-                        }
-                    },
-                ))
+                choice_control(&setting.label, &labels, selected, move |index| {
+                    if let Some(value) = values.get(index) {
+                        set(value.clone());
+                    }
+                })
             }
             Kind::Swatches(choices) => {
                 let selected = value
@@ -312,16 +304,11 @@ impl SettingsView {
                     }
                     _ => None,
                 };
-                boxed(SegmentedControl::new(
-                    &setting.label,
-                    &labels,
-                    selected,
-                    move |index| {
-                        if let Some(rate) = rates.get(index) {
-                            set(Value::Number(*rate));
-                        }
-                    },
-                ))
+                choice_control(&setting.label, &labels, selected, move |index| {
+                    if let Some(rate) = rates.get(index) {
+                        set(Value::Number(*rate));
+                    }
+                })
             }
             Kind::Text => {
                 let saved = match value {
@@ -354,16 +341,11 @@ impl SettingsView {
                         .position(|(width, height)| size == format!("{width}x{height}")),
                     _ => None,
                 };
-                boxed(SegmentedControl::new(
-                    &setting.label,
-                    &labels,
-                    selected,
-                    move |index| {
-                        if let Some((width, height)) = sizes.get(index) {
-                            set(Value::Keyword(format!("{width}x{height}")));
-                        }
-                    },
-                ))
+                choice_control(&setting.label, &labels, selected, move |index| {
+                    if let Some((width, height)) = sizes.get(index) {
+                        set(Value::Keyword(format!("{width}x{height}")));
+                    }
+                })
             }
             Kind::DisplayUses => {
                 let display = scope?;
@@ -401,16 +383,11 @@ impl SettingsView {
                 };
                 let selected = choices.iter().position(|(_, value)| *value == current);
                 let labels: Vec<String> = choices.iter().map(|(label, _)| label.clone()).collect();
-                boxed(SegmentedControl::new(
-                    &setting.label,
-                    &labels,
-                    selected,
-                    move |index| {
-                        if let Some((_, value)) = choices.get(index) {
-                            set(Value::Keyword(value.clone()));
-                        }
-                    },
-                ))
+                choice_control(&setting.label, &labels, selected, move |index| {
+                    if let Some((_, value)) = choices.get(index) {
+                        set(Value::Keyword(value.clone()));
+                    }
+                })
             }
             Kind::List(List::InputLevel) => {
                 self.audio.as_ref()?.default_input()?;
@@ -419,7 +396,7 @@ impl SettingsView {
                     Rc::clone(&self.input_level),
                 ))
             }
-            Kind::List(_) | Kind::Pictures => return None,
+            Kind::List(_) | Kind::Pictures | Kind::Page(_) => return None,
         };
         let focus = control.id();
         Some((control, focus))
@@ -434,15 +411,75 @@ impl SettingsView {
         if setting.id == SettingId::VariableRefreshRate && !scope?.variable_refresh_capable() {
             return None;
         }
-        let (control, focus) = self.control(setting, scope)?;
+        let (control, focus) = match self.allowed(setting.id) {
+            true => self.control(setting, scope)?,
+            false => {
+                let shown = match self.values.get(&setting.id)? {
+                    Value::Flag(true) => L10N.tr("on"),
+                    Value::Flag(false) => L10N.tr("off"),
+                    Value::Text(text) => text.clone(),
+                    _ => return None,
+                };
+                let label = Label::new(&shown);
+                let focus = label.id();
+                (boxed(label), focus)
+            }
+        };
         let connector = scope.map(|display| display.connector.clone());
         self.anchors
             .push((Anchor::Setting(setting.id, connector), focus));
         let label = Text::new(&setting.label, Tone::Primary)
             .highlighted(matched.map(|hit| hit.label.clone()).unwrap_or_default());
-        Some(boxed(
-            Row::new(label, Some(control)).highlighted(matched.is_some()),
-        ))
+        let mut row = Row::new(label, Some(control)).highlighted(matched.is_some());
+        if let Some(description) = &setting.description {
+            row = row.detail(Text::new(description, Tone::Muted).caption());
+        }
+        Some(boxed(row))
+    }
+
+    fn page_row(
+        &mut self,
+        setting: &Setting,
+        child: PaneId,
+        matched: Option<&SettingHit>,
+    ) -> Box<dyn Widget> {
+        let value = self
+            .pane_summary(child)
+            .map_or_else(|| "›".to_owned(), |summary| format!("{summary}  ›"));
+        let mut open = intent(&self.intents, Intent::SelectPane);
+        let label = Text::new(&setting.label, Tone::Primary)
+            .highlighted(matched.map(|hit| hit.label.clone()).unwrap_or_default());
+        let row = Row::new(label, Some(boxed(Label::new(&value))))
+            .highlighted(matched.is_some() || self.hit(child).is_some())
+            .on_activate(move || open(child));
+        self.item_row(child.keyword().to_owned(), row)
+    }
+
+    fn setting_rows(&mut self, setting: &Setting, matched: Option<&SettingHit>) -> Widgets {
+        let mut rows = match setting.kind {
+            Kind::List(List::Shortcuts) => self.shortcut_cards(),
+            Kind::List(list) if list != List::InputLevel => self.list_rows(list),
+            Kind::Pictures => self.picture_rows(setting),
+            Kind::Page(child) => vec![self.page_row(setting, child, matched)],
+            _ => self
+                .setting_row(setting, None, matched)
+                .into_iter()
+                .collect(),
+        };
+        if rows.is_empty() {
+            return rows;
+        }
+        let note = match self.errors.get(&setting.id) {
+            Some(error) => Some(Text::new(error, Tone::Danger)),
+            None if !self.allowed(setting.id) => {
+                Some(Text::new(&L10N.tr("administrator-only"), Tone::Muted))
+            }
+            None => None,
+        };
+        rows.extend(
+            note.map(|note| boxed(Caption::new(note.role(TextRole::Callout)).inset(ROW_INSET))),
+        );
+        rows
     }
 
     pub(crate) fn item_row(&mut self, anchor: String, row: Row) -> Box<dyn Widget> {
@@ -655,6 +692,8 @@ impl SettingsView {
             List::Vpns => self.vpn_rows(),
             List::Languages => self.language_rows(),
             List::Regions => self.region_rows(),
+            List::DefaultApps => self.default_app_rows(),
+            List::Clipboard => self.clipboard_rows(),
         }
     }
 
@@ -699,6 +738,16 @@ impl SettingsView {
         let sources = self.input_sources();
         let count = sources.len();
         let mut rows = Vec::new();
+        if let Some(next) = SHORTCUTS
+            .iter()
+            .find(|shortcut| shortcut.action == Action::NextInputSource)
+            .filter(|_| count > 1)
+        {
+            rows.push(boxed(Row::new(
+                Text::new(&L10N.tr("switch-sources"), Tone::Primary),
+                Some(boxed(Shortcut::new(next.keys))),
+            )));
+        }
         for (index, code) in sources.iter().enumerate() {
             let name = self.layouts().name(code);
             let short = self.layouts().short(code);
@@ -715,7 +764,7 @@ impl SettingsView {
                 self.anchors
                     .push((Anchor::Setting(SettingId::InputSources, None), button.id()));
                 rows.push(boxed(Row::new(
-                    Text::new(&L10N.tr("switch-sources-hint"), Tone::Muted).caption(),
+                    Text::new(&L10N.tr("more-input-sources"), Tone::Muted).caption(),
                     Some(boxed(button)),
                 )));
             }
@@ -886,6 +935,7 @@ impl SettingsView {
                 .battery
                 .as_ref()
                 .is_some_and(|battery| !battery.profiles.is_empty()),
+            SettingId::BatteryLevel | SettingId::LidOnPower => self.battery.is_some(),
             _ => true,
         })
     }
@@ -1087,16 +1137,24 @@ impl SettingsView {
             .and_then(|parent| self.back_button(parent))
             .into_iter()
             .collect();
-        page.push(boxed(Caption::new(
-            Text::new(&pane.name, Tone::Primary).role(TextRole::Title),
-        )));
-        if pane.id == PaneId::General {
-            page.push(boxed(Card::new(self.general_rows())));
+        if !self.query.trim().is_empty() && self.hits.is_empty() {
+            let notice = self.no_match();
+            return self.page(vec![notice]);
         }
+        if pane.id == PaneId::Notifications
+            && let Some(app) = self.app_page()
+        {
+            return self.page(app);
+        }
+        page.push(self.header(&pane));
         if pane.id == PaneId::Bluetooth
             && let Some(card) = self.pairing_card()
         {
             page.extend(card);
+        }
+        if let Some(notice) = self.notice(&pane) {
+            page.push(notice);
+            return self.page(page);
         }
         for section in &pane.sections {
             if pane.id == PaneId::Displays {
@@ -1106,53 +1164,31 @@ impl SettingsView {
             if !self.section_shown(section) {
                 continue;
             }
-            if section
-                .settings
-                .iter()
-                .any(|setting| setting.kind == Kind::List(List::Shortcuts))
-            {
-                if let Some(title) = &section.title {
-                    page.push(boxed(Caption::new(Text::label(title))));
+            let mut rows: Widgets = Vec::new();
+            let mut listed = None;
+            for setting in &section.settings {
+                if Some(setting.id) == pane.master {
+                    continue;
                 }
-                page.extend(self.shortcut_cards());
-                continue;
+                if matches!(setting.kind, Kind::List(list) if list != List::InputLevel) {
+                    listed = listed.or(matched(setting.id));
+                }
+                rows.extend(self.setting_rows(setting, matched(setting.id).as_ref()));
             }
-            let list = section
-                .settings
-                .iter()
-                .find_map(|setting| match setting.kind {
-                    Kind::List(list) if list != List::InputLevel => Some((list, setting.id)),
-                    _ => None,
-                });
-            let pictures = section
-                .settings
-                .iter()
-                .find(|setting| setting.kind == Kind::Pictures);
-            let rows: Widgets = match (list, pictures) {
-                (Some((list, _)), _) => self.list_rows(list),
-                (None, Some(setting)) => self.picture_rows(setting),
-                (None, None) => section
-                    .settings
-                    .iter()
-                    .filter_map(|setting| {
-                        self.setting_row(setting, None, matched(setting.id).as_ref())
-                    })
-                    .collect(),
-            };
             if rows.is_empty() {
                 continue;
             }
             if let Some(title) = &section.title {
-                let highlights = list
-                    .and_then(|(_, id)| matched(id))
-                    .map(|hit| hit.label)
-                    .unwrap_or_default();
+                let highlights = listed.map(|hit| hit.label).unwrap_or_default();
                 page.push(boxed(Caption::new(
                     Text::label(title).highlighted(highlights),
                 )));
             }
             page.push(boxed(Card::new(rows)));
-            if list.is_some_and(|(list, _)| list == List::Networks)
+            if section
+                .settings
+                .iter()
+                .any(|setting| setting.id == SettingId::Networks)
                 && self.join.asking.is_none()
                 && let Some(error) = &self.join.error
             {
@@ -1162,6 +1198,10 @@ impl SettingsView {
         if let Some(message) = &self.message {
             page.push(boxed(Caption::new(Text::new(message, Tone::Muted))));
         }
+        self.page(page)
+    }
+
+    fn page(&self, page: Widgets) -> Box<dyn Widget> {
         boxed(Scroll::new(
             boxed(Column::new(PAGE_SPACING, PAGE_PADDING, page)),
             Rc::clone(&self.scroll),

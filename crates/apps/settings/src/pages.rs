@@ -2,6 +2,7 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use unbound_audio::Direction;
+use unbound_bluetooth::Kind as DeviceKind;
 use unbound_config::{ACCENTS, MAX_INPUT_SOURCES};
 use unbound_keyboard::{Action, SHORTCUTS, shortcuts_in};
 use unbound_toolkit::ui::{
@@ -20,8 +21,8 @@ use crate::view::{
     Anchor, Intent, Intents, MIRROR_PREFIX, SettingsView, USE_EXTENDED, USE_MAIN, intent,
 };
 use crate::widgets::{
-    Caption, Captioned, Card, Check, Column, Fade, Row, Signal, Swatch, Swatches, Text, Thumbnail,
-    Thumbnails, Tone,
+    Caption, Captioned, Card, Check, Column, Fade, Row, SIDEBAR_SYMBOL, Signal, Swatch, Swatches,
+    Text, Thumbnail, Thumbnails, Tone,
 };
 use unbound_config::Placement;
 use unbound_settings_panes::SettingHit;
@@ -601,8 +602,12 @@ impl SettingsView {
         devices
             .into_iter()
             .map(|device| {
+                let name = match device.named {
+                    true => device.name.clone(),
+                    false => kind_noun(device.kind),
+                };
                 if self.forgetting.as_ref() == Some(&Forget::Device(device.address.clone())) {
-                    return self.forget_row(&device.name, &L10N.tr("forget-device-warning"));
+                    return self.forget_row(&name, &L10N.tr("forget-device-warning"));
                 }
                 let busy = self.busy.contains(&device.address);
                 let (status, action, make): (String, String, fn(String) -> Intent) =
@@ -635,6 +640,16 @@ impl SettingsView {
                     ),
                     _ => status,
                 };
+                let status = match device.named {
+                    true => status,
+                    false => L10N.tr_args(
+                        "unnamed-device-status",
+                        [
+                            ("address", device.address.clone().into()),
+                            ("status", status.into()),
+                        ],
+                    ),
+                };
                 let control = (!busy).then(|| {
                     let mut act = intent(&self.intents, make);
                     let address = device.address.clone();
@@ -653,7 +668,9 @@ impl SettingsView {
                         button
                     }
                 });
-                let mut row = Row::new(Text::new(&device.name, Tone::Primary), control);
+                let ink = self.palette().ink2;
+                let symbol = self.symbol(device.kind.symbol(), SIDEBAR_SYMBOL, ink);
+                let mut row = Row::new(Text::new(&name, Tone::Primary), control).symbol(symbol);
                 if !status.is_empty() {
                     row = row.detail(Text::new(&status, Tone::Muted).caption());
                 }
@@ -1284,4 +1301,22 @@ impl SettingsView {
         self.page_view = Some(view.id());
         boxed(view)
     }
+}
+
+fn kind_noun(kind: DeviceKind) -> String {
+    L10N.tr(match kind {
+        DeviceKind::Mouse => "device-mouse",
+        DeviceKind::Keyboard => "device-keyboard",
+        DeviceKind::Tablet => "device-tablet",
+        DeviceKind::GameController => "device-game-controller",
+        DeviceKind::Headphones => "device-headphones",
+        DeviceKind::Headset => "device-headset",
+        DeviceKind::Speaker => "device-speaker",
+        DeviceKind::Phone => "device-phone",
+        DeviceKind::Computer => "device-computer",
+        DeviceKind::Camera => "device-camera",
+        DeviceKind::Printer => "device-printer",
+        DeviceKind::Display => "device-display",
+        DeviceKind::Other => "unknown-device",
+    })
 }

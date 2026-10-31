@@ -207,6 +207,9 @@ fn bluetooth_pairs_after_the_code_is_confirmed_in_settings() {
         fake.discovering().expect("adapter")
     });
     assert!(has_text(&mut view, "Studio Headphones, Connected"));
+    button_in_row(&mut view, "Keyboard", "Pair");
+    assert!(!has_text(&mut view, "4C-87-5D-0D-0E-0F"));
+    assert!(!has_text(&mut view, "4C:87:5D:0D:0E:0F"));
 
     let connect = button_in_row(&mut view, "mouse", "Connect");
     click(&mut view, connect);

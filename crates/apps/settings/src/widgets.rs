@@ -25,7 +25,8 @@ const CAPTION_SIZE: f32 = 11.0;
 const SIDEBAR_ROW_HEIGHT: f32 = 28.0;
 const SIDEBAR_SYMBOL_INSET: f32 = 8.0;
 pub(crate) const SIDEBAR_SYMBOL: f32 = 16.0;
-const SIDEBAR_TEXT_INSET: f32 = SIDEBAR_SYMBOL_INSET + SIDEBAR_SYMBOL + 8.0;
+const SYMBOL_GAP: f32 = 8.0;
+const SIDEBAR_TEXT_INSET: f32 = SIDEBAR_SYMBOL_INSET + SIDEBAR_SYMBOL + SYMBOL_GAP;
 const SIDEBAR_LABEL_GAP: f32 = 10.0;
 const HEADER_TILE: f32 = 40.0;
 pub(crate) const HEADER_SYMBOL: f32 = 24.0;
@@ -864,6 +865,7 @@ impl Widget for Card {
 
 pub struct Row {
     id: WidgetId,
+    symbol: Option<Image>,
     label: Text,
     detail: Option<Text>,
     highlighted: bool,
@@ -878,6 +880,7 @@ impl Row {
     pub fn new(label: Text, control: Option<Box<dyn Widget>>) -> Self {
         Self {
             id: WidgetId::next(),
+            symbol: None,
             label,
             detail: None,
             highlighted: false,
@@ -887,6 +890,11 @@ impl Row {
             pressed: false,
             frame: Rect::default(),
         }
+    }
+
+    pub fn symbol(mut self, symbol: Option<Image>) -> Self {
+        self.symbol = symbol;
+        self
     }
 
     pub fn detail(mut self, detail: Text) -> Self {
@@ -907,6 +915,13 @@ impl Row {
     fn activate(&mut self) {
         if let Some(on_activate) = &mut self.on_activate {
             on_activate();
+        }
+    }
+
+    fn text_inset(&self) -> f32 {
+        match self.symbol {
+            Some(_) => SIDEBAR_SYMBOL + SYMBOL_GAP,
+            None => 0.0,
         }
     }
 
@@ -936,7 +951,9 @@ impl Widget for Row {
             true => self.control.width + ROW_GAP,
             false => 0.0,
         };
-        let text_width = Some((available.width - 2.0 * ROW_PADDING - beside_control).max(0.0));
+        let text_width = Some(
+            (available.width - 2.0 * ROW_PADDING - self.text_inset() - beside_control).max(0.0),
+        );
         self.label.measure_within(cx, text_width);
         if let Some(detail) = &mut self.detail {
             detail.measure_within(cx, text_width);
@@ -983,7 +1000,19 @@ impl Widget for Row {
         if cx.is_focused(self.id) {
             focus_ring(cx, shape, items);
         }
-        let x = self.frame.x + ROW_PADDING;
+        if let Some(symbol) = &self.symbol {
+            items.push(Item::Image {
+                rect: symbol_rect(
+                    Point::new(
+                        self.frame.x + ROW_PADDING + SIDEBAR_SYMBOL / 2.0,
+                        self.frame.y + self.frame.height / 2.0,
+                    ),
+                    SIDEBAR_SYMBOL,
+                ),
+                image: symbol.clone(),
+            });
+        }
+        let x = self.frame.x + ROW_PADDING + self.text_inset();
         let y = self.frame.y + (self.frame.height - self.text_height()) / 2.0;
         self.label.paint(cx, Point::new(x, y), items);
         if let Some(detail) = &self.detail {

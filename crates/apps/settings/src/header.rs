@@ -36,7 +36,7 @@ impl SettingsView {
             .clone()
     }
 
-    fn palette(&mut self) -> unbound_toolkit::Palette {
+    pub(crate) fn palette(&mut self) -> unbound_toolkit::Palette {
         self.ui().context().palette
     }
 

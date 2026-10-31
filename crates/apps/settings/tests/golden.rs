@@ -6,6 +6,7 @@ use std::path::PathBuf;
 
 use support::SIZE;
 use unbound_audio::{Device, Direction, Level, Snapshot};
+use unbound_bluetooth::Bluetooth;
 use unbound_keyboard::Layouts;
 use unbound_settings::sidebar_width;
 use unbound_settings::{
@@ -15,6 +16,8 @@ use unbound_settings::{
     WifiState, thumbnail,
 };
 use unbound_settings_panes::Permission;
+use unbound_test_bus::SessionBus;
+use unbound_test_bus::bluez::FakeBluez;
 use unbound_toolkit::ui::{Event, Key, Modifiers};
 use unbound_toolkit::{
     Appearance, CpuRenderer, FrameRegions, Palette, Scene, Scheme, TextSize, TextSystem,
@@ -352,11 +355,14 @@ fn wifi_off(scheme: Scheme) -> SettingsView {
 }
 
 fn bluetooth(scheme: Scheme) -> SettingsView {
+    let bus = SessionBus::start().expect("dbus-daemon");
+    let _fake = FakeBluez::start(&bus).expect("fake BlueZ");
+    let client = Bluetooth::new(&bus.connect().expect("client"));
     let mut view = new_view(scheme);
     view.apply(Update::Bluetooth(Some(BluetoothState {
         powered: true,
-        paired: Vec::new(),
-        nearby: Vec::new(),
+        paired: client.paired_devices().expect("paired"),
+        nearby: client.nearby_devices().expect("nearby"),
     })));
     view.select_pane(PaneId::Bluetooth);
     view

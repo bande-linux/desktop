@@ -1,18 +1,19 @@
 #!/bin/bash
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
+debs=$(realpath "${1:-/debs}")
 
 apt-get update -qq
 apt-get install -y -qq --no-install-recommends apt-utils > /dev/null
-(cd /debs && apt-ftparchive packages . > Packages)
-echo 'deb [trusted=yes] file:/debs ./' > /etc/apt/sources.list.d/local.list
+(cd "$debs" && apt-ftparchive packages . > Packages)
+echo "deb [trusted=yes] file:$debs ./" > /etc/apt/sources.list.d/local.list
 apt-get update -qq
 
 echo "== unbound-desktop resolves and installs from the packages alone"
-ours=$(cd /debs && for deb in *.deb; do dpkg-deb --field "$deb" Package; done | grep -v -e apt-source -e archive-keyring)
+ours=$(cd "$debs" && for deb in *.deb; do dpkg-deb --field "$deb" Package; done | grep -v -e apt-source -e archive-keyring -e '^unbound-os$')
 apt-get install -y -q --no-install-recommends $ours < /dev/null
 
-echo "== every app unbound-desktop recommends is in Debian 13"
+echo "== every app unbound-desktop recommends is in Debian testing"
 apt-cache show unbound-desktop | sed -n 's/^Recommends: //p' | tr ',' '\n' | sed 's/^ *//; s/[ (].*//' |
     while read -r recommended; do
         [ -n "$recommended" ] || continue
@@ -87,18 +88,19 @@ cat /tmp/compositor.out
 [ "$status" = 124 ]
 grep -q '^WAYLAND_DISPLAY=wayland-' /tmp/compositor.out
 
-echo "== the channel packages switch the repository without prompts"
+echo "== unbound-os brings the system around the desktop"
+apt-get install -y -q --no-install-recommends unbound-os < /dev/null > /dev/null
+for package in unbound-desktop unbound-greeter unbound-apt-source greetd network-manager pipewire wireplumber systemd-zram-generator; do
+    [ "$(dpkg-query -W -f '${db:Status-Status}' "$package")" = installed ] || { echo "$package is missing"; exit 1; }
+done
+[ "$(dpkg-query -W -f '${Version}' unbound-os)" = "$version" ]
+
+echo "== the APT source follows the rolling suite and allows only Unbound's packages"
 rm /etc/apt/sources.list.d/local.list
-apt-get install -y -q /debs/unbound-archive-keyring_*_all.deb /debs/unbound-apt-source_*_all.deb < /dev/null > /dev/null
-grep -qx 'Suites: trixie' /etc/apt/sources.list.d/unbound.sources
-apt-get install -y -q /debs/unbound-apt-source-testing_*_all.deb < /dev/null > /dev/null
-grep -qx 'Suites: trixie-testing' /etc/apt/sources.list.d/unbound.sources
-[ "$(dpkg-query -W -f '${db:Status-Status}' unbound-apt-source)" = config-files ]
-dpkg --purge unbound-apt-source > /dev/null
-grep -qx 'Suites: trixie-testing' /etc/apt/sources.list.d/unbound.sources
-apt-get install -y -q /debs/unbound-apt-source_*_all.deb < /dev/null > /dev/null
-grep -qx 'Suites: trixie' /etc/apt/sources.list.d/unbound.sources
+grep -qx 'Suites: rolling' /etc/apt/sources.list.d/unbound.sources
+grep -qx 'Components: main apple' /etc/apt/sources.list.d/unbound.sources
 grep -qx 'Signed-By: /usr/share/keyrings/unbound-archive-keyring.pgp' /etc/apt/sources.list.d/unbound.sources
 test -s /usr/share/keyrings/unbound-archive-keyring.pgp
 grep -qx 'Pin: origin unbound-linux.github.io' /etc/apt/preferences.d/unbound.pref
+grep -qx 'Package: unbound-\* xdg-desktop-portal-unbound linux-\*-apple-\* unbound-os-apple' /etc/apt/preferences.d/unbound.pref
 echo "install test passed"

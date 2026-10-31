@@ -1,7 +1,7 @@
 # Unbound
 
-Unbound is a Linux desktop environment written in Rust for Debian 13 on arm64, with Apple
-Silicon as its primary hardware. It is its own desktop, with its own compositor, shell, session
+Unbound is a Linux desktop environment written in Rust for Debian testing on arm64 and amd64,
+with Apple Silicon as its primary hardware. It is its own desktop, with its own compositor, shell, session
 services and apps, and it holds itself to the polish of macOS: every surface should feel as
 smooth, consistent and finished. It is pure Wayland, with no X11 or XWayland anywhere. The
 compositor, renderer, toolkit, shell, apps and services all live in this one Cargo workspace.
@@ -38,13 +38,14 @@ them into role directories; the grouping below is that target.
 | Libraries | `unbound-spring` (damped springs), `unbound-xdg` (desktop entries, icons, launching), `unbound-audio` (PipeWire), `unbound-network` (NetworkManager), `unbound-bluetooth` (BlueZ) |
 | Testing | `unbound-test-bus` (private D-Bus session buses), `unbound-test-wayland` (Wayland test clients), `unbound-bench` (performance measurements), `unbound-sample` (toolkit sample for `ci/perf`) |
 
-Other directories: `packaging/` holds the meta-package and the APT source packages, `ci/` the
-scripts CI runs (guest VM, install test, hardware-in-the-loop), and `docs/` the documentation.
+Other directories: `packaging/` holds the `unbound-desktop` and `unbound-os` meta-packages and
+the APT source packages, `ci/` the scripts CI runs (release packages, install test, guest VM,
+hardware-in-the-loop), and `docs/` the documentation.
 
 ## Building and testing
 
-The toolchain is pinned in `rust-toolchain.toml` and installed by `rustup`. On Debian 13 or
-Ubuntu 24.04, install the system libraries the workspace links against, and the Vulkan driver,
+The toolchain is pinned in `rust-toolchain.toml` and installed by `rustup`. On Debian testing,
+install the system libraries the workspace links against, and the Vulkan driver,
 fonts and D-Bus daemon the tests use:
 
 ```bash
@@ -66,22 +67,20 @@ Tests need no GPU and no display: rendering runs on lavapipe, the compositor tes
 headless, and D-Bus tests start their own session buses. `cargo run -p unbound-compositor --
 --headless` starts the compositor without a display.
 
-CI runs these checks and more (Debian packages, an install test into a clean Debian 13, a KVM
-guest on vkms, polkit and portal integration, performance budgets) on self-hosted arm64 runners
-on every push; see [`docs/architecture/ci.md`](docs/architecture/ci.md).
+On every push to `main`, CI runs these checks in Debian testing, builds the packages for arm64
+and amd64, installs them into a clean Debian testing and publishes them to the APT repository;
+the KVM guest, polkit and performance jobs run on demand. See
+[`docs/architecture/ci.md`](docs/architecture/ci.md).
 
-## Installing on Debian 13
+## Installing on Debian testing
 
-Unbound installs from its APT repository at <https://unbound-linux.github.io/apt> on Debian 13
-(trixie), arm64. You need a display manager that lists Wayland sessions, such as GDM, SDDM, or a
-greetd front-end.
+Unbound installs from its APT repository at <https://unbound-linux.github.io/apt> on Debian
+testing, arm64 or amd64. The repository has one rolling suite: every change merged to `main`
+that passes CI is published. Its packages are built against Debian testing and do not install
+on Debian 13 (trixie).
 
-1. Choose a channel:
-   - **Release** carries tagged versions only.
-   - **Testing** carries a build of every change merged to `main`.
-
-   Download the archive keyring and the channel's package from the latest release, then install
-   both. For the release channel:
+1. Download the archive keyring and the source package from the latest release and install
+   both:
 
    ```bash
    cd /tmp
@@ -89,22 +88,28 @@ greetd front-end.
         https://github.com/unbound-linux/apt/releases/latest/download/unbound-apt-source.deb
    sudo apt install ./unbound-archive-keyring.deb ./unbound-apt-source.deb
    ```
-
-   For testing, use `unbound-apt-source-testing.deb` in both places.
-2. Install the desktop:
+2. Install the desktop alone, next to the desktop you have:
 
    ```bash
    sudo apt update
    sudo apt install unbound-desktop
    ```
 
-Log out and choose **Unbound** at the login screen. Updates arrive with `sudo apt upgrade` from
-your channel only.
+   Log out and choose **Unbound** at the login screen. You need a display manager that lists
+   Wayland sessions, such as GDM, SDDM or a greetd front-end.
 
-- **Switch channels:** run `sudo apt install unbound-apt-source-testing` or
-  `sudo apt install unbound-apt-source`.
-- **Signing key:** the repository is signed with the key
-  `6287 DE66 4599 29AA 1C01  E146 495A 6C19 8264 7E05`.
+   Or turn the system into unbound-os, with Unbound's login window as the display manager,
+   NetworkManager, PipeWire and compressed swap in memory:
+
+   ```bash
+   sudo apt update
+   sudo apt install unbound-os
+   ```
+
+Updates arrive with `sudo apt upgrade`. The APT source lists the `main` component, with the
+desktop and `unbound-os`, and the `apple` component, with the kernel for Apple Silicon Macs;
+its pin lets the repository provide only Unbound's own packages. The repository is signed with
+the key `6287 DE66 4599 29AA 1C01  E146 495A 6C19 8264 7E05`.
 
 ## Documentation
 

@@ -1,0 +1,10 @@
+build-essential
+rustup
+pkg-config
+libxkbcommon-dev
+libgbm-dev
+libinput-dev
+libseat-dev
+libudev-dev
+libpipewire-0.3-dev
+libclang-dev

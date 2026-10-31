@@ -52,7 +52,7 @@ if [ "$build" = 1 ]; then
     debs=()
     for package in "${packages[@]}"; do
         $cargo deb --package "$package" --locked --deb-version "$version"
-        debs+=("$repo/target/debian/${package}_${version}_arm64.deb")
+        debs+=("$repo/target/debian/${package}_${version}_$(dpkg --print-architecture).deb")
     done
     sudo apt-get install -y --allow-downgrades --reinstall "${debs[@]}"
     systemctl --user daemon-reload

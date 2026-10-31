@@ -15,6 +15,6 @@
 
 ## Workflow
 - Trunk-based: `main` is always green. Each milestone is a short branch from `main`.
-- Merge a branch into `main` only when the local gate is fully green (fmt, workspace clippy `-D warnings`, workspace tests on the hermetic bus): fast-forward if possible, otherwise a merge commit. Never force-push, never merge red. GitHub CI runs only on version tags (`v*.*.*`) and manual dispatch.
+- Merge a branch into `main` only when the local gate is fully green (fmt, workspace clippy `-D warnings`, workspace tests on the hermetic bus): fast-forward if possible, otherwise a merge commit. Never force-push, never merge red. GitHub CI (`release.yml`) runs on every push to `main` and on dispatch, and a green run on `main` publishes to the APT repository.
 - Then merge `main` into the next branch and push only that branch; never push several stacked branches at once.
 - Commit messages: one brief line saying what the commit does. No body, no trailers (no `Co-Authored-By`, no session links), nothing special.

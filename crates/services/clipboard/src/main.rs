@@ -12,7 +12,7 @@ use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use rustix::process::{DumpableBehavior, set_dumpable_behavior};
 use unbound_clipboard::{
     BUS_NAME, ClipboardHistory, Contents, History, MAX_BYTES, OBJECT_PATH, Shared, is_sensitive,
-    lock, now, state_dir,
+    lock, now,
 };
 use wayland_client::backend::WaylandError;
 use wayland_client::globals::{GlobalListContents, registry_queue_init};
@@ -129,9 +129,8 @@ fn serve_history(
 }
 
 fn history() -> Shared {
-    let home = std::env::var_os("HOME").map(PathBuf::from);
-    let state_home = std::env::var_os("XDG_STATE_HOME").map(PathBuf::from);
-    let history = state_dir(state_home.as_deref(), home.as_deref())
+    let history = unbound_xdg::state_home()
+        .map(|state| state.join("unbound/clipboard"))
         .map(|dir| History::load(dir, now()))
         .unwrap_or_default();
     Arc::new(Mutex::new(history))

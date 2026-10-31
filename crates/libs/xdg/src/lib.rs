@@ -33,5 +33,6 @@ pub use launch::{
 pub use mime::{DIRECTORY, MimeDatabase, OCTET_STREAM, TEXT_PLAIN};
 pub use mimeapps::{
     MimeApps, cache_home, config_dirs, config_home, data_home, mimeapps_paths, set_default_app,
+    state_home,
 };
 pub use uri::{file_uri, path_from_file_uri, percent_decode, percent_encode};

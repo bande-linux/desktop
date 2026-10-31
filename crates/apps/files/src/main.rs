@@ -22,7 +22,7 @@ use unbound_toolkit::{
 use unbound_volumes::{eject, media_roots};
 use unbound_xdg::{
     Apps, TERMINAL, UserDir, config_dirs, config_home, data_dirs, file_uri, launch_with,
-    path_from_file_uri, spawn_detached, user_dir,
+    path_from_file_uri, spawn_detached, state_home, user_dir,
 };
 
 const APP_ID: &str = "org.unbound.Files";
@@ -44,8 +44,7 @@ fn read(path: Option<PathBuf>) -> Option<String> {
 }
 
 fn layout_file(home: &Path) -> PathBuf {
-    let state_home = std::env::var_os("XDG_STATE_HOME").map(PathBuf::from);
-    sidebar_file(state_home.as_deref(), home)
+    sidebar_file(state_home().as_deref(), home)
 }
 
 fn sidebar(home: &Path) -> (Vec<Row>, Vec<Location>) {
@@ -436,7 +435,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let user_dirs = config_home()
         .and_then(|config| std::fs::read_to_string(config.join("user-dirs.dirs")).ok());
     view.set_templates(user_dir(&home, user_dirs.as_deref(), UserDir::Templates));
-    let state_home = std::env::var_os("XDG_STATE_HOME").map(PathBuf::from);
+    let state_home = state_home();
     view.set_view_memory(ViewMemory::load(views_file(state_home.as_deref(), &home)));
     view.set_status_bar_file(status_bar_file(state_home.as_deref(), &home));
     let data_home = std::env::var_os("XDG_DATA_HOME").map(PathBuf::from);

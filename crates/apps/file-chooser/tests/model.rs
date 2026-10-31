@@ -193,6 +193,21 @@ fn the_last_folder_is_remembered_for_each_app() {
 }
 
 #[test]
+fn a_remembered_folder_keeps_its_exact_name() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let folder = Path::new(OsStr::from_bytes(b"/home/anna/caf\xe9\n\tnotes"));
+    let memory = remember("", "org.example.Editor", folder);
+    let memory = remember(&memory, "org.example.Viewer", Path::new("/home/anna"));
+    assert_eq!(
+        remembered_folder(&memory, "org.example.Editor").as_deref(),
+        Some(folder)
+    );
+    assert_eq!(memory.lines().count(), 2);
+}
+
+#[test]
 fn the_dialog_starts_in_the_apps_folder_then_the_remembered_one_then_a_default() {
     let folder = folder();
     let home = Path::new("/home/anna");

@@ -31,7 +31,7 @@ use unbound_toolkit::{
     MenuPlacement, Point, Rect, Role, Scene, ScreenImage, Shape, TextAlign, TextStyle, TextSystem,
     Transfer, Window, WindowError, WindowEvent,
 };
-use unbound_xdg::{UserDir, file_uri, spawn_detached, user_dir};
+use unbound_xdg::{UserDir, config_home, file_uri, spawn_detached, state_home, user_dir};
 use zbus::blocking::Connection;
 
 const MARKUP_FLAG: &str = "--markup";
@@ -1064,11 +1064,8 @@ fn run() -> Result<(), WindowError> {
     let home = std::env::var_os("HOME")
         .map(PathBuf::from)
         .ok_or_else(|| WindowError::Io(std::io::Error::other("HOME is not set")))?;
-    let config_home = std::env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| home.join(".config"));
-    let options_path = std::env::var_os("XDG_STATE_HOME")
-        .map(PathBuf::from)
+    let config_home = config_home().unwrap_or_else(|| home.join(".config"));
+    let options_path = state_home()
         .unwrap_or_else(|| home.join(".local/state"))
         .join("unbound-screenshot/options");
     let mut window = Window::open(

@@ -39,7 +39,7 @@ pub use window::{
 mod tests {
     #[test]
     fn every_message_id_used_in_code_is_in_the_english_file() {
-        let sources = [include_str!("window.rs")];
+        let sources = [include_str!("window/menus.rs")];
         assert_eq!(
             unbound_l10n::missing_ids(super::ENGLISH, &sources),
             Vec::<&str>::new()

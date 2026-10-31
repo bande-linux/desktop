@@ -17,7 +17,7 @@ use wayland_client::{Connection, Dispatch, Proxy, QueueHandle, WEnum, event_crea
 use wayland_protocols::wp::viewporter::client::wp_viewport::WpViewport;
 
 use crate::primary::Primary;
-use crate::window::{ShmTarget, State, Window, WindowError, WindowEvent};
+use crate::window::{ShmTarget, State, Target, Window, WindowError, WindowEvent};
 
 pub(crate) const TEXT_TYPES: [&str; 3] = ["text/plain;charset=utf-8", "UTF8_STRING", "text/plain"];
 const URI_LIST: &str = "text/uri-list";
@@ -421,9 +421,11 @@ impl Window {
                 let mut target = ShmTarget::default();
                 target.present(
                     &mut self.cpu,
-                    shm,
-                    &handle,
-                    &surface,
+                    Target {
+                        shm,
+                        handle: &handle,
+                        surface: &surface,
+                    },
                     &icon.scene,
                     scale,
                     None,

@@ -19,7 +19,7 @@ use wayland_protocols::xdg::shell::client::xdg_positioner::{
 use wayland_protocols::xdg::shell::client::xdg_surface::{self, XdgSurface};
 use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::ZwlrLayerSurfaceV1;
 
-use crate::window::{ShmTarget, State, WindowError};
+use crate::window::{ShmTarget, State, Target, WindowError};
 
 const SUBMENU_OVERLAP: f32 = 2.0;
 const SUBMENU_LIFT: i32 = -4;
@@ -251,9 +251,11 @@ impl Popup {
         }
         self.presented = Some(next);
         self.target.present_moved(
-            frame.shm,
-            frame.handle,
-            &self.surface,
+            Target {
+                shm: frame.shm,
+                handle: frame.handle,
+                surface: &self.surface,
+            },
             next.alpha,
             next.shift,
         )

@@ -145,6 +145,19 @@ fn super_w_asks_the_focused_window_to_close_instead_of_typing() {
 }
 
 #[test]
+fn a_window_that_inhibits_shortcuts_gets_super_w_instead_of_closing() {
+    let mut server = server();
+    let mut client = client_with_window(&mut server, 32);
+    client.inhibit_shortcuts(&mut server, 0);
+
+    chord(&mut server, KEY_W);
+    client.exchange(&mut server);
+
+    assert!(!client.close_requested(0));
+    assert!(client.keys().contains(&(KEY_W, true)));
+}
+
+#[test]
 fn super_q_asks_every_window_of_the_focused_app_to_close() {
     let mut server = server();
     let mut other = client_with_window(&mut server, 128);

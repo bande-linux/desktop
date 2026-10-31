@@ -10,6 +10,10 @@ use smithay::input::pointer::{AxisFrame, ButtonEvent, MotionEvent};
 use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Clock, Logical, Monotonic, Point, SERIAL_COUNTER};
+use smithay::wayland::keyboard_shortcuts_inhibit::{
+    KeyboardShortcutsInhibitHandler, KeyboardShortcutsInhibitState, KeyboardShortcutsInhibitor,
+    KeyboardShortcutsInhibitorSeat,
+};
 use unbound_graphics::Modifiers;
 use unbound_protocols::server::unbound_shell_v1::{
     BrightnessKey, LauncherMode, MediaKey, Panel, VolumeKey,
@@ -684,7 +688,27 @@ impl Headless {
     }
 }
 
+impl KeyboardShortcutsInhibitHandler for State {
+    fn keyboard_shortcuts_inhibit_state(&mut self) -> &mut KeyboardShortcutsInhibitState {
+        &mut self.shortcuts_inhibit_state
+    }
+
+    fn new_inhibitor(&mut self, inhibitor: KeyboardShortcutsInhibitor) {
+        inhibitor.activate();
+    }
+}
+
+smithay::delegate_keyboard_shortcuts_inhibit!(State);
+
 impl State {
+    fn shortcuts_inhibited(&self) -> bool {
+        self.seat
+            .get_keyboard()
+            .and_then(|keyboard| keyboard.current_focus())
+            .and_then(|focus| self.seat.keyboard_shortcuts_inhibitor_for_surface(&focus))
+            .is_some_and(|inhibitor| inhibitor.is_active())
+    }
+
     pub(crate) fn deliver_key(&mut self, evdev_code: u32, pressed: bool, time: u32) {
         let state = self;
         let Some(keyboard) = state.seat.get_keyboard() else {
@@ -775,8 +799,9 @@ impl State {
                         modifiers.shift,
                     )));
                 }
-                if let Some(shortcut) =
-                    without_super(sym.raw()).filter(|_| !modifiers.logo && !state.is_locked())
+                let inhibited = state.shortcuts_inhibited();
+                if let Some(shortcut) = without_super(sym.raw())
+                    .filter(|_| !modifiers.logo && !state.is_locked() && !inhibited)
                 {
                     state.held_shortcut_keys.push(evdev_code);
                     return FilterResult::Intercept(Some(shortcut));
@@ -804,6 +829,8 @@ impl State {
                 )
                 .filter(|shortcut| {
                     modifiers.logo
+                        && (!inhibited
+                            || matches!(shortcut, Shortcut::ForceQuit | Shortcut::LockScreen))
                         && (*shortcut != Shortcut::ToggleScreenReader
                             || crate::assistive::screen_reader_installed())
                         && (!state.is_locked()

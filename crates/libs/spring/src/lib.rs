@@ -207,8 +207,22 @@ impl<T> Animated<T> {
         }
     }
 
+    pub fn released(start: State, target: f64, spring: Spring) -> Self {
+        Self {
+            spring,
+            start,
+            target,
+            since: None,
+            precision: UNIT_PRECISION,
+        }
+    }
+
     pub fn target(&self) -> f32 {
         self.target as f32
+    }
+
+    pub fn start_at(&mut self, now: T) {
+        self.since.get_or_insert(now);
     }
 
     pub fn jump_to(&mut self, value: impl Into<f64>) {

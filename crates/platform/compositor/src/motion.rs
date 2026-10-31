@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use smithay::desktop::layer_map_for_output;
 use smithay::utils::{Logical, Physical, Point, Rectangle, Size};
-use unbound_spring::{Animation, Spring, State as Phase};
+use unbound_spring::{Animated, Animation, Spring, State as Phase};
 
 use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
@@ -24,6 +24,11 @@ pub(crate) struct Tick {
 }
 
 impl Tick {
+    pub(crate) fn drive(&self, animated: &mut Animated<Duration>) -> Duration {
+        animated.start_at(self.time);
+        self.time + self.refresh
+    }
+
     pub(crate) fn step_since(&self, last: Option<Duration>) -> f64 {
         last.map_or(self.refresh.as_secs_f64(), |last| {
             self.time.as_secs_f64() - last.as_secs_f64()

@@ -1,6 +1,6 @@
 # Gap plans (2026-10-31)
 
-One plan per item in `NOTES/gaps.md`. Each plan has findings, a recommendation, milestones of about 1-2 hours and the decisions it needs.
+One plan per item in `NOTES/gaps.md` and `NOTES/gaps2.md`. Each plan has findings, a recommendation, milestones of about 1-2 hours and the decisions it needs.
 
 ## Order
 
@@ -36,6 +36,7 @@ Plans share work. Land the shared pieces first:
 | [ci-releases](ci-releases.md) | Never ran on a tag; polkit lint failure; OOM on a shared 12 GB runner VM; arm64 only | 10 |
 | [app-store](app-store.md) | Only the apt CLI; recommends building our own Software app | 13 (MVP 9) |
 | [window-snapping](window-snapping.md) | Left/right trigger at the screen edge behind the taskbar; 150 ms dwell reset by 2 px drift | 3 |
+| [notifications-placement](notifications-placement.md) | Banners hard-wired top right while the centre opens beside a left taskbar | 4 (+1 optional) |
 
 ## Decisions for the owner
 
@@ -45,4 +46,5 @@ Each plan's last section lists its decisions with a recommendation. The ones tha
 - **Shortcuts:** shortcut labels as words ("Ctrl+C") or macOS symbols.
 - **Theme:** slate hue, mid-tone selection fill, whether light moves too.
 - **Packages:** offline-only updates; Flathub on or off; own store or GNOME Software as a stopgap.
+- **Notifications:** everything opens from the clock corner, or banners stay top right.
 - **Swap:** no disk swap (zram plus oomd) or swapfile plus zswap.

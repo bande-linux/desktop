@@ -6,7 +6,7 @@ use std::time::Duration;
 use unbound_config::{
     Accent, Accessibility, AlertSound, Appearance, BarEdge, CapsLock, ClockFormat, Config,
     DisplaySettings, InputSource, LidOnPower, Placement, Rotation, Setting, Suspend, WallpaperFit,
-    WallpaperVariant, migrate,
+    WallpaperVariant,
 };
 
 fn apply(setting: Setting, source: &str) -> String {
@@ -230,73 +230,6 @@ fn a_file_with_a_wrong_value_is_still_edited_and_keeps_it_for_the_user() {
     assert_eq!(
         apply(Setting::BarEdge(BarEdge::Top), source),
         "bar {\n    edge \"top\"\n}\n"
-    );
-}
-
-#[test]
-fn a_write_renames_the_old_panel_section_instead_of_adding_a_bar() {
-    assert_eq!(
-        apply(
-            Setting::BarEdge(BarEdge::Top),
-            "panel {\n    edge \"left\" // mine\n}\n"
-        ),
-        "bar {\n    edge \"top\" // mine\n}\n"
-    );
-}
-
-#[test]
-fn the_old_dock_section_moves_into_an_existing_bar_without_overriding_it() {
-    assert_eq!(
-        apply(
-            Setting::BarNames(true),
-            "dock {\n    size 48\n    edge \"right\"\n}\nbar {\n    edge \"top\"\n}\n"
-        ),
-        "bar {\n    edge \"top\"\n    size 48\n    names #true\n}\n"
-    );
-}
-
-const OWNERS_FILE: &str = "appearance \"dark\"
-output \"Virtual-1\" {
-    scale 1.5
-}
-bar {
-    size 44
-}
-";
-
-#[test]
-fn the_old_connector_block_becomes_the_named_display_keeping_its_layout() {
-    let connected = [("Virtual-1".to_owned(), "Virtual-1".to_owned())];
-    assert_eq!(
-        migrate(OWNERS_FILE, &connected).expect("KDL").as_deref(),
-        Some(
-            "appearance \"dark\"\ndisplay \"Virtual-1\" {\n    scale 1.5\n}\nbar {\n    size 44\n}\n"
-        )
-    );
-
-    let commented = "// laptop\noutput \"eDP-1\" { // built in\n    scale 2 // retina\n}\n";
-    let connected = [(
-        "eDP-1".to_owned(),
-        "Apple Built-in Retina Display".to_owned(),
-    )];
-    assert_eq!(
-        migrate(commented, &connected).expect("KDL").as_deref(),
-        Some(
-            "// laptop\ndisplay \"Apple Built-in Retina Display\" { // built in\n    scale 2 // retina\n}\n"
-        )
-    );
-}
-
-#[test]
-fn an_old_connector_block_waits_for_its_display_and_yields_to_a_named_one() {
-    assert_eq!(migrate(OWNERS_FILE, &[]).expect("KDL"), None);
-    assert_eq!(migrate("appearance \"dark\"\n", &[]).expect("KDL"), None);
-
-    let both = "output \"DP-1\" {\n    scale 2\n}\ndisplay \"Dell U2720Q\" {\n    scale 1.5\n}\n";
-    let connected = [("DP-1".to_owned(), "Dell U2720Q".to_owned())];
-    assert_eq!(
-        migrate(both, &connected).expect("KDL").as_deref(),
-        Some("display \"Dell U2720Q\" {\n    scale 1.5\n}\n")
     );
 }
 

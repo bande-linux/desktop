@@ -3872,7 +3872,6 @@ dependencies = [
  "tracing",
  "unbound-bus",
  "unbound-design",
- "unbound-edid",
  "unbound-l10n",
  "unbound-log",
  "unbound-notify",

@@ -111,7 +111,7 @@ fn a_new_error_replaces_the_notification_and_a_fix_closes_it() {
 #[test]
 fn unknown_settings_are_reported_once_while_the_rest_applies() {
     let fixture = start(
-        "appearance \"dark\"\noutput \"Virtual-1\" {\n    scale 1.5\n}\nsparkle #true\nbar {\n    size 44\n}\n",
+        "appearance \"dark\"\ndisplay \"Virtual-1\" {\n    scale 1.5\n}\nsparkle #true\nbar {\n    size 44\n}\n",
     );
 
     let shown = fixture.wait_for(|active| active.len() == 1)[0].clone();

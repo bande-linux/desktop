@@ -25,60 +25,8 @@ fn error_at(source: &str) -> (usize, usize) {
     (line, column)
 }
 
-const OWNERS_FILE: &str = "appearance \"dark\"
-output \"Virtual-1\" {
-    scale 1.5
-}
-bar {
-    size 44
-}
-";
-
 #[test]
-fn a_file_from_before_displays_were_named_still_applies_every_setting() {
-    let (config, problems) = Config::load(OWNERS_FILE).expect("well-formed KDL");
-
-    assert_eq!(problems, []);
-    assert_eq!(config.appearance, Appearance::Dark);
-    assert_eq!(config.bar.icon_size, 44);
-    assert_eq!(config.display("Virtual-1", "Virtual-1").scale, Some(1.5));
-    assert_eq!(
-        config
-            .display("Dell DELL U2720Q 7ZD5K53", "Virtual-1")
-            .scale,
-        Some(1.5)
-    );
-    assert_eq!(
-        config.display("Dell DELL U2720Q 7ZD5K53", "DP-1"),
-        DisplaySettings::default()
-    );
-}
-
-#[test]
-fn a_named_display_wins_over_its_old_connector_block() {
-    let config = Config::parse(
-        "output \"DP-1\" {\n    scale 2\n}\ndisplay \"Dell U2720Q\" {\n    scale 1.5\n}\n",
-    )
-    .expect("well-formed KDL");
-
-    assert_eq!(config.display("Dell U2720Q", "DP-1").scale, Some(1.5));
-    assert_eq!(config.display("LG 27UK850", "DP-1").scale, Some(2.0));
-}
-
-#[test]
-fn the_old_panel_and_dock_sections_are_read_into_the_bar() {
-    let (config, problems) = Config::load("panel {\n    edge \"top\"\n}\n").expect("KDL");
-
-    assert_eq!(problems, []);
-    assert_eq!(config.bar.edge, BarEdge::Top);
-    let (config, problems) = Config::load(
-        "dock {\n    size 48\n    edge \"right\"\n}\nbar {\n    menu-bar \"separate\"\n    edge \"bottom\"\n}\n",
-    )
-    .expect("KDL");
-    assert_eq!(problems, []);
-    assert_eq!(config.bar.icon_size, 48);
-    assert_eq!(config.bar.edge, BarEdge::Bottom);
-    assert_eq!(config.bar.menu_bar, MenuBarPlacement::Separate);
+fn a_section_set_twice_is_reported_where_it_repeats() {
     assert_eq!(error_at("bar {\n}\nbar {\n}\n"), (3, 1));
 }
 
@@ -647,37 +595,6 @@ fn sound_settings_default_to_effects_and_feedback_on_and_reject_a_loud_alert() {
     assert_eq!(sound.alert_volume, 0.4);
     assert_eq!(error_at("sound {\n    alert-volume 2\n}\n"), (2, 18));
     assert_eq!(error_at("sound {\n    alert \"gong\"\n}\n"), (2, 11));
-}
-
-fn connector(drm: &Path, name: &str, status: &str, edid: &[u8]) {
-    let folder = drm.join(name);
-    std::fs::create_dir_all(&folder).expect("connector folder");
-    std::fs::write(folder.join("status"), status).expect("status");
-    std::fs::write(folder.join("edid"), edid).expect("edid");
-}
-
-#[test]
-fn connected_displays_are_named_as_the_compositor_names_them() {
-    let drm = tempfile::tempdir().expect("temp dir");
-    let mut dell = vec![0u8; 128];
-    dell[..8].copy_from_slice(&[0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00]);
-    dell[8..10].copy_from_slice(&[0x10, 0xac]);
-    dell[72..77].copy_from_slice(&[0, 0, 0, 0xfc, 0]);
-    dell[77..90].copy_from_slice(b"DELL P2419H\n ");
-    connector(drm.path(), "card0-Virtual-1", "connected\n", &[]);
-    connector(drm.path(), "card0-HDMI-A-1", "disconnected\n", &[]);
-    connector(drm.path(), "card1-DP-1", "connected\n", &dell);
-    connector(drm.path(), "card1-DP-2", "connected\n", &dell);
-    std::fs::create_dir_all(drm.path().join("renderD128")).expect("render node");
-
-    assert_eq!(
-        unbound_config::connected_displays(drm.path()),
-        [
-            ("DP-1".to_owned(), "Dell DELL P2419H (DP-1)".to_owned()),
-            ("DP-2".to_owned(), "Dell DELL P2419H (DP-2)".to_owned()),
-            ("Virtual-1".to_owned(), "Virtual-1".to_owned()),
-        ]
-    );
 }
 
 #[test]

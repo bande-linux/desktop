@@ -1,6 +1,6 @@
 use smithay::backend::input::InputEvent;
 use smithay::backend::libinput::LibinputInputBackend;
-use smithay::reexports::input::{ClickMethod, Device, DeviceCapability};
+use smithay::reexports::input::{ClickMethod, Device, DeviceCapability, DeviceConfigResult};
 use unbound_config::{Mouse, SecondaryClick, Trackpad};
 
 use crate::state::Compositor;
@@ -21,32 +21,43 @@ fn is_touchpad(device: &Device) -> bool {
     device.config_tap_finger_count() > 0
 }
 
+fn report(device: &Device, setting: &str, result: DeviceConfigResult) {
+    if let Err(error) = result {
+        tracing::warn!("cannot set {setting} on {}: {error:?}", device.name());
+    }
+}
+
 fn configure(device: &mut Device, settings: &PointerSettings) {
     if !device.has_capability(DeviceCapability::Pointer) {
         return;
     }
     let (natural, speed) = if is_touchpad(device) {
         let trackpad = &settings.trackpad;
-        let _ = device.config_tap_set_enabled(trackpad.tap_to_click);
+        let result = device.config_tap_set_enabled(trackpad.tap_to_click);
+        report(device, "tap to click", result);
         if device.config_dwt_is_available() {
-            let _ = device.config_dwt_set_enabled(trackpad.disable_while_typing);
+            let result = device.config_dwt_set_enabled(trackpad.disable_while_typing);
+            report(device, "disable while typing", result);
         }
         let method = match trackpad.secondary_click {
             SecondaryClick::TwoFingers => ClickMethod::Clickfinger,
             SecondaryClick::Corner => ClickMethod::ButtonAreas,
         };
         if device.config_click_methods().contains(&method) {
-            let _ = device.config_click_set_method(method);
+            let result = device.config_click_set_method(method);
+            report(device, "the click method", result);
         }
         (trackpad.natural_scrolling, trackpad.speed)
     } else {
         (settings.mouse.natural_scrolling, settings.mouse.speed)
     };
     if device.config_scroll_has_natural_scroll() {
-        let _ = device.config_scroll_set_natural_scroll_enabled(natural);
+        let result = device.config_scroll_set_natural_scroll_enabled(natural);
+        report(device, "natural scrolling", result);
     }
     if device.config_accel_is_available() {
-        let _ = device.config_accel_set_speed(speed);
+        let result = device.config_accel_set_speed(speed);
+        report(device, "the pointer speed", result);
     }
 }
 

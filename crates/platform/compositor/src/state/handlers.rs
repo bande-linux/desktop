@@ -1,3 +1,4 @@
+use std::sync::OnceLock;
 use std::time::Duration;
 
 use super::{ClientState, MENU_BAR_NAMESPACE, State, is_mapped, send_preferred_scale};
@@ -97,9 +98,10 @@ impl CompositorHandler for State {
     }
 
     fn client_compositor_state<'a>(&self, client: &'a Client) -> &'a CompositorClientState {
+        static UNKNOWN_CLIENT: OnceLock<CompositorClientState> = OnceLock::new();
         match client.get_data::<ClientState>() {
             Some(state) => &state.compositor_state,
-            None => unreachable!("every client is inserted with ClientState"),
+            None => UNKNOWN_CLIENT.get_or_init(CompositorClientState::default),
         }
     }
 

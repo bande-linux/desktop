@@ -61,12 +61,17 @@ impl State {
 impl InputMethodHandler for State {
     fn new_popup(&mut self, surface: PopupSurface) {
         self.place_candidates(&surface);
-        let _ = self.popups.track_popup(PopupKind::InputMethod(surface));
+        if let Err(error) = self.popups.track_popup(PopupKind::InputMethod(surface)) {
+            tracing::warn!("cannot track the input method candidates: {error}");
+        }
     }
 
     fn dismiss_popup(&mut self, surface: PopupSurface) {
-        if let Some(parent) = surface.get_parent().map(|parent| parent.surface.clone()) {
-            let _ = PopupManager::dismiss_popup(&parent, &PopupKind::InputMethod(surface));
+        if let Some(parent) = surface.get_parent().map(|parent| parent.surface.clone())
+            && let Err(error) =
+                PopupManager::dismiss_popup(&parent, &PopupKind::InputMethod(surface))
+        {
+            tracing::warn!("cannot dismiss the input method candidates: {error}");
         }
         self.needs_redraw = true;
     }

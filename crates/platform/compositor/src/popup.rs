@@ -92,7 +92,9 @@ impl State {
         popup.with_pending_state(|state| {
             state.geometry = geometry;
         });
-        let _ = self.popups.track_popup(PopupKind::Xdg(popup));
+        if let Err(error) = self.popups.track_popup(PopupKind::Xdg(popup)) {
+            tracing::warn!("cannot track a popup: {error}");
+        }
     }
 
     pub(crate) fn adopt_layer_popup(&mut self, popup: PopupSurface) {
@@ -121,8 +123,10 @@ impl State {
         self.popups.commit(surface);
         match self.popups.find_popup(surface) {
             Some(PopupKind::Xdg(popup)) => {
-                if !popup.is_initial_configure_sent() {
-                    let _ = popup.send_configure();
+                if !popup.is_initial_configure_sent()
+                    && let Err(error) = popup.send_configure()
+                {
+                    tracing::warn!("cannot configure a popup: {error}");
                 }
                 true
             }

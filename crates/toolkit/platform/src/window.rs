@@ -1353,8 +1353,11 @@ impl Window {
         for (outcome, keyboard) in outcomes {
             redraw |= self.apply_menu_outcome(outcome, keyboard);
         }
-        if redraw && self.menus.is_some() {
-            let _ = self.draw_menus(frame);
+        if redraw
+            && self.menus.is_some()
+            && let Err(error) = self.draw_menus(frame)
+        {
+            tracing::warn!(%error, "cannot draw the menus");
         }
     }
 
@@ -1363,7 +1366,9 @@ impl Window {
             MenuOutcome::Nothing => false,
             MenuOutcome::Redraw => true,
             MenuOutcome::Activate(action) if self.window_menu => {
-                let _ = self.window_menu_action(&action);
+                if let Err(error) = self.window_menu_action(&action) {
+                    tracing::warn!(%error, %action, "cannot perform the window menu action");
+                }
                 true
             }
             MenuOutcome::Activate(action) => {
@@ -1414,7 +1419,9 @@ impl Window {
                         text: menu_text(&mut self.text, appearance),
                         palette: appearance.palette(),
                     };
-                    let _ = menus.open_submenu(opening, level, index, keyboard);
+                    if let Err(error) = menus.open_submenu(opening, level, index, keyboard) {
+                        tracing::warn!(%error, "cannot open the submenu");
+                    }
                 }
                 true
             }
@@ -1668,8 +1675,10 @@ impl Window {
         let frame = self.frame_time();
         if let (Some((level, index)), Some(menus)) = (item, &mut self.menus) {
             let outcome = menus.activate(level, index, frame.on_screen());
-            if self.apply_menu_outcome(outcome, true) {
-                let _ = self.draw_menus(frame);
+            if self.apply_menu_outcome(outcome, true)
+                && let Err(error) = self.draw_menus(frame)
+            {
+                tracing::warn!(%error, "cannot draw the menus");
             }
             return true;
         }

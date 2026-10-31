@@ -469,7 +469,9 @@ impl Window {
         incoming.accepted = action;
         incoming.only = only;
         respond(incoming);
-        let _ = self.flush();
+        if let Err(error) = self.flush() {
+            tracing::warn!(%error, "cannot answer the drag");
+        }
     }
 
     pub(crate) fn transfer_fds(&self) -> Vec<BorrowedFd<'_>> {
@@ -510,7 +512,9 @@ impl Window {
                 action,
             } => {
                 self.dropped(&offer, position, transfer, action);
-                let _ = self.flush();
+                if let Err(error) = self.flush() {
+                    tracing::warn!(%error, "cannot finish the drop");
+                }
             }
             Purpose::Hover { offer } => self.announce(&offer, transfer.uris),
         }
@@ -562,7 +566,9 @@ impl Window {
         {
             finish_outgoing(outgoing);
             self.state.drag_event(DragEvent::Finished(None));
-            let _ = self.flush();
+            if let Err(error) = self.flush() {
+                tracing::warn!(%error, "cannot cancel the expired drag");
+            }
         }
     }
 
@@ -876,10 +882,15 @@ impl Dispatch<WlDataSource, ()> for State {
 }
 
 pub(crate) fn send(fd: OwnedFd, bytes: Vec<u8>) {
-    let _ = std::thread::Builder::new().spawn(move || {
+    let spawned = std::thread::Builder::new().spawn(move || {
         if let Ok(flags) = fcntl_getfl(&fd) {
             let _ = fcntl_setfl(&fd, flags - OFlags::NONBLOCK);
         }
-        let _ = File::from(fd).write_all(&bytes);
+        if let Err(error) = File::from(fd).write_all(&bytes) {
+            tracing::debug!(%error, "cannot send the clipboard data");
+        }
     });
+    if let Err(error) = spawned {
+        tracing::warn!(%error, "cannot start the clipboard transfer");
+    }
 }

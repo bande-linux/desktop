@@ -225,7 +225,9 @@ tautologies). "Goldens" are headless renders in `crates/apps/files/tests/golden/
 - **F4.** Marks stay sorted and are searched by bisection; the list view selects by row index
   (`Table::select_rows`, `selected_rows`) instead of 100 000 path strings; sizes and dates are
   formatted once per value; sorting re-orders in memory instead of reading again; the column
-  view paints only its visible rows.
+  view paints only its visible rows. Select All meets the 16 ms target (5.7 ms); switching to
+  the list view does not yet (27 ms, all rows are still built): that needs a `Table` that asks
+  for the cells of visible rows only.
 - **F5.** The preview column, 32 pt rows in the columns view, dark goldens for every view.
 - **F6.** List rows of folders are expandable; Right, Left, Alt+Right and the disclosure open them
   in place, children are listed when opened (on the UI thread: an opened folder is usually small),

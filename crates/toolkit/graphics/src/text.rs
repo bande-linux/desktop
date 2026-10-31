@@ -1,13 +1,17 @@
 use std::borrow::Cow;
 use std::fmt;
+use std::ops::Range;
 use std::sync::Arc;
 
 use parley::fontique::GenericFamily;
 use parley::{
-    Alignment, AlignmentOptions, FontContext, FontData, FontFamily, FontFamilyName, FontWeight,
-    Layout, LayoutContext, LineHeight, PositionedLayoutItem, RangedBuilder, StyleProperty,
+    Affinity, Alignment, AlignmentOptions, Cursor, FontContext, FontData, FontFamily,
+    FontFamilyName, FontWeight, Layout, LayoutContext, LineHeight, PositionedLayoutItem,
+    RangedBuilder, Selection, StyleProperty,
 };
 use unbound_design::{Color, TextRole, TextSize, Typeface};
+
+use crate::Rect;
 
 const DISPLAY_SIZE: f32 = 20.0;
 
@@ -181,6 +185,17 @@ impl TextSystem {
         max_width: Option<f32>,
         align: TextAlign,
     ) -> Paragraph {
+        self.emphasized(text, style, &[], max_width, align)
+    }
+
+    pub fn emphasized(
+        &mut self,
+        text: &str,
+        style: TextStyle,
+        emphasis: &[(Range<usize>, f32)],
+        max_width: Option<f32>,
+        align: TextAlign,
+    ) -> Paragraph {
         let text = if style.caps {
             Cow::Owned(text.to_uppercase())
         } else {
@@ -190,6 +205,14 @@ impl TextSystem {
             self.layouts
                 .ranged_builder(&mut self.fonts, &text, self.size.scale(), true);
         style.apply(&mut builder);
+        for (range, weight) in emphasis {
+            if text.get(range.clone()).is_some() {
+                builder.push(
+                    StyleProperty::FontWeight(FontWeight::new(*weight)),
+                    range.clone(),
+                );
+            }
+        }
         let mut layout = builder.build(&text);
         layout.break_all_lines(max_width);
         let alignment = match align {
@@ -292,6 +315,23 @@ impl Paragraph {
 
     pub fn line_count(&self) -> usize {
         self.layout.len()
+    }
+
+    pub fn span_rects(&self, range: Range<usize>) -> Vec<Rect> {
+        let mut rects = Vec::new();
+        Selection::new(
+            Cursor::from_byte_index(&self.layout, range.start, Affinity::Downstream),
+            Cursor::from_byte_index(&self.layout, range.end, Affinity::Upstream),
+        )
+        .geometry_with(&self.layout, |rect, _| {
+            rects.push(Rect::new(
+                rect.x0 as f32,
+                rect.y0 as f32,
+                (rect.x1 - rect.x0) as f32,
+                (rect.y1 - rect.y0) as f32,
+            ));
+        });
+        rects
     }
 
     pub fn glyph_runs(&self) -> Vec<GlyphRun> {

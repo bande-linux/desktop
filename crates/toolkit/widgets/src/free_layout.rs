@@ -1,5 +1,5 @@
 use accesskit::{Node, Role};
-use unbound_graphics::{Item, Rect};
+use unbound_graphics::{Item, Rect, TextSize};
 
 use super::{Context, Size, Widget, WidgetId};
 
@@ -7,6 +7,7 @@ pub struct FreeLayout {
     id: WidgetId,
     children: Vec<Box<dyn Widget>>,
     frames: Vec<Rect>,
+    in_header: Vec<bool>,
     frame: Rect,
 }
 
@@ -22,20 +23,38 @@ impl FreeLayout {
             id: WidgetId::next(),
             children: Vec::new(),
             frames: Vec::new(),
+            in_header: Vec::new(),
             frame: Rect::default(),
         }
     }
 
     pub fn insert(&mut self, child: impl Widget + 'static, frame: Rect) -> WidgetId {
+        self.push(Box::new(child), frame, false)
+    }
+
+    pub fn insert_in_header(&mut self, child: impl Widget + 'static, frame: Rect) -> WidgetId {
+        self.push(Box::new(child), frame, true)
+    }
+
+    fn push(&mut self, child: Box<dyn Widget>, frame: Rect, in_header: bool) -> WidgetId {
         let id = child.id();
-        self.children.push(Box::new(child));
+        self.children.push(child);
         self.frames.push(frame);
+        self.in_header.push(in_header);
         id
+    }
+
+    pub fn replace(&mut self, old: WidgetId, child: impl Widget + 'static) -> Option<WidgetId> {
+        let index = self.index(old)?;
+        let id = child.id();
+        self.children[index] = Box::new(child);
+        Some(id)
     }
 
     pub fn remove(&mut self, id: WidgetId) -> Option<Box<dyn Widget>> {
         let index = self.index(id)?;
         self.frames.remove(index);
+        self.in_header.remove(index);
         Some(self.children.remove(index))
     }
 
@@ -85,9 +104,16 @@ impl Widget for FreeLayout {
             .iter()
             .map(|frame| self.absolute(*frame))
             .collect::<Vec<_>>();
-        for (child, frame) in self.children.iter_mut().zip(absolute) {
+        let text_size = cx.text.size();
+        for ((child, frame), in_header) in
+            self.children.iter_mut().zip(absolute).zip(&self.in_header)
+        {
+            if *in_header {
+                cx.text.set_size(TextSize::DEFAULT);
+            }
             child.measure(cx, Size::new(frame.width, frame.height));
             child.place(cx, frame);
+            cx.text.set_size(text_size);
         }
     }
 

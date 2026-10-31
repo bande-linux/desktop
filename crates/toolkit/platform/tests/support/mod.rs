@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 use std::os::unix::net::UnixStream;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Once, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -17,20 +17,27 @@ use zbus::zvariant::{OwnedValue, Value};
 
 const PORTAL_PATH: &str = "/org/freedesktop/portal/desktop";
 const APPEARANCE: &str = "org.freedesktop.appearance";
+const UNBOUND_APPEARANCE: &str = "org.unbound.appearance";
 
 static DARK: AtomicBool = AtomicBool::new(false);
+static TEXT_SIZE: AtomicU32 = AtomicU32::new(100);
 
 struct Settings;
 
 #[zbus::interface(name = "org.freedesktop.portal.Settings")]
 impl Settings {
     fn read_all(&self, _namespaces: Vec<String>) -> HashMap<String, HashMap<String, OwnedValue>> {
-        let scheme = if DARK.load(Ordering::SeqCst) { 1u32 } else { 2 };
-        let appearance = HashMap::from([(
-            "color-scheme".to_owned(),
-            OwnedValue::try_from(Value::from(scheme)).expect("owned value"),
+        let owned = |value: u32| OwnedValue::try_from(Value::from(value)).expect("owned value");
+        let scheme = if DARK.load(Ordering::SeqCst) { 1 } else { 2 };
+        let appearance = HashMap::from([("color-scheme".to_owned(), owned(scheme))]);
+        let unbound = HashMap::from([(
+            "text-size".to_owned(),
+            owned(TEXT_SIZE.load(Ordering::SeqCst)),
         )]);
-        HashMap::from([(APPEARANCE.to_owned(), appearance)])
+        HashMap::from([
+            (APPEARANCE.to_owned(), appearance),
+            (UNBOUND_APPEARANCE.to_owned(), unbound),
+        ])
     }
 }
 
@@ -119,6 +126,7 @@ pub struct Shot {
     pub dark: bool,
     pub pointer: (i32, i32),
     pub popups: usize,
+    pub text_size: u32,
 }
 
 fn draw_on_the_gpu() {
@@ -131,6 +139,7 @@ pub fn shot(name: &str, prepare: fn(&mut Window) -> Option<Ui>, shot: Shot) {
     let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
     server.set_dark_appearance(shot.dark);
     DARK.store(shot.dark, Ordering::SeqCst);
+    TEXT_SIZE.store(shot.text_size, Ordering::SeqCst);
     let pointer = shot.pointer;
     let title = shot.title;
     let companion = shot.companion;

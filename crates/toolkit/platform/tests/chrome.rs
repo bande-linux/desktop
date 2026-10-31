@@ -8,6 +8,7 @@ use unbound_toolkit_platform::{FrameRegions, HEADER_HEIGHT, MenuPlacement, SHEET
 use unbound_widgets::{Alert, Cell, Column, Context, Menu, MenuItem, Row, Sort, Table, Ui, Widget};
 
 const SORT_BY: i32 = 4 + 28 + 28 + 9 + 14;
+const LARGER_SORT_BY: i32 = 4 + 37 + 37 + 9 + 18;
 const OVER_CLOSE: (i32, i32) = (24, 24);
 const OVER_ZOOM: (i32, i32) = (66, 24);
 const AWAY: (i32, i32) = (200, 120);
@@ -142,12 +143,13 @@ fn the_window_frame_menus_tables_and_alerts_match_their_goldens() {
         dark,
         pointer,
         popups: 0,
+        text_size: 100,
     };
     let monitor = |pointer| Shot {
         title: "Monitor",
         ..documents(false, pointer)
     };
-    let shots: [(&str, Prepare, Shot); 10] = [
+    let shots: [(&str, Prepare, Shot); 11] = [
         ("window-frame-rest-light-1x", bare, documents(false, AWAY)),
         ("window-frame-rest-dark-1x", bare, documents(true, AWAY)),
         (
@@ -182,6 +184,15 @@ fn the_window_frame_menus_tables_and_alerts_match_their_goldens() {
             Shot {
                 popups: 2,
                 ..documents(false, content(60, SORT_BY))
+            },
+        ),
+        (
+            "menu-submenu-150-light-1x",
+            show_menu,
+            Shot {
+                popups: 2,
+                text_size: 150,
+                ..documents(false, content(60, LARGER_SORT_BY))
             },
         ),
         (

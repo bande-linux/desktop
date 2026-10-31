@@ -15,6 +15,7 @@ extract() {
     echo "$root"
 }
 field() { dpkg-deb --field "$debs/$1_${version}_$architecture.deb" "$2"; }
+contains() { grep -q " ./$2\$" <<< "$(dpkg-deb --contents "$debs/$1_${version}_$architecture.deb")"; }
 
 echo "== every package is built for $architecture at $version"
 [ "$(find "$debs" -name '*.deb' | wc -l)" = "${#packages[@]}" ]
@@ -37,17 +38,16 @@ grep -qx 'Name=org.freedesktop.Notifications' "$service"
 test -x "$root$(sed -n 's/^Exec=//p' "$service")"
 
 echo "== the clipboard daemon's package"
-dpkg-deb --contents "$debs/unbound-clipboard_${version}_$architecture.deb" | grep -q ' ./usr/bin/unbound-clipboard$'
+contains unbound-clipboard usr/bin/unbound-clipboard
 field unbound-compositor Recommends | grep -qw unbound-clipboard
 
 echo "== the shell's packages"
 for package in unbound-shell unbound-term unbound-lock unbound-screenshot unbound-files unbound-settings; do
     field unbound-compositor Recommends | grep -q "$package"
-    dpkg-deb --contents "$debs/${package}_${version}_$architecture.deb" | grep -q " ./usr/bin/$package\$"
+    contains "$package" "usr/bin/$package"
 done
 for variant in light dark; do
-    dpkg-deb --contents "$debs/unbound-shell_${version}_$architecture.deb" |
-        grep -q " ./usr/share/unbound/wallpapers/drift-$variant.svg\$"
+    contains unbound-shell "usr/share/unbound/wallpapers/drift-$variant.svg"
 done
 root=$(extract unbound-term)
 grep -qx 'Exec=unbound-term' "$root/usr/share/applications/org.unbound.Terminal.desktop"

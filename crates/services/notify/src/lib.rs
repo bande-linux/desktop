@@ -33,6 +33,7 @@ const APPS_FILE: &str = "notification-apps";
 struct State {
     center: Center,
     sharers: BTreeSet<String>,
+    full_screen: BTreeSet<String>,
     presented: Presentation,
     presentations: Sender<Presentation>,
     stopped: bool,
@@ -182,6 +183,20 @@ impl Shared {
         }
     }
 
+    fn follow_full_screen(&self, holder: &str, full_screen: bool) {
+        let mut state = self.lock();
+        let changed = if full_screen {
+            state.full_screen.insert(holder.to_owned())
+        } else {
+            state.full_screen.remove(holder)
+        };
+        if changed {
+            let full_screen = !state.full_screen.is_empty();
+            state.center.set_full_screen(full_screen);
+            state.present();
+        }
+    }
+
     fn activate(&self, id: u32, action_key: &str) -> Outcome {
         self.update(|center| {
             if let Some(Invoked { closed }) = center.invoke(id, action_key) {
@@ -265,6 +280,7 @@ impl NotificationServer {
                 presented: center.presentation(),
                 center,
                 sharers: BTreeSet::new(),
+                full_screen: BTreeSet::new(),
                 presentations,
                 stopped: false,
             }),
@@ -353,6 +369,7 @@ fn forget_departed_sharers(shared: &Shared, connection: &Connection) -> zbus::Re
         };
         if arguments.new_owner.is_none() {
             shared.share_screen(arguments.name.as_str(), false);
+            shared.follow_full_screen(arguments.name.as_str(), false);
         }
     }
     Ok(())
@@ -619,6 +636,18 @@ impl NotificationCenter {
         if !bus.name_has_owner(sharer.clone().into()).await? {
             self.shared.share_screen(sharer.as_str(), false);
         }
+        Ok(())
+    }
+
+    fn quiet_for_full_screen(
+        &self,
+        #[zbus(header)] header: zbus::message::Header<'_>,
+        full_screen: bool,
+    ) -> zbus::fdo::Result<()> {
+        let holder = header
+            .sender()
+            .ok_or_else(|| zbus::fdo::Error::Failed("no caller".to_owned()))?;
+        self.shared.follow_full_screen(holder.as_str(), full_screen);
         Ok(())
     }
 

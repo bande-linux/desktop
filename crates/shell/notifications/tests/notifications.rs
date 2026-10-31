@@ -378,3 +378,24 @@ fn the_calendar_follows_midnight_unless_another_month_is_shown() {
     screen.set_today(date(2026, 11, 2), now);
     assert_eq!(screen.shown_month(), date(2026, 9, 1));
 }
+
+#[test]
+fn banners_go_quiet_only_while_the_display_in_use_shows_a_full_screen_app() {
+    let mut screen = screen();
+    screen.set_active_output("eDP-1");
+
+    screen.set_full_screen("HDMI-A-1", true);
+    assert!(screen.take_requests().is_empty());
+
+    screen.set_full_screen("eDP-1", true);
+    assert_eq!(screen.take_requests(), [Request::QuietForFullScreen(true)]);
+
+    screen.set_active_output("HDMI-A-1");
+    assert!(screen.take_requests().is_empty());
+
+    screen.set_full_screen("HDMI-A-1", false);
+    assert_eq!(screen.take_requests(), [Request::QuietForFullScreen(false)]);
+
+    screen.set_active_output("eDP-1");
+    assert_eq!(screen.take_requests(), [Request::QuietForFullScreen(true)]);
+}

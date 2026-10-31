@@ -142,6 +142,7 @@ pub struct Presentation {
     pub center: Vec<Stack>,
     pub do_not_disturb: bool,
     pub screen_shared: bool,
+    pub full_screen: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -161,6 +162,7 @@ pub struct Center {
     entries: BTreeMap<u32, Entry>,
     do_not_disturb: bool,
     screen_shared: bool,
+    full_screen: bool,
     banners_held: bool,
     apps: BTreeMap<String, App>,
 }
@@ -292,8 +294,13 @@ impl Center {
         self.hide_quieted_banners();
     }
 
+    pub fn set_full_screen(&mut self, full_screen: bool) {
+        self.full_screen = full_screen;
+        self.hide_quieted_banners();
+    }
+
     pub fn quiet(&self) -> bool {
-        self.do_not_disturb || self.screen_shared
+        self.do_not_disturb || self.screen_shared || self.full_screen
     }
 
     fn hide_quieted_banners(&mut self) {
@@ -386,6 +393,7 @@ impl Center {
             center: self.stacks(|entry| !entry.notification.transient),
             do_not_disturb: self.do_not_disturb,
             screen_shared: self.screen_shared,
+            full_screen: self.full_screen,
         }
     }
 

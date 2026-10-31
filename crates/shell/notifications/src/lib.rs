@@ -57,6 +57,7 @@ pub enum Request {
     Clear(String),
     ClearAll,
     HoldBanners(bool),
+    QuietForFullScreen(bool),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -133,6 +134,9 @@ pub struct Screen {
     pressed: Option<Target>,
     drag: Option<Drag>,
     holding: bool,
+    full_screen: HashSet<String>,
+    active_output: Option<String>,
+    quiet_for_full_screen: bool,
     size: (f32, f32),
     requests: Vec<Request>,
 }
@@ -167,6 +171,9 @@ impl Screen {
             pressed: None,
             drag: None,
             holding: false,
+            full_screen: HashSet::new(),
+            active_output: None,
+            quiet_for_full_screen: false,
             size: (0.0, 0.0),
             requests: Vec::new(),
         }
@@ -205,6 +212,31 @@ impl Screen {
 
     pub fn set_size(&mut self, width: u32, height: u32) {
         self.size = (width as f32, height as f32);
+    }
+
+    pub fn set_full_screen(&mut self, output: &str, full_screen: bool) {
+        if full_screen {
+            self.full_screen.insert(output.to_owned());
+        } else {
+            self.full_screen.remove(output);
+        }
+        self.follow_full_screen();
+    }
+
+    pub fn set_active_output(&mut self, output: &str) {
+        self.active_output = Some(output.to_owned());
+        self.follow_full_screen();
+    }
+
+    fn follow_full_screen(&mut self) {
+        let quiet = self
+            .active_output
+            .as_ref()
+            .is_some_and(|output| self.full_screen.contains(output));
+        if quiet != self.quiet_for_full_screen {
+            self.quiet_for_full_screen = quiet;
+            self.requests.push(Request::QuietForFullScreen(quiet));
+        }
     }
 
     pub fn take_requests(&mut self) -> Vec<Request> {
@@ -371,6 +403,8 @@ impl Screen {
         });
         let status = if self.presentation.screen_shared {
             Some("screen-shared")
+        } else if self.presentation.full_screen {
+            Some("full-screen")
         } else {
             self.presentation
                 .do_not_disturb

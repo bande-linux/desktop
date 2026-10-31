@@ -446,3 +446,30 @@ fn sharing_the_screen_keeps_banners_off_screen_without_replaying_them_afterwards
     center.post(from("Chat", "After"), Timeout::ServerDefault, start);
     assert_eq!(center.presentation().banners.len(), 2);
 }
+
+#[test]
+fn a_full_screen_app_keeps_banners_off_screen_but_lets_critical_ones_through() {
+    let start = Instant::now();
+    let mut center = Center::default();
+    center.post(from("Chat", "Before"), Timeout::ServerDefault, start);
+
+    center.set_full_screen(true);
+    assert!(center.presentation().banners.is_empty());
+    center.post(from("Chat", "During"), Timeout::ServerDefault, start);
+    let alarm = Notification {
+        urgency: Urgency::Critical,
+        ..from("Power", "Battery critically low")
+    };
+    center.post(alarm, Timeout::ServerDefault, start);
+    let presentation = center.presentation();
+    assert!(presentation.full_screen);
+    assert_eq!(
+        summaries(&presentation.banners),
+        [group("Power", &["Battery critically low"])]
+    );
+
+    center.set_full_screen(false);
+    center.post(from("Chat", "After"), Timeout::ServerDefault, start);
+    assert!(!center.presentation().full_screen);
+    assert_eq!(center.presentation().banners.len(), 2);
+}

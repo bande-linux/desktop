@@ -231,6 +231,17 @@ impl App for Notifications {
                 self.screen.toggle(now);
                 self.carry_out(window);
             }
+            WindowEvent::FullScreen {
+                output,
+                full_screen,
+            } => {
+                self.screen.set_full_screen(&output, full_screen);
+                self.carry_out(window);
+            }
+            WindowEvent::ActiveOutput(output) => {
+                self.screen.set_active_output(&output);
+                self.carry_out(window);
+            }
             WindowEvent::PanelAnchor {
                 panel: Panel::NotificationCenter,
                 edge,
@@ -347,6 +358,9 @@ fn serve(connection: &Connection, outgoing: &Receiver<Outgoing>, outbox: &Outbox
             Outgoing::Call(Request::Clear(group)) => center.clear(&group),
             Outgoing::Call(Request::ClearAll) => center.clear_all(),
             Outgoing::Call(Request::HoldBanners(held)) => center.hold_banners(held),
+            Outgoing::Call(Request::QuietForFullScreen(quiet)) => {
+                center.quiet_for_full_screen(quiet)
+            }
             Outgoing::Call(Request::Activate { .. }) => Ok(()),
         };
         report("reach the notification daemon", result);

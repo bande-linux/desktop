@@ -75,6 +75,8 @@ pub trait NotificationCenter {
 
     fn quiet_while_connected(&self) -> zbus::Result<()>;
 
+    fn quiet_for_full_screen(&self, full_screen: bool) -> zbus::Result<()>;
+
     fn get_apps(&self) -> zbus::Result<Vec<WireApp>>;
 
     fn set_app_rule(

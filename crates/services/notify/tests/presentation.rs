@@ -339,3 +339,27 @@ fn banners_stay_quiet_while_a_sharer_is_connected() {
     fixture.notify("After", HashMap::new());
     assert_eq!(fixture.next().banners.len(), 1);
 }
+
+#[test]
+fn banners_stay_quiet_while_the_shell_reports_a_full_screen_app_until_it_leaves() {
+    let fixture = start();
+    let shell = fixture.bus.connect().expect("shell connection");
+    let center = NotificationCenter::new(&shell).expect("shell proxy");
+    center
+        .quiet_for_full_screen(true)
+        .expect("QuietForFullScreen");
+    assert!(fixture.next().full_screen);
+
+    center
+        .quiet_for_full_screen(false)
+        .expect("QuietForFullScreen");
+    assert!(!fixture.next().full_screen);
+
+    center
+        .quiet_for_full_screen(true)
+        .expect("QuietForFullScreen");
+    assert!(fixture.next().full_screen);
+    drop(center);
+    drop(shell);
+    assert!(!fixture.next().full_screen);
+}

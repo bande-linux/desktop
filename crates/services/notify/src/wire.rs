@@ -15,7 +15,7 @@ pub type WireNotification = (
 );
 pub type WirePicture = (u32, u32, Vec<u8>, String);
 pub type WireStack = (String, Vec<WireNotification>);
-pub type WirePresentation = (Vec<WireStack>, Vec<WireStack>, bool, bool);
+pub type WirePresentation = (Vec<WireStack>, Vec<WireStack>, bool, bool, bool);
 
 pub(crate) fn urgency_code(urgency: Urgency) -> u8 {
     match urgency {
@@ -137,15 +137,19 @@ impl Presentation {
             stacks_to_wire(&self.center),
             self.do_not_disturb,
             self.screen_shared,
+            self.full_screen,
         )
     }
 
-    pub fn from_wire((banners, center, do_not_disturb, screen_shared): WirePresentation) -> Self {
+    pub fn from_wire(
+        (banners, center, do_not_disturb, screen_shared, full_screen): WirePresentation,
+    ) -> Self {
         Self {
             banners: stacks_from_wire(banners),
             center: stacks_from_wire(center),
             do_not_disturb,
             screen_shared,
+            full_screen,
         }
     }
 }

@@ -4,6 +4,7 @@ show-less = Show Less
 no-notifications = No Notifications
 do-not-disturb-on = Do Not Disturb is on. Notifications arrive here silently.
 screen-shared = Your screen is being shared. Notifications arrive here silently.
+full-screen = An app is full screen. Notifications arrive here silently.
 age-now = now
 age-minutes = { $count } min ago
 age-yesterday = Yesterday

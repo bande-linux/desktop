@@ -10,6 +10,7 @@ image = { workspace = true, features = ["gif", "jpeg", "png", "webp"] }
 md-5.workspace = true
 png.workspace = true
 tracing.workspace = true
+unbound-inbox.workspace = true
 unbound-xdg.workspace = true
 
 [dev-dependencies]

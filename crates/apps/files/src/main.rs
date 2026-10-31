@@ -360,7 +360,7 @@ fn open_terminal(window: &mut Window, folder: &Path) {
         TERMINAL_DIRECTORY.to_owned(),
         folder.to_string_lossy().into_owned(),
     ];
-    if let Err(error) = spawn_detached(&command, None, token.as_deref()) {
+    if let Err(error) = spawn_detached(TERMINAL_APP_ID, &command, None, token.as_deref()) {
         tracing::warn!("cannot open a terminal: {error}");
     }
 }
@@ -378,7 +378,7 @@ fn new_window(window: &mut Window, location: &Location) {
         }
     };
     let token = window.activation_token(APP_ID).ok();
-    if let Err(error) = spawn_detached(&[program, argument], None, token.as_deref()) {
+    if let Err(error) = spawn_detached(APP_ID, &[program, argument], None, token.as_deref()) {
         tracing::warn!("cannot open a window: {error}");
     }
 }

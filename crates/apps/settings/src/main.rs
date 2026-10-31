@@ -52,7 +52,7 @@ impl Settings {
 fn reveal(window: &mut Window, path: &Path) {
     let token = window.activation_token(FILES_APP_ID).ok();
     let command = [FILES.to_owned(), path.to_string_lossy().into_owned()];
-    if let Err(error) = spawn_detached(&command, None, token.as_deref()) {
+    if let Err(error) = spawn_detached(FILES_APP_ID, &command, None, token.as_deref()) {
         tracing::warn!("cannot show {} in Files: {error}", path.display());
     }
 }
@@ -197,7 +197,7 @@ fn check_updates() -> Result<(), Box<dyn std::error::Error>> {
     if announce_updates(&session, &system)? {
         let program = std::env::current_exe()?.to_string_lossy().into_owned();
         let pane = PaneId::SoftwareUpdate.keyword().to_owned();
-        spawn_detached(&[program, pane], None, None)?;
+        spawn_detached(APP_ID, &[program, pane], None, None)?;
     }
     Ok(())
 }

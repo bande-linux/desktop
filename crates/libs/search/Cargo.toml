@@ -8,6 +8,7 @@ repository.workspace = true
 [dependencies]
 jiff.workspace = true
 tracing.workspace = true
+unbound-inbox.workspace = true
 unbound-watch.workspace = true
 unbound-xdg.workspace = true
 

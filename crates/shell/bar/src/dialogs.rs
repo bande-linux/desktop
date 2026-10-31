@@ -10,9 +10,10 @@ use unbound_toolkit::{
     App, Image, Item, Palette, Point, Rect, Role, Scene, TextAlign, TextStyle, TextSystem, Window,
     WindowEvent,
 };
-use unbound_xdg::{Locale, applications, current_desktops, data_dirs, find_icon};
+use unbound_xdg::{Locale, applications, current_desktops, data_dirs, find_app, find_icon};
 use zbus::blocking::Connection;
 
+pub const DIALOGS: &str = "org.unbound.MenuBar";
 const ABOUT_SIZE: (u32, u32) = (280, 190);
 const ABOUT_ICON: f32 = 64.0;
 const ABOUT_PADDING: f32 = 28.0;
@@ -151,10 +152,7 @@ impl Dialog {
 }
 
 pub fn run_confirmation(ending: Ending) -> Result<(), Box<dyn std::error::Error>> {
-    let mut window = Window::open(
-        Role::toplevel(&ending.button(), "org.unbound.MenuBar"),
-        (420, 130),
-    )?;
+    let mut window = Window::open(Role::toplevel(&ending.button(), DIALOGS), (420, 130))?;
     let choice = Rc::new(Cell::new(Choice::Undecided));
     let now = Instant::now();
     let ui = confirmation(ending, COUNTDOWN, &choice, &window);
@@ -180,10 +178,7 @@ pub fn run_about() -> Result<(), Box<dyn std::error::Error>> {
         &read("/proc/cpuinfo"),
         &read("/proc/meminfo"),
     );
-    let mut window = Window::open(
-        Role::toplevel(&L10N.tr("about-title"), "org.unbound.MenuBar"),
-        (360, 210),
-    )?;
+    let mut window = Window::open(Role::toplevel(&L10N.tr("about-title"), DIALOGS), (360, 210))?;
     let row = |label: &str, value: &str| -> Box<dyn Widget> {
         Box::new(Label::new(&format!("{label}    {value}")))
     };
@@ -282,20 +277,19 @@ impl App for AppAbout {
 
 pub fn run_about_app(app_id: &str, version: &str) -> Result<(), Box<dyn std::error::Error>> {
     let directories = data_dirs();
-    let entry = applications(
+    let entries = applications(
         &directories,
         Locale::from_env().as_ref(),
         &current_desktops(),
-    )
-    .into_iter()
-    .find(|entry| entry.app_id() == app_id);
+    );
+    let entry = find_app(&entries, app_id).cloned();
     let name = entry
         .as_ref()
         .map_or_else(|| app_id.to_owned(), |entry| entry.name.clone());
     let mut window = Window::open(
         Role::toplevel(
             &L10N.tr_args("about-app-title", [("app", name.clone().into())]),
-            "org.unbound.MenuBar",
+            DIALOGS,
         ),
         ABOUT_SIZE,
     )?;

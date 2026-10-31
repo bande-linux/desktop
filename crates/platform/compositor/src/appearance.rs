@@ -1,18 +1,9 @@
 use std::thread;
 
+use unbound_bus::portal_settings::{self, APPEARANCE, PREFER_DARK, UNBOUND_APPEARANCE};
 use unbound_graphics::TextSize;
-use zbus::blocking::{Connection, Proxy};
+use zbus::blocking::Connection;
 use zbus::zvariant::OwnedValue;
-
-const PORTAL: &str = "org.freedesktop.portal.Desktop";
-const PORTAL_PATH: &str = "/org/freedesktop/portal/desktop";
-const SETTINGS: &str = "org.freedesktop.portal.Settings";
-const NAMESPACE: &str = "org.freedesktop.appearance";
-const UNBOUND_NAMESPACE: &str = "org.unbound.appearance";
-const REDUCED_MOTION: &str = "reduced-motion";
-const COLOR_SCHEME: &str = "color-scheme";
-const TEXT_SIZE: &str = "text-size";
-const PREFER_DARK: u32 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct SystemAppearance {
@@ -22,14 +13,14 @@ pub struct SystemAppearance {
 }
 
 impl SystemAppearance {
-    fn apply(&mut self, namespace: &str, key: &str, value: &OwnedValue) {
+    fn apply(&mut self, namespace: &str, key: &str, value: OwnedValue) {
         let value = u32::try_from(value).ok();
         match (namespace, key) {
-            (NAMESPACE, REDUCED_MOTION) => {
+            (APPEARANCE, "reduced-motion") => {
                 self.reduce_motion = value.is_some_and(|reduce| reduce != 0);
             }
-            (NAMESPACE, COLOR_SCHEME) => self.dark = value == Some(PREFER_DARK),
-            (UNBOUND_NAMESPACE, TEXT_SIZE) => {
+            (APPEARANCE, "color-scheme") => self.dark = value == Some(PREFER_DARK),
+            (UNBOUND_APPEARANCE, "text-size") => {
                 self.text_size = value.map_or(TextSize::DEFAULT, TextSize::from_percent);
             }
             _ => {}
@@ -39,36 +30,18 @@ impl SystemAppearance {
 
 pub fn follow_appearance(
     connection: Connection,
-    mut publish: impl FnMut(SystemAppearance) -> bool + Send + 'static,
-) -> zbus::Result<()> {
-    let settings = Proxy::new(&connection, PORTAL, PORTAL_PATH, SETTINGS)?;
-    let changes = settings.receive_signal("SettingChanged")?;
+    publish: impl FnMut(SystemAppearance) -> bool + Send + 'static,
+) {
     thread::spawn(move || {
-        let mut appearance = SystemAppearance::default();
-        for (namespace, key) in [
-            (NAMESPACE, REDUCED_MOTION),
-            (NAMESPACE, COLOR_SCHEME),
-            (UNBOUND_NAMESPACE, TEXT_SIZE),
-        ] {
-            if let Ok(value) = settings.call::<_, _, OwnedValue>("ReadOne", &(namespace, key)) {
-                appearance.apply(namespace, key, &value);
-            }
-        }
-        if !publish(appearance) {
-            return;
-        }
-        for change in changes {
-            let Ok((namespace, key, value)) =
-                change.body().deserialize::<(String, String, OwnedValue)>()
-            else {
-                continue;
-            };
-            let before = appearance;
-            appearance.apply(&namespace, &key, &value);
-            if appearance != before && !publish(appearance) {
-                return;
-            }
+        let followed = portal_settings::follow(
+            &connection,
+            &[APPEARANCE, UNBOUND_APPEARANCE],
+            SystemAppearance::default(),
+            SystemAppearance::apply,
+            publish,
+        );
+        if let Err(error) = followed {
+            tracing::warn!("cannot follow the appearance: {error}");
         }
     });
-    Ok(())
 }

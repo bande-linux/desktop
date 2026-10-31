@@ -1,3 +1,5 @@
+pub mod portal_settings;
+
 use zbus::blocking::{Connection, MessageIterator};
 
 pub fn serve_until_closed(connection: &Connection) {

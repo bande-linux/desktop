@@ -50,9 +50,8 @@ pub enum Sleep {
     Ended,
 }
 
-pub fn follow_sleep() -> zbus::Result<Channel<Sleep>> {
-    let connection = Connection::system()?;
-    let changes = ManagerProxyBlocking::new(&connection)?.receive_prepare_for_sleep()?;
+pub fn follow_sleep(connection: &Connection) -> zbus::Result<Channel<Sleep>> {
+    let changes = ManagerProxyBlocking::new(connection)?.receive_prepare_for_sleep()?;
     let (sender, channel) = channel::channel();
     thread::spawn(move || {
         for change in changes {
@@ -72,9 +71,8 @@ pub fn follow_sleep() -> zbus::Result<Channel<Sleep>> {
     Ok(channel)
 }
 
-pub fn follow_shutdown() -> zbus::Result<Channel<OwnedFd>> {
-    let connection = Connection::system()?;
-    let manager = ManagerProxyBlocking::new(&connection)?;
+pub fn follow_shutdown(connection: &Connection) -> zbus::Result<Channel<OwnedFd>> {
+    let manager = ManagerProxyBlocking::new(connection)?;
     let changes = manager.receive_prepare_for_shutdown()?;
     let take = move || -> zbus::Result<OwnedFd> {
         let delay = manager.inhibit(
@@ -110,9 +108,11 @@ pub fn follow_shutdown() -> zbus::Result<Channel<OwnedFd>> {
     Ok(channel)
 }
 
-pub fn follow_session(lock_states: Receiver<bool>) -> zbus::Result<Channel<SessionRequest>> {
-    let connection = Connection::system()?;
-    let session = SessionProxyBlocking::builder(&connection)
+pub fn follow_session(
+    connection: &Connection,
+    lock_states: Receiver<bool>,
+) -> zbus::Result<Channel<SessionRequest>> {
+    let session = SessionProxyBlocking::builder(connection)
         .path(OWN_SESSION)?
         .build()?;
     let locks = session.receive_lock()?;

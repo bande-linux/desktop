@@ -19,6 +19,7 @@ use unbound_compositor::{
     follow_session, follow_shutdown, follow_sleep, notify_ready, serve_keyboard_monitor,
 };
 use unbound_config::{BUS_NAME, Config, OBJECT_PATH, config_path};
+use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
 const HEADLESS_SIZE: (i32, i32) = (1920, 1080);
@@ -35,6 +36,25 @@ struct App<O> {
     schedulers: Vec<FrameScheduler>,
     started: Duration,
     shown: bool,
+    buses: Buses,
+}
+
+struct Buses {
+    session: Option<Connection>,
+    system: Option<Connection>,
+}
+
+impl Buses {
+    fn connect() -> Self {
+        Self {
+            session: Connection::session()
+                .inspect_err(|error| tracing::warn!("cannot connect to the session bus: {error}"))
+                .ok(),
+            system: Connection::system()
+                .inspect_err(|error| tracing::warn!("cannot connect to the system bus: {error}"))
+                .ok(),
+        }
+    }
 }
 
 struct Greeter {
@@ -64,9 +84,12 @@ enum Session {
 fn main() -> ExitCode {
     let started = now();
     unbound_log::init("unbound-compositor");
-    let result = parse_args().and_then(|(backend, session)| match backend {
-        Backend::Headless => run_headless(session, started),
-        Backend::Drm(device) => run_drm(device.as_deref(), session, started),
+    let result = parse_args().and_then(|(backend, session)| {
+        let buses = Buses::connect();
+        match backend {
+            Backend::Headless => run_headless(session, started, buses),
+            Backend::Drm(device) => run_drm(device.as_deref(), session, started, buses),
+        }
     });
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -100,7 +123,7 @@ fn now() -> Duration {
     Duration::from(Clock::<Monotonic>::new().now())
 }
 
-fn run_headless(session: Session, started: Duration) -> Result<(), Box<dyn Error>> {
+fn run_headless(session: Session, started: Duration, buses: Buses) -> Result<(), Box<dyn Error>> {
     let renderer = Renderer::new()?;
     let info = renderer.device_info();
     tracing::info!("rendering on {} ({})", info.name, info.driver);
@@ -112,6 +135,7 @@ fn run_headless(session: Session, started: Duration) -> Result<(), Box<dyn Error
         schedulers: vec![FrameScheduler::new(FrameClock::new(now(), REFRESH))],
         started,
         shown: false,
+        buses,
     };
     serve(&mut event_loop, app, session).map(drop)
 }
@@ -129,9 +153,11 @@ fn display_config() -> Config {
         .unwrap_or_default()
 }
 
-fn follow_display_settings(publish: channel::Sender<()>) -> zbus::Result<()> {
-    let connection = zbus::blocking::Connection::session()?;
-    let properties = PropertiesProxy::builder(&connection)
+fn follow_display_settings(
+    connection: &Connection,
+    publish: channel::Sender<()>,
+) -> zbus::Result<()> {
+    let properties = PropertiesProxy::builder(connection)
         .destination(BUS_NAME)?
         .path(OBJECT_PATH)?
         .build()?;
@@ -254,6 +280,7 @@ fn run_drm(
     device: Option<&Path>,
     session: Session,
     started: Duration,
+    buses: Buses,
 ) -> Result<(), Box<dyn Error>> {
     let (backend, notifiers) = open_display(device)?;
     tracing::info!("driving {}", backend.path().display());
@@ -280,8 +307,9 @@ fn run_drm(
             reactivate(app);
         }
     })?;
-    match follow_sleep() {
-        Ok(changes) => {
+    match buses.system.as_ref().map(follow_sleep) {
+        None => {}
+        Some(Ok(changes)) => {
             handle.insert_source(changes, |event, _, app| match event {
                 Event::Msg(Sleep::Starting) => app.output.suspend_input(),
                 Event::Msg(Sleep::Ended) => {
@@ -296,7 +324,7 @@ fn run_drm(
                 Event::Closed => {}
             })?;
         }
-        Err(error) => tracing::warn!("cannot follow sleep: {error}"),
+        Some(Err(error)) => tracing::warn!("cannot follow sleep: {error}"),
     }
     handle.insert_source(notifiers.device, |event, metadata, app| match event {
         DrmEvent::VBlank(crtc) => page_flipped(app, crtc, *metadata),
@@ -313,8 +341,13 @@ fn run_drm(
         Err(error) => tracing::warn!("cannot watch for displays being plugged in: {error}"),
     }
     let (settings, settings_changes) = channel::channel();
-    match follow_display_settings(settings) {
-        Ok(()) => {
+    match buses
+        .session
+        .as_ref()
+        .map(|bus| follow_display_settings(bus, settings))
+    {
+        None => {}
+        Some(Ok(())) => {
             handle.insert_source(settings_changes, |event, _, app| {
                 if matches!(event, Event::Msg(())) {
                     app.compositor.set_display_config(display_config());
@@ -322,7 +355,7 @@ fn run_drm(
                 }
             })?;
         }
-        Err(error) => tracing::warn!("cannot follow the display settings: {error}"),
+        Some(Err(error)) => tracing::warn!("cannot follow the display settings: {error}"),
     }
     let mut app = App {
         compositor,
@@ -330,6 +363,7 @@ fn run_drm(
         schedulers: Vec::new(),
         started,
         shown: false,
+        buses,
     };
     let input = app.output.input_backend()?;
     handle.insert_source(input, |event, _, app| {
@@ -361,11 +395,13 @@ fn listen<O: 'static>(
         app.compositor.remember_windows_in(path);
     }
     let socket_name = socket.socket_name().to_string_lossy().into_owned();
-    let exported = zbus::blocking::Connection::session().and_then(|session| {
-        export_session_environment(&session, &socket_name, app.compositor.cursor_theme())
-    });
-    if let Err(error) = exported {
-        tracing::warn!("cannot export the session environment: {error}");
+    if let Some(session) = &app.buses.session {
+        app.compositor.use_session_bus(session.clone());
+        if let Err(error) =
+            export_session_environment(session, &socket_name, app.compositor.cursor_theme())
+        {
+            tracing::warn!("cannot export the session environment: {error}");
+        }
     }
     handle.insert_source(socket, |stream, _, app| {
         if let Err(error) = app.compositor.insert_client(stream) {
@@ -390,22 +426,18 @@ fn listen<O: 'static>(
 fn follow_session_bus<O: 'static>(
     event_loop: &mut EventLoop<'static, App<O>>,
     app: &mut App<O>,
-    bus: &zbus::blocking::Connection,
+    bus: &Connection,
 ) -> Result<(), Box<dyn Error>> {
     let handle = event_loop.handle();
     let (appearance, appearance_changes) = channel::channel();
-    match follow_appearance(bus.clone(), move |look| appearance.send(look).is_ok()) {
-        Ok(()) => {
-            handle.insert_source(appearance_changes, |event, _, app| {
-                if let Event::Msg(look) = event {
-                    app.compositor.set_reduce_motion(look.reduce_motion);
-                    app.compositor.set_dark_appearance(look.dark);
-                    app.compositor.set_text_size(look.text_size);
-                }
-            })?;
+    follow_appearance(bus.clone(), move |look| appearance.send(look).is_ok());
+    handle.insert_source(appearance_changes, |event, _, app| {
+        if let Event::Msg(look) = event {
+            app.compositor.set_reduce_motion(look.reduce_motion);
+            app.compositor.set_dark_appearance(look.dark);
+            app.compositor.set_text_size(look.text_size);
         }
-        Err(error) => tracing::warn!("cannot follow the appearance: {error}"),
-    }
+    })?;
     let (alerts, alerted) = channel::channel();
     match follow_alerts(bus, move || alerts.send(()).is_ok()) {
         Ok(()) => {
@@ -453,37 +485,43 @@ fn start_user_session<O: 'static>(
         }
     }
     app.compositor.apply_input_settings(InputSettings::read());
-    match zbus::blocking::Connection::session() {
-        Ok(bus) => follow_session_bus(event_loop, app, &bus)?,
-        Err(error) => tracing::warn!("cannot follow the session settings: {error}"),
+    if let Some(bus) = app.buses.session.clone() {
+        follow_session_bus(event_loop, app, &bus)?;
     }
-    let (lock_states, reported) = std::sync::mpsc::channel();
-    match follow_session(reported) {
-        Ok(requests) => {
-            app.compositor.report_lock_states(lock_states);
-            event_loop
-                .handle()
-                .insert_source(requests, |event, _, app| {
-                    if let Event::Msg(SessionRequest::Lock) = event {
-                        app.compositor.request_lock_screen();
-                    }
-                })?;
-        }
-        Err(error) => tracing::warn!("cannot follow the logind session: {error}"),
-    }
-    if let Some(file) = unbound_xdg::reopen_file() {
-        app.compositor.remember_apps_to_reopen_in(file);
-        match follow_shutdown() {
-            Ok(shutdowns) => {
+    let system = app.buses.system.clone();
+    if let Some(system) = &system {
+        let (lock_states, reported) = std::sync::mpsc::channel();
+        match follow_session(system, reported) {
+            Ok(requests) => {
+                app.compositor.report_lock_states(lock_states);
                 event_loop
                     .handle()
-                    .insert_source(shutdowns, |event, _, app| {
-                        if let Event::Msg(delay) = event {
-                            app.compositor.shutting_down(delay);
+                    .insert_source(requests, |event, _, app| {
+                        if let Event::Msg(SessionRequest::Lock) = event {
+                            app.compositor.request_lock_screen();
                         }
                     })?;
             }
-            Err(error) => tracing::warn!("cannot remember the apps before shutdown: {error}"),
+            Err(error) => tracing::warn!("cannot follow the logind session: {error}"),
+        }
+    }
+    if let Some(file) = unbound_xdg::reopen_file() {
+        app.compositor.remember_apps_to_reopen_in(file);
+        if let Some(system) = &system {
+            match follow_shutdown(system) {
+                Ok(shutdowns) => {
+                    event_loop
+                        .handle()
+                        .insert_source(shutdowns, |event, _, app| {
+                            if let Event::Msg(delay) = event {
+                                app.compositor.shutting_down(delay);
+                            }
+                        })?;
+                }
+                Err(error) => {
+                    tracing::warn!("cannot remember the apps before shutdown: {error}")
+                }
+            }
         }
     }
     if std::env::var_os("UNBOUND_REVIEW_JOB").is_none() {

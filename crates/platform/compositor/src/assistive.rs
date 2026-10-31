@@ -31,6 +31,7 @@ pub(crate) fn screen_reader_installed() -> bool {
 pub(crate) struct Assistive {
     pub(crate) settings: Accessibility,
     screen_reader: Option<Child>,
+    pub(crate) session_bus: Option<Connection>,
     remembering: Option<Sender<Remembered>>,
     flash: Option<Flash>,
 }
@@ -41,12 +42,9 @@ struct Flash {
     last: Option<Duration>,
 }
 
-fn remembering(first: Remembered) -> Option<Sender<Remembered>> {
+fn remembering(connection: Connection, first: Remembered) -> Option<Sender<Remembered>> {
     let (sender, settings) = channel::<Remembered>();
     thread::spawn(move || {
-        let Ok(connection) = Connection::session() else {
-            return;
-        };
         for (property, value) in settings {
             let set = connection.call_method(
                 Some(BUS_NAME),
@@ -99,7 +97,10 @@ impl State {
             None => Some((property, value)),
         };
         if let Some(remembered) = unsent {
-            assistive.remembering = remembering(remembered);
+            assistive.remembering = assistive
+                .session_bus
+                .clone()
+                .and_then(|connection| remembering(connection, remembered));
         }
     }
 
@@ -117,14 +118,14 @@ impl State {
                 size: settings.cursor_size,
                 ..self.cursor_theme.clone()
             };
-            let exported = theme.clone();
-            thread::spawn(move || {
-                let result = Connection::session()
-                    .and_then(|session| export_cursor_environment(&session, &exported));
-                if let Err(error) = result {
-                    tracing::warn!("cannot export the pointer size: {error}");
-                }
-            });
+            if let Some(session) = self.assistive.session_bus.clone() {
+                let exported = theme.clone();
+                thread::spawn(move || {
+                    if let Err(error) = export_cursor_environment(&session, &exported) {
+                        tracing::warn!("cannot export the pointer size: {error}");
+                    }
+                });
+            }
             self.use_cursor_theme(theme);
         }
         self.configure_access_keys(&settings);
@@ -200,6 +201,10 @@ impl State {
 }
 
 impl Compositor {
+    pub fn use_session_bus(&mut self, connection: Connection) {
+        self.state.assistive.session_bus = Some(connection);
+    }
+
     pub(crate) fn keep_screen_reader(&mut self) {
         let assistive = &mut self.state.assistive;
         if let Some(child) = assistive.screen_reader.as_mut()

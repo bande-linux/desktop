@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use smithay::utils::Size;
 use unbound_compositor::{FrameClock, FrameScheduler, Headless, REFRESH, Renderer};
-use unbound_graphics::{Accent, Appearance, Color, Contrast, Scene, Scheme};
+use unbound_graphics::{Accent, Appearance, Color, Contrast, Scene, Scheme, TextSize};
 use unbound_test_bus::SessionBus;
 use unbound_toolkit_platform::{App, Role, Window, WindowEvent};
 use zbus::zvariant::{OwnedValue, Value};
@@ -32,7 +32,10 @@ impl Settings {
             ("color-scheme".to_owned(), owned(Value::from(1u32))),
             ("accent-color".to_owned(), owned(Value::from(ACCENT))),
         ]);
-        let unbound = HashMap::from([("frame-tint".to_owned(), owned(Value::from(TINT.to_vec())))]);
+        let unbound = HashMap::from([
+            ("frame-tint".to_owned(), owned(Value::from(TINT.to_vec()))),
+            ("text-size".to_owned(), owned(Value::from(150u32))),
+        ]);
         HashMap::from([
             (APPEARANCE.to_owned(), appearance),
             (UNBOUND_APPEARANCE.to_owned(), unbound),
@@ -72,7 +75,7 @@ impl App for Follower {
 }
 
 #[test]
-fn the_window_follows_the_portal_colour_scheme_accent_contrast_and_reduced_motion() {
+fn the_window_follows_the_portal_colour_scheme_accent_contrast_motion_and_text_size() {
     let bus = SessionBus::start().expect("private session bus");
     unsafe {
         std::env::set_var("DBUS_SESSION_BUS_ADDRESS", bus.address());
@@ -141,6 +144,7 @@ fn the_window_follows_the_portal_colour_scheme_accent_contrast_and_reduced_motio
                         "frame-tint",
                         Value::from(Vec::<f64>::new()),
                     );
+                    change(UNBOUND_APPEARANCE, "text-size", Value::from(300u32));
                 }
                 2 => change(APPEARANCE, "color-scheme", Value::from(0u32)),
                 _ => {}
@@ -153,17 +157,20 @@ fn the_window_follows_the_portal_colour_scheme_accent_contrast_and_reduced_motio
         scheme: Scheme::Dark,
         accent: Accent::Rose,
         frame_tint: Some(Color::hex(0x336699)),
+        text_size: TextSize::from_percent(150),
         ..Appearance::default()
     };
     let dark_reduced = Appearance {
         scheme: Scheme::Dark,
         contrast: Contrast::Increased,
         reduce_motion: true,
+        text_size: TextSize::LARGEST,
         ..Appearance::default()
     };
     let light = Appearance {
         contrast: Contrast::Increased,
         reduce_motion: true,
+        text_size: TextSize::LARGEST,
         ..Appearance::default()
     };
     assert_eq!(

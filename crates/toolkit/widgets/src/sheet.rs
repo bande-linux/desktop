@@ -3,7 +3,8 @@ use std::rc::Rc;
 
 use accesskit::{Node, Role};
 use unbound_graphics::{
-    Elevation, Image, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextRole, TextStyle,
+    ControlSize, Elevation, Image, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign,
+    TextRole, TextStyle,
 };
 
 use super::{Animated, BUTTON_HEIGHT, Button, Context, Size, Widget, WidgetId};
@@ -97,6 +98,7 @@ pub struct Alert {
     message_text: Option<Paragraph>,
     button_sizes: Vec<Size>,
     stacked: bool,
+    button_height: f32,
     frame: Rect,
 }
 
@@ -109,6 +111,7 @@ impl Alert {
             icon: None,
             buttons: Vec::new(),
             primary_count: 0,
+            button_height: BUTTON_HEIGHT,
             other_count: 0,
             chosen: Rc::new(Cell::new(false)),
             on_choice: Rc::new(RefCell::new(Box::new(on_choice))),
@@ -180,7 +183,7 @@ impl Alert {
             true => self.buttons.len().max(1),
             false => 1,
         } as f32;
-        rows * BUTTON_HEIGHT + (rows - 1.0) * BUTTON_SPACING + 2.0 * FOOTER_PADDING
+        rows * self.button_height + (rows - 1.0) * BUTTON_SPACING + 2.0 * FOOTER_PADDING
     }
 }
 
@@ -207,6 +210,8 @@ impl Widget for Alert {
             )
         });
         let other_count = self.other_count;
+        self.button_height = cx.control_height(ControlSize::Regular);
+        let button_height = self.button_height;
         self.button_sizes = self
             .buttons
             .iter_mut()
@@ -215,7 +220,7 @@ impl Widget for Alert {
                 let size = button.measure(cx, available);
                 match index < other_count {
                     true => size,
-                    false => Size::new(size.width.max(BUTTON_MIN_WIDTH), BUTTON_HEIGHT),
+                    false => Size::new(size.width.max(BUTTON_MIN_WIDTH), button_height),
                 }
             })
             .collect();
@@ -240,18 +245,18 @@ impl Widget for Alert {
     fn place(&mut self, cx: &mut Context, frame: Rect) {
         self.frame = frame;
         if self.stacked {
-            let mut y = frame.y + frame.height - FOOTER_PADDING - BUTTON_HEIGHT;
+            let mut y = frame.y + frame.height - FOOTER_PADDING - self.button_height;
             let width = frame.width - 2.0 * FOOTER_INSET;
             for button in &mut self.buttons {
                 button.place(
                     cx,
-                    Rect::new(frame.x + FOOTER_INSET, y, width, BUTTON_HEIGHT),
+                    Rect::new(frame.x + FOOTER_INSET, y, width, self.button_height),
                 );
-                y -= BUTTON_HEIGHT + BUTTON_SPACING;
+                y -= self.button_height + BUTTON_SPACING;
             }
             return;
         }
-        let y = frame.y + frame.height - FOOTER_PADDING - BUTTON_HEIGHT;
+        let y = frame.y + frame.height - FOOTER_PADDING - self.button_height;
         let mut right = frame.x + frame.width - FOOTER_INSET;
         let mut left = frame.x + FOOTER_INSET;
         let other_count = self.other_count;

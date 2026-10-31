@@ -4371,6 +4371,7 @@ dependencies = [
  "unbound-notify",
  "unbound-settings-panes",
  "unbound-sound",
+ "unbound-status",
  "unbound-test-bus",
  "unbound-toolkit",
  "unbound-wallpaper",
@@ -4429,6 +4430,7 @@ name = "unbound-status"
 version = "0.1.0"
 dependencies = [
  "rustix 1.1.6",
+ "tempfile",
  "tracing",
  "unbound-app-menu",
  "unbound-audio",
@@ -4438,6 +4440,7 @@ dependencies = [
  "unbound-l10n",
  "unbound-network",
  "unbound-notify",
+ "unbound-power",
  "unbound-test-bus",
  "unbound-xdg",
  "zbus",

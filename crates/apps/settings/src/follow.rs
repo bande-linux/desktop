@@ -14,12 +14,14 @@ use zbus::blocking::fdo::PropertiesProxy;
 use crate::L10N;
 use crate::about::{About, AboutCommand, follow_about};
 use crate::battery::{BatteryCommand, BatteryState, follow_battery};
+use crate::brightness::follow_brightness;
 use crate::client::{CONFIG_SETTINGS, SettingsClient};
 use crate::defaults::{DefaultApp, DefaultAppCommand, follow_default_apps};
 use crate::failure::{sentence, unexpected};
 use crate::locale::{LocaleCommand, LocaleState, follow_locale};
 use crate::login::{LoginCommand, LoginItems, follow_login_items};
 use crate::notifications::{AppNotifications, NotificationCommand, follow_app_notifications};
+use crate::permissions::{Grants, PermissionCommand, follow_permissions};
 use crate::pictures::{Pair, PictureCommand, choose_file, follow_pictures};
 use crate::privacy::clear_clipboard;
 use crate::privilege::{Privilege, follow_privileges};
@@ -61,6 +63,7 @@ pub enum Update {
     Failed(Option<SettingId>, String),
     Refused(Vec<Privilege>),
     DefaultApps(Vec<DefaultApp>),
+    Permissions(Grants),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -82,6 +85,8 @@ pub enum Command {
     Software(SoftwareCommand),
     Locale(LocaleCommand),
     DefaultApp(DefaultAppCommand),
+    Permission(PermissionCommand),
+    Brightness(f32),
     Reveal(PathBuf),
     ImportVpn,
     ClearClipboard,
@@ -278,6 +283,8 @@ pub struct Services {
     software: Option<Sender<SoftwareCommand>>,
     locale: Option<Sender<LocaleCommand>>,
     default_apps: Sender<DefaultAppCommand>,
+    permissions: Sender<PermissionCommand>,
+    brightness: Option<Sender<f32>>,
 }
 
 impl Services {
@@ -304,6 +311,8 @@ impl Services {
             software: system.map(|system| follow_software(system, updates.clone())),
             locale: system.map(|system| follow_locale(system, updates.clone())),
             default_apps: follow_default_apps(updates.clone()),
+            permissions: follow_permissions(session, updates.clone()),
+            brightness: system.and_then(|system| follow_brightness(system, updates.clone())),
         }
     }
 
@@ -338,6 +347,11 @@ impl Services {
                 .is_some_and(|time| time.send(command).is_ok()),
             Command::Login(command) => self.login.send(command).is_ok(),
             Command::DefaultApp(command) => self.default_apps.send(command).is_ok(),
+            Command::Permission(command) => self.permissions.send(command).is_ok(),
+            Command::Brightness(level) => self
+                .brightness
+                .as_ref()
+                .is_some_and(|brightness| brightness.send(level).is_ok()),
             Command::Notifications(command) => self.notifications.send(command).is_ok(),
             Command::Locale(command) => self
                 .locale

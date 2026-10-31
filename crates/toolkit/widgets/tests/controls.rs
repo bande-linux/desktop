@@ -5,11 +5,13 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Node, NodeId, Role, Toggled, TreeId};
-use unbound_graphics::{Item, Palette, Point, Rect, Scheme, TextSystem};
+use unbound_graphics::{
+    Item, Palette, Point, Rect, Scheme, TextAlign, TextSize, TextStyle, TextSystem,
+};
 use unbound_widgets::{
     Axis, BUTTON_HEIGHT, Button, CheckState, Checkbox, ComboBox, Context, Event, Key, Modifiers,
     Pointer, PopUpButton, ProgressBar, RadioGroup, SegmentedControl, Size, Spinner, Stack, Stepper,
-    TOOLTIP_DELAY, Ui, Widget, WidgetId,
+    TOOLTIP_DELAY, TextField, Ui, Widget, WidgetId,
 };
 
 const NONE: Modifiers = Modifiers {
@@ -364,4 +366,28 @@ fn a_combo_box_takes_typing_or_a_choice_from_its_menu() {
         harness.ui.take_menu_request().is_some(),
         "Down opens the choices"
     );
+}
+
+#[test]
+fn at_the_largest_text_size_controls_grow_and_a_field_still_fits_its_text() {
+    let mut text = TextSystem::new();
+    text.set_size(TextSize::LARGEST);
+    let mut cx = Context::new(text, Palette::for_scheme(Scheme::Light));
+    let line = cx
+        .text
+        .paragraph(
+            "Ag",
+            TextStyle::new(13.0, cx.palette.ink),
+            None,
+            TextAlign::Start,
+        )
+        .height();
+    let mut field = TextField::new("Name", "Ag", |_| {});
+    let field = field.measure(&mut cx, AREA);
+    let mut button = Button::new("Save", || {});
+    let button = button.measure(&mut cx, AREA);
+
+    assert!(line > 30.0, "the text doubled: {line}");
+    assert!(field.height >= line + 8.0, "{} < {line}", field.height);
+    assert!(button.height > BUTTON_HEIGHT && button.height >= line);
 }

@@ -107,6 +107,13 @@ impl Stepper {
     }
 }
 
+fn stepper_size(cx: &Context) -> Size {
+    Size::new(
+        (STEPPER_SIZE.width * cx.text.scale()).round(),
+        cx.control_height(ControlSize::Regular),
+    )
+}
+
 impl Widget for Stepper {
     fn id(&self) -> WidgetId {
         self.id
@@ -123,11 +130,12 @@ impl Widget for Stepper {
                 TextAlign::Start,
             ),
         );
-        STEPPER_SIZE
+        stepper_size(cx)
     }
 
     fn place(&mut self, cx: &mut Context, frame: Rect) {
-        self.frame = Rect::new(frame.x, frame.y, STEPPER_SIZE.width, STEPPER_SIZE.height);
+        let size = stepper_size(cx);
+        self.frame = Rect::new(frame.x, frame.y, size.width, size.height);
         let now = cx.now();
         let Some(press) = &mut self.press else {
             return;

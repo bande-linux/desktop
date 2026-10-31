@@ -21,7 +21,9 @@ pub use login_picture::{
     share_login_picture,
 };
 pub use report::{EDIT_ACTION, ErrorNotifier};
-pub use service::{ArrangedDisplay, BUS_NAME, ConfigService, OBJECT_PATH, ServiceError};
+pub use service::{
+    ArrangedDisplay, BUS_NAME, ConfigService, NightLightValue, OBJECT_PATH, ServiceError,
+};
 pub use store::{ConfigStore, Loaded, ReloadError};
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-config.ftl");

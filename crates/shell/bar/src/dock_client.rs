@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::mpsc::Sender;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -23,9 +24,8 @@ use unbound_toolkit::{
     MenuPlacement, Point, Rect, Role, Scene, TextSystem, Window, WindowEvent,
 };
 use unbound_xdg::{
-    DesktopEntry, ICON_THEMES, Locale, app_name, applications, autostart_dir, current_desktops,
-    data_dirs, find_app, find_icon, launch_with_arguments, opens_at_login, path_from_file_uri,
-    running_app, set_open_at_login,
+    AppCatalog, DesktopEntry, ICON_THEMES, app_name, autostart_dir, data_dirs, find_app, find_icon,
+    launch_with_arguments, opens_at_login, path_from_file_uri, running_app, set_open_at_login,
 };
 use zbus::blocking::Connection;
 
@@ -80,7 +80,7 @@ impl TrashWatch {
 pub struct Dock {
     state: Shared,
     ui: Ui,
-    entries: Vec<DesktopEntry>,
+    entries: Rc<[DesktopEntry]>,
     kept: Vec<String>,
     windows: Vec<String>,
     running: Vec<String>,
@@ -988,7 +988,7 @@ impl Dock {
         output: &str,
         config: &BarConfig,
         text: TextSystem,
-        session: Option<&Connection>,
+        (session, catalog): (Option<&Connection>, &AppCatalog),
         home: (Option<&Path>, Option<&Path>),
     ) -> std::io::Result<Self> {
         let edge = config.edge;
@@ -1009,11 +1009,7 @@ impl Dock {
         let mut dock = Self {
             state,
             ui,
-            entries: applications(
-                &data_dirs(),
-                Locale::from_env().as_ref(),
-                &current_desktops(),
-            ),
+            entries: catalog.entries(),
             kept: config.apps.clone(),
             windows: Vec::new(),
             running: Vec::new(),

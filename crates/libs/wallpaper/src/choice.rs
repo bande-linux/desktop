@@ -121,11 +121,11 @@ pub fn read(session: &Connection) -> Choice {
     proxy(session).map_or_else(|_| Choice::default(), |config| read_with(&config))
 }
 
-pub fn follow(choices: Outbox<Choice>) {
+pub fn follow(session: &Connection, choices: Outbox<Choice>) {
+    let session = session.clone();
     let work = move || {
         let mut sent = false;
         let mut follow = || -> zbus::Result<()> {
-            let session = Connection::session()?;
             let config = proxy(&session)?;
             let changes = PropertiesProxy::builder(&session)
                 .destination(CONFIG_BUS_NAME)?
@@ -170,9 +170,10 @@ pub fn set(session: &Connection, path: &Path) -> zbus::Result<()> {
     config.set_wallpaper_dark(&path)
 }
 
-pub fn choose(path: PathBuf) {
+pub fn choose(session: &Connection, path: PathBuf) {
+    let session = session.clone();
     let work = move || {
-        if let Err(error) = Connection::session().and_then(|session| set(&session, &path)) {
+        if let Err(error) = set(&session, &path) {
             tracing::warn!("cannot set the wallpaper: {error}");
         }
     };

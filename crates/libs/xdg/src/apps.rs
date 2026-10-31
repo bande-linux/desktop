@@ -1,16 +1,19 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
+use std::sync::Arc;
 
-use crate::entry::{DesktopEntry, Locale, current_desktops, handlers};
+use crate::entry::{DesktopEntry, Locale, current_desktops, data_dirs, handlers};
 use crate::mime::{DIRECTORY, MimeDatabase, OCTET_STREAM};
-use crate::mimeapps::{MimeApps, mimeapps_paths, set_default_app};
+use crate::mimeapps::{MimeApps, config_dirs, mimeapps_paths, set_default_app};
 
 const DESKTOP_ENTRY: &str = "application/x-desktop";
 
 pub struct Apps {
-    mime: MimeDatabase,
+    mime: Arc<MimeDatabase>,
     associations: MimeApps,
     handlers: Vec<DesktopEntry>,
     locale: Option<Locale>,
@@ -25,7 +28,7 @@ impl Apps {
         let desktops = current_desktops();
         let lists = mimeapps_paths(config_dirs, &data_dirs, &desktops);
         Self {
-            mime: MimeDatabase::load(&data_dirs),
+            mime: Arc::new(MimeDatabase::load(&data_dirs)),
             associations: MimeApps::load(&lists),
             handlers: handlers(&data_dirs, locale.as_ref(), &desktops),
             locale,
@@ -112,5 +115,39 @@ impl Apps {
 
     pub fn data_dirs(&self) -> &[PathBuf] {
         &self.data_dirs
+    }
+
+    pub fn mime_database(&self) -> Arc<MimeDatabase> {
+        Arc::clone(&self.mime)
+    }
+}
+
+#[derive(Clone)]
+pub struct AppCatalog {
+    apps: Rc<RefCell<Apps>>,
+    entries: Rc<[DesktopEntry]>,
+}
+
+impl AppCatalog {
+    pub fn load() -> Self {
+        let apps = Apps::load(data_dirs(), &config_dirs());
+        let entries = apps
+            .handlers
+            .iter()
+            .filter(|entry| !entry.no_display)
+            .cloned()
+            .collect();
+        Self {
+            apps: Rc::new(RefCell::new(apps)),
+            entries,
+        }
+    }
+
+    pub fn apps(&self) -> Rc<RefCell<Apps>> {
+        Rc::clone(&self.apps)
+    }
+
+    pub fn entries(&self) -> Rc<[DesktopEntry]> {
+        Rc::clone(&self.entries)
     }
 }

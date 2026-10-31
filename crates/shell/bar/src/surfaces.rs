@@ -4,6 +4,7 @@ use std::rc::Rc;
 use unbound_config::Config;
 use unbound_status::hub::StatusHub;
 use unbound_toolkit::{App, TextSystem, Window};
+use unbound_xdg::AppCatalog;
 use zbus::blocking::Connection;
 
 use crate::combined_client::{CombinedClient, combined_role};
@@ -27,6 +28,7 @@ pub struct Services<'a> {
     pub text: &'a TextSystem,
     pub session: Option<&'a Connection>,
     pub status: &'a StatusHub,
+    pub catalog: &'a AppCatalog,
     pub config_home: Option<&'a Path>,
     pub home: Option<&'a Path>,
     pub notification_center: NotificationCenter,
@@ -64,7 +66,7 @@ pub fn open(
                 &display.output,
                 bar,
                 text.sharing_fonts(),
-                services.session,
+                (services.session, services.catalog),
                 homes,
             )?;
             let view = RailView::new(
@@ -73,20 +75,15 @@ pub fn open(
                 unbound_xdg::data_dirs(),
                 icon_size,
             );
-            let status = MenuBarClient::with_view(view, place, services.status, layout)?;
+            let status = MenuBarClient::with_view(view, place, services, layout)?;
             let shared = (status.handoff(), status.restart());
             surfaces.push((window, Box::new(CombinedClient::new(dock, status))));
             shared
         }
         false => {
             let mut window = open_window(menu_bar_role(), MENU_BAR_SIZE)?;
-            let client = MenuBarClient::new(
-                &mut window,
-                text.sharing_fonts(),
-                place,
-                services.status,
-                layout,
-            )?;
+            let client =
+                MenuBarClient::new(&mut window, text.sharing_fonts(), place, services, layout)?;
             let shared = (client.handoff(), client.restart());
             surfaces.push((window, Box::new(client)));
             if display.main {
@@ -99,7 +96,7 @@ pub fn open(
                     &display.output,
                     bar,
                     text.sharing_fonts(),
-                    services.session,
+                    (services.session, services.catalog),
                     homes,
                 )?;
                 surfaces.push((window, Box::new(dock)));

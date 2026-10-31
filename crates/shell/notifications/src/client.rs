@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::os::fd::BorrowedFd;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::mpsc::{self, Receiver};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -17,8 +18,8 @@ use unbound_toolkit::{
     TextSystem, Window, WindowEvent,
 };
 use unbound_xdg::{
-    DesktopEntry, Locale, applications, current_desktops, data_dirs, find_app, find_icon, launch,
-    path_from_file_uri, running_app,
+    AppCatalog, DesktopEntry, data_dirs, find_app, find_icon, launch, path_from_file_uri,
+    running_app,
 };
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::DBusProxy;
@@ -47,7 +48,7 @@ pub struct Notifications {
     screen: Screen,
     inbox: Inbox<Message>,
     outgoing: mpsc::Sender<Outgoing>,
-    entries: Vec<DesktopEntry>,
+    entries: Rc<[DesktopEntry]>,
     region: Option<Option<Vec<Rect>>>,
     keyboard: Option<bool>,
     hide_pending: bool,
@@ -72,7 +73,7 @@ fn image_named(name: &str, directories: &[PathBuf]) -> Option<Image> {
 }
 
 fn sender_lookup(
-    entries: Vec<DesktopEntry>,
+    entries: Rc<[DesktopEntry]>,
 ) -> impl FnMut(&unbound_notify::Notification, &str) -> Sender {
     let mut icons: HashMap<String, Option<Image>> = HashMap::new();
     let mut pictures: HashMap<u32, (Picture, Option<Image>)> = HashMap::new();
@@ -368,12 +369,9 @@ impl Notifications {
         window: &mut Window,
         text: TextSystem,
         session: Option<&Connection>,
+        catalog: &AppCatalog,
     ) -> std::io::Result<Self> {
-        let entries = applications(
-            &data_dirs(),
-            Locale::from_env().as_ref(),
-            &current_desktops(),
-        );
+        let entries = catalog.entries();
         let inbox = Inbox::new()?;
         let (outgoing, requests) = mpsc::channel();
         if let Some(connection) = session {

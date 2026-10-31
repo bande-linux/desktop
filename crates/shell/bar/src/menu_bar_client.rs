@@ -29,14 +29,14 @@ use unbound_toolkit::{
     SessionEnd, TextSystem, Window, WindowEvent,
 };
 use unbound_xdg::{
-    DesktopEntry, ICON_THEMES, Locale, app_name, applications, current_desktops, data_dirs,
-    find_app, find_icon, launch_action, remember_running_apps, spawn_detached,
+    DesktopEntry, ICON_THEMES, app_name, data_dirs, find_app, find_icon, launch_action,
+    remember_running_apps, spawn_detached,
 };
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
 use crate::menu_search_client::SharedHandoff;
-use crate::surfaces::{Display, NotificationCenter};
+use crate::surfaces::{Display, NotificationCenter, Services};
 
 const TRAY_PIXELS: u32 = 32;
 const SCROLL_STEP: f32 = 1.0 / 16.0;
@@ -59,7 +59,8 @@ pub struct MenuBarClient<V> {
     restart: Restart,
     workspaces: (usize, usize),
     anchors: Vec<(Panel, Rect)>,
-    entries: Vec<DesktopEntry>,
+    entries: Rc<[DesktopEntry]>,
+    session: Option<Connection>,
     inbox: Inbox<Update>,
     status: StatusHub,
     tray: Vec<TrayItem>,
@@ -201,15 +202,16 @@ impl<V: StatusView> MenuBarClient<V> {
             Command::AppAction(id) => self.run_app_action(window, &id),
             Command::ShowBatteryPercentage(shown) => {
                 self.bar.set_battery_percentage(shown);
-                thread::spawn(move || {
-                    let written = Connection::session().and_then(|session| {
-                        config(&session)?.set_property("ShowBatteryPercentage", shown)?;
-                        Ok(())
+                if let Some(session) = self.session.clone() {
+                    thread::spawn(move || {
+                        let written = config(&session).and_then(|config| {
+                            Ok(config.set_property("ShowBatteryPercentage", shown)?)
+                        });
+                        if let Err(error) = written {
+                            tracing::warn!("cannot save the battery percentage setting: {error}");
+                        }
                     });
-                    if let Err(error) = written {
-                        tracing::warn!("cannot save the battery percentage setting: {error}");
-                    }
-                });
+                }
             }
             Command::SelectInputSource(index) => {
                 report("switch the input source", window.select_input_source(index));
@@ -732,11 +734,11 @@ impl MenuBarClient<MenuBar> {
         window: &mut Window,
         text: TextSystem,
         place: (Display, NotificationCenter),
-        status: &StatusHub,
+        services: &Services<'_>,
         layout: (MenuBarPlacement, BarEdge),
     ) -> std::io::Result<Self> {
         let bar = MenuBar::new(window.appearance().palette(), text, String::new());
-        MenuBarClient::with_view(bar, place, status, layout)
+        MenuBarClient::with_view(bar, place, services, layout)
     }
 }
 
@@ -744,16 +746,11 @@ impl<V: StatusView> MenuBarClient<V> {
     pub fn with_view(
         mut view: V,
         (display, notification_center): (Display, NotificationCenter),
-        status: &StatusHub,
+        services: &Services<'_>,
         layout: (MenuBarPlacement, BarEdge),
     ) -> std::io::Result<Self> {
-        let entries = applications(
-            &data_dirs(),
-            Locale::from_env().as_ref(),
-            &current_desktops(),
-        );
         let inbox = Inbox::new()?;
-        status.subscribe(inbox.outbox());
+        services.status.subscribe(inbox.outbox());
         let dates = DateFormats::from_env();
         view.set_time(&jiff::Zoned::now(), &dates);
         Ok(Self {
@@ -765,9 +762,10 @@ impl<V: StatusView> MenuBarClient<V> {
             restart: Restart::default(),
             workspaces: (1, 0),
             anchors: Vec::new(),
-            entries,
+            entries: services.catalog.entries(),
+            session: services.session.cloned(),
             inbox,
-            status: status.clone(),
+            status: services.status.clone(),
             tray: Vec::new(),
             tray_icons: HashMap::new(),
             open_anchor: None,

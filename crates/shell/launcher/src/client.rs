@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::sync::Arc;
 use std::sync::mpsc::{Sender, channel};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -21,8 +22,8 @@ use unbound_toolkit::{
     Role, Scene, TextSystem, Window, WindowError, WindowEvent, ui::frame_time,
 };
 use unbound_xdg::{
-    Apps, DIRECTORY, DesktopEntry, ICON_THEMES, Locale, MimeDatabase, applications, config_dirs,
-    current_desktops, data_dirs, find_icon, launch, launch_with, launch_with_arguments,
+    AppCatalog, Apps, DIRECTORY, DesktopEntry, ICON_THEMES, MimeDatabase, data_dirs, find_icon,
+    launch, launch_with, launch_with_arguments,
 };
 
 const FALLBACK_DOCUMENT: &str = "application-x-generic";
@@ -93,7 +94,7 @@ struct Previewer {
 }
 
 impl Previewer {
-    fn spawn() -> std::io::Result<Self> {
+    fn spawn(mimes: Arc<MimeDatabase>) -> std::io::Result<Self> {
         let (requests, wanted) = channel::<PathBuf>();
         let results = Inbox::new()?;
         let sender = results.outbox();
@@ -102,7 +103,6 @@ impl Previewer {
             .spawn(move || {
                 let cache = Cache::for_user();
                 let thumbnailers = Thumbnailers::load(&data_dirs());
-                let mimes = MimeDatabase::load(&data_dirs());
                 while let Ok(mut path) = wanted.recv() {
                     while let Ok(newer) = wanted.try_recv() {
                         path = newer;
@@ -137,7 +137,7 @@ impl Previewer {
 
 pub struct LauncherShell {
     launcher: Launcher,
-    entries: Vec<DesktopEntry>,
+    entries: Rc<[DesktopEntry]>,
     index: Option<FileIndex>,
     previewer: Option<Previewer>,
     clips: Option<Clips>,
@@ -464,9 +464,10 @@ impl LauncherShell {
         window: &mut Window,
         text: TextSystem,
         session: Option<&zbus::blocking::Connection>,
+        catalog: &AppCatalog,
     ) -> std::io::Result<Self> {
         let dirs = data_dirs();
-        let entries = applications(&dirs, Locale::from_env().as_ref(), &current_desktops());
+        let entries = catalog.entries();
         let apps = entries
             .iter()
             .map(|entry| AppInfo {
@@ -491,7 +492,8 @@ impl LauncherShell {
             .unwrap_or(&home)
             .join("launcher-skin-tone");
         let usage = usage_file.map(Usage::load).unwrap_or_default();
-        let apps_by_type = Rc::new(RefCell::new(Apps::load(dirs.clone(), &config_dirs())));
+        let apps_by_type = catalog.apps();
+        let mimes = apps_by_type.borrow().mime_database();
         let library = Library {
             apps: apps_by_type.clone(),
             app_icons: app_icons(&entries, &dirs),
@@ -501,7 +503,7 @@ impl LauncherShell {
         let index = FileIndex::spawn(home.clone())
             .inspect_err(|error| tracing::warn!("cannot index the home folder: {error}"))
             .ok();
-        let previewer = Previewer::spawn()
+        let previewer = Previewer::spawn(mimes)
             .inspect_err(|error| tracing::warn!("cannot preview: {error}"))
             .ok();
         if let Err(error) = window.hide() {

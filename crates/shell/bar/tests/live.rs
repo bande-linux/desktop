@@ -19,6 +19,7 @@ use unbound_launcher::LauncherShell;
 use unbound_notifications::Notifications;
 use unbound_test_wayland::{RED, ShmImage, TestClient};
 use unbound_toolkit::{App, Scene, Surfaces, TextSystem, Window, WindowEvent};
+use unbound_xdg::AppCatalog;
 use wayland_client::protocol::wl_shm::Format;
 
 const OUTPUT: (i32, i32) = (1024, 720);
@@ -182,11 +183,12 @@ fn shell(
     targets: Sender<Targets>,
 ) {
     let text = TextSystem::new();
+    let catalog = AppCatalog::load();
     let mut root =
         Window::open_on(stream, unbound_notifications::role(), (0, 0)).expect("notifications");
     root.share_fonts(&text);
     let notifications =
-        Notifications::new(&mut root, text.sharing_fonts(), None).expect("notifications");
+        Notifications::new(&mut root, text.sharing_fonts(), None, &catalog).expect("notifications");
     let toggle = notifications.toggle();
     let mut config = Config::default();
     config.bar.names = names;
@@ -199,6 +201,7 @@ fn shell(
         text: &text,
         session: None,
         status: &status,
+        catalog: &catalog,
         config_home: None,
         home: None,
         notification_center: Rc::new(toggle),
@@ -218,13 +221,15 @@ fn shell(
         None,
         None,
         status.audio(),
+        &catalog,
     )
     .expect("panel");
     let mut launcher = root
         .open_beside(unbound_launcher::role(), (0, 0))
         .expect("launcher");
     launcher.share_fonts(&text);
-    let search = LauncherShell::new(&mut launcher, text.sharing_fonts(), None).expect("launcher");
+    let search =
+        LauncherShell::new(&mut launcher, text.sharing_fonts(), None, &catalog).expect("launcher");
     let mut windows = vec![root];
     let mut parts: Vec<(Part, Box<dyn App>)> = vec![(Part::Notifications, Box::new(notifications))];
     for (window, app) in bar.surfaces {

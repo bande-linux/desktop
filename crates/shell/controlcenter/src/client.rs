@@ -29,7 +29,7 @@ use unbound_toolkit::{
     Window, WindowEvent,
 };
 use unbound_xdg::{
-    DesktopEntry, ICON_THEMES, applications, current_desktops, data_dirs, find_icon,
+    AppCatalog, DesktopEntry, ICON_THEMES, current_desktops, data_dirs, find_icon,
     path_from_file_uri, remember_running_apps, running_app, spawn_detached,
 };
 use zbus::blocking::Connection;
@@ -57,6 +57,7 @@ pub struct ControlCenter {
     pointer: Point,
     anchor: Option<Anchor>,
     audio: Option<Arc<Audio>>,
+    entries: Rc<[DesktopEntry]>,
     network: Option<NetworkManager>,
     bluetooth: Option<Bluetooth>,
     system: Option<Connection>,
@@ -492,12 +493,11 @@ impl ControlCenter {
         let Some(player) = self.players.current() else {
             return;
         };
-        let entries = applications(&data_dirs(), None, &current_desktops());
         let windows = window.running_apps();
         let running = player
             .desktop_entry
             .as_deref()
-            .and_then(|entry| running_app(&entries, &windows, entry))
+            .and_then(|entry| running_app(&self.entries, &windows, entry))
             .map(str::to_owned);
         match running {
             Some(app_id) => report("bring the player forward", window.activate_app(&app_id)),
@@ -910,6 +910,7 @@ impl ControlCenter {
         session: Option<&Connection>,
         system: Option<&Connection>,
         audio: Option<Arc<Audio>>,
+        catalog: &AppCatalog,
     ) -> std::io::Result<Self> {
         let player_updates = Inbox::new()?;
         let player_commands = session.map(|connection| {
@@ -938,6 +939,7 @@ impl ControlCenter {
             pointer: Point::new(0.0, 0.0),
             anchor: None,
             audio,
+            entries: catalog.entries(),
             network: system.map(NetworkManager::new),
             bluetooth: system.map(Bluetooth::new),
             backlight: Backlight::find(Path::new(SYSFS_BACKLIGHT)),

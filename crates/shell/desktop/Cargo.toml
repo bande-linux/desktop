@@ -18,6 +18,7 @@ unbound-toolkit.workspace = true
 unbound-volumes.workspace = true
 unbound-wallpaper.workspace = true
 unbound-xdg.workspace = true
+zbus.workspace = true
 
 [dev-dependencies]
 unbound-golden.workspace = true

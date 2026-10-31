@@ -18,10 +18,7 @@ use unbound_notifications::Notifications;
 use unbound_status::captive::{follow_captive_portal, open_page};
 use unbound_status::hub::StatusHub;
 use unbound_toolkit::{App, Rect, Scene, Surfaces, TextSystem, Window, WindowEvent};
-use unbound_xdg::{
-    Locale, applications, current_desktops, data_dirs, find_app, launch, reopen_file,
-    take_apps_to_reopen,
-};
+use unbound_xdg::{AppCatalog, find_app, launch, reopen_file, take_apps_to_reopen};
 use zbus::blocking::Connection;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,6 +37,7 @@ struct Context {
     session: Option<Connection>,
     system: Option<Connection>,
     status: StatusHub,
+    catalog: AppCatalog,
     config_home: Option<PathBuf>,
     home: Option<PathBuf>,
     notification_center: Rc<RefCell<Box<dyn Fn()>>>,
@@ -60,6 +58,7 @@ impl Context {
             text: &self.text,
             session: self.session.as_ref(),
             status: &self.status,
+            catalog: &self.catalog,
             config_home: self.config_home.as_deref(),
             home: self.home.as_deref(),
             notification_center: Rc::new(move || (toggle.borrow())()),
@@ -68,7 +67,12 @@ impl Context {
 
     fn notifications(&self, window: &mut Window) -> std::io::Result<Box<dyn App>> {
         window.share_fonts(&self.text);
-        let part = Notifications::new(window, self.text.sharing_fonts(), self.session.as_ref())?;
+        let part = Notifications::new(
+            window,
+            self.text.sharing_fonts(),
+            self.session.as_ref(),
+            &self.catalog,
+        )?;
         *self.notification_center.borrow_mut() = Box::new(part.toggle());
         Ok(Box::new(part))
     }
@@ -77,6 +81,7 @@ impl Context {
         &self,
         beside: &Window,
         place: &Place,
+        config: &Config,
     ) -> Result<(Opened, Option<Restart>), Box<dyn Error>> {
         match place {
             Place::Notifications => {
@@ -93,6 +98,7 @@ impl Context {
                     self.session.as_ref(),
                     self.system.as_ref(),
                     self.status.audio(),
+                    &self.catalog,
                 )?;
                 Ok((vec![(window, Box::new(part))], None))
             }
@@ -103,6 +109,7 @@ impl Context {
                     &mut window,
                     self.text.sharing_fonts(),
                     self.session.as_ref(),
+                    &self.catalog,
                 )?;
                 Ok((vec![(window, Box::new(part))], None))
             }
@@ -116,13 +123,14 @@ impl Context {
                 let part = DesktopSurface::new(
                     &window,
                     display.main,
-                    &self.config(),
+                    config,
                     self.text.sharing_fonts(),
+                    (self.session.as_ref(), &self.catalog),
                 )?;
                 Ok((vec![(window, Box::new(part))], None))
             }
             Place::Bar(display) => {
-                let bar = surfaces::open(beside, display, &self.config(), &self.services())?;
+                let bar = surfaces::open(beside, display, config, &self.services())?;
                 Ok((bar.surfaces, Some(bar.restart)))
             }
         }
@@ -185,11 +193,11 @@ impl Shell {
         });
     }
 
-    fn open(&mut self, place: Place) -> Result<(), Box<dyn Error>> {
+    fn open(&mut self, place: Place, config: &Config) -> Result<(), Box<dyn Error>> {
         let Some(beside) = self.windows.first() else {
             return Ok(());
         };
-        let (opened, restart) = self.context.open(beside, &place)?;
+        let (opened, restart) = self.context.open(beside, &place, config)?;
         self.remove(|known| *known == place);
         if let (Place::Bar(display), Some(restart)) = (&place, restart) {
             self.restarts.push((display.clone(), restart));
@@ -205,18 +213,21 @@ impl Shell {
         self.reconcile = false;
         let wanted = self.wanted();
         self.remove(|place| !wanted.contains(place));
+        let mut config = None;
         for place in wanted {
             if self.parts.iter().any(|(known, _)| *known == place) {
                 continue;
             }
-            if let Err(error) = self.open(place.clone()) {
+            let config = config.get_or_insert_with(|| self.context.config());
+            if let Err(error) = self.open(place.clone(), config) {
                 tracing::warn!("cannot open {place:?}: {error}");
             }
         }
     }
 
     fn rearrange_bar(&mut self, display: Display) {
-        if let Err(error) = self.open(Place::Bar(display.clone())) {
+        let config = self.context.config();
+        if let Err(error) = self.open(Place::Bar(display.clone()), &config) {
             tracing::warn!("cannot rearrange the bar: {error}");
             for (known, restart) in &self.restarts {
                 if *known == display {
@@ -325,7 +336,7 @@ fn bus(connection: zbus::Result<Connection>, name: &str) -> Option<Connection> {
         .ok()
 }
 
-fn reopen_apps(wanted: bool) {
+fn reopen_apps(wanted: bool, catalog: &AppCatalog) {
     let Some(file) = reopen_file() else {
         return;
     };
@@ -333,13 +344,8 @@ fn reopen_apps(wanted: bool) {
     if !wanted || apps.is_empty() {
         return;
     }
-    let entries = applications(
-        &data_dirs(),
-        Locale::from_env().as_ref(),
-        &current_desktops(),
-    );
     for app in apps {
-        if let Some(entry) = find_app(&entries, &app)
+        if let Some(entry) = find_app(&catalog.entries(), &app)
             && let Err(error) = launch(entry, None)
         {
             tracing::warn!("cannot reopen {app}: {error}");
@@ -356,11 +362,12 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         session,
         system,
         status,
+        catalog: AppCatalog::load(),
         config_home: std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from),
         home: std::env::var_os("HOME").map(PathBuf::from),
         notification_center: Rc::new(RefCell::new(Box::new(|| {}))),
     };
-    reopen_apps(context.config().reopen_apps);
+    reopen_apps(context.config().reopen_apps, &context.catalog);
     if let Some(system) = &context.system {
         if let Err(error) = register_agent(system, Arc::new(PairingDialogs::default())) {
             tracing::warn!("Bluetooth devices can pair only from Settings: {error}");

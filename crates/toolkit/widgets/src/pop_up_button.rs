@@ -1,9 +1,11 @@
 use accesskit::{Action, ActionRequest, HasPopup, Node, Role};
-use unbound_graphics::{Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextStyle};
+use unbound_graphics::{
+    ControlSize, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextStyle,
+};
 
 use super::control::{chevron_down, focus_ring};
 use super::menu::{ROW_HEIGHT, TEXT_START, VERTICAL_PADDING};
-use super::{BUTTON_HEIGHT, Context, Event, Key, Menu, MenuItem, Size, Widget, WidgetId};
+use super::{Context, Event, Key, Menu, MenuItem, Size, Widget, WidgetId};
 
 const PADDING: f32 = 10.0;
 const CHEVRON_SPACE: f32 = 28.0;
@@ -98,11 +100,16 @@ impl Widget for PopUpButton {
             .map(Paragraph::width)
             .fold(0.0, f32::max);
         self.width = (PADDING + widest + CHEVRON_SPACE).ceil();
-        Size::new(self.width, BUTTON_HEIGHT)
+        Size::new(self.width, cx.control_height(ControlSize::Regular))
     }
 
-    fn place(&mut self, _cx: &mut Context, frame: Rect) {
-        self.frame = Rect::new(frame.x, frame.y, self.width.min(frame.width), BUTTON_HEIGHT);
+    fn place(&mut self, cx: &mut Context, frame: Rect) {
+        self.frame = Rect::new(
+            frame.x,
+            frame.y,
+            self.width.min(frame.width),
+            cx.control_height(ControlSize::Regular),
+        );
     }
 
     fn frame(&self) -> Rect {

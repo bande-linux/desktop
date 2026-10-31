@@ -37,4 +37,5 @@ mod tiling;
 mod transient;
 mod watchdog;
 mod window;
+mod window_menu;
 mod workspace;

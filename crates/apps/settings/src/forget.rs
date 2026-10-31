@@ -1,9 +1,11 @@
+use unbound_settings_panes::Permission;
 use unbound_toolkit::Spacing;
 use unbound_toolkit::ui::{Axis, Button, Stack, Widget};
 
 use crate::L10N;
 use crate::follow::Command;
 use crate::pages::boxed;
+use crate::permissions::PermissionCommand;
 use crate::services::{BluetoothCommand, NetworkCommand};
 use crate::view::{Anchor, Intent, SettingsView, intent};
 use crate::widgets::{Row, Text, Tone};
@@ -14,6 +16,7 @@ const CONFIRM: &str = "forget-confirm";
 pub(crate) enum Forget {
     Network(Vec<u8>),
     Device(String),
+    Share(String),
 }
 
 impl SettingsView {
@@ -56,6 +59,7 @@ impl SettingsView {
         let back = match target.as_ref().or(self.forgetting.as_ref()) {
             Some(Forget::Network(ssid)) => String::from_utf8_lossy(ssid).into_owned(),
             Some(Forget::Device(address)) => address.clone(),
+            Some(Forget::Share(app)) => format!("grant:{app}"),
             None => return,
         };
         self.focus_next = Some(Anchor::Item(if target.is_some() {
@@ -85,6 +89,19 @@ impl SettingsView {
                 })
                 .cloned()
                 .map(|device| Command::Bluetooth(BluetoothCommand::Forget(device))),
+            Some(Forget::Share(app)) => {
+                if let Some((_, grants)) = self
+                    .permissions
+                    .iter_mut()
+                    .find(|(permission, _)| *permission == Permission::ScreenSharing)
+                {
+                    grants.retain(|grant| grant.app != app);
+                }
+                Some(Command::Permission(PermissionCommand::Forget(
+                    Permission::ScreenSharing,
+                    app,
+                )))
+            }
             None => None,
         };
         self.commands.extend(command);

@@ -126,6 +126,7 @@ impl Widget for TextView {
     }
 
     fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
+        self.editor.set_scale(cx.text.scale());
         self.editor.set_color(cx.palette.ink);
         self.placeholder_paragraph = (!self.placeholder.is_empty()).then(|| {
             cx.text.paragraph(

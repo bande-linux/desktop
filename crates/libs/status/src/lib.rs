@@ -1,7 +1,9 @@
+pub mod backlight;
 pub mod captive;
 pub mod clock;
 pub mod dbusmenu;
 pub mod devices;
+pub mod history;
 pub mod memory;
 pub mod session;
 pub mod status;

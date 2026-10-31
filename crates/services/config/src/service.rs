@@ -14,13 +14,14 @@ use zbus::zvariant::{OwnedValue, Value};
 
 use crate::{
     ACCENTS, Accessibility, AlertSound, Appearance, BarEdge, CURSOR_SIZE_RANGE, CapsLock,
-    ClockFormat, Config, ConfigStore, DisplaySettings, InputSource, LidOnPower, Loaded,
-    MenuBarPlacement, Placement, ReloadError, Rotation, SecondaryClick, Setting, Suspend,
-    TEXT_SIZE_RANGE, WallpaperFit, WallpaperVariant, ZOOM_RANGE, accent_keyword,
-    read_system_input_sources,
+    ClockFormat, ClockTime, Config, ConfigStore, DisplaySettings, InputSource, LidOnPower, Loaded,
+    MenuBarPlacement, NIGHT_LIGHT_WARMTH_RANGE, NightLight, NightSchedule, Placement, ReloadError,
+    Rotation, SecondaryClick, Setting, Suspend, TEXT_SIZE_RANGE, WallpaperFit, WallpaperVariant,
+    ZOOM_RANGE, accent_keyword, read_system_input_sources,
 };
 
 pub type ArrangedDisplay = (String, i32, i32, bool, String);
+pub type NightLightValue = (bool, String, String, String, u32);
 
 pub const BUS_NAME: &str = "org.unbound.Config";
 pub const OBJECT_PATH: &str = "/org/unbound/Config";
@@ -981,7 +982,7 @@ impl ConfigInterface {
     }
 
     #[zbus(property)]
-    fn night_light(&self) -> (bool, String, String, String, u32) {
+    fn night_light(&self) -> NightLightValue {
         let night = self.store.current().night_light;
         (
             night.on,
@@ -990,6 +991,34 @@ impl ConfigInterface {
             night.to.text(),
             night.warmth,
         )
+    }
+
+    #[zbus(property)]
+    fn set_night_light(&self, value: NightLightValue) -> zbus::fdo::Result<()> {
+        let (on, schedule, from, to, warmth) = value;
+        let time = |text: &str| {
+            ClockTime::parse(text).ok_or_else(|| {
+                InvalidArgs(format!("\"{text}\" is not a time of day such as \"22:00\""))
+            })
+        };
+        let (least, most) = NIGHT_LIGHT_WARMTH_RANGE;
+        if !(least..=most).contains(&warmth) {
+            return Err(InvalidArgs(format!(
+                "the warmth must lie between {least} and {most}"
+            )));
+        }
+        let night = NightLight {
+            on,
+            schedule: keyword(
+                &[NightSchedule::Sunset, NightSchedule::Custom],
+                NightSchedule::keyword,
+                &schedule,
+            )?,
+            from: time(&from)?,
+            to: time(&to)?,
+            warmth,
+        };
+        self.write(&Setting::NightLight(night))
     }
 
     #[zbus(property)]

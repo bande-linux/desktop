@@ -71,6 +71,24 @@ impl Context {
         }
     }
 
+    fn from_env() -> Self {
+        Context {
+            text: TextSystem::new(),
+            session: bus(Connection::session(), "session"),
+            system: bus(Connection::system(), "system"),
+            config_home: std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from),
+            home: std::env::var_os("HOME").map(PathBuf::from),
+            notification_center: Rc::new(RefCell::new(Box::new(|| {}))),
+            app_slice: own_app_slice(),
+        }
+    }
+
+    fn launcher(&self, window: &mut Window) -> std::io::Result<Box<dyn App>> {
+        window.share_fonts(&self.text);
+        let part = LauncherShell::new(window, self.text.sharing_fonts(), self.session.as_ref())?;
+        Ok(Box::new(part))
+    }
+
     fn notifications(&self, window: &mut Window) -> std::io::Result<Box<dyn App>> {
         window.share_fonts(&self.text);
         let part = Notifications::new(window, self.text.sharing_fonts(), self.session.as_ref())?;
@@ -102,13 +120,8 @@ impl Context {
             }
             Place::Launcher => {
                 let mut window = beside.open_beside(unbound_launcher::role(), (0, 0))?;
-                window.share_fonts(&self.text);
-                let part = LauncherShell::new(
-                    &mut window,
-                    self.text.sharing_fonts(),
-                    self.session.as_ref(),
-                )?;
-                Ok((vec![(window, Box::new(part))], None))
+                let part = self.launcher(&mut window)?;
+                Ok((vec![(window, part)], None))
             }
             Place::Desktop(display) => {
                 let mut window = beside.open_beside_on(
@@ -160,6 +173,25 @@ struct Shell {
 }
 
 impl Shell {
+    fn start(
+        context: Context,
+        mut root: Window,
+        pressure: Option<PressureTrigger>,
+    ) -> Result<Self, Box<dyn Error>> {
+        let launcher = context.launcher(&mut root)?;
+        let mut shell = Shell {
+            context,
+            windows: vec![root],
+            parts: vec![(Place::Launcher, launcher)],
+            restarts: Vec::new(),
+            reconcile: false,
+            pressure,
+            streak: Streak::default(),
+        };
+        shell.reconcile();
+        Ok(shell)
+    }
+
     fn part_of_source(&self, mut index: usize) -> Option<(usize, usize)> {
         for (part, (_, app)) in self.parts.iter().enumerate() {
             let count = app.sources().len();
@@ -177,7 +209,7 @@ impl Shell {
             .first()
             .map(|window| window.displays().to_vec())
             .unwrap_or_default();
-        let mut wanted = vec![Place::Notifications];
+        let mut wanted = vec![Place::Launcher, Place::Notifications];
         for (index, output) in displays.into_iter().enumerate() {
             let display = Display {
                 output,
@@ -186,7 +218,7 @@ impl Shell {
             wanted.push(Place::Desktop(display.clone()));
             wanted.push(Place::Bar(display));
         }
-        wanted.extend([Place::ControlCenter, Place::Launcher]);
+        wanted.push(Place::ControlCenter);
         if self.streak.alerting() {
             wanted.push(Place::LowMemory);
         }
@@ -395,16 +427,13 @@ fn own_app_slice() -> Option<PathBuf> {
     app_slice(Path::new(CGROUP_ROOT), &cgroup)
 }
 
+fn root_role() -> unbound_toolkit::Role {
+    unbound_launcher::role()
+}
+
 pub fn run() -> Result<(), Box<dyn Error>> {
-    let context = Context {
-        text: TextSystem::new(),
-        session: bus(Connection::session(), "session"),
-        system: bus(Connection::system(), "system"),
-        config_home: std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from),
-        home: std::env::var_os("HOME").map(PathBuf::from),
-        notification_center: Rc::new(RefCell::new(Box::new(|| {}))),
-        app_slice: own_app_slice(),
-    };
+    let root = Window::open(root_role(), (0, 0))?;
+    let context = Context::from_env();
     reopen_apps(context.config().reopen_apps);
     if let Some(session) = &context.session {
         follow_oom_kills(session.clone());
@@ -417,18 +446,10 @@ pub fn run() -> Result<(), Box<dyn Error>> {
             follow_captive_portal(system, session, open_page);
         }
     }
-    let mut root = Window::open(unbound_notifications::role(), (0, 0))?;
-    let notifications = context.notifications(&mut root)?;
-    let mut shell = Shell {
-        context,
-        windows: vec![root],
-        parts: vec![(Place::Notifications, notifications)],
-        restarts: Vec::new(),
-        reconcile: false,
-        pressure: pressure_trigger(),
-        streak: Streak::default(),
-    };
-    shell.reconcile();
+    let mut shell = Shell::start(context, root, pressure_trigger())?;
     unbound_toolkit::run_surfaces(&mut shell)?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

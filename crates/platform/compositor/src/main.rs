@@ -16,7 +16,7 @@ use unbound_compositor::{
     FrameScheduler, GREETER, Headless, InputSettings, REFRESH, REVIEW, Renderer, SCREENSHOT,
     SESSION_CLIENT_RESTART_THROTTLE, SHELL, SessionRequest, SessionRole, SessionUpkeep, Sleep,
     export_session_environment, follow_alerts, follow_appearance, follow_input_settings,
-    follow_session, follow_sleep, notify_ready, serve_keyboard_monitor,
+    follow_session, follow_shutdown, follow_sleep, notify_ready, serve_keyboard_monitor,
 };
 use unbound_config::{BUS_NAME, Config, OBJECT_PATH, config_path};
 use zbus::blocking::fdo::PropertiesProxy;
@@ -470,6 +470,21 @@ fn start_user_session<O: 'static>(
         }
         Err(error) => tracing::warn!("cannot follow the logind session: {error}"),
     }
+    if let Some(file) = unbound_xdg::reopen_file() {
+        app.compositor.remember_apps_to_reopen_in(file);
+        match follow_shutdown() {
+            Ok(shutdowns) => {
+                event_loop
+                    .handle()
+                    .insert_source(shutdowns, |event, _, app| {
+                        if let Event::Msg(delay) = event {
+                            app.compositor.shutting_down(delay);
+                        }
+                    })?;
+            }
+            Err(error) => tracing::warn!("cannot remember the apps before shutdown: {error}"),
+        }
+    }
     if std::env::var_os("UNBOUND_REVIEW_JOB").is_none() {
         return Ok(None);
     }
@@ -546,6 +561,9 @@ where
             .reveal_wake(now())
             .map(|at| at.saturating_sub(now()));
         let snap_due = compositor.snap_tick(now());
+        let menu_wait = compositor
+            .window_menu_tick(Instant::now())
+            .map(|at| at.saturating_duration_since(Instant::now()));
         let mut frame_wake = None;
         for scheduler in schedulers.iter_mut() {
             match scheduler.poll(now, compositor, output) {
@@ -575,6 +593,7 @@ where
             .chain(watchdog_wait)
             .chain(night_wait)
             .chain(reveal_wait)
+            .chain(menu_wait)
             .min();
     }
 }

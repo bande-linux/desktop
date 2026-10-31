@@ -6,8 +6,8 @@ use kdl::{KdlDocument, KdlEntry, KdlEntryFormat, KdlNode, KdlValue};
 use crate::{
     Accent, Accessibility, AlertSound, Appearance, BarEdge, CapsLock, ClockFormat, Config,
     ConfigError, DEFAULT_BAR_ICON_SIZE, DisplaySettings, InputSource, LidOnPower, MenuBarPlacement,
-    Mouse, Placement, SecondaryClick, Sound, Suspend, Trackpad, WallpaperFit, WallpaperVariant,
-    accent_keyword, same_displays,
+    Mouse, NightLight, Placement, SecondaryClick, Sound, Suspend, Trackpad, WallpaperFit,
+    WallpaperVariant, accent_keyword, same_displays,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -46,6 +46,7 @@ pub enum Setting {
     AlertVolume(f64),
     Wallpaper(WallpaperVariant, Option<PathBuf>),
     WallpaperFit(WallpaperFit),
+    NightLight(NightLight),
     Display(String, DisplaySettings),
     Arrangement(Vec<Placement>),
 }
@@ -262,6 +263,7 @@ impl Setting {
                 "fit",
                 (*fit != WallpaperFit::Fill).then(|| fit.keyword().into()),
             ),
+            Self::NightLight(night) => set_night_light(&mut document, night),
             Self::Display(identity, display) => set_display(&mut document, identity, display),
             Self::Arrangement(placements) => set_arrangement(&mut document, &config, placements),
         }
@@ -351,6 +353,41 @@ fn set_accessibility(document: &mut KdlDocument, access: &Accessibility) {
             (size != default).then_some(KdlValue::Integer(size.into())),
         );
     }
+}
+
+fn set_night_light(document: &mut KdlDocument, night: &NightLight) {
+    let standard = NightLight::default();
+    let section = Some("night-light");
+    set(
+        document,
+        section,
+        "on",
+        night.on.then_some(KdlValue::Bool(true)),
+    );
+    set(
+        document,
+        section,
+        "schedule",
+        (night.schedule != standard.schedule).then(|| night.schedule.keyword().into()),
+    );
+    set(
+        document,
+        section,
+        "from",
+        (night.from != standard.from).then(|| night.from.text().into()),
+    );
+    set(
+        document,
+        section,
+        "to",
+        (night.to != standard.to).then(|| night.to.text().into()),
+    );
+    set(
+        document,
+        section,
+        "warmth",
+        (night.warmth != standard.warmth).then_some(KdlValue::Integer(night.warmth.into())),
+    );
 }
 
 fn number(value: f64) -> KdlValue {

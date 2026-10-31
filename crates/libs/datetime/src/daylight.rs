@@ -139,6 +139,24 @@ pub fn sky(now: &Zoned, place: Option<Place>) -> Option<(Sky, Timestamp)> {
     })
 }
 
+pub fn within_daily(now: &Zoned, start: Time, end: Time) -> Option<(bool, Timestamp)> {
+    let current = now.time();
+    let inside = if start <= end {
+        (start..end).contains(&current)
+    } else {
+        current >= start || current < end
+    };
+    let instant = now.timestamp();
+    let tomorrow = now.date().tomorrow().ok()?;
+    [now.date(), tomorrow]
+        .into_iter()
+        .flat_map(|date| [start, end].map(|time| at(date, time, now.time_zone())))
+        .flatten()
+        .filter(|boundary| *boundary > instant)
+        .min()
+        .map(|next| (inside, next))
+}
+
 pub fn system_place() -> Option<Place> {
     let zone = TimeZone::system();
     let name = zone.iana_name()?;

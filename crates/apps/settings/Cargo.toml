@@ -23,6 +23,7 @@ unbound-network.workspace = true
 unbound-notify.workspace = true
 unbound-settings-panes.workspace = true
 unbound-sound.workspace = true
+unbound-status.workspace = true
 unbound-toolkit.workspace = true
 unbound-wallpaper.workspace = true
 unbound-xdg.workspace = true

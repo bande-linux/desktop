@@ -7,7 +7,7 @@ use parley::{
     Alignment, AlignmentOptions, FontContext, FontData, FontFamily, FontFamilyName, FontWeight,
     Layout, LayoutContext, LineHeight, PositionedLayoutItem, RangedBuilder, StyleProperty,
 };
-use unbound_design::{Color, TextRole, Typeface};
+use unbound_design::{Color, TextRole, TextSize, Typeface};
 
 const DISPLAY_SIZE: f32 = 20.0;
 
@@ -132,6 +132,7 @@ pub enum TextAlign {
 pub struct TextSystem {
     fonts: FontContext,
     layouts: LayoutContext<Color>,
+    size: TextSize,
 }
 
 impl Default for TextSystem {
@@ -145,6 +146,7 @@ impl TextSystem {
         Self {
             fonts: FontContext::new(),
             layouts: LayoutContext::new(),
+            size: TextSize::DEFAULT,
         }
     }
 
@@ -152,7 +154,20 @@ impl TextSystem {
         Self {
             fonts: self.fonts.clone(),
             layouts: LayoutContext::new(),
+            size: self.size,
         }
+    }
+
+    pub fn set_size(&mut self, size: TextSize) {
+        self.size = size;
+    }
+
+    pub fn size(&self) -> TextSize {
+        self.size
+    }
+
+    pub fn scale(&self) -> f32 {
+        self.size.scale()
     }
 
     pub fn contexts(&mut self) -> (&mut FontContext, &mut LayoutContext<Color>) {
@@ -171,9 +186,9 @@ impl TextSystem {
         } else {
             Cow::Borrowed(text)
         };
-        let mut builder = self
-            .layouts
-            .ranged_builder(&mut self.fonts, &text, 1.0, true);
+        let mut builder =
+            self.layouts
+                .ranged_builder(&mut self.fonts, &text, self.size.scale(), true);
         style.apply(&mut builder);
         let mut layout = builder.build(&text);
         layout.break_all_lines(max_width);

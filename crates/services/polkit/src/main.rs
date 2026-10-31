@@ -8,8 +8,8 @@ use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use accesskit::TreeUpdate;
 use rustix::event::{PollFd, PollFlags, poll};
 use unbound_inbox::{Inbox, Outbox};
-use unbound_polkit::agent::{Agent, Conversation, Notice, Request, Subject};
-use unbound_polkit::dialog::{Dialog, Message, Password, Prompt};
+use unbound_polkit::agent::{Agent, Answer, Conversation, Notice, Request, Subject};
+use unbound_polkit::dialog::{Dialog, Message, Prompt};
 use unbound_polkit::helper::HELPER;
 use unbound_toolkit::{
     App, Edges, KeyboardFocus, LayerKind, LayerOptions, Role, Scene, TextSystem, Window,
@@ -28,7 +28,7 @@ struct Bridge {
 }
 
 impl Conversation for Bridge {
-    fn respond(&self, request: &Request, prompt: &str, _echo: bool) -> Option<Password> {
+    fn respond(&self, request: &Request, user: &str, prompt: &str, _echo: bool) -> Answer {
         {
             let mut active = self.active.lock().unwrap_or_else(PoisonError::into_inner);
             while active.as_ref().is_some_and(|active| active != request) {
@@ -43,12 +43,13 @@ impl Conversation for Bridge {
         let (reply, answer) = mpsc::channel();
         let prompt = Prompt {
             message: request.message.clone(),
-            user: request.user.clone(),
+            identities: request.identities.clone(),
+            user: user.to_owned(),
         };
         if !self.outbox.send(Message::Prompt { prompt, reply }) {
-            return None;
+            return Answer::Cancel;
         }
-        answer.recv().ok().flatten()
+        answer.recv().unwrap_or(Answer::Cancel)
     }
 
     fn notice(&self, request: &Request, notice: Notice) {
@@ -81,16 +82,10 @@ impl App for Asking<'_> {
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
-        let changed = match event {
-            WindowEvent::Input(input) => self.dialog.handle(&input),
-            WindowEvent::Accessibility(request) => self.dialog.perform(&request),
-            WindowEvent::AppearanceChanged(appearance) => {
-                self.dialog.ui_mut().set_appearance(appearance);
-                true
-            }
-            _ => false,
-        };
-        if changed {
+        if let Err(error) = window.drive(self.dialog.ui_mut(), event) {
+            tracing::warn!("cannot handle the event: {error}");
+        }
+        if self.dialog.settle_choices() {
             window.request_redraw();
         }
     }
@@ -138,7 +133,7 @@ impl App for Asking<'_> {
 
 fn ask(
     prompt: Prompt,
-    reply: mpsc::Sender<Option<Password>>,
+    reply: mpsc::Sender<Answer>,
     inbox: &mut Inbox<Message>,
     pending: &mut VecDeque<Message>,
 ) -> Result<bool, WindowError> {
@@ -220,7 +215,7 @@ fn serve() -> Result<(), Box<dyn Error>> {
     loop {
         match next(&mut inbox, &mut pending)? {
             Message::Prompt { reply, .. } if declined => {
-                let _ = reply.send(None);
+                let _ = reply.send(Answer::Cancel);
             }
             Message::Prompt { prompt, reply } => {
                 declined = ask(prompt, reply, &mut inbox, &mut pending)?;

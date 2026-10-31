@@ -236,13 +236,19 @@ impl SettingsView {
             }
             PaneId::About => self.about.as_ref().map(|about| about.model.clone()),
             PaneId::Storage | PaneId::SoftwareUpdate => self.pane_summary(pane.id),
+            PaneId::NightLight => self.night_light_summary(),
             PaneId::Appearance
             | PaneId::Bar
             | PaneId::Accessibility
             | PaneId::KeyboardShortcuts
             | PaneId::TrackpadMouse
             | PaneId::Apps
-            | PaneId::PrivacySecurity => None,
+            | PaneId::PrivacySecurity
+            | PaneId::Camera
+            | PaneId::Microphone
+            | PaneId::Screenshots
+            | PaneId::ScreenSharing
+            | PaneId::Location => None,
         };
         live.unwrap_or_else(|| pane.summary.clone())
     }

@@ -1,0 +1,43 @@
+use std::os::fd::BorrowedFd;
+use std::sync::mpsc::Sender;
+
+use unbound_inbox::Inbox;
+use unbound_status::Update;
+use unbound_status::devices::{Control, follow_devices};
+use unbound_status::status::{Battery, Wifi};
+
+pub struct Devices {
+    inbox: Inbox<Update>,
+    _controls: Sender<Control>,
+}
+
+impl Devices {
+    pub fn follow() -> Option<Self> {
+        let system = zbus::blocking::Connection::system()
+            .inspect_err(|error| tracing::warn!("no system bus: {error}"))
+            .ok()?;
+        let inbox = Inbox::new()
+            .inspect_err(|error| tracing::warn!("cannot follow the battery and Wi-Fi: {error}"))
+            .ok()?;
+        let controls = follow_devices(&system, inbox.outbox());
+        Some(Self {
+            inbox,
+            _controls: controls,
+        })
+    }
+
+    pub fn fd(&self) -> BorrowedFd<'_> {
+        self.inbox.fd()
+    }
+
+    pub fn latest(&mut self) -> Option<(Option<Battery>, Option<Wifi>)> {
+        self.inbox
+            .drain()
+            .into_iter()
+            .rev()
+            .find_map(|update| match update {
+                Update::Devices((battery, wifi, _)) => Some((battery, wifi)),
+                _ => None,
+            })
+    }
+}

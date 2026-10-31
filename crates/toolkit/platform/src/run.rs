@@ -196,6 +196,7 @@ pub fn run(window: &mut Window, app: &mut impl App) -> Result<(), WindowError> {
             .flatten();
         if let Some(appearance) = change {
             window.request_redraw();
+            let appearance = window.for_role(appearance);
             app.event(window, WindowEvent::AppearanceChanged(appearance));
         }
         for index in pastes_ready.into_iter().rev() {
@@ -441,6 +442,7 @@ pub fn run_surfaces(app: &mut impl Surfaces) -> Result<(), WindowError> {
                         continue;
                     };
                     app.windows_mut()[index].request_redraw();
+                    let appearance = app.windows()[index].for_role(appearance);
                     app.event(index, WindowEvent::AppearanceChanged(appearance));
                 }
             }

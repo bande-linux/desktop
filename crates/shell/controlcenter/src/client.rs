@@ -7,9 +7,8 @@ use std::time::{Duration, Instant};
 
 use crate::media::{self, Command, Playback, Player, Players};
 use crate::{
-    Anchor, Change, Changes, Choice, HUD_DURATION, HUD_SIZE, Hud, KeyboardLight, L10N, PANEL_WIDTH,
-    SYSFS_LEDS, Status, chooser_menu, hud, panel, panel_items, place_beside, scene, slide_from,
-    stepped,
+    Anchor, Change, Changes, Choice, HUD_DURATION, HUD_SIZE, Hud, L10N, PANEL_WIDTH, Status,
+    chooser_menu, hud, panel, panel_items, place_beside, scene, slide_from, stepped,
 };
 use accesskit::TreeUpdate;
 use unbound_audio::{Audio, Level, Meter, meter_level};
@@ -17,8 +16,8 @@ use unbound_bluetooth::Bluetooth;
 use unbound_inbox::Inbox;
 use unbound_network::NetworkManager;
 use unbound_notify::client::NotificationCenter;
-use unbound_power::backlight::{Backlight, SYSFS_BACKLIGHT};
 use unbound_power::logind::own_session;
+use unbound_status::backlight::{DisplayLight, KeyboardLight, SYSFS_LEDS};
 use unbound_status::captive::open_page;
 use unbound_status::session::full_name;
 use unbound_toolkit::ui::{Animated, Event, Key, Menu, MenuItem, Pointer, Scroll, Spring, Ui};
@@ -29,7 +28,7 @@ use unbound_toolkit::{
 };
 use unbound_xdg::{
     DesktopEntry, ICON_THEMES, applications, current_desktops, data_dirs, find_icon,
-    path_from_file_uri, remember_running_apps, running_app, spawn_detached,
+    path_from_file_uri, running_app, spawn_detached,
 };
 use zbus::blocking::Connection;
 
@@ -60,7 +59,7 @@ pub struct ControlCenter {
     bluetooth: Option<Bluetooth>,
     system: Option<Connection>,
     session: Option<Connection>,
-    backlight: Option<Backlight>,
+    backlight: Option<DisplayLight>,
     keyboard_light: Option<KeyboardLight>,
     players: Players,
     player_updates: Inbox<Vec<Player>>,
@@ -172,12 +171,7 @@ impl ControlCenter {
     }
 
     fn brightness(&self) -> Option<f32> {
-        let backlight = self.backlight.as_ref()?;
-        let maximum = backlight
-            .max_brightness()
-            .ok()
-            .filter(|maximum| *maximum > 0)?;
-        Some(backlight.brightness().ok()? as f32 / maximum as f32)
+        self.backlight.as_ref()?.level()
     }
 
     fn status(&self) -> Status {
@@ -380,16 +374,8 @@ impl ControlCenter {
                 }
             }
             Change::Brightness(level) => {
-                if let (Some(system), Some(backlight)) = (&self.system, &self.backlight)
-                    && let Ok(maximum) = backlight.max_brightness()
-                {
-                    let value = ((level * maximum as f32).round() as u32).clamp(1, maximum);
-                    report(
-                        "set the brightness",
-                        own_session(system).and_then(|session| {
-                            session.set_brightness("backlight", &backlight.name, value)
-                        }),
-                    );
+                if let (Some(system), Some(backlight)) = (&self.system, &self.backlight) {
+                    report("set the brightness", backlight.set_level(system, level));
                 }
             }
             Change::KeyboardBrightness(level) => self.set_keyboard_light(level),
@@ -479,7 +465,6 @@ impl ControlCenter {
                 "shut-down" => SessionEnd::ShutDown,
                 _ => SessionEnd::LogOut,
             };
-            remember_running_apps(&window.running_apps());
             if let Err(error) = window.confirm_session_end(ending) {
                 tracing::warn!("cannot ask to end the session: {error}");
             }
@@ -626,14 +611,10 @@ impl ControlCenter {
     }
 
     fn set_keyboard_light(&self, level: f32) {
-        if let (Some(system), Some(light)) = (&self.system, &self.keyboard_light)
-            && let Some(maximum) = light.maximum()
-        {
-            let value = ((level * maximum as f32).round() as u32).min(maximum);
+        if let (Some(system), Some(light)) = (&self.system, &self.keyboard_light) {
             report(
                 "set the keyboard brightness",
-                own_session(system)
-                    .and_then(|session| session.set_brightness("leds", &light.name, value)),
+                light.set_level(system, level),
             );
         }
     }
@@ -941,7 +922,7 @@ impl ControlCenter {
             audio,
             network: system.map(NetworkManager::new),
             bluetooth: system.map(Bluetooth::new),
-            backlight: Backlight::find(Path::new(SYSFS_BACKLIGHT)),
+            backlight: DisplayLight::find(),
             keyboard_light: KeyboardLight::find(Path::new(SYSFS_LEDS)),
             system: system.cloned(),
             session: session.cloned(),

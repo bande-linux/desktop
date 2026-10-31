@@ -4,7 +4,7 @@ pub use alert::ask;
 pub use unbound_graphics::{
     Appearance, Color, ControlSize, CpuRenderer, Elevation, GlyphRun, GpuRenderer, Image, Item,
     Paint, Palette, Paragraph, Path, Point, PositionedGlyph, Radius, Rect, RenderError, Scene,
-    Scheme, Shape, Snapshot, Spacing, Stop, TextAlign, TextRole, TextStyle, TextSystem,
+    Scheme, Shape, Snapshot, Spacing, Stop, TextAlign, TextRole, TextSize, TextStyle, TextSystem,
     window_controls_area,
 };
 pub use unbound_toolkit_platform::{

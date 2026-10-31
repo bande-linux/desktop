@@ -1,8 +1,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use jiff::civil::date;
+use jiff::civil::{Time, date};
 use jiff::{Timestamp, Zoned};
-use unbound_datetime::daylight::{Place, Sky, place, sky};
+use unbound_datetime::daylight::{Place, Sky, place, sky, within_daily};
 
 const ZONE_TAB: &str = "# comment\nSE\t+5920+01803\tEurope/Stockholm\nNO\t+5955+01045\tEurope/Oslo\nUS\t+404251-0740023\tAmerica/New_York\tEastern (most areas)\n";
 
@@ -82,4 +82,41 @@ fn without_a_known_place_evenings_from_seven_are_dark() {
         (scheme, local(next, "UTC")),
         (Sky::Night, "07:00".to_owned())
     );
+}
+
+fn day(timestamp: Timestamp, zone: &str) -> String {
+    timestamp
+        .in_tz(zone)
+        .expect("zone")
+        .strftime("%d %H:%M")
+        .to_string()
+}
+
+#[test]
+fn a_daily_window_spans_midnight_and_names_the_next_change() {
+    let zone = "Europe/Stockholm";
+    let (ten, seven) = (Time::constant(22, 0, 0, 0), Time::constant(7, 0, 0, 0));
+    let (inside, next) =
+        within_daily(&at("2026-10-31T23:10[Europe/Stockholm]"), ten, seven).expect("night");
+    assert!(inside);
+    assert_eq!(day(next, zone), "01 07:00");
+
+    let (inside, next) =
+        within_daily(&at("2026-10-31T12:00[Europe/Stockholm]"), ten, seven).expect("day");
+    assert!(!inside);
+    assert_eq!(day(next, zone), "31 22:00");
+
+    assert_eq!(
+        within_daily(&at("2026-10-31T06:59[Europe/Stockholm]"), ten, seven)
+            .map(|(inside, _)| inside),
+        Some(true)
+    );
+    let (inside, next) = within_daily(
+        &at("2026-10-31T15:00[Europe/Stockholm]"),
+        Time::constant(13, 0, 0, 0),
+        Time::constant(16, 30, 0, 0),
+    )
+    .expect("nap");
+    assert!(inside);
+    assert_eq!(day(next, zone), "31 16:30");
 }

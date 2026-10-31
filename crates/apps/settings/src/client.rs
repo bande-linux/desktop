@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 
-use unbound_config::{ArrangedDisplay, DisplaySettings, Placement, Rotation};
+use unbound_config::{ArrangedDisplay, DisplaySettings, NightLightValue, Placement, Rotation};
 use unbound_datetime::DateFormats;
 use unbound_notify::client::NotificationCenter;
 use zbus::blocking::Connection;
@@ -59,6 +59,14 @@ pub trait Config {
     fn reduce_motion(&self) -> zbus::Result<bool>;
     #[zbus(property)]
     fn set_reduce_motion(&self, reduce: bool) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn text_size(&self) -> zbus::Result<u32>;
+    #[zbus(property)]
+    fn set_text_size(&self, percent: u32) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn night_light(&self) -> zbus::Result<NightLightValue>;
+    #[zbus(property)]
+    fn set_night_light(&self, value: NightLightValue) -> zbus::Result<()>;
     #[zbus(property)]
     fn cursor_size(&self) -> zbus::Result<u32>;
     #[zbus(property)]
@@ -222,7 +230,7 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 41] = [
+pub const CONFIG_SETTINGS: [SettingId; 47] = [
     SettingId::Appearance,
     SettingId::Clock24Hour,
     SettingId::LowPowerOnBattery,
@@ -233,6 +241,12 @@ pub const CONFIG_SETTINGS: [SettingId; 41] = [
     SettingId::ReduceTransparency,
     SettingId::ReduceMotion,
     SettingId::CursorSize,
+    SettingId::TextSize,
+    SettingId::NightLight,
+    SettingId::NightSchedule,
+    SettingId::NightFrom,
+    SettingId::NightTo,
+    SettingId::NightWarmth,
     SettingId::FlashScreen,
     SettingId::StickyKeys,
     SettingId::SlowKeys,
@@ -361,8 +375,20 @@ impl SettingsClient {
         )
     }
 
+    fn change_night_light(&self, change: impl FnOnce(&mut NightLightValue)) -> zbus::Result<()> {
+        let mut night = self.config.night_light()?;
+        change(&mut night);
+        self.config.set_night_light(night)
+    }
+
     pub fn get(&self, id: SettingId) -> zbus::Result<Value> {
         Ok(match id {
+            SettingId::NightLight => Value::Flag(self.config.night_light()?.0),
+            SettingId::NightSchedule => Value::Keyword(self.config.night_light()?.1),
+            SettingId::NightFrom => Value::Text(self.config.night_light()?.2),
+            SettingId::NightTo => Value::Text(self.config.night_light()?.3),
+            SettingId::NightWarmth => Value::Number(self.config.night_light()?.4),
+            SettingId::TextSize => Value::Number(self.config.text_size()?),
             SettingId::DoNotDisturb => Value::Flag(self.notifications.do_not_disturb()?),
             SettingId::Appearance => Value::Keyword(self.config.appearance()?),
             SettingId::ScreenReader => Value::Flag(self.config.screen_reader()?),
@@ -475,6 +501,22 @@ impl SettingsClient {
                 self.config.set_reduce_motion(*reduce)
             }
             (SettingId::CursorSize, Value::Number(size)) => self.config.set_cursor_size(*size),
+            (SettingId::TextSize, Value::Number(percent)) => self.config.set_text_size(*percent),
+            (SettingId::NightLight, Value::Flag(on)) => {
+                self.change_night_light(|night| night.0 = *on)
+            }
+            (SettingId::NightSchedule, Value::Keyword(schedule)) => {
+                self.change_night_light(|night| schedule.clone_into(&mut night.1))
+            }
+            (SettingId::NightFrom, Value::Text(from)) => {
+                self.change_night_light(|night| from.clone_into(&mut night.2))
+            }
+            (SettingId::NightTo, Value::Text(to)) => {
+                self.change_night_light(|night| to.clone_into(&mut night.3))
+            }
+            (SettingId::NightWarmth, Value::Number(warmth)) => {
+                self.change_night_light(|night| night.4 = *warmth)
+            }
             (SettingId::FlashScreen, Value::Flag(on)) => self.config.set_flash_screen(*on),
             (SettingId::StickyKeys, Value::Flag(on)) => self.config.set_sticky_keys(*on),
             (SettingId::SlowKeys, Value::Flag(on)) => self.config.set_slow_keys(*on),

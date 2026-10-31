@@ -10,6 +10,7 @@ use smithay::input::pointer::{AxisFrame, ButtonEvent, MotionEvent};
 use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Clock, Logical, Monotonic, Point, SERIAL_COUNTER};
+use unbound_graphics::Modifiers;
 use unbound_protocols::server::unbound_shell_v1::{
     BrightnessKey, LauncherMode, MediaKey, Panel, VolumeKey,
 };
@@ -65,6 +66,7 @@ enum Shortcut {
     ShowDesktop,
     TogglePanel(Panel),
     CancelGrab,
+    MenuKey(u32, Modifiers),
 }
 
 fn volume_key(keysym: u32) -> Option<VolumeKey> {
@@ -224,6 +226,10 @@ impl State {
     fn run(&mut self, shortcut: Shortcut) {
         if shortcut == Shortcut::CancelGrab {
             self.cancel_grab();
+            return;
+        }
+        if let Shortcut::MenuKey(keysym, modifiers) = shortcut {
+            self.window_menu_key(keysym, modifiers);
             return;
         }
         if let Shortcut::Volume(key, fine) = shortcut {
@@ -411,7 +417,8 @@ impl State {
             | Shortcut::SwitcherKey(..)
             | Shortcut::AssistKey(..)
             | Shortcut::InputSource { .. }
-            | Shortcut::CancelGrab => {}
+            | Shortcut::CancelGrab
+            | Shortcut::MenuKey(..) => {}
         }
     }
 }
@@ -554,6 +561,21 @@ impl Headless {
         if state.assist.is_open() {
             state.assist_pointer(location);
         }
+        if state.window_menu_pointer(location) {
+            if let Some(pointer) = state.seat.get_pointer() {
+                pointer.motion(
+                    state,
+                    None,
+                    &MotionEvent {
+                        location,
+                        serial: SERIAL_COUNTER.next_serial(),
+                        time,
+                    },
+                );
+                pointer.frame(state);
+            }
+            return;
+        }
         let under = state
             .surface_under(location)
             .filter(|(surface, _)| state.reachable_beside_menu(surface));
@@ -579,6 +601,9 @@ impl Headless {
     pub fn press_button(&mut self, button: u32, pressed: bool, time: u32) {
         self.state.note_activity();
         let state = &mut self.state;
+        if state.window_menu_button(button, pressed) {
+            return;
+        }
         if !pressed && state.release_frame(button) {
             return;
         }
@@ -714,6 +739,18 @@ impl State {
                 if sym.raw() == keysyms::KEY_Escape && state.holds_cancellable_grab() {
                     state.held_shortcut_keys.push(evdev_code);
                     return FilterResult::Intercept(Some(Shortcut::CancelGrab));
+                }
+                if state.window_menus.is_open() && !modifiers.logo && !sym.is_modifier_key() {
+                    state.held_shortcut_keys.push(evdev_code);
+                    return FilterResult::Intercept(Some(Shortcut::MenuKey(
+                        sym.raw(),
+                        Modifiers {
+                            shift: modifiers.shift,
+                            alt: modifiers.alt,
+                            control: modifiers.ctrl,
+                            logo: modifiers.logo,
+                        },
+                    )));
                 }
                 if state.switcher.is_active() && !sym.is_modifier_key() {
                     state.held_shortcut_keys.push(evdev_code);

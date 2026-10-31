@@ -2,8 +2,8 @@ use std::time::{Duration, Instant};
 
 use accesskit::{Action, Node, NodeId, Role, Toggled};
 use unbound_graphics::{
-    Color, Item, Palette, Paragraph, Path, Point, Radius, Rect, Shape, TextAlign, TextStyle,
-    TextSystem,
+    Color, Elevation, Item, Palette, Paragraph, Path, Point, Radius, Rect, Scene, Shape, TextAlign,
+    TextStyle, TextSystem,
 };
 
 use super::control::square_capped;
@@ -21,6 +21,7 @@ const SHORTCUT_GAP: f32 = 28.0;
 const CHEVRON_SPACE: f32 = 18.0;
 const MINIMUM_WIDTH: f32 = 140.0;
 pub const MENU_RADIUS: f32 = Radius::L;
+pub const MENU_SHADOW_MARGIN: f32 = 24.0;
 const FONT_SIZE: f32 = 13.0;
 const MARK_STROKE: f32 = 1.6;
 const SUBMENU_DELAY: Duration = Duration::from_millis(200);
@@ -505,6 +506,22 @@ impl MenuPanel {
             (None, false) => (0..count).rev().find(selectable),
             (Some(index), true) => (index + 1..count).find(selectable).or(Some(index)),
             (Some(index), false) => (0..index).rev().find(selectable).or(Some(index)),
+        }
+    }
+
+    pub fn scene(&self, palette: &Palette, show_highlight: bool) -> Scene {
+        let size = self.size;
+        let shape = Shape::rounded(Rect::new(0.0, 0.0, size.width, size.height), MENU_RADIUS);
+        let mut items = Item::shadows(shape, Elevation::Overlay, palette.scheme, true).to_vec();
+        items.extend(self.paint(palette, show_highlight));
+        Scene {
+            width: (size.width + 2.0 * MENU_SHADOW_MARGIN) as u32,
+            height: (size.height + 2.0 * MENU_SHADOW_MARGIN) as u32,
+            background: Color::TRANSPARENT,
+            items: vec![Item::Translate {
+                offset: Point::new(MENU_SHADOW_MARGIN, MENU_SHADOW_MARGIN),
+                items,
+            }],
         }
     }
 

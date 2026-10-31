@@ -387,6 +387,7 @@ impl State {
         self.animate_source_hud(tick.time);
         self.animate_switcher(tick);
         self.animate_assist(tick);
+        self.animate_window_menu(tick);
         self.animate_zoom(tick.time);
         self.animate_flash(tick.time);
         self.animate_reveal(tick.time);
@@ -406,6 +407,7 @@ impl State {
             || self.input_sources.is_animating()
             || self.switcher.is_animating()
             || self.assist.is_animating()
+            || self.window_menus.is_animating()
             || self.zoom.is_animating(self.progress_precision())
             || self.is_flashing()
             || self.is_revealing()

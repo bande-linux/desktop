@@ -232,13 +232,16 @@ impl State {
         toplevel: &xdg_toplevel::XdgToplevel,
         placement: unbound_app_v1::Placement,
     ) {
-        let Some(index) = self
+        if let Some(index) = self
             .windows
             .iter()
             .position(|window| window.toplevel.xdg_toplevel() == toplevel)
-        else {
-            return;
-        };
+        {
+            self.apply_placement(index, placement);
+        }
+    }
+
+    pub(crate) fn apply_placement(&mut self, index: usize, placement: unbound_app_v1::Placement) {
         if self.windows[index].has_state(xdg_toplevel::State::Fullscreen) {
             return;
         }

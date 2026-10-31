@@ -13,6 +13,7 @@ enum Dimension {
     Temperature,
     Volume,
     Speed,
+    Area,
 }
 
 #[derive(Debug, PartialEq)]
@@ -93,6 +94,29 @@ static UNITS: &[Unit] = &[
     unit(&["cl", "centilitre", "centiliter"], Dimension::Volume, 0.01),
     unit(&["dl", "decilitre", "deciliter"], Dimension::Volume, 0.1),
     unit(&["gal", "gallon"], Dimension::Volume, 3.785_411_784),
+    unit(&["qt", "quart"], Dimension::Volume, 0.946_352_946),
+    unit(&["pt", "pint"], Dimension::Volume, 0.473_176_473),
+    unit(&["cup"], Dimension::Volume, 0.236_588_236_5),
+    unit(&["floz"], Dimension::Volume, 0.029_573_529_562_5),
+    unit(
+        &["tbsp", "tablespoon"],
+        Dimension::Volume,
+        0.014_786_764_781_25,
+    ),
+    unit(
+        &["tsp", "teaspoon"],
+        Dimension::Volume,
+        0.004_928_921_593_75,
+    ),
+    unit(&["m²", "sqm"], Dimension::Area, 1.0),
+    unit(&["km²", "sqkm"], Dimension::Area, 1e6),
+    unit(&["cm²", "sqcm"], Dimension::Area, 1e-4),
+    unit(&["ha", "hectare"], Dimension::Area, 1e4),
+    unit(&["ac", "acre"], Dimension::Area, 4_046.856_422_4),
+    unit(&["mi²", "sqmi"], Dimension::Area, 2_589_988.110_336),
+    unit(&["yd²", "sqyd"], Dimension::Area, 0.836_127_36),
+    unit(&["ft²", "sqft"], Dimension::Area, 0.092_903_04),
+    unit(&["in²", "sqin"], Dimension::Area, 0.000_645_16),
     unit(&["m/s"], Dimension::Speed, 1.0),
     unit(&["km/h", "kmh", "kph"], Dimension::Speed, 1.0 / 3.6),
     unit(&["mph"], Dimension::Speed, 0.447_04),
@@ -159,7 +183,7 @@ fn tokens(text: &str) -> Option<Vec<Token>> {
             index = end;
         } else if character.is_alphabetic() || character == '°' {
             let mut end = index + 1;
-            while end < chars.len() && chars[end].is_alphabetic() {
+            while end < chars.len() && (chars[end].is_alphabetic() || chars[end] == '²') {
                 end += 1;
             }
             if chars.get(end) == Some(&'/') {

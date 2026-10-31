@@ -312,7 +312,7 @@ impl Chrome {
     pub(crate) fn frame_scene(
         &mut self,
         frame: &Frame,
-        content: &Scene,
+        content: Scene,
         palette: &Palette,
         scheme: Scheme,
         look: Look,
@@ -339,11 +339,11 @@ impl Chrome {
             sheet.height,
         );
         let drawn = match frame.regions {
-            _ if frame.header => content.items.clone(),
-            Some(_) => content.items.clone(),
+            _ if frame.header => content.items,
+            Some(_) => content.items,
             None => vec![Item::Clip {
                 shape: Shape::rounded(local, radius),
-                items: content.items.clone(),
+                items: content.items,
             }],
         };
         items.push(Item::Translate {
@@ -451,7 +451,7 @@ pub fn framed_scene(
     chrome.header = header;
     chrome.frame_scene(
         &frame,
-        content,
+        content.clone(),
         palette,
         palette.scheme,
         Look {

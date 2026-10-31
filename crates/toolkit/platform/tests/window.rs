@@ -53,7 +53,7 @@ fn the_first_frame_is_drawn_on_the_cpu_and_later_frames_on_the_gpu() {
         .expect("window");
         let mut paths = Vec::new();
         for color in [RED, BLUE] {
-            paths.push(window.draw(&filled(color)).expect("frame"));
+            paths.push(window.draw(filled(color)).expect("frame"));
             window.wait_for_frame().expect("frame callback");
             presented.send(color).expect("report frame");
             check_done.recv().expect("compositor checked the frame");
@@ -125,7 +125,7 @@ fn a_lock_window_covers_the_output_until_it_unlocks() {
             background: BLUE,
             items: Vec::new(),
         };
-        window.draw(&scene).expect("frame");
+        window.draw(scene).expect("frame");
         window.wait_for_frame().expect("frame callback");
         shown.send((width, height)).expect("report frame");
         check_done.recv().expect("compositor checked the frame");
@@ -184,7 +184,7 @@ fn on_a_2x_output_a_window_keeps_its_size_in_points_and_fills_twice_the_pixels()
         )
         .expect("window");
         let scale = window.scale();
-        window.draw(&filled(RED)).expect("frame");
+        window.draw(filled(RED)).expect("frame");
         window.wait_for_frame().expect("frame callback");
         drawn.send(scale).expect("report frame");
         check_done.recv().expect("compositor checked the frame");
@@ -274,7 +274,7 @@ fn windows_sharing_the_gpu_resize_while_others_draw_and_stay_on_the_gpu() {
                                 paragraph: label,
                             }],
                         };
-                        let path = window.draw(&scene).expect("frame");
+                        let path = window.draw(scene).expect("frame");
                         window.wait_for_frame().expect("frame callback");
                         path
                     })
@@ -332,7 +332,7 @@ fn a_change_under_an_opaque_window_shades_only_the_window_on_top() {
         let mut window =
             Window::open_on(client_end, Role::toplevel("toolkit test", TOOLKIT), WINDOW)
                 .expect("window");
-        window.draw(&filled(RED)).expect("frame");
+        window.draw(filled(RED)).expect("frame");
         window.wait_for_frame().expect("frame callback");
         drawn.send(()).expect("report frame");
         check_done.recv().expect("compositor checked the frame");

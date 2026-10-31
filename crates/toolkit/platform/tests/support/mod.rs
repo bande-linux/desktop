@@ -155,7 +155,7 @@ pub fn shot(name: &str, prepare: fn(&mut Window) -> Option<Ui>, shot: Shot) {
         };
         window.wait_for_gpu();
         let scene = still.scene(&mut window);
-        window.draw(&scene).expect("first frame");
+        window.draw(scene).expect("first frame");
         still.ui = prepare(&mut window);
         still.frames_at_rest = 0;
         still.at_rest.store(false, Ordering::SeqCst);
@@ -175,7 +175,7 @@ pub fn shot(name: &str, prepare: fn(&mut Window) -> Option<Ui>, shot: Shot) {
                 items: Vec::new(),
             };
             for _ in 0..3 {
-                beside.draw(&scene).expect("second window's frame");
+                beside.draw(scene.clone()).expect("second window's frame");
                 beside.wait_for_frame().expect("second window shown");
             }
             beside

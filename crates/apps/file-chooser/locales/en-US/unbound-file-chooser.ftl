@@ -18,3 +18,6 @@ save-as = Save As:
 name-placeholder = Name
 replace-title = “{ $name }” already exists. Do you want to replace it?
 replace-message = A file with the same name already exists in this folder. Replacing it overwrites its current contents.
+wallpaper-title = Use “{ $picture }” as your desktop picture?
+wallpaper-message = { $app } wants to change your desktop picture.
+button-set-wallpaper = Set Desktop Picture

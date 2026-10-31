@@ -166,7 +166,9 @@ impl FrameOutput for Renderer {
         compositor: &mut Headless,
         output: &str,
     ) -> Result<Submission, RenderError> {
-        self.render_output(compositor, output)?;
+        if !compositor.holds_frames() {
+            self.render_output(compositor, output)?;
+        }
         Ok(Submission::AtVblank)
     }
 }

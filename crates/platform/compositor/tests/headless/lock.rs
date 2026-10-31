@@ -241,7 +241,7 @@ fn the_lock_screen_is_started_again_when_the_locker_dies_while_locked() {
 }
 
 #[test]
-fn logind_hears_the_session_is_locked_once_blank_and_unlocked_after() {
+fn logind_hears_the_session_is_locked_once_the_lock_screen_is_presented_and_unlocked_after() {
     let (mut server, mut editor) = focused_app();
     let (states, reported) = std::sync::mpsc::channel();
     server.report_lock_states(states);
@@ -249,11 +249,19 @@ fn logind_hears_the_session_is_locked_once_blank_and_unlocked_after() {
 
     lock.lock_session(&mut server);
     roundtrip(&mut server, &mut [&mut lock, &mut editor]);
-    assert!(reported.try_recv().is_err());
     present_frame(&mut server, 1);
-    assert_eq!(reported.try_recv(), Ok(true));
+    roundtrip(&mut server, &mut [&mut lock, &mut editor]);
+    assert!(lock.session_locked());
+    assert!(reported.try_recv().is_err());
 
     lock.show_lock_surface(&mut server, BLUE);
+    roundtrip(&mut server, &mut [&mut lock, &mut editor]);
+    assert!(reported.try_recv().is_err());
+    present_frame(&mut server, 2);
+    assert_eq!(reported.try_recv(), Ok(true));
+    present_frame(&mut server, 3);
+    assert!(reported.try_recv().is_err());
+
     lock.unlock_session(&mut server);
     roundtrip(&mut server, &mut [&mut lock, &mut editor]);
     assert_eq!(reported.try_recv(), Ok(false));

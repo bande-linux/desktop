@@ -29,13 +29,6 @@ const BADGE_MIN_WIDTH: f32 = 22.0;
 const BADGE_HEIGHT: f32 = 15.0;
 const BADGE_MARGIN: f32 = 5.0;
 
-pub fn app_name<'a>(app_id: &'a str, names: &'a [(String, String)]) -> &'a str {
-    names
-        .iter()
-        .find(|(id, _)| id == app_id)
-        .map_or(app_id, |(_, name)| name.as_str())
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Slot {
     System,
@@ -79,7 +72,7 @@ pub trait StatusView {
     fn set_battery_percentage(&mut self, shown: bool) -> bool;
     fn battery_percentage(&self) -> bool;
     fn set_workspaces(&mut self, count: usize, active: usize) -> bool;
-    fn shown_tray_items(&self) -> usize;
+    fn hidden_tray(&self) -> Vec<Slot>;
     fn scene(&mut self, width: u32, height: u32, scale: f64) -> Scene;
     fn accessibility(&self) -> TreeUpdate;
 }
@@ -179,8 +172,8 @@ impl StatusView for MenuBar {
         false
     }
 
-    fn shown_tray_items(&self) -> usize {
-        self.tray.len()
+    fn hidden_tray(&self) -> Vec<Slot> {
+        Vec::new()
     }
 
     fn scene(&mut self, width: u32, height: u32, scale: f64) -> Scene {

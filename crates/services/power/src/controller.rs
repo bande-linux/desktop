@@ -9,7 +9,7 @@ use zbus::blocking::Connection;
 
 use crate::backlight::{Backlight, dimmed};
 use crate::idle::{Command, IdleMachine, Policy};
-use crate::logind::{ManagerProxyBlocking, SessionProxyBlocking};
+use crate::logind::{self, ManagerProxyBlocking, SessionProxyBlocking};
 
 #[zbus::proxy(
     interface = "org.unbound.Config",
@@ -139,19 +139,8 @@ pub fn follow_config(session: &Connection, controller: &Arc<IdleController>) -> 
 }
 
 pub fn follow_lock(system: &Connection, controller: &Arc<IdleController>) -> zbus::Result<()> {
-    let path = ManagerProxyBlocking::new(system)?.get_session("auto")?;
-    let session = SessionProxyBlocking::builder(system).path(path)?.build()?;
-    let changes = session.receive_locked_hint_changed();
-    controller.set_locked(session.locked_hint()?);
     let controller = Arc::clone(controller);
-    thread::spawn(move || {
-        for change in changes {
-            if let Ok(locked) = change.get() {
-                controller.set_locked(locked);
-            }
-        }
-    });
-    Ok(())
+    logind::follow_locked_hint(system, move |locked| controller.set_locked(locked))
 }
 
 pub fn logind_executor(

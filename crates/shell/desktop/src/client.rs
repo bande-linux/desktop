@@ -12,7 +12,7 @@ use crate::{
     layouts_path, list, parse_layouts, save_layouts,
 };
 use accesskit::TreeUpdate;
-use unbound_config::{BarEdge, Config};
+use unbound_config::{BarEdge, Config, Wallpaper, WallpaperFit};
 use unbound_fs::{
     Action, Answer, Change, FolderWatch, Operations, Purpose, Resolution, Task, Trash,
 };
@@ -24,13 +24,15 @@ use unbound_toolkit::{
     MenuPlacement, Point, Role, Scene, Scheme, TextSystem, Transfer, Window, WindowEvent,
 };
 use unbound_volumes::{eject, media_roots, mounted_volumes};
-use unbound_wallpaper::{Choice, Picture, Variant, choose, follow, render};
+use unbound_wallpaper::{Choice, Fit, Picture, Variant, choose, follow, render, render_cached};
 use unbound_xdg::{
-    Apps, DIRECTORY, DesktopEntry, ICON_THEMES, OCTET_STREAM, UserDir, config_dirs, config_home,
-    data_dirs, file_uri, find_icon, launch, launch_with, path_from_file_uri, user_dir,
+    Apps, DIRECTORY, DesktopEntry, ICON_THEMES, OCTET_STREAM, UserDir, cache_home, config_dirs,
+    config_home, data_dirs, file_uri, find_icon, launch, launch_with, launch_with_arguments,
+    path_from_file_uri, user_dir,
 };
 
 const PDF: &str = "application/pdf";
+const WALLPAPER_CACHE: &str = "unbound/wallpapers";
 const SETTINGS_APP: &str = "org.unbound.Settings";
 const WALLPAPER_PANE: &str = "appearance";
 const FILES_INFO_FLAG: &str = "--info";
@@ -58,6 +60,7 @@ pub struct DesktopSurface {
     home: Option<PathBuf>,
     icons: HashMap<(String, u32), Option<Image>>,
     thumbnails: Option<Thumbnails>,
+    items: Vec<Item>,
     pictures: HashMap<PathBuf, (Option<SystemTime>, Option<Option<Image>>)>,
     layouts_file: Option<PathBuf>,
     bar_edge: BarEdge,
@@ -97,8 +100,13 @@ impl DesktopSurface {
             return;
         }
         let loader = self.loaded.outbox();
+        let cache = cache_home().map(|cache| cache.join(WALLPAPER_CACHE));
         let work = move || {
-            let rendered = match render(&key.path, key.fit, key.width, key.height) {
+            let picture = match &cache {
+                Some(cache) => render_cached(cache, &key.path, key.fit, key.width, key.height),
+                None => render(&key.path, key.fit, key.width, key.height),
+            };
+            let rendered = match picture {
                 Ok(picture) => {
                     let luma = Luma::of(&picture);
                     Some((picture, luma))
@@ -120,6 +128,10 @@ impl DesktopSurface {
 
     fn refresh_wallpaper(&mut self, window: &mut Window) {
         let Some(wanted) = self.wallpaper_key(self.variant()) else {
+            if self.choice.is_some() && self.viewport.is_some() {
+                self.view.wallpaper_unavailable();
+                window.request_redraw();
+            }
             return;
         };
         let other = match self.variant() {
@@ -214,7 +226,7 @@ impl DesktopSurface {
     }
 
     fn thumbnails_ready(&mut self) {
-        let Some(thumbnails) = &self.thumbnails else {
+        let Some(thumbnails) = &mut self.thumbnails else {
             return;
         };
         let done = thumbnails.take();
@@ -230,7 +242,7 @@ impl DesktopSurface {
                 *kept = Some(picture);
             }
         }
-        self.relist();
+        self.show_items();
     }
 
     fn relist(&mut self) {
@@ -239,10 +251,18 @@ impl DesktopSurface {
         }
         let mountinfo = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
         let volumes = mounted_volumes(&mountinfo, &self.media);
-        let items = list(&mut self.apps, &self.desktop_dir, &volumes);
+        self.items = list(&mut self.apps, &self.desktop_dir, &volumes);
+        self.show_items();
+        self.watch_folders();
+        self.save_layouts();
+    }
+
+    fn show_items(&mut self) {
         let pixels = self.icon_pixels();
         let mut wanted = Vec::new();
-        let with_icons = items
+        let with_icons = self
+            .items
+            .clone()
             .into_iter()
             .map(|item| {
                 let artwork = self.artwork(&item, pixels, &mut wanted);
@@ -255,8 +275,6 @@ impl DesktopSurface {
             thumbnails.want(wanted);
         }
         self.view.set_items(with_icons, frame_time().on_screen());
-        self.watch_folders();
-        self.save_layouts();
     }
 
     fn icon_pixels(&self) -> u32 {
@@ -375,21 +393,11 @@ impl DesktopSurface {
             return;
         };
         let token = window.activation_token(files.app_id()).ok();
-        let launched =
-            files
-                .command()
-                .map_err(|error| error.to_string())
-                .and_then(|mut command| {
-                    command.push(FILES_INFO_FLAG.to_owned());
-                    command.push(path.to_string_lossy().into_owned());
-                    unbound_xdg::spawn_detached(
-                        &command,
-                        files.working_directory.as_deref(),
-                        token.as_deref(),
-                    )
-                    .map_err(|error| error.to_string())
-                });
-        if let Err(error) = launched {
+        let arguments = [
+            FILES_INFO_FLAG.to_owned(),
+            path.to_string_lossy().into_owned(),
+        ];
+        if let Err(error) = launch_with_arguments(&files, &arguments, token.as_deref()) {
             tracing::warn!("cannot show the info of {}: {error}", path.display());
         }
     }
@@ -453,18 +461,8 @@ impl DesktopSurface {
             return;
         };
         let token = window.activation_token(SETTINGS_APP).ok();
-        let launched = settings
-            .command()
-            .map_err(|error| error.to_string())
-            .and_then(|mut command| {
-                command.push(WALLPAPER_PANE.to_owned());
-                unbound_xdg::spawn_detached(
-                    &command,
-                    settings.working_directory.as_deref(),
-                    token.as_deref(),
-                )
-                .map_err(|error| error.to_string())
-            });
+        let launched =
+            launch_with_arguments(&settings, &[WALLPAPER_PANE.to_owned()], token.as_deref());
         if let Err(error) = launched {
             tracing::warn!("cannot open Settings: {error}");
         }
@@ -785,7 +783,9 @@ impl App for DesktopSurface {
                 }
             }
             2 => {
+                let mut failed = false;
                 for (key, rendered) in self.loaded.drain() {
+                    failed |= rendered.is_none();
                     let layer = rendered.and_then(|(picture, luma)| {
                         Image::from_rgba(picture.width, picture.height, picture.rgba).map(|image| {
                             Layer {
@@ -801,6 +801,10 @@ impl App for DesktopSurface {
                     }
                 }
                 self.refresh_wallpaper(window);
+                if failed && self.view.wallpaper_key().is_none() {
+                    self.view.wallpaper_unavailable();
+                    window.request_redraw();
+                }
             }
             3 if self.thumbnails.is_some() => {
                 self.thumbnails_ready();
@@ -844,6 +848,17 @@ impl App for DesktopSurface {
 
     fn accessibility(&self) -> Option<TreeUpdate> {
         Some(self.view.accessibility())
+    }
+}
+
+fn configured_choice(wallpaper: &Wallpaper) -> Choice {
+    Choice {
+        light: wallpaper.light.clone(),
+        dark: wallpaper.dark.clone(),
+        fit: match wallpaper.fit {
+            WallpaperFit::Fill => Fit::Fill,
+            WallpaperFit::Fit => Fit::Fit,
+        },
     }
 }
 
@@ -912,11 +927,12 @@ impl DesktopSurface {
             home,
             icons: HashMap::new(),
             thumbnails,
+            items: Vec::new(),
             pictures: HashMap::new(),
             layouts_file,
             bar_edge,
             combined_bar,
-            choice: None,
+            choice: Some(configured_choice(&config.wallpaper)),
             choices,
             loaded,
             pending: HashSet::new(),

@@ -389,6 +389,7 @@ impl State {
         self.animate_assist(tick);
         self.animate_zoom(tick.time);
         self.animate_flash(tick.time);
+        self.animate_reveal(tick.time);
         self.closing.retain(|closing| !closing.motion.is_settled());
         if self.is_animating() {
             self.needs_redraw = true;
@@ -407,6 +408,7 @@ impl State {
             || self.assist.is_animating()
             || self.zoom.is_animating(self.progress_precision())
             || self.is_flashing()
+            || self.is_revealing()
             || self.windows.iter().any(|window| window.motion.is_some())
     }
 }

@@ -23,8 +23,9 @@ use unbound_toolkit::{
     MenuPlacement, Point, Rect, Role, Scene, TextSystem, Window, WindowEvent,
 };
 use unbound_xdg::{
-    DesktopEntry, ICON_THEMES, Locale, applications, autostart_dir, current_desktops, data_dirs,
-    find_icon, opens_at_login, path_from_file_uri, set_open_at_login,
+    DesktopEntry, ICON_THEMES, Locale, app_name, applications, autostart_dir, current_desktops,
+    data_dirs, find_app, find_icon, launch_with_arguments, opens_at_login, path_from_file_uri,
+    running_app, set_open_at_login,
 };
 use zbus::blocking::Connection;
 
@@ -81,6 +82,7 @@ pub struct Dock {
     ui: Ui,
     entries: Vec<DesktopEntry>,
     kept: Vec<String>,
+    windows: Vec<String>,
     running: Vec<String>,
     icons: HashMap<String, Option<Image>>,
     icon_scale: f64,
@@ -89,6 +91,7 @@ pub struct Dock {
     zone: i32,
     menu: Option<MenuTarget>,
     confirming: bool,
+    swallow_release: bool,
     active: Option<String>,
     release_at: Option<Instant>,
     unresponsive: Vec<String>,
@@ -119,7 +122,31 @@ impl Dock {
     }
 
     fn entry(&self, app_id: &str) -> Option<&DesktopEntry> {
-        self.entries.iter().find(|entry| entry.app_id() == app_id)
+        find_app(&self.entries, app_id)
+    }
+
+    fn identity(&self, window_app: &str) -> String {
+        self.entry(window_app)
+            .map_or(window_app, DesktopEntry::app_id)
+            .to_owned()
+    }
+
+    fn window_app(&self, app_id: &str) -> String {
+        running_app(&self.entries, &self.windows, app_id)
+            .unwrap_or(app_id)
+            .to_owned()
+    }
+
+    fn follow_windows(&mut self, windows: Vec<String>) {
+        let mut running = Vec::new();
+        for window_app in &windows {
+            let app_id = self.identity(window_app);
+            if !running.contains(&app_id) {
+                running.push(app_id);
+            }
+        }
+        self.windows = windows;
+        self.running = running;
     }
 
     fn describe(&mut self, app_id: &str, kept: bool) -> Option<DockApp> {
@@ -128,10 +155,7 @@ impl Dock {
         if kept && entry.is_none() && !running {
             return None;
         }
-        let name = entry.as_ref().map_or_else(
-            || app_id.rsplit('.').next().unwrap_or(app_id).to_owned(),
-            |entry| entry.name.clone(),
-        );
+        let name = app_name(&self.entries, app_id);
         let icon = self.icon(entry.as_ref().and_then(|entry| entry.icon.as_deref()));
         Some(DockApp {
             app_id: app_id.to_owned(),
@@ -196,7 +220,7 @@ impl Dock {
 
     fn open(&mut self, window: &mut Window, app_id: &str) {
         if self.running.iter().any(|running| running == app_id) {
-            if let Err(error) = window.activate_app(app_id) {
+            if let Err(error) = window.activate_app(&self.window_app(app_id)) {
                 tracing::warn!("cannot activate {app_id}: {error}");
             }
             return;
@@ -348,8 +372,7 @@ impl Dock {
     }
 
     fn app_name(&self, app_id: &str) -> String {
-        self.entry(app_id)
-            .map_or_else(|| app_id.to_owned(), |entry| entry.name.clone())
+        app_name(&self.entries, app_id)
     }
 
     fn opens_at_login(&self, app_id: &str) -> bool {
@@ -451,7 +474,7 @@ impl Dock {
                 let running = self.running.iter().any(|running| running == app_id);
                 let mut items = Vec::new();
                 if running {
-                    let windows = window.app_windows(app_id);
+                    let windows = window.app_windows(&self.window_app(app_id));
                     for shown in &windows {
                         let title = if shown.title.is_empty() {
                             self.app_name(app_id)
@@ -521,11 +544,7 @@ impl Dock {
     }
 
     fn menu_action(&mut self, window: &mut Window, action: &str) {
-        self.state.borrow_mut().set_menu_open(false, Instant::now());
-        if !self.state.borrow().is_navigating() {
-            self.release_at = Some(Instant::now() + KEYBOARD_GRACE);
-        }
-
+        self.set_menu_open(false);
         let Some(target) = self.menu.take() else {
             return;
         };
@@ -554,17 +573,17 @@ impl Dock {
             (MenuTarget::App(app_id), MENU_OPEN) => self.open(window, &app_id),
             (MenuTarget::App(app_id), MENU_SHOW) => self.show_in_files(window, &app_id),
             (MenuTarget::App(app_id), MENU_HIDE) => {
-                if let Err(error) = window.hide_app(&app_id) {
+                if let Err(error) = window.hide_app(&self.window_app(&app_id)) {
                     tracing::warn!("cannot hide {app_id}: {error}");
                 }
             }
             (MenuTarget::App(app_id), MENU_QUIT) => {
-                if let Err(error) = window.quit_app(&app_id) {
+                if let Err(error) = window.quit_app(&self.window_app(&app_id)) {
                     tracing::warn!("cannot quit {app_id}: {error}");
                 }
             }
             (MenuTarget::App(app_id), MENU_FORCE_QUIT) => {
-                if let Err(error) = window.force_quit_app(&app_id) {
+                if let Err(error) = window.force_quit_app(&self.window_app(&app_id)) {
                     tracing::warn!("cannot force {app_id} to quit: {error}");
                 }
             }
@@ -594,21 +613,8 @@ impl Dock {
             tracing::warn!("cannot open {location}: Files is not installed");
             return;
         };
-        let command = entry.command().map(|mut command| {
-            command.push(location.to_owned());
-            command
-        });
         let token = window.activation_token(FILES).ok();
-        let started = command
-            .map_err(|error| error.to_string())
-            .and_then(|command| {
-                unbound_xdg::spawn_detached(
-                    &command,
-                    entry.working_directory.as_deref(),
-                    token.as_deref(),
-                )
-                .map_err(|error| error.to_string())
-            });
+        let started = launch_with_arguments(&entry, &[location.to_owned()], token.as_deref());
         if let Err(error) = started {
             tracing::warn!("cannot open {location}: {error}");
         }
@@ -749,7 +755,24 @@ impl Dock {
     }
 
     pub fn set_menu_open(&mut self, open: bool) {
+        if !open && !self.state.borrow().is_navigating() {
+            self.release_at = Some(Instant::now() + KEYBOARD_GRACE);
+        }
         self.state.borrow_mut().set_menu_open(open, Instant::now());
+    }
+
+    fn menu_shown(&self) -> bool {
+        self.state.borrow().is_menu_open()
+    }
+
+    fn menu_closed(&mut self) {
+        self.menu = None;
+        self.confirming = false;
+        self.set_menu_open(false);
+    }
+
+    fn owns_open_menu_at(&self, point: Point) -> bool {
+        self.menu.is_some() && self.state.borrow().target_at(point) == self.menu
     }
 
     pub fn revealed(&self, now: Instant) -> f32 {
@@ -799,16 +822,27 @@ impl App for Dock {
                 window.request_redraw();
             }
             WindowEvent::Focus(true) => {
-                if !self.state.borrow().is_navigating() && self.menu.is_none() {
+                if !self.state.borrow().is_navigating() && !self.menu_shown() {
                     self.release_at = Some(Instant::now() + KEYBOARD_GRACE);
                 }
             }
             WindowEvent::Focus(false) => {
                 self.release_at = None;
-                if self.menu.is_none() {
+                if !self.menu_shown() {
                     self.state.borrow_mut().end_navigation(Instant::now());
                     window.request_redraw();
                 }
+            }
+            WindowEvent::Input(Event::PointerDown(pointer))
+                if self.owns_open_menu_at(pointer.position) =>
+            {
+                window.close_menu();
+                self.menu_closed();
+                self.swallow_release = true;
+                window.request_redraw();
+            }
+            WindowEvent::Input(Event::PointerUp(_)) if self.swallow_release => {
+                self.swallow_release = false;
             }
             WindowEvent::Input(input) => {
                 if self.ui.handle(&input) {
@@ -824,7 +858,7 @@ impl App for Dock {
                 self.run_actions(window);
             }
             WindowEvent::AppsChanged => {
-                self.running = window.running_apps();
+                self.follow_windows(window.running_apps());
                 let running = &self.running;
                 self.unresponsive.retain(|app_id| running.contains(app_id));
                 self.sync();
@@ -835,22 +869,18 @@ impl App for Dock {
                 window.request_redraw();
             }
             WindowEvent::MenuClosed => {
-                self.menu = None;
-                self.confirming = false;
-                if !self.state.borrow().is_navigating() {
-                    self.release_at = Some(Instant::now() + KEYBOARD_GRACE);
-                }
-                self.state.borrow_mut().set_menu_open(false, Instant::now());
+                self.menu_closed();
                 window.request_redraw();
             }
             WindowEvent::ActiveApp(app_id) => {
-                self.state.borrow_mut().activated(&app_id);
+                self.state.borrow_mut().activated(&self.identity(&app_id));
                 self.active = (!app_id.is_empty()).then_some(app_id);
                 window.request_redraw();
             }
             WindowEvent::AppResponding {
                 app_id, responding, ..
             } => {
+                let app_id = self.identity(&app_id);
                 self.unresponsive.retain(|known| *known != app_id);
                 if !responding {
                     self.unresponsive.push(app_id);
@@ -867,7 +897,7 @@ impl App for Dock {
             WindowEvent::AttentionRequested(app_id) => {
                 self.state
                     .borrow_mut()
-                    .request_attention(&app_id, Instant::now());
+                    .request_attention(&self.identity(&app_id), Instant::now());
                 window.request_redraw();
             }
             WindowEvent::AppearanceChanged(appearance) => {
@@ -907,7 +937,7 @@ impl App for Dock {
     fn tick(&mut self, window: &mut Window, now: Instant) {
         if self.release_at.is_some_and(|at| now >= at) {
             self.release_at = None;
-            if self.menu.is_none() && !self.state.borrow().is_navigating() {
+            if !self.menu_shown() && !self.state.borrow().is_navigating() {
                 self.release_keyboard(window);
             }
         }
@@ -985,7 +1015,8 @@ impl Dock {
                 &current_desktops(),
             ),
             kept: config.apps.clone(),
-            running: window.running_apps(),
+            windows: Vec::new(),
+            running: Vec::new(),
             icons: HashMap::new(),
             icon_scale: window.scale(),
             reported: HashMap::new(),
@@ -993,6 +1024,7 @@ impl Dock {
             zone: exclusive_zone(icon_size).round() as i32,
             menu: None,
             confirming: false,
+            swallow_release: false,
             active: None,
             release_at: None,
             unresponsive: Vec::new(),
@@ -1004,6 +1036,7 @@ impl Dock {
             names: config.names,
             output: output.to_owned(),
         };
+        dock.follow_windows(window.running_apps());
         dock.load_trash_icons();
         dock.sync();
         Ok(dock)

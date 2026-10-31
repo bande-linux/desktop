@@ -1,4 +1,5 @@
 use std::io;
+use std::path::Path;
 
 use tracing_subscriber::filter::{FilterFn, LevelFilter, Targets};
 use tracing_subscriber::fmt;
@@ -15,7 +16,9 @@ pub fn init(identifier: &str) {
         .map(|journal| journal.with_syslog_identifier(identifier.to_owned()));
     let journaled = journal.is_some();
     let stderr_is_journal = stderr_is_journal();
-    let stderr = (!journaled || !stderr_is_journal).then(|| {
+    let stderr_is_console =
+        std::fs::read_link("/proc/self/fd/2").is_ok_and(|path| is_virtual_console(&path));
+    let stderr = (!journaled || !(stderr_is_journal || stderr_is_console)).then(|| {
         fmt::layer()
             .with_writer(io::stderr)
             .with_ansi(io::IsTerminal::is_terminal(&io::stderr()))
@@ -31,6 +34,14 @@ pub fn init(identifier: &str) {
     {
         journal_panics(!stderr_is_journal);
     }
+}
+
+fn is_virtual_console(path: &Path) -> bool {
+    path.to_str()
+        .and_then(|path| path.strip_prefix("/dev/tty"))
+        .is_some_and(|number| {
+            !number.is_empty() && number.bytes().all(|byte| byte.is_ascii_digit())
+        })
 }
 
 fn journal_panics(also_report: bool) {
@@ -70,9 +81,20 @@ fn targets(directives: Option<&str>) -> Targets {
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use tracing_subscriber::filter::LevelFilter;
 
-    use super::{is_journal_stream, targets};
+    use super::{is_journal_stream, is_virtual_console, targets};
+
+    #[test]
+    fn the_login_console_is_kept_clean_but_terminal_emulators_get_logs() {
+        assert!(is_virtual_console(Path::new("/dev/tty7")));
+        assert!(is_virtual_console(Path::new("/dev/tty12")));
+        assert!(!is_virtual_console(Path::new("/dev/pts/3")));
+        assert!(!is_virtual_console(Path::new("/dev/tty")));
+        assert!(!is_virtual_console(Path::new("/dev/ttyAMA0")));
+    }
 
     #[test]
     fn rust_log_directives_set_the_level_per_target() {

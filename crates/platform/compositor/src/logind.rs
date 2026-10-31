@@ -17,9 +17,47 @@ trait Session {
     fn lock(&self) -> zbus::Result<()>;
 }
 
+#[zbus::proxy(
+    interface = "org.freedesktop.login1.Manager",
+    default_service = "org.freedesktop.login1",
+    default_path = "/org/freedesktop/login1"
+)]
+trait Manager {
+    #[zbus(signal)]
+    fn prepare_for_sleep(&self, start: bool) -> zbus::Result<()>;
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SessionRequest {
     Lock,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Sleep {
+    Starting,
+    Ended,
+}
+
+pub fn follow_sleep() -> zbus::Result<Channel<Sleep>> {
+    let connection = Connection::system()?;
+    let changes = ManagerProxyBlocking::new(&connection)?.receive_prepare_for_sleep()?;
+    let (sender, channel) = channel::channel();
+    thread::spawn(move || {
+        for change in changes {
+            let Ok(arguments) = change.args() else {
+                continue;
+            };
+            let sleep = if *arguments.start() {
+                Sleep::Starting
+            } else {
+                Sleep::Ended
+            };
+            if sender.send(sleep).is_err() {
+                return;
+            }
+        }
+    });
+    Ok(channel)
 }
 
 pub fn follow_session(lock_states: Receiver<bool>) -> zbus::Result<Channel<SessionRequest>> {

@@ -8,7 +8,7 @@ repository.workspace = true
 [dependencies]
 blocking.workspace = true
 jiff.workspace = true
-rustix.workspace = true
+rustix = { workspace = true, features = ["time"] }
 tracing.workspace = true
 unbound-bus.workspace = true
 unbound-config.workspace = true

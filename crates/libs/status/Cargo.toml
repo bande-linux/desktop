@@ -6,11 +6,12 @@ edition.workspace = true
 repository.workspace = true
 
 [dependencies]
-rustix = { workspace = true, features = ["time"] }
+rustix.workspace = true
 tracing.workspace = true
 unbound-app-menu.workspace = true
 unbound-audio.workspace = true
 unbound-bluetooth.workspace = true
+unbound-datetime.workspace = true
 unbound-inbox.workspace = true
 unbound-l10n.workspace = true
 unbound-network.workspace = true

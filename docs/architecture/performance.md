@@ -57,6 +57,24 @@ All numbers below are from the development VM: 10 cores, lavapipe (Mesa 25.0.7, 
 CPU), so GPU memory shows up as process memory. On Apple Silicon GPU memory is also system
 memory, so the device-memory savings carry over.
 
+## 2026-10-31: Activity Monitor's own cost
+
+What one sample costs Activity Monitor on this VM (293 processes, release build, mean of 200
+samples, CPU time of the process from `/proc/self/stat`, measured with a throwaway harness that
+runs `Sampler::live()` and `MonitorView::update` plus `scene` at 860 × 600; no rendering):
+
+| What is shown | sampling | sample, update and scene | % of one core at one sample per 2 s | RSS |
+| :--- | ---: | ---: | ---: | ---: |
+| CPU tab | 1.35 ms | 2.0 ms | 0.1 % | 9.7 MB |
+| Memory tab (proportional memory from `smaps_rollup`) | 13.1 ms | 14.2 ms | 0.7 % | 9.8 MB |
+| Energy columns (wake-ups from every task's `status`, GPU from `fdinfo`) | 4.5 ms | 5.4 ms | 0.3 % | 9.8 MB |
+
+Proportional memory is the expensive measure, which is why it is read only while the Memory column
+shows; wake-ups likewise. Between samples, a wake-up of the event loop (a tooltip, a caret, an
+animation's deadline) used to redraw every window of the app; it now redraws only the window whose
+own timer is due, and a sample redraws all of them once. Sampling less while every window is hidden
+needs a hidden or suspended signal from the toolkit, which it does not have yet.
+
 ## 2026-10-30: menus, launcher and banners in motion
 
 Frames per action with `unbound-session-bench launcher menu notification`, `main` at `bef5145`
@@ -140,7 +158,12 @@ compositor (2.1 in the live session, all from the same pool) likewise.
 - **The clock by the minute.** The bar checked its clock every second. A `timerfd` on
   `CLOCK_REALTIME`, armed for the next whole minute with `TFD_TIMER_CANCEL_ON_SET`, now wakes it
   once a minute, at the minute, and at once when the clock is set or the machine resumes, so the
-  time is right after suspend even though the bar's own timers do not run during it.
+  time is right after suspend even though the bar's own timers do not run during it. The lock
+  screen redrew every second for the same clock; it now uses the same timer (`MinuteTimer` in
+  `unbound-datetime`), one frame a minute instead of sixty.
+- **Locking before sleep without polling.** `unbound-power` asked logind for `LockedHint` every
+  20 ms (up to 150 calls) while the lock screen came up before sleep; it now waits on the
+  property's change signal.
 - **Status notifier items by narrow match rules.** The tray host subscribed to every signal on
   the session bus; it now asks the bus only for status-item and watcher signals, the watcher's
   owner changes and the app-menu `LayoutUpdated`, so other apps' signals no longer wake the bar.

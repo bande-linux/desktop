@@ -6,6 +6,7 @@ edition.workspace = true
 repository.workspace = true
 
 [dependencies]
+accesskit.workspace = true
 unbound-graphics.workspace = true
 unbound-toolkit-platform.workspace = true
 unbound-widgets.workspace = true

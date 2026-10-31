@@ -3753,9 +3753,13 @@ name = "unbound-bar"
 version = "0.1.0"
 dependencies = [
  "accesskit",
+ "image",
  "jiff",
+ "smithay",
  "tracing",
+ "unbound-compositor",
  "unbound-config",
+ "unbound-controlcenter",
  "unbound-datetime",
  "unbound-dock-model",
  "unbound-fs",
@@ -3763,10 +3767,14 @@ dependencies = [
  "unbound-inbox",
  "unbound-keyboard",
  "unbound-l10n",
+ "unbound-launcher",
+ "unbound-notifications",
  "unbound-sound",
  "unbound-status",
+ "unbound-test-wayland",
  "unbound-toolkit",
  "unbound-xdg",
+ "wayland-client",
  "zbus",
 ]
 
@@ -3774,6 +3782,7 @@ dependencies = [
 name = "unbound-bench"
 version = "0.1.0"
 dependencies = [
+ "rustix 1.1.6",
  "smithay",
  "tempfile",
  "tracing",
@@ -3900,6 +3909,7 @@ dependencies = [
  "icu_datetime",
  "icu_locale_core",
  "jiff",
+ "rustix 1.1.6",
 ]
 
 [[package]]
@@ -3953,6 +3963,7 @@ dependencies = [
  "unbound-log",
  "unbound-toolkit",
  "unbound-volumes",
+ "unbound-wallpaper",
  "unbound-xdg",
  "xdg-desktop-portal-unbound",
 ]
@@ -4079,6 +4090,7 @@ dependencies = [
  "tracing",
  "unbound-fs",
  "unbound-golden",
+ "unbound-inbox",
  "unbound-l10n",
  "unbound-preview",
  "unbound-search",
@@ -4134,8 +4146,10 @@ dependencies = [
  "unbound-golden",
  "unbound-l10n",
  "unbound-log",
+ "unbound-test-bus",
  "unbound-toolkit",
  "unbound-xdg",
+ "zbus",
 ]
 
 [[package]]
@@ -4167,6 +4181,7 @@ dependencies = [
 name = "unbound-notify"
 version = "0.1.0"
 dependencies = [
+ "rustix 1.1.6",
  "tempfile",
  "tracing",
  "unbound-bus",
@@ -4300,6 +4315,7 @@ dependencies = [
  "jiff",
  "tempfile",
  "tracing",
+ "unbound-inbox",
  "unbound-watch",
  "unbound-xdg",
 ]
@@ -4388,6 +4404,7 @@ dependencies = [
  "unbound-app-menu",
  "unbound-audio",
  "unbound-bluetooth",
+ "unbound-datetime",
  "unbound-inbox",
  "unbound-l10n",
  "unbound-network",
@@ -4447,6 +4464,7 @@ dependencies = [
  "png",
  "tempfile",
  "tracing",
+ "unbound-inbox",
  "unbound-xdg",
 ]
 
@@ -4554,6 +4572,11 @@ dependencies = [
  "image",
  "rustix 1.1.6",
  "tempfile",
+ "tracing",
+ "unbound-l10n",
+ "unbound-notify",
+ "unbound-test-bus",
+ "zbus",
 ]
 
 [[package]]

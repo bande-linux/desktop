@@ -118,7 +118,10 @@ fn return_submits_the_password_once_and_typing_waits_for_the_verdict() {
     let mut screen = screen();
     type_text(&mut screen, "secret");
     press_return(&mut screen);
-    assert_eq!(screen.take_password().as_deref().map(String::as_str), Some("secret"));
+    assert_eq!(
+        screen.take_password().as_deref().map(String::as_str),
+        Some("secret")
+    );
 
     type_text(&mut screen, "more");
     press_return(&mut screen);
@@ -156,7 +159,10 @@ fn a_rejected_password_is_cleared_and_the_field_shakes_back_into_place() {
 
     type_text(&mut screen, "right");
     press_return(&mut screen);
-    assert_eq!(screen.take_password().as_deref().map(String::as_str), Some("right"));
+    assert_eq!(
+        screen.take_password().as_deref().map(String::as_str),
+        Some("right")
+    );
 }
 
 #[test]
@@ -268,7 +274,10 @@ fn a_message_stays_until_escape_clears_it_with_the_typed_text() {
     assert_eq!(texts(&mut screen), plain);
     type_text(&mut screen, "whole");
     press_return(&mut screen);
-    assert_eq!(screen.take_password().as_deref().map(String::as_str), Some("whole"));
+    assert_eq!(
+        screen.take_password().as_deref().map(String::as_str),
+        Some("whole")
+    );
 }
 
 #[test]
@@ -282,7 +291,10 @@ fn a_follow_up_prompt_names_the_field_and_takes_a_fresh_answer() {
     assert_eq!(placeholder(&screen), "New password");
     type_text(&mut screen, "new");
     press_return(&mut screen);
-    assert_eq!(screen.take_password().as_deref().map(String::as_str), Some("new"));
+    assert_eq!(
+        screen.take_password().as_deref().map(String::as_str),
+        Some("new")
+    );
 
     screen.ask(None);
     assert_eq!(placeholder(&screen), "Enter Password");

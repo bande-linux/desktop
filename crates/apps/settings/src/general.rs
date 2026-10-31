@@ -66,6 +66,12 @@ impl SettingsView {
                 }
                 _ => None,
             },
+            PaneId::NightLight => self.night_light_summary(),
+            PaneId::Camera
+            | PaneId::Microphone
+            | PaneId::Screenshots
+            | PaneId::ScreenSharing
+            | PaneId::Location => self.grant_summary(pane),
             _ => None,
         }
     }

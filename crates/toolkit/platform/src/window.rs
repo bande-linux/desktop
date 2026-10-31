@@ -21,7 +21,7 @@ use raw_window_handle::{
 use rustix::fs::{MemfdFlags, memfd_create};
 use unbound_graphics::{
     Appearance, CpuRenderer, Cursor, Event, GpuDevice, GpuRenderer, Point, Pointer, PointerButton,
-    Rect, Region, RenderError, ResizeEdge, Scene, TextSystem, damage, pixels,
+    Rect, Region, RenderError, ResizeEdge, Scene, TextSize, TextSystem, damage, pixels,
 };
 use unbound_protocols::client::unbound_shell_v1::{
     BrightnessKey, Edge as DisplayEdge, LauncherMode, MediaKey, Panel, VolumeKey,
@@ -365,6 +365,16 @@ enum ShellSurface {
     Lock(Locked),
 }
 
+fn for_role(role: &ShellSurface, appearance: Appearance) -> Appearance {
+    match role {
+        ShellSurface::Toplevel(..) => appearance,
+        ShellSurface::Layer(_) | ShellSurface::Lock(_) => Appearance {
+            text_size: TextSize::DEFAULT,
+            ..appearance
+        },
+    }
+}
+
 pub struct Window {
     gpu: Gpu,
     pub(crate) cpu: CpuRenderer,
@@ -590,7 +600,7 @@ impl Window {
         if fresh {
             appearance.borrow_mut().wait_for_first_reading();
         }
-        let current = appearance.borrow().current();
+        let current = for_role(&role, appearance.borrow().current());
         state.events.push(WindowEvent::AppearanceChanged(current));
         Ok(Self {
             gpu,
@@ -721,7 +731,11 @@ impl Window {
     }
 
     pub fn appearance(&self) -> Appearance {
-        self.appearance.borrow().current()
+        self.for_role(self.appearance.borrow().current())
+    }
+
+    pub(crate) fn for_role(&self, appearance: Appearance) -> Appearance {
+        for_role(&self.role, appearance)
     }
 
     pub fn connection(&self) -> Connection {

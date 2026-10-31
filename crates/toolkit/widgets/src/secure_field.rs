@@ -19,6 +19,7 @@ pub struct SecureField {
     id: WidgetId,
     placeholder: String,
     font_size: f32,
+    scale: f32,
     secret: Zeroizing<String>,
     on_submit: Box<dyn FnMut(&str)>,
     bullets: Option<Paragraph>,
@@ -32,6 +33,7 @@ impl SecureField {
             id: WidgetId::next(),
             placeholder: placeholder.to_owned(),
             font_size,
+            scale: 1.0,
             secret: Zeroizing::default(),
             on_submit: Box::new(on_submit),
             bullets: None,
@@ -45,7 +47,7 @@ impl SecureField {
     }
 
     fn height(&self) -> f32 {
-        (self.font_size * 1.6 + PADDING)
+        (self.font_size * self.scale * 1.6 + PADDING)
             .ceil()
             .max(ControlSize::Regular.height())
     }
@@ -96,6 +98,7 @@ impl Widget for SecureField {
     }
 
     fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
+        self.scale = cx.text.scale();
         let bullets: String = std::iter::repeat_n(BULLET, self.secret.chars().count()).collect();
         self.bullets = Some(cx.text.paragraph(
             &bullets,

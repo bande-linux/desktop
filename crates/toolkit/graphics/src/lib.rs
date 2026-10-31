@@ -25,5 +25,5 @@ pub use title_bar::{
 };
 pub use unbound_design::{
     Accent, Appearance, Color, Contrast, ControlSize, Elevation, Palette, Radius, Scheme, Shadow,
-    Spacing, TextRole, Typeface,
+    Spacing, TextRole, TextSize, Typeface, grown_line,
 };

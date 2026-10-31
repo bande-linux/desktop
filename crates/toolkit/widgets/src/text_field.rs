@@ -34,6 +34,7 @@ pub struct TextField {
     editor: Editor,
     on_change: Box<dyn FnMut(&str)>,
     scroll: f32,
+    field_height: f32,
     frame: Rect,
 }
 
@@ -49,6 +50,7 @@ impl TextField {
             editor: Editor::new(text, FONT_SIZE, false),
             on_change: Box::new(on_change),
             scroll: 0.0,
+            field_height: TEXT_FIELD_HEIGHT,
             frame: Rect::default(),
         }
     }
@@ -98,9 +100,9 @@ impl TextField {
 
     fn height(&self) -> f32 {
         if matches!(self.border, Border::Field | Border::Search) {
-            TEXT_FIELD_HEIGHT
+            self.field_height
         } else {
-            (self.editor.font_size() * 1.5).ceil()
+            (self.editor.font_size() * 1.5 * self.editor.scale()).ceil()
         }
     }
 
@@ -169,6 +171,8 @@ impl Widget for TextField {
     }
 
     fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
+        self.editor.set_scale(cx.text.scale());
+        self.field_height = cx.control_height(ControlSize::Regular);
         self.editor.set_color(cx.palette.ink);
         self.editor.lay_out(&mut cx.text, WHOLE_LINE);
         self.placeholder_paragraph = (!self.placeholder.is_empty()).then(|| {

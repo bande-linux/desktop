@@ -7,27 +7,29 @@ use std::path::PathBuf;
 use support::SIZE;
 use unbound_audio::{Device, Direction, Level, Snapshot};
 use unbound_keyboard::Layouts;
-use unbound_settings::SIDEBAR_WIDTH;
+use unbound_settings::sidebar_width;
 use unbound_settings::{
     About, App, AppNotifications, BatteryState, BluetoothState, Category, Charge, DefaultApp,
-    Display, InstalledLocale, LocaleState, LoginItems, Mode, Package, Pair, PaneId,
+    Display, Grant, InstalledLocale, LocaleState, LoginItems, Mode, Package, Pair, PaneId,
     PointingDevices, SettingId, SettingsView, SoftwareState, Storage, TimeState, Update, Value,
     WifiState, thumbnail,
 };
+use unbound_settings_panes::Permission;
 use unbound_toolkit::ui::{Event, Key, Modifiers};
 use unbound_toolkit::{
-    CpuRenderer, FrameRegions, HEADER_HEIGHT, Palette, Scene, Scheme, TextSystem, framed_scene,
+    Appearance, CpuRenderer, FrameRegions, HEADER_HEIGHT, Palette, Scene, Scheme, TextSize,
+    TextSystem, framed_scene,
 };
 
 type Build = fn(Scheme) -> SettingsView;
 
-fn framed(view: &mut SettingsView, scheme: Scheme) -> Scene {
+fn framed(view: &mut SettingsView, scheme: Scheme, text: TextSize) -> Scene {
     let content = view.scene(SIZE.0, SIZE.1 - HEADER_HEIGHT);
     framed_scene(
         &content,
         "Settings",
         Some(FrameRegions {
-            sidebar: SIDEBAR_WIDTH,
+            sidebar: sidebar_width(text),
             toolbar: 0.0,
         }),
         None,
@@ -169,9 +171,85 @@ fn displays(scheme: Scheme) -> SettingsView {
         },
     ]);
 
+    view.apply(Update::Values(vec![
+        (SettingId::Brightness, Value::Fraction(0.6)),
+        (SettingId::NightLight, Value::Flag(false)),
+    ]));
     open(&mut view, "displays");
     view
 }
+
+fn night_light(scheme: Scheme) -> SettingsView {
+    let mut view = displays(scheme);
+    view.set_clock(
+        || "2026-10-31T23:10[Europe/Stockholm]".parse().expect("zoned"),
+        None,
+    );
+    view.apply(Update::Values(vec![
+        (SettingId::NightLight, Value::Flag(true)),
+        (
+            SettingId::NightSchedule,
+            Value::Keyword("custom".to_owned()),
+        ),
+        (SettingId::NightFrom, Value::Text("22:00".to_owned())),
+        (SettingId::NightTo, Value::Text("07:00".to_owned())),
+        (SettingId::NightWarmth, Value::Number(60)),
+    ]));
+    view.select_pane(PaneId::NightLight);
+    view
+}
+
+fn grant(app: &str, name: &str, allowed: bool) -> Grant {
+    Grant {
+        app: app.to_owned(),
+        name: name.to_owned(),
+        allowed,
+        tokens: vec![format!("{app}-token")],
+    }
+}
+
+fn granted(scheme: Scheme) -> SettingsView {
+    let mut view = new_view(scheme);
+    view.set_value(SettingId::LockAfter, Value::Seconds(600));
+    view.apply(Update::Permissions(vec![
+        (
+            Permission::Camera,
+            vec![
+                grant("org.mozilla.firefox", "Firefox", true),
+                grant("com.example.Chat", "Chat", false),
+                grant("", "Other apps", true),
+            ],
+        ),
+        (
+            Permission::ScreenSharing,
+            vec![grant("org.mozilla.firefox", "Firefox", true)],
+        ),
+    ]));
+    view
+}
+
+fn camera(scheme: Scheme) -> SettingsView {
+    let mut view = granted(scheme);
+    view.select_pane(PaneId::Camera);
+    view
+}
+
+fn screen_sharing(scheme: Scheme) -> SettingsView {
+    let mut view = granted(scheme);
+    view.select_pane(PaneId::ScreenSharing);
+    view
+}
+
+fn large_text(scheme: Scheme) -> SettingsView {
+    let mut view = accessibility(scheme);
+    view.set_appearance(Appearance {
+        text_size: TextSize::from_percent(LARGE_TEXT),
+        ..Appearance::default()
+    });
+    view
+}
+
+const LARGE_TEXT: u32 = 150;
 
 fn accessibility(scheme: Scheme) -> SettingsView {
     let mut view = new_view(scheme);
@@ -189,6 +267,7 @@ fn accessibility(scheme: Scheme) -> SettingsView {
         view.set_value(id, Value::Flag(on));
     }
     view.set_value(SettingId::CursorSize, Value::Number(32));
+    view.set_value(SettingId::TextSize, Value::Number(LARGE_TEXT));
     view.select_pane(PaneId::Accessibility);
     view
 }
@@ -228,6 +307,7 @@ fn appearance(scheme: Scheme) -> SettingsView {
         ),
         (SettingId::Accent, Value::Keyword("teal".to_owned())),
         (SettingId::TintedFrame, Value::Flag(false)),
+        (SettingId::TextSize, Value::Number(100)),
     ]));
     view.select_pane(PaneId::Appearance);
     view
@@ -342,8 +422,7 @@ fn trackpad(scheme: Scheme) -> SettingsView {
 }
 
 fn privacy(scheme: Scheme) -> SettingsView {
-    let mut view = new_view(scheme);
-    view.set_value(SettingId::LockAfter, Value::Seconds(600));
+    let mut view = granted(scheme);
     view.select_pane(PaneId::PrivacySecurity);
     view
 }
@@ -544,7 +623,7 @@ fn network(scheme: Scheme) -> SettingsView {
 
 #[test]
 fn the_panes_match_their_goldens() {
-    let panes: [(&str, Scheme, Build, f64); 24] = [
+    let panes: [(&str, Scheme, Build, f64); 28] = [
         ("appearance-light", Scheme::Light, appearance, 1.0),
         ("appearance-dark", Scheme::Dark, appearance, 1.0),
         ("appearance-light@1.5x", Scheme::Light, appearance, 1.5),
@@ -557,6 +636,10 @@ fn the_panes_match_their_goldens() {
         ("accessibility-light", Scheme::Light, accessibility, 1.0),
         ("displays-light", Scheme::Light, displays, 1.0),
         ("displays-dark", Scheme::Dark, displays, 1.0),
+        ("night-light-light", Scheme::Light, night_light, 1.0),
+        ("camera-light", Scheme::Light, camera, 1.0),
+        ("screen-sharing-light", Scheme::Light, screen_sharing, 1.0),
+        ("accessibility-150-light", Scheme::Light, large_text, 1.0),
         ("sound-light", Scheme::Light, sound, 1.0),
         ("keyboard-light", Scheme::Light, keyboard_pane, 1.0),
         (
@@ -579,7 +662,11 @@ fn the_panes_match_their_goldens() {
         for (name, scheme, build, scale) in panes {
             scope.spawn(move || {
                 let mut view = build(scheme);
-                let scene = framed(&mut view, scheme);
+                let text = match name.contains("-150") {
+                    true => TextSize::from_percent(LARGE_TEXT),
+                    false => TextSize::DEFAULT,
+                };
+                let scene = framed(&mut view, scheme, text);
                 let pixels = (
                     (f64::from(SIZE.0) * scale).round() as u32,
                     (f64::from(SIZE.1) * scale).round() as u32,

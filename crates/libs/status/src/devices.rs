@@ -129,7 +129,7 @@ pub fn battery_of(state: u32, percent: f64, to_empty: i64, to_full: i64) -> Batt
     Battery { percent, power }
 }
 
-fn battery(system: &Connection) -> Option<Battery> {
+pub fn battery(system: &Connection) -> Option<Battery> {
     let device = DisplayDevice::builder(system)
         .cache_properties(CacheProperties::No)
         .build()

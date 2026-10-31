@@ -4,7 +4,7 @@ use accesskit::{Action, ActionRequest, TreeId};
 use std::cell::Cell;
 use std::rc::Rc;
 use std::time::Instant;
-use unbound_graphics::{CpuRenderer, Image, Palette, Scheme, TextSystem, pixels};
+use unbound_graphics::{CpuRenderer, Image, Palette, Scheme, TextSize, TextSystem, pixels};
 
 use unbound_widgets::{
     Axis, Button, CheckState, Checkbox, ComboBox, Context, Event, Pointer, PopUpButton,
@@ -103,6 +103,14 @@ fn row(children: Vec<Box<dyn Widget>>) -> Box<dyn Widget> {
 const TRASH: &[u8] = br##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill="#201E1A" d="M6 1h4l1 1h3v1.5H2V2h3zM3 5h10l-.8 9.2A1 1 0 0 1 11.2 15H4.8a1 1 0 0 1-1-.8zm3 2v6h1.2V7zm2.8 0v6H10V7z"/></svg>"##;
 
 fn controls(scheme: Scheme) -> Ui {
+    controls_at(scheme, TextSize::DEFAULT, CONTROLS)
+}
+
+fn larger_controls(scheme: Scheme) -> Ui {
+    controls_at(scheme, TextSize::from_percent(150), LARGER_CONTROLS)
+}
+
+fn controls_at(scheme: Scheme, text_size: TextSize, area: (u32, u32)) -> Ui {
     let trash = Image::from_svg(TRASH, 32, 32).expect("symbol");
     let delete = Button::symbol(trash, "Move to Trash", || {});
     let delete_id = delete.id();
@@ -161,14 +169,16 @@ fn controls(scheme: Scheme) -> Ui {
             Box::new(ProgressBar::new("Preparing", None)),
         ],
     );
+    let mut text = TextSystem::new();
+    text.set_size(text_size);
     let mut ui = Ui::new(
         Box::new(stack),
-        Context::new(TextSystem::new(), Palette::for_scheme(scheme)),
+        Context::new(text, Palette::for_scheme(scheme)),
     );
     let clock = Rc::new(Cell::new(Instant::now()));
     let time = clock.clone();
     ui.set_clock(move || time.get());
-    ui.layout(Size::new(CONTROLS.0 as f32, CONTROLS.1 as f32));
+    ui.layout(Size::new(area.0 as f32, area.1 as f32));
     focus(&mut ui, typed_id);
     let frame = ui.widget(delete_id).expect("button").frame();
     ui.handle(&Event::PointerMove(Pointer::at(
@@ -179,6 +189,7 @@ fn controls(scheme: Scheme) -> Ui {
 }
 
 const CONTROLS: (u32, u32) = (600, 470);
+const LARGER_CONTROLS: (u32, u32) = (760, 600);
 
 #[test]
 fn controls_match_their_goldens() {
@@ -188,4 +199,5 @@ fn controls_match_their_goldens() {
         controls,
         &[LIGHT, DARK, LIGHT_FRACTIONAL],
     );
+    shoot("controls-150", LARGER_CONTROLS, larger_controls, &[LIGHT]);
 }

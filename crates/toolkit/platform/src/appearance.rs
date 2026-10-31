@@ -6,7 +6,7 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread;
 use std::time::Duration;
 
-use unbound_graphics::{Accent, Appearance, Color, Contrast, Scheme};
+use unbound_graphics::{Accent, Appearance, Color, Contrast, Scheme, TextSize};
 use zbus::blocking::{Connection, Proxy};
 use zbus::zvariant::OwnedValue;
 
@@ -118,6 +118,10 @@ fn apply(appearance: &mut Appearance, namespace: &str, key: &str, value: OwnedVa
         }
         (NAMESPACE, "reduced-motion") => {
             appearance.reduce_motion = u32::try_from(&value) == Ok(REDUCE);
+        }
+        (UNBOUND_NAMESPACE, "text-size") => {
+            appearance.text_size =
+                u32::try_from(&value).map_or(TextSize::DEFAULT, TextSize::from_percent);
         }
         (UNBOUND_NAMESPACE, "frame-tint") => {
             appearance.frame_tint = Vec::<f64>::try_from(value)

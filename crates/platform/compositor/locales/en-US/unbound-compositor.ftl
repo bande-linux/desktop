@@ -29,3 +29,4 @@ start-failure = { $name } could not start because { $reason }.
 start-failure-missing = it is not installed
 start-failure-denied = it may not be run
 start-failure-other = of an error: { $error }
+remember-apps-before-shutdown = Remember the open apps to reopen them at the next login

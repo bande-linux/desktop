@@ -7,7 +7,7 @@ use std::os::unix::net::UnixStream;
 
 use zbus::blocking::Connection;
 
-use crate::backlight::{Backlight, KeyboardLight, dimmed};
+use crate::backlight::{Backlight, KeyboardBacklight, dimmed};
 use crate::idle::{Command, IdleMachine, Policy};
 use crate::logind::{self, ManagerProxyBlocking, SessionProxyBlocking};
 
@@ -147,7 +147,7 @@ pub fn logind_executor(
     manager: ManagerProxyBlocking<'static>,
     session: SessionProxyBlocking<'static>,
     backlight: Option<Backlight>,
-    keyboard: Option<KeyboardLight>,
+    keyboard: Option<KeyboardBacklight>,
 ) -> impl Fn(Command) + Send + Sync + 'static {
     let undimmed = Mutex::new(None);
     let keyboard_lit = Mutex::new(None);

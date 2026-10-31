@@ -1,16 +1,18 @@
-use std::cell::{Cell, RefCell};
+use std::cell::{Cell, OnceCell, RefCell};
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::rc::Rc;
 
 use accesskit::{Action, ActionData, ActionRequest, TreeId, TreeUpdate};
+use jiff::Zoned;
 use std::time::{Duration, Instant};
 use unbound_audio::{Direction, Snapshot, meter_level};
 use unbound_config::{DisplaySettings, MAX_INPUT_SOURCES, Placement, Rotation};
+use unbound_datetime::daylight::Place;
 use unbound_toolkit::ui::{
     Context, Event, Key, Modifiers, PointerButton, SearchField, Ui, Widget, WidgetId,
 };
-use unbound_toolkit::{Image, Palette, Rect, SHEET_INSET, Scene, TextSystem};
+use unbound_toolkit::{Appearance, Image, Palette, Rect, SHEET_INSET, Scene, TextSystem};
 
 use crate::L10N;
 use crate::about::{About, AboutCommand};
@@ -21,7 +23,9 @@ use crate::forget::Forget;
 use crate::idle::Idle;
 use crate::locale::{LocaleCommand, LocaleState};
 use crate::login::{LoginCommand, LoginItems, login_matches};
+use crate::night::clock_text;
 use crate::notifications::{AppNotifications, NotificationCommand};
+use crate::permissions::Grants;
 use crate::pictures::{Pair, PictureCommand};
 use crate::pointing::PointingDevices;
 use crate::privacy::focus_after_asking;
@@ -33,7 +37,7 @@ use crate::storage::{Storage, StorageCommand};
 use crate::time::{TimeCommand, TimeState, parse_manual, zone_matches};
 use crate::widgets::{Column, Crossfade, Root};
 use unbound_keyboard::Layouts;
-use unbound_settings_panes::{AUTOMATIC, Pane, PaneId, SettingId, Value, panes};
+use unbound_settings_panes::{AUTOMATIC, Pane, PaneId, Permission, SettingId, Value, panes};
 use unbound_settings_panes::{PaneHit, search};
 
 const PAGE_STEP: f32 = 240.0;
@@ -46,6 +50,7 @@ pub(crate) const MIRROR_PREFIX: &str = "mirror:";
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Intent {
     SelectPane(PaneId),
+    Open(PaneId, SettingId),
     StepPane(isize),
     Query(String),
     Set(SettingId, Value),
@@ -88,6 +93,7 @@ pub(crate) enum Intent {
     ImportVpn,
     Locale(LocaleCommand),
     DefaultApp(&'static str, String),
+    Grant(Permission, String, bool),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -203,6 +209,7 @@ pub struct SettingsView {
     pub(crate) errors: HashMap<SettingId, String>,
     pub(crate) refused: Vec<Privilege>,
     pub(crate) default_apps: Option<Vec<DefaultApp>>,
+    pub(crate) permissions: Grants,
     pressed: bool,
     stale: bool,
     pub(crate) focus_next: Option<Anchor>,
@@ -212,6 +219,8 @@ pub struct SettingsView {
     pub(crate) sidebar_scroll: Rc<Cell<f32>>,
     pub(crate) icon_dirs: Vec<PathBuf>,
     pub(crate) symbols: HashMap<Symbol, Option<Image>>,
+    pub(crate) place: OnceCell<Option<Place>>,
+    pub(crate) clock: Box<dyn Fn() -> Zoned>,
 }
 
 pub(crate) type Symbol = (&'static str, u32, [u8; 4]);
@@ -277,6 +286,7 @@ impl SettingsView {
             errors: HashMap::new(),
             refused: Vec::new(),
             default_apps: None,
+            permissions: Vec::new(),
             pressed: false,
             stale: true,
             focus_next: None,
@@ -286,16 +296,28 @@ impl SettingsView {
             sidebar_scroll: Rc::default(),
             icon_dirs: unbound_xdg::data_dirs(),
             symbols: HashMap::new(),
+            place: OnceCell::new(),
+            clock: Box::new(Zoned::now),
         };
         view.rebuild();
         view
     }
 
-    pub fn set_palette(&mut self, palette: Palette) {
-        if self.ui.context().palette != palette {
-            self.ui.context().palette = palette;
+    pub fn set_appearance(&mut self, appearance: Appearance) {
+        let cx = self.ui.context();
+        let changed = cx.palette != appearance.palette()
+            || cx.reduce_motion != appearance.reduce_motion
+            || cx.text.size() != appearance.text_size;
+        if changed {
+            self.ui.set_appearance(appearance);
             self.invalidate();
         }
+    }
+
+    pub fn set_clock(&mut self, clock: impl Fn() -> Zoned + 'static, place: Option<Place>) {
+        self.clock = Box::new(clock);
+        self.place = OnceCell::from(place);
+        self.invalidate();
     }
 
     pub fn set_icon_dirs(&mut self, dirs: Vec<PathBuf>) {
@@ -492,6 +514,7 @@ impl SettingsView {
             }
             Update::Refused(refused) => self.refused = refused,
             Update::DefaultApps(defaults) => self.default_apps = Some(defaults),
+            Update::Permissions(permissions) => self.permissions = permissions,
         }
         self.availability_changed();
     }
@@ -563,7 +586,7 @@ impl SettingsView {
             PaneId::Network => self.network.is_some(),
             PaneId::Notifications => self.values.contains_key(&SettingId::DoNotDisturb),
             PaneId::Sound => self.audio.is_some(),
-            PaneId::Displays => !self.displays.is_empty(),
+            PaneId::Displays | PaneId::NightLight => !self.displays.is_empty(),
             PaneId::About => self.about.is_some(),
             PaneId::Appearance
             | PaneId::Accessibility
@@ -572,11 +595,15 @@ impl SettingsView {
             | PaneId::KeyboardShortcuts
             | PaneId::Power
             | PaneId::PrivacySecurity
+            | PaneId::Camera
+            | PaneId::Screenshots
+            | PaneId::ScreenSharing
             | PaneId::Apps
             | PaneId::Storage
             | PaneId::SoftwareUpdate => true,
             PaneId::LanguageTime => self.locale.is_some() || self.time.is_some(),
             PaneId::TrackpadMouse => self.pointing.trackpad || self.pointing.mouse,
+            PaneId::Microphone | PaneId::Location => self.has_grants(pane),
         }
     }
 
@@ -935,6 +962,7 @@ impl SettingsView {
                     self.scroll.set(0.0);
                 }
                 Intent::Software(command) => self.commands.push(Command::Software(command)),
+                Intent::Grant(permission, app, on) => self.grant(permission, app, on),
                 Intent::Network(command) => self.commands.push(Command::Network(command)),
                 Intent::ImportVpn => self.commands.push(Command::ImportVpn),
                 Intent::DefaultApp(role, id) => {
@@ -1010,6 +1038,10 @@ impl SettingsView {
                     if pane.parent() == Some(self.pane) {
                         self.focus_next = Some(Anchor::Back);
                     }
+                    self.select_pane(pane);
+                }
+                Intent::Open(pane, setting) => {
+                    self.focus_next = Some(Anchor::Setting(setting, None));
                     self.select_pane(pane);
                 }
                 Intent::StepPane(step) => self.step_pane(step),
@@ -1247,6 +1279,15 @@ impl SettingsView {
         }
     }
 
+    pub(crate) fn text_size_label(&self) -> Option<String> {
+        match self.values.get(&SettingId::TextSize)? {
+            Value::Number(percent) => {
+                Some(L10N.tr_args("text-size-percent", [("percent", (*percent).into())]))
+            }
+            _ => None,
+        }
+    }
+
     fn idle(&self) -> Option<Idle> {
         let seconds = |id| match self.values.get(&id) {
             Some(Value::Seconds(seconds)) => Some(*seconds),
@@ -1286,6 +1327,7 @@ impl SettingsView {
             (SettingId::ComputerName, Value::Text(name)) => {
                 Command::About(AboutCommand::Rename(name))
             }
+            (SettingId::Brightness, Value::Fraction(level)) => Command::Brightness(level),
             (id, value) => Command::Set(id, value),
         }
     }
@@ -1326,6 +1368,21 @@ impl SettingsView {
                 }
                 None => Some(L10N.tr("manual-address-invalid")),
             };
+            return;
+        }
+        if let (SettingId::NightFrom | SettingId::NightTo, Value::Text(text)) = (id, &value) {
+            match clock_text(text) {
+                Some(time) => {
+                    self.errors.remove(&id);
+                    if self.values.get(&id) != Some(&Value::Text(time.clone())) {
+                        self.values.insert(id, Value::Text(time.clone()));
+                        self.commands.push(Command::Set(id, Value::Text(time)));
+                    }
+                }
+                None => {
+                    self.errors.insert(id, L10N.tr("night-time-invalid"));
+                }
+            }
             return;
         }
         if let (SettingId::DateAndTime, Value::Text(text)) = (id, &value) {

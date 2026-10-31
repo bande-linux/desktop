@@ -49,7 +49,7 @@ draws the panes (`pages.rs`, `view.rs`, `widgets.rs`) and talks to the services.
 | Keyboard | Input sources (add, reorder, remove); Repeat rate and Delay until repeat; Caps Lock key; Keyboard shortcuts (read only) | the config and the compositor; the shortcut table comes from `libs/keyboard` |
 | Trackpad & Mouse | Trackpad: Tap to click, Secondary click, Natural scrolling, Tracking speed, Ignore while typing. Mouse: Natural scrolling, Tracking speed | the config and the compositor (libinput); devices found through udev |
 
-Two config keys have no control: `accessibility { text-size }`, which the portal serves but the
+Two config keys had no control: `accessibility { text-size }`, which the portal serves but the
 toolkit does not follow, and `power { show-battery-percentage }`, set from the battery menu by
 decision (roadmap).
 
@@ -883,14 +883,40 @@ adapter. A paired device that reports its battery shows it beside its status ("C
 Battery 80%"). Turning Wi-Fi or Bluetooth off, or a device or service going away, cross-fades
 the page into the off state with the fade preset, which stays under Reduce motion.
 
+**Slices 3 to 5 and 7 (branch `day/settings-depth-3`).**
+
+- **Night Light.** Displays ▸ Night Light › opens a subpage with the master switch in the
+  header, Schedule (Sunset to sunrise, Custom) with From and To shown only when custom, and a
+  Warmth slider from Less warm to More warm. The header and the Displays row say "On until
+  07:00" or "Off until 22:00". `NightLight` on `org.unbound.Config` is writable as a whole and
+  refuses a bad time, schedule or warmth. A typed time is normalised ("6:5" becomes "06:05") or
+  refused at its row. Changing the warmth by day previews it at full strength for three seconds
+  and then fades back (compositor). The daily window moved to `libs/datetime` as
+  `within_daily`, shared by the compositor and Settings.
+- **Brightness.** Displays opens with a Brightness slider for the built-in panel, shown only
+  when a backlight exists. `libs/status::backlight` now holds the display and keyboard light
+  code that Control Center had; both set through logind `SetBrightness`, and Settings follows
+  key presses by polling `actual_brightness` for the kernel's change notification (no timer).
+- **App permissions.** Privacy & Security opens with Camera, Screenshots and Screen Sharing,
+  and Microphone and Location only when the permission store holds entries for them. Each
+  row shows how many apps asked; each page lists them with a switch ("yes" or "no" in the
+  store; Location writes `NONE` or `EXACT`), or, for Screen Sharing, Forget… with an inline
+  confirmation that deletes the app's restore tokens. Entries without an app id read "Other
+  apps". The store's `Changed` signal keeps the pages live; a missing table or store reads as
+  the empty state ("No app has asked to use the camera yet.").
+- **Text size.** The toolkit follows the portal's `text-size` (100–200 %) live: the text system
+  scales every paragraph and the editor, and buttons, pop-ups, segmented controls, fields,
+  steppers, disclosures and alert buttons grow by the extra line height. App windows follow
+  it; the bar, dock, panels, lock screen and menus keep their size. Appearance has a Text size
+  slider (Default to Largest, five stops); Accessibility ▸ Vision links to it with its value
+  and opens Appearance with the slider focused. The Settings sidebar widens with the text.
+
 **Open.**
 
-- The polkit agent is only a library: no dialog, no binary, nothing packaged or started in the
-  session, so a polkit challenge still counts as refused.
-- The app permission pages of Privacy & Security (Camera, Screenshots, Screen Sharing from the
-  portal permission store).
-- The brightness slider and moving Control Center's backlight code into `libs/status`.
-- Displays ▸ Night Light waits for `night/system-depth`.
+- Menus (pop-up menus and context menus) do not scale with the text size yet.
+- Files, Terminal and Activity Monitor take only the palette from the appearance today; they
+  follow the text size once they hand the appearance to their `Ui`.
+- Row labels in Settings do not wrap, so a very long label at 200 % can meet its control.
 - The guest `pkcheck` test of the rules (no polkitd in the VM image tonight).
 
 ## Sources

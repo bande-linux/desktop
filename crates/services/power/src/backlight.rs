@@ -51,15 +51,19 @@ impl Backlight {
     pub fn max_brightness(&self) -> io::Result<u32> {
         read_number(&self.directory.join("max_brightness"))
     }
+
+    pub fn actual_brightness_file(&self) -> PathBuf {
+        self.directory.join("actual_brightness")
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct KeyboardLight {
+pub struct KeyboardBacklight {
     pub name: String,
     directory: PathBuf,
 }
 
-impl KeyboardLight {
+impl KeyboardBacklight {
     pub fn find(leds: &Path) -> Option<Self> {
         let mut names: Vec<String> = fs::read_dir(leds)
             .ok()?
@@ -79,15 +83,8 @@ impl KeyboardLight {
         read_number(&self.directory.join("brightness"))
     }
 
-    pub fn maximum(&self) -> Option<u32> {
+    pub fn max_brightness(&self) -> io::Result<u32> {
         read_number(&self.directory.join("max_brightness"))
-            .ok()
-            .filter(|maximum| *maximum > 0)
-    }
-
-    pub fn level(&self) -> Option<f32> {
-        let maximum = self.maximum()?;
-        Some(self.brightness().ok()? as f32 / maximum as f32)
     }
 }
 

@@ -208,6 +208,7 @@ pub struct State {
     pub(crate) switcher: crate::switcher::Switcher,
     pub(crate) assist: crate::assist::Assist,
     pub(crate) recall: crate::recall::Recall,
+    pub(crate) reopen_file: Option<std::path::PathBuf>,
     pub(crate) gesture_route: Option<crate::gesture::Route>,
     pub(crate) active_app: String,
     pub(crate) active_output: String,
@@ -396,6 +397,7 @@ impl Headless {
             switcher: crate::switcher::Switcher::default(),
             assist: crate::assist::Assist::default(),
             recall: crate::recall::Recall::default(),
+            reopen_file: None,
             gesture_route: None,
             active_app: String::new(),
             active_output: String::new(),
@@ -615,6 +617,25 @@ impl Headless {
 
     pub fn windows(&self) -> &[Window] {
         &self.state.windows
+    }
+
+    pub fn mapped_layers(&self) -> Vec<(String, u32)> {
+        self.state
+            .screens
+            .iter()
+            .flat_map(|screen| {
+                layer_map_for_output(&screen.output)
+                    .layers()
+                    .filter(|layer| is_mapped(layer.wl_surface()))
+                    .map(|layer| {
+                        (
+                            layer.namespace().to_owned(),
+                            layer.wl_surface().id().protocol_id(),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect()
     }
 
     pub fn render_elements(&mut self, renderer: &mut VulkanRenderer) -> Vec<ScreenElement> {

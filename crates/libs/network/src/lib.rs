@@ -339,6 +339,15 @@ impl NetworkManager {
         Ok(outcome)
     }
 
+    pub fn forget(&self, network: &Network) -> Result<()> {
+        for (ssid, connection) in self.saved_wifi()? {
+            if ssid == network.ssid {
+                self.settings_connection(&connection)?.delete()?;
+            }
+        }
+        Ok(())
+    }
+
     fn replace_password(&self, connection: &OwnedObjectPath, psk: &str) -> Result<()> {
         let proxy = self.settings_connection(connection)?;
         let mut settings: ConnectionSettings = proxy.get_settings()?;

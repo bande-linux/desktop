@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Node, Role, SortDirection};
@@ -73,14 +74,14 @@ impl Column {
 
 #[derive(Debug, Clone)]
 pub struct Cell {
-    pub text: String,
+    pub text: Rc<str>,
     pub icon: Option<Image>,
     pub muted: bool,
     pub tint: Option<Color>,
 }
 
 impl Cell {
-    pub fn new(text: impl Into<String>) -> Self {
+    pub fn new(text: impl Into<Rc<str>>) -> Self {
         Self {
             text: text.into(),
             icon: None,
@@ -113,6 +114,7 @@ pub struct Row {
     pub key: String,
     pub cells: Vec<Cell>,
     pub children: Vec<Row>,
+    pub expandable: bool,
 }
 
 impl Row {
@@ -121,11 +123,19 @@ impl Row {
             key: key.into(),
             cells,
             children: Vec::new(),
+            expandable: false,
         }
     }
 
     pub fn children(self, children: Vec<Row>) -> Self {
         Self { children, ..self }
+    }
+
+    pub fn expandable(self) -> Self {
+        Self {
+            expandable: true,
+            ..self
+        }
     }
 }
 
@@ -142,7 +152,7 @@ fn flatten(rows: Vec<Row>, depth: usize, lines: &mut Vec<Line>) -> usize {
     let mut added = 0;
     for row in rows {
         let at = lines.len();
-        let branch = !row.children.is_empty();
+        let branch = row.expandable || !row.children.is_empty();
         lines.push(Line {
             key: row.key,
             cells: row.cells,
@@ -187,13 +197,14 @@ enum Drag {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct TextKey {
-    text: String,
+    text: Rc<str>,
     column: usize,
     color: Color,
     width: u32,
 }
 
 type KeysCallback = Box<dyn FnMut(&[String])>;
+type ExpandCallback = Box<dyn FnMut(&[String], bool, bool)>;
 type MenuSource = Box<dyn FnMut(&[String]) -> Option<Menu>>;
 type MenuChoice = Box<dyn FnMut(&str, &[String])>;
 type DragStart = Box<dyn FnMut(&[String], Point)>;
@@ -222,6 +233,7 @@ pub struct Table {
     on_sort: Box<dyn FnMut(Sort)>,
     on_selection: KeysCallback,
     on_activate: KeysCallback,
+    on_expand: ExpandCallback,
     menu: MenuSource,
     on_menu_action: MenuChoice,
     menu_keys: Vec<String>,
@@ -263,6 +275,7 @@ impl Table {
             on_sort: Box::new(|_| {}),
             on_selection: Box::new(|_| {}),
             on_activate: Box::new(|_| {}),
+            on_expand: Box::new(|_, _, _| {}),
             menu: Box::new(|_| None),
             on_menu_action: Box::new(|_, _| {}),
             menu_keys: Vec::new(),
@@ -298,6 +311,22 @@ impl Table {
         Self {
             on_activate: Box::new(callback),
             ..self
+        }
+    }
+
+    pub fn on_expand(self, callback: impl FnMut(&[String], bool, bool) + 'static) -> Self {
+        Self {
+            on_expand: Box::new(callback),
+            ..self
+        }
+    }
+
+    pub fn set_expanded_rows(&mut self, keys: impl IntoIterator<Item = String>) {
+        let expanded = keys.into_iter().collect::<HashSet<_>>();
+        if expanded != self.expanded {
+            let kept = self.remembered();
+            self.expanded = expanded;
+            self.reshow(kept);
         }
     }
 
@@ -341,6 +370,80 @@ impl Table {
             .any(|line| line.cells.first().is_some_and(|cell| cell.icon.is_some()));
         self.lines = lines;
         self.reshow(kept);
+    }
+
+    fn is_flat(&self) -> bool {
+        self.shown.len() == self.lines.len()
+    }
+
+    pub fn insert_row(&mut self, index: usize, row: Row) {
+        let mut lines = Vec::new();
+        flatten(vec![row], 0, &mut lines);
+        let index = index.min(self.lines.len());
+        let added = lines.len();
+        let kept = (!self.is_flat() || added > 1).then(|| self.remembered());
+        self.outline |= lines.iter().any(|line| line.branch);
+        self.named_icons |= lines
+            .iter()
+            .any(|line| line.cells.first().is_some_and(|cell| cell.icon.is_some()));
+        self.lines.splice(index..index, lines);
+        match kept {
+            Some(kept) => self.reshow(kept),
+            None => {
+                self.shown.push(self.shown.len());
+                self.selected.insert(index, false);
+                let shift = |at: usize| if at >= index { at + 1 } else { at };
+                self.cursor = self.cursor.map(shift);
+                self.anchor = self.anchor.map(shift);
+            }
+        }
+    }
+
+    pub fn remove_row(&mut self, index: usize) {
+        let Some(line) = self.lines.get(index) else {
+            return;
+        };
+        let removed = 1 + line.descendants;
+        if !self.is_flat() || removed > 1 {
+            let kept = self.remembered();
+            self.lines.drain(index..index + removed);
+            self.reshow(kept);
+            return;
+        }
+        self.lines.remove(index);
+        self.shown.truncate(self.lines.len());
+        self.selected.remove(index);
+        let shift = |at: usize| match at.cmp(&index) {
+            std::cmp::Ordering::Less => Some(at),
+            std::cmp::Ordering::Equal => None,
+            std::cmp::Ordering::Greater => Some(at - 1),
+        };
+        self.cursor = self.cursor.and_then(shift);
+        self.anchor = self.anchor.and_then(shift);
+    }
+
+    pub fn select_rows(&mut self, rows: &[usize]) {
+        self.selected = vec![false; self.shown.len()];
+        for row in rows {
+            if let Some(selected) = self.selected.get_mut(*row) {
+                *selected = true;
+            }
+        }
+        self.cursor = rows.first().copied().filter(|row| *row < self.shown.len());
+        self.anchor = self.cursor;
+    }
+
+    pub fn row_count(&self) -> usize {
+        self.shown.len()
+    }
+
+    pub fn selected_rows(&self) -> Vec<usize> {
+        self.selected
+            .iter()
+            .enumerate()
+            .filter(|(_, selected)| **selected)
+            .map(|(index, _)| index)
+            .collect()
     }
 
     fn key_at(&self, index: usize) -> Option<&str> {
@@ -395,6 +498,12 @@ impl Table {
             };
         }
         self.shown = shown;
+        if kept.selected.is_empty() && kept.cursor.is_none() && kept.anchor.is_none() {
+            self.cursor = None;
+            self.anchor = None;
+            self.selected = vec![false; self.shown.len()];
+            return;
+        }
         let positions = self
             .shown
             .iter()
@@ -450,6 +559,7 @@ impl Table {
             self.turns.insert(key.clone(), turn);
         }
         self.change_expansion(at, &changed, expanded);
+        (self.on_expand)(&changed, expanded, all);
         true
     }
 
@@ -758,7 +868,7 @@ impl Table {
                         self.lines[*line]
                             .cells
                             .iter()
-                            .map(|cell| cell.text.as_str())
+                            .map(|cell| cell.text.as_ref())
                             .collect::<Vec<_>>()
                             .join("\t")
                     })
@@ -1295,14 +1405,14 @@ impl Table {
                 .id
                 .part(index as u64 * (self.columns.len() as u64 + 1) + column as u64 + 1);
             let mut cell_node = Node::new(Role::Cell);
-            cell_node.set_label(cell.text.clone());
+            cell_node.set_label(cell.text.as_ref());
             cell_node.set_column_index(column);
             cell_node.set_row_index(index);
             cells.push(cell_id);
             parts.nodes.push((cell_id, cell_node));
         }
         if let Some(name) = row.cells.first() {
-            node.set_label(name.text.clone());
+            node.set_label(name.text.as_ref());
         }
         node.set_children(cells);
         parts.children.push(row_id);

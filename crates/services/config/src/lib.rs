@@ -583,6 +583,70 @@ impl Default for Accessibility {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ClockTime {
+    pub hour: u8,
+    pub minute: u8,
+}
+
+impl ClockTime {
+    pub fn parse(text: &str) -> Option<Self> {
+        let (hour, minute) = text.split_once(':')?;
+        let digits = |part: &str| {
+            (part.len() == 2 && part.bytes().all(|byte| byte.is_ascii_digit()))
+                .then(|| part.parse::<u8>().ok())
+                .flatten()
+        };
+        let (hour, minute) = (digits(hour)?, digits(minute)?);
+        (hour < 24 && minute < 60).then_some(Self { hour, minute })
+    }
+
+    pub fn text(self) -> String {
+        format!("{:02}:{:02}", self.hour, self.minute)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NightSchedule {
+    Sunset,
+    Custom,
+}
+
+impl NightSchedule {
+    pub fn keyword(self) -> &'static str {
+        match self {
+            Self::Sunset => "sunset",
+            Self::Custom => "custom",
+        }
+    }
+}
+
+pub const NIGHT_LIGHT_WARMTH_RANGE: (u32, u32) = (0, 100);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NightLight {
+    pub on: bool,
+    pub schedule: NightSchedule,
+    pub from: ClockTime,
+    pub to: ClockTime,
+    pub warmth: u32,
+}
+
+impl Default for NightLight {
+    fn default() -> Self {
+        Self {
+            on: false,
+            schedule: NightSchedule::Sunset,
+            from: ClockTime {
+                hour: 22,
+                minute: 0,
+            },
+            to: ClockTime { hour: 7, minute: 0 },
+            warmth: 50,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
     pub appearance: Appearance,
@@ -599,6 +663,7 @@ pub struct Config {
     pub power: Power,
     pub sound: Sound,
     pub wallpaper: Wallpaper,
+    pub night_light: NightLight,
     pub displays: BTreeMap<String, DisplaySettings>,
     pub outputs: BTreeMap<String, DisplaySettings>,
     pub arrangements: Vec<Vec<Placement>>,
@@ -639,6 +704,7 @@ impl Default for Config {
             power: Power::default(),
             sound: Sound::default(),
             wallpaper: Wallpaper::default(),
+            night_light: NightLight::default(),
             displays: BTreeMap::new(),
             outputs: BTreeMap::new(),
             arrangements: Vec::new(),
@@ -818,6 +884,10 @@ impl Parser<'_> {
                 }
                 "wallpaper" => {
                     config.wallpaper = self.wallpaper(node);
+                    Ok(())
+                }
+                "night-light" => {
+                    config.night_light = self.night_light(node);
                     Ok(())
                 }
                 "display" => self.display(node, &mut config.displays),
@@ -1048,6 +1118,45 @@ impl Parser<'_> {
             idle.suspend = Suspend::After(idle.lock_after);
         }
         idle
+    }
+
+    fn night_light(&self, node: &KdlNode) -> NightLight {
+        let mut night = NightLight::default();
+        self.section(node, |child| {
+            match child.name().value() {
+                "on" => night.on = self.flag(child)?,
+                "schedule" => {
+                    night.schedule = self.keyword(
+                        child,
+                        &[NightSchedule::Sunset, NightSchedule::Custom]
+                            .map(|schedule| (schedule.keyword(), schedule)),
+                    )?
+                }
+                "from" => night.from = self.clock_time(child)?,
+                "to" => night.to = self.clock_time(child)?,
+                "warmth" => night.warmth = self.integer_in(child, NIGHT_LIGHT_WARMTH_RANGE)?,
+                _ => return Err(self.unknown_child("night-light", child)),
+            }
+            Ok(())
+        });
+        night
+    }
+
+    fn clock_time(&self, node: &KdlNode) -> Result<ClockTime, ConfigError> {
+        let entry = self.argument(node)?;
+        entry
+            .value()
+            .as_string()
+            .and_then(ClockTime::parse)
+            .ok_or_else(|| {
+                self.at_entry(
+                    entry,
+                    format!(
+                        "`{}` must be a time of day such as \"22:00\"",
+                        node.name().value()
+                    ),
+                )
+            })
     }
 
     fn keyboard(&self, node: &KdlNode, keyboard: &mut Keyboard) {

@@ -1,10 +1,12 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use unbound_toolkit::ui::{Animated, Event, Spring};
+use unbound_toolkit::ui::{Animated, Event, Menu, MenuItem, Spring};
 use unbound_toolkit::{
     Color, Elevation, Image, Item, Palette, Point, Radius, Rect, Scene, Scheme, Shape,
 };
+
+use crate::L10N;
 
 const MOST_WIDTH: f32 = 192.0;
 const MOST_HEIGHT: f32 = 128.0;
@@ -12,17 +14,26 @@ const MARGIN: f32 = 18.0;
 const BORDER: f32 = 3.0;
 const RADIUS: f32 = Radius::S;
 const SHOWN_FOR: Duration = Duration::from_secs(5);
+const LINGER: Duration = Duration::from_secs(2);
 const DRAG_THRESHOLD: f32 = 4.0;
+const SWIPE_AWAY: f32 = 40.0;
 const PLAY_RADIUS: f32 = 16.0;
 const PLAY_DISC: f32 = 0.7;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ThumbnailAction {
     None,
     Open(PathBuf),
     Drag(PathBuf),
+    Menu(Point),
     Gone,
 }
+
+pub const SHOW_IN_FILES: &str = "thumbnail-show-in-files";
+pub const OPEN: &str = "thumbnail-open";
+pub const COPY: &str = "thumbnail-copy";
+pub const TRASH: &str = "thumbnail-trash";
+pub const CLOSE: &str = "thumbnail-close";
 
 pub struct Thumbnail {
     image: Image,
@@ -34,6 +45,9 @@ pub struct Thumbnail {
     until: Instant,
     hovered: bool,
     pressed: Option<Point>,
+    swipe: Animated,
+    swiping: bool,
+    menu_open: bool,
     leaving: bool,
 }
 
@@ -62,7 +76,49 @@ impl Thumbnail {
             until: now + SHOWN_FOR,
             hovered: false,
             pressed: None,
+            swipe: Animated::points(0.0),
+            swiping: false,
+            menu_open: false,
             leaving: false,
+        }
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub fn is_video(&self) -> bool {
+        self.video
+    }
+
+    fn held(&self) -> bool {
+        self.hovered || self.pressed.is_some() || self.menu_open
+    }
+
+    pub fn menu(&self) -> Menu {
+        let open = match self.video {
+            true => "thumbnail-play",
+            false => "thumbnail-markup",
+        };
+        let mut items = vec![
+            MenuItem::new(&L10N.tr(open), OPEN),
+            MenuItem::new(&L10N.tr("thumbnail-show-in-files"), SHOW_IN_FILES),
+        ];
+        if !self.video {
+            items.push(MenuItem::new(&L10N.tr("copy"), COPY));
+        }
+        items.extend([
+            MenuItem::separator(),
+            MenuItem::new(&L10N.tr("thumbnail-trash"), TRASH),
+            MenuItem::separator(),
+            MenuItem::new(&L10N.tr("close"), CLOSE),
+        ]);
+        Menu::new(items)
+    }
+
+    pub fn menu_closed(&mut self, now: Instant) {
+        if std::mem::take(&mut self.menu_open) {
+            self.until = self.until.max(now + LINGER);
         }
     }
 
@@ -87,7 +143,7 @@ impl Thumbnail {
     }
 
     pub fn is_animating(&self, now: Instant) -> bool {
-        self.progress(now).1
+        self.progress(now).1 || self.swipe.value_at(now).1
     }
 
     pub fn is_leaving(&self) -> bool {
@@ -95,11 +151,11 @@ impl Thumbnail {
     }
 
     pub fn deadline(&self) -> Option<Instant> {
-        (!self.leaving && !self.hovered && self.pressed.is_none()).then_some(self.until)
+        (!self.leaving && !self.held()).then_some(self.until)
     }
 
     pub fn tick(&mut self, now: Instant) -> ThumbnailAction {
-        if !self.leaving && !self.hovered && self.pressed.is_none() && now >= self.until {
+        if !self.leaving && !self.held() && now >= self.until {
             self.leave(now);
         }
         match self.leaving && !self.is_animating(now) {
@@ -130,8 +186,13 @@ impl Thumbnail {
             Event::PointerMove(pointer) | Event::PointerEnter(pointer) => {
                 self.hovered = self.contains(screen, pointer.position);
                 if let Some(from) = self.pressed {
-                    let moved = (pointer.position.x - from.x).hypot(pointer.position.y - from.y);
-                    if moved > DRAG_THRESHOLD {
+                    let (across, down) = (pointer.position.x - from.x, pointer.position.y - from.y);
+                    if self.swiping || (across > DRAG_THRESHOLD && across > 2.0 * down.abs()) {
+                        self.swiping = true;
+                        self.swipe.jump_to(across.max(0.0));
+                        return ThumbnailAction::None;
+                    }
+                    if across.hypot(down) > DRAG_THRESHOLD {
                         self.pressed = None;
                         return ThumbnailAction::Drag(self.path.clone());
                     }
@@ -140,13 +201,29 @@ impl Thumbnail {
             }
             Event::PointerLeave => {
                 self.hovered = false;
-                self.until = self.until.max(now + Duration::from_secs(2));
+                self.until = self.until.max(now + LINGER);
                 ThumbnailAction::None
             }
             Event::PointerDown(pointer) if pointer.is_primary() => {
                 self.pressed = self
                     .contains(screen, pointer.position)
                     .then_some(pointer.position);
+                ThumbnailAction::None
+            }
+            Event::PointerDown(pointer) if self.contains(screen, pointer.position) => {
+                self.pressed = None;
+                self.menu_open = true;
+                ThumbnailAction::Menu(pointer.position)
+            }
+            Event::PointerUp(_) if std::mem::take(&mut self.swiping) => {
+                self.pressed = None;
+                match self.swipe.target() >= SWIPE_AWAY {
+                    true => self.dismiss(now),
+                    false => {
+                        self.swipe
+                            .animate_at(now, self.reduce_motion, 0.0, Spring::STANDARD);
+                    }
+                }
                 ThumbnailAction::None
             }
             Event::PointerUp(_) if self.pressed.take().is_some() => {
@@ -228,13 +305,20 @@ impl Thumbnail {
     pub fn scene(&self, screen: (u32, u32), now: Instant) -> Scene {
         let rest = self.rest(screen);
         let (progress, _) = self.progress(now);
+        let (swiped, _) = self.swipe.value_at(now);
         let items = match self.reduce_motion {
             true => vec![Item::Opacity {
                 alpha: progress.clamp(0.0, 1.0),
-                items: self.card(rest),
+                items: vec![Item::Translate {
+                    offset: Point::new(swiped, 0.0),
+                    items: self.card(rest),
+                }],
             }],
             false => vec![Item::Translate {
-                offset: Point::new((1.0 - progress) * (rest.width + MARGIN + 24.0), 0.0),
+                offset: Point::new(
+                    swiped + (1.0 - progress) * (rest.width + MARGIN + 24.0),
+                    0.0,
+                ),
                 items: self.card(rest),
             }],
         };
@@ -250,7 +334,7 @@ impl Thumbnail {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use unbound_toolkit::ui::Pointer;
+    use unbound_toolkit::ui::{Pointer, PointerButton};
 
     fn thumbnail(now: Instant) -> Thumbnail {
         let image = Image::from_rgba(400, 200, vec![0xff; 400 * 200 * 4]).expect("image");
@@ -295,6 +379,58 @@ mod tests {
             carried,
             ThumbnailAction::Drag(PathBuf::from("/tmp/shot.png"))
         );
+    }
+
+    #[test]
+    fn a_secondary_click_asks_for_its_menu_and_keeps_it_until_the_menu_closes() {
+        let now = Instant::now();
+        let mut shown = thumbnail(now);
+        let inside = Point::new(1200.0, 740.0);
+        let outside = Point::new(400.0, 300.0);
+        let secondary =
+            |at| Event::PointerDown(Pointer::at(at).with_button(PointerButton::Secondary));
+
+        let missed = shown.handle(SCREEN, &secondary(outside), now);
+        let asked = shown.handle(SCREEN, &secondary(inside), now);
+        shown.handle(SCREEN, &Event::PointerLeave, now);
+        let later = now + SHOWN_FOR + Duration::from_secs(5);
+
+        assert_eq!(missed, ThumbnailAction::None);
+        assert_eq!(asked, ThumbnailAction::Menu(inside));
+        assert_eq!(shown.tick(later), ThumbnailAction::None);
+        shown.menu_closed(later);
+        assert_eq!(shown.tick(later), ThumbnailAction::None);
+        shown.tick(later + LINGER);
+        assert_eq!(
+            shown.tick(later + LINGER + Duration::from_secs(2)),
+            ThumbnailAction::Gone
+        );
+    }
+
+    #[test]
+    fn a_swipe_to_the_right_sends_it_away_and_a_short_one_brings_it_back() {
+        let now = Instant::now();
+        let inside = Point::new(1200.0, 740.0);
+        let swipe = |by: f32| {
+            let mut shown = thumbnail(now);
+            shown.handle(SCREEN, &Event::PointerDown(Pointer::at(inside)), now);
+            let to = Point::new(inside.x + by, inside.y + 3.0);
+            let moved = shown.handle(SCREEN, &Event::PointerMove(Pointer::at(to)), now);
+            let released = shown.handle(SCREEN, &Event::PointerUp(Pointer::at(to)), now);
+            assert_eq!(
+                (moved, released),
+                (ThumbnailAction::None, ThumbnailAction::None)
+            );
+            shown
+        };
+        let mut away = swipe(60.0);
+        let mut back = swipe(12.0);
+        let settled = now + Duration::from_secs(2);
+
+        assert_eq!(away.tick(settled), ThumbnailAction::Gone);
+        assert_eq!(back.tick(settled), ThumbnailAction::None);
+        assert!(!back.is_leaving());
+        assert_eq!(back.swipe.value_at(settled), (0.0, false));
     }
 
     #[test]

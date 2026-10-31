@@ -6,7 +6,7 @@ pub use agent::{AGENT_PATH, PairingPrompt, register_agent};
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::{DBusProxy, ObjectManagerProxy};
 use zbus::names::OwnedInterfaceName;
-use zbus::zvariant::{ObjectPath, OwnedObjectPath, OwnedValue};
+use zbus::zvariant::{OwnedObjectPath, OwnedValue};
 
 const SERVICE: &str = "org.bluez";
 const ADAPTER: &str = "org.bluez.Adapter1";
@@ -19,7 +19,7 @@ trait Adapter {
 
     fn stop_discovery(&self) -> zbus::Result<()>;
 
-    fn remove_device(&self, device: &ObjectPath<'_>) -> zbus::Result<()>;
+    fn remove_device(&self, device: &zbus::zvariant::ObjectPath<'_>) -> zbus::Result<()>;
 
     #[zbus(property)]
     fn powered(&self) -> zbus::Result<bool>;
@@ -49,7 +49,6 @@ pub struct Device {
     pub connected: bool,
     pub battery: Option<u8>,
     path: OwnedObjectPath,
-    adapter: Option<OwnedObjectPath>,
 }
 
 type Interfaces = HashMap<OwnedInterfaceName, HashMap<String, OwnedValue>>;
@@ -65,23 +64,20 @@ fn property<T: TryFrom<OwnedValue>>(
 
 impl Device {
     fn from_interfaces(path: OwnedObjectPath, interfaces: &Interfaces) -> Option<Self> {
-        let named = |wanted: &str| {
+        let of = |interface: &str| {
             interfaces
                 .iter()
-                .find(|(name, _)| name.as_str() == wanted)
+                .find(|(name, _)| name.as_str() == interface)
                 .map(|(_, properties)| properties)
         };
-        let properties = named(DEVICE)?;
+        let properties = of(DEVICE)?;
         let address: String = property(properties, "Address")?;
         Some(Self {
             name: property(properties, "Alias").unwrap_or_else(|| address.clone()),
             icon: property(properties, "Icon"),
             paired: property(properties, "Paired").unwrap_or(false),
             connected: property(properties, "Connected").unwrap_or(false),
-            battery: named(BATTERY)
-                .and_then(|battery| property::<u8>(battery, "Percentage"))
-                .map(|percent| percent.min(100)),
-            adapter: property(properties, "Adapter"),
+            battery: of(BATTERY).and_then(|battery| property(battery, "Percentage")),
             address,
             path,
         })
@@ -198,22 +194,17 @@ impl Bluetooth {
         self.device(device)?.disconnect()
     }
 
+    pub fn forget(&self, device: &Device) -> zbus::Result<()> {
+        match self.adapter()? {
+            Some(adapter) => adapter.remove_device(&device.path),
+            None => Ok(()),
+        }
+    }
+
     pub fn pair(&self, device: &Device) -> zbus::Result<()> {
         let proxy = self.device(device)?;
         proxy.pair()?;
         proxy.set_trusted(true)?;
         proxy.connect()
-    }
-
-    pub fn forget(&self, device: &Device) -> zbus::Result<()> {
-        let adapter = match &device.adapter {
-            Some(path) => AdapterProxyBlocking::builder(&self.bus)
-                .path(path.clone())?
-                .build()?,
-            None => self.adapter()?.ok_or_else(|| {
-                zbus::Error::Failure("this computer has no Bluetooth adapter".into())
-            })?,
-        };
-        adapter.remove_device(&device.path)
     }
 }

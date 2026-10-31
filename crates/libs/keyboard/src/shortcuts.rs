@@ -43,6 +43,7 @@ pub enum Action {
     TileWindow,
     NextApp,
     NextWindow,
+    PreviousWindow,
     QuitApp,
     HideApp,
     HideOthers,
@@ -52,18 +53,23 @@ pub enum Action {
     WorkspaceByNumber,
     CarryWindowLeft,
     CarryWindowRight,
+    MoveWindowToDisplay,
     Overview,
     AppWindows,
+    ShowDesktop,
     NextInputSource,
     PreviousInputSource,
     CaptureScreen,
     CaptureArea,
+    CaptureOptions,
     ShowLauncher,
     ShowClipboardHistory,
     ShowEmojiPicker,
     FocusMenuBar,
     FocusDock,
     SearchMenus,
+    ShowNotificationCenter,
+    ShowControlCenter,
     LockScreen,
     ToggleZoom,
     ZoomIn,
@@ -77,9 +83,11 @@ impl Action {
             Self::CloseWindow
             | Self::MinimizeWindow
             | Self::ToggleFullScreen
-            | Self::TileWindow => Area::Windows,
+            | Self::TileWindow
+            | Self::MoveWindowToDisplay => Area::Windows,
             Self::NextApp
             | Self::NextWindow
+            | Self::PreviousWindow
             | Self::QuitApp
             | Self::HideApp
             | Self::HideOthers
@@ -90,9 +98,10 @@ impl Action {
             | Self::CarryWindowLeft
             | Self::CarryWindowRight
             | Self::Overview
-            | Self::AppWindows => Area::Workspaces,
+            | Self::AppWindows
+            | Self::ShowDesktop => Area::Workspaces,
             Self::NextInputSource | Self::PreviousInputSource => Area::Keyboard,
-            Self::CaptureScreen | Self::CaptureArea => Area::Screenshots,
+            Self::CaptureScreen | Self::CaptureArea | Self::CaptureOptions => Area::Screenshots,
             Self::ToggleZoom | Self::ZoomIn | Self::ZoomOut | Self::ToggleScreenReader => {
                 Area::Accessibility
             }
@@ -102,6 +111,8 @@ impl Action {
             | Self::FocusMenuBar
             | Self::FocusDock
             | Self::SearchMenus
+            | Self::ShowNotificationCenter
+            | Self::ShowControlCenter
             | Self::LockScreen => Area::System,
         }
     }
@@ -114,6 +125,7 @@ impl Action {
             Self::TileWindow => L10N.tr("tile-window"),
             Self::NextApp => L10N.tr("next-app"),
             Self::NextWindow => L10N.tr("next-window"),
+            Self::PreviousWindow => L10N.tr("previous-window"),
             Self::QuitApp => L10N.tr("quit-app"),
             Self::HideApp => L10N.tr("hide-app"),
             Self::HideOthers => L10N.tr("hide-others"),
@@ -123,18 +135,23 @@ impl Action {
             Self::WorkspaceByNumber => L10N.tr("workspace-by-number"),
             Self::CarryWindowLeft => L10N.tr("carry-window-left"),
             Self::CarryWindowRight => L10N.tr("carry-window-right"),
+            Self::MoveWindowToDisplay => L10N.tr("move-window-to-display"),
             Self::Overview => L10N.tr("overview"),
             Self::AppWindows => L10N.tr("app-windows"),
+            Self::ShowDesktop => L10N.tr("show-desktop"),
             Self::NextInputSource => L10N.tr("next-input-source"),
             Self::PreviousInputSource => L10N.tr("previous-input-source"),
             Self::CaptureScreen => L10N.tr("capture-screen"),
             Self::CaptureArea => L10N.tr("capture-area"),
+            Self::CaptureOptions => L10N.tr("capture-options"),
             Self::ShowLauncher => L10N.tr("show-launcher"),
             Self::ShowClipboardHistory => L10N.tr("show-clipboard-history"),
             Self::ShowEmojiPicker => L10N.tr("show-emoji-picker"),
             Self::FocusMenuBar => L10N.tr("focus-menu-bar"),
             Self::FocusDock => L10N.tr("focus-dock"),
             Self::SearchMenus => L10N.tr("search-menus"),
+            Self::ShowNotificationCenter => L10N.tr("show-notification-center"),
+            Self::ShowControlCenter => L10N.tr("show-control-center"),
             Self::LockScreen => L10N.tr("lock-screen"),
             Self::ToggleZoom => L10N.tr("toggle-zoom"),
             Self::ZoomIn => L10N.tr("zoom-in"),
@@ -154,13 +171,15 @@ const fn shortcut(action: Action, keys: &'static str) -> Shortcut {
     Shortcut { action, keys }
 }
 
-pub const SHORTCUTS: [Shortcut; 32] = [
+pub const SHORTCUTS: [Shortcut; 40] = [
     shortcut(Action::CloseWindow, "Super+W"),
     shortcut(Action::MinimizeWindow, "Super+M"),
     shortcut(Action::ToggleFullScreen, "Ctrl+Super+F"),
     shortcut(Action::TileWindow, "Ctrl+Super+Left"),
+    shortcut(Action::MoveWindowToDisplay, "Alt+Shift+Super+Right"),
     shortcut(Action::NextApp, "Super+Tab"),
     shortcut(Action::NextWindow, "Super+`"),
+    shortcut(Action::PreviousWindow, "Shift+Super+`"),
     shortcut(Action::QuitApp, "Super+Q"),
     shortcut(Action::HideApp, "Super+H"),
     shortcut(Action::HideOthers, "Alt+Super+H"),
@@ -171,17 +190,23 @@ pub const SHORTCUTS: [Shortcut; 32] = [
     shortcut(Action::CarryWindowLeft, "Ctrl+Shift+Super+Left"),
     shortcut(Action::CarryWindowRight, "Ctrl+Shift+Super+Right"),
     shortcut(Action::Overview, "Alt+Super+Up"),
+    shortcut(Action::Overview, "Mission Control"),
     shortcut(Action::AppWindows, "Alt+Super+Down"),
+    shortcut(Action::ShowDesktop, "Super+F11"),
+    shortcut(Action::ShowDesktop, "Super+Mission Control"),
     shortcut(Action::NextInputSource, "Alt+Super+Space"),
     shortcut(Action::PreviousInputSource, "Alt+Shift+Super+Space"),
     shortcut(Action::CaptureScreen, "Shift+Super+3"),
     shortcut(Action::CaptureArea, "Shift+Super+4"),
+    shortcut(Action::CaptureOptions, "Shift+Super+5"),
     shortcut(Action::ShowLauncher, "Super+Space"),
     shortcut(Action::ShowClipboardHistory, "Shift+Super+V"),
     shortcut(Action::ShowEmojiPicker, "Ctrl+Super+Space"),
     shortcut(Action::FocusMenuBar, "Super+F2"),
     shortcut(Action::FocusDock, "Super+F3"),
     shortcut(Action::SearchMenus, "Shift+Super+/"),
+    shortcut(Action::ShowNotificationCenter, "Alt+Super+N"),
+    shortcut(Action::ShowControlCenter, "Alt+Super+C"),
     shortcut(Action::LockScreen, "Ctrl+Super+Q"),
     shortcut(Action::ToggleZoom, "Alt+Super+0"),
     shortcut(Action::ZoomIn, "Alt+Super+="),

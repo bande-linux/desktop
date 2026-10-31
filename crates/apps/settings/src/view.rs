@@ -17,6 +17,7 @@ use crate::about::{About, AboutCommand};
 use crate::battery::{BatteryCommand, BatteryState};
 use crate::defaults::{DefaultApp, DefaultAppCommand};
 use crate::follow::{Command, Update};
+use crate::forget::Forget;
 use crate::idle::Idle;
 use crate::locale::{LocaleCommand, LocaleState};
 use crate::login::{LoginCommand, LoginItems, login_matches};
@@ -30,7 +31,7 @@ use crate::software::{SoftwareCommand, SoftwareState};
 use crate::state::{Answer, BluetoothState, Display, Joined, NetworkState, Question, WifiState};
 use crate::storage::{Storage, StorageCommand};
 use crate::time::{TimeCommand, TimeState, parse_manual, zone_matches};
-use crate::widgets::{Column, Root};
+use crate::widgets::{Column, Crossfade, Root};
 use unbound_keyboard::Layouts;
 use unbound_settings_panes::{AUTOMATIC, Pane, PaneId, SettingId, Value, panes};
 use unbound_settings_panes::{PaneHit, search};
@@ -59,6 +60,8 @@ pub(crate) enum Intent {
     Connect(String),
     Disconnect(String),
     Pair(String),
+    AskForget(Option<Forget>),
+    Forget,
     Answer(Answer),
     ChoosePicture,
     AddingSource(bool),
@@ -179,6 +182,7 @@ pub struct SettingsView {
     pub(crate) drafts: HashMap<SettingId, String>,
     pub(crate) confirming_empty_trash: bool,
     pub(crate) confirming_clear_clipboard: bool,
+    pub(crate) forgetting: Option<Forget>,
     pub(crate) time: Option<TimeState>,
     pub(crate) picking: Option<(Picker, String)>,
     pub(crate) login: Option<LoginItems>,
@@ -201,8 +205,10 @@ pub struct SettingsView {
     pub(crate) default_apps: Option<Vec<DefaultApp>>,
     pressed: bool,
     stale: bool,
-    focus_next: Option<Anchor>,
+    pub(crate) focus_next: Option<Anchor>,
     pub(crate) scroll: Rc<Cell<f32>>,
+    pub(crate) crossfade: Rc<RefCell<Crossfade>>,
+    pub(crate) shown: Option<(PaneId, bool)>,
     pub(crate) sidebar_scroll: Rc<Cell<f32>>,
     pub(crate) icon_dirs: Vec<PathBuf>,
     pub(crate) symbols: HashMap<Symbol, Option<Image>>,
@@ -250,6 +256,7 @@ impl SettingsView {
             drafts: HashMap::new(),
             confirming_empty_trash: false,
             confirming_clear_clipboard: false,
+            forgetting: None,
             time: None,
             picking: None,
             login: None,
@@ -274,6 +281,8 @@ impl SettingsView {
             stale: true,
             focus_next: None,
             scroll: Rc::default(),
+            crossfade: Rc::default(),
+            shown: None,
             sidebar_scroll: Rc::default(),
             icon_dirs: unbound_xdg::data_dirs(),
             symbols: HashMap::new(),
@@ -724,6 +733,13 @@ impl SettingsView {
             Event::Key {
                 key: Key::Escape,
                 modifiers,
+            } if plain(modifiers) && self.forgetting.is_some() => {
+                self.intents.borrow_mut().push(Intent::AskForget(None));
+                true
+            }
+            Event::Key {
+                key: Key::Escape,
+                modifiers,
             } if plain(modifiers) && self.confirming_clear_clipboard => {
                 self.intents
                     .borrow_mut()
@@ -1022,6 +1038,8 @@ impl SettingsView {
                     self.device_command(address, BluetoothCommand::Disconnect)
                 }
                 Intent::Pair(address) => self.device_command(address, BluetoothCommand::Pair),
+                Intent::AskForget(target) => self.ask_forget(target),
+                Intent::Forget => self.forget(),
                 Intent::Answer(answer) => {
                     self.pairing = None;
                     self.commands.push(Command::Answer(answer));

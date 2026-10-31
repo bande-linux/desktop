@@ -15,7 +15,6 @@ pub const PHONE: &str = "/org/bluez/hci0/dev_5C_F9_38_07_08_09";
 pub const KEYBOARD: &str = "/org/bluez/hci0/dev_E8_06_88_0A_0B_0C";
 pub const PHONE_PASSKEY: u32 = 123_456;
 pub const KEYBOARD_PASSKEY: u32 = 4_207;
-pub const HEADPHONES_BATTERY: u8 = 80;
 
 type AgentLocation = Arc<Mutex<Option<(OwnedUniqueName, OwnedObjectPath)>>>;
 
@@ -95,6 +94,18 @@ enum BluezError {
     #[zbus(error)]
     ZBus(zbus::Error),
     AuthenticationRejected(String),
+}
+
+struct Battery {
+    percentage: u8,
+}
+
+#[zbus::interface(name = "org.bluez.Battery1")]
+impl Battery {
+    #[zbus(property)]
+    fn percentage(&self) -> u8 {
+        self.percentage
+    }
 }
 
 struct Device {
@@ -179,23 +190,6 @@ impl Device {
     fn connected(&self) -> bool {
         self.connected
     }
-
-    #[zbus(property)]
-    fn adapter(&self) -> OwnedObjectPath {
-        OwnedObjectPath::try_from(ADAPTER).unwrap_or_default()
-    }
-}
-
-struct Battery {
-    percentage: u8,
-}
-
-#[zbus::interface(name = "org.bluez.Battery1")]
-impl Battery {
-    #[zbus(property)]
-    fn percentage(&self) -> u8 {
-        self.percentage
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -273,12 +267,7 @@ impl FakeBluez {
                 },
             )?;
         }
-        server.at(
-            HEADPHONES,
-            Battery {
-                percentage: HEADPHONES_BATTERY,
-            },
-        )?;
+        server.at(HEADPHONES, Battery { percentage: 80 })?;
         bluez.request_name("org.bluez")?;
         Ok(Self { bluez, capability })
     }
@@ -299,7 +288,7 @@ impl FakeBluez {
         Ok(self.adapter()?.get().discovering)
     }
 
-    pub fn knows(&self, path: &str) -> bool {
+    pub fn has_device(&self, path: &str) -> bool {
         self.bluez
             .object_server()
             .interface::<_, Device>(path)

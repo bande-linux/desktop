@@ -7,13 +7,16 @@ repository.workspace = true
 publish = false
 
 [dependencies]
-rustix.workspace = true
+rustix = { workspace = true, features = ["event"] }
 smithay.workspace = true
 tempfile.workspace = true
 tracing.workspace = true
 unbound-compositor.workspace = true
+unbound-files.workspace = true
+unbound-fs.workspace = true
 unbound-log.workspace = true
 unbound-sample.workspace = true
 unbound-test-wayland.workspace = true
 unbound-toolkit.workspace = true
+unbound-xdg.workspace = true
 wayland-client.workspace = true

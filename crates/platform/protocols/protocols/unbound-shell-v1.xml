@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <protocol name="unbound_shell_v1">
-  <interface name="unbound_shell_v1" version="17">
+  <interface name="unbound_shell_v1" version="18">
     <description summary="requests and events between the compositor and the shell">
       Offered only on the connections of the shell clients the compositor starts
       itself (the shell and the screenshot tool), never on the listening socket.
@@ -65,13 +65,9 @@
     <request name="toggle_control_center" since="4">
       <description summary="open or close Control Center">
         Sent by the menu bar when its Control Center item is clicked. The
-        compositor relays it to every shell client as toggle_control_center.
+        compositor relays it to every shell client as toggle_panel.
       </description>
     </request>
-
-    <event name="toggle_control_center" since="4">
-      <description summary="the user asked to open or close Control Center"/>
-    </event>
 
     <request name="set_icon_rect" since="5">
       <description summary="say where an app's icon is shown">
@@ -458,9 +454,19 @@
       <arg name="app_id" type="string"/>
       <arg name="count" type="uint"/>
     </event>
+
+    <event name="toggle_panel" since="18">
+      <description summary="the user asked to open or close a panel">
+        Sent to every shell client when the menu bar asks for Control Center
+        or a keyboard shortcut asks for Control Center or the Notification
+        Center. The client that draws the panel opens it, or closes it when
+        it is open.
+      </description>
+      <arg name="panel" type="uint" enum="panel"/>
+    </event>
   </interface>
 
-  <interface name="unbound_app_v1" version="5">
+  <interface name="unbound_app_v1" version="6">
     <description summary="requests from the desktop to a whole app">
       Offered to every client. A client that binds it takes over app-level
       requests that the compositor would otherwise express per window: while
@@ -487,6 +493,7 @@
       <entry name="bottom_left" value="4" summary="the bottom left quarter"/>
       <entry name="bottom_right" value="5" summary="the bottom right quarter"/>
       <entry name="restore" value="6" summary="the size and place the window had before it was tiled or zoomed"/>
+      <entry name="next_display" value="7" summary="the next display, keeping its place there" since="6"/>
     </enum>
 
     <request name="place_window" since="2">

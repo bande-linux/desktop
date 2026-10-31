@@ -37,8 +37,12 @@ fn serve() -> zbus::Result<Connection> {
     let connection = Connection::session()?;
     let tool_connection = Connection::session()?;
     let tool = Arc::new(ScreenshotTool::new(tool_connection.clone()));
+    let system = Connection::system()
+        .map_err(|error| tracing::warn!("cannot reach the system bus: {error}"))
+        .ok();
     Settings::serve(
         &connection,
+        system.as_ref(),
         CursorSettings::from_environment(),
         config_home(),
     )?;

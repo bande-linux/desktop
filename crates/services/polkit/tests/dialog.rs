@@ -6,8 +6,8 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Role, TreeId};
-use unbound_polkit::agent::Notice;
-use unbound_polkit::dialog::{Dialog, Message, Password, Prompt};
+use unbound_polkit::agent::{Answer, Identity, Notice};
+use unbound_polkit::dialog::{Dialog, Message, Prompt};
 use unbound_toolkit::ui::{Event, Key, Modifiers};
 use unbound_toolkit::{Appearance, CpuRenderer, TextSystem};
 
@@ -20,9 +20,13 @@ struct Asking {
 }
 
 impl Asking {
-    fn new() -> (Self, Receiver<Option<Password>>) {
+    fn new() -> (Self, Receiver<Answer>) {
+        Self::with(prompt())
+    }
+
+    fn with(prompt: Prompt) -> (Self, Receiver<Answer>) {
         let (reply, answer) = mpsc::channel();
-        let mut dialog = Dialog::new(prompt(), reply, TextSystem::new(), Appearance::default());
+        let mut dialog = Dialog::new(prompt, reply, TextSystem::new(), Appearance::default());
         let clock = Rc::new(Cell::new(Instant::now()));
         let now = Rc::clone(&clock);
         dialog.ui_mut().set_clock(move || now.get());
@@ -52,10 +56,28 @@ impl Asking {
     }
 }
 
+fn identity(login: &str, name: &str) -> Identity {
+    Identity {
+        login: login.to_owned(),
+        name: name.to_owned(),
+    }
+}
+
 fn prompt() -> Prompt {
     Prompt {
         message: "Authentication is required to set the system timezone.".to_owned(),
+        identities: vec![identity("anna", "Anna Lindqvist")],
         user: "anna".to_owned(),
+    }
+}
+
+fn two_admins() -> Prompt {
+    Prompt {
+        identities: vec![
+            identity("anna", "Anna Lindqvist"),
+            identity("omar", "Omar Haddad"),
+        ],
+        ..prompt()
     }
 }
 
@@ -63,11 +85,24 @@ fn check_golden(name: &str, rgba: Vec<u8>) {
     unbound_golden::assert_golden!(name, &unbound_golden::from_rgba(SIZE.0, SIZE.1, rgba));
 }
 
-fn answered(answer: &Receiver<Option<Password>>) -> Option<String> {
-    answer
-        .try_recv()
-        .expect("an answer")
-        .map(|password| password.as_str().to_owned())
+fn answered(answer: &Receiver<Answer>) -> Option<String> {
+    match answer.try_recv().expect("an answer") {
+        Answer::Password(password) => Some(password.as_str().to_owned()),
+        Answer::SwitchTo(login) => Some(format!("switch to {login}")),
+        Answer::Cancel => None,
+    }
+}
+
+fn description(asking: &Asking) -> String {
+    asking
+        .dialog
+        .ui()
+        .accessibility()
+        .nodes
+        .into_iter()
+        .find(|(_, node)| node.role() == Role::AlertDialog)
+        .and_then(|(_, node)| node.description().map(str::to_owned))
+        .expect("the dialog's description")
 }
 
 #[test]
@@ -146,4 +181,69 @@ fn polkit_closing_the_request_dismisses_the_dialog() {
     asking.settle();
     assert!(asking.dialog.finished());
     assert!(!asking.dialog.declined());
+}
+
+#[test]
+fn the_dialog_names_the_user_by_full_name() {
+    let (asking, _answer) = Asking::new();
+    assert_eq!(
+        description(&asking),
+        "Enter the password for Anna Lindqvist to allow this."
+    );
+}
+
+#[test]
+fn choosing_another_administrator_restarts_for_that_user() {
+    let (mut asking, first) = Asking::with(two_admins());
+    check_golden("choose-user", asking.settle());
+    let picker = asking
+        .dialog
+        .ui()
+        .accessibility()
+        .nodes
+        .into_iter()
+        .find(|(_, node)| node.role() == Role::ComboBox)
+        .expect("a user picker");
+    assert_eq!(picker.1.value(), Some("Anna Lindqvist"));
+    asking.type_text("half");
+    asking.dialog.perform(&ActionRequest {
+        action: Action::Click,
+        target_tree: TreeId::ROOT,
+        target_node: picker.0,
+        data: None,
+    });
+    assert!(asking.dialog.ui_mut().take_menu_request().is_some());
+    asking.dialog.ui_mut().menu_action("1");
+    asking.dialog.settle_choices();
+    assert_eq!(answered(&first), Some("switch to omar".to_owned()));
+    assert_eq!(
+        description(&asking),
+        "Enter the password for Omar Haddad to allow this."
+    );
+
+    let (reply, second) = mpsc::channel();
+    asking.dialog.receive(Message::Prompt {
+        prompt: Prompt {
+            user: "omar".to_owned(),
+            ..two_admins()
+        },
+        reply,
+    });
+    asking.type_text("right");
+    asking.press(Key::Enter);
+    assert_eq!(answered(&second), Some("right".to_owned()));
+}
+
+#[test]
+fn a_single_administrator_gets_no_picker() {
+    let (asking, _answer) = Asking::new();
+    assert!(
+        !asking
+            .dialog
+            .ui()
+            .accessibility()
+            .nodes
+            .into_iter()
+            .any(|(_, node)| node.role() == Role::ComboBox)
+    );
 }

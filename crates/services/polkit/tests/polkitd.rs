@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::mpsc::{self, Receiver, Sender};
 
-use unbound_polkit::agent::{Agent, Conversation, Notice, Request, Subject};
+use unbound_polkit::agent::{Agent, Answer, Conversation, Notice, Request, Subject};
 use unbound_polkit::helper::HELPER;
 use zbus::blocking::Connection;
 use zeroize::Zeroizing;
@@ -19,15 +19,18 @@ struct Scripted {
 }
 
 impl Conversation for Scripted {
-    fn respond(&self, request: &Request, _prompt: &str, _echo: bool) -> Option<Zeroizing<String>> {
+    fn respond(&self, request: &Request, _user: &str, _prompt: &str, _echo: bool) -> Answer {
         if let Ok(seen) = self.seen.lock() {
             let _ = seen.send(format!("prompt {} {}", request.action_id, request.message));
         }
-        let mut answers = self.answers.lock().ok()?;
-        if answers.is_empty() {
-            None
-        } else {
-            answers.remove(0).map(Zeroizing::new)
+        let Ok(mut answers) = self.answers.lock() else {
+            return Answer::Cancel;
+        };
+        match answers.is_empty() {
+            true => Answer::Cancel,
+            false => answers.remove(0).map_or(Answer::Cancel, |password| {
+                Answer::Password(Zeroizing::new(password))
+            }),
         }
     }
 

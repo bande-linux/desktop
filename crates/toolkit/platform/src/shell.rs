@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use unbound_protocols::client::unbound_app_control_v1::{self, UnboundAppControlV1};
 use unbound_protocols::client::unbound_app_v1::{self, Placement, UnboundAppV1};
 use unbound_protocols::client::unbound_shell_v1::{self, SessionEnd, UnboundShellV1};
@@ -40,6 +42,7 @@ pub(crate) struct Shell {
     pub(crate) app_control_global: Option<(WlRegistry, u32)>,
     app_control: Option<UnboundAppControlV1>,
     toplevels: Vec<Toplevel>,
+    processes: HashMap<String, u32>,
     minimized: Vec<String>,
     token: Option<String>,
     displays: Vec<String>,
@@ -211,6 +214,10 @@ impl Window {
             }
         }
         apps
+    }
+
+    pub fn app_pid(&self, app_id: &str) -> Option<u32> {
+        self.state.shell.processes.get(app_id).copied()
     }
 
     pub fn activate_app(&mut self, app_id: &str) -> Result<(), WindowError> {
@@ -450,6 +457,14 @@ impl Dispatch<UnboundShellV1, ()> for State {
                     .events
                     .push(WindowEvent::AppsRunning { app_id, count });
             }
+            unbound_shell_v1::Event::AppProcess { app_id, pid } => {
+                let Ok(pid) = u32::try_from(pid) else {
+                    return;
+                };
+                if !app_id.is_empty() && state.shell.processes.insert(app_id, pid) != Some(pid) {
+                    state.events.push(WindowEvent::AppsChanged);
+                }
+            }
             _ => {}
         }
     }
@@ -520,6 +535,13 @@ impl Dispatch<ExtForeignToplevelHandleV1, ()> for State {
                     .minimized
                     .retain(|identifier| *identifier != closed.identifier);
                 closed.handle.destroy();
+                let shell = &mut state.shell;
+                shell.processes.retain(|app_id, _| {
+                    shell
+                        .toplevels
+                        .iter()
+                        .any(|toplevel| toplevel.app_id == *app_id)
+                });
 
                 state.events.push(WindowEvent::AppsChanged);
             }

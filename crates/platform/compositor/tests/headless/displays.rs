@@ -12,20 +12,8 @@ use crate::support::*;
 use wayland_client::protocol::wl_shm::Format;
 
 const MAIN: &str = "HEADLESS-1";
-const SIDE: &str = "HEADLESS-2";
 const MAIN_SIZE: (i32, i32) = (256, 192);
-const SIDE_SIZE: (i32, i32) = (320, 240);
 const WINDOW: (i32, i32) = (64, 48);
-
-fn side_display() -> OutputConfig {
-    OutputConfig::virtual_display(SIDE, Size::from(SIDE_SIZE))
-}
-
-fn two_displays() -> Compositor {
-    let mut server = Compositor::new(Size::from(MAIN_SIZE)).expect("headless compositor");
-    server.add_output(side_display());
-    server
-}
 
 fn at(x: f64, y: f64) -> Point<f64, Logical> {
     (x, y).into()

@@ -64,14 +64,14 @@ Trigger option 1, timing option 1, shared-edge option 1. Then make the preview s
 ## Implementation plan
 Each milestone is its own short branch from `main`, gated by fmt, workspace clippy `-D warnings` and workspace tests, then verified live on the mini before merging.
 
-**M1: Trigger at the usable-area edge (about 1 h)**
+**M1: Trigger at the usable-area edge (about 1 h)** Done (b5b13858).
 - `crates/platform/compositor/src/tile.rs`: in `snap_at`, test left and right against `area` instead of `output`. The pointer is always on this screen, so `x <= area.location.x + EDGE_REACH` already covers the strip over the rail. Keep the `output` parameter only if M2 needs it, and delete it otherwise.
 - Unit tests in `tile.rs` (`#[cfg(test)] mod tests`, like `grab.rs:468`) for the pure `snap_at`. Use a screen of 0..256 with an area starting at x 32: the pointer at 10 (over the rail) and at 33 gives `Left`; at 36 it gives `None`. With no panel, the right edge at 254 gives `Right`. The corner rows still use the area. These fail on main.
 - `tests/headless/support.rs`: add `left_rail(server)`, a shell layer anchored Left|Top|Bottom with size (BAR, 0) and exclusive zone BAR, next to `top_bar`.
 - `tests/headless/tiling.rs`: a new test, `a_window_dropped_over_the_left_rail_fills_the_half_beside_it`. With a rail, drag to (10, 96) and to (BAR, 96), drop, and the window is `rect(BAR, 0, (256-BAR)/2, 192)`. Drag to (BAR+8, 96) and it is not tiled.
 - `docs/design/catalogue.md:61`: "screen edge" becomes "edge of the free area (the taskbar edge counts)".
 
-**M2: Immediate preview on outer edges, 250 ms on shared edges (about 2 h)**
+**M2: Immediate preview on outer edges, 250 ms on shared edges (about 2 h)** Done.
 - `tile.rs`:
   - Remove `REST`, `REST_DISTANCE` and `SnapDrag::rest_at`. Add `SHARED_EDGE_HOLD: Duration = 250 ms`.
   - Make the candidate `(screen, Snap)`, so the same side on another display is a new target.
@@ -88,7 +88,7 @@ Each milestone is its own short branch from `main`, gated by fmt, workspace clip
   - `the_outer_edge_of_the_side_display_still_previews_at_once`: the pointer at (575, 120). The preview is due at once.
 - `docs/design/features/windows.md:93-95`: replace the 150 ms rest with "The outline appears as soon as the pointer reaches the edge of the free area; the taskbar counts as edge. Between two displays the pointer must rest 250 ms, so moving a window across does not tile it."
 
-**M3: Faster springs (about 1 h)**
+**M3: Faster springs (about 1 h)** Done, including the 0.18 s drop spring.
 - `tile.rs:389-396`: preview `Spring::FADE` (0.12 s) instead of `Spring::QUICK`.
 - If the owner agrees (decision 2): drag-drop tiles spring with `Spring::QUICK`. `tile_window` takes the spring as a parameter from `finish_move`, and keyboard and menu tiling stay `STANDARD`. If not, skip this part.
 - Tests:
@@ -108,3 +108,6 @@ Each milestone is its own short branch from `main`, gated by fmt, workspace clip
 ## Decisions for the owner
 1. Outer edges: preview immediately (recommended, like Windows, GNOME and KDE), or keep a short 100 ms dwell that no longer resets on wobble?
 2. Should the window's spring into its tile after a drop also get faster, 0.18 s instead of 0.25 s? Keyboard and menu tiling would stay at 0.25 s.
+
+Decided overnight 2026-11-01: preview at once on outer edges, no dwell (plan recommendation; owner may revisit).
+Decided overnight 2026-11-01: the drop springs into its tile in 0.18 s (plan recommendation; owner may revisit).

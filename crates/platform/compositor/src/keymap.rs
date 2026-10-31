@@ -7,7 +7,7 @@ use smithay::utils::{Logical, Point};
 use unbound_config::{CapsLock, InputSource, Keyboard};
 use unbound_graphics::TextRole;
 use unbound_render::VulkanRenderer;
-use unbound_spring::{Animation, Spring, State as Phase};
+use unbound_spring::{Animated, Spring};
 
 use crate::label::{Label, LabelStyle, Look};
 use crate::state::{Compositor, OutputElement, State};
@@ -18,7 +18,6 @@ const HUD_STYLE: LabelStyle = LabelStyle {
     look: Look::Card,
 };
 const HUD_HOLD: Duration = Duration::from_millis(800);
-const HUD_SETTLED_ALPHA: f64 = 1.0 / 512.0;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KeyboardSettings {
@@ -71,19 +70,10 @@ pub(crate) struct InputSources {
 }
 
 fn hud_opacity(elapsed: Duration) -> Option<f32> {
-    let Some(fading) = elapsed.checked_sub(HUD_HOLD) else {
-        return Some(1.0);
-    };
-    let mut fade = Animation::new(
-        Spring::FADE,
-        Phase {
-            position: 1.0,
-            velocity: 0.0,
-        },
-        0.0,
-    );
-    let opacity = fade.advance(fading.as_secs_f64()).position;
-    (!fade.is_at_rest(HUD_SETTLED_ALPHA)).then_some(opacity.clamp(0.0, 1.0) as f32)
+    let mut fade = Animated::new(1.0);
+    fade.animate_at(HUD_HOLD, false, 0.0, Spring::FADE);
+    let (opacity, fading) = fade.value_at(elapsed);
+    fading.then_some(opacity.clamp(0.0, 1.0))
 }
 
 impl InputSources {

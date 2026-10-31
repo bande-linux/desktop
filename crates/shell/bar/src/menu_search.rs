@@ -204,7 +204,7 @@ impl Card {
     fn row_at(&self, point: Point) -> Option<usize> {
         self.rows
             .iter()
-            .find(|row| contains(row.frame, point))
+            .find(|row| row.frame.contains(point))
             .map(|row| row.index)
     }
 
@@ -241,13 +241,6 @@ impl Card {
             );
         }
     }
-}
-
-fn contains(frame: Rect, point: Point) -> bool {
-    point.x >= frame.x
-        && point.y >= frame.y
-        && point.x < frame.x + frame.width
-        && point.y < frame.y + frame.height
 }
 
 impl Widget for Card {
@@ -464,7 +457,7 @@ impl Widget for Backdrop {
 
     fn handle(&mut self, _cx: &mut Context, event: &Event) -> bool {
         if let Event::PointerDown(pointer) = event
-            && !contains(self.children[0].frame(), pointer.position)
+            && !self.children[0].frame().contains(pointer.position)
         {
             self.model.borrow_mut().closing = true;
             return true;

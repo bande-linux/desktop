@@ -82,6 +82,11 @@ impl Pointer {
     pub fn is_primary(&self) -> bool {
         self.button == PointerButton::Primary
     }
+
+    pub fn is_secondary(&self) -> bool {
+        self.button == PointerButton::Secondary
+            || (self.button == PointerButton::Primary && self.modifiers.control)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

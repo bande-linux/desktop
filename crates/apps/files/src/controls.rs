@@ -18,8 +18,7 @@ use crate::L10N;
 use crate::browser::{Location, RowEdit};
 use crate::prompt::{Kind, Prompt};
 use crate::view::{
-    COLUMN_WIDTH, FilesView, PATH_BAR_HEIGHT, ROW_HEIGHT, Rename, Request, SLOW_CLICK_RENAME,
-    Sheet, contains,
+    COLUMN_WIDTH, FilesView, PATH_BAR_HEIGHT, ROW_HEIGHT, Rename, Request, SLOW_CLICK_RENAME, Sheet,
 };
 use crate::views::{ICON_SIZES, ListColumn, ViewMode, save_list_columns};
 
@@ -370,7 +369,7 @@ impl FilesView {
             .collect::<Vec<_>>();
         ids.into_iter()
             .filter_map(|id| self.frame_of(id))
-            .any(|frame| contains(frame, at))
+            .any(|frame| frame.contains(at))
     }
 
     fn pointer_down(&mut self, event: &Event, pointer: &Pointer) -> bool {
@@ -380,10 +379,7 @@ impl FilesView {
             return self.files_pointer_down(pointer);
         }
         if let Some(field) = self.rename.as_ref().map(|rename| rename.field) {
-            if self
-                .frame_of(field)
-                .is_some_and(|frame| contains(frame, at))
-            {
+            if self.frame_of(field).is_some_and(|frame| frame.contains(at)) {
                 self.press = Some(Press::Ui);
                 return self.ui.handle(event);
             }
@@ -393,15 +389,12 @@ impl FilesView {
             .controls()
             .into_iter()
             .filter_map(|id| self.frame_of(id))
-            .any(|frame| contains(frame, at));
+            .any(|frame| frame.contains(at));
         if on_control {
             self.press = Some(Press::Ui);
             return self.ui.handle(event);
         }
-        if let Some(table) = self
-            .frame_of(self.table)
-            .filter(|frame| contains(*frame, at))
-        {
+        if let Some(table) = self.frame_of(self.table).filter(|frame| frame.contains(at)) {
             return self.table_down(event, pointer, table);
         }
         self.press = Some(Press::Files);

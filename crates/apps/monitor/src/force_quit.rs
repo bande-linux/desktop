@@ -4,7 +4,7 @@ use std::time::Instant;
 use accesskit::{ActionRequest, TreeUpdate};
 use unbound_toolkit::ui::{
     BUTTON_HEIGHT, Button, Cell, Column, Cursor, Event, Key, Modifiers, Pointer, Row, Table,
-    WidgetId,
+    WidgetId, opens_menu,
 };
 use unbound_toolkit::{
     Item, Palette, Point, Radius, Rect, Scene, Shape, TextAlign, TextRole, TextStyle, TextSystem,
@@ -17,8 +17,7 @@ use crate::menu::{MenuCommand, force_quit_menu};
 use crate::model::{AppList, StopTarget};
 use crate::sampler::Snapshot;
 use crate::view::{
-    ALERT_ICON, FORCE_QUIT, Icons, Painter, QUIT, Request, Screen, answer_stop, contains,
-    is_secondary, opens_menu, stop_alert,
+    ALERT_ICON, FORCE_QUIT, Icons, Painter, QUIT, Request, Screen, answer_stop, stop_alert,
 };
 
 const PADDING: f32 = 16.0;
@@ -219,10 +218,10 @@ impl ForceQuitView {
     fn pointer_down(&mut self, event: &Event, pointer: &Pointer) -> bool {
         let at = pointer.position;
         let handled = self.pass(event);
-        if self.list.has_dialog() || !contains(self.list.frame(), at) {
+        if self.list.has_dialog() || !self.list.frame().contains(at) {
             return handled;
         }
-        if is_secondary(pointer) && !self.apps.selection().is_empty() {
+        if pointer.is_secondary() && !self.apps.selection().is_empty() {
             self.request_menu(at);
             return true;
         }

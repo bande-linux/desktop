@@ -5,7 +5,7 @@ use accesskit::{ActionRequest, Node, Role, TreeUpdate};
 use unbound_toolkit::ui::{
     Animated, BUTTON_HEIGHT, Button, Cell, Column as TableColumn, Cursor, Event, HEADER_HEIGHT,
     Key, Modifiers, Pointer, Row as TableRow, SEGMENTED_HEIGHT, SearchField, SegmentedControl,
-    Sort, Spring, TEXT_FIELD_HEIGHT, Table, WidgetId,
+    Sort, Spring, TEXT_FIELD_HEIGHT, Table, WidgetId, opens_menu,
 };
 use unbound_toolkit::{
     Color, Header, Item, Palette, Path, Point, Radius, Rect, SHEET_INSET, Scene, Shape, TextAlign,
@@ -24,7 +24,7 @@ use crate::sampler::Snapshot;
 use crate::system::PressureLevel;
 use crate::view::{
     ALERT_ICON, FORCE_QUIT, INSPECT_SYMBOL, Icons, Painter, QUIT, Request, Screen, answer_stop,
-    contains, is_secondary, opens_menu, stop_alert, stop_button, symbol_button,
+    stop_alert, stop_button, symbol_button,
 };
 
 pub const TOOLBAR_HEIGHT: f32 = unbound_toolkit::HEADER_HEIGHT as f32;
@@ -781,21 +781,21 @@ impl MonitorView {
         let on_graph = self
             .footer_layout()
             .graph
-            .is_some_and(|graph| contains(graph, at));
+            .is_some_and(|graph| graph.contains(at));
         if on_graph && !self.list.has_dialog() && self.monitor.tab() == Tab::Cpu {
             return self.toggle_cores();
         }
         let handled = self.pass(event);
-        if self.list.has_dialog() || !contains(self.list.frame(), at) {
+        if self.list.has_dialog() || !self.list.frame().contains(at) {
             return handled;
         }
         let header = at.y < self.list.frame().y + HEADER_HEIGHT;
-        if is_secondary(pointer) && header && self.monitor.tab().has_column_choice() {
+        if pointer.is_secondary() && header && self.monitor.tab().has_column_choice() {
             let menu = columns_menu(self.monitor.tab(), self.monitor.columns());
             self.requests.push(Request::Menu(menu, at));
             return true;
         }
-        if is_secondary(pointer) && !header && !self.monitor.selection().is_empty() {
+        if pointer.is_secondary() && !header && !self.monitor.selection().is_empty() {
             self.request_menu(at);
             return true;
         }

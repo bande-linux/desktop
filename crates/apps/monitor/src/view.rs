@@ -3,9 +3,7 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use accesskit::{ActionRequest, TreeUpdate};
-use unbound_toolkit::ui::{
-    Alert, Button, ClipboardRequest, Cursor, Event, Key, Menu, Modifiers, Pointer, PointerButton,
-};
+use unbound_toolkit::ui::{Alert, Button, ClipboardRequest, Cursor, Event, Menu};
 use unbound_toolkit::{
     Color, Header, Image, Item, Palette, Point, Rect, Scene, Shape, TextAlign, TextStyle,
     TextSystem,
@@ -65,19 +63,6 @@ impl Icons {
         self.loaded.insert(name.to_owned(), image.clone());
         image
     }
-}
-
-pub(crate) fn contains(rect: Rect, at: Point) -> bool {
-    at.x >= rect.x && at.x < rect.x + rect.width && at.y >= rect.y && at.y < rect.y + rect.height
-}
-
-pub fn is_secondary(pointer: &Pointer) -> bool {
-    pointer.button == PointerButton::Secondary
-        || (pointer.button == PointerButton::Primary && pointer.modifiers.control)
-}
-
-pub fn opens_menu(key: Key, modifiers: Modifiers) -> bool {
-    key == Key::Menu || (key == Key::Function(10) && modifiers.shift && !modifiers.logo)
 }
 
 pub struct Painter<'a> {

@@ -161,13 +161,6 @@ fn moved(event: &Event, offset: Point) -> Event {
     }
 }
 
-fn contains(rect: Rect, point: Point) -> bool {
-    point.x >= rect.x
-        && point.y >= rect.y
-        && point.x < rect.x + rect.width
-        && point.y < rect.y + rect.height
-}
-
 impl ControlCenter {
     fn notification_center(&self) -> Option<NotificationCenter<'_>> {
         NotificationCenter::new(self.session.as_ref()?).ok()
@@ -693,7 +686,7 @@ impl ControlCenter {
                 self.dismiss(window);
                 return;
             }
-            Event::PointerDown(pointer) if !contains(rect, pointer.position) => {
+            Event::PointerDown(pointer) if !rect.contains(pointer.position) => {
                 self.dismiss(window);
                 return;
             }

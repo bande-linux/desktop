@@ -411,7 +411,7 @@ fn path_to(widget: &dyn Widget, id: WidgetId, path: &mut Vec<WidgetId>) -> bool 
     false
 }
 
-fn opens_menu(key: Key, modifiers: Modifiers) -> bool {
+pub fn opens_menu(key: Key, modifiers: Modifiers) -> bool {
     match key {
         Key::Menu => true,
         Key::Function(10) => {

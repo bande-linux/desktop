@@ -3,7 +3,7 @@ use unbound_toolkit::ui::{Context, Event, Size, Widget, WidgetId};
 use unbound_toolkit::{Color, Item, Rect, Shape};
 
 use crate::L10N;
-use crate::rows::{SKIN_TONES, contains, tone_name};
+use crate::rows::{SKIN_TONES, tone_name};
 use crate::view::Shared;
 
 const SWATCH: f32 = 14.0;
@@ -104,7 +104,9 @@ impl Widget for Tones {
         match event {
             Event::PointerDown(pointer) if pointer.is_primary() => {
                 match (0..SKIN_TONES.len()).find(|index| {
-                    contains(self.swatch(*index).inset(-SPACING / 2.0), pointer.position)
+                    self.swatch(*index)
+                        .inset(-SPACING / 2.0)
+                        .contains(pointer.position)
                 }) {
                     Some(index) => self.choose(index),
                     None => false,

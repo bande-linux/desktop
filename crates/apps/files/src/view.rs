@@ -231,13 +231,6 @@ fn user_folder(dir: UserDir) -> PathBuf {
     user_dir(&home, user_dirs.as_deref(), dir)
 }
 
-pub(crate) fn contains(rect: Rect, point: Point) -> bool {
-    point.x >= rect.x
-        && point.y >= rect.y
-        && point.x < rect.x + rect.width
-        && point.y < rect.y + rect.height
-}
-
 fn pasted_paths(text: &str) -> Vec<PathBuf> {
     text.lines()
         .map(str::trim)
@@ -1046,7 +1039,7 @@ impl FilesView {
 
     fn scroll(&mut self, scroll: &Scroll) -> bool {
         let content = self.content_frame();
-        if !contains(content, scroll.position) {
+        if !content.contains(scroll.position) {
             return false;
         }
         match self.mode {
@@ -1067,7 +1060,7 @@ impl FilesView {
         self.hits
             .iter()
             .rev()
-            .find(|(rect, _)| contains(*rect, at))
+            .find(|(rect, _)| rect.contains(at))
             .map(|(_, hit)| hit.clone())
     }
 

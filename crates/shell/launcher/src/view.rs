@@ -12,7 +12,7 @@ use unbound_search::{FileResults, Usage};
 use unbound_toolkit::Appearance;
 use unbound_toolkit::ui::{
     Animated, Context, Event, Key, Menu, Modifiers, ScrollState, Size, Spring, TextField, Ui,
-    Widget, WidgetId,
+    Widget, WidgetId, opens_menu,
 };
 use unbound_toolkit::{
     Color, Elevation, Image, Item, Point, Radius, Rect, Scene, Scheme, Shape, TextAlign, TextRole,
@@ -26,8 +26,8 @@ use crate::model::{
 };
 use crate::preview::PreviewPane;
 use crate::rows::{
-    CELL_HEIGHT, Choice, Form, GLYPH_HEIGHT, ROW_HEIGHT, apply_menu_action, centered, contains,
-    fitted, hit_menu,
+    CELL_HEIGHT, Choice, Form, GLYPH_HEIGHT, ROW_HEIGHT, apply_menu_action, centered, fitted,
+    hit_menu,
 };
 use crate::tones::{TONES_WIDTH, Tones};
 
@@ -656,7 +656,7 @@ impl Widget for Backdrop {
     fn handle(&mut self, _cx: &mut Context, event: &Event) -> bool {
         if let Event::PointerDown(pointer) = event
             && pointer.is_primary()
-            && !contains(self.children[0].frame(), pointer.position)
+            && !self.children[0].frame().contains(pointer.position)
         {
             self.state
                 .borrow_mut()
@@ -675,16 +675,6 @@ impl Widget for Backdrop {
     fn children_mut(&mut self) -> &mut [Box<dyn Widget>] {
         &mut self.children
     }
-}
-
-fn opens_menu(key: Key, modifiers: Modifiers) -> bool {
-    key == Key::Menu
-        || (key == Key::Function(10)
-            && modifiers
-                == Modifiers {
-                    shift: true,
-                    ..Modifiers::default()
-                })
 }
 
 pub struct Launcher {

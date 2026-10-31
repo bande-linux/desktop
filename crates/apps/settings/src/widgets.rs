@@ -33,13 +33,6 @@ const CONTROL_WIDTH: f32 = 320.0;
 const SCROLL_BAR_WIDTH: f32 = 6.0;
 const UNBOUNDED: f32 = 1.0e6;
 
-fn contains(frame: Rect, point: Point) -> bool {
-    point.x >= frame.x
-        && point.y >= frame.y
-        && point.x < frame.x + frame.width
-        && point.y < frame.y + frame.height
-}
-
 fn is_activation(event: &Event) -> bool {
     matches!(
         event,
@@ -1155,7 +1148,7 @@ impl Widget for Row {
         match event {
             Event::PointerDown(pointer) if pointer.is_primary() => self.pressed = true,
             Event::PointerUp(pointer) if pointer.is_primary() => {
-                let activate = self.pressed && contains(self.frame, pointer.position);
+                let activate = self.pressed && self.frame.contains(pointer.position);
                 self.pressed = false;
                 if activate {
                     self.activate();
@@ -1580,7 +1573,7 @@ impl Widget for Thumbnails {
         match event {
             Event::PointerDown(pointer) if pointer.is_primary() => {
                 match (0..self.tiles.len())
-                    .find(|index| contains(self.tile(*index), pointer.position))
+                    .find(|index| self.tile(*index).contains(pointer.position))
                 {
                     Some(index) => self.select(index),
                     None => return false,
@@ -1740,10 +1733,9 @@ impl Widget for Swatches {
         match event {
             Event::PointerDown(pointer) if pointer.is_primary() => {
                 match (0..self.swatches.len()).find(|index| {
-                    contains(
-                        self.swatch(*index).inset(-SWATCH_GAP / 2.0),
-                        pointer.position,
-                    )
+                    self.swatch(*index)
+                        .inset(-SWATCH_GAP / 2.0)
+                        .contains(pointer.position)
                 }) {
                     Some(index) => self.select(index),
                     None => return false,

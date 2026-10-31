@@ -19,6 +19,7 @@ use unbound_term::{
 };
 use unbound_toolkit::ui::{
     Cursor, Event, Key, Menu, Modifiers, Pointer, PointerButton, Scroll, ScrollPhase, ScrollSource,
+    opens_menu,
 };
 use unbound_toolkit::{
     App, DragAction, DragEvent, FrameRegions, Header, Item, MenuPlacement, Point, Radius, Rect,
@@ -345,7 +346,7 @@ impl TerminalApp {
     fn pane_at(&self, at: Point) -> Option<u32> {
         self.frames()
             .into_iter()
-            .find(|(_, frame)| contains(*frame, at))
+            .find(|(_, frame)| frame.contains(at))
             .map(|(id, _)| id)
     }
 
@@ -354,7 +355,7 @@ impl TerminalApp {
             .layout
             .dividers(self.pane_area())
             .into_iter()
-            .find(|divider| contains(divider.reach(), at))
+            .find(|divider| divider.reach().contains(at))
     }
 
     fn layout(&mut self) {
@@ -1219,7 +1220,7 @@ impl TerminalApp {
     }
 
     fn in_content(&self, at: Point) -> bool {
-        contains(self.pane_area(), at)
+        self.pane_area().contains(at)
     }
 
     fn link_at(&mut self, at: Point) -> Option<Link> {
@@ -1884,13 +1885,6 @@ fn bounds(rect: Rect) -> accesskit::Rect {
     }
 }
 
-fn contains(rect: Rect, point: Point) -> bool {
-    point.x >= rect.x
-        && point.y >= rect.y
-        && point.x < rect.x + rect.width
-        && point.y < rect.y + rect.height
-}
-
 pub fn spawn_self(window: &mut Window, arguments: Vec<String>) {
     let program = match std::env::current_exe() {
         Ok(program) => program.to_string_lossy().into_owned(),
@@ -1919,14 +1913,6 @@ fn mouse_button(button: PointerButton) -> Option<MouseButton> {
 fn asks_for_menu(pointer: &Pointer) -> bool {
     pointer.button == PointerButton::Secondary
         || (pointer.is_primary() && pointer.modifiers.control)
-}
-
-fn opens_menu(key: Key, modifiers: Modifiers) -> bool {
-    let shift_only = Modifiers {
-        shift: true,
-        ..Modifiers::default()
-    };
-    key == Key::Menu || (key == Key::Function(10) && modifiers == shift_only)
 }
 
 fn quoted(name: &str) -> String {

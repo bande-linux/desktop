@@ -221,13 +221,6 @@ impl Arrangement {
     }
 }
 
-fn contains(rect: Rect, point: Point) -> bool {
-    point.x >= rect.x
-        && point.y >= rect.y
-        && point.x < rect.x + rect.width
-        && point.y < rect.y + rect.height
-}
-
 impl Widget for Arrangement {
     fn id(&self) -> WidgetId {
         self.id
@@ -319,7 +312,7 @@ impl Widget for Arrangement {
             Event::PointerDown(pointer) if pointer.is_primary() => {
                 let Some(index) = (0..self.screens.len())
                     .rev()
-                    .find(|index| contains(self.rect_of(*index), pointer.position))
+                    .find(|index| self.rect_of(*index).contains(pointer.position))
                 else {
                     return false;
                 };

@@ -40,8 +40,8 @@ tag and on dispatch, `extended.yml` on dispatch only, and neither runs on pull r
 
 `release.yml` runs when a version is tagged (`git tag vX.Y.Z && git push origin vX.Y.Z`) and
 when dispatched by hand for a test build (`gh workflow run release.yml --ref <branch>`). A newer
-run on the same ref cancels the older one. Only a tag publishes, and `deb-all` fails a tag whose
-commit is not on `main`. Day-to-day correctness still comes from the local gate (`cargo fmt --check`, workspace
+run on the same ref cancels the older one. Only a tag's run is published, and `deb-all` fails a tag
+whose commit is not on `main`. Day-to-day correctness still comes from the local gate (`cargo fmt --check`, workspace
 clippy with `-D warnings`, and the workspace tests on the hermetic bus) before every push to
 `main`. The packaging steps are scripts in `ci/release/`, so the same build and checks run
 natively on a developer machine:
@@ -97,12 +97,9 @@ Jobs:
   compositor serves Wayland clients, then installs `unbound-os` and checks the APT source.
   `crates/services/portal/tests/frontend/run.sh` then reads the colour scheme through Debian's
   `xdg-desktop-portal` and checks it follows `config.kdl`.
-- `publish`: for a tag, when every job above is green and the repository variable
-  `APT_PUBLISH` is `true`, dispatches `publish.yml` in `unbound-linux/apt` with
-  `repo=desktop` and the run's `run_id`. The archive takes the run's `unbound-debs-arm64`,
-  `unbound-debs-amd64` and `unbound-debs-all` artifacts into the `main` component of its
-  `rolling` suite. The token comes from a GitHub App (`APT_TRIGGER_CLIENT_ID`,
-  `APT_TRIGGER_KEY`) that may only start workflows in `unbound-linux/apt`.
+The APT repository publishes on its own: every 30 minutes it looks for new green `release.yml`
+runs for tags and takes their `unbound-debs-arm64`, `unbound-debs-amd64` and
+`unbound-debs-all` artifacts into the `main` component of its `rolling` suite.
 
 Versions come from `ci/deb/version.sh`. A tag `vX.Y.Z` builds version `X.Y.Z` and must equal
 the `[workspace.package] version` in `Cargo.toml`, so a release is: bump the version, merge to

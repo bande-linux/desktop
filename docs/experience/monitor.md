@@ -344,9 +344,10 @@ or inspect a process, Escape to close the inspector) gets one end-to-end test so
 - **M3.** Memory Pressure graph coloured by PSI state (thresholds in `Pressure::level`); App
   Memory, Kernel, Compressed, Cached Files and Swap Used with a stacked bar under Memory Used and
   colour keys on the readouts it explains.
-- **M4.** View ▸ Show CPU Cores, a click on the CPU graph or the same command again (or Escape)
-  opens and closes one strip per core on the `standard` spring, grouped by `cpu_capacity` into
-  Performance and Efficiency; remembered. Dragging the footer edge is not built.
+- **M4.** View ▸ Show CPU Cores, a click on the CPU graph, or dragging the footer's top edge up
+  (24 pt snaps) opens one strip per core on the `standard` spring, grouped by `cpu_capacity` into
+  Performance and Efficiency; the same command, a click, Escape or dragging down closes it; the
+  choice is remembered.
 - **M5.** The inspector's Info groups into Process (with the systemd unit), Parent and Children,
   Command and Resources as disclosure sections; Super+C copies the selected values; activating the
   executable shows it in Files. The values are table cells, so the Label role and tabular figures

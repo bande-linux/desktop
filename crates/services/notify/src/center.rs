@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
+use crate::Picture;
+
 pub const BANNER_DURATION: Duration = Duration::from_secs(5);
 pub const BANNER_LINGER: Duration = Duration::from_secs(2);
 
@@ -31,6 +33,7 @@ pub struct Notification {
     pub desktop_entry: Option<String>,
     pub resident: bool,
     pub transient: bool,
+    pub picture: Option<Picture>,
 }
 
 impl Notification {
@@ -138,6 +141,7 @@ pub struct Presentation {
     pub banners: Vec<Stack>,
     pub center: Vec<Stack>,
     pub do_not_disturb: bool,
+    pub screen_shared: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -156,6 +160,7 @@ pub struct Center {
     sequence: u64,
     entries: BTreeMap<u32, Entry>,
     do_not_disturb: bool,
+    screen_shared: bool,
     banners_held: bool,
     apps: BTreeMap<String, App>,
 }
@@ -203,7 +208,7 @@ impl Center {
             return id;
         }
         notification.transient |= !rule.in_center;
-        let shown = (!self.do_not_disturb && rule.banners != Banners::Off)
+        let shown = (!self.quiet() && rule.banners != Banners::Off)
             || notification.urgency == Urgency::Critical;
         let banner = match (shown, timeout) {
             (false, _) => Banner::Hidden,
@@ -275,17 +280,31 @@ impl Center {
 
     pub fn set_do_not_disturb(&mut self, enabled: bool) {
         self.do_not_disturb = enabled;
-        if enabled {
-            for entry in self.entries.values_mut() {
-                if entry.notification.urgency != Urgency::Critical {
-                    entry.banner = Banner::Hidden;
-                }
-            }
-        }
+        self.hide_quieted_banners();
     }
 
     pub fn do_not_disturb(&self) -> bool {
         self.do_not_disturb
+    }
+
+    pub fn set_screen_shared(&mut self, shared: bool) {
+        self.screen_shared = shared;
+        self.hide_quieted_banners();
+    }
+
+    pub fn quiet(&self) -> bool {
+        self.do_not_disturb || self.screen_shared
+    }
+
+    fn hide_quieted_banners(&mut self) {
+        if !self.quiet() {
+            return;
+        }
+        for entry in self.entries.values_mut() {
+            if entry.notification.urgency != Urgency::Critical {
+                entry.banner = Banner::Hidden;
+            }
+        }
     }
 
     pub fn clear_all(&mut self) -> Vec<u32> {
@@ -366,6 +385,7 @@ impl Center {
             banners: self.stacks(|entry| entry.banner != Banner::Hidden),
             center: self.stacks(|entry| !entry.notification.transient),
             do_not_disturb: self.do_not_disturb,
+            screen_shared: self.screen_shared,
         }
     }
 

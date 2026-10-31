@@ -18,6 +18,7 @@ unbound-graphics.workspace = true
 unbound-inbox.workspace = true
 unbound-l10n.workspace = true
 unbound-log.workspace = true
+unbound-notify.workspace = true
 unbound-protocols = { workspace = true, features = ["client"] }
 unbound-sound.workspace = true
 unbound-toolkit.workspace = true

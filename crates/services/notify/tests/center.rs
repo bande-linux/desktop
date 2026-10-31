@@ -407,3 +407,42 @@ fn clear_all_empties_the_center() {
     assert_eq!(cleared, [mail, chat]);
     assert!(center.presentation().center.is_empty());
 }
+
+#[test]
+fn sharing_the_screen_keeps_banners_off_screen_without_replaying_them_afterwards() {
+    let start = Instant::now();
+    let mut center = Center::default();
+    center.post(from("Chat", "Before"), Timeout::ServerDefault, start);
+
+    center.set_screen_shared(true);
+    assert!(center.presentation().banners.is_empty());
+    center.post(from("Chat", "During"), Timeout::ServerDefault, start);
+    let alarm = Notification {
+        urgency: Urgency::Critical,
+        ..from("Power", "Battery critically low")
+    };
+    center.post(alarm, Timeout::ServerDefault, start);
+    let presentation = center.presentation();
+    assert!(presentation.screen_shared);
+    assert_eq!(
+        summaries(&presentation.banners),
+        [group("Power", &["Battery critically low"])]
+    );
+
+    center.set_screen_shared(false);
+    let presentation = center.presentation();
+    assert!(!presentation.screen_shared);
+    assert_eq!(
+        summaries(&presentation.banners),
+        [group("Power", &["Battery critically low"])]
+    );
+    assert_eq!(
+        summaries(&presentation.center),
+        [
+            group("Power", &["Battery critically low"]),
+            group("Chat", &["During", "Before"])
+        ]
+    );
+    center.post(from("Chat", "After"), Timeout::ServerDefault, start);
+    assert_eq!(center.presentation().banners.len(), 2);
+}

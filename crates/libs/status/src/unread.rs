@@ -5,7 +5,7 @@ use zbus::blocking::Connection;
 
 use crate::Update;
 
-pub fn unread((_, center, _): &WirePresentation) -> bool {
+pub fn unread((_, center, ..): &WirePresentation) -> bool {
     !center.is_empty()
 }
 

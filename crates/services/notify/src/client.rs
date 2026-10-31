@@ -73,6 +73,8 @@ pub trait NotificationCenter {
 
     fn hold_banners(&self, held: bool) -> zbus::Result<()>;
 
+    fn quiet_while_connected(&self) -> zbus::Result<()>;
+
     #[zbus(property)]
     fn do_not_disturb(&self) -> zbus::Result<bool>;
 

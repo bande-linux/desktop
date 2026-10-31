@@ -61,7 +61,6 @@ pub(crate) struct Shell {
     toplevels: Vec<(ExtForeignToplevelHandleV1, String, bool)>,
     toplevel_updates: usize,
     workspaces: Option<(u32, u32)>,
-    window_workspaces: Vec<(String, u32)>,
     input_sources: Option<(String, u32)>,
     panel_anchors: Vec<(unbound_shell_v1::Panel, (i32, i32, i32, i32))>,
 }
@@ -305,16 +304,6 @@ impl TestClient {
 
     pub fn workspaces(&self) -> Option<(u32, u32)> {
         self.globals.shell.workspaces
-    }
-
-    pub fn window_workspace(&self, identifier: &str) -> Option<u32> {
-        self.globals
-            .shell
-            .window_workspaces
-            .iter()
-            .rev()
-            .find(|(known, _)| known == identifier)
-            .map(|(_, workspace)| *workspace)
     }
 
     pub fn input_sources(&self) -> Option<(&str, u32)> {
@@ -602,13 +591,6 @@ impl Dispatch<UnboundShellV1, ()> for Globals {
             unbound_shell_v1::Event::Workspaces { count, active } => {
                 globals.shell.workspaces = Some((count, active));
             }
-            unbound_shell_v1::Event::WindowWorkspace {
-                identifier,
-                workspace,
-            } => globals
-                .shell
-                .window_workspaces
-                .push((identifier, workspace)),
             unbound_shell_v1::Event::PanelAnchor {
                 panel: WEnum::Value(panel),
                 x,

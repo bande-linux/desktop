@@ -57,7 +57,7 @@ impl Checkbox {
         self.state
     }
 
-    pub fn set_state(&mut self, cx: &Context, state: CheckState) {
+    fn set_state(&mut self, cx: &Context, state: CheckState) {
         self.state = state;
         self.shown.animate_to(cx, level(state), Spring::QUICK);
     }

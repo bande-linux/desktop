@@ -25,6 +25,14 @@ fn workspace_of(server: &Headless, color_window: usize) -> Option<usize> {
     server.workspace_of(&server.windows()[color_window])
 }
 
+fn workspace_of_app(server: &Headless, app_id: &str) -> Option<usize> {
+    let window = server
+        .windows()
+        .iter()
+        .find(|window| window.app_id() == app_id)?;
+    server.workspace_of(window)
+}
+
 fn swipe(server: &mut Headless, fingers: u32, steps: &[(f64, f64)], start: u32) -> u32 {
     server.gesture(Gesture::SwipeBegin { fingers }, start);
     let mut time = start;
@@ -152,8 +160,7 @@ fn the_dock_learns_the_workspaces_and_activating_an_app_switches_to_its_workspac
     let mut dock = TestClient::connect_as_shell(&mut server);
     dock.join_shell(&mut server);
     roundtrip(&mut server, &mut [&mut editor, &mut viewer, &mut dock]);
-    let viewer_window = dock.window_identifiers(VIEWER).remove(0);
-    let at_start = (dock.workspaces(), dock.window_workspace(&viewer_window));
+    let at_start = (dock.workspaces(), workspace_of_app(&server, VIEWER));
 
     chord(
         &mut server,
@@ -164,7 +171,7 @@ fn the_dock_learns_the_workspaces_and_activating_an_app_switches_to_its_workspac
     chord(&mut server, &[KEY_LEFTALT, KEY_LEFTMETA], KEY_LEFT);
     settle(&mut server, end);
     roundtrip(&mut server, &mut [&mut editor, &mut viewer, &mut dock]);
-    let apart = (dock.workspaces(), dock.window_workspace(&viewer_window));
+    let apart = (dock.workspaces(), workspace_of_app(&server, VIEWER));
 
     dock.activate_app(&mut server, VIEWER);
     roundtrip(&mut server, &mut [&mut editor, &mut viewer, &mut dock]);

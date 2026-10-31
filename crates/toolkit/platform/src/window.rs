@@ -56,14 +56,12 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::{
 use crate::L10N;
 use crate::access::Accessibility;
 use crate::appearance::AppearanceWatch;
-use crate::capture::Capture;
 use crate::chrome::{
     Chrome, Control, Frame, FrameRegions, HEADER_HEIGHT, Header, Look, RESIZE_MARGIN, SHEET_INSET,
     Zone, control_for_node,
 };
 use crate::clipboard::Clipboard;
 use crate::clipboard::{DragAction, DragEvent, DragIcon, Transfer};
-use crate::effect::BackgroundEffect;
 use crate::lock::{Locked, SessionLock};
 use crate::popup::{Fading, MenuPlacement, Menus, Opening, Parent};
 use crate::presentation::Presentation;
@@ -218,7 +216,6 @@ pub enum WindowError {
     Io(io::Error),
     Render(RenderError),
     LockRefused,
-    CaptureFailed(u32),
 }
 
 impl fmt::Display for WindowError {
@@ -231,12 +228,6 @@ impl fmt::Display for WindowError {
             Self::Io(error) => write!(f, "{error}"),
             Self::Render(error) => write!(f, "{error}"),
             Self::LockRefused => write!(f, "the compositor refused to lock the session"),
-            Self::CaptureFailed(reason) => {
-                write!(
-                    f,
-                    "the compositor could not capture the screen (reason {reason})"
-                )
-            }
         }
     }
 }
@@ -339,10 +330,8 @@ pub(crate) struct State {
     pub(crate) clipboard: Clipboard,
     pub(crate) shell: Shell,
     pub(crate) lock: SessionLock,
-    pub(crate) capture: Capture,
     pub(crate) text_input: TextInput,
     pub(crate) scaling: Scaling,
-    pub(crate) effect: BackgroundEffect,
     pub(crate) presentation: Presentation,
 }
 
@@ -761,15 +750,11 @@ impl Window {
         self.state.events.push(WindowEvent::CloseRequested);
     }
 
-    pub fn toplevel_state(&self) -> ToplevelState {
-        self.state.toplevel
-    }
-
     pub fn close_requested_by_button(&self) -> bool {
         self.closed_by_button
     }
 
-    pub fn toggle_full_screen(&mut self) -> Result<(), WindowError> {
+    fn toggle_full_screen(&mut self) -> Result<(), WindowError> {
         let toplevel = self.toplevel()?;
         if self.state.toplevel.fullscreen {
             toplevel.unset_fullscreen();
@@ -896,13 +881,13 @@ impl Window {
         Ok((seat, serial))
     }
 
-    pub fn start_move(&mut self) -> Result<(), WindowError> {
+    fn start_move(&mut self) -> Result<(), WindowError> {
         let (seat, serial) = self.grab()?;
         self.toplevel()?._move(seat, serial);
         self.flush()
     }
 
-    pub fn start_resize(&mut self, edge: ResizeEdge) -> Result<(), WindowError> {
+    fn start_resize(&mut self, edge: ResizeEdge) -> Result<(), WindowError> {
         let (seat, serial) = self.grab()?;
         self.toplevel()?.resize(seat, serial, edge.protocol());
         self.flush()
@@ -960,11 +945,6 @@ impl Window {
         self.state
             .suggested_size
             .is_some_and(|size| size != self.size)
-    }
-
-    pub fn gpu_ready(&mut self) -> bool {
-        self.poll_gpu();
-        matches!(self.gpu, Gpu::Ready(_))
     }
 
     pub fn wait_for_gpu(&mut self) -> bool {
@@ -2365,9 +2345,6 @@ impl Dispatch<WlRegistry, ()> for State {
                 "zwp_primary_selection_device_manager_v1" => {
                     state.clipboard.primary.manager = Some(registry.bind(name, 1, handle, ()));
                 }
-                "ext_background_effect_manager_v1" => {
-                    state.effect.manager = Some(registry.bind(name, 1, handle, ()));
-                }
                 "wp_cursor_shape_manager_v1" => {
                     state.cursor_shape_manager = Some(registry.bind(name, 1, handle, ()));
                 }
@@ -2388,12 +2365,6 @@ impl Dispatch<WlRegistry, ()> for State {
                 }
                 "unbound_app_v1" => {
                     state.shell.app = Some(registry.bind(name, version.min(5), handle, ()));
-                }
-                "ext_output_image_capture_source_manager_v1" => {
-                    state.capture.sources = Some(registry.bind(name, 1, handle, ()));
-                }
-                "ext_image_copy_capture_manager_v1" => {
-                    state.capture.manager = Some(registry.bind(name, 1, handle, ()));
                 }
                 "zwp_text_input_manager_v3" => {
                     state.text_input.manager = Some(registry.bind(name, 1, handle, ()));

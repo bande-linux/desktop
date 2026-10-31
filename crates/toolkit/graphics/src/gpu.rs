@@ -41,7 +41,7 @@ fn is_software(info: &wgpu::AdapterInfo) -> bool {
 }
 
 impl GpuDevice {
-    pub fn offscreen() -> Result<Self, RenderError> {
+    fn offscreen() -> Result<Self, RenderError> {
         let instance = vulkan_instance();
         let adapter =
             pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
@@ -225,10 +225,6 @@ impl GpuRenderer {
 
     pub fn adapter_info(&self) -> wgpu::AdapterInfo {
         self.gpu.adapter.get_info()
-    }
-
-    pub fn atlas_size(&self) -> (u16, u16) {
-        self.atlas
     }
 
     pub fn render(&mut self, scene: &Scene) -> Result<Snapshot, RenderError> {

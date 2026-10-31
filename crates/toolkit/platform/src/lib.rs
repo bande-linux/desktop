@@ -1,9 +1,7 @@
 mod access;
 mod appearance;
-mod capture;
 mod chrome;
 mod clipboard;
-mod effect;
 mod lock;
 mod popup;
 mod presentation;
@@ -23,7 +21,6 @@ const ENGLISH: &str = include_str!("../locales/en-US/unbound-toolkit-platform.ft
 
 static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
-pub use capture::ScreenImage;
 pub use chrome::{FrameRegions, HEADER_HEIGHT, Header, SHEET_INSET, framed_scene};
 pub use clipboard::{DragAction, DragEvent, DragIcon, Transfer};
 pub use popup::MenuPlacement;

@@ -37,7 +37,6 @@ pub struct Window {
     pub(crate) recalled: Option<Point<i32, Logical>>,
     pub(crate) parent_anchor: Option<Point<i32, Logical>>,
     pub(crate) keep_on_top: bool,
-    pub(crate) announced_workspace: Option<usize>,
     pub(crate) frame: Frame,
 }
 
@@ -115,7 +114,6 @@ impl Window {
             recalled: None,
             parent_anchor: None,
             keep_on_top: false,
-            announced_workspace: None,
             frame: Frame::default(),
         }
     }

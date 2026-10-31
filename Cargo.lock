@@ -4498,7 +4498,6 @@ dependencies = [
  "accesskit",
  "accesskit_unix",
  "atspi-common",
- "pollster",
  "raw-window-handle",
  "rustix 1.1.6",
  "serde",

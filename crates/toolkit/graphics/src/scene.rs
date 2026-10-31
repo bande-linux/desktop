@@ -66,36 +66,6 @@ impl Shape {
     pub const fn rounded(rect: Rect, radius: f32) -> Self {
         Self { rect, radius }
     }
-
-    pub fn bands(&self, count: usize) -> Vec<Rect> {
-        let Self { rect, radius } = *self;
-        if rect.width <= 0.0 || rect.height <= 0.0 {
-            return Vec::new();
-        }
-        let radius = radius.min(rect.width / 2.0).min(rect.height / 2.0).max(0.0);
-        let count = if radius > 0.0 { count.max(1) } else { 0 };
-        let band = radius / count.max(1) as f32;
-        let mut rects = vec![Rect::new(
-            rect.x,
-            rect.y + radius,
-            rect.width,
-            rect.height - 2.0 * radius,
-        )];
-        for index in 0..count {
-            let from_edge = index as f32 * band;
-            let rise = radius - from_edge;
-            let inset = (radius - (radius * radius - rise * rise).max(0.0).sqrt()).ceil();
-            let width = rect.width - 2.0 * inset;
-            rects.push(Rect::new(rect.x + inset, rect.y + from_edge, width, band));
-            rects.push(Rect::new(
-                rect.x + inset,
-                rect.y + rect.height - from_edge - band,
-                width,
-                band,
-            ));
-        }
-        rects
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

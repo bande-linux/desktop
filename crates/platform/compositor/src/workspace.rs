@@ -678,20 +678,6 @@ impl State {
         let state = (workspaces.count(), workspaces.active);
         let changed = state != self.announced_workspaces;
         self.announced_workspaces = state;
-        for index in 0..self.windows.len() {
-            let position = self.window_position(&self.windows[index]);
-            if position == self.windows[index].announced_workspace {
-                continue;
-            }
-            self.windows[index].announced_workspace = position;
-            if let (Some(handle), Some(position)) = (&self.windows[index].foreign, position) {
-                for shell in &self.shell_resources {
-                    if shell.version() >= unbound_shell_v1::EVT_WINDOW_WORKSPACE_SINCE {
-                        shell.window_workspace(handle.identifier(), position as u32);
-                    }
-                }
-            }
-        }
         if changed {
             for shell in &self.shell_resources {
                 self.send_workspaces(shell);
@@ -702,23 +688,10 @@ impl State {
         self.announce_active_app(key.as_ref());
     }
 
-    fn send_workspaces(&self, shell: &UnboundShellV1) {
+    pub(crate) fn send_workspaces(&self, shell: &UnboundShellV1) {
         if shell.version() >= unbound_shell_v1::EVT_WORKSPACES_SINCE {
             let (count, active) = self.announced_workspaces;
             shell.workspaces(count as u32, active as u32);
-        }
-    }
-
-    pub(crate) fn announce_workspaces_to(&self, shell: &UnboundShellV1) {
-        self.send_workspaces(shell);
-        if shell.version() < unbound_shell_v1::EVT_WINDOW_WORKSPACE_SINCE {
-            return;
-        }
-        for window in &self.windows {
-            if let (Some(handle), Some(position)) = (&window.foreign, self.window_position(window))
-            {
-                shell.window_workspace(handle.identifier(), position as u32);
-            }
         }
     }
 }

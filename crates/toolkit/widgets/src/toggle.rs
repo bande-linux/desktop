@@ -30,10 +30,6 @@ impl Toggle {
         }
     }
 
-    pub fn is_on(&self) -> bool {
-        self.on
-    }
-
     fn flip(&mut self, cx: &Context) {
         self.on = !self.on;
         self.knob

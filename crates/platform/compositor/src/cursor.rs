@@ -48,7 +48,7 @@ const XCURSOR_IMAGE_HEADER: usize = 36;
 const XCURSOR_TOC_ENTRY: usize = 12;
 const XCURSOR_MAX_SIDE: u32 = 0x7fff;
 const THEME_INHERITANCE_DEPTH: usize = 16;
-pub const DEFAULT_CURSOR_THEME: &str = "default";
+const DEFAULT_CURSOR_THEME: &str = "default";
 pub const DEFAULT_CURSOR_SIZE: u32 = 24;
 
 #[derive(Debug, Clone, PartialEq, Eq)]

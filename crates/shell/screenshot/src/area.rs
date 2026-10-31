@@ -2,8 +2,8 @@ use unbound_toolkit::ui::{Event, Key};
 
 use crate::engine::Frame;
 use unbound_toolkit::{
-    Color, Item, Palette, Point, Radius, Rect, Scene, Scheme, ScreenImage, Shape, Spacing,
-    TextAlign, TextRole, TextStyle, TextSystem,
+    Color, Item, Palette, Point, Radius, Rect, Scene, Scheme, Shape, Snapshot, Spacing, TextAlign,
+    TextRole, TextStyle, TextSystem,
 };
 
 const SELECTION_FILL: f32 = 0.16;
@@ -221,7 +221,7 @@ fn crosshair(items: &mut Vec<Item>, at: Point) {
     }
 }
 
-pub fn crop(image: &ScreenImage, region: Region) -> Option<ScreenImage> {
+pub fn crop(image: &Snapshot, region: Region) -> Option<Snapshot> {
     let right = region.x.checked_add(region.width)?;
     let bottom = region.y.checked_add(region.height)?;
     if region.width == 0 || region.height == 0 || right > image.width || bottom > image.height {
@@ -236,7 +236,7 @@ pub fn crop(image: &ScreenImage, region: Region) -> Option<ScreenImage> {
                 .copied()
         })
         .collect();
-    Some(ScreenImage {
+    Some(Snapshot {
         width: region.width,
         height: region.height,
         rgba,
@@ -356,7 +356,7 @@ mod tests {
         let rgba = (0..3u8)
             .flat_map(|y| (0..4u8).flat_map(move |x| pixel(x, y)))
             .collect();
-        let image = ScreenImage {
+        let image = Snapshot {
             width: 4,
             height: 3,
             rgba,
@@ -375,7 +375,7 @@ mod tests {
         let expected = [pixel(1, 1), pixel(2, 1), pixel(1, 2), pixel(2, 2)].concat();
         assert_eq!(
             cropped,
-            Some(ScreenImage {
+            Some(Snapshot {
                 width: 2,
                 height: 2,
                 rgba: expected
@@ -385,7 +385,7 @@ mod tests {
 
     #[test]
     fn a_region_outside_the_screen_cannot_be_cropped() {
-        let image = ScreenImage {
+        let image = Snapshot {
             width: 4,
             height: 3,
             rgba: vec![0; 48],

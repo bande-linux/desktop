@@ -31,6 +31,7 @@ impl fmt::Display for RenderError {
 
 impl std::error::Error for RenderError {}
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Snapshot {
     pub width: u32,
     pub height: u32,

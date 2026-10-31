@@ -496,14 +496,6 @@ impl Headless {
         Some(self.state.screens[self.state.screen_named(output)?].settings)
     }
 
-    pub fn output_config(&self, output: &str) -> Option<&OutputConfig> {
-        Some(&self.state.screens[self.state.screen_named(output)?].config)
-    }
-
-    pub fn usable_area_on(&self, output: &str) -> Option<Rect> {
-        Some(self.state.usable_area(self.state.screen_named(output)?))
-    }
-
     pub fn output_of(&self, window: &crate::Window) -> String {
         self.state.screens[self.state.screen_of(window)].name()
     }
@@ -552,12 +544,6 @@ impl Headless {
     pub fn configure_output(&mut self, output: &str, settings: OutputSettings) {
         if let Some(screen) = self.state.screen_named(output) {
             self.state.configure_screen(screen, settings);
-        }
-    }
-
-    pub fn set_main_output(&mut self, output: &str) {
-        if let Some(screen) = self.state.screen_named(output) {
-            self.state.make_main(screen);
         }
     }
 

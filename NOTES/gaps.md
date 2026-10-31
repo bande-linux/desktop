@@ -6,10 +6,10 @@ swap Super->Ctrl like normal linux distros
 Status: planned ([plans/super-ctrl.md](plans/super-ctrl.md))
 
 keep in dock doesnt work for everything, for example launching -code- from terminal should still be able to save to dock. Also dock should be renamed to taskbar
-Status: started ([plans/keep-in-taskbar.md](plans/keep-in-taskbar.md))
+Status: started ([plans/keep-in-taskbar.md](plans/keep-in-taskbar.md)); process matching done, launcher and rename wait on owner decisions
 
 its not possible to scroll in the settings app, for example bluetooth and wifi views. Also bluetooth devices have no names, so i have no idea which device is my mouse etc.
-Status: started ([plans/settings-scroll-and-bluetooth-names.md](plans/settings-scroll-and-bluetooth-names.md))
+Status: finished ([plans/settings-scroll-and-bluetooth-names.md](plans/settings-scroll-and-bluetooth-names.md))
 
 its not possible to install .deb files from Files, this needs an install tool like most distros provide
 Status: planned ([plans/deb-installer.md](plans/deb-installer.md))
@@ -18,7 +18,7 @@ GTK apps do not fit with our window bar. Is that possible to solve so that all a
 Status: planned ([plans/third-party-title-bars.md](plans/third-party-title-bars.md))
 
 it seems like some apps are not getting the correct taskbar icon? this could also be that they simply dont have one. So dont dwell too deeply in that.
-Status: started ([plans/taskbar-icons.md](plans/taskbar-icons.md))
+Status: started ([plans/taskbar-icons.md](plans/taskbar-icons.md)); M1 and M3 done, M2 waits on an owner decision
 
 its not possible to install more keyboard layouts or languages in settings *important*
 Status: planned ([plans/keyboard-layouts-and-languages.md](plans/keyboard-layouts-and-languages.md))
@@ -33,7 +33,7 @@ the software update doesnt seem to work.
 Status: planned ([plans/software-update.md](plans/software-update.md))
 
 changing time zone doesnt apply
-Status: started ([plans/time-zone.md](plans/time-zone.md))
+Status: finished ([plans/time-zone.md](plans/time-zone.md)); M5 polkit fix waits on an owner decision
 
 scrolling direction should have individual settings for trackpad and mouse. Also trackpad and mouse probably should have their own setting views with more option. The trackpad has 0 options for example.
 Status: planned ([plans/mouse-and-trackpad.md](plans/mouse-and-trackpad.md))

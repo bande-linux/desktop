@@ -1,9 +1,10 @@
 mod alarm;
 mod center;
 pub mod client;
+mod picture;
 mod wire;
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -21,6 +22,7 @@ pub use center::{
     App, AppRule, BANNER_DURATION, BANNER_LINGER, Banners, Center, CloseReason, HiddenBanner,
     Invoked, Notification, Presentation, Stack, Timeout, Urgency,
 };
+pub use picture::{MAX_PICTURE, Picture};
 pub use wire::{WireNotification, WirePresentation, WireStack};
 
 pub const BUS_NAME: &str = "org.freedesktop.Notifications";
@@ -30,6 +32,7 @@ const APPS_FILE: &str = "notification-apps";
 
 struct State {
     center: Center,
+    sharers: BTreeSet<String>,
     presented: Presentation,
     presentations: Sender<Presentation>,
     stopped: bool,
@@ -165,6 +168,20 @@ impl Shared {
         }
     }
 
+    fn share_screen(&self, sharer: &str, sharing: bool) {
+        let mut state = self.lock();
+        let changed = if sharing {
+            state.sharers.insert(sharer.to_owned())
+        } else {
+            state.sharers.remove(sharer)
+        };
+        if changed {
+            let shared = !state.sharers.is_empty();
+            state.center.set_screen_shared(shared);
+            state.present();
+        }
+    }
+
     fn activate(&self, id: u32, action_key: &str) -> Outcome {
         self.update(|center| {
             if let Some(Invoked { closed }) = center.invoke(id, action_key) {
@@ -247,6 +264,7 @@ impl NotificationServer {
             state: Mutex::new(State {
                 presented: center.presentation(),
                 center,
+                sharers: BTreeSet::new(),
                 presentations,
                 stopped: false,
             }),
@@ -273,6 +291,13 @@ impl NotificationServer {
         thread::spawn(move || expire(&timer, &timer_connection));
         let publisher = connection.clone();
         thread::spawn(move || publish(&presented, &publisher));
+        let watched = Arc::clone(&shared);
+        let watcher = connection.clone();
+        thread::spawn(move || {
+            if let Err(error) = forget_departed_sharers(&watched, &watcher) {
+                tracing::warn!("cannot follow who shares the screen: {error}");
+            }
+        });
         Ok(Self {
             connection: connection.clone(),
             shared,
@@ -294,22 +319,6 @@ impl NotificationServer {
             zbus::block_on(emit_closed(&emitter, &[id], CloseReason::Dismissed));
         }
         Ok(closed)
-    }
-
-    pub fn invoke_action(&self, id: u32, action_key: &str) -> zbus::Result<bool> {
-        let Some(Invoked { closed }) = self.shared.update(|center| center.invoke(id, action_key))
-        else {
-            return Ok(false);
-        };
-        let emitter = SignalEmitter::new(self.connection.inner(), OBJECT_PATH)?;
-        zbus::block_on(announce(
-            &emitter,
-            id,
-            action_key,
-            "",
-            &Outcome::Invoked { closed },
-        ));
-        Ok(true)
     }
 }
 
@@ -334,6 +343,19 @@ fn publish(presented: &Receiver<Presentation>, connection: &Connection) {
             tracing::warn!("cannot publish the notifications on screen: {error}");
         }
     }
+}
+
+fn forget_departed_sharers(shared: &Shared, connection: &Connection) -> zbus::Result<()> {
+    let bus = zbus::blocking::fdo::DBusProxy::new(connection)?;
+    for change in bus.receive_name_owner_changed()? {
+        let Ok(arguments) = change.args() else {
+            continue;
+        };
+        if arguments.new_owner.is_none() {
+            shared.share_screen(arguments.name.as_str(), false);
+        }
+    }
+    Ok(())
 }
 
 fn expire(shared: &Shared, connection: &Connection) {
@@ -387,7 +409,7 @@ struct Notifications {
 #[zbus::interface(name = "org.freedesktop.Notifications")]
 impl Notifications {
     fn get_capabilities(&self) -> Vec<String> {
-        ["actions", "body", "persistence", "sound"]
+        ["actions", "body", "icon-static", "persistence", "sound"]
             .map(str::to_owned)
             .to_vec()
     }
@@ -427,11 +449,12 @@ impl Notifications {
                 .map(str::to_owned),
             resident: hint(&hints, "resident").unwrap_or(false),
             transient: hint(&hints, "transient").unwrap_or(false),
+            picture: picture::picture_of(&hints),
         };
         let (id, audible, new_app) = self.shared.update(|center| {
             let known = center.apps().count();
             let fresh = replaces_id == 0 || center.get(replaces_id).is_none();
-            let shown = !center.do_not_disturb() || notification.urgency == Urgency::Critical;
+            let shown = !center.quiet() || notification.urgency == Urgency::Critical;
             let id = center.post(
                 notification,
                 Timeout::from_milliseconds(expire_timeout),
@@ -580,6 +603,23 @@ impl NotificationCenter {
     async fn clear_all(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) {
         let cleared = self.shared.update(Center::clear_all);
         emit_closed(&emitter, &cleared, CloseReason::Dismissed).await;
+    }
+
+    async fn quiet_while_connected(
+        &self,
+        #[zbus(header)] header: zbus::message::Header<'_>,
+        #[zbus(connection)] connection: &zbus::Connection,
+    ) -> zbus::fdo::Result<()> {
+        let sharer = header
+            .sender()
+            .ok_or_else(|| zbus::fdo::Error::Failed("no caller".to_owned()))?
+            .to_owned();
+        self.shared.share_screen(sharer.as_str(), true);
+        let bus = zbus::fdo::DBusProxy::new(connection).await?;
+        if !bus.name_has_owner(sharer.clone().into()).await? {
+            self.shared.share_screen(sharer.as_str(), false);
+        }
+        Ok(())
     }
 
     fn hold_banners(&self, held: bool) {

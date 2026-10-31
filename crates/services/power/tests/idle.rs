@@ -113,13 +113,6 @@ fn an_inhibitor_taken_while_dimmed_brightens_the_screen() {
 }
 
 #[test]
-fn the_session_locks_before_the_computer_sleeps() {
-    let mut idle = IdleMachine::new(plan_defaults());
-    assert_eq!(idle.preparing_for_sleep(), [Command::Lock]);
-    assert!(idle.preparing_for_sleep().is_empty(), "already locked");
-}
-
-#[test]
 fn a_new_policy_restarts_the_timers_only_when_it_differs() {
     let mut idle = IdleMachine::new(plan_defaults());
     assert!(idle.set_policy(plan_defaults()).is_empty());

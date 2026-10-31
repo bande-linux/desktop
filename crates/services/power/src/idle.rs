@@ -123,14 +123,6 @@ impl IdleMachine {
         vec![Command::RestartIdleTimers]
     }
 
-    pub fn preparing_for_sleep(&mut self) -> Vec<Command> {
-        if self.locked {
-            return Vec::new();
-        }
-        self.locked = true;
-        vec![Command::Lock]
-    }
-
     fn undim(&mut self) -> Vec<Command> {
         if !self.dimmed {
             return Vec::new();

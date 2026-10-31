@@ -1,3 +1,4 @@
+pub mod captive;
 pub mod clock;
 pub mod dbusmenu;
 pub mod devices;
@@ -24,6 +25,7 @@ static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", E
 pub enum Update {
     Devices(devices::Devices),
     Sound(Option<status::Sound>),
+    Capturing(Vec<unbound_audio::Capture>),
     Tray(Vec<TrayItem>),
     Menu { menu: String, root: Node },
     AppMenu { app: String, root: Option<Node> },

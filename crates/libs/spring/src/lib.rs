@@ -60,10 +60,6 @@ impl Spring {
         }
     }
 
-    pub fn from_duration_bounce(duration: f64, bounce: f64) -> Result<Self, SpringError> {
-        Self::new(TAU / duration, 1.0 - bounce)
-    }
-
     pub fn new(angular_frequency: f64, damping_ratio: f64) -> Result<Self, SpringError> {
         if !(angular_frequency.is_finite() && angular_frequency > 0.0) {
             return Err(SpringError::AngularFrequency(angular_frequency));
@@ -161,15 +157,6 @@ impl Animation {
         self.elapsed = 0.0;
     }
 
-    pub fn retarget_with_velocity(&mut self, target: f64, velocity: f64) {
-        self.start = State {
-            position: self.state().position,
-            velocity,
-        };
-        self.target = target;
-        self.elapsed = 0.0;
-    }
-
     pub fn is_at_rest(&self, precision: f64) -> bool {
         let state = self.state();
         (state.position - self.target).abs() <= precision
@@ -185,9 +172,6 @@ pub struct Decay {
 impl Decay {
     pub const NORMAL: Self = Self {
         rate_per_millisecond: 0.998,
-    };
-    pub const FAST: Self = Self {
-        rate_per_millisecond: 0.99,
     };
 
     pub fn state_at(&self, start: State, seconds: f64) -> State {

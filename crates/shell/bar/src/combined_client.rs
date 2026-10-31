@@ -2,7 +2,7 @@ use std::os::fd::BorrowedFd;
 use std::time::Instant;
 
 use crate::L10N;
-use crate::menubar::StatusView;
+use crate::menu_bar::StatusView;
 use crate::rail::{EXPANDED_WIDTH, RailView, bar_width, owns_node, surface_size};
 use accesskit::{Node, NodeId, Role as AccessRole, TreeInfo, TreeUpdate};
 use unbound_toolkit::ui::{Cursor, Event};

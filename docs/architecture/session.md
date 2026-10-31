@@ -240,7 +240,8 @@ graph LR
   Electron apps that do not yet default to Wayland run natively instead of failing for want of
   an X server, and `QT_QPA_PLATFORMTHEME` as described under the portal.
 - Services bound to `graphical-session.target` start then: PipeWire, WirePlumber,
-  `unbound-config`, `unbound-power`, `unbound-tray`, `unbound-automount`. `unbound-notify` and
+  `unbound-config`, `unbound-power`, `unbound-tray`, `unbound-automount`,
+  `unbound-polkit-agent`. `unbound-notify` and
   the portal backend are started by D-Bus activation, and `unbound-clipboard` and the shell
   clients by the compositor ([behaviour](behaviour.md)): `unbound-shell`, one process for the
   desktop, the bar, the notifications, Control Center and the launcher of every display, and
@@ -251,17 +252,23 @@ graph LR
 
 ### Polkit authentication agent (`unbound-polkit`)
 
-- Implemented in `crates/services/polkit` as a library: an
-  `org.freedesktop.PolicyKit1.AuthenticationAgent` object that registers with polkitd for a
-  logind session or a process, runs `/usr/lib/polkit-1/polkit-agent-helper-1` for the chosen
+- Implemented in `crates/services/polkit`, packaged as `unbound-polkit` with the
+  `unbound-polkit-agent` binary and a systemd user unit wanted by `unbound-session.target`: an
+  `org.freedesktop.PolicyKit1.AuthenticationAgent` object that registers with polkitd for the
+  user's logind session (logind's `auto` session, which is the display session for a user
+  service), runs `/usr/lib/polkit-1/polkit-agent-helper-1` for the chosen
   user (the cookie on standard input, PAM prompts and results as escaped lines, as polkit 126's
   own agent library does) and answers `CancelAuthentication` by stopping the helper. It
   authenticates as the requesting user when polkitd lists them, otherwise as the first listed
-  user, as macOS pre-fills the dialog with the current administrator. A wrong password is
-  reported and asked for again until the user cancels, as the macOS authorization dialog shakes
-  and stays open. The dialog itself is the `Conversation` trait (prompt, notices, close),
-  waiting for a toolkit window; until then no agent binary is packaged. `ci/polkit` runs the
-  agent against the real polkitd and PAM of Debian 13 in a container.
+  user, as macOS pre-fills the dialog with the current administrator. Each request opens a
+  Datum dialog on an overlay layer with exclusive keyboard focus: a padlock, polkit's message as
+  the title, who is asked for, a password field, Cancel (Escape) and Authenticate (Return). A
+  wrong password shakes the dialog, clears the field and says so, and the dialog stays open
+  until the right password or Cancel, as the macOS authorization dialog does. Requests are
+  shown one at a time. Once the field hands the password over, it stays in zeroized buffers
+  up to the helper's standard input. Settings checks its actions without interaction and
+  leaves rows changeable when polkit answers with a challenge, so changing them brings up the
+  dialog. `ci/polkit` runs the agent against the real polkitd and PAM of Debian 13 in a container.
 
 ## Tier 2: full desktop polish
 

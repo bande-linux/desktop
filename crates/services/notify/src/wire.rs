@@ -1,4 +1,4 @@
-use crate::{Notification, Presentation, Stack, Urgency};
+use crate::{Notification, Picture, Presentation, Stack, Urgency};
 
 pub type WireNotification = (
     u32,
@@ -11,9 +11,11 @@ pub type WireNotification = (
     String,
     bool,
     bool,
+    WirePicture,
 );
+pub type WirePicture = (u32, u32, Vec<u8>, String);
 pub type WireStack = (String, Vec<WireNotification>);
-pub type WirePresentation = (Vec<WireStack>, Vec<WireStack>, bool);
+pub type WirePresentation = (Vec<WireStack>, Vec<WireStack>, bool, bool);
 
 pub(crate) fn urgency_code(urgency: Urgency) -> u8 {
     match urgency {
@@ -31,6 +33,29 @@ pub(crate) fn urgency_of(code: Option<u8>) -> Urgency {
     }
 }
 
+fn picture_to_wire(picture: Option<&Picture>) -> WirePicture {
+    match picture {
+        Some(Picture::Pixels {
+            width,
+            height,
+            rgba,
+        }) => (*width, *height, rgba.clone(), String::new()),
+        Some(Picture::File(path)) => (0, 0, Vec::new(), path.clone()),
+        None => (0, 0, Vec::new(), String::new()),
+    }
+}
+
+fn picture_from_wire((width, height, rgba, path): WirePicture) -> Option<Picture> {
+    if !path.is_empty() {
+        return Some(Picture::File(path));
+    }
+    (width > 0 && height > 0).then_some(Picture::Pixels {
+        width,
+        height,
+        rgba,
+    })
+}
+
 fn notification_to_wire(notification: &Notification) -> WireNotification {
     (
         notification.id,
@@ -43,12 +68,24 @@ fn notification_to_wire(notification: &Notification) -> WireNotification {
         notification.desktop_entry.clone().unwrap_or_default(),
         notification.resident,
         notification.transient,
+        picture_to_wire(notification.picture.as_ref()),
     )
 }
 
 fn notification_from_wire(wire: WireNotification) -> Notification {
-    let (id, app_name, app_icon, summary, body, actions, urgency, entry, resident, transient) =
-        wire;
+    let (
+        id,
+        app_name,
+        app_icon,
+        summary,
+        body,
+        actions,
+        urgency,
+        entry,
+        resident,
+        transient,
+        picture,
+    ) = wire;
     Notification {
         id,
         app_name,
@@ -60,6 +97,7 @@ fn notification_from_wire(wire: WireNotification) -> Notification {
         desktop_entry: Some(entry).filter(|entry| !entry.is_empty()),
         resident,
         transient,
+        picture: picture_from_wire(picture),
     }
 }
 
@@ -98,14 +136,16 @@ impl Presentation {
             stacks_to_wire(&self.banners),
             stacks_to_wire(&self.center),
             self.do_not_disturb,
+            self.screen_shared,
         )
     }
 
-    pub fn from_wire((banners, center, do_not_disturb): WirePresentation) -> Self {
+    pub fn from_wire((banners, center, do_not_disturb, screen_shared): WirePresentation) -> Self {
         Self {
             banners: stacks_from_wire(banners),
             center: stacks_from_wire(center),
             do_not_disturb,
+            screen_shared,
         }
     }
 }

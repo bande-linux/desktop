@@ -10,6 +10,7 @@ use unbound_toolkit::{
 use unbound_status::status::{Status, speaker_waves};
 
 use crate::L10N;
+use crate::rail::{control_center_label, in_use_dot};
 use crate::symbols::{Symbol, Symbols, battery_items, place_symbol, snap, wifi_symbol};
 
 pub const HEIGHT: u32 = 24;
@@ -323,7 +324,7 @@ impl MenuBar {
                     [("percent", battery.percent.round().into())],
                 )
             }),
-            Slot::ControlCenter => L10N.tr("control-center"),
+            Slot::ControlCenter => control_center_label(&self.status),
             Slot::Clock => self.clock.clone(),
             Slot::TrayMore | Slot::Workspace(_) | Slot::Launcher => String::new(),
         }
@@ -588,6 +589,9 @@ impl MenuBar {
                 slot => {
                     if let Some(symbol) = self.symbol_of(slot) {
                         self.place_symbol(symbol, content, scale, &mut items);
+                    }
+                    if slot == Slot::ControlCenter && !self.status.capturing.is_empty() {
+                        items.push(in_use_dot(content, &self.palette));
                     }
                 }
             }

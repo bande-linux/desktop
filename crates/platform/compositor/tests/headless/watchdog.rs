@@ -108,3 +108,26 @@ fn a_shell_that_binds_later_learns_which_apps_are_not_responding() {
         [(std::process::id() as i32, APP_ID.to_owned(), false)]
     );
 }
+
+#[test]
+fn an_ordinary_app_watching_apps_learns_who_stops_and_starts_answering() {
+    let mut scene = scene();
+    let start = Duration::from_secs(10);
+    let mut monitor = TestClient::connect(&mut scene.server);
+    scene.app.hang();
+    scene.interact(start);
+    scene.tick(start + UNRESPONSIVE_AFTER);
+
+    monitor.join_app_control(&mut scene.server);
+    scene.app.recover(&mut scene.server);
+    monitor.exchange(&mut scene.server);
+
+    let pid = std::process::id() as i32;
+    assert_eq!(
+        monitor.app_responding(),
+        [
+            (pid, APP_ID.to_owned(), false),
+            (pid, APP_ID.to_owned(), true)
+        ]
+    );
+}

@@ -4,10 +4,11 @@ use unbound_toolkit::ui::{Menu, MenuItem};
 use unbound_status::Command;
 use unbound_status::dbusmenu::{Node, command};
 use unbound_status::status::{
-    Battery, Bluetooth, InputSources, Power, Sound, Wifi, hours_and_minutes,
+    Battery, Bluetooth, Capture, InputSources, Power, Sound, Wifi, hours_and_minutes,
 };
 
 use crate::L10N;
+use crate::rail::in_use;
 
 fn item(title: &str, command: &Command) -> MenuItem {
     MenuItem::new(title, &command.action())
@@ -86,6 +87,11 @@ pub fn battery_menu(battery: &Battery, percentage_shown: bool) -> Menu {
 pub fn wifi_menu(wifi: &Wifi) -> Menu {
     let mut items =
         vec![item(&L10N.tr("wifi"), &Command::SetWifi(!wifi.enabled)).checked(wifi.enabled)];
+    if wifi.sign_in {
+        items.push(MenuItem::separator());
+        items.push(note(&L10N.tr("sign-in-required")));
+        items.push(item(&L10N.tr("sign-in"), &Command::SignIn));
+    }
     if wifi.enabled {
         let mut networks: Vec<_> = wifi.networks.iter().collect();
         networks.sort_by(|a, b| {
@@ -115,12 +121,18 @@ pub fn wifi_menu(wifi: &Wifi) -> Menu {
     Menu::new(items)
 }
 
-pub fn sound_menu(sound: &Sound) -> Menu {
+pub fn sound_menu(sound: &Sound, capturing: &[Capture]) -> Menu {
     let percent = [("percent", (f64::from(sound.volume) * 100.0).round().into())];
-    let mut items = vec![
+    let mut items = Vec::new();
+    let in_use = in_use(capturing);
+    if !in_use.is_empty() {
+        items.extend(in_use.iter().map(|line| note(line)));
+        items.push(MenuItem::separator());
+    }
+    items.extend([
         note(&L10N.tr_args("volume-level", percent)),
         item(&L10N.tr("mute"), &Command::SetMuted(!sound.muted)).checked(sound.muted),
-    ];
+    ]);
     if !sound.outputs.is_empty() {
         items.push(MenuItem::separator());
         items.push(note(&L10N.tr("output")));
@@ -151,11 +163,30 @@ pub fn bluetooth_menu(bluetooth: &Bluetooth) -> Menu {
         items.push(MenuItem::separator());
         items.push(note(&L10N.tr("devices")));
         for gadget in &bluetooth.devices {
+            let title = match gadget.battery {
+                Some(percent) => L10N.tr_args(
+                    "device-battery",
+                    [
+                        ("name", gadget.name.clone().into()),
+                        ("percent", percent.into()),
+                    ],
+                ),
+                None => gadget.name.clone(),
+            };
             items.push(
-                item(&gadget.name, &Command::ToggleGadget(gadget.address.clone()))
+                item(&title, &Command::ToggleGadget(gadget.address.clone()))
                     .checked(gadget.connected),
             );
         }
+        let forgettable = bluetooth
+            .devices
+            .iter()
+            .map(|gadget| item(&gadget.name, &Command::ForgetGadget(gadget.address.clone())))
+            .collect();
+        items.push(MenuItem::submenu(
+            &L10N.tr("forget-device"),
+            Menu::new(forgettable),
+        ));
     }
     items.push(MenuItem::separator());
     items.push(settings("bluetooth"));

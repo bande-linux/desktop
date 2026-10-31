@@ -8,7 +8,7 @@ use std::thread;
 use std::time::Instant;
 
 use crate::dialogs::DIALOGS;
-use crate::menubar::{HEIGHT, MenuBar, Slot, StatusView};
+use crate::menu_bar::{HEIGHT, MenuBar, Slot, StatusView};
 use crate::menus::{
     AppMenus, app_menu, battery_menu, bluetooth_menu, cascade, input_source_menu, sound_menu,
     system_menu, wifi_menu,
@@ -32,7 +32,7 @@ use unbound_toolkit::{
 };
 use unbound_xdg::{
     DesktopEntry, ICON_THEMES, Locale, app_name, applications, current_desktops, data_dirs,
-    find_app, find_icon, launch_action, spawn_detached,
+    find_app, find_icon, launch_action, remember_running_apps, spawn_detached,
 };
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
@@ -83,6 +83,7 @@ fn report<E: std::fmt::Display>(what: &str, result: Result<(), E>) {
 }
 
 fn confirm_session_end(window: &mut Window, ending: SessionEnd) {
+    remember_running_apps(&window.running_apps());
     report("ask to end the session", window.confirm_session_end(ending));
 }
 
@@ -370,7 +371,10 @@ impl<V: StatusView> MenuBarClient<V> {
                 self.control(Control::Scan);
                 status.wifi.as_ref().map(wifi_menu)
             }
-            Slot::Sound => status.sound.as_ref().map(sound_menu),
+            Slot::Sound => status
+                .sound
+                .as_ref()
+                .map(|sound| sound_menu(sound, &status.capturing)),
             Slot::Bluetooth => status.bluetooth.as_ref().map(bluetooth_menu),
             Slot::InputSource => Some(input_source_menu(&status.input_sources)),
             Slot::TrayMore => Some(self.more_menu(&status.input_sources)),
@@ -642,6 +646,7 @@ impl<V: StatusView> App for MenuBarClient<V> {
                     status.bluetooth = bluetooth;
                 }
                 Update::Sound(sound) => self.bar.status_mut().sound = sound,
+                Update::Capturing(capturing) => self.bar.status_mut().capturing = capturing,
                 Update::Tray(items) => {
                     self.tray = items;
                     self.refresh_tray_icons(window);

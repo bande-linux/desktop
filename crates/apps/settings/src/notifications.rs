@@ -1,5 +1,6 @@
 use std::sync::mpsc::{self, Sender};
 
+use unbound_notify::client::NotificationCenter;
 use zbus::blocking::Connection;
 
 use unbound_settings_panes::PaneId;
@@ -12,24 +13,6 @@ use crate::follow::{Update, Updates, spawn};
 use crate::pages::{Widgets, boxed, muted_row};
 use crate::view::{Anchor, Intent, Intents, SettingsView, intent};
 use crate::widgets::{Card, HEADER_SYMBOL, Header, Row, Text, Tone};
-
-type WireApp = (String, String, bool, String, bool);
-
-#[zbus::proxy(
-    interface = "org.unbound.NotificationCenter",
-    default_service = "org.freedesktop.Notifications",
-    default_path = "/org/freedesktop/Notifications"
-)]
-trait AppRules {
-    fn get_apps(&self) -> zbus::Result<Vec<WireApp>>;
-    fn set_app_rule(
-        &self,
-        group: &str,
-        allow: bool,
-        banners: &str,
-        in_center: bool,
-    ) -> zbus::Result<()>;
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppNotifications {
@@ -46,7 +29,7 @@ pub enum NotificationCommand {
     Set(AppNotifications),
 }
 
-fn read(rules: &AppRulesProxyBlocking<'_>) -> zbus::Result<Vec<AppNotifications>> {
+fn read(rules: &NotificationCenter<'_>) -> zbus::Result<Vec<AppNotifications>> {
     let mut apps: Vec<AppNotifications> = rules
         .get_apps()?
         .into_iter()
@@ -71,7 +54,7 @@ pub fn follow_app_notifications(
     let (sender, receiver) = mpsc::channel();
     let session = session.clone();
     spawn("notification-apps", move || {
-        let Ok(rules) = AppRulesProxyBlocking::new(&session) else {
+        let Ok(rules) = NotificationCenter::new(&session) else {
             return;
         };
         for command in receiver {

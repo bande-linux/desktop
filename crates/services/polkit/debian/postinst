@@ -1,0 +1,11 @@
+#!/bin/sh
+set -e
+if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-deconfigure" ] || [ "$1" = "abort-remove" ] ; then
+	if [ -z "$DPKG_ROOT" ] ; then
+		if deb-systemd-helper --quiet --user was-enabled unbound-polkit-agent.service ; then
+			deb-systemd-helper --user enable unbound-polkit-agent.service >/dev/null || true
+		else
+			deb-systemd-helper --user update-state unbound-polkit-agent.service >/dev/null || true
+		fi
+	fi
+fi

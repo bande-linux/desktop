@@ -5,9 +5,9 @@ use kdl::{KdlDocument, KdlEntry, KdlEntryFormat, KdlNode, KdlValue};
 
 use crate::{
     Accent, Accessibility, AlertSound, Appearance, BarEdge, CapsLock, ClockFormat, Config,
-    ConfigError, DEFAULT_BAR_ICON_SIZE, DisplaySettings, InputSource, LEGACY_DISPLAY, LidOnPower,
-    MenuBarPlacement, Mouse, Placement, SecondaryClick, Sound, Suspend, Trackpad, WallpaperFit,
-    WallpaperVariant, accent_keyword, same_displays, section_name,
+    ConfigError, DEFAULT_BAR_ICON_SIZE, DisplaySettings, InputSource, LidOnPower, MenuBarPlacement,
+    Mouse, Placement, SecondaryClick, Sound, Suspend, Trackpad, WallpaperFit, WallpaperVariant,
+    accent_keyword, same_displays,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -54,7 +54,6 @@ impl Setting {
     pub fn apply(&self, source: &str) -> Result<String, ConfigError> {
         let (config, before) = Config::load(source)?;
         let mut document = document(source)?;
-        rename_sections(&mut document);
         match self {
             Self::Appearance(appearance) => set(
                 &mut document,
@@ -293,99 +292,6 @@ fn introduced<'a>(before: &[ConfigError], after: &'a [ConfigError]) -> Option<&'
     after
         .iter()
         .find(|problem| count(after, &problem.message) > count(before, &problem.message))
-}
-
-fn rename_sections(document: &mut KdlDocument) -> bool {
-    let mut renamed = false;
-    let mut position = 0;
-    while position < document.nodes().len() {
-        let written = document.nodes()[position].name().value().to_owned();
-        let name = section_name(&written);
-        if name == written {
-            position += 1;
-            continue;
-        }
-        renamed = true;
-        let Some(target) = document
-            .nodes()
-            .iter()
-            .position(|node| node.name().value() == name)
-        else {
-            document.nodes_mut()[position].set_name(name);
-            position += 1;
-            continue;
-        };
-        let moved: Vec<KdlNode> = document.nodes()[position]
-            .children()
-            .map(|children| children.nodes().to_vec())
-            .unwrap_or_default();
-        remove(document, position);
-        let target = if target > position {
-            target - 1
-        } else {
-            target
-        };
-        let children = document.nodes_mut()[target].ensure_children();
-        for mut child in moved {
-            if let Some(format) = child.format_mut() {
-                format.leading = format.leading.trim_start_matches('\n').to_owned();
-            }
-            let known = children
-                .nodes()
-                .iter()
-                .any(|node| node.name().value() == child.name().value());
-            if !known {
-                children.nodes_mut().push(child);
-            }
-        }
-    }
-    renamed
-}
-
-fn first_string(node: &KdlNode) -> Option<&str> {
-    node.entries().first()?.value().as_string()
-}
-
-pub fn migrate(
-    source: &str,
-    connected: &[(String, String)],
-) -> Result<Option<String>, ConfigError> {
-    let mut document = document(source)?;
-    let mut changed = rename_sections(&mut document);
-    let mut position = 0;
-    while position < document.nodes().len() {
-        let node = &document.nodes()[position];
-        let identity = first_string(node)
-            .filter(|_| node.name().value() == LEGACY_DISPLAY)
-            .and_then(|connector| {
-                connected
-                    .iter()
-                    .find(|(known, _)| known == connector)
-                    .map(|(_, identity)| identity.clone())
-            });
-        let Some(identity) = identity else {
-            position += 1;
-            continue;
-        };
-        changed = true;
-        let configured = document.nodes().iter().any(|node| {
-            node.name().value() == "display" && first_string(node) == Some(identity.as_str())
-        });
-        if configured {
-            remove(&mut document, position);
-            continue;
-        }
-        let node = &mut document.nodes_mut()[position];
-        node.set_name("display");
-        if let Some(entry) = node.entries_mut().first_mut() {
-            let mut format = entry.format().cloned().unwrap_or_else(spaced);
-            format.value_repr = repr(&identity.as_str().into());
-            *entry = KdlEntry::new(identity.as_str());
-            entry.set_format(format);
-        }
-        position += 1;
-    }
-    Ok(changed.then(|| document.to_string()))
 }
 
 impl Appearance {

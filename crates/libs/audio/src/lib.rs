@@ -64,6 +64,19 @@ pub struct AppStream {
     pub level: Level,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Sense {
+    Microphone,
+    Camera,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Capture {
+    pub name: String,
+    pub icon: Option<String>,
+    pub senses: Vec<Sense>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Snapshot {
     pub generation: u64,
@@ -71,6 +84,7 @@ pub struct Snapshot {
     pub outputs: Vec<Device>,
     pub inputs: Vec<Device>,
     pub apps: Vec<AppStream>,
+    pub capturing: Vec<Capture>,
     pub default_output: Option<String>,
     pub default_input: Option<String>,
 }
@@ -107,7 +121,9 @@ impl Snapshot {
         let mut streams: Vec<(&u32, &graph::NodeState)> = state
             .nodes
             .iter()
-            .filter(|(_, node)| node.app.is_some() && !node.channels.is_empty())
+            .filter(|(_, node)| {
+                node.app.is_some() && node.sense.is_none() && !node.channels.is_empty()
+            })
             .collect();
         streams.sort_by_key(|(id, _)| **id);
         let mut apps: Vec<AppStream> = Vec::new();
@@ -138,6 +154,7 @@ impl Snapshot {
             outputs,
             inputs,
             apps,
+            capturing: capturing(state),
             default_output: state.default_output.clone(),
             default_input: state.default_input.clone(),
         }
@@ -157,6 +174,40 @@ impl Snapshot {
     pub fn default_input(&self) -> Option<&Device> {
         self.device(self.default_input.as_deref()?)
     }
+}
+
+fn capturing(state: &State) -> Vec<Capture> {
+    let mut captures: Vec<Capture> = Vec::new();
+    for (source, consumer) in state.links.values() {
+        let (Some(source), Some(consumer)) = (state.nodes.get(source), state.nodes.get(consumer))
+        else {
+            continue;
+        };
+        let (Some(app), Some(sense)) = (&consumer.app, consumer.sense) else {
+            continue;
+        };
+        let real = match sense {
+            Sense::Microphone => source.direction == Some(Direction::Input),
+            Sense::Camera => source.camera,
+        };
+        if !real {
+            continue;
+        }
+        match captures.iter_mut().find(|known| known.name == app.name) {
+            Some(known) if known.senses.contains(&sense) => {}
+            Some(known) => {
+                known.senses.push(sense);
+                known.senses.sort_by_key(|sense| *sense as u8);
+            }
+            None => captures.push(Capture {
+                name: app.name.clone(),
+                icon: app.icon.clone(),
+                senses: vec![sense],
+            }),
+        }
+    }
+    captures.sort_by_key(|capture| capture.name.to_lowercase());
+    captures
 }
 
 pub struct Audio {
@@ -306,5 +357,91 @@ impl Drop for Audio {
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use graph::{App, NodeState};
+
+    fn app(name: &str, sense: Option<Sense>, channels: Vec<f32>) -> NodeState {
+        NodeState {
+            app: Some(App {
+                name: name.to_owned(),
+                icon: None,
+            }),
+            sense,
+            channels,
+            ..NodeState::default()
+        }
+    }
+
+    fn graph() -> State {
+        let mut state = State::default();
+        let microphone = NodeState {
+            name: "microphone".to_owned(),
+            direction: Some(Direction::Input),
+            ..NodeState::default()
+        };
+        let speakers = NodeState {
+            name: "speakers".to_owned(),
+            direction: Some(Direction::Output),
+            ..NodeState::default()
+        };
+        let camera = NodeState {
+            name: "camera".to_owned(),
+            camera: true,
+            ..NodeState::default()
+        };
+        let screen = NodeState {
+            name: "screen-cast".to_owned(),
+            ..NodeState::default()
+        };
+        state.nodes.extend([
+            (1, microphone),
+            (2, speakers),
+            (3, camera),
+            (4, screen),
+            (10, app("Meet", Some(Sense::Microphone), vec![1.0])),
+            (11, app("Meet", Some(Sense::Camera), Vec::new())),
+            (12, app("Recorder", Some(Sense::Microphone), vec![1.0])),
+            (13, app("Browser", Some(Sense::Camera), Vec::new())),
+            (14, app("Radio", None, vec![1.0])),
+        ]);
+        state.links.extend([
+            (100, (1, 10)),
+            (101, (3, 11)),
+            (102, (2, 12)),
+            (103, (4, 13)),
+            (104, (14, 2)),
+        ]);
+        state
+    }
+
+    #[test]
+    fn apps_using_the_microphone_or_camera_are_listed_but_monitors_and_screen_casts_are_not() {
+        let snapshot = Snapshot::of(&graph());
+
+        assert_eq!(
+            snapshot.capturing,
+            [Capture {
+                name: "Meet".to_owned(),
+                icon: None,
+                senses: vec![Sense::Microphone, Sense::Camera],
+            }]
+        );
+        let playing: Vec<&str> = snapshot.apps.iter().map(|app| app.name.as_str()).collect();
+        assert_eq!(playing, ["Radio"]);
+    }
+
+    #[test]
+    fn unlinking_the_capture_stream_clears_the_indicator() {
+        let mut state = graph();
+        state
+            .links
+            .retain(|_, (source, _)| *source != 1 && *source != 3);
+
+        assert!(Snapshot::of(&state).capturing.is_empty());
     }
 }

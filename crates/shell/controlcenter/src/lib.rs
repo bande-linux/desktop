@@ -81,6 +81,7 @@ pub fn slide_from(anchor: Option<Anchor>, distance: f32) -> Point {
 pub struct Status {
     pub wifi: Option<bool>,
     pub network: Option<String>,
+    pub sign_in: bool,
     pub bluetooth: Option<bool>,
     pub do_not_disturb: bool,
     pub volume: Option<f32>,
@@ -185,6 +186,7 @@ fn tiles(status: &Status, changes: &Changes) -> Vec<Box<dyn Widget>> {
         specs.push(TileSpec {
             title: L10N.tr("wifi"),
             detail: match (&status.network, on) {
+                (_, true) if status.sign_in => L10N.tr("sign-in-required"),
                 (Some(network), true) => network.clone(),
                 (None, true) => L10N.tr("not-connected"),
                 (_, false) => on_off(false),

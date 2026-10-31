@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+pub use unbound_audio::{Capture, Sense};
 use unbound_network::Network;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -29,6 +30,7 @@ impl Battery {
 pub struct Wifi {
     pub enabled: bool,
     pub networks: Vec<Network>,
+    pub sign_in: bool,
 }
 
 impl Wifi {
@@ -56,6 +58,7 @@ pub struct Gadget {
     pub address: String,
     pub name: String,
     pub connected: bool,
+    pub battery: Option<u8>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -91,6 +94,7 @@ pub struct Status {
     pub sound: Option<Sound>,
     pub bluetooth: Option<Bluetooth>,
     pub input_sources: InputSources,
+    pub capturing: Vec<Capture>,
 }
 
 pub fn wifi_bars(strength: u8) -> u8 {

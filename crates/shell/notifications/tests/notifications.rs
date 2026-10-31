@@ -3,6 +3,7 @@
 use std::time::{Duration, Instant};
 
 use jiff::Zoned;
+use jiff::civil::date;
 use unbound_datetime::{DateFormats, posix_locale};
 use unbound_notifications::{BANNER_WIDTH, CENTER_WIDTH, Request, Screen, Sender, age_label};
 use unbound_notify::{Notification, Presentation, Stack};
@@ -41,7 +42,9 @@ fn screen() -> Screen {
         Box::new(|notification: &Notification, _: &str| Sender {
             name: notification.app_name.clone(),
             icon: None,
+            picture: None,
         }),
+        DateFormats::for_locale(&posix_locale("en_US")),
     );
     screen.set_size(WIDTH, HEIGHT);
     screen
@@ -51,7 +54,7 @@ fn banners(stacks: Vec<Stack>) -> Presentation {
     Presentation {
         banners: stacks.clone(),
         center: stacks,
-        do_not_disturb: false,
+        ..Presentation::default()
     }
 }
 
@@ -255,14 +258,15 @@ fn the_keyboard_walks_the_center_expands_a_stack_and_clears_it() {
                     notification(1, "Mail", "First", &[]),
                 ],
             )],
-            do_not_disturb: false,
+            ..Presentation::default()
         },
         now,
     );
     screen.open(now);
 
-    screen.handle(&key(Key::Down), now);
-    screen.handle(&key(Key::Down), now);
+    for _ in 0..4 {
+        screen.handle(&key(Key::Down), now);
+    }
     screen.handle(&key(Key::Enter), now);
     assert!(screen.take_requests().is_empty(), "Enter expands the stack");
 
@@ -271,8 +275,9 @@ fn the_keyboard_walks_the_center_expands_a_stack_and_clears_it() {
     screen.handle(&key(Key::Delete), now);
     screen.handle(&key(Key::Up), now);
     screen.handle(&key(Key::Enter), now);
-    screen.handle(&key(Key::Up), now);
-    screen.handle(&key(Key::Up), now);
+    for _ in 0..4 {
+        screen.handle(&key(Key::Up), now);
+    }
     screen.handle(&key(Key::Enter), now);
 
     assert_eq!(
@@ -326,4 +331,50 @@ fn a_left_bar_opens_the_center_beside_its_clock_instead_of_at_the_right() {
     let right = Point::new(WIDTH as f32 - 40.0, 30.0);
     screen.handle(&pointer(Event::PointerDown, right), now + SETTLED);
     assert!(!screen.is_open());
+}
+
+#[test]
+fn the_calendar_opens_on_today_and_the_keyboard_turns_its_months() {
+    let now = Instant::now();
+    let mut screen = screen();
+    screen.set_today(date(2026, 10, 31), now);
+    screen.open(now);
+    assert_eq!(screen.shown_month(), date(2026, 10, 1));
+
+    screen.handle(&key(Key::PageDown), now);
+    assert_eq!(screen.shown_month(), date(2026, 11, 1));
+    screen.handle(&key(Key::PageUp), now);
+    screen.handle(&key(Key::PageUp), now);
+    assert_eq!(screen.shown_month(), date(2026, 9, 1));
+    screen.handle(&key(Key::Home), now);
+    assert_eq!(screen.shown_month(), date(2026, 10, 1));
+
+    screen.handle(&key(Key::Tab), now);
+    screen.handle(&key(Key::Tab), now);
+    screen.handle(&key(Key::Enter), now);
+    screen.handle(&key(Key::Enter), now);
+    assert_eq!(screen.shown_month(), date(2026, 12, 1));
+    screen.handle(&key(Key::Tab), now);
+    screen.handle(&key(Key::Space), now);
+    assert_eq!(screen.shown_month(), date(2026, 11, 1));
+
+    screen.close(now);
+    screen.open(now);
+    assert_eq!(screen.shown_month(), date(2026, 10, 1));
+}
+
+#[test]
+fn the_calendar_follows_midnight_unless_another_month_is_shown() {
+    let now = Instant::now();
+    let mut screen = screen();
+    screen.set_today(date(2026, 10, 31), now);
+    screen.open(now);
+
+    screen.set_today(date(2026, 11, 1), now);
+    assert_eq!(screen.shown_month(), date(2026, 11, 1));
+
+    screen.handle(&key(Key::PageUp), now);
+    screen.handle(&key(Key::PageUp), now);
+    screen.set_today(date(2026, 11, 2), now);
+    assert_eq!(screen.shown_month(), date(2026, 9, 1));
 }

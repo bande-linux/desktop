@@ -34,6 +34,12 @@ pub trait NetworkManager {
 
     #[zbus(property)]
     fn set_wireless_enabled(&self, enabled: bool) -> zbus::Result<()>;
+
+    #[zbus(property)]
+    fn connectivity(&self) -> zbus::Result<u32>;
+
+    #[zbus(property)]
+    fn connectivity_check_uri(&self) -> zbus::Result<String>;
 }
 
 #[zbus::proxy(

@@ -219,7 +219,12 @@ fn invoking_an_action_emits_action_invoked_then_closes() {
         0,
     );
 
-    assert!(fixture.server.invoke_action(id, "restart").expect("invoke"));
+    assert!(
+        fixture
+            .center
+            .activate(id, "restart", "")
+            .expect("activate")
+    );
 
     assert_eq!(
         fixture.next_event(),
@@ -246,7 +251,7 @@ fn a_resident_notification_stays_after_an_action() {
         )
         .expect("Notify");
 
-    assert!(fixture.server.invoke_action(id, "pause").expect("invoke"));
+    assert!(fixture.center.activate(id, "pause", "").expect("activate"));
 
     assert_eq!(fixture.next_event(), Event::Action(id, "pause".to_owned()));
     fixture.assert_quiet();

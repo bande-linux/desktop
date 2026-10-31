@@ -7,8 +7,8 @@ use std::time::{Duration, Instant};
 use tempfile::TempDir;
 use unbound_xdg::{
     DesktopEntry, ExecError, ICON_THEMES, Locale, TERMINAL, UserDir, app_name, applications,
-    autostart_dir, find_app, find_icon, launch, opens_at_login, running_app, set_open_at_login,
-    user_dir,
+    apps_to_reopen, autostart_dir, find_app, find_icon, launch, opens_at_login, remember_apps,
+    running_app, set_open_at_login, take_apps_to_reopen, user_dir,
 };
 
 fn desktops() -> Vec<String> {
@@ -440,4 +440,24 @@ fn window_app_ids_find_their_desktop_entry() {
         Some("org.example.Unknown")
     );
     assert_eq!(running_app(&entries, &running, "slack"), None);
+}
+
+#[test]
+fn running_apps_are_remembered_once_by_desktop_id_and_reopened_only_once() {
+    let entries = [
+        installed("firefox", "Exec=firefox %u"),
+        installed("org.unbound.Files", "Exec=unbound-files"),
+    ];
+    let running: Vec<String> = ["firefox", "files", "firefox", "org.unbound.MenuBar"]
+        .map(str::to_owned)
+        .to_vec();
+    let apps = apps_to_reopen(&entries, &running);
+    assert_eq!(apps, ["firefox", "org.unbound.Files"]);
+
+    let state = TempDir::new().expect("temporary directory");
+    let file = state.path().join("unbound/reopen");
+    remember_apps(&file, &apps).expect("remember");
+    assert_eq!(take_apps_to_reopen(&file), ["firefox", "org.unbound.Files"]);
+    assert!(!file.exists());
+    assert!(take_apps_to_reopen(&file).is_empty());
 }

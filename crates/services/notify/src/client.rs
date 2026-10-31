@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use zbus::blocking::Connection;
 use zbus::zvariant::Value;
 
-use crate::{BUS_NAME, OBJECT_PATH, Urgency, WirePresentation};
+use crate::{BUS_NAME, OBJECT_PATH, Urgency, WireApp, WirePresentation};
 
 const INTERFACE: &str = "org.freedesktop.Notifications";
 
@@ -72,6 +72,18 @@ pub trait NotificationCenter {
     fn clear_all(&self) -> zbus::Result<()>;
 
     fn hold_banners(&self, held: bool) -> zbus::Result<()>;
+
+    fn quiet_while_connected(&self) -> zbus::Result<()>;
+
+    fn get_apps(&self) -> zbus::Result<Vec<WireApp>>;
+
+    fn set_app_rule(
+        &self,
+        group: &str,
+        allow: bool,
+        banners: &str,
+        in_center: bool,
+    ) -> zbus::Result<()>;
 
     #[zbus(property)]
     fn do_not_disturb(&self) -> zbus::Result<bool>;

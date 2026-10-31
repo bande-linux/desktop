@@ -1,6 +1,8 @@
+use std::path::PathBuf;
 use std::process::ExitCode;
 
 use unbound_automount::Automounter;
+use unbound_automount::space::{SpaceWatch, free_space, open_storage_settings, watch_space};
 use zbus::blocking::Connection;
 
 fn main() -> ExitCode {
@@ -11,6 +13,12 @@ fn main() -> ExitCode {
     });
     match started {
         Ok((_automounter, session)) => {
+            let mut volumes = vec![PathBuf::from("/")];
+            volumes.extend(std::env::var_os("HOME").map(PathBuf::from));
+            let _space = watch_space(
+                SpaceWatch::new(&session, &volumes, free_space),
+                open_storage_settings,
+            );
             unbound_bus::serve_until_closed(&session);
             ExitCode::SUCCESS
         }

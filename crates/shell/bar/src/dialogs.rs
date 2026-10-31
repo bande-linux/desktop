@@ -10,7 +10,10 @@ use unbound_toolkit::{
     App, Image, Item, Palette, Point, Rect, Role, Scene, TextAlign, TextStyle, TextSystem, Window,
     WindowEvent,
 };
-use unbound_xdg::{Locale, applications, current_desktops, data_dirs, find_app, find_icon};
+use unbound_xdg::{
+    Locale, applications, current_desktops, data_dirs, find_app, find_icon, reopen_file,
+    take_apps_to_reopen,
+};
 use zbus::blocking::Connection;
 
 pub const DIALOGS: &str = "org.unbound.MenuBar";
@@ -151,7 +154,12 @@ impl Confirmation {
         let now = Instant::now();
         match self.choice.replace(Choice::Undecided) {
             Choice::Undecided => {}
-            Choice::Cancel => window.close(),
+            Choice::Cancel => {
+                if let Some(file) = reopen_file() {
+                    take_apps_to_reopen(&file);
+                }
+                window.close();
+            }
             Choice::Confirm => {
                 let effect = self.session.confirm(now);
                 self.apply(window, effect, now);

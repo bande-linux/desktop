@@ -437,7 +437,7 @@ impl Dispatch<WlRegistry, ()> for Globals {
             match interface.as_str() {
                 "wl_compositor" => globals.compositor = Some(registry.bind(name, 4, qh, ())),
                 "wl_shm" => globals.shm = Some(registry.bind(name, 1, qh, ())),
-                "xdg_wm_base" => globals.wm_base = Some(registry.bind(name, 1, qh, ())),
+                "xdg_wm_base" => globals.wm_base = Some(registry.bind(name, 6, qh, ())),
                 "zwp_linux_dmabuf_v1" => globals.dmabuf = Some(registry.bind(name, 3, qh, ())),
                 "wp_presentation" => globals.presentation = Some(registry.bind(name, 1, qh, ())),
                 _ => {}

@@ -8,15 +8,15 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use unbound_bar::dock::{DockAction, DockApp, DockState, MenuTarget, Shared, dock_ui, scene};
-use unbound_bar::menubar::{Slot, StatusView};
-use unbound_bar::menus::{AppMenus, cascade};
+use unbound_bar::menu_bar::{Slot, StatusView};
+use unbound_bar::menus::{AppMenus, bluetooth_menu, cascade, wifi_menu};
 use unbound_bar::rail::{RailView, bar_width, surface_size};
 use unbound_config::BarEdge;
 use unbound_datetime::{DateFormats, posix_locale};
 use unbound_dock_model::LauncherUpdate;
 use unbound_status::dbusmenu::Node;
 use unbound_status::status::{
-    Battery, Bluetooth, Gadget, InputSource, InputSources, Power, Sound, Wifi,
+    Battery, Bluetooth, Capture, Gadget, InputSource, InputSources, Power, Sense, Sound, Wifi,
 };
 use unbound_toolkit::ui::{
     Event, Key, MenuOutcome, MenuPanel, MenuTracker, Modifiers, Pointer, PointerButton, Ui,
@@ -108,6 +108,7 @@ impl Rail {
         status.wifi = Some(Wifi {
             enabled: true,
             networks: Vec::new(),
+            sign_in: false,
         });
         status.sound = Some(Sound {
             volume: 0.6,
@@ -121,6 +122,7 @@ impl Rail {
                 address: "00:11".to_owned(),
                 name: "Headphones".to_owned(),
                 connected: true,
+                battery: None,
             }],
         });
         status.battery = Some(Battery {
@@ -611,6 +613,64 @@ fn the_open_cascade_keeps_the_pressed_header_and_offers_type_to_search() {
 }
 
 #[test]
+fn the_bluetooth_and_wifi_menus_show_batteries_forget_and_sign_in() {
+    let scheme = Scheme::Light;
+    let palette = Palette::for_scheme(scheme);
+    let mut text = TextSystem::new();
+    let gadget = |address: &str, name: &str, connected, battery| Gadget {
+        address: address.to_owned(),
+        name: name.to_owned(),
+        connected,
+        battery,
+    };
+    let menus = [
+        bluetooth_menu(&Bluetooth {
+            powered: true,
+            devices: vec![
+                gadget("00:11", "Studio Headphones", true, Some(80)),
+                gadget("00:22", "Mouse", false, None),
+            ],
+        }),
+        wifi_menu(&Wifi {
+            enabled: true,
+            networks: Vec::new(),
+            sign_in: true,
+        }),
+    ];
+    let size = (560, 240);
+    let mut items = vec![Item::Fill {
+        shape: Shape::rect(Rect::new(0.0, 0.0, size.0 as f32, size.1 as f32)),
+        paint: Color::hex(0x808080).into(),
+    }];
+    let mut left = 16.0;
+    for menu in menus {
+        let panel = MenuPanel::new(menu, &mut text, &palette);
+        let outline = Shape::rounded(
+            Rect::new(0.0, 0.0, panel.size().width, panel.size().height),
+            unbound_toolkit::ui::MENU_RADIUS,
+        );
+        let mut drawn = Item::shadows(outline, Elevation::Overlay, scheme, true).to_vec();
+        drawn.extend(panel.paint(&palette, false));
+        items.push(Item::Translate {
+            offset: Point::new(left, 16.0),
+            items: drawn,
+        });
+        left += panel.size().width + 24.0;
+    }
+    let scene = Scene {
+        width: size.0,
+        height: size.1,
+        background: Color::TRANSPARENT,
+        items,
+    };
+    let mut rgba = vec![0; (size.0 * size.1 * 4) as usize];
+    CpuRenderer::new()
+        .render_into(&scene, 1.0, &mut rgba)
+        .expect("frame");
+    check_golden("status-menus-light", size, rgba);
+}
+
+#[test]
 fn the_keyboard_reaches_the_more_cell_between_the_apps_and_the_trash_and_opens_it() {
     let mut rail = Rail::new(Scheme::Light, 600, numbered(14));
     rail.frame(1.0);
@@ -679,4 +739,36 @@ fn an_app_leaving_a_full_rail_frees_room_before_the_next_one_comes_out_of_more()
     }
     assert_eq!(before.len(), shown + 1);
     assert!(before.contains(&format!("org.example.App{}", shown + 1)));
+}
+
+#[test]
+fn an_app_using_the_microphone_and_camera_marks_control_center_and_names_itself() {
+    let mut rail = Rail::new(Scheme::Light, HEIGHT, apps(1.0));
+    rail.view.status_mut().capturing = vec![
+        Capture {
+            name: "Meet".to_owned(),
+            icon: None,
+            senses: vec![Sense::Microphone, Sense::Camera],
+        },
+        Capture {
+            name: "Recorder".to_owned(),
+            icon: None,
+            senses: vec![Sense::Microphone],
+        },
+    ];
+    rail.frame(1.0);
+    rail.advance(Duration::from_secs(2));
+    let frame = rail.frame(1.0);
+    check_golden("bar-in-use-light", rail.size(), frame);
+
+    let tree = rail.view.accessibility();
+    let labels: Vec<String> = tree
+        .nodes
+        .iter()
+        .map(|(_, node)| node.label().unwrap_or_default().to_owned())
+        .collect();
+    assert!(labels.contains(
+        &"Control Center, Meet is using the microphone and camera, Recorder is using the microphone"
+            .to_owned()
+    ));
 }

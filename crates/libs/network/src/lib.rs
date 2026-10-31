@@ -25,6 +25,7 @@ const AP_SEC_KEY_MGMT_SAE: u32 = 0x400;
 const ACTIVE_STATE_ACTIVATED: u32 = 2;
 const ACTIVE_STATE_DEACTIVATED: u32 = 4;
 const ACTIVE_REASON_NO_SECRETS: u32 = 9;
+const CONNECTIVITY_PORTAL: u32 = 2;
 const ACTIVE_REASON_LOGIN_FAILED: u32 = 10;
 const WIRELESS: &str = "802-11-wireless";
 const WIRELESS_SECURITY: &str = "802-11-wireless-security";
@@ -151,6 +152,14 @@ impl NetworkManager {
 
     pub fn set_wifi_enabled(&self, enabled: bool) -> Result<()> {
         Ok(self.manager()?.set_wireless_enabled(enabled)?)
+    }
+
+    pub fn sign_in_page(&self) -> Result<Option<String>> {
+        let manager = self.manager()?;
+        if manager.connectivity()? != CONNECTIVITY_PORTAL {
+            return Ok(None);
+        }
+        Ok(Some(manager.connectivity_check_uri()?).filter(|uri| !uri.is_empty()))
     }
 
     fn devices_of_type(&self, device_type: u32) -> Result<Vec<OwnedObjectPath>> {

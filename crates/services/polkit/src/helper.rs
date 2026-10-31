@@ -3,6 +3,8 @@ use std::path::Path;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::{Arc, Mutex, PoisonError};
 
+use zeroize::Zeroizing;
+
 pub const HELPER: &str = "/usr/lib/polkit-1/polkit-agent-helper-1";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -121,7 +123,8 @@ impl HelperSession {
     }
 
     pub fn respond(&mut self, response: &str) -> io::Result<()> {
-        let mut line = response.as_bytes().to_vec();
+        let mut line = Zeroizing::new(Vec::with_capacity(response.len() + 1));
+        line.extend_from_slice(response.as_bytes());
         if line.last() != Some(&b'\n') {
             line.push(b'\n');
         }

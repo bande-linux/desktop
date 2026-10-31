@@ -27,6 +27,8 @@ const SLIVER_INSET: f32 = 8.0;
 const SLIVER_SHADE: f32 = 0.03;
 const HOVER_INK: f32 = 0.08;
 const MAX_ACTIONS: usize = 3;
+const PICTURE: f32 = 40.0;
+const PICTURE_GAP: f32 = Spacing::M as f32;
 pub const CLOSE_REACH: f32 = CLOSE_SIZE / 2.0 + 1.0;
 pub const DEFAULT_ACTION: &str = "default";
 
@@ -40,6 +42,7 @@ pub enum Part {
 pub struct Sender {
     pub name: String,
     pub icon: Option<Image>,
+    pub picture: Option<Image>,
 }
 
 pub struct Card {
@@ -49,6 +52,7 @@ pub struct Card {
     pub height: f32,
     width: f32,
     icon: Option<Image>,
+    picture: Option<(Rect, Image)>,
     initial: Option<Paragraph>,
     app: Paragraph,
     headline: Option<(f32, Paragraph)>,
@@ -138,12 +142,20 @@ impl Card {
             1,
         );
         let mut bottom = PADDING_Y + HEADER + HEADER_GAP;
+        let picture = sender.picture.map(|image| {
+            let rect = Rect::new(width - PADDING_X - PICTURE, bottom, PICTURE, PICTURE);
+            (rect, image)
+        });
+        let content_width = match picture {
+            Some(_) => text_width - PICTURE - PICTURE_GAP,
+            None => text_width,
+        };
         let headline = (!notification.summary.is_empty()).then(|| {
             let paragraph = fitted(
                 text,
                 &notification.summary,
                 TextStyle::new(TITLE_SIZE, palette.ink).weight(TextStyle::SEMIBOLD),
-                text_width,
+                content_width,
                 1,
             );
             let top = bottom;
@@ -155,7 +167,7 @@ impl Card {
                 text,
                 &notification.body,
                 TextStyle::role(TextRole::Body, palette.ink2),
-                text_width,
+                content_width,
                 body_lines,
             );
             let top = bottom;
@@ -173,6 +185,9 @@ impl Card {
             bottom = top + paragraph.height();
             (top, paragraph)
         });
+        if let Some((rect, _)) = &picture {
+            bottom = bottom.max(rect.y + rect.height);
+        }
         let mut height = bottom + PADDING_Y;
         let shown: Vec<&(String, String)> = notification
             .actions
@@ -220,6 +235,7 @@ impl Card {
             height: height.round(),
             width,
             icon: sender.icon,
+            picture,
             initial,
             app,
             headline,
@@ -348,6 +364,9 @@ impl Card {
             ),
             paragraph: self.age.clone(),
         });
+        if let Some((rect, image)) = &self.picture {
+            picture(*rect, image, palette, &mut card);
+        }
         for (top, paragraph) in self.headline.iter().chain(&self.body).chain(&self.more) {
             card.push(Item::Text {
                 origin: Point::new(PADDING_X, top.round()),
@@ -413,7 +432,36 @@ impl Card {
     }
 }
 
-fn surface_with_edge(palette: &Palette, shape: Shape, fill: Color, items: &mut Vec<Item>) {
+fn picture(frame: Rect, image: &Image, palette: &Palette, items: &mut Vec<Item>) {
+    let (width, height) = (image.width() as f32, image.height() as f32);
+    let scale = (frame.width / width).max(frame.height / height);
+    let (fill_width, fill_height) = (width * scale, height * scale);
+    let shape = Shape::rounded(frame, Radius::S);
+    items.push(Item::Clip {
+        shape,
+        items: vec![Item::Image {
+            rect: Rect::new(
+                frame.x + (frame.width - fill_width) / 2.0,
+                frame.y + (frame.height - fill_height) / 2.0,
+                fill_width,
+                fill_height,
+            ),
+            image: image.clone(),
+        }],
+    });
+    items.push(Item::Stroke {
+        shape: Shape::rounded(frame.inset(0.5), Radius::S - 0.5),
+        width: 1.0,
+        paint: palette.hairline.into(),
+    });
+}
+
+pub(crate) fn surface_with_edge(
+    palette: &Palette,
+    shape: Shape,
+    fill: Color,
+    items: &mut Vec<Item>,
+) {
     items.push(Item::Fill {
         shape,
         paint: fill.into(),

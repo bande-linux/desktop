@@ -51,7 +51,7 @@ pub use notifications::{AppNotifications, NotificationCommand, follow_app_notifi
 pub use pictures::{Pair, PictureCommand, bundled_pairs, thumbnail};
 pub use pointing::{PointingDevices, UDEV_DATA};
 pub use power::charge_text;
-pub use privilege::Privilege;
+pub use privilege::{Privilege, refused};
 pub use services::{
     AudioCommand, BluetoothCommand, NetworkCommand, follow_bluetooth, follow_network,
 };

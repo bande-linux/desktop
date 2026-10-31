@@ -145,6 +145,22 @@ pub(crate) enum Target {
     Scrim(WlSurface),
 }
 
+impl Target {
+    pub(crate) fn surface(&self) -> Option<(WlSurface, Point<f64, Logical>)> {
+        match self {
+            Target::Surface(surface, at) => Some((surface.clone(), *at)),
+            Target::Frame(..) | Target::Scrim(_) => None,
+        }
+    }
+
+    pub(crate) fn frame(&self) -> Option<(WlSurface, Zone)> {
+        match self {
+            Target::Frame(surface, zone) => Some((surface.clone(), *zone)),
+            Target::Surface(..) | Target::Scrim(_) => None,
+        }
+    }
+}
+
 fn surface_at(
     surface: &WlSurface,
     origin: Point<i32, Logical>,
@@ -169,15 +185,12 @@ impl State {
             })
     }
 
-    fn frame_under(&self, location: Point<f64, Logical>) -> Option<(WlSurface, Zone)> {
-        match self.pointer_target(location)? {
-            Target::Frame(surface, zone) => Some((surface, zone)),
-            Target::Surface(..) | Target::Scrim(_) => None,
-        }
-    }
-
-    pub(crate) fn point_at_frame(&mut self, location: Point<f64, Logical>, over_surface: bool) {
-        let pointed = self.frame_under(location);
+    pub(crate) fn point_at_frame(
+        &mut self,
+        location: Point<f64, Logical>,
+        pointed: Option<(WlSurface, Zone)>,
+        over_surface: bool,
+    ) {
         let hovered = pointed
             .as_ref()
             .filter(|(_, zone)| matches!(zone, Zone::Control(_) | Zone::TitleBar))
@@ -210,12 +223,16 @@ impl State {
         self.needs_redraw = true;
     }
 
-    pub(crate) fn press_frame(&mut self, button: u32, time: u32) -> Option<bool> {
-        let (surface, zone) = self.frame_under(self.pointer_location)?;
+    pub(crate) fn press_frame(
+        &mut self,
+        (surface, zone): (WlSurface, Zone),
+        button: u32,
+        time: u32,
+    ) -> bool {
         self.focus(Some(surface.clone()));
         if button != BTN_LEFT {
             self.swallowed_button = Some(button);
-            return Some(true);
+            return true;
         }
         match zone {
             Zone::Control(control) => {
@@ -223,7 +240,7 @@ impl State {
                     self.windows[index].frame.pressed = Some(control);
                     self.needs_redraw = true;
                 }
-                Some(true)
+                true
             }
             Zone::TitleBar => {
                 let double = self
@@ -238,15 +255,15 @@ impl State {
                 if double {
                     self.swallowed_button = Some(button);
                     self.toggle_zoom(&surface);
-                    return Some(true);
+                    return true;
                 }
                 self.decorations.last_click = Some((surface.clone(), time));
                 self.move_from_title_bar(&surface, button);
-                Some(false)
+                false
             }
             Zone::Resize(edges) => {
                 self.resize_from_frame(&surface, protocol_edge(edges), button);
-                Some(false)
+                false
             }
         }
     }
@@ -265,7 +282,9 @@ impl State {
         let control = self.windows[index].frame.pressed.take();
         self.needs_redraw = true;
         let surface = self.windows[index].surface().clone();
-        let released_on = self.frame_under(self.pointer_location);
+        let released_on = self
+            .pointer_target(self.pointer_location)
+            .and_then(|target| target.frame());
         if released_on.as_ref().map(|(on, zone)| (on, *zone))
             != control.map(|control| (&surface, Zone::Control(control)))
         {

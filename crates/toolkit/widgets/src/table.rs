@@ -77,6 +77,8 @@ pub struct Cell {
     pub icon: Option<Image>,
     pub muted: bool,
     pub tint: Option<Color>,
+    pub label: bool,
+    pub tabular: bool,
 }
 
 impl Cell {
@@ -86,6 +88,8 @@ impl Cell {
             icon: None,
             muted: false,
             tint: None,
+            label: false,
+            tabular: false,
         }
     }
 
@@ -103,6 +107,20 @@ impl Cell {
     pub fn tinted(self, tint: Color) -> Self {
         Self {
             tint: Some(tint),
+            ..self
+        }
+    }
+
+    pub fn label(self) -> Self {
+        Self {
+            label: true,
+            ..self
+        }
+    }
+
+    pub fn tabular(self) -> Self {
+        Self {
+            tabular: true,
             ..self
         }
     }
@@ -191,6 +209,8 @@ struct TextKey {
     column: usize,
     color: Color,
     width: u32,
+    label: bool,
+    tabular: bool,
 }
 
 type KeysCallback = Box<dyn FnMut(&[String])>;
@@ -1051,6 +1071,8 @@ impl Table {
             column,
             color,
             width: width.to_bits(),
+            label: cell.label,
+            tabular: cell.tabular || self.columns[column].numeric,
         }
     }
 
@@ -1079,8 +1101,11 @@ impl Table {
                 let paragraph = match old.remove(&key) {
                     Some(paragraph) => paragraph,
                     None => {
-                        let style = TextStyle::new(TEXT_SIZE, key.color);
-                        let style = match self.columns[column].numeric {
+                        let style = match key.label {
+                            true => TextStyle::role(TextRole::Label, key.color),
+                            false => TextStyle::new(TEXT_SIZE, key.color),
+                        };
+                        let style = match key.tabular {
                             true => style.tabular(),
                             false => style,
                         };

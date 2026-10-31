@@ -137,6 +137,7 @@ pub struct Entry {
     shell_action: Option<ShellAction>,
     enabled: bool,
     separator: bool,
+    selected: Option<bool>,
     children: Vec<Entry>,
 }
 
@@ -149,6 +150,7 @@ impl Entry {
             shell_action: None,
             enabled: true,
             separator: false,
+            selected: None,
             children: Vec::new(),
         }
     }
@@ -185,6 +187,13 @@ impl Entry {
         Self { enabled, ..self }
     }
 
+    pub fn radio(self, selected: bool) -> Self {
+        Self {
+            selected: Some(selected),
+            ..self
+        }
+    }
+
     fn size(&self) -> i32 {
         1 + self.children.iter().map(Entry::size).sum::<i32>()
     }
@@ -204,6 +213,10 @@ impl Entry {
         }
         if !self.children.is_empty() {
             properties.insert("children-display".to_owned(), Value::from("submenu"));
+        }
+        if let Some(selected) = self.selected {
+            properties.insert("toggle-type".to_owned(), Value::from("radio"));
+            properties.insert("toggle-state".to_owned(), Value::from(i32::from(selected)));
         }
         if let Some(shortcut) = &self.shortcut {
             let keys = shortcut.split('+').map(str::to_owned).collect::<Vec<_>>();

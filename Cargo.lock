@@ -3786,6 +3786,7 @@ dependencies = [
 name = "unbound-bench"
 version = "0.1.0"
 dependencies = [
+ "rustix 1.1.6",
  "smithay",
  "tempfile",
  "tracing",
@@ -4093,6 +4094,7 @@ dependencies = [
  "tracing",
  "unbound-fs",
  "unbound-golden",
+ "unbound-inbox",
  "unbound-l10n",
  "unbound-preview",
  "unbound-search",
@@ -4148,8 +4150,10 @@ dependencies = [
  "unbound-golden",
  "unbound-l10n",
  "unbound-log",
+ "unbound-test-bus",
  "unbound-toolkit",
  "unbound-xdg",
+ "zbus",
 ]
 
 [[package]]
@@ -4315,6 +4319,7 @@ dependencies = [
  "jiff",
  "tempfile",
  "tracing",
+ "unbound-inbox",
  "unbound-watch",
  "unbound-xdg",
 ]
@@ -4466,6 +4471,7 @@ dependencies = [
  "png",
  "tempfile",
  "tracing",
+ "unbound-inbox",
  "unbound-xdg",
 ]
 

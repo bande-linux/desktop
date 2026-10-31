@@ -10,6 +10,7 @@ use unbound_network::{JoinOutcome, ManualIpv4, NetworkManager};
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::{MatchRule, message};
 
+use crate::failure::unexpected;
 use crate::follow::Update;
 use crate::follow::{Updates, spawn};
 use crate::state::{Answer, BluetoothState, Joined, NetworkState, Question, WifiState};
@@ -50,7 +51,7 @@ pub enum BluetoothCommand {
 
 fn report<E: std::fmt::Display>(updates: &Updates, result: Result<(), E>) {
     if let Err(error) = result {
-        updates.send(Update::Failed(error.to_string()));
+        updates.send(unexpected(error));
     }
 }
 

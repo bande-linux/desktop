@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
@@ -44,6 +44,7 @@ jobs:
 
   test:
     name: ci/lavapipe-test
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/ci/')
     runs-on: [self-hosted, unbound]
     timeout-minutes: 30
     steps:
@@ -66,6 +67,7 @@ jobs:
 
   deb:
     name: ci/deb
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/ci/')
     runs-on: [self-hosted, unbound]
     timeout-minutes: 90
     env:
@@ -114,7 +116,23 @@ jobs:
             target/dist/unbound-compositor
             target/dist/unbound-bench
             target/dist/unbound-toolkit-bench
+            target/dist/unbound-idle
             target/dist/unbound-sample
+            target/dist/unbound-shell
+            target/dist/unbound-screenshot
+            target/dist/unbound-clipboard
+            target/dist/unbound-lock
+            target/dist/unbound-config
+            target/dist/unbound-power
+            target/dist/unbound-sound
+            target/dist/unbound-tray
+            target/dist/unbound-automount
+            target/dist/unbound-notify
+            target/dist/xdg-desktop-portal-unbound
+            target/dist/unbound-files
+            target/dist/unbound-settings
+            target/dist/unbound-term
+            target/dist/unbound-monitor
           if-no-files-found: error
       - name: Inspect the packages
         run: |
@@ -273,6 +291,7 @@ jobs:
 
   deb-all:
     name: ci/deb-all
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/ci/')
     runs-on: [self-hosted, unbound]
     timeout-minutes: 15
     steps:
@@ -339,6 +358,7 @@ jobs:
 
   vm:
     name: ci/vm
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/ci/')
     runs-on: [self-hosted, unbound-kvm]
     timeout-minutes: 90
     steps:
@@ -362,6 +382,7 @@ jobs:
 
   polkit:
     name: ci/polkit
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/ci/')
     runs-on: [self-hosted, unbound]
     timeout-minutes: 30
     steps:
@@ -415,7 +436,7 @@ jobs:
         with:
           name: perf-binaries
           path: target/release
-      - run: chmod +x target/release/unbound-*
+      - run: chmod +x target/release/*
       - name: Measure against the budgets in docs/decisions/0001-rendering.md
         shell: bash
         run: |
@@ -439,6 +460,22 @@ jobs:
         with:
           name: perf-toolkit
           path: perf-toolkit.json
+          if-no-files-found: ignore
+      - name: Install the runtime dependencies of an idle session
+        run: ci/apt-install.sh dbus-daemon libglib2.0-bin libpipewire-0.3-0t64 libpam0g
+      - name: Measure wakeups of an idle session against the budget
+        shell: bash
+        run: |
+          home=$(mktemp -d)
+          mkdir -m 700 "$home/run"
+          env -i PATH=/usr/bin:/bin HOME="$home" XDG_RUNTIME_DIR="$home/run" LANG=C.UTF-8 \
+            dbus-run-session --config-file=crates/testing/test-bus/data/session.conf -- \
+            target/release/unbound-idle --json perf-idle.json | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: perf-idle
+          path: perf-idle.json
           if-no-files-found: ignore
 
   publish:

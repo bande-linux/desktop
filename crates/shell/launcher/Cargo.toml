@@ -10,6 +10,7 @@ accesskit.workspace = true
 image.workspace = true
 tracing.workspace = true
 unbound-fs.workspace = true
+unbound-inbox.workspace = true
 unbound-l10n.workspace = true
 unbound-preview.workspace = true
 unbound-search.workspace = true

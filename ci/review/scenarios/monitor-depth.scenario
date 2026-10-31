@@ -1,0 +1,22 @@
+# Activity Monitor depth: the footer instrument, memory pressure, per-core strips, the inspector and the view filter.
+note "Activity Monitor while a build runs"
+key super+space
+wait 600ms
+type "activity"
+wait 500ms
+key enter
+wait-for-window "org.unbound.ActivityMonitor"
+wait 6s
+shot "cpu footer"
+note "Memory: pressure graph and what holds memory"
+key super+2
+wait 4s
+shot "memory footer"
+key super+3
+wait 2s
+shot "disk footer"
+key super+4
+wait 2s
+shot "network footer"
+key super+1
+wait 1s

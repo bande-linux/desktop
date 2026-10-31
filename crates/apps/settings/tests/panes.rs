@@ -174,6 +174,18 @@ fn wifi_lists_networks_joins_open_ones_and_asks_for_passwords() {
     pump(&mut view, &feed, &router, |view| {
         find(view, Role::Button, "Cafe").is_none()
     });
+    assert!(has_text(&mut view, "Wi-Fi is off"));
+    assert!(has_text(&mut view, "Turn on Wi-Fi to see networks nearby."));
+
+    let power = find(&mut view, Role::Switch, "Wi-Fi").expect("Wi-Fi switch");
+    click(&mut view, power);
+    pump(&mut view, &feed, &router, |_| {
+        fake.wireless_enabled().expect("manager")
+    });
+    pump(&mut view, &feed, &router, |view| {
+        find(view, Role::Button, "Cafe").is_some()
+    });
+    assert!(!has_text(&mut view, "Wi-Fi is off"));
 }
 
 #[test]
@@ -401,13 +413,14 @@ fn a_display_change_keeps_its_other_settings_and_only_offers_what_the_panel_can(
     )])));
     open(&mut view, "Displays");
 
-    let scales = nodes(&mut view)
+    let scales: Vec<Option<String>> = nodes(&mut view)
         .into_iter()
         .filter(|(_, node)| {
-            node.role() == Role::RadioGroup && node.label() == Some("Size of text and controls")
+            node.role() == Role::ComboBox && node.label() == Some("Size of text and controls")
         })
-        .count();
-    assert_eq!(scales, 2);
+        .map(|(_, node)| node.value().map(str::to_owned))
+        .collect();
+    assert_eq!(scales, [Some("Auto".to_owned()), Some("Auto".to_owned())]);
     let rates: Vec<Option<String>> = nodes(&mut view)
         .into_iter()
         .filter(|(_, node)| node.role() == Role::RadioGroup && node.label() == Some("Refresh rate"))
@@ -416,13 +429,15 @@ fn a_display_change_keeps_its_other_settings_and_only_offers_what_the_panel_can(
     assert_eq!(rates, [Some("120 Hz".to_owned())]);
     assert!(find(&mut view, Role::Switch, "Variable refresh rate").is_some());
 
-    let scale = find(&mut view, Role::RadioGroup, "Size of text and controls").expect("scale");
+    let scale = find(&mut view, Role::ComboBox, "Size of text and controls").expect("scale");
     view.perform(&ActionRequest {
-        action: Action::Increment,
+        action: Action::Click,
         target_tree: TreeId::ROOT,
         target_node: scale,
         data: None,
     });
+    assert!(view.ui().menu_action("1"), "100% is the second choice");
+    view.settle();
     assert_eq!(
         view.take_commands(),
         [Command::Display(
@@ -551,7 +566,7 @@ fn the_wallpaper_pane_offers_the_bundled_pairs_and_a_picture_of_ones_own() {
             dark: String::new(),
         },
     )]));
-    open(&mut view, "Wallpaper");
+    open(&mut view, "Appearance");
     assert_eq!(
         value_of(&mut view, Role::RadioGroup, "Wallpaper").as_deref(),
         Some("Drift")
@@ -725,9 +740,18 @@ fn escape_stops_adding_a_layout_and_a_full_list_offers_no_more() {
 }
 
 #[test]
-fn the_keyboard_pane_lists_the_desktop_shortcuts_with_key_symbols() {
+fn the_desktop_shortcuts_live_on_their_own_page_and_switching_sources_shows_its_keys() {
     let mut view = keyboard_view(&["se"]);
+    assert!(!has_text(&mut view, "Alt+Super+Space"));
+    assert!(!has_text(&mut view, "Lock Screen"));
+    assert!(!has_text(&mut view, "⌘"));
+
+    let mut view = keyboard_view(&["se", "us"]);
     assert!(has_text(&mut view, "Alt+Super+Space"));
+    assert!(!has_text(&mut view, "Lock Screen"));
+    let shortcuts = find(&mut view, Role::Button, "Keyboard Shortcuts").expect("row");
+    click(&mut view, shortcuts);
+    assert_eq!(view.selected_pane(), PaneId::KeyboardShortcuts);
     assert!(has_text(&mut view, "Lock Screen"));
 }
 

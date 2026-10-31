@@ -4,8 +4,10 @@ use std::sync::mpsc::{self, Sender};
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
+use crate::failure::failed;
 use crate::follow::{Update, Updates, spawn};
 use crate::storage::disk;
+use unbound_settings_panes::SettingId;
 
 const HOSTNAME: &str = "org.freedesktop.hostname1";
 const HOSTNAME_PATH: &str = "/org/freedesktop/hostname1";
@@ -241,7 +243,7 @@ pub fn follow_about(system: &Connection, updates: Updates) -> Sender<AboutComman
             match command {
                 AboutCommand::Rename(name) => {
                     if let Err(error) = rename(&hostname, &name) {
-                        updates.send(Update::Failed(error.to_string()));
+                        updates.send(failed(SettingId::ComputerName, &error, "service-hostname"));
                         updates.send(Update::About(read_about(&hostname)));
                     }
                 }

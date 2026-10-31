@@ -9,6 +9,7 @@ use unbound_notify::Urgency;
 use unbound_notify::client::{Request, notify};
 
 use crate::L10N;
+use crate::failure::{sentence, unexpected};
 use crate::follow::{Update, Updates, spawn};
 
 const PACKAGEKIT: &str = "org.freedesktop.PackageKit";
@@ -223,7 +224,7 @@ fn install(system: &Connection, ids: Vec<String>, updates: &Updates) -> Software
         Ok(outcome) => failed(&outcome).unwrap_or(SoftwareState::Installed {
             restart: outcome.restart,
         }),
-        Err(error) => SoftwareState::Failed(error.to_string()),
+        Err(error) => SoftwareState::Failed(sentence(&error, "service-updates")),
     }
 }
 
@@ -291,7 +292,7 @@ pub fn follow_software(system: &Connection, updates: Updates) -> Sender<Software
                     if let Err(error) =
                         LoginProxyBlocking::new(&system).and_then(|login| login.reboot(true))
                     {
-                        updates.send(Update::Failed(error.to_string()));
+                        updates.send(unexpected(error));
                     }
                     continue;
                 }

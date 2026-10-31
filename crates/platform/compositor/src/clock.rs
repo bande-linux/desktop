@@ -104,6 +104,7 @@ impl FrameClock {
 pub enum Submission {
     AtVblank,
     AwaitingFlip,
+    Paused,
 }
 
 pub trait FrameOutput {
@@ -121,7 +122,7 @@ enum Phase {
     Idle,
     Waiting(Vblank),
     Rendered(Vblank),
-    Flipping,
+    Held,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -206,12 +207,12 @@ impl FrameScheduler {
                     now = clock();
                     self.clock.record_render(deadline, started, now);
                     self.phase = match submission {
-                        Submission::AwaitingFlip => Phase::Flipping,
+                        Submission::AwaitingFlip | Submission::Paused => Phase::Held,
                         Submission::AtVblank if now <= vblank.time => Phase::Rendered(vblank),
                         Submission::AtVblank => Phase::Rendered(self.clock.vblank_after(now)),
                     };
                 }
-                Phase::Flipping => {
+                Phase::Held => {
                     return Ok(Poll {
                         wake_at: None,
                         presented,

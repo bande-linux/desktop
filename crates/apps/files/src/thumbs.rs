@@ -88,7 +88,7 @@ impl Thumbs {
     }
 
     pub(crate) fn take(&mut self) -> bool {
-        let Some(service) = &self.service else {
+        let Some(service) = &mut self.service else {
             return false;
         };
         let done = service.take();

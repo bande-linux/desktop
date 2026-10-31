@@ -2,13 +2,16 @@ use std::sync::mpsc::{self, Sender};
 
 use zbus::blocking::Connection;
 
+use unbound_settings_panes::PaneId;
+use unbound_toolkit::TextRole;
 use unbound_toolkit::ui::{Label, SegmentedControl, Toggle, Widget, WidgetId};
 
 use crate::L10N;
+use crate::failure::unexpected;
 use crate::follow::{Update, Updates, spawn};
 use crate::pages::{Widgets, boxed, muted_row};
 use crate::view::{Anchor, Intent, Intents, SettingsView, intent};
-use crate::widgets::{Row, Text, Tone};
+use crate::widgets::{Card, HEADER_SYMBOL, Header, Row, Text, Tone};
 
 type WireApp = (String, String, bool, String, bool);
 
@@ -76,7 +79,7 @@ pub fn follow_app_notifications(
                 && let Err(error) =
                     rules.set_app_rule(&app.group, app.allow, &app.banners, app.in_center)
             {
-                updates.send(Update::Failed(error.to_string()));
+                updates.send(unexpected(error));
             }
             match read(&rules) {
                 Ok(apps) => {
@@ -191,20 +194,40 @@ impl SettingsView {
         }
         let mut rows = Vec::new();
         for app in apps {
-            let expanded = self.expanded_app.as_deref() == Some(app.group.as_str());
-            let mut expand = intent(&self.intents, Intent::ExpandApp);
-            let target = (!expanded).then(|| app.group.clone());
+            let mut open = intent(&self.intents, Intent::OpenApp);
+            let group = app.group.clone();
             let row = Row::new(
                 Text::new(&app.name, Tone::Primary),
-                Some(boxed(Label::new(if expanded { "⌄" } else { "›" }))),
+                Some(boxed(Label::new("›"))),
             )
             .detail(Text::new(&summary(&app), Tone::Muted).caption())
-            .on_activate(move || expand(target.clone()));
+            .on_activate(move || open(group.clone()));
             rows.push(self.item_row(format!("app:{}", app.group), row));
-            if expanded {
-                rows.extend(self.app_rule_rows(&app));
-            }
         }
         rows
+    }
+
+    pub(crate) fn app_page(&mut self) -> Option<Widgets> {
+        let group = self.app_page.clone()?;
+        let app = self
+            .notification_apps
+            .as_ref()?
+            .iter()
+            .find(|app| app.group == group)?
+            .clone();
+        let mut page: Widgets = self
+            .back_button(PaneId::Notifications)
+            .into_iter()
+            .collect();
+        let ink = self.ui().context().palette.ink;
+        let symbol = self.symbol(PaneId::Notifications.symbol(), HEADER_SYMBOL, ink);
+        page.push(boxed(Header::new(
+            symbol,
+            Text::new(&app.name, Tone::Primary).role(TextRole::Title),
+            &summary(&app),
+            None,
+        )));
+        page.push(boxed(Card::new(self.app_rule_rows(&app))));
+        Some(page)
     }
 }

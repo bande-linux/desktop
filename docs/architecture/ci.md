@@ -37,16 +37,11 @@ the `ci-builder` image below exists.
 
 ## Workflow (`.github/workflows/ci.yml`)
 
-Which jobs run depends on the event, so the three runners spend their time where it matters:
-
-- **Full run** (every job below): pushes to `main`, pushes to branches named `ci/**`, pull
-  requests and manual dispatch (`gh workflow run ci.yml --ref <branch>`).
-- **Quick run** (`ci/lint` only): pushes to any other branch. Push work branches freely; for
-  the full run a branch needs before it merges, open a pull request, push it to `ci/<topic>`
-  as well, or dispatch the workflow on it.
-
-Runs are grouped by event and ref: a newer push to a branch cancels that branch's run in
-progress, while a `main` run is never cancelled mid-publish (the next one waits for it).
+CI runs only when a version is tagged (`git tag v0.1.0 && git push origin v0.1.0`) or when it is
+dispatched by hand (`gh workflow run ci.yml --ref <branch or tag>`). Pushes to `main` and to other
+branches start no runs; day-to-day correctness comes from the local gate (`cargo fmt --check`,
+workspace clippy with `-D warnings`, and the workspace tests on the hermetic bus) before every
+push to `main`. A run is never cancelled by a newer one.
 
 Job names are the status-check contexts:
 
@@ -100,14 +95,8 @@ Job names are the status-check contexts:
   idle memory and reports the wall-clock numbers against the budgets in
   [`../decisions/0001-rendering.md`](../decisions/0001-rendering.md); the tables go to the job
   summary and `perf.json` and `perf-toolkit.json` are uploaded.
-- `ci/publish` (on `main`, and on a manually dispatched tag): when every job above is green,
-  starts the publish of the packages in `unbound-linux/apt` (the testing channel).
-- `ci/alert` (on pushes to `main`): when a job failed or timed out, opens the issue "CI is red
-  on main" with links to the failing jobs, or comments on it if it is already open; when a
-  later run passes, comments with the green run and closes it (`ci/red-main.sh`).
-
-`.github/workflows/release.yml` (`release/promote`) runs on a version tag: it finds the green
-`main` build of the tagged commit and starts the release publish in `unbound-linux/apt`.
+- `ci/publish` (on a tag): when every job above is green,
+  starts the release publish of the packages in `unbound-linux/apt`.
 
 `ci/hil` holds scripts for hardware-in-the-loop tests that boot a guest test on an Apple Silicon
 Mac over debug USB; they are not part of the workflow.

@@ -15,7 +15,7 @@ use smithay::utils::{Clock, Logical, Monotonic, Point, Rectangle, SERIAL_COUNTER
 use unbound_spring::Spring;
 
 use crate::motion::Look;
-use crate::state::{Rect, State};
+use crate::state::State;
 use crate::tile::Tile;
 
 #[derive(Debug, Clone, Copy)]
@@ -36,7 +36,7 @@ enum Undo {
     Move {
         placement: Placement,
         workspace: u64,
-        restore: Option<Rect>,
+        restore: Option<Rectangle<i32, Logical>>,
     },
     Resize,
 }
@@ -54,7 +54,7 @@ pub(crate) struct WindowGrab {
 const BTN_LEFT: u32 = 0x110;
 const BTN_RIGHT: u32 = 0x111;
 
-fn edge_toward(window: Rect, point: Point<i32, Logical>) -> ResizeEdge {
+fn edge_toward(window: Rectangle<i32, Logical>, point: Point<i32, Logical>) -> ResizeEdge {
     let third = |start: i32, length: i32, at: i32| {
         let offset = at - start;
         if offset * 3 < length {
@@ -65,8 +65,8 @@ fn edge_toward(window: Rect, point: Point<i32, Logical>) -> ResizeEdge {
             0
         }
     };
-    let horizontal = third(window.location.x, window.size.w, point.x);
-    let vertical = third(window.location.y, window.size.h, point.y);
+    let horizontal = third(window.loc.x, window.size.w, point.x);
+    let vertical = third(window.loc.y, window.size.h, point.y);
     match (horizontal, vertical) {
         (-1, -1) => ResizeEdge::TopLeft,
         (-1, 1) => ResizeEdge::BottomLeft,
@@ -285,7 +285,7 @@ impl State {
         surface: &WlSurface,
         placement: Placement,
         workspace: u64,
-        restore: Option<Rect>,
+        restore: Option<Rectangle<i32, Logical>>,
     ) {
         let Some(index) = self.window_index(surface) else {
             return;
@@ -302,9 +302,9 @@ impl State {
         };
         match placement {
             Placement::Free(location) => {
-                let from = self.windows[index].geometry().map(|rect| {
-                    Look::shown(Rectangle::new(rect.location.to_f64(), rect.size.to_f64()))
-                });
+                let from = self.windows[index]
+                    .geometry()
+                    .map(|rect| Look::shown(rect.to_f64()));
                 let window = &mut self.windows[index];
                 window.location = location;
                 window.pending_location = None;
@@ -469,15 +469,13 @@ impl PointerGrab<State> for WindowGrab {
 mod tests {
     use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel::ResizeEdge;
 
+    use smithay::utils::Rectangle;
+
     use super::edge_toward;
-    use crate::state::Rect;
 
     #[test]
     fn the_resize_edge_follows_the_third_of_the_window_under_the_pointer() {
-        let window = Rect {
-            location: (100, 100).into(),
-            size: (300, 300).into(),
-        };
+        let window = Rectangle::new((100, 100).into(), (300, 300).into());
         let edge = |x, y| edge_toward(window, (x, y).into());
         assert_eq!(edge(110, 110), ResizeEdge::TopLeft);
         assert_eq!(edge(250, 110), ResizeEdge::Top);

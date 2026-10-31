@@ -4,7 +4,7 @@ use std::time::Duration;
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
-use smithay::utils::{Point, Rectangle};
+use smithay::utils::Point;
 use unbound_protocols::server::unbound_shell_v1::UnboundShellV1;
 use unbound_spring::{Animation, Spring, State as Phase};
 
@@ -200,7 +200,7 @@ impl State {
 
     pub(crate) fn on_view(&self, window: &Window) -> bool {
         let output = self.screen_rect(self.screen_of(window));
-        let output = Rectangle::new(output.location.to_f64(), output.size.to_f64());
+        let output = output.to_f64();
         match self.presented(window) {
             Some(look) => look.alpha > 0.0 && look.rect.overlaps(output),
             None => true,
@@ -223,7 +223,7 @@ impl State {
 
     pub(crate) fn presented(&self, window: &Window) -> Option<Look> {
         let geometry = window.geometry()?;
-        let real = Rectangle::new(geometry.location.to_f64(), geometry.size.to_f64());
+        let real = geometry.to_f64();
         let animated = window.shown_look();
         let offset = self.workspace_offset(window);
         let screen = self.screen_of(window);
@@ -335,8 +335,7 @@ impl State {
             Some(motion) => motion.translate(shift),
             None => {
                 let from = self.windows[index].geometry().map(|rect| {
-                    let mut look =
-                        Look::shown(Rectangle::new(rect.location.to_f64(), rect.size.to_f64()));
+                    let mut look = Look::shown(rect.to_f64());
                     look.rect.loc.x += shift;
                     look
                 });

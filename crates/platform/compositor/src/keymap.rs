@@ -257,8 +257,8 @@ impl State {
             .filter(|hud| hud.screen == screen)?;
         let output = self.screen_rect(screen);
         let location = Point::<f64, Logical>::from((
-            f64::from(output.location.x) + (f64::from(output.size.w) - hud.label.size.w) / 2.0,
-            f64::from(output.location.y) + (f64::from(output.size.h) - hud.label.size.h) / 2.0,
+            f64::from(output.loc.x) + (f64::from(output.size.w) - hud.label.size.w) / 2.0,
+            f64::from(output.loc.y) + (f64::from(output.size.h) - hud.label.size.h) / 2.0,
         ))
         .to_physical(scale)
         .to_i32_round::<i32>()

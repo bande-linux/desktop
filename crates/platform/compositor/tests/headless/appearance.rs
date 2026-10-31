@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::mpsc;
 use std::time::Duration;
 
@@ -17,12 +18,11 @@ struct Settings;
 
 #[zbus::interface(name = "org.freedesktop.portal.Settings")]
 impl Settings {
-    fn read_one(&self, namespace: String, key: String) -> zbus::fdo::Result<OwnedValue> {
-        if namespace == APPEARANCE && key == "reduced-motion" {
-            return OwnedValue::try_from(Value::from(1u32))
-                .map_err(|error| zbus::fdo::Error::Failed(error.to_string()));
-        }
-        Err(zbus::fdo::Error::Failed("no such setting".to_owned()))
+    fn read_all(&self, _namespaces: Vec<String>) -> HashMap<String, HashMap<String, OwnedValue>> {
+        HashMap::from([(
+            APPEARANCE.to_owned(),
+            HashMap::from([("reduced-motion".to_owned(), OwnedValue::from(1u32))]),
+        )])
     }
 
     #[zbus(signal)]
@@ -47,8 +47,7 @@ fn reduce_motion_dark_mode_and_text_size_follow_the_portals_appearance_keys() {
 
     follow_appearance(bus.connect().expect("compositor connection"), move |look| {
         sender.send(look).is_ok()
-    })
-    .expect("follow the portal");
+    });
     let first = readings.recv_timeout(TIMEOUT).expect("first reading");
     let emitter = SignalEmitter::new(portal.inner(), PORTAL_PATH).expect("emitter");
     for (namespace, key, value) in [

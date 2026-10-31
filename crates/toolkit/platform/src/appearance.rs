@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::net::UnixStream;
@@ -6,17 +5,11 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread;
 use std::time::Duration;
 
+use unbound_bus::portal_settings::{self, APPEARANCE, PREFER_DARK, UNBOUND_APPEARANCE};
 use unbound_graphics::{Accent, Appearance, Color, Contrast, Scheme, TextSize};
-use zbus::blocking::{Connection, Proxy};
+use zbus::blocking::Connection;
 use zbus::zvariant::OwnedValue;
 
-const PORTAL: &str = "org.freedesktop.portal.Desktop";
-const PORTAL_PATH: &str = "/org/freedesktop/portal/desktop";
-const SETTINGS: &str = "org.freedesktop.portal.Settings";
-const NAMESPACE: &str = "org.freedesktop.appearance";
-const UNBOUND_NAMESPACE: &str = "org.unbound.appearance";
-const NAMESPACES: [&str; 2] = [NAMESPACE, UNBOUND_NAMESPACE];
-const PREFER_DARK: u32 = 1;
 const REDUCE: u32 = 1;
 const HIGH_CONTRAST: u32 = 1;
 const FIRST_READING: Duration = Duration::from_millis(500);
@@ -67,70 +60,50 @@ impl AppearanceWatch {
     }
 }
 
-fn follow(sender: &Sender<Appearance>, wake: &UnixStream) -> zbus::Result<()> {
-    let connection = Connection::session()?;
-    let settings = Proxy::new(&connection, PORTAL, PORTAL_PATH, SETTINGS)?;
-    let changes = settings.receive_signal("SettingChanged")?;
-    let mut appearance = Appearance::default();
-    let all: HashMap<String, HashMap<String, OwnedValue>> =
-        settings.call("ReadAll", &(&NAMESPACES[..],))?;
-    for (namespace, values) in all {
-        for (key, value) in values {
-            apply(&mut appearance, &namespace, &key, value);
-        }
-    }
-    if !publish(sender, wake, appearance) {
-        return Ok(());
-    }
-    for change in changes {
-        let (namespace, key, value): (String, String, OwnedValue) = change.body().deserialize()?;
-        if apply(&mut appearance, &namespace, &key, value) && !publish(sender, wake, appearance) {
-            break;
-        }
-    }
-    Ok(())
+fn follow(sender: &Sender<Appearance>, mut wake: &UnixStream) -> zbus::Result<()> {
+    portal_settings::follow(
+        &Connection::session()?,
+        &[APPEARANCE, UNBOUND_APPEARANCE],
+        Appearance::default(),
+        apply,
+        |appearance| sender.send(appearance).is_ok() && wake.write_all(&[0]).is_ok(),
+    )
 }
 
-fn publish(sender: &Sender<Appearance>, mut wake: &UnixStream, appearance: Appearance) -> bool {
-    sender.send(appearance).is_ok() && wake.write_all(&[0]).is_ok()
-}
-
-fn apply(appearance: &mut Appearance, namespace: &str, key: &str, value: OwnedValue) -> bool {
-    let before = *appearance;
+fn apply(appearance: &mut Appearance, namespace: &str, key: &str, value: OwnedValue) {
     match (namespace, key) {
-        (NAMESPACE, "color-scheme") => {
+        (APPEARANCE, "color-scheme") => {
             appearance.scheme = match u32::try_from(&value) {
                 Ok(PREFER_DARK) => Scheme::Dark,
                 _ => Scheme::Light,
             };
         }
-        (NAMESPACE, "accent-color") => {
+        (APPEARANCE, "accent-color") => {
             appearance.accent = <(f64, f64, f64)>::try_from(value)
                 .ok()
                 .and_then(|(red, green, blue)| color(&[red, green, blue]))
                 .map_or_else(Accent::default, Accent::nearest);
         }
-        (NAMESPACE, "contrast") => {
+        (APPEARANCE, "contrast") => {
             appearance.contrast = match u32::try_from(&value) {
                 Ok(HIGH_CONTRAST) => Contrast::Increased,
                 _ => Contrast::Standard,
             };
         }
-        (NAMESPACE, "reduced-motion") => {
+        (APPEARANCE, "reduced-motion") => {
             appearance.reduce_motion = u32::try_from(&value) == Ok(REDUCE);
         }
-        (UNBOUND_NAMESPACE, "text-size") => {
+        (UNBOUND_APPEARANCE, "text-size") => {
             appearance.text_size =
                 u32::try_from(&value).map_or(TextSize::DEFAULT, TextSize::from_percent);
         }
-        (UNBOUND_NAMESPACE, "frame-tint") => {
+        (UNBOUND_APPEARANCE, "frame-tint") => {
             appearance.frame_tint = Vec::<f64>::try_from(value)
                 .ok()
                 .and_then(|channels| color(&channels));
         }
         _ => {}
     }
-    *appearance != before
 }
 
 fn color(channels: &[f64]) -> Option<Color> {

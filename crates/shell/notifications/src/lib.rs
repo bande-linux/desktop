@@ -19,7 +19,7 @@ use unbound_toolkit::{
 };
 
 use calendar::{Calendar, Turn};
-use card::{CLOSE_REACH, contains};
+use card::CLOSE_REACH;
 pub use card::{Card, DEFAULT_ACTION, Part, Sender, age_label};
 pub use client::{Notifications, role};
 
@@ -718,7 +718,7 @@ impl Screen {
 
     fn center_target_at(&self, point: Point, now: Instant) -> Option<Target> {
         let panel = self.panel_rect(now);
-        if !contains(panel, point) {
+        if !panel.contains(point) {
             return None;
         }
         let local = Point::new(
@@ -731,7 +731,7 @@ impl Screen {
                 Row::Title {
                     clear_all: Some((_, rect)),
                     ..
-                } if contains(*rect, inside) => return Some(Target::ClearAll),
+                } if rect.contains(inside) => return Some(Target::ClearAll),
                 Row::Calendar(calendar) => {
                     if let Some(turn) = calendar.turn_at(inside) {
                         return Some(Target::Turn(turn));
@@ -743,10 +743,10 @@ impl Screen {
                     clear,
                     ..
                 } => {
-                    if contains(*rect, inside) {
+                    if rect.contains(inside) {
                         return Some(Target::ShowLess(group.clone()));
                     }
-                    if contains(*clear, inside) {
+                    if clear.contains(inside) {
                         return Some(Target::ClearGroup(group.clone()));
                     }
                 }
@@ -880,7 +880,7 @@ impl Screen {
                 self.pointer = Some(pointer.position);
                 if self.open {
                     self.pressed = self.center_target_at(pointer.position, now);
-                    if self.pressed.is_none() && !contains(self.panel_rect(now), pointer.position) {
+                    if self.pressed.is_none() && !self.panel_rect(now).contains(pointer.position) {
                         self.close(now);
                     }
                     return true;

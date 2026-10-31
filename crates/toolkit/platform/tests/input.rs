@@ -1224,13 +1224,6 @@ fn long_menu() -> Menu {
     )
 }
 
-fn inside(outer: unbound_compositor::Rect, inner: unbound_compositor::Rect) -> bool {
-    inner.location.x >= outer.location.x
-        && inner.location.y >= outer.location.y
-        && inner.location.x + inner.size.w <= outer.location.x + outer.size.w
-        && inner.location.y + inner.size.h <= outer.location.y + outer.size.h
-}
-
 impl Desktop {
     fn desktop_layer(&mut self, menu: fn() -> Menu) -> Client {
         let mut client = self.open_with_menu(
@@ -1308,7 +1301,7 @@ fn a_desktop_menu_opened_in_any_corner_or_edge_stays_on_the_screen_at_1x_and_1_5
             desktop.open_menu_at(&mut client, at, 1);
             let placed = desktop.server.popup_rects()[0];
             assert!(
-                inside(screen, placed),
+                screen.contains_rect(placed),
                 "at {scale}x a menu at {at:?} lands at {placed:?}"
             );
             desktop.close_menus(&mut client);
@@ -1340,9 +1333,9 @@ fn a_submenu_without_room_on_the_right_opens_on_the_left_overlapping_its_menu() 
     let [menu, submenu] = rects[..] else {
         panic!("{rects:?}");
     };
-    assert_eq!(menu.location.x, at as i32);
-    assert!(inside(screen, submenu), "{submenu:?}");
-    assert_eq!(submenu.location.x + submenu.size.w, menu.location.x + 2);
+    assert_eq!(menu.loc.x, at as i32);
+    assert!(screen.contains_rect(submenu), "{submenu:?}");
+    assert_eq!(submenu.loc.x + submenu.size.w, menu.loc.x + 2);
 }
 
 #[test]
@@ -1352,9 +1345,9 @@ fn a_menu_taller_than_the_screen_is_shortened_and_reaches_every_item_by_keyboard
     let screen = desktop.server.usable_area();
     desktop.open_menu_at(&mut client, (20.0, 20.0), 1);
     let placed = desktop.server.popup_rects()[0];
-    assert_eq!(placed.location.y, screen.location.y);
+    assert_eq!(placed.loc.y, screen.loc.y);
     assert_eq!(placed.size.h, screen.size.h);
-    assert!(inside(screen, placed));
+    assert!(screen.contains_rect(placed));
 
     desktop.type_keys(&[KEY_END]);
     desktop.type_keys(&[KEY_ENTER]);
@@ -1376,7 +1369,7 @@ fn a_menu_taller_than_the_screen_is_shortened_and_reaches_every_item_by_keyboard
             .value(Axis::Vertical, 3000.0),
     );
     desktop.settle(&mut [&mut client]);
-    let middle = f64::from(placed.location.y + placed.size.h / 2);
+    let middle = f64::from(placed.loc.y + placed.size.h / 2);
     desktop
         .server
         .move_pointer_to(Point::from((40.0, middle)), 0);

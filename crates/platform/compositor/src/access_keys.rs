@@ -179,11 +179,8 @@ impl AccessKeys {
     }
 }
 
-fn confirm_sticky_keys(turn_on: bool) {
+fn confirm_sticky_keys(session: Connection, turn_on: bool) {
     thread::spawn(move || {
-        let Ok(session) = Connection::session() else {
-            return;
-        };
         let (title, body, accept) = if turn_on {
             (
                 L10N.tr("sticky-keys-turn-on-title"),
@@ -253,8 +250,10 @@ fn confirm_sticky_keys(turn_on: bool) {
 impl State {
     pub(crate) fn access_keys(&mut self, code: u32, pressed: bool, time: u32) -> Vec<Delivery> {
         self.keys.last_time = time;
-        if self.keys.count_shift(code, pressed, time) {
-            confirm_sticky_keys(!self.keys.sticky);
+        if self.keys.count_shift(code, pressed, time)
+            && let Some(session) = self.assistive.session_bus.clone()
+        {
+            confirm_sticky_keys(session, !self.keys.sticky);
         }
         if self.keys.bounce(code, pressed, time) {
             self.keys.swallowed.push(code);

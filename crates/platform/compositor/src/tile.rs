@@ -9,7 +9,7 @@ use unbound_spring::Spring;
 
 use crate::motion::{Look, Motion, Tick};
 use crate::scene::Casting;
-use crate::state::{Compositor, Rect, State};
+use crate::state::{Compositor, State};
 
 pub(crate) const REST: Duration = Duration::from_millis(150);
 const REST_DISTANCE: f64 = 2.0;
@@ -89,23 +89,20 @@ impl Tile {
         }
     }
 
-    pub(crate) fn rect(self, area: Rect) -> Rect {
+    pub(crate) fn rect(self, area: Rectangle<i32, Logical>) -> Rectangle<i32, Logical> {
         let left_width = area.size.w / 2;
         let top_height = area.size.h / 2;
         let (x, width) = if self.on_left() {
-            (area.location.x, left_width)
+            (area.loc.x, left_width)
         } else {
-            (area.location.x + left_width, area.size.w - left_width)
+            (area.loc.x + left_width, area.size.w - left_width)
         };
         let (y, height) = match self.row() {
-            Row::Whole => (area.location.y, area.size.h),
-            Row::Top => (area.location.y, top_height),
-            Row::Bottom => (area.location.y + top_height, area.size.h - top_height),
+            Row::Whole => (area.loc.y, area.size.h),
+            Row::Top => (area.loc.y, top_height),
+            Row::Bottom => (area.loc.y + top_height, area.size.h - top_height),
         };
-        Rect {
-            location: (x, y).into(),
-            size: (width, height).into(),
-        }
+        Rectangle::new((x, y).into(), (width, height).into())
     }
 }
 
@@ -133,11 +130,15 @@ fn placing(tile: Option<Tile>, zoomed: bool, direction: Direction) -> Option<Pla
     }
 }
 
-pub(crate) fn snap_at(pointer: Point<f64, Logical>, output: Rect, area: Rect) -> Option<Snap> {
-    let left = pointer.x <= f64::from(output.location.x) + EDGE_REACH;
-    let right = pointer.x >= f64::from(output.location.x + output.size.w) - 1.0 - EDGE_REACH;
-    let upper = pointer.y < f64::from(area.location.y + CORNER_REACH);
-    let lower = pointer.y >= f64::from(area.location.y + area.size.h - CORNER_REACH);
+pub(crate) fn snap_at(
+    pointer: Point<f64, Logical>,
+    output: Rectangle<i32, Logical>,
+    area: Rectangle<i32, Logical>,
+) -> Option<Snap> {
+    let left = pointer.x <= f64::from(output.loc.x) + EDGE_REACH;
+    let right = pointer.x >= f64::from(output.loc.x + output.size.w) - 1.0 - EDGE_REACH;
+    let upper = pointer.y < f64::from(area.loc.y + CORNER_REACH);
+    let lower = pointer.y >= f64::from(area.loc.y + area.size.h - CORNER_REACH);
     let row = if upper {
         Row::Top
     } else if lower {
@@ -148,7 +149,7 @@ pub(crate) fn snap_at(pointer: Point<f64, Logical>, output: Rect, area: Rect) ->
     if left || right {
         return Some(Snap::Tile(Tile::on_side(left, row)));
     }
-    (pointer.y <= f64::from(area.location.y) + EDGE_REACH).then_some(Snap::Zoom)
+    (pointer.y <= f64::from(area.loc.y) + EDGE_REACH).then_some(Snap::Zoom)
 }
 
 pub(crate) struct SnapDrag {
@@ -174,7 +175,7 @@ pub(crate) struct Preview {
 }
 
 impl State {
-    fn snap_rect(&self, snap: Snap) -> Rect {
+    fn snap_rect(&self, snap: Snap) -> Rectangle<i32, Logical> {
         let area = self.usable_area(self.pointer_screen());
         match snap {
             Snap::Tile(tile) => tile.rect(area),
@@ -205,12 +206,12 @@ impl State {
         window.request_size(Some(target.size));
         window.tile = Some((tile, target));
         if let Some(serial) = window.configure() {
-            window.pending_location = Some((serial, target.location));
+            window.pending_location = Some((serial, target.loc));
         }
         self.animate_window(index, Spring::STANDARD, None);
     }
 
-    pub(crate) fn untile(&mut self, index: usize) -> Option<Rect> {
+    pub(crate) fn untile(&mut self, index: usize) -> Option<Rectangle<i32, Logical>> {
         let window = &mut self.windows[index];
         window.tile.take()?;
         let restore = window.restore.take();
@@ -222,7 +223,7 @@ impl State {
         window.request_size(restore.map(|restore| restore.size));
         let serial = window.configure();
         if let (Some(serial), Some(restore)) = (serial, restore) {
-            window.pending_location = Some((serial, restore.location));
+            window.pending_location = Some((serial, restore.loc));
         }
         restore
     }
@@ -292,13 +293,13 @@ impl State {
         }
     }
 
-    pub(crate) fn share_tiled_edge(&mut self, index: usize, rect: Rect) {
+    pub(crate) fn share_tiled_edge(&mut self, index: usize, rect: Rectangle<i32, Logical>) {
         let Some((tile, old)) = self.windows[index].tile else {
             return;
         };
         self.windows[index].tile = Some((tile, rect));
-        let right = |rect: Rect| rect.location.x + rect.size.w;
-        let bottom = |rect: Rect| rect.location.y + rect.size.h;
+        let right = |rect: Rectangle<i32, Logical>| rect.loc.x + rect.size.w;
+        let bottom = |rect: Rectangle<i32, Logical>| rect.loc.y + rect.size.h;
         for neighbor in 0..self.windows.len() {
             let Some((their_tile, theirs)) = self.windows[neighbor].tile else {
                 continue;
@@ -310,24 +311,24 @@ impl State {
                 continue;
             }
             let mut shared = theirs;
-            if tile.on_left() && !their_tile.on_left() && theirs.location.x == right(old) {
-                shared.location.x = right(rect);
+            if tile.on_left() && !their_tile.on_left() && theirs.loc.x == right(old) {
+                shared.loc.x = right(rect);
                 shared.size.w = right(theirs) - right(rect);
-            } else if !tile.on_left() && their_tile.on_left() && right(theirs) == old.location.x {
-                shared.size.w = rect.location.x - theirs.location.x;
+            } else if !tile.on_left() && their_tile.on_left() && right(theirs) == old.loc.x {
+                shared.size.w = rect.loc.x - theirs.loc.x;
             } else if tile.on_left() == their_tile.on_left()
                 && tile.row() == Row::Top
                 && their_tile.row() == Row::Bottom
-                && theirs.location.y == bottom(old)
+                && theirs.loc.y == bottom(old)
             {
-                shared.location.y = bottom(rect);
+                shared.loc.y = bottom(rect);
                 shared.size.h = bottom(theirs) - bottom(rect);
             } else if tile.on_left() == their_tile.on_left()
                 && tile.row() == Row::Bottom
                 && their_tile.row() == Row::Top
-                && bottom(theirs) == old.location.y
+                && bottom(theirs) == old.loc.y
             {
-                shared.size.h = rect.location.y - theirs.location.y;
+                shared.size.h = rect.loc.y - theirs.loc.y;
             } else {
                 continue;
             }
@@ -335,7 +336,7 @@ impl State {
             window.tile = Some((their_tile, shared));
             window.request_size(Some(shared.size));
             if let Some(serial) = window.configure() {
-                window.pending_location = Some((serial, shared.location));
+                window.pending_location = Some((serial, shared.loc));
             }
         }
     }
@@ -382,10 +383,7 @@ impl State {
         drag.shown = Some(candidate);
         let (owner, at) = (drag.surface.clone(), drag.rest_at);
         let target = self.snap_rect(candidate);
-        let target = Look::shown(Rectangle::new(
-            target.location.to_f64(),
-            target.size.to_f64(),
-        ));
+        let target = Look::shown(target.to_f64());
         let (from, spring) = if self.reduce_motion {
             (Look::hidden(target.rect), Spring::FADE)
         } else {

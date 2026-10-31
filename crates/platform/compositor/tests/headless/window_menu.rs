@@ -33,7 +33,7 @@ fn decorated(server: &mut Compositor) -> TestClient {
 }
 
 fn on_window(server: &Compositor, (x, y): (i32, i32)) -> Point<f64, Logical> {
-    let location = geometry(server).location;
+    let location = geometry(server).loc;
     at(location.x + x, location.y + y)
 }
 

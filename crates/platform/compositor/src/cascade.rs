@@ -1,25 +1,29 @@
 use smithay::reexports::wayland_server::Resource;
-use smithay::utils::{Logical, Point, Size};
+use smithay::utils::{Logical, Point, Rectangle, Size};
 
 use crate::shell::toplevel_names;
-use crate::state::{Rect, State, centered};
+use crate::state::{State, centered};
 use crate::window::Window;
 
 const CASCADE_STEP: i32 = 28;
 
-fn step(area: Rect, size: Size<i32, Logical>, from: Point<i32, Logical>) -> Point<i32, Logical> {
+fn step(
+    area: Rectangle<i32, Logical>,
+    size: Size<i32, Logical>,
+    from: Point<i32, Logical>,
+) -> Point<i32, Logical> {
     let mut at = from + Point::from((CASCADE_STEP, CASCADE_STEP));
-    if at.x + size.w > area.location.x + area.size.w {
-        at.x = area.location.x;
+    if at.x + size.w > area.loc.x + area.size.w {
+        at.x = area.loc.x;
     }
-    if at.y + size.h > area.location.y + area.size.h {
-        at.y = area.location.y;
+    if at.y + size.h > area.loc.y + area.size.h {
+        at.y = area.loc.y;
     }
     at
 }
 
 pub(crate) fn cascaded(
-    area: Rect,
+    area: Rectangle<i32, Logical>,
     size: Size<i32, Logical>,
     siblings: &[Point<i32, Logical>],
 ) -> Point<i32, Logical> {
@@ -62,11 +66,8 @@ impl State {
 mod tests {
     use super::*;
 
-    fn area() -> Rect {
-        Rect {
-            location: (0, 30).into(),
-            size: (1000, 700).into(),
-        }
+    fn area() -> Rectangle<i32, Logical> {
+        Rectangle::new((0, 30).into(), (1000, 700).into())
     }
 
     #[test]

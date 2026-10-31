@@ -1,6 +1,6 @@
 use crate::support::*;
-use smithay::utils::Size;
-use unbound_compositor::{Compositor, Rect, Renderer};
+use smithay::utils::{Logical, Rectangle, Size};
+use unbound_compositor::{Compositor, Renderer};
 use unbound_test_wayland::{BLUE, GREEN, RED, roundtrip};
 
 const OUTPUT: (i32, i32) = (480, 270);
@@ -20,7 +20,7 @@ fn tile_with_keys(server: &mut Compositor, arrow: u32) {
     server.key(KEY_LEFTCTRL, false, 0);
 }
 
-fn tile_of(server: &Compositor, nth: usize) -> Option<Rect> {
+fn tile_of(server: &Compositor, nth: usize) -> Option<Rectangle<i32, Logical>> {
     server.windows()[nth].tile()
 }
 
@@ -40,7 +40,7 @@ fn tiling_a_window_to_a_half_offers_the_others_for_the_other_half() {
     assert!(!server.other_half_offered());
     let left = tile_of(&server, 0).expect("the viewer is tiled to the left");
     let right = tile_of(&server, 1).expect("the editor fills the right");
-    assert_eq!(left.location.x + left.size.w, right.location.x);
+    assert_eq!(left.loc.x + left.size.w, right.loc.x);
     assert!(editor.keyboard_focus_on(0));
 }
 

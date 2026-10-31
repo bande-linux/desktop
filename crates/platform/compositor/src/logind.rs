@@ -2,7 +2,7 @@ use std::os::fd::OwnedFd;
 use std::sync::mpsc::Receiver;
 use std::thread;
 
-use smithay::reexports::calloop::channel::{self, Channel};
+use smithay::reexports::calloop::channel::Sender;
 use zbus::blocking::Connection;
 
 const OWN_SESSION: &str = "/org/freedesktop/login1/session/auto";
@@ -50,10 +50,8 @@ pub enum Sleep {
     Ended,
 }
 
-pub fn follow_sleep() -> zbus::Result<Channel<Sleep>> {
-    let connection = Connection::system()?;
-    let changes = ManagerProxyBlocking::new(&connection)?.receive_prepare_for_sleep()?;
-    let (sender, channel) = channel::channel();
+pub fn follow_sleep(connection: &Connection, sender: Sender<Sleep>) -> zbus::Result<()> {
+    let changes = ManagerProxyBlocking::new(connection)?.receive_prepare_for_sleep()?;
     thread::spawn(move || {
         for change in changes {
             let Ok(arguments) = change.args() else {
@@ -69,12 +67,11 @@ pub fn follow_sleep() -> zbus::Result<Channel<Sleep>> {
             }
         }
     });
-    Ok(channel)
+    Ok(())
 }
 
-pub fn follow_shutdown() -> zbus::Result<Channel<OwnedFd>> {
-    let connection = Connection::system()?;
-    let manager = ManagerProxyBlocking::new(&connection)?;
+pub fn follow_shutdown(connection: &Connection, sender: Sender<OwnedFd>) -> zbus::Result<()> {
+    let manager = ManagerProxyBlocking::new(connection)?;
     let changes = manager.receive_prepare_for_shutdown()?;
     let take = move || -> zbus::Result<OwnedFd> {
         let delay = manager.inhibit(
@@ -86,7 +83,6 @@ pub fn follow_shutdown() -> zbus::Result<Channel<OwnedFd>> {
         Ok(delay.into())
     };
     let mut held = Some(take()?);
-    let (sender, channel) = channel::channel();
     thread::spawn(move || {
         for change in changes {
             let Ok(arguments) = change.args() else {
@@ -107,16 +103,18 @@ pub fn follow_shutdown() -> zbus::Result<Channel<OwnedFd>> {
             }
         }
     });
-    Ok(channel)
+    Ok(())
 }
 
-pub fn follow_session(lock_states: Receiver<bool>) -> zbus::Result<Channel<SessionRequest>> {
-    let connection = Connection::system()?;
-    let session = SessionProxyBlocking::builder(&connection)
+pub fn follow_session(
+    connection: &Connection,
+    lock_states: Receiver<bool>,
+    requests: Sender<SessionRequest>,
+) -> zbus::Result<()> {
+    let session = SessionProxyBlocking::builder(connection)
         .path(OWN_SESSION)?
         .build()?;
     let locks = session.receive_lock()?;
-    let (requests, channel) = channel::channel();
     thread::spawn(move || {
         for _ in locks {
             if requests.send(SessionRequest::Lock).is_err() {
@@ -131,5 +129,5 @@ pub fn follow_session(lock_states: Receiver<bool>) -> zbus::Result<Channel<Sessi
             }
         }
     });
-    Ok(channel)
+    Ok(())
 }

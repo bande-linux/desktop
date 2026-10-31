@@ -288,7 +288,7 @@ impl SeatHandler for State {
             .and_then(|index| self.windows[index].geometry())
         {
             self.zoom
-                .follow((rect.location + rect.size.downscale(2).to_point()).to_f64());
+                .follow((rect.loc + rect.size.downscale(2).to_point()).to_f64());
         }
     }
 }

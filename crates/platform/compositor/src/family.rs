@@ -9,7 +9,7 @@ use unbound_spring::Spring;
 
 use crate::motion::Look;
 use crate::recall::clamp_into;
-use crate::state::{Rect, State, centered};
+use crate::state::{State, centered};
 use crate::window::Window;
 
 const NUDGE: f64 = 16.0;
@@ -25,8 +25,8 @@ fn is_modal(window: &Window) -> bool {
     })
 }
 
-fn anchor(rect: Rect) -> Point<i32, Logical> {
-    (rect.location.x + rect.size.w / 2, rect.location.y).into()
+fn anchor(rect: Rectangle<i32, Logical>) -> Point<i32, Logical> {
+    (rect.loc.x + rect.size.w / 2, rect.loc.y).into()
 }
 
 impl State {
@@ -125,7 +125,7 @@ impl State {
         let Some(rect) = self.windows[index].geometry() else {
             return;
         };
-        let mut from = Look::shown(Rectangle::new(rect.location.to_f64(), rect.size.to_f64()));
+        let mut from = Look::shown(rect.to_f64());
         if self.reduce_motion {
             from.alpha = FLASH_ALPHA;
         } else {
@@ -138,15 +138,12 @@ impl State {
     pub(crate) fn place_over_parent(
         &self,
         index: usize,
-        area: Rect,
+        area: Rectangle<i32, Logical>,
     ) -> Option<Point<i32, Logical>> {
         let parent = self.windows[self.parent_index(index)?].geometry()?;
         let size = self.windows[index].geometry()?.size;
-        let over = Rect {
-            location: centered(parent, size),
-            size,
-        };
-        Some(clamp_into(over, area).location)
+        let over = Rectangle::new(centered(parent, size), size);
+        Some(clamp_into(over, area).loc)
     }
 
     pub(crate) fn parent_workspace(&self, index: usize) -> Option<u64> {
@@ -223,9 +220,9 @@ impl State {
             self.animate_window(child, Spring::FADE, None);
             lost.push(self.windows[child].surface().clone());
         } else {
-            let from = self.windows[child].geometry().map(|rect| {
-                Look::hidden(Rectangle::new(rect.location.to_f64(), rect.size.to_f64()))
-            });
+            let from = self.windows[child]
+                .geometry()
+                .map(|rect| Look::hidden(rect.to_f64()));
             self.animate_window(child, Spring::FADE, from);
         }
     }
@@ -246,9 +243,7 @@ impl State {
         if before == now || placed {
             return;
         }
-        let from = window
-            .geometry()
-            .map(|rect| Look::shown(Rectangle::new(rect.location.to_f64(), rect.size.to_f64())));
+        let from = window.geometry().map(|rect| Look::shown(rect.to_f64()));
         let shift = now - before;
         window.location += shift;
         if let Some((_, location)) = &mut window.pending_location {

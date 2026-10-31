@@ -206,8 +206,8 @@ fn the_shell_learns_where_the_windows_are_frontmost_first() {
         let window = &server.windows()[index];
         let geometry = window.geometry().expect("mapped");
         (
-            geometry.location.x,
-            geometry.location.y,
+            geometry.loc.x,
+            geometry.loc.y,
             geometry.size.w,
             geometry.size.h,
         )

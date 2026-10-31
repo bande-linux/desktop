@@ -227,7 +227,7 @@ fn inflate(rect: Frame, by: f64) -> Frame {
 pub(crate) fn real_rect(window: &Window) -> Option<Frame> {
     let geometry = window.geometry()?;
     Some(Rectangle::new(
-        geometry.location.to_f64(),
+        geometry.loc.to_f64(),
         geometry.size.to_f64(),
     ))
 }
@@ -246,8 +246,8 @@ impl State {
         let count = workspaces.count() as f64;
         let add = Rectangle::new(Point::default(), (size.w * ADD_SHARE, size.h).into());
         let total = count * (size.w + THUMB_GAP) + add.size.w;
-        let left = f64::from(area.location.x) + (f64::from(area.size.w) - total) / 2.0;
-        let top = f64::from(area.location.y) + STRIP_PAD;
+        let left = f64::from(area.loc.x) + (f64::from(area.size.w) - total) / 2.0;
+        let top = f64::from(area.loc.y) + STRIP_PAD;
         let thumbnails = (0..workspaces.count())
             .map(|index| {
                 Rectangle::new(
@@ -263,18 +263,18 @@ impl State {
     fn layout_area(&self, screen: usize) -> Frame {
         let area = self.usable_area(screen);
         let top = if self.overview.app.is_some() {
-            f64::from(area.location.y)
+            f64::from(area.loc.y)
         } else {
             let (thumbnails, _) = self.strip(screen);
             thumbnails
                 .first()
-                .map_or(f64::from(area.location.y), |thumbnail| {
+                .map_or(f64::from(area.loc.y), |thumbnail| {
                     thumbnail.loc.y + thumbnail.size.h + STRIP_PAD
                 })
         };
-        let bottom = f64::from(area.location.y + area.size.h);
+        let bottom = f64::from(area.loc.y + area.size.h);
         Rectangle::new(
-            (f64::from(area.location.x) + MARGIN, top + MARGIN).into(),
+            (f64::from(area.loc.x) + MARGIN, top + MARGIN).into(),
             (
                 f64::from(area.size.w) - 2.0 * MARGIN,
                 bottom - top - 2.0 * MARGIN - TITLE_ROOM,
@@ -434,7 +434,7 @@ impl State {
         }
         let rect = self.presented(&self.windows[index])?.rect;
         let output = self.screen_rect(screen);
-        let bottom = f64::from(output.location.y + output.size.h);
+        let bottom = f64::from(output.loc.y + output.size.h);
         let x = rect.loc.x + (rect.size.w - label.size.w) / 2.0;
         let y = (rect.loc.y + rect.size.h + TITLE_GAP).min(bottom - label.size.h);
         let location = Point::<f64, Logical>::from((x, y))
@@ -600,7 +600,7 @@ impl State {
             return Vec::new();
         }
         let output = self.screen_rect(screen);
-        let output = Rectangle::new(output.location.to_f64(), output.size.to_f64());
+        let output = output.to_f64();
         let area = rounded(output.to_physical(scale), 0.0);
         let scrim = OutputElement::Fill(FillElement::new(
             scrim,
@@ -654,7 +654,7 @@ impl State {
         let (thumbnails, add) = self.strip(screen);
         let factor = self.thumbnail_scale(screen);
         let output = self.screen_rect(screen);
-        let origin = output.location.to_f64();
+        let origin = output.loc.to_f64();
         let output = Rectangle::new(origin, output.size.to_f64());
         let wallpaper: Vec<Piece> = self
             .placed_layers(screen, Layer::Background)

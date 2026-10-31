@@ -272,13 +272,6 @@ pub fn surface_depth(icon_size: f32) -> f32 {
     exclusive_zone(icon_size) + LABEL_ROOM
 }
 
-fn contains(frame: Rect, point: Point) -> bool {
-    point.x >= frame.x
-        && point.y >= frame.y
-        && point.x < frame.x + frame.width
-        && point.y < frame.y + frame.height
-}
-
 fn scaled(rect: Rect, factor: f32) -> Rect {
     let width = rect.width * factor;
     let height = rect.height * factor;
@@ -756,7 +749,7 @@ impl DockState {
 
     pub fn target_at(&self, point: Point) -> Option<MenuTarget> {
         match &self.more {
-            Some(more) if contains(self.reach(more.cell), point) => {
+            Some(more) if self.reach(more.cell).contains(point) => {
                 Some(MenuTarget::More(more.hidden.clone()))
             }
             _ => self.drop_target(point),
@@ -767,7 +760,7 @@ impl DockState {
         self.slots
             .iter()
             .filter(|slot| !slot.leaving && !slot.hidden)
-            .find(|slot| contains(self.reach(slot.cell), point))
+            .find(|slot| self.reach(slot.cell).contains(point))
             .and_then(|slot| match &slot.key {
                 Key::App(app_id) => Some(MenuTarget::App(app_id.clone())),
                 Key::Trash => Some(MenuTarget::Trash),
@@ -2353,7 +2346,7 @@ impl Widget for Tile {
                     self.press(cx, false, false);
                     return true;
                 }
-                let inside = contains(self.frame, pointer.position);
+                let inside = self.frame.contains(pointer.position);
                 if !inside {
                     self.state.borrow_mut().hold = None;
                 }
@@ -2366,7 +2359,7 @@ impl Widget for Tile {
             }
             Event::PointerUp(pointer) if pointer.is_primary() => {
                 self.state.borrow_mut().press_at = None;
-                let inside = self.pressed() && contains(self.frame, pointer.position);
+                let inside = self.pressed() && self.frame.contains(pointer.position);
                 self.press(cx, false, false);
                 let mut state = self.state.borrow_mut();
                 state.hold = None;

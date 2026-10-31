@@ -196,7 +196,7 @@ impl State {
             return Point::default();
         }
         let output = self.screen_rect(screen);
-        let (left, width) = (f64::from(output.location.x), f64::from(output.size.w));
+        let (left, width) = (f64::from(output.loc.x), f64::from(output.size.w));
         (shift_for(rect, left, width) * progress, 0.0).into()
     }
 

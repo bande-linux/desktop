@@ -307,8 +307,8 @@ impl Session {
                 .and_then(|window| window.geometry())
                 .ok_or_else(|| format!("{app_id} has no window"))?;
             let title = Point::from((
-                f64::from(geometry.location.x + geometry.size.w / 2),
-                f64::from(geometry.location.y + 12),
+                f64::from(geometry.loc.x + geometry.size.w / 2),
+                f64::from(geometry.loc.y + 12),
             ));
             let time = now().as_millis() as u32;
             self.server.move_pointer_to(title, time);

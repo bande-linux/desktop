@@ -198,13 +198,6 @@ pub struct MenuBar {
     battery_percentage: bool,
 }
 
-fn contains(rect: Rect, point: Point) -> bool {
-    point.x >= rect.x
-        && point.x < rect.x + rect.width
-        && point.y >= rect.y
-        && point.y < rect.y + rect.height
-}
-
 impl MenuBar {
     pub fn new(palette: Palette, text: TextSystem, clock: String) -> Self {
         Self {
@@ -290,7 +283,7 @@ impl MenuBar {
     pub fn slot_at(&self, point: Point) -> Option<Slot> {
         self.slots
             .iter()
-            .find(|(_, rect)| contains(*rect, point))
+            .find(|(_, rect)| rect.contains(point))
             .map(|(slot, _)| *slot)
     }
 

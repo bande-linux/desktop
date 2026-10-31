@@ -16,7 +16,7 @@ use smithay::wayland::shell::xdg::{PopupSurface, PositionerState};
 
 use crate::motion::{BAR_NAMESPACE, DOCK_NAMESPACE};
 
-use crate::state::{Compositor, MENU_BAR_NAMESPACE, Rect, State};
+use crate::state::{Compositor, MENU_BAR_NAMESPACE, State};
 
 impl State {
     pub(crate) fn toplevel_of(&self, surface: &WlSurface) -> Option<WlSurface> {
@@ -73,10 +73,10 @@ impl State {
             .screen_at(anchor_centre.to_f64())
             .unwrap_or_else(|| self.screen_of_surface(&root));
         let area = self.popup_area(&root, screen);
-        positioner.get_unconstrained_geometry(Rectangle::new(area.location - parent, area.size))
+        positioner.get_unconstrained_geometry(Rectangle::new(area.loc - parent, area.size))
     }
 
-    fn popup_area(&self, root: &WlSurface, screen: usize) -> Rect {
+    fn popup_area(&self, root: &WlSurface, screen: usize) -> Rectangle<i32, Logical> {
         let whole_screen = self.is_panel(root)
             || self.window_index(root).is_some_and(|index| {
                 self.windows[index].has_state(xdg_toplevel::State::Fullscreen)
@@ -273,7 +273,7 @@ impl State {
 }
 
 impl Compositor {
-    pub fn popup_rects(&self) -> Vec<Rect> {
+    pub fn popup_rects(&self) -> Vec<Rectangle<i32, Logical>> {
         (0..self.state.screens.len())
             .flat_map(|screen| self.state.stack(screen))
             .filter_map(|(surface, origin)| {
@@ -281,8 +281,8 @@ impl Compositor {
                 let drawn = with_renderer_surface_state(&surface, |state| {
                     state.buffer().and(state.surface_size())
                 })??;
-                Some(Rect {
-                    location: origin + geometry.loc,
+                Some(Rectangle {
+                    loc: origin + geometry.loc,
                     size: match geometry.size.is_empty() {
                         true => drawn,
                         false => geometry.size,

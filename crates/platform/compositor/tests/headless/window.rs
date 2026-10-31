@@ -1,5 +1,6 @@
 use crate::support::*;
-use unbound_compositor::{Compositor, Rect, Renderer};
+use smithay::utils::Rectangle;
+use unbound_compositor::{Compositor, Renderer};
 use unbound_test_wayland::{
     Anchor, BLUE, ConstraintAdjustment, GREEN, KeyboardInteractivity, Layer, LayerRequest,
     PopupRequest, RED, ResizeEdge, TestClient, ToplevelState, roundtrip,
@@ -28,7 +29,7 @@ fn drag_with(
 fn a_moved_window_follows_the_pointer_and_stays_put_after_release() {
     let mut server = server();
     let mut editor = window(&mut server, RED, WINDOW);
-    assert_eq!(geometry(&server).location, CENTERED.into());
+    assert_eq!(geometry(&server).loc, CENTERED.into());
 
     drag_with(
         &mut server,
@@ -37,12 +38,12 @@ fn a_moved_window_follows_the_pointer_and_stays_put_after_release() {
         (20, 30),
         |server, client| client.request_move(server, 0),
     );
-    assert_eq!(geometry(&server).location, (116, 102).into());
+    assert_eq!(geometry(&server).loc, (116, 102).into());
 
     server.press_button(BTN_LEFT, false, 2);
     server.move_pointer_to(at(10, 10), 3);
     roundtrip(&mut server, &mut [&mut editor]);
-    assert_eq!(geometry(&server).location, (116, 102).into());
+    assert_eq!(geometry(&server).loc, (116, 102).into());
 }
 
 #[test]
@@ -51,7 +52,7 @@ fn a_window_cannot_be_dragged_under_the_top_bar() {
     let mut shell = top_bar(&mut server);
     let mut editor = window(&mut server, RED, WINDOW);
     roundtrip(&mut server, &mut [&mut shell, &mut editor]);
-    let start = geometry(&server).location;
+    let start = geometry(&server).loc;
 
     drag_with(
         &mut server,
@@ -61,7 +62,7 @@ fn a_window_cannot_be_dragged_under_the_top_bar() {
         |server, client| client.request_move(server, 0),
     );
 
-    assert_eq!(geometry(&server).location, (start.x, BAR).into());
+    assert_eq!(geometry(&server).loc, (start.x, BAR).into());
 }
 
 #[test]
@@ -75,7 +76,7 @@ fn a_move_without_a_held_button_is_ignored() {
     server.move_pointer_to(at(150, 150), 1);
     roundtrip(&mut server, &mut [&mut editor]);
 
-    assert_eq!(geometry(&server).location, CENTERED.into());
+    assert_eq!(geometry(&server).loc, CENTERED.into());
 }
 
 #[test]
@@ -96,10 +97,7 @@ fn resizing_from_the_bottom_right_corner_grows_the_window_toward_the_pointer() {
     editor.fill_configured_size(&mut server, 0, RED);
     assert_eq!(
         geometry(&server),
-        Rect {
-            location: CENTERED.into(),
-            size: (84, 58).into(),
-        }
+        Rectangle::new(CENTERED.into(), (84, 58).into())
     );
 
     server.press_button(BTN_LEFT, false, 2);
@@ -125,8 +123,8 @@ fn resizing_from_the_left_edge_keeps_the_right_edge_in_place() {
 
     let window = geometry(&server);
     assert_eq!(window.size, (84, 48).into());
-    assert_eq!(window.location.x + window.size.w, right);
-    assert_eq!(window.location.y, CENTERED.1);
+    assert_eq!(window.loc.x + window.size.w, right);
+    assert_eq!(window.loc.y, CENTERED.1);
 }
 
 #[test]
@@ -165,10 +163,7 @@ fn zoom_fills_the_area_beside_the_bar_and_unzoom_restores_the_window() {
     editor.fill_configured_size(&mut server, 0, RED);
     assert_eq!(
         geometry(&server),
-        Rect {
-            location: (0, BAR).into(),
-            size: (OUTPUT.0, OUTPUT.1 - BAR).into(),
-        }
+        Rectangle::new((0, BAR).into(), (OUTPUT.0, OUTPUT.1 - BAR).into())
     );
 
     editor.set_maximized(&mut server, 0, false);
@@ -193,7 +188,7 @@ fn a_fullscreen_window_covers_the_output_including_the_bar() {
     assert_eq!((configured.width, configured.height), OUTPUT);
     assert!(configured.states.contains(&ToplevelState::Fullscreen));
     editor.fill_configured_size(&mut server, 0, BLUE);
-    assert_eq!(geometry(&server).location, (0, 0).into());
+    assert_eq!(geometry(&server).loc, (0, 0).into());
     assert_eq!(pixel(&mut renderer, &mut server, 10, 5), rgb(BLUE));
 
     editor.set_fullscreen(&mut server, 0, false);
@@ -342,7 +337,7 @@ fn a_click_on_the_menus_own_window_closes_it_and_only_the_next_click_reaches_the
     let mut server = server();
     let mut shell = top_bar(&mut server);
     let mut editor = window(&mut server, RED, WINDOW);
-    let origin = geometry(&server).location;
+    let origin = geometry(&server).loc;
     let popup = grabbing_menu(&mut server, &mut editor, origin.x + 5, origin.y + 5);
     let delivered = editor.buttons().len();
 
@@ -532,17 +527,17 @@ fn escape_during_a_move_puts_the_window_back_and_ends_the_move() {
         (20, 30),
         |server, client| client.request_move(server, 0),
     );
-    assert_eq!(geometry(&server).location, (116, 102).into());
+    assert_eq!(geometry(&server).loc, (116, 102).into());
 
     escape(&mut server, &mut editor);
-    assert_eq!(geometry(&server).location, CENTERED.into());
+    assert_eq!(geometry(&server).loc, CENTERED.into());
     server.move_pointer_to(at(150, 140), 7);
     roundtrip(&mut server, &mut [&mut editor]);
 
-    assert_eq!(geometry(&server).location, CENTERED.into());
+    assert_eq!(geometry(&server).loc, CENTERED.into());
     assert!(editor.keys().is_empty());
     assert_released(&mut server, &mut editor);
-    assert_eq!(geometry(&server).location, CENTERED.into());
+    assert_eq!(geometry(&server).loc, CENTERED.into());
 }
 
 #[test]
@@ -569,10 +564,7 @@ fn escape_during_a_resize_gives_back_the_starting_size() {
     assert!(!configured.states.contains(&ToplevelState::Resizing));
     assert_eq!(
         geometry(&server),
-        Rect {
-            location: CENTERED.into(),
-            size: WINDOW.into(),
-        }
+        Rectangle::new(CENTERED.into(), WINDOW.into())
     );
     assert!(editor.keys().is_empty());
     assert_released(&mut server, &mut editor);

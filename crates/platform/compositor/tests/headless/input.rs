@@ -163,7 +163,7 @@ fn control_super_drag_moves_a_window_from_anywhere_inside_it() {
     let mut client = client_with_window(&mut server, 64);
     client.exchange(&mut server);
     let before = geometry(&server);
-    let inside = before.location + Point::from((32, 32));
+    let inside = before.loc + Point::from((32, 32));
 
     server.key(KEY_LEFTCTRL, true, 0);
     server.key(KEY_LEFTMETA, true, 0);
@@ -175,10 +175,7 @@ fn control_super_drag_moves_a_window_from_anywhere_inside_it() {
     server.key(KEY_LEFTCTRL, false, 5);
     client.exchange(&mut server);
 
-    assert_eq!(
-        geometry(&server).location,
-        before.location + Point::from((20, 15))
-    );
+    assert_eq!(geometry(&server).loc, before.loc + Point::from((20, 15)));
     assert!(!client.buttons().contains(&(BTN_LEFT, true)));
 }
 
@@ -188,7 +185,7 @@ fn a_plain_drag_inside_a_window_reaches_the_app_and_leaves_the_window_in_place()
     let mut client = client_with_window(&mut server, 64);
     client.exchange(&mut server);
     let before = geometry(&server);
-    let inside = before.location + Point::from((32, 32));
+    let inside = before.loc + Point::from((32, 32));
 
     server.move_pointer_to(inside.to_f64(), 1);
     server.press_button(BTN_LEFT, true, 2);
@@ -196,7 +193,7 @@ fn a_plain_drag_inside_a_window_reaches_the_app_and_leaves_the_window_in_place()
     server.press_button(BTN_LEFT, false, 4);
     client.exchange(&mut server);
 
-    assert_eq!(geometry(&server).location, before.location);
+    assert_eq!(geometry(&server).loc, before.loc);
     assert!(client.buttons().contains(&(BTN_LEFT, true)));
 }
 
@@ -333,7 +330,7 @@ fn the_compositor_draws_an_arrow_where_the_pointer_is_once_it_moves() {
 fn game_under_pointer(server: &mut Compositor) -> (TestClient, Point<f64, Logical>) {
     let mut game = client_with_window(server, 64);
     game.use_relative_pointer(server);
-    let centre = (geometry(server).location + Point::from((32, 32))).to_f64();
+    let centre = (geometry(server).loc + Point::from((32, 32))).to_f64();
     server.move_pointer_to(centre, 0);
     game.exchange(server);
     (game, centre)

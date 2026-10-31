@@ -107,10 +107,13 @@ fn zone_at(window: &Window, location: Point<f64, Logical>) -> Option<Zone> {
     Some(Zone::Resize(resize_edge(frame, point)))
 }
 
-fn local_point(rect: crate::state::Rect, location: Point<f64, Logical>) -> unbound_graphics::Point {
+fn local_point(
+    rect: Rectangle<i32, Logical>,
+    location: Point<f64, Logical>,
+) -> unbound_graphics::Point {
     unbound_graphics::Point::new(
-        (location.x - f64::from(rect.location.x)) as f32,
-        (location.y - f64::from(rect.location.y)) as f32,
+        (location.x - f64::from(rect.loc.x)) as f32,
+        (location.y - f64::from(rect.loc.y)) as f32,
     )
 }
 
@@ -176,7 +179,7 @@ impl State {
             .into_iter()
             .find_map(|placed| match placed {
                 Placed::Surface(surface, origin) => surface_at(&surface, origin, location),
-                Placed::Window(window) => zone_at(window, location)
+                Placed::Window(_, window) => zone_at(window, location)
                     .map(|zone| Target::Frame(window.surface().clone(), zone))
                     .or_else(|| surface_at(window.surface(), window.surface_origin(), location)),
                 Placed::Scrim(owner, _) => Some(Target::Scrim(owner)),

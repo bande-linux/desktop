@@ -188,7 +188,7 @@ impl State {
     }
 
     fn zone_origin(&self, screen: usize) -> Point<i32, Logical> {
-        self.usable_area(screen).location - self.screen_rect(screen).location
+        self.usable_area(screen).loc - self.screen_rect(screen).loc
     }
 
     pub(crate) fn follow_panel_zones(&mut self) {

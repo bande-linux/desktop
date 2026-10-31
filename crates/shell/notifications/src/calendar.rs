@@ -6,7 +6,7 @@ use unbound_toolkit::{
     TextSystem,
 };
 
-use crate::card::{RADIUS, contains, surface_with_edge};
+use crate::card::{RADIUS, surface_with_edge};
 
 const PADDING: f32 = Spacing::M as f32;
 const HEADER: f32 = 28.0;
@@ -146,7 +146,7 @@ impl Calendar {
     pub fn turn_at(&self, point: Point) -> Option<Turn> {
         [(self.previous, Turn::Previous), (self.next, Turn::Next)]
             .into_iter()
-            .find(|(rect, _)| contains(*rect, point))
+            .find(|(rect, _)| rect.contains(point))
             .map(|(_, turn)| turn)
     }
 

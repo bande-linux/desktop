@@ -22,7 +22,7 @@ use unbound_widgets::{MENU_SHADOW_MARGIN, Menu, MenuItem, MenuOutcome, MenuPanel
 use crate::L10N;
 use crate::label::Labels;
 use crate::motion::{Look, Motion, Tick};
-use crate::state::{Compositor, OutputElement, Rect, State};
+use crate::state::{Compositor, OutputElement, State};
 
 const TILING_MENU_AFTER: Duration = Duration::from_millis(500);
 const BELOW_GAP: i32 = 4;
@@ -86,7 +86,7 @@ fn menu_text(labels: &mut Option<Labels>, size: TextSize) -> &mut TextSystem {
 
 enum Anchored {
     AtPoint(Point<f64, Logical>),
-    Below(Rect),
+    Below(Rectangle<i32, Logical>),
 }
 
 fn placed(
@@ -95,7 +95,7 @@ fn placed(
     anchor_edges: Anchor,
     offset: (i32, i32),
     constraint_adjustment: ConstraintAdjustment,
-    area: Rect,
+    area: Rectangle<i32, Logical>,
 ) -> Rectangle<i32, Logical> {
     PositionerState {
         rect_size: size,
@@ -106,13 +106,13 @@ fn placed(
         offset: offset.into(),
         ..PositionerState::default()
     }
-    .get_unconstrained_geometry(Rectangle::new(area.location, area.size))
+    .get_unconstrained_geometry(area)
 }
 
 fn root_placement(
     anchored: &Anchored,
     size: Size<i32, Logical>,
-    area: Rect,
+    area: Rectangle<i32, Logical>,
 ) -> Rectangle<i32, Logical> {
     let fitting = ConstraintAdjustment::FlipY
         | ConstraintAdjustment::SlideX
@@ -130,7 +130,7 @@ fn root_placement(
         Anchored::Below(rect) => placed(
             size,
             Rectangle::new(
-                (rect.location.x, rect.location.y - BELOW_GAP).into(),
+                (rect.loc.x, rect.loc.y - BELOW_GAP).into(),
                 (rect.size.w, rect.size.h + 2 * BELOW_GAP).into(),
             ),
             Anchor::BottomLeft,
@@ -145,7 +145,7 @@ fn submenu_placement(
     parent: Frame,
     row: unbound_graphics::Rect,
     size: Size<i32, Logical>,
-    area: Rect,
+    area: Rectangle<i32, Logical>,
 ) -> Rectangle<i32, Logical> {
     let origin = parent.loc.to_i32_round::<i32>();
     placed(
@@ -312,10 +312,10 @@ impl State {
             return;
         };
         let control = WindowControl::Zoom.area(window.title_bar_height() as f32);
-        let below = Rect {
-            location: (
-                geometry.location.x + control.x.round() as i32,
-                geometry.location.y + control.y.round() as i32,
+        let below = Rectangle {
+            loc: (
+                geometry.loc.x + control.x.round() as i32,
+                geometry.loc.y + control.y.round() as i32,
             )
                 .into(),
             size: (control.width.round() as i32, control.height.round() as i32).into(),

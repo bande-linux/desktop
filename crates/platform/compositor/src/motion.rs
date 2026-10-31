@@ -192,7 +192,7 @@ impl State {
                 let size = window.requested_size().unwrap_or(geometry.size);
                 (location, size)
             })
-            .unwrap_or((geometry.location, geometry.size));
+            .unwrap_or((geometry.loc, geometry.size));
         Some(Rectangle::new(location.to_f64(), size.to_f64()))
     }
 
@@ -261,7 +261,7 @@ impl State {
             Some((at, size)) => (at + size.downscale(2).to_point()).to_f64(),
             None => {
                 let output = self.screen_rect(self.screen_of(window));
-                let origin = output.location.to_f64();
+                let origin = output.loc.to_f64();
                 (
                     origin.x + f64::from(output.size.w) / 2.0,
                     origin.y + f64::from(output.size.h),
@@ -283,7 +283,7 @@ impl State {
         let (Some(target), Some(rect)) = (self.destination(window), window.geometry()) else {
             return;
         };
-        let real = Look::shown(Rectangle::new(rect.location.to_f64(), rect.size.to_f64()));
+        let real = Look::shown(rect.to_f64());
         let mut from = from.unwrap_or(real);
         let spring = if self.reduce_motion {
             from.rect = target.rect;
@@ -298,7 +298,7 @@ impl State {
         let Some(rect) = self.windows[index].geometry() else {
             return;
         };
-        let real = Rectangle::new(rect.location.to_f64(), rect.size.to_f64());
+        let real = rect.to_f64();
         self.windows[index].motion = None;
         self.animate_window(
             index,
@@ -310,7 +310,7 @@ impl State {
     pub(crate) fn restore_window(&mut self, index: usize) {
         let from = self.windows[index]
             .geometry()
-            .map(|rect| Rectangle::new(rect.location.to_f64(), rect.size.to_f64()))
+            .map(|rect| rect.to_f64())
             .map(|rect| {
                 if self.reduce_motion {
                     Look::hidden(rect)

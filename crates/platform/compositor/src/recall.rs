@@ -4,16 +4,16 @@ use std::path::PathBuf;
 
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
-use smithay::utils::Point;
+use smithay::utils::{Logical, Point, Rectangle};
 
 use crate::shell::toplevel_names;
-use crate::state::{Compositor, Rect, State};
+use crate::state::{Compositor, State};
 
 #[derive(Debug, Clone, PartialEq)]
 struct Remembered {
     displays: String,
     app_id: String,
-    frame: Rect,
+    frame: Rectangle<i32, Logical>,
 }
 
 #[derive(Default)]
@@ -35,10 +35,7 @@ fn parse(text: &str) -> Vec<Remembered> {
             (*w > 0 && *h > 0 && !displays.is_empty() && !app_id.is_empty()).then(|| Remembered {
                 displays,
                 app_id,
-                frame: Rect {
-                    location: (*x, *y).into(),
-                    size: (*w, *h).into(),
-                },
+                frame: Rectangle::new((*x, *y).into(), (*w, *h).into()),
             })
         })
         .collect()
@@ -53,8 +50,8 @@ fn format(frames: &[Remembered]) -> String {
                 "{}\t{}\t{}\t{}\t{}\t{}\n",
                 remembered.displays,
                 remembered.app_id,
-                frame.location.x,
-                frame.location.y,
+                frame.loc.x,
+                frame.loc.y,
                 frame.size.w,
                 frame.size.h
             )
@@ -62,21 +59,15 @@ fn format(frames: &[Remembered]) -> String {
         .collect()
 }
 
-pub(crate) fn clamp_into(frame: Rect, area: Rect) -> Rect {
+pub(crate) fn clamp_into(
+    frame: Rectangle<i32, Logical>,
+    area: Rectangle<i32, Logical>,
+) -> Rectangle<i32, Logical> {
     let w = frame.size.w.min(area.size.w);
     let h = frame.size.h.min(area.size.h);
-    let x = frame
-        .location
-        .x
-        .clamp(area.location.x, area.location.x + area.size.w - w);
-    let y = frame
-        .location
-        .y
-        .clamp(area.location.y, area.location.y + area.size.h - h);
-    Rect {
-        location: (x, y).into(),
-        size: (w, h).into(),
-    }
+    let x = frame.loc.x.clamp(area.loc.x, area.loc.x + area.size.w - w);
+    let y = frame.loc.y.clamp(area.loc.y, area.loc.y + area.size.h - h);
+    Rectangle::new((x, y).into(), (w, h).into())
 }
 
 impl Recall {
@@ -137,14 +128,14 @@ impl State {
         else {
             return;
         };
-        let center = frame.location + Point::from((frame.size.w / 2, frame.size.h / 2));
+        let center = frame.loc + Point::from((frame.size.w / 2, frame.size.h / 2));
         let screen = self
             .screen_at(center.to_f64())
             .unwrap_or_else(|| self.pointer_screen());
         let frame = clamp_into(frame, self.usable_area(screen));
         let window = &mut self.windows[index];
         window.workspace = self.screens[screen].workspaces.active_id();
-        window.recalled = Some(frame.location);
+        window.recalled = Some(frame.loc);
         window.request_size(Some(frame.size));
     }
 
@@ -215,11 +206,8 @@ impl Compositor {
 mod tests {
     use super::*;
 
-    fn rect(x: i32, y: i32, w: i32, h: i32) -> Rect {
-        Rect {
-            location: (x, y).into(),
-            size: (w, h).into(),
-        }
+    fn rect(x: i32, y: i32, w: i32, h: i32) -> Rectangle<i32, Logical> {
+        Rectangle::new((x, y).into(), (w, h).into())
     }
 
     #[test]

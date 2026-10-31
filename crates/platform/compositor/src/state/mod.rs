@@ -24,7 +24,7 @@ use smithay::reexports::wayland_server::protocol::wl_buffer::WlBuffer;
 use smithay::reexports::wayland_server::protocol::wl_shm::Format;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{Client, Display, DisplayHandle, Resource};
-use smithay::utils::{Logical, Physical, Point, Size, Transform};
+use smithay::utils::{Logical, Physical, Point, Rectangle, Size, Transform};
 use smithay::wayland::compositor::{
     CompositorClientState, SurfaceAttributes,
     TraversalAction, with_surface_tree_downward,
@@ -483,7 +483,7 @@ impl Compositor {
         &self.state.cursor_theme
     }
 
-    pub fn usable_area(&self) -> Rect {
+    pub fn usable_area(&self) -> Rectangle<i32, Logical> {
         self.state.usable_area(0)
     }
 
@@ -570,16 +570,13 @@ impl State {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Rect {
-    pub location: Point<i32, Logical>,
-    pub size: Size<i32, Logical>,
-}
-
-pub(crate) fn centered(area: Rect, window: Size<i32, Logical>) -> Point<i32, Logical> {
+pub(crate) fn centered(
+    area: Rectangle<i32, Logical>,
+    window: Size<i32, Logical>,
+) -> Point<i32, Logical> {
     (
-        area.location.x + ((area.size.w - window.w) / 2).max(0),
-        area.location.y + ((area.size.h - window.h) / 2).max(0),
+        area.loc.x + ((area.size.w - window.w) / 2).max(0),
+        area.loc.y + ((area.size.h - window.h) / 2).max(0),
     )
         .into()
 }

@@ -53,10 +53,14 @@ impl Layers<'_> {
     }
 }
 
-fn push_windows<'a>(placed: &mut Vec<Placed<'a>>, visible: &[(Band, &'a Window)], band: Band) {
-    for (_, window) in visible.iter().filter(|(of, _)| *of == band) {
+fn push_windows<'a>(
+    placed: &mut Vec<Placed<'a>>,
+    visible: &[(Band, usize, &'a Window)],
+    band: Band,
+) {
+    for (_, index, window) in visible.iter().filter(|(of, _, _)| *of == band) {
         placed.extend(popup_surfaces(window.surface(), window.content_location()));
-        placed.push(Placed::Window(window));
+        placed.push(Placed::Window(*index, window));
     }
 }
 
@@ -80,7 +84,7 @@ fn popup_surfaces<'a>(
 #[derive(Clone)]
 pub(crate) enum Placed<'a> {
     Surface(WlSurface, Point<i32, Logical>),
-    Window(&'a Window),
+    Window(usize, &'a Window),
     Closing(&'a Closing),
     Overview(usize),
     Backdrop(usize),
@@ -89,7 +93,7 @@ pub(crate) enum Placed<'a> {
 
 type Composed<E = ScreenElement> = (
     Vec<E>,
-    Vec<(WlSurface, Option<Drawn>)>,
+    Vec<(usize, Option<Drawn>)>,
     Option<(Vec<crate::scene::Piece>, crate::scene::Area)>,
 );
 
@@ -129,10 +133,8 @@ impl Compositor {
                 self.state.windows[index].drawn = None;
             }
         }
-        for (surface, drawn) in drawn {
-            if let Some(index) = self.state.window_index(&surface)
-                && self.state.screen_of(&self.state.windows[index]) == screen
-            {
+        for (index, drawn) in drawn {
+            if self.state.screen_of(&self.state.windows[index]) == screen {
                 self.state.windows[index].drawn = drawn;
             }
         }
@@ -245,7 +247,7 @@ impl Compositor {
                             .or_else(|| scrim(renderer, self.state.decorations.scheme)),
                     ));
                 }
-                Placed::Window(window) => {
+                Placed::Window(index, window) => {
                     let shading = Shading {
                         active: key.as_ref() == Some(window.surface()),
                         scheme: self.state.decorations.scheme,
@@ -269,7 +271,7 @@ impl Compositor {
                     if let (Some(ghost), Some(look)) = (self.state.overview_ghost(window), &look) {
                         elements.extend(look.ghost(ghost, scale, &renderer.context_id()));
                     }
-                    drawn.push((window.surface().clone(), look));
+                    drawn.push((index, look));
                     if let Some(preview) = &self.state.preview
                         && &preview.owner == window.surface()
                     {
@@ -417,7 +419,9 @@ impl State {
             .into_iter()
             .filter_map(|placed| match placed {
                 Placed::Surface(surface, origin) => Some((surface, origin)),
-                Placed::Window(window) => Some((window.surface().clone(), window.surface_origin())),
+                Placed::Window(_, window) => {
+                    Some((window.surface().clone(), window.surface_origin()))
+                }
                 Placed::Closing(_)
                 | Placed::Overview(_)
                 | Placed::Backdrop(_)
@@ -444,11 +448,12 @@ impl State {
         let visible = self
             .windows
             .iter()
+            .enumerate()
             .rev()
-            .filter(|window| {
+            .filter(|(_, window)| {
                 self.screen_of(window) == screen || (rendered && self.dragged_onto(window, screen))
             })
-            .filter(|window| {
+            .filter(|(_, window)| {
                 if rendered {
                     window.rendered() && self.on_view(window)
                 } else {
@@ -457,7 +462,7 @@ impl State {
                         && !self.overview.is_shown()
                 }
             })
-            .map(|window| {
+            .map(|(index, window)| {
                 let band = if self.on_full_screen_space(window) || self.dragged_in_overview(window)
                 {
                     Band::Front
@@ -468,7 +473,7 @@ impl State {
                 } else {
                     Band::Rest
                 };
-                (band, window)
+                (band, index, window)
             })
             .collect::<Vec<_>>();
         let overview = rendered && self.overview.is_shown();

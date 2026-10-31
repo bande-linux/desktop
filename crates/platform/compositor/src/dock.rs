@@ -74,7 +74,7 @@ impl State {
             }
             let from = self.windows[index].geometry().map(|rect| {
                 Look::hidden(smithay::utils::Rectangle::new(
-                    rect.location.to_f64(),
+                    rect.loc.to_f64(),
                     rect.size.to_f64(),
                 ))
             });

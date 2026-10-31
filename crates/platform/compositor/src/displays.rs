@@ -8,7 +8,7 @@ use unbound_spring::Spring;
 
 use crate::motion::{Look, OPENING_SCALE};
 use crate::screen::{OutputConfig, OutputSettings, Screen};
-use crate::state::{Compositor, Rect, State};
+use crate::state::{Compositor, State};
 
 const MAIN_SCREEN_LAYERS: [&str; 6] = [
     "dock",
@@ -23,33 +23,34 @@ pub(crate) struct Departed {
     identity: String,
     spaces: Vec<u64>,
     landed: u64,
-    windows: Vec<(WlSurface, Rect, bool)>,
+    windows: Vec<(WlSurface, Rectangle<i32, Logical>, bool)>,
 }
 
-fn center(rect: Rect) -> (f64, f64) {
+fn center(rect: Rectangle<i32, Logical>) -> (f64, f64) {
     (
-        f64::from(rect.location.x) + f64::from(rect.size.w) / 2.0,
-        f64::from(rect.location.y) + f64::from(rect.size.h) / 2.0,
+        f64::from(rect.loc.x) + f64::from(rect.size.w) / 2.0,
+        f64::from(rect.loc.y) + f64::from(rect.size.h) / 2.0,
     )
 }
 
-pub(crate) fn carried(rect: Rect, from: Rect, to: Rect) -> Rect {
+pub(crate) fn carried(
+    rect: Rectangle<i32, Logical>,
+    from: Rectangle<i32, Logical>,
+    to: Rectangle<i32, Logical>,
+) -> Rectangle<i32, Logical> {
     let size: Size<i32, Logical> = (
         rect.size.w.min(to.size.w).max(1),
         rect.size.h.min(to.size.h).max(1),
     )
         .into();
     let (cx, cy) = center(rect);
-    let rx = (cx - f64::from(from.location.x)) / f64::from(from.size.w.max(1));
-    let ry = (cy - f64::from(from.location.y)) / f64::from(from.size.h.max(1));
-    let x = f64::from(to.location.x) + rx * f64::from(to.size.w) - f64::from(size.w) / 2.0;
-    let y = f64::from(to.location.y) + ry * f64::from(to.size.h) - f64::from(size.h) / 2.0;
-    let x = (x.round() as i32).clamp(to.location.x, to.location.x + to.size.w - size.w);
-    let y = (y.round() as i32).clamp(to.location.y, to.location.y + to.size.h - size.h);
-    Rect {
-        location: (x, y).into(),
-        size,
-    }
+    let rx = (cx - f64::from(from.loc.x)) / f64::from(from.size.w.max(1));
+    let ry = (cy - f64::from(from.loc.y)) / f64::from(from.size.h.max(1));
+    let x = f64::from(to.loc.x) + rx * f64::from(to.size.w) - f64::from(size.w) / 2.0;
+    let y = f64::from(to.loc.y) + ry * f64::from(to.size.h) - f64::from(size.h) / 2.0;
+    let x = (x.round() as i32).clamp(to.loc.x, to.loc.x + to.size.w - size.w);
+    let y = (y.round() as i32).clamp(to.loc.y, to.loc.y + to.size.h - size.h);
+    Rectangle::new((x, y).into(), size)
 }
 
 impl State {
@@ -110,7 +111,13 @@ impl State {
         }
     }
 
-    fn put_window(&mut self, index: usize, from: Rect, screen: usize, free: Option<Rect>) {
+    fn put_window(
+        &mut self,
+        index: usize,
+        from: Rectangle<i32, Logical>,
+        screen: usize,
+        free: Option<Rectangle<i32, Logical>>,
+    ) {
         let to = self.screen_rect(screen);
         let area = self.usable_area(screen);
         let window = &mut self.windows[index];
@@ -139,12 +146,12 @@ impl State {
         if target.size != geometry.size {
             window.request_size(Some(target.size));
             if let Some(serial) = window.configure() {
-                window.pending_location = Some((serial, target.location));
+                window.pending_location = Some((serial, target.loc));
             }
         } else {
             window.pending_location = None;
         }
-        window.location = target.location;
+        window.location = target.loc;
         self.needs_redraw = true;
     }
 
@@ -164,10 +171,9 @@ impl State {
         self.windows[index].workspace = workspace;
         self.put_window(index, from, screen, None);
         if self.present(&self.windows[index]) {
-            let from = self.windows[index].geometry().map(|rect| {
-                Look::hidden(Rectangle::new(rect.location.to_f64(), rect.size.to_f64()))
-                    .scaled(OPENING_SCALE)
-            });
+            let from = self.windows[index]
+                .geometry()
+                .map(|rect| Look::hidden(rect.to_f64()).scaled(OPENING_SCALE));
             self.animate_window(index, Spring::STANDARD, from);
         }
         self.window_left_workspace(left);
@@ -181,11 +187,7 @@ impl State {
             .as_ref()
             .is_some_and(|drag| drag.surface() == window.surface());
         let output = self.screen_rect(screen);
-        dragged
-            && window.geometry().is_some_and(|rect| {
-                Rectangle::new(rect.location, rect.size)
-                    .overlaps(Rectangle::new(output.location, output.size))
-            })
+        dragged && window.geometry().is_some_and(|rect| rect.overlaps(output))
     }
 
     pub(crate) fn screen_beside(&self, from: usize, direction: (i32, i32)) -> Option<usize> {
@@ -256,7 +258,7 @@ impl State {
         };
         let departed = self.departed.remove(at);
         let fresh = self.screens[screen].workspaces.active_id();
-        let returning: Vec<(usize, Rect, Option<Rect>)> = departed
+        let returning: Vec<_> = departed
             .windows
             .iter()
             .filter_map(|(surface, rect, was_shown)| {
@@ -286,15 +288,12 @@ impl State {
             }
         }
         self.screens[screen].workspaces.adopt(spaces);
-        let origin = self.screen_rect(screen).location;
+        let origin = self.screen_rect(screen).loc;
         for (index, from, rect) in returning {
             if !departed.spaces.contains(&self.windows[index].workspace) {
                 self.windows[index].workspace = fresh;
             }
-            let free = rect.map(|rect| Rect {
-                location: origin + rect.location,
-                size: rect.size,
-            });
+            let free = rect.map(|rect| Rectangle::new(origin + rect.loc, rect.size));
             self.put_window(index, from, screen, free);
         }
     }
@@ -312,7 +311,7 @@ impl State {
             .into_iter()
             .filter(|id| *id != shown)
             .collect();
-        let windows: Vec<(WlSurface, Rect, bool)> = self
+        let windows: Vec<(WlSurface, Rectangle<i32, Logical>, bool)> = self
             .windows
             .iter()
             .filter(|window| window.workspace == shown || spaces.contains(&window.workspace))
@@ -320,10 +319,7 @@ impl State {
                 let geometry = window.geometry()?;
                 Some((
                     window.surface().clone(),
-                    Rect {
-                        location: geometry.location - from.location,
-                        size: geometry.size,
-                    },
+                    Rectangle::new(geometry.loc - from.loc, geometry.size),
                     window.workspace == shown,
                 ))
             })
@@ -365,8 +361,8 @@ impl State {
         self.screens[screen].apply(settings);
         let after = self.screen_rect(screen);
         if pointer_here {
-            let relative = self.pointer_location - before.location.to_f64();
-            self.pointer_location = after.location.to_f64()
+            let relative = self.pointer_location - before.loc.to_f64();
+            self.pointer_location = after.loc.to_f64()
                 + Point::from((
                     relative.x * f64::from(after.size.w) / f64::from(before.size.w.max(1)),
                     relative.y * f64::from(after.size.h) / f64::from(before.size.h.max(1)),
@@ -378,7 +374,7 @@ impl State {
                     continue;
                 }
                 if before.size == after.size {
-                    self.shift_window(index, after.location - before.location);
+                    self.shift_window(index, after.loc - before.loc);
                 } else {
                     self.put_window(index, before, screen, None);
                 }
@@ -392,16 +388,16 @@ impl State {
         window.location += by;
         window.motion = None;
         if let Some(restore) = &mut window.restore {
-            restore.location += by;
+            restore.loc += by;
         }
         if let Some((_, rect)) = &mut window.tile {
-            rect.location += by;
+            rect.loc += by;
         }
         if let Some((_, at)) = &mut window.pending_location {
             *at += by;
         }
         if let Some(resize) = &mut window.resize {
-            resize.initial.location += by;
+            resize.initial.loc += by;
         }
     }
 
@@ -466,7 +462,7 @@ impl State {
             .min(f64::from(frame.h) / f64::from(shown.size.h.max(1)));
         let settings = OutputSettings {
             scale,
-            position: shown.location,
+            position: shown.loc,
             ..current
         };
         if settings != current {
@@ -501,7 +497,7 @@ impl Compositor {
         self.state.screens.iter().map(Screen::name).collect()
     }
 
-    pub fn output_rect(&self, output: &str) -> Option<Rect> {
+    pub fn output_rect(&self, output: &str) -> Option<Rectangle<i32, Logical>> {
         Some(self.state.screen_rect(self.state.screen_named(output)?))
     }
 
@@ -523,10 +519,10 @@ impl Compositor {
             .screens
             .iter()
             .map(|screen| screen.rect())
-            .map(|rect| rect.location.x + rect.size.w)
+            .map(|rect| rect.loc.x + rect.size.w)
             .max()
             .unwrap_or(0);
-        settings.position = (right, main.location.y).into();
+        settings.position = (right, main.loc.y).into();
         self.state.add_screen(config, settings);
         self.state.arrange_screens();
     }

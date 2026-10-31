@@ -17,6 +17,7 @@ pub struct Disclosure {
     content_size: Size,
     on_toggle: Box<dyn FnMut(bool)>,
     paragraph: Option<Paragraph>,
+    header_height: f32,
     frame: Rect,
 }
 
@@ -36,6 +37,7 @@ impl Disclosure {
             content_size: Size::default(),
             on_toggle: Box::new(on_toggle),
             paragraph: None,
+            header_height: DISCLOSURE_HEIGHT,
             frame: Rect::default(),
         }
     }
@@ -60,7 +62,7 @@ impl Disclosure {
             self.frame.x,
             self.frame.y,
             self.frame.width,
-            DISCLOSURE_HEIGHT,
+            self.header_height,
         )
     }
 }
@@ -89,6 +91,7 @@ impl Widget for Disclosure {
     }
 
     fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
+        self.header_height = DISCLOSURE_HEIGHT + cx.grown_line();
         self.paragraph = Some(cx.text.paragraph(
             &self.title,
             TextStyle::new(13.0, cx.palette.ink).weight(TextStyle::MEDIUM),
@@ -97,23 +100,23 @@ impl Widget for Disclosure {
         ));
         let below = Size::new(
             available.width,
-            (available.height - DISCLOSURE_HEIGHT - GAP).max(0.0),
+            (available.height - self.header_height - GAP).max(0.0),
         );
         self.content_size = self.content[0].measure(cx, below);
         let shown = self.turn.value(cx);
         let content = (self.content_size.height + GAP) * shown;
-        Size::new(available.width, DISCLOSURE_HEIGHT + content.ceil())
+        Size::new(available.width, self.header_height + content.ceil())
     }
 
     fn place(&mut self, cx: &mut Context, frame: Rect) {
         self.frame = frame;
         let content = Rect::new(
             frame.x,
-            frame.y + DISCLOSURE_HEIGHT + GAP,
+            frame.y + self.header_height + GAP,
             frame.width,
             self.content_size.height,
         );
-        let hidden = Rect::new(frame.x, frame.y + DISCLOSURE_HEIGHT, 0.0, 0.0);
+        let hidden = Rect::new(frame.x, frame.y + self.header_height, 0.0, 0.0);
         let shown = self.expanded || self.turn.value(cx) > 0.0;
         self.content[0].place(cx, if shown { content } else { hidden });
     }

@@ -491,7 +491,10 @@ impl Dispatch<UnboundShellV1, ()> for State {
             ),
             unbound_shell_v1::Request::ConfirmSessionEnd {
                 ending: WEnum::Value(ending),
-            } => state.session_end_requested = Some(ending),
+            } => {
+                state.session_end_requested = Some(ending);
+                state.remember_apps_to_reopen(None);
+            }
             unbound_shell_v1::Request::QuitAllApps => state.quit_all_apps(resource.clone()),
             unbound_shell_v1::Request::Destroy => {
                 state.shell_resources.retain(|shell| shell != resource);

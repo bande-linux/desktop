@@ -18,12 +18,25 @@ const AUTHORITY_PATH: &str = "/org/freedesktop/PolicyKit1/Authority";
 const AUTHORITY_INTERFACE: &str = "org.freedesktop.PolicyKit1.Authority";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Identity {
+    pub login: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Request {
     pub action_id: String,
     pub message: String,
     pub icon_name: String,
     pub details: HashMap<String, String>,
+    pub identities: Vec<Identity>,
     pub user: String,
+}
+
+pub enum Answer {
+    Password(Zeroizing<String>),
+    SwitchTo(String),
+    Cancel,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,7 +47,7 @@ pub enum Notice {
 }
 
 pub trait Conversation: Send + Sync {
-    fn respond(&self, request: &Request, prompt: &str, echo: bool) -> Option<Zeroizing<String>>;
+    fn respond(&self, request: &Request, user: &str, prompt: &str, echo: bool) -> Answer;
     fn notice(&self, request: &Request, notice: Notice);
     fn close(&self, request: &Request);
 }
@@ -137,34 +150,55 @@ impl Drop for Agent {
     }
 }
 
-type Identity = (String, HashMap<String, OwnedValue>);
+type PolkitIdentity = (String, HashMap<String, OwnedValue>);
 
-fn user_name(uid: u32) -> Option<String> {
+fn from_passwd(entry: &str) -> Option<Identity> {
+    let fields: Vec<&str> = entry.trim_end().split(':').collect();
+    let login = fields.first().filter(|login| !login.is_empty())?;
+    let full_name = fields
+        .get(4)
+        .and_then(|gecos| gecos.split(',').next())
+        .map(str::trim)
+        .filter(|name| !name.is_empty());
+    Some(Identity {
+        login: (*login).to_owned(),
+        name: full_name.unwrap_or(login).to_owned(),
+    })
+}
+
+fn identity(uid: u32) -> Option<Identity> {
     let output = Command::new("getent")
         .args(["passwd", &uid.to_string()])
         .output()
         .ok()?;
-    let entry = String::from_utf8(output.stdout).ok()?;
-    entry
-        .split(':')
-        .next()
-        .filter(|name| !name.is_empty())
-        .map(str::to_owned)
+    from_passwd(&String::from_utf8(output.stdout).ok()?)
 }
 
-fn choose_user(identities: &[Identity]) -> Option<String> {
-    let uids: Vec<u32> = identities
+fn identities_of(identities: &[PolkitIdentity]) -> (Vec<Identity>, Option<String>) {
+    let mut uids: Vec<u32> = Vec::new();
+    for uid in identities
         .iter()
         .filter(|(kind, _)| kind == "unix-user")
         .filter_map(|(_, details)| u32::try_from(details.get("uid")?).ok())
-        .collect();
+    {
+        if !uids.contains(&uid) {
+            uids.push(uid);
+        }
+    }
     let own = rustix::process::getuid().as_raw();
-    let uid = uids
+    let known: Vec<(u32, Identity)> = uids
+        .into_iter()
+        .filter_map(|uid| Some((uid, identity(uid)?)))
+        .collect();
+    let chosen = known
         .iter()
-        .copied()
-        .find(|uid| *uid == own)
-        .or_else(|| uids.first().copied())?;
-    user_name(uid)
+        .find(|(uid, _)| *uid == own)
+        .or_else(|| known.first())
+        .map(|(_, identity)| identity.login.clone());
+    (
+        known.into_iter().map(|(_, identity)| identity).collect(),
+        chosen,
+    )
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -192,8 +226,9 @@ fn converse(
     running: &Shared,
 ) -> Result<Outcome, AgentError> {
     let failed = |error: std::io::Error| AgentError::Failed(error.to_string());
-    loop {
-        let mut session = HelperSession::start(helper, &request.user, cookie).map_err(failed)?;
+    let mut user = request.user.clone();
+    'helper: loop {
+        let mut session = HelperSession::start(helper, &user, cookie).map_err(failed)?;
         {
             let mut running = lock(running);
             match running.sessions.get_mut(cookie) {
@@ -205,13 +240,25 @@ fn converse(
         loop {
             match session.read_line().map_err(failed)? {
                 Some(Line::Prompt { text, echo }) => {
-                    let response = conversation.respond(request, &text, echo);
-                    match response {
-                        Some(response) if lock(running).sessions.contains_key(cookie) => {
+                    let answer = conversation.respond(request, &user, &text, echo);
+                    if !lock(running).sessions.contains_key(cookie) {
+                        return Ok(Outcome::Cancelled);
+                    }
+                    match answer {
+                        Answer::Password(response) => {
                             session.respond(&response).map_err(failed)?;
                             answered = true;
                         }
-                        _ => return Ok(Outcome::Cancelled),
+                        Answer::SwitchTo(login)
+                            if request
+                                .identities
+                                .iter()
+                                .any(|identity| identity.login == login) =>
+                        {
+                            user = login;
+                            continue 'helper;
+                        }
+                        Answer::SwitchTo(_) | Answer::Cancel => return Ok(Outcome::Cancelled),
                     }
                 }
                 Some(Line::Info(text)) => conversation.notice(request, Notice::Info(text)),
@@ -269,18 +316,20 @@ impl AuthenticationAgent {
         icon_name: String,
         details: HashMap<String, String>,
         cookie: String,
-        identities: Vec<Identity>,
+        identities: Vec<PolkitIdentity>,
         #[zbus(connection)] connection: &zbus::Connection,
         #[zbus(header)] header: Header<'_>,
     ) -> Result<(), AgentError> {
         from_polkitd(connection, &header).await?;
-        let user = choose_user(&identities)
-            .ok_or_else(|| AgentError::Failed("no user to authenticate as".to_owned()))?;
+        let (identities, user) = identities_of(&identities);
+        let user =
+            user.ok_or_else(|| AgentError::Failed("no user to authenticate as".to_owned()))?;
         let request = Request {
             action_id,
             message,
             icon_name,
             details,
+            identities,
             user,
         };
         lock(&self.running)
@@ -325,5 +374,29 @@ impl AuthenticationAgent {
                 "no authentication with cookie {cookie}"
             ))),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Identity, from_passwd};
+
+    #[test]
+    fn the_full_name_is_the_first_gecos_field_and_falls_back_to_the_login() {
+        assert_eq!(
+            from_passwd("anna:x:1000:1000:Anna Lindqvist,,,:/home/anna:/bin/bash\n"),
+            Some(Identity {
+                login: "anna".to_owned(),
+                name: "Anna Lindqvist".to_owned(),
+            })
+        );
+        assert_eq!(
+            from_passwd("backup:x:34:34::/var/backups:/usr/sbin/nologin"),
+            Some(Identity {
+                login: "backup".to_owned(),
+                name: "backup".to_owned(),
+            })
+        );
+        assert_eq!(from_passwd(""), None);
     }
 }

@@ -2,12 +2,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::time::Instant;
 
-use unbound_graphics::{
-    Appearance, Color, CpuRenderer, Elevation, Event, Item, Palette, Point, Rect, Scene, Shape,
-    TextSystem,
-};
+use unbound_graphics::{Appearance, CpuRenderer, Event, Palette, Point, Rect, Scene, TextSystem};
 use unbound_widgets::{
-    Animated, FrameTime, MENU_RADIUS, Menu, MenuOutcome, MenuPanel, MenuTracker, Spring,
+    Animated, FrameTime, MENU_SHADOW_MARGIN, Menu, MenuOutcome, MenuPanel, MenuTracker, Spring,
 };
 use wayland_client::protocol::wl_callback::{self, WlCallback};
 use wayland_client::protocol::wl_compositor::WlCompositor;
@@ -24,7 +21,6 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::ZwlrL
 
 use crate::window::{ShmTarget, State, WindowError};
 
-const MARGIN: f32 = 24.0;
 const SUBMENU_OVERLAP: f32 = 2.0;
 const SUBMENU_LIFT: i32 = -4;
 const BELOW_GAP: f32 = 4.0;
@@ -326,7 +322,8 @@ impl Menus {
     }
 
     pub(crate) fn handle(&mut self, level: usize, event: &Event, now: Instant) -> MenuOutcome {
-        let local = |point: Point| Point::new(point.x - MARGIN, point.y - MARGIN);
+        let local =
+            |point: Point| Point::new(point.x - MENU_SHADOW_MARGIN, point.y - MENU_SHADOW_MARGIN);
         match event {
             Event::PointerMove(pointer) => {
                 self.tracker
@@ -533,24 +530,7 @@ impl Menus {
                 scrolled: panel.scroll_offset(),
                 height: panel.size().height,
             };
-            let scene = || {
-                let size = panel.size();
-                let shape =
-                    Shape::rounded(Rect::new(0.0, 0.0, size.width, size.height), MENU_RADIUS);
-                let mut items =
-                    Item::shadows(shape, Elevation::Overlay, palette.scheme, true).to_vec();
-                items.extend(panel.paint(&palette, show_highlight));
-                Scene {
-                    width: (size.width + 2.0 * MARGIN) as u32,
-                    height: (size.height + 2.0 * MARGIN) as u32,
-                    background: Color::TRANSPARENT,
-                    items: vec![Item::Translate {
-                        offset: Point::new(MARGIN, MARGIN),
-                        items,
-                    }],
-                }
-            };
-            popup.paint(look, cpu, scene)?;
+            popup.paint(look, cpu, || panel.scene(&palette, show_highlight))?;
             popup.present(&frame, flashing)?;
         }
         Ok(())
@@ -705,7 +685,7 @@ fn set_shape(
     takes_input: bool,
 ) {
     let whole = |value: f32| value.round() as i32;
-    let (x, y) = (whole(MARGIN), whole(MARGIN));
+    let (x, y) = (whole(MENU_SHADOW_MARGIN), whole(MENU_SHADOW_MARGIN));
     let (width, height) = (whole(size.0).max(1), whole(size.1).max(1));
     xdg_surface.set_window_geometry(x, y, width, height);
     let input = compositor.create_region(handle, ());

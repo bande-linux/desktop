@@ -7,7 +7,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use unbound_polkit::agent::{Agent, Conversation, Notice, OBJECT_PATH, Request, Subject};
+use unbound_polkit::agent::{Agent, Answer, Conversation, Notice, OBJECT_PATH, Request, Subject};
 use unbound_test_bus::SessionBus;
 use zbus::blocking::Connection;
 use zbus::zvariant::{OwnedValue, Value};
@@ -30,18 +30,27 @@ struct Scripted {
 }
 
 impl Conversation for Scripted {
-    fn respond(&self, _request: &Request, prompt: &str, _echo: bool) -> Option<Zeroizing<String>> {
+    fn respond(&self, _request: &Request, _user: &str, prompt: &str, _echo: bool) -> Answer {
         if let Ok(seen) = self.seen.lock() {
             let _ = seen.send(Seen::Prompt(prompt.to_owned()));
         }
-        if let Some(hold) = &self.hold {
-            let _ = hold.lock().ok()?.recv_timeout(WAIT);
+        if let Some(hold) = &self.hold
+            && let Ok(hold) = hold.lock()
+        {
+            let _ = hold.recv_timeout(WAIT);
         }
-        let mut answers = self.answers.lock().ok()?;
-        if answers.is_empty() {
-            None
-        } else {
-            answers.remove(0).map(Zeroizing::new)
+        let Ok(mut answers) = self.answers.lock() else {
+            return Answer::Cancel;
+        };
+        match answers.is_empty() {
+            true => Answer::Cancel,
+            false => match answers.remove(0) {
+                Some(login) if login.starts_with("switch to ") => {
+                    Answer::SwitchTo(login.trim_start_matches("switch to ").to_owned())
+                }
+                Some(password) => Answer::Password(Zeroizing::new(password)),
+                None => Answer::Cancel,
+            },
         }
     }
 
@@ -174,15 +183,21 @@ fn start(answers: &[Option<&str>], hold: bool) -> Fixture {
 
 impl Fixture {
     fn begin(&self) -> std::thread::JoinHandle<zbus::Result<()>> {
-        self.begin_from(&self.polkitd)
+        self.begin_from(&self.polkitd, vec![rustix::process::getuid().as_raw()])
     }
 
-    fn begin_from(&self, caller: &Connection) -> std::thread::JoinHandle<zbus::Result<()>> {
+    fn begin_from(
+        &self,
+        caller: &Connection,
+        uids: Vec<u32>,
+    ) -> std::thread::JoinHandle<zbus::Result<()>> {
         let polkitd = caller.clone();
         let agent_name = self.agent_name.clone();
         std::thread::spawn(move || {
-            let uid = Value::from(rustix::process::getuid().as_raw());
-            let identities = vec![("unix-user", HashMap::from([("uid", uid)]))];
+            let identities: Vec<_> = uids
+                .into_iter()
+                .map(|uid| ("unix-user", HashMap::from([("uid", Value::from(uid))])))
+                .collect();
             polkitd
                 .call_method(
                     Some(agent_name.as_str()),
@@ -226,7 +241,11 @@ fn assert_info(seen: Seen) {
 fn only_polkitd_can_start_an_authentication() {
     let fixture = start(&[Some("right")], false);
     let impostor = fixture.bus.connect().expect("impostor connection");
-    let result = fixture.begin_from(&impostor).join().expect("caller");
+    let own = rustix::process::getuid().as_raw();
+    let result = fixture
+        .begin_from(&impostor, vec![own])
+        .join()
+        .expect("caller");
     assert!(result.is_err());
     assert!(
         fixture
@@ -294,4 +313,21 @@ fn polkitd_can_cancel_a_running_authentication() {
         let _ = release.send(());
     }
     assert!(cancelled(begun.join().expect("thread")));
+}
+
+#[test]
+fn choosing_another_administrator_restarts_the_helper_for_them() {
+    let fixture = start(&[Some("switch to root"), Some("right")], false);
+    let own = rustix::process::getuid().as_raw();
+    let begun = fixture.begin_from(&fixture.polkitd, vec![own, 0]);
+
+    assert_info(fixture.next());
+    assert_eq!(fixture.next(), Seen::Prompt("Password: ".to_owned()));
+    assert_eq!(
+        fixture.next(),
+        Seen::Notice(Notice::Info("Authenticating root".to_owned()))
+    );
+    assert_eq!(fixture.next(), Seen::Prompt("Password: ".to_owned()));
+    assert_eq!(fixture.next(), Seen::Closed);
+    begun.join().expect("thread").expect("authorized");
 }

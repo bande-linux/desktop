@@ -34,8 +34,9 @@ impl Session {
 
     pub fn on(driver: &str) -> Self {
         let path = card_path(driver);
-        let (output, DrmNotifiers { session, device }) =
-            DrmBackend::open(Some(&path)).expect("the compositor takes the card through libseat");
+        let (output, DrmNotifiers { session, device }) = DrmBackend::open(Some(&path))
+            .expect("the compositor takes the card through libseat")
+            .expect("the card drives a connected display");
         let first = output
             .outputs()
             .into_iter()
@@ -89,19 +90,25 @@ impl Session {
     }
 
     pub fn present(&mut self) -> Scanout {
+        assert!(self.present_damage(), "a frame with damage");
+        self.card.scanout()
+    }
+
+    pub fn present_damage(&mut self) -> bool {
         let main = self.shared.server.main_output();
         let submission = self
             .output
             .submit(&mut self.shared.server, &main)
             .expect("frame");
-        assert_eq!(submission, Submission::AwaitingFlip);
+        if submission != Submission::AwaitingFlip {
+            return false;
+        }
         self.shared.flip = None;
         self.dispatch_until("a page flip", |session| session.shared.flip.is_some());
         let (crtc, metadata) = self.shared.flip.take().expect("a page flip");
         self.output
             .flipped(crtc, metadata)
             .expect("frame completion");
-
-        self.card.scanout()
+        true
     }
 }

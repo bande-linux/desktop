@@ -2,15 +2,15 @@ name: ci
 
 on:
   push:
-    branches: ['**']
-  pull_request:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
   workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
+  CARGO_BUILD_JOBS: '2'
   CARGO_INCREMENTAL: '0'
   CARGO_TERM_COLOR: always
   RUSTC_WRAPPER: sccache
@@ -19,10 +19,11 @@ jobs:
   lint:
     name: ci/lint
     runs-on: [self-hosted, unbound]
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
       - run: rustup toolchain install
+      - run: ci/target-dir.sh
       - name: Install build dependencies
         run: ci/apt-install.sh pkg-config libxkbcommon-dev libgbm-dev libinput-dev libseat-dev libudev-dev libpipewire-0.3-dev libclang-dev
       - run: cargo fmt --all --check
@@ -44,17 +45,16 @@ jobs:
 
   test:
     name: ci/lavapipe-test
-    if: github.event_name != 'push' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/ci/')
     runs-on: [self-hosted, unbound]
-    timeout-minutes: 30
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
       - run: rustup toolchain install
+      - run: ci/target-dir.sh
       - name: Install build and test dependencies
-        run: ci/apt-install.sh pkg-config libxkbcommon-dev libgbm-dev libinput-dev libseat-dev libudev-dev libpipewire-0.3-dev libclang-dev libvulkan1 mesa-vulkan-drivers fonts-dejavu-core dbus-daemon at-spi2-core
-      - name: Install the toolkit's fonts, fontconfig and libwayland-client
-        run: |
-          ci/apt-install.sh fonts-inter fonts-manrope fonts-jetbrains-mono fonts-noto-cjk libfontconfig1 libwayland-client0
+        run: ci/apt-install.sh pkg-config libxkbcommon-dev libgbm-dev libinput-dev libseat-dev libudev-dev libpipewire-0.3-dev libclang-dev libvulkan1 mesa-vulkan-drivers dbus-daemon at-spi2-core libfontconfig1 libwayland-client0
+      - name: Install Debian 13's fonts, which the goldens are rendered with
+        run: ci/debian-fonts.sh
       - name: Install kill for the clipboard daemon's restart test
         run: ci/apt-install.sh procps
       - run: cargo test --workspace --locked -- --show-output
@@ -67,7 +67,6 @@ jobs:
 
   deb:
     name: ci/deb
-    if: github.event_name != 'push' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/ci/')
     runs-on: [self-hosted, unbound]
     timeout-minutes: 90
     env:
@@ -77,6 +76,7 @@ jobs:
         with:
           fetch-depth: 0
       - run: rustup toolchain install
+      - run: ci/target-dir.sh
       - name: Install build and smoke-test dependencies
         run: ci/apt-install.sh pkg-config libxkbcommon-dev libgbm-dev libinput-dev libseat-dev libudev-dev libvulkan1 mesa-vulkan-drivers dbus-daemon dbus-bin
       - name: Install cargo-deb
@@ -94,6 +94,7 @@ jobs:
           echo "DEB_VERSION=$version" >> "$GITHUB_ENV"
       - name: Build the packages
         env:
+          CARGO_BUILD_JOBS: '1'
           RUSTFLAGS: --remap-path-prefix=${{ github.workspace }}=/build --remap-path-prefix=/root/.cargo=/cargo --remap-path-prefix=/root/.rustup=/rustup
         run: |
           packages="unbound-compositor unbound-notify unbound-clipboard unbound-config unbound-power unbound-sound \
@@ -104,12 +105,11 @@ jobs:
             cargo deb --profile dist --no-build --package "$package" --locked --deb-version "$DEB_VERSION"
           done
       - name: Build the benchmarks for ci/perf against the packaged release build
-        if: github.ref == 'refs/heads/main' || contains(github.event.head_commit.message, '[perf]')
         env:
+          CARGO_BUILD_JOBS: '1'
           RUSTFLAGS: --remap-path-prefix=${{ github.workspace }}=/build --remap-path-prefix=/root/.cargo=/cargo --remap-path-prefix=/root/.rustup=/rustup
         run: cargo build --profile dist --locked --package unbound-bench --package unbound-sample
       - uses: actions/upload-artifact@v7
-        if: github.ref == 'refs/heads/main' || contains(github.event.head_commit.message, '[perf]')
         with:
           name: perf-binaries
           path: |
@@ -183,7 +183,7 @@ jobs:
           test -x "$root/usr/bin/unbound-monitor"
           grep -qx 'Exec=unbound-monitor' "$root/usr/share/applications/org.unbound.ActivityMonitor.desktop"
           dpkg-deb --extract target/debian/unbound-greeter_*.deb "$root"
-          grep -qx 'command = "unbound-compositor --greeter"' "$root/usr/share/unbound-greeter/greetd-config.toml"
+          grep -qx 'command = "/usr/bin/unbound-compositor --greeter"' "$root/usr/share/unbound-greeter/greetd-config.toml"
           dpkg-deb --field target/debian/unbound-greeter_*.deb Depends | grep -qw greetd
           dpkg-deb --extract target/debian/unbound-lock_*.deb "$root"
           grep -qx '@include common-auth' "$root/etc/pam.d/unbound-lock"
@@ -259,13 +259,13 @@ jobs:
           dpkg-deb --extract target/debian/unbound-config_*.deb "$root"
           export XDG_CONFIG_HOME=$(mktemp -d)
           mkdir -p "$XDG_CONFIG_HOME/unbound"
-          echo 'panel { edge "top"; }' > "$XDG_CONFIG_HOME/unbound/config.kdl"
+          echo 'bar { edge "top"; }' > "$XDG_CONFIG_HOME/unbound/config.kdl"
           dbus-run-session -- bash -c '
             "$1/usr/bin/unbound-config" &
             daemon=$!
             for attempt in $(seq 50); do
               reply=$(dbus-send --session --print-reply --dest=org.unbound.Config /org/unbound/Config \
-                org.freedesktop.DBus.Properties.Get string:org.unbound.Config string:DockEdge 2>/dev/null) \
+                org.freedesktop.DBus.Properties.Get string:org.unbound.Config string:BarEdge 2>/dev/null) \
                 && break
               sleep 0.1
             done
@@ -291,7 +291,6 @@ jobs:
 
   deb-all:
     name: ci/deb-all
-    if: github.event_name != 'push' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/ci/')
     runs-on: [self-hosted, unbound]
     timeout-minutes: 15
     steps:
@@ -358,17 +357,19 @@ jobs:
 
   vm:
     name: ci/vm
-    if: github.event_name != 'push' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/ci/')
     runs-on: [self-hosted, unbound-kvm]
-    timeout-minutes: 90
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v7
       - run: rustup toolchain install
+      - run: ci/target-dir.sh
       - name: Install build and guest dependencies
         run: ci/apt-install.sh pkg-config libxkbcommon-dev libgbm-dev libinput-dev libseat-dev libudev-dev libpipewire-0.3-dev libclang-dev jq e2fsprogs qemu-system-arm
       - name: Build or reuse the guest kernel and root image
         run: ci/vm/images.sh vm
       - name: Run the guest tests in a KVM guest with vkms and virtio-gpu
+        env:
+          GUEST_TIMEOUT: '2700'
         run: ci/vm/guest-tests.sh vm
       - name: Sign in through greetd, PAM and logind in a guest booted with systemd
         continue-on-error: true
@@ -382,12 +383,12 @@ jobs:
 
   polkit:
     name: ci/polkit
-    if: github.event_name != 'push' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/ci/')
     runs-on: [self-hosted, unbound]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - run: rustup toolchain install
+      - run: ci/target-dir.sh
       - name: Build the polkitd test
         run: |
           cargo test --package unbound-polkit --test polkitd --locked --no-run --message-format=json \
@@ -425,7 +426,6 @@ jobs:
   perf:
     name: ci/perf
     needs: [test, deb, vm]
-    if: github.ref == 'refs/heads/main' || contains(github.event.head_commit.message, '[perf]')
     runs-on: [self-hosted, unbound]
     timeout-minutes: 30
     steps:
@@ -481,9 +481,7 @@ jobs:
   publish:
     name: ci/publish
     needs: [lint, test, deb, deb-all, deb-install, vm, polkit, portal, perf]
-    if: >-
-      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      (github.event_name == 'workflow_dispatch' && github.ref_type == 'tag')
+    if: github.ref_type == 'tag'
     runs-on: [self-hosted, unbound]
     timeout-minutes: 10
     steps:

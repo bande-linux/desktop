@@ -83,7 +83,7 @@ impl AreaSelection {
                 self.pointer = Some(pointer.position);
                 AreaOutcome::Selecting
             }
-            Event::PointerMove(pointer) => {
+            Event::PointerEnter(pointer) | Event::PointerMove(pointer) => {
                 self.pointer = Some(pointer.position);
                 AreaOutcome::Selecting
             }
@@ -267,6 +267,28 @@ mod tests {
             let outcome = selection.handle(&Event::PointerUp(Pointer::at(Point::new(to.0, to.1))));
             assert_eq!(outcome, expected, "{from:?} to {to:?}");
         }
+    }
+
+    #[test]
+    fn the_crosshair_shows_where_the_pointer_already_is_when_the_overlay_opens() {
+        let mut selection = AreaSelection::default();
+        let palette = Palette::for_scheme(Scheme::Light);
+        let mut text = TextSystem::new();
+        assert!(
+            selection
+                .scene(200, 100, &palette, &mut text)
+                .items
+                .is_empty()
+        );
+
+        selection.handle(&Event::PointerEnter(Pointer::at(Point::new(40.0, 30.0))));
+
+        assert!(
+            !selection
+                .scene(200, 100, &palette, &mut text)
+                .items
+                .is_empty()
+        );
     }
 
     #[test]

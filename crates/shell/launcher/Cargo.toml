@@ -21,6 +21,7 @@ unbound-xdg.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]
+rustix = { workspace = true, features = ["time"] }
 tempfile.workspace = true
 unbound-golden.workspace = true
 

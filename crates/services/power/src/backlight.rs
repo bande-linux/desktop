@@ -49,6 +49,10 @@ impl Backlight {
     pub fn max_brightness(&self) -> io::Result<u32> {
         read_number(&self.directory.join("max_brightness"))
     }
+
+    pub fn actual_brightness_file(&self) -> PathBuf {
+        self.directory.join("actual_brightness")
+    }
 }
 
 pub fn dimmed(brightness: u32) -> Option<u32> {

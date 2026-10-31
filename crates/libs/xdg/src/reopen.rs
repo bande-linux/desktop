@@ -37,16 +37,13 @@ pub fn remember_apps(file: &Path, apps: &[&str]) -> io::Result<()> {
     fs::write(file, listed)
 }
 
-pub fn remember_running_apps(running: &[String]) {
-    let Some(file) = reopen_file() else {
-        return;
-    };
+pub fn remember_running_apps(file: &Path, running: &[String]) {
     let entries = applications(
         &data_dirs(),
         Locale::from_env().as_ref(),
         &current_desktops(),
     );
-    if let Err(error) = remember_apps(&file, &apps_to_reopen(&entries, running)) {
+    if let Err(error) = remember_apps(file, &apps_to_reopen(&entries, running)) {
         tracing::warn!("cannot remember the apps to reopen: {error}");
     }
 }

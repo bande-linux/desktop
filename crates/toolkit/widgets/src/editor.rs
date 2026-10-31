@@ -196,6 +196,7 @@ pub(crate) struct Editor {
     preedit: Option<Preedit>,
     history: History,
     font_size: f32,
+    scale: f32,
     multi_line: bool,
     width: Option<f32>,
     color: Color,
@@ -241,6 +242,7 @@ impl Editor {
             preedit: None,
             history: History::default(),
             font_size,
+            scale: 1.0,
             multi_line,
             width: None,
             color: Color::BLACK,
@@ -267,6 +269,10 @@ impl Editor {
 
     pub(crate) fn font_size(&self) -> f32 {
         self.font_size
+    }
+
+    pub(crate) fn scale(&self) -> f32 {
+        self.scale
     }
 
     pub(crate) fn set_text(&mut self, text: &str) {
@@ -499,6 +505,15 @@ impl Editor {
         self.invalidate();
     }
 
+    pub(crate) fn set_scale(&mut self, scale: f32) {
+        if self.scale == scale {
+            return;
+        }
+        self.scale = scale;
+        self.line_height = (self.font_size * LINE_HEIGHT_RATIO * scale).ceil();
+        self.invalidate();
+    }
+
     pub(crate) fn set_color(&mut self, color: Color) {
         if self.color == color {
             return;
@@ -561,7 +576,7 @@ impl Editor {
     fn build(&self, text: &mut TextSystem, paragraph: usize) -> Paragraph {
         let content = self.layout_text(paragraph);
         let (fonts, layouts) = text.contexts();
-        let mut builder = layouts.ranged_builder(fonts, &content, 1.0, true);
+        let mut builder = layouts.ranged_builder(fonts, &content, self.scale, true);
         TextStyle::new(self.font_size, self.color).apply(&mut builder);
         let mut layout: Layout<Color> = builder.build(&content);
         layout.break_all_lines(self.width);

@@ -26,7 +26,7 @@ unbound-test-bus.workspace = true
 
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
-section = "sound"
+section = "misc"
 depends = "$auto, dbus-session-bus | default-dbus-session-bus, init-system-helpers (>= 1.66)"
 recommends = "pipewire, wireplumber, unbound-config"
 extended-description = """\

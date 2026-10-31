@@ -340,6 +340,16 @@ fn the_login_window_offers_power_and_asks_before_restarting_or_shutting_down() {
         PowerAction::Restart,
         PowerAction::ShutDown,
     ]);
+    let wifi = Wifi {
+        enabled: true,
+        networks: Vec::new(),
+        sign_in: false,
+    };
+    let battery = Battery {
+        percent: 80.0,
+        power: Power::Charging { until_full: None },
+    };
+    screen.set_devices(Some(battery), Some(&wifi));
     render(&mut screen, "login-power");
 
     press(&mut screen, Key::Tab);

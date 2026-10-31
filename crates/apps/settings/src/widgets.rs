@@ -9,10 +9,15 @@ use unbound_toolkit::ui::{
 };
 use unbound_toolkit::{
     Color, Image, Item, Paragraph, Point, Radius, Rect, SHEET_INSET, Scheme, Shape, Spacing,
-    TextAlign, TextRole, TextStyle,
+    TextAlign, TextRole, TextSize, TextStyle,
 };
 
-pub const SIDEBAR_WIDTH: f32 = 220.0;
+const SIDEBAR_WIDTH: f32 = 220.0;
+const SIDEBAR_GROWTH: f32 = 60.0;
+
+pub fn sidebar_width(text: TextSize) -> f32 {
+    (SIDEBAR_WIDTH + SIDEBAR_GROWTH * (text.scale() - 1.0)).round()
+}
 const MARGIN: f32 = Spacing::M as f32;
 const SIDEBAR_INSET: f32 = Spacing::S as f32;
 const BODY_SIZE: f32 = 13.0;
@@ -194,6 +199,7 @@ pub struct Root {
     children: Vec<Box<dyn Widget>>,
     sizes: Vec<Size>,
     inset: f32,
+    sidebar: f32,
     frame: Rect,
 }
 
@@ -207,6 +213,7 @@ impl Root {
             children: vec![search, panes, content],
             sizes: Vec::new(),
             inset: SHEET_INSET as f32,
+            sidebar: SIDEBAR_WIDTH,
             frame: Rect::default(),
         }
     }
@@ -217,9 +224,9 @@ impl Root {
 
     fn sheet(&self) -> Rect {
         Rect::new(
-            SIDEBAR_WIDTH,
+            self.sidebar,
             self.frame.y,
-            (self.frame.width - SIDEBAR_WIDTH - self.inset).max(0.0),
+            (self.frame.width - self.sidebar - self.inset).max(0.0),
             (self.frame.height - self.inset).max(0.0),
         )
     }
@@ -231,9 +238,10 @@ impl Widget for Root {
     }
 
     fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
-        let sidebar = Size::new(SIDEBAR_WIDTH - 2.0 * SIDEBAR_INSET, available.height);
+        self.sidebar = sidebar_width(cx.text.size());
+        let sidebar = Size::new(self.sidebar - 2.0 * SIDEBAR_INSET, available.height);
         let content = Size::new(
-            (available.width - SIDEBAR_WIDTH - self.inset).max(0.0),
+            (available.width - self.sidebar - self.inset).max(0.0),
             (available.height - self.inset).max(0.0),
         );
         self.sizes = self
@@ -257,7 +265,7 @@ impl Widget for Root {
     fn place(&mut self, cx: &mut Context, frame: Rect) {
         self.frame = frame;
         let search_height = self.sizes.first().map_or(0.0, |size| size.height);
-        let width = SIDEBAR_WIDTH - 2.0 * SIDEBAR_INSET;
+        let width = self.sidebar - 2.0 * SIDEBAR_INSET;
         let frames = [
             Rect::new(SIDEBAR_INSET, 0.0, width, search_height),
             Rect::new(
@@ -728,7 +736,7 @@ impl Widget for SidebarRow {
 
     fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
         self.text.measure(cx);
-        Size::new(available.width, SIDEBAR_ROW_HEIGHT)
+        Size::new(available.width, SIDEBAR_ROW_HEIGHT + cx.grown_line())
     }
 
     fn place(&mut self, _cx: &mut Context, frame: Rect) {

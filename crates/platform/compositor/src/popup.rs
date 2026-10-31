@@ -240,6 +240,7 @@ impl State {
     }
 
     pub(crate) fn close_menus(&mut self) {
+        self.dismiss_window_menu();
         if self.popup_grab.is_some() {
             self.end_popup_grab();
             self.refocus_pointer();

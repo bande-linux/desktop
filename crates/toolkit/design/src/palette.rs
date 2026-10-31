@@ -1,4 +1,4 @@
-use crate::Color;
+use crate::{Color, TextSize};
 
 const NEUTRAL_HUE: f64 = 80.0;
 
@@ -234,6 +234,7 @@ pub struct Appearance {
     pub contrast: Contrast,
     pub reduce_motion: bool,
     pub frame_tint: Option<Color>,
+    pub text_size: TextSize,
 }
 
 const FRAME_TINT: f32 = 0.06;

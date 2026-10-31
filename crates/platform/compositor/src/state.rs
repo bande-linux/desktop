@@ -264,6 +264,7 @@ pub struct State {
     pub(crate) switcher: crate::switcher::Switcher,
     pub(crate) assist: crate::assist::Assist,
     pub(crate) recall: crate::recall::Recall,
+    pub(crate) reopen_file: Option<std::path::PathBuf>,
     pub(crate) gesture_route: Option<crate::gesture::Route>,
     pub(crate) active_app: String,
     pub(crate) active_output: String,
@@ -301,6 +302,7 @@ pub struct State {
     pub(crate) pointing: crate::pointing::Pointing,
     pub(crate) pending_captures: Vec<crate::capture::PendingCapture>,
     pub(crate) decorations: crate::frame::Decorations,
+    pub(crate) window_menus: crate::window_menu::WindowMenus,
     pub(crate) alerts: crate::alert::Alerts,
     pub(crate) labels: std::cell::RefCell<crate::label::Labels>,
 }
@@ -448,6 +450,7 @@ impl Headless {
             switcher: crate::switcher::Switcher::default(),
             assist: crate::assist::Assist::default(),
             recall: crate::recall::Recall::default(),
+            reopen_file: None,
             gesture_route: None,
             active_app: String::new(),
             active_output: String::new(),
@@ -490,6 +493,7 @@ impl Headless {
             pointing: crate::pointing::Pointing::default(),
             pending_captures: Vec::new(),
             decorations: crate::frame::Decorations::default(),
+            window_menus: crate::window_menu::WindowMenus::default(),
             alerts: crate::alert::Alerts::default(),
             labels: std::cell::RefCell::default(),
         };
@@ -667,6 +671,25 @@ impl Headless {
         &self.state.windows
     }
 
+    pub fn mapped_layers(&self) -> Vec<(String, u32)> {
+        self.state
+            .screens
+            .iter()
+            .flat_map(|screen| {
+                layer_map_for_output(&screen.output)
+                    .layers()
+                    .filter(|layer| is_mapped(layer.wl_surface()))
+                    .map(|layer| {
+                        (
+                            layer.namespace().to_owned(),
+                            layer.wl_surface().id().protocol_id(),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    }
+
     pub fn render_elements(&mut self, renderer: &mut VulkanRenderer) -> Vec<ScreenElement> {
         self.render_screen(renderer, 0)
     }
@@ -689,6 +712,7 @@ impl Headless {
     ) -> Vec<ScreenElement> {
         self.state.paint_title_bars(renderer);
         self.state.prepare_switcher(screen);
+        self.state.prepare_window_menu(screen);
         let (elements, drawn, icon) = self.compose(renderer, screen, true);
         if self.state.pointer_screen() == screen {
             self.state.remember_drag_icon(icon);
@@ -778,6 +802,7 @@ impl Headless {
         elements.extend(self.state.source_hud_element(renderer, screen, scale));
         elements.extend(self.state.switcher_elements(renderer, screen, scale));
         elements.extend(self.state.assist_elements(renderer, screen, scale));
+        elements.extend(self.state.window_menu_elements(renderer, screen, scale));
         let key = self.state.key_window();
         let shell_opacity = self.state.shell_opacity();
         let wallpapers: Vec<WlSurface> = match shell_opacity < 1.0 {
@@ -1070,6 +1095,7 @@ impl State {
         if self.popup_grab.is_some() && surface != self.menu_root() {
             self.close_menus();
         }
+        self.dismiss_window_menu_unless_on(surface.as_ref());
         let onto_layer = surface
             .as_ref()
             .is_some_and(|surface| self.toplevel_of(surface).is_none());

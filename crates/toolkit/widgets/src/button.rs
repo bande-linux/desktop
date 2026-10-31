@@ -163,13 +163,17 @@ impl Widget for Button {
                 (true, true) => cx.palette.ink,
                 (true, false) => cx.palette.ink2,
             });
-            return Size::new(BUTTON_HEIGHT, BUTTON_HEIGHT);
+            let side = cx.control_height(ControlSize::Regular);
+            return Size::new(side, side);
         }
         let style = self.text_style(cx);
         let paragraph = cx
             .text
             .paragraph(&self.title, style, None, TextAlign::Start);
-        let size = Size::new((paragraph.width() + 2.0 * PADDING).ceil(), BUTTON_HEIGHT);
+        let size = Size::new(
+            (paragraph.width() + 2.0 * PADDING).ceil(),
+            cx.control_height(ControlSize::Regular),
+        );
         self.paragraph = Some(paragraph);
         size
     }

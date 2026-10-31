@@ -1,3 +1,5 @@
+use crate::{TextRole, TextSize};
+
 pub struct Spacing;
 
 impl Spacing {
@@ -27,4 +29,12 @@ impl ControlSize {
             Self::Large => 36.0,
         }
     }
+
+    pub fn height_for(self, text: TextSize) -> f32 {
+        self.height() + grown_line(text)
+    }
+}
+
+pub fn grown_line(text: TextSize) -> f32 {
+    (TextRole::Body.spec().line_height * (text.scale() - 1.0)).round()
 }

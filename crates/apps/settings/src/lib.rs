@@ -1,6 +1,7 @@
 mod about;
 mod arrangement;
 mod battery;
+mod brightness;
 mod client;
 mod clock;
 mod defaults;
@@ -15,8 +16,10 @@ mod language;
 mod locale;
 mod login;
 mod network;
+mod night;
 mod notifications;
 mod pages;
+mod permissions;
 mod pictures;
 mod pointing;
 mod power;
@@ -47,7 +50,9 @@ pub use locale::{
     parse_assignments,
 };
 pub use login::{App, LoginCommand, LoginItems, login_items, login_matches};
+pub use night::{clock_text, night_summary};
 pub use notifications::{AppNotifications, NotificationCommand, follow_app_notifications};
+pub use permissions::{Grant, Grants, PermissionCommand, follow_permissions};
 pub use pictures::{Pair, PictureCommand, bundled_pairs, thumbnail};
 pub use pointing::{PointingDevices, UDEV_DATA};
 pub use power::charge_text;
@@ -65,7 +70,7 @@ pub use time::{
 };
 pub use unbound_settings_panes::{PaneId, SettingId, Value};
 pub use view::SettingsView;
-pub use widgets::{SIDEBAR_WIDTH, bucket_levels};
+pub use widgets::{bucket_levels, sidebar_width};
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-settings.ftl");
 
@@ -86,6 +91,9 @@ mod tests {
             include_str!("defaults.rs"),
             include_str!("failure.rs"),
             include_str!("privacy.rs"),
+            include_str!("night.rs"),
+            include_str!("permissions.rs"),
+            include_str!("brightness.rs"),
             include_str!("language.rs"),
             include_str!("network.rs"),
             include_str!("notifications.rs"),

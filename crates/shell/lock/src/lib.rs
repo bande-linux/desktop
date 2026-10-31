@@ -1,4 +1,5 @@
 mod backdrop;
+mod devices;
 mod pam;
 mod user;
 
@@ -27,6 +28,7 @@ use unbound_toolkit::{
 use zeroize::Zeroizing;
 
 pub use backdrop::{BackdropSource, Look, load_backdrop};
+pub use devices::Devices;
 pub use pam::{AuthError, authenticate};
 pub use unbound_inbox::Inbox;
 pub use unbound_wallpaper::Variant;

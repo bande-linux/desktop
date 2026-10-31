@@ -1,8 +1,9 @@
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::L10N;
 
 pub const COUNTDOWN: Duration = Duration::from_secs(60);
+pub const QUIT_PATIENCE: Duration = Duration::from_secs(3);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Ending {
@@ -55,6 +56,148 @@ impl Ending {
             Self::ShutDown => "button-shut-down",
             Self::LogOut => "button-log-out",
         })
+    }
+
+    pub fn blocked(self, app: &str) -> String {
+        let app = [("app", app.to_owned().into())];
+        match self {
+            Self::Restart => L10N.tr_args("blocked-restart", app),
+            Self::ShutDown => L10N.tr_args("blocked-shut-down", app),
+            Self::LogOut => L10N.tr_args("blocked-log-out", app),
+        }
+    }
+
+    pub fn anyway(self) -> String {
+        L10N.tr(match self {
+            Self::Restart => "anyway-restart",
+            Self::ShutDown => "anyway-shut-down",
+            Self::LogOut => "anyway-log-out",
+        })
+    }
+}
+
+pub fn quitting_apps() -> String {
+    L10N.tr("quitting-apps")
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Stage {
+    Asking {
+        until: Instant,
+    },
+    Quitting {
+        since: Instant,
+        running: Option<String>,
+    },
+    Blocked {
+        app_id: String,
+    },
+    Ending,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Effect {
+    QuitApps,
+    Activate(String),
+    End,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionEnding {
+    pub ending: Ending,
+    stage: Stage,
+}
+
+impl SessionEnding {
+    pub fn new(ending: Ending, now: Instant) -> Self {
+        Self {
+            ending,
+            stage: Stage::Asking {
+                until: now + COUNTDOWN,
+            },
+        }
+    }
+
+    pub fn stage(&self) -> &Stage {
+        &self.stage
+    }
+
+    pub fn confirm(&mut self, now: Instant) -> Option<Effect> {
+        match self.stage {
+            Stage::Asking { .. } => {
+                self.stage = Stage::Quitting {
+                    since: now,
+                    running: None,
+                };
+                Some(Effect::QuitApps)
+            }
+            Stage::Quitting { .. } | Stage::Blocked { .. } => {
+                self.stage = Stage::Ending;
+                Some(Effect::End)
+            }
+            Stage::Ending => None,
+        }
+    }
+
+    pub fn apps_running(&mut self, app_id: String, count: u32, now: Instant) -> Option<Effect> {
+        match &mut self.stage {
+            Stage::Quitting { .. } | Stage::Blocked { .. } if count == 0 => {
+                self.stage = Stage::Ending;
+                Some(Effect::End)
+            }
+            Stage::Quitting { running, .. } => {
+                *running = Some(app_id);
+                self.tick(now)
+            }
+            Stage::Blocked { app_id: blocking } if *blocking != app_id => {
+                blocking.clone_from(&app_id);
+                Some(Effect::Activate(app_id))
+            }
+            _ => None,
+        }
+    }
+
+    pub fn tick(&mut self, now: Instant) -> Option<Effect> {
+        match &self.stage {
+            Stage::Asking { until } if *until <= now => self.confirm(now),
+            Stage::Quitting {
+                since,
+                running: Some(app_id),
+            } if *since + QUIT_PATIENCE <= now => {
+                let app_id = app_id.clone();
+                self.stage = Stage::Blocked {
+                    app_id: app_id.clone(),
+                };
+                Some(Effect::Activate(app_id))
+            }
+            _ => None,
+        }
+    }
+
+    pub fn left(&self, now: Instant) -> Duration {
+        match self.stage {
+            Stage::Asking { until } => until.saturating_duration_since(now),
+            _ => Duration::ZERO,
+        }
+    }
+
+    pub fn deadline(&self, now: Instant) -> Option<Instant> {
+        match &self.stage {
+            Stage::Asking { until } => {
+                let left = until.saturating_duration_since(now);
+                let part = left.subsec_nanos();
+                Some(if part == 0 {
+                    now + Duration::from_secs(1).min(left)
+                } else {
+                    now + Duration::from_nanos(u64::from(part))
+                })
+            }
+            Stage::Quitting {
+                since,
+                running: Some(_),
+            } => Some(*since + QUIT_PATIENCE),
+            _ => None,
+        }
     }
 }
 

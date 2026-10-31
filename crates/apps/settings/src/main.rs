@@ -6,17 +6,17 @@ use std::time::Instant;
 use unbound_app_menu::{AppMenu, Entry, Standard, app_submenu, window_submenu};
 use unbound_settings::SIDEBAR_WIDTH;
 use unbound_settings::{
-    Command, Displays, Feed, L10N, PaneId, PointingDevices, Services, SettingsView, UDEV_DATA,
-    announce_updates, feed,
+    Command, Displays, Feed, L10N, PaneId, PointingDevices, Services, SettingsView,
+    SoftwareCommand, UDEV_DATA, announce_updates, feed,
 };
-use unbound_settings_panes::panes;
+use unbound_settings_panes::panes as panes_list;
 use unbound_toolkit::{
     App, FrameRegions, MenuPlacement, Rect, Role, Scene, TextSystem, Window, WindowEvent,
 };
 use unbound_xdg::spawn_detached;
 
 const APP_ID: &str = "org.unbound.Settings";
-const WINDOW_SIZE: (u32, u32) = (900, 600);
+const WINDOW_SIZE: (u32, u32) = (900, 720);
 const FEED: usize = 0;
 const PANE_ACTION: &str = "pane:";
 const FILES_APP_ID: &str = "org.unbound.Files";
@@ -58,10 +58,21 @@ fn reveal(window: &mut Window, path: &Path) {
 }
 
 fn app_menus() -> Vec<Entry> {
-    let panes = panes()
-        .into_iter()
-        .map(|pane| Entry::item(&pane.name, &format!("{PANE_ACTION}{}", pane.id.keyword())))
-        .collect();
+    let mut panes = Vec::new();
+    let mut group = None;
+    for pane in panes_list() {
+        let Some(own) = pane.id.group() else {
+            continue;
+        };
+        if group.is_some_and(|group| group != own) {
+            panes.push(Entry::separator());
+        }
+        group = Some(own);
+        panes.push(Entry::item(
+            &pane.name,
+            &format!("{PANE_ACTION}{}", pane.id.keyword()),
+        ));
+    }
     vec![
         app_submenu(&L10N.tr("title"), Vec::new()),
         Entry::submenu(&L10N.tr("menu-view"), panes),
@@ -209,6 +220,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .ok();
     let (feed, updates) = feed()?;
     let services = Services::start(&session, system.as_ref(), &updates);
+    services.send(Command::Software(SoftwareCommand::Check));
     let mut window = Window::open(Role::toplevel(&L10N.tr("title"), APP_ID), WINDOW_SIZE)?;
     window.set_frame_regions(FrameRegions {
         sidebar: SIDEBAR_WIDTH,

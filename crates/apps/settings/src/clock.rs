@@ -21,10 +21,14 @@ fn zone_detail(region: &str, zone: &str, now: Timestamp) -> String {
 
 impl SettingsView {
     pub(crate) fn clock_rows(&mut self) -> Widgets {
-        let Some(time) = self.time.clone().filter(|time| !time.automatic) else {
+        let id = SettingId::DateAndTime;
+        let Some(time) = self
+            .time
+            .clone()
+            .filter(|time| !time.automatic && self.allowed(id))
+        else {
             return Vec::new();
         };
-        let id = SettingId::DateAndTime;
         let zone = TimeZone::get(&time.zone).unwrap_or(TimeZone::UTC);
         let now = Zoned::now().with_time_zone(zone);
         let text = self
@@ -57,12 +61,15 @@ impl SettingsView {
             .filter(|(picker, _)| *picker == Picker::Zone)
         else {
             let (city, region) = zone_place(&time.zone);
-            let mut change = intent(&self.intents, |()| Intent::Pick(Some(Picker::Zone)));
-            let button = Button::new(&L10N.tr("change-ellipsis"), move || change(()));
-            self.anchors
-                .push((Anchor::Setting(SettingId::TimeZone, None), button.id()));
+            let button = self.allowed(SettingId::TimeZone).then(|| {
+                let mut change = intent(&self.intents, |()| Intent::Pick(Some(Picker::Zone)));
+                let button = Button::new(&L10N.tr("change-ellipsis"), move || change(()));
+                self.anchors
+                    .push((Anchor::Setting(SettingId::TimeZone, None), button.id()));
+                boxed(button)
+            });
             return vec![boxed(
-                Row::new(Text::new(&city, Tone::Primary), Some(boxed(button))).detail(
+                Row::new(Text::new(&city, Tone::Primary), button).detail(
                     Text::new(&zone_detail(&region, &time.zone, now), Tone::Muted).caption(),
                 ),
             )];

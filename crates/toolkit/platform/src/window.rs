@@ -201,6 +201,10 @@ pub enum WindowEvent {
         full_screen: bool,
     },
     Displays(Vec<String>),
+    AppsRunning {
+        app_id: String,
+        count: u32,
+    },
     CapsLock(bool),
     Accessibility(ActionRequest),
 
@@ -2456,7 +2460,7 @@ impl Dispatch<WlRegistry, ()> for State {
                     }
                 }
                 "unbound_shell_v1" => {
-                    state.shell.protocol = Some(registry.bind(name, version.min(17), handle, ()));
+                    state.shell.protocol = Some(registry.bind(name, version.min(18), handle, ()));
                 }
                 "unbound_app_v1" => {
                     state.shell.app = Some(registry.bind(name, version.min(6), handle, ()));

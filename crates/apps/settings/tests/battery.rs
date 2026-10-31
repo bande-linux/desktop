@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Role, TreeId};
-use support::{WAIT, find};
+use support::{WAIT, find, has_text};
 use unbound_settings::{
     BatteryCommand, Charge, Command, PaneId, SettingId, SettingsView, Value, bucket_levels,
     charge_of, charge_text, feed, follow_battery,
@@ -137,15 +137,16 @@ fn the_battery_pane_shows_the_charge_and_switches_power_modes() {
     let sender = follow_battery(&system, updates);
     let mut view = SettingsView::new(Palette::for_scheme(Scheme::Light), TextSystem::new());
     let deadline = Instant::now() + WAIT;
-    while !view.visible_panes().contains(&PaneId::Battery) {
+    while view.value(SettingId::PowerMode).is_none() {
         for update in feed.drain() {
             view.apply(update);
         }
         assert!(Instant::now() < deadline, "no battery");
         std::thread::sleep(Duration::from_millis(20));
     }
-    view.select_pane(PaneId::Battery);
+    view.select_pane(PaneId::Power);
     assert!(find(&mut view, Role::Row, "64%, On battery, 3 h 20 min left").is_some());
+    assert!(has_text(&mut view, "64% · On battery, 3 h 20 min left"));
     assert!(
         find(
             &mut view,

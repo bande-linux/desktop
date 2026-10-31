@@ -6,8 +6,8 @@ use std::sync::LazyLock;
 use unbound_l10n::Localizer;
 
 pub use registry::{
-    AUTOMATIC, Choice, DIM_CHOICES, Kind, LOCK_CHOICES, List, POINTER_SPEEDS, Pane, PaneId,
-    Section, Setting, SettingId, Value, WITH_DISPLAY, panes,
+    AUTOMATIC, Choice, DIM_CHOICES, Group, Kind, LOCK_CHOICES, List, MAX_SEGMENTS, POINTER_SPEEDS,
+    Pane, PaneId, Section, Setting, SettingId, Value, WITH_DISPLAY, duration_label, panes,
 };
 pub use search::{PaneHit, SettingHit, search};
 

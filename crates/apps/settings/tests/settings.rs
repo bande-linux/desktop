@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use accesskit::{Node, Role};
+use accesskit::{Action, ActionRequest, Node, Role, TreeId};
 use unbound_config::{
     Appearance, BarEdge, CapsLock, Config, ConfigService, ConfigStore, MenuBarPlacement,
     SecondaryClick, Suspend, WallpaperFit,
@@ -14,7 +14,7 @@ use unbound_test_bus::SessionBus;
 use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer};
 use unbound_toolkit::{Palette, Point, Scheme, TextSystem};
 
-const SIZE: (u32, u32) = (900, 600);
+const SIZE: (u32, u32) = (900, 720);
 
 fn view() -> SettingsView {
     let mut view = SettingsView::new(Palette::for_scheme(Scheme::Light), TextSystem::new());
@@ -126,15 +126,15 @@ fn typing_anywhere_searches_and_narrows_the_sidebar_to_ranked_panes() {
 
     assert!(view.search_focused());
     assert_eq!(view.query(), "suspend");
-    assert_eq!(view.visible_panes(), [PaneId::LockScreen]);
-    assert_eq!(view.selected_pane(), PaneId::LockScreen);
+    assert_eq!(view.visible_panes(), [PaneId::Power]);
+    assert_eq!(view.selected_pane(), PaneId::Power);
     assert_eq!(view.highlighted_settings(), [SettingId::SleepAfter]);
 
     press(&mut view, Key::Escape);
     assert_eq!(view.query(), "");
     assert_eq!(view.visible_panes().len(), 7);
     assert!(view.highlighted_settings().is_empty());
-    assert_eq!(view.selected_pane(), PaneId::LockScreen);
+    assert_eq!(view.selected_pane(), PaneId::Power);
 }
 
 #[test]
@@ -226,8 +226,27 @@ fn shortening_the_lock_time_also_shortens_dimming() {
     press(&mut view, Key::Enter);
     assert_eq!(view.focused_setting(), Some(SettingId::LockAfter));
 
-    press(&mut view, Key::Left);
-    press(&mut view, Key::Left);
+    for choice in ["1", "0"] {
+        view.scene(SIZE.0, SIZE.1);
+        let menu = view
+            .accessibility()
+            .nodes
+            .into_iter()
+            .find(|(_, node)| {
+                node.role() == Role::ComboBox
+                    && node.label() == Some("Turn off the display and lock after")
+            })
+            .map(|(id, _)| id)
+            .expect("lock menu");
+        view.perform(&ActionRequest {
+            action: Action::Click,
+            target_tree: TreeId::ROOT,
+            target_node: menu,
+            data: None,
+        });
+        assert!(view.ui().menu_action(choice));
+        view.settle();
+    }
 
     assert_eq!(
         changes(&mut view),
@@ -437,7 +456,7 @@ fn without_a_screen_reader_installed_its_switch_and_shortcut_are_not_offered() {
     view.set_value(SettingId::Zoom, Value::Flag(false));
     view.select_pane(PaneId::Accessibility);
     assert!(labelled(&mut view, "Screen reader"));
-    view.select_pane(PaneId::Keyboard);
+    view.select_pane(PaneId::KeyboardShortcuts);
     assert!(labelled(&mut view, "Turn the screen reader on or off"));
 
     view.hide_screen_reader();

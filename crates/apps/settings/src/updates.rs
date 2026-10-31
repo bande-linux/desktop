@@ -4,6 +4,7 @@ use unbound_toolkit::ui::{Button, Label, ProgressBar, Spinner, Widget};
 
 use crate::L10N;
 use crate::pages::{Widgets, boxed};
+use crate::privilege::Privilege;
 use crate::software::{Package, SoftwareCommand, SoftwareState};
 use crate::view::{Anchor, Intent, SettingsView, intent};
 use crate::widgets::{Row, Text, Tone};
@@ -17,8 +18,11 @@ impl SettingsView {
         command: SoftwareCommand,
         primary: bool,
     ) -> Box<dyn Widget> {
+        let refused = matches!(command, SoftwareCommand::Install(_))
+            && self.refused.contains(&Privilege::Updates);
         let mut act = intent(&self.intents, Intent::Software);
-        let button = Button::new(title, move || act(command.clone()));
+        let mut button = Button::new(title, move || act(command.clone()));
+        button.set_enabled(!refused);
         let button = if primary { button.primary() } else { button };
         self.anchors.push((
             Anchor::Setting(SettingId::SoftwareUpdates, None),
@@ -93,10 +97,15 @@ impl SettingsView {
                     system
                 };
                 let ids = packages.iter().map(|package| package.id.clone()).collect();
+                let refused = self.refused.contains(&Privilege::Updates);
+                let detail = match refused {
+                    true => L10N.tr("administrator-only"),
+                    false => detail,
+                };
                 let install = self.software_button(
                     &L10N.tr("install-now"),
                     SoftwareCommand::Install(ids),
-                    true,
+                    !refused,
                 );
                 let mut rows = vec![self.status_row(
                     &L10N.tr_args("updates-available", [("count", packages.len().into())]),

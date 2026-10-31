@@ -34,7 +34,7 @@ use unbound_xdg::{
 const PDF: &str = "application/pdf";
 const WALLPAPER_CACHE: &str = "unbound/wallpapers";
 const SETTINGS_APP: &str = "org.unbound.Settings";
-const WALLPAPER_PANE: &str = "wallpaper";
+const WALLPAPER_PANE: &str = "appearance";
 const FILES_INFO_FLAG: &str = "--info";
 
 type Loaded = (WallpaperKey, Option<(Picture, Luma)>);

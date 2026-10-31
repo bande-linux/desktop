@@ -1,6 +1,6 @@
 use unbound_datetime::{DateFormats, posix_locale};
 use unbound_settings_panes::SettingId;
-use unbound_toolkit::ui::{PopUpButton, Widget};
+use unbound_toolkit::ui::{Label, PopUpButton, Widget};
 
 use crate::L10N;
 use crate::locale::{InstalledLocale, LocaleCommand};
@@ -38,6 +38,13 @@ impl SettingsView {
                 _ => false,
             })
             .unwrap_or(0);
+        if !self.allowed(id) {
+            let shown = labels.get(selected).cloned().unwrap_or_default();
+            return boxed(Row::new(
+                Text::new(label, Tone::Primary),
+                Some(boxed(Label::new(&shown))),
+            ));
+        }
         let mut send = intent(&self.intents, Intent::Locale);
         let menu = PopUpButton::new(label, &labels, selected, move |index| {
             if let Some(command) = choices

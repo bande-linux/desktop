@@ -3,7 +3,10 @@
 use std::time::{Duration, Instant};
 
 use unbound_datetime::{DateFormats, posix_locale};
-use unbound_lock::{LockScreen, SHAKE_DURATION, User, clock_texts, display_name, shake_offset};
+use unbound_lock::{
+    LockScreen, PowerAction, SHAKE_DURATION, User, clock_texts, display_name, shake_offset,
+};
+use unbound_status::status::{Battery, Power, Wifi};
 use unbound_toolkit::ui::{Event, Key, Modifiers};
 use unbound_toolkit::{Appearance, CpuRenderer, Image, Item, TextSystem};
 
@@ -286,6 +289,73 @@ fn a_follow_up_prompt_names_the_field_and_takes_a_fresh_answer() {
 
     screen.ask(None);
     assert_eq!(placeholder(&screen), "Enter Password");
+}
+
+#[test]
+fn a_low_battery_and_the_wifi_show_in_the_top_right_corner() {
+    let mut screen = screen();
+    screen.set_backdrop(wallpaper(), Instant::now() - Duration::from_secs(5));
+    screen.advance(Instant::now());
+    let battery = Battery {
+        percent: 12.0,
+        power: Power::Battery { remaining: None },
+    };
+    let wifi = Wifi {
+        enabled: true,
+        networks: Vec::new(),
+    };
+
+    assert!(screen.set_devices(Some(battery), Some(&wifi)));
+    assert!(!screen.set_devices(Some(battery), Some(&wifi)));
+    render(&mut screen, "lock-screen-status");
+}
+
+fn press(screen: &mut LockScreen, key: Key) {
+    screen.handle(&Event::Key {
+        key,
+        modifiers: NONE,
+    });
+}
+
+#[test]
+fn the_login_window_offers_power_and_asks_before_restarting_or_shutting_down() {
+    let mut screen = screen();
+    screen.set_backdrop(wallpaper(), Instant::now() - Duration::from_secs(5));
+    screen.advance(Instant::now());
+    screen.offer_power(&[
+        PowerAction::Sleep,
+        PowerAction::Restart,
+        PowerAction::ShutDown,
+    ]);
+    render(&mut screen, "login-power");
+
+    press(&mut screen, Key::Tab);
+    press(&mut screen, Key::Space);
+    let slept = screen.take_power();
+    press(&mut screen, Key::Tab);
+    press(&mut screen, Key::Tab);
+    press(&mut screen, Key::Space);
+    let asked = screen.take_power();
+    render(&mut screen, "login-power-shut-down");
+    press(&mut screen, Key::Enter);
+
+    assert_eq!(slept, Some(PowerAction::Sleep));
+    assert_eq!(asked, None);
+    assert_eq!(screen.take_power(), Some(PowerAction::ShutDown));
+}
+
+#[test]
+fn escape_takes_back_the_question_without_shutting_down() {
+    let mut screen = screen();
+    screen.offer_power(&[PowerAction::Restart]);
+    press(&mut screen, Key::Tab);
+    press(&mut screen, Key::Space);
+    screen.take_power();
+
+    press(&mut screen, Key::Escape);
+    press(&mut screen, Key::Enter);
+
+    assert_eq!(screen.take_power(), None);
 }
 
 #[test]

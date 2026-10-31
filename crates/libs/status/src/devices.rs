@@ -69,7 +69,43 @@ trait LoginManager {
 
     fn power_off(&self, interactive: bool) -> zbus::Result<()>;
 
+    fn can_suspend(&self) -> zbus::Result<String>;
+
+    fn can_reboot(&self) -> zbus::Result<String>;
+
+    fn can_power_off(&self) -> zbus::Result<String>;
+
     fn get_session(&self, session_id: &str) -> zbus::Result<OwnedObjectPath>;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PowerAction {
+    Sleep,
+    Restart,
+    ShutDown,
+}
+
+pub fn powers(system: &Connection) -> zbus::Result<Vec<PowerAction>> {
+    let login = Login::new(system)?;
+    let answers = [
+        (PowerAction::Sleep, login.can_suspend()?),
+        (PowerAction::Restart, login.can_reboot()?),
+        (PowerAction::ShutDown, login.can_power_off()?),
+    ];
+    Ok(answers
+        .into_iter()
+        .filter(|(_, answer)| answer == "yes")
+        .map(|(power, _)| power)
+        .collect())
+}
+
+pub fn use_power(system: &Connection, power: PowerAction) -> zbus::Result<()> {
+    let login = Login::new(system)?;
+    match power {
+        PowerAction::Sleep => login.suspend(false),
+        PowerAction::Restart => login.reboot(false),
+        PowerAction::ShutDown => login.power_off(false),
+    }
 }
 
 fn seconds(value: i64) -> Option<Duration> {
@@ -149,7 +185,6 @@ pub type Devices = (Option<Battery>, Option<Wifi>, Option<Bluetooth>);
 pub enum Control {
     Run(Command),
     Scan,
-    End(Ending),
     Refresh(Source),
 }
 
@@ -322,7 +357,6 @@ fn run_controls(system: &Connection, controls: &Receiver<Control>, outbox: &Outb
             match control {
                 Control::Run(command) => run(system, &network, &bluez, command),
                 Control::Scan => report("scan for networks", network.scan()),
-                Control::End(ending) => report("end the session", end_session(system, ending)),
                 Control::Refresh(source) => {
                     stale.push(source);
                     continue;

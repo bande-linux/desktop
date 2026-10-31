@@ -31,7 +31,7 @@ pub use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::{
     Anchor, KeyboardInteractivity,
 };
 
-use crate::{Globals, Headless, Memory, ShmImage, TestClient, Workspace};
+use crate::{Globals, Headless, Memory, SessionEnd, ShmImage, TestClient, Workspace};
 
 #[derive(Default)]
 pub(crate) struct Shell {
@@ -57,6 +57,7 @@ pub(crate) struct Shell {
     shell_focus: Vec<String>,
     identifiers: Vec<(ExtForeignToplevelHandleV1, String)>,
     quit_requests: usize,
+    apps_running: Vec<(String, u32)>,
     toplevels: Vec<(ExtForeignToplevelHandleV1, String, bool)>,
     toplevel_updates: usize,
     workspaces: Option<(u32, u32)>,
@@ -172,7 +173,7 @@ impl TestClient {
     }
 
     pub fn join_shell(&mut self, server: &mut Headless) {
-        let shell: UnboundShellV1 = self.bind("unbound_shell_v1", 17);
+        let shell: UnboundShellV1 = self.bind("unbound_shell_v1", 18);
         self.globals.shell.shell = Some(shell);
         let _: ExtForeignToplevelListV1 = self.bind("ext_foreign_toplevel_list_v1", 1);
         self.exchange(server);
@@ -348,6 +349,18 @@ impl TestClient {
 
     pub fn quit_app(&mut self, server: &mut Headless, app_id: &str) {
         self.shell_request(server, |shell| shell.quit_app(app_id.to_owned()));
+    }
+
+    pub fn quit_all_apps(&mut self, server: &mut Headless) {
+        self.shell_request(server, UnboundShellV1::quit_all_apps);
+    }
+
+    pub fn confirm_session_end(&mut self, server: &mut Headless, ending: SessionEnd) {
+        self.shell_request(server, |shell| shell.confirm_session_end(ending));
+    }
+
+    pub fn apps_running(&self) -> &[(String, u32)] {
+        &self.globals.shell.apps_running
     }
 
     pub fn activate_window(&mut self, server: &mut Headless, identifier: &str) {
@@ -609,6 +622,9 @@ impl Dispatch<UnboundShellV1, ()> for Globals {
                 .push((panel, (x, y, width, height))),
             unbound_shell_v1::Event::FocusShell { namespace } => {
                 globals.shell.shell_focus.push(namespace);
+            }
+            unbound_shell_v1::Event::AppsRunning { app_id, count } => {
+                globals.shell.apps_running.push((app_id, count));
             }
             unbound_shell_v1::Event::AppResponding {
                 pid,

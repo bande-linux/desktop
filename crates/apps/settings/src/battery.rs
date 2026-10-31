@@ -4,6 +4,7 @@ use zbus::blocking::{Connection, MessageIterator};
 use zbus::zvariant::{OwnedObjectPath, OwnedValue};
 use zbus::{MatchRule, message};
 
+use crate::failure::unexpected;
 use crate::follow::{Update, Updates, spawn};
 
 const UPOWER_PATH: &str = "/org/freedesktop/UPower";
@@ -201,7 +202,7 @@ pub fn follow_battery(system: &Connection, updates: Updates) -> Sender<BatteryCo
         for command in receiver {
             let BatteryCommand::Profile(profile) = command;
             if let Err(error) = profiles.set_active_profile(&profile) {
-                updates.send(Update::Failed(error.to_string()));
+                updates.send(unexpected(error));
                 updates.send(Update::Battery(read(&system)));
             }
         }

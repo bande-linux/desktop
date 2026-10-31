@@ -7,6 +7,7 @@ use unbound_wallpaper::{Fit, Picture, render};
 use zbus::blocking::{Connection, Proxy};
 use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
 
+use crate::failure::unexpected;
 use crate::follow::{Update, Updates, spawn};
 use crate::{L10N, SettingsClient};
 use unbound_settings_panes::{SettingId, Value as SettingValue};
@@ -193,7 +194,7 @@ pub fn follow_pictures(
                     let chosen = match choose_picture(&session) {
                         Ok(chosen) => chosen,
                         Err(error) => {
-                            updates.send(Update::Failed(error.to_string()));
+                            updates.send(unexpected(error));
                             continue;
                         }
                     };
@@ -210,7 +211,7 @@ pub fn follow_pictures(
                         .map_err(Clone::clone)
                         .and_then(|client| client.set(SettingId::Wallpaper, &value));
                     if let Err(error) = result {
-                        updates.send(Update::Failed(error.to_string()));
+                        updates.send(unexpected(error));
                     }
                 }
             }

@@ -1,5 +1,5 @@
 use unbound_protocols::client::unbound_app_v1::{self, Placement, UnboundAppV1};
-use unbound_protocols::client::unbound_shell_v1::{self, UnboundShellV1};
+use unbound_protocols::client::unbound_shell_v1::{self, SessionEnd, UnboundShellV1};
 use wayland_client::{Connection, Dispatch, Proxy, QueueHandle, WEnum, event_created_child};
 use wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_handle_v1::{
     self, ExtForeignToplevelHandleV1,
@@ -97,6 +97,18 @@ impl Window {
     pub fn activate_window(&mut self, identifier: &str) -> Result<(), WindowError> {
         self.shell_since(unbound_shell_v1::REQ_ACTIVATE_WINDOW_SINCE)?
             .activate_window(identifier.to_owned());
+        self.flush()
+    }
+
+    pub fn confirm_session_end(&mut self, ending: SessionEnd) -> Result<(), WindowError> {
+        self.shell_since(unbound_shell_v1::REQ_CONFIRM_SESSION_END_SINCE)?
+            .confirm_session_end(ending);
+        self.flush()
+    }
+
+    pub fn quit_all_apps(&mut self) -> Result<(), WindowError> {
+        self.shell_since(unbound_shell_v1::REQ_QUIT_ALL_APPS_SINCE)?
+            .quit_all_apps();
         self.flush()
     }
 
@@ -280,7 +292,7 @@ impl Window {
             .is_some_and(|app| app.version() >= unbound_app_v1::REQ_SET_KEEP_ON_TOP_SINCE)
     }
 
-    pub(crate) fn set_keep_on_top(&mut self, keep: bool) -> Result<(), WindowError> {
+    pub fn set_keep_on_top(&mut self, keep: bool) -> Result<(), WindowError> {
         let app = self
             .state
             .shell
@@ -431,6 +443,11 @@ impl Dispatch<UnboundShellV1, ()> for State {
                 state
                     .events
                     .push(WindowEvent::Displays(state.shell.displays.clone()));
+            }
+            unbound_shell_v1::Event::AppsRunning { app_id, count } => {
+                state
+                    .events
+                    .push(WindowEvent::AppsRunning { app_id, count });
             }
             _ => {}
         }

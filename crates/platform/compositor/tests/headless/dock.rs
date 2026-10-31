@@ -2,7 +2,7 @@ use crate::support::*;
 use smithay::utils::Point;
 use unbound_compositor::{BACKGROUND, Headless, Renderer};
 use unbound_test_wayland::{
-    Anchor, KeyboardInteractivity, Layer, LayerRequest, RED, TestClient, roundtrip,
+    Anchor, KeyboardInteractivity, Layer, LayerRequest, RED, SessionEnd, TestClient, roundtrip,
 };
 
 const WINDOW: i32 = 64;
@@ -217,4 +217,41 @@ fn clicking_the_bar_keeps_the_active_app() {
 
     assert!(bar.layer_has_keyboard(0));
     assert_eq!(bar.active_apps(), [EDITOR]);
+}
+
+#[test]
+fn ending_the_session_asks_every_app_to_quit_and_names_the_one_that_stays_until_it_closes() {
+    let mut server = server();
+    let mut editor = app(&mut server, EDITOR);
+    let mut viewer = app(&mut server, VIEWER);
+    let mut dialog = shell(&mut server);
+    roundtrip(&mut server, &mut [&mut editor, &mut viewer, &mut dialog]);
+
+    dialog.quit_all_apps(&mut server);
+    editor.exchange(&mut server);
+    viewer.exchange(&mut server);
+    let asked = (editor.close_requested(0), viewer.close_requested(0));
+    viewer.close_window(&mut server, 0);
+    dialog.exchange(&mut server);
+    let keeping = dialog.apps_running().last().cloned();
+    editor.close_window(&mut server, 0);
+    dialog.exchange(&mut server);
+
+    assert_eq!(asked, (true, true));
+    assert_eq!(dialog.apps_running().first(), Some(&(VIEWER.to_owned(), 2)));
+    assert_eq!(keeping, Some((EDITOR.to_owned(), 1)));
+    assert_eq!(dialog.apps_running().last(), Some(&(String::new(), 0)));
+}
+
+#[test]
+fn asking_to_end_the_session_starts_the_confirmation_as_a_shell_client() {
+    let mut server = server();
+    let mut menu_bar = shell(&mut server);
+    server.set_session_dialog(std::path::Path::new("/bin/true"));
+
+    menu_bar.confirm_session_end(&mut server, SessionEnd::Restart);
+    let upkeep = server.keep_session_clients_running();
+
+    assert!(upkeep.failures.is_empty());
+    assert!(server.session_dialog_pid().is_some());
 }

@@ -114,6 +114,8 @@ pub trait FrameOutput {
         compositor: &mut Headless,
         output: &str,
     ) -> Result<Submission, Self::Error>;
+
+    fn set_color_temperature(&mut self, _kelvin: f64) {}
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

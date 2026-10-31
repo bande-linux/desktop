@@ -144,7 +144,9 @@ fn follow_display_settings(publish: channel::Sender<()>) -> zbus::Result<()> {
         for change in changes {
             let displays_changed = change.args().is_ok_and(|args| {
                 let changed = args.changed_properties();
-                changed.contains_key("Displays") || changed.contains_key("Arrangements")
+                ["Displays", "Arrangements", "NightLight"]
+                    .iter()
+                    .any(|property| changed.contains_key(property))
             });
             if displays_changed && publish.send(()).is_err() {
                 return;
@@ -552,6 +554,11 @@ where
         let watchdog_wait = compositor
             .watchdog_tick(now())
             .map(|at| at.saturating_sub(now()));
+        let night = compositor.night_light_tick(now());
+        if let Some(kelvin) = night.kelvin {
+            output.set_color_temperature(kelvin);
+        }
+        let night_wait = night.wake_at.map(|at| at.saturating_sub(now()));
         timeout = upkeep
             .retry_in
             .into_iter()
@@ -559,6 +566,7 @@ where
             .chain(idle_wait)
             .chain(snap_wait)
             .chain(watchdog_wait)
+            .chain(night_wait)
             .chain(reveal_wait)
             .min();
     }

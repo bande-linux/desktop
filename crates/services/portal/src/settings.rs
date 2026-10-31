@@ -15,8 +15,8 @@ use zbus::object_server::SignalEmitter;
 use zbus::proxy::CacheProperties;
 use zbus::zvariant::{OwnedValue, Value};
 
-use crate::daylight::{automatic_scheme, system_place};
 use crate::{OBJECT_PATH, gtk};
+use unbound_datetime::daylight::{Sky, sky, system_place};
 
 pub const APPEARANCE: &str = "org.freedesktop.appearance";
 pub const UNBOUND_APPEARANCE: &str = "org.unbound.appearance";
@@ -211,8 +211,13 @@ impl Reader {
         let (scheme, next) = match config.appearance().unwrap_or_default().as_str() {
             "dark" => (Scheme::Dark, None),
             "light" => (Scheme::Light, None),
-            _ => automatic_scheme(now, system_place())
-                .map_or((Scheme::Light, None), |(scheme, next)| (scheme, Some(next))),
+            _ => sky(now, system_place()).map_or((Scheme::Light, None), |(sky, next)| {
+                let scheme = match sky {
+                    Sky::Day => Scheme::Light,
+                    Sky::Night => Scheme::Dark,
+                };
+                (scheme, Some(next))
+            }),
         };
         let accent = config.accent().unwrap_or_default();
         let tint = config

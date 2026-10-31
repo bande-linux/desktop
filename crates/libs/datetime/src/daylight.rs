@@ -1,7 +1,6 @@
 use jiff::civil::{Date, Time};
 use jiff::tz::TimeZone;
 use jiff::{Timestamp, Zoned};
-use unbound_design::Scheme;
 
 pub const ZONE_TAB: &str = "/usr/share/zoneinfo/zone.tab";
 
@@ -13,6 +12,12 @@ const EARTH_TILT: f64 = 23.4397;
 const MORNING: Time = Time::constant(7, 0, 0, 0);
 const EVENING: Time = Time::constant(19, 0, 0, 0);
 const NOON: Time = Time::constant(12, 0, 0, 0);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Sky {
+    Day,
+    Night,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Place {
@@ -116,20 +121,20 @@ fn day(date: Date, zone: &TimeZone, place: Option<Place>) -> Option<Daylight> {
     }
 }
 
-pub fn automatic_scheme(now: &Zoned, place: Option<Place>) -> Option<(Scheme, Timestamp)> {
+pub fn sky(now: &Zoned, place: Option<Place>) -> Option<(Sky, Timestamp)> {
     let zone = now.time_zone();
     let today = now.date();
     let tomorrow = today.tomorrow().ok()?;
     let instant = now.timestamp();
     let next_day = at(tomorrow, Time::midnight(), zone)?;
     Some(match day(today, zone, place)? {
-        Daylight::AlwaysUp => (Scheme::Light, next_day),
-        Daylight::AlwaysDown => (Scheme::Dark, next_day),
-        Daylight::Between(rise, _) if instant < rise => (Scheme::Dark, rise),
-        Daylight::Between(_, set) if instant < set => (Scheme::Light, set),
+        Daylight::AlwaysUp => (Sky::Day, next_day),
+        Daylight::AlwaysDown => (Sky::Night, next_day),
+        Daylight::Between(rise, _) if instant < rise => (Sky::Night, rise),
+        Daylight::Between(_, set) if instant < set => (Sky::Day, set),
         Daylight::Between(..) => match day(tomorrow, zone, place)? {
-            Daylight::Between(rise, _) => (Scheme::Dark, rise),
-            Daylight::AlwaysUp | Daylight::AlwaysDown => (Scheme::Dark, next_day),
+            Daylight::Between(rise, _) => (Sky::Night, rise),
+            Daylight::AlwaysUp | Daylight::AlwaysDown => (Sky::Night, next_day),
         },
     })
 }

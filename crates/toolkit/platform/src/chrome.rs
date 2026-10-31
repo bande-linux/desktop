@@ -233,6 +233,7 @@ pub(crate) struct Chrome {
     pub(crate) pointer_in_content: bool,
     pub(crate) content_buttons: usize,
     pub(crate) tab_press: Option<Point>,
+    pub(crate) zoom_rest: Option<Instant>,
 }
 
 impl Chrome {
@@ -317,6 +318,7 @@ impl Chrome {
             return false;
         }
         self.hovered = hovered;
+        self.zoom_rest = (hovered == Some(Some(Control::Zoom))).then_some(now);
         let level = |on: bool| if on { 1.0 } else { 0.0 };
         self.hover
             .animate_at(now, reduce_motion, level(hovered.is_some()), Spring::FADE);

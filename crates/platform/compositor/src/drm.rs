@@ -44,6 +44,16 @@ struct Head {
     modes: Vec<Mode>,
     compositor: OutputCompositor,
     scanned_out: bool,
+    colour: Colour,
+    warmth: Option<f64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Colour {
+    Unknown,
+    Ramp(usize),
+    Matrix(property::Handle),
+    Fixed,
 }
 
 pub struct DrmBackend {
@@ -56,6 +66,7 @@ pub struct DrmBackend {
     feedback: DmabufFeedback,
     heads: Vec<Head>,
     libinput: Option<Libinput>,
+    kelvin: Option<f64>,
 }
 
 pub struct DrmNotifiers {
@@ -250,6 +261,7 @@ impl DrmBackend {
             feedback,
             heads: Vec::new(),
             libinput: None,
+            kelvin: None,
         })
     }
 
@@ -309,6 +321,8 @@ impl DrmBackend {
             modes,
             compositor,
             scanned_out: false,
+            colour: Colour::Unknown,
+            warmth: None,
         }))
     }
 
@@ -433,6 +447,9 @@ impl DrmBackend {
             return Ok(None);
         };
         head.compositor.frame_submitted()?;
+        if let Some(kelvin) = self.kelvin {
+            warm(&self.device, head, kelvin);
+        }
         Ok(Some((
             head.config.name.clone(),
             Vblank {
@@ -484,6 +501,7 @@ impl DrmBackend {
             if let Err(error) = head.compositor.reset_state() {
                 tracing::warn!("cannot reset {}: {error}", head.config.name);
             }
+            head.warmth = None;
         }
         if let Some(libinput) = self.libinput.as_mut() {
             libinput
@@ -494,8 +512,81 @@ impl DrmBackend {
     }
 }
 
+fn colour_of(device: &DrmDevice, crtc: crtc::Handle) -> Colour {
+    let size = device
+        .get_crtc(crtc)
+        .map_or(0, |info| info.gamma_length() as usize);
+    if size > 0 {
+        return Colour::Ramp(size);
+    }
+    device
+        .get_properties(crtc)
+        .ok()
+        .and_then(|properties| {
+            properties
+                .as_props_and_values()
+                .0
+                .iter()
+                .copied()
+                .find(|handle| {
+                    device
+                        .get_property(*handle)
+                        .is_ok_and(|info| info.name().to_bytes() == b"CTM")
+                })
+        })
+        .map_or(Colour::Fixed, Colour::Matrix)
+}
+
+fn set_matrix(
+    device: &DrmDevice,
+    crtc: crtc::Handle,
+    property: property::Handle,
+    kelvin: f64,
+) -> std::io::Result<()> {
+    let blob = device.create_property_blob(&crate::night::matrix(kelvin))?;
+    let applied = device.set_property(crtc, property, blob.into());
+    device.destroy_property_blob(blob.into())?;
+    applied
+}
+
+fn warm(device: &DrmDevice, head: &mut Head, kelvin: f64) {
+    if head.warmth == Some(kelvin) {
+        return;
+    }
+    let crtc = head.compositor.crtc();
+    if head.colour == Colour::Unknown {
+        head.colour = colour_of(device, crtc);
+        tracing::info!("{} warms through {:?}", head.config.name, head.colour);
+    }
+    let applied = match head.colour {
+        Colour::Ramp(size) => {
+            let [red, green, blue] = crate::night::ramp(size, kelvin);
+            device.set_gamma(crtc, &red, &green, &blue)
+        }
+        Colour::Matrix(property) => set_matrix(device, crtc, property, kelvin),
+        Colour::Unknown | Colour::Fixed => return,
+    };
+    match applied {
+        Ok(()) => head.warmth = Some(kelvin),
+        Err(error) => {
+            tracing::warn!("cannot warm {}: {error}", head.config.name);
+            head.colour = Colour::Fixed;
+        }
+    }
+}
+
 impl FrameOutput for DrmBackend {
     type Error = DrmBackendError;
+
+    fn set_color_temperature(&mut self, kelvin: f64) {
+        self.kelvin = Some(kelvin);
+        if !self.session.is_active() {
+            return;
+        }
+        for head in &mut self.heads {
+            warm(&self.device, head, kelvin);
+        }
+    }
 
     fn submit(
         &mut self,

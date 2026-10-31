@@ -75,6 +75,8 @@ use crate::text_input::TextInput;
 pub const RENDERER_VARIABLE: &str = "UNBOUND_RENDERER";
 pub const ACTIVATION_TOKEN_VARIABLE: &str = "XDG_ACTIVATION_TOKEN";
 const RELEASE_HIDDEN_AFTER: Duration = Duration::from_secs(30);
+const TILING_MENU_AFTER: Duration = Duration::from_millis(500);
+const NEXT_DISPLAY_SINCE: u32 = 6;
 const MAX_STALE_REGIONS: usize = 64;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -172,7 +174,7 @@ pub enum WindowEvent {
         fine: bool,
     },
     MediaKey(MediaKey),
-    ToggleControlCenter,
+    TogglePanel(Panel),
     AppResponding {
         pid: i32,
         app_id: String,
@@ -340,6 +342,7 @@ pub(crate) struct State {
     pub(crate) scaling: Scaling,
     pub(crate) effect: BackgroundEffect,
     pub(crate) presentation: Presentation,
+    outputs: Vec<u32>,
 }
 
 impl State {
@@ -775,9 +778,58 @@ impl Window {
         self.flush()
     }
 
-    fn open_window_menu(&mut self, at: Point) -> Result<(), WindowError> {
+    fn move_and_resize_items(&self) -> Vec<MenuItem> {
         let toplevel = self.state.toplevel;
         let place = |key: &str| MenuItem::new(&L10N.tr(key), key);
+        let mut items = vec![
+            place("place-left").shortcut("Ctrl+Super+Left"),
+            place("place-right").shortcut("Ctrl+Super+Right"),
+            MenuItem::separator(),
+            place("place-top-left"),
+            place("place-top-right"),
+            place("place-bottom-left"),
+            place("place-bottom-right"),
+            MenuItem::separator(),
+            place("place-fill").enabled(!toplevel.maximized),
+        ];
+        let next_display = self
+            .state
+            .shell
+            .app
+            .as_ref()
+            .is_some_and(|app| app.version() >= NEXT_DISPLAY_SINCE);
+        if next_display && self.state.outputs.len() > 1 {
+            items.push(place("place-next-display").shortcut("Alt+Shift+Super+Right"));
+        }
+        items.extend([
+            MenuItem::separator(),
+            place("place-restore").enabled(toplevel.tiled || toplevel.maximized),
+        ]);
+        items
+    }
+
+    fn offers_tiling_menu(&self) -> bool {
+        self.can_place() && !self.state.toplevel.fullscreen && self.menus.is_none()
+    }
+
+    fn open_tiling_menu(&mut self) -> Result<(), WindowError> {
+        let control = Control::Zoom.area(self.frame().title);
+        let offset = self.content_offset();
+        self.show_menu(
+            Menu::new(self.move_and_resize_items()),
+            MenuPlacement::Below(Rect::new(
+                control.x - offset.x,
+                control.y - offset.y,
+                control.width,
+                control.height,
+            )),
+        )?;
+        self.window_menu = true;
+        Ok(())
+    }
+
+    fn open_window_menu(&mut self, at: Point) -> Result<(), WindowError> {
+        let toplevel = self.state.toplevel;
         let mut items = vec![
             MenuItem::new(&L10N.tr("minimize"), "minimize")
                 .enabled(!toplevel.fullscreen)
@@ -802,17 +854,7 @@ impl Window {
             items.push(
                 MenuItem::submenu(
                     &L10N.tr("move-and-resize"),
-                    Menu::new(vec![
-                        place("place-left").shortcut("Ctrl+Super+Left"),
-                        place("place-right").shortcut("Ctrl+Super+Right"),
-                        MenuItem::separator(),
-                        place("place-top-left"),
-                        place("place-top-right"),
-                        place("place-bottom-left"),
-                        place("place-bottom-right"),
-                        MenuItem::separator(),
-                        place("place-restore").enabled(toplevel.tiled || toplevel.maximized),
-                    ]),
+                    Menu::new(self.move_and_resize_items()),
                 )
                 .enabled(!toplevel.fullscreen),
             );
@@ -860,6 +902,8 @@ impl Window {
             "place-top-right" => self.place(Placement::TopRight),
             "place-bottom-left" => self.place(Placement::BottomLeft),
             "place-bottom-right" => self.place(Placement::BottomRight),
+            "place-fill" if !self.state.toplevel.maximized => self.toggle_zoom(),
+            "place-next-display" => self.place(Placement::NextDisplay),
             "place-restore" => self.place(Placement::Restore),
             "keep-on-top" => {
                 let keep = !self.keep_on_top;
@@ -1221,7 +1265,15 @@ impl Window {
             .chain(self.ui_deadline)
             .chain(self.release_deadline())
             .chain(self.drag_deadline())
+            .chain(self.tiling_menu_deadline())
             .min()
+    }
+
+    fn tiling_menu_deadline(&self) -> Option<Instant> {
+        self.chrome
+            .as_ref()
+            .and_then(|chrome| chrome.zoom_rest)
+            .map(|since| since + TILING_MENU_AFTER)
     }
 
     fn release_deadline(&self) -> Option<Instant> {
@@ -1256,6 +1308,22 @@ impl Window {
         }
         self.serve_menus(self.frame_time());
         self.abandon_unfinished_drag(now);
+        if self
+            .tiling_menu_deadline()
+            .is_some_and(|deadline| deadline <= now)
+        {
+            let offered = self.offers_tiling_menu();
+            if let Some(chrome) = &mut self.chrome {
+                chrome.zoom_rest = None;
+                if offered {
+                    chrome.pressed = None;
+                    self.needs_redraw = true;
+                }
+            }
+            if offered && self.open_tiling_menu().is_err() {
+                self.needs_redraw = true;
+            }
+        }
         if self.ui_deadline.is_some_and(|deadline| deadline <= now) {
             self.ui_deadline = None;
             self.request_redraw();
@@ -1446,6 +1514,7 @@ impl Window {
                     let inside = zone == Zone::Control(control);
                     if inside != chrome.pressed_inside {
                         chrome.pressed_inside = inside;
+                        chrome.zoom_rest = None;
                         self.needs_redraw = true;
                     }
                     return;
@@ -1504,6 +1573,7 @@ impl Window {
                     Zone::Control(control) => {
                         chrome.pressed = Some(control);
                         chrome.pressed_inside = true;
+                        chrome.zoom_rest = (control == Control::Zoom).then_some(now);
                         self.needs_redraw = true;
                         Ok(())
                     }
@@ -1518,6 +1588,7 @@ impl Window {
             }
             Event::PointerUp(pointer) => {
                 chrome.tab_press = None;
+                chrome.zoom_rest = None;
                 if chrome.content_buttons > 0 {
                     chrome.content_buttons -= 1;
                     passed.push(WindowEvent::Input(Event::PointerUp(into_content(pointer))));
@@ -2331,6 +2402,10 @@ impl Dispatch<WlRegistry, ()> for State {
         _: &Connection,
         handle: &QueueHandle<Self>,
     ) {
+        if let wl_registry::Event::GlobalRemove { name } = event {
+            state.outputs.retain(|output| *output != name);
+            return;
+        }
         if let wl_registry::Event::Global {
             name,
             interface,
@@ -2371,6 +2446,7 @@ impl Dispatch<WlRegistry, ()> for State {
                     state.lock.manager = Some(registry.bind(name, 1, handle, ()));
                 }
                 "wl_output" => {
+                    state.outputs.push(name);
                     if state.lock.output.is_none() {
                         state.lock.output = Some(registry.bind(name, 1, handle, ()));
                     }
@@ -2380,10 +2456,10 @@ impl Dispatch<WlRegistry, ()> for State {
                     }
                 }
                 "unbound_shell_v1" => {
-                    state.shell.protocol = Some(registry.bind(name, version.min(16), handle, ()));
+                    state.shell.protocol = Some(registry.bind(name, version.min(17), handle, ()));
                 }
                 "unbound_app_v1" => {
-                    state.shell.app = Some(registry.bind(name, version.min(5), handle, ()));
+                    state.shell.app = Some(registry.bind(name, version.min(6), handle, ()));
                 }
                 "ext_output_image_capture_source_manager_v1" => {
                     state.capture.sources = Some(registry.bind(name, 1, handle, ()));

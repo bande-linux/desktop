@@ -756,7 +756,7 @@ impl App for ControlCenter {
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
         match event {
-            WindowEvent::ToggleControlCenter => self.toggle_panel(window),
+            WindowEvent::TogglePanel(Panel::ControlCenter) => self.toggle_panel(window),
             WindowEvent::PanelAnchor {
                 panel: Panel::ControlCenter,
                 edge,

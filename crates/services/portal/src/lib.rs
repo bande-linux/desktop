@@ -1,5 +1,4 @@
 pub mod capture;
-pub mod daylight;
 pub mod dialog_process;
 pub mod file_chooser;
 pub mod gtk;

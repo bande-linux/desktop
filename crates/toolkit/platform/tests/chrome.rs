@@ -9,6 +9,7 @@ use unbound_widgets::{Alert, Cell, Column, Context, Menu, MenuItem, Row, Sort, T
 
 const SORT_BY: i32 = 4 + 28 + 28 + 9 + 14;
 const OVER_CLOSE: (i32, i32) = (24, 24);
+const OVER_ZOOM: (i32, i32) = (66, 24);
 const AWAY: (i32, i32) = (200, 120);
 
 fn bare(_: &mut Window) -> Option<Ui> {
@@ -146,13 +147,21 @@ fn the_window_frame_menus_tables_and_alerts_match_their_goldens() {
         title: "Monitor",
         ..documents(false, pointer)
     };
-    let shots: [(&str, Prepare, Shot); 9] = [
+    let shots: [(&str, Prepare, Shot); 10] = [
         ("window-frame-rest-light-1x", bare, documents(false, AWAY)),
         ("window-frame-rest-dark-1x", bare, documents(true, AWAY)),
         (
             "window-frame-close-hovered-light-1x",
             bare,
             documents(false, OVER_CLOSE),
+        ),
+        (
+            "window-frame-tiling-menu-light-1x",
+            bare,
+            Shot {
+                popups: 1,
+                ..documents(false, OVER_ZOOM)
+            },
         ),
         (
             "window-frame-inactive-light-1x",

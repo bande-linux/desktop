@@ -10,6 +10,7 @@ use crate::dock::{
     DockAction, DockApp, DockState, MenuTarget, Rail, Shared, dock_ui, exclusive_zone, scene,
     surface_size,
 };
+use crate::installed_apps::InstalledApps;
 use crate::rail::surface_size as rail_surface_size;
 use accesskit::TreeUpdate;
 use unbound_config::{Bar as BarConfig, BarEdge};
@@ -23,9 +24,8 @@ use unbound_toolkit::{
     MenuPlacement, Point, Rect, Role, Scene, TextSystem, Window, WindowEvent,
 };
 use unbound_xdg::{
-    DesktopEntry, ICON_THEMES, Locale, app_name, applications, autostart_dir, current_desktops,
-    data_dirs, find_app, find_icon, launch_with_arguments, opens_at_login, path_from_file_uri,
-    running_app, set_open_at_login,
+    DesktopEntry, ICON_THEMES, app_name, autostart_dir, data_dirs, find_app, find_icon,
+    launch_with_arguments, opens_at_login, path_from_file_uri, running_app, set_open_at_login,
 };
 use zbus::blocking::Connection;
 
@@ -80,7 +80,7 @@ impl TrashWatch {
 pub struct Dock {
     state: Shared,
     ui: Ui,
-    entries: Vec<DesktopEntry>,
+    apps: InstalledApps,
     kept: Vec<String>,
     windows: Vec<String>,
     running: Vec<String>,
@@ -122,7 +122,7 @@ impl Dock {
     }
 
     fn entry(&self, app_id: &str) -> Option<&DesktopEntry> {
-        find_app(&self.entries, app_id)
+        find_app(self.apps.entries(), app_id)
     }
 
     fn identity(&self, window_app: &str) -> String {
@@ -132,7 +132,7 @@ impl Dock {
     }
 
     fn window_app(&self, app_id: &str) -> String {
-        running_app(&self.entries, &self.windows, app_id)
+        running_app(self.apps.entries(), &self.windows, app_id)
             .unwrap_or(app_id)
             .to_owned()
     }
@@ -155,7 +155,7 @@ impl Dock {
         if kept && entry.is_none() && !running {
             return None;
         }
-        let name = app_name(&self.entries, app_id);
+        let name = app_name(self.apps.entries(), app_id);
         let icon = self.icon(entry.as_ref().and_then(|entry| entry.icon.as_deref()));
         Some(DockApp {
             app_id: app_id.to_owned(),
@@ -187,6 +187,17 @@ impl Dock {
         if let Some(trash) = &self.trash {
             state.set_trash_full(!trash.trash.is_empty());
         }
+    }
+
+    fn follow_installed_apps(&mut self, window: &mut Window, now: Instant) {
+        if !self.apps.reload_if_changed(now) {
+            return;
+        }
+        self.icons.clear();
+        self.load_trash_icons();
+        self.follow_windows(self.windows.clone());
+        self.sync();
+        window.request_redraw();
     }
 
     fn follow_scale(&mut self, window: &Window) {
@@ -372,7 +383,7 @@ impl Dock {
     }
 
     fn app_name(&self, app_id: &str) -> String {
-        app_name(&self.entries, app_id)
+        app_name(self.apps.entries(), app_id)
     }
 
     fn opens_at_login(&self, app_id: &str) -> bool {
@@ -911,6 +922,7 @@ impl App for Dock {
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
         let mut sources = vec![self.bus.fd()];
+        sources.extend(self.apps.fd());
         sources.extend(self.trash.as_ref().map(|trash| trash.watch.fd()));
         sources
     }
@@ -918,6 +930,7 @@ impl App for Dock {
     fn source_ready(&mut self, window: &mut Window, index: usize) {
         match index {
             0 => self.receive(window),
+            1 if self.apps.fd().is_some() => self.apps.read(),
             _ => {
                 if let Some(trash) = &mut self.trash {
                     trash.watch.read();
@@ -928,10 +941,15 @@ impl App for Dock {
 
     fn deadline(&self) -> Option<Instant> {
         let watch = self.trash.as_ref().and_then(|trash| trash.watch.deadline());
-        [self.state.borrow().deadline(), watch, self.release_at]
-            .into_iter()
-            .flatten()
-            .min()
+        [
+            self.state.borrow().deadline(),
+            watch,
+            self.apps.deadline(),
+            self.release_at,
+        ]
+        .into_iter()
+        .flatten()
+        .min()
     }
 
     fn tick(&mut self, window: &mut Window, now: Instant) {
@@ -942,6 +960,7 @@ impl App for Dock {
             }
         }
         self.state.borrow_mut().tick(now);
+        self.follow_installed_apps(window, now);
         if let Some(trash) = &mut self.trash
             && !trash.watch.take_changed(now).is_empty()
         {
@@ -1009,11 +1028,7 @@ impl Dock {
         let mut dock = Self {
             state,
             ui,
-            entries: applications(
-                &data_dirs(),
-                Locale::from_env().as_ref(),
-                &current_desktops(),
-            ),
+            apps: InstalledApps::load(),
             kept: config.apps.clone(),
             windows: Vec::new(),
             running: Vec::new(),

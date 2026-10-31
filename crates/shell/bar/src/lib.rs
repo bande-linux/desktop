@@ -2,6 +2,7 @@ mod combined_client;
 pub mod dialogs;
 pub mod dock;
 mod dock_client;
+mod installed_apps;
 pub mod low_memory;
 pub mod menu_bar;
 mod menu_bar_client;

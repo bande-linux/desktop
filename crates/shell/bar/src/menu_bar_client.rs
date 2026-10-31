@@ -8,6 +8,7 @@ use std::thread;
 use std::time::Instant;
 
 use crate::dialogs::DIALOGS;
+use crate::installed_apps::InstalledApps;
 use crate::menu_bar::{HEIGHT, MenuBar, Slot, StatusView};
 use crate::menus::{
     AppMenus, app_menu, battery_menu, bluetooth_menu, cascade, input_source_menu, sound_menu,
@@ -31,8 +32,8 @@ use unbound_toolkit::{
     SessionEnd, TextSystem, Window, WindowEvent,
 };
 use unbound_xdg::{
-    DesktopEntry, ICON_THEMES, Locale, app_name, applications, current_desktops, data_dirs,
-    find_app, find_icon, launch_action, spawn_detached,
+    DesktopEntry, ICON_THEMES, app_name, data_dirs, find_app, find_icon, launch_action,
+    spawn_detached,
 };
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
@@ -61,7 +62,7 @@ pub struct MenuBarClient<V> {
     restart: Restart,
     workspaces: (usize, usize),
     anchors: Vec<(Panel, Rect)>,
-    entries: Vec<DesktopEntry>,
+    apps: InstalledApps,
     inbox: Inbox<Update>,
     controls: Option<Sender<Control>>,
     sound: Sender<SoundControl>,
@@ -282,7 +283,7 @@ impl<V: StatusView> MenuBarClient<V> {
     }
 
     fn entry(&self) -> Option<&DesktopEntry> {
-        find_app(&self.entries, &self.app_id)
+        find_app(self.apps.entries(), &self.app_id)
     }
 
     fn run_app_action(&mut self, window: &mut Window, id: &str) {
@@ -518,7 +519,7 @@ impl<V: StatusView> App for MenuBarClient<V> {
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
         match event {
             WindowEvent::ActiveApp(app_id) => {
-                if self.bar.set_app(&app_name(&self.entries, &app_id)) {
+                if self.bar.set_app(&app_name(self.apps.entries(), &app_id)) {
                     window.request_redraw();
                 }
                 if app_id != self.app_id {
@@ -632,10 +633,16 @@ impl<V: StatusView> App for MenuBarClient<V> {
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        vec![self.inbox.fd()]
+        let mut sources = vec![self.inbox.fd()];
+        sources.extend(self.apps.fd());
+        sources
     }
 
-    fn source_ready(&mut self, window: &mut Window, _index: usize) {
+    fn source_ready(&mut self, window: &mut Window, index: usize) {
+        if index > 0 {
+            self.apps.read();
+            return;
+        }
         for update in self.inbox.drain() {
             match update {
                 Update::Devices((battery, wifi, bluetooth)) => {
@@ -702,14 +709,22 @@ impl<V: StatusView> App for MenuBarClient<V> {
     }
 
     fn deadline(&self) -> Option<Instant> {
-        (!self.handoff.borrow().chosen.is_empty() || self.restart.get()).then(Instant::now)
+        let now =
+            (!self.handoff.borrow().chosen.is_empty() || self.restart.get()).then(Instant::now);
+        now.into_iter().chain(self.apps.deadline()).min()
     }
 
     fn accessibility(&self) -> Option<accesskit::TreeUpdate> {
         Some(self.bar.accessibility())
     }
 
-    fn tick(&mut self, window: &mut Window, _now: Instant) {
+    fn tick(&mut self, window: &mut Window, now: Instant) {
+        if self.apps.reload_if_changed(now) {
+            self.bar
+                .set_app(&app_name(self.apps.entries(), &self.app_id));
+            self.follow_app_icon(window);
+            window.request_redraw();
+        }
         let chosen = std::mem::take(&mut self.handoff.borrow_mut().chosen);
         for action in chosen {
             if let Some(command) = Command::parse(&action) {
@@ -756,11 +771,6 @@ impl<V: StatusView> MenuBarClient<V> {
         (session, system): (Option<&Connection>, Option<&Connection>),
         layout: (MenuBarPlacement, BarEdge),
     ) -> std::io::Result<Self> {
-        let entries = applications(
-            &data_dirs(),
-            Locale::from_env().as_ref(),
-            &current_desktops(),
-        );
         let inbox = Inbox::new()?;
         let controls = system.map(|system| follow_devices(system, inbox.outbox()));
         let sound = follow_sound(inbox.outbox());
@@ -804,7 +814,7 @@ impl<V: StatusView> MenuBarClient<V> {
             restart: Restart::default(),
             workspaces: (1, 0),
             anchors: Vec::new(),
-            entries,
+            apps: InstalledApps::load(),
             inbox,
             controls,
             sound,

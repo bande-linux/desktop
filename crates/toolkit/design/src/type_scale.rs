@@ -79,3 +79,29 @@ impl TextRole {
         }
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TextSize(u32);
+
+impl TextSize {
+    pub const DEFAULT: Self = Self(100);
+    pub const LARGEST: Self = Self(200);
+
+    pub fn from_percent(percent: u32) -> Self {
+        Self(percent.clamp(Self::DEFAULT.0, Self::LARGEST.0))
+    }
+
+    pub const fn percent(self) -> u32 {
+        self.0
+    }
+
+    pub fn scale(self) -> f32 {
+        self.0 as f32 / 100.0
+    }
+}
+
+impl Default for TextSize {
+    fn default() -> Self {
+        Self::DEFAULT
+    }
+}

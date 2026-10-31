@@ -29,7 +29,7 @@ use unbound_toolkit::{
 };
 use unbound_xdg::{
     DesktopEntry, ICON_THEMES, applications, current_desktops, data_dirs, find_icon,
-    path_from_file_uri, remember_running_apps, running_app, spawn_detached,
+    path_from_file_uri, running_app, spawn_detached,
 };
 use zbus::blocking::Connection;
 
@@ -479,7 +479,6 @@ impl ControlCenter {
                 "shut-down" => SessionEnd::ShutDown,
                 _ => SessionEnd::LogOut,
             };
-            remember_running_apps(&window.running_apps());
             if let Err(error) = window.confirm_session_end(ending) {
                 tracing::warn!("cannot ask to end the session: {error}");
             }

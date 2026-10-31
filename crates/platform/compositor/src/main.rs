@@ -16,7 +16,7 @@ use unbound_compositor::{
     Headless, InputSettings, REFRESH, REVIEW, Renderer, SCREENSHOT,
     SESSION_CLIENT_RESTART_THROTTLE, SHELL, SessionRequest, SessionRole, SessionUpkeep, Sleep,
     export_session_environment, follow_alerts, follow_appearance, follow_input_settings,
-    follow_session, follow_sleep, notify_ready, serve_keyboard_monitor,
+    follow_session, follow_shutdown, follow_sleep, notify_ready, serve_keyboard_monitor,
 };
 use unbound_config::{BUS_NAME, Config, OBJECT_PATH, config_path};
 use zbus::blocking::fdo::PropertiesProxy;
@@ -458,6 +458,21 @@ fn start_user_session<O: 'static>(
                 })?;
         }
         Err(error) => tracing::warn!("cannot follow the logind session: {error}"),
+    }
+    if let Some(file) = unbound_xdg::reopen_file() {
+        app.compositor.remember_apps_to_reopen_in(file);
+        match follow_shutdown() {
+            Ok(shutdowns) => {
+                event_loop
+                    .handle()
+                    .insert_source(shutdowns, |event, _, app| {
+                        if let Event::Msg(delay) = event {
+                            app.compositor.shutting_down(delay);
+                        }
+                    })?;
+            }
+            Err(error) => tracing::warn!("cannot remember the apps before shutdown: {error}"),
+        }
     }
     if std::env::var_os("UNBOUND_REVIEW_JOB").is_none() {
         return Ok(None);

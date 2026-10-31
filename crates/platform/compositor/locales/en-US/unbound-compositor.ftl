@@ -8,3 +8,4 @@ sticky-keys-turn-off-body = You pressed Shift five times while Sticky Keys are o
 sticky-keys-turn-off = Turn Off
 sticky-keys-keep = Cancel
 window-switcher = Windows
+remember-apps-before-shutdown = Remember the open apps to reopen them at the next login

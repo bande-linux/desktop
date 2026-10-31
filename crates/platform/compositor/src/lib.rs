@@ -70,7 +70,7 @@ pub use gesture::Gesture;
 pub use input_settings::{InputSettings, follow_input_settings};
 pub use keyboard_monitor::{KEYBOARD_MONITOR_NAME, KeyboardMonitorHandle, serve_keyboard_monitor};
 pub use keymap::KeyboardSettings;
-pub use logind::{SessionRequest, Sleep, follow_session, follow_sleep};
+pub use logind::{SessionRequest, Sleep, follow_session, follow_shutdown, follow_sleep};
 pub use night::NightTick;
 pub use pointing::PointerSettings;
 pub use render::{BACKGROUND, FrameStats, Renderer, Snapshot};

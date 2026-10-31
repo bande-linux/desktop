@@ -7,8 +7,13 @@ use unbound_protocols::server::unbound_app_control_v1::{self, UnboundAppControlV
 use unbound_protocols::server::unbound_app_v1::{self, UnboundAppV1};
 use unbound_protocols::server::unbound_shell_v1::{self, UnboundShellV1};
 
+use std::os::fd::OwnedFd;
+use std::path::PathBuf;
+
+use unbound_xdg::remember_running_apps;
+
 use crate::shell::{is_shell, toplevel_names};
-use crate::state::State;
+use crate::state::{Headless, State};
 
 impl State {
     pub(crate) fn quit_app(&mut self, owner: Option<Client>) {
@@ -41,6 +46,26 @@ impl State {
         owners
     }
 
+    pub(crate) fn remember_apps_to_reopen(&self, delay: Option<OwnedFd>) {
+        let Some(file) = self.reopen_file.clone() else {
+            return;
+        };
+        let running: Vec<String> = self
+            .app_owners()
+            .into_iter()
+            .map(|(_, app_id)| app_id)
+            .collect();
+        let remembered = std::thread::Builder::new()
+            .name("reopen".to_owned())
+            .spawn(move || {
+                remember_running_apps(&file, &running);
+                drop(delay);
+            });
+        if let Err(error) = remembered {
+            tracing::warn!("cannot remember the apps to reopen: {error}");
+        }
+    }
+
     pub(crate) fn quit_all_apps(&mut self, requester: UnboundShellV1) {
         for (owner, _) in self.app_owners() {
             self.quit_app(Some(owner));
@@ -66,6 +91,23 @@ impl State {
                 shell.apps_running(running.0.clone(), running.1);
                 *announced = Some(running.clone());
             }
+        }
+    }
+}
+
+impl Headless {
+    pub fn remember_apps_to_reopen_in(&mut self, file: PathBuf) {
+        self.state.reopen_file = Some(file);
+    }
+
+    pub fn shutting_down(&mut self, delay: OwnedFd) {
+        let remembered = self
+            .state
+            .reopen_file
+            .as_ref()
+            .is_some_and(|file| file.exists());
+        if !remembered {
+            self.state.remember_apps_to_reopen(Some(delay));
         }
     }
 }

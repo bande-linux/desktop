@@ -8,6 +8,7 @@ mod launch;
 mod mime;
 mod mimeapps;
 mod reopen;
+mod units;
 mod uri;
 
 use std::sync::LazyLock;
@@ -28,8 +29,8 @@ pub use entry::{
 pub use icon::{FALLBACK_THEME, ICON_THEMES, find_icon};
 pub use identity::{app_name, find_app, running_app};
 pub use launch::{
-    ACTIVATION_TOKEN, ExecError, LaunchError, TERMINAL, launch, launch_action, launch_with,
-    launch_with_arguments, spawn_detached,
+    ACTIVATION_TOKEN, ExecError, LaunchError, TERMINAL, follow_oom_kills, launch, launch_action,
+    launch_with, launch_with_arguments, spawn_detached,
 };
 pub use mime::{DIRECTORY, MimeDatabase, OCTET_STREAM, TEXT_PLAIN};
 pub use mimeapps::{
@@ -39,4 +40,5 @@ pub use mimeapps::{
 pub use reopen::{
     apps_to_reopen, remember_apps, remember_running_apps, reopen_file, take_apps_to_reopen,
 };
+pub use units::unit_app_ids;
 pub use uri::{file_uri, path_from_file_uri, percent_decode, percent_encode};

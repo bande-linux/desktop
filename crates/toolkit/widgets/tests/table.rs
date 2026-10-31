@@ -539,6 +539,42 @@ fn a_flexible_column_takes_the_spare_width_and_its_divider_follows_the_pointer()
     assert_eq!((kind.x, kind.width), (320.0, 80.0));
 }
 
+fn body_texts(items: &[Item], found: &mut Vec<(f32, f32, f32, f32)>) {
+    for item in items {
+        match item {
+            Item::Text { origin, paragraph } if origin.y >= HEADER_HEIGHT => {
+                found.push((origin.y, origin.x, paragraph.width(), paragraph.height()))
+            }
+            Item::Clip { items, .. } => body_texts(items, found),
+            _ => {}
+        }
+    }
+}
+
+#[test]
+fn label_cells_use_the_label_role_and_tabular_cells_line_up_their_digits() {
+    let mut fixture = Fixture::new(&[]);
+    fixture.table().set_rows(vec![
+        Row::new(
+            "pid",
+            vec![Cell::new("1111").tabular(), Cell::new("pid").label()],
+        ),
+        Row::new("user", vec![Cell::new("0000").tabular(), Cell::new("pid")]),
+        Row::new("plain", vec![Cell::new("1111")]),
+    ]);
+    let scene = fixture.ui.scene(AREA.width as u32, AREA.height as u32);
+    let mut texts = Vec::new();
+    body_texts(&scene.items, &mut texts);
+    texts.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1)));
+
+    let [ones, label, zeros, body, plain] = texts[..] else {
+        panic!("expected five cell texts, got {texts:?}");
+    };
+    assert_eq!(ones.2, zeros.2);
+    assert!(plain.2 < zeros.2, "{plain:?} {zeros:?}");
+    assert!(label.3 < body.3, "{label:?} {body:?}");
+}
+
 fn selection_top(items: &[Item], accent: Color) -> Option<f32> {
     items.iter().find_map(|item| match item {
         Item::Fill {

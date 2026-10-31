@@ -1,4 +1,5 @@
 use unbound_compositor::SessionRole;
+use unbound_protocols::client::unbound_app_control_v1::{self, UnboundAppControlV1};
 use unbound_protocols::client::unbound_app_v1::{self, Placement, UnboundAppV1};
 use unbound_protocols::client::unbound_shell_v1::{self, UnboundShellV1};
 use wayland_client::protocol::wl_shm::Format;
@@ -41,6 +42,7 @@ pub(crate) struct Shell {
     fractional_scale: Option<WpFractionalScaleV1>,
     pub(crate) layers: Vec<(WlSurface, ZwlrLayerSurfaceV1)>,
     shell: Option<UnboundShellV1>,
+    app_control: Option<UnboundAppControlV1>,
     launcher_requests: usize,
     scrim_presses: usize,
     launcher_modes: Vec<(unbound_shell_v1::LauncherMode, bool)>,
@@ -325,6 +327,18 @@ impl TestClient {
 
     fn shell_request(&mut self, server: &mut Headless, request: impl FnOnce(&UnboundShellV1)) {
         request(self.globals.shell.shell.as_ref().expect("joined the shell"));
+        self.exchange(server);
+    }
+
+    pub fn join_app_control(&mut self, server: &mut Headless) {
+        self.globals.shell.app_control = Some(self.bind("unbound_app_control_v1", 1));
+        self.exchange(server);
+    }
+
+    pub fn ask_app_to_quit(&mut self, server: &mut Headless, app_id: &str) {
+        if let Some(control) = &self.globals.shell.app_control {
+            control.quit_app(app_id.to_owned());
+        }
         self.exchange(server);
     }
 
@@ -632,6 +646,29 @@ impl Dispatch<UnboundAppV1, ()> for Globals {
     ) {
         if let unbound_app_v1::Event::QuitRequested = event {
             globals.shell.quit_requests += 1;
+        }
+    }
+}
+
+impl Dispatch<UnboundAppControlV1, ()> for Globals {
+    fn event(
+        globals: &mut Self,
+        _: &UnboundAppControlV1,
+        event: unbound_app_control_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        if let unbound_app_control_v1::Event::AppResponding {
+            pid,
+            app_id,
+            responding,
+        } = event
+        {
+            globals
+                .shell
+                .responding
+                .push((pid, app_id, responding != 0));
         }
     }
 }

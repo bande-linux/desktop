@@ -6,6 +6,7 @@ use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::backend::ClientId;
 use smithay::utils::SERIAL_COUNTER;
 use smithay::wayland::shell::xdg::ShellClient;
+use unbound_protocols::server::unbound_app_control_v1::UnboundAppControlV1;
 use unbound_protocols::server::unbound_shell_v1::{self, UnboundShellV1};
 
 use crate::shell::toplevel_names;
@@ -51,18 +52,35 @@ impl Watchdog {
     }
 }
 
-fn announce(shells: &[UnboundShellV1], ping: &Ping, responding: bool) {
+fn announce(
+    shells: &[UnboundShellV1],
+    controls: &[UnboundAppControlV1],
+    ping: &Ping,
+    responding: bool,
+) {
     for shell in shells {
         if shell.version() >= unbound_shell_v1::EVT_APP_RESPONDING_SINCE {
             shell.app_responding(ping.pid, ping.app_id.clone(), u32::from(responding));
         }
     }
+    for control in controls {
+        control.app_responding(ping.pid, ping.app_id.clone(), u32::from(responding));
+    }
 }
 
 impl State {
-    pub(crate) fn announce_unresponsive(&self, shell: &UnboundShellV1) {
+    pub(crate) fn announce_unresponsive(
+        &self,
+        shell: Option<&UnboundShellV1>,
+        control: Option<&UnboundAppControlV1>,
+    ) {
         for ping in self.watchdog.pings.iter().filter(|ping| ping.unresponsive) {
-            announce(std::slice::from_ref(shell), ping, false);
+            announce(
+                shell.map(std::slice::from_ref).unwrap_or_default(),
+                control.map(std::slice::from_ref).unwrap_or_default(),
+                ping,
+                false,
+            );
         }
     }
 
@@ -77,7 +95,12 @@ impl State {
         };
         ping.pending = false;
         if std::mem::take(&mut ping.unresponsive) {
-            announce(&self.shell_resources, ping, true);
+            announce(
+                &self.shell_resources,
+                &self.app_control_resources,
+                ping,
+                true,
+            );
             self.needs_redraw = true;
         }
     }
@@ -142,22 +165,24 @@ impl State {
 
     fn watchdog_due(&mut self, now: Duration) -> Option<Duration> {
         let shells = &self.shell_resources;
+        let controls = &self.app_control_resources;
         let mut changed = false;
         self.watchdog.pings.retain(|ping| {
             let alive = ping.client.alive();
             let quiet = !ping.pending && now >= ping.sent + PING_INTERVAL;
             if !alive && ping.unresponsive {
-                announce(shells, ping, true);
+                announce(shells, controls, ping, true);
                 changed = true;
             }
             alive && !quiet
         });
         self.ping_clients(now);
         let shells = &self.shell_resources;
+        let controls = &self.app_control_resources;
         for ping in &mut self.watchdog.pings {
             if ping.pending && !ping.unresponsive && now >= ping.sent + UNRESPONSIVE_AFTER {
                 ping.unresponsive = true;
-                announce(shells, ping, false);
+                announce(shells, controls, ping, false);
                 changed = true;
             }
         }

@@ -196,6 +196,7 @@ impl State {
         for surface in lost {
             self.refocus_after_losing(&surface);
         }
+        self.suspend_unseen_windows();
     }
 
     fn follow_minimized(&mut self, child: usize, parent: usize, lost: &mut Vec<WlSurface>) {

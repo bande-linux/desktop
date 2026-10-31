@@ -325,11 +325,8 @@ or inspect a process, Escape to close the inspector) gets one end-to-end test so
 
 ## 8. Needs from other crates
 
-- `platform/compositor`: let Activity Monitor's main window use `quit_app` and receive
-  `app_responding` (today `unbound_shell_v1` is visible to shell clients only, and only the Force
-  Quit window is started as one) (M7).
-- `toolkit/platform`: a "window hidden" signal (minimised, fully covered or xdg `suspended`) so
-  the Monitor can sample less while nobody looks (M1).
+- `platform/compositor`: send xdg `suspended` also for windows on another workspace and for
+  windows fully covered by others (today only minimised and hidden windows) (M1).
 - `libs/status`: UPower history, moved from `apps/settings` (M10).
 - `shell/bar` (later): a way for an app to draw a live bar icon.
 - `libs/xdg` (later): apps in their own systemd scopes, for priority control.
@@ -365,6 +362,38 @@ or inspect a process, Escape to close the inspector) gets one end-to-end test so
   Preventing Sleep column or an inspector shows; the reason appears in the inspector.
 - **M1.** A tick between samples now redraws only the window whose own timer is due; before, every
   wake redrew every window. Sampling less while hidden still needs the toolkit's hidden signal (§8).
+
+## 10. Built on 2026-10-31, second pass
+
+- **M7, compositor side.** A new global, `unbound_app_control_v1`, offered to every client, carries
+  only `quit_app(app_id)` and the `app_responding` event; it lists no windows and types no text, so
+  ordinary apps get no more than they could do to another app of the same user. Shell clients are
+  never asked to quit through it. `Window::quit_app` uses it when the window has no
+  `unbound_shell_v1`, and `Window::watch_apps` binds it on demand, so apps that never ask receive
+  no events. The Monitor's main window watches apps: Quit on an app row is the polite Super+Q path
+  and hung apps are marked Not Responding in the list.
+- **M1, hidden sampling.** The compositor sets xdg_toplevel `suspended` (xdg_wm_base 6) on
+  minimised and hidden windows; the toolkit reports it in `ToplevelState::suspended`. While every
+  Monitor window is suspended the sampler reads only `/proc/stat`, `meminfo`, `diskstats` and
+  `net/dev`, keeps the last process list and skips redraws; on showing it samples at once and
+  re-baselines processes so no CPU spike appears.
+- **M6, radio items.** `unbound-app-menu` has `Entry::radio(selected)` (dbusmenu
+  `toggle-type` radio); the menu bar already draws the checkmark. View ▸ All Processes, My
+  Processes and Apps are radio items and the Monitor republishes its menus when the filter changes.
+- **M5, cell style.** Table cells take `.label()` (Label role) and `.tabular()`; the inspector's
+  labels and section titles use the Label role and its values tabular figures.
+- **M12.** Disk readouts start with Reads/s and Writes/s from `/proc/diskstats` fields 4 and 8.
+  Interfaces are named by kind, "Wi-Fi (wlan0)", "Ethernet (eth0)", "VPN (wg0)", from
+  `/sys/class/net`; down interfaces are hidden. Packets per second as columns are not built.
+- **M11.** Open Files names sockets by their ports from `/proc/<pid>/net/{tcp,tcp6,udp,udp6}`:
+  "TCP 127.0.0.1:8080 (listening)", "TCP 10.0.0.2:51450 → 93.184.216.34:443", IPv6 in short
+  form; the net files are read only when the process has a socket.
+- **M13.** A search that matches nothing says "No processes match “text”" in `ink3` with a quiet
+  Clear Search button; tests drive Super+F, typing, Down and Super+I to an inspect request, and
+  Escape closes the inspector. Return on a top-level row expands its group rather than inspecting,
+  even when the group holds one process; that is left as it is.
+- **Not built:** M10 (battery footer, UPower history into `libs/status`); the Energy and GPU tabs
+  announcing themselves when they appear.
 
 ## Sources
 

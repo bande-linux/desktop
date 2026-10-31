@@ -443,7 +443,7 @@ impl GlobalDispatch<UnboundShellV1, ()> for State {
         if shell.version() >= unbound_shell_v1::EVT_ACTIVE_OUTPUT_SINCE {
             shell.active_output(state.active_output.clone());
         }
-        state.announce_unresponsive(&shell);
+        state.announce_unresponsive(Some(&shell), None);
         state.announce_minimized_windows(&shell);
         state.send_workspaces(&shell);
         state.announce_input_sources_to(&shell);

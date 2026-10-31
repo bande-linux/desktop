@@ -193,3 +193,39 @@ fn the_standard_app_menu_leaves_about_and_hiding_to_the_menu_bar() {
         ]
     );
 }
+
+#[test]
+fn radio_items_tell_the_menu_bar_which_choice_is_selected() {
+    let bus = SessionBus::start().expect("bus");
+    let filters = vec![Entry::submenu(
+        "View",
+        vec![
+            Entry::item("All Processes", "all").radio(false),
+            Entry::item("My Processes", "mine").radio(true),
+            Entry::item("Show CPU Cores", "cores"),
+        ],
+    )];
+    let _menu = AppMenu::export_on(bus.connect().expect("app"), APP, filters).expect("export");
+    let client = bus.connect().expect("client");
+
+    let (_, (_, _, items)) = get_layout(&client, 1);
+    let toggles = items
+        .iter()
+        .map(|node| {
+            let (_, properties, _): Layout = node.try_clone().unwrap().try_into().expect("node");
+            (
+                property(&properties, "toggle-type").map(ToString::to_string),
+                property(&properties, "toggle-state").map(ToString::to_string),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        toggles,
+        [
+            (Some("\"radio\"".to_owned()), Some("0".to_owned())),
+            (Some("\"radio\"".to_owned()), Some("1".to_owned())),
+            (None, None),
+        ]
+    );
+}

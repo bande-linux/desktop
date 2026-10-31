@@ -79,6 +79,7 @@ use smithay::{
     delegate_xdg_activation, delegate_xdg_shell,
 };
 use smithay::reexports::wayland_protocols::ext::background_effect::v1::server::ext_background_effect_manager_v1::ExtBackgroundEffectManagerV1;
+use unbound_protocols::server::unbound_app_control_v1::UnboundAppControlV1;
 use unbound_protocols::server::unbound_app_v1::UnboundAppV1;
 use unbound_protocols::server::unbound_shell_v1::UnboundShellV1;
 use unbound_render::VulkanRenderer;
@@ -182,6 +183,7 @@ pub struct State {
         Vec<unbound_protocols::server::unbound_capture_v1::UnboundCaptureV1>,
     pub(crate) pending_insert: Option<crate::shell::PendingInsert>,
     pub(crate) app_resources: Vec<UnboundAppV1>,
+    pub(crate) app_control_resources: Vec<UnboundAppControlV1>,
     pub(crate) foreign_toplevel_state: ForeignToplevelListState,
     pub(crate) exclusive_layer: Option<ExclusiveLayer>,
     exclusive_candidates: Vec<(WlSurface, Layer)>,
@@ -308,6 +310,7 @@ impl Headless {
         let screen = Screen::new(&handle, config, settings);
         handle.create_global::<State, UnboundShellV1, ()>(18, ());
         handle.create_global::<State, UnboundAppV1, ()>(6, ());
+        handle.create_global::<State, UnboundAppControlV1, ()>(1, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
         handle.create_global::<State, smithay::reexports::wayland_protocols_wlr::output_management::v1::server::zwlr_output_manager_v1::ZwlrOutputManagerV1, ()>(crate::management::MANAGER_VERSION, ());
         State::create_capture_globals(&handle);
@@ -361,6 +364,7 @@ impl Headless {
             capture_resources: Vec::new(),
             pending_insert: None,
             app_resources: Vec::new(),
+            app_control_resources: Vec::new(),
             foreign_toplevel_state: ForeignToplevelListState::new_with_filter::<State>(
                 &handle,
                 shell::is_shell,

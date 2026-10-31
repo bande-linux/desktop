@@ -361,6 +361,22 @@ impl State {
         self.announce_active_app(key.as_ref());
     }
 
+    pub(crate) fn suspend_unseen_windows(&self) {
+        for window in &self.windows {
+            let unseen = window.minimized.is_some() || window.hidden;
+            let changed = window.toplevel.with_pending_state(|state| {
+                if unseen {
+                    state.states.set(xdg_toplevel::State::Suspended)
+                } else {
+                    state.states.unset(xdg_toplevel::State::Suspended)
+                }
+            });
+            if changed {
+                window.configure();
+            }
+        }
+    }
+
     pub(crate) fn key_window(&self) -> Option<WlSurface> {
         let focused = match &self.exclusive_layer {
             Some(layer) => layer.previous.clone(),

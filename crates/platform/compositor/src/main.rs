@@ -535,6 +535,9 @@ where
             .reveal_wake(now())
             .map(|at| at.saturating_sub(now()));
         let snap_due = compositor.snap_tick(now());
+        let menu_wait = compositor
+            .window_menu_tick(Instant::now())
+            .map(|at| at.saturating_duration_since(Instant::now()));
         let mut frame_wake = None;
         for scheduler in schedulers.iter_mut() {
             match scheduler.poll(now, compositor, output) {
@@ -564,6 +567,7 @@ where
             .chain(watchdog_wait)
             .chain(night_wait)
             .chain(reveal_wait)
+            .chain(menu_wait)
             .min();
     }
 }

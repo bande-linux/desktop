@@ -34,3 +34,15 @@ pub use window::{
     ACTIVATION_TOKEN_VARIABLE, Edges, FramePath, KeyboardFocus, LayerKind, LayerOptions,
     RENDERER_VARIABLE, Role, ToplevelState, Window, WindowError, WindowEvent,
 };
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn every_message_id_used_in_code_is_in_the_english_file() {
+        let sources = [include_str!("window.rs")];
+        assert_eq!(
+            unbound_l10n::missing_ids(super::ENGLISH, &sources),
+            Vec::<&str>::new()
+        );
+    }
+}

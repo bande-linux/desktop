@@ -96,7 +96,13 @@ static L10N: std::sync::LazyLock<unbound_l10n::Localizer> =
 mod tests {
     #[test]
     fn every_message_id_used_in_code_is_in_the_english_file() {
-        let sources = [include_str!("switcher.rs"), include_str!("window_menu.rs")];
+        let sources = [
+            include_str!("access_keys.rs"),
+            include_str!("alert.rs"),
+            include_str!("logind.rs"),
+            include_str!("switcher.rs"),
+            include_str!("window_menu.rs"),
+        ];
         assert_eq!(
             unbound_l10n::missing_ids(super::ENGLISH, &sources),
             Vec::<&str>::new()

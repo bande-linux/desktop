@@ -249,6 +249,11 @@ impl State {
             unbound_app_v1::Placement::TopRight => Tile::TopRight,
             unbound_app_v1::Placement::BottomLeft => Tile::BottomLeft,
             unbound_app_v1::Placement::BottomRight => Tile::BottomRight,
+            unbound_app_v1::Placement::NextDisplay => {
+                let surface = self.windows[index].surface().clone();
+                self.move_to_next_screen(&surface);
+                return;
+            }
             _ => {
                 let surface = self.windows[index].surface().clone();
                 if self.windows[index].has_state(xdg_toplevel::State::Maximized) {

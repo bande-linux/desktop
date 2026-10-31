@@ -221,6 +221,19 @@ impl State {
         }
     }
 
+    pub(crate) fn move_to_next_screen(&mut self, surface: &WlSurface) {
+        let Some(index) = self.window_index(surface) else {
+            return;
+        };
+        let index = self.root_index(index);
+        if self.screens.len() < 2 || self.on_full_screen_space(&self.windows[index]) {
+            return;
+        }
+        let next = (self.screen_of(&self.windows[index]) + 1) % self.screens.len();
+        self.move_window_to_screen(index, next, None);
+        self.focus(Some(surface.clone()));
+    }
+
     pub(crate) fn add_screen(&mut self, config: OutputConfig, settings: OutputSettings) {
         if self.screen_named(&config.name).is_some() {
             return;
@@ -534,6 +547,7 @@ impl Headless {
     }
 
     pub fn set_display_config(&mut self, config: unbound_config::Config) {
+        self.state.night_light.configure(config.night_light);
         self.state.display_config = config;
         self.state.arrange_screens();
     }

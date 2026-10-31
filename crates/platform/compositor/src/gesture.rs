@@ -220,6 +220,15 @@ impl State {
         self.needs_redraw = true;
     }
 
+    pub(crate) fn toggle_desktop(&mut self) {
+        let target = if self.desktop.target == 0.0 { 1.0 } else { 0.0 };
+        let spring = self.release_spring(0.0);
+        self.desktop.settle_to(target, 0.0, spring);
+        self.hand_keyboard_over(target);
+        self.needs_redraw = true;
+        self.refocus_pointer();
+    }
+
     pub(crate) fn animate_desktop(&mut self, tick: Tick) {
         let precision = self.progress_precision();
         let desktop = &mut self.desktop;

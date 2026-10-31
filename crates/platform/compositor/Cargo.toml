@@ -8,10 +8,12 @@ repository.workspace = true
 [dependencies]
 accesskit.workspace = true
 accesskit_unix.workspace = true
+jiff.workspace = true
 rustix = { workspace = true, features = ["time"] }
 smithay = { workspace = true, features = ["backend_drm", "backend_gbm", "backend_libinput", "backend_session_libseat", "backend_udev", "desktop"] }
 tracing.workspace = true
 unbound-config.workspace = true
+unbound-datetime.workspace = true
 unbound-edid.workspace = true
 unbound-graphics.workspace = true
 unbound-l10n.workspace = true

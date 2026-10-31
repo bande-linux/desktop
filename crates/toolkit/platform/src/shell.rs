@@ -365,9 +365,9 @@ impl Dispatch<UnboundShellV1, ()> for State {
             unbound_shell_v1::Event::MediaKey {
                 key: WEnum::Value(key),
             } => state.events.push(WindowEvent::MediaKey(key)),
-            unbound_shell_v1::Event::ToggleControlCenter => {
-                state.events.push(WindowEvent::ToggleControlCenter);
-            }
+            unbound_shell_v1::Event::TogglePanel {
+                panel: WEnum::Value(panel),
+            } => state.events.push(WindowEvent::TogglePanel(panel)),
             unbound_shell_v1::Event::AppResponding {
                 pid,
                 app_id,

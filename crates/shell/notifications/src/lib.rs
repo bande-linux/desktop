@@ -1,3 +1,4 @@
+mod calendar;
 mod card;
 mod client;
 
@@ -6,7 +7,8 @@ use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
 use jiff::Zoned;
-use unbound_datetime::DateFormats;
+use jiff::civil::Date;
+use unbound_datetime::{DateFormats, Month};
 use unbound_l10n::Localizer;
 use unbound_notify::{Notification, Presentation, Stack};
 use unbound_spring::rubber_band;
@@ -16,6 +18,7 @@ use unbound_toolkit::{
     Scene, Scheme, Shape, Spacing, TextAlign, TextRole, TextStyle, TextSystem,
 };
 
+use calendar::{Calendar, Turn};
 use card::{CLOSE_REACH, contains};
 pub use card::{Card, DEFAULT_ACTION, Part, Sender, age_label};
 pub use client::{Notifications, role};
@@ -61,6 +64,7 @@ enum Target {
     ClearAll,
     ShowLess(String),
     ClearGroup(String),
+    Turn(Turn),
     Card(usize, Part),
 }
 
@@ -85,6 +89,7 @@ enum Row {
         clear_all: Option<(Paragraph, Rect)>,
         status: Option<Paragraph>,
     },
+    Calendar(Calendar),
     Group {
         group: String,
         name: Paragraph,
@@ -114,6 +119,8 @@ pub struct Screen {
     presentation: Presentation,
     first_seen: HashMap<u32, Instant>,
     dates: DateFormats,
+    today: Date,
+    month: Month,
     banners: Vec<Banner>,
     open: bool,
     center_x: Animated,
@@ -135,7 +142,9 @@ fn hidden_offset(width: f32) -> f32 {
 }
 
 impl Screen {
-    pub fn new(palette: Palette, text: TextSystem, senders: Senders) -> Self {
+    pub fn new(palette: Palette, text: TextSystem, senders: Senders, dates: DateFormats) -> Self {
+        let now = Zoned::now();
+        let today = now.date();
         Self {
             palette,
             text,
@@ -143,7 +152,9 @@ impl Screen {
             senders,
             presentation: Presentation::default(),
             first_seen: HashMap::new(),
-            dates: DateFormats::from_env(),
+            today,
+            month: dates.month(&now),
+            dates,
             banners: Vec::new(),
             open: false,
             center_x: Animated::points(hidden_offset(CENTER_WIDTH)),
@@ -165,6 +176,31 @@ impl Screen {
         self.palette = palette;
         self.reduce_motion = reduce_motion;
         self.rebuild(now);
+    }
+
+    pub fn set_today(&mut self, today: Date, now: Instant) {
+        if today == self.today {
+            return;
+        }
+        if self.month.contains(self.today) {
+            self.month = Month::containing(today, self.dates.first_weekday());
+        }
+        self.today = today;
+        self.rebuild_center(now);
+    }
+
+    pub fn shown_month(&self) -> Date {
+        self.month.first
+    }
+
+    fn turn_month(&mut self, months: i32, now: Instant) {
+        self.month = self.month.shifted(months);
+        self.rebuild_center(now);
+    }
+
+    fn show_today(&mut self, now: Instant) {
+        self.month = Month::containing(self.today, self.dates.first_weekday());
+        self.rebuild_center(now);
     }
 
     pub fn set_size(&mut self, width: u32, height: u32) {
@@ -333,9 +369,16 @@ impl Screen {
             );
             (label, rect)
         });
-        let status = self.presentation.do_not_disturb.then(|| {
+        let status = if self.presentation.screen_shared {
+            Some("screen-shared")
+        } else {
+            self.presentation
+                .do_not_disturb
+                .then_some("do-not-disturb-on")
+        };
+        let status = status.map(|status| {
             self.text.paragraph(
-                &L10N.tr("do-not-disturb-on"),
+                &L10N.tr(status),
                 TextStyle::role(TextRole::Callout, palette.ink2),
                 Some(inner),
                 TextAlign::Start,
@@ -353,6 +396,21 @@ impl Screen {
             },
         });
         y += title_height + GAP / 2.0;
+        let calendar = Calendar::new(
+            &self.month,
+            self.today,
+            &self.dates,
+            inner,
+            &palette,
+            &mut self.text,
+        );
+        let height = calendar.height;
+        rows.push(PlacedRow {
+            y,
+            height,
+            row: Row::Calendar(calendar),
+        });
+        y += height + GAP;
         if stacks.is_empty() {
             let empty = self.text.paragraph(
                 &L10N.tr("no-notifications"),
@@ -508,6 +566,7 @@ impl Screen {
         self.scroll = 0.0;
         self.focus = None;
         self.end_hold();
+        self.month = Month::containing(self.today, self.dates.first_weekday());
         self.rebuild(now);
         self.center_x
             .animate_at(now, self.reduce_motion, 0.0, Spring::STANDARD);
@@ -612,6 +671,10 @@ impl Screen {
                     targets.push(Target::ShowLess(group.clone()));
                     targets.push(Target::ClearGroup(group.clone()));
                 }
+                Row::Calendar(_) => {
+                    targets.push(Target::Turn(Turn::Previous));
+                    targets.push(Target::Turn(Turn::Next));
+                }
                 Row::Card { .. } => targets.push(Target::Card(index, Part::Body)),
                 Row::Title { .. } | Row::Empty(_) => {}
             }
@@ -635,6 +698,11 @@ impl Screen {
                     clear_all: Some((_, rect)),
                     ..
                 } if contains(*rect, inside) => return Some(Target::ClearAll),
+                Row::Calendar(calendar) => {
+                    if let Some(turn) = calendar.turn_at(inside) {
+                        return Some(Target::Turn(turn));
+                    }
+                }
                 Row::Group {
                     group,
                     show_less: (_, rect),
@@ -681,6 +749,7 @@ impl Screen {
                 self.rebuild_center(now);
             }
             Target::ClearGroup(group) => self.requests.push(Request::Clear(group)),
+            Target::Turn(turn) => self.turn_month(turn.months(), now),
             Target::Card(index, part) => {
                 let Some(PlacedRow {
                     row: Row::Card { card, collapsed },
@@ -903,6 +972,9 @@ impl Screen {
             Key::Down => self.focus = step(self.focus, true),
             Key::Up => self.focus = step(self.focus, false),
             Key::Tab => self.focus = step(self.focus, !shift),
+            Key::PageUp => self.turn_month(-1, now),
+            Key::PageDown => self.turn_month(1, now),
+            Key::Home => self.show_today(now),
             Key::Enter | Key::Space => {
                 if let Some(target) = self.focus.and_then(|at| targets.get(at)).cloned() {
                     self.run(target, now);
@@ -932,6 +1004,14 @@ impl Screen {
                 }
             }
             Some(Target::ClearAll) => 0,
+            Some(Target::Turn(_)) => match self
+                .rows
+                .iter()
+                .position(|placed| matches!(placed.row, Row::Calendar(_)))
+            {
+                Some(row) => row,
+                None => return,
+            },
             None => return,
         };
         let Some(placed) = self.rows.get(row) else {
@@ -1039,6 +1119,19 @@ impl Screen {
                             paragraph: status.clone(),
                         });
                     }
+                }
+                Row::Calendar(calendar) => {
+                    let turn = |target: &Option<Target>| match target {
+                        Some(Target::Turn(turn)) => Some(*turn),
+                        _ => None,
+                    };
+                    calendar.paint(
+                        origin,
+                        &palette,
+                        turn(&hovered),
+                        turn(&focused),
+                        &mut content,
+                    );
                 }
                 Row::Group {
                     group,
@@ -1165,6 +1258,7 @@ mod tests {
         let sources = [
             include_str!("lib.rs"),
             include_str!("card.rs"),
+            include_str!("calendar.rs"),
             include_str!("client.rs"),
         ];
         assert_eq!(

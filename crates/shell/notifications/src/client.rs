@@ -1,27 +1,31 @@
 use std::collections::HashMap;
 use std::os::fd::BorrowedFd;
-use std::path::Path;
+use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use jiff::Zoned;
+use unbound_datetime::DateFormats;
+
 use crate::{Request, Screen, Sender};
 use unbound_inbox::{Inbox, Outbox};
 use unbound_notify::client::NotificationCenter;
-use unbound_notify::{BUS_NAME, Presentation};
+use unbound_notify::{BUS_NAME, Picture, Presentation};
 use unbound_toolkit::{
     App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Panel, Rect, Role, Scene,
     TextSystem, Window, WindowEvent,
 };
 use unbound_xdg::{
     DesktopEntry, Locale, applications, current_desktops, data_dirs, find_app, find_icon, launch,
-    running_app,
+    path_from_file_uri, running_app,
 };
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::DBusProxy;
 
 const ICON_PIXELS: u32 = 64;
 const AGE_REFRESH: Duration = Duration::from_secs(30);
+const MAX_CACHED_PICTURES: usize = 64;
 
 enum Message {
     Presentation(Presentation),
@@ -56,12 +60,50 @@ fn report<E: std::fmt::Display>(what: &str, result: Result<(), E>) {
     }
 }
 
+fn image_named(name: &str, directories: &[PathBuf]) -> Option<Image> {
+    let path = if name.starts_with('/') {
+        Some(PathBuf::from(name))
+    } else if name.starts_with("file:") {
+        path_from_file_uri(name)
+    } else {
+        find_icon(name, ICON_PIXELS, &[], directories)
+    };
+    path.and_then(|path| Image::load(&path, ICON_PIXELS))
+}
+
 fn sender_lookup(
     entries: Vec<DesktopEntry>,
 ) -> impl FnMut(&unbound_notify::Notification, &str) -> Sender {
     let mut icons: HashMap<String, Option<Image>> = HashMap::new();
+    let mut pictures: HashMap<u32, (Picture, Option<Image>)> = HashMap::new();
     let directories = data_dirs();
     move |notification, group| {
+        let picture = notification.picture.as_ref().and_then(|picture| {
+            if let Picture::File(name) = picture {
+                return icons
+                    .entry(name.clone())
+                    .or_insert_with(|| image_named(name, &directories))
+                    .clone();
+            }
+            match pictures.get(&notification.id) {
+                Some((known, image)) if known == picture => image.clone(),
+                _ => {
+                    let image = match picture {
+                        Picture::Pixels {
+                            width,
+                            height,
+                            rgba,
+                        } => Image::from_rgba(*width, *height, rgba.clone()),
+                        Picture::File(_) => None,
+                    };
+                    if pictures.len() >= MAX_CACHED_PICTURES {
+                        pictures.clear();
+                    }
+                    pictures.insert(notification.id, (picture.clone(), image.clone()));
+                    image
+                }
+            }
+        });
         let entry = find_app(&entries, group).or_else(|| {
             entries
                 .iter()
@@ -86,17 +128,14 @@ fn sender_lookup(
         .find_map(|icon_name| {
             icons
                 .entry(icon_name.to_owned())
-                .or_insert_with(|| {
-                    let path = if icon_name.starts_with('/') {
-                        Some(Path::new(icon_name).to_path_buf())
-                    } else {
-                        find_icon(icon_name, ICON_PIXELS, &[], &directories)
-                    };
-                    path.and_then(|path| Image::load(&path, ICON_PIXELS))
-                })
+                .or_insert_with(|| image_named(icon_name, &directories))
                 .clone()
         });
-        Sender { name, icon }
+        Sender {
+            name,
+            icon,
+            picture,
+        }
     }
 }
 
@@ -214,7 +253,10 @@ impl App for Notifications {
         for message in self.inbox.drain() {
             match message {
                 Message::Presentation(presentation) => self.screen.present(presentation, now),
-                Message::Toggle => self.screen.toggle(now),
+                Message::Toggle => {
+                    self.screen.set_today(Zoned::now().date(), now);
+                    self.screen.toggle(now);
+                }
                 Message::Focus { app, token } => self.focus(window, &app, &token),
             }
         }
@@ -240,6 +282,7 @@ impl App for Notifications {
         }
         self.hide_pending = false;
         if self.next_refresh.is_some_and(|refresh| refresh <= now) {
+            self.screen.set_today(Zoned::now().date(), now);
             self.screen.rebuild(now);
             self.sync(window);
         }
@@ -349,6 +392,7 @@ impl Notifications {
             appearance.palette(),
             text,
             Box::new(sender_lookup(entries.clone())),
+            DateFormats::from_env(),
         );
         screen.set_appearance(
             appearance.palette(),

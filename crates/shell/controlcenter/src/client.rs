@@ -762,6 +762,9 @@ impl App for ControlCenter {
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
         match event {
             WindowEvent::TogglePanel(Panel::ControlCenter) => self.toggle_panel(window),
+            WindowEvent::Focus(false) if matches!(self.mode, Mode::Panel { .. }) => {
+                self.dismiss(window);
+            }
             WindowEvent::PanelAnchor {
                 panel: Panel::ControlCenter,
                 edge,

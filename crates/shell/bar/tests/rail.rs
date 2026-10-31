@@ -16,7 +16,7 @@ use unbound_datetime::{DateFormats, posix_locale};
 use unbound_dock_model::LauncherUpdate;
 use unbound_status::dbusmenu::Node;
 use unbound_status::status::{
-    Battery, Bluetooth, Gadget, InputSource, InputSources, Power, Sound, Wifi,
+    Battery, Bluetooth, Capture, Gadget, InputSource, InputSources, Power, Sense, Sound, Wifi,
 };
 use unbound_toolkit::ui::{
     Event, Key, MenuOutcome, MenuPanel, MenuTracker, Modifiers, Pointer, PointerButton, Ui,
@@ -679,4 +679,36 @@ fn an_app_leaving_a_full_rail_frees_room_before_the_next_one_comes_out_of_more()
     }
     assert_eq!(before.len(), shown + 1);
     assert!(before.contains(&format!("org.example.App{}", shown + 1)));
+}
+
+#[test]
+fn an_app_using_the_microphone_and_camera_marks_control_center_and_names_itself() {
+    let mut rail = Rail::new(Scheme::Light, HEIGHT, apps(1.0));
+    rail.view.status_mut().capturing = vec![
+        Capture {
+            name: "Meet".to_owned(),
+            icon: None,
+            senses: vec![Sense::Microphone, Sense::Camera],
+        },
+        Capture {
+            name: "Recorder".to_owned(),
+            icon: None,
+            senses: vec![Sense::Microphone],
+        },
+    ];
+    rail.frame(1.0);
+    rail.advance(Duration::from_secs(2));
+    let frame = rail.frame(1.0);
+    check_golden("bar-in-use-light", rail.size(), frame);
+
+    let tree = rail.view.accessibility();
+    let labels: Vec<String> = tree
+        .nodes
+        .iter()
+        .map(|(_, node)| node.label().unwrap_or_default().to_owned())
+        .collect();
+    assert!(labels.contains(
+        &"Control Center, Meet is using the microphone and camera, Recorder is using the microphone"
+            .to_owned()
+    ));
 }

@@ -4308,6 +4308,7 @@ dependencies = [
  "unbound-inbox",
  "unbound-l10n",
  "unbound-log",
+ "unbound-notify",
  "unbound-protocols",
  "unbound-sound",
  "unbound-test-bus",

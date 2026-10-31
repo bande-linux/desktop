@@ -261,6 +261,7 @@ fn sound_shows_both_directions_and_sends_level_and_device_changes() {
         ],
         inputs: vec![device(3, "Built-in.Microphone", Direction::Input, 0.8)],
         apps: Vec::new(),
+        capturing: Vec::new(),
         default_output: Some("Built-in.Speakers".to_owned()),
         default_input: Some("Built-in.Microphone".to_owned()),
     })));
@@ -326,6 +327,7 @@ fn sound_offers_the_alert_effects_a_live_input_level_and_a_volume_per_app() {
                 muted: false,
             },
         }],
+        capturing: Vec::new(),
         default_output: Some("Built-in.Speakers".to_owned()),
         default_input: Some("Built-in.Microphone".to_owned()),
     })));

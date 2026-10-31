@@ -6,7 +6,7 @@ use std::thread;
 use std::time::Duration;
 
 use unbound_notify::client::NotificationCenter;
-use unbound_notify::{NotificationServer, Presentation, Urgency};
+use unbound_notify::{MAX_PICTURE, NotificationServer, Picture, Presentation, Urgency};
 use unbound_test_bus::SessionBus;
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
@@ -37,7 +37,7 @@ trait Notifications {
 }
 
 struct Fixture {
-    _bus: SessionBus,
+    bus: SessionBus,
     _server: NotificationServer,
     connection: Connection,
     client: NotificationsProxyBlocking<'static>,
@@ -64,7 +64,7 @@ fn start() -> Fixture {
         }
     });
     Fixture {
-        _bus: bus,
+        bus,
         _server: server,
         connection,
         client,
@@ -227,4 +227,115 @@ fn do_not_disturb_is_remembered_across_restarts() {
         .set(interface, "DoNotDisturb", Value::from(false))
         .expect("Set");
     assert!(!file.exists(), "turning it off forgets it");
+}
+
+fn picture_of(presentation: &Presentation) -> Option<Picture> {
+    presentation.center[0].notifications[0].picture.clone()
+}
+
+fn image_data(width: i32, height: i32, alpha: bool, pixel: &[u8]) -> Value<'static> {
+    let channels = pixel.len() as i32;
+    let rowstride = width * channels + 2;
+    let mut data = Vec::new();
+    for _ in 0..height {
+        for _ in 0..width {
+            data.extend_from_slice(pixel);
+        }
+        data.extend_from_slice(&[0, 0]);
+    }
+    Value::from((width, height, rowstride, alpha, 8i32, channels, data))
+}
+
+#[test]
+fn image_data_becomes_straight_rgba_and_wins_over_an_image_path() {
+    let fixture = start();
+    let pixels = image_data(2, 1, false, &[10, 20, 30]);
+    let path = Value::from("/usr/share/pixmaps/sender.png");
+    fixture.notify(
+        "Photo",
+        HashMap::from([("image-data", &pixels), ("image-path", &path)]),
+    );
+
+    assert_eq!(
+        picture_of(&fixture.next()),
+        Some(Picture::Pixels {
+            width: 2,
+            height: 1,
+            rgba: vec![10, 20, 30, 255, 10, 20, 30, 255],
+        })
+    );
+}
+
+#[test]
+fn an_image_path_wins_over_the_old_icon_data() {
+    let fixture = start();
+    let path = Value::from("file:///home/me/avatar.png");
+    let legacy = image_data(1, 1, true, &[1, 2, 3, 4]);
+    fixture.notify(
+        "Call",
+        HashMap::from([("image-path", &path), ("icon_data", &legacy)]),
+    );
+
+    assert_eq!(
+        picture_of(&fixture.next()),
+        Some(Picture::File("file:///home/me/avatar.png".to_owned()))
+    );
+}
+
+#[test]
+fn the_old_icon_data_is_shown_when_nothing_newer_is_given() {
+    let fixture = start();
+    let legacy = image_data(1, 1, true, &[100, 50, 0, 255]);
+    fixture.notify("Old app", HashMap::from([("icon_data", &legacy)]));
+
+    assert_eq!(
+        picture_of(&fixture.next()),
+        Some(Picture::Pixels {
+            width: 1,
+            height: 1,
+            rgba: vec![100, 50, 0, 255],
+        })
+    );
+}
+
+#[test]
+fn a_large_picture_is_shrunk_to_fit_and_malformed_pixels_are_ignored() {
+    let fixture = start();
+    let big = image_data(512, 256, true, &[200, 100, 50, 255]);
+    fixture.notify("Big", HashMap::from([("image-data", &big)]));
+    let Some(Picture::Pixels {
+        width,
+        height,
+        rgba,
+    }) = picture_of(&fixture.next())
+    else {
+        panic!("no pixels");
+    };
+    assert_eq!((width, height), (MAX_PICTURE, MAX_PICTURE / 2));
+    assert_eq!(&rgba[..4], &[200, 100, 50, 255]);
+
+    let short = Value::from((4i32, 4i32, 16i32, true, 8i32, 4i32, vec![0u8; 8]));
+    fixture.notify("Broken", HashMap::from([("image-data", &short)]));
+    assert_eq!(picture_of(&fixture.next()), None);
+}
+
+#[test]
+fn banners_stay_quiet_while_a_sharer_is_connected() {
+    let fixture = start();
+    let sharer = fixture.bus.connect().expect("sharer connection");
+    NotificationCenter::new(&sharer)
+        .expect("sharer proxy")
+        .quiet_while_connected()
+        .expect("QuietWhileConnected");
+    assert!(fixture.next().screen_shared);
+
+    fixture.notify("During", HashMap::new());
+    let presentation = fixture.next();
+    assert!(presentation.banners.is_empty());
+    assert_eq!(presentation.center.len(), 1);
+
+    drop(sharer);
+    assert!(!fixture.next().screen_shared);
+    fixture.notify("After", HashMap::new());
+    assert_eq!(fixture.next().banners.len(), 1);
 }

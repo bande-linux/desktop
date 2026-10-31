@@ -370,7 +370,10 @@ impl<V: StatusView> MenuBarClient<V> {
                 self.control(Control::Scan);
                 status.wifi.as_ref().map(wifi_menu)
             }
-            Slot::Sound => status.sound.as_ref().map(sound_menu),
+            Slot::Sound => status
+                .sound
+                .as_ref()
+                .map(|sound| sound_menu(sound, &status.capturing)),
             Slot::Bluetooth => status.bluetooth.as_ref().map(bluetooth_menu),
             Slot::InputSource => Some(input_source_menu(&status.input_sources)),
             Slot::TrayMore => Some(self.more_menu(&status.input_sources)),
@@ -642,6 +645,7 @@ impl<V: StatusView> App for MenuBarClient<V> {
                     status.bluetooth = bluetooth;
                 }
                 Update::Sound(sound) => self.bar.status_mut().sound = sound,
+                Update::Capturing(capturing) => self.bar.status_mut().capturing = capturing,
                 Update::Tray(items) => {
                     self.tray = items;
                     self.refresh_tray_icons(window);

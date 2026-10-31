@@ -12,7 +12,7 @@ use unbound_status::dbusmenu::{Node, tree, without_mnemonics};
 use unbound_status::devices::battery_of;
 use unbound_status::session::{Ending, facts};
 use unbound_status::status::{
-    Battery, Bluetooth, Gadget, InputSource, InputSources, Output, Power, Sound,
+    Battery, Bluetooth, Capture, Gadget, InputSource, InputSources, Output, Power, Sense, Sound,
 };
 use unbound_status::tray::{TrayIcon, pixmap_rgba, split};
 use unbound_toolkit::ui::{Menu, MenuItem};
@@ -243,7 +243,7 @@ fn the_sound_menu_checks_the_output_in_use_and_mute_switches() {
         ],
         default_output: Some("usb".to_owned()),
     };
-    let menu = sound_menu(&sound);
+    let menu = sound_menu(&sound, &[]);
     let shown = titles(&menu);
     assert!(shown.contains(&("Volume 42%".to_owned(), false, false)));
     assert!(shown.contains(&("USB Headset".to_owned(), true, true)));
@@ -255,6 +255,31 @@ fn the_sound_menu_checks_the_output_in_use_and_mute_switches() {
     assert_eq!(
         Command::parse(action_of(&menu, "Speakers")),
         Some(Command::UseOutput("speakers".to_owned()))
+    );
+}
+
+#[test]
+fn the_sound_menu_names_the_apps_using_the_microphone_or_camera_first() {
+    let sound = Sound {
+        volume: 0.5,
+        muted: false,
+        outputs: Vec::new(),
+        default_output: None,
+    };
+    let capturing = [Capture {
+        name: "Meet".to_owned(),
+        icon: None,
+        senses: vec![Sense::Camera],
+    }];
+    let shown = titles(&sound_menu(&sound, &capturing));
+    assert_eq!(
+        shown[0],
+        ("Meet is using the camera".to_owned(), false, false)
+    );
+    assert!(
+        titles(&sound_menu(&sound, &[]))
+            .iter()
+            .all(|(title, ..)| !title.contains("Meet"))
     );
 }
 

@@ -1,8 +1,10 @@
 pub mod daylight;
 mod minute;
+mod month;
 
 use icu_calendar::Gregorian;
-use icu_datetime::fieldsets::{DE, E, MD, MDE, T, YMD};
+use icu_calendar::week::WeekInformation;
+use icu_datetime::fieldsets::{DE, E, MD, MDE, T, YM, YMD};
 use icu_datetime::input::{Date, DateTime, Time};
 use icu_datetime::{DateTimeFormatterPreferences, FixedCalendarDateTimeFormatter};
 use icu_locale_core::preferences::extensions::unicode::keywords::HourCycle;
@@ -10,6 +12,7 @@ use icu_locale_core::{Locale, locale};
 use jiff::Zoned;
 
 pub use minute::MinuteTimer;
+pub use month::{Month, Week};
 
 const LOCALE_VARIABLES: [&str; 3] = ["LC_ALL", "LC_TIME", "LANG"];
 const FALLBACK: Locale = locale!("en-US");
@@ -29,10 +32,15 @@ pub fn posix_locale(value: &str) -> Locale {
 #[derive(Debug, Clone)]
 pub struct DateFormats {
     preferences: DateTimeFormatterPreferences,
+    first_weekday: jiff::civil::Weekday,
+}
+
+fn gregorian(day: jiff::civil::Date) -> Option<Date<Gregorian>> {
+    Date::try_new_gregorian(i32::from(day.year()), day.month() as u8, day.day() as u8).ok()
 }
 
 fn date_of(at: &Zoned) -> Option<Date<Gregorian>> {
-    Date::try_new_gregorian(i32::from(at.year()), at.month() as u8, at.day() as u8).ok()
+    gregorian(at.date())
 }
 
 fn time_of(at: &Zoned) -> Option<Time> {
@@ -41,9 +49,39 @@ fn time_of(at: &Zoned) -> Option<Time> {
 
 impl DateFormats {
     pub fn for_locale(locale: &Locale) -> Self {
+        let first_weekday =
+            WeekInformation::try_new(locale.into()).map_or(jiff::civil::Weekday::Monday, |week| {
+                jiff::civil::Weekday::from_monday_one_offset(week.first_weekday as i8)
+                    .unwrap_or(jiff::civil::Weekday::Monday)
+            });
         Self {
             preferences: locale.into(),
+            first_weekday,
         }
+    }
+
+    pub fn first_weekday(&self) -> jiff::civil::Weekday {
+        self.first_weekday
+    }
+
+    pub fn month(&self, at: &Zoned) -> Month {
+        Month::containing(at.date(), self.first_weekday)
+    }
+
+    pub fn month_title(&self, first: jiff::civil::Date) -> String {
+        FixedCalendarDateTimeFormatter::<Gregorian, _>::try_new(self.preferences, YM::long())
+            .ok()
+            .zip(gregorian(first))
+            .map(|(formatter, date)| formatter.format(&date).to_string())
+            .unwrap_or_else(|| first.strftime("%B %Y").to_string())
+    }
+
+    pub fn short_weekday(&self, day: jiff::civil::Date) -> String {
+        FixedCalendarDateTimeFormatter::<Gregorian, _>::try_new(self.preferences, E::short())
+            .ok()
+            .zip(gregorian(day))
+            .map(|(formatter, date)| formatter.format(&date).to_string())
+            .unwrap_or_else(|| day.strftime("%a").to_string())
     }
 
     pub fn with_clock_format(mut self, format: &str) -> Self {

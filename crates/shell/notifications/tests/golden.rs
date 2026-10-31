@@ -2,9 +2,12 @@
 
 use std::time::{Duration, Instant};
 
+use jiff::civil::date;
+use unbound_datetime::{DateFormats, posix_locale};
+
 use unbound_notifications::{Screen, Sender};
-use unbound_notify::{Notification, Presentation, Stack};
-use unbound_toolkit::{Color, CpuRenderer, Palette, Scene, Scheme, TextSystem};
+use unbound_notify::{Notification, Picture, Presentation, Stack};
+use unbound_toolkit::{Color, CpuRenderer, Image, Palette, Scene, Scheme, TextSystem};
 
 const SIZE: (u32, u32) = (420, 460);
 const SETTLED: Duration = Duration::from_secs(2);
@@ -62,7 +65,16 @@ fn screen(presentation: Presentation, now: Instant) -> Screen {
         Box::new(|notification: &Notification, _: &str| Sender {
             name: notification.app_name.clone(),
             icon: None,
+            picture: match &notification.picture {
+                Some(Picture::Pixels {
+                    width,
+                    height,
+                    rgba,
+                }) => Image::from_rgba(*width, *height, rgba.clone()),
+                _ => None,
+            },
         }),
+        DateFormats::for_locale(&posix_locale("en_GB")),
     );
     screen.set_size(SIZE.0, SIZE.1);
     screen.present(presentation, now);
@@ -84,7 +96,7 @@ fn banners_match_their_golden() {
     let presentation = Presentation {
         banners: stacks(),
         center: Vec::new(),
-        do_not_disturb: false,
+        ..Presentation::default()
     };
     let mut screen = screen(presentation, now);
     check_golden("banners-light", screen.scene(now + SETTLED));
@@ -96,9 +108,51 @@ fn the_center_matches_its_golden() {
     let presentation = Presentation {
         banners: Vec::new(),
         center: stacks(),
-        do_not_disturb: false,
+        ..Presentation::default()
     };
     let mut screen = screen(presentation, now);
+    screen.set_today(date(2026, 10, 31), now);
     screen.open(now);
     check_golden("center-light", screen.scene(now + SETTLED));
+}
+
+fn landscape_photo(width: u32, height: u32) -> Picture {
+    let rgba = (0..height)
+        .flat_map(|y| {
+            (0..width).flat_map(move |x| {
+                let sky = y < height / 2;
+                let sun = (x as i32 - width as i32 / 2).pow(2)
+                    + (y as i32 - height as i32 / 3).pow(2)
+                    < (height as i32 / 6).pow(2);
+                match (sun, sky) {
+                    (true, _) => [255, 196, 64, 255],
+                    (false, true) => [96, 160, 230, 255],
+                    (false, false) => [64, 140, (x * 255 / width) as u8, 255],
+                }
+            })
+        })
+        .collect();
+    Picture::Pixels {
+        width,
+        height,
+        rgba,
+    }
+}
+
+#[test]
+fn a_banner_with_a_picture_matches_its_golden() {
+    let now = Instant::now();
+    let mut photo = notification(
+        7,
+        "Messages",
+        "Lena Holm",
+        "Look at the view from the cabin this morning, the lake is completely still",
+    );
+    photo.picture = Some(landscape_photo(96, 64));
+    let presentation = Presentation {
+        banners: vec![stack("messages", vec![photo])],
+        ..Presentation::default()
+    };
+    let mut screen = screen(presentation, now);
+    check_golden("banner-picture-light", screen.scene(now + SETTLED));
 }

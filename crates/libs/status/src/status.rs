@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+pub use unbound_audio::{Capture, Sense};
 use unbound_network::Network;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -91,6 +92,7 @@ pub struct Status {
     pub sound: Option<Sound>,
     pub bluetooth: Option<Bluetooth>,
     pub input_sources: InputSources,
+    pub capturing: Vec<Capture>,
 }
 
 pub fn wifi_bars(strength: u8) -> u8 {

@@ -747,3 +747,24 @@ fn the_keyboard_opens_the_app_menus_and_walks_the_apps_and_gives_the_keyboard_ba
     desktop.settle();
     assert!(desktop.calm());
 }
+
+#[test]
+fn a_bar_menu_opened_over_control_center_closes_it() {
+    let mut desktop = Desktop::new(false);
+    desktop.press(Target::ControlCenter, Press::Primary);
+    desktop.await_outcome(Outcome::ControlCenter);
+    desktop.press(Target::Mark, Press::Secondary);
+    assert_eq!(
+        expect(
+            &mut desktop,
+            "a bar menu while Control Center is open",
+            Outcome::Menu
+        ),
+        None
+    );
+    desktop.key(KEY_ESC);
+    assert!(
+        desktop.await_calm(),
+        "Control Center closed when the menu took the keyboard"
+    );
+}

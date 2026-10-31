@@ -458,11 +458,18 @@ fn run_sound(controls: Receiver<SoundControl>, outbox: &Outbox<Update>) {
         }
     });
     let mut generation = None;
+    let mut capturing = None;
     loop {
         let snapshot = audio.changed_since(generation);
         generation = Some(snapshot.generation);
         if !outbox.send(Update::Sound(sound_of(&snapshot))) {
             return;
+        }
+        if capturing.as_ref() != Some(&snapshot.capturing) {
+            capturing = Some(snapshot.capturing.clone());
+            if !outbox.send(Update::Capturing(snapshot.capturing)) {
+                return;
+            }
         }
     }
 }

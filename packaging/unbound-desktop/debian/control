@@ -42,6 +42,9 @@ Recommends: unbound-term (= ${binary:Version}),
             fonts-inter,
             fonts-manrope,
             fonts-jetbrains-mono,
+            fonts-noto-core,
+            fonts-noto-cjk,
+            cups,
             xdg-user-dirs,
             upower,
             udisks2,
@@ -53,5 +56,6 @@ Description: Unbound desktop environment
  to the sessions a display manager such as GDM, SDDM or greetd offers.
  .
  It recommends a browser, text editor, image viewer, PDF viewer, calculator
- and video player, and opens files in them by default, and an unlocked
- keyring for the passwords browsers and editors keep.
+ and video player, and opens files in them by default, an unlocked keyring
+ for the passwords browsers and editors keep, fallback fonts for every
+ script and the print service.

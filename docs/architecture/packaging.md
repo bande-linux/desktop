@@ -42,17 +42,17 @@ profiles. Sizes are tracked in [performance.md](performance.md).
   (`packaging/unbound-apt-source`): the repository's signing key and the APT source for the
   release and testing channels. Installation is described in the top-level `README.md`.
 
-## Runtime stack still to be pulled in
+## Runtime stack
 
-As the remaining subsystems land, the meta-package grows toward the full runtime stack the
-architecture relies on. Not yet in its dependencies:
+The packages pull in the runtime stack the architecture relies on:
 
-- `greetd` (once `unbound-greeter` installs its configuration),
-- PipeWire, `pipewire-pulse`, WirePlumber and `gstreamer1.0-pipewire` (audio and screen
-  casting),
-- `network-manager`, `bluez` and `polkitd` (Control Center, Settings and the polkit agent),
-- `fonts-noto-core` and `fonts-noto-cjk` (fallback faces), and an icon theme,
-- `mesa-vulkan-drivers` and `libvulkan1` are already pulled in by `unbound-compositor`.
+- `unbound-desktop` recommends `fonts-noto-core` and `fonts-noto-cjk`, the fallback faces
+  for scripts Inter does not cover, and `cups` for printing;
+- `unbound-shell` recommends PipeWire, WirePlumber, NetworkManager with Debian's
+  connectivity check, BlueZ and the Adwaita icon theme, and `unbound-settings` adds
+  PackageKit and power-profiles-daemon;
+- `unbound-polkit` depends on `polkitd`, and `unbound-greeter` on `greetd`;
+- `mesa-vulkan-drivers` and `libvulkan1` come with `unbound-compositor`.
 
 No package depends on an X server, XWayland or an X session; `ci/deb-install` checks that none
 comes along.

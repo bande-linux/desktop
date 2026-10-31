@@ -2,6 +2,7 @@ mod combined_client;
 pub mod dialogs;
 pub mod dock;
 mod dock_client;
+pub mod low_memory;
 pub mod menu_bar;
 mod menu_bar_client;
 pub mod menu_search;
@@ -32,6 +33,7 @@ mod tests {
             include_str!("rail.rs"),
             include_str!("combined_client.rs"),
             include_str!("dialogs.rs"),
+            include_str!("low_memory.rs"),
             include_str!("dock_client.rs"),
             include_str!("menu_bar_client.rs"),
             include_str!("pairing.rs"),

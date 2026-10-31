@@ -1,12 +1,14 @@
 use std::cell::RefCell;
 use std::error::Error;
 use std::os::fd::BorrowedFd;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 
 use accesskit::TreeUpdate;
+use unbound_bar::dialogs::DIALOGS;
+use unbound_bar::low_memory::{LOW_MEMORY_SIZE, LowMemory};
 use unbound_bar::pairing::PairingDialogs;
 use unbound_bar::surfaces::{self, Display, Restart, Services};
 use unbound_bluetooth::register_agent;
@@ -16,10 +18,13 @@ use unbound_desktop_surface::DesktopSurface;
 use unbound_launcher::LauncherShell;
 use unbound_notifications::Notifications;
 use unbound_status::captive::{follow_captive_portal, open_page};
-use unbound_toolkit::{App, Rect, Scene, Surfaces, TextSystem, Window, WindowEvent};
+use unbound_status::memory::{
+    CGROUP_ROOT, OWN_CGROUP, PressureTrigger, SYSTEM_PRESSURE, Streak, app_slice,
+};
+use unbound_toolkit::{App, Rect, Role, Scene, Surfaces, TextSystem, Window, WindowEvent};
 use unbound_xdg::{
-    Locale, applications, current_desktops, data_dirs, find_app, launch, reopen_file,
-    take_apps_to_reopen,
+    Locale, applications, current_desktops, data_dirs, find_app, follow_oom_kills, launch,
+    reopen_file, take_apps_to_reopen,
 };
 use zbus::blocking::Connection;
 
@@ -30,6 +35,7 @@ enum Place {
     Launcher,
     Desktop(Display),
     Bar(Display),
+    LowMemory,
 }
 
 type Opened = Vec<(Window, Box<dyn App>)>;
@@ -41,6 +47,7 @@ struct Context {
     config_home: Option<PathBuf>,
     home: Option<PathBuf>,
     notification_center: Rc<RefCell<Box<dyn Fn()>>>,
+    app_slice: Option<PathBuf>,
 }
 
 impl Context {
@@ -122,6 +129,22 @@ impl Context {
                 let bar = surfaces::open(beside, display, &self.config(), &self.services())?;
                 Ok((bar.surfaces, Some(bar.restart)))
             }
+            Place::LowMemory => {
+                let title = unbound_bar::L10N.tr("low-memory-window");
+                let mut window =
+                    beside.open_beside(Role::toplevel(&title, DIALOGS), LOW_MEMORY_SIZE)?;
+                window.share_fonts(&self.text);
+                if let Err(error) = window.set_keep_on_top(true) {
+                    tracing::warn!("the low memory window may hide behind others: {error}");
+                }
+                let part = LowMemory::new(
+                    &window,
+                    self.text.sharing_fonts(),
+                    self.session.clone(),
+                    self.app_slice.clone(),
+                );
+                Ok((vec![(window, Box::new(part))], None))
+            }
         }
     }
 }
@@ -132,6 +155,8 @@ struct Shell {
     parts: Vec<(Place, Box<dyn App>)>,
     restarts: Vec<(Display, Restart)>,
     reconcile: bool,
+    pressure: Option<PressureTrigger>,
+    streak: Streak,
 }
 
 impl Shell {
@@ -162,7 +187,17 @@ impl Shell {
             wanted.push(Place::Bar(display));
         }
         wanted.extend([Place::ControlCenter, Place::Launcher]);
+        if self.streak.alerting() {
+            wanted.push(Place::LowMemory);
+        }
         wanted
+    }
+
+    fn memory_stalled(&mut self) {
+        if self.streak.stalled(Instant::now()) {
+            tracing::warn!("memory is running low");
+            self.reconcile = true;
+        }
     }
 
     fn remove(&mut self, unwanted: impl Fn(&Place) -> bool) {
@@ -248,14 +283,16 @@ impl Surfaces for Shell {
         self.parts
             .iter()
             .flat_map(|(_, app)| app.sources())
+            .chain(self.pressure.as_ref().map(PressureTrigger::fd))
             .collect()
     }
 
     fn source_ready(&mut self, index: usize) {
-        if let Some((part, local)) = self.part_of_source(index) {
-            self.parts[part]
+        match self.part_of_source(index) {
+            Some((part, local)) => self.parts[part]
                 .1
-                .source_ready(&mut self.windows[part], local);
+                .source_ready(&mut self.windows[part], local),
+            None => self.memory_stalled(),
         }
     }
 
@@ -308,6 +345,9 @@ impl Surfaces for Shell {
             .filter(|(window, _)| window.is_closed())
             .map(|(_, (place, _))| place.clone())
             .collect();
+        if closed.contains(&Place::LowMemory) {
+            self.streak.dismissed();
+        }
         if !closed.is_empty() {
             self.remove(|place| closed.contains(place));
             self.reconcile = true;
@@ -344,6 +384,17 @@ fn reopen_apps(wanted: bool) {
     }
 }
 
+fn pressure_trigger() -> Option<PressureTrigger> {
+    PressureTrigger::open(Path::new(SYSTEM_PRESSURE))
+        .inspect_err(|error| tracing::warn!("no warning when memory runs low: {error}"))
+        .ok()
+}
+
+fn own_app_slice() -> Option<PathBuf> {
+    let cgroup = std::fs::read_to_string(OWN_CGROUP).ok()?;
+    app_slice(Path::new(CGROUP_ROOT), &cgroup)
+}
+
 pub fn run() -> Result<(), Box<dyn Error>> {
     let context = Context {
         text: TextSystem::new(),
@@ -352,8 +403,12 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         config_home: std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from),
         home: std::env::var_os("HOME").map(PathBuf::from),
         notification_center: Rc::new(RefCell::new(Box::new(|| {}))),
+        app_slice: own_app_slice(),
     };
     reopen_apps(context.config().reopen_apps);
+    if let Some(session) = &context.session {
+        follow_oom_kills(session.clone());
+    }
     if let Some(system) = &context.system {
         if let Err(error) = register_agent(system, Arc::new(PairingDialogs::default())) {
             tracing::warn!("Bluetooth devices can pair only from Settings: {error}");
@@ -370,6 +425,8 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         parts: vec![(Place::Notifications, notifications)],
         restarts: Vec::new(),
         reconcile: false,
+        pressure: pressure_trigger(),
+        streak: Streak::default(),
     };
     shell.reconcile();
     unbound_toolkit::run_surfaces(&mut shell)?;

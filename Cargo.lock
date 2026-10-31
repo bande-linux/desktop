@@ -4428,6 +4428,7 @@ name = "unbound-status"
 version = "0.1.0"
 dependencies = [
  "rustix 1.1.6",
+ "tempfile",
  "tracing",
  "unbound-app-menu",
  "unbound-audio",

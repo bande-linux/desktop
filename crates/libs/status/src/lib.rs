@@ -2,6 +2,7 @@ pub mod captive;
 pub mod clock;
 pub mod dbusmenu;
 pub mod devices;
+pub mod memory;
 pub mod session;
 pub mod status;
 pub mod tray;

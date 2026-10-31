@@ -938,7 +938,7 @@ fn night_light_pane() -> Pane {
                 vec![switch(SettingId::NightLight, "night-light-power")],
             ),
             section(
-                Some(L10N.tr("night-schedule")),
+                None,
                 vec![
                     setting(
                         SettingId::NightSchedule,

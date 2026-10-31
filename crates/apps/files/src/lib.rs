@@ -1,3 +1,4 @@
+mod batch_rename;
 mod browser;
 mod context;
 mod controls;
@@ -8,6 +9,7 @@ mod inspector;
 mod lister;
 mod loader;
 mod menus;
+mod open_with;
 mod paint;
 mod prompt;
 mod quick_look;
@@ -23,7 +25,9 @@ use std::sync::LazyLock;
 
 use unbound_l10n::Localizer;
 
+pub use batch_rename::{BatchRename, RuleKind};
 pub use browser::{Browser, Column, Location, RowEdit};
+pub use open_with::OpenWith;
 pub use paint::permissions;
 pub use quick_look::QuickLook;
 pub use search::SEARCH_HEIGHT;
@@ -62,6 +66,8 @@ mod tests {
             include_str!("view.rs"),
             include_str!("grid.rs"),
             include_str!("inspector.rs"),
+            include_str!("batch_rename.rs"),
+            include_str!("open_with.rs"),
             include_str!("quick_look.rs"),
             include_str!("tabs.rs"),
             include_str!("search.rs"),

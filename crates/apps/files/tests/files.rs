@@ -16,8 +16,8 @@ use unbound_fs::{FolderChanges, Sort, SortBy, Trash, list};
 use unbound_preview::Preview;
 use unbound_thumbnails::{Cache, Thumbnailers, Thumbnails};
 use unbound_toolkit::ui::{
-    Event, HEADER_HEIGHT as LIST_HEADER, Key, Menu, Modifiers, Pointer, PointerButton,
-    ROW_HEIGHT as LIST_ROW,
+    ClipboardRequest, Event, HEADER_HEIGHT as LIST_HEADER, Key, Menu, Modifiers, Pointer,
+    PointerButton, ROW_HEIGHT as LIST_ROW,
 };
 use unbound_toolkit::{
     CpuRenderer, DragAction, FrameRegions, Image, Item, Palette, Point, SHEET_INSET, Scheme,
@@ -836,7 +836,7 @@ fn right_clicking_an_item_selects_it_and_its_menu_acts_on_it() {
         .iter()
         .find_map(|item| item.submenu.as_ref())
         .expect("open with");
-    assert_eq!(titles(open_with), ["Editor"]);
+    assert_eq!(titles(open_with), ["Editor", "Other…"]);
     assert!(view.menu_action(&open_with.items[0].action));
     let requests = view.take_requests();
     let [Request::Open { app, files }] = requests.as_slice() else {
@@ -1586,6 +1586,7 @@ fn search_results_match_their_golden() {
     type_text(&mut view, "report");
     run_until(&mut view, |view| shown(view).len() == 3);
     view.handle(&press(Key::Down));
+    settle(&mut view);
     shoot("search", &mut view);
 }
 
@@ -2709,4 +2710,396 @@ fn the_inspector_matches_its_goldens() {
 
     view.handle(&command(Key::Character('a'), false));
     shoot("inspector-several", &mut view);
+}
+
+impl Place {
+    fn add_viewer(&self) {
+        fs::create_dir_all(self.root.path().join("data/applications")).expect("applications");
+        fs::write(
+            self.root.path().join("data/applications/viewer.desktop"),
+            "[Desktop Entry]\nType=Application\nName=Viewer\nExec=viewer %F\n",
+        )
+        .expect("viewer");
+        fs::write(
+            self.root.path().join("data/applications/settings.desktop"),
+            "[Desktop Entry]\nType=Application\nName=Settings\nExec=settings\n",
+        )
+        .expect("settings");
+    }
+}
+
+fn open_with_rows(view: &FilesView) -> Vec<String> {
+    view.accessibility()
+        .nodes
+        .into_iter()
+        .filter(|(_, node)| node.role() == accesskit::Role::Row)
+        .filter_map(|(_, node)| node.label().map(str::to_owned))
+        .collect()
+}
+
+#[test]
+fn other_apps_open_the_file_and_can_become_the_default() {
+    let place = Place::new();
+    place.add_viewer();
+    let mut view = place.view();
+    view.handle(&press(Key::Up));
+    view.menu_action("open-with-other");
+    assert!(matches!(view.sheet(), Some(Sheet::OpenWith(_))));
+    view.scene(1000, 600);
+    assert_eq!(open_with_rows(&view), ["Editor", "Viewer"]);
+
+    view.handle(&Event::Commit("view".to_owned()));
+    view.scene(1000, 600);
+    assert_eq!(open_with_rows(&view), ["Viewer"]);
+    let always = control_node(&view, accesskit::Role::CheckBox, "Always Open With");
+    click_node(&mut view, always);
+    view.handle(&press(Key::Enter));
+
+    assert!(view.sheet().is_none());
+    let requests = view.take_requests();
+    let [Request::Open { app, files }] = requests.as_slice() else {
+        panic!("{requests:?}");
+    };
+    assert_eq!(app.id, "viewer.desktop");
+    assert_eq!(files, &[place.home().join("notes.txt")]);
+    let list =
+        fs::read_to_string(place.root.path().join("config/mimeapps.list")).expect("mimeapps.list");
+    assert!(list.contains("text/plain=viewer.desktop"), "{list}");
+}
+
+#[test]
+fn a_file_without_an_app_asks_which_app_to_use() {
+    let place = Place::new();
+    place.add_viewer();
+    fs::write(place.home().join("unknown.xyz"), [0u8, 1, 2]).expect("file");
+    let mut view = place.view();
+    while selected_name(view.browser()).as_deref() != Some("unknown.xyz") {
+        view.handle(&press(Key::Down));
+    }
+
+    view.handle(&command(Key::Character('o'), false));
+
+    assert!(view.take_requests().is_empty());
+    let Some(Sheet::OpenWith(open_with)) = view.sheet() else {
+        panic!("{:?}", view.sheet());
+    };
+    assert_eq!(open_with.files, [place.home().join("unknown.xyz")]);
+    view.handle(&press(Key::Enter));
+    let requests = view.take_requests();
+    let [Request::Open { app, .. }] = requests.as_slice() else {
+        panic!("{requests:?}");
+    };
+    assert_eq!(app.id, "editor.desktop");
+}
+
+#[test]
+fn the_open_with_sheet_matches_its_golden() {
+    let place = Place::new();
+    place.add_viewer();
+    date_everything(&place.home());
+    let mut view = place.themed_view();
+    view.handle(&press(Key::Up));
+    view.menu_action("open-with-other");
+    settle(&mut view);
+    shoot("open-with-other", &mut view);
+}
+
+fn plain(text: Option<String>) -> Option<String> {
+    text.map(|text| text.replace(['\u{2068}', '\u{2069}'], ""))
+}
+
+#[test]
+fn copying_as_pathname_puts_one_absolute_path_per_line() {
+    let place = Place::new();
+    let mut view = place.view();
+    view.handle(&press(Key::Down));
+    view.handle(&shift(Key::Down));
+    view.take_requests();
+
+    view.handle(&Event::Key {
+        key: Key::Character('C'),
+        modifiers: Modifiers {
+            logo: true,
+            alt: true,
+            shift: true,
+            ..Modifiers::default()
+        },
+    });
+
+    let expected = format!(
+        "{}\n{}",
+        place.home().join("Documents").display(),
+        place.home().join("Empty").display()
+    );
+    assert_eq!(
+        view.take_requests(),
+        [Request::Clipboard(ClipboardRequest::Copy(expected))]
+    );
+}
+
+#[test]
+fn add_to_sidebar_bookmarks_the_selected_folder() {
+    let place = Place::new();
+    let mut view = place.view();
+    view.handle(&press(Key::Down));
+
+    view.handle(&Event::Key {
+        key: Key::Character('t'),
+        modifiers: Modifiers {
+            logo: true,
+            control: true,
+            ..Modifiers::default()
+        },
+    });
+
+    let requests = view.take_requests();
+    let [Request::EditSidebar(SidebarEdit { bookmarks, .. })] = requests.as_slice() else {
+        panic!("{requests:?}");
+    };
+    assert_eq!(
+        bookmarks,
+        &Some(BookmarkEdit::Add(vec![place.home().join("Documents")]))
+    );
+    let menu = right_click_selected(&mut view);
+    assert!(titles(&menu).contains(&"Add to Sidebar".to_owned()));
+}
+
+fn right_click_selected(view: &mut FilesView) -> Menu {
+    view.handle(&Event::Key {
+        key: Key::Function(10),
+        modifiers: Modifiers {
+            shift: true,
+            ..Modifiers::default()
+        },
+    });
+    match view.take_requests().as_slice() {
+        [Request::ShowMenu { menu, .. }] => menu.clone(),
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn the_edit_menu_names_the_action_to_undo_and_redo() {
+    let place = Place::new();
+    let mut view = place.view();
+    assert_eq!(view.undo_title(), None);
+    view.handle(&command(Key::Character('n'), true));
+    view.handle(&press(Key::Escape));
+    assert_eq!(plain(view.undo_title()).as_deref(), Some("Undo New Folder"));
+
+    view.handle(&press(Key::Down));
+    view.handle(&shift(Key::Down));
+    view.handle(&command(Key::Backspace, false));
+    run_until(&mut view, idle);
+    assert_eq!(
+        plain(view.undo_title()).as_deref(),
+        Some("Undo Move to Trash")
+    );
+
+    view.handle(&command(Key::Character('z'), false));
+    run_until(&mut view, idle);
+    assert_eq!(
+        plain(view.redo_title()).as_deref(),
+        Some("Redo Move to Trash")
+    );
+    assert_eq!(plain(view.undo_title()).as_deref(), Some("Undo New Folder"));
+}
+
+#[test]
+fn recents_offer_show_in_enclosing_folder() {
+    let place = Place::new();
+    let notes = place.home().join("notes.txt");
+    let xbel = place.root.path().join("recently-used.xbel");
+    fs::write(
+        &xbel,
+        format!(
+            "<xbel><bookmark href=\"{}\" visited=\"2026-02-01T08:00:00Z\"/></xbel>",
+            file_uri(&notes)
+        ),
+    )
+    .expect("recents");
+    let mut view = place.view();
+    view.set_recents_sources(xbel, place.root.path().join("usage"));
+    view.handle(&command(Key::Character('f'), true));
+    view.handle(&press(Key::Down));
+
+    let menu = right_click_selected(&mut view);
+    assert!(titles(&menu).contains(&"Show in Enclosing Folder".to_owned()));
+    view.menu_action("show-in-enclosing-folder");
+    assert_eq!(view.browser().root(), &Location::Folder(place.home()));
+    assert_eq!(selected_name(view.browser()).as_deref(), Some("notes.txt"));
+}
+
+fn photos(place: &Place) -> FilesView {
+    for name in ["IMG_1.jpg", "IMG_2.jpg"] {
+        fs::write(place.home().join(name), name).expect("photo");
+    }
+    let mut view = place.view();
+    while selected_name(view.browser()).as_deref() != Some("IMG_1.jpg") {
+        view.handle(&press(Key::Down));
+    }
+    view.handle(&shift(Key::Down));
+    view
+}
+
+fn batch_state(view: &FilesView) -> unbound_files::BatchRename {
+    match view.sheet() {
+        Some(Sheet::Rename(state)) => state.clone(),
+        other => panic!("{other:?}"),
+    }
+}
+
+fn rename_button_disabled(view: &FilesView) -> bool {
+    view.accessibility()
+        .nodes
+        .into_iter()
+        .find(|(_, node)| node.role() == accesskit::Role::Button && node.label() == Some("Rename"))
+        .map(|(_, node)| node.is_disabled())
+        .expect("a Rename button")
+}
+
+#[test]
+fn renaming_several_items_previews_and_applies_the_new_names() {
+    let place = Place::new();
+    let mut view = photos(&place);
+
+    view.handle(&press(Key::Function(2)));
+    assert_eq!(batch_state(&view).items.len(), 2);
+    view.scene(1000, 600);
+
+    view.handle(&Event::Commit("IMG_".to_owned()));
+    view.handle(&press(Key::Tab));
+    view.handle(&Event::Commit("Photo ".to_owned()));
+    let state = batch_state(&view);
+    assert_eq!(
+        (state.find.as_str(), state.replace.as_str()),
+        ("IMG_", "Photo ")
+    );
+    assert_eq!(
+        state
+            .preview()
+            .into_iter()
+            .map(|line| line.replace(['\u{2068}', '\u{2069}'], ""))
+            .collect::<Vec<_>>(),
+        ["IMG_1.jpg → Photo 1.jpg", "IMG_2.jpg → Photo 2.jpg"]
+    );
+    assert!(!rename_button_disabled(&view));
+
+    view.handle(&press(Key::Enter));
+
+    assert!(view.sheet().is_none());
+    assert!(place.home().join("Photo 1.jpg").exists());
+    assert!(place.home().join("Photo 2.jpg").exists());
+    assert_eq!(
+        names_of(view.browser().selection()),
+        ["Photo 1.jpg", "Photo 2.jpg"]
+    );
+    view.handle(&command(Key::Character('z'), false));
+    run_until(&mut view, idle);
+    assert!(place.home().join("IMG_1.jpg").exists());
+    assert!(place.home().join("IMG_2.jpg").exists());
+}
+
+#[test]
+fn a_clash_disables_rename_and_says_why() {
+    let place = Place::new();
+    let mut view = photos(&place);
+    view.handle(&press(Key::Function(2)));
+    view.scene(1000, 600);
+
+    view.handle(&Event::Commit("1".to_owned()));
+    view.handle(&press(Key::Tab));
+    view.handle(&Event::Commit("2".to_owned()));
+
+    assert!(rename_button_disabled(&view));
+    view.handle(&press(Key::Enter));
+    assert!(view.sheet().is_some());
+    assert!(place.home().join("IMG_1.jpg").exists());
+}
+
+#[test]
+fn the_batch_rename_sheet_matches_its_golden() {
+    let place = Place::new();
+    date_everything(&place.home());
+    for name in ["IMG_1.jpg", "IMG_2.jpg", "IMG_3.jpg"] {
+        fs::write(place.home().join(name), name).expect("photo");
+    }
+    let mut view = place.themed_view();
+    view.handle(&command(Key::Character('2'), false));
+    while selected_name(view.browser()).as_deref() != Some("IMG_1.jpg") {
+        view.handle(&press(Key::Down));
+    }
+    view.handle(&shift(Key::Down));
+    view.handle(&shift(Key::Down));
+    view.handle(&press(Key::Function(2)));
+    view.handle(&Event::Commit("IMG_".to_owned()));
+    view.handle(&press(Key::Tab));
+    view.handle(&Event::Commit("Lake ".to_owned()));
+    settle(&mut view);
+    shoot("batch-rename", &mut view);
+}
+
+fn choose_in_pop_up(view: &mut FilesView, label: &str, index: usize) {
+    view.scene(1000, 600);
+    let node = control_node(view, accesskit::Role::ComboBox, label);
+    click_node(view, node);
+    view.take_requests();
+    view.menu_action(&index.to_string());
+}
+
+fn view_switch_disabled(view: &FilesView) -> bool {
+    view.accessibility()
+        .nodes
+        .into_iter()
+        .find(|(_, node)| {
+            node.role() == accesskit::Role::RadioGroup && node.label() == Some("View")
+        })
+        .map(|(_, node)| node.is_disabled())
+        .expect("the view switch")
+}
+
+#[test]
+fn search_filters_keep_the_chosen_kind_and_recent_dates() {
+    let place = Place::new();
+    picture(&place.home().join("trip.png"), 8, 8);
+    fs::write(place.home().join("trip.txt"), "notes").expect("file");
+    fs::write(place.home().join("old trip.txt"), "old").expect("file");
+    fs::create_dir(place.home().join("trip")).expect("folder");
+    let month_ago = std::time::SystemTime::now() - Duration::from_secs(30 * 24 * 3600);
+    fs::File::open(place.home().join("old trip.txt"))
+        .and_then(|file| file.set_modified(month_ago))
+        .expect("date");
+    let mut view = place.view();
+    assert!(!view_switch_disabled(&view));
+
+    view.handle(&command(Key::Character('f'), false));
+    type_text(&mut view, "trip");
+    run_until(&mut view, |view| shown(view).len() == 4);
+    assert!(view_switch_disabled(&view));
+    view.handle(&command(Key::Character('3'), false));
+    assert_eq!(view.mode(), ViewMode::List);
+
+    choose_in_pop_up(&mut view, "Kind", 3);
+    assert_eq!(shown(&view), ["trip.png"]);
+    choose_in_pop_up(&mut view, "Kind", 2);
+    let mut documents = shown(&view);
+    documents.sort();
+    assert_eq!(documents, ["old trip.txt", "trip.txt"]);
+    choose_in_pop_up(&mut view, "Date Modified", 2);
+    assert_eq!(shown(&view), ["trip.txt"]);
+
+    view.handle(&press(Key::Escape));
+    assert_eq!(view.searching(), None);
+    assert_eq!(view.mode(), ViewMode::Columns);
+    assert!(!view_switch_disabled(&view));
+}
+
+fn settle(view: &mut FilesView) {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    view.scene(GOLDEN_SIZE.0, GOLDEN_SIZE.1);
+    while view.animating() {
+        assert!(Instant::now() < deadline, "the view did not settle");
+        std::thread::sleep(Duration::from_millis(20));
+        view.scene(GOLDEN_SIZE.0, GOLDEN_SIZE.1);
+    }
 }

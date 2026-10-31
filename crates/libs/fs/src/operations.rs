@@ -91,8 +91,8 @@ impl Operations {
         Ok(())
     }
 
-    pub fn record(&mut self, action: Action, change: Change) {
-        self.history.record(action, vec![change]);
+    pub fn record(&mut self, action: Action, changes: Vec<Change>) {
+        self.history.record(action, changes);
     }
 
     fn revert(&mut self, step: Step, purpose: Purpose) -> io::Result<()> {

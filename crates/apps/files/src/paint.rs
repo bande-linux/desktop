@@ -4,7 +4,7 @@ use std::time::Instant;
 use unbound_fs::{Entry, Purpose, format_date, format_size};
 use unbound_preview::Preview;
 use unbound_thumbnails::ThumbnailSize;
-use unbound_toolkit::ui::{BUTTON_HEIGHT as CONTROL_HEIGHT, SWITCH_SIZE};
+use unbound_toolkit::ui::{BUTTON_HEIGHT as CONTROL_HEIGHT, SWITCH_SIZE, Size};
 use unbound_toolkit::{
     Color, Elevation, Image, Item, Paragraph, Point, Radius, Rect, Scene, Shape, TextAlign,
     TextRole, TextStyle,
@@ -114,6 +114,10 @@ impl FilesView {
         self.hits.clear();
         self.layout_controls();
         self.refresh_navigation();
+        if self.mode == ViewMode::List {
+            self.ui.layout(Size::new(width as f32, height as f32));
+            self.fill_table();
+        }
         let mut inspector = Vec::new();
         if self.inspector {
             self.paint_inspector(&mut inspector);

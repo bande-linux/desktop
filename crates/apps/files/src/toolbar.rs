@@ -111,10 +111,12 @@ impl FilesView {
     }
 
     pub(crate) fn refresh_view_control(&mut self) {
+        let enabled = self.searching.is_none();
         if let Some(wanted) = MODES.iter().position(|mode| *mode == self.mode) {
             self.ui
                 .update_widget(self.toolbar.view, |control: &mut SegmentedControl, cx| {
                     control.set_selected(cx, wanted);
+                    control.set_enabled(enabled);
                 });
         }
     }

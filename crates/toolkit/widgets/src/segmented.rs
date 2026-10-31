@@ -13,6 +13,7 @@ const FONT_SIZE: f32 = 13.0;
 const CHIP_SHADOW: f32 = 0.14;
 const SYMBOL_SEGMENT: f32 = 32.0;
 const SYMBOL_SIZE: f32 = 16.0;
+const DISABLED_ALPHA: f32 = 0.45;
 
 struct Segment {
     title: String,
@@ -29,6 +30,7 @@ pub struct SegmentedControl {
     selected: Option<usize>,
     on_select: Box<dyn FnMut(usize)>,
     pill: Option<(Animated, Animated)>,
+    enabled: bool,
     frame: Rect,
 }
 
@@ -55,6 +57,7 @@ impl SegmentedControl {
             selected,
             on_select: Box::new(on_select),
             pill: None,
+            enabled: true,
             frame: Rect::default(),
         }
     }
@@ -75,6 +78,10 @@ impl SegmentedControl {
 
     pub fn selected(&self) -> Option<usize> {
         self.selected
+    }
+
+    pub fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
     }
 
     pub fn set_selected(&mut self, cx: &Context, index: usize) {
@@ -130,59 +137,7 @@ impl SegmentedControl {
         };
         Some(Rect::new(x, self.frame.y, width, self.frame.height).inset(INSET))
     }
-}
-
-impl Widget for SegmentedControl {
-    fn id(&self) -> WidgetId {
-        self.id
-    }
-
-    fn measure(&mut self, cx: &mut Context, _available: Size) -> Size {
-        for segment in &mut self.segments {
-            if let Some((plain, selected)) = &mut segment.symbol {
-                plain.tint(cx.palette.ink2);
-                selected.tint(cx.palette.ink);
-                segment.width = SYMBOL_SEGMENT;
-                continue;
-            }
-            let style = TextStyle::new(FONT_SIZE, cx.palette.ink2);
-            let plain = cx
-                .text
-                .paragraph(&segment.title, style, None, TextAlign::Start);
-            segment.width = (plain.width() + 2.0 * PADDING).round();
-            segment.selected = Some(cx.text.paragraph(
-                &segment.title,
-                TextStyle::new(FONT_SIZE, cx.palette.ink).weight(TextStyle::SEMIBOLD),
-                None,
-                TextAlign::Start,
-            ));
-            segment.plain = Some(plain);
-        }
-        Size::new(
-            self.segments.iter().map(|segment| segment.width).sum(),
-            SEGMENTED_HEIGHT,
-        )
-    }
-
-    fn place(&mut self, _cx: &mut Context, frame: Rect) {
-        let width = self.segments.iter().map(|segment| segment.width).sum();
-        self.frame = Rect::new(frame.x, frame.y, width, SEGMENTED_HEIGHT);
-        if let Some(index) = self.selected
-            && self.pill.is_none()
-        {
-            let target = self.segment(index);
-            self.pill = Some((
-                Animated::points(target.x - self.frame.x),
-                Animated::points(target.width),
-            ));
-        }
-    }
-
-    fn frame(&self) -> Rect {
-        self.frame
-    }
-
-    fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
+    fn paint_segments(&self, cx: &Context, items: &mut Vec<Item>) {
         let track = Shape::rounded(self.frame, Radius::M);
         items.push(Item::Fill {
             shape: track,
@@ -246,6 +201,70 @@ impl Widget for SegmentedControl {
             items: selected,
         });
     }
+}
+
+impl Widget for SegmentedControl {
+    fn id(&self) -> WidgetId {
+        self.id
+    }
+
+    fn measure(&mut self, cx: &mut Context, _available: Size) -> Size {
+        for segment in &mut self.segments {
+            if let Some((plain, selected)) = &mut segment.symbol {
+                plain.tint(cx.palette.ink2);
+                selected.tint(cx.palette.ink);
+                segment.width = SYMBOL_SEGMENT;
+                continue;
+            }
+            let style = TextStyle::new(FONT_SIZE, cx.palette.ink2);
+            let plain = cx
+                .text
+                .paragraph(&segment.title, style, None, TextAlign::Start);
+            segment.width = (plain.width() + 2.0 * PADDING).round();
+            segment.selected = Some(cx.text.paragraph(
+                &segment.title,
+                TextStyle::new(FONT_SIZE, cx.palette.ink).weight(TextStyle::SEMIBOLD),
+                None,
+                TextAlign::Start,
+            ));
+            segment.plain = Some(plain);
+        }
+        Size::new(
+            self.segments.iter().map(|segment| segment.width).sum(),
+            SEGMENTED_HEIGHT,
+        )
+    }
+
+    fn place(&mut self, _cx: &mut Context, frame: Rect) {
+        let width = self.segments.iter().map(|segment| segment.width).sum();
+        self.frame = Rect::new(frame.x, frame.y, width, SEGMENTED_HEIGHT);
+        if let Some(index) = self.selected
+            && self.pill.is_none()
+        {
+            let target = self.segment(index);
+            self.pill = Some((
+                Animated::points(target.x - self.frame.x),
+                Animated::points(target.width),
+            ));
+        }
+    }
+
+    fn frame(&self) -> Rect {
+        self.frame
+    }
+
+    fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
+        if !self.enabled {
+            let mut dimmed = Vec::new();
+            self.paint_segments(cx, &mut dimmed);
+            items.push(Item::Opacity {
+                alpha: DISABLED_ALPHA,
+                items: dimmed,
+            });
+            return;
+        }
+        self.paint_segments(cx, items);
+    }
 
     fn access(&self, _cx: &Context) -> Node {
         let mut node = Node::new(Role::RadioGroup);
@@ -253,12 +272,20 @@ impl Widget for SegmentedControl {
         if let Some(segment) = self.selected.and_then(|index| self.segments.get(index)) {
             node.set_value(segment.title.clone());
         }
-        node.add_action(Action::Increment);
-        node.add_action(Action::Decrement);
+        match self.enabled {
+            true => {
+                node.add_action(Action::Increment);
+                node.add_action(Action::Decrement);
+            }
+            false => node.set_disabled(),
+        }
         node
     }
 
     fn perform(&mut self, cx: &mut Context, request: &ActionRequest) -> bool {
+        if !self.enabled {
+            return false;
+        }
         let current = self.selected.unwrap_or(0);
         let index = match request.action {
             Action::Increment => current + 1,
@@ -300,7 +327,7 @@ impl Widget for SegmentedControl {
     }
 
     fn perform_part(&mut self, cx: &mut Context, part: u64, request: &ActionRequest) -> bool {
-        if request.action != Action::Click {
+        if !self.enabled || request.action != Action::Click {
             return false;
         }
         self.select(cx, part as usize);
@@ -308,6 +335,9 @@ impl Widget for SegmentedControl {
     }
 
     fn handle(&mut self, cx: &mut Context, event: &Event) -> bool {
+        if !self.enabled {
+            return false;
+        }
         match event {
             Event::PointerDown(pointer) if pointer.is_primary() => {
                 if let Some(index) = (0..self.segments.len())
@@ -332,6 +362,6 @@ impl Widget for SegmentedControl {
     }
 
     fn accepts_focus(&self, cx: &Context) -> bool {
-        cx.keyboard_navigation
+        self.enabled && cx.keyboard_navigation
     }
 }

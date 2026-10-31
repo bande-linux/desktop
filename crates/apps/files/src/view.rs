@@ -9,7 +9,7 @@ use std::time::{Duration, Instant, SystemTime};
 
 use unbound_fs::{
     Action, Answer, Change, Entry, Finished, FolderChanges, FolderWatch, Operations, Purpose,
-    RenameError, Resolution, Task, TrashItem, archive_path, can_extract,
+    RenameError, Resolution, Step, Task, TrashItem, archive_path, can_extract,
 };
 use unbound_preview::Preview;
 use unbound_search::{Usage, recent_files};
@@ -103,6 +103,8 @@ pub enum Sheet {
         items: Vec<TrashItem>,
     },
     GoTo(String),
+    OpenWith(crate::open_with::OpenWith),
+    Rename(crate::batch_rename::BatchRename),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -223,6 +225,22 @@ pub struct FilesView {
     typed: (String, Option<Instant>),
     pub(crate) paste_moves: Option<bool>,
     pub(crate) clipboard_files: bool,
+}
+
+fn step_title(step: &Step) -> String {
+    let id = match step.action {
+        Action::Copy => "edit-copy",
+        Action::Move => "edit-move",
+        Action::Duplicate => "edit-duplicate",
+        Action::Rename => "edit-rename",
+        Action::NewFolder => "edit-new-folder",
+        Action::NewDocument => "edit-new-document",
+        Action::Trash => "edit-trash",
+        Action::PutBack => "edit-put-back",
+        Action::Compress => "edit-compress",
+        Action::Extract => "edit-extract",
+    };
+    L10N.tr_args(id, [("count", step.changes.len().into())])
 }
 
 pub(crate) fn home() -> PathBuf {
@@ -1382,6 +1400,8 @@ impl FilesView {
                 }
             }
             Sheet::GoTo(typed) if action == "go" => self.go_to(&typed),
+            Sheet::OpenWith(open_with) if action == "open" => self.open_with_chosen_app(open_with),
+            Sheet::Rename(state) if action == "rename" => self.apply_batch_rename(state),
             Sheet::EmptyTrash if action == "confirm" => {
                 self.requests.push(Request::PlaySound(TRASH_SOUND));
                 self.start(Task::EmptyTrash, Purpose::Erase);
@@ -1399,19 +1419,8 @@ impl FilesView {
     }
 
     fn go_to(&mut self, typed: &str) {
-        let typed = typed.trim();
-        let expanded = match typed.strip_prefix('~') {
-            Some(rest) => home().join(rest.trim_start_matches('/')),
-            None => PathBuf::from(typed),
-        };
-        let path = if expanded.is_absolute() {
-            expanded
-        } else {
-            self.browser
-                .current_folder()
-                .unwrap_or_else(home)
-                .join(expanded)
-        };
+        let folder = self.browser.current_folder().unwrap_or_else(home);
+        let path = unbound_fs::typed_location(typed, &home(), &folder);
         if path.is_dir() {
             self.go(Location::Folder(path));
         } else if path.symlink_metadata().is_ok() {
@@ -1531,6 +1540,7 @@ impl FilesView {
             Key::Character('{' | '[') if command && shift => self.step_tab(false),
             Key::Character('}' | ']') if command && shift => self.step_tab(true),
             Key::Tab if modifiers.control => self.step_tab(!shift),
+            Key::Character('t' | 'T') if command && modifiers.control => self.add_to_sidebar(),
             Key::Character('t' | 'T') if command && !shift => {
                 self.open_tab(self.browser.root().clone());
             }
@@ -1579,6 +1589,7 @@ impl FilesView {
                 self.browser.select_all();
                 self.selection_changed();
             }
+            Key::Character('c' | 'C') if command && alt && shift => self.copy_paths(),
             Key::Character('c' | 'C') if command => self.copy_selection(false),
             Key::Character('x' | 'X') if command => self.copy_selection(true),
             Key::Character('v' | 'V') if command => self.paste(alt),
@@ -1607,6 +1618,10 @@ impl FilesView {
     }
 
     pub(crate) fn set_mode(&mut self, mode: ViewMode) {
+        if self.searching.is_some() {
+            self.refresh_view_control();
+            return;
+        }
         self.commit_rename();
         self.band = None;
         self.mode = mode;
@@ -1707,6 +1722,7 @@ impl FilesView {
             self.start(Task::Extract { archives }, Purpose::Do(Action::Extract));
         }
         let mut launches: Vec<(DesktopEntry, Vec<PathBuf>)> = Vec::new();
+        let mut unknown = Vec::new();
         for entry in files {
             let mime = self.apps.mime_for(&entry.path);
             if let Some(launcher) = self.apps.launcher(&entry.path, &mime) {
@@ -1718,13 +1734,7 @@ impl FilesView {
                     Some((_, files)) => files.push(entry.path.clone()),
                     None => launches.push((app, vec![entry.path.clone()])),
                 },
-                None => {
-                    let kind = self.apps.kind(&mime);
-                    self.show_notice(L10N.tr_args(
-                        "error-no-app",
-                        [("name", entry.name.clone().into()), ("kind", kind.into())],
-                    ));
-                }
+                None => unknown.push(entry.path.clone()),
             }
         }
         self.requests
@@ -1732,6 +1742,9 @@ impl FilesView {
                 app: Box::new(app),
                 files,
             }));
+        if !unknown.is_empty() {
+            self.ask_open_with(unknown);
+        }
     }
 
     fn open_with_chosen(&mut self) {
@@ -1777,7 +1790,7 @@ impl FilesView {
                 if let Change::Moved { to, .. } = &change {
                     self.reveal_after_change(std::slice::from_ref(to));
                 }
-                self.operations.record(Action::Rename, change);
+                self.operations.record(Action::Rename, vec![change]);
             }
             Ok(None) => {}
             Err(error) => {
@@ -1797,7 +1810,7 @@ impl FilesView {
         }
     }
 
-    fn reveal_after_change(&mut self, paths: &[PathBuf]) {
+    pub(crate) fn reveal_after_change(&mut self, paths: &[PathBuf]) {
         let folders = paths
             .iter()
             .filter_map(|path| path.parent().map(Path::to_path_buf))
@@ -1839,7 +1852,7 @@ impl FilesView {
                 if let Change::Created(path) = &change {
                     self.reveal_after_change(std::slice::from_ref(path));
                 }
-                self.operations.record(Action::NewDocument, change);
+                self.operations.record(Action::NewDocument, vec![change]);
                 self.start_rename();
             }
             Err(error) => self.show_notice(
@@ -1868,7 +1881,7 @@ impl FilesView {
                 if let Change::Created(path) = &change {
                     self.reveal_after_change(std::slice::from_ref(path));
                 }
-                self.operations.record(Action::NewFolder, change);
+                self.operations.record(Action::NewFolder, vec![change]);
                 self.start_rename();
             }
             Err(error) => self.show_notice(
@@ -1927,6 +1940,61 @@ impl FilesView {
             .collect::<Vec<_>>();
         if !items.is_empty() || !paths.is_empty() {
             self.present(Sheet::DeleteImmediately { paths, items });
+        }
+    }
+
+    pub fn undo_title(&self) -> Option<String> {
+        let step = self.operations.history().next_undo()?;
+        Some(L10N.tr_args("menu-undo-action", [("action", step_title(step).into())]))
+    }
+
+    pub fn redo_title(&self) -> Option<String> {
+        let step = self.operations.history().next_redo()?;
+        Some(L10N.tr_args("menu-redo-action", [("action", step_title(step).into())]))
+    }
+
+    pub(crate) fn copy_paths(&mut self) {
+        let paths = self.browser.selected_paths();
+        if paths.is_empty() || self.browser.in_trash() {
+            return;
+        }
+        let text = paths
+            .iter()
+            .map(|path| path.to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("\n");
+        self.requests
+            .push(Request::Clipboard(ClipboardRequest::Copy(text)));
+    }
+
+    pub(crate) fn add_to_sidebar(&mut self) {
+        let selection = self.browser.selection();
+        let folders = selection
+            .iter()
+            .filter(|entry| entry.is_folder() && entry.trashed.is_none())
+            .map(|entry| Location::Folder(entry.path.clone()))
+            .collect::<Vec<_>>();
+        let locations = match (folders.is_empty(), selection.is_empty()) {
+            (false, _) => folders,
+            (true, true) => self
+                .browser
+                .current_folder()
+                .map(Location::Folder)
+                .into_iter()
+                .collect(),
+            (true, false) => Vec::new(),
+        };
+        let locations = locations
+            .into_iter()
+            .filter(|location| {
+                !self
+                    .favourites
+                    .iter()
+                    .any(|row| matches!(row, Row::Place(place) if place.location == *location))
+            })
+            .collect::<Vec<_>>();
+        if !locations.is_empty() {
+            self.place_in_sidebar(locations, None);
         }
     }
 

@@ -12,8 +12,8 @@ use smithay::reexports::drm::control::crtc;
 use smithay::utils::{Clock, Monotonic, Size};
 use smithay::wayland::socket::ListeningSocketSource;
 use unbound_compositor::{
-    CLIPBOARD_DAEMON, CursorTheme, DrmBackend, FrameClock, FrameOutput, FrameScheduler, GREETER,
-    Headless, InputSettings, REFRESH, REVIEW, Renderer, SCREENSHOT,
+    CLIPBOARD_DAEMON, CursorTheme, DrmBackend, DrmNotifiers, FrameClock, FrameOutput,
+    FrameScheduler, GREETER, Headless, InputSettings, REFRESH, REVIEW, Renderer, SCREENSHOT,
     SESSION_CLIENT_RESTART_THROTTLE, SHELL, SessionRequest, SessionRole, SessionUpkeep, Sleep,
     export_session_environment, follow_alerts, follow_appearance, follow_input_settings,
     follow_session, follow_sleep, notify_ready, serve_keyboard_monitor,
@@ -239,12 +239,23 @@ fn page_flipped(app: &mut App<DrmBackend>, crtc: crtc::Handle, metadata: Option<
     }
 }
 
+fn open_display(device: Option<&Path>) -> Result<(DrmBackend, DrmNotifiers), Box<dyn Error>> {
+    let mut retrying = false;
+    loop {
+        DrmBackend::wait_for_display(retrying)?;
+        if let Some(opened) = DrmBackend::open(device)? {
+            return Ok(opened);
+        }
+        retrying = true;
+    }
+}
+
 fn run_drm(
     device: Option<&Path>,
     session: Session,
     started: Duration,
 ) -> Result<(), Box<dyn Error>> {
-    let (backend, notifiers) = DrmBackend::open(device)?;
+    let (backend, notifiers) = open_display(device)?;
     tracing::info!("driving {}", backend.path().display());
     let mut outputs = backend.outputs().into_iter();
     let first = outputs.next().ok_or("no display is connected")?;

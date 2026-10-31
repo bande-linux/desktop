@@ -81,10 +81,6 @@ fn two_admins() -> Prompt {
     }
 }
 
-fn check_golden(name: &str, rgba: Vec<u8>) {
-    unbound_golden::assert_golden!(name, &unbound_golden::from_rgba(SIZE.0, SIZE.1, rgba));
-}
-
 fn answered(answer: &Receiver<Answer>) -> Option<String> {
     match answer.try_recv().expect("an answer") {
         Answer::Password(password) => Some(password.as_str().to_owned()),
@@ -108,7 +104,7 @@ fn description(asking: &Asking) -> String {
 #[test]
 fn the_typed_password_is_sent_with_enter() {
     let (mut asking, answer) = Asking::new();
-    check_golden("asking", asking.settle());
+    unbound_golden::assert_golden_rgba!("asking", SIZE, asking.settle());
     asking.type_text("hunter2");
     asking.press(Key::Enter);
     assert_eq!(answered(&answer), Some("hunter2".to_owned()));
@@ -155,7 +151,7 @@ fn a_wrong_password_shakes_clears_the_field_and_asks_again() {
         reply,
     });
     assert!(asking.dialog.ui().is_animating() || asking.dialog.ui().deadline().is_some());
-    check_golden("wrong-password", asking.settle());
+    unbound_golden::assert_golden_rgba!("wrong-password", SIZE, asking.settle());
     asking.type_text("right");
     asking.press(Key::Enter);
     assert_eq!(answered(&second), Some("right".to_owned()));
@@ -195,7 +191,7 @@ fn the_dialog_names_the_user_by_full_name() {
 #[test]
 fn choosing_another_administrator_restarts_for_that_user() {
     let (mut asking, first) = Asking::with(two_admins());
-    check_golden("choose-user", asking.settle());
+    unbound_golden::assert_golden_rgba!("choose-user", SIZE, asking.settle());
     let picker = asking
         .dialog
         .ui()

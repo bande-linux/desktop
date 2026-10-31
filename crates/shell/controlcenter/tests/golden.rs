@@ -12,10 +12,6 @@ use unbound_toolkit::{Color, CpuRenderer, Image, Palette, Rect, Scene, Scheme, T
 const MARGIN: f32 = 24.0;
 const DESKTOP: Color = Color::hex(0x7C8698);
 
-fn check_golden(name: &str, width: u32, height: u32, rgba: Vec<u8>) {
-    unbound_golden::assert_golden!(name, &unbound_golden::from_rgba(width, height, rgba));
-}
-
 fn cover() -> Image {
     let size = 64;
     let rgba = (0..size * size)
@@ -102,5 +98,5 @@ fn control_center_with_now_playing_matches_its_golden() {
         items: panel_items(&mut ui, &palette, rect),
     };
     let frame = CpuRenderer::new().render(&scene).expect("frame");
-    check_golden("panel-light", frame.width, frame.height, frame.rgba);
+    unbound_golden::assert_golden_rgba!("panel-light", (frame.width, frame.height), frame.rgba);
 }

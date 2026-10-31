@@ -602,10 +602,6 @@ fn every_keystroke_updates_the_results_within_a_frame() {
     assert!(median < Duration::from_millis(16), "median {median:?}");
 }
 
-fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>) {
-    unbound_golden::assert_golden!(name, &unbound_golden::from_rgba(size.0, size.1, rgba));
-}
-
 fn scene(launcher: &mut Launcher, now: Instant) -> Scene {
     let surface = launcher.surface(SCREEN);
     launcher.scene(surface.size.0, surface.size.1, now)
@@ -615,7 +611,7 @@ fn render(launcher: &mut Launcher, name: &str) {
     let mut scene = scene(launcher, Instant::now());
     scene.background = Color::hex(0x5A6B7D);
     let frame = CpuRenderer::new().render(&scene).expect("frame");
-    check_golden(name, (scene.width, scene.height), frame.rgba);
+    unbound_golden::assert_golden_rgba!(name, (scene.width, scene.height), frame.rgba);
 }
 
 #[test]

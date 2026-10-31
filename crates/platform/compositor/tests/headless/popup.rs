@@ -17,10 +17,6 @@ fn at((x, y): (i32, i32)) -> Point<f64, smithay::utils::Logical> {
     (f64::from(x), f64::from(y)).into()
 }
 
-fn app(server: &mut Compositor, color: [u8; 4], app_id: &str) -> TestClient {
-    window_of(server, color, WINDOW, app_id)
-}
-
 struct Desk {
     server: Compositor,
     bystander: TestClient,
@@ -30,10 +26,10 @@ struct Desk {
 impl Desk {
     fn new() -> Self {
         let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
-        let mut bystander = app(&mut server, BLUE, VIEWER);
+        let mut bystander = window_of(&mut server, BLUE, WINDOW, VIEWER);
         bystander.set_maximized(&mut server, 0, true);
         bystander.fill_configured_size(&mut server, 0, BLUE);
-        let mut editor = app(&mut server, RED, EDITOR);
+        let mut editor = window_of(&mut server, RED, WINDOW, EDITOR);
         click(&mut server, (CENTERED.0 + 5, CENTERED.1 + 5));
         roundtrip(&mut server, &mut [&mut bystander, &mut editor]);
         assert!(editor.keyboard_focus_on(0));
@@ -611,7 +607,7 @@ fn a_window_menu_is_kept_on_the_display_of_its_anchor() {
     let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     server.add_output(OutputConfig::virtual_display(SIDE, Size::from((320, 240))));
     server.move_pointer_to(at((OUTPUT.0 + 160, 120)), 0);
-    let mut editor = app(&mut server, RED, EDITOR);
+    let mut editor = window_of(&mut server, RED, WINDOW, EDITOR);
     let side = server.output_rect(SIDE).expect("side display");
     let window = server.windows()[0].geometry().expect("mapped");
     assert!(inside(side, window));

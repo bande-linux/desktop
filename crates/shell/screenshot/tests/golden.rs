@@ -21,10 +21,7 @@ fn backdrop() -> Item {
 
 fn check_golden(name: &str, scene: &Scene) {
     let frame = CpuRenderer::new().render(scene).expect("frame");
-    unbound_golden::assert_golden!(
-        name,
-        &unbound_golden::from_rgba(frame.width, frame.height, frame.rgba)
-    );
+    unbound_golden::assert_golden_rgba!(name, (frame.width, frame.height), frame.rgba);
 }
 
 #[test]

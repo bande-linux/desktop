@@ -101,10 +101,7 @@ fn contact_sheet(icons: &[(String, String)]) -> Scene {
 
 fn check_golden(name: &str, scene: &Scene) {
     let frame = CpuRenderer::new().render(scene).unwrap();
-    unbound_golden::assert_golden!(
-        name,
-        &unbound_golden::from_rgba(frame.width, frame.height, frame.rgba)
-    );
+    unbound_golden::assert_golden_rgba!(name, (frame.width, frame.height), frame.rgba);
 }
 
 fn every_icon() -> Vec<(String, String)> {

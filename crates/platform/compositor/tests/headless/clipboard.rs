@@ -1,8 +1,6 @@
-use std::io::Read;
-
 use crate::support::*;
 use unbound_compositor::Compositor;
-use unbound_test_wayland::clipboard::TEXT;
+use unbound_test_wayland::clipboard::{TEXT, read_all};
 use unbound_test_wayland::{ShmImage, TestClient, quadrants, roundtrip};
 use wayland_client::protocol::wl_shm::Format;
 
@@ -25,12 +23,6 @@ fn focused_client(server: &mut Compositor) -> TestClient {
         "a newly mapped window takes focus"
     );
     client
-}
-
-fn read_all(mut pipe: std::io::PipeReader) -> String {
-    let mut text = String::new();
-    pipe.read_to_string(&mut text).expect("read pasted data");
-    text
 }
 
 #[test]

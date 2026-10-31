@@ -1,6 +1,5 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use std::io::Read;
 use std::os::fd::{AsRawFd, BorrowedFd};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
@@ -14,7 +13,7 @@ use smithay::utils::Size;
 use unbound_clipboard::Item;
 use unbound_compositor::{Compositor, SessionRole};
 use unbound_test_bus::SessionBus;
-use unbound_test_wayland::clipboard::TEXT;
+use unbound_test_wayland::clipboard::{TEXT, read_all};
 use unbound_test_wayland::{ShmImage, TestClient, quadrants, roundtrip, roundtrip_until};
 use wayland_client::protocol::wl_shm::Format;
 
@@ -86,12 +85,6 @@ fn wait_for_takeover(server: &mut Compositor, source: &mut TestClient) {
     roundtrip_until(server, &mut [source], |clients| {
         clients[0].cancelled_sources() == 1
     });
-}
-
-fn read_all(mut pipe: std::io::PipeReader) -> String {
-    let mut text = String::new();
-    pipe.read_to_string(&mut text).expect("read pasted data");
-    text
 }
 
 fn paste(server: &mut Compositor, target: &mut TestClient) -> String {

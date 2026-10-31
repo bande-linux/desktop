@@ -33,15 +33,6 @@ fn tap(server: &mut Compositor, key: u32, time: u32) {
     server.key(key, false, time + 20);
 }
 
-fn chord(server: &mut Compositor, keys: &[u32]) {
-    for key in keys {
-        server.key(*key, true, 0);
-    }
-    for key in keys.iter().rev() {
-        server.key(*key, false, 0);
-    }
-}
-
 fn red_pixels(snapshot: &Snapshot) -> usize {
     snapshot
         .rgba

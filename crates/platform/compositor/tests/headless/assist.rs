@@ -1,7 +1,7 @@
 use crate::support::*;
 use smithay::utils::Size;
 use unbound_compositor::{Compositor, Rect, Renderer};
-use unbound_test_wayland::{BLUE, GREEN, RED, TestClient, roundtrip};
+use unbound_test_wayland::{BLUE, GREEN, RED, roundtrip};
 
 const OUTPUT: (i32, i32) = (480, 270);
 const WINDOW: (i32, i32) = (160, 100);
@@ -9,10 +9,6 @@ const KEY_ENTER: u32 = 28;
 
 fn server() -> Compositor {
     Compositor::new(Size::from(OUTPUT)).expect("headless compositor")
-}
-
-fn app(server: &mut Compositor, color: [u8; 4]) -> TestClient {
-    window(server, color, WINDOW)
 }
 
 fn tile_with_keys(server: &mut Compositor, arrow: u32) {
@@ -31,8 +27,8 @@ fn tile_of(server: &Compositor, nth: usize) -> Option<Rect> {
 #[test]
 fn tiling_a_window_to_a_half_offers_the_others_for_the_other_half() {
     let mut server = server();
-    let mut editor = app(&mut server, RED);
-    let mut viewer = app(&mut server, BLUE);
+    let mut editor = window(&mut server, RED, WINDOW);
+    let mut viewer = window(&mut server, BLUE, WINDOW);
     roundtrip(&mut server, &mut [&mut editor, &mut viewer]);
 
     tile_with_keys(&mut server, KEY_LEFT);
@@ -51,8 +47,8 @@ fn tiling_a_window_to_a_half_offers_the_others_for_the_other_half() {
 #[test]
 fn escape_dismisses_the_offer_without_typing_into_the_app() {
     let mut server = server();
-    let mut editor = app(&mut server, RED);
-    let mut viewer = app(&mut server, BLUE);
+    let mut editor = window(&mut server, RED, WINDOW);
+    let mut viewer = window(&mut server, BLUE, WINDOW);
     roundtrip(&mut server, &mut [&mut editor, &mut viewer]);
 
     tile_with_keys(&mut server, KEY_RIGHT);
@@ -83,8 +79,8 @@ fn escape_dismisses_the_offer_without_typing_into_the_app() {
 #[test]
 fn clicking_a_thumbnail_fills_the_other_half_with_it() {
     let mut server = server();
-    let mut editor = app(&mut server, RED);
-    let mut viewer = app(&mut server, BLUE);
+    let mut editor = window(&mut server, RED, WINDOW);
+    let mut viewer = window(&mut server, BLUE, WINDOW);
     roundtrip(&mut server, &mut [&mut editor, &mut viewer]);
 
     tile_with_keys(&mut server, KEY_LEFT);
@@ -102,7 +98,7 @@ fn clicking_a_thumbnail_fills_the_other_half_with_it() {
 #[test]
 fn a_lone_window_is_tiled_without_an_offer() {
     let mut server = server();
-    let mut editor = app(&mut server, RED);
+    let mut editor = window(&mut server, RED, WINDOW);
     roundtrip(&mut server, &mut [&mut editor]);
 
     tile_with_keys(&mut server, KEY_LEFT);
@@ -114,9 +110,9 @@ fn a_lone_window_is_tiled_without_an_offer() {
 fn the_offer_matches_its_golden() {
     let mut server = server();
     let mut renderer = Renderer::new().expect("renderer");
-    let mut editor = app(&mut server, RED);
-    let mut player = app(&mut server, GREEN);
-    let mut viewer = app(&mut server, BLUE);
+    let mut editor = window(&mut server, RED, WINDOW);
+    let mut player = window(&mut server, GREEN, WINDOW);
+    let mut viewer = window(&mut server, BLUE, WINDOW);
     roundtrip(&mut server, &mut [&mut editor, &mut player, &mut viewer]);
     server.move_pointer_to(at(5, 5), 0);
 
@@ -128,12 +124,12 @@ fn the_offer_matches_its_golden() {
 
     renderer.render(&mut server).expect("frame");
     let snapshot = renderer.snapshot(&server).expect("read back");
-    unbound_golden::assert_golden!(
+    unbound_golden::assert_golden_rgba!(
         "other-half",
-        &unbound_golden::from_rgba(
+        (
             snapshot.size.w.unsigned_abs(),
-            snapshot.size.h.unsigned_abs(),
-            snapshot.rgba,
-        )
+            snapshot.size.h.unsigned_abs()
+        ),
+        snapshot.rgba
     );
 }

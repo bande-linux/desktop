@@ -16,6 +16,14 @@ macro_rules! assert_golden {
     };
 }
 
+#[macro_export]
+macro_rules! assert_golden_rgba {
+    ($name:expr, $size:expr, $rgba:expr $(,)?) => {{
+        let (width, height) = $size;
+        $crate::assert_golden!($name, &$crate::from_rgba(width, height, $rgba))
+    }};
+}
+
 pub fn from_rgba(width: u32, height: u32, rgba: Vec<u8>) -> RgbImage {
     let Some(frame) = image::RgbaImage::from_raw(width, height, rgba) else {
         panic!(

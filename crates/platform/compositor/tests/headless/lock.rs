@@ -8,10 +8,6 @@ use unbound_test_wayland::{BLUE, RED, TestClient, roundtrip};
 const WINDOW: (i32, i32) = (64, 48);
 const INSIDE_WINDOW: (i32, i32) = (100, 80);
 
-fn app(server: &mut Compositor) -> TestClient {
-    window(server, RED, WINDOW)
-}
-
 fn locker(server: &mut Compositor) -> TestClient {
     let mut client = TestClient::connect_as_shell(server);
     client.use_seat(server);
@@ -34,7 +30,7 @@ fn present_frame(server: &mut Compositor, sequence: u64) {
 
 fn focused_app() -> (Compositor, TestClient) {
     let mut server = server();
-    let mut editor = app(&mut server);
+    let mut editor = window(&mut server, RED, WINDOW);
     server.move_pointer_to((128.0, 96.0).into(), 0);
     server.press_button(BTN_LEFT, true, 0);
     server.press_button(BTN_LEFT, false, 0);

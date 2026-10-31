@@ -60,10 +60,6 @@ fn press_return(screen: &mut LockScreen) {
     });
 }
 
-fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>) {
-    unbound_golden::assert_golden!(name, &unbound_golden::from_rgba(size.0, size.1, rgba));
-}
-
 fn wallpaper() -> Image {
     let (width, height) = (64, 48);
     let rgba = (0..width * height)
@@ -78,7 +74,7 @@ fn wallpaper() -> Image {
 fn render(screen: &mut LockScreen, name: &str) {
     let scene = screen.scene(OUTPUT.0, OUTPUT.1);
     let frame = CpuRenderer::new().render(&scene).expect("frame");
-    check_golden(name, OUTPUT, frame.rgba);
+    unbound_golden::assert_golden_rgba!(name, OUTPUT, frame.rgba);
 }
 
 #[test]

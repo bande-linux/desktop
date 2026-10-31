@@ -9,10 +9,6 @@ const WINDOW: (i32, i32) = (64, 48);
 const CENTERED: (i32, i32) = (96, 72);
 const WHITE: [u8; 4] = [0xff, 0xff, 0xff, 0xff];
 
-fn app(server: &mut Compositor, color: [u8; 4]) -> TestClient {
-    window(server, color, WINDOW)
-}
-
 fn drag_with(
     server: &mut Compositor,
     client: &mut TestClient,
@@ -31,7 +27,7 @@ fn drag_with(
 #[test]
 fn a_moved_window_follows_the_pointer_and_stays_put_after_release() {
     let mut server = server();
-    let mut editor = app(&mut server, RED);
+    let mut editor = window(&mut server, RED, WINDOW);
     assert_eq!(geometry(&server).location, CENTERED.into());
 
     drag_with(
@@ -53,7 +49,7 @@ fn a_moved_window_follows_the_pointer_and_stays_put_after_release() {
 fn a_window_cannot_be_dragged_under_the_top_bar() {
     let mut server = server();
     let mut shell = top_bar(&mut server);
-    let mut editor = app(&mut server, RED);
+    let mut editor = window(&mut server, RED, WINDOW);
     roundtrip(&mut server, &mut [&mut shell, &mut editor]);
     let start = geometry(&server).location;
 
@@ -71,7 +67,7 @@ fn a_window_cannot_be_dragged_under_the_top_bar() {
 #[test]
 fn a_move_without_a_held_button_is_ignored() {
     let mut server = server();
-    let mut editor = app(&mut server, RED);
+    let mut editor = window(&mut server, RED, WINDOW);
     click(&mut server, 110, 80);
     roundtrip(&mut server, &mut [&mut editor]);
 
@@ -85,7 +81,7 @@ fn a_move_without_a_held_button_is_ignored() {
 #[test]
 fn resizing_from_the_bottom_right_corner_grows_the_window_toward_the_pointer() {
     let mut server = server();
-    let mut editor = app(&mut server, RED);
+    let mut editor = window(&mut server, RED, WINDOW);
 
     drag_with(
         &mut server,
@@ -115,7 +111,7 @@ fn resizing_from_the_bottom_right_corner_grows_the_window_toward_the_pointer() {
 #[test]
 fn resizing_from_the_left_edge_keeps_the_right_edge_in_place() {
     let mut server = server();
-    let mut editor = app(&mut server, RED);
+    let mut editor = window(&mut server, RED, WINDOW);
     let right = CENTERED.0 + WINDOW.0;
 
     drag_with(
@@ -136,7 +132,7 @@ fn resizing_from_the_left_edge_keeps_the_right_edge_in_place() {
 #[test]
 fn resizing_stops_at_the_minimum_size_the_app_sets() {
     let mut server = server();
-    let mut editor = app(&mut server, RED);
+    let mut editor = window(&mut server, RED, WINDOW);
     editor.set_min_size(&mut server, 0, 50, 40);
 
     drag_with(
@@ -155,7 +151,7 @@ fn resizing_stops_at_the_minimum_size_the_app_sets() {
 fn zoom_fills_the_area_beside_the_bar_and_unzoom_restores_the_window() {
     let mut server = server();
     let mut shell = top_bar(&mut server);
-    let mut editor = app(&mut server, RED);
+    let mut editor = window(&mut server, RED, WINDOW);
     roundtrip(&mut server, &mut [&mut shell, &mut editor]);
     let before = geometry(&server);
 
@@ -188,7 +184,7 @@ fn a_fullscreen_window_covers_the_output_including_the_bar() {
     let mut server = server();
     let mut renderer = Renderer::new().expect("renderer");
     let mut shell = top_bar(&mut server);
-    let mut editor = app(&mut server, RED);
+    let mut editor = window(&mut server, RED, WINDOW);
     roundtrip(&mut server, &mut [&mut shell, &mut editor]);
     let before = geometry(&server);
 
@@ -211,8 +207,8 @@ fn a_fullscreen_window_covers_the_output_including_the_bar() {
 #[test]
 fn only_the_key_window_is_told_it_is_activated() {
     let mut server = server();
-    let mut first = app(&mut server, RED);
-    let mut second = app(&mut server, BLUE);
+    let mut first = window(&mut server, RED, WINDOW);
+    let mut second = window(&mut server, BLUE, WINDOW);
     click(&mut server, 110, 80);
     roundtrip(&mut server, &mut [&mut first, &mut second]);
 
@@ -234,8 +230,8 @@ fn minimizing_hides_the_window_keeps_the_app_active_and_the_shell_brings_it_back
     let mut renderer = Renderer::new().expect("renderer");
     let mut shell = TestClient::connect_as_shell(&mut server);
     shell.join_shell(&mut server);
-    let mut behind = app(&mut server, RED);
-    let mut front = app(&mut server, BLUE);
+    let mut behind = window(&mut server, RED, WINDOW);
+    let mut front = window(&mut server, BLUE, WINDOW);
     front.set_app_id(&mut server, 0, "org.example.Front");
     shell.activate_app(&mut server, "org.example.Front");
     roundtrip(&mut server, &mut [&mut shell, &mut behind, &mut front]);
@@ -269,7 +265,7 @@ fn menu(parent: usize, anchor_rect: (i32, i32, i32, i32), size: (i32, i32)) -> P
 fn a_popup_is_placed_at_its_anchor_relative_to_the_window() {
     let mut server = server();
     let mut renderer = Renderer::new().expect("renderer");
-    let mut editor = app(&mut server, RED);
+    let mut editor = window(&mut server, RED, WINDOW);
 
     let popup = editor.open_popup(&mut server, &menu(0, (10, 10, 1, 1), (30, 20)));
     roundtrip(&mut server, &mut [&mut editor]);
@@ -284,7 +280,7 @@ fn a_popup_is_placed_at_its_anchor_relative_to_the_window() {
 #[test]
 fn a_popup_that_would_leave_the_screen_flips_to_the_other_side_of_its_anchor() {
     let mut server = server();
-    let mut editor = app(&mut server, RED);
+    let mut editor = window(&mut server, RED, WINDOW);
 
     let request = PopupRequest {
         adjustment: ConstraintAdjustment::FlipX,
@@ -299,10 +295,10 @@ fn a_popup_that_would_leave_the_screen_flips_to_the_other_side_of_its_anchor() {
 #[test]
 fn a_click_outside_a_grabbing_popup_dismisses_it_and_is_not_delivered() {
     let mut server = server();
-    let mut bystander = app(&mut server, BLUE);
+    let mut bystander = window(&mut server, BLUE, WINDOW);
     bystander.set_maximized(&mut server, 0, true);
     bystander.fill_configured_size(&mut server, 0, BLUE);
-    let mut editor = app(&mut server, RED);
+    let mut editor = window(&mut server, RED, WINDOW);
     click(&mut server, 110, 80);
     roundtrip(&mut server, &mut [&mut bystander, &mut editor]);
     assert!(editor.keyboard_focus_on(0));
@@ -345,7 +341,7 @@ fn grabbing_menu(server: &mut Compositor, client: &mut TestClient, x: i32, y: i3
 fn a_click_on_the_menus_own_window_closes_it_and_only_the_next_click_reaches_the_window() {
     let mut server = server();
     let mut shell = top_bar(&mut server);
-    let mut editor = app(&mut server, RED);
+    let mut editor = window(&mut server, RED, WINDOW);
     let origin = geometry(&server).location;
     let popup = grabbing_menu(&mut server, &mut editor, origin.x + 5, origin.y + 5);
     let delivered = editor.buttons().len();
@@ -391,7 +387,7 @@ fn a_hidden_overlay_never_takes_the_pointer() {
         },
     );
     shell.hide_layer(&mut server, 0);
-    let mut editor = app(&mut server, RED);
+    let mut editor = window(&mut server, RED, WINDOW);
     roundtrip(&mut server, &mut [&mut shell, &mut editor]);
 
     click(&mut server, CENTERED.0 + 5, CENTERED.1 + 5);
@@ -405,7 +401,7 @@ fn a_hidden_overlay_never_takes_the_pointer() {
 #[test]
 fn a_grabbing_popup_that_opens_under_a_still_pointer_has_it_at_once() {
     let mut server = server();
-    let mut editor = app(&mut server, RED);
+    let mut editor = window(&mut server, RED, WINDOW);
     let (x, y) = (CENTERED.0 + 11, CENTERED.1 + 11);
     click(&mut server, x - 6, y - 6);
     roundtrip(&mut server, &mut [&mut editor]);
@@ -426,7 +422,7 @@ fn a_grabbing_popup_that_opens_under_a_still_pointer_has_it_at_once() {
 #[test]
 fn ctrl_super_f_toggles_full_screen_for_the_key_window() {
     let mut server = server();
-    let mut editor = app(&mut server, RED);
+    let mut editor = window(&mut server, RED, WINDOW);
     click(&mut server, 110, 80);
     roundtrip(&mut server, &mut [&mut editor]);
 
@@ -446,7 +442,7 @@ fn ctrl_super_f_toggles_full_screen_for_the_key_window() {
 #[test]
 fn super_f_without_ctrl_reaches_the_app() {
     let mut server = server();
-    let mut editor = app(&mut server, RED);
+    let mut editor = window(&mut server, RED, WINDOW);
     click(&mut server, 110, 80);
     roundtrip(&mut server, &mut [&mut editor]);
 
@@ -491,9 +487,9 @@ fn an_apps_next_window_cascades_from_its_frontmost_one_and_other_apps_stay_centr
 fn a_window_kept_on_top_stays_in_front_of_a_newer_window_until_released() {
     let mut server = server();
     let mut renderer = Renderer::new().expect("renderer");
-    let mut editor = app(&mut server, RED);
+    let mut editor = window(&mut server, RED, WINDOW);
     editor.keep_on_top(&mut server, 0, true);
-    let mut viewer = app(&mut server, BLUE);
+    let mut viewer = window(&mut server, BLUE, WINDOW);
     roundtrip(&mut server, &mut [&mut editor, &mut viewer]);
     let middle = (CENTERED.0 + WINDOW.0 / 2, CENTERED.1 + WINDOW.1 / 2);
 
@@ -528,7 +524,7 @@ fn assert_released(server: &mut Compositor, client: &mut TestClient) {
 #[test]
 fn escape_during_a_move_puts_the_window_back_and_ends_the_move() {
     let mut server = server();
-    let mut editor = app(&mut server, RED);
+    let mut editor = window(&mut server, RED, WINDOW);
     drag_with(
         &mut server,
         &mut editor,
@@ -552,7 +548,7 @@ fn escape_during_a_move_puts_the_window_back_and_ends_the_move() {
 #[test]
 fn escape_during_a_resize_gives_back_the_starting_size() {
     let mut server = server();
-    let mut editor = app(&mut server, RED);
+    let mut editor = window(&mut server, RED, WINDOW);
     drag_with(
         &mut server,
         &mut editor,

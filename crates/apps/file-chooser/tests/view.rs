@@ -12,10 +12,6 @@ use xdg_desktop_portal_unbound::file_chooser::{Dialog, Filter, Mode, Pattern};
 
 const SIZE: (u32, u32) = (820, 520);
 
-fn check_golden(name: &str, rgba: Vec<u8>) {
-    unbound_golden::assert_golden!(name, &unbound_golden::from_rgba(SIZE.0, SIZE.1, rgba));
-}
-
 struct Home {
     _root: tempfile::TempDir,
     home: PathBuf,
@@ -105,7 +101,7 @@ fn the_open_and_save_dialogs_match_their_goldens() {
             directory: false,
         },
     );
-    check_golden("open", render(&mut open));
+    unbound_golden::assert_golden_rgba!("open", SIZE, render(&mut open));
     let mut save = view(
         &home.home,
         Mode::Save {
@@ -113,7 +109,7 @@ fn the_open_and_save_dialogs_match_their_goldens() {
             file: None,
         },
     );
-    check_golden("save", render(&mut save));
+    unbound_golden::assert_golden_rgba!("save", SIZE, render(&mut save));
 }
 
 #[test]
@@ -195,7 +191,7 @@ fn typing_a_path_goes_to_its_folder_and_selects_a_file_there() {
         render(&mut view);
         std::thread::sleep(Duration::from_millis(16));
     }
-    check_golden("go-to", render(&mut view));
+    unbound_golden::assert_golden_rgba!("go-to", SIZE, render(&mut view));
     key(&mut view, Key::Backspace);
     type_text(&mut view, "~/Documents/Letter.txt");
     key(&mut view, Key::Enter);

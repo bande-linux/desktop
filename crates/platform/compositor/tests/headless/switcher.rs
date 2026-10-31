@@ -202,13 +202,13 @@ fn clicking_an_icon_switches_to_its_app() {
 fn check_golden(name: &str, renderer: &mut Renderer, server: &mut Compositor) {
     renderer.render(server).expect("frame");
     let snapshot = renderer.snapshot(server).expect("read back");
-    unbound_golden::assert_golden!(
+    unbound_golden::assert_golden_rgba!(
         name,
-        &unbound_golden::from_rgba(
+        (
             snapshot.size.w.unsigned_abs(),
-            snapshot.size.h.unsigned_abs(),
-            snapshot.rgba,
-        )
+            snapshot.size.h.unsigned_abs()
+        ),
+        snapshot.rgba
     );
 }
 

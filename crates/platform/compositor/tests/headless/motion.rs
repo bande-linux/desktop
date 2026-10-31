@@ -11,10 +11,6 @@ const SETTLED: Duration = Duration::from_secs(2);
 
 type Bounds = (i32, i32, i32, i32);
 
-fn app(server: &mut Compositor) -> TestClient {
-    window(server, RED, WINDOW)
-}
-
 fn ms(millis: u64) -> Duration {
     Duration::from_millis(millis)
 }
@@ -67,7 +63,7 @@ const FULL: Bounds = (96, 72, 96 + WINDOW.0 - 1, 72 + WINDOW.1 - 1);
 fn a_new_window_takes_focus_at_once_and_grows_and_fades_in() {
     let mut server = server();
     let mut renderer = Renderer::new().expect("renderer");
-    let mut editor = app(&mut server);
+    let mut editor = window(&mut server, RED, WINDOW);
     roundtrip(&mut server, &mut [&mut editor]);
     assert!(editor.keyboard_focus_on(0));
 
@@ -85,7 +81,7 @@ fn a_new_window_takes_focus_at_once_and_grows_and_fades_in() {
 fn settled_window() -> (Compositor, Renderer, TestClient) {
     let mut server = server();
     let mut renderer = Renderer::new().expect("renderer");
-    let mut editor = app(&mut server);
+    let mut editor = window(&mut server, RED, WINDOW);
     frame(&mut renderer, &mut server, ms(0));
     frame(&mut renderer, &mut server, SETTLED);
     roundtrip(&mut server, &mut [&mut editor]);
@@ -236,13 +232,13 @@ fn a_window_minimizes_into_its_apps_dock_icon() {
 fn a_display_sampled_at_an_earlier_vblank_than_another_shows_that_earlier_moment() {
     let mut alone = server();
     let mut renderer = Renderer::new().expect("renderer");
-    let mut client = app(&mut alone);
+    let mut client = window(&mut alone, RED, WINDOW);
     roundtrip(&mut alone, &mut [&mut client]);
     alone.animate(ms(8));
     let expected = frame(&mut renderer, &mut alone, ms(16));
 
     let mut shared = server();
-    let mut other = app(&mut shared);
+    let mut other = window(&mut shared, RED, WINDOW);
     roundtrip(&mut shared, &mut [&mut other]);
     shared.animate(ms(8));
     shared.animate(ms(24));

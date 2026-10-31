@@ -45,10 +45,6 @@ fn new_view(scheme: Scheme) -> SettingsView {
     view
 }
 
-fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>) {
-    unbound_golden::assert_golden!(name, &unbound_golden::from_rgba(size.0, size.1, rgba));
-}
-
 fn sleep_search(scheme: Scheme) -> SettingsView {
     let mut view = new_view(scheme);
     view.set_value(SettingId::DimAfter, Value::Seconds(300));
@@ -685,7 +681,7 @@ fn the_panes_match_their_goldens() {
                 CpuRenderer::new()
                     .render_into(&scene, scale, &mut rgba)
                     .expect("frame");
-                check_golden(name, pixels, rgba);
+                unbound_golden::assert_golden_rgba!(name, pixels, rgba);
             });
         }
     });
@@ -715,5 +711,5 @@ fn long_row_labels_wrap_beside_their_control_at_large_text() {
     CpuRenderer::new()
         .render_into(&scene, 1.0, &mut rgba)
         .expect("frame");
-    check_golden("accessibility-150-narrow-light", NARROW, rgba);
+    unbound_golden::assert_golden_rgba!("accessibility-150-narrow-light", NARROW, rgba);
 }

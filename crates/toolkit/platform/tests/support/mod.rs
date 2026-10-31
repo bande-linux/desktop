@@ -68,10 +68,6 @@ pub fn appearance_portal() -> Portal {
 const OUTPUT: (i32, i32) = (480, 340);
 const SHOWN_AT_REST: u32 = 3;
 
-fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>) {
-    unbound_golden::assert_golden!(name, &unbound_golden::from_rgba(size.0, size.1, rgba));
-}
-
 struct Still {
     done: mpsc::Receiver<()>,
     ui: Option<Ui>,
@@ -248,7 +244,7 @@ pub fn shot(name: &str, prepare: fn(&mut Window) -> Option<Ui>, shot: Shot) {
         pump(&mut server, &mut scheduler, &mut renderer);
     }
     client.join().expect("client thread");
-    check_golden(
+    unbound_golden::assert_golden_rgba!(
         name,
         (snapshot.size.w as u32, snapshot.size.h as u32),
         snapshot.rgba,

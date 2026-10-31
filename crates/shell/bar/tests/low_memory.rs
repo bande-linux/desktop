@@ -83,7 +83,7 @@ impl Dialog {
         self.clock.set(self.clock.get() + SETTLED);
         let scene = self.view.scene(width, height);
         let frame = CpuRenderer::new().render(&scene).expect("frame");
-        unbound_golden::assert_golden!(name, &unbound_golden::from_rgba(width, height, frame.rgba));
+        unbound_golden::assert_golden_rgba!(name, (width, height), frame.rgba);
     }
 }
 

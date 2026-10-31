@@ -31,21 +31,6 @@ fn at(x: f64, y: f64) -> Point<f64, Logical> {
     (x, y).into()
 }
 
-fn app(server: &mut Compositor) -> TestClient {
-    window(server, RED, WINDOW)
-}
-
-fn chord(server: &mut Compositor, modifiers: &[u32], key: u32) {
-    for modifier in modifiers {
-        server.key(*modifier, true, 0);
-    }
-    server.key(key, true, 0);
-    server.key(key, false, 0);
-    for modifier in modifiers.iter().rev() {
-        server.key(*modifier, false, 0);
-    }
-}
-
 fn red_pixels(renderer: &mut Renderer, server: &mut Compositor, output: &str) -> usize {
     renderer.render_output(server, output).expect("frame");
     let snapshot = renderer.snapshot_output(output).expect("read back");
@@ -82,7 +67,7 @@ fn the_pointer_crosses_between_displays_but_never_leaves_them() {
 fn a_menu_on_the_second_display_closes_on_a_click_beside_it_and_the_next_click_lands() {
     let mut server = two_displays();
     server.move_pointer_to(at(400.0, 100.0), 0);
-    let mut editor = app(&mut server);
+    let mut editor = window(&mut server, RED, WINDOW);
     let origin = geometry(&server).location;
     server.move_pointer_to(at(f64::from(origin.x + 5), f64::from(origin.y + 5)), 0);
     server.press_button(BTN_LEFT, true, 1);
@@ -124,7 +109,7 @@ fn a_window_opens_centred_on_the_display_with_the_pointer() {
     let mut server = two_displays();
     server.move_pointer_to(at(400.0, 100.0), 0);
 
-    let _app = app(&mut server);
+    let _app = window(&mut server, RED, WINDOW);
 
     assert_eq!(server.output_of(&server.windows()[0]), SIDE);
     assert_eq!(geometry(&server), rect(256 + 128, 96, 64, 48));
@@ -134,7 +119,7 @@ fn a_window_opens_centred_on_the_display_with_the_pointer() {
 fn each_display_draws_only_its_own_windows() {
     let mut server = two_displays();
     server.move_pointer_to(at(400.0, 100.0), 0);
-    let _app = app(&mut server);
+    let _app = window(&mut server, RED, WINDOW);
     let mut renderer = Renderer::new().expect("renderer");
 
     assert!(red_pixels(&mut renderer, &mut server, SIDE) > (WINDOW.0 * WINDOW.1) as usize * 4 / 5);
@@ -145,13 +130,12 @@ fn each_display_draws_only_its_own_windows() {
 #[test]
 fn a_shortcut_moves_the_focused_window_to_the_neighbouring_display_keeping_its_place() {
     let mut server = two_displays();
-    let mut app = app(&mut server);
+    let mut app = window(&mut server, RED, WINDOW);
     assert_eq!(geometry(&server), rect(96, 72, 64, 48));
 
     chord(
         &mut server,
-        &[KEY_LEFTALT, KEY_LEFTMETA, KEY_LEFTSHIFT],
-        KEY_RIGHT,
+        &[KEY_LEFTALT, KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_RIGHT],
     );
     roundtrip(&mut server, &mut [&mut app]);
 
@@ -161,8 +145,7 @@ fn a_shortcut_moves_the_focused_window_to_the_neighbouring_display_keeping_its_p
 
     chord(
         &mut server,
-        &[KEY_LEFTALT, KEY_LEFTMETA, KEY_LEFTSHIFT],
-        KEY_LEFT,
+        &[KEY_LEFTALT, KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_LEFT],
     );
 
     assert_eq!(server.output_of(&server.windows()[0]), MAIN);
@@ -172,7 +155,7 @@ fn a_shortcut_moves_the_focused_window_to_the_neighbouring_display_keeping_its_p
 #[test]
 fn the_tiling_menus_next_display_moves_the_window_round_the_displays() {
     let mut server = two_displays();
-    let mut app = app(&mut server);
+    let mut app = window(&mut server, RED, WINDOW);
 
     app.place_window(&mut server, 0, Placement::NextDisplay);
     roundtrip(&mut server, &mut [&mut app]);
@@ -189,7 +172,7 @@ fn the_tiling_menus_next_display_moves_the_window_round_the_displays() {
 #[test]
 fn dragging_a_window_onto_another_display_moves_it_there() {
     let mut server = two_displays();
-    let mut app = app(&mut server);
+    let mut app = window(&mut server, RED, WINDOW);
     server.move_pointer_to(at(100.0, 80.0), 0);
     server.press_button(BTN_LEFT, true, 0);
     roundtrip(&mut server, &mut [&mut app]);
@@ -207,7 +190,7 @@ fn dragging_a_window_onto_another_display_moves_it_there() {
 fn windows_of_an_unplugged_display_come_over_and_go_back_when_it_returns() {
     let mut server = two_displays();
     server.move_pointer_to(at(300.0, 20.0), 0);
-    let mut app = app(&mut server);
+    let mut app = window(&mut server, RED, WINDOW);
     assert_eq!(geometry(&server), rect(384, 96, 64, 48));
 
     server.remove_output(SIDE);
@@ -231,12 +214,11 @@ fn windows_of_an_unplugged_display_come_over_and_go_back_when_it_returns() {
 fn each_display_has_its_own_row_of_workspaces() {
     let mut server = two_displays();
     server.move_pointer_to(at(400.0, 100.0), 0);
-    let mut app = app(&mut server);
+    let mut app = window(&mut server, RED, WINDOW);
 
     chord(
         &mut server,
-        &[KEY_LEFTCTRL, KEY_LEFTMETA, KEY_LEFTSHIFT],
-        KEY_RIGHT,
+        &[KEY_LEFTCTRL, KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_RIGHT],
     );
     roundtrip(&mut server, &mut [&mut app]);
 
@@ -253,13 +235,12 @@ fn a_window_is_told_the_scale_of_the_display_it_is_on() {
     settings.scale = 2.0;
     server.configure_output(SIDE, settings);
     assert_eq!(server.output_rect(SIDE), Some(rect(256, 0, 160, 120)));
-    let mut app = app(&mut server);
+    let mut app = window(&mut server, RED, WINDOW);
     assert_eq!(app.preferred_scale(&mut server, 0), Some(120));
 
     chord(
         &mut server,
-        &[KEY_LEFTALT, KEY_LEFTMETA, KEY_LEFTSHIFT],
-        KEY_RIGHT,
+        &[KEY_LEFTALT, KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_RIGHT],
     );
 
     assert_eq!(app.preferred_scale(&mut server, 0), Some(240));
@@ -326,7 +307,7 @@ fn display_settings_pick_the_resolution_refresh_and_scale() {
 fn windows_move_with_their_display_when_it_is_rearranged() {
     let mut server = two_displays();
     server.move_pointer_to(at(400.0, 100.0), 0);
-    let _app = app(&mut server);
+    let _app = window(&mut server, RED, WINDOW);
 
     let arranged = config(
         &server,
@@ -343,9 +324,9 @@ fn windows_move_with_their_display_when_it_is_rearranged() {
 fn a_mirroring_display_shows_its_source_scaled_to_fit_and_keeps_no_windows() {
     let mut server = two_displays();
     server.move_pointer_to(at(400.0, 100.0), 0);
-    let _side_app = app(&mut server);
+    let _side_app = window(&mut server, RED, WINDOW);
     server.move_pointer_to(at(100.0, 100.0), 0);
-    let _main_app = app(&mut server);
+    let _main_app = window(&mut server, RED, WINDOW);
     let mut renderer = Renderer::new().expect("renderer");
 
     let arranged = config(
@@ -386,7 +367,7 @@ fn while_locked_a_display_without_a_lock_surface_shows_only_its_wallpaper() {
         },
         "wallpaper",
     );
-    let _app = app(&mut server);
+    let _app = window(&mut server, RED, WINDOW);
     let mut lock = TestClient::connect_as_shell(&mut server);
     lock.use_seat(&mut server);
     lock.lock_session(&mut server);
@@ -483,9 +464,9 @@ fn a_rotated_display_is_laid_out_upright_and_drawn_turned() {
 fn zoom_fills_the_display_the_window_is_on() {
     let mut server = two_displays();
     server.move_pointer_to(at(400.0, 100.0), 0);
-    let mut app = app(&mut server);
+    let mut app = window(&mut server, RED, WINDOW);
 
-    chord(&mut server, &[KEY_LEFTCTRL, KEY_LEFTMETA], KEY_UP);
+    chord(&mut server, &[KEY_LEFTCTRL, KEY_LEFTMETA, KEY_UP]);
     roundtrip(&mut server, &mut [&mut app]);
     app.fill_configured_size(&mut server, 0, RED);
     roundtrip(&mut server, &mut [&mut app]);
@@ -560,8 +541,7 @@ fn a_window_with_our_title_bar_moves_to_a_display_of_another_scale_with_its_bar(
 
     chord(
         &mut server,
-        &[KEY_LEFTALT, KEY_LEFTMETA, KEY_LEFTSHIFT],
-        KEY_RIGHT,
+        &[KEY_LEFTALT, KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_RIGHT],
     );
     roundtrip(&mut server, &mut [&mut app]);
 
@@ -584,8 +564,7 @@ fn a_window_with_our_title_bar_moves_to_a_display_of_another_scale_with_its_bar(
 
     chord(
         &mut server,
-        &[KEY_LEFTALT, KEY_LEFTMETA, KEY_LEFTSHIFT],
-        KEY_LEFT,
+        &[KEY_LEFTALT, KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_LEFT],
     );
     roundtrip(&mut server, &mut [&mut app]);
 

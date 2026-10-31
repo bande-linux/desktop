@@ -7,10 +7,6 @@ use unbound_test_wayland::{BLUE, Placement, RED, ResizeEdge, TestClient, roundtr
 const WINDOW: (i32, i32) = (64, 48);
 const GRAB: (i32, i32) = (110, 80);
 
-fn app(server: &mut Compositor, color: [u8; 4]) -> TestClient {
-    window(server, color, WINDOW)
-}
-
 fn grab(server: &mut Compositor, client: &mut TestClient) {
     server.move_pointer_to(at(GRAB.0, GRAB.1), 0);
     server.press_button(BTN_LEFT, true, 0);
@@ -58,7 +54,7 @@ fn chord(server: &mut Compositor, client: &mut TestClient, key: u32) {
 #[test]
 fn a_window_swept_past_the_edge_without_resting_is_not_tiled() {
     let mut server = server();
-    let mut editor = app(&mut server, RED);
+    let mut editor = window(&mut server, RED, WINDOW);
 
     drop_after(&mut server, &mut editor, (0, 96), 100);
 
@@ -75,7 +71,7 @@ fn a_window_dropped_after_resting_fills_the_half_quarter_or_screen_under_the_poi
         ((128, 0), 200, rect(0, 0, 256, 192)),
     ] {
         let mut server = server();
-        let mut editor = app(&mut server, RED);
+        let mut editor = window(&mut server, RED, WINDOW);
 
         drop_after(&mut server, &mut editor, to, rest);
 
@@ -87,7 +83,7 @@ fn a_window_dropped_after_resting_fills_the_half_quarter_or_screen_under_the_poi
 fn the_preview_appears_only_once_the_pointer_rests() {
     let mut server = server();
     let mut renderer = Renderer::new().expect("renderer");
-    let mut editor = app(&mut server, RED);
+    let mut editor = window(&mut server, RED, WINDOW);
     let mut background = |server: &mut Compositor, time: u64| {
         server.animate(Duration::from_millis(time));
         renderer.render(server).expect("frame");
@@ -126,7 +122,7 @@ fn the_preview_appears_only_once_the_pointer_rests() {
 #[test]
 fn ctrl_super_arrows_walk_through_halves_quarters_zoom_and_back() {
     let mut server = server();
-    let mut editor = app(&mut server, RED);
+    let mut editor = window(&mut server, RED, WINDOW);
     let mut steps = Vec::new();
     for key in [KEY_LEFT, KEY_UP, KEY_DOWN, KEY_DOWN, KEY_RIGHT] {
         chord(&mut server, &mut editor, key);
@@ -148,7 +144,7 @@ fn ctrl_super_arrows_walk_through_halves_quarters_zoom_and_back() {
 #[test]
 fn ctrl_super_up_zooms_a_free_window_and_down_returns_it() {
     let mut server = server();
-    let mut editor = app(&mut server, RED);
+    let mut editor = window(&mut server, RED, WINDOW);
     let free = settle(&mut server, &mut editor, RED);
 
     chord(&mut server, &mut editor, KEY_UP);
@@ -160,10 +156,10 @@ fn ctrl_super_up_zooms_a_free_window_and_down_returns_it() {
 #[test]
 fn neighbouring_tiles_share_the_edge_that_is_dragged() {
     let mut server = server();
-    let mut left = app(&mut server, RED);
+    let mut left = window(&mut server, RED, WINDOW);
     chord(&mut server, &mut left, KEY_LEFT);
     settle(&mut server, &mut left, RED);
-    let mut right = app(&mut server, BLUE);
+    let mut right = window(&mut server, BLUE, WINDOW);
     chord(&mut server, &mut right, KEY_RIGHT);
     settle(&mut server, &mut right, BLUE);
     roundtrip(&mut server, &mut [&mut left, &mut right]);
@@ -197,7 +193,7 @@ fn with_reduce_motion_the_preview_fades_in_where_the_window_will_go() {
         let mut server = server();
         server.set_reduce_motion(reduce);
         let mut renderer = Renderer::new().expect("renderer");
-        let mut editor = app(&mut server, RED);
+        let mut editor = window(&mut server, RED, WINDOW);
         grab(&mut server, &mut editor);
         server.move_pointer_to(at(0, 96), 1000);
         server.snap_tick(Duration::from_millis(1150));
@@ -231,7 +227,7 @@ fn with_reduce_motion_the_preview_fades_in_where_the_window_will_go() {
 #[test]
 fn the_window_menu_can_tile_a_window_into_a_quarter_and_restore_it() {
     let mut server = server();
-    let mut editor = app(&mut server, RED);
+    let mut editor = window(&mut server, RED, WINDOW);
     let before = settle(&mut server, &mut editor, RED);
 
     editor.place_window(&mut server, 0, Placement::BottomRight);
@@ -252,7 +248,7 @@ fn escape(server: &mut Compositor, client: &mut TestClient) {
 #[test]
 fn escape_while_the_snap_preview_shows_puts_the_window_back_untiled() {
     let mut server = server();
-    let mut editor = app(&mut server, RED);
+    let mut editor = window(&mut server, RED, WINDOW);
     let before = settle(&mut server, &mut editor, RED);
     grab(&mut server, &mut editor);
     server.move_pointer_to(at(0, 96), 1000);
@@ -268,7 +264,7 @@ fn escape_while_the_snap_preview_shows_puts_the_window_back_untiled() {
 #[test]
 fn escape_while_dragging_a_tiled_window_returns_it_to_its_tile() {
     let mut server = server();
-    let mut editor = app(&mut server, RED);
+    let mut editor = window(&mut server, RED, WINDOW);
     chord(&mut server, &mut editor, KEY_LEFT);
     let tiled = settle(&mut server, &mut editor, RED);
     assert_eq!(tiled, rect(0, 0, 128, 192));

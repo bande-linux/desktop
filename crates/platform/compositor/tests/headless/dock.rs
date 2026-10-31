@@ -10,10 +10,6 @@ const WINDOW: i32 = 64;
 const KEY_F2: u32 = 60;
 const KEY_F3: u32 = 61;
 
-fn app(server: &mut Compositor, app_id: &str) -> TestClient {
-    window_of(server, RED, (WINDOW, WINDOW), app_id)
-}
-
 fn shell(server: &mut Compositor) -> TestClient {
     let mut shell = TestClient::connect_as_shell(server);
     shell.use_seat(server);
@@ -32,7 +28,7 @@ fn super_key(server: &mut Compositor, key: u32) {
 fn a_hidden_app_fades_out_loses_the_keyboard_and_comes_back_when_activated() {
     let mut server = server();
     let mut renderer = Renderer::new().expect("renderer");
-    let mut editor = app(&mut server, EDITOR);
+    let mut editor = window_of(&mut server, RED, (WINDOW, WINDOW), EDITOR);
     let mut dock = shell(&mut server);
     settle(&mut server, 1000);
 
@@ -55,7 +51,7 @@ fn a_hidden_app_fades_out_loses_the_keyboard_and_comes_back_when_activated() {
 fn super_h_hides_the_focused_app_and_show_app_brings_it_back_without_the_keyboard() {
     let mut server = server();
     let mut renderer = Renderer::new().expect("renderer");
-    let mut editor = app(&mut server, EDITOR);
+    let mut editor = window_of(&mut server, RED, (WINDOW, WINDOW), EDITOR);
     let mut menu_bar = shell(&mut server);
     settle(&mut server, 1000);
 
@@ -75,7 +71,7 @@ fn super_h_hides_the_focused_app_and_show_app_brings_it_back_without_the_keyboar
 #[test]
 fn quitting_an_app_from_the_dock_asks_its_windows_to_close() {
     let mut server = server();
-    let mut editor = app(&mut server, EDITOR);
+    let mut editor = window_of(&mut server, RED, (WINDOW, WINDOW), EDITOR);
     let mut dock = shell(&mut server);
 
     dock.quit_app(&mut server, EDITOR);
@@ -87,7 +83,7 @@ fn quitting_an_app_from_the_dock_asks_its_windows_to_close() {
 #[test]
 fn a_hidden_app_is_told_it_is_suspended_until_it_shows_again() {
     let mut server = server();
-    let mut editor = app(&mut server, EDITOR);
+    let mut editor = window_of(&mut server, RED, (WINDOW, WINDOW), EDITOR);
     let mut menu_bar = shell(&mut server);
     let suspended = |editor: &TestClient| {
         editor
@@ -108,8 +104,8 @@ fn a_hidden_app_is_told_it_is_suspended_until_it_shows_again() {
 #[test]
 fn an_ordinary_app_can_ask_another_app_to_quit_without_seeing_the_shell() {
     let mut server = server();
-    let mut editor = app(&mut server, EDITOR);
-    let mut monitor = app(&mut server, "org.unbound.Monitor");
+    let mut editor = window_of(&mut server, RED, (WINDOW, WINDOW), EDITOR);
+    let mut monitor = window_of(&mut server, RED, (WINDOW, WINDOW), "org.unbound.Monitor");
 
     monitor.join_app_control(&mut server);
     monitor.ask_app_to_quit(&mut server, EDITOR);
@@ -124,7 +120,7 @@ fn an_ordinary_app_can_ask_another_app_to_quit_without_seeing_the_shell() {
 fn the_dock_learns_which_windows_are_minimised_and_can_bring_one_back() {
     let mut server = server();
     let mut renderer = Renderer::new().expect("renderer");
-    let mut editor = app(&mut server, EDITOR);
+    let mut editor = window_of(&mut server, RED, (WINDOW, WINDOW), EDITOR);
     let mut dock = shell(&mut server);
     roundtrip(&mut server, &mut [&mut editor, &mut dock]);
     let identifier = dock
@@ -154,8 +150,8 @@ fn the_dock_learns_which_windows_are_minimised_and_can_bring_one_back() {
 #[test]
 fn an_app_that_asks_to_come_forward_without_a_valid_token_asks_for_attention_instead() {
     let mut server = server();
-    let mut background = app(&mut server, "org.example.Mail");
-    let mut editor = app(&mut server, EDITOR);
+    let mut background = window_of(&mut server, RED, (WINDOW, WINDOW), "org.example.Mail");
+    let mut editor = window_of(&mut server, RED, (WINDOW, WINDOW), EDITOR);
     let mut dock = shell(&mut server);
     roundtrip(&mut server, &mut [&mut background, &mut editor, &mut dock]);
 
@@ -170,7 +166,7 @@ fn an_app_that_asks_to_come_forward_without_a_valid_token_asks_for_attention_ins
 #[test]
 fn super_f3_gives_the_dock_the_keyboard_and_super_f2_the_menu_bar() {
     let mut server = server();
-    let mut editor = app(&mut server, EDITOR);
+    let mut editor = window_of(&mut server, RED, (WINDOW, WINDOW), EDITOR);
     let mut dock = shell(&mut server);
     let bar = |anchor, size| LayerRequest {
         layer: Layer::Top,
@@ -202,7 +198,7 @@ fn super_f3_gives_the_dock_the_keyboard_and_super_f2_the_menu_bar() {
 #[test]
 fn the_combined_bar_takes_the_keyboard_for_both_super_f2_and_super_f3() {
     let mut server = server();
-    let mut editor = app(&mut server, EDITOR);
+    let mut editor = window_of(&mut server, RED, (WINDOW, WINDOW), EDITOR);
     let mut bar = shell(&mut server);
     bar.show_named_layer(
         &mut server,
@@ -231,7 +227,7 @@ fn the_combined_bar_takes_the_keyboard_for_both_super_f2_and_super_f3() {
 #[test]
 fn clicking_the_bar_keeps_the_active_app() {
     let mut server = server();
-    let mut editor = app(&mut server, EDITOR);
+    let mut editor = window_of(&mut server, RED, (WINDOW, WINDOW), EDITOR);
     let mut bar = shell(&mut server);
     bar.show_named_layer(
         &mut server,
@@ -259,8 +255,8 @@ fn clicking_the_bar_keeps_the_active_app() {
 #[test]
 fn ending_the_session_asks_every_app_to_quit_and_names_the_one_that_stays_until_it_closes() {
     let mut server = server();
-    let mut editor = app(&mut server, EDITOR);
-    let mut viewer = app(&mut server, VIEWER);
+    let mut editor = window_of(&mut server, RED, (WINDOW, WINDOW), EDITOR);
+    let mut viewer = window_of(&mut server, RED, (WINDOW, WINDOW), VIEWER);
     let mut dialog = shell(&mut server);
     roundtrip(&mut server, &mut [&mut editor, &mut viewer, &mut dialog]);
 

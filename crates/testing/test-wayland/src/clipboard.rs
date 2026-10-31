@@ -1,4 +1,4 @@
-use std::io::{PipeReader, Write};
+use std::io::{PipeReader, Read, Write};
 use std::os::fd::AsFd;
 use std::sync::Mutex;
 
@@ -401,3 +401,9 @@ delegate_noop!(Globals: ignore WlSeat);
 delegate_noop!(Globals: WlDataDeviceManager);
 delegate_noop!(Globals: ZwpPrimarySelectionDeviceManagerV1);
 delegate_noop!(Globals: ExtDataControlManagerV1);
+
+pub fn read_all(mut pipe: PipeReader) -> String {
+    let mut text = String::new();
+    pipe.read_to_string(&mut text).expect("read pasted data");
+    text
+}

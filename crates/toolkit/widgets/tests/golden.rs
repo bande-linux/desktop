@@ -16,10 +16,6 @@ const LIGHT: (Scheme, &str, f64, &str) = (Scheme::Light, "light", 1.0, "1x");
 const DARK: (Scheme, &str, f64, &str) = (Scheme::Dark, "dark", 1.0, "1x");
 const LIGHT_FRACTIONAL: (Scheme, &str, f64, &str) = (Scheme::Light, "light", 1.5, "1.5x");
 
-fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>) {
-    unbound_golden::assert_golden!(name, &unbound_golden::from_rgba(size.0, size.1, rgba));
-}
-
 fn focus(ui: &mut Ui, id: WidgetId) {
     ui.perform(&ActionRequest {
         action: Action::Focus,
@@ -43,7 +39,7 @@ fn shoot(
         CpuRenderer::new()
             .render_into(&scene, scale, &mut rgba)
             .expect("render");
-        check_golden(
+        unbound_golden::assert_golden_rgba!(
             &format!("{name}-{scheme_name}-{scale_name}"),
             (width, height),
             rgba,

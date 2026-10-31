@@ -10,7 +10,7 @@ fn check(session: &SessionEnding, scheme: Scheme, now: Instant, name: &str) {
     let scene = session_ending_scene(session, Palette::for_scheme(scheme), CONFIRMATION_SIZE, now);
     let frame = CpuRenderer::new().render(&scene).expect("frame");
     let (width, height) = CONFIRMATION_SIZE;
-    unbound_golden::assert_golden!(name, &unbound_golden::from_rgba(width, height, frame.rgba));
+    unbound_golden::assert_golden_rgba!(name, (width, height), frame.rgba);
 }
 
 #[test]

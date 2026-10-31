@@ -308,10 +308,7 @@ fn wallpaper_at(view: &mut DesktopView, scheme: Scheme, now: Instant) {
 fn check_golden(name: &str, view: &mut DesktopView) {
     let scene = view.scene(Instant::now() + Duration::from_secs(5));
     let frame = CpuRenderer::new().render(&scene).unwrap();
-    unbound_golden::assert_golden!(
-        name,
-        &unbound_golden::from_rgba(frame.width, frame.height, frame.rgba)
-    );
+    unbound_golden::assert_golden_rgba!(name, (frame.width, frame.height), frame.rgba);
 }
 
 fn at(view: &DesktopView, name: &str) -> Point {

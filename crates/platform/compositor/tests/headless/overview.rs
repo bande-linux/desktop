@@ -8,10 +8,6 @@ const WINDOW: (i32, i32) = (64, 48);
 const ADD_WORKSPACE: (f64, f64) = (151.0, 25.0);
 const BELOW_THE_STRIP: usize = 50;
 
-fn app(server: &mut Compositor, color: [u8; 4], app_id: &str) -> TestClient {
-    window_of(server, color, WINDOW, app_id)
-}
-
 fn open_with_keys(server: &mut Compositor) {
     server.key(KEY_LEFTALT, true, 0);
     server.key(KEY_LEFTMETA, true, 0);
@@ -48,8 +44,8 @@ fn click(server: &mut Compositor, (x, y): (f64, f64), time: u32) {
 fn the_overview_spreads_overlapping_windows_and_a_click_picks_one() {
     let mut server = server();
     let mut renderer = Renderer::new().expect("renderer");
-    let mut editor = app(&mut server, RED, EDITOR);
-    let mut viewer = app(&mut server, BLUE, VIEWER);
+    let mut editor = window_of(&mut server, RED, WINDOW, EDITOR);
+    let mut viewer = window_of(&mut server, BLUE, WINDOW, VIEWER);
     let end = settle(&mut server, 0);
     let before = snapshot(&mut renderer, &mut server);
 
@@ -73,8 +69,8 @@ fn a_middle_click_in_the_overview_closes_that_window_and_keeps_the_overview_open
     const BTN_MIDDLE: u32 = 0x112;
     let mut server = server();
     let mut renderer = Renderer::new().expect("renderer");
-    let mut editor = app(&mut server, RED, EDITOR);
-    let mut viewer = app(&mut server, BLUE, VIEWER);
+    let mut editor = window_of(&mut server, RED, WINDOW, EDITOR);
+    let mut viewer = window_of(&mut server, BLUE, WINDOW, VIEWER);
     let end = settle(&mut server, 0);
 
     open_with_keys(&mut server);
@@ -95,7 +91,7 @@ fn a_middle_click_in_the_overview_closes_that_window_and_keeps_the_overview_open
 #[test]
 fn keys_typed_in_the_overview_stay_out_of_the_app_and_escape_closes_it() {
     let mut server = server();
-    let mut editor = app(&mut server, RED, EDITOR);
+    let mut editor = window_of(&mut server, RED, WINDOW, EDITOR);
     let end = settle(&mut server, 0);
     open_with_keys(&mut server);
     settle(&mut server, end);
@@ -119,7 +115,7 @@ fn keys_typed_in_the_overview_stay_out_of_the_app_and_escape_closes_it() {
 #[test]
 fn a_three_finger_swipe_up_opens_the_overview_and_down_closes_it() {
     let mut server = server();
-    let _editor = app(&mut server, RED, EDITOR);
+    let _editor = window_of(&mut server, RED, WINDOW, EDITOR);
     let swipe = |server: &mut Compositor, dy: f64, start: u32| {
         server.gesture(Gesture::SwipeBegin { fingers: 3 }, start);
         for step in 1..=10 {
@@ -147,8 +143,8 @@ fn a_three_finger_swipe_up_opens_the_overview_and_down_closes_it() {
 fn dragging_a_window_onto_the_plus_moves_it_to_a_new_workspace() {
     let mut server = server();
     let mut renderer = Renderer::new().expect("renderer");
-    let mut editor = app(&mut server, RED, EDITOR);
-    let mut viewer = app(&mut server, BLUE, VIEWER);
+    let mut editor = window_of(&mut server, RED, WINDOW, EDITOR);
+    let mut viewer = window_of(&mut server, BLUE, WINDOW, VIEWER);
     let end = settle(&mut server, 0);
     open_with_keys(&mut server);
     let end = settle(&mut server, end);
@@ -178,8 +174,8 @@ fn dragging_a_window_onto_the_plus_moves_it_to_a_new_workspace() {
 fn the_dock_can_show_the_windows_of_one_app() {
     let mut server = server();
     let mut renderer = Renderer::new().expect("renderer");
-    let mut editor = app(&mut server, RED, EDITOR);
-    let mut viewer = app(&mut server, BLUE, VIEWER);
+    let mut editor = window_of(&mut server, RED, WINDOW, EDITOR);
+    let mut viewer = window_of(&mut server, BLUE, WINDOW, VIEWER);
     let mut dock = TestClient::connect_as_shell(&mut server);
     dock.join_shell(&mut server);
     let end = settle(&mut server, 0);
@@ -198,7 +194,7 @@ fn the_dock_can_show_the_windows_of_one_app() {
 fn the_selected_window_shows_its_title_below_it() {
     let mut server = server();
     let mut renderer = Renderer::new().expect("renderer");
-    let _editor = app(&mut server, RED, EDITOR);
+    let _editor = window_of(&mut server, RED, WINDOW, EDITOR);
     let end = settle(&mut server, 0);
     let below = rgb_at(&snapshot(&mut renderer, &mut server), 128, 162);
 
@@ -214,7 +210,7 @@ fn the_selected_window_shows_its_title_below_it() {
 fn with_reduce_motion_the_overview_fades_instead_of_moving_windows() {
     let mut server = server();
     let mut renderer = Renderer::new().expect("renderer");
-    let _editor = app(&mut server, RED, EDITOR);
+    let _editor = window_of(&mut server, RED, WINDOW, EDITOR);
     let end = settle(&mut server, 0);
     server.set_reduce_motion(true);
 

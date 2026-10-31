@@ -229,13 +229,13 @@ fn the_window_menu_matches_its_golden() {
 
     renderer.render(&mut server).expect("frame");
     let snapshot = renderer.snapshot(&server).expect("read back");
-    unbound_golden::assert_golden!(
+    unbound_golden::assert_golden_rgba!(
         "window-menu",
-        &unbound_golden::from_rgba(
+        (
             snapshot.size.w.unsigned_abs(),
-            snapshot.size.h.unsigned_abs(),
-            snapshot.rgba,
-        )
+            snapshot.size.h.unsigned_abs()
+        ),
+        snapshot.rgba
     );
 }
 
@@ -259,12 +259,12 @@ fn the_window_menu_follows_the_text_size_and_matches_its_golden() {
 
     renderer.render(&mut server).expect("frame");
     let snapshot = renderer.snapshot(&server).expect("read back");
-    unbound_golden::assert_golden!(
+    unbound_golden::assert_golden_rgba!(
         "window-menu-150",
-        &unbound_golden::from_rgba(
+        (
             snapshot.size.w.unsigned_abs(),
-            snapshot.size.h.unsigned_abs(),
-            snapshot.rgba,
-        )
+            snapshot.size.h.unsigned_abs()
+        ),
+        snapshot.rgba
     );
 }

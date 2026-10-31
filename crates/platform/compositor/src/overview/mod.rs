@@ -9,7 +9,7 @@ use smithay::input::keyboard::keysyms;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Point, Rectangle};
 use smithay::wayland::shell::wlr_layer::Layer;
-use unbound_spring::{Animation, Spring, State as Phase};
+use unbound_spring::{Animated, Spring, State as Phase};
 
 use self::layout::lerp;
 pub(crate) use self::layout::{arrange, real_rect};
@@ -58,8 +58,8 @@ pub(crate) struct Overview {
     title: Option<(WlSurface, Label)>,
     progress: f64,
     target: f64,
-    settle: Option<Animation>,
-    last: Option<Duration>,
+    settle: Option<Animated<Duration>>,
+    now: Option<Duration>,
     tracker: Option<Tracker>,
     opens_up: bool,
     app: Option<String>,
@@ -103,19 +103,21 @@ impl Overview {
 
     fn settle_to(&mut self, target: f64, velocity: f64, spring: Spring) {
         let velocity = match &self.settle {
-            Some(settle) if velocity == 0.0 => settle.state().velocity,
+            Some(settle) if velocity == 0.0 => {
+                settle.state_at(self.now.unwrap_or_default()).velocity
+            }
             _ => velocity,
         };
         self.tracker = None;
         self.target = target;
-        self.last = None;
-        self.settle = Some(Animation::new(
-            spring,
+        self.now = None;
+        self.settle = Some(Animated::released(
             Phase {
                 position: self.progress,
                 velocity,
             },
             target,
+            spring,
         ));
     }
 }
@@ -291,13 +293,13 @@ impl State {
             }
         }
         if let Some(settle) = self.overview.settle.as_mut() {
-            let step = tick.step_since(self.overview.last);
-            self.overview.last = Some(tick.time);
-            self.overview.progress = settle.advance(step).position;
-            if settle.is_at_rest(precision) {
+            let now = tick.drive(settle);
+            self.overview.now = Some(now);
+            self.overview.progress = settle.state_at(now).position;
+            if settle.is_at_rest(now, precision) {
                 self.overview.progress = self.overview.target;
                 self.overview.settle = None;
-                self.overview.last = None;
+                self.overview.now = None;
                 if self.overview.target == 0.0 {
                     self.overview.app = None;
                     self.overview.filter.clear();
@@ -328,7 +330,7 @@ impl State {
             self.overview.opens_up = upward;
         }
         self.overview.settle = None;
-        self.overview.last = None;
+        self.overview.now = None;
         self.overview.tracker = Some(Tracker::new(self.overview.progress, time, 1.0));
         self.relayout_overview();
         self.refocus_pointer();

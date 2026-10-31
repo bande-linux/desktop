@@ -8,7 +8,7 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use unbound_bar::dock::{DockAction, DockApp, DockState, MenuTarget, Shared, dock_ui, scene};
-use unbound_bar::menubar::{Slot, StatusView};
+use unbound_bar::menu_bar::{Slot, StatusView};
 use unbound_bar::menus::{AppMenus, bluetooth_menu, cascade, wifi_menu};
 use unbound_bar::rail::{RailView, bar_width, surface_size};
 use unbound_config::BarEdge;

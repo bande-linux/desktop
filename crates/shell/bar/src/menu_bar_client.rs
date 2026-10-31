@@ -8,7 +8,7 @@ use std::thread;
 use std::time::Instant;
 
 use crate::dialogs::DIALOGS;
-use crate::menubar::{HEIGHT, MenuBar, Slot, StatusView};
+use crate::menu_bar::{HEIGHT, MenuBar, Slot, StatusView};
 use crate::menus::{
     AppMenus, app_menu, battery_menu, bluetooth_menu, cascade, input_source_menu, sound_menu,
     system_menu, wifi_menu,

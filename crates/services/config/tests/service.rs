@@ -9,9 +9,7 @@ use std::thread;
 use std::time::Duration;
 
 use support::replace_file;
-use unbound_config::{
-    BUS_NAME, ConfigService, ConfigStore, Loaded, OBJECT_PATH, ReloadError, migrate_file,
-};
+use unbound_config::{BUS_NAME, ConfigService, ConfigStore, Loaded, OBJECT_PATH, ReloadError};
 use unbound_test_bus::SessionBus;
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::{DBusProxy, PropertiesProxy};
@@ -494,25 +492,10 @@ fn sleep_can_be_returned_to_following_the_display() {
 }
 
 #[test]
-fn the_owners_file_from_before_named_displays_is_migrated_and_fully_applied() {
-    let directory = tempfile::tempdir().expect("temp dir");
-    let path = directory.path().join("config.kdl");
-    std::fs::write(
-        &path,
-        "appearance \"dark\"\noutput \"Virtual-1\" {\n    scale 1.5\n}\nbar {\n    size 44\n}\n",
-    )
-    .expect("write");
-    let connected = [("Virtual-1".to_owned(), "Virtual-1".to_owned())];
-
-    assert!(migrate_file(&path, &connected).expect("migrate"));
-    assert!(!migrate_file(&path, &connected).expect("migrate again"));
-    let source = std::fs::read_to_string(&path).expect("read");
-    assert_eq!(
-        source,
-        "appearance \"dark\"\ndisplay \"Virtual-1\" {\n    scale 1.5\n}\nbar {\n    size 44\n}\n"
+fn a_file_with_a_named_display_is_fully_applied() {
+    let fixture = start(
+        "appearance \"dark\"\ndisplay \"Virtual-1\" {\n    scale 1.5\n}\nbar {\n    size 44\n}\n",
     );
-
-    let fixture = start(&source);
     assert_eq!(
         String::try_from(get(&fixture.client, "Appearance")).expect("string"),
         "dark"

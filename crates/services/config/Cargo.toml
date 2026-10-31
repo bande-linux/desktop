@@ -10,7 +10,6 @@ kdl.workspace = true
 tracing.workspace = true
 unbound-bus.workspace = true
 unbound-design.workspace = true
-unbound-edid.workspace = true
 unbound-l10n.workspace = true
 unbound-log.workspace = true
 unbound-notify.workspace = true

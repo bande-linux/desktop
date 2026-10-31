@@ -1,4 +1,3 @@
-mod connectors;
 mod edit;
 mod login_picture;
 mod report;
@@ -16,16 +15,13 @@ use kdl::{KdlDocument, KdlEntry, KdlNode, KdlValue};
 pub use unbound_design::Accent;
 use unbound_l10n::Localizer;
 
-pub use connectors::{DRM_CLASS, connected_displays};
-pub use edit::{Setting, migrate};
+pub use edit::Setting;
 pub use login_picture::{
     LOGIN_PICTURE_LIMIT, LOGIN_PICTURES, copy_login_picture, login_picture, login_picture_file,
     share_login_picture,
 };
 pub use report::{EDIT_ACTION, ErrorNotifier};
-pub use service::{
-    ArrangedDisplay, BUS_NAME, ConfigService, OBJECT_PATH, ServiceError, migrate_file,
-};
+pub use service::{ArrangedDisplay, BUS_NAME, ConfigService, OBJECT_PATH, ServiceError};
 pub use store::{ConfigStore, Loaded, ReloadError};
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-config.ftl");
@@ -115,10 +111,6 @@ impl BarEdge {
 
     pub fn from_keyword(keyword: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|edge| edge.keyword() == keyword)
-    }
-
-    pub fn is_vertical(self) -> bool {
-        matches!(self, Self::Left | Self::Right)
     }
 }
 
@@ -665,7 +657,6 @@ pub struct Config {
     pub wallpaper: Wallpaper,
     pub night_light: NightLight,
     pub displays: BTreeMap<String, DisplaySettings>,
-    pub outputs: BTreeMap<String, DisplaySettings>,
     pub arrangements: Vec<Vec<Placement>>,
 }
 
@@ -706,7 +697,6 @@ impl Default for Config {
             wallpaper: Wallpaper::default(),
             night_light: NightLight::default(),
             displays: BTreeMap::new(),
-            outputs: BTreeMap::new(),
             arrangements: Vec::new(),
         }
     }
@@ -735,10 +725,6 @@ pub fn config_path(xdg_config_home: Option<&Path>, home: Option<&Path>) -> Optio
     Some(base.join("unbound").join("config.kdl"))
 }
 
-pub const RENAMED_SECTIONS: [(&str, &str); 2] = [("panel", "bar"), ("dock", "bar")];
-
-pub const LEGACY_DISPLAY: &str = "output";
-
 impl Config {
     pub fn parse(source: &str) -> Result<Self, ConfigError> {
         Self::load(source).map(|(config, _)| config)
@@ -763,20 +749,9 @@ impl Config {
         Ok((config, problems))
     }
 
-    pub fn display(&self, identity: &str, connector: &str) -> DisplaySettings {
-        self.displays
-            .get(identity)
-            .or_else(|| self.outputs.get(connector))
-            .copied()
-            .unwrap_or_default()
+    pub fn display(&self, identity: &str) -> DisplaySettings {
+        self.displays.get(identity).copied().unwrap_or_default()
     }
-}
-
-pub fn section_name(written: &str) -> &str {
-    RENAMED_SECTIONS
-        .iter()
-        .find(|(old, _)| *old == written)
-        .map_or(written, |(_, new)| new)
 }
 
 fn locate(source: &str, offset: usize, message: String) -> ConfigError {
@@ -817,16 +792,15 @@ impl Parser<'_> {
         let mut config = Config::default();
         let mut seen = Vec::new();
         for node in document.nodes() {
-            let written = node.name().value();
-            let name = section_name(written);
-            if !matches!(name, "display" | "arrangement" | LEGACY_DISPLAY) {
-                if seen.contains(&written) {
+            let name = node.name().value();
+            if !matches!(name, "display" | "arrangement") {
+                if seen.contains(&name) {
                     self.settle(Err(
-                        self.at_node(node, format!("`{written}` is set more than once"))
+                        self.at_node(node, format!("`{name}` is set more than once"))
                     ));
                     continue;
                 }
-                seen.push(written);
+                seen.push(name);
             }
             let result = match name {
                 "appearance" => self
@@ -891,7 +865,6 @@ impl Parser<'_> {
                     Ok(())
                 }
                 "display" => self.display(node, &mut config.displays),
-                LEGACY_DISPLAY => self.display(node, &mut config.outputs),
                 "arrangement" => self.arrangement(node).and_then(|placements| {
                     let displays: Vec<String> = placements
                         .iter()
@@ -905,7 +878,7 @@ impl Parser<'_> {
                     config.arrangements.push(placements);
                     Ok(())
                 }),
-                _ => Err(self.at_node(node, format!("unknown setting `{written}`"))),
+                _ => Err(self.at_node(node, format!("unknown setting `{name}`"))),
             };
             self.settle(result);
         }
@@ -1370,11 +1343,6 @@ impl Parser<'_> {
     }
 
     fn identity(&self, node: &KdlNode, entry: &KdlEntry) -> Result<String, ConfigError> {
-        let example = if node.name().value() == LEGACY_DISPLAY {
-            "connector such as \"eDP-1\""
-        } else {
-            "name such as \"Dell Inc. DELL U2720Q 7ZD5K53\""
-        };
         entry
             .value()
             .as_string()
@@ -1383,7 +1351,10 @@ impl Parser<'_> {
             .ok_or_else(|| {
                 self.at_entry(
                     entry,
-                    format!("`{}` needs the display's {example}", node.name().value()),
+                    format!(
+                        "`{}` needs the display's name such as \"Dell Inc. DELL U2720Q 7ZD5K53\"",
+                        node.name().value()
+                    ),
                 )
             })
     }
@@ -1553,7 +1524,6 @@ mod tests {
         let sources = [
             include_str!("lib.rs"),
             include_str!("main.rs"),
-            include_str!("connectors.rs"),
             include_str!("login_picture.rs"),
             include_str!("edit.rs"),
             include_str!("report.rs"),

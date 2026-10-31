@@ -117,7 +117,7 @@ pub(crate) fn arrange(
         .iter()
         .zip(&identities)
         .filter_map(|(head, identity)| {
-            let display = config.display(identity, &head.name);
+            let display = config.display(identity);
             Some(Arranged {
                 name: head.name.clone(),
                 settings: settings_for(head, &display)?,

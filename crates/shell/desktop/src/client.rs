@@ -307,7 +307,7 @@ impl DesktopSurface {
 
     fn area(&self, size: (u32, u32)) -> Bounds {
         let (width, height) = (size.0 as f32, size.1 as f32);
-        let top = unbound_bar::menubar::HEIGHT as f32;
+        let top = unbound_bar::menu_bar::HEIGHT as f32;
         let dock = unbound_bar::dock::exclusive_zone(unbound_bar::dock::ICON_SIZE);
         let bar = unbound_bar::rail::bar_width(unbound_bar::dock::ICON_SIZE);
         let (left, right, bottom, top) = match (self.bar_edge, self.combined_bar) {

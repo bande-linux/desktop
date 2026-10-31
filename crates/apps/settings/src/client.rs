@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use unbound_config::{ArrangedDisplay, DisplaySettings, Placement, Rotation};
 use unbound_datetime::DateFormats;
+use unbound_notify::client::NotificationCenter;
 use zbus::blocking::Connection;
 use zbus::proxy::CacheProperties;
 use zbus::zvariant::OwnedValue;
@@ -198,18 +199,6 @@ pub trait Config {
     fn set_arrangement(&self, displays: Vec<ArrangedDisplay>) -> zbus::Result<()>;
 }
 
-#[zbus::proxy(
-    interface = "org.unbound.NotificationCenter",
-    default_service = "org.freedesktop.Notifications",
-    default_path = "/org/freedesktop/Notifications"
-)]
-pub trait NotificationCenter {
-    #[zbus(property)]
-    fn do_not_disturb(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn set_do_not_disturb(&self, enabled: bool) -> zbus::Result<()>;
-}
-
 fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
     let number = |key: &str| {
         settings
@@ -291,7 +280,7 @@ pub fn stop_speed(stop: u32) -> f64 {
 
 pub struct SettingsClient {
     config: ConfigProxyBlocking<'static>,
-    notifications: NotificationCenterProxyBlocking<'static>,
+    notifications: NotificationCenter<'static>,
 }
 
 impl SettingsClient {
@@ -300,7 +289,7 @@ impl SettingsClient {
             config: ConfigProxyBlocking::builder(connection)
                 .cache_properties(CacheProperties::No)
                 .build()?,
-            notifications: NotificationCenterProxyBlocking::builder(connection)
+            notifications: NotificationCenter::builder(connection)
                 .cache_properties(CacheProperties::No)
                 .build()?,
         })

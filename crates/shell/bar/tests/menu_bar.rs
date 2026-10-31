@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use unbound_bar::menubar::{MenuBar, Slot};
+use unbound_bar::menu_bar::{MenuBar, Slot};
 use unbound_bar::menus::{
     app_menu, battery_menu, bluetooth_menu, input_source_menu, sound_menu, system_menu, wifi_menu,
 };

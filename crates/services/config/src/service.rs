@@ -16,7 +16,7 @@ use crate::{
     ACCENTS, Accessibility, AlertSound, Appearance, BarEdge, CURSOR_SIZE_RANGE, CapsLock,
     ClockFormat, Config, ConfigStore, DisplaySettings, InputSource, LidOnPower, Loaded,
     MenuBarPlacement, Placement, ReloadError, Rotation, SecondaryClick, Setting, Suspend,
-    TEXT_SIZE_RANGE, WallpaperFit, WallpaperVariant, ZOOM_RANGE, accent_keyword, migrate,
+    TEXT_SIZE_RANGE, WallpaperFit, WallpaperVariant, ZOOM_RANGE, accent_keyword,
     read_system_input_sources,
 };
 
@@ -62,18 +62,6 @@ fn replace(path: &Path, contents: &str) -> io::Result<()> {
     let staging = path.with_file_name(STAGING_NAME);
     std::fs::write(&staging, contents)?;
     std::fs::rename(&staging, path)
-}
-
-pub fn migrate_file(path: &Path, connected: &[(String, String)]) -> io::Result<bool> {
-    let source = match std::fs::read_to_string(path) {
-        Ok(source) => source,
-        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(false),
-        Err(error) => return Err(error),
-    };
-    match migrate(&source, connected) {
-        Ok(Some(migrated)) => replace(path, &migrated).map(|()| true),
-        Ok(None) | Err(_) => Ok(false),
-    }
 }
 
 pub struct ConfigService {

@@ -10,7 +10,6 @@ use zbus::message::{Flags, Message};
 
 pub const BUS_NAME: &str = "org.unbound.Sound";
 pub const OBJECT_PATH: &str = "/org/unbound/Sound";
-pub const THEME_NAME: &str = "Unbound";
 
 const INDEX_THEME: &str = "[Sound Theme]
 Name=Unbound

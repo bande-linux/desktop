@@ -2,10 +2,10 @@ use std::collections::HashMap;
 use std::sync::mpsc::{self, Sender};
 use std::thread;
 
-use unbound_config::client::ConfigProxy;
+use unbound_bus::follow_properties;
+use unbound_config::client::{ConfigProxy, INTERFACE, Properties};
 use unbound_config::{BUS_NAME, BarEdge, OBJECT_PATH};
 use unbound_inbox::Outbox;
-use zbus::blocking::fdo::PropertiesProxy;
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::proxy::CacheProperties;
 use zbus::zvariant::OwnedValue;
@@ -96,65 +96,37 @@ fn config(session: &Connection) -> zbus::Result<ConfigProxy<'static>> {
         .build()
 }
 
-fn bar_settings(config: &ConfigProxy<'_>) -> zbus::Result<Vec<BusEvent>> {
-    let mut events = Vec::new();
-    if let Ok(size) = config.bar_icon_size() {
-        events.push(BusEvent::IconSize(size));
-    }
-    if let Ok(auto_hide) = config.bar_auto_hide() {
-        events.push(BusEvent::AutoHide(auto_hide));
-    }
-    if let Ok(names) = config.bar_names() {
-        events.push(BusEvent::Names(names));
-    }
-    if let Some(edge) = config
-        .bar_edge()
-        .ok()
-        .as_deref()
-        .and_then(BarEdge::from_keyword)
-    {
-        events.push(BusEvent::Edge(edge));
-    }
-    events.push(BusEvent::Apps(config.bar_apps()?));
-    Ok(events)
+fn bar_settings(changed: Properties) -> Vec<BusEvent> {
+    let edge = changed.bar_edge.as_deref().and_then(BarEdge::from_keyword);
+    [
+        changed.bar_icon_size.map(BusEvent::IconSize),
+        changed.bar_auto_hide.map(BusEvent::AutoHide),
+        changed.bar_names.map(BusEvent::Names),
+        edge.map(BusEvent::Edge),
+        changed.bar_apps.map(BusEvent::Apps),
+    ]
+    .into_iter()
+    .flatten()
+    .collect()
 }
 
 fn follow_bar_settings(session: Connection, outbox: Outbox<BusEvent>) {
     spawn("bar-settings", move || {
-        let follow = || -> zbus::Result<()> {
-            let config = config(&session)?;
-            let changes = PropertiesProxy::builder(&session)
-                .destination(BUS_NAME)?
-                .path(OBJECT_PATH)?
-                .build()?
-                .receive_properties_changed()?;
-            let mut known: Vec<BusEvent> = Vec::new();
-            let mut publish = || -> zbus::Result<bool> {
-                for event in bar_settings(&config)? {
-                    if known.contains(&event) {
-                        continue;
-                    }
-                    known.retain(|old| {
-                        std::mem::discriminant(old) != std::mem::discriminant(&event)
-                    });
-                    known.push(event.clone());
-                    if !outbox.send(event) {
-                        return Ok(false);
-                    }
+        let mut known: Vec<BusEvent> = Vec::new();
+        let followed = follow_properties(&session, BUS_NAME, OBJECT_PATH, INTERFACE, |changed| {
+            for event in bar_settings(changed) {
+                if known.contains(&event) {
+                    continue;
                 }
-                Ok(true)
-            };
-            if !publish()? {
-                return Ok(());
-            }
-            for _ in changes {
-                if !publish()? {
-                    break;
+                known.retain(|old| std::mem::discriminant(old) != std::mem::discriminant(&event));
+                known.push(event.clone());
+                if !outbox.send(event) {
+                    return false;
                 }
             }
-            Ok(())
-        };
-        if let Err(error) = follow() {
+            true
+        });
+        if let Err(error) = followed {
             tracing::warn!("cannot follow the bar's settings in org.unbound.Config: {error}");
         }
     });

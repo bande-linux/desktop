@@ -96,7 +96,7 @@ fn press(view: &mut SettingsView, key: Key) {
 
 fn pump(
     view: &mut SettingsView,
-    feed: &Feed,
+    feed: &mut Feed,
     sender: &std::sync::mpsc::Sender<TimeCommand>,
     done: impl Fn(&mut SettingsView) -> bool,
 ) {
@@ -135,11 +135,11 @@ fn the_time_zone_is_chosen_by_typing_a_city_and_manual_time_is_set_on_return() {
         .build()
         .expect("fake timedated");
     let system = bus.connect().expect("connection");
-    let (feed, updates) = feed().expect("feed");
+    let (mut feed, updates) = feed().expect("feed");
     let sender = follow_time(&system, updates);
     let mut view = SettingsView::new(Palette::for_scheme(Scheme::Light), TextSystem::new());
     view.select_pane(PaneId::LanguageTime);
-    pump(&mut view, &feed, &sender, |view| {
+    pump(&mut view, &mut feed, &sender, |view| {
         has_text(view, "Stockholm")
     });
     assert!(has_text(&mut view, "Europe · UTC+"));
@@ -152,10 +152,10 @@ fn the_time_zone_is_chosen_by_typing_a_city_and_manual_time_is_set_on_return() {
     assert!(has_text(&mut view, "Paris"));
     assert!(!has_text(&mut view, "Tokyo"));
     press(&mut view, Key::Enter);
-    pump(&mut view, &feed, &sender, |_| {
+    pump(&mut view, &mut feed, &sender, |_| {
         clock.lock().expect("clock").zone == "Europe/Paris"
     });
-    pump(&mut view, &feed, &sender, |view| {
+    pump(&mut view, &mut feed, &sender, |view| {
         has_text(view, "Paris") && !has_text(view, "Search cities")
     });
 
@@ -165,7 +165,7 @@ fn the_time_zone_is_chosen_by_typing_a_city_and_manual_time_is_set_on_return() {
         press(&mut view, Key::Character(character));
     }
     press(&mut view, Key::Enter);
-    pump(&mut view, &feed, &sender, |view| {
+    pump(&mut view, &mut feed, &sender, |view| {
         has_text(view, "Only an administrator can change this.")
     });
     assert!(has_text(&mut view, "Paris"), "the zone springs back");
@@ -174,7 +174,7 @@ fn the_time_zone_is_chosen_by_typing_a_city_and_manual_time_is_set_on_return() {
 
     let automatic = find(&mut view, Role::Switch, "Set time automatically").expect("switch");
     click(&mut view, automatic);
-    pump(&mut view, &feed, &sender, |view| {
+    pump(&mut view, &mut feed, &sender, |view| {
         !clock.lock().expect("clock").ntp && has_text(view, "Press Return to set the clock")
     });
     let field = nodes(&mut view)
@@ -196,7 +196,7 @@ fn the_time_zone_is_chosen_by_typing_a_city_and_manual_time_is_set_on_return() {
     });
     press(&mut view, Key::Enter);
     let expected = parse_manual("2026-12-24 18:30", "Europe/Paris").expect("valid");
-    pump(&mut view, &feed, &sender, |_| {
+    pump(&mut view, &mut feed, &sender, |_| {
         clock.lock().expect("clock").set == [expected.as_microsecond()]
     });
 }

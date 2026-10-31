@@ -15,6 +15,7 @@ required-features = ["service"]
 
 [dependencies]
 kdl.workspace = true
+serde.workspace = true
 tracing.workspace = true
 unbound-bus = { workspace = true, optional = true }
 unbound-design.workspace = true

@@ -9,12 +9,15 @@ repository.workspace = true
 accesskit.workspace = true
 jiff.workspace = true
 rustix = { workspace = true, features = ["fs"] }
+serde.workspace = true
 tracing.workspace = true
 unbound-app-menu.workspace = true
 unbound-audio.workspace = true
 unbound-bluetooth.workspace = true
+unbound-bus.workspace = true
 unbound-config.workspace = true
 unbound-datetime.workspace = true
+unbound-inbox.workspace = true
 unbound-fs.workspace = true
 unbound-keyboard.workspace = true
 unbound-l10n.workspace = true

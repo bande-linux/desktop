@@ -2,9 +2,9 @@ use std::path::{Path, PathBuf};
 use std::thread;
 
 use zbus::blocking::Connection;
-use zbus::blocking::fdo::PropertiesProxy;
 
-use unbound_config::client::ConfigProxy;
+use unbound_bus::{follow_properties, get_all};
+use unbound_config::client::{ConfigProxy, INTERFACE, Properties};
 use unbound_config::{BUS_NAME, OBJECT_PATH};
 use unbound_inbox::Outbox;
 
@@ -74,18 +74,18 @@ impl Choice {
     }
 }
 
-fn configured(value: zbus::Result<String>) -> Option<PathBuf> {
+fn configured(value: &Option<String>) -> Option<PathBuf> {
     value
-        .ok()
+        .as_deref()
         .filter(|path| !path.is_empty())
         .map(PathBuf::from)
 }
 
-fn read_with(config: &ConfigProxy<'_>) -> Choice {
+pub fn choice_of(config: &Properties) -> Choice {
     Choice {
-        light: configured(config.wallpaper_light()),
-        dark: configured(config.wallpaper_dark()),
-        fit: match config.wallpaper_fit().ok().as_deref() {
+        light: configured(&config.wallpaper_light),
+        dark: configured(&config.wallpaper_dark),
+        fit: match config.wallpaper_fit.as_deref() {
             Some("fit") => Fit::Fit,
             _ => Fit::Fill,
         },
@@ -99,39 +99,27 @@ fn proxy(session: &Connection) -> zbus::Result<ConfigProxy<'static>> {
 }
 
 pub fn read(session: &Connection) -> Choice {
-    proxy(session).map_or_else(|_| Choice::default(), |config| read_with(&config))
+    get_all(session, BUS_NAME, OBJECT_PATH, INTERFACE)
+        .map_or_else(|_| Choice::default(), |config| choice_of(&config))
 }
 
 pub fn follow(session: &Connection, choices: Outbox<Choice>) {
     let session = session.clone();
     let work = move || {
-        let mut sent = false;
-        let mut follow = || -> zbus::Result<()> {
-            let config = proxy(&session)?;
-            let changes = PropertiesProxy::builder(&session)
-                .destination(BUS_NAME)?
-                .path(OBJECT_PATH)?
-                .build()?
-                .receive_properties_changed()?;
-            let mut last = read_with(&config);
-            sent = true;
-            if !choices.send(last.clone()) {
-                return Ok(());
+        let mut config = Properties::default();
+        let mut last = None;
+        let followed = follow_properties(&session, BUS_NAME, OBJECT_PATH, INTERFACE, |changed| {
+            config.update(changed);
+            let choice = choice_of(&config);
+            if last.as_ref() == Some(&choice) {
+                return true;
             }
-            for _ in changes {
-                let choice = read_with(&config);
-                if choice != last {
-                    last = choice.clone();
-                    if !choices.send(choice) {
-                        break;
-                    }
-                }
-            }
-            Ok(())
-        };
-        if let Err(error) = follow() {
+            last = Some(choice.clone());
+            choices.send(choice)
+        });
+        if let Err(error) = followed {
             tracing::warn!("cannot follow the wallpaper in org.unbound.Config: {error}");
-            if !sent {
+            if last.is_none() {
                 choices.send(Choice::default());
             }
         }

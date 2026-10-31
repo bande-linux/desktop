@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 
-use zbus::zvariant::OwnedValue;
+use zbus::zvariant::{DeserializeDict, OwnedValue, Type};
 
 pub const BUS_NAME: &str = "org.unbound.Config";
 pub const OBJECT_PATH: &str = "/org/unbound/Config";
+
+pub const INTERFACE: &str = "org.unbound.Config";
 
 pub type ArrangedDisplay = (String, i32, i32, bool, String);
 pub type NightLight = (bool, String, String, String, u32);
@@ -37,6 +39,34 @@ macro_rules! config_interface {
             #[zbus(property)]
             fn arrangements(&self) -> zbus::Result<Vec<Vec<ArrangedDisplay>>>;
             fn set_arrangement(&self, displays: Vec<ArrangedDisplay>) -> zbus::Result<()>;
+        }
+
+        #[derive(Debug, Default, PartialEq, DeserializeDict, Type)]
+        #[zvariant(signature = "a{sv}", rename_all = "PascalCase", crate = "zbus::zvariant")]
+        pub struct Properties {
+            $(pub $name: Option<$read>,)*
+            pub night_light: Option<NightLight>,
+            pub displays: Option<Displays>,
+            pub arrangements: Option<Vec<Vec<ArrangedDisplay>>>,
+        }
+
+        impl Properties {
+            pub fn update(&mut self, newer: Self) {
+                $(
+                    if newer.$name.is_some() {
+                        self.$name = newer.$name;
+                    }
+                )*
+                if newer.night_light.is_some() {
+                    self.night_light = newer.night_light;
+                }
+                if newer.displays.is_some() {
+                    self.displays = newer.displays;
+                }
+                if newer.arrangements.is_some() {
+                    self.arrangements = newer.arrangements;
+                }
+            }
         }
     };
 }

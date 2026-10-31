@@ -9,6 +9,7 @@ repository.workspace = true
 blocking.workspace = true
 jiff.workspace = true
 rustix = { workspace = true, features = ["time"] }
+serde.workspace = true
 tracing.workspace = true
 unbound-bus.workspace = true
 unbound-config.workspace = true

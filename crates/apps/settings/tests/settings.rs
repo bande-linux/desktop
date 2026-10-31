@@ -275,7 +275,7 @@ fn changes_are_written_through_org_unbound_config() {
         .expect("settings client");
 
     assert_eq!(
-        client.get(SettingId::SleepAfter).expect("sleep"),
+        client.read(&[SettingId::SleepAfter])[0].1.clone(),
         keyword("with-display")
     );
     for (id, value) in [
@@ -325,7 +325,7 @@ fn changes_are_written_through_org_unbound_config() {
     assert!(access.reduce_motion && access.increase_contrast && access.sticky_keys);
     assert_eq!((access.zoom, access.cursor_size), (2.0, 48));
     assert_eq!(
-        client.get(SettingId::Zoom).expect("zoom"),
+        client.read(&[SettingId::Zoom])[0].1.clone(),
         Value::Flag(true)
     );
     assert_eq!(written.wallpaper.fit, WallpaperFit::Fit);
@@ -343,7 +343,7 @@ fn changes_are_written_through_org_unbound_config() {
     assert_eq!(written.trackpad.secondary_click, SecondaryClick::Corner);
     assert!(written.mouse.natural_scrolling);
     assert_eq!(
-        client.get(SettingId::TrackpadSpeed).expect("speed"),
+        client.read(&[SettingId::TrackpadSpeed])[0].1.clone(),
         Value::Number(8)
     );
     assert_eq!(
@@ -357,7 +357,7 @@ fn changes_are_written_through_org_unbound_config() {
         .set(SettingId::SleepAfter, &keyword("with-display"))
         .expect("with display");
     assert_eq!(
-        client.get(SettingId::SleepAfter).expect("sleep"),
+        client.read(&[SettingId::SleepAfter])[0].1.clone(),
         keyword("with-display")
     );
     assert_eq!(

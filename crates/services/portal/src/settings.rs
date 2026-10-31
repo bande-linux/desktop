@@ -11,18 +11,17 @@ use rustix::time::{
     Itimerspec, TimerfdClockId, TimerfdFlags, TimerfdTimerFlags, Timespec, timerfd_create,
     timerfd_settime,
 };
-use unbound_config::client::ConfigProxy;
+use unbound_bus::{follow_properties, get_all};
+use unbound_config::client::{INTERFACE, Properties};
 use unbound_config::{ACCENTS, Accent};
 use unbound_design::{Color, Scheme, Typeface};
-use unbound_wallpaper::{Choice, Variant};
+use unbound_wallpaper::{Choice, Variant, choice_of};
 use zbus::blocking::Connection;
-use zbus::blocking::fdo::PropertiesProxy;
 use zbus::object_server::SignalEmitter;
-use zbus::proxy::CacheProperties;
-use zbus::zvariant::{OwnedValue, Value};
+use zbus::zvariant::{DeserializeDict, OwnedValue, Type, Value};
 
 use crate::{OBJECT_PATH, gtk};
-use unbound_datetime::daylight::{Sky, sky, system_place};
+use unbound_datetime::daylight::{Place, Sky, ZONE_TAB, place, sky, system_place};
 
 pub const APPEARANCE: &str = "org.freedesktop.appearance";
 pub const UNBOUND_APPEARANCE: &str = "org.unbound.appearance";
@@ -33,6 +32,8 @@ pub const ICON_THEME: &str = "Unbound";
 pub const VERSION: u32 = 2;
 
 const TINT_SAMPLE: u32 = 24;
+const TIMEDATE: &str = "org.freedesktop.timedate1";
+const TIMEDATE_PATH: &str = "/org/freedesktop/timedate1";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ColorScheme {
@@ -179,29 +180,43 @@ impl TintCache {
     }
 }
 
+#[derive(DeserializeDict, Type)]
+#[zvariant(
+    signature = "a{sv}",
+    rename_all = "PascalCase",
+    crate = "zbus::zvariant"
+)]
+struct Timedate {
+    timezone: Option<String>,
+}
+
+enum Wake {
+    Time,
+    Config(Box<Properties>),
+    Zone(String),
+}
+
+#[derive(Default)]
 struct Reader {
-    connection: Connection,
-    config: ConfigProxy<'static>,
+    config: Properties,
+    zone: Option<String>,
     tints: TintCache,
 }
 
 impl Reader {
-    fn new(connection: &Connection) -> zbus::Result<Self> {
-        Ok(Self {
-            connection: connection.clone(),
-            config: ConfigProxy::builder(connection)
-                .cache_properties(CacheProperties::No)
-                .build()?,
-            tints: TintCache::default(),
-        })
+    fn place(&self) -> Option<Place> {
+        match &self.zone {
+            Some(zone) => place(&std::fs::read_to_string(ZONE_TAB).ok()?, zone),
+            None => system_place(),
+        }
     }
 
     fn read(&mut self, now: &Zoned) -> (Look, Option<Timestamp>) {
         let config = &self.config;
-        let (scheme, next) = match config.appearance().unwrap_or_default().as_str() {
-            "dark" => (Scheme::Dark, None),
-            "light" => (Scheme::Light, None),
-            _ => sky(now, system_place()).map_or((Scheme::Light, None), |(sky, next)| {
+        let (scheme, next) = match config.appearance.as_deref() {
+            Some("dark") => (Scheme::Dark, None),
+            Some("light") => (Scheme::Light, None),
+            _ => sky(now, self.place()).map_or((Scheme::Light, None), |(sky, next)| {
                 let scheme = match sky {
                     Sky::Day => Scheme::Light,
                     Sky::Night => Scheme::Dark,
@@ -209,14 +224,11 @@ impl Reader {
                 (scheme, Some(next))
             }),
         };
-        let accent = config.accent().unwrap_or_default();
+        let accent = config.accent.as_deref().unwrap_or_default();
         let tint = config
-            .tinted_frame()
+            .tinted_frame
             .unwrap_or(false)
-            .then(|| {
-                let choice = unbound_wallpaper::read(&self.connection);
-                self.tints.tint(&choice, scheme)
-            })
+            .then(|| self.tints.tint(&choice_of(config), scheme))
             .flatten();
         let look = Look {
             scheme: scheme.into(),
@@ -225,15 +237,51 @@ impl Reader {
                 .find(|(keyword, _)| *keyword == accent)
                 .map_or_else(Accent::default, |(_, accent)| *accent),
             tint,
-            increase_contrast: config.increase_contrast().unwrap_or(false),
-            reduce_transparency: config.reduce_transparency().unwrap_or(false),
-            reduce_motion: config.reduce_motion().unwrap_or(false),
-            text_size: config.text_size().unwrap_or(100),
-            cursor_size: config.cursor_size().unwrap_or(24),
-            effects: config.sound_effects().unwrap_or(true),
+            increase_contrast: config.increase_contrast.unwrap_or(false),
+            reduce_transparency: config.reduce_transparency.unwrap_or(false),
+            reduce_motion: config.reduce_motion.unwrap_or(false),
+            text_size: config.text_size.unwrap_or(100),
+            cursor_size: config.cursor_size.unwrap_or(24),
+            effects: config.sound_effects.unwrap_or(true),
         };
         (look, next)
     }
+}
+
+fn follow_config(connection: Connection, wake: mpsc::Sender<Wake>) {
+    thread::spawn(move || {
+        let followed = follow_properties(
+            &connection,
+            unbound_config::BUS_NAME,
+            unbound_config::OBJECT_PATH,
+            INTERFACE,
+            |changed| wake.send(Wake::Config(Box::new(changed))).is_ok(),
+        );
+        if let Err(error) = followed {
+            tracing::warn!("the appearance stopped following the settings: {error}");
+        }
+    });
+}
+
+fn follow_zone(wake: mpsc::Sender<Wake>) {
+    thread::spawn(move || {
+        let followed = Connection::system().and_then(|system| {
+            follow_properties(
+                &system,
+                TIMEDATE,
+                TIMEDATE_PATH,
+                TIMEDATE,
+                |changed: Timedate| {
+                    changed
+                        .timezone
+                        .is_none_or(|zone| wake.send(Wake::Zone(zone)).is_ok())
+                },
+            )
+        });
+        if let Err(error) = followed {
+            tracing::info!("the automatic appearance does not follow time zone changes: {error}");
+        }
+    });
 }
 
 type Namespaces = Vec<(&'static str, Vec<(&'static str, OwnedValue)>)>;
@@ -376,7 +424,7 @@ fn wake_at(timer: &OwnedFd, next: Option<Timestamp>) {
     }
 }
 
-fn follow_timer(timer: Arc<OwnedFd>, wake: mpsc::Sender<()>) {
+fn follow_timer(timer: Arc<OwnedFd>, wake: mpsc::Sender<Wake>) {
     let mut expirations = [0; 8];
     loop {
         match read(&*timer, &mut expirations) {
@@ -387,7 +435,7 @@ fn follow_timer(timer: Arc<OwnedFd>, wake: mpsc::Sender<()>) {
                 return;
             }
         }
-        if wake.send(()).is_err() {
+        if wake.send(Wake::Time).is_err() {
             return;
         }
     }
@@ -404,12 +452,15 @@ impl Settings {
         cursor: CursorSettings,
         gtk_home: Option<PathBuf>,
     ) -> zbus::Result<()> {
-        let changes = PropertiesProxy::builder(connection)
-            .destination(unbound_config::BUS_NAME)?
-            .path(unbound_config::OBJECT_PATH)?
-            .build()?
-            .receive_properties_changed()?;
-        let mut reader = Reader::new(connection)?;
+        let mut reader = Reader {
+            config: get_all(
+                connection,
+                unbound_config::BUS_NAME,
+                unbound_config::OBJECT_PATH,
+                INTERFACE,
+            )?,
+            ..Reader::default()
+        };
         let (first, next) = reader.read(&Zoned::now());
         let style_gtk = move |look: Look| {
             if let Some(home) = &gtk_home
@@ -435,16 +486,16 @@ impl Settings {
         wake_at(&timer, next);
         let (waiting, timer_wake) = (Arc::clone(&timer), wake.clone());
         thread::spawn(move || follow_timer(waiting, timer_wake));
-        thread::spawn(move || {
-            for _ in changes {
-                if wake.send(()).is_err() {
-                    break;
-                }
-            }
-        });
+        follow_config(connection.clone(), wake.clone());
+        follow_zone(wake);
         let connection = connection.clone();
         thread::spawn(move || {
-            while woken.recv().is_ok() {
+            while let Ok(woken) = woken.recv() {
+                match woken {
+                    Wake::Time => {}
+                    Wake::Config(changed) => reader.config.update(*changed),
+                    Wake::Zone(zone) => reader.zone = Some(zone),
+                }
                 let (new, next) = reader.read(&Zoned::now());
                 wake_at(&timer, next);
                 let old = std::mem::replace(

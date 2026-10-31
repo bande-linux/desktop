@@ -21,7 +21,7 @@ fn app_summary(view: &mut SettingsView) -> Option<String> {
 
 fn pump(
     view: &mut SettingsView,
-    feed: &Feed,
+    feed: &mut Feed,
     sender: &std::sync::mpsc::Sender<unbound_settings::NotificationCommand>,
     done: impl Fn(&mut SettingsView) -> bool,
 ) {
@@ -63,7 +63,7 @@ fn each_app_that_notified_gets_its_own_rules() {
         },
     )
     .expect("notify");
-    let (feed, updates) = feed().expect("feed");
+    let (mut feed, updates) = feed().expect("feed");
     let sender = follow_app_notifications(&client, updates);
     let mut view = SettingsView::new(Palette::for_scheme(Scheme::Light), TextSystem::new());
     view.set_value(
@@ -71,7 +71,7 @@ fn each_app_that_notified_gets_its_own_rules() {
         unbound_settings::Value::Flag(false),
     );
     view.select_pane(PaneId::Notifications);
-    pump(&mut view, &feed, &sender, |view| {
+    pump(&mut view, &mut feed, &sender, |view| {
         find(
             view,
             Role::Button,
@@ -85,7 +85,7 @@ fn each_app_that_notified_gets_its_own_rules() {
     assert!(find(&mut view, Role::Switch, "Do Not Disturb").is_none());
     let persistent = find(&mut view, Role::RadioButton, "Persistent").expect("Persistent");
     click(&mut view, persistent);
-    pump(&mut view, &feed, &sender, |_| {
+    pump(&mut view, &mut feed, &sender, |_| {
         server
             .apps()
             .iter()
@@ -93,13 +93,13 @@ fn each_app_that_notified_gets_its_own_rules() {
     });
     let center = find(&mut view, Role::Switch, "Show in Notification Center").expect("switch");
     click(&mut view, center);
-    pump(&mut view, &feed, &sender, |view| {
+    pump(&mut view, &mut feed, &sender, |view| {
         !server.apps()[0].rule.in_center
             && app_summary(view).as_deref() == Some("Persistent banners")
     });
     let allow = find(&mut view, Role::Switch, "Allow notifications").expect("allow");
     click(&mut view, allow);
-    pump(&mut view, &feed, &sender, |view| {
+    pump(&mut view, &mut feed, &sender, |view| {
         !server.apps()[0].rule.allow && app_summary(view).as_deref() == Some("Off")
     });
     assert!(find(&mut view, Role::RadioButton, "Persistent").is_none());

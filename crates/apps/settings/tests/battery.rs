@@ -133,7 +133,7 @@ fn the_battery_pane_shows_the_charge_and_switches_power_modes() {
         .build()
         .expect("fake UPower");
     let system = bus.connect().expect("connection");
-    let (feed, updates) = feed().expect("feed");
+    let (mut feed, updates) = feed().expect("feed");
     let sender = follow_battery(&system, updates);
     let mut view = SettingsView::new(Palette::for_scheme(Scheme::Light), TextSystem::new());
     let deadline = Instant::now() + WAIT;

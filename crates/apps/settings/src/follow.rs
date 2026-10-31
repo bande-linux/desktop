@@ -1,20 +1,21 @@
 use std::collections::BTreeMap;
-use std::io::{self, Read, Write};
-use std::os::fd::{AsFd, BorrowedFd};
-use std::os::unix::net::UnixStream;
+use std::io;
 use std::path::PathBuf;
-use std::sync::Arc;
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::mpsc::{self, Sender};
 use std::thread;
 
+use unbound_bus::follow_properties;
+use unbound_config::client::{INTERFACE, Properties};
 use unbound_config::{BUS_NAME, DisplaySettings, OBJECT_PATH, Placement};
+use unbound_inbox::{Inbox, Outbox};
 use zbus::blocking::Connection;
-use zbus::blocking::fdo::PropertiesProxy;
+use zbus::export::serde::de::DeserializeOwned;
+use zbus::zvariant::{DeserializeDict, Type};
 
 use crate::L10N;
 use crate::about::{About, AboutCommand, follow_about};
 use crate::battery::{BatteryCommand, BatteryState, follow_battery};
-use crate::client::{CONFIG_SETTINGS, SettingsClient};
+use crate::client::{CONFIG_SETTINGS, SettingsClient, arrangements, displays, values};
 use crate::defaults::{DefaultApp, DefaultAppCommand, follow_default_apps};
 use crate::failure::{sentence, unexpected};
 use crate::locale::{LocaleCommand, LocaleState, follow_locale};
@@ -35,6 +36,7 @@ use unbound_settings_panes::{SettingId, Value};
 
 const NOTIFICATIONS: &str = "org.freedesktop.Notifications";
 const NOTIFICATIONS_PATH: &str = "/org/freedesktop/Notifications";
+const NOTIFICATION_CENTER: &str = "org.unbound.NotificationCenter";
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Update {
@@ -87,49 +89,13 @@ pub enum Command {
     ClearClipboard,
 }
 
-pub struct Feed {
-    receiver: Receiver<Update>,
-    wake: UnixStream,
-}
-
-#[derive(Clone)]
-pub struct Updates {
-    sender: Sender<Update>,
-    wake: Arc<UnixStream>,
-}
-
-impl Updates {
-    pub fn send(&self, update: Update) -> bool {
-        self.sender.send(update).is_ok() && (&*self.wake).write_all(&[1]).is_ok()
-    }
-}
+pub type Feed = Inbox<Update>;
+pub type Updates = Outbox<Update>;
 
 pub fn feed() -> io::Result<(Feed, Updates)> {
-    let (reader, writer) = UnixStream::pair()?;
-    reader.set_nonblocking(true)?;
-    let (sender, receiver) = mpsc::channel();
-    Ok((
-        Feed {
-            receiver,
-            wake: reader,
-        },
-        Updates {
-            sender,
-            wake: Arc::new(writer),
-        },
-    ))
-}
-
-impl Feed {
-    pub fn fd(&self) -> BorrowedFd<'_> {
-        self.wake.as_fd()
-    }
-
-    pub fn drain(&self) -> Vec<Update> {
-        let mut bytes = [0; 64];
-        while matches!((&self.wake).read(&mut bytes), Ok(read) if read > 0) {}
-        self.receiver.try_iter().collect()
-    }
+    let feed = Inbox::new()?;
+    let updates = feed.outbox();
+    Ok((feed, updates))
 }
 
 pub fn spawn(name: &str, work: impl FnOnce() + Send + 'static) {
@@ -138,62 +104,67 @@ pub fn spawn(name: &str, work: impl FnOnce() + Send + 'static) {
     }
 }
 
-fn follow_properties(
+#[derive(DeserializeDict, Type)]
+#[zvariant(
+    signature = "a{sv}",
+    rename_all = "PascalCase",
+    crate = "zbus::zvariant"
+)]
+struct NotificationCenter {
+    do_not_disturb: Option<bool>,
+}
+
+fn follow<T: DeserializeOwned + Type>(
     session: &Connection,
-    destination: &'static str,
-    path: &'static str,
+    (destination, path, interface): (&'static str, &'static str, &'static str),
     updates: Updates,
-    read: impl Fn(&SettingsClient) -> Vec<Update> + Send + 'static,
+    mut read: impl FnMut(T) -> Vec<Update> + Send + 'static,
 ) {
     let session = session.clone();
     spawn(destination, move || {
-        let follow = || -> zbus::Result<()> {
-            let client = SettingsClient::connect(&session)?;
-            let changes = PropertiesProxy::builder(&session)
-                .destination(destination)?
-                .path(path)?
-                .build()?
-                .receive_properties_changed()?;
-            let publish = || read(&client).into_iter().all(|update| updates.send(update));
-            if !publish() {
-                return Ok(());
-            }
-            for _ in changes {
-                if !publish() {
-                    break;
-                }
-            }
-            Ok(())
-        };
-        if let Err(error) = follow() {
+        let followed = follow_properties(&session, destination, path, interface, |properties| {
+            read(properties)
+                .into_iter()
+                .all(|update| updates.send(update))
+        });
+        if let Err(error) = followed {
             tracing::warn!("cannot follow {destination}: {error}");
         }
     });
 }
 
+fn config_updates(config: &Properties, ids: &[SettingId]) -> Vec<Update> {
+    let mut read = vec![Update::Values(values(config, ids))];
+    read.extend(displays(config).map(Update::Displays));
+    read.extend(arrangements(config).map(Update::Arrangements));
+    read
+}
+
 pub fn follow_config(session: &Connection, updates: Updates) {
-    follow_properties(session, BUS_NAME, OBJECT_PATH, updates, |client| {
-        let mut read = vec![Update::Values(client.read(&CONFIG_SETTINGS))];
-        match (client.displays(), client.arrangements()) {
-            (Ok(displays), Ok(arrangements)) => {
-                read.push(Update::Displays(displays));
-                read.push(Update::Arrangements(arrangements));
-            }
-            (Err(error), _) | (_, Err(error)) => {
-                tracing::warn!("cannot read the display settings: {error}")
-            }
-        }
-        read
-    });
+    let mut config = Properties::default();
+    follow(
+        session,
+        (BUS_NAME, OBJECT_PATH, INTERFACE),
+        updates,
+        move |changed| {
+            config.update(changed);
+            config_updates(&config, &CONFIG_SETTINGS)
+        },
+    );
 }
 
 pub fn follow_notifications(session: &Connection, updates: Updates) {
-    follow_properties(
+    follow(
         session,
-        NOTIFICATIONS,
-        NOTIFICATIONS_PATH,
+        (NOTIFICATIONS, NOTIFICATIONS_PATH, NOTIFICATION_CENTER),
         updates,
-        |client| vec![Update::Values(client.read(&[SettingId::DoNotDisturb]))],
+        |center: NotificationCenter| {
+            center
+                .do_not_disturb
+                .map(|on| Update::Values(vec![(SettingId::DoNotDisturb, Value::Flag(on))]))
+                .into_iter()
+                .collect()
+        },
     );
 }
 
@@ -248,11 +219,13 @@ pub fn worker(session: &Connection, updates: Updates) -> Sender<Command> {
                         sentence(&error, "service-desktop"),
                     ));
                     updates.send(Update::Values(client.read(&restore)));
-                    if let Ok(displays) = client.displays() {
-                        updates.send(Update::Displays(displays));
-                    }
-                    if let Ok(arrangements) = client.arrangements() {
-                        updates.send(Update::Arrangements(arrangements));
+                    if let Ok(config) = client.properties() {
+                        if let Some(displays) = displays(&config) {
+                            updates.send(Update::Displays(displays));
+                        }
+                        if let Some(arrangements) = arrangements(&config) {
+                            updates.send(Update::Arrangements(arrangements));
+                        }
                     }
                 }
             }

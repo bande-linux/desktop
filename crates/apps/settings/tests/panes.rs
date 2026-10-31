@@ -96,7 +96,7 @@ impl Router {
 
 fn pump(
     view: &mut SettingsView,
-    feed: &Feed,
+    feed: &mut Feed,
     router: &Router,
     done: impl Fn(&mut SettingsView) -> bool,
 ) {
@@ -122,13 +122,13 @@ fn wifi_lists_networks_joins_open_ones_and_asks_for_passwords() {
     let bus = SessionBus::start().expect("dbus-daemon");
     let fake = FakeNetworkManager::start(&bus).expect("fake NetworkManager");
     let system = bus.connect().expect("system connection");
-    let (feed, updates) = feed().expect("feed");
+    let (mut feed, updates) = feed().expect("feed");
     let router = Router {
         network: Some(follow_network(&system, updates)),
         bluetooth: None,
     };
     let mut view = view();
-    pump(&mut view, &feed, &router, |view| {
+    pump(&mut view, &mut feed, &router, |view| {
         view.visible_panes().contains(&PaneId::Wifi)
     });
     open(&mut view, "Wi-Fi");
@@ -139,10 +139,10 @@ fn wifi_lists_networks_joins_open_ones_and_asks_for_passwords() {
 
     let cafe = find(&mut view, Role::Button, "Cafe").expect("Cafe row");
     click(&mut view, cafe);
-    pump(&mut view, &feed, &router, |_| {
+    pump(&mut view, &mut feed, &router, |_| {
         fake.saved_ssids().contains(&b"Cafe".to_vec())
     });
-    pump(&mut view, &feed, &router, |view| {
+    pump(&mut view, &mut feed, &router, |view| {
         has_text(view, "Cafe, Saved")
     });
     assert!(fake.scans() >= 1);
@@ -158,7 +158,7 @@ fn wifi_lists_networks_joins_open_ones_and_asks_for_passwords() {
         press(&mut view, Key::Character(character));
     }
     press(&mut view, Key::Enter);
-    pump(&mut view, &feed, &router, |view| {
+    pump(&mut view, &mut feed, &router, |view| {
         has_text(view, "The password is not correct")
     });
     assert!(!fake.saved_ssids().contains(&b"Modern".to_vec()));
@@ -168,10 +168,10 @@ fn wifi_lists_networks_joins_open_ones_and_asks_for_passwords() {
 
     let power = find(&mut view, Role::Switch, "Wi-Fi").expect("Wi-Fi switch");
     click(&mut view, power);
-    pump(&mut view, &feed, &router, |_| {
+    pump(&mut view, &mut feed, &router, |_| {
         !fake.wireless_enabled().expect("manager")
     });
-    pump(&mut view, &feed, &router, |view| {
+    pump(&mut view, &mut feed, &router, |view| {
         find(view, Role::Button, "Cafe").is_none()
     });
     assert!(has_text(&mut view, "Wi-Fi is off"));
@@ -179,10 +179,10 @@ fn wifi_lists_networks_joins_open_ones_and_asks_for_passwords() {
 
     let power = find(&mut view, Role::Switch, "Wi-Fi").expect("Wi-Fi switch");
     click(&mut view, power);
-    pump(&mut view, &feed, &router, |_| {
+    pump(&mut view, &mut feed, &router, |_| {
         fake.wireless_enabled().expect("manager")
     });
-    pump(&mut view, &feed, &router, |view| {
+    pump(&mut view, &mut feed, &router, |view| {
         find(view, Role::Button, "Cafe").is_some()
     });
     assert!(!has_text(&mut view, "Wi-Fi is off"));
@@ -193,45 +193,45 @@ fn bluetooth_pairs_after_the_code_is_confirmed_in_settings() {
     let bus = SessionBus::start().expect("dbus-daemon");
     let fake = FakeBluez::start(&bus).expect("fake BlueZ");
     let system = bus.connect().expect("system connection");
-    let (feed, updates) = feed().expect("feed");
+    let (mut feed, updates) = feed().expect("feed");
     let router = Router {
         network: None,
         bluetooth: Some(follow_bluetooth(&system, updates)),
     };
     let mut view = view();
-    pump(&mut view, &feed, &router, |view| {
+    pump(&mut view, &mut feed, &router, |view| {
         view.visible_panes().contains(&PaneId::Bluetooth)
     });
     open(&mut view, "Bluetooth");
-    pump(&mut view, &feed, &router, |_| {
+    pump(&mut view, &mut feed, &router, |_| {
         fake.discovering().expect("adapter")
     });
     assert!(has_text(&mut view, "Studio Headphones, Connected"));
 
     let connect = button_in_row(&mut view, "mouse", "Connect");
     click(&mut view, connect);
-    pump(&mut view, &feed, &router, |view| {
+    pump(&mut view, &mut feed, &router, |view| {
         has_text(view, "mouse, Connected")
     });
 
     let pair = button_in_row(&mut view, "Phone", "Pair");
     click(&mut view, pair);
-    pump(&mut view, &feed, &router, |view| {
+    pump(&mut view, &mut feed, &router, |view| {
         has_text(view, "Does Phone show the code 123456?")
     });
     let accept = button_in_row(&mut view, "Does Phone", "Pair");
     click(&mut view, accept);
-    pump(&mut view, &feed, &router, |_| {
+    pump(&mut view, &mut feed, &router, |_| {
         fake.device(PHONE).expect("phone").paired
     });
-    pump(&mut view, &feed, &router, |view| {
+    pump(&mut view, &mut feed, &router, |view| {
         has_text(view, "Phone, Connected")
     });
     assert!(!has_text(&mut view, "Does Phone"));
 
     let off = find(&mut view, Role::Switch, "Bluetooth").expect("switch");
     click(&mut view, off);
-    pump(&mut view, &feed, &router, |_| {
+    pump(&mut view, &mut feed, &router, |_| {
         !fake.powered().expect("adapter")
     });
 }

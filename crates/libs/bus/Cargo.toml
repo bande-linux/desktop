@@ -9,6 +9,7 @@ repository.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]
+serde.workspace = true
 unbound-test-bus.workspace = true
 
 [lints]

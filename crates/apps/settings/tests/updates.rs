@@ -169,11 +169,11 @@ fn updates_are_listed_with_sizes_installed_and_a_kernel_asks_for_a_restart() {
         ])
     );
 
-    let (feed, updates) = feed().expect("feed");
+    let (mut feed, updates) = feed().expect("feed");
     let sender = follow_software(&system, updates);
     let mut view = SettingsView::new(Palette::for_scheme(Scheme::Light), TextSystem::new());
     view.select_pane(PaneId::SoftwareUpdate);
-    let pump = |view: &mut SettingsView, done: &dyn Fn(&mut SettingsView) -> bool| {
+    let mut pump = |view: &mut SettingsView, done: &dyn Fn(&mut SettingsView) -> bool| {
         let deadline = Instant::now() + WAIT;
         loop {
             for update in feed.drain() {

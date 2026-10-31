@@ -9,7 +9,7 @@ use unbound_test_bus::SessionBus;
 
 const WAIT: Duration = Duration::from_secs(5);
 
-fn wait_for(feed: &Feed, wanted: impl Fn(&Update) -> bool) -> Update {
+fn wait_for(feed: &mut Feed, wanted: impl Fn(&Update) -> bool) -> Update {
     let deadline = Instant::now() + WAIT;
     loop {
         if let Some(update) = feed.drain().into_iter().find(|update| wanted(update)) {
@@ -38,13 +38,13 @@ fn edits_from_anywhere_arrive_live_and_failed_writes_are_reported() {
     )
     .expect("config service");
     let session = bus.connect().expect("client connection");
-    let (feed, updates) = feed().expect("feed");
+    let (mut feed, updates) = feed().expect("feed");
     follow_config(&session, updates.clone());
     let commands = worker(&session, updates);
 
     let dark = Value::Keyword("dark".to_owned());
     let light = Value::Keyword("light".to_owned());
-    wait_for(&feed, |update| {
+    wait_for(&mut feed, |update| {
         has(
             update,
             SettingId::Appearance,
@@ -53,17 +53,21 @@ fn edits_from_anywhere_arrive_live_and_failed_writes_are_reported() {
     });
 
     std::fs::write(&path, "appearance \"dark\"\n").expect("edit by hand");
-    wait_for(&feed, |update| has(update, SettingId::Appearance, &dark));
+    wait_for(&mut feed, |update| {
+        has(update, SettingId::Appearance, &dark)
+    });
 
     commands
         .send(Command::Set(SettingId::Appearance, light.clone()))
         .expect("worker");
-    wait_for(&feed, |update| has(update, SettingId::Appearance, &light));
+    wait_for(&mut feed, |update| {
+        has(update, SettingId::Appearance, &light)
+    });
 
     commands
         .send(Command::Set(SettingId::KeyRepeatRate, Value::Number(500)))
         .expect("worker");
-    wait_for(&feed, |update| {
+    wait_for(&mut feed, |update| {
         matches!(update, Update::Failed(Some(SettingId::KeyRepeatRate), _))
     });
 }

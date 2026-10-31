@@ -8,6 +8,7 @@ repository.workspace = true
 [dependencies]
 image.workspace = true
 resvg.workspace = true
+unbound-bus.workspace = true
 unbound-config.workspace = true
 unbound-inbox.workspace = true
 tracing.workspace = true

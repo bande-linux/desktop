@@ -12,7 +12,8 @@ use crate::menus::{
     AppMenus, app_menu, battery_menu, bluetooth_menu, cascade, input_source_menu, sound_menu,
     system_menu, wifi_menu,
 };
-use unbound_config::client::ConfigProxy;
+use unbound_bus::follow_properties;
+use unbound_config::client::{ConfigProxy, INTERFACE, Properties};
 use unbound_config::{BUS_NAME, BarEdge, MenuBarPlacement, OBJECT_PATH};
 use unbound_datetime::DateFormats;
 use unbound_inbox::{Inbox, Outbox};
@@ -34,7 +35,6 @@ use unbound_xdg::{
     remember_running_apps, spawn_detached,
 };
 use zbus::blocking::Connection;
-use zbus::blocking::fdo::PropertiesProxy;
 
 use crate::menu_search_client::SharedHandoff;
 use crate::surfaces::{Display, NotificationCenter, Services};
@@ -800,29 +800,31 @@ fn config(session: &Connection) -> zbus::Result<ConfigProxy<'static>> {
 }
 
 fn follow_config(session: &Connection, outbox: &Outbox<Update>) -> zbus::Result<()> {
-    let config = config(session)?;
-    let changes = PropertiesProxy::builder(session)
-        .destination(BUS_NAME)?
-        .path(OBJECT_PATH)?
-        .build()?
-        .receive_properties_changed()?;
-    let publish = || -> zbus::Result<bool> {
-        Ok(
-            outbox.send(Update::BatteryPercentage(config.show_battery_percentage()?))
-                && outbox.send(Update::ClockFormat(config.clock_format()?))
-                && outbox.send(Update::BarLayout {
-                    menu_bar: config.bar_menu_bar()?,
-                    edge: config.bar_edge()?,
-                }),
-        )
-    };
-    if !publish()? {
-        return Ok(());
-    }
-    for _ in changes {
-        if !publish()? {
-            break;
-        }
-    }
-    Ok(())
+    let mut config = Properties::default();
+    follow_properties(
+        session,
+        BUS_NAME,
+        OBJECT_PATH,
+        INTERFACE,
+        |changed: Properties| {
+            let layout_changed = changed.bar_menu_bar.is_some() || changed.bar_edge.is_some();
+            let mut updates = Vec::new();
+            updates.extend(
+                changed
+                    .show_battery_percentage
+                    .map(Update::BatteryPercentage),
+            );
+            updates.extend(changed.clock_format.clone().map(Update::ClockFormat));
+            config.update(changed);
+            if layout_changed
+                && let (Some(menu_bar), Some(edge)) = (&config.bar_menu_bar, &config.bar_edge)
+            {
+                updates.push(Update::BarLayout {
+                    menu_bar: menu_bar.clone(),
+                    edge: edge.clone(),
+                });
+            }
+            updates.into_iter().all(|update| outbox.send(update))
+        },
+    )
 }

@@ -1,7 +1,8 @@
 use std::collections::{BTreeMap, HashMap};
 
-use unbound_config::client::ConfigProxy;
-use unbound_config::{DisplaySettings, Placement, Rotation};
+use unbound_bus::get_all;
+use unbound_config::client::{ConfigProxy, INTERFACE, Properties};
+use unbound_config::{BUS_NAME, DisplaySettings, OBJECT_PATH, Placement, Rotation};
 use unbound_datetime::DateFormats;
 use unbound_notify::client::NotificationCenter;
 use zbus::blocking::Connection;
@@ -77,6 +78,112 @@ pub const CONFIG_SETTINGS: [SettingId; 41] = [
     SettingId::VolumeFeedback,
 ];
 
+fn value(id: SettingId, config: &Properties) -> Option<Value> {
+    let flag = |field: Option<bool>| field.map(Value::Flag);
+    let keyword = |field: &Option<String>| field.clone().map(Value::Keyword);
+    match id {
+        SettingId::Appearance => keyword(&config.appearance),
+        SettingId::ScreenReader => flag(config.screen_reader),
+        SettingId::Zoom => config.zoom.map(|zoom| Value::Flag(zoom > 1.0)),
+        SettingId::IncreaseContrast => flag(config.increase_contrast),
+        SettingId::ReduceTransparency => flag(config.reduce_transparency),
+        SettingId::ReduceMotion => flag(config.reduce_motion),
+        SettingId::CursorSize => config.cursor_size.map(Value::Number),
+        SettingId::FlashScreen => flag(config.flash_screen),
+        SettingId::StickyKeys => flag(config.sticky_keys),
+        SettingId::SlowKeys => flag(config.slow_keys),
+        SettingId::BounceKeys => flag(config.bounce_keys),
+        SettingId::Accent => keyword(&config.accent),
+        SettingId::TintedFrame => flag(config.tinted_frame),
+        SettingId::LowPowerOnBattery => flag(config.low_power_on_battery),
+        SettingId::LidOnPower => keyword(&config.lid_on_power),
+        SettingId::Clock24Hour => config.clock_format.as_deref().map(|format| {
+            Value::Flag(match format {
+                "24-hour" => true,
+                "12-hour" => false,
+                _ => DateFormats::from_env().uses_24_hour_clock(),
+            })
+        }),
+        SettingId::Wallpaper => Some(Value::Pictures {
+            light: config.wallpaper_light.clone()?,
+            dark: config.wallpaper_dark.clone()?,
+        }),
+        SettingId::WallpaperFit => keyword(&config.wallpaper_fit),
+        SettingId::BarIconSize => config.bar_icon_size.map(Value::Number),
+        SettingId::BarAutoHide => flag(config.bar_auto_hide),
+        SettingId::BarNames => flag(config.bar_names),
+        SettingId::BarEdge => keyword(&config.bar_edge),
+        SettingId::BarMenuBar => keyword(&config.bar_menu_bar),
+        SettingId::DimAfter => config.idle_dim_after.map(Value::Seconds),
+        SettingId::LockAfter => config.idle_lock_after.map(Value::Seconds),
+        SettingId::SleepAfter => match config.idle_suspend_with_display? {
+            true => Some(Value::Keyword(WITH_DISPLAY.to_owned())),
+            false => config.idle_suspend_after.map(Value::Seconds),
+        },
+        SettingId::KeyRepeatRate => config.key_repeat_rate.map(Value::Number),
+        SettingId::KeyRepeatDelay => config.key_repeat_delay.map(Value::Number),
+        SettingId::InputSources => config.input_sources.clone().map(Value::Codes),
+        SettingId::CapsLock => keyword(&config.caps_lock),
+        SettingId::TrackpadTapToClick => flag(config.trackpad_tap_to_click),
+        SettingId::TrackpadNaturalScrolling => flag(config.trackpad_natural_scrolling),
+        SettingId::TrackpadSpeed => config
+            .trackpad_speed
+            .map(|speed| Value::Number(speed_stop(speed))),
+        SettingId::TrackpadSecondaryClick => keyword(&config.trackpad_secondary_click),
+        SettingId::TrackpadDisableWhileTyping => flag(config.trackpad_disable_while_typing),
+        SettingId::MouseNaturalScrolling => flag(config.mouse_natural_scrolling),
+        SettingId::MouseSpeed => config
+            .mouse_speed
+            .map(|speed| Value::Number(speed_stop(speed))),
+        SettingId::AlertSound => keyword(&config.alert_sound),
+        SettingId::AlertVolume => config
+            .alert_volume
+            .map(|volume| Value::Fraction(volume as f32)),
+        SettingId::SoundEffects => flag(config.sound_effects),
+        SettingId::VolumeFeedback => flag(config.volume_feedback),
+        _ => None,
+    }
+}
+
+pub fn values(config: &Properties, ids: &[SettingId]) -> Vec<(SettingId, Value)> {
+    ids.iter()
+        .filter_map(|id| Some((*id, value(*id, config)?)))
+        .collect()
+}
+
+pub fn displays(config: &Properties) -> Option<BTreeMap<String, DisplaySettings>> {
+    Some(
+        config
+            .displays
+            .as_ref()?
+            .iter()
+            .map(|(identity, settings)| (identity.clone(), display_settings(settings)))
+            .collect(),
+    )
+}
+
+pub fn arrangements(config: &Properties) -> Option<Vec<Vec<Placement>>> {
+    Some(
+        config
+            .arrangements
+            .as_ref()?
+            .iter()
+            .map(|arranged| {
+                arranged
+                    .iter()
+                    .map(|(display, x, y, main, mirror)| Placement {
+                        display: display.clone(),
+                        x: *x,
+                        y: *y,
+                        main: *main,
+                        mirror: (!mirror.is_empty()).then(|| mirror.clone()),
+                    })
+                    .collect()
+            })
+            .collect(),
+    )
+}
+
 const ZOOM_WHEN_TURNED_ON: f64 = 2.0;
 
 pub fn speed_stop(speed: f64) -> u32 {
@@ -106,15 +213,6 @@ impl SettingsClient {
         })
     }
 
-    pub fn displays(&self) -> zbus::Result<BTreeMap<String, DisplaySettings>> {
-        Ok(self
-            .config
-            .displays()?
-            .iter()
-            .map(|(identity, settings)| (identity.clone(), display_settings(settings)))
-            .collect())
-    }
-
     pub fn set_display(&self, identity: &str, display: &DisplaySettings) -> zbus::Result<()> {
         let mut settings = HashMap::new();
         if let Some(resolution) = display.resolution {
@@ -135,26 +233,6 @@ impl SettingsClient {
         self.config.set_display(identity, settings)
     }
 
-    pub fn arrangements(&self) -> zbus::Result<Vec<Vec<Placement>>> {
-        Ok(self
-            .config
-            .arrangements()?
-            .into_iter()
-            .map(|arranged| {
-                arranged
-                    .into_iter()
-                    .map(|(display, x, y, main, mirror)| Placement {
-                        display,
-                        x,
-                        y,
-                        main,
-                        mirror: (!mirror.is_empty()).then_some(mirror),
-                    })
-                    .collect()
-            })
-            .collect())
-    }
-
     pub fn set_arrangement(&self, placements: &[Placement]) -> zbus::Result<()> {
         self.config.set_arrangement(
             placements
@@ -172,81 +250,30 @@ impl SettingsClient {
         )
     }
 
-    pub fn get(&self, id: SettingId) -> zbus::Result<Value> {
-        Ok(match id {
-            SettingId::DoNotDisturb => Value::Flag(self.notifications.do_not_disturb()?),
-            SettingId::Appearance => Value::Keyword(self.config.appearance()?),
-            SettingId::ScreenReader => Value::Flag(self.config.screen_reader()?),
-            SettingId::Zoom => Value::Flag(self.config.zoom()? > 1.0),
-            SettingId::IncreaseContrast => Value::Flag(self.config.increase_contrast()?),
-            SettingId::ReduceTransparency => Value::Flag(self.config.reduce_transparency()?),
-            SettingId::ReduceMotion => Value::Flag(self.config.reduce_motion()?),
-            SettingId::CursorSize => Value::Number(self.config.cursor_size()?),
-            SettingId::FlashScreen => Value::Flag(self.config.flash_screen()?),
-            SettingId::StickyKeys => Value::Flag(self.config.sticky_keys()?),
-            SettingId::SlowKeys => Value::Flag(self.config.slow_keys()?),
-            SettingId::BounceKeys => Value::Flag(self.config.bounce_keys()?),
-            SettingId::Accent => Value::Keyword(self.config.accent()?),
-            SettingId::TintedFrame => Value::Flag(self.config.tinted_frame()?),
-            SettingId::LowPowerOnBattery => Value::Flag(self.config.low_power_on_battery()?),
-            SettingId::LidOnPower => Value::Keyword(self.config.lid_on_power()?),
-            SettingId::Clock24Hour => Value::Flag(match self.config.clock_format()?.as_str() {
-                "24-hour" => true,
-                "12-hour" => false,
-                _ => DateFormats::from_env().uses_24_hour_clock(),
-            }),
-            SettingId::Wallpaper => Value::Pictures {
-                light: self.config.wallpaper_light()?,
-                dark: self.config.wallpaper_dark()?,
-            },
-            SettingId::WallpaperFit => Value::Keyword(self.config.wallpaper_fit()?),
-            SettingId::BarIconSize => Value::Number(self.config.bar_icon_size()?),
-            SettingId::BarAutoHide => Value::Flag(self.config.bar_auto_hide()?),
-            SettingId::BarNames => Value::Flag(self.config.bar_names()?),
-            SettingId::BarEdge => Value::Keyword(self.config.bar_edge()?),
-            SettingId::BarMenuBar => Value::Keyword(self.config.bar_menu_bar()?),
-            SettingId::DimAfter => Value::Seconds(self.config.idle_dim_after()?),
-            SettingId::LockAfter => Value::Seconds(self.config.idle_lock_after()?),
-            SettingId::SleepAfter if self.config.idle_suspend_with_display()? => {
-                Value::Keyword(WITH_DISPLAY.to_owned())
-            }
-            SettingId::SleepAfter => Value::Seconds(self.config.idle_suspend_after()?),
-            SettingId::KeyRepeatRate => Value::Number(self.config.key_repeat_rate()?),
-            SettingId::KeyRepeatDelay => Value::Number(self.config.key_repeat_delay()?),
-            SettingId::InputSources => Value::Codes(self.config.input_sources()?),
-            SettingId::CapsLock => Value::Keyword(self.config.caps_lock()?),
-            SettingId::TrackpadTapToClick => Value::Flag(self.config.trackpad_tap_to_click()?),
-            SettingId::TrackpadNaturalScrolling => {
-                Value::Flag(self.config.trackpad_natural_scrolling()?)
-            }
-            SettingId::TrackpadSpeed => Value::Number(speed_stop(self.config.trackpad_speed()?)),
-            SettingId::TrackpadSecondaryClick => {
-                Value::Keyword(self.config.trackpad_secondary_click()?)
-            }
-            SettingId::TrackpadDisableWhileTyping => {
-                Value::Flag(self.config.trackpad_disable_while_typing()?)
-            }
-            SettingId::MouseNaturalScrolling => Value::Flag(self.config.mouse_natural_scrolling()?),
-            SettingId::MouseSpeed => Value::Number(speed_stop(self.config.mouse_speed()?)),
-            SettingId::AlertSound => Value::Keyword(self.config.alert_sound()?),
-            SettingId::AlertVolume => Value::Fraction(self.config.alert_volume()? as f32),
-            SettingId::SoundEffects => Value::Flag(self.config.sound_effects()?),
-            SettingId::VolumeFeedback => Value::Flag(self.config.volume_feedback()?),
-            _ => return Err(zbus::Error::Unsupported),
-        })
+    pub fn properties(&self) -> zbus::Result<Properties> {
+        get_all(
+            self.config.inner().connection(),
+            BUS_NAME,
+            OBJECT_PATH,
+            INTERFACE,
+        )
     }
 
     pub fn read(&self, ids: &[SettingId]) -> Vec<(SettingId, Value)> {
-        ids.iter()
-            .copied()
-            .filter_map(|id| match self.get(id) {
-                Ok(value) => Some((id, value)),
-                Err(error) => {
-                    tracing::warn!("cannot read {id:?}: {error}");
-                    None
-                }
-            })
-            .collect()
+        let mut read = match self.properties() {
+            Ok(config) => values(&config, ids),
+            Err(error) => {
+                tracing::warn!("cannot read the settings: {error}");
+                Vec::new()
+            }
+        };
+        if ids.contains(&SettingId::DoNotDisturb) {
+            match self.notifications.do_not_disturb() {
+                Ok(on) => read.push((SettingId::DoNotDisturb, Value::Flag(on))),
+                Err(error) => tracing::warn!("cannot read Do Not Disturb: {error}"),
+            }
+        }
+        read
     }
 
     pub fn set(&self, id: SettingId, value: &Value) -> zbus::Result<()> {

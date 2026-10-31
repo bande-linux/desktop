@@ -303,6 +303,7 @@ fn a_low_battery_and_the_wifi_show_in_the_top_right_corner() {
     let wifi = Wifi {
         enabled: true,
         networks: Vec::new(),
+        sign_in: false,
     };
 
     assert!(screen.set_devices(Some(battery), Some(&wifi)));

@@ -13,5 +13,8 @@ icu_locale_core.workspace = true
 jiff.workspace = true
 rustix = { workspace = true, features = ["time"] }
 
+[dev-dependencies]
+tempfile.workspace = true
+
 [lints]
 workspace = true

@@ -450,7 +450,7 @@ impl Table {
         }
         for key in &changed {
             let mut turn = Animated::new(if expanded { 0.0 } else { 1.0 });
-            turn.animate_to(cx, if expanded { 1.0 } else { 0.0 }, Spring::QUICK);
+            cx.animate(&mut turn, if expanded { 1.0 } else { 0.0 }, Spring::QUICK);
             self.turns.insert(key.clone(), turn);
         }
         self.change_expansion(at, &changed, expanded);
@@ -517,7 +517,7 @@ impl Table {
 
     fn turn(&self, cx: &Context, line: &Line) -> f32 {
         match self.turns.get(&line.key) {
-            Some(turn) => turn.value(cx),
+            Some(turn) => cx.sample(turn),
             None => match self.expanded.contains(&line.key) {
                 true => 1.0,
                 false => 0.0,
@@ -1114,7 +1114,7 @@ impl Widget for Table {
         self.offset = self.scroll.offset(cx);
         self.follow_selection(cx);
         self.turns
-            .retain(|_, turn| (turn.value(cx) - turn.target()).abs() > f32::EPSILON);
+            .retain(|_, turn| (cx.sample(turn) - turn.target()).abs() > f32::EPSILON);
         let (first, last) = self.visible_rows(cx);
         self.prepare_texts(cx, first, last);
         self.titles = self

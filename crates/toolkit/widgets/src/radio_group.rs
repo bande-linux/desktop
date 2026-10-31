@@ -63,9 +63,9 @@ impl RadioGroup {
             return;
         }
         if let Some(previous) = self.selected.and_then(|index| self.choices.get_mut(index)) {
-            previous.shown.animate_to(cx, 0.0, Spring::QUICK);
+            cx.animate(&mut previous.shown, 0.0, Spring::QUICK);
         }
-        self.choices[index].shown.animate_to(cx, 1.0, Spring::QUICK);
+        cx.animate(&mut self.choices[index].shown, 1.0, Spring::QUICK);
         self.selected = Some(index);
         (self.on_select)(index);
     }
@@ -135,7 +135,7 @@ impl Widget for RadioGroup {
         let focused = cx.is_focused(self.id);
         for (index, choice) in self.choices.iter().enumerate() {
             let circle = Self::circle(choice.frame);
-            let shown = choice.shown.value(cx);
+            let shown = cx.sample(&choice.shown);
             paint_box(
                 cx,
                 circle,

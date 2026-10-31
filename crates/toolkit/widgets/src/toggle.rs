@@ -32,8 +32,11 @@ impl Toggle {
 
     fn flip(&mut self, cx: &Context) {
         self.on = !self.on;
-        self.knob
-            .animate_to(cx, if self.on { 1.0 } else { 0.0 }, Spring::QUICK);
+        cx.animate(
+            &mut self.knob,
+            if self.on { 1.0 } else { 0.0 },
+            Spring::QUICK,
+        );
         (self.on_change)(self.on);
     }
 }
@@ -57,7 +60,7 @@ impl Widget for Toggle {
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
         let track = Shape::rounded(self.frame, self.frame.height / 2.0);
-        let progress = self.knob.value(cx);
+        let progress = cx.sample(&self.knob);
         items.push(Item::Fill {
             shape: track,
             paint: cx.palette.edge.mix(cx.palette.accent, progress).into(),

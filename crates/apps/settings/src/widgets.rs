@@ -2105,7 +2105,7 @@ impl Widget for Fade {
         let mut crossfade = self.crossfade.borrow_mut();
         let alpha = crossfade
             .progress
-            .map_or(1.0, |progress| progress.value(cx).clamp(0.0, 1.0));
+            .map_or(1.0, |progress| cx.sample(&progress).clamp(0.0, 1.0));
         if alpha >= 1.0 {
             crossfade.progress = None;
             crossfade.before.clone_from(&after);

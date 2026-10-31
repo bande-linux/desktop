@@ -69,8 +69,11 @@ impl Slider {
             return;
         }
         self.value = value.clamp(self.range.0, self.range.1);
-        self.knob
-            .animate_to(cx, fraction(self.value, self.range), Spring::INTERACTIVE);
+        cx.animate(
+            &mut self.knob,
+            fraction(self.value, self.range),
+            Spring::INTERACTIVE,
+        );
     }
 
     fn has_detents(&self) -> bool {
@@ -81,7 +84,7 @@ impl Slider {
         let value = self.detent(value.clamp(self.range.0, self.range.1));
         let shown = fraction(value, self.range);
         match glide {
-            true => self.knob.animate_to(cx, shown, Spring::INTERACTIVE),
+            true => cx.animate(&mut self.knob, shown, Spring::INTERACTIVE),
             false => self.knob.jump_to(shown),
         }
         if value != self.value {
@@ -164,7 +167,7 @@ impl Widget for Slider {
                 });
             }
         }
-        let filled = length * self.knob.value(cx).clamp(0.0, 1.0);
+        let filled = length * cx.sample(&self.knob).clamp(0.0, 1.0);
         items.push(Item::Fill {
             shape: Shape::rounded(
                 Rect::new(start, track_y, filled, TRACK_HEIGHT),

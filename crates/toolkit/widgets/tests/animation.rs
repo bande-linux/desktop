@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use unbound_graphics::{Appearance, Item, Palette, Scheme, TextSystem};
 use unbound_widgets::{
-    Animated, Context, Event, FrameTime, Key, Modifiers, Spring, Toggle, Ui, Widget, set_frame_time,
+    Context, Event, FrameTime, Key, Modifiers, Toggle, Ui, Widget, set_frame_time,
 };
 
 struct Clock(Rc<Cell<Instant>>);
@@ -143,34 +143,5 @@ fn an_animation_started_by_input_moves_on_its_first_frame_by_one_refresh() {
     assert!(
         knob_x(&mut ui) > first,
         "each frame is sampled at its presentation"
-    );
-}
-
-#[test]
-fn a_glide_stops_asking_for_frames_once_the_rest_of_its_motion_is_invisible() {
-    let start = Instant::now();
-    let refresh = Duration::from_micros(8333);
-    let settled_after = |mut animated: Animated, target: f32| {
-        animated.animate_at(start, false, target, Spring::QUICK);
-        let mut last_moving = 0.0;
-        for frame in 1..1000 {
-            let (value, moving) = animated.value_at(start + refresh * frame);
-            if !moving {
-                assert_eq!(value, target);
-                return target - last_moving;
-            }
-            last_moving = value;
-        }
-        panic!("the animation never settled");
-    };
-    let snap = settled_after(Animated::points(0.0), 100.0);
-    assert!(
-        (0.005..0.1).contains(&snap),
-        "a glide stops once the rest of its motion is a fraction of a pixel: {snap}"
-    );
-    let step = settled_after(Animated::new(0.0), 1.0);
-    assert!(
-        (0.0002..1.0 / 255.0).contains(&step),
-        "a fade stops once the rest of it is below one shade: {step}"
     );
 }

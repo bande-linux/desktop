@@ -187,7 +187,7 @@ impl Authorization {
 
     fn shake(&mut self, cx: &Context) {
         self.shake.jump_to(SHAKE_DISTANCE);
-        self.shake.animate_to(cx, 0.0, Spring::SHAKE);
+        cx.animate(&mut self.shake, 0.0, Spring::SHAKE);
     }
 
     fn paint_lock(&self, cx: &Context, items: &mut Vec<Item>) {
@@ -307,7 +307,7 @@ impl Widget for Authorization {
     }
 
     fn place(&mut self, cx: &mut Context, frame: Rect) {
-        let offset = self.shake.value(cx).round();
+        let offset = cx.sample(&self.shake).round();
         self.frame = Rect::new(frame.x + offset, frame.y, frame.width, frame.height);
         let frame = self.frame;
         let x = frame.x + self.text_x();

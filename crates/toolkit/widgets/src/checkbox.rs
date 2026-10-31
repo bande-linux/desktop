@@ -59,7 +59,7 @@ impl Checkbox {
 
     fn set_state(&mut self, cx: &Context, state: CheckState) {
         self.state = state;
-        self.shown.animate_to(cx, level(state), Spring::QUICK);
+        cx.animate(&mut self.shown, level(state), Spring::QUICK);
     }
 
     fn toggle(&mut self, cx: &Context) {
@@ -147,7 +147,7 @@ impl Widget for Checkbox {
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
         let rect = self.box_rect();
-        let shown = self.shown.value(cx);
+        let shown = cx.sample(&self.shown);
         paint_box(cx, rect, Radius::XS, shown, self.pressed, items);
         if cx.is_focused(self.id) {
             super::focus_ring(cx, Shape::rounded(rect, Radius::XS), items);

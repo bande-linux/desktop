@@ -216,7 +216,7 @@ impl Table {
         match &self.glide {
             Some(glide) => {
                 let centre = (index as f32 + 0.5) * self.row_height();
-                glide.top.value(cx) <= centre && centre < glide.bottom.value(cx)
+                cx.sample(&glide.top) <= centre && centre < cx.sample(&glide.bottom)
             }
             None => self.selected.get(index).copied().unwrap_or(false),
         }
@@ -236,8 +236,8 @@ impl Table {
             Some(glide) if glide.run == run => {}
             Some(glide) => {
                 glide.run = run;
-                glide.top.animate_to(cx, top, Spring::QUICK);
-                glide.bottom.animate_to(cx, bottom, Spring::QUICK);
+                cx.animate(&mut glide.top, top, Spring::QUICK);
+                cx.animate(&mut glide.bottom, bottom, Spring::QUICK);
             }
             None => {
                 self.glide = Some(Glide {
@@ -262,7 +262,7 @@ impl Table {
             false => cx.palette.well,
         };
         let spans: Vec<(f32, f32)> = match &self.glide {
-            Some(glide) => vec![(glide.top.value(cx), glide.bottom.value(cx))],
+            Some(glide) => vec![(cx.sample(&glide.top), cx.sample(&glide.bottom))],
             None => self
                 .runs()
                 .into_iter()

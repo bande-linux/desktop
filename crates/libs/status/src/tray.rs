@@ -175,7 +175,7 @@ fn register(connection: &Connection, name: &str) {
     }
 }
 
-pub fn host(connection: &Connection, outbox: &Outbox<Update>) -> zbus::Result<()> {
+pub(crate) fn host(connection: &Connection, outbox: &Outbox<Update>) -> zbus::Result<()> {
     let name = format!("org.kde.StatusNotifierHost-{}", process::id());
     DBusProxy::new(connection)?.request_name(
         name.as_str().try_into()?,
@@ -302,7 +302,11 @@ fn layout(connection: &Connection, key: &str, parent: i32) -> zbus::Result<Node>
     Ok(tree(root))
 }
 
-pub fn run_errands(connection: &Connection, errands: &Receiver<Errand>, outbox: &Outbox<Update>) {
+pub(crate) fn run_errands(
+    connection: &Connection,
+    errands: &Receiver<Errand>,
+    outbox: &Outbox<Update>,
+) {
     for errand in errands {
         let result = match errand {
             Errand::ShowMenu { menu, parent } => layout(connection, &menu, parent).map(|root| {

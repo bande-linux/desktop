@@ -1,0 +1,233 @@
+use std::mem::{Discriminant, discriminant};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, Sender};
+use std::sync::{Arc, Mutex, MutexGuard};
+use std::thread;
+
+use rustix::event::{PollFd, PollFlags, poll};
+use unbound_audio::Audio;
+use unbound_inbox::{Inbox, Outbox};
+use zbus::blocking::Connection;
+
+use crate::Update;
+use crate::clock::follow_minutes;
+use crate::devices::{Control, SoundControl, follow_devices, follow_sound};
+use crate::tray::{Errand, host, run_errands};
+use crate::unread::follow_unread;
+
+#[derive(Default)]
+struct Relay {
+    subscribers: Vec<Outbox<Update>>,
+    latest: Vec<(Discriminant<Update>, Update)>,
+}
+
+impl Relay {
+    fn publish(&mut self, update: Update) {
+        if remembered(&update) {
+            let kind = discriminant(&update);
+            self.latest.retain(|(known, _)| *known != kind);
+            self.latest.push((kind, update.clone()));
+        }
+        self.subscribers
+            .retain(|subscriber| subscriber.send(update.clone()));
+    }
+
+    fn subscribe(&mut self, outbox: Outbox<Update>) {
+        if self
+            .latest
+            .iter()
+            .all(|(_, update)| outbox.send(update.clone()))
+        {
+            self.subscribers.push(outbox);
+        }
+    }
+}
+
+fn remembered(update: &Update) -> bool {
+    !matches!(
+        update,
+        Update::Menu { .. } | Update::AppMenu { .. } | Update::AppMenuChanged | Update::Minute
+    )
+}
+
+#[derive(Clone)]
+pub struct StatusHub {
+    relay: Arc<Mutex<Relay>>,
+    source: Outbox<Update>,
+    devices: Option<Sender<Control>>,
+    sound: Option<Sender<SoundControl>>,
+    errands: Option<Sender<Errand>>,
+    audio: Option<Arc<Audio>>,
+    worker_lost: Arc<AtomicBool>,
+}
+
+fn lock(relay: &Mutex<Relay>) -> MutexGuard<'_, Relay> {
+    relay
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+fn relay_updates(mut inbox: Inbox<Update>, relay: &Mutex<Relay>) {
+    loop {
+        let ready = inbox.fd();
+        let mut fds = [PollFd::new(&ready, PollFlags::IN)];
+        if let Err(error) = poll(&mut fds, None)
+            && error != rustix::io::Errno::INTR
+        {
+            tracing::warn!("the bar and Control Center stop following the status: {error}");
+            return;
+        }
+        let updates = inbox.drain();
+        let mut relay = lock(relay);
+        for update in updates {
+            relay.publish(update);
+        }
+    }
+}
+
+fn spawn(name: &str, work: impl FnOnce() + Send + 'static) {
+    if let Err(error) = thread::Builder::new().name(name.to_owned()).spawn(work) {
+        tracing::warn!("cannot start {name}: {error}");
+    }
+}
+
+impl StatusHub {
+    pub fn start(
+        session: Option<&Connection>,
+        system: Option<&Connection>,
+    ) -> std::io::Result<Self> {
+        let inbox = Inbox::new()?;
+        let source = inbox.outbox();
+        let relay = Arc::new(Mutex::new(Relay::default()));
+        let relaying = Arc::clone(&relay);
+        spawn("status-relay", move || relay_updates(inbox, &relaying));
+        let audio = Audio::connect()
+            .inspect_err(|error| tracing::warn!("no sound: {error}"))
+            .ok()
+            .map(Arc::new);
+        let sound = audio
+            .as_ref()
+            .map(|audio| follow_sound(Arc::clone(audio), source.clone()));
+        let devices = system.map(|system| follow_devices(system, source.clone()));
+        let minutes = source.clone();
+        spawn("status-clock", move || {
+            if let Err(error) = follow_minutes(&minutes) {
+                tracing::warn!("the clock does not advance: {error}");
+            }
+        });
+        let errands = session.map(|session| {
+            let (hosting, outbox) = (session.clone(), source.clone());
+            spawn("status-tray", move || {
+                if let Err(error) = host(&hosting, &outbox) {
+                    tracing::warn!("cannot host status items: {error}");
+                }
+            });
+            let (following, outbox) = (session.clone(), source.clone());
+            spawn("status-unread", move || {
+                if let Err(error) = follow_unread(&following, &outbox) {
+                    tracing::info!("cannot follow unread notifications: {error}");
+                }
+            });
+            let (errands, queue) = mpsc::channel();
+            let (session, outbox) = (session.clone(), source.clone());
+            spawn("status-errands", move || {
+                run_errands(&session, &queue, &outbox);
+            });
+            errands
+        });
+        Ok(Self {
+            relay,
+            source,
+            devices,
+            sound,
+            errands,
+            audio,
+            worker_lost: Arc::default(),
+        })
+    }
+
+    pub fn subscribe(&self, outbox: Outbox<Update>) {
+        lock(&self.relay).subscribe(outbox);
+    }
+
+    pub fn publisher(&self) -> Outbox<Update> {
+        self.source.clone()
+    }
+
+    pub fn audio(&self) -> Option<Arc<Audio>> {
+        self.audio.clone()
+    }
+
+    pub fn control(&self, control: Control) {
+        self.deliver("battery, Wi-Fi and Bluetooth", &self.devices, control);
+    }
+
+    pub fn sound(&self, control: SoundControl) {
+        self.deliver("sound", &self.sound, control);
+    }
+
+    pub fn errand(&self, errand: Errand) {
+        self.deliver("status item", &self.errands, errand);
+    }
+
+    fn deliver<T>(&self, worker: &str, sender: &Option<Sender<T>>, message: T) {
+        if let Some(sender) = sender
+            && sender.send(message).is_err()
+            && !self.worker_lost.swap(true, Ordering::Relaxed)
+        {
+            tracing::error!("the {worker} worker stopped; the bar no longer acts on it");
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use unbound_inbox::Inbox;
+
+    use super::Relay;
+    use crate::Update;
+
+    #[test]
+    fn every_subscriber_hears_each_update_and_a_late_one_catches_up_on_state_only() {
+        let mut relay = Relay::default();
+        let mut early = Inbox::new().unwrap();
+        relay.subscribe(early.outbox());
+        relay.publish(Update::Unread(false));
+        relay.publish(Update::Minute);
+        relay.publish(Update::Unread(true));
+        let mut late = Inbox::new().unwrap();
+        relay.subscribe(late.outbox());
+        relay.publish(Update::BatteryPercentage(true));
+        let heard = |inbox: &mut Inbox<Update>| {
+            inbox
+                .drain()
+                .into_iter()
+                .map(|update| format!("{update:?}"))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            heard(&mut early),
+            [
+                "Unread(false)",
+                "Minute",
+                "Unread(true)",
+                "BatteryPercentage(true)"
+            ]
+        );
+        assert_eq!(
+            heard(&mut late),
+            ["Unread(true)", "BatteryPercentage(true)"]
+        );
+    }
+
+    #[test]
+    fn a_subscriber_that_went_away_is_dropped() {
+        let mut relay = Relay::default();
+        relay.subscribe(Inbox::new().unwrap().outbox());
+        let mut kept = Inbox::new().unwrap();
+        relay.subscribe(kept.outbox());
+        relay.publish(Update::Minute);
+        assert_eq!(relay.subscribers.len(), 1);
+        assert_eq!(kept.drain().len(), 1);
+    }
+}

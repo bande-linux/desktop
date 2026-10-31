@@ -194,10 +194,11 @@ fn shell(
         .into_iter()
         .chain((0..KEPT).map(app_id))
         .collect();
+    let status = surfaces::status_hub(None, None).expect("status");
     let services = Services {
         text: &text,
         session: None,
-        system: None,
+        status: &status,
         config_home: None,
         home: None,
         notification_center: Rc::new(toggle),
@@ -211,8 +212,14 @@ fn shell(
         .open_beside(unbound_controlcenter::role(), (0, 0))
         .expect("control center");
     control_center.share_fonts(&text);
-    let control =
-        ControlCenter::new(&mut control_center, text.sharing_fonts(), None, None).expect("panel");
+    let control = ControlCenter::new(
+        &mut control_center,
+        text.sharing_fonts(),
+        None,
+        None,
+        status.audio(),
+    )
+    .expect("panel");
     let mut launcher = root
         .open_beside(unbound_launcher::role(), (0, 0))
         .expect("launcher");

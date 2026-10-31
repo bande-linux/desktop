@@ -8,7 +8,7 @@ use std::time::Instant;
 
 use accesskit::TreeUpdate;
 use unbound_bar::pairing::PairingDialogs;
-use unbound_bar::surfaces::{self, Display, Restart, Services};
+use unbound_bar::surfaces::{self, Display, Restart, Services, status_hub};
 use unbound_bluetooth::register_agent;
 use unbound_config::{Config, config_path};
 use unbound_controlcenter::ControlCenter;
@@ -16,6 +16,7 @@ use unbound_desktop_surface::DesktopSurface;
 use unbound_launcher::LauncherShell;
 use unbound_notifications::Notifications;
 use unbound_status::captive::{follow_captive_portal, open_page};
+use unbound_status::hub::StatusHub;
 use unbound_toolkit::{App, Rect, Scene, Surfaces, TextSystem, Window, WindowEvent};
 use unbound_xdg::{
     Locale, applications, current_desktops, data_dirs, find_app, launch, reopen_file,
@@ -38,6 +39,7 @@ struct Context {
     text: TextSystem,
     session: Option<Connection>,
     system: Option<Connection>,
+    status: StatusHub,
     config_home: Option<PathBuf>,
     home: Option<PathBuf>,
     notification_center: Rc<RefCell<Box<dyn Fn()>>>,
@@ -57,7 +59,7 @@ impl Context {
         Services {
             text: &self.text,
             session: self.session.as_ref(),
-            system: self.system.as_ref(),
+            status: &self.status,
             config_home: self.config_home.as_deref(),
             home: self.home.as_deref(),
             notification_center: Rc::new(move || (toggle.borrow())()),
@@ -90,6 +92,7 @@ impl Context {
                     self.text.sharing_fonts(),
                     self.session.as_ref(),
                     self.system.as_ref(),
+                    self.status.audio(),
                 )?;
                 Ok((vec![(window, Box::new(part))], None))
             }
@@ -345,10 +348,14 @@ fn reopen_apps(wanted: bool) {
 }
 
 pub fn run() -> Result<(), Box<dyn Error>> {
+    let session = bus(Connection::session(), "session");
+    let system = bus(Connection::system(), "system");
+    let status = status_hub(session.as_ref(), system.as_ref())?;
     let context = Context {
         text: TextSystem::new(),
-        session: bus(Connection::session(), "session"),
-        system: bus(Connection::system(), "system"),
+        session,
+        system,
+        status,
         config_home: std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from),
         home: std::env::var_os("HOME").map(PathBuf::from),
         notification_center: Rc::new(RefCell::new(Box::new(|| {}))),

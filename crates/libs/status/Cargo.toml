@@ -1,6 +1,6 @@
 [package]
 name = "unbound-status"
-description = "Battery, Wi-Fi, sound, Bluetooth, status notifier items, app menus and session endings for the bar"
+description = "Battery, Wi-Fi, sound, Bluetooth, status notifier items, app menus, session endings and memory pressure for the shell"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true

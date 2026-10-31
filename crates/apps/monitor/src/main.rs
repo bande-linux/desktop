@@ -9,7 +9,7 @@ use unbound_app_menu::{AppMenu, Entry, Standard};
 use unbound_monitor::{
     AppList, Asked, BatteryReport, Catalog, ForceQuitView, INSPECTOR_SIZE, Icons, InspectorView,
     L10N, Monitor, MonitorView, Request, Sampler, Screen, SleepBlocker, Snapshot, Stop,
-    TOOLBAR_HEIGHT, battery_reader, due_redraws, list_sleep_blockers, stop_all,
+    TOOLBAR_HEIGHT, Tab, battery_reader, due_redraws, list_sleep_blockers, stop_all,
 };
 use unbound_toolkit::{
     Appearance, FrameRegions, Image, MenuPlacement, Role, Scene, Surfaces, TextSystem, Window,
@@ -495,6 +495,9 @@ fn run() -> Result<(), WindowError> {
         let mut monitor = Monitor::new(catalog, rustix::process::getuid().as_raw());
         if let Some(text) = state_file().and_then(|file| std::fs::read_to_string(file).ok()) {
             monitor.restore(&text);
+        }
+        if std::env::args().any(|argument| argument == "--memory") {
+            monitor.set_tab(Tab::Memory);
         }
         let mut screen = MonitorView::new(monitor, palette, TextSystem::new(), icons());
         let snapshot = first_sample(&mut sampler, &mut screen);

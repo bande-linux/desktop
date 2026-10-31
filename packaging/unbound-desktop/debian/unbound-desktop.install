@@ -1,1 +1,3 @@
 unbound-mimeapps.list usr/share/applications/
+systemd/zram-generator.conf.d usr/lib/systemd/
+systemd/user/app.slice.d usr/lib/systemd/user/

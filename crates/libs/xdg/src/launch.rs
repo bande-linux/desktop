@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt;
 use std::io;
 use std::os::unix::process::{CommandExt, ExitStatusExt};
@@ -7,21 +8,25 @@ use std::slice;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use rustix::fs::{Mode, OFlags};
 use rustix::process::Signal;
 use unbound_notify::Urgency;
 use unbound_notify::client::{Request, notify};
-use zbus::blocking::Connection;
-use zbus::zvariant::Value;
+use zbus::blocking::{Connection, MessageIterator};
+use zbus::zvariant::{OwnedValue, Value};
+use zbus::{MatchRule, message};
 
 use crate::L10N;
 use crate::entry::{
     DesktopAction, DesktopEntry, Locale, applications, current_desktops, data_dirs,
 };
 use crate::identity::{app_name, find_app};
+use crate::units::{scope_name, unit_app_ids, unit_of_object_path};
 use crate::uri::file_uri;
 
 pub const TERMINAL: &str = "unbound-term";
 pub const ACTIVATION_TOKEN: &str = "XDG_ACTIVATION_TOKEN";
+const APP_OOM_SCORE: &[u8] = b"200";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExecError {
@@ -290,9 +295,15 @@ pub fn spawn_detached(
     }
     unsafe {
         process.pre_exec(|| {
-            rustix::process::setsid()
-                .map(|_| ())
-                .map_err(io::Error::from)
+            rustix::process::setsid().map_err(io::Error::from)?;
+            if let Ok(score) = rustix::fs::open(
+                c"/proc/self/oom_score_adj",
+                OFlags::WRONLY | OFlags::CLOEXEC,
+                Mode::empty(),
+            ) {
+                let _ = rustix::io::write(&score, APP_OOM_SCORE);
+            }
+            Ok(())
         });
     }
     if app_id.is_empty() {
@@ -319,6 +330,7 @@ pub fn spawn_detached(
 enum Failure {
     NotOpened,
     Crashed,
+    OutOfMemory,
 }
 
 const OPENING: Duration = Duration::from_secs(5);
@@ -331,6 +343,13 @@ const CRASHES: [Signal; 6] = [
     Signal::SYS,
 ];
 const SYSTEMD: &str = "org.freedesktop.systemd1";
+const SYSTEMD_PATH: &str = "/org/freedesktop/systemd1";
+const SYSTEMD_MANAGER: &str = "org.freedesktop.systemd1.Manager";
+const UNIT_INTERFACES: [&str; 2] = [
+    "org.freedesktop.systemd1.Scope",
+    "org.freedesktop.systemd1.Service",
+];
+const OOM_KILL: &str = "oom-kill";
 
 fn failure(status: ExitStatus, ran: Duration) -> Option<Failure> {
     if let Some(signal) = status.signal() {
@@ -342,18 +361,6 @@ fn failure(status: ExitStatus, ran: Duration) -> Option<Failure> {
     (!status.success() && ran < OPENING).then_some(Failure::NotOpened)
 }
 
-fn scope_name(app_id: &str, pid: u32) -> String {
-    let mut escaped = String::with_capacity(app_id.len());
-    for byte in app_id.bytes() {
-        if byte.is_ascii_alphanumeric() || matches!(byte, b':' | b'_' | b'.') {
-            escaped.push(char::from(byte));
-        } else {
-            escaped.push_str(&format!("\\x{byte:02x}"));
-        }
-    }
-    format!("app-unbound-{escaped}-{pid}.scope")
-}
-
 fn place_in_scope(bus: &Connection, app_id: &str, pid: u32) -> zbus::Result<()> {
     let properties = vec![
         ("PIDs", Value::from(vec![pid])),
@@ -362,8 +369,8 @@ fn place_in_scope(bus: &Connection, app_id: &str, pid: u32) -> zbus::Result<()> 
     ];
     bus.call_method(
         Some(SYSTEMD),
-        "/org/freedesktop/systemd1",
-        Some("org.freedesktop.systemd1.Manager"),
+        SYSTEMD_PATH,
+        Some(SYSTEMD_MANAGER),
         "StartTransientUnit",
         &(
             scope_name(app_id, pid),
@@ -406,6 +413,7 @@ fn tell(bus: zbus::Result<Connection>, app_id: &str, failure: Failure) {
     let (summary, body) = match failure {
         Failure::NotOpened => ("app-not-opened", "app-not-opened-body"),
         Failure::Crashed => ("app-crashed", "app-crashed-body"),
+        Failure::OutOfMemory => ("app-out-of-memory", "app-out-of-memory-body"),
     };
     let request = Request {
         app_name: entry.map_or(app_id, DesktopEntry::app_id),
@@ -425,22 +433,99 @@ fn tell(bus: zbus::Result<Connection>, app_id: &str, failure: Failure) {
     }
 }
 
+fn tell_task_stopped(bus: &Connection, unit: &str) {
+    let request = Request {
+        app_name: "",
+        replaces_id: 0,
+        app_icon: "",
+        summary: &L10N.tr("task-out-of-memory"),
+        body: &L10N.tr_args(
+            "task-out-of-memory-body",
+            [("unit", unit.to_owned().into())],
+        ),
+        actions: &[],
+        urgency: Urgency::Normal,
+        sound: None,
+    };
+    if let Err(error) = notify(bus, &request) {
+        tracing::warn!("cannot tell that {unit} ran out of memory: {error}");
+    }
+}
+
+fn killed_unit(change: &message::Message) -> Option<String> {
+    let header = change.header();
+    let unit = unit_of_object_path(header.path()?.as_str())?;
+    let (interface, changed, _) = change
+        .body()
+        .deserialize::<(String, HashMap<String, OwnedValue>, Vec<String>)>()
+        .ok()?;
+    let result = changed.get("Result")?.downcast_ref::<&str>().ok()?;
+    (UNIT_INTERFACES.contains(&interface.as_str()) && result == OOM_KILL).then_some(unit)
+}
+
+fn watch_oom_kills(bus: &Connection) -> zbus::Result<()> {
+    let rule = MatchRule::builder()
+        .msg_type(message::Type::Signal)
+        .sender(SYSTEMD)?
+        .interface("org.freedesktop.DBus.Properties")?
+        .member("PropertiesChanged")?
+        .path_namespace("/org/freedesktop/systemd1/unit")?
+        .build();
+    let changes = MessageIterator::for_match_rule(rule, bus, None)?;
+    bus.call_method(
+        Some(SYSTEMD),
+        SYSTEMD_PATH,
+        Some(SYSTEMD_MANAGER),
+        "Subscribe",
+        &(),
+    )?;
+    for change in changes.flatten() {
+        let Some(unit) = killed_unit(&change) else {
+            continue;
+        };
+        tracing::warn!("{unit} ran out of memory");
+        let ids = unit_app_ids(&unit);
+        let entries = applications(
+            &data_dirs(),
+            Locale::from_env().as_ref(),
+            &current_desktops(),
+        );
+        let app_id = ids
+            .iter()
+            .find_map(|id| find_app(&entries, id).map(DesktopEntry::app_id))
+            .or(ids.last().map(String::as_str));
+        match app_id {
+            Some(app_id) => tell(Ok(bus.clone()), app_id, Failure::OutOfMemory),
+            None => tell_task_stopped(bus, &unit),
+        }
+    }
+    Ok(())
+}
+
+pub fn follow_oom_kills(bus: Connection) {
+    thread::spawn(move || {
+        if let Err(error) = watch_oom_kills(&bus) {
+            tracing::warn!("apps closed for lack of memory go untold: {error}");
+        }
+    });
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used, clippy::unwrap_used)]
 
-    use std::collections::HashMap;
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex};
 
     use unbound_test_bus::SessionBus;
-    use zbus::zvariant::{OwnedObjectPath, OwnedValue};
+    use zbus::zvariant::OwnedObjectPath;
 
     use super::*;
 
     type Units = Arc<Mutex<Vec<(String, Vec<u32>, String)>>>;
     type Notes = Arc<Mutex<Vec<(String, String)>>>;
 
-    struct Systemd(Units);
+    struct Systemd(Units, Arc<AtomicBool>);
 
     #[zbus::interface(name = "org.freedesktop.systemd1.Manager")]
     impl Systemd {
@@ -462,6 +547,10 @@ mod tests {
             let slice = String::try_from(property("Slice")).unwrap();
             self.0.lock().unwrap().push((name, pids, slice));
             OwnedObjectPath::try_from("/org/freedesktop/systemd1/job/1").unwrap()
+        }
+
+        fn subscribe(&self) {
+            self.1.store(true, Ordering::SeqCst);
         }
     }
 
@@ -510,15 +599,21 @@ mod tests {
         assert_eq!(failure(status("exit 1"), Duration::from_secs(60)), None);
     }
 
-    #[test]
-    fn apps_run_in_their_own_scope_and_a_crash_is_told() {
-        let bus = SessionBus::start().unwrap();
+    struct Desktop {
+        server: Connection,
+        units: Units,
+        notes: Notes,
+        subscribed: Arc<AtomicBool>,
+    }
+
+    fn desktop(bus: &SessionBus) -> Desktop {
         let units = Units::default();
         let notes = Notes::default();
+        let subscribed = Arc::new(AtomicBool::new(false));
         let server = bus.connect().unwrap();
         server
             .object_server()
-            .at("/org/freedesktop/systemd1", Systemd(units.clone()))
+            .at(SYSTEMD_PATH, Systemd(units.clone(), subscribed.clone()))
             .unwrap();
         server
             .object_server()
@@ -531,6 +626,102 @@ mod tests {
         server
             .request_name("org.freedesktop.Notifications")
             .unwrap();
+        Desktop {
+            server,
+            units,
+            notes,
+            subscribed,
+        }
+    }
+
+    fn wait_for(done: impl Fn() -> bool) {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !done() {
+            assert!(Instant::now() < deadline, "timed out");
+            thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    #[test]
+    fn launched_apps_rank_above_the_session_for_the_kernel_out_of_memory_killer() {
+        let folder = tempfile::tempdir().unwrap();
+        let score = folder.path().join("score");
+        let script = format!(
+            "cat /proc/self/oom_score_adj > '{0}.part' && mv '{0}.part' '{0}'",
+            score.display()
+        );
+        spawn_detached("", &["sh".to_owned(), "-c".to_owned(), script], None, None).unwrap();
+        wait_for(|| score.exists());
+
+        assert_eq!(std::fs::read_to_string(&score).unwrap().trim(), "200");
+    }
+
+    #[test]
+    fn an_app_or_task_that_ran_out_of_memory_is_named_in_a_notification() {
+        let bus = SessionBus::start().unwrap();
+        let desktop = desktop(&bus);
+        follow_oom_kills(bus.connect().unwrap());
+        wait_for(|| desktop.subscribed.load(Ordering::SeqCst));
+
+        let ended = |unit: &str, interface: &str, result: &str| {
+            let changed = HashMap::from([("Result", Value::from(result))]);
+            desktop
+                .server
+                .emit_signal(
+                    None::<()>,
+                    format!("/org/freedesktop/systemd1/unit/{unit}").as_str(),
+                    "org.freedesktop.DBus.Properties",
+                    "PropertiesChanged",
+                    &(interface, changed, Vec::<String>::new()),
+                )
+                .unwrap();
+        };
+        ended(
+            "app_2dunbound_2dorg_2eexample_2eEditor_2d41_2escope",
+            "org.freedesktop.systemd1.Scope",
+            "oom-kill",
+        );
+        ended(
+            "app_2dunbound_2dorg_2eexample_2eViewer_2d42_2escope",
+            "org.freedesktop.systemd1.Scope",
+            "signal",
+        );
+        ended(
+            "app_2dunbound_2dorg_2eexample_2eViewer_2d42_2escope",
+            "org.freedesktop.systemd1.Unit",
+            "oom-kill",
+        );
+        ended(
+            "run_2dp77_2di88_2escope",
+            "org.freedesktop.systemd1.Scope",
+            "oom-kill",
+        );
+        wait_for(|| desktop.notes.lock().unwrap().len() >= 2);
+
+        assert_eq!(
+            *desktop.notes.lock().unwrap(),
+            [
+                (
+                    "org.example.Editor".to_owned(),
+                    "Editor was closed because memory ran low".to_owned()
+                ),
+                (
+                    String::new(),
+                    "A background task was stopped because memory ran low".to_owned()
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn apps_run_in_their_own_scope_and_a_crash_is_told() {
+        let bus = SessionBus::start().unwrap();
+        let Desktop {
+            server: _server,
+            units,
+            notes,
+            ..
+        } = desktop(&bus);
 
         let run = |app_id: &str, script: &str| {
             let child = Command::new("sh").args(["-c", script]).spawn().unwrap();

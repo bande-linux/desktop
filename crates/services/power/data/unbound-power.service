@@ -4,6 +4,7 @@ PartOf=graphical-session.target
 After=graphical-session.target
 
 [Service]
+Slice=session.slice
 Type=dbus
 BusName=org.freedesktop.ScreenSaver
 ExecStart=/usr/bin/unbound-power

@@ -4,6 +4,7 @@ PartOf=graphical-session.target
 After=graphical-session.target
 
 [Service]
+Slice=session.slice
 Type=dbus
 BusName=org.unbound.Config
 ExecStart=/usr/bin/unbound-config

@@ -1,5 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+use std::net::{TcpListener, TcpStream};
+use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::net::UnixStream;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
@@ -86,6 +88,43 @@ fn open_pair(server: &mut Headless) -> Receiver<(usize, WindowEvent)> {
         unbound_toolkit_platform::run_surfaces(&mut pair).expect("run loop");
     });
     received
+}
+
+struct Urgent {
+    windows: Vec<Window>,
+    socket: TcpStream,
+    ready: Sender<(usize, WindowEvent)>,
+}
+
+impl Surfaces for Urgent {
+    fn windows(&self) -> &[Window] {
+        &self.windows
+    }
+
+    fn windows_mut(&mut self) -> &mut [Window] {
+        &mut self.windows
+    }
+
+    fn scene(&mut self, index: usize) -> Scene {
+        let (width, height) = self.windows[index].size();
+        Scene {
+            width,
+            height,
+            background: Color::hex(0x3070D0),
+            items: Vec::new(),
+        }
+    }
+
+    fn event(&mut self, _index: usize, _event: WindowEvent) {}
+
+    fn sources(&self) -> Vec<BorrowedFd<'_>> {
+        vec![self.socket.as_fd()]
+    }
+
+    fn source_ready(&mut self, index: usize) {
+        let _ = self.ready.send((index, WindowEvent::CloseRequested));
+        self.windows[0].close();
+    }
 }
 
 struct Desktop {
@@ -193,4 +232,43 @@ fn sibling_surfaces_on_one_connection_each_get_only_their_own_input() {
         .map(|(index, _)| *index)
         .collect();
     assert_eq!(typed_in, [1]);
+}
+
+#[test]
+fn a_source_that_signals_only_priority_data_wakes_the_loop() {
+    let mut desktop = Desktop {
+        server: Headless::new(Size::from(OUTPUT)).expect("headless compositor"),
+        renderer: Renderer::new().expect("Vulkan renderer"),
+        scheduler: FrameScheduler::new(FrameClock::new(Duration::ZERO, REFRESH)),
+        start: Instant::now(),
+        seen: Vec::new(),
+    };
+    let listener = TcpListener::bind("127.0.0.1:0").expect("listen");
+    let sender = TcpStream::connect(listener.local_addr().expect("address")).expect("connect");
+    let (socket, _) = listener.accept().expect("accept");
+    let (client_end, server_end) = UnixStream::pair().expect("socket pair");
+    desktop
+        .server
+        .insert_session_client(server_end, SessionRole::Shell)
+        .expect("insert shell client");
+    let (ready, events) = mpsc::channel();
+    thread::spawn(move || {
+        let window =
+            Window::open_on(client_end, strip(Edges::ALL, "urgent"), (0, 0)).expect("window");
+        let mut urgent = Urgent {
+            windows: vec![window],
+            socket,
+            ready,
+        };
+        unbound_toolkit_platform::run_surfaces(&mut urgent).expect("run loop");
+    });
+    for _ in 0..200 {
+        desktop.pump(&events);
+    }
+    assert!(desktop.seen.is_empty());
+
+    rustix::net::send(&sender, b"u", rustix::net::SendFlags::OOB).expect("urgent byte");
+    desktop.wait_for(&events, |seen| !seen.is_empty());
+
+    assert_eq!(desktop.seen, [(0, WindowEvent::CloseRequested)]);
 }

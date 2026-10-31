@@ -37,7 +37,7 @@ jobs:
       - name: Install the build dependencies and the toolchain
         run: |
           xargs ci/apt-install.sh < ci/release/build-depends
-          rustup toolchain install
+          ci/release/toolchain.sh
       - uses: Swatinem/rust-cache@v2
         with:
           key: lint
@@ -63,7 +63,7 @@ jobs:
         run: |
           xargs ci/apt-install.sh libvulkan1 mesa-vulkan-drivers dbus-daemon at-spi2-core libfontconfig1 \
             libwayland-client0 procps < ci/release/build-depends
-          rustup toolchain install
+          ci/release/toolchain.sh
       - name: Install Debian 13's fonts, which the goldens are rendered with
         run: ci/debian-fonts.sh
       - uses: Swatinem/rust-cache@v2
@@ -112,7 +112,7 @@ jobs:
         run: |
           xargs ci/apt-install.sh dpkg-dev libvulkan1 mesa-vulkan-drivers dbus-daemon dbus-bin systemd \
             dbus-user-session < ci/release/build-depends
-          rustup toolchain install
+          ci/release/toolchain.sh
       - uses: Swatinem/rust-cache@v2
         with:
           key: debs-${{ matrix.arch }}
@@ -136,7 +136,7 @@ jobs:
       - run: ci/release/smoke.sh
       - name: Disk and memory after the build
         if: always()
-        run: df -h / && free -m
+        run: df -h / && grep -E "MemTotal|MemAvailable" /proc/meminfo
       - uses: actions/upload-artifact@v7
         with:
           name: unbound-debs-${{ matrix.arch }}

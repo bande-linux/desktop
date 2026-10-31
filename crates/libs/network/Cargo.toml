@@ -3,6 +3,7 @@ name = "unbound-network"
 description = "Unbound NetworkManager client: Wi-Fi power, network list, joining and wired status"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 

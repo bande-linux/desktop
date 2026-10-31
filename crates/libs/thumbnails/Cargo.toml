@@ -3,6 +3,7 @@ name = "unbound-thumbnails"
 description = "Thumbnails for Unbound after the freedesktop thumbnail spec: a shared cache, in-process images, installed thumbnailers and a background worker"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 

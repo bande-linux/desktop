@@ -3,6 +3,7 @@ name = "unbound-toolkit"
 description = "Unbound UI toolkit: one entry point to graphics, widgets and the Wayland platform"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 

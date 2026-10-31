@@ -3,6 +3,7 @@ name = "unbound-test-wayland"
 description = "Wayland test clients for Unbound compositor tests"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 publish = false

@@ -3,6 +3,7 @@ name = "unbound-l10n"
 description = "Fluent localisation for Unbound programs"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 

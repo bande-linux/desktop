@@ -3,6 +3,7 @@ name = "unbound-file-chooser"
 description = "Unbound Open and Save dialogs for the xdg-desktop-portal FileChooser"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 

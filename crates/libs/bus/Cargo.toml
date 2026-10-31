@@ -3,6 +3,7 @@ name = "unbound-bus"
 description = "D-Bus service lifetime for Unbound daemons: serve until the bus goes away"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 

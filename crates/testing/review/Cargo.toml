@@ -3,6 +3,7 @@ name = "unbound-review"
 description = "Runs a scripted scenario on a live Unbound session and records it for review"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 publish = false

@@ -3,6 +3,7 @@ name = "unbound-widgets"
 description = "Unbound widgets: the UI tree, widgets, focus and accessibility nodes"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 

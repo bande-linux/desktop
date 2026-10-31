@@ -3,6 +3,7 @@ name = "unbound-settings"
 description = "Unbound System Settings: panes for the desktop and its devices with ranked search"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 

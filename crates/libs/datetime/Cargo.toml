@@ -3,6 +3,7 @@ name = "unbound-datetime"
 description = "Dates and times written the way the user's LC_TIME locale writes them"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 

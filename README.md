@@ -119,5 +119,5 @@ your channel only.
 
 ## License
 
-Dual-licensed under the Apache License, Version 2.0, or the MIT license, at your option (as
-declared in `packaging/unbound-desktop/debian/copyright`).
+Dual-licensed under the Apache License, Version 2.0 ([`LICENSE-APACHE`](LICENSE-APACHE)), or
+the MIT license ([`LICENSE-MIT`](LICENSE-MIT)), at your option.

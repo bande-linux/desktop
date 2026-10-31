@@ -3,6 +3,7 @@ name = "unbound-desktop-surface"
 description = "Unbound desktop surface: the wallpaper and the files on the desktop, as a part of unbound-shell"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 

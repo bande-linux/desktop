@@ -7,12 +7,12 @@ use std::process::ExitCode;
 
 use unbound_app_menu::AppMenu;
 use unbound_term::{
-    COLUMNS, GridSize, L10N, Painter, ROWS, SavedWindow, Session, Settings, Terminal, app_menus,
-    claim, left_behind, settings_folder, window_file, windows_folder,
+    APP_ID, COLUMNS, GridSize, L10N, Painter, ROWS, SavedWindow, Session, Settings, Terminal,
+    app_menus, claim, left_behind, settings_folder, window_file, windows_folder,
 };
 use unbound_toolkit::{Role, Window, WindowError};
 
-use crate::app::{APP_ID, Arguments, RESTORE_OPTION, TerminalApp};
+use crate::app::{Arguments, RESTORE_OPTION, TerminalApp};
 
 const PROGRAM: &str = "unbound-term";
 
@@ -81,6 +81,9 @@ fn run() -> Result<(), WindowError> {
     painter.set_appearance(window.appearance());
     painter.set_metrics(settings.font_size, window.scale());
     let mut command = arguments.command.take();
+    let bus = zbus::blocking::Connection::session()
+        .inspect_err(|error| tracing::warn!("cannot reach the session bus: {error}"))
+        .ok();
     let mut sessions = Vec::new();
     for folder in folders {
         let mut terminal = Terminal::new(grid);
@@ -88,7 +91,7 @@ fn run() -> Result<(), WindowError> {
         let folder = folder
             .filter(|folder| folder.is_dir())
             .or_else(|| home.clone());
-        match Session::spawn(terminal, command.take(), folder) {
+        match Session::spawn(terminal, command.take(), folder, bus.clone()) {
             Ok(session) => sessions.push(session),
             Err(error) if !sessions.is_empty() => tracing::warn!("cannot restore a tab: {error}"),
             Err(error) => return Err(error.into()),

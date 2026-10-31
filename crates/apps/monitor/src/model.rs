@@ -4,10 +4,11 @@ use std::path::PathBuf;
 
 use crate::L10N;
 use crate::apps::{Catalog, Group, GroupKey};
+use unbound_fs::format_size;
 use unbound_status::history::{charging_spans, time_on_battery};
 use unbound_status::status::Power;
 
-use crate::format::{format_bytes, format_cpu_time, format_hours, format_percent, format_rate};
+use crate::format::{format_cpu_time, format_hours, format_percent, format_rate};
 use crate::power::{BATTERY_HISTORY, BatteryReport};
 use crate::sampler::{Process, Snapshot};
 use crate::signal::{SignalError, Stop, stop};
@@ -399,7 +400,7 @@ impl Column {
             | Column::ReadTotal
             | Column::WrittenTotal
             | Column::ReceivedTotal
-            | Column::SentTotal => format_bytes(*value as u64),
+            | Column::SentTotal => format_size(*value as u64),
             Column::Read | Column::Written | Column::Received | Column::Sent => format_rate(*value),
             _ => format!("{value:.0}"),
         }
@@ -1425,16 +1426,16 @@ impl Monitor {
             Tab::Memory => {
                 let memory = &snapshot.memory;
                 vec![
-                    (L10N.tr("summary-physical"), format_bytes(memory.total)),
-                    (L10N.tr("summary-used"), format_bytes(memory.used)),
-                    (L10N.tr("summary-app"), format_bytes(memory.app)),
-                    (L10N.tr("summary-kernel"), format_bytes(memory.kernel)),
+                    (L10N.tr("summary-physical"), format_size(memory.total)),
+                    (L10N.tr("summary-used"), format_size(memory.used)),
+                    (L10N.tr("summary-app"), format_size(memory.app)),
+                    (L10N.tr("summary-kernel"), format_size(memory.kernel)),
                     (
                         L10N.tr("summary-compressed"),
-                        format_bytes(memory.compressed),
+                        format_size(memory.compressed),
                     ),
-                    (L10N.tr("summary-cached"), format_bytes(memory.cached)),
-                    (L10N.tr("summary-swap"), format_bytes(memory.swap_used)),
+                    (L10N.tr("summary-cached"), format_size(memory.cached)),
+                    (L10N.tr("summary-swap"), format_size(memory.swap_used)),
                 ]
             }
             Tab::Energy => {
@@ -1465,11 +1466,11 @@ impl Monitor {
                 ),
                 (
                     L10N.tr("summary-read"),
-                    format_bytes(snapshot.disk.read_total),
+                    format_size(snapshot.disk.read_total),
                 ),
                 (
                     L10N.tr("summary-written"),
-                    format_bytes(snapshot.disk.written_total),
+                    format_size(snapshot.disk.written_total),
                 ),
             ],
             Tab::Network => {
@@ -1488,11 +1489,11 @@ impl Monitor {
                     ),
                     (
                         L10N.tr("summary-received"),
-                        format_bytes(total(|interface| interface.received_total as f64) as u64),
+                        format_size(total(|interface| interface.received_total as f64) as u64),
                     ),
                     (
                         L10N.tr("summary-sent"),
-                        format_bytes(total(|interface| interface.sent_total as f64) as u64),
+                        format_size(total(|interface| interface.sent_total as f64) as u64),
                     ),
                 ]
             }
@@ -1510,7 +1511,7 @@ impl Monitor {
                     ),
                     (
                         L10N.tr("summary-gpu-memory"),
-                        format_bytes(users.iter().map(|used| used.memory).sum()),
+                        format_size(users.iter().map(|used| used.memory).sum()),
                     ),
                     (L10N.tr("summary-gpu-processes"), users.len().to_string()),
                 ]

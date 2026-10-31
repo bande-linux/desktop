@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use accesskit::{ActionRequest, TreeUpdate};
+use unbound_fs::format_size;
 use unbound_toolkit::ui::{
     Button, Cell, Column, Cursor, Event, Key, Row, SEGMENTED_HEIGHT, SegmentedControl, Table,
     WidgetId,
@@ -10,7 +11,7 @@ use unbound_toolkit::ui::{
 use unbound_toolkit::{Header, Palette, Rect, SHEET_INSET, Scene, TextSystem};
 
 use crate::L10N;
-use crate::format::{format_bytes, format_cpu_time, format_percent};
+use crate::format::{format_cpu_time, format_percent};
 use crate::inspect::{Details, read_details, state_name};
 use crate::list::{List, Signal, sender};
 use crate::model::StopTarget;
@@ -292,17 +293,13 @@ impl InspectorView {
                 format_cpu_time(process.cpu_seconds),
             ),
             row("threads", "column-threads", process.threads.to_string()),
-            row(
-                "resident",
-                "column-resident",
-                format_bytes(process.resident),
-            ),
+            row("resident", "column-resident", format_size(process.resident)),
         ];
         if let Some(proportional) = process.proportional {
-            resources.push(row("memory", "column-memory", format_bytes(proportional)));
+            resources.push(row("memory", "column-memory", format_size(proportional)));
         }
         if let Some(size) = self.details.virtual_size {
-            resources.push(row("virtual", "inspector-virtual", format_bytes(size)));
+            resources.push(row("virtual", "inspector-virtual", format_size(size)));
         }
         if let Some(seconds) = self.details.running_seconds {
             resources.push(row(
@@ -315,12 +312,12 @@ impl InspectorView {
             resources.push(row(
                 "read",
                 "column-read-total",
-                format_bytes(disk.read_total),
+                format_size(disk.read_total),
             ));
             resources.push(row(
                 "written",
                 "column-written-total",
-                format_bytes(disk.written_total),
+                format_size(disk.written_total),
             ));
         }
         let mut sections = vec![section(
@@ -425,7 +422,7 @@ impl InspectorView {
                             index.to_string(),
                             vec![
                                 Cell::new(format!("{:012x}–{:012x}", map.start, map.end)),
-                                Cell::new(format_bytes(map.end.saturating_sub(map.start))),
+                                Cell::new(format_size(map.end.saturating_sub(map.start))),
                                 Cell::new(map.permissions.as_str()),
                                 Cell::new(map.path.as_str()),
                             ],

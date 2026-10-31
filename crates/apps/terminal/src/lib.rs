@@ -5,6 +5,7 @@ mod panes;
 mod process;
 mod render;
 mod restore;
+mod scope;
 mod session;
 mod settings;
 mod settings_view;
@@ -39,6 +40,8 @@ pub use terminal::{
 pub use theme::{Profile, Theme, ansi_colors};
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-term.ftl");
+
+pub const APP_ID: &str = "org.unbound.Terminal";
 
 pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 

@@ -85,14 +85,6 @@ cores-performance = Performance
 cores-efficiency = Efficiency
 core-label = Core { $number }
 
-size-bytes = { $count ->
-    [one] { $count } byte
-   *[other] { $count } bytes
-}
-size-kilobytes = { $value } KB
-size-megabytes = { $value } MB
-size-gigabytes = { $value } GB
-size-terabytes = { $value } TB
 per-second = { $size }/s
 
 search-placeholder = Search

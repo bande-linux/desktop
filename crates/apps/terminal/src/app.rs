@@ -11,12 +11,12 @@ use alacritty_terminal::tty::Shell;
 use unbound_app_menu::{AppMenu, Standard};
 use unbound_spring::{Decay, State as SpringState};
 use unbound_term::{
-    Axis, BANNER_HEIGHT, Banner, BannerAction, CellPoint, Command, Divider, FULL_SCREEN_LEADING,
-    GridSize, HEADER_LEADING, L10N, Layout, Link, MenuCommand, MouseButton, MouseKind, Notice,
-    Painter, Pane, STRIP_HEIGHT, SavedWindow, SearchDirection, SelectionKind, Session, Settings,
-    TabBar, TabBarLayout, TabTarget, Terminal, TerminalContext, bracketed, dropped_text,
-    encode_key, is_openable, is_settings_file, mouse_report, next_font_size, reports_mouse,
-    settings_folder, shortcut, tab_menu, terminal_menu, wants_scroll_as_arrows,
+    APP_ID, Axis, BANNER_HEIGHT, Banner, BannerAction, CellPoint, Command, Divider,
+    FULL_SCREEN_LEADING, GridSize, HEADER_LEADING, L10N, Layout, Link, MenuCommand, MouseButton,
+    MouseKind, Notice, Painter, Pane, STRIP_HEIGHT, SavedWindow, SearchDirection, SelectionKind,
+    Session, Settings, TabBar, TabBarLayout, TabTarget, Terminal, TerminalContext, bracketed,
+    dropped_text, encode_key, is_openable, is_settings_file, mouse_report, next_font_size,
+    reports_mouse, settings_folder, shortcut, tab_menu, terminal_menu, wants_scroll_as_arrows,
 };
 use unbound_toolkit::ui::{
     Cursor, Event, Key, Menu, Modifiers, Pointer, PointerButton, Scroll, ScrollPhase, ScrollSource,
@@ -29,7 +29,6 @@ use unbound_watch::{Changes, FolderWatch};
 
 use crate::bus::{Bus, Outgoing};
 
-pub const APP_ID: &str = "org.unbound.Terminal";
 const FILES: &str = "unbound-files";
 const FILES_APP_ID: &str = "org.unbound.Files";
 const WINDOW_NODE: NodeId = NodeId(u64::MAX);
@@ -527,7 +526,7 @@ impl TerminalApp {
             .or_else(|| self.home.clone());
         let mut terminal = Terminal::new(size);
         terminal.resize(size, self.painter.metrics.pixel_cell_size());
-        Session::spawn(terminal, None, directory)
+        Session::spawn(terminal, None, directory, self.session().bus())
             .inspect_err(|error| tracing::warn!("cannot start a shell: {error}"))
             .ok()
     }
@@ -1720,7 +1719,7 @@ impl App for TerminalApp {
         let mut sources = self
             .tabs
             .iter()
-            .flat_map(|tab| tab.sessions.iter().map(Session::fd))
+            .flat_map(|tab| tab.sessions.iter().filter_map(Session::fd))
             .collect::<Vec<_>>();
         sources.extend(self.app_menu.as_ref().map(AppMenu::fd));
         sources.extend(self.settings_watch.as_ref().map(|watch| watch.wake.as_fd()));
@@ -1728,7 +1727,20 @@ impl App for TerminalApp {
     }
 
     fn source_ready(&mut self, window: &mut Window, index: usize) {
-        let sessions: usize = self.tabs.iter().map(|tab| tab.sessions.len()).sum();
+        let polled: Vec<(usize, usize)> = self
+            .tabs
+            .iter()
+            .enumerate()
+            .flat_map(|(tab, entry)| {
+                entry
+                    .sessions
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, session)| session.fd().is_some())
+                    .map(move |(session, _)| (tab, session))
+            })
+            .collect();
+        let sessions = polled.len();
         let menu_index = self.app_menu.as_ref().map(|_| sessions);
         if Some(index) == menu_index {
             let actions = self
@@ -1751,17 +1763,8 @@ impl App for TerminalApp {
             }
             return self.reload_settings(window);
         }
-        let mut remaining = index;
-        let Some(tab) = self.tabs.iter().position(|tab| {
-            let inside = remaining < tab.sessions.len();
-            if !inside {
-                remaining -= tab.sessions.len();
-            }
-            inside
-        }) else {
-            return;
-        };
-        let notices = self.tabs[tab].sessions[remaining].read();
+        let (tab, session) = polled[index];
+        let notices = self.tabs[tab].sessions[session].read();
         self.handle_notices(window, tab, notices);
         if tab == self.active || self.has_strip() {
             window.request_redraw();

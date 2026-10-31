@@ -5,7 +5,7 @@ mod fixture;
 use fixture::{entry, process};
 use unbound_monitor::{
     Catalog, Column, GroupKey, Interface, InterfaceKind, Monitor, Process, Rates, Row, RowKey,
-    Snapshot, Tab, format_bytes, format_cpu_time, format_rate,
+    Snapshot, Tab, format_cpu_time, format_rate,
 };
 
 fn catalog() -> Catalog {
@@ -163,7 +163,7 @@ fn disk_cells_show_a_dash_where_a_process_cannot_be_read() {
         .collect::<Vec<_>>();
     assert_eq!(
         cells[0][..5],
-        ["rsync", "0 bytes/s", "2.5 MB/s", "0 bytes", "7 GB"]
+        ["rsync", "Zero bytes/s", "2.5 MB/s", "Zero bytes", "7 GB"]
     );
     assert_eq!(cells[1][..3], ["cron", "\u{2013}", "\u{2013}"]);
 }
@@ -200,8 +200,5 @@ fn the_network_tab_lists_interfaces_by_traffic() {
 fn values_read_like_activity_monitor() {
     assert_eq!(format_cpu_time(83.456), "1:23.46");
     assert_eq!(format_cpu_time(3_725.0), "1:02:05");
-    assert_eq!(format_bytes(999), "999 bytes");
-    assert_eq!(format_bytes(1_234_567), "1.2 MB");
-    assert_eq!(format_bytes(16_000_000_000), "16 GB");
     assert_eq!(format_rate(1.0), "1 byte/s");
 }

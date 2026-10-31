@@ -73,3 +73,4 @@ settings-flash = Flash the window
 settings-badge = Show a badge in the bar
 settings-notifications = Notifications
 settings-notify = Notify when long commands finish
+tab-out-of-memory = This tab was closed because memory ran low

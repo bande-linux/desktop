@@ -4161,6 +4161,7 @@ dependencies = [
  "tempfile",
  "tracing",
  "unbound-app-menu",
+ "unbound-fs",
  "unbound-golden",
  "unbound-l10n",
  "unbound-log",
@@ -4456,6 +4457,7 @@ version = "0.1.0"
 dependencies = [
  "accesskit",
  "alacritty_terminal",
+ "rustix 1.1.6",
  "tempfile",
  "tracing",
  "unbound-app-menu",
@@ -4465,6 +4467,7 @@ dependencies = [
  "unbound-log",
  "unbound-notify",
  "unbound-spring",
+ "unbound-test-bus",
  "unbound-toolkit",
  "unbound-watch",
  "unbound-xdg",

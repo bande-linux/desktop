@@ -11,13 +11,13 @@ use rustix::process::Signal;
 use unbound_notify::Urgency;
 use unbound_notify::client::{Request, notify};
 use zbus::blocking::Connection;
-use zbus::zvariant::Value;
 
 use crate::L10N;
 use crate::entry::{
     DesktopAction, DesktopEntry, Locale, applications, current_desktops, data_dirs,
 };
 use crate::identity::{app_name, find_app};
+use crate::scope::{Failed, app_scope, start_scope};
 use crate::uri::file_uri;
 
 pub const TERMINAL: &str = "unbound-term";
@@ -320,7 +320,6 @@ const CRASHES: [Signal; 6] = [
     Signal::FPE,
     Signal::SYS,
 ];
-const SYSTEMD: &str = "org.freedesktop.systemd1";
 
 fn failure(status: ExitStatus, ran: Duration) -> Option<Failure> {
     if let Some(signal) = status.signal() {
@@ -332,46 +331,14 @@ fn failure(status: ExitStatus, ran: Duration) -> Option<Failure> {
     (!status.success() && ran < OPENING).then_some(Failure::NotOpened)
 }
 
-fn scope_name(app_id: &str, pid: u32) -> String {
-    let mut escaped = String::with_capacity(app_id.len());
-    for byte in app_id.bytes() {
-        if byte.is_ascii_alphanumeric() || matches!(byte, b':' | b'_' | b'.') {
-            escaped.push(char::from(byte));
-        } else {
-            escaped.push_str(&format!("\\x{byte:02x}"));
-        }
-    }
-    format!("app-unbound-{escaped}-{pid}.scope")
-}
-
-fn place_in_scope(bus: &Connection, app_id: &str, pid: u32) -> zbus::Result<()> {
-    let properties = vec![
-        ("PIDs", Value::from(vec![pid])),
-        ("Slice", Value::from("app.slice")),
-        ("CollectMode", Value::from("inactive-or-failed")),
-    ];
-    bus.call_method(
-        Some(SYSTEMD),
-        "/org/freedesktop/systemd1",
-        Some("org.freedesktop.systemd1.Manager"),
-        "StartTransientUnit",
-        &(
-            scope_name(app_id, pid),
-            "fail",
-            properties,
-            Vec::<(&str, Vec<(&str, Value)>)>::new(),
-        ),
-    )?;
-    Ok(())
-}
-
 fn supervise(
     connect: impl Fn() -> zbus::Result<Connection>,
     app_id: &str,
     mut child: Child,
     started: Instant,
 ) {
-    let placed = connect().and_then(|bus| place_in_scope(&bus, app_id, child.id()));
+    let unit = app_scope(app_id, child.id());
+    let placed = connect().and_then(|bus| start_scope(&bus, &unit, child.id(), Failed::Collect));
     if let Err(error) = placed {
         tracing::debug!("{app_id} runs outside its own scope: {error}");
     }
@@ -423,37 +390,12 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use unbound_test_bus::SessionBus;
-    use zbus::zvariant::{OwnedObjectPath, OwnedValue};
+    use unbound_test_bus::systemd::{FakeSystemd, StartedUnit};
+    use zbus::zvariant::OwnedValue;
 
     use super::*;
 
-    type Units = Arc<Mutex<Vec<(String, Vec<u32>, String)>>>;
     type Notes = Arc<Mutex<Vec<(String, String)>>>;
-
-    struct Systemd(Units);
-
-    #[zbus::interface(name = "org.freedesktop.systemd1.Manager")]
-    impl Systemd {
-        fn start_transient_unit(
-            &self,
-            name: String,
-            _mode: String,
-            properties: Vec<(String, OwnedValue)>,
-            _aux: Vec<(String, Vec<(String, OwnedValue)>)>,
-        ) -> OwnedObjectPath {
-            let property = |key: &str| {
-                properties
-                    .iter()
-                    .find(|(name, _)| name == key)
-                    .map(|(_, value)| value.try_clone().unwrap())
-                    .unwrap()
-            };
-            let pids = Vec::<u32>::try_from(property("PIDs")).unwrap();
-            let slice = String::try_from(property("Slice")).unwrap();
-            self.0.lock().unwrap().push((name, pids, slice));
-            OwnedObjectPath::try_from("/org/freedesktop/systemd1/job/1").unwrap()
-        }
-    }
 
     struct Notifications(Notes);
 
@@ -503,13 +445,9 @@ mod tests {
     #[test]
     fn apps_run_in_their_own_scope_and_a_crash_is_told() {
         let bus = SessionBus::start().unwrap();
-        let units = Units::default();
+        let systemd = FakeSystemd::start(&bus).unwrap();
         let notes = Notes::default();
         let server = bus.connect().unwrap();
-        server
-            .object_server()
-            .at("/org/freedesktop/systemd1", Systemd(units.clone()))
-            .unwrap();
         server
             .object_server()
             .at(
@@ -517,7 +455,6 @@ mod tests {
                 Notifications(notes.clone()),
             )
             .unwrap();
-        server.request_name(SYSTEMD).unwrap();
         server
             .request_name("org.freedesktop.Notifications")
             .unwrap();
@@ -531,18 +468,19 @@ mod tests {
         let calm = run("org.example.Calm", "sleep 0.2");
         let crashed = run("org.example.crash-test", "sleep 0.2; kill -SEGV $$");
 
+        let scope = |name: String, pid: u32| StartedUnit {
+            name,
+            pids: vec![pid],
+            slice: "app.slice".to_owned(),
+            collect_mode: Some("inactive-or-failed".to_owned()),
+        };
         assert_eq!(
-            *units.lock().unwrap(),
+            systemd.started(),
             [
-                (
-                    format!("app-unbound-org.example.Calm-{calm}.scope"),
-                    vec![calm],
-                    "app.slice".to_owned()
-                ),
-                (
+                scope(format!("app-unbound-org.example.Calm-{calm}.scope"), calm),
+                scope(
                     format!("app-unbound-org.example.crash\\x2dtest-{crashed}.scope"),
-                    vec![crashed],
-                    "app.slice".to_owned()
+                    crashed
                 ),
             ]
         );

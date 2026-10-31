@@ -3,11 +3,11 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use accesskit::TreeUpdate;
-use unbound_term::{L10N, SETTINGS_SIZE, Settings, SharedSettings, settings_folder, settings_view};
+use unbound_term::{
+    APP_ID, L10N, SETTINGS_SIZE, Settings, SharedSettings, settings_folder, settings_view,
+};
 use unbound_toolkit::ui::Ui;
 use unbound_toolkit::{App, Appearance, Rect, Role, Scene, Window, WindowError, WindowEvent};
-
-use crate::app::APP_ID;
 
 pub struct Preferences {
     ui: Ui,

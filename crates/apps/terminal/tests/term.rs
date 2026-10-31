@@ -346,6 +346,7 @@ fn a_shell_runs_on_a_pty_and_reports_its_folder_and_running_program() {
             vec!["-c".to_owned(), script.to_owned()],
         )),
         Some(start.clone()),
+        None,
     )
     .expect("session");
     wait_until(&mut session, "the shell starts", |session| {
@@ -890,6 +891,7 @@ fn a_command_that_finishes_is_reported_with_its_name() {
             "/bin/sh".to_owned(),
             vec!["-c".to_owned(), script.to_owned()],
         )),
+        None,
         None,
     )
     .expect("session");

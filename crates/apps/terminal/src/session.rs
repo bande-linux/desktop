@@ -1,18 +1,24 @@
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use std::os::fd::{AsFd, BorrowedFd};
+use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use alacritty_terminal::event::{Event as TermEvent, OnResize};
 use alacritty_terminal::tty::{self, Options, Pty, Shell};
+use zbus::blocking::Connection;
+
+use crate::L10N;
 
 use crate::process::{self, Report, Reports};
+use crate::scope;
 use crate::terminal::{GridSize, Terminal};
 
 const READ_BUFFER: usize = 65536;
 const READS_PER_WAKE: usize = 16;
 const TITLE_SEPARATOR: &str = " — ";
+const CALM_SCREEN: &str = "\x1b[?1049l\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[0m\x1b[?25l";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Notice {
@@ -40,6 +46,10 @@ pub struct Session {
     foreground: Option<(u32, String)>,
     command: Option<(Instant, String)>,
     notices: Vec<Notice>,
+    bus: Option<Connection>,
+    ending: Option<UnixStream>,
+    hung_up: bool,
+    out_of_memory: bool,
     exited: bool,
 }
 
@@ -48,6 +58,7 @@ impl Session {
         terminal: Terminal,
         shell: Option<Shell>,
         directory: Option<PathBuf>,
+        bus: Option<Connection>,
     ) -> io::Result<Self> {
         let options = Options {
             shell,
@@ -61,6 +72,11 @@ impl Session {
         };
         let pty = tty::new(&options, terminal.window_size(), 0)?;
         let shell = pty.child().id();
+        let ending = bus.clone().and_then(|bus| {
+            scope::follow(bus, shell)
+                .inspect_err(|error| tracing::warn!("cannot follow the shell {shell}: {error}"))
+                .ok()
+        });
         let mut session = Self {
             terminal,
             pty,
@@ -72,6 +88,10 @@ impl Session {
             foreground: None,
             command: None,
             notices: Vec::new(),
+            bus,
+            ending,
+            hung_up: false,
+            out_of_memory: false,
             exited: false,
         };
         session.refresh_foreground();
@@ -82,12 +102,43 @@ impl Session {
         self.shell
     }
 
-    pub fn fd(&self) -> BorrowedFd<'_> {
-        self.pty.file().as_fd()
+    pub fn bus(&self) -> Option<Connection> {
+        self.bus.clone()
+    }
+
+    pub fn fd(&self) -> Option<BorrowedFd<'_>> {
+        if self.exited || self.out_of_memory {
+            None
+        } else if self.hung_up {
+            self.ending.as_ref().map(AsFd::as_fd)
+        } else {
+            Some(self.pty.file().as_fd())
+        }
     }
 
     pub fn exited(&self) -> bool {
         self.exited
+    }
+
+    fn hang_up(&mut self) {
+        self.hung_up = true;
+        self.output.clear();
+        self.exited = self.ending.is_none();
+    }
+
+    fn learn_ending(&mut self) {
+        let mut byte = [0u8];
+        let read = self.ending.as_mut().map(|ending| ending.read(&mut byte));
+        match read {
+            Some(Err(error)) if error.kind() == io::ErrorKind::WouldBlock => {}
+            Some(Ok(1)) if byte[0] == 1 => {
+                self.out_of_memory = true;
+                let message = L10N.tr("tab-out-of-memory");
+                self.terminal
+                    .feed(format!("{CALM_SCREEN}\r\n\r\n{message}").as_bytes());
+            }
+            _ => self.exited = true,
+        }
     }
 
     pub fn has_pending_output(&self) -> bool {
@@ -95,6 +146,9 @@ impl Session {
     }
 
     pub fn send(&mut self, bytes: &[u8]) {
+        if self.hung_up {
+            return;
+        }
         self.output.extend_from_slice(bytes);
         self.flush();
     }
@@ -114,12 +168,16 @@ impl Session {
     }
 
     pub fn read(&mut self) -> Vec<Notice> {
+        if self.hung_up {
+            self.learn_ending();
+            return Vec::new();
+        }
         let mut buffer = [0u8; READ_BUFFER];
         for _ in 0..READS_PER_WAKE {
             let mut master = self.pty.file();
             match master.read(&mut buffer) {
                 Ok(0) => {
-                    self.exited = true;
+                    self.hang_up();
                     break;
                 }
                 Ok(read) => {
@@ -132,7 +190,7 @@ impl Session {
                 Err(error) if error.kind() == io::ErrorKind::WouldBlock => break,
                 Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
                 Err(_) => {
-                    self.exited = true;
+                    self.hang_up();
                     break;
                 }
             }
@@ -180,7 +238,7 @@ impl Session {
                 TermEvent::ResetTitle => self.program_title = None,
                 TermEvent::ClipboardStore(_, text) => notices.push(Notice::Copy(text)),
                 TermEvent::Bell => notices.push(Notice::Bell),
-                TermEvent::ChildExit(_) | TermEvent::Exit => self.exited = true,
+                TermEvent::ChildExit(_) | TermEvent::Exit => self.hang_up(),
                 _ => {}
             }
         }

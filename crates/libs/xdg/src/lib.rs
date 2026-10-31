@@ -8,6 +8,7 @@ mod launch;
 mod mime;
 mod mimeapps;
 mod reopen;
+mod scope;
 mod uri;
 
 use std::sync::LazyLock;
@@ -39,4 +40,5 @@ pub use mimeapps::{
 pub use reopen::{
     apps_to_reopen, remember_apps, remember_running_apps, reopen_file, take_apps_to_reopen,
 };
+pub use scope::{Failed, app_scope, ran_out_of_memory, start_scope};
 pub use uri::{file_uri, path_from_file_uri, percent_decode, percent_encode};

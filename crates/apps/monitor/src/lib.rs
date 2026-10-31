@@ -25,7 +25,7 @@ pub use apps::{AppInfo, Catalog, Group, GroupKey};
 pub use asked::Asked;
 pub use cpu::{CpuShare, read_cpu_ticks};
 pub use force_quit::ForceQuitView;
-pub use format::{format_bytes, format_cpu_time, format_rate};
+pub use format::{format_cpu_time, format_rate};
 pub use inhibitors::{Inhibitor, SleepBlocker, list_sleep_blockers, sleep_blockers};
 pub use inspect::{Details, Mapping, OpenFile, Thread, read_details};
 pub use inspector::{INSPECTOR_SIZE, InspectorView, Section};

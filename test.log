@@ -1,0 +1,264 @@
+   Compiling unbound-monitor v0.1.0 (/home/mikael/unbound-linux/desktop/.claude/worktrees/agent-a22a2c81a6ae0d678/crates/apps/monitor)
+   Compiling unbound-term v0.1.0 (/home/mikael/unbound-linux/desktop/.claude/worktrees/agent-a22a2c81a6ae0d678/crates/apps/terminal)
+   Compiling unbound-xdg v0.1.0 (/home/mikael/unbound-linux/desktop/.claude/worktrees/agent-a22a2c81a6ae0d678/crates/libs/xdg)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 34.82s
+     Running unittests src/lib.rs (target/debug/deps/unbound_monitor-b086ad61200e8e84)
+
+running 3 tests
+test inspect::tests::mappings_keep_paths_with_spaces_and_anonymous_regions ... ok
+test inspect::tests::sockets_read_as_listening_or_connected_ports_with_short_ipv6 ... ok
+test tests::every_message_id_used_in_code_is_in_the_english_file ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/debug/deps/unbound_monitor-01ca40ae289aac7e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/apps.rs (target/debug/deps/apps-5628d2427c1d9aab)
+
+running 5 tests
+test interpreters_terminal_entries_and_shared_programs_never_claim_a_process ... ok
+test kernel_threads_share_one_group_and_the_oldest_root_leads_an_app ... ok
+test services_keep_their_same_named_workers_and_leave_other_children_alone ... ok
+test systemd_app_scopes_name_the_app_even_when_the_program_does_not ... ok
+test terminal_children_stay_with_the_terminal_but_apps_started_from_it_stand_alone ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/inhibitors.rs (target/debug/deps/inhibitors-0ece9eaae525696c)
+
+running 2 tests
+test only_blocking_sleep_and_idle_inhibitors_keep_the_computer_awake ... ok
+test a_sleep_blocker_from_logind_marks_its_app_in_the_energy_tab ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/inspector.rs (target/debug/deps/inspector-1ce75ae951fcd8d4)
+
+running 4 tests
+test details_list_threads_open_files_and_mappings_in_order ... ok
+test escape_closes_the_inspector ... ok
+test the_inspector_links_the_family_and_shows_each_section ... ok
+test the_inspector_matches_its_golden ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.85s
+
+     Running tests/model.rs (target/debug/deps/model-df27b399d6324e41)
+
+running 8 tests
+test a_selected_process_that_exits_leaves_nothing_selected ... ok
+test an_apps_processes_sort_under_it_and_a_selected_one_stays_selected ... ok
+test apps_sort_by_their_summed_cpu_and_selection_follows_a_row_that_moves ... ok
+test quitting_an_app_signals_its_roots_and_force_quitting_signals_every_process ... ok
+test disk_cells_show_a_dash_where_a_process_cannot_be_read ... ok
+test search_by_process_name_or_pid_opens_the_app_on_the_matching_processes ... ok
+test the_network_tab_lists_interfaces_by_traffic ... ok
+test values_read_like_activity_monitor ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/monitor.rs (target/debug/deps/monitor-c2147efa11be7601)
+
+running 16 tests
+test a_system_without_gpu_statistics_reports_none ... ok
+test a_reused_pid_starts_its_cpu_count_afresh ... ok
+test cores_of_two_capacities_group_into_performance_and_efficiency_with_their_own_shares ... ok
+test cpu_shares_split_user_system_and_idle_time_between_samples ... ok
+test an_app_that_wakes_often_uses_more_energy_than_an_idle_one_and_only_on_a_laptop ... ok
+test disk_counters_are_read_only_while_asked_for_and_rates_restart_from_zero ... ok
+test disk_rates_count_bytes_since_the_last_sample ... ok
+test live_cpu_ticks_count_every_core ... ok
+test gpu_use_comes_from_drm_fdinfo_once_per_client_and_only_while_asked_for ... ok
+test memory_is_proportional_only_while_asked_for_and_resident_otherwise ... ok
+test memory_pressure_turns_amber_when_tasks_wait_and_red_when_all_of_them_stall ... ok
+test process_cpu_is_the_share_of_one_core_over_the_interval_as_in_top ... ok
+test names_users_and_kernel_threads_come_from_proc ... ok
+test the_energy_footer_shows_the_charge_the_time_left_and_the_last_twelve_hours ... ok
+test system_totals_cover_memory_physical_disks_and_interfaces_without_loopback ... ok
+test while_nobody_looks_only_the_system_is_sampled_and_processes_resume_without_a_spike ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/signal.rs (target/debug/deps/signal-a73696c18d7beef1)
+
+running 2 tests
+test a_process_with_another_start_time_is_treated_as_already_exited ... ok
+test quit_and_force_quit_send_term_and_kill_to_the_sampled_process ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/view.rs (target/debug/deps/view-d94cab1858f488f8)
+
+running 29 tests
+test a_right_click_on_the_header_chooses_columns_and_the_choice_is_remembered ... ok
+test a_narrow_window_keeps_the_graph_and_shows_every_readout_whole ... ok
+test a_right_click_selects_the_row_and_offers_quit_turning_into_force_quit_with_alt ... ok
+test a_tick_between_samples_redraws_only_a_window_whose_own_timer_is_due ... ok
+test a_search_that_finds_nothing_says_so_and_clear_search_brings_the_rows_back ... ok
+test an_app_that_stopped_responding_is_marked_in_the_list_until_it_answers_again ... ok
+test another_tab_shows_its_own_columns_sorted_by_its_measure_and_keeps_the_selection ... ok
+test clicking_the_cpu_graph_shows_every_core_until_escape_and_the_choice_is_remembered ... ok
+test dragging_the_footer_edge_up_shows_the_cores_and_down_hides_them ... ok
+test force_quit_lists_apps_for_assistive_technology_and_force_quits_the_selected_ones ... ok
+test force_quit_marks_an_app_that_stopped_responding_until_it_answers_again ... ok
+test force_quit_matches_its_golden ... ok
+test header_clicks_sort_numbers_largest_first_and_names_from_a ... ok
+test no_series_is_drawn_in_the_alarm_colour ... ok
+test quit_asks_an_app_politely_and_signals_only_a_chosen_process ... ok
+test searching_for_a_process_opens_its_app_and_clearing_the_search_closes_it_again ... ok
+test several_selected_rows_quit_together ... ok
+test super_f_searches_as_you_type_and_escape_clears_the_search ... ok
+test the_disk_scale_follows_the_peak_of_the_shown_history ... ok
+test the_energy_tab_graphs_the_battery_of_the_last_twelve_hours ... ok
+test the_gpu_tab_appears_once_the_system_reports_gpu_use ... ok
+test the_graph_and_the_readouts_are_in_the_accessibility_tree ... ok
+test the_keyboard_alone_finds_a_process_and_asks_to_inspect_it ... ok
+test the_memory_footer_names_what_holds_memory_and_graphs_the_pressure ... ok
+test the_memory_tab_resamples_at_once_to_show_proportional_memory ... ok
+test the_selection_stays_on_its_process_while_the_numbers_reorder_the_list ... ok
+test the_view_filter_keeps_my_processes_or_apps_and_is_remembered ... ok
+test the_wheel_scrolls_the_list_under_the_pointer ... ok
+test activity_monitor_matches_its_goldens ... ok
+
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.29s
+
+     Running unittests src/lib.rs (target/debug/deps/unbound_term-344ab084f2ab857c)
+
+running 1 test
+test tests::every_message_id_used_in_code_is_in_the_english_file ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/debug/deps/unbound_term-c71f6ec22e0dec35)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/scopes.rs (target/debug/deps/scopes-1ccf4fb4cee5023e)
+
+running 3 tests
+test a_tab_whose_shell_is_killed_otherwise_closes ... ok
+test a_tab_killed_for_memory_says_so_and_stays_open ... ok
+test without_a_user_manager_tabs_still_close_when_their_shell_ends ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/term.rs (target/debug/deps/term-85ec23506a24d1ae)
+
+running 35 tests
+test a_drag_selects_text_for_copying ... ok
+test a_shell_runs_on_a_pty_and_reports_its_folder_and_running_program ... ok
+test alt_moves_by_word_and_prefixes_escape ... ok
+test closing_other_tabs_is_offered_only_when_there_are_others ... ok
+test control_sends_signals_and_super_is_kept_for_the_app ... ok
+test dropped_files_become_shell_quoted_paths_and_dropped_text_stays_as_it_is ... ok
+test every_profile_keeps_text_and_ansi_colours_legible ... ok
+test find_starts_at_the_newest_match_and_steps_through_the_scrollback ... ok
+test folder_reports_are_found_across_reads_and_only_for_this_machine ... ok
+test found_text_and_the_find_bar_match_their_goldens ... ok
+test keys_are_sent_as_xterm_sequences ... ok
+test links_are_found_in_plain_text_and_in_hyperlink_escapes ... ok
+test menu_actions_name_the_command_they_run ... ok
+test output_lands_on_the_grid_and_scrolls_into_the_scrollback ... ok
+test pastes_are_bracketed_when_the_program_asks ... ok
+test paths_in_the_output_are_links_to_files_that_exist ... ok
+test precise_scrolling_moves_by_points_and_stops_at_both_ends_of_the_scrollback ... ok
+test prompt_marks_and_notifications_are_reported ... ok
+test select_all_copies_the_scrollback_and_the_screen ... ok
+test settings_keep_their_defaults_for_unknown_or_broken_values_and_round_trip ... ok
+test a_command_that_finishes_is_reported_with_its_name ... ok
+test splitting_nests_panes_and_closing_one_gives_its_room_back ... ok
+test super_chords_are_app_commands_whatever_the_shift_state_of_plus ... ok
+test super_up_and_down_jump_between_the_commands_typed_at_the_prompt ... ok
+test text_size_steps_through_a_ladder_and_stops_at_its_ends ... ok
+test the_close_confirmation_answers_enter_and_escape_and_matches_its_goldens ... ok
+test the_find_bar_reports_typing_and_its_keys ... ok
+test the_mouse_is_reported_in_the_encoding_and_detail_the_program_asked_for ... ok
+test split_panes_match_their_goldens ... ok
+test the_tab_strip_shares_the_header_after_the_window_controls_and_keeps_room_for_new_tab ... ok
+test the_terminal_menu_offers_the_link_under_the_pointer_and_copy_only_with_a_selection ... ok
+test the_settings_window_matches_its_goldens ... ok
+test two_clicks_select_a_word_three_a_line_and_alt_drag_a_block ... ok
+test windows_left_behind_are_restored_once_and_running_ones_are_left_alone ... ok
+test the_window_with_tabs_in_its_header_matches_its_goldens ... ok
+
+test result: ok. 35 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.90s
+
+     Running unittests src/lib.rs (target/debug/deps/unbound_xdg-34c055fa1b1767d2)
+
+running 5 tests
+test launch::tests::only_crashes_and_failures_while_opening_are_reported ... ok
+test scope::tests::a_scope_still_stopping_is_waited_for ... ok
+test scope::tests::only_a_scope_that_failed_from_an_oom_kill_ran_out_of_memory ... ok
+test scope::tests::without_systemd_nothing_ran_out_of_memory ... ok
+test launch::tests::apps_run_in_their_own_scope_and_a_crash_is_told ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.41s
+
+     Running tests/base_dirs.rs (target/debug/deps/base_dirs-c4d65e1e0ca32a08)
+
+running 1 test
+test state_home_uses_an_absolute_xdg_state_home_and_otherwise_the_home_folder ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/mime.rs (target/debug/deps/mime-be3c3a146d1033ff)
+
+running 11 tests
+test ancestry_follows_aliases_subclasses_and_text ... ok
+test a_higher_directory_replaces_and_extends_the_globs_below ... ok
+test choosing_a_default_app_rewrites_only_its_keys ... ok
+test contents_decide_when_the_name_says_nothing_or_is_ambiguous ... ok
+test descriptions_are_localised ... ok
+test file_uris_round_trip_any_path ... ok
+test defaults_follow_list_precedence_and_associations ... ok
+test files_fill_the_exec_field_codes ... ok
+test handlers_include_entries_hidden_from_menus ... ok
+test icons_fall_back_from_specific_to_generic_names ... ok
+test names_are_matched_by_literal_then_longest_glob_with_case_rules ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/xdg.rs (target/debug/deps/xdg-4d092a242bb7777c)
+
+running 15 tests
+test desktop_actions_are_listed_in_order_localised_and_run_with_their_own_exec ... ok
+test field_codes_expand_to_the_icon_name_and_location ... ok
+test hidden_entries_and_entries_for_other_desktops_are_not_listed ... ok
+test ids_come_from_the_path_below_applications_and_earlier_directories_win ... ok
+test icons_are_found_by_size_through_inherited_themes ... ok
+test localized_names_are_matched_from_the_most_to_the_least_specific_locale ... ok
+test launched_apps_receive_the_activation_token ... ok
+test open_at_login_copies_the_desktop_entry_into_autostart_and_removes_it_again ... ok
+test quoted_exec_arguments_follow_the_specifications_escapes ... ok
+test reserved_characters_must_be_quoted ... ok
+test terminal_apps_run_inside_the_terminal ... ok
+test running_apps_are_remembered_once_by_desktop_id_and_reopened_only_once ... ok
+test user_dirs_follow_xdg_user_dirs_and_default_to_english_names_in_home ... ok
+test window_app_ids_find_their_desktop_entry ... ok
+test the_unbound_theme_draws_its_own_icons_and_adwaita_the_rest ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests unbound_monitor
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests unbound_term
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests unbound_xdg
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

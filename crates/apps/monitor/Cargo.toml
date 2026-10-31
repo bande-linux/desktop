@@ -10,6 +10,7 @@ accesskit.workspace = true
 rustix.workspace = true
 tracing.workspace = true
 unbound-app-menu.workspace = true
+unbound-fs.workspace = true
 unbound-l10n.workspace = true
 unbound-log.workspace = true
 unbound-status.workspace = true

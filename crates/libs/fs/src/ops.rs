@@ -140,6 +140,7 @@ impl Job {
             last_progress: None,
             remembered: None,
             outcome: Outcome::default(),
+            made: None,
         };
         thread::Builder::new()
             .name("file operation".to_owned())
@@ -200,6 +201,7 @@ struct Worker {
     last_progress: Option<Instant>,
     remembered: Option<Resolution>,
     outcome: Outcome,
+    made: Option<PathBuf>,
 }
 
 fn name_of(path: &Path) -> io::Result<&std::ffi::OsStr> {
@@ -471,10 +473,25 @@ impl Worker {
         self.copy_item(source, &target)
     }
 
+    fn copy_made(&mut self, source: &Path, target: &Path) -> Result<(), Halt> {
+        self.made = None;
+        self.copy_tree(source, target)
+    }
+
+    fn discard_made(&mut self, target: &Path) {
+        if self.made.take().as_deref() == Some(target) {
+            let _ = remove_all(target);
+        }
+    }
+
+    fn mark_made(&mut self, target: &Path) {
+        self.made.get_or_insert_with(|| target.to_path_buf());
+    }
+
     fn copy_item(&mut self, source: &Path, target: &Path) -> Result<(), Halt> {
-        match self.copy_tree(source, target) {
+        match self.copy_made(source, target) {
             Ok(()) => {
-                if target.symlink_metadata().is_ok() {
+                if self.made.as_deref() == Some(target) && target.symlink_metadata().is_ok() {
                     self.outcome
                         .changes
                         .push(Change::Created(target.to_path_buf()));
@@ -482,7 +499,7 @@ impl Worker {
                 Ok(())
             }
             Err(halt) => {
-                let _ = remove_all(target);
+                self.discard_made(target);
                 Err(halt)
             }
         }
@@ -513,7 +530,11 @@ impl Worker {
         };
         let file_type = metadata.file_type();
         let copied = if file_type.is_symlink() {
-            fs::read_link(source).and_then(|link| symlink(link, target))
+            let linked = fs::read_link(source).and_then(|link| symlink(link, target));
+            if linked.is_ok() {
+                self.mark_made(target);
+            }
+            linked
         } else if file_type.is_dir() {
             self.copy_folder(source, target, &metadata)?
         } else if file_type.is_file() {
@@ -541,6 +562,7 @@ impl Worker {
         if let Err(error) = fs::create_dir(target) {
             return Ok(Err(error));
         }
+        self.mark_made(target);
         let mut children = match fs::read_dir(source) {
             Ok(entries) => entries
                 .filter_map(Result::ok)
@@ -573,6 +595,7 @@ impl Worker {
             Ok(files) => files,
             Err(error) => return Ok(Err(error)),
         };
+        self.mark_made(target);
         loop {
             if self.check().is_err() {
                 drop(output);
@@ -603,12 +626,12 @@ impl Worker {
                 self.progress.items_total += items;
                 self.progress.bytes_total += bytes;
                 let failures = self.outcome.failures.len();
-                if let Err(halt) = self.copy_tree(from, to) {
-                    let _ = remove_all(to);
+                if let Err(halt) = self.copy_made(from, to) {
+                    self.discard_made(to);
                     return Err(halt);
                 }
                 if self.outcome.failures.len() > failures {
-                    let _ = remove_all(to);
+                    self.discard_made(to);
                     return Ok(false);
                 }
                 if let Err(error) = remove_all(from) {

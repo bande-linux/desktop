@@ -522,3 +522,31 @@ fn sizes_read_as_in_the_finder() {
     assert_eq!(format_size(1_500_000), "1.5 MB");
     assert_eq!(format_size(2_340_000_000), "2.34 GB");
 }
+
+#[test]
+fn deleting_never_reaches_into_another_mount() {
+    let place = Place::new();
+    let outcome = place.run(Task::Delete {
+        sources: vec![PathBuf::from("/proc")],
+    });
+    let kinds: Vec<_> = outcome
+        .failures
+        .iter()
+        .map(|failure| failure.error.kind())
+        .collect();
+    assert_eq!(kinds, [std::io::ErrorKind::CrossesDevices]);
+}
+
+#[test]
+fn deleting_a_folder_removes_links_but_not_what_they_point_to() {
+    let place = Place::new();
+    let kept = place.file("elsewhere/kept.txt", "kept");
+    place.file("doomed/inner/deep/file.txt", "gone");
+    symlink(place.path("elsewhere"), place.path("doomed/inner/link")).expect("link");
+    let outcome = place.run(Task::Delete {
+        sources: vec![place.path("doomed")],
+    });
+    assert!(outcome.failures.is_empty(), "{:?}", outcome.failures);
+    assert!(place.path("doomed").symlink_metadata().is_err());
+    assert_eq!(read(&kept), "kept");
+}

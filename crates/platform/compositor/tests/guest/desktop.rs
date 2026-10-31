@@ -117,28 +117,30 @@ fn input_devices_held_by(pid: u32) -> Vec<PathBuf> {
 
 const SETTLED: Duration = Duration::from_secs(2);
 
-fn wait_for_shell() -> Scanout {
+fn wait_for_settled(what: &str, drawn: impl Fn(&Scanout) -> bool) -> Scanout {
     let mut unchanged_since: Option<(Scanout, Instant)> = None;
-    wait_for(
-        "the shell to settle on the desktop and the bar",
-        STARTUP,
-        || {
-            let Some(now) = current_scanout() else {
-                return false;
-            };
-            let drawn = running("unbound-shell")
-                && pixel(&now, 32, 200) != BACKGROUND
-                && pixel(&now, now.width / 2, now.height / 2) != BACKGROUND;
-            match &unchanged_since {
-                Some((shown, since)) if drawn && shown.rgb == now.rgb => since.elapsed() >= SETTLED,
-                _ => {
-                    unchanged_since = drawn.then(|| (now, Instant::now()));
-                    false
-                }
+    wait_for(what, STARTUP, || {
+        let Some(now) = current_scanout() else {
+            return false;
+        };
+        let drawn = drawn(&now);
+        match &unchanged_since {
+            Some((shown, since)) if drawn && shown.rgb == now.rgb => since.elapsed() >= SETTLED,
+            _ => {
+                unchanged_since = drawn.then(|| (now, Instant::now()));
+                false
             }
-        },
-    );
+        }
+    });
     scanout()
+}
+
+fn wait_for_shell() -> Scanout {
+    wait_for_settled("the shell to settle on the desktop and the bar", |now| {
+        running("unbound-shell")
+            && pixel(now, 32, 200) != BACKGROUND
+            && pixel(now, now.width / 2, now.height / 2) != BACKGROUND
+    })
 }
 
 fn start_desktop() -> Desktop {
@@ -641,18 +643,20 @@ fn super_shift_4_saves_a_dragged_out_area_to_the_desktop() {
     for _ in 0..20 {
         mouse.frame(&[(EV_REL, REL_X, -200), (EV_REL, REL_Y, -200)]);
     }
-    thread::sleep(Duration::from_secs(1));
-    let corner = |scanout: &Scanout| {
-        (0..32)
-            .flat_map(|y| (0..32).map(move |x| (x, y)))
-            .map(|(x, y)| pixel(scanout, x, y))
-            .collect::<Vec<_>>()
-    };
-    let before = scanout();
+    let before = wait_for_settled("the pointer to rest in the corner", |_| true);
 
     mouse.chord(&[KEY_LEFTMETA, KEY_LEFTSHIFT], KEY_4);
+    let cursor = (unbound_compositor::ARROW_WIDTH * unbound_compositor::ARROW_HEIGHT) as usize;
     wait_for("the crosshair of the area overlay", STARTUP, || {
-        corner(&scanout()) != corner(&before)
+        mouse.frame(&[(EV_REL, REL_X, 1), (EV_REL, REL_Y, 1)]);
+        mouse.frame(&[(EV_REL, REL_X, -50), (EV_REL, REL_Y, -50)]);
+        let now = scanout();
+        now.rgb
+            .iter()
+            .zip(&before.rgb)
+            .filter(|(now, before)| now != before)
+            .count()
+            > 2 * cursor
     });
     thread::sleep(Duration::from_millis(500));
     let pressed_at: (usize, usize) = (0, 0);
@@ -691,7 +695,6 @@ fn super_shift_4_saves_a_dragged_out_area_to_the_desktop() {
         "{width} x {height} is not the shape of a {drag:?} drag"
     );
 
-    let cursor = (unbound_compositor::ARROW_WIDTH * unbound_compositor::ARROW_HEIGHT) as usize;
     let differing_at = |(left, top): (usize, usize)| {
         (0..height)
             .flat_map(|y| (0..width).map(move |x| (x, y)))
@@ -895,18 +898,15 @@ fn the_greeter_takes_a_password_typed_in_the_system_layout_after_a_refusal_and_h
         &["--greeter"],
         &[("GREETD_SOCK", socket.to_str().expect("socket path"))],
     );
-    wait_for("the greeter", STARTUP, || running("unbound-greeter"));
-    wait_for("the greeter to draw", STARTUP, || {
-        current_scanout().is_some_and(|scanout| {
-            scanout
+    wait_for_settled("the greeter's prompt to be drawn and settle", |now| {
+        running("unbound-greeter")
+            && now
                 .rgb
                 .iter()
                 .filter(|&&shown| differs(shown, BACKGROUND))
                 .count()
-                > CARET_PIXELS
-        })
+                > now.rgb.len() / 2
     });
-    thread::sleep(Duration::from_secs(1));
     scanout().save("m24-greeter");
     assert!(
         !running("unbound-shell"),

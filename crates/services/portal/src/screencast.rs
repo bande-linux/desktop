@@ -305,12 +305,17 @@ impl ScreenCast {
                 Value::from((RESTORE_VENDOR, RESTORE_VERSION, Value::from(ids))),
             );
         }
-        match lock(&self.sessions).get_mut(&path) {
-            Some(session) => session.streams = streams,
-            None => {
-                self.backend.stop(&streams);
-                return (CANCELLED, Results::new());
+        let unclaimed = match lock(&self.sessions).get_mut(&path) {
+            Some(session) => {
+                session.streams = streams;
+                None
             }
+            None => Some(streams),
+        };
+        if let Some(streams) = unclaimed {
+            let backend = Arc::clone(&self.backend);
+            blocking::unblock(move || backend.stop(&streams)).await;
+            return (CANCELLED, Results::new());
         }
         (SUCCESS, results)
     }
@@ -342,7 +347,8 @@ impl SessionObject {
     async fn close(&self, #[zbus(object_server)] server: &ObjectServer) {
         let session = lock(&self.sessions).remove(&self.path);
         if let Some(session) = session.filter(|session| !session.streams.is_empty()) {
-            self.backend.stop(&session.streams);
+            let backend = Arc::clone(&self.backend);
+            blocking::unblock(move || backend.stop(&session.streams)).await;
         }
         let _ = server.remove::<SessionObject, _>(&self.path).await;
     }

@@ -4,7 +4,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use rustix::process::{Pid, Signal, kill_process};
+use rustix::process::{Pid, PidfdFlags, Signal, pidfd_open, pidfd_send_signal};
 
 use crate::file_chooser::{Dialog, FileChooserUi, Filter, Mode, Outcome, Pattern, Selection};
 use crate::request::Cancellation;
@@ -241,10 +241,11 @@ impl DialogProcess {
                 return None;
             }
         };
-        if let Some(pid) = i32::try_from(child.id()).ok().and_then(Pid::from_raw) {
-            cancellation.on_cancel(move || {
-                let _ = kill_process(pid, Signal::TERM);
-            });
+        match pidfd_open(Pid::from_child(&child), PidfdFlags::empty()) {
+            Ok(process) => cancellation.on_cancel(move || {
+                let _ = pidfd_send_signal(&process, Signal::TERM);
+            }),
+            Err(error) => tracing::warn!("cannot watch {}: {error}", self.program.display()),
         }
         let mut output = Vec::new();
         if let Some(mut stdout) = child.stdout.take() {

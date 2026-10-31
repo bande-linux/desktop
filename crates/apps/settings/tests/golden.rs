@@ -410,7 +410,7 @@ fn keyboard_shortcuts(scheme: Scheme) -> SettingsView {
     keyboard(scheme, PaneId::KeyboardShortcuts)
 }
 
-fn trackpad(scheme: Scheme) -> SettingsView {
+fn pointing(scheme: Scheme, pane: PaneId) -> SettingsView {
     let mut view = new_view(scheme);
     view.set_pointing_devices(PointingDevices {
         trackpad: true,
@@ -428,8 +428,16 @@ fn trackpad(scheme: Scheme) -> SettingsView {
         (SettingId::MouseNaturalScrolling, Value::Flag(false)),
         (SettingId::MouseSpeed, Value::Number(5)),
     ]));
-    view.select_pane(PaneId::TrackpadMouse);
+    view.select_pane(pane);
     view
+}
+
+fn mouse(scheme: Scheme) -> SettingsView {
+    pointing(scheme, PaneId::Mouse)
+}
+
+fn trackpad(scheme: Scheme) -> SettingsView {
+    pointing(scheme, PaneId::Trackpad)
 }
 
 fn privacy(scheme: Scheme) -> SettingsView {
@@ -631,7 +639,7 @@ fn network(scheme: Scheme) -> SettingsView {
 
 #[test]
 fn the_panes_match_their_goldens() {
-    let panes: [(&str, Scheme, Build, f64); 29] = [
+    let panes: [(&str, Scheme, Build, f64); 30] = [
         ("appearance-light", Scheme::Light, appearance, 1.0),
         ("appearance-dark", Scheme::Dark, appearance, 1.0),
         ("appearance-light@1.5x", Scheme::Light, appearance, 1.5),
@@ -656,7 +664,8 @@ fn the_panes_match_their_goldens() {
             keyboard_shortcuts,
             1.0,
         ),
-        ("trackpad-mouse-light", Scheme::Light, trackpad, 1.0),
+        ("mouse-light", Scheme::Light, mouse, 1.0),
+        ("trackpad-light", Scheme::Light, trackpad, 1.0),
         ("power-light", Scheme::Light, power, 1.0),
         ("power-150-light", Scheme::Light, larger_power, 1.0),
         ("privacy-security-light", Scheme::Light, privacy, 1.0),

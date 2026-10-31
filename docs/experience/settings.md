@@ -177,7 +177,8 @@ What already works well and stays:
    Displays
    Sound
    Keyboard
-   Trackpad & Mouse
+   Mouse
+   Trackpad
  SYSTEM
    Power
    Privacy & Security
@@ -197,7 +198,7 @@ What already works well and stays:
 Inside a group, the panes people open most come first. About comes last, as everywhere.
 
 - Each label is one plain word, in Datum's tracked capitals (the Label role in `ink3`).
-- Each group has three to five panes: 16 rows in all, against today's 15 rows plus 6 hidden
+- Each group has three to five panes: 17 rows in all, against today's 15 rows plus 6 hidden
   subpages.
 - Groups follow the user's question, not the implementation:
   - Bluetooth sits with Wi-Fi as a radio you join, as on macOS, Windows and GNOME.
@@ -227,7 +228,8 @@ Inside a group, the panes people open most come first. About comes last, as ever
 | Devices | Displays | `video-display-symbolic` | arrangement, brightness, Night Light, each display | Night Light | a display is known |
 | | Sound | `audio-volume-high-symbolic` | output, input, sound effects, apps | — | PipeWire runs |
 | | Keyboard | `input-keyboard-symbolic` | input sources, key repeat, modifier keys | Keyboard Shortcuts | always |
-| | Trackpad & Mouse | `input-mouse-symbolic`; new `trackpad` | trackpad, mouse | — | a trackpad or a mouse exists |
+| | Mouse | `input-mouse-symbolic` | primary button, scrolling, tracking | — | a mouse exists |
+| | Trackpad | new: `input-touchpad-symbolic` | click, scroll, pointer | — | a trackpad exists |
 | System | Power | the live `battery-level-*-symbolic`; `system-shutdown-symbolic` without a battery | battery, power mode, when inactive, lid | — | always |
 | | Privacy & Security | `changes-prevent-symbolic` | app permissions, screen lock, clipboard | Camera, Screenshots, Screen Sharing | always |
 | | Apps | `view-app-grid-symbolic` | default apps, open at login | — | always |
@@ -308,7 +310,8 @@ Every pane and subpage is built from the same parts, in this order.
 | Displays | Built-in display · 2 displays, extended |
 | Sound | MacBook Pro Speakers · 60 % |
 | Keyboard | English (US) · 2 input sources |
-| Trackpad & Mouse | How clicking, scrolling and tracking feel |
+| Mouse | Buttons, scrolling and tracking speed |
+| Trackpad | Tapping, clicking, scrolling and tracking speed |
 | Power | 82 % · 4 h 10 min left · On power adapter |
 | Privacy & Security | Which apps may use the camera, take screenshots or share the screen |
 | Apps | Which apps open your files and links, and which open at login |
@@ -439,7 +442,7 @@ anywhere on the row operates the control: it flips a switch, opens a pop-up, foc
 
 **Words.**
 
-- Pane and subpage names are Title Case nouns of one or two words: "Trackpad & Mouse".
+- Pane and subpage names are Title Case nouns of one or two words: "Privacy & Security".
 - Section labels are one or two words.
 - Row labels are in sentence case and say what is set, in positive form: "Show names",
   "Automatically hide the bar". There is no "Enable", no "settings" and no "Configure".
@@ -479,7 +482,8 @@ anywhere on the row operates the control: it flips a switch, opens a pop-up, foc
 | Keyboard ▸ Input sources | Keyboard ▸ Input sources | hint shows the keys with the `Shortcut` widget |
 | Keyboard ▸ Repeat rate, Delay until repeat; Caps Lock key | Keyboard ▸ Key repeat; Modifier keys | unchanged |
 | Keyboard ▸ Keyboard shortcuts (inline, long) | Keyboard ▸ Keyboard Shortcuts › subpage | the long list leaves the main page |
-| Trackpad & Mouse ▸ all rows | Trackpad & Mouse | primary button and acceleration added (slice 6) |
+| Trackpad & Mouse ▸ Mouse rows | Mouse | its own pane, shown only with a mouse; primary button and acceleration added (slice 6) |
+| Trackpad & Mouse ▸ Trackpad rows | Trackpad | its own pane, shown only with a trackpad; acceleration, dragging and scroll method added (slice 6) |
 | General (hub) | — | removed |
 | General ▸ About (Name, Model, Chip, Memory, Storage, Bande, System, Serial) | About | top-level; the name is the hero; Storage and Software Update become disclosure rows with their summaries |
 | General ▸ Storage (usage, Trash, Largest files) | About ▸ Storage | unchanged |
@@ -818,7 +822,7 @@ Owns `toolkit/graphics`, `toolkit/widgets` and `apps/settings`.
 
 ## 8. Decisions taken in this spec, for the owner to confirm
 
-1. Four labelled groups and 16 panes. There is no General hub: About is top level, and Storage
+1. Four labelled groups and 17 panes. There is no General hub: About is top level, and Storage
    and Software Update live under it.
 2. Date & Time and Language & Region merge into **Language & Time**. Login Items join default
    apps in **Apps**.

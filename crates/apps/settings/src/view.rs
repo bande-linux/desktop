@@ -602,7 +602,8 @@ impl SettingsView {
             | PaneId::Storage
             | PaneId::SoftwareUpdate => true,
             PaneId::LanguageTime => self.locale.is_some() || self.time.is_some(),
-            PaneId::TrackpadMouse => self.pointing.trackpad || self.pointing.mouse,
+            PaneId::Mouse => self.pointing.mouse,
+            PaneId::Trackpad => self.pointing.trackpad,
             PaneId::Microphone | PaneId::Location => self.has_grants(pane),
         }
     }

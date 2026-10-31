@@ -794,20 +794,27 @@ fn the_desktop_shortcuts_live_on_their_own_page_and_switching_sources_shows_its_
 }
 
 #[test]
-fn trackpad_settings_appear_only_with_a_trackpad_and_mouse_settings_only_with_a_mouse() {
+fn the_trackpad_pane_appears_only_with_a_trackpad_and_the_mouse_pane_only_with_a_mouse() {
     let mut view = view();
     view.apply(Update::Values(vec![
         (SettingId::TrackpadTapToClick, Value::Flag(true)),
         (SettingId::MouseNaturalScrolling, Value::Flag(false)),
         (SettingId::MouseSpeed, Value::Number(5)),
     ]));
-    assert!(find(&mut view, Role::ListItem, "Trackpad & Mouse").is_none());
+    assert!(find(&mut view, Role::ListItem, "Mouse").is_none());
+    assert!(find(&mut view, Role::ListItem, "Trackpad").is_none());
 
     view.set_pointing_devices(PointingDevices {
         trackpad: false,
         mouse: true,
     });
-    open(&mut view, "Trackpad & Mouse");
+    assert!(find(&mut view, Role::ListItem, "Trackpad").is_none());
+    for character in "scroll direction".chars() {
+        press(&mut view, Key::Character(character));
+    }
+    assert_eq!(view.visible_panes(), [PaneId::Mouse]);
+    press(&mut view, Key::Escape);
+    open(&mut view, "Mouse");
     assert!(find(&mut view, Role::Switch, "Tap to click").is_none());
     let natural = find(&mut view, Role::Switch, "Natural scrolling").expect("mouse scrolling");
     click(&mut view, natural);
@@ -821,7 +828,9 @@ fn trackpad_settings_appear_only_with_a_trackpad_and_mouse_settings_only_with_a_
 
     view.set_pointing_devices(PointingDevices {
         trackpad: true,
-        mouse: true,
+        mouse: false,
     });
+    assert!(find(&mut view, Role::ListItem, "Mouse").is_none());
+    open(&mut view, "Trackpad");
     assert!(find(&mut view, Role::Switch, "Tap to click").is_some());
 }

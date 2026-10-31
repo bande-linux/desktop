@@ -1010,12 +1010,6 @@ impl SettingsView {
                 .bluetooth
                 .as_ref()
                 .is_some_and(|bluetooth| bluetooth.powered),
-            SettingId::TrackpadTapToClick
-            | SettingId::TrackpadNaturalScrolling
-            | SettingId::TrackpadSpeed
-            | SettingId::TrackpadSecondaryClick
-            | SettingId::TrackpadDisableWhileTyping => self.pointing.trackpad,
-            SettingId::MouseNaturalScrolling | SettingId::MouseSpeed => self.pointing.mouse,
             SettingId::AutomaticTime => self.time.as_ref().is_some_and(|time| time.can_automatic),
             SettingId::DateAndTime | SettingId::TimeZone => self.time.is_some(),
             SettingId::PowerMode | SettingId::LowPowerOnBattery => self

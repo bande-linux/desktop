@@ -392,8 +392,19 @@ or inspect a process, Escape to close the inspector) gets one end-to-end test so
   Clear Search button; tests drive Super+F, typing, Down and Super+I to an inspect request, and
   Escape closes the inspector. Return on a top-level row expands its group rather than inspecting,
   even when the group holds one process; that is left as it is.
-- **Not built:** M10 (battery footer, UPower history into `libs/status`); the Energy and GPU tabs
-  announcing themselves when they appear.
+- **Not built:** the Energy and GPU tabs announcing themselves when they appear.
+
+## 11. Built on 2026-10-31, `day/shell-polish`
+
+- **M10.** The Energy footer adds Remaining Charge, Time Remaining or Time Until Full (from
+  UPower's display device, "–" while UPower is still estimating) and Time on Battery (from the
+  first reading after the last plugged-in one in the history; "–" on power or when the last 12
+  hours hold no plug-in). The graph is "Battery (last 12 hours)": `GetHistory("charge", 43200, 72)`
+  placed by time, the charge as the `accent` series over `accent_soft`, plugged-in spans as a 3 pt
+  `success` band along the bottom, and "12 hr" in the corner; the accessibility description names
+  the charge. A worker reads the display device each sample and the history at most once a minute,
+  only while the Energy tab is shown. `GetHistory` and the battery lookup live in
+  `unbound_status::history`, which Settings' Battery pane now uses too.
 
 ## Sources
 

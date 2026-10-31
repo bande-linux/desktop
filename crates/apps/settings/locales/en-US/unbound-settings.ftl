@@ -230,3 +230,21 @@ same-as-language = Same as language
 formats-preview = Dates and times look like
 language = Language
 region = Region
+night-light-off-hint = Turn on Night Light to make the colours warmer at night.
+on-until = On until { $time }
+off-until = Off until { $time }
+night-time-invalid = Enter a time such as 22:00.
+service-brightness = The brightness service
+text-size-percent = { $percent }%
+other-apps = Other apps
+app-count = { $count ->
+    [0] None
+    [one] 1 app
+   *[other] { $count } apps
+}
+camera-none = No app has asked to use the camera yet.
+microphone-none = No app has asked to use the microphone yet.
+screenshots-none = No app has asked to take screenshots yet.
+screen-sharing-none = No app remembers what it may share.
+location-none = No app has asked for your location yet.
+forget-share-warning = It asks again before it shares your screen or a window.

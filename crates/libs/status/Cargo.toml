@@ -16,11 +16,13 @@ unbound-inbox.workspace = true
 unbound-l10n.workspace = true
 unbound-network.workspace = true
 unbound-notify.workspace = true
+unbound-power.workspace = true
 unbound-xdg.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]
 rustix = { workspace = true, features = ["event"] }
+tempfile.workspace = true
 unbound-test-bus.workspace = true
 
 [lints]

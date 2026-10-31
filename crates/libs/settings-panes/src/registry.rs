@@ -29,12 +29,18 @@ pub enum PaneId {
     Notifications,
     Accessibility,
     Displays,
+    NightLight,
     Sound,
     Keyboard,
     KeyboardShortcuts,
     TrackpadMouse,
     Power,
     PrivacySecurity,
+    Camera,
+    Microphone,
+    Screenshots,
+    ScreenSharing,
+    Location,
     Apps,
     LanguageTime,
     About,
@@ -43,7 +49,7 @@ pub enum PaneId {
 }
 
 impl PaneId {
-    const KEYWORDS: [(Self, &'static str); 19] = [
+    const KEYWORDS: [(Self, &'static str); 25] = [
         (Self::Wifi, "wifi"),
         (Self::Bluetooth, "bluetooth"),
         (Self::Network, "network"),
@@ -52,12 +58,18 @@ impl PaneId {
         (Self::Notifications, "notifications"),
         (Self::Accessibility, "accessibility"),
         (Self::Displays, "displays"),
+        (Self::NightLight, "night-light"),
         (Self::Sound, "sound"),
         (Self::Keyboard, "keyboard"),
         (Self::KeyboardShortcuts, "keyboard-shortcuts"),
         (Self::TrackpadMouse, "trackpad-mouse"),
         (Self::Power, "power"),
         (Self::PrivacySecurity, "privacy-security"),
+        (Self::Camera, "camera"),
+        (Self::Microphone, "microphone"),
+        (Self::Screenshots, "screenshots"),
+        (Self::ScreenSharing, "screen-sharing"),
+        (Self::Location, "location"),
         (Self::Apps, "apps"),
         (Self::LanguageTime, "language-time"),
         (Self::About, "about"),
@@ -77,7 +89,15 @@ impl PaneId {
             Self::Power | Self::PrivacySecurity | Self::Apps | Self::LanguageTime | Self::About => {
                 Some(Group::System)
             }
-            Self::KeyboardShortcuts | Self::Storage | Self::SoftwareUpdate => None,
+            Self::KeyboardShortcuts
+            | Self::NightLight
+            | Self::Camera
+            | Self::Microphone
+            | Self::Screenshots
+            | Self::ScreenSharing
+            | Self::Location
+            | Self::Storage
+            | Self::SoftwareUpdate => None,
         }
     }
 
@@ -91,11 +111,17 @@ impl PaneId {
             Self::Notifications => "preferences-system-notifications-symbolic",
             Self::Accessibility => "avatar-default-symbolic",
             Self::Displays => "video-display-symbolic",
+            Self::NightLight => "night-light-symbolic",
             Self::Sound => "audio-volume-high-symbolic",
             Self::Keyboard | Self::KeyboardShortcuts => "input-keyboard-symbolic",
             Self::TrackpadMouse => "input-mouse-symbolic",
             Self::Power => "system-shutdown-symbolic",
             Self::PrivacySecurity => "changes-prevent-symbolic",
+            Self::Camera => "camera-photo-symbolic",
+            Self::Microphone => "audio-input-microphone-symbolic",
+            Self::Screenshots => "screenshot-recorded-symbolic",
+            Self::ScreenSharing => "emblem-shared-symbolic",
+            Self::Location => "find-location-symbolic",
             Self::Apps => "view-app-grid-symbolic",
             Self::LanguageTime => "preferences-system-symbolic",
             Self::About => "computer-symbolic",
@@ -122,6 +148,12 @@ impl PaneId {
         match self {
             Self::Storage | Self::SoftwareUpdate => Some(Self::About),
             Self::KeyboardShortcuts => Some(Self::Keyboard),
+            Self::NightLight => Some(Self::Displays),
+            Self::Camera
+            | Self::Microphone
+            | Self::Screenshots
+            | Self::ScreenSharing
+            | Self::Location => Some(Self::PrivacySecurity),
             _ => None,
         }
     }
@@ -216,6 +248,21 @@ pub enum SettingId {
     ScreenLock,
     ClipboardHistory,
     DefaultApps,
+    Brightness,
+    NightLightPage,
+    NightLight,
+    NightSchedule,
+    NightFrom,
+    NightTo,
+    NightWarmth,
+    TextSize,
+    TextSizeLink,
+    CameraPage,
+    MicrophonePage,
+    ScreenshotsPage,
+    ScreenSharingPage,
+    LocationPage,
+    AppPermissions,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -256,6 +303,42 @@ pub enum List {
     Regions,
     DefaultApps,
     Clipboard,
+    Permissions(Permission),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Permission {
+    Camera,
+    Microphone,
+    Screenshots,
+    ScreenSharing,
+    Location,
+}
+
+impl Permission {
+    pub const ALL: [Self; 5] = [
+        Self::Camera,
+        Self::Microphone,
+        Self::Screenshots,
+        Self::ScreenSharing,
+        Self::Location,
+    ];
+
+    pub fn pane(self) -> PaneId {
+        match self {
+            Self::Camera => PaneId::Camera,
+            Self::Microphone => PaneId::Microphone,
+            Self::Screenshots => PaneId::Screenshots,
+            Self::ScreenSharing => PaneId::ScreenSharing,
+            Self::Location => PaneId::Location,
+        }
+    }
+
+    pub fn of(pane: PaneId) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|permission| permission.pane() == pane)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -506,6 +589,8 @@ fn rotation_choices() -> Vec<Choice> {
 pub const AUTOMATIC: &str = "automatic";
 
 const BAR_SIZES: (u32, u32) = (32, 56);
+const NIGHT_WARMTH: (u32, u32) = (0, 100);
+pub const TEXT_SIZES: [u32; 5] = [100, 125, 150, 175, 200];
 
 const SCALES: [u32; 5] = [100, 125, 150, 175, 200];
 
@@ -628,6 +713,19 @@ fn desktop_panes() -> Vec<Pane> {
                     )],
                 ),
                 section(
+                    None,
+                    vec![setting(
+                        SettingId::TextSize,
+                        L10N.tr("text-size"),
+                        L10N.tr("text-size-keywords"),
+                        Kind::Stops {
+                            stops: numbers(&TEXT_SIZES),
+                            low: L10N.tr("text-size-default"),
+                            high: L10N.tr("text-size-largest"),
+                        },
+                    )],
+                ),
+                section(
                     Some(L10N.tr("wallpaper")),
                     vec![
                         setting(
@@ -728,6 +826,12 @@ fn accessibility_pane() -> Pane {
                     switch(SettingId::ReduceTransparency, "reduce-transparency"),
                     switch(SettingId::ReduceMotion, "reduce-motion"),
                     setting(
+                        SettingId::TextSizeLink,
+                        L10N.tr("text-size"),
+                        L10N.tr("text-size-keywords"),
+                        Kind::Page(PaneId::Appearance),
+                    ),
+                    setting(
                         SettingId::CursorSize,
                         L10N.tr("cursor-size"),
                         L10N.tr("cursor-size-keywords"),
@@ -760,6 +864,7 @@ fn accessibility_pane() -> Pane {
 fn device_panes() -> Vec<Pane> {
     vec![
         displays_pane(),
+        night_light_pane(),
         sound_pane(),
         keyboard_pane(),
         pane(
@@ -776,43 +881,105 @@ fn device_panes() -> Vec<Pane> {
 fn displays_pane() -> Pane {
     pane(
         PaneId::Displays,
-        vec![section(
-            None,
-            vec![
-                setting(
-                    SettingId::DisplayUse,
-                    L10N.tr("display-use"),
-                    L10N.tr("display-use-keywords"),
-                    Kind::DisplayUses,
-                ),
-                setting(
-                    SettingId::DisplayResolution,
-                    L10N.tr("display-resolution"),
-                    L10N.tr("display-resolution-keywords"),
-                    Kind::Resolutions,
-                ),
-                setting(
-                    SettingId::DisplayScale,
-                    L10N.tr("display-scale"),
-                    L10N.tr("display-scale-keywords"),
-                    choice(scale_choices()),
-                ),
-                setting(
-                    SettingId::RefreshRate,
-                    L10N.tr("refresh-rate"),
-                    L10N.tr("refresh-rate-keywords"),
-                    Kind::RefreshRates,
-                ),
-                setting(
-                    SettingId::DisplayRotation,
-                    L10N.tr("display-rotation"),
-                    L10N.tr("display-rotation-keywords"),
-                    choice(rotation_choices()),
-                ),
-                switch(SettingId::VariableRefreshRate, "variable-refresh-rate"),
-            ],
-        )],
+        vec![
+            section(
+                None,
+                vec![
+                    level(SettingId::Brightness, "brightness"),
+                    page(SettingId::NightLightPage, PaneId::NightLight),
+                ],
+            ),
+            section(
+                None,
+                vec![
+                    setting(
+                        SettingId::DisplayUse,
+                        L10N.tr("display-use"),
+                        L10N.tr("display-use-keywords"),
+                        Kind::DisplayUses,
+                    ),
+                    setting(
+                        SettingId::DisplayResolution,
+                        L10N.tr("display-resolution"),
+                        L10N.tr("display-resolution-keywords"),
+                        Kind::Resolutions,
+                    ),
+                    setting(
+                        SettingId::DisplayScale,
+                        L10N.tr("display-scale"),
+                        L10N.tr("display-scale-keywords"),
+                        choice(scale_choices()),
+                    ),
+                    setting(
+                        SettingId::RefreshRate,
+                        L10N.tr("refresh-rate"),
+                        L10N.tr("refresh-rate-keywords"),
+                        Kind::RefreshRates,
+                    ),
+                    setting(
+                        SettingId::DisplayRotation,
+                        L10N.tr("display-rotation"),
+                        L10N.tr("display-rotation-keywords"),
+                        choice(rotation_choices()),
+                    ),
+                    switch(SettingId::VariableRefreshRate, "variable-refresh-rate"),
+                ],
+            ),
+        ],
     )
+}
+
+fn night_light_pane() -> Pane {
+    pane(
+        PaneId::NightLight,
+        vec![
+            section(
+                None,
+                vec![switch(SettingId::NightLight, "night-light-power")],
+            ),
+            section(
+                None,
+                vec![
+                    setting(
+                        SettingId::NightSchedule,
+                        L10N.tr("night-schedule"),
+                        L10N.tr("night-schedule-keywords"),
+                        Kind::Choices(keyword_choices(vec![
+                            (L10N.tr("night-sunset"), "sunset"),
+                            (L10N.tr("night-custom"), "custom"),
+                        ])),
+                    ),
+                    setting(
+                        SettingId::NightFrom,
+                        L10N.tr("night-from"),
+                        L10N.tr("night-times-keywords"),
+                        Kind::Text,
+                    ),
+                    setting(
+                        SettingId::NightTo,
+                        L10N.tr("night-to"),
+                        L10N.tr("night-times-keywords"),
+                        Kind::Text,
+                    ),
+                ],
+            ),
+            section(
+                None,
+                vec![setting(
+                    SettingId::NightWarmth,
+                    L10N.tr("night-warmth"),
+                    L10N.tr("night-warmth-keywords"),
+                    Kind::Range {
+                        range: NIGHT_WARMTH,
+                        step: 5,
+                        low: L10N.tr("less-warm"),
+                        high: L10N.tr("more-warm"),
+                    },
+                )],
+            ),
+        ],
+    )
+    .with_master(SettingId::NightLight)
 }
 
 fn sound_pane() -> Pane {
@@ -992,6 +1159,16 @@ fn system_panes() -> Vec<Pane> {
             PaneId::PrivacySecurity,
             vec![
                 section(
+                    Some(L10N.tr("app-permissions")),
+                    vec![
+                        page(SettingId::CameraPage, PaneId::Camera),
+                        page(SettingId::MicrophonePage, PaneId::Microphone),
+                        page(SettingId::ScreenshotsPage, PaneId::Screenshots),
+                        page(SettingId::ScreenSharingPage, PaneId::ScreenSharing),
+                        page(SettingId::LocationPage, PaneId::Location),
+                    ],
+                ),
+                section(
                     Some(L10N.tr("screen-lock")),
                     vec![setting(
                         SettingId::ScreenLock,
@@ -1031,6 +1208,11 @@ fn system_panes() -> Vec<Pane> {
                 ),
             ],
         ),
+        permission_pane(Permission::Camera),
+        permission_pane(Permission::Microphone),
+        permission_pane(Permission::Screenshots),
+        permission_pane(Permission::ScreenSharing),
+        permission_pane(Permission::Location),
         language_time_pane(),
         about_pane(),
         pane(
@@ -1062,6 +1244,22 @@ fn system_panes() -> Vec<Pane> {
             )],
         ),
     ]
+}
+
+fn permission_pane(permission: Permission) -> Pane {
+    let id = permission.pane();
+    pane(
+        id,
+        vec![section(
+            None,
+            vec![setting(
+                SettingId::AppPermissions,
+                L10N.tr(&format!("{}-apps", id.keyword())),
+                L10N.tr(&format!("{}-keywords", id.keyword())),
+                Kind::List(List::Permissions(permission)),
+            )],
+        )],
+    )
 }
 
 fn power_pane() -> Pane {

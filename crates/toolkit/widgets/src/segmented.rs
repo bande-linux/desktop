@@ -231,13 +231,18 @@ impl Widget for SegmentedControl {
         }
         Size::new(
             self.segments.iter().map(|segment| segment.width).sum(),
-            SEGMENTED_HEIGHT,
+            cx.control_height(ControlSize::Regular),
         )
     }
 
-    fn place(&mut self, _cx: &mut Context, frame: Rect) {
+    fn place(&mut self, cx: &mut Context, frame: Rect) {
         let width = self.segments.iter().map(|segment| segment.width).sum();
-        self.frame = Rect::new(frame.x, frame.y, width, SEGMENTED_HEIGHT);
+        self.frame = Rect::new(
+            frame.x,
+            frame.y,
+            width,
+            cx.control_height(ControlSize::Regular),
+        );
         if let Some(index) = self.selected
             && self.pill.is_none()
         {

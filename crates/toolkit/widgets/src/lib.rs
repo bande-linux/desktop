@@ -45,7 +45,9 @@ pub use context_menu::ContextMenu;
 pub use disclosure::{DISCLOSURE_HEIGHT, Disclosure};
 pub use free_layout::FreeLayout;
 pub use label::Label;
-pub use menu::{MENU_RADIUS, Menu, MenuItem, MenuOutcome, MenuPanel, MenuTracker, Search};
+pub use menu::{
+    MENU_RADIUS, MENU_SHADOW_MARGIN, Menu, MenuItem, MenuOutcome, MenuPanel, MenuTracker, Search,
+};
 pub use pop_up_button::PopUpButton;
 pub use progress::{LevelIndicator, PROGRESS_HEIGHT, ProgressBar, SPINNER_SIZE, Spinner};
 pub use radio_group::RadioGroup;
@@ -75,7 +77,8 @@ static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", E
 
 pub use control::{focus_ring, focus_ring_for};
 use unbound_graphics::{
-    Appearance, Color, Item, Palette, Point, Rect, Scene, TextAlign, TextStyle, TextSystem,
+    Appearance, Color, ControlSize, Item, Palette, Point, Rect, Scene, TextAlign, TextStyle,
+    TextSystem, grown_line,
 };
 pub use unbound_graphics::{
     Cursor, Event, Key, Modifiers, Pointer, PointerButton, Scroll, ScrollPhase, ScrollSource,
@@ -216,6 +219,14 @@ impl Context {
 
     pub fn is_focused(&self, id: WidgetId) -> bool {
         self.focus == Some(id)
+    }
+
+    pub fn control_height(&self, size: ControlSize) -> f32 {
+        size.height_for(self.text.size())
+    }
+
+    pub fn grown_line(&self) -> f32 {
+        grown_line(self.text.size())
     }
 }
 
@@ -647,6 +658,7 @@ impl Ui {
     pub fn set_appearance(&mut self, appearance: Appearance) {
         self.cx.palette = appearance.palette();
         self.cx.reduce_motion = appearance.reduce_motion;
+        self.cx.text.set_size(appearance.text_size);
     }
 
     pub fn is_animating(&self) -> bool {

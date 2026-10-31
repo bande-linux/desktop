@@ -21,6 +21,11 @@ unbound-toolkit.workspace = true
 unbound-xdg.workspace = true
 zbus.workspace = true
 
+[dev-dependencies]
+smithay.workspace = true
+tempfile.workspace = true
+unbound-compositor.workspace = true
+
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"

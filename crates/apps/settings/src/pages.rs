@@ -445,10 +445,16 @@ impl SettingsView {
         child: PaneId,
         matched: Option<&SettingHit>,
     ) -> Box<dyn Widget> {
-        let value = self
-            .pane_summary(child)
-            .map_or_else(|| "›".to_owned(), |summary| format!("{summary}  ›"));
-        let mut open = intent(&self.intents, Intent::SelectPane);
+        let (summary, revealed) = match setting.id {
+            SettingId::TextSizeLink => (self.text_size_label(), Some(SettingId::TextSize)),
+            SettingId::ScreenLock => (self.pane_summary(child), Some(SettingId::LockAfter)),
+            _ => (self.pane_summary(child), None),
+        };
+        let value = summary.map_or_else(|| "›".to_owned(), |summary| format!("{summary}  ›"));
+        let mut open = intent(&self.intents, move |child| match revealed {
+            Some(setting) => Intent::Open(child, setting),
+            None => Intent::SelectPane(child),
+        });
         let label = Text::new(&setting.label, Tone::Primary)
             .highlighted(matched.map(|hit| hit.label.clone()).unwrap_or_default());
         let row = Row::new(label, Some(boxed(Label::new(&value))))
@@ -462,7 +468,16 @@ impl SettingsView {
             Kind::List(List::Shortcuts) => self.shortcut_cards(),
             Kind::List(list) if list != List::InputLevel => self.list_rows(list),
             Kind::Pictures => self.picture_rows(setting),
-            Kind::Page(child) => vec![self.page_row(setting, child, matched)],
+            Kind::Page(child) if self.available(child) => {
+                vec![self.page_row(setting, child, matched)]
+            }
+            Kind::Page(_) => Vec::new(),
+            Kind::Text
+                if matches!(setting.id, SettingId::NightFrom | SettingId::NightTo)
+                    && !self.night_custom() =>
+            {
+                Vec::new()
+            }
             _ => self
                 .setting_row(setting, None, matched)
                 .into_iter()
@@ -735,6 +750,7 @@ impl SettingsView {
             List::Regions => self.region_rows(),
             List::DefaultApps => self.default_app_rows(),
             List::Clipboard => self.clipboard_rows(),
+            List::Permissions(permission) => self.permission_rows(permission),
         }
     }
 
@@ -1198,7 +1214,11 @@ impl SettingsView {
         let mut body: Widgets = notice.into_iter().collect();
         let sections: &[Section] = if body.is_empty() { &pane.sections } else { &[] };
         for section in sections {
-            if pane.id == PaneId::Displays {
+            if section
+                .settings
+                .iter()
+                .any(|setting| setting.id == SettingId::DisplayUse)
+            {
                 body.extend(self.display_sections(section, &matched));
                 continue;
             }

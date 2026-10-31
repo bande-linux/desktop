@@ -4,14 +4,13 @@ use std::process::ExitCode;
 use std::time::Instant;
 
 use unbound_app_menu::{AppMenu, Entry, Standard, app_submenu, window_submenu};
-use unbound_settings::SIDEBAR_WIDTH;
 use unbound_settings::{
     Command, Displays, Feed, L10N, PaneId, PointingDevices, Services, SettingsView,
-    SoftwareCommand, UDEV_DATA, announce_updates, feed,
+    SoftwareCommand, UDEV_DATA, announce_updates, feed, sidebar_width,
 };
 use unbound_settings_panes::panes as panes_list;
 use unbound_toolkit::{
-    App, FrameRegions, MenuPlacement, Rect, Role, Scene, TextSystem, Window, WindowEvent,
+    App, FrameRegions, MenuPlacement, Rect, Role, Scene, TextSize, TextSystem, Window, WindowEvent,
 };
 use unbound_xdg::spawn_detached;
 
@@ -54,6 +53,13 @@ fn reveal(window: &mut Window, path: &Path) {
     let command = [FILES.to_owned(), path.to_string_lossy().into_owned()];
     if let Err(error) = spawn_detached(FILES_APP_ID, &command, None, token.as_deref()) {
         tracing::warn!("cannot show {} in Files: {error}", path.display());
+    }
+}
+
+fn frame_regions(text: TextSize) -> FrameRegions {
+    FrameRegions {
+        sidebar: sidebar_width(text),
+        toolbar: 0.0,
     }
 }
 
@@ -147,7 +153,8 @@ impl App for Settings {
                 self.view.perform(&request);
             }
             WindowEvent::AppearanceChanged(appearance) => {
-                self.view.set_palette(appearance.palette());
+                self.view.set_appearance(appearance);
+                window.set_frame_regions(frame_regions(appearance.text_size));
             }
             WindowEvent::Focus(true) => {
                 if let Some(Err(error)) = self.app_menu.as_ref().map(AppMenu::claim) {
@@ -222,10 +229,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let services = Services::start(&session, system.as_ref(), &updates);
     services.send(Command::Software(SoftwareCommand::Check));
     let mut window = Window::open(Role::toplevel(&L10N.tr("title"), APP_ID), WINDOW_SIZE)?;
-    window.set_frame_regions(FrameRegions {
-        sidebar: SIDEBAR_WIDTH,
-        toolbar: 0.0,
-    });
+    window.set_frame_regions(frame_regions(window.appearance().text_size));
     let mut view = SettingsView::new(window.appearance().palette(), TextSystem::new());
     view.set_pointing_devices(PointingDevices::scan(Path::new(UDEV_DATA)));
     if unbound_xdg::find_executable(unbound_config::SCREEN_READER).is_none() {

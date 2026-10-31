@@ -32,7 +32,7 @@ use unbound_toolkit::{
 };
 use unbound_xdg::{
     DesktopEntry, ICON_THEMES, Locale, app_name, applications, current_desktops, data_dirs,
-    find_app, find_icon, launch_action, remember_running_apps, spawn_detached,
+    find_app, find_icon, launch_action, spawn_detached,
 };
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
@@ -83,7 +83,6 @@ fn report<E: std::fmt::Display>(what: &str, result: Result<(), E>) {
 }
 
 fn confirm_session_end(window: &mut Window, ending: SessionEnd) {
-    remember_running_apps(&window.running_apps());
     report("ask to end the session", window.confirm_session_end(ending));
 }
 

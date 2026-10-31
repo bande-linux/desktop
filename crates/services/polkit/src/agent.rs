@@ -7,6 +7,7 @@ use zbus::blocking::Connection;
 use zbus::zvariant::{OwnedValue, Value};
 
 use crate::helper::{Canceller, HelperSession, Line};
+use zeroize::Zeroizing;
 
 pub const OBJECT_PATH: &str = "/org/unbound/PolicyKit1/AuthenticationAgent";
 const AUTHORITY: &str = "org.freedesktop.PolicyKit1";
@@ -30,7 +31,7 @@ pub enum Notice {
 }
 
 pub trait Conversation: Send + Sync {
-    fn respond(&self, request: &Request, prompt: &str, echo: bool) -> Option<String>;
+    fn respond(&self, request: &Request, prompt: &str, echo: bool) -> Option<Zeroizing<String>>;
     fn notice(&self, request: &Request, notice: Notice);
     fn close(&self, request: &Request);
 }

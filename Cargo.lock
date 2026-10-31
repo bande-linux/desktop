@@ -4204,11 +4204,19 @@ dependencies = [
 name = "unbound-polkit"
 version = "0.1.0"
 dependencies = [
+ "accesskit",
  "blocking",
  "rustix 1.1.6",
  "tempfile",
+ "tracing",
+ "unbound-golden",
+ "unbound-inbox",
+ "unbound-l10n",
+ "unbound-log",
  "unbound-test-bus",
+ "unbound-toolkit",
  "zbus",
+ "zeroize",
 ]
 
 [[package]]
@@ -5672,6 +5680,12 @@ dependencies = [
  "syn 3.0.9",
  "synstructure",
 ]
+
+[[package]]
+name = "zeroize"
+version = "1.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ced3678a2879b30306d323f4542626697a464a97c0a07c9aebf7ebca65cd4dde"
 
 [[package]]
 name = "zerotrie"

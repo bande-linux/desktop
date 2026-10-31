@@ -11,6 +11,7 @@ use unbound_polkit::agent::{Agent, Conversation, Notice, OBJECT_PATH, Request, S
 use unbound_test_bus::SessionBus;
 use zbus::blocking::Connection;
 use zbus::zvariant::{OwnedValue, Value};
+use zeroize::Zeroizing;
 
 const WAIT: Duration = Duration::from_secs(5);
 const COOKIE: &str = "3-cookie-1";
@@ -29,7 +30,7 @@ struct Scripted {
 }
 
 impl Conversation for Scripted {
-    fn respond(&self, _request: &Request, prompt: &str, _echo: bool) -> Option<String> {
+    fn respond(&self, _request: &Request, prompt: &str, _echo: bool) -> Option<Zeroizing<String>> {
         if let Ok(seen) = self.seen.lock() {
             let _ = seen.send(Seen::Prompt(prompt.to_owned()));
         }
@@ -40,7 +41,7 @@ impl Conversation for Scripted {
         if answers.is_empty() {
             None
         } else {
-            answers.remove(0)
+            answers.remove(0).map(Zeroizing::new)
         }
     }
 

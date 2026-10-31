@@ -469,6 +469,7 @@ impl SettingsView {
             Update::NotificationApps(apps) => self.notification_apps = Some(apps),
             Update::Software(state) => self.software = state,
             Update::Locale(locale) => self.locale = locale,
+            Update::Pointing(devices) => self.set_pointing_devices(devices),
             Update::Network(network) => {
                 if let Some(ethernet) = network.ethernet.as_ref() {
                     self.manual_ipv4 |= ethernet.manual;

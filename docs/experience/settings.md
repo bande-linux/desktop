@@ -876,9 +876,22 @@ notifying app opens its own page; the inline expander is gone.
   row shows only with a battery.
 - Settings checks for updates once when it opens, so the attention row can appear.
 
-**Open.** The app permission pages of Privacy & Security (Camera, Screenshots, Screen Sharing
-from the portal permission store); slice 4; the cross-fade into the off state; the guest
-`pkcheck` test of the rules (no polkitd in the VM image tonight).
+**Slice 4, in part (branch `night/settings-depth-2`).** A saved Wi-Fi network and a paired
+Bluetooth device carry "Forget…", confirmed inline at their row (Escape cancels);
+`libs/network` deletes the saved connection and `libs/bluetooth` removes the device from the
+adapter. A paired device that reports its battery shows it beside its status ("Connected ·
+Battery 80%"). Turning Wi-Fi or Bluetooth off, or a device or service going away, cross-fades
+the page into the off state with the fade preset, which stays under Reduce motion.
+
+**Open.**
+
+- The polkit agent is only a library: no dialog, no binary, nothing packaged or started in the
+  session, so a polkit challenge still counts as refused.
+- The app permission pages of Privacy & Security (Camera, Screenshots, Screen Sharing from the
+  portal permission store).
+- The brightness slider and moving Control Center's backlight code into `libs/status`.
+- Displays ▸ Night Light waits for `night/system-depth`.
+- The guest `pkcheck` test of the rules (no polkitd in the VM image tonight).
 
 ## Sources
 

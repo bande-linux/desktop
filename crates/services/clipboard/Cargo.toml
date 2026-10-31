@@ -8,6 +8,7 @@ repository.workspace = true
 [dependencies]
 rustix.workspace = true
 tracing.workspace = true
+unbound-inbox.workspace = true
 unbound-log.workspace = true
 unbound-xdg.workspace = true
 wayland-backend.workspace = true

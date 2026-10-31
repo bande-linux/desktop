@@ -1,8 +1,7 @@
-use std::io::Write;
-use std::os::unix::net::UnixStream;
-use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+use unbound_inbox::Outbox;
 
 use crate::history::{Contents, History, summary};
 
@@ -26,8 +25,7 @@ pub fn lock(history: &Shared) -> MutexGuard<'_, History> {
 
 pub struct ClipboardHistory {
     pub history: Shared,
-    pub paste: Sender<Contents>,
-    pub wake: UnixStream,
+    pub paste: Outbox<Contents>,
 }
 
 #[zbus::interface(name = "org.unbound.Clipboard")]
@@ -70,12 +68,13 @@ impl ClipboardHistory {
         let contents = lock(&self.history)
             .promote(id, now())
             .ok_or_else(|| zbus::fdo::Error::InvalidArgs(format!("no item {id}")))?;
-        self.paste
-            .send(contents)
-            .map_err(|error| zbus::fdo::Error::Failed(error.to_string()))?;
-        self.wake
-            .write_all(&[1])
-            .map_err(|error| zbus::fdo::Error::IOError(error.to_string()))
+        if self.paste.send(contents) {
+            Ok(())
+        } else {
+            Err(zbus::fdo::Error::Failed(
+                "the clipboard no longer takes pastes".to_owned(),
+            ))
+        }
     }
 
     fn remove(&self, id: u64) {

@@ -1,14 +1,15 @@
 use std::fs::{self, File, FileTimes, Metadata, OpenOptions};
-use std::io::{self, Read, Write};
-use std::os::fd::{AsFd, BorrowedFd};
+use std::io::{self, Read};
+use std::os::fd::BorrowedFd;
 use std::os::unix::fs::{OpenOptionsExt, symlink};
-use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use std::time::{Duration, Instant};
+
+use unbound_inbox::{Inbox, Outbox};
 
 mod archive;
 
@@ -116,25 +117,20 @@ pub enum Report {
 
 #[derive(Debug)]
 pub struct Job {
-    reports: Receiver<Report>,
+    reports: Inbox<Report>,
     answers: Sender<Answer>,
     cancelled: Arc<AtomicBool>,
-    wake: UnixStream,
 }
 
 impl Job {
     pub fn start(task: Task, trash: Trash) -> io::Result<Self> {
-        let (wake, signal) = UnixStream::pair()?;
-        wake.set_nonblocking(true)?;
-        signal.set_nonblocking(true)?;
-        let (report_sender, reports) = mpsc::channel();
+        let reports = Inbox::new()?;
         let (answers, answer_receiver) = mpsc::channel();
         let cancelled = Arc::new(AtomicBool::new(false));
         let mut worker = Worker {
-            reports: report_sender,
+            reports: reports.outbox(),
             answers: answer_receiver,
             cancelled: cancelled.clone(),
-            signal,
             trash,
             progress: Progress::default(),
             last_progress: None,
@@ -149,26 +145,23 @@ impl Job {
             reports,
             answers,
             cancelled,
-            wake,
         })
     }
 
     pub fn fd(&self) -> BorrowedFd<'_> {
-        self.wake.as_fd()
+        self.reports.fd()
     }
 
-    pub fn take_reports(&self) -> Vec<Report> {
-        let mut drained = [0u8; 256];
-        while matches!((&self.wake).read(&mut drained), Ok(read) if read > 0) {}
-        self.reports.try_iter().collect()
+    pub fn take_reports(&mut self) -> Vec<Report> {
+        self.reports.drain()
     }
 
     pub fn wait(&self) -> Report {
         loop {
             match self.reports.recv() {
-                Ok(Report::Progress(_)) => {}
-                Ok(report) => return report,
-                Err(_) => return Report::Finished(Outcome::default()),
+                Some(Report::Progress(_)) => {}
+                Some(report) => return report,
+                None => return Report::Finished(Outcome::default()),
             }
         }
     }
@@ -192,10 +185,9 @@ enum Halt {
 }
 
 struct Worker {
-    reports: Sender<Report>,
+    reports: Outbox<Report>,
     answers: Receiver<Answer>,
     cancelled: Arc<AtomicBool>,
-    signal: UnixStream,
     trash: Trash,
     progress: Progress,
     last_progress: Option<Instant>,
@@ -241,9 +233,7 @@ fn crosses_devices(error: &io::Error) -> bool {
 
 impl Worker {
     fn send(&mut self, report: Report) {
-        if self.reports.send(report).is_ok() {
-            let _ = (&self.signal).write(&[1]);
-        }
+        self.reports.send(report);
     }
 
     fn check(&self) -> Result<(), Halt> {

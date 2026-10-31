@@ -1,10 +1,8 @@
 use std::error::Error;
 use std::fs::File;
 use std::io::{ErrorKind, PipeReader, Read, Write};
-use std::os::fd::{AsFd, OwnedFd};
-use std::os::unix::net::UnixStream;
+use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 use std::process::ExitCode;
-use std::sync::mpsc::{Receiver, channel};
 use std::sync::{Arc, Mutex};
 
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
@@ -13,6 +11,7 @@ use unbound_clipboard::{
     BUS_NAME, ClipboardHistory, Contents, History, MAX_BYTES, OBJECT_PATH, Shared, is_sensitive,
     lock, now,
 };
+use unbound_inbox::Inbox;
 use wayland_client::backend::WaylandError;
 use wayland_client::globals::{GlobalListContents, registry_queue_init};
 use wayland_client::protocol::wl_registry::WlRegistry;
@@ -109,22 +108,19 @@ fn compositor_gone(error: &(dyn Error + 'static)) -> bool {
 
 fn serve_history(
     history: &Shared,
-) -> Result<(zbus::blocking::Connection, Receiver<Contents>, UnixStream), Box<dyn Error>> {
-    let (paste, pasted) = channel();
-    let (wake, woken) = UnixStream::pair()?;
-    woken.set_nonblocking(true)?;
+) -> Result<(zbus::blocking::Connection, Inbox<Contents>), Box<dyn Error>> {
+    let pasted = Inbox::new()?;
     let bus = zbus::blocking::connection::Builder::session()?
         .serve_at(
             OBJECT_PATH,
             ClipboardHistory {
                 history: Arc::clone(history),
-                paste,
-                wake,
+                paste: pasted.outbox(),
             },
         )?
         .name(BUS_NAME)?
         .build()?;
-    Ok((bus, pasted, woken))
+    Ok((bus, pasted))
 }
 
 fn history() -> Shared {
@@ -137,7 +133,7 @@ fn history() -> Shared {
 
 fn wait(
     queue: &mut wayland_client::EventQueue<Daemon>,
-    woken: Option<&UnixStream>,
+    woken: Option<BorrowedFd<'_>>,
 ) -> Result<(), Box<dyn Error>> {
     let Some(guard) = queue.prepare_read() else {
         return Ok(());
@@ -145,7 +141,7 @@ fn wait(
     let wayland_ready = {
         let connection_fd = guard.connection_fd();
         let mut fds = vec![PollFd::new(&connection_fd, PollFlags::IN)];
-        if let Some(woken) = woken {
+        if let Some(woken) = &woken {
             fds.push(PollFd::new(woken, PollFlags::IN));
         }
         match poll(&mut fds, None) {
@@ -160,10 +156,6 @@ fn wait(
             Err(WaylandError::Io(error)) if error.kind() == ErrorKind::WouldBlock => {}
             Err(error) => return Err(error.into()),
         }
-    }
-    if let Some(mut woken) = woken {
-        let mut drained = [0u8; 64];
-        while matches!(woken.read(&mut drained), Ok(read) if read > 0) {}
     }
     Ok(())
 }
@@ -181,14 +173,14 @@ fn run() -> Result<(), Box<dyn Error>> {
     let served = serve_history(&history)
         .inspect_err(|error| tracing::warn!("cannot offer the clipboard history: {error}"))
         .ok();
-    let (_bus, pasted, woken) = match served {
-        Some((bus, pasted, woken)) => (Some(bus), Some(pasted), Some(woken)),
-        None => (None, None, None),
+    let (_bus, mut pasted) = match served {
+        Some((bus, pasted)) => (Some(bus), Some(pasted)),
+        None => (None, None),
     };
 
     while !daemon.finished {
         queue.dispatch_pending(&mut daemon)?;
-        for contents in pasted.iter().flat_map(Receiver::try_iter) {
+        for contents in pasted.iter_mut().flat_map(Inbox::drain) {
             take_over(
                 &manager,
                 &device,
@@ -221,7 +213,7 @@ fn run() -> Result<(), Box<dyn Error>> {
         }
         connection.flush()?;
         if !daemon.finished {
-            wait(&mut queue, woken.as_ref())?;
+            wait(&mut queue, pasted.as_ref().map(Inbox::fd))?;
         }
     }
     Ok(())

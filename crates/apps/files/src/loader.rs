@@ -1,14 +1,14 @@
 use std::fs;
-use std::io::{self, Read, Write};
-use std::os::fd::{AsFd, BorrowedFd};
-use std::os::unix::net::UnixStream;
+use std::io;
+use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::mpsc::{self, Sender};
 use std::thread;
 
 use unbound_fs::Entry;
+use unbound_inbox::Inbox;
 use unbound_preview::{Preview, preview};
 use unbound_toolkit::Image;
 
@@ -31,9 +31,8 @@ pub enum Loaded {
 #[derive(Debug)]
 pub struct Loader {
     requests: Sender<(u64, Request)>,
-    results: Receiver<Loaded>,
+    results: Inbox<Loaded>,
     generation: Arc<AtomicU64>,
-    wake: UnixStream,
 }
 
 fn tree_size(path: &Path, current: &dyn Fn() -> bool) -> Option<(u64, u64)> {
@@ -64,11 +63,9 @@ fn tree_size(path: &Path, current: &dyn Fn() -> bool) -> Option<(u64, u64)> {
 
 impl Loader {
     pub fn new() -> io::Result<Self> {
-        let (wake, signal) = UnixStream::pair()?;
-        wake.set_nonblocking(true)?;
-        signal.set_nonblocking(true)?;
         let (requests, receiver) = mpsc::channel::<(u64, Request)>();
-        let (sender, results) = mpsc::channel();
+        let results = Inbox::new()?;
+        let sender = results.outbox();
         let generation = Arc::new(AtomicU64::new(0));
         let latest = generation.clone();
         thread::Builder::new()
@@ -92,11 +89,10 @@ impl Loader {
                             })
                         }
                     };
-                    if let Some(loaded) = loaded {
-                        if sender.send(loaded).is_err() {
-                            return;
-                        }
-                        let _ = (&signal).write(&[1]);
+                    if let Some(loaded) = loaded
+                        && !sender.send(loaded)
+                    {
+                        return;
                     }
                 }
             })?;
@@ -104,12 +100,11 @@ impl Loader {
             requests,
             results,
             generation,
-            wake,
         })
     }
 
     pub fn fd(&self) -> BorrowedFd<'_> {
-        self.wake.as_fd()
+        self.results.fd()
     }
 
     pub fn forget_pending(&self) -> u64 {
@@ -128,9 +123,7 @@ impl Loader {
             .send((generation, Request::FolderSize(folder)));
     }
 
-    pub fn take(&self) -> Vec<Loaded> {
-        let mut drained = [0u8; 256];
-        while matches!((&self.wake).read(&mut drained), Ok(read) if read > 0) {}
-        self.results.try_iter().collect()
+    pub fn take(&mut self) -> Vec<Loaded> {
+        self.results.drain()
     }
 }

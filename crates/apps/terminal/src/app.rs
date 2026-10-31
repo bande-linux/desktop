@@ -1,7 +1,5 @@
 use std::collections::VecDeque;
-use std::io::Read;
-use std::os::fd::{AsFd, BorrowedFd};
-use std::os::unix::net::UnixStream;
+use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -9,6 +7,7 @@ use accesskit::{Action, Node, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
 use alacritty_terminal::term::TermMode;
 use alacritty_terminal::tty::Shell;
 use unbound_app_menu::{AppMenu, Standard};
+use unbound_inbox::Inbox;
 use unbound_spring::{Decay, State as SpringState};
 use unbound_term::{
     Axis, BANNER_HEIGHT, Banner, BannerAction, CellPoint, Command, Divider, FULL_SCREEN_LEADING,
@@ -116,23 +115,23 @@ impl Tab {
 
 struct SettingsWatch {
     _watch: FolderWatch,
-    wake: UnixStream,
+    saved: Inbox<()>,
 }
 
 impl SettingsWatch {
     fn start(folder: &Path) -> Option<Self> {
         let started = std::fs::create_dir_all(folder).and_then(|()| {
-            let (wake, mut signal) = UnixStream::pair()?;
-            wake.set_nonblocking(true)?;
+            let saved = Inbox::new()?;
+            let outbox = saved.outbox();
             let watch = FolderWatch::spawn(Changes::Saved, move |paths| {
                 if paths.iter().any(|path| is_settings_file(path)) {
-                    std::io::Write::write_all(&mut signal, &[1]).ok();
+                    outbox.send(());
                 }
             })?;
             watch.watch(folder)?;
             Ok(Self {
                 _watch: watch,
-                wake,
+                saved,
             })
         });
         started
@@ -141,8 +140,7 @@ impl SettingsWatch {
     }
 
     fn drain(&mut self) {
-        let mut buffer = [0u8; 64];
-        while matches!(self.wake.read(&mut buffer), Ok(read) if read > 0) {}
+        self.saved.drain();
     }
 }
 
@@ -1723,7 +1721,7 @@ impl App for TerminalApp {
             .flat_map(|tab| tab.sessions.iter().map(Session::fd))
             .collect::<Vec<_>>();
         sources.extend(self.app_menu.as_ref().map(AppMenu::fd));
-        sources.extend(self.settings_watch.as_ref().map(|watch| watch.wake.as_fd()));
+        sources.extend(self.settings_watch.as_ref().map(|watch| watch.saved.fd()));
         sources
     }
 

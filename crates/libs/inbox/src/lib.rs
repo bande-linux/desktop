@@ -1,3 +1,4 @@
+use std::fmt;
 use std::io::{self, PipeReader, PipeWriter, Read, Write};
 use std::os::fd::{AsFd, BorrowedFd};
 use std::sync::Arc;
@@ -12,6 +13,12 @@ pub struct Inbox<T> {
 pub struct Outbox<T> {
     sender: Sender<T>,
     writer: Arc<PipeWriter>,
+}
+
+impl<T> fmt::Debug for Inbox<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Inbox").finish_non_exhaustive()
+    }
 }
 
 impl<T> Clone for Outbox<T> {
@@ -57,6 +64,10 @@ impl<T> Inbox<T> {
 
     pub fn fd(&self) -> BorrowedFd<'_> {
         self.reader.as_fd()
+    }
+
+    pub fn recv(&self) -> Option<T> {
+        self.receiver.recv().ok()
     }
 
     pub fn drain(&mut self) -> Vec<T> {

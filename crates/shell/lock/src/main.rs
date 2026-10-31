@@ -1,6 +1,4 @@
-use std::io::{Read, Write};
 use std::os::fd::{AsFd, BorrowedFd};
-use std::os::unix::net::UnixStream;
 use std::process::ExitCode;
 use std::sync::mpsc::Sender;
 use std::thread;
@@ -21,9 +19,6 @@ use unbound_toolkit::{
 };
 use zeroize::Zeroizing;
 
-const ACCEPTED: u8 = 1;
-const REJECTED: u8 = 0;
-
 fn variant_of(scheme: Scheme) -> Variant {
     match scheme {
         Scheme::Light => Variant::Light,
@@ -34,8 +29,7 @@ fn variant_of(scheme: Scheme) -> Variant {
 struct Locker {
     screen: LockScreen,
     user: User,
-    verdicts: UnixStream,
-    verdict_sender: UnixStream,
+    verdicts: Inbox<bool>,
     minutes: MinuteTimer,
     backdrop: Option<Inbox<(Look, Image)>>,
     backdrop_requested: bool,
@@ -46,20 +40,13 @@ struct Locker {
 
 impl Locker {
     fn check(&mut self, password: Zeroizing<String>) {
-        let Ok(mut sender) = self.verdict_sender.try_clone() else {
-            self.screen.reject(frame_time().on_screen());
-            return;
-        };
+        let verdicts = self.verdicts.outbox();
         let login = self.user.login.clone();
         thread::spawn(move || {
-            let verdict = match authenticate(PAM_SERVICE, &login, &password) {
-                Ok(()) => ACCEPTED,
-                Err(error) => {
-                    tracing::warn!("{error}");
-                    REJECTED
-                }
-            };
-            let _ = sender.write_all(&[verdict]);
+            let accepted = authenticate(PAM_SERVICE, &login, &password)
+                .inspect_err(|error| tracing::warn!("{error}"))
+                .is_ok();
+            verdicts.send(accepted);
         });
     }
 }
@@ -111,7 +98,7 @@ impl App for Locker {
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        let mut sources = vec![self.verdicts.as_fd(), self.minutes.as_fd()];
+        let mut sources = vec![self.verdicts.fd(), self.minutes.as_fd()];
         sources.extend(self.devices.as_ref().map(|(inbox, _)| inbox.fd()));
         sources.extend(self.backdrop.as_ref().map(Inbox::fd));
         sources
@@ -155,11 +142,10 @@ impl App for Locker {
             }
             return;
         }
-        let mut verdict = [REJECTED];
-        if self.verdicts.read_exact(&mut verdict).is_err() {
+        let Some(accepted) = self.verdicts.drain().pop() else {
             return;
-        }
-        if verdict[0] == ACCEPTED {
+        };
+        if accepted {
             match window.unlock() {
                 Ok(()) => self.unlocked = true,
                 Err(error) => tracing::warn!("cannot unlock: {error}"),
@@ -204,7 +190,6 @@ fn follow_status() -> Option<(Inbox<Update>, Sender<Control>)> {
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let user = current_user()?;
-    let (verdicts, verdict_sender) = UnixStream::pair()?;
     let mut window = Window::open(Role::Lock, (0, 0))?;
     let mut locker = Locker {
         screen: LockScreen::new(
@@ -219,8 +204,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             TextSystem::new(),
         ),
         user,
-        verdicts,
-        verdict_sender,
+        verdicts: Inbox::new()?,
         minutes: MinuteTimer::new()?,
         backdrop: None,
         backdrop_requested: false,

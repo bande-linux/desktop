@@ -740,6 +740,10 @@ impl Window {
         self.state.events.push(WindowEvent::CloseRequested);
     }
 
+    pub fn toplevel_state(&self) -> ToplevelState {
+        self.state.toplevel
+    }
+
     pub fn close_requested_by_button(&self) -> bool {
         self.closed_by_button
     }

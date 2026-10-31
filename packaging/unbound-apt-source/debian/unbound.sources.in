@@ -1,5 +1,5 @@
 Types: deb
 URIs: @ARCHIVE_URL@
-Suites: @SUITE@
-Components: main
+Suites: rolling
+Components: main apple
 Signed-By: @KEYRING@

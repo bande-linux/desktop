@@ -3920,6 +3920,9 @@ dependencies = [
  "icu_locale_core",
  "jiff",
  "rustix 1.1.6",
+ "tempfile",
+ "unbound-test-bus",
+ "zbus",
 ]
 
 [[package]]
@@ -4014,6 +4017,7 @@ dependencies = [
  "ruzstd",
  "tar",
  "tempfile",
+ "unbound-datetime",
  "unbound-l10n",
  "unbound-xdg",
  "zip",
@@ -4318,6 +4322,7 @@ dependencies = [
  "tempfile",
  "tracing",
  "unbound-compositor",
+ "unbound-datetime",
  "unbound-fs",
  "unbound-golden",
  "unbound-graphics",

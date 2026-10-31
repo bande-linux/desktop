@@ -13,24 +13,15 @@ Depends: ${misc:Depends}
 Description: OpenPGP key of the Unbound APT repository
  The key that signs the Unbound APT repository at
  https://unbound-linux.github.io/apt, and an APT pin that allows the
- repository to provide only Unbound's own packages.
+ repository to provide only Unbound's own packages and its Apple kernels.
 
 Package: unbound-apt-source
 Architecture: all
 Depends: unbound-archive-keyring, ${misc:Depends}
 Conflicts: unbound-apt-source-testing
 Replaces: unbound-apt-source-testing
-Description: Unbound APT repository, release channel
- Makes APT follow the release channel of the Unbound APT repository, which
- carries tagged versions of the Unbound desktop. Install
- unbound-apt-source-testing instead to follow every change merged to main.
-
-Package: unbound-apt-source-testing
-Architecture: all
-Depends: unbound-archive-keyring, ${misc:Depends}
-Conflicts: unbound-apt-source
-Replaces: unbound-apt-source
-Description: Unbound APT repository, testing channel
- Makes APT follow the testing channel of the Unbound APT repository, which
- carries a build of every change merged to main. Install unbound-apt-source
- instead to follow tagged releases only.
+Description: Unbound APT repository
+ Makes APT follow the rolling suite of the Unbound APT repository, which
+ carries every Unbound release, built for Debian testing. Its
+ main component holds the Unbound desktop and unbound-os, and its apple
+ component the kernel and boot packages for Apple Silicon Macs.

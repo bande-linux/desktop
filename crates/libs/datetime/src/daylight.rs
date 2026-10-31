@@ -157,8 +157,11 @@ pub fn within_daily(now: &Zoned, start: Time, end: Time) -> Option<(bool, Timest
         .map(|next| (inside, next))
 }
 
-pub fn system_place() -> Option<Place> {
-    let zone = TimeZone::system();
+pub fn place_of(zone: &TimeZone) -> Option<Place> {
     let name = zone.iana_name()?;
     place(&std::fs::read_to_string(ZONE_TAB).ok()?, name)
+}
+
+pub fn system_place() -> Option<Place> {
+    place_of(&crate::local_zone())
 }

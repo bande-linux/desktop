@@ -1,4 +1,4 @@
-FROM debian:trixie
+FROM debian:testing
 RUN apt-get update \
     && apt-get install -y --no-install-recommends dbus-bin dbus-daemon dbus-system-bus-common polkitd passwd \
     && rm -rf /var/lib/apt/lists/*

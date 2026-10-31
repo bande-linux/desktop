@@ -18,7 +18,7 @@ use unbound_config::{BUS_NAME, BarEdge, MenuBarPlacement, OBJECT_PATH};
 use unbound_datetime::DateFormats;
 use unbound_inbox::{Inbox, Outbox};
 use unbound_keyboard::Layouts;
-use unbound_status::clock::follow_minutes;
+use unbound_status::clock::{follow_minutes, follow_zone};
 use unbound_status::dbusmenu::{APP_MENU_PATH, Node};
 use unbound_status::devices::{Control, SoundControl, follow_devices, follow_sound};
 use unbound_status::session::full_name;
@@ -685,10 +685,10 @@ impl<V: StatusView> App for MenuBarClient<V> {
                 }
                 Update::ClockFormat(format) => {
                     self.dates = DateFormats::from_env().with_clock_format(&format);
-                    self.bar.set_time(&jiff::Zoned::now(), &self.dates);
+                    self.bar.set_time(&unbound_datetime::now(), &self.dates);
                 }
                 Update::Minute => {
-                    self.bar.set_time(&jiff::Zoned::now(), &self.dates);
+                    self.bar.set_time(&unbound_datetime::now(), &self.dates);
                 }
                 Update::AppMenuChanged => {
                     if !self.app_id.is_empty() {
@@ -780,6 +780,11 @@ impl<V: StatusView> MenuBarClient<V> {
                 tracing::warn!("the clock does not advance: {error}");
             }
         });
+        if let Some(system) = system
+            && let Err(error) = follow_zone(system, inbox.outbox())
+        {
+            tracing::warn!("the clock does not follow time zone changes: {error}");
+        }
         let (errands, errand_queue) = mpsc::channel();
         if let Some(session) = session {
             let (hosting, outbox) = (session.clone(), inbox.outbox());
@@ -804,7 +809,7 @@ impl<V: StatusView> MenuBarClient<V> {
             thread::spawn(move || run_errands(&session, &errand_queue, &outbox));
         }
         let dates = DateFormats::from_env();
-        view.set_time(&jiff::Zoned::now(), &dates);
+        view.set_time(&unbound_datetime::now(), &dates);
         Ok(Self {
             bar: view,
             display,

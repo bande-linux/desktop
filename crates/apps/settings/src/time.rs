@@ -3,36 +3,15 @@ use std::sync::mpsc::{self, Sender};
 use jiff::Timestamp;
 use jiff::civil::DateTime;
 use jiff::tz::TimeZone;
+use unbound_datetime::timedate::{TimedateProxyBlocking, timedate_changes};
 use zbus::blocking::Connection;
-use zbus::blocking::fdo::PropertiesProxy;
 
 use unbound_settings_panes::SettingId;
 
 use crate::failure::failed;
 use crate::follow::{Update, Updates, spawn};
 
-const TIMEDATE: &str = "org.freedesktop.timedate1";
-const TIMEDATE_PATH: &str = "/org/freedesktop/timedate1";
 pub const MANUAL_FORMAT: &str = "%Y-%m-%d %H:%M";
-
-#[zbus::proxy(
-    interface = "org.freedesktop.timedate1",
-    default_service = "org.freedesktop.timedate1",
-    default_path = "/org/freedesktop/timedate1"
-)]
-trait Timedate {
-    #[zbus(property)]
-    fn timezone(&self) -> zbus::Result<String>;
-    #[zbus(property, name = "NTP")]
-    fn ntp(&self) -> zbus::Result<bool>;
-    #[zbus(property, name = "CanNTP")]
-    fn can_ntp(&self) -> zbus::Result<bool>;
-    fn list_timezones(&self) -> zbus::Result<Vec<String>>;
-    fn set_timezone(&self, zone: &str, interactive: bool) -> zbus::Result<()>;
-    #[zbus(name = "SetNTP")]
-    fn set_ntp(&self, on: bool, interactive: bool) -> zbus::Result<()>;
-    fn set_time(&self, microseconds: i64, relative: bool, interactive: bool) -> zbus::Result<()>;
-}
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TimeState {
@@ -141,11 +120,7 @@ pub fn follow_time(system: &Connection, updates: Updates) -> Sender<TimeCommand>
             let timedate = TimedateProxyBlocking::builder(&reader)
                 .cache_properties(zbus::proxy::CacheProperties::No)
                 .build()?;
-            let changes = PropertiesProxy::builder(&reader)
-                .destination(TIMEDATE)?
-                .path(TIMEDATE_PATH)?
-                .build()?
-                .receive_properties_changed()?;
+            let changes = timedate_changes(&reader)?;
             let mut zones = Vec::new();
             if !feed.send(Update::Time(read(&timedate, &mut zones))) {
                 return Ok(());

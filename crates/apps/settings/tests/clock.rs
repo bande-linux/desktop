@@ -2,7 +2,6 @@
 
 mod support;
 
-use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Role, TreeId};
@@ -13,78 +12,9 @@ use unbound_settings::{
     Value, feed, follow_time, parse_manual, zone_matches, zone_offset, zone_place,
 };
 use unbound_test_bus::SessionBus;
+use unbound_test_bus::timedate::FakeTimedate;
 use unbound_toolkit::ui::{Event, Key, Modifiers};
 use unbound_toolkit::{Palette, Scheme, TextSystem};
-use zbus::object_server::SignalEmitter;
-
-#[derive(Default)]
-struct Clock {
-    zone: String,
-    ntp: bool,
-    set: Vec<i64>,
-}
-
-struct Timedate(Arc<Mutex<Clock>>);
-
-#[zbus::interface(name = "org.freedesktop.timedate1")]
-impl Timedate {
-    #[zbus(property)]
-    fn timezone(&self) -> String {
-        self.0.lock().expect("clock").zone.clone()
-    }
-
-    #[zbus(property, name = "NTP")]
-    fn ntp(&self) -> bool {
-        self.0.lock().expect("clock").ntp
-    }
-
-    #[zbus(property, name = "CanNTP")]
-    fn can_ntp(&self) -> bool {
-        true
-    }
-
-    fn list_timezones(&self) -> Vec<String> {
-        [
-            "America/New_York",
-            "Europe/Stockholm",
-            "Europe/Paris",
-            "Asia/Tokyo",
-        ]
-        .map(str::to_owned)
-        .to_vec()
-    }
-
-    async fn set_timezone(
-        &self,
-        zone: String,
-        _interactive: bool,
-        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
-    ) -> zbus::fdo::Result<()> {
-        if zone == "Asia/Tokyo" {
-            return Err(zbus::fdo::Error::InteractiveAuthorizationRequired(
-                "authentication is required".to_owned(),
-            ));
-        }
-        self.0.lock().expect("clock").zone = zone;
-        let _ = self.timezone_changed(&emitter).await;
-        Ok(())
-    }
-
-    #[zbus(name = "SetNTP")]
-    async fn set_ntp(
-        &self,
-        on: bool,
-        _interactive: bool,
-        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
-    ) {
-        self.0.lock().expect("clock").ntp = on;
-        let _ = self.n_t_p_changed(&emitter).await;
-    }
-
-    fn set_time(&self, microseconds: i64, _relative: bool, _interactive: bool) {
-        self.0.lock().expect("clock").set.push(microseconds);
-    }
-}
 
 fn press(view: &mut SettingsView, key: Key) {
     view.handle(&Event::Key {
@@ -121,19 +51,7 @@ fn pump(
 #[test]
 fn the_time_zone_is_chosen_by_typing_a_city_and_manual_time_is_set_on_return() {
     let bus = SessionBus::start().expect("dbus-daemon");
-    let clock = Arc::new(Mutex::new(Clock {
-        zone: "Europe/Stockholm".to_owned(),
-        ntp: true,
-        set: Vec::new(),
-    }));
-    let _daemon = zbus::blocking::connection::Builder::address(bus.address())
-        .expect("address")
-        .name("org.freedesktop.timedate1")
-        .expect("name")
-        .serve_at("/org/freedesktop/timedate1", Timedate(Arc::clone(&clock)))
-        .expect("serve")
-        .build()
-        .expect("fake timedated");
+    let clock = FakeTimedate::start(&bus, "Europe/Stockholm").expect("fake timedated");
     let system = bus.connect().expect("connection");
     let (feed, updates) = feed().expect("feed");
     let sender = follow_time(&system, updates);
@@ -153,7 +71,7 @@ fn the_time_zone_is_chosen_by_typing_a_city_and_manual_time_is_set_on_return() {
     assert!(!has_text(&mut view, "Tokyo"));
     press(&mut view, Key::Enter);
     pump(&mut view, &feed, &sender, |_| {
-        clock.lock().expect("clock").zone == "Europe/Paris"
+        clock.zone().expect("zone") == "Europe/Paris"
     });
     pump(&mut view, &feed, &sender, |view| {
         has_text(view, "Paris") && !has_text(view, "Search cities")
@@ -175,7 +93,7 @@ fn the_time_zone_is_chosen_by_typing_a_city_and_manual_time_is_set_on_return() {
     let automatic = find(&mut view, Role::Switch, "Set time automatically").expect("switch");
     click(&mut view, automatic);
     pump(&mut view, &feed, &sender, |view| {
-        !clock.lock().expect("clock").ntp && has_text(view, "Press Return to set the clock")
+        !clock.ntp().expect("ntp") && has_text(view, "Press Return to set the clock")
     });
     let field = nodes(&mut view)
         .into_iter()
@@ -197,7 +115,7 @@ fn the_time_zone_is_chosen_by_typing_a_city_and_manual_time_is_set_on_return() {
     press(&mut view, Key::Enter);
     let expected = parse_manual("2026-12-24 18:30", "Europe/Paris").expect("valid");
     pump(&mut view, &feed, &sender, |_| {
-        clock.lock().expect("clock").set == [expected.as_microsecond()]
+        clock.set_times().expect("set") == [expected.as_microsecond()]
     });
 }
 

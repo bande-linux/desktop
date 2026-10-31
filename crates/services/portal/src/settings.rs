@@ -5,6 +5,7 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
 
+use jiff::tz::TimeZone;
 use jiff::{Timestamp, Zoned};
 use rustix::io::{Errno, read};
 use rustix::time::{
@@ -21,7 +22,9 @@ use zbus::proxy::CacheProperties;
 use zbus::zvariant::{OwnedValue, Value};
 
 use crate::{OBJECT_PATH, gtk};
-use unbound_datetime::daylight::{Sky, sky, system_place};
+use unbound_datetime::daylight::{Sky, place_of, sky};
+use unbound_datetime::local_zone;
+use unbound_datetime::timedate::zone_changes;
 
 pub const APPEARANCE: &str = "org.freedesktop.appearance";
 pub const UNBOUND_APPEARANCE: &str = "org.unbound.appearance";
@@ -228,13 +231,15 @@ impl Reader {
         let (scheme, next) = match config.appearance().unwrap_or_default().as_str() {
             "dark" => (Scheme::Dark, None),
             "light" => (Scheme::Light, None),
-            _ => sky(now, system_place()).map_or((Scheme::Light, None), |(sky, next)| {
-                let scheme = match sky {
-                    Sky::Day => Scheme::Light,
-                    Sky::Night => Scheme::Dark,
-                };
-                (scheme, Some(next))
-            }),
+            _ => {
+                sky(now, place_of(now.time_zone())).map_or((Scheme::Light, None), |(sky, next)| {
+                    let scheme = match sky {
+                        Sky::Day => Scheme::Light,
+                        Sky::Night => Scheme::Dark,
+                    };
+                    (scheme, Some(next))
+                })
+            }
         };
         let accent = config.accent().unwrap_or_default();
         let tint = config
@@ -403,7 +408,7 @@ fn wake_at(timer: &OwnedFd, next: Option<Timestamp>) {
     }
 }
 
-fn follow_timer(timer: Arc<OwnedFd>, wake: mpsc::Sender<()>) {
+fn follow_timer(timer: Arc<OwnedFd>, wake: mpsc::Sender<Option<TimeZone>>) {
     let mut expirations = [0; 8];
     loop {
         match read(&*timer, &mut expirations) {
@@ -414,10 +419,22 @@ fn follow_timer(timer: Arc<OwnedFd>, wake: mpsc::Sender<()>) {
                 return;
             }
         }
-        if wake.send(()).is_err() {
+        if wake.send(None).is_err() {
             return;
         }
     }
+}
+
+fn follow_zone(system: &Connection, wake: mpsc::Sender<Option<TimeZone>>) -> zbus::Result<()> {
+    let zones = zone_changes(system)?;
+    thread::spawn(move || {
+        for zone in zones {
+            if wake.send(TimeZone::get(&zone).ok()).is_err() {
+                return;
+            }
+        }
+    });
+    Ok(())
 }
 
 pub struct Settings {
@@ -428,6 +445,7 @@ pub struct Settings {
 impl Settings {
     pub fn serve(
         connection: &Connection,
+        system: Option<&Connection>,
         cursor: CursorSettings,
         gtk_home: Option<PathBuf>,
     ) -> zbus::Result<()> {
@@ -437,7 +455,7 @@ impl Settings {
             .build()?
             .receive_properties_changed()?;
         let mut reader = Reader::new(connection)?;
-        let (first, next) = reader.read(&Zoned::now());
+        let (first, next) = reader.read(&unbound_datetime::now());
         let style_gtk = move |look: Look| {
             if let Some(home) = &gtk_home
                 && let Err(error) = gtk::install(home, look.accent, look.scheme.scheme())
@@ -462,17 +480,23 @@ impl Settings {
         wake_at(&timer, next);
         let (waiting, timer_wake) = (Arc::clone(&timer), wake.clone());
         thread::spawn(move || follow_timer(waiting, timer_wake));
+        if let Some(system) = system
+            && let Err(error) = follow_zone(system, wake.clone())
+        {
+            tracing::warn!("the automatic appearance does not follow time zone changes: {error}");
+        }
         thread::spawn(move || {
             for _ in changes {
-                if wake.send(()).is_err() {
+                if wake.send(None).is_err() {
                     break;
                 }
             }
         });
         let connection = connection.clone();
         thread::spawn(move || {
-            while woken.recv().is_ok() {
-                let (new, next) = reader.read(&Zoned::now());
+            while let Ok(zone) = woken.recv() {
+                let zone = zone.unwrap_or_else(local_zone);
+                let (new, next) = reader.read(&Timestamp::now().to_zoned(zone));
                 wake_at(&timer, next);
                 let old = std::mem::replace(
                     &mut *look.lock().unwrap_or_else(PoisonError::into_inner),

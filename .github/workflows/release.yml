@@ -1,0 +1,200 @@
+name: release
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CARGO_INCREMENTAL: '0'
+  CARGO_TERM_COLOR: always
+  CARGO_DEB_VERSION: 3.8.0
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04-arm
+    container: debian:testing
+    timeout-minutes: 60
+    steps:
+      - name: Install git
+        run: apt-get update -qq && apt-get install -y -qq --no-install-recommends git ca-certificates
+      - uses: actions/checkout@v7
+      - name: Lint the workflows
+        run: |
+          ci/apt-install.sh golang-go shellcheck
+          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+      - name: Install the build dependencies and the toolchain
+        run: |
+          xargs ci/apt-install.sh < ci/release/build-depends
+          ci/release/toolchain.sh
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: lint
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: ci/release/lint.sh
+
+  test:
+    runs-on: ubuntu-24.04-arm
+    container:
+      image: debian:testing
+      volumes:
+        - /usr/share/dotnet:/host/dotnet
+        - /usr/local/lib/android:/host/android
+        - /opt/ghc:/host/ghc
+    timeout-minutes: 120
+    steps:
+      - name: Free disk space on the host
+        run: rm -rf /host/dotnet/* /host/android/* /host/ghc/* && df -h /
+      - name: Install git
+        run: apt-get update -qq && apt-get install -y -qq --no-install-recommends git ca-certificates
+      - uses: actions/checkout@v7
+      - name: Install the build and test dependencies and the toolchain
+        run: |
+          xargs ci/apt-install.sh libvulkan1 mesa-vulkan-drivers dbus-daemon at-spi2-core libfontconfig1 \
+            libwayland-client0 procps < ci/release/build-depends
+          ci/release/toolchain.sh
+      - name: Install Debian 13's fonts, which the goldens are rendered with
+        run: ci/debian-fonts.sh
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: test
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo test --workspace --locked -- --show-output
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: rendered-frames
+          path: target/tmp/*.png
+          if-no-files-found: ignore
+
+  debs:
+    name: debs (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+          - arch: amd64
+            runner: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
+    container:
+      image: debian:testing
+      volumes:
+        - /usr/share/dotnet:/host/dotnet
+        - /usr/local/lib/android:/host/android
+        - /opt/ghc:/host/ghc
+    timeout-minutes: 240
+    env:
+      CARGO_BUILD_JOBS: '2'
+    steps:
+      - name: Free disk space on the host
+        run: rm -rf /host/dotnet/* /host/android/* /host/ghc/* && df -h /
+      - name: Install git
+        run: apt-get update -qq && apt-get install -y -qq --no-install-recommends git ca-certificates
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Trust the checkout
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Install the build and smoke-test dependencies and the toolchain
+        run: |
+          xargs ci/apt-install.sh dpkg-dev libvulkan1 mesa-vulkan-drivers dbus-daemon dbus-bin systemd \
+            dbus-user-session < ci/release/build-depends
+          ci/release/toolchain.sh
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: debs-${{ matrix.arch }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Install cargo-deb
+        run: |
+          cargo deb --version 2>/dev/null | grep -qw "$CARGO_DEB_VERSION" ||
+            cargo install cargo-deb --version "$CARGO_DEB_VERSION" --locked
+          echo "${CARGO_HOME:-$HOME/.cargo}/bin" >> "$GITHUB_PATH"
+      - name: Derive the package version from git
+        run: |
+          ci/deb/version-test.sh
+          version=$(ci/deb/version.sh)
+          echo "Package version $version"
+          echo "DEB_VERSION=$version" >> "$GITHUB_ENV"
+      - name: Build the packages
+        run: |
+          test "$(dpkg --print-architecture)" = "${{ matrix.arch }}"
+          ci/release/build-debs.sh
+      - run: ci/release/check-debs.sh
+      - run: ci/release/smoke.sh
+      - name: Disk and memory after the build
+        if: always()
+        run: df -h / && grep -E "MemTotal|MemAvailable" /proc/meminfo
+      - uses: actions/upload-artifact@v7
+        with:
+          name: unbound-debs-${{ matrix.arch }}
+          path: target/debian/*.deb
+          if-no-files-found: error
+
+  deb-all:
+    runs-on: ubuntu-24.04
+    container: debian:testing
+    timeout-minutes: 15
+    steps:
+      - name: Install git and the packaging tools
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends git ca-certificates build-essential debhelper dpkg-dev \
+            lintian gnupg
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Trust the checkout
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Check that the tagged commit is on main
+        if: github.ref_type == 'tag'
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      - run: ci/release/build-all.sh debs
+      - uses: actions/upload-artifact@v7
+        with:
+          name: unbound-debs-all
+          path: debs/*.deb
+          if-no-files-found: error
+
+  install:
+    name: install (${{ matrix.arch }})
+    needs: [debs, deb-all]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+          - arch: amd64
+            runner: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
+    container: debian:testing
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          name: unbound-debs-${{ matrix.arch }}
+          path: install-debs
+      - uses: actions/download-artifact@v7
+        with:
+          name: unbound-debs-all
+          path: install-debs
+      - name: Install unbound-desktop and unbound-os into a clean Debian testing
+        run: |
+          test "$(dpkg --print-architecture)" = "${{ matrix.arch }}"
+          ci/deb/install-test/run.sh install-debs
+      - name: Read the colour scheme through xdg-desktop-portal
+        run: crates/services/portal/tests/frontend/run.sh

@@ -307,12 +307,14 @@ fn run_drm(
             reactivate(app);
         }
     })?;
-    match buses.system.as_ref().map(follow_sleep) {
-        None => {}
-        Some(Ok(changes)) => {
-            handle.insert_source(changes, |event, _, app| match event {
-                Event::Msg(Sleep::Starting) => app.output.suspend_input(),
-                Event::Msg(Sleep::Ended) => {
+    if let Some(system) = &buses.system {
+        follow(
+            &handle,
+            "sleep",
+            |sender| follow_sleep(system, sender),
+            |app, sleep| match sleep {
+                Sleep::Starting => app.output.suspend_input(),
+                Sleep::Ended => {
                     if let Err(error) = app.output.wake() {
                         tracing::warn!("cannot wake the displays and input: {error}");
                     }
@@ -321,10 +323,8 @@ fn run_drm(
                     }
                     app.compositor.woke();
                 }
-                Event::Closed => {}
-            })?;
-        }
-        Some(Err(error)) => tracing::warn!("cannot follow sleep: {error}"),
+            },
+        )?;
     }
     handle.insert_source(notifiers.device, |event, metadata, app| match event {
         DrmEvent::VBlank(crtc) => page_flipped(app, crtc, *metadata),
@@ -340,22 +340,16 @@ fn run_drm(
         }
         Err(error) => tracing::warn!("cannot watch for displays being plugged in: {error}"),
     }
-    let (settings, settings_changes) = channel::channel();
-    match buses
-        .session
-        .as_ref()
-        .map(|bus| follow_display_settings(bus, settings))
-    {
-        None => {}
-        Some(Ok(())) => {
-            handle.insert_source(settings_changes, |event, _, app| {
-                if matches!(event, Event::Msg(())) {
-                    app.compositor.set_display_config(display_config());
-                    sync_heads(app);
-                }
-            })?;
-        }
-        Some(Err(error)) => tracing::warn!("cannot follow the display settings: {error}"),
+    if let Some(session) = &buses.session {
+        follow(
+            &handle,
+            "the display settings",
+            |sender| follow_display_settings(session, sender),
+            |app, ()| {
+                app.compositor.set_display_config(display_config());
+                sync_heads(app);
+            },
+        )?;
     }
     let mut app = App {
         compositor,
@@ -423,48 +417,59 @@ fn listen<O: 'static>(
     Ok(())
 }
 
+fn follow<O: 'static, T: 'static>(
+    handle: &LoopHandle<'static, App<O>>,
+    what: &str,
+    start: impl FnOnce(channel::Sender<T>) -> zbus::Result<()>,
+    mut apply: impl FnMut(&mut App<O>, T) + 'static,
+) -> Result<(), Box<dyn Error>> {
+    let (sender, changes) = channel::channel();
+    if let Err(error) = start(sender) {
+        tracing::warn!("cannot follow {what}: {error}");
+        return Ok(());
+    }
+    handle.insert_source(changes, move |event, _, app| {
+        if let Event::Msg(value) = event {
+            apply(app, value);
+        }
+    })?;
+    Ok(())
+}
+
 fn follow_session_bus<O: 'static>(
-    event_loop: &mut EventLoop<'static, App<O>>,
+    handle: &LoopHandle<'static, App<O>>,
     app: &mut App<O>,
     bus: &Connection,
 ) -> Result<(), Box<dyn Error>> {
-    let handle = event_loop.handle();
-    let (appearance, appearance_changes) = channel::channel();
-    follow_appearance(bus.clone(), move |look| appearance.send(look).is_ok());
-    handle.insert_source(appearance_changes, |event, _, app| {
-        if let Event::Msg(look) = event {
+    follow(
+        handle,
+        "the appearance",
+        |sender| {
+            follow_appearance(bus.clone(), move |look| sender.send(look).is_ok());
+            Ok(())
+        },
+        |app, look| {
             app.compositor.set_reduce_motion(look.reduce_motion);
             app.compositor.set_dark_appearance(look.dark);
             app.compositor.set_text_size(look.text_size);
-        }
-    })?;
-    let (alerts, alerted) = channel::channel();
-    match follow_alerts(bus, move || alerts.send(()).is_ok()) {
-        Ok(()) => {
-            handle.insert_source(alerted, |event, _, app| {
-                if let Event::Msg(()) = event {
-                    app.compositor.flash_screen();
-                }
-            })?;
-        }
-        Err(error) => tracing::warn!("cannot follow alert sounds: {error}"),
-    }
+        },
+    )?;
+    follow(
+        handle,
+        "alert sounds",
+        |sender| follow_alerts(bus, move || sender.send(()).is_ok()),
+        |app, ()| app.compositor.flash_screen(),
+    )?;
     match serve_keyboard_monitor(bus) {
         Ok(monitor) => app.compositor.monitor_keyboard(monitor),
         Err(error) => tracing::warn!("assistive technologies cannot watch the keyboard: {error}"),
     }
-    let (input_settings, input_settings_changes) = channel::channel();
-    match follow_input_settings(bus, move |settings| input_settings.send(settings).is_ok()) {
-        Ok(()) => {
-            handle.insert_source(input_settings_changes, |event, _, app| {
-                if let Event::Msg(settings) = event {
-                    app.compositor.apply_input_settings(settings);
-                }
-            })?;
-        }
-        Err(error) => tracing::warn!("cannot follow the keyboard and pointer settings: {error}"),
-    }
-    Ok(())
+    follow(
+        handle,
+        "the keyboard and pointer settings",
+        |sender| follow_input_settings(bus, move |settings| sender.send(settings).is_ok()),
+        |app, settings| app.compositor.apply_input_settings(settings),
+    )
 }
 
 fn start_user_session<O: 'static>(
@@ -485,43 +490,30 @@ fn start_user_session<O: 'static>(
         }
     }
     app.compositor.apply_input_settings(InputSettings::read());
+    let handle = event_loop.handle();
     if let Some(bus) = app.buses.session.clone() {
-        follow_session_bus(event_loop, app, &bus)?;
+        follow_session_bus(&handle, app, &bus)?;
     }
     let system = app.buses.system.clone();
     if let Some(system) = &system {
         let (lock_states, reported) = std::sync::mpsc::channel();
-        match follow_session(system, reported) {
-            Ok(requests) => {
-                app.compositor.report_lock_states(lock_states);
-                event_loop
-                    .handle()
-                    .insert_source(requests, |event, _, app| {
-                        if let Event::Msg(SessionRequest::Lock) = event {
-                            app.compositor.request_lock_screen();
-                        }
-                    })?;
-            }
-            Err(error) => tracing::warn!("cannot follow the logind session: {error}"),
-        }
+        app.compositor.report_lock_states(lock_states);
+        follow(
+            &handle,
+            "the logind session",
+            |sender| follow_session(system, reported, sender),
+            |app, SessionRequest::Lock| app.compositor.request_lock_screen(),
+        )?;
     }
     if let Some(file) = unbound_xdg::reopen_file() {
         app.compositor.remember_apps_to_reopen_in(file);
         if let Some(system) = &system {
-            match follow_shutdown(system) {
-                Ok(shutdowns) => {
-                    event_loop
-                        .handle()
-                        .insert_source(shutdowns, |event, _, app| {
-                            if let Event::Msg(delay) = event {
-                                app.compositor.shutting_down(delay);
-                            }
-                        })?;
-                }
-                Err(error) => {
-                    tracing::warn!("cannot remember the apps before shutdown: {error}")
-                }
-            }
+            follow(
+                &handle,
+                "shutdown to remember the apps",
+                |sender| follow_shutdown(system, sender),
+                |app, delay| app.compositor.shutting_down(delay),
+            )?;
         }
     }
     if std::env::var_os("UNBOUND_REVIEW_JOB").is_none() {

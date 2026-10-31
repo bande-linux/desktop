@@ -1,4 +1,4 @@
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::ops::Range;
 use std::rc::Rc;
 use std::time::Instant;
@@ -36,7 +36,6 @@ const ROW_PADDING: f32 = Spacing::M as f32;
 const ROW_MIN_HEIGHT: f32 = 44.0;
 const ROW_GAP: f32 = Spacing::M as f32;
 const CONTROL_WIDTH: f32 = 320.0;
-const SCROLL_BAR_WIDTH: f32 = 6.0;
 const UNBOUNDED: f32 = 1.0e6;
 
 fn is_activation(event: &Event) -> bool {
@@ -793,140 +792,6 @@ impl Widget for SidebarRow {
 
     fn accepts_focus(&self, _cx: &Context) -> bool {
         true
-    }
-}
-
-fn focused_frame(widget: &dyn Widget, cx: &Context) -> Option<Rect> {
-    if cx.is_focused(widget.id()) {
-        return Some(widget.frame());
-    }
-    widget
-        .children()
-        .iter()
-        .find_map(|child| focused_frame(child.as_ref(), cx))
-}
-
-pub struct Scroll {
-    id: WidgetId,
-    children: Vec<Box<dyn Widget>>,
-    offset: Rc<Cell<f32>>,
-    content_height: f32,
-    frame: Rect,
-}
-
-impl Scroll {
-    pub fn new(child: Box<dyn Widget>, offset: Rc<Cell<f32>>) -> Self {
-        Self {
-            id: WidgetId::next(),
-            children: vec![child],
-            offset,
-            content_height: 0.0,
-            frame: Rect::default(),
-        }
-    }
-
-    fn place_child(&mut self, cx: &mut Context) {
-        let limit = (self.content_height - self.frame.height).max(0.0);
-        let offset = self.offset.get().clamp(0.0, limit);
-        self.offset.set(offset);
-        let frame = Rect::new(
-            self.frame.x,
-            self.frame.y - offset,
-            self.frame.width,
-            self.content_height,
-        );
-        for child in &mut self.children {
-            child.place(cx, frame);
-        }
-    }
-}
-
-impl Widget for Scroll {
-    fn id(&self) -> WidgetId {
-        self.id
-    }
-
-    fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
-        self.content_height = self
-            .children
-            .iter_mut()
-            .map(|child| {
-                child
-                    .measure(cx, Size::new(available.width, UNBOUNDED))
-                    .height
-            })
-            .fold(0.0, f32::max);
-        available
-    }
-
-    fn place(&mut self, cx: &mut Context, frame: Rect) {
-        self.frame = frame;
-        self.place_child(cx);
-        let focused = self
-            .children
-            .iter()
-            .find_map(|child| focused_frame(child.as_ref(), cx));
-        if let Some(focused) = focused {
-            let top = self.frame.y + MARGIN;
-            let bottom = self.frame.y + self.frame.height - MARGIN;
-            let shift = if focused.y < top {
-                focused.y - top
-            } else if focused.y + focused.height > bottom {
-                (focused.y + focused.height - bottom).min(focused.y - top)
-            } else {
-                0.0
-            };
-            if shift != 0.0 {
-                self.offset.set(self.offset.get() + shift);
-                self.place_child(cx);
-            }
-        }
-    }
-
-    fn frame(&self) -> Rect {
-        self.frame
-    }
-
-    fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
-        let mut clipped = Vec::new();
-        for child in &self.children {
-            child.paint(cx, &mut clipped);
-        }
-        items.push(Item::Clip {
-            shape: Shape::rect(self.frame),
-            items: clipped,
-        });
-        if self.content_height > self.frame.height {
-            let visible = self.frame.height / self.content_height;
-            let height = (self.frame.height * visible).max(24.0);
-            let travel = self.frame.height - height;
-            let limit = self.content_height - self.frame.height;
-            let y = self.frame.y + travel * self.offset.get() / limit;
-            items.push(Item::Fill {
-                shape: Shape::rounded(
-                    Rect::new(
-                        self.frame.x + self.frame.width - SCROLL_BAR_WIDTH - 3.0,
-                        y + 3.0,
-                        SCROLL_BAR_WIDTH,
-                        height - 6.0,
-                    ),
-                    SCROLL_BAR_WIDTH / 2.0,
-                ),
-                paint: cx.palette.ink3.into(),
-            });
-        }
-    }
-
-    fn access(&self, _cx: &Context) -> Node {
-        Node::new(Role::ScrollView)
-    }
-
-    fn children(&self) -> &[Box<dyn Widget>] {
-        &self.children
-    }
-
-    fn children_mut(&mut self) -> &mut [Box<dyn Widget>] {
-        &mut self.children
     }
 }
 

@@ -10,7 +10,8 @@ use unbound_audio::{Direction, Snapshot, meter_level};
 use unbound_config::{DisplaySettings, MAX_INPUT_SOURCES, Placement, Rotation};
 use unbound_datetime::daylight::Place;
 use unbound_toolkit::ui::{
-    Context, Event, Key, Modifiers, PointerButton, SearchField, Ui, Widget, WidgetId,
+    Context, Event, Key, Modifiers, PointerButton, ScrollState, SearchField, Size, Ui, Widget,
+    WidgetId,
 };
 use unbound_toolkit::{Appearance, Image, Palette, Rect, SHEET_INSET, Scene, TextSystem};
 
@@ -40,7 +41,6 @@ use unbound_keyboard::Layouts;
 use unbound_settings_panes::{AUTOMATIC, Pane, PaneId, Permission, SettingId, Value, panes};
 use unbound_settings_panes::{PaneHit, search};
 
-const PAGE_STEP: f32 = 240.0;
 const PICK_RESULTS: usize = 8;
 const SECOND: Duration = Duration::from_secs(1);
 pub(crate) const USE_MAIN: &str = "main";
@@ -213,10 +213,12 @@ pub struct SettingsView {
     pressed: bool,
     stale: bool,
     pub(crate) focus_next: Option<Anchor>,
-    pub(crate) scroll: Rc<Cell<f32>>,
+    reveal_pending: bool,
+    pub(crate) scroll: Rc<RefCell<ScrollState>>,
+    pub(crate) page_view: Option<WidgetId>,
     pub(crate) crossfade: Rc<RefCell<Crossfade>>,
     pub(crate) shown: Option<(PaneId, bool)>,
-    pub(crate) sidebar_scroll: Rc<Cell<f32>>,
+    pub(crate) sidebar_scroll: Rc<RefCell<ScrollState>>,
     pub(crate) icon_dirs: Vec<PathBuf>,
     pub(crate) symbols: HashMap<Symbol, Option<Image>>,
     pub(crate) place: OnceCell<Option<Place>>,
@@ -290,7 +292,9 @@ impl SettingsView {
             pressed: false,
             stale: true,
             focus_next: None,
+            reveal_pending: false,
             scroll: Rc::default(),
+            page_view: None,
             crossfade: Rc::default(),
             shown: None,
             sidebar_scroll: Rc::default(),
@@ -851,13 +855,12 @@ impl SettingsView {
                 key: key @ (Key::PageUp | Key::PageDown),
                 ..
             } => {
-                let step = if *key == Key::PageUp {
-                    -PAGE_STEP
-                } else {
-                    PAGE_STEP
+                let action = match key {
+                    Key::PageUp => Action::ScrollUp,
+                    _ => Action::ScrollDown,
                 };
-                self.scroll.set(self.scroll.get() + step);
-                true
+                self.page_view
+                    .is_some_and(|page| self.ui.perform(&request(action, page, None)))
             }
             _ => self.ui.handle(event),
         };
@@ -959,7 +962,7 @@ impl SettingsView {
                 Intent::OpenApp(group) => {
                     self.focus_next = Some(Anchor::Back);
                     self.app_page = Some(group);
-                    self.scroll.set(0.0);
+                    *self.scroll.borrow_mut() = ScrollState::default();
                 }
                 Intent::Software(command) => self.commands.push(Command::Software(command)),
                 Intent::Grant(permission, app, on) => self.grant(permission, app, on),
@@ -1235,7 +1238,7 @@ impl SettingsView {
         self.picking = None;
         self.app_page = None;
         self.errors.clear();
-        self.scroll.set(0.0);
+        *self.scroll.borrow_mut() = ScrollState::default();
         self.invalidate();
     }
 
@@ -1610,6 +1613,7 @@ impl SettingsView {
     }
 
     fn rebuild(&mut self) {
+        self.reveal_pending = self.focus_next.is_some();
         let focused = self.focus_next.take().or_else(|| {
             let focus = self.ui.focus()?;
             self.anchors
@@ -1660,6 +1664,10 @@ impl SettingsView {
     }
 
     pub fn scene(&mut self, width: u32, height: u32) -> Scene {
+        if std::mem::take(&mut self.reveal_pending) {
+            self.ui.layout(Size::new(width as f32, height as f32));
+            self.ui.reveal_focus();
+        }
         self.ui.scene(width, height)
     }
 

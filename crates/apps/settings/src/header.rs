@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use unbound_network::VpnState;
 use unbound_settings_panes::{Group, Pane, PaneId, SettingId, Value};
-use unbound_toolkit::ui::{Toggle, Widget};
+use unbound_toolkit::ui::{ScrollView, Toggle, Widget};
 use unbound_toolkit::{Color, Image, TextRole};
 use unbound_xdg::{ICON_THEMES, find_icon};
 
@@ -13,8 +13,8 @@ use crate::software::SoftwareState;
 use crate::time::zone_place;
 use crate::view::{Intent, SettingsView, intent};
 use crate::widgets::{
-    Column, HEADER_SYMBOL, Header, NOTICE_SYMBOL, Notice, SIDEBAR_SYMBOL, Scroll, SidebarLabel,
-    SidebarRow, Text, Tone,
+    Column, HEADER_SYMBOL, Header, NOTICE_SYMBOL, Notice, SIDEBAR_SYMBOL, SidebarLabel, SidebarRow,
+    Text, Tone,
 };
 
 const SYMBOL_DENSITY: f32 = 2.0;
@@ -122,7 +122,7 @@ impl SettingsView {
             let row = self.sidebar_row(id, label, searching);
             rows.push(row);
         }
-        boxed(Scroll::new(
+        boxed(ScrollView::shared(
             boxed(Column::new(2.0, 0.0, rows)),
             Rc::clone(&self.sidebar_scroll),
         ))

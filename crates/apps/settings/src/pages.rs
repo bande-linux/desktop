@@ -5,8 +5,8 @@ use unbound_audio::Direction;
 use unbound_config::{ACCENTS, MAX_INPUT_SOURCES};
 use unbound_keyboard::{Action, SHORTCUTS, shortcuts_in};
 use unbound_toolkit::ui::{
-    Axis, Button, Label, LevelIndicator, PopUpButton, SearchField, SecureField, SegmentedControl,
-    Shortcut, Slider, Stack, TextField, Toggle, Widget, WidgetId,
+    Axis, Button, Label, LevelIndicator, PopUpButton, ScrollView, SearchField, SecureField,
+    SegmentedControl, Shortcut, Slider, Stack, TextField, Toggle, Widget, WidgetId,
 };
 use unbound_toolkit::{Scheme, Spacing, TextRole};
 
@@ -20,8 +20,8 @@ use crate::view::{
     Anchor, Intent, Intents, MIRROR_PREFIX, SettingsView, USE_EXTENDED, USE_MAIN, intent,
 };
 use crate::widgets::{
-    Caption, Captioned, Card, Check, Column, Fade, Row, Scroll, Signal, Swatch, Swatches, Text,
-    Thumbnail, Thumbnails, Tone,
+    Caption, Captioned, Card, Check, Column, Fade, Row, Signal, Swatch, Swatches, Text, Thumbnail,
+    Thumbnails, Tone,
 };
 use unbound_config::Placement;
 use unbound_settings_panes::SettingHit;
@@ -1276,10 +1276,12 @@ impl SettingsView {
         }
     }
 
-    fn page(&self, page: Widgets) -> Box<dyn Widget> {
-        boxed(Scroll::new(
+    fn page(&mut self, page: Widgets) -> Box<dyn Widget> {
+        let view = ScrollView::shared(
             boxed(Column::new(PAGE_SPACING, PAGE_PADDING, page)),
             Rc::clone(&self.scroll),
-        ))
+        );
+        self.page_view = Some(view.id());
+        boxed(view)
     }
 }

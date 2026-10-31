@@ -198,7 +198,7 @@ graph LR
   serves every key above. Qt apps run natively on Wayland through
   `qt6-wayland`, which Qt's own packages recommend. The backend lives in
   `/usr/libexec` and is started by D-Bus activation through its user unit, as Debian's portal
-  backends are. `ci/portal` installs the packages into Debian 13 with its `xdg-desktop-portal`
+  backends are. The `install` jobs install the packages into Debian testing with its `xdg-desktop-portal`
   and reads `color-scheme` through `org.freedesktop.portal.Settings` before and after switching
   the appearance.
 

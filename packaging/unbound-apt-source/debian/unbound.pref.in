@@ -2,6 +2,6 @@ Package: *
 Pin: origin @ARCHIVE_HOST@
 Pin-Priority: -1
 
-Package: unbound-* xdg-desktop-portal-unbound
+Package: unbound-* xdg-desktop-portal-unbound linux-*-apple-* unbound-os-apple
 Pin: origin @ARCHIVE_HOST@
 Pin-Priority: 500

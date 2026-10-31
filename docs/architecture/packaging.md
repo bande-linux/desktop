@@ -1,6 +1,6 @@
 # Debian packaging
 
-Unbound ships as Debian packages for Debian 13 (trixie) on arm64. Each crate that installs
+Unbound ships as Debian packages for Debian testing on arm64 and amd64. Each crate that installs
 something is its own binary package, built with `cargo deb` from the crate's
 `[package.metadata.deb]`; the architecture-independent packages are built with debhelper from
 `packaging/`. Every package of one build carries the same version, derived from git by
@@ -12,7 +12,7 @@ profiles. Sizes are tracked in [performance.md](performance.md).
 
 ## Packages
 
-- **Per crate** (`cargo deb`, arm64): `unbound-compositor`, the session services
+- **Per crate** (`cargo deb`, one build per architecture; the list is `ci/release/packages`): `unbound-compositor`, the session services
   (`unbound-config`, `unbound-notify`, `unbound-power`, `unbound-clipboard`, `unbound-tray`,
   `unbound-automount`, `xdg-desktop-portal-unbound`), the shell clients (`unbound-shell`,
   `unbound-screenshot`, `unbound-lock`, `unbound-greeter`) and the apps (`unbound-term`, `unbound-files`,
@@ -32,15 +32,22 @@ profiles. Sizes are tracked in [performance.md](performance.md).
   `/usr/share/applications/unbound-mimeapps.list`, read only in an Unbound session, which
   opens folders in Files, web pages in Firefox, text in Text Editor, pictures in Loupe, PDFs
   in Papers and videos in Showtime; a person's own choice in `~/.config/mimeapps.list` still
-  wins. `ci/deb-install` installs without the third-party recommends and checks that each of
-  them has an installation candidate in Debian 13. Installing it adds "Unbound" to the sessions a
+  wins. The `install` jobs install without the third-party recommends and check that each of
+  them has an installation candidate in Debian testing. Installing it adds "Unbound" to the sessions a
   display manager such as GDM, SDDM or greetd offers.
 - The old `unbound-bar`, `unbound-desktop-surface`, `unbound-launcher`, `unbound-notifications`
   and `unbound-controlcenter` packages have no successors of their own: `unbound-shell`
   conflicts with and replaces them, so an upgrade removes them.
-- **`unbound-archive-keyring`, `unbound-apt-source`, `unbound-apt-source-testing`**
-  (`packaging/unbound-apt-source`): the repository's signing key and the APT source for the
-  release and testing channels. Installation is described in the top-level `README.md`.
+- **`unbound-os`** (`packaging/unbound-os`, architecture `all`): the meta-package of the
+  operating system. It depends on `unbound-desktop` and `unbound-greeter` at the same version,
+  `unbound-apt-source`, `greetd`, `network-manager`, `pipewire`, `wireplumber` and
+  `systemd-zram-generator`. `unbound-desktop` never depends on it, so the desktop installs on
+  any Debian testing system on its own.
+- **`unbound-archive-keyring`, `unbound-apt-source`** (`packaging/unbound-apt-source`): the
+  repository's signing key, the APT source for the `rolling` suite with the `main` and `apple`
+  components, and a pin that lets the repository provide only `unbound-*`,
+  `xdg-desktop-portal-unbound`, the Apple kernels (`linux-*-apple-*`) and `unbound-os-apple`.
+  Installation is described in the top-level `README.md`.
 
 ## Runtime stack
 
@@ -54,5 +61,5 @@ The packages pull in the runtime stack the architecture relies on:
 - `unbound-polkit` depends on `polkitd`, and `unbound-greeter` on `greetd`;
 - `mesa-vulkan-drivers` and `libvulkan1` come with `unbound-compositor`.
 
-No package depends on an X server, XWayland or an X session; `ci/deb-install` checks that none
+No package depends on an X server, XWayland or an X session; the `install` jobs check that none
 comes along.

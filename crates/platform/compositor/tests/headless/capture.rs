@@ -11,6 +11,7 @@ const CORNER: (i32, i32) = (2, 2);
 const BUFFER_CONSTRAINTS: u32 = 1;
 const STOPPED: u32 = 2;
 const KEY_5: u32 = 6;
+const KEY_SYSRQ: u32 = 99;
 
 fn red_window(server: &mut Headless) -> TestClient {
     let mut client = TestClient::connect(server);
@@ -238,6 +239,18 @@ fn super_shift_5_asks_the_shell_for_the_capture_options() {
     for key in keys.iter().rev() {
         server.key(*key, false, 0);
     }
+    shell.exchange(&mut server);
+
+    assert_eq!(shell.capture_option_requests(), 1);
+}
+
+#[test]
+fn the_print_screen_key_asks_the_shell_for_the_capture_options() {
+    let mut server = server();
+    let mut shell = TestClient::connect_as_shell(&mut server);
+    shell.join_capture(&mut server);
+
+    tap(&mut server, KEY_SYSRQ);
     shell.exchange(&mut server);
 
     assert_eq!(shell.capture_option_requests(), 1);

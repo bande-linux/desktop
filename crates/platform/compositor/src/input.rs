@@ -99,7 +99,11 @@ fn media_key(keysym: u32) -> Option<MediaKey> {
 }
 
 fn without_super(keysym: u32) -> Option<Shortcut> {
-    (keysym == keysyms::KEY_XF86LaunchA).then_some(Shortcut::Overview)
+    match keysym {
+        keysyms::KEY_XF86LaunchA => Some(Shortcut::Overview),
+        keysyms::KEY_Print => Some(Shortcut::CaptureOptions),
+        _ => None,
+    }
 }
 
 fn shortcut(

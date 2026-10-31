@@ -145,6 +145,22 @@ pub fn top_bar(server: &mut Compositor) -> TestClient {
     shell
 }
 
+pub fn left_rail(server: &mut Compositor) -> TestClient {
+    let mut shell = TestClient::connect_as_shell(server);
+    shell.show_layer(
+        server,
+        &LayerRequest {
+            layer: Layer::Top,
+            anchor: Anchor::Left | Anchor::Top | Anchor::Bottom,
+            size: (BAR as u32, 0),
+            exclusive_zone: BAR,
+            keyboard: KeyboardInteractivity::None,
+            color: GREEN,
+        },
+    );
+    shell
+}
+
 pub fn geometry(server: &Compositor) -> Rectangle<i32, Logical> {
     server.windows()[0].geometry().expect("a mapped window")
 }

@@ -58,7 +58,7 @@ proposals.
 - **Keyboard Navigation**: `Super+1..9` jumps directly to workspace $N$; `Super+Ctrl+Left/Right` navigates sequentially.
 
 ## 8. Window Snapping & Tiling Zones
-- **Edge & Corner Snapping**: Dragging a window to the left/right screen edge previews a 50% split-screen tile; dragging to any corner previews a 25% quarter-screen tile.
+- **Edge & Corner Snapping**: Dragging a window to the left/right edge of the free area (the taskbar edge counts) previews a 50% split-screen tile; dragging to any corner previews a 25% quarter-screen tile.
 - **Keyboard Shortcuts**: `Super+Left/Right` splits active window to half screen, `Super+Up` maximizes, `Super+Down` restores or minimizes.
 - **Layout Persistence**: Tiled windows maintain their proportional splits when display resolution or orientation changes.
 

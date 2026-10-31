@@ -85,6 +85,28 @@ fn a_window_dropped_after_resting_fills_the_half_quarter_or_screen_under_the_poi
 }
 
 #[test]
+fn a_window_dropped_over_the_left_rail_fills_the_half_beside_it() {
+    for (to, expected) in [
+        ((10, 96), Some(rect(BAR, 0, (256 - BAR) / 2, 192))),
+        ((BAR, 96), Some(rect(BAR, 0, (256 - BAR) / 2, 192))),
+        ((BAR + 8, 96), None),
+    ] {
+        let mut server = server();
+        let mut shell = left_rail(&mut server);
+        let mut editor = window(&mut server, RED, WINDOW);
+        roundtrip(&mut server, &mut [&mut shell, &mut editor]);
+
+        drop_after(&mut server, &mut editor, to, 150);
+
+        let geometry = settle(&mut server, &mut editor, RED);
+        match expected {
+            Some(tile) => assert_eq!(geometry, tile, "{to:?}"),
+            None => assert_eq!(geometry.size, WINDOW.into(), "{to:?}"),
+        }
+    }
+}
+
+#[test]
 fn the_preview_appears_only_once_the_pointer_rests() {
     let mut server = server();
     let mut renderer = Renderer::new().expect("renderer");

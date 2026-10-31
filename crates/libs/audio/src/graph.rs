@@ -21,7 +21,7 @@ use spa::sys;
 use spa::utils::dict::DictRef;
 
 use crate::stream::{self, INTERNAL_PREFIX, Running};
-use crate::{Direction, Error, level};
+use crate::{Direction, Error, Sense, level};
 
 const DEFAULT_OUTPUT: &str = "default.audio.sink";
 const DEFAULT_INPUT: &str = "default.audio.source";
@@ -65,7 +65,9 @@ pub(crate) struct NodeState {
     pub channels: Vec<f32>,
     pub muted: bool,
     pub app: Option<App>,
-    device: Option<(u32, i32)>,
+    pub sense: Option<Sense>,
+    pub camera: bool,
+    pub(crate) device: Option<(u32, i32)>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -79,6 +81,7 @@ pub(crate) struct State {
     pub generation: u64,
     pub connected: bool,
     pub nodes: HashMap<u32, NodeState>,
+    pub links: HashMap<u32, (u32, u32)>,
     routes: HashMap<(u32, i32), (Vec<f32>, bool)>,
     pub default_output: Option<String>,
     pub default_input: Option<String>,
@@ -134,6 +137,8 @@ struct Bound {
 enum Kind {
     Device(Direction),
     AppStream,
+    Capture(Sense),
+    Camera,
 }
 
 fn kind_of(media_class: Option<&str>) -> Option<Kind> {
@@ -141,6 +146,9 @@ fn kind_of(media_class: Option<&str>) -> Option<Kind> {
         "Audio/Sink" => Some(Kind::Device(Direction::Output)),
         "Audio/Source" | "Audio/Source/Virtual" => Some(Kind::Device(Direction::Input)),
         "Stream/Output/Audio" => Some(Kind::AppStream),
+        "Stream/Input/Audio" => Some(Kind::Capture(Sense::Microphone)),
+        "Stream/Input/Video" => Some(Kind::Capture(Sense::Camera)),
+        "Video/Source" => Some(Kind::Camera),
         _ => None,
     }
 }
@@ -231,6 +239,19 @@ impl Graph {
                 Some(kind) => self.add_node(global, kind),
                 None => Ok(()),
             },
+            ObjectType::Link => {
+                let node = |key| {
+                    props
+                        .and_then(|p| p.get(key))
+                        .and_then(|id| id.parse().ok())
+                };
+                if let Some(link) = node("link.output.node").zip(node("link.input.node")) {
+                    self.shared.update(|state| {
+                        state.links.insert(global.id, link);
+                    });
+                }
+                Ok(())
+            }
             ObjectType::Device
                 if props.and_then(|p| p.get("media.class")) == Some("Audio/Device") =>
             {
@@ -275,7 +296,10 @@ impl Graph {
                     .get("node.description")
                     .or_else(|| props.get("node.nick"))
                     .map_or_else(|| name.clone(), str::to_owned);
-                let app = (kind == Kind::AppStream).then(|| App {
+                let camera = kind == Kind::Camera
+                    && (props.get("media.role") == Some("Camera")
+                        || matches!(props.get("device.api"), Some("v4l2" | "libcamera")));
+                let app = matches!(kind, Kind::AppStream | Kind::Capture(_)).then(|| App {
                     name: props
                         .get("application.name")
                         .or_else(|| props.get("application.process.binary"))
@@ -291,8 +315,13 @@ impl Graph {
                     let node = state.nodes.entry(id).or_default();
                     node.direction = match kind {
                         Kind::Device(direction) => Some(direction),
-                        Kind::AppStream => None,
+                        Kind::AppStream | Kind::Capture(_) | Kind::Camera => None,
                     };
+                    node.sense = match kind {
+                        Kind::Capture(sense) => Some(sense),
+                        _ => None,
+                    };
+                    node.camera = camera;
                     node.app = app;
                     node.device = device;
                     node.name = name;
@@ -405,6 +434,11 @@ impl Graph {
             self.shared.update(|state| {
                 state.default_output = None;
                 state.default_input = None;
+            });
+        }
+        if self.shared.lock().links.contains_key(&id) {
+            self.shared.update(|state| {
+                state.links.remove(&id);
             });
         }
         if bound.nodes.remove(&id).is_some() {

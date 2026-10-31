@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use accesskit::{Action, Node as AccessNode, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
 use jiff::Zoned;
 use unbound_datetime::DateFormats;
-use unbound_status::status::{Battery, Status, speaker_waves};
+use unbound_status::status::{Battery, Capture, Sense, Status, speaker_waves};
 use unbound_toolkit::ui::PointerButton;
 use unbound_toolkit::{
     Color, DisplayEdge, Image, Item, MenuPlacement, Palette, Paragraph, Point, Rect, Scene, Shape,
@@ -43,6 +43,7 @@ const DAY_SIZE: f32 = 11.0;
 const BADGE_SIZE: f32 = 10.0;
 const PERCENT_SIZE: f32 = 8.0;
 const UNREAD_DOT: f32 = 7.0;
+const IN_USE_DOT: f32 = 6.0;
 const HOVER_ALPHA: u8 = 18;
 const OPEN_ALPHA: u8 = 30;
 const NODE_BASE: u64 = 1 << 40;
@@ -101,6 +102,41 @@ pub struct RailView {
     open: Option<Slot>,
     hovered: Option<Slot>,
     slots: Vec<(Slot, Rect)>,
+}
+
+pub fn in_use(capturing: &[Capture]) -> Vec<String> {
+    capturing
+        .iter()
+        .map(|capture| {
+            let id = match capture.senses.as_slice() {
+                [Sense::Microphone] => "in-use-microphone",
+                [Sense::Camera] => "in-use-camera",
+                _ => "in-use-microphone-and-camera",
+            };
+            L10N.tr_args(id, [("app", capture.name.clone().into())])
+        })
+        .collect()
+}
+
+pub fn control_center_label(status: &Status) -> String {
+    let mut parts = vec![L10N.tr("control-center")];
+    parts.extend(in_use(&status.capturing));
+    parts.join(", ")
+}
+
+pub fn in_use_dot(rect: Rect, palette: &Palette) -> Item {
+    Item::Fill {
+        shape: Shape::rounded(
+            Rect::new(
+                rect.x + rect.width - IN_USE_DOT - 2.0,
+                rect.y + 2.0,
+                IN_USE_DOT,
+                IN_USE_DOT,
+            ),
+            IN_USE_DOT / 2.0,
+        ),
+        paint: palette.accent.into(),
+    }
 }
 
 fn contains(rect: Rect, point: Point) -> bool {
@@ -677,6 +713,9 @@ impl RailView {
                 Slot::App => self.paint_header(rect, scale, &mut items),
                 _ => {}
             }
+            if slot == Slot::ControlCenter && !self.status.capturing.is_empty() {
+                items.push(in_use_dot(rect, &palette));
+            }
         }
         self.slots = slots;
         items
@@ -1037,7 +1076,7 @@ impl RailView {
                     [("percent", battery.percent.round().into())],
                 )
             }),
-            Slot::ControlCenter => L10N.tr("control-center"),
+            Slot::ControlCenter => control_center_label(&self.status),
             Slot::Clock => {
                 let clock = format!("{} {}", self.clock.time, self.clock.day);
                 if self.unread {

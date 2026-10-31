@@ -4,10 +4,11 @@ use unbound_toolkit::ui::{Menu, MenuItem};
 use unbound_status::Command;
 use unbound_status::dbusmenu::{Node, command};
 use unbound_status::status::{
-    Battery, Bluetooth, InputSources, Power, Sound, Wifi, hours_and_minutes,
+    Battery, Bluetooth, Capture, InputSources, Power, Sound, Wifi, hours_and_minutes,
 };
 
 use crate::L10N;
+use crate::rail::in_use;
 
 fn item(title: &str, command: &Command) -> MenuItem {
     MenuItem::new(title, &command.action())
@@ -115,12 +116,18 @@ pub fn wifi_menu(wifi: &Wifi) -> Menu {
     Menu::new(items)
 }
 
-pub fn sound_menu(sound: &Sound) -> Menu {
+pub fn sound_menu(sound: &Sound, capturing: &[Capture]) -> Menu {
     let percent = [("percent", (f64::from(sound.volume) * 100.0).round().into())];
-    let mut items = vec![
+    let mut items = Vec::new();
+    let in_use = in_use(capturing);
+    if !in_use.is_empty() {
+        items.extend(in_use.iter().map(|line| note(line)));
+        items.push(MenuItem::separator());
+    }
+    items.extend([
         note(&L10N.tr_args("volume-level", percent)),
         item(&L10N.tr("mute"), &Command::SetMuted(!sound.muted)).checked(sound.muted),
-    ];
+    ]);
     if !sound.outputs.is_empty() {
         items.push(MenuItem::separator());
         items.push(note(&L10N.tr("output")));

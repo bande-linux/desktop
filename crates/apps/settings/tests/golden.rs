@@ -110,6 +110,7 @@ fn sound(scheme: Scheme) -> SettingsView {
             0.8,
         )],
         apps: Vec::new(),
+        capturing: Vec::new(),
         default_output: Some("speakers".to_owned()),
         default_input: Some("microphone".to_owned()),
     })));

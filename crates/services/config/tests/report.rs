@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 
 use support::replace_file;
 use unbound_config::{ConfigService, ConfigStore, EDIT_ACTION, ErrorNotifier};
+use unbound_notify::client::NotificationCenter;
 use unbound_notify::{Notification, NotificationServer};
 use unbound_test_bus::SessionBus;
 
@@ -19,6 +20,7 @@ struct Fixture {
     path: PathBuf,
     _service: ConfigService,
     notifications: NotificationServer,
+    center: NotificationCenter<'static>,
     opened: Receiver<PathBuf>,
     _bus: SessionBus,
 }
@@ -49,6 +51,7 @@ fn start(initial: &str) -> Fixture {
         path,
         _service: service,
         notifications,
+        center: NotificationCenter::new(&connection).expect("center proxy"),
         opened,
         _bus: bus,
     }
@@ -140,9 +143,9 @@ fn open_in_editor_opens_the_configuration_file() {
 
     assert!(
         fixture
-            .notifications
-            .invoke_action(id, EDIT_ACTION)
-            .expect("invoke")
+            .center
+            .activate(id, EDIT_ACTION, "")
+            .expect("activate")
     );
     assert_eq!(
         fixture.opened.recv_timeout(WAIT).expect("opened"),

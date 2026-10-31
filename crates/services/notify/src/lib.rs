@@ -295,22 +295,6 @@ impl NotificationServer {
         }
         Ok(closed)
     }
-
-    pub fn invoke_action(&self, id: u32, action_key: &str) -> zbus::Result<bool> {
-        let Some(Invoked { closed }) = self.shared.update(|center| center.invoke(id, action_key))
-        else {
-            return Ok(false);
-        };
-        let emitter = SignalEmitter::new(self.connection.inner(), OBJECT_PATH)?;
-        zbus::block_on(announce(
-            &emitter,
-            id,
-            action_key,
-            "",
-            &Outcome::Invoked { closed },
-        ));
-        Ok(true)
-    }
 }
 
 impl Drop for NotificationServer {

@@ -116,10 +116,6 @@ impl BarEdge {
     pub fn from_keyword(keyword: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|edge| edge.keyword() == keyword)
     }
-
-    pub fn is_vertical(self) -> bool {
-        matches!(self, Self::Left | Self::Right)
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

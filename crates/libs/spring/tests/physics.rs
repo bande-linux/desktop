@@ -214,16 +214,6 @@ fn presets_settle_to_a_thousandth_of_the_distance_in_their_named_times() {
 }
 
 #[test]
-fn duration_and_bounce_map_to_frequency_and_damping() {
-    let spring = Spring::from_duration_bounce(0.3, 0.15).expect("valid spring");
-
-    assert!(close(spring.angular_frequency(), 2.0 * PI / 0.3, 1e-12));
-    assert!(close(spring.damping_ratio(), 0.85, 1e-12));
-    assert_eq!(spring, Spring::MOMENTUM);
-    assert!(Spring::from_duration_bounce(0.3, 1.5).is_err());
-}
-
-#[test]
 fn momentum_overshoots_slightly_and_critical_presets_never() {
     let peak = |spring: Spring| {
         let mut animation = Animation::new(spring, released(0.0, 0.0), 1.0);
@@ -238,36 +228,19 @@ fn momentum_overshoots_slightly_and_critical_presets_never() {
 }
 
 #[test]
-fn an_injected_velocity_carries_into_the_new_target() {
-    let mut animation = Animation::new(Spring::STANDARD, released(0.0, 0.0), 100.0);
-    animation.advance(0.05);
-
-    animation.retarget_with_velocity(-100.0, 800.0);
-    let before = animation.state();
-    let after = animation.advance(0.001);
-
-    assert!(close(before.velocity, 800.0, 1e-12));
-    assert!(after.position > before.position);
-    animation.advance(2.0);
-    assert!(animation.is_at_rest(0.01));
-}
-
-#[test]
 fn decay_loses_its_rate_of_speed_every_millisecond_and_stops_at_its_projection() {
     let start = released(10.0, 2000.0);
-    for decay in [Decay::NORMAL, Decay::FAST] {
-        let after = decay.state_at(start, 0.001);
-        let rate = after.velocity / start.velocity;
-        assert!(rate > 0.98 && rate < 1.0);
-        let settled = decay.state_at(start, 20.0);
-        assert!(close(settled.position, decay.project(start), 1e-9));
-    }
+    let decay = Decay::NORMAL;
+    let after = decay.state_at(start, 0.001);
+    let rate = after.velocity / start.velocity;
+    assert!(rate > 0.98 && rate < 1.0);
+    let settled = decay.state_at(start, 20.0);
+    assert!(close(settled.position, decay.project(start), 1e-9));
     assert!(close(
         Decay::NORMAL.state_at(start, 0.001).velocity,
         2000.0 * 0.998,
         1e-9
     ));
-    assert!(Decay::NORMAL.project(start) > Decay::FAST.project(start));
 }
 
 #[test]

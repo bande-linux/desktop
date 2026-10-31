@@ -1,5 +1,7 @@
+use unbound_protocols::client::unbound_app_control_v1::{self, UnboundAppControlV1};
 use unbound_protocols::client::unbound_app_v1::{self, Placement, UnboundAppV1};
 use unbound_protocols::client::unbound_shell_v1::{self, UnboundShellV1};
+use wayland_client::protocol::wl_registry::WlRegistry;
 use wayland_client::{Connection, Dispatch, Proxy, QueueHandle, WEnum, event_created_child};
 use wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_handle_v1::{
     self, ExtForeignToplevelHandleV1,
@@ -35,6 +37,8 @@ pub struct AppWindow {
 pub(crate) struct Shell {
     pub(crate) protocol: Option<UnboundShellV1>,
     pub(crate) app: Option<UnboundAppV1>,
+    pub(crate) app_control_global: Option<(WlRegistry, u32)>,
+    app_control: Option<UnboundAppControlV1>,
     toplevels: Vec<Toplevel>,
     minimized: Vec<String>,
     token: Option<String>,
@@ -83,9 +87,39 @@ impl Window {
     }
 
     pub fn quit_app(&mut self, app_id: &str) -> Result<(), WindowError> {
-        self.shell_since(unbound_shell_v1::REQ_QUIT_APP_SINCE)?
-            .quit_app(app_id.to_owned());
+        if let Ok(shell) = self.shell_since(unbound_shell_v1::REQ_QUIT_APP_SINCE) {
+            shell.quit_app(app_id.to_owned());
+        } else {
+            self.app_control()?.quit_app(app_id.to_owned());
+        }
         self.flush()
+    }
+
+    pub fn watch_apps(&mut self) -> Result<(), WindowError> {
+        if self
+            .shell_since(unbound_shell_v1::EVT_APP_RESPONDING_SINCE)
+            .is_ok()
+        {
+            return Ok(());
+        }
+        self.app_control()?;
+        self.flush()
+    }
+
+    fn app_control(&mut self) -> Result<&UnboundAppControlV1, WindowError> {
+        let shell = &mut self.state.shell;
+        if shell.app_control.is_none() {
+            let (registry, name) = shell
+                .app_control_global
+                .as_ref()
+                .ok_or(WindowError::Missing("unbound_app_control_v1"))?;
+            shell.app_control = Some(registry.bind(*name, 1, &self.queue.handle(), ()));
+        }
+        self.state
+            .shell
+            .app_control
+            .as_ref()
+            .ok_or(WindowError::Missing("unbound_app_control_v1"))
     }
 
     pub fn force_quit_app(&mut self, app_id: &str) -> Result<(), WindowError> {
@@ -290,6 +324,30 @@ impl Window {
             .ok_or(WindowError::Missing("unbound_app_v1 version 4"))?;
         app.set_keep_on_top(self.toplevel()?, u32::from(keep));
         self.flush()
+    }
+}
+
+impl Dispatch<UnboundAppControlV1, ()> for State {
+    fn event(
+        state: &mut Self,
+        _: &UnboundAppControlV1,
+        event: unbound_app_control_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        if let unbound_app_control_v1::Event::AppResponding {
+            pid,
+            app_id,
+            responding,
+        } = event
+        {
+            state.events.push(WindowEvent::AppResponding {
+                pid,
+                app_id,
+                responding: responding != 0,
+            });
+        }
     }
 }
 

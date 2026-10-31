@@ -269,6 +269,7 @@ pub struct ToplevelState {
     pub fullscreen: bool,
     pub activated: bool,
     pub tiled: bool,
+    pub suspended: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2343,7 +2344,7 @@ impl Dispatch<WlRegistry, ()> for State {
                 }
                 "wl_shm" => state.shm = Some(registry.bind(name, 1, handle, ())),
                 "xdg_wm_base" => {
-                    state.wm_base = Some(registry.bind(name, version.min(5), handle, ()));
+                    state.wm_base = Some(registry.bind(name, version.min(6), handle, ()));
                 }
                 "zwlr_layer_shell_v1" => {
                     state.layer_shell = Some(registry.bind(name, version.min(5), handle, ()));
@@ -2384,6 +2385,9 @@ impl Dispatch<WlRegistry, ()> for State {
                 }
                 "unbound_app_v1" => {
                     state.shell.app = Some(registry.bind(name, version.min(5), handle, ()));
+                }
+                "unbound_app_control_v1" => {
+                    state.shell.app_control_global = Some((registry.clone(), name));
                 }
                 "ext_output_image_capture_source_manager_v1" => {
                     state.capture.sources = Some(registry.bind(name, 1, handle, ()));
@@ -2474,6 +2478,7 @@ impl Dispatch<XdgToplevel, ()> for State {
                     maximized: states.contains(&xdg_toplevel::State::Maximized),
                     fullscreen: states.contains(&xdg_toplevel::State::Fullscreen),
                     activated: states.contains(&xdg_toplevel::State::Activated),
+                    suspended: states.contains(&xdg_toplevel::State::Suspended),
                     tiled: states.iter().any(|state| {
                         matches!(
                             state,

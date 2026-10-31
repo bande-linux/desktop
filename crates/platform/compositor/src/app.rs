@@ -3,9 +3,11 @@ use smithay::reexports::wayland_server::backend::ClientId;
 use smithay::reexports::wayland_server::{
     Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource,
 };
+use unbound_protocols::server::unbound_app_control_v1::{self, UnboundAppControlV1};
 use unbound_protocols::server::unbound_app_v1::{self, UnboundAppV1};
 use unbound_protocols::server::unbound_shell_v1;
 
+use crate::shell::is_shell;
 use crate::state::State;
 
 impl State {
@@ -98,5 +100,54 @@ impl Dispatch<UnboundAppV1, ()> for State {
 
     fn destroyed(state: &mut Self, _client: ClientId, resource: &UnboundAppV1, _data: &()) {
         state.app_resources.retain(|app| app != resource);
+    }
+}
+
+impl GlobalDispatch<UnboundAppControlV1, ()> for State {
+    fn bind(
+        state: &mut Self,
+        _display: &DisplayHandle,
+        _client: &Client,
+        resource: New<UnboundAppControlV1>,
+        _global_data: &(),
+        data_init: &mut DataInit<'_, Self>,
+    ) {
+        let control = data_init.init(resource, ());
+        state.announce_unresponsive(None, Some(&control));
+        state.app_control_resources.push(control);
+    }
+}
+
+impl Dispatch<UnboundAppControlV1, ()> for State {
+    fn request(
+        state: &mut Self,
+        _client: &Client,
+        resource: &UnboundAppControlV1,
+        request: unbound_app_control_v1::Request,
+        _data: &(),
+        _display: &DisplayHandle,
+        _data_init: &mut DataInit<'_, Self>,
+    ) {
+        match request {
+            unbound_app_control_v1::Request::QuitApp { app_id } => {
+                for client in state.app_clients(&app_id) {
+                    if !is_shell(&client) {
+                        state.quit_app(Some(client));
+                    }
+                }
+            }
+            unbound_app_control_v1::Request::Destroy => {
+                state
+                    .app_control_resources
+                    .retain(|control| control != resource);
+            }
+            _ => {}
+        }
+    }
+
+    fn destroyed(state: &mut Self, _client: ClientId, resource: &UnboundAppControlV1, _data: &()) {
+        state
+            .app_control_resources
+            .retain(|control| control != resource);
     }
 }

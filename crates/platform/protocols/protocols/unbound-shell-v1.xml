@@ -507,4 +507,36 @@
       </description>
     </request>
   </interface>
+  <interface name="unbound_app_control_v1" version="1">
+    <description summary="quitting apps and watching them answer, for Activity Monitor">
+      Offered to every client. It carries only what an app may already do to
+      another app of the same user, politely: ask it to quit and learn whether
+      it answers. It lists no windows and types no text. A client that binds
+      it receives app_responding until it destroys it.
+    </description>
+
+    <request name="destroy" type="destructor"/>
+
+    <request name="quit_app">
+      <description summary="ask an app to quit">
+        Asks the app with this app id to quit, as Super+Q does: through
+        unbound_app_v1.quit_requested when the app has bound it, otherwise by
+        asking each of its windows to close. The app may ask the user first.
+        Shell clients are never asked.
+      </description>
+      <arg name="app_id" type="string"/>
+    </request>
+
+    <event name="app_responding">
+      <description summary="an app stopped or started answering">
+        As unbound_shell_v1.app_responding: sent with responding 0 when an app
+        has not answered a ping for 3 seconds and with responding 1 when it
+        answers again or exits, and on binding for every app that is not
+        responding.
+      </description>
+      <arg name="pid" type="int"/>
+      <arg name="app_id" type="string"/>
+      <arg name="responding" type="uint"/>
+    </event>
+  </interface>
 </protocol>

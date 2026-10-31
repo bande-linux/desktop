@@ -22,7 +22,7 @@ impl State {
             .collect()
     }
 
-    fn app_clients(&self, app_id: &str) -> Vec<Client> {
+    pub(crate) fn app_clients(&self, app_id: &str) -> Vec<Client> {
         let mut clients: Vec<Client> = Vec::new();
         for index in self.app_windows(app_id) {
             if let Some(client) = self.windows[index].surface().client()

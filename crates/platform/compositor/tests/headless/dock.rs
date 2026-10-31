@@ -2,7 +2,7 @@ use crate::support::*;
 use smithay::utils::Point;
 use unbound_compositor::{BACKGROUND, Headless, Renderer};
 use unbound_test_wayland::{
-    Anchor, KeyboardInteractivity, Layer, LayerRequest, RED, TestClient, roundtrip,
+    Anchor, KeyboardInteractivity, Layer, LayerRequest, RED, TestClient, ToplevelState, roundtrip,
 };
 
 const WINDOW: i32 = 64;
@@ -81,6 +81,42 @@ fn quitting_an_app_from_the_dock_asks_its_windows_to_close() {
     editor.exchange(&mut server);
 
     assert!(editor.close_requested(0));
+}
+
+#[test]
+fn a_hidden_app_is_told_it_is_suspended_until_it_shows_again() {
+    let mut server = server();
+    let mut editor = app(&mut server, EDITOR);
+    let mut menu_bar = shell(&mut server);
+    let suspended = |editor: &TestClient| {
+        editor
+            .configured(0)
+            .is_some_and(|configured| configured.states.contains(&ToplevelState::Suspended))
+    };
+
+    menu_bar.hide_app(&mut server, EDITOR);
+    editor.exchange(&mut server);
+    let while_hidden = suspended(&editor);
+    menu_bar.show_app(&mut server, EDITOR);
+    editor.exchange(&mut server);
+
+    assert!(while_hidden);
+    assert!(!suspended(&editor));
+}
+
+#[test]
+fn an_ordinary_app_can_ask_another_app_to_quit_without_seeing_the_shell() {
+    let mut server = server();
+    let mut editor = app(&mut server, EDITOR);
+    let mut monitor = app(&mut server, "org.unbound.Monitor");
+
+    monitor.join_app_control(&mut server);
+    monitor.ask_app_to_quit(&mut server, EDITOR);
+    editor.exchange(&mut server);
+
+    assert!(editor.close_requested(0));
+    assert!(!monitor.close_requested(0));
+    assert!(!monitor.advertises("unbound_shell_v1"));
 }
 
 #[test]

@@ -4211,11 +4211,19 @@ dependencies = [
 name = "unbound-polkit"
 version = "0.1.0"
 dependencies = [
+ "accesskit",
  "blocking",
  "rustix 1.1.6",
  "tempfile",
+ "tracing",
+ "unbound-golden",
+ "unbound-inbox",
+ "unbound-l10n",
+ "unbound-log",
  "unbound-test-bus",
+ "unbound-toolkit",
  "zbus",
+ "zeroize",
 ]
 
 [[package]]

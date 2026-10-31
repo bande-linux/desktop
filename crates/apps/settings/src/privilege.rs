@@ -67,14 +67,14 @@ pub fn refused(system: &Connection) -> zbus::Result<Vec<Privilege>> {
     );
     let mut refused = Vec::new();
     for privilege in Privilege::ALL {
-        let (authorized, _, _) = authority.check_authorization(
+        let (authorized, challenge, _) = authority.check_authorization(
             &subject,
             privilege.action(),
             &HashMap::new(),
             NO_INTERACTION,
             "",
         )?;
-        if !authorized {
+        if !authorized && !challenge {
             refused.push(privilege);
         }
     }

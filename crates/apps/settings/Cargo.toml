@@ -51,7 +51,7 @@ follows changes made elsewhere while it is open. Desktop settings go \
 through org.unbound.Config, which writes config.kdl. A polkit rule lets \
 administrators (members of sudo) change the time, language, computer \
 name and install updates without a password prompt."""
-recommends = "network-manager, bluez, pipewire, wireplumber, unbound-notify, packagekit, power-profiles-daemon, upower"
+recommends = "unbound-polkit, network-manager, bluez, pipewire, wireplumber, unbound-notify, packagekit, power-profiles-daemon, upower"
 maintainer-scripts = "debian/"
 assets = [
     ["target/release/unbound-settings", "usr/bin/", "755"],

@@ -1,0 +1,11 @@
+[Unit]
+Description=Unbound polkit authentication agent
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/unbound-polkit-agent
+Restart=on-failure
+
+[Install]
+WantedBy=unbound-session.target

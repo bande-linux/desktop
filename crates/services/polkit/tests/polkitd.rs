@@ -8,6 +8,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use unbound_polkit::agent::{Agent, Conversation, Notice, Request, Subject};
 use unbound_polkit::helper::HELPER;
 use zbus::blocking::Connection;
+use zeroize::Zeroizing;
 
 const ACTION: &str = "org.unbound.polkit-test";
 const MESSAGE: &str = "Authentication is required to run the Unbound agent test";
@@ -18,7 +19,7 @@ struct Scripted {
 }
 
 impl Conversation for Scripted {
-    fn respond(&self, request: &Request, _prompt: &str, _echo: bool) -> Option<String> {
+    fn respond(&self, request: &Request, _prompt: &str, _echo: bool) -> Option<Zeroizing<String>> {
         if let Ok(seen) = self.seen.lock() {
             let _ = seen.send(format!("prompt {} {}", request.action_id, request.message));
         }
@@ -26,7 +27,7 @@ impl Conversation for Scripted {
         if answers.is_empty() {
             None
         } else {
-            answers.remove(0)
+            answers.remove(0).map(Zeroizing::new)
         }
     }
 

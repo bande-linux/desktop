@@ -222,7 +222,7 @@ impl App for Files {
             .set_clipboard_has_files(window.clipboard_has_uris());
         let changed = match event {
             WindowEvent::AppearanceChanged(appearance) => {
-                self.view.set_palette(appearance.palette());
+                self.view.set_appearance(appearance);
                 true
             }
             WindowEvent::Input(input) => self.view.handle(&input),

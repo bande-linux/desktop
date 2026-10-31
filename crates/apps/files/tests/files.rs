@@ -3103,3 +3103,28 @@ fn settle(view: &mut FilesView) {
         view.scene(GOLDEN_SIZE.0, GOLDEN_SIZE.1);
     }
 }
+
+#[test]
+fn files_follows_the_text_size() {
+    fn widest_text(items: &[Item]) -> f32 {
+        items
+            .iter()
+            .map(|item| match item {
+                Item::Text { paragraph, .. } => paragraph.width(),
+                Item::Clip { items, .. } | Item::Opacity { items, .. } => widest_text(items),
+                _ => 0.0,
+            })
+            .fold(0.0, f32::max)
+    }
+    let place = Place::new();
+    let mut view = place.view();
+    view.handle(&command(Key::Character('2'), false));
+    let regular = widest_text(&view.scene(1000, 600).items);
+
+    view.set_appearance(unbound_toolkit::Appearance {
+        text_size: unbound_toolkit::TextSize::LARGEST,
+        ..unbound_toolkit::Appearance::default()
+    });
+
+    assert!(widest_text(&view.scene(1000, 600).items) > regular * 1.5);
+}

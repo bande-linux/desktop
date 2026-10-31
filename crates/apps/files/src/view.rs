@@ -18,7 +18,7 @@ use unbound_toolkit::ui::{
     ClipboardRequest, Context, Cursor, Event, FreeLayout, Key, Menu, Modifiers, Pointer,
     PointerButton, Scroll, ScrollState, Slider, Ui, Widget, WidgetId,
 };
-use unbound_toolkit::{Image, Item, Palette, Point, Rect, SHEET_INSET, TextSystem};
+use unbound_toolkit::{Appearance, Image, Item, Palette, Point, Rect, SHEET_INSET, TextSystem};
 use unbound_volumes::mounted_volumes;
 use unbound_xdg::{Apps, DesktopEntry, UserDir, path_from_file_uri, user_dir};
 
@@ -454,6 +454,12 @@ impl FilesView {
         {
             self.requests.push(Request::Eject(volume));
         }
+    }
+
+    pub fn set_appearance(&mut self, appearance: Appearance) {
+        self.palette = appearance.palette();
+        self.ui.set_appearance(appearance);
+        self.layout_controls();
     }
 
     pub fn set_palette(&mut self, palette: Palette) {

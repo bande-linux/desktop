@@ -21,7 +21,7 @@ it seems like some apps are not getting the correct taskbar icon? this could als
 Status: started ([plans/taskbar-icons.md](plans/taskbar-icons.md)); M1 and M3 done, M2 waits on an owner decision
 
 its not possible to install more keyboard layouts or languages in settings *important*
-Status: planned ([plans/keyboard-layouts-and-languages.md](plans/keyboard-layouts-and-languages.md))
+Status: started ([plans/keyboard-layouts-and-languages.md](plans/keyboard-layouts-and-languages.md))
 
 grapping a window edge or corner in order to reseize it is a bit difficult, the resizer is too unprecise to the actual corner or edge
 Status: planned ([plans/window-resize-zones.md](plans/window-resize-zones.md))
@@ -30,19 +30,19 @@ the themes, especially the dark theme, looks a bit "dated". Review how modern da
 Status: planned ([plans/dark-theme.md](plans/dark-theme.md))
 
 the software update doesnt seem to work.
-Status: planned ([plans/software-update.md](plans/software-update.md))
+Status: started ([plans/software-update.md](plans/software-update.md))
 
 changing time zone doesnt apply
 Status: finished ([plans/time-zone.md](plans/time-zone.md)); M5 polkit fix waits on an owner decision
 
 scrolling direction should have individual settings for trackpad and mouse. Also trackpad and mouse probably should have their own setting views with more option. The trackpad has 0 options for example.
-Status: planned ([plans/mouse-and-trackpad.md](plans/mouse-and-trackpad.md))
+Status: started ([plans/mouse-and-trackpad.md](plans/mouse-and-trackpad.md))
 
 in settings the selected item in the sidebar has blue markers, that looks pretty bad. Its enough to highlight the selection i think
 Status: planned ([plans/sidebar-selection.md](plans/sidebar-selection.md))
 
 Files has no "settings" (and other inhouse apps who needs it), for example i want to show file extensions
-Status: planned ([plans/app-settings.md](plans/app-settings.md))
+Status: started ([plans/app-settings.md](plans/app-settings.md))
 
 we have no swap (granted this is not an official installation of debian) and it may not be up to bande-desktop, but quickly review how that should work and if we should do anything or if that is soley up to the debian installer
 Status: planned ([plans/swap.md](plans/swap.md))
@@ -54,4 +54,4 @@ we have no app store, should we build one?
 Status: planned ([plans/app-store.md](plans/app-store.md))
 
 snapping windows to the sides is a bit slow and also to the left requires you do drag to the screen edge but dragging to the taskbar should be enough since thats the real edge of the window. So the screen estate is the whole screen minus the taskbar, not the whole screen like now.
-Status: planned ([plans/window-snapping.md](plans/window-snapping.md))
+Status: started ([plans/window-snapping.md](plans/window-snapping.md))

@@ -4052,6 +4052,7 @@ dependencies = [
  "tempfile",
  "tracing",
  "unbound-config",
+ "unbound-datetime",
  "unbound-keyboard",
  "unbound-l10n",
  "unbound-lock",

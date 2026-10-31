@@ -13,6 +13,7 @@ serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
 unbound-config.workspace = true
+unbound-datetime.workspace = true
 unbound-keyboard.workspace = true
 unbound-l10n.workspace = true
 unbound-lock.workspace = true

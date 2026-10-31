@@ -7,13 +7,14 @@ use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
 use unbound_config::LOGIN_PICTURES;
+use unbound_datetime::{DateFormats, MinuteTimer};
 use unbound_greeter::{
     L10N, Login, Rejection, Request, Step, last_user_file, login_picture, login_users, opened_path,
     read_message, remember_user, remembered_user, write_message,
 };
 use unbound_keyboard::Layouts;
 use unbound_lock::{
-    BackdropSource, DateFormats, Inbox, LockScreen, Look, PowerAction, User, Variant, load_backdrop,
+    BackdropSource, Inbox, LockScreen, Look, PowerAction, User, Variant, load_backdrop,
 };
 use unbound_status::devices::{powers, use_power};
 use unbound_toolkit::ui::{Event, Key, frame_time};
@@ -21,8 +22,6 @@ use unbound_toolkit::{
     App, Appearance, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Role, Scene, TextSystem,
     Window, WindowEvent,
 };
-
-const CLOCK_TICK: Duration = Duration::from_secs(1);
 
 struct Conversation {
     login: Login,
@@ -61,7 +60,7 @@ struct Greeter {
     screen: LockScreen,
     conversation: Option<Conversation>,
     caps_lock: bool,
-    next_clock: Instant,
+    minutes: MinuteTimer,
     backdrop: Option<Inbox<(Look, Image)>>,
     backdrop_requested: bool,
     picture: Option<File>,
@@ -280,10 +279,8 @@ impl App for Greeter {
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        self.backdrop
-            .as_ref()
-            .map(Inbox::fd)
-            .into_iter()
+        std::iter::once(self.minutes.as_fd())
+            .chain(self.backdrop.as_ref().map(Inbox::fd))
             .chain(
                 self.conversation
                     .as_ref()
@@ -293,7 +290,15 @@ impl App for Greeter {
     }
 
     fn source_ready(&mut self, window: &mut Window, index: usize) {
-        match self.backdrop.as_mut().filter(|_| index == 0) {
+        if index == 0 {
+            if let Err(error) = self.minutes.wait() {
+                tracing::warn!("cannot follow the clock: {error}");
+            }
+            self.screen.set_clock(&jiff::Zoned::now());
+            window.request_redraw();
+            return;
+        }
+        match self.backdrop.as_mut().filter(|_| index == 1) {
             Some(inbox) => {
                 for (look, image) in inbox.drain() {
                     match look {
@@ -312,22 +317,11 @@ impl App for Greeter {
     }
 
     fn deadline(&self) -> Option<Instant> {
-        match self.finished() {
-            true => Some(Instant::now()),
-            false => Some(self.next_clock),
-        }
+        self.finished().then(Instant::now)
     }
 
     fn animating(&self) -> bool {
         self.screen.is_animating()
-    }
-
-    fn tick(&mut self, window: &mut Window, now: Instant) {
-        if now >= self.next_clock {
-            self.screen.set_clock(&jiff::Zoned::now());
-            self.next_clock = now + CLOCK_TICK;
-        }
-        window.request_redraw();
     }
 
     fn finished(&self) -> bool {
@@ -385,7 +379,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         screen,
         conversation: None,
         caps_lock: false,
-        next_clock: Instant::now() + CLOCK_TICK,
+        minutes: MinuteTimer::new()?,
         backdrop: None,
         backdrop_requested: false,
         picture,

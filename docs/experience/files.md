@@ -1,7 +1,8 @@
 # Files: depth and polish against the Finder
 
 Status: research and build plan of 2026-10-30, branch `night/files-monitor-spec`. Slices F1–F7
-were built on 2026-10-31 in `night/files-depth-1`; see "Built" under §6. It reads with the accepted proposal [`../design/features/files.md`](../design/features/files.md),
+were built on 2026-10-31 in `night/files-depth-1`, F8–F14 and lazy list rows in
+`day/files-depth-2`; see "Built" under §6. It reads with the accepted proposal [`../design/features/files.md`](../design/features/files.md),
 the principles in [`../design/DESIGN.md`](../design/DESIGN.md) and the design language
 [`../design/datum.md`](../design/datum.md).
 
@@ -239,6 +240,55 @@ tautologies). "Goldens" are headless renders in `crates/apps/files/tests/golden/
   Size and Kind, remembered in `files-columns` beside the views file.
 - Not done: the review scenario `files-depth.scenario` (the harness installs packages into the
   live system; the goldens in `crates/apps/files/tests/golden/` are the shots instead).
+
+### Built (2026-10-31, `day/files-depth-2`)
+
+- **F8.** Quick Look has a header: a full-screen toggle, "2 of 5" for a selection, the name and
+  "Open with <App>". Left and Right step within the selection without changing it; text scrolls
+  with the wheel and Page Up/Down (a scroll state with a scrollbar); Super+= and Super+− zoom a
+  picture (the wheel pans it when zoomed). Super+Y joins Space, Alt+Super+Y opens or toggles full
+  screen. Escape leaves full screen first and closes on the second press: one key never loses
+  the item the user was looking at. Goldens `quick-look-text`, `quick-look-several`.
+- **F9.** The inspector shows Created, Dimensions (read from the image header on the preview
+  worker, `unbound_preview::image_size`) and, for items you own, a Sharing & Permissions
+  section: "Allow running as a program" (a toolkit `Toggle`) and You, Group and Everyone pop-ups
+  (Read & Write, Read only, No Access). Folders keep the search bit with read access. The
+  permission rules live in `unbound_fs` (`Access`, `Class`, `with_access`, `with_runnable`).
+  Several items show the count, total size and their kinds. The inspector scrolls; controls are
+  real widgets, so they are keyboard and screen-reader reachable. Goldens `inspector-file`,
+  `inspector-several`.
+- **F10.** Open With ends with "Other…": a sheet with a search field, every app that opens
+  files (recommended first) and "Always Open With", which writes `mimeapps.list` through the
+  Use for All path. Opening a file with no app presents this sheet instead of a notice.
+  Golden `open-with-other`.
+- **F11.** Copy's Alt alternative is "Copy “name” as Pathname" on **Alt+Shift+Super+C**:
+  Alt+Super+C is the compositor's Control Center, so the plan's shortcut could not be used.
+  Folders get "Add to Sidebar" (Control+Super+T; with nothing selected it adds the shown folder).
+  Recents offer Show in Enclosing Folder. The Edit menu names the step: "Undo Move of 3 Items",
+  "Redo Move to Trash"; batch renames read "Undo Rename" (a rename chain is undone through
+  staging names, so its change count is not the item count). The menu bar is re-exported when
+  the titles change (`AppMenu::update` skips unchanged menus).
+- **F12.** `unbound_fs::plan_renames` turns items and a `RenameRule` (Replace Text, Add Text
+  before or after, Format: name and index or five-digit counter, before or after, from a start
+  number) into a plan, keeps extensions, and reports empty names, slashes, two items with one
+  name and a name taken in the folder before anything changes. `rename_all` renames in one go,
+  through staging names when one new name is another item's old name; the changes are one undo
+  step.
+- **F13.** F2 or Rename with several items opens "Rename N Items": a rule pop-up, the rule's
+  fields, a live example of the first three names, and the reason in `danger` text while Rename
+  is disabled. The renamed items stay selected. Golden `batch-rename`.
+- **F14.** The search bar has Kind (Any, Folder, Document, Image, Audio, Video, Archive; by MIME
+  type from the name) and Date Modified (Any Time, Today, Last 7 Days, Last 30 Days, This Year;
+  `unbound_fs::Recency`, from local midnight) pop-ups. The view switch is dimmed and ignores
+  Super+1/3 while searching; Escape restores the view. Golden `search` updated.
+- **Lazy list rows.** `Table::set_row_count` makes unfilled flat rows, `unfilled_rows` names the
+  rows around the visible ones (and the cursor) without cells, `fill_row` fills them. Files
+  fills them before each frame, so switching to the list builds one screen of rows instead of
+  100 000. Switching to the list at 100 000 items: 12.7 ms median (32.9 worst) before, 1.4 ms
+  (4.7) after; Select All 4.3 ms to 1.1 ms (`../architecture/performance.md`). Type-select in the list goes through Files' own entries, which are always complete.
+  Nested lists (open folders) still build every row.
+- **Go to Folder** uses `unbound_fs::typed_location`, shared with the file chooser: "~" and
+  "~/…" expand, "~name" is a name in the shown folder.
 
 ### F1. Measure big folders
 
@@ -543,7 +593,7 @@ then selects the executable.
 
 ## 8. Needs from other crates
 
-- `toolkit/widgets`: possibly lazy cells or a row source for `Table` (F4).
+- `toolkit/widgets`: lazy rows for `Table` (done in `day/files-depth-2`), `SegmentedControl::set_enabled`.
 - `testing/bench`: the big-folder actions (F1).
 - `apps/terminal` and a shared lib: the LauncherEntry sender moves out of `apps/terminal` (F25).
 - `apps/monitor`: switch "Show in Files" to `ShowItems` once F26 lands.

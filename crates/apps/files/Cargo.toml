@@ -7,7 +7,7 @@ repository.workspace = true
 
 [dependencies]
 accesskit.workspace = true
-rustix = { workspace = true, features = ["fs"] }
+rustix = { workspace = true, features = ["fs", "process"] }
 tracing.workspace = true
 unbound-app-menu.workspace = true
 unbound-fs.workspace = true

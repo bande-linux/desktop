@@ -120,6 +120,16 @@ impl DesktopEntry {
         self.expand(&split(&action.exec)?, &[])
     }
 
+    pub fn opens_files(&self) -> bool {
+        split(&self.exec).is_ok_and(|arguments| {
+            arguments.iter().any(|(argument, quoted)| {
+                !quoted
+                    && (SINGLE_FILE_CODES.contains(&argument.as_str())
+                        || FILE_LIST_CODES.contains(&argument.as_str()))
+            })
+        })
+    }
+
     pub fn commands_for(&self, files: &[PathBuf]) -> Result<Vec<Vec<String>>, ExecError> {
         let arguments = split(&self.exec)?;
         let has = |codes: [&str; 2]| {

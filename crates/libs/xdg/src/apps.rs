@@ -39,6 +39,10 @@ impl Apps {
         self.mime.for_path(path)
     }
 
+    pub fn mime_for_name(&self, name: &str) -> &str {
+        self.mime.for_name(name).unwrap_or(OCTET_STREAM)
+    }
+
     pub fn icon_names(&self, mime: &str) -> Vec<String> {
         self.mime.icon_names(mime)
     }
@@ -66,7 +70,7 @@ impl Apps {
         let mime = if is_folder {
             DIRECTORY.to_owned()
         } else {
-            self.mime.for_name(name).unwrap_or(OCTET_STREAM).to_owned()
+            self.mime_for_name(name).to_owned()
         };
         self.kind(&mime)
     }
@@ -79,6 +83,13 @@ impl Apps {
     pub fn apps_for(&self, mime: &str) -> Vec<&DesktopEntry> {
         self.associations
             .apps_for(&self.mime.ancestors(mime), &self.handlers)
+    }
+
+    pub fn openers(&self) -> Vec<&DesktopEntry> {
+        self.handlers
+            .iter()
+            .filter(|entry| !entry.no_display && entry.opens_files())
+            .collect()
     }
 
     pub fn default_for_path(&self, path: &Path) -> Option<&DesktopEntry> {

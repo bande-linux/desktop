@@ -1,5 +1,5 @@
 use unbound_app_menu::{Entry, app_submenu, close_window, window_submenu};
-use unbound_files::L10N;
+use unbound_files::{FilesView, L10N};
 use unbound_toolkit::ui::{Event, Key, Modifiers};
 
 const KEY_ACTION: &str = "key:";
@@ -12,7 +12,17 @@ fn submenu(message: &str, entries: Vec<Entry>) -> Entry {
     Entry::submenu(&L10N.tr(message), entries)
 }
 
-pub fn app_menus() -> Vec<Entry> {
+fn titled(title: Option<String>, message: &str, keys: &str) -> Entry {
+    let enabled = title.is_some();
+    Entry::item(
+        &title.unwrap_or_else(|| L10N.tr(message)),
+        &format!("{KEY_ACTION}{keys}"),
+    )
+    .shortcut(keys)
+    .enabled(enabled)
+}
+
+pub fn app_menus(view: &FilesView) -> Vec<Entry> {
     vec![
         app_submenu(&L10N.tr("app-name"), Vec::new()),
         submenu(
@@ -26,6 +36,7 @@ pub fn app_menus() -> Vec<Entry> {
                 shortcut("menu-get-info", "Super+I"),
                 shortcut("menu-rename", "F2"),
                 shortcut("menu-duplicate", "Super+D"),
+                shortcut("menu-add-to-sidebar", "Control+Super+T"),
                 Entry::item(&L10N.tr("menu-open-in-terminal"), "open-in-terminal"),
                 Entry::item(&L10N.tr("menu-compress-selection"), "compress"),
                 Entry::separator(),
@@ -41,11 +52,12 @@ pub fn app_menus() -> Vec<Entry> {
         submenu(
             "menu-edit",
             vec![
-                shortcut("menu-undo", "Super+Z"),
-                shortcut("menu-redo", "Shift+Super+Z"),
+                titled(view.undo_title(), "menu-undo", "Super+Z"),
+                titled(view.redo_title(), "menu-redo", "Shift+Super+Z"),
                 Entry::separator(),
                 shortcut("menu-cut", "Super+X"),
                 shortcut("menu-copy", "Super+C"),
+                shortcut("menu-copy-path", "Alt+Shift+Super+C"),
                 shortcut("menu-paste", "Super+V"),
                 shortcut("menu-move-item-here", "Alt+Super+V"),
                 shortcut("menu-select-all", "Super+A"),
@@ -63,7 +75,8 @@ pub fn app_menus() -> Vec<Entry> {
                 Entry::separator(),
                 shortcut("menu-show-hidden-files", "Shift+Super+."),
                 shortcut("menu-status-bar", "Super+/"),
-                shortcut("menu-quick-look", "Space"),
+                shortcut("menu-quick-look", "Super+Y"),
+                shortcut("menu-quick-look-full-screen", "Alt+Super+Y"),
             ],
         ),
         submenu(

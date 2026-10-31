@@ -27,6 +27,17 @@ info-original-location = Put back to
 info-deleted = Deleted
 info-permissions = Permissions
 info-link = Points to
+info-dimensions = Dimensions
+info-pixels = { $width } × { $height }
+sharing-permissions = Sharing & Permissions
+allow-running = Allow running as a program
+access-you = You
+access-group = Group
+access-everyone = Everyone
+access-read-write = Read & Write
+access-read-only = Read only
+access-none = No Access
+error-permissions = The permissions couldn’t be changed: { $error }
 folder-size = { $size } for { $count ->
     [one] { $count } item
    *[other] { $count } items
@@ -76,19 +87,69 @@ error-item = “{ $name }” couldn’t be handled: { $error }{ $others ->
     [0] {""}
    *[other] {" "}({ $others } more)
 }
-error-no-app = There is no app to open “{ $name }” ({ $kind }).
 go-to-title = Go to the folder:
 go = Go
 error-go-to = “{ $path }” can’t be found.
 error-default-app = The default app couldn’t be changed: { $error }
 
 menu-open-with = Open With
+menu-open-with-other = Other…
+open-with-title = Choose an app to open “{ $name }”:
+open-with-items-title = Choose an app to open { $count } items:
+always-open-with = Always Open With
 menu-quick-look = Quick Look
+menu-quick-look-full-screen = Quick Look in Full Screen
+quick-look-position = { $at } of { $count }
+quick-look-open-with = Open with { $app }
 menu-get-info = Get Info
 menu-show-in-enclosing-folder = Show in Enclosing Folder
 menu-rename = Rename
+menu-rename-items = Rename { $count } Items…
+batch-title = Rename { $count } Items
+batch-replace-text = Replace Text
+batch-add-text = Add Text
+batch-format-names = Format
+batch-find = Find:
+batch-replace-with = Replace with:
+batch-text = Text:
+batch-where = Where:
+batch-after-name = after name
+batch-before-name = before name
+batch-format = Format:
+batch-name-index = Name and Index
+batch-name-counter = Name and Counter
+batch-custom-format = Custom Format:
+batch-start-at = Start numbers at:
+batch-start-number = Start numbers at a whole number.
+batch-twice = Two items would both be named “{ $name }”.
+batch-example = { $old } → { $new }
 menu-duplicate = Duplicate
 menu-copy = Copy
+menu-copy-path = Copy as Pathname
+menu-copy-path-of = Copy “{ $name }” as Pathname
+menu-copy-paths = Copy { $count } Items as Pathnames
+menu-add-to-sidebar = Add to Sidebar
+menu-undo-action = Undo { $action }
+menu-redo-action = Redo { $action }
+edit-copy = Copy of { $count ->
+    [one] { $count } Item
+   *[other] { $count } Items
+}
+edit-move = Move of { $count ->
+    [one] { $count } Item
+   *[other] { $count } Items
+}
+edit-duplicate = Duplicate of { $count ->
+    [one] { $count } Item
+   *[other] { $count } Items
+}
+edit-rename = Rename
+edit-new-folder = New Folder
+edit-new-document = New Document
+edit-trash = Move to Trash
+edit-put-back = Put Back
+edit-compress = Compress
+edit-extract = Extract
 menu-cut = Cut
 menu-move-to-trash = Move to Trash
 menu-move-items-to-trash = Move { $count } Items to Trash
@@ -138,6 +199,20 @@ search-title = Searching “{ $folder }”
 search-scope = Search:
 search-scope-folder = “{ $folder }”
 search-scope-home = Home
+search-kind = Kind
+search-date = Date Modified
+kind-any = Any Kind
+kind-folder = Folder
+kind-document = Document
+kind-image = Image
+kind-audio = Audio
+kind-video = Video
+kind-archive = Archive
+date-any-time = Any Time
+date-today-filter = Today
+date-last-week = Last 7 Days
+date-last-month = Last 30 Days
+date-this-year = This Year
 column-where = Where
 view-label = View
 view-icons = Icons

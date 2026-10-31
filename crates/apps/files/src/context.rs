@@ -144,7 +144,8 @@ impl FilesView {
                 .map(|entry| entry.name.clone())
                 .unwrap_or_default(),
             trashed,
-            searching: self.searching.is_some(),
+            away: self.searching.is_some() || *self.browser.root() == Location::Recents,
+            files: !selection.is_empty() && files.len() == selection.len() && !trashed,
             folders: !selection.is_empty()
                 && selection
                     .iter()
@@ -186,6 +187,10 @@ impl FilesView {
             Command::OpenInTerminal => self.open_in_terminal(),
             Command::NewDocument(name) => self.new_document(&name),
             Command::OpenWith(id) => self.open_with(&id),
+            Command::OpenWithOther => {
+                let files = self.browser.selected_paths();
+                self.ask_open_with(files);
+            }
             Command::QuickLook => {
                 if self.quick_look.is_none() {
                     self.toggle_quick_look();
@@ -196,6 +201,8 @@ impl FilesView {
             Command::Duplicate => self.duplicate(),
             Command::Compress => self.compress(),
             Command::Copy => self.copy_selection(false),
+            Command::CopyPath => self.copy_paths(),
+            Command::AddToSidebar => self.add_to_sidebar(),
             Command::Cut => self.copy_selection(true),
             Command::ShowInEnclosingFolder => self.show_in_enclosing_folder(),
             Command::Trash | Command::PutBack => self.trash_or_put_back(),

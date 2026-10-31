@@ -196,6 +196,11 @@ impl Files {
             window.set_title(&title);
             self.title = title;
         }
+        if let Some(app_menu) = &self.app_menu
+            && let Err(error) = app_menu.update(menu_bar::app_menus(&self.view))
+        {
+            tracing::warn!("cannot update the menus: {error}");
+        }
         window.set_cursor(self.view.cursor());
         window.request_redraw();
     }
@@ -217,7 +222,7 @@ impl App for Files {
             .set_clipboard_has_files(window.clipboard_has_uris());
         let changed = match event {
             WindowEvent::AppearanceChanged(appearance) => {
-                self.view.set_palette(appearance.palette());
+                self.view.set_appearance(appearance);
                 true
             }
             WindowEvent::Input(input) => self.view.handle(&input),
@@ -451,7 +456,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut window = Window::open(Role::toplevel(&title, APP_ID), WINDOW_SIZE)?;
     window.set_frame_regions(frame_regions(false));
     window.set_header(Header::default());
-    let app_menu = AppMenu::export(APP_ID, menu_bar::app_menus())
+    let app_menu = AppMenu::export(APP_ID, menu_bar::app_menus(&view))
         .inspect_err(|error| tracing::warn!("{error}"))
         .ok();
     let mut files = Files {

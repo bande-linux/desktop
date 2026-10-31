@@ -504,7 +504,7 @@ impl DesktopSurface {
                     Action::Move,
                 ),
                 Request::Rename { path, name } => match unbound_fs::rename(&path, &name) {
-                    Ok(Some(change)) => self.operations.record(Action::Rename, change),
+                    Ok(Some(change)) => self.operations.record(Action::Rename, vec![change]),
                     Ok(None) => {}
                     Err(error) => tracing::warn!("cannot rename {}: {error:?}", path.display()),
                 },
@@ -513,7 +513,7 @@ impl DesktopSurface {
                         if let Change::Created(path) = &change {
                             self.view.rename_when_listed(path.clone());
                         }
-                        self.operations.record(Action::NewFolder, change);
+                        self.operations.record(Action::NewFolder, vec![change]);
                         self.relist();
                     }
                     Err(error) => tracing::warn!("cannot make a folder: {error}"),

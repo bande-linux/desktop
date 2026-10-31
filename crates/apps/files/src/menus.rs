@@ -11,12 +11,15 @@ pub enum Command {
     OpenInTerminal,
     NewDocument(String),
     OpenWith(String),
+    OpenWithOther,
     QuickLook,
     Info,
     Rename,
     Duplicate,
     Compress,
     Copy,
+    CopyPath,
+    AddToSidebar,
     Cut,
     ShowInEnclosingFolder,
     Trash,
@@ -44,6 +47,7 @@ const ACTIONS: &[(&str, Command)] = &[
     ("open", Command::Open),
     ("open-in-new-tab", Command::OpenInNewTab),
     ("open-in-terminal", Command::OpenInTerminal),
+    ("open-with-other", Command::OpenWithOther),
     ("open-place-in-new-tab", Command::OpenPlaceInNewTab),
     ("quick-look", Command::QuickLook),
     ("info", Command::Info),
@@ -51,6 +55,8 @@ const ACTIONS: &[(&str, Command)] = &[
     ("duplicate", Command::Duplicate),
     ("compress", Command::Compress),
     ("copy", Command::Copy),
+    ("copy-path", Command::CopyPath),
+    ("add-to-sidebar", Command::AddToSidebar),
     ("cut", Command::Cut),
     ("show-in-enclosing-folder", Command::ShowInEnclosingFolder),
     ("trash", Command::Trash),
@@ -115,8 +121,9 @@ pub struct Selection {
     pub count: usize,
     pub name: String,
     pub trashed: bool,
-    pub searching: bool,
+    pub away: bool,
     pub folders: bool,
+    pub files: bool,
     pub apps: Vec<App>,
 }
 
@@ -130,7 +137,7 @@ pub fn items_menu(selection: &Selection) -> Menu {
                 .shortcut("Alt+Super+Backspace"),
         );
         items.push(MenuItem::separator());
-        items.push(item("menu-quick-look", &Command::QuickLook).enabled(count == 1));
+        items.push(item("menu-quick-look", &Command::QuickLook).shortcut("Space"));
         items.push(item("menu-get-info", &Command::Info).shortcut("Super+I"));
         return Menu::new(items);
     }
@@ -141,36 +148,36 @@ pub fn items_menu(selection: &Selection) -> Menu {
     if selection.folders && count == 1 {
         items.push(item("menu-open-in-terminal", &Command::OpenInTerminal));
     }
-    if !selection.apps.is_empty() {
-        let apps = selection
+    if selection.files {
+        let mut apps = selection
             .apps
             .iter()
             .map(|app| MenuItem::new(&app.name, &format!("{OPEN_WITH}{}", app.id)))
-            .collect();
+            .collect::<Vec<_>>();
+        if !apps.is_empty() {
+            apps.push(MenuItem::separator());
+        }
+        apps.push(item("menu-open-with-other", &Command::OpenWithOther));
         items.push(MenuItem::submenu(
             &L10N.tr("menu-open-with"),
             Menu::new(apps),
         ));
     }
     items.push(MenuItem::separator());
-    items.push(
-        item("menu-quick-look", &Command::QuickLook)
-            .shortcut("Space")
-            .enabled(count == 1),
-    );
+    items.push(item("menu-quick-look", &Command::QuickLook).shortcut("Space"));
     items.push(item("menu-get-info", &Command::Info).shortcut("Super+I"));
-    if selection.searching {
+    if selection.away {
         items.push(item(
             "menu-show-in-enclosing-folder",
             &Command::ShowInEnclosingFolder,
         ));
     }
     items.push(MenuItem::separator());
-    items.push(
-        item("menu-rename", &Command::Rename)
-            .shortcut("F2")
-            .enabled(count == 1),
-    );
+    let rename = match count {
+        1 => L10N.tr("menu-rename"),
+        _ => L10N.tr_args("menu-rename-items", [("count", count.into())]),
+    };
+    items.push(MenuItem::new(&rename, action(&Command::Rename)).shortcut("F2"));
     items.push(item("menu-duplicate", &Command::Duplicate).shortcut("Super+D"));
     let compress = match count {
         1 => L10N.tr_args("menu-compress", [("name", selection.name.clone().into())]),
@@ -178,7 +185,23 @@ pub fn items_menu(selection: &Selection) -> Menu {
     };
     items.push(MenuItem::new(&compress, action(&Command::Compress)));
     items.push(item("menu-cut", &Command::Cut).shortcut("Super+X"));
-    items.push(item("menu-copy", &Command::Copy).shortcut("Super+C"));
+    let copy_path = match count {
+        1 => L10N.tr_args(
+            "menu-copy-path-of",
+            [("name", selection.name.clone().into())],
+        ),
+        _ => L10N.tr_args("menu-copy-paths", [("count", count.into())]),
+    };
+    items.push(
+        item("menu-copy", &Command::Copy)
+            .shortcut("Super+C")
+            .alternate(
+                MenuItem::new(&copy_path, action(&Command::CopyPath)).shortcut("Alt+Shift+Super+C"),
+            ),
+    );
+    if selection.folders {
+        items.push(item("menu-add-to-sidebar", &Command::AddToSidebar).shortcut("Control+Super+T"));
+    }
     items.push(MenuItem::separator());
     let trash = if count == 1 {
         L10N.tr("menu-move-to-trash")

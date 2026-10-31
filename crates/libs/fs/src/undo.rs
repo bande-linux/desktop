@@ -34,12 +34,12 @@ impl History {
         }
     }
 
-    pub fn next_undo(&self) -> Option<Action> {
-        self.undo.last().map(|step| step.action)
+    pub fn next_undo(&self) -> Option<&Step> {
+        self.undo.last()
     }
 
-    pub fn next_redo(&self) -> Option<Action> {
-        self.redo.last().map(|step| step.action)
+    pub fn next_redo(&self) -> Option<&Step> {
+        self.redo.last()
     }
 
     pub fn take_undo(&mut self) -> Option<Step> {

@@ -16,8 +16,8 @@ use unbound_fs::{FolderChanges, Sort, SortBy, Trash, list};
 use unbound_preview::Preview;
 use unbound_thumbnails::{Cache, Thumbnailers, Thumbnails};
 use unbound_toolkit::ui::{
-    Event, HEADER_HEIGHT as LIST_HEADER, Key, Menu, Modifiers, Pointer, PointerButton,
-    ROW_HEIGHT as LIST_ROW,
+    ClipboardRequest, Event, HEADER_HEIGHT as LIST_HEADER, Key, Menu, Modifiers, Pointer,
+    PointerButton, ROW_HEIGHT as LIST_ROW,
 };
 use unbound_toolkit::{
     CpuRenderer, DragAction, FrameRegions, Image, Item, Palette, Point, SHEET_INSET, Scheme,
@@ -390,14 +390,14 @@ fn space_shows_the_selected_image_in_quick_look_and_closes_it_again() {
     });
     let scene = view.scene(1000, 600);
     let panel = view.quick_look_frame();
-    let image = scene.items.iter().find_map(|item| match item {
-        Item::Clip { items, .. } => items.iter().find_map(|item| match item {
+    fn picture_rect(items: &[Item]) -> Option<unbound_toolkit::Rect> {
+        items.iter().find_map(|item| match item {
             Item::Image { rect, .. } if rect.width == 40.0 => Some(*rect),
+            Item::Clip { items, .. } => picture_rect(items),
             _ => None,
-        }),
-        _ => None,
-    });
-    let image = image.expect("the picture is drawn");
+        })
+    }
+    let image = picture_rect(&scene.items).expect("the picture is drawn");
     assert_eq!((image.width, image.height), (40.0, 30.0));
     assert!(image.x > panel.x && image.x + image.width < panel.x + panel.width);
 
@@ -836,7 +836,7 @@ fn right_clicking_an_item_selects_it_and_its_menu_acts_on_it() {
         .iter()
         .find_map(|item| item.submenu.as_ref())
         .expect("open with");
-    assert_eq!(titles(open_with), ["Editor"]);
+    assert_eq!(titles(open_with), ["Editor", "Other…"]);
     assert!(view.menu_action(&open_with.items[0].action));
     let requests = view.take_requests();
     let [Request::Open { app, files }] = requests.as_slice() else {
@@ -1586,6 +1586,7 @@ fn search_results_match_their_golden() {
     type_text(&mut view, "report");
     run_until(&mut view, |view| shown(view).len() == 3);
     view.handle(&press(Key::Down));
+    settle(&mut view);
     shoot("search", &mut view);
 }
 
@@ -2404,4 +2405,726 @@ fn the_list_with_an_open_folder_matches_its_golden() {
     view.handle(&press(Key::Down));
     view.handle(&press(Key::Down));
     shoot("list-expanded", &mut view);
+}
+
+fn alt_command(key: Key) -> Event {
+    Event::Key {
+        key,
+        modifiers: Modifiers {
+            logo: true,
+            alt: true,
+            ..Modifiers::default()
+        },
+    }
+}
+
+fn quick_look_position(view: &FilesView) -> Option<(String, Option<(usize, usize)>)> {
+    view.quick_look()
+        .map(|shown| (shown.entry.name.clone(), shown.position()))
+}
+
+#[test]
+fn quick_look_steps_through_a_selection_without_changing_it() {
+    let place = Place::new();
+    let mut view = place.view();
+    view.handle(&press(Key::Down));
+    view.handle(&shift(Key::Down));
+    view.handle(&shift(Key::Down));
+    let selected = names_of(view.browser().selection());
+    assert_eq!(selected.len(), 3);
+
+    view.handle(&press(Key::Space));
+    assert_eq!(
+        quick_look_position(&view),
+        Some(("Documents".to_owned(), Some((1, 3))))
+    );
+    view.handle(&press(Key::Right));
+    assert_eq!(
+        quick_look_position(&view),
+        Some(("Empty".to_owned(), Some((2, 3))))
+    );
+    view.handle(&press(Key::Right));
+    view.handle(&press(Key::Right));
+    assert_eq!(
+        quick_look_position(&view),
+        Some(("notes.txt".to_owned(), Some((3, 3))))
+    );
+    view.handle(&press(Key::Left));
+    assert_eq!(
+        quick_look_position(&view),
+        Some(("Empty".to_owned(), Some((2, 3))))
+    );
+    assert_eq!(names_of(view.browser().selection()), selected);
+}
+
+#[test]
+fn quick_look_opens_its_item_with_the_default_app() {
+    let place = Place::new();
+    let mut view = place.view();
+    view.handle(&press(Key::Up));
+    view.handle(&command(Key::Character('y'), false));
+    view.scene(1000, 600);
+    let button = view
+        .hit_frame(&unbound_files::Hit::QuickLookOpen)
+        .expect("an Open with button");
+
+    view.handle(&Event::PointerDown(Pointer::at(Point::new(
+        button.x + button.width / 2.0,
+        button.y + button.height / 2.0,
+    ))));
+
+    let requests = view.take_requests();
+    let [Request::Open { app, files }] = requests.as_slice() else {
+        panic!("{requests:?}");
+    };
+    assert_eq!(app.id, "editor.desktop");
+    assert_eq!(files, &[place.home().join("notes.txt")]);
+    assert!(view.quick_look().is_some());
+}
+
+#[test]
+fn page_down_scrolls_a_long_text_in_quick_look() {
+    let place = Place::new();
+    let text = (1..=400)
+        .map(|line| format!("line {line}\n"))
+        .collect::<String>();
+    fs::write(place.home().join("notes.txt"), text).expect("long text");
+    let mut view = place.view();
+    view.handle(&press(Key::Up));
+    view.handle(&press(Key::Space));
+    run_until(&mut view, |view| {
+        view.quick_look()
+            .is_some_and(|shown| matches!(shown.preview, Some(Preview::Text(_))))
+    });
+    view.scene(1000, 600);
+
+    assert!(view.handle(&press(Key::PageDown)));
+
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while view.quick_look_scrolled() < 100.0 {
+        assert!(Instant::now() < deadline, "the text did not scroll");
+        std::thread::sleep(Duration::from_millis(20));
+        view.scene(1000, 600);
+    }
+    assert_eq!(selected_name(view.browser()).as_deref(), Some("notes.txt"));
+}
+
+#[test]
+fn quick_look_in_full_screen_covers_the_window_and_escape_returns() {
+    let place = Place::new();
+    let mut view = place.view();
+    view.handle(&press(Key::Up));
+    view.handle(&press(Key::Space));
+    let panel = view.quick_look_frame();
+    assert!(panel.width < 1000.0);
+
+    view.handle(&alt_command(Key::Character('y')));
+    let full = view.quick_look_frame();
+    assert_eq!(
+        (full.x, full.y, full.width, full.height),
+        (0.0, 0.0, 1000.0, 600.0)
+    );
+
+    view.handle(&press(Key::Escape));
+    assert_eq!(view.quick_look_frame(), panel);
+    assert!(view.quick_look().is_some());
+    view.handle(&press(Key::Escape));
+    assert!(view.quick_look().is_none());
+}
+
+#[test]
+fn super_plus_zooms_a_quick_look_picture_instead_of_the_icons() {
+    let place = Place::new();
+    picture(&place.home().join("picture.png"), 80, 60);
+    let mut view = place.view();
+    view.handle(&command(Key::Character('1'), false));
+    let icon_size = view.icon_size();
+    view.handle(&press(Key::Right));
+    while selected_name(view.browser()).as_deref() != Some("picture.png") {
+        view.handle(&press(Key::Right));
+    }
+    view.handle(&press(Key::Space));
+    run_until(&mut view, |view| {
+        view.quick_look()
+            .is_some_and(|shown| matches!(shown.preview, Some(Preview::Image(_))))
+    });
+
+    view.handle(&command(Key::Character('='), false));
+    view.handle(&command(Key::Character('='), false));
+
+    assert!(view.quick_look().is_some_and(|shown| shown.zoom > 1.5));
+    assert_eq!(view.icon_size(), icon_size);
+    for _ in 0..3 {
+        view.handle(&command(Key::Character('-'), false));
+    }
+    assert!(view.quick_look().is_some_and(|shown| shown.zoom == 1.0));
+}
+
+#[test]
+fn quick_look_matches_its_goldens() {
+    let place = Place::new();
+    fs::write(
+        place.home().join("notes.txt"),
+        "# Notes\n\nQuick Look shows the first lines of a text file\nin a monospaced face, and Page Down scrolls it.\n\n- one\n- two\n- three\n",
+    )
+    .expect("text");
+    picture(&place.home().join("Lake.png"), 640, 400);
+    picture(&place.home().join("Mountain.png"), 300, 450);
+    let mut view = place.themed_view();
+    view.handle(&press(Key::Up));
+    view.handle(&press(Key::Space));
+    run_until(&mut view, |view| {
+        view.quick_look()
+            .is_some_and(|shown| shown.preview.is_some())
+    });
+    shoot("quick-look-text", &mut view);
+
+    view.handle(&press(Key::Escape));
+    view.handle(&press(Key::Up));
+    view.handle(&shift(Key::Up));
+    view.handle(&press(Key::Space));
+    run_until(&mut view, |view| {
+        view.quick_look()
+            .is_some_and(|shown| shown.preview.is_some() && shown.position().is_some())
+    });
+    shoot("quick-look-several", &mut view);
+}
+
+fn control_node(view: &FilesView, role: accesskit::Role, label: &str) -> accesskit::NodeId {
+    view.accessibility()
+        .nodes
+        .into_iter()
+        .find(|(_, node)| node.role() == role && node.label() == Some(label))
+        .map(|(id, _)| id)
+        .unwrap_or_else(|| panic!("no {role:?} named {label}"))
+}
+
+fn click_node(view: &mut FilesView, node: accesskit::NodeId) {
+    view.perform(&accesskit::ActionRequest {
+        action: accesskit::Action::Click,
+        target_tree: accesskit::TreeId::ROOT,
+        target_node: node,
+        data: None,
+    });
+}
+
+fn mode_of(path: &Path) -> u32 {
+    fs::metadata(path).expect("metadata").permissions().mode() & 0o777
+}
+
+fn inspect(place: &Place, name: &str) -> FilesView {
+    let mut view = place.view();
+    view.handle(&command(Key::Character('2'), false));
+    while selected_name(view.browser()).as_deref() != Some(name) {
+        view.handle(&press(Key::Down));
+    }
+    view.handle(&command(Key::Character('i'), false));
+    view.scene(1000, 600);
+    view
+}
+
+#[test]
+fn the_inspector_switch_lets_a_script_run() {
+    let place = Place::new();
+    let script = place.home().join("run.sh");
+    fs::write(&script, "#!/bin/sh\necho hi\n").expect("script");
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o644)).expect("mode");
+    let mut view = inspect(&place, "run.sh");
+
+    let switch = control_node(&view, accesskit::Role::Switch, "Allow running as a program");
+    click_node(&mut view, switch);
+
+    assert_eq!(mode_of(&script), 0o755);
+    assert_eq!(
+        view.info()
+            .and_then(|info| info.mode)
+            .map(|mode| mode & 0o777),
+        Some(0o755)
+    );
+    view.scene(1000, 600);
+    let node = control_node(&view, accesskit::Role::Switch, "Allow running as a program");
+    click_node(&mut view, node);
+    assert_eq!(mode_of(&script), 0o644);
+}
+
+#[test]
+fn read_only_access_removes_the_write_bit_of_that_class_only() {
+    let place = Place::new();
+    let file = place.home().join("notes.txt");
+    fs::set_permissions(&file, fs::Permissions::from_mode(0o664)).expect("mode");
+    let mut view = inspect(&place, "notes.txt");
+
+    let node = control_node(&view, accesskit::Role::ComboBox, "Group");
+    click_node(&mut view, node);
+    assert!(
+        view.take_requests()
+            .iter()
+            .any(|request| matches!(request, Request::ShowMenu { .. }))
+    );
+    view.menu_action("1");
+
+    assert_eq!(mode_of(&file), 0o644);
+    view.scene(1000, 600);
+    let node = control_node(&view, accesskit::Role::ComboBox, "Everyone");
+    click_node(&mut view, node);
+    view.menu_action("2");
+    assert_eq!(mode_of(&file), 0o640);
+}
+
+#[test]
+fn the_inspector_sums_several_items_and_names_their_kinds() {
+    let place = Place::new();
+    fs::write(place.home().join("more.txt"), "12345").expect("file");
+    let mut view = place.view();
+    view.handle(&command(Key::Character('2'), false));
+    view.handle(&command(Key::Character('a'), false));
+    view.handle(&command(Key::Character('i'), false));
+
+    let info = view.info().expect("info");
+    assert_eq!(info.entries.len(), 4);
+    assert_eq!(info.kind, "inode/directory, text/plain");
+}
+
+#[test]
+fn the_inspector_matches_its_goldens() {
+    let place = Place::new();
+    picture(&place.home().join("Lake.png"), 640, 400);
+    fs::set_permissions(
+        place.home().join("Lake.png"),
+        fs::Permissions::from_mode(0o644),
+    )
+    .expect("mode");
+    date_everything(&place.home());
+    let mut view = place.themed_view();
+    view.handle(&command(Key::Character('2'), false));
+    view.handle(&press(Key::Down));
+    view.handle(&press(Key::Down));
+    view.handle(&press(Key::Down));
+    view.handle(&command(Key::Character('i'), false));
+    run_until(&mut view, |view| {
+        view.info()
+            .is_some_and(|info| info.pixels == Some((640, 400)))
+    });
+    settle_thumbnails(&mut view, GOLDEN_SIZE, 0);
+    shoot("inspector-file", &mut view);
+
+    view.handle(&command(Key::Character('a'), false));
+    shoot("inspector-several", &mut view);
+}
+
+impl Place {
+    fn add_viewer(&self) {
+        fs::create_dir_all(self.root.path().join("data/applications")).expect("applications");
+        fs::write(
+            self.root.path().join("data/applications/viewer.desktop"),
+            "[Desktop Entry]\nType=Application\nName=Viewer\nExec=viewer %F\n",
+        )
+        .expect("viewer");
+        fs::write(
+            self.root.path().join("data/applications/settings.desktop"),
+            "[Desktop Entry]\nType=Application\nName=Settings\nExec=settings\n",
+        )
+        .expect("settings");
+    }
+}
+
+fn open_with_rows(view: &FilesView) -> Vec<String> {
+    view.accessibility()
+        .nodes
+        .into_iter()
+        .filter(|(_, node)| node.role() == accesskit::Role::Row)
+        .filter_map(|(_, node)| node.label().map(str::to_owned))
+        .collect()
+}
+
+#[test]
+fn other_apps_open_the_file_and_can_become_the_default() {
+    let place = Place::new();
+    place.add_viewer();
+    let mut view = place.view();
+    view.handle(&press(Key::Up));
+    view.menu_action("open-with-other");
+    assert!(matches!(view.sheet(), Some(Sheet::OpenWith(_))));
+    view.scene(1000, 600);
+    assert_eq!(open_with_rows(&view), ["Editor", "Viewer"]);
+
+    view.handle(&Event::Commit("view".to_owned()));
+    view.scene(1000, 600);
+    assert_eq!(open_with_rows(&view), ["Viewer"]);
+    let always = control_node(&view, accesskit::Role::CheckBox, "Always Open With");
+    click_node(&mut view, always);
+    view.handle(&press(Key::Enter));
+
+    assert!(view.sheet().is_none());
+    let requests = view.take_requests();
+    let [Request::Open { app, files }] = requests.as_slice() else {
+        panic!("{requests:?}");
+    };
+    assert_eq!(app.id, "viewer.desktop");
+    assert_eq!(files, &[place.home().join("notes.txt")]);
+    let list =
+        fs::read_to_string(place.root.path().join("config/mimeapps.list")).expect("mimeapps.list");
+    assert!(list.contains("text/plain=viewer.desktop"), "{list}");
+}
+
+#[test]
+fn a_file_without_an_app_asks_which_app_to_use() {
+    let place = Place::new();
+    place.add_viewer();
+    fs::write(place.home().join("unknown.xyz"), [0u8, 1, 2]).expect("file");
+    let mut view = place.view();
+    while selected_name(view.browser()).as_deref() != Some("unknown.xyz") {
+        view.handle(&press(Key::Down));
+    }
+
+    view.handle(&command(Key::Character('o'), false));
+
+    assert!(view.take_requests().is_empty());
+    let Some(Sheet::OpenWith(open_with)) = view.sheet() else {
+        panic!("{:?}", view.sheet());
+    };
+    assert_eq!(open_with.files, [place.home().join("unknown.xyz")]);
+    view.handle(&press(Key::Enter));
+    let requests = view.take_requests();
+    let [Request::Open { app, .. }] = requests.as_slice() else {
+        panic!("{requests:?}");
+    };
+    assert_eq!(app.id, "editor.desktop");
+}
+
+#[test]
+fn the_open_with_sheet_matches_its_golden() {
+    let place = Place::new();
+    place.add_viewer();
+    date_everything(&place.home());
+    let mut view = place.themed_view();
+    view.handle(&press(Key::Up));
+    view.menu_action("open-with-other");
+    settle(&mut view);
+    shoot("open-with-other", &mut view);
+}
+
+fn plain(text: Option<String>) -> Option<String> {
+    text.map(|text| text.replace(['\u{2068}', '\u{2069}'], ""))
+}
+
+#[test]
+fn copying_as_pathname_puts_one_absolute_path_per_line() {
+    let place = Place::new();
+    let mut view = place.view();
+    view.handle(&press(Key::Down));
+    view.handle(&shift(Key::Down));
+    view.take_requests();
+
+    view.handle(&Event::Key {
+        key: Key::Character('C'),
+        modifiers: Modifiers {
+            logo: true,
+            alt: true,
+            shift: true,
+            ..Modifiers::default()
+        },
+    });
+
+    let expected = format!(
+        "{}\n{}",
+        place.home().join("Documents").display(),
+        place.home().join("Empty").display()
+    );
+    assert_eq!(
+        view.take_requests(),
+        [Request::Clipboard(ClipboardRequest::Copy(expected))]
+    );
+}
+
+#[test]
+fn add_to_sidebar_bookmarks_the_selected_folder() {
+    let place = Place::new();
+    let mut view = place.view();
+    view.handle(&press(Key::Down));
+
+    view.handle(&Event::Key {
+        key: Key::Character('t'),
+        modifiers: Modifiers {
+            logo: true,
+            control: true,
+            ..Modifiers::default()
+        },
+    });
+
+    let requests = view.take_requests();
+    let [Request::EditSidebar(SidebarEdit { bookmarks, .. })] = requests.as_slice() else {
+        panic!("{requests:?}");
+    };
+    assert_eq!(
+        bookmarks,
+        &Some(BookmarkEdit::Add(vec![place.home().join("Documents")]))
+    );
+    let menu = right_click_selected(&mut view);
+    assert!(titles(&menu).contains(&"Add to Sidebar".to_owned()));
+}
+
+fn right_click_selected(view: &mut FilesView) -> Menu {
+    view.handle(&Event::Key {
+        key: Key::Function(10),
+        modifiers: Modifiers {
+            shift: true,
+            ..Modifiers::default()
+        },
+    });
+    match view.take_requests().as_slice() {
+        [Request::ShowMenu { menu, .. }] => menu.clone(),
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn the_edit_menu_names_the_action_to_undo_and_redo() {
+    let place = Place::new();
+    let mut view = place.view();
+    assert_eq!(view.undo_title(), None);
+    view.handle(&command(Key::Character('n'), true));
+    view.handle(&press(Key::Escape));
+    assert_eq!(plain(view.undo_title()).as_deref(), Some("Undo New Folder"));
+
+    view.handle(&press(Key::Down));
+    view.handle(&shift(Key::Down));
+    view.handle(&command(Key::Backspace, false));
+    run_until(&mut view, idle);
+    assert_eq!(
+        plain(view.undo_title()).as_deref(),
+        Some("Undo Move to Trash")
+    );
+
+    view.handle(&command(Key::Character('z'), false));
+    run_until(&mut view, idle);
+    assert_eq!(
+        plain(view.redo_title()).as_deref(),
+        Some("Redo Move to Trash")
+    );
+    assert_eq!(plain(view.undo_title()).as_deref(), Some("Undo New Folder"));
+}
+
+#[test]
+fn recents_offer_show_in_enclosing_folder() {
+    let place = Place::new();
+    let notes = place.home().join("notes.txt");
+    let xbel = place.root.path().join("recently-used.xbel");
+    fs::write(
+        &xbel,
+        format!(
+            "<xbel><bookmark href=\"{}\" visited=\"2026-02-01T08:00:00Z\"/></xbel>",
+            file_uri(&notes)
+        ),
+    )
+    .expect("recents");
+    let mut view = place.view();
+    view.set_recents_sources(xbel, place.root.path().join("usage"));
+    view.handle(&command(Key::Character('f'), true));
+    view.handle(&press(Key::Down));
+
+    let menu = right_click_selected(&mut view);
+    assert!(titles(&menu).contains(&"Show in Enclosing Folder".to_owned()));
+    view.menu_action("show-in-enclosing-folder");
+    assert_eq!(view.browser().root(), &Location::Folder(place.home()));
+    assert_eq!(selected_name(view.browser()).as_deref(), Some("notes.txt"));
+}
+
+fn photos(place: &Place) -> FilesView {
+    for name in ["IMG_1.jpg", "IMG_2.jpg"] {
+        fs::write(place.home().join(name), name).expect("photo");
+    }
+    let mut view = place.view();
+    while selected_name(view.browser()).as_deref() != Some("IMG_1.jpg") {
+        view.handle(&press(Key::Down));
+    }
+    view.handle(&shift(Key::Down));
+    view
+}
+
+fn batch_state(view: &FilesView) -> unbound_files::BatchRename {
+    match view.sheet() {
+        Some(Sheet::Rename(state)) => state.clone(),
+        other => panic!("{other:?}"),
+    }
+}
+
+fn rename_button_disabled(view: &FilesView) -> bool {
+    view.accessibility()
+        .nodes
+        .into_iter()
+        .find(|(_, node)| node.role() == accesskit::Role::Button && node.label() == Some("Rename"))
+        .map(|(_, node)| node.is_disabled())
+        .expect("a Rename button")
+}
+
+#[test]
+fn renaming_several_items_previews_and_applies_the_new_names() {
+    let place = Place::new();
+    let mut view = photos(&place);
+
+    view.handle(&press(Key::Function(2)));
+    assert_eq!(batch_state(&view).items.len(), 2);
+    view.scene(1000, 600);
+
+    view.handle(&Event::Commit("IMG_".to_owned()));
+    view.handle(&press(Key::Tab));
+    view.handle(&Event::Commit("Photo ".to_owned()));
+    let state = batch_state(&view);
+    assert_eq!(
+        (state.find.as_str(), state.replace.as_str()),
+        ("IMG_", "Photo ")
+    );
+    assert_eq!(
+        state
+            .preview()
+            .into_iter()
+            .map(|line| line.replace(['\u{2068}', '\u{2069}'], ""))
+            .collect::<Vec<_>>(),
+        ["IMG_1.jpg → Photo 1.jpg", "IMG_2.jpg → Photo 2.jpg"]
+    );
+    assert!(!rename_button_disabled(&view));
+
+    view.handle(&press(Key::Enter));
+
+    assert!(view.sheet().is_none());
+    assert!(place.home().join("Photo 1.jpg").exists());
+    assert!(place.home().join("Photo 2.jpg").exists());
+    assert_eq!(
+        names_of(view.browser().selection()),
+        ["Photo 1.jpg", "Photo 2.jpg"]
+    );
+    view.handle(&command(Key::Character('z'), false));
+    run_until(&mut view, idle);
+    assert!(place.home().join("IMG_1.jpg").exists());
+    assert!(place.home().join("IMG_2.jpg").exists());
+}
+
+#[test]
+fn a_clash_disables_rename_and_says_why() {
+    let place = Place::new();
+    let mut view = photos(&place);
+    view.handle(&press(Key::Function(2)));
+    view.scene(1000, 600);
+
+    view.handle(&Event::Commit("1".to_owned()));
+    view.handle(&press(Key::Tab));
+    view.handle(&Event::Commit("2".to_owned()));
+
+    assert!(rename_button_disabled(&view));
+    view.handle(&press(Key::Enter));
+    assert!(view.sheet().is_some());
+    assert!(place.home().join("IMG_1.jpg").exists());
+}
+
+#[test]
+fn the_batch_rename_sheet_matches_its_golden() {
+    let place = Place::new();
+    date_everything(&place.home());
+    for name in ["IMG_1.jpg", "IMG_2.jpg", "IMG_3.jpg"] {
+        fs::write(place.home().join(name), name).expect("photo");
+    }
+    let mut view = place.themed_view();
+    view.handle(&command(Key::Character('2'), false));
+    while selected_name(view.browser()).as_deref() != Some("IMG_1.jpg") {
+        view.handle(&press(Key::Down));
+    }
+    view.handle(&shift(Key::Down));
+    view.handle(&shift(Key::Down));
+    view.handle(&press(Key::Function(2)));
+    view.handle(&Event::Commit("IMG_".to_owned()));
+    view.handle(&press(Key::Tab));
+    view.handle(&Event::Commit("Lake ".to_owned()));
+    settle(&mut view);
+    shoot("batch-rename", &mut view);
+}
+
+fn choose_in_pop_up(view: &mut FilesView, label: &str, index: usize) {
+    view.scene(1000, 600);
+    let node = control_node(view, accesskit::Role::ComboBox, label);
+    click_node(view, node);
+    view.take_requests();
+    view.menu_action(&index.to_string());
+}
+
+fn view_switch_disabled(view: &FilesView) -> bool {
+    view.accessibility()
+        .nodes
+        .into_iter()
+        .find(|(_, node)| {
+            node.role() == accesskit::Role::RadioGroup && node.label() == Some("View")
+        })
+        .map(|(_, node)| node.is_disabled())
+        .expect("the view switch")
+}
+
+#[test]
+fn search_filters_keep_the_chosen_kind_and_recent_dates() {
+    let place = Place::new();
+    picture(&place.home().join("trip.png"), 8, 8);
+    fs::write(place.home().join("trip.txt"), "notes").expect("file");
+    fs::write(place.home().join("old trip.txt"), "old").expect("file");
+    fs::create_dir(place.home().join("trip")).expect("folder");
+    let month_ago = std::time::SystemTime::now() - Duration::from_secs(30 * 24 * 3600);
+    fs::File::open(place.home().join("old trip.txt"))
+        .and_then(|file| file.set_modified(month_ago))
+        .expect("date");
+    let mut view = place.view();
+    assert!(!view_switch_disabled(&view));
+
+    view.handle(&command(Key::Character('f'), false));
+    type_text(&mut view, "trip");
+    run_until(&mut view, |view| shown(view).len() == 4);
+    assert!(view_switch_disabled(&view));
+    view.handle(&command(Key::Character('3'), false));
+    assert_eq!(view.mode(), ViewMode::List);
+
+    choose_in_pop_up(&mut view, "Kind", 3);
+    assert_eq!(shown(&view), ["trip.png"]);
+    choose_in_pop_up(&mut view, "Kind", 2);
+    let mut documents = shown(&view);
+    documents.sort();
+    assert_eq!(documents, ["old trip.txt", "trip.txt"]);
+    choose_in_pop_up(&mut view, "Date Modified", 2);
+    assert_eq!(shown(&view), ["trip.txt"]);
+
+    view.handle(&press(Key::Escape));
+    assert_eq!(view.searching(), None);
+    assert_eq!(view.mode(), ViewMode::Columns);
+    assert!(!view_switch_disabled(&view));
+}
+
+fn settle(view: &mut FilesView) {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    view.scene(GOLDEN_SIZE.0, GOLDEN_SIZE.1);
+    while view.animating() {
+        assert!(Instant::now() < deadline, "the view did not settle");
+        std::thread::sleep(Duration::from_millis(20));
+        view.scene(GOLDEN_SIZE.0, GOLDEN_SIZE.1);
+    }
+}
+
+#[test]
+fn files_follows_the_text_size() {
+    fn widest_text(items: &[Item]) -> f32 {
+        items
+            .iter()
+            .map(|item| match item {
+                Item::Text { paragraph, .. } => paragraph.width(),
+                Item::Clip { items, .. } | Item::Opacity { items, .. } => widest_text(items),
+                _ => 0.0,
+            })
+            .fold(0.0, f32::max)
+    }
+    let place = Place::new();
+    let mut view = place.view();
+    view.handle(&command(Key::Character('2'), false));
+    let regular = widest_text(&view.scene(1000, 600).items);
+
+    view.set_appearance(unbound_toolkit::Appearance {
+        text_size: unbound_toolkit::TextSize::LARGEST,
+        ..unbound_toolkit::Appearance::default()
+    });
+
+    assert!(widest_text(&view.scene(1000, 600).items) > regular * 1.5);
 }

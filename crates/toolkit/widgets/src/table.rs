@@ -166,6 +166,12 @@ struct Line {
     branch: bool,
 }
 
+impl Line {
+    fn unfilled(&self) -> bool {
+        self.key.is_empty() && self.cells.is_empty()
+    }
+}
+
 fn flatten(rows: Vec<Row>, depth: usize, lines: &mut Vec<Line>) -> usize {
     let mut added = 0;
     for row in rows {
@@ -390,6 +396,49 @@ impl Table {
             .any(|line| line.cells.first().is_some_and(|cell| cell.icon.is_some()));
         self.lines = lines;
         self.reshow(kept);
+    }
+
+    pub fn set_row_count(&mut self, count: usize, outline: bool, icons: bool) {
+        self.lines = std::iter::repeat_with(|| Line {
+            key: String::new(),
+            cells: Vec::new(),
+            depth: 0,
+            descendants: 0,
+            branch: false,
+        })
+        .take(count)
+        .collect();
+        self.outline = outline;
+        self.named_icons = icons;
+        self.reshow(Remembered {
+            selected: Vec::new(),
+            cursor: None,
+            anchor: None,
+        });
+    }
+
+    pub fn unfilled_rows(&self, cx: &Context) -> Vec<usize> {
+        let (first, last) = self.visible_rows(cx);
+        let page = last - first;
+        let around = first.saturating_sub(page)..(last + page).min(self.shown.len());
+        let cursor = self.cursor.filter(|cursor| !around.contains(cursor));
+        around
+            .chain(cursor)
+            .filter(|index| self.line(*index).is_some_and(Line::unfilled))
+            .collect()
+    }
+
+    pub fn fill_row(&mut self, index: usize, row: Row) {
+        let Some(&at) = self.shown.get(index) else {
+            return;
+        };
+        let line = &mut self.lines[at];
+        if line.descendants > 0 || !row.children.is_empty() {
+            return;
+        }
+        line.branch = row.expandable;
+        line.key = row.key;
+        line.cells = row.cells;
     }
 
     fn is_flat(&self) -> bool {
@@ -1573,7 +1622,17 @@ impl Widget for Table {
             items: rows,
         });
         if self.header {
-            self.paint_header(cx, items);
+            let mut header = Vec::new();
+            self.paint_header(cx, &mut header);
+            items.push(Item::Clip {
+                shape: Shape::rect(Rect::new(
+                    self.frame.x,
+                    self.frame.y,
+                    self.frame.width,
+                    HEADER_HEIGHT,
+                )),
+                items: header,
+            });
         }
         self.scroll.paint_scrollbar(cx, body, items);
     }

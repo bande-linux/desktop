@@ -457,11 +457,20 @@ fn history_redoes_only_what_was_undone_since_the_last_action() {
     let step = history.take_undo().expect("undo");
     assert_eq!(step.action, Action::Duplicate);
     history.undone(step);
-    assert_eq!(history.next_undo(), Some(Action::NewFolder));
-    assert_eq!(history.next_redo(), Some(Action::Duplicate));
+    assert_eq!(
+        history.next_undo().map(|step| step.action),
+        Some(Action::NewFolder)
+    );
+    assert_eq!(
+        history.next_redo().map(|step| step.action),
+        Some(Action::Duplicate)
+    );
     let step = history.take_redo().expect("redo");
     history.redone(step);
-    assert_eq!(history.next_undo(), Some(Action::Duplicate));
+    assert_eq!(
+        history.next_undo().map(|step| step.action),
+        Some(Action::Duplicate)
+    );
     let step = history.take_undo().expect("undo");
     history.undone(step);
     history.record(Action::Copy, created("c"));
@@ -644,4 +653,260 @@ fn deleting_a_folder_removes_links_but_not_what_they_point_to() {
     assert!(outcome.failures.is_empty(), "{:?}", outcome.failures);
     assert!(place.path("doomed").symlink_metadata().is_err());
     assert_eq!(read(&kept), "kept");
+}
+
+#[test]
+fn allowing_a_script_to_run_sets_execute_for_whoever_can_read() {
+    let place = TempDir::new().unwrap();
+    let script = place.path().join("run.sh");
+    fs::write(&script, "#!/bin/sh\n").unwrap();
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o640)).unwrap();
+    let mode = fs::metadata(&script).unwrap().permissions().mode();
+    assert!(!unbound_fs::runnable(mode));
+
+    unbound_fs::set_mode(&script, unbound_fs::with_runnable(mode, true)).unwrap();
+
+    let mode = fs::metadata(&script).unwrap().permissions().mode();
+    assert_eq!(mode & 0o777, 0o750);
+    assert!(unbound_fs::runnable(mode));
+    assert_eq!(unbound_fs::with_runnable(mode, false) & 0o777, 0o640);
+}
+
+#[test]
+fn access_changes_only_the_chosen_class() {
+    use unbound_fs::{Access, Class, access, with_access};
+    let mode = 0o100_764;
+    assert_eq!(access(mode, Class::Owner), Access::ReadWrite);
+    assert_eq!(access(mode, Class::Group), Access::ReadWrite);
+    assert_eq!(access(mode, Class::Others), Access::ReadOnly);
+
+    assert_eq!(
+        with_access(mode, Class::Group, Access::ReadOnly, false),
+        0o100_744
+    );
+    assert_eq!(
+        with_access(mode, Class::Owner, Access::ReadOnly, false),
+        0o100_564
+    );
+    assert_eq!(
+        with_access(mode, Class::Others, Access::NoAccess, false),
+        0o100_760
+    );
+    assert_eq!(
+        with_access(0o40_700, Class::Others, Access::ReadOnly, true),
+        0o40_705
+    );
+}
+
+fn batch_items(folder: &Path, names: &[&str]) -> Vec<unbound_fs::BatchItem> {
+    names
+        .iter()
+        .map(|name| {
+            let path = folder.join(name);
+            unbound_fs::BatchItem {
+                folder: path.is_dir(),
+                path,
+            }
+        })
+        .collect()
+}
+
+fn new_names(plan: &[(PathBuf, PathBuf)]) -> Vec<String> {
+    plan.iter()
+        .map(|(_, to)| to.file_name().unwrap().to_string_lossy().into_owned())
+        .collect()
+}
+
+fn batch_folder(names: &[&str]) -> TempDir {
+    let folder = TempDir::new().unwrap();
+    for name in names {
+        match name.ends_with('/') {
+            true => fs::create_dir(folder.path().join(name.trim_end_matches('/'))).unwrap(),
+            false => fs::write(folder.path().join(name), name).unwrap(),
+        }
+    }
+    folder
+}
+
+#[test]
+fn batch_rename_rules_change_the_names_and_keep_extensions() {
+    use unbound_fs::{Numbering, RenameRule, plan_renames};
+    let folder = batch_folder(&["IMG_0001.jpg", "IMG_0002.jpg", "Trip.v2/", "notes.txt"]);
+    let items = batch_items(folder.path(), &["IMG_0001.jpg", "IMG_0002.jpg", "Trip.v2"]);
+
+    let replace = RenameRule::Replace {
+        find: "IMG_".to_owned(),
+        replace: "Lake ".to_owned(),
+    };
+    assert_eq!(
+        new_names(&plan_renames(&items, &replace).unwrap()),
+        ["Lake 0001.jpg", "Lake 0002.jpg"]
+    );
+    let add = RenameRule::Add {
+        text: " (edited)".to_owned(),
+        after: true,
+    };
+    assert_eq!(
+        new_names(&plan_renames(&items, &add).unwrap()),
+        [
+            "IMG_0001 (edited).jpg",
+            "IMG_0002 (edited).jpg",
+            "Trip.v2 (edited)"
+        ]
+    );
+    let before = RenameRule::Add {
+        text: "2026 ".to_owned(),
+        after: false,
+    };
+    assert_eq!(
+        new_names(&plan_renames(&items[..1], &before).unwrap()),
+        ["2026 IMG_0001.jpg"]
+    );
+    let index = RenameRule::Format {
+        name: "Holiday".to_owned(),
+        numbering: Numbering::Index,
+        start: 7,
+        after: true,
+    };
+    assert_eq!(
+        new_names(&plan_renames(&items, &index).unwrap()),
+        ["Holiday 7.jpg", "Holiday 8.jpg", "Holiday 9"]
+    );
+    let counter = RenameRule::Format {
+        name: "Scan".to_owned(),
+        numbering: Numbering::Counter,
+        start: 1,
+        after: false,
+    };
+    assert_eq!(
+        new_names(&plan_renames(&items[..2], &counter).unwrap()),
+        ["00001 Scan.jpg", "00002 Scan.jpg"]
+    );
+}
+
+#[test]
+fn batch_rename_reports_clashes_before_changing_anything() {
+    use unbound_fs::{BatchProblem, RenameRule, plan_renames};
+    let folder = batch_folder(&["a.txt", "b.txt", "a copy.txt"]);
+    let items = batch_items(folder.path(), &["a.txt", "b.txt"]);
+
+    let same = RenameRule::Replace {
+        find: "b".to_owned(),
+        replace: "a".to_owned(),
+    };
+    assert_eq!(
+        plan_renames(&items, &same),
+        Err(BatchProblem::Twice("a.txt".to_owned()))
+    );
+    let taken = RenameRule::Add {
+        text: " copy".to_owned(),
+        after: true,
+    };
+    assert_eq!(
+        plan_renames(&items, &taken),
+        Err(BatchProblem::Exists("a copy.txt".to_owned()))
+    );
+    let empty = RenameRule::Replace {
+        find: "a".to_owned(),
+        replace: String::new(),
+    };
+    assert_eq!(plan_renames(&items[..1], &empty), Err(BatchProblem::Empty));
+    assert!(folder.path().join("a.txt").exists());
+    assert!(folder.path().join("b.txt").exists());
+}
+
+#[test]
+fn a_batch_rename_is_one_step_that_undoes_every_name() {
+    use unbound_fs::{Numbering, Operations, RenameRule, plan_renames, rename_all};
+    let place = Place::new();
+    let folder = place.dir.path().join("photos");
+    fs::create_dir(&folder).unwrap();
+    for name in ["Photo 1.jpg", "Photo 2.jpg", "Photo 3.jpg"] {
+        fs::write(folder.join(name), name).unwrap();
+    }
+    let items = batch_items(&folder, &["Photo 1.jpg", "Photo 2.jpg", "Photo 3.jpg"]);
+    let shifted = RenameRule::Format {
+        name: "Photo".to_owned(),
+        numbering: Numbering::Index,
+        start: 2,
+        after: true,
+    };
+    let plan = plan_renames(&items, &shifted).unwrap();
+    let (changes, error) = rename_all(&plan);
+    assert!(error.is_none());
+    assert_eq!(
+        names(&folder, false),
+        ["Photo 2.jpg", "Photo 3.jpg", "Photo 4.jpg"]
+    );
+    assert_eq!(
+        fs::read_to_string(folder.join("Photo 4.jpg")).unwrap(),
+        "Photo 3.jpg"
+    );
+
+    let mut operations = Operations::new(place.trash.clone());
+    operations.record(Action::Rename, changes);
+    assert!(operations.undo().unwrap());
+    while operations.poll(0).is_none() {
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert_eq!(
+        names(&folder, false),
+        ["Photo 1.jpg", "Photo 2.jpg", "Photo 3.jpg"]
+    );
+    assert_eq!(
+        fs::read_to_string(folder.join("Photo 1.jpg")).unwrap(),
+        "Photo 1.jpg"
+    );
+    assert_eq!(
+        operations.history().next_redo().map(|step| step.action),
+        Some(Action::Rename)
+    );
+}
+
+#[test]
+fn recency_windows_start_at_local_midnight() {
+    use unbound_fs::Recency;
+    let zone = jiff::tz::TimeZone::UTC;
+    let at = |text: &str| SystemTime::from(text.parse::<jiff::Timestamp>().unwrap());
+    let now = at("2026-03-15T10:00:00Z");
+    assert_eq!(Recency::AnyTime.start(now, &zone), None);
+    assert_eq!(
+        Recency::Today.start(now, &zone),
+        Some(at("2026-03-15T00:00:00Z"))
+    );
+    assert_eq!(
+        Recency::LastWeek.start(now, &zone),
+        Some(at("2026-03-09T00:00:00Z"))
+    );
+    assert_eq!(
+        Recency::LastMonth.start(now, &zone),
+        Some(at("2026-02-14T00:00:00Z"))
+    );
+    assert_eq!(
+        Recency::ThisYear.start(now, &zone),
+        Some(at("2026-01-01T00:00:00Z"))
+    );
+}
+
+#[test]
+fn typed_locations_expand_the_home_folder_and_resolve_against_the_shown_one() {
+    let home = Path::new("/home/anna");
+    let shown = Path::new("/home/anna/Documents");
+    assert_eq!(unbound_fs::typed_location(" ~ ", home, shown), home);
+    assert_eq!(
+        unbound_fs::typed_location("~/Pictures/", home, shown),
+        home.join("Pictures")
+    );
+    assert_eq!(
+        unbound_fs::typed_location("/etc", home, shown),
+        Path::new("/etc")
+    );
+    assert_eq!(
+        unbound_fs::typed_location("Receipts", home, shown),
+        shown.join("Receipts")
+    );
+    assert_eq!(
+        unbound_fs::typed_location("~bob", home, shown),
+        shown.join("~bob")
+    );
 }

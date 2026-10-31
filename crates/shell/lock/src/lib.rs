@@ -18,6 +18,7 @@ use unbound_toolkit::{
     Appearance, Image, Item, Palette, Paragraph, Point, Rect, Scene, Scheme, Shape, TextAlign,
     TextRole, TextStyle, TextSystem,
 };
+use zeroize::Zeroizing;
 
 pub use backdrop::{BackdropSource, Look, load_backdrop};
 pub use pam::{AuthError, authenticate};
@@ -76,7 +77,7 @@ struct Model {
     initial: String,
     date: String,
     time: String,
-    submitted: Option<String>,
+    submitted: Option<Zeroizing<String>>,
     checking: bool,
     shake_from: Option<Instant>,
     now: Instant,
@@ -404,7 +405,7 @@ impl LockScreen {
             let mut model = submitted.borrow_mut();
             if !model.checking && !password.is_empty() {
                 model.checking = true;
-                model.submitted = Some(password.to_owned());
+                model.submitted = Some(Zeroizing::new(password.to_owned()));
             }
         });
         let field_id = field.id();
@@ -511,7 +512,7 @@ impl LockScreen {
         self.ui.accessibility()
     }
 
-    pub fn take_password(&mut self) -> Option<String> {
+    pub fn take_password(&mut self) -> Option<Zeroizing<String>> {
         self.model.borrow_mut().submitted.take()
     }
 

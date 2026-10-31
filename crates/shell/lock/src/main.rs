@@ -15,6 +15,7 @@ use unbound_toolkit::ui::frame_time;
 use unbound_toolkit::{
     App, Image, Role, Scene, Scheme, TextSystem, Window, WindowError, WindowEvent,
 };
+use zeroize::Zeroizing;
 
 const ACCEPTED: u8 = 1;
 const REJECTED: u8 = 0;
@@ -39,7 +40,7 @@ struct Locker {
 }
 
 impl Locker {
-    fn check(&mut self, password: String) {
+    fn check(&mut self, password: Zeroizing<String>) {
         let Ok(mut sender) = self.verdict_sender.try_clone() else {
             self.screen.reject(frame_time().on_screen());
             return;

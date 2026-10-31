@@ -48,7 +48,7 @@ fn secret(prompt: &str) -> Response {
 
 fn answer(text: &str) -> Step {
     Step::Send(Request::PostAuthMessageResponse {
-        response: Some(text.to_owned()),
+        response: Some(text.to_owned().into()),
     })
 }
 
@@ -61,7 +61,7 @@ fn auth_error() -> Response {
 
 #[test]
 fn the_right_password_starts_the_unbound_session_as_a_wayland_session() {
-    let (mut login, first) = Login::begin("ada", "kåäö1".to_owned());
+    let (mut login, first) = Login::begin("ada", "kåäö1".to_owned().into());
     assert_eq!(
         first,
         Request::CreateSession {
@@ -87,7 +87,7 @@ fn the_right_password_starts_the_unbound_session_as_a_wayland_session() {
 
 #[test]
 fn a_wrong_password_cancels_the_session_so_another_attempt_can_follow() {
-    let (mut login, _) = Login::begin("ada", "wrong".to_owned());
+    let (mut login, _) = Login::begin("ada", "wrong".to_owned().into());
     login.respond(password_prompt());
 
     assert_eq!(
@@ -104,7 +104,7 @@ fn a_wrong_password_cancels_the_session_so_another_attempt_can_follow() {
 
 #[test]
 fn informational_messages_are_shown_and_acknowledged_without_a_response() {
-    let (mut login, _) = Login::begin("ada", "secret".to_owned());
+    let (mut login, _) = Login::begin("ada", "secret".to_owned().into());
 
     assert_eq!(
         login.respond(Response::AuthMessage {
@@ -121,7 +121,7 @@ fn informational_messages_are_shown_and_acknowledged_without_a_response() {
 
 #[test]
 fn an_expired_password_asks_for_each_further_secret_and_reports_pams_reason() {
-    let (mut login, _) = Login::begin("ada", "old".to_owned());
+    let (mut login, _) = Login::begin("ada", "old".to_owned().into());
     login.respond(password_prompt());
     let notice = "You are required to change your password immediately";
     assert_eq!(
@@ -160,7 +160,7 @@ fn an_expired_password_asks_for_each_further_secret_and_reports_pams_reason() {
 
 #[test]
 fn escape_during_a_further_prompt_cancels_the_attempt_without_a_rejection() {
-    let (mut login, _) = Login::begin("ada", "code".to_owned());
+    let (mut login, _) = Login::begin("ada", "code".to_owned().into());
     login.respond(password_prompt());
     login.respond(secret("Verification code: "));
 

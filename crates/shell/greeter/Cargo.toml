@@ -18,6 +18,7 @@ unbound-l10n.workspace = true
 unbound-lock.workspace = true
 unbound-log.workspace = true
 unbound-toolkit.workspace = true
+zeroize.workspace = true
 
 [dev-dependencies]
 rustix.workspace = true

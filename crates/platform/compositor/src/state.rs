@@ -578,10 +578,6 @@ impl Headless {
         self.state.main_screen().mode_size()
     }
 
-    pub fn output_scale(&self) -> f64 {
-        self.state.main_screen().scale()
-    }
-
     pub fn logical_output_size(&self) -> Size<i32, Logical> {
         self.state.main_screen().rect().size
     }

@@ -1,7 +1,7 @@
 use accesskit::{Action, Affine, Node, NodeId, Role, TreeUpdate};
 use unbound_graphics::{
-    Color, Item, Palette, Paragraph, Point, Radius, Rect, Scene, Scheme, Shape, TextAlign,
-    TextStyle, TextSystem, TitleBar, title_style, window_controls_area,
+    Color, Item, Palette, Paragraph, Point, Radius, Rect, ResizeEdge, Scene, Scheme, Shape,
+    TextAlign, TextStyle, TextSystem, TitleBar, resize_edge, title_style, window_controls_area,
 };
 
 use std::time::Instant;
@@ -9,7 +9,6 @@ use std::time::Instant;
 use unbound_widgets::{Animated, Spring};
 
 use crate::L10N;
-use crate::window::ResizeEdge;
 
 pub use unbound_graphics::HEADER_HEIGHT;
 pub(crate) use unbound_graphics::RESIZE_MARGIN;
@@ -17,7 +16,6 @@ pub const SHEET_INSET: u32 = 6;
 pub(crate) use unbound_graphics::WindowControl as Control;
 const RESIZE_BAND: f32 = RESIZE_MARGIN as f32;
 const TITLE_TRAILING_GAP: f32 = 12.0;
-const CORNER_REACH: f32 = unbound_graphics::RESIZE_CORNER;
 
 const WINDOW_NODE: NodeId = NodeId(u64::MAX);
 const TITLE_BAR_NODE: NodeId = NodeId(u64::MAX - 1);
@@ -160,60 +158,26 @@ impl Frame {
 
     pub(crate) fn zone_at(&self, point: Point) -> Zone {
         let window = self.window();
-        let inside = point.x >= window.x
-            && point.y >= window.y
-            && point.x < window.x + window.width
-            && point.y < window.y + window.height;
-        if inside {
+        if window.contains(point) {
             let local = Point::new(point.x - window.x, point.y - window.y);
             if local.y < self.title {
                 return Control::at(local, self.title).map_or(Zone::TitleBar, Zone::Control);
             }
-            return if contains(self.content(), local) {
+            return if self.content().contains(local) {
                 Zone::Content
             } else {
                 Zone::TitleBar
             };
         }
-        if self.margin == 0.0 || !contains(window.inset(-RESIZE_BAND), point) {
+        if self.margin == 0.0 || !window.inset(-RESIZE_BAND).contains(point) {
             return Zone::Outside;
         }
-        let horizontal = if point.x < window.x + CORNER_REACH {
-            -1
-        } else if point.x >= window.x + window.width - CORNER_REACH {
-            1
-        } else {
-            0
-        };
-        let vertical = if point.y < window.y + CORNER_REACH {
-            -1
-        } else if point.y >= window.y + window.height - CORNER_REACH {
-            1
-        } else {
-            0
-        };
-        Zone::Resize(match (vertical, horizontal) {
-            (-1, -1) => ResizeEdge::TopLeft,
-            (-1, 1) => ResizeEdge::TopRight,
-            (1, -1) => ResizeEdge::BottomLeft,
-            (1, 1) => ResizeEdge::BottomRight,
-            (-1, _) => ResizeEdge::Top,
-            (1, _) => ResizeEdge::Bottom,
-            (_, -1) => ResizeEdge::Left,
-            _ => ResizeEdge::Right,
-        })
+        Zone::Resize(resize_edge(window, point))
     }
 
     pub(crate) fn input_area(&self) -> Rect {
         self.window().inset(-RESIZE_BAND)
     }
-}
-
-fn contains(rect: Rect, point: Point) -> bool {
-    point.x >= rect.x
-        && point.y >= rect.y
-        && point.x < rect.x + rect.width
-        && point.y < rect.y + rect.height
 }
 
 #[derive(Default)]
@@ -254,7 +218,7 @@ impl Chrome {
                         .items
                         .iter()
                         .chain(&header.tabs)
-                        .any(|item| contains(*item, local)) =>
+                        .any(|item| item.contains(local)) =>
             {
                 Zone::Content
             }
@@ -268,7 +232,7 @@ impl Chrome {
             && self
                 .header
                 .as_ref()
-                .is_some_and(|header| header.tabs.iter().any(|tab| contains(*tab, local)))
+                .is_some_and(|header| header.tabs.iter().any(|tab| tab.contains(local)))
     }
 
     pub(crate) fn wrap_tree(&self, frame: &Frame, mut tree: TreeUpdate) -> TreeUpdate {
@@ -312,7 +276,7 @@ impl Chrome {
     ) -> bool {
         let hovered = point
             .map(|point| Point::new(point.x - frame.margin, point.y - frame.margin))
-            .filter(|local| contains(window_controls_area(frame.title), *local))
+            .filter(|local| window_controls_area(frame.title).contains(*local))
             .map(|local| Control::at(local, frame.title));
         if hovered == self.hovered {
             return false;

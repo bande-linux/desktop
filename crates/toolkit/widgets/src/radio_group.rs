@@ -2,7 +2,7 @@ use accesskit::{Action, ActionRequest, Node, Role, Toggled};
 use unbound_graphics::{Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle};
 
 use super::checkbox::{CHECKBOX_SIZE, paint_box};
-use super::{Animated, Context, Event, Key, Parts, Size, Spring, Widget, WidgetId, contains};
+use super::{Animated, Context, Event, Key, Parts, Size, Spring, Widget, WidgetId};
 
 const GAP: f32 = 8.0;
 const ROW_GAP: f32 = 8.0;
@@ -73,7 +73,7 @@ impl RadioGroup {
     fn choice_at(&self, point: Point) -> Option<usize> {
         self.choices
             .iter()
-            .position(|choice| contains(choice.frame, point))
+            .position(|choice| choice.frame.contains(point))
     }
 
     fn circle(frame: Rect) -> Rect {

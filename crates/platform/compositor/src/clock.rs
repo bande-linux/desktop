@@ -58,7 +58,7 @@ impl FrameClock {
         time.min(self.refresh.saturating_sub(SAFETY_MARGIN))
     }
 
-    pub fn predicted_render(&self) -> Duration {
+    fn predicted_render(&self) -> Duration {
         let slowest = self.deadline_to_done.iter().copied().max();
         self.within_a_refresh(slowest.unwrap_or_default())
     }

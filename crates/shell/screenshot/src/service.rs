@@ -9,7 +9,7 @@ use zbus::blocking::Connection;
 use zbus::message::Header;
 use zbus::zvariant::{OwnedValue, Value};
 
-use unbound_toolkit::ScreenImage;
+use unbound_toolkit::Snapshot;
 
 use crate::cast::Cast;
 use crate::engine::{Engine, Shot, Source};
@@ -33,7 +33,7 @@ pub struct Choice {
     pub id: String,
     pub title: String,
     pub app_id: String,
-    pub thumbnail: Option<ScreenImage>,
+    pub thumbnail: Option<Snapshot>,
 }
 
 pub enum UiRequest {
@@ -74,9 +74,9 @@ fn kind_of(id: &str) -> u32 {
     }
 }
 
-pub fn thumbnail(shot: &Shot) -> Option<ScreenImage> {
+pub fn thumbnail(shot: &Shot) -> Option<Snapshot> {
     shrunk(
-        &ScreenImage {
+        &Snapshot {
             width: shot.width,
             height: shot.height,
             rgba: shot.rgba(),

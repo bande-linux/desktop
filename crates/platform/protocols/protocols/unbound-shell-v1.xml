@@ -217,16 +217,6 @@
       <arg name="active" type="uint"/>
     </event>
 
-    <event name="window_workspace" since="9">
-      <description summary="a window is on a workspace">
-        Sent on binding for every window and whenever the position of the
-        workspace holding the window with this ext_foreign_toplevel_handle_v1
-        identifier changes, including when a workspace to its left goes away.
-      </description>
-      <arg name="identifier" type="string"/>
-      <arg name="workspace" type="uint"/>
-    </event>
-
     <request name="show_windows" since="9">
       <description summary="open the overview">
         Opens the overview of the active workspace. With an app id it shows

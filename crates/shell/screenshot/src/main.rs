@@ -29,7 +29,7 @@ use unbound_toolkit::ui::{
 };
 use unbound_toolkit::{
     App, Color, DragAction, DragIcon, Edges, Image, Item, KeyboardFocus, LayerKind, LayerOptions,
-    MenuPlacement, Point, Rect, Role, Scene, ScreenImage, Shape, TextAlign, TextStyle, TextSystem,
+    MenuPlacement, Point, Rect, Role, Scene, Shape, Snapshot, TextAlign, TextStyle, TextSystem,
     Transfer, Window, WindowError, WindowEvent,
 };
 use unbound_xdg::{UserDir, config_home, file_uri, spawn_detached, state_home, user_dir};
@@ -101,8 +101,8 @@ struct Screenshots {
     session: Option<Connection>,
 }
 
-fn as_screen_image(shot: &Shot) -> ScreenImage {
-    ScreenImage {
+fn as_snapshot(shot: &Shot) -> Snapshot {
+    Snapshot {
         width: shot.width,
         height: shot.height,
         rgba: shot.rgba(),
@@ -137,7 +137,7 @@ fn ui_with(window: &Window, layout: FreeLayout) -> Ui {
     ui
 }
 
-fn thumbnail_image(image: &ScreenImage) -> Option<Image> {
+fn thumbnail_image(image: &Snapshot) -> Option<Image> {
     let small = shrunk(image, THUMBNAIL_SIDE)?;
     Image::from_rgba(small.width, small.height, small.rgba)
 }
@@ -264,20 +264,20 @@ impl Screenshots {
             .collect()
     }
 
-    fn shoot(&mut self, window: &mut Window, target: &Target) -> Option<ScreenImage> {
+    fn shoot(&mut self, window: &mut Window, target: &Target) -> Option<Snapshot> {
         self.hide_overlay(window);
         let engine = self.engine.as_ref()?;
         let pointer = self.options.show_pointer;
         match target {
             Target::Window(identifier) => {
                 let shot = engine.shoot(Source::Window(identifier.clone()), pointer)?;
-                Some(with_shadow(&as_screen_image(&shot), window.scale()))
+                Some(with_shadow(&as_snapshot(&shot), window.scale()))
             }
             Target::Area(region) => {
-                let image = as_screen_image(&engine.shoot(Source::Screen, pointer)?);
+                let image = as_snapshot(&engine.shoot(Source::Screen, pointer)?);
                 crop(&image, scaled(*region, window.scale()))
             }
-            _ => Some(as_screen_image(&engine.shoot(Source::Screen, pointer)?)),
+            _ => Some(as_snapshot(&engine.shoot(Source::Screen, pointer)?)),
         }
     }
 
@@ -306,7 +306,7 @@ impl Screenshots {
                 self.hide_overlay(window);
                 self.play_shutter();
                 let pointer = self.options.show_pointer;
-                let images: Vec<ScreenImage> = self
+                let images: Vec<Snapshot> = self
                     .engine
                     .as_ref()
                     .map(|engine| {
@@ -316,7 +316,7 @@ impl Screenshots {
                             .filter_map(|display| {
                                 engine.shoot(Source::Display(display.name), pointer)
                             })
-                            .map(|shot| as_screen_image(&shot))
+                            .map(|shot| as_snapshot(&shot))
                             .collect()
                     })
                     .unwrap_or_default();
@@ -336,7 +336,7 @@ impl Screenshots {
         self.arrange(window);
     }
 
-    fn deliver(&mut self, window: &mut Window, image: ScreenImage) {
+    fn deliver(&mut self, window: &mut Window, image: Snapshot) {
         if self.options.destination == Destination::Clipboard {
             match png(&image) {
                 Ok(bytes) => window.copy_transfer(Transfer::uris(Vec::new()).with_png(bytes)),
@@ -361,7 +361,7 @@ impl Screenshots {
     fn show_thumbnail(
         &mut self,
         window: &mut Window,
-        image: &ScreenImage,
+        image: &Snapshot,
         path: PathBuf,
         video: bool,
     ) {

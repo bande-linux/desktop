@@ -6,7 +6,7 @@ use unbound_graphics::{
 };
 
 use super::control::{focus_ring, glyph_line};
-use super::{Context, Event, Key, Size, Widget, WidgetId, contains};
+use super::{Context, Event, Key, Size, Widget, WidgetId};
 
 pub const STEPPER_SIZE: Size = Size::new(96.0, ControlSize::Regular.height());
 const CELL: f32 = 28.0;
@@ -95,7 +95,7 @@ impl Stepper {
     fn half_at(&self, point: Point) -> Option<Half> {
         [Half::Down, Half::Up]
             .into_iter()
-            .find(|half| contains(self.cell(*half), point))
+            .find(|half| self.cell(*half).contains(point))
     }
 
     fn cell(&self, half: Half) -> Rect {

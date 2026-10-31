@@ -7,7 +7,7 @@ use unbound_screenshot::L10N;
 use unbound_screenshot::markup::{Command, Commanded, Markup, TOOLBAR_HEIGHT, Toolbar};
 use unbound_toolkit::ui::{Context, Event, FreeLayout, Key, Size, Ui, Widget, WidgetId};
 use unbound_toolkit::{
-    App, Elevation, Image, Item, Palette, Point, Rect, Role, Scene, Scheme, ScreenImage, Shape,
+    App, Elevation, Image, Item, Palette, Point, Rect, Role, Scene, Scheme, Shape, Snapshot,
     TextSystem, Transfer, Window, WindowError, WindowEvent,
 };
 use unbound_xdg::file_uri;
@@ -59,14 +59,9 @@ impl MarkupApp {
         Point::new((point.x - canvas.x) * factor, (point.y - canvas.y) * factor)
     }
 
-    fn rendered(&mut self) -> Option<ScreenImage> {
+    fn rendered(&mut self) -> Option<Snapshot> {
         self.markup.commit_text();
-        let snapshot = self.markup.export(&self.image, &mut self.text)?;
-        Some(ScreenImage {
-            width: snapshot.width,
-            height: snapshot.height,
-            rgba: snapshot.rgba,
-        })
+        self.markup.export(&self.image, &mut self.text)
     }
 
     fn done(&mut self, window: &mut Window) {

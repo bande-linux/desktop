@@ -51,7 +51,7 @@ impl WindowControl {
     pub fn at(point: Point, height: f32) -> Option<Self> {
         Self::ALL
             .into_iter()
-            .find(|control| contains(control.area(height), point))
+            .find(|control| control.area(height).contains(point))
     }
 
     fn centre(self, height: f32) -> Point {
@@ -73,11 +73,41 @@ pub fn title_style(palette: &Palette, active: bool) -> TextStyle {
     )
 }
 
-fn contains(rect: Rect, point: Point) -> bool {
-    point.x >= rect.x
-        && point.y >= rect.y
-        && point.x < rect.x + rect.width
-        && point.y < rect.y + rect.height
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResizeEdge {
+    Top,
+    Bottom,
+    Left,
+    Right,
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
+}
+
+pub fn resize_edge(window: Rect, point: Point) -> ResizeEdge {
+    let horizontal = side(point.x, window.x, window.width);
+    let vertical = side(point.y, window.y, window.height);
+    match (vertical, horizontal) {
+        (-1, -1) => ResizeEdge::TopLeft,
+        (-1, 1) => ResizeEdge::TopRight,
+        (1, -1) => ResizeEdge::BottomLeft,
+        (1, 1) => ResizeEdge::BottomRight,
+        (-1, _) => ResizeEdge::Top,
+        (1, _) => ResizeEdge::Bottom,
+        (_, -1) => ResizeEdge::Left,
+        _ => ResizeEdge::Right,
+    }
+}
+
+fn side(at: f32, start: f32, length: f32) -> i8 {
+    if at < start + RESIZE_CORNER {
+        -1
+    } else if at >= start + length - RESIZE_CORNER {
+        1
+    } else {
+        0
+    }
 }
 
 pub struct TitleBar<'a> {

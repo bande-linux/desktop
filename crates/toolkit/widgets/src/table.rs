@@ -12,7 +12,7 @@ use unbound_graphics::{
 use super::disclosure::chevron;
 use super::{
     Animated, Context, Cursor, Event, Key, Menu, Modifiers, Parts, Pointer, PointerButton,
-    ScrollState, Size, Spring, Widget, WidgetId, contains,
+    ScrollState, Size, Spring, Widget, WidgetId,
 };
 
 pub const ROW_HEIGHT: f32 = 32.0;
@@ -735,7 +735,7 @@ impl Table {
 
     fn row_at_offset(&self, point: Point, offset: f32) -> Option<usize> {
         let body = self.body();
-        if !contains(body, point) {
+        if !body.contains(point) {
             return None;
         }
         let y = point.y - body.y + offset;

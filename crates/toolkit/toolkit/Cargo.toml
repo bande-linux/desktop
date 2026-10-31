@@ -12,7 +12,6 @@ unbound-toolkit-platform.workspace = true
 unbound-widgets.workspace = true
 
 [dev-dependencies]
-accesskit.workspace = true
 smithay.workspace = true
 unbound-compositor.workspace = true
 unbound-test-bus.workspace = true

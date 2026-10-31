@@ -394,7 +394,6 @@ impl State {
                     .foreign_toplevel_state
                     .new_toplevel::<State>(title, app_id);
                 self.windows[index].foreign = Some(handle);
-                self.windows[index].announced_workspace = None;
                 self.announce_workspaces();
             }
             None => {}
@@ -446,7 +445,7 @@ impl GlobalDispatch<UnboundShellV1, ()> for State {
         }
         state.announce_unresponsive(&shell);
         state.announce_minimized_windows(&shell);
-        state.announce_workspaces_to(&shell);
+        state.send_workspaces(&shell);
         state.announce_input_sources_to(&shell);
         for anchor in &state.panel_anchors {
             send_panel_anchor(&shell, anchor);

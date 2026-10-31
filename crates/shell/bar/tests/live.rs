@@ -336,7 +336,7 @@ impl Desktop {
     }
 
     fn bar_width(&self) -> Option<i32> {
-        Some(self.server.usable_area().location.x).filter(|x| *x > 0)
+        Some(self.server.usable_area().loc.x).filter(|x| *x > 0)
     }
 
     fn editor_has_keyboard(&self) -> bool {

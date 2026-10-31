@@ -938,7 +938,7 @@ pub(crate) fn window_elements(
             None,
         );
     };
-    let real = Rectangle::new(geometry.location.to_f64(), geometry.size.to_f64());
+    let real = geometry.to_f64();
     let area = real.to_physical(scale);
     let look = look.unwrap_or(Look::shown(real));
     let shown = look.rect.to_physical(scale);

@@ -446,7 +446,7 @@ impl Compositor {
             }
             InputEvent::PointerMotionAbsolute { event } => {
                 let bounds = self.state.bounding_rect();
-                let location = event.position_transformed(bounds.size) + bounds.location.to_f64();
+                let location = event.position_transformed(bounds.size) + bounds.loc.to_f64();
                 self.move_pointer_to(location, event.time_msec());
             }
             InputEvent::PointerButton { event } => {

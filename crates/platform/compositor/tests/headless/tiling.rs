@@ -1,7 +1,8 @@
 use std::time::Duration;
 
 use crate::support::*;
-use unbound_compositor::{BACKGROUND, Compositor, Rect, Renderer};
+use smithay::utils::{Logical, Rectangle};
+use unbound_compositor::{BACKGROUND, Compositor, Renderer};
 use unbound_test_wayland::{BLUE, Placement, RED, ResizeEdge, TestClient, roundtrip};
 
 const WINDOW: (i32, i32) = (64, 48);
@@ -26,7 +27,11 @@ fn drop_after(server: &mut Compositor, client: &mut TestClient, to: (i32, i32), 
     release(server, client, 1000 + rest);
 }
 
-fn settle(server: &mut Compositor, client: &mut TestClient, color: [u8; 4]) -> Rect {
+fn settle(
+    server: &mut Compositor,
+    client: &mut TestClient,
+    color: [u8; 4],
+) -> Rectangle<i32, Logical> {
     if client
         .configured(0)
         .is_some_and(|configured| configured.width > 0)
@@ -174,7 +179,7 @@ fn neighbouring_tiles_share_the_edge_that_is_dragged() {
     right.fill_configured_size(&mut server, 0, BLUE);
     roundtrip(&mut server, &mut [&mut left, &mut right]);
 
-    let geometries: Vec<Rect> = server
+    let geometries: Vec<Rectangle<i32, Logical>> = server
         .windows()
         .iter()
         .map(|window| window.geometry().expect("mapped"))

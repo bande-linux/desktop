@@ -36,7 +36,7 @@ fn server() -> Compositor {
 }
 
 fn origin(server: &Compositor) -> (i32, i32) {
-    let location = geometry(server).location;
+    let location = geometry(server).loc;
     (location.x, location.y)
 }
 
@@ -208,7 +208,7 @@ fn dragging_the_title_bar_moves_the_window() {
     roundtrip(&mut server, &mut [&mut client]);
 
     assert_eq!(
-        geometry(&server).location,
+        geometry(&server).loc,
         (top_left.0 - 20, top_left.1 + 30).into()
     );
 }
@@ -270,7 +270,7 @@ fn a_window_taller_than_the_screen_opens_with_its_title_bar_on_screen() {
         (OUTPUT.0 + 40, OUTPUT.1 + 40),
     );
 
-    assert_eq!(geometry(&server).location, (0, 0).into());
+    assert_eq!(geometry(&server).loc, (0, 0).into());
 }
 
 #[test]

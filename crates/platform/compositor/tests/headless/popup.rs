@@ -1,6 +1,6 @@
 use crate::support::*;
-use smithay::utils::{Point, Size};
-use unbound_compositor::{Compositor, OutputConfig, Rect};
+use smithay::utils::{Logical, Point, Rectangle, Size};
+use unbound_compositor::{Compositor, OutputConfig};
 use unbound_test_wayland::{
     Anchor, BLUE, ConstraintAdjustment, GREEN, KeyboardInteractivity, Layer, LayerRequest,
     PopupRequest, RED, ShmImage, TestClient, roundtrip, roundtrip_until,
@@ -507,14 +507,7 @@ fn bottom_bar(server: &mut Compositor) -> TestClient {
     )
 }
 
-fn inside(outer: Rect, inner: Rect) -> bool {
-    inner.location.x >= outer.location.x
-        && inner.location.y >= outer.location.y
-        && inner.location.x + inner.size.w <= outer.location.x + outer.size.w
-        && inner.location.y + inner.size.h <= outer.location.y + outer.size.h
-}
-
-fn only_popup(server: &Compositor) -> Rect {
+fn only_popup(server: &Compositor) -> Rectangle<i32, Logical> {
     let rects = server.popup_rects();
     assert_eq!(rects.len(), 1, "{rects:?}");
     rects[0]
@@ -541,7 +534,7 @@ fn a_desktop_menu_opened_near_any_edge_or_corner_stays_on_the_screen() {
 
         let placed = only_popup(&server);
         assert!(
-            inside(server.usable_area(), placed),
+            server.usable_area().contains_rect(placed),
             "a menu at {anchor:?} lands at {placed:?}"
         );
         assert_eq!(placed.size, MENU_SIZE.into());
@@ -558,7 +551,7 @@ fn a_desktop_menu_in_the_bottom_right_corner_opens_up_and_to_the_left_of_the_poi
 
     let placed = only_popup(&server);
     assert_eq!(
-        (placed.location.x, placed.location.y),
+        (placed.loc.x, placed.loc.y),
         (pointer.0 - MENU_SIZE.0, pointer.1 - MENU_SIZE.1)
     );
 }
@@ -577,7 +570,7 @@ fn a_desktop_menu_stays_clear_of_the_bar_but_a_bar_menu_may_cover_its_own_bar() 
     );
     roundtrip(&mut server, &mut [&mut bar, &mut desk]);
     let placed = only_popup(&server);
-    assert!(inside(usable, placed), "{placed:?} covers the bar");
+    assert!(usable.contains_rect(placed), "{placed:?} covers the bar");
 
     let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     let mut bar = bottom_bar(&mut server);
@@ -588,7 +581,7 @@ fn a_desktop_menu_stays_clear_of_the_bar_but_a_bar_menu_may_cover_its_own_bar() 
     bar.open_layer_popup(&mut server, &request);
     roundtrip(&mut server, &mut [&mut bar]);
     let placed = only_popup(&server);
-    assert_eq!(placed.location.y, OUTPUT.1 - 20);
+    assert_eq!(placed.loc.y, OUTPUT.1 - 20);
 }
 
 #[test]
@@ -610,14 +603,14 @@ fn a_window_menu_is_kept_on_the_display_of_its_anchor() {
     let mut editor = window_of(&mut server, RED, WINDOW, EDITOR);
     let side = server.output_rect(SIDE).expect("side display");
     let window = server.windows()[0].geometry().expect("mapped");
-    assert!(inside(side, window));
-    let below_main = OUTPUT.1 + 5 - window.location.y;
-    let right_edge = side.location.x + side.size.w - window.location.x - 10;
+    assert!(side.contains_rect(window));
+    let below_main = OUTPUT.1 + 5 - window.loc.y;
+    let right_edge = side.loc.x + side.size.w - window.loc.x - 10;
 
     let low = editor.open_popup(&mut server, &placed_menu((10, below_main), (60, 30)));
     roundtrip(&mut server, &mut [&mut editor]);
     assert_eq!(
-        only_popup(&server).location.y,
+        only_popup(&server).loc.y,
         OUTPUT.1 + 6,
         "the side display is taller, so the menu need not flip"
     );
@@ -626,6 +619,6 @@ fn a_window_menu_is_kept_on_the_display_of_its_anchor() {
     editor.open_popup(&mut server, &placed_menu((right_edge, 10), (60, 30)));
     roundtrip(&mut server, &mut [&mut editor]);
     let placed = only_popup(&server);
-    assert!(inside(side, placed), "{placed:?} leaves {side:?}");
-    assert_eq!(placed.location.x + 60, window.location.x + right_edge);
+    assert!(side.contains_rect(placed), "{placed:?} leaves {side:?}");
+    assert_eq!(placed.loc.x + 60, window.loc.x + right_edge);
 }

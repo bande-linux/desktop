@@ -374,8 +374,8 @@ fn a_change_under_an_opaque_window_shades_only_the_window_on_top() {
         .expect("the window below");
     let inset = 16;
     let damage = (
-        above.location.x + inset - under.x,
-        above.location.y + WINDOW_HEADER_HEIGHT as i32 - under.y,
+        above.loc.x + inset - under.x,
+        above.loc.y + WINDOW_HEADER_HEIGHT as i32 - under.y,
         above.size.w - 2 * inset,
         above.size.h - WINDOW_HEADER_HEIGHT as i32 - inset,
     );

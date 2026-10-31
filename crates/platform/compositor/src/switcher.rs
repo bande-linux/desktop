@@ -829,7 +829,7 @@ impl State {
 
     fn switcher_layout(&self, session: &Session, content: &Content) -> Layout {
         let area = self.usable_area(session.screen);
-        let room = Rectangle::new(area.location.to_f64(), area.size.to_f64());
+        let room = area.to_f64();
         match content {
             Content::Icons(apps) => lay_out(
                 &vec![Size::from((ICON + 2.0 * ICON_INSET, ICON + 2.0 * ICON_INSET)); apps.len()],

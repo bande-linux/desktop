@@ -1,8 +1,8 @@
 use std::path::Path;
 
 use crate::support::*;
-use smithay::utils::{Point, Size};
-use unbound_compositor::{Compositor, Rect};
+use smithay::utils::{Logical, Point, Rectangle, Size};
+use unbound_compositor::Compositor;
 use unbound_test_wayland::{RED, TestClient, roundtrip};
 
 const OUTPUT: (i32, i32) = (640, 400);
@@ -22,7 +22,7 @@ fn open(server: &mut Compositor, app_id: &str) -> TestClient {
     client
 }
 
-fn frame_of(server: &Compositor, app_id: &str, nth: usize) -> Rect {
+fn frame_of(server: &Compositor, app_id: &str, nth: usize) -> Rectangle<i32, Logical> {
     server
         .windows()
         .iter()
@@ -52,7 +52,7 @@ fn an_apps_first_window_opens_where_its_last_window_closed_even_after_a_restart(
     let mut server = remembering(state.path());
     let mut editor = open(&mut server, EDITOR);
     let opened = frame_of(&server, EDITOR, 0);
-    drag(&mut server, &mut editor, opened.location);
+    drag(&mut server, &mut editor, opened.loc);
     let moved = frame_of(&server, EDITOR, 0);
     editor.close_window(&mut server, 0);
     drop(server);
@@ -65,12 +65,12 @@ fn an_apps_first_window_opens_where_its_last_window_closed_even_after_a_restart(
     let viewer = open(&mut server, VIEWER);
     roundtrip(&mut server, &mut [&mut again, &mut second]);
 
-    assert_ne!(moved.location, opened.location);
-    assert_eq!(recalled.location, moved.location);
+    assert_ne!(moved.loc, opened.loc);
+    assert_eq!(recalled.loc, moved.loc);
     let size = again.configured(0).expect("configured");
     assert_eq!((size.width, size.height), WINDOW);
-    assert_ne!(cascaded.location, moved.location);
-    assert_eq!(frame_of(&server, VIEWER, 0).location, opened.location);
+    assert_ne!(cascaded.loc, moved.loc);
+    assert_eq!(frame_of(&server, VIEWER, 0).loc, opened.loc);
     drop(viewer);
 }
 
@@ -87,6 +87,6 @@ fn a_remembered_frame_off_the_current_displays_is_brought_back_into_view() {
     let _editor = open(&mut server, EDITOR);
     let frame = frame_of(&server, EDITOR, 0);
 
-    assert!(frame.location.x + WINDOW.0 <= OUTPUT.0);
-    assert!(frame.location.y + WINDOW.1 <= OUTPUT.1);
+    assert!(frame.loc.x + WINDOW.0 <= OUTPUT.0);
+    assert!(frame.loc.y + WINDOW.1 <= OUTPUT.1);
 }

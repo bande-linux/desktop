@@ -29,13 +29,6 @@ const REMOVE: &str = "remove";
 const CLEAR: &str = "clear";
 const TONE_PREFIX: &str = "tone-";
 
-pub fn contains(frame: Rect, point: Point) -> bool {
-    point.x >= frame.x
-        && point.y >= frame.y
-        && point.x < frame.x + frame.width
-        && point.y < frame.y + frame.height
-}
-
 pub fn clipped(frame: Rect, viewport: Rect) -> Rect {
     let left = frame.x.max(viewport.x);
     let top = frame.y.max(viewport.y);
@@ -492,7 +485,7 @@ impl Widget for Choice {
                 true
             }
             Event::PointerUp(pointer)
-                if pointer.is_primary() && contains(self.visible, pointer.position) =>
+                if pointer.is_primary() && self.visible.contains(pointer.position) =>
             {
                 state.model.select(self.position);
                 if pointer.modifiers.logo {

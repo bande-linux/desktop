@@ -46,8 +46,7 @@ impl State {
         };
         let size = mapped_size(popup.wl_surface()).unwrap_or_default();
         let screen = self.screen_rect(self.screen_of_surface(&parent.surface));
-        let surface_origin =
-            Point::from((origin.x, origin.y)) - parent.location.loc - screen.location;
+        let surface_origin = Point::from((origin.x, origin.y)) - parent.location.loc - screen.loc;
         let output = screen.size;
         popup.set_location(candidates_location(
             popup.text_input_rectangle(),

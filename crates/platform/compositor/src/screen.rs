@@ -8,7 +8,7 @@ use smithay::reexports::wayland_server::protocol::wl_callback::WlCallback;
 use smithay::utils::{Logical, Physical, Point, Raw, Rectangle, Size, Transform};
 use smithay::wayland::presentation::PresentationFeedbackCallback;
 
-use crate::state::{REFRESH, Rect, State};
+use crate::state::{REFRESH, State};
 use crate::window::Window;
 use crate::workspace::Workspaces;
 
@@ -191,24 +191,17 @@ impl Screen {
         self.settings.mode.size
     }
 
-    pub(crate) fn rect(&self) -> Rect {
-        Rect {
-            location: self.settings.position,
-            size: self.settings.logical_size(),
-        }
+    pub(crate) fn rect(&self) -> Rectangle<i32, Logical> {
+        Rectangle::new(self.settings.position, self.settings.logical_size())
     }
 
     pub(crate) fn contains(&self, point: Point<f64, Logical>) -> bool {
-        let rect = self.rect();
-        Rectangle::new(rect.location.to_f64(), rect.size.to_f64()).contains(point)
+        self.rect().to_f64().contains(point)
     }
 
-    pub(crate) fn usable_area(&self) -> Rect {
+    pub(crate) fn usable_area(&self) -> Rectangle<i32, Logical> {
         let zone = layer_map_for_output(&self.output).non_exclusive_zone();
-        Rect {
-            location: self.settings.position + zone.loc,
-            size: zone.size,
-        }
+        Rectangle::new(self.settings.position + zone.loc, zone.size)
     }
 
     pub(crate) fn origin_in_pixels(&self, scale: f64) -> Point<i32, Physical> {
@@ -250,11 +243,11 @@ impl State {
             .unwrap_or(0)
     }
 
-    pub(crate) fn screen_rect(&self, screen: usize) -> Rect {
+    pub(crate) fn screen_rect(&self, screen: usize) -> Rectangle<i32, Logical> {
         self.screens[screen].rect()
     }
 
-    pub(crate) fn usable_area(&self, screen: usize) -> Rect {
+    pub(crate) fn usable_area(&self, screen: usize) -> Rectangle<i32, Logical> {
         self.screens[screen].usable_area()
     }
 
@@ -269,12 +262,12 @@ impl State {
                 let rect = screen.rect();
                 let clamped: Point<f64, Logical> = (
                     point.x.clamp(
-                        f64::from(rect.location.x),
-                        f64::from(rect.location.x + rect.size.w - 1),
+                        f64::from(rect.loc.x),
+                        f64::from(rect.loc.x + rect.size.w - 1),
                     ),
                     point.y.clamp(
-                        f64::from(rect.location.y),
-                        f64::from(rect.location.y + rect.size.h - 1),
+                        f64::from(rect.loc.y),
+                        f64::from(rect.loc.y + rect.size.h - 1),
                     ),
                 )
                     .into();
@@ -287,29 +280,12 @@ impl State {
             .unwrap_or(point)
     }
 
-    pub(crate) fn bounding_rect(&self) -> Rect {
-        let rects: Vec<Rect> = self
-            .screens
+    pub(crate) fn bounding_rect(&self) -> Rectangle<i32, Logical> {
+        self.screens
             .iter()
             .filter(|screen| screen.mirror.is_none())
             .map(Screen::rect)
-            .collect();
-
-        let left = rects.iter().map(|rect| rect.location.x).min().unwrap_or(0);
-        let top = rects.iter().map(|rect| rect.location.y).min().unwrap_or(0);
-        let right = rects
-            .iter()
-            .map(|rect| rect.location.x + rect.size.w)
-            .max()
-            .unwrap_or(0);
-        let bottom = rects
-            .iter()
-            .map(|rect| rect.location.y + rect.size.h)
-            .max()
-            .unwrap_or(0);
-        Rect {
-            location: (left, top).into(),
-            size: (right - left, bottom - top).into(),
-        }
+            .reduce(Rectangle::merge)
+            .unwrap_or_default()
     }
 }

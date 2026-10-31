@@ -31,8 +31,8 @@ impl State {
                 };
                 capture.window(
                     handle.identifier(),
-                    geometry.location.x,
-                    geometry.location.y,
+                    geometry.loc.x,
+                    geometry.loc.y,
                     geometry.size.w,
                     geometry.size.h,
                 );

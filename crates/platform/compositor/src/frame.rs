@@ -107,10 +107,13 @@ fn zone_at(window: &Window, location: Point<f64, Logical>) -> Option<Zone> {
     Some(Zone::Resize(resize_edge(frame, point)))
 }
 
-fn local_point(rect: crate::state::Rect, location: Point<f64, Logical>) -> unbound_graphics::Point {
+fn local_point(
+    rect: Rectangle<i32, Logical>,
+    location: Point<f64, Logical>,
+) -> unbound_graphics::Point {
     unbound_graphics::Point::new(
-        (location.x - f64::from(rect.location.x)) as f32,
-        (location.y - f64::from(rect.location.y)) as f32,
+        (location.x - f64::from(rect.loc.x)) as f32,
+        (location.y - f64::from(rect.loc.y)) as f32,
     )
 }
 

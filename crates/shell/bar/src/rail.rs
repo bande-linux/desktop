@@ -139,13 +139,6 @@ pub fn in_use_dot(rect: Rect, palette: &Palette) -> Item {
     }
 }
 
-fn contains(rect: Rect, point: Point) -> bool {
-    point.x >= rect.x
-        && point.x < rect.x + rect.width
-        && point.y >= rect.y
-        && point.y < rect.y + rect.height
-}
-
 fn snap(value: f32, scale: f64) -> f32 {
     ((f64::from(value) * scale).round() / scale) as f32
 }
@@ -1169,7 +1162,7 @@ impl StatusView for RailView {
         let found = self
             .slots
             .iter()
-            .filter(|(_, rect)| contains(*rect, point))
+            .filter(|(_, rect)| rect.contains(point))
             .map(|(slot, _)| *slot)
             .collect::<Vec<_>>();
         let glyph = found.iter().copied().find(|slot| {

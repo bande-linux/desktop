@@ -1,8 +1,7 @@
-use smithay::utils::{Logical, Point, Transform};
+use smithay::utils::{Logical, Point, Rectangle, Transform};
 use unbound_config::{Config, DisplaySettings, Placement, Rotation};
 
 use crate::screen::{OutputConfig, OutputMode, OutputSettings, automatic_scale};
-use crate::state::Rect;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Arranged {
@@ -66,18 +65,8 @@ fn settings_for(head: &OutputConfig, display: &DisplaySettings) -> Option<Output
     })
 }
 
-fn rect(settings: &OutputSettings) -> Rect {
-    Rect {
-        location: settings.position,
-        size: settings.logical_size(),
-    }
-}
-
-fn overlaps(a: Rect, b: Rect) -> bool {
-    a.location.x < b.location.x + b.size.w
-        && b.location.x < a.location.x + a.size.w
-        && a.location.y < b.location.y + b.size.h
-        && b.location.y < a.location.y + a.size.h
+fn rect(settings: &OutputSettings) -> Rectangle<i32, Logical> {
+    Rectangle::new(settings.position, settings.logical_size())
 }
 
 fn side_by_side(arranged: &mut [Arranged], main: usize) {
@@ -183,12 +172,12 @@ pub(crate) fn arrange(
             .enumerate()
             .filter(|(other, display)| *other != index && display.mirror.is_none())
             .map(|(_, display)| rect(&display.settings))
-            .map(|rect| rect.location.x + rect.size.w)
+            .map(|rect| rect.loc.x + rect.size.w)
             .max()
             .unwrap_or(0);
         arranged[index].settings.position = (right, 0).into();
     }
-    let shown: Vec<Rect> = arranged
+    let shown: Vec<Rectangle<i32, Logical>> = arranged
         .iter()
         .filter(|display| display.mirror.is_none())
         .map(|display| rect(&display.settings))
@@ -196,7 +185,7 @@ pub(crate) fn arrange(
     let collides = shown
         .iter()
         .enumerate()
-        .any(|(index, a)| shown[index + 1..].iter().any(|b| overlaps(*a, *b)));
+        .any(|(index, a)| shown[index + 1..].iter().any(|b| a.overlaps(*b)));
     if collides {
         side_by_side(&mut arranged, main);
     }

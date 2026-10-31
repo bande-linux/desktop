@@ -12,7 +12,7 @@ use crate::browser::Location;
 use crate::controls::Press;
 use crate::sidebar::{PlaceKind, Row, favourites};
 use crate::toolbar::TOOLBAR_HEIGHT;
-use crate::view::{FilesView, Hit, Request, SIDEBAR_WIDTH, contains, home};
+use crate::view::{FilesView, Hit, Request, SIDEBAR_WIDTH, home};
 use crate::views::ViewMode;
 
 const DRAG_THRESHOLD: f32 = 4.0;
@@ -89,7 +89,7 @@ impl FilesView {
     }
 
     fn grabbed_icon(&mut self, at: Point) -> Option<Point> {
-        if self.table_frame().is_some_and(|frame| contains(frame, at)) {
+        if self.table_frame().is_some_and(|frame| frame.contains(at)) {
             let row = self.table_row_at(at)?;
             let name = self.shown_table()?.cell_bounds(row, 0)?;
             return Some(Point::new(
@@ -98,14 +98,14 @@ impl FilesView {
             ));
         }
         let row = self.hits.iter().find_map(|(rect, hit)| match hit {
-            Hit::Row { row, .. } if contains(*rect, at) => Some(*row),
+            Hit::Row { row, .. } if rect.contains(at) => Some(*row),
             _ => None,
         });
         if self.mode == ViewMode::Icons {
             return row.map(|row| self.grid_icon_centre(row));
         }
         self.hits.iter().find_map(|(rect, hit)| match hit {
-            Hit::Row { .. } if contains(*rect, at) => Some(Point::new(
+            Hit::Row { .. } if rect.contains(at) => Some(Point::new(
                 rect.x + COLUMN_ICON_CENTRE,
                 rect.y + rect.height / 2.0,
             )),
@@ -277,7 +277,7 @@ impl FilesView {
         if folders && let Some((target, line)) = self.sidebar_gap(at) {
             return Some((target, line, None));
         }
-        if let Some(table) = self.table_frame().filter(|frame| contains(*frame, at)) {
+        if let Some(table) = self.table_frame().filter(|frame| frame.contains(at)) {
             let column = &self.browser.columns()[0];
             let folder = self
                 .table_row_at(at)
@@ -292,11 +292,7 @@ impl FilesView {
                 None => (Self::location_target(&column.location)?, table, None),
             });
         }
-        let (rect, hit) = self
-            .hits
-            .iter()
-            .rev()
-            .find(|(rect, _)| contains(*rect, at))?;
+        let (rect, hit) = self.hits.iter().rev().find(|(rect, _)| rect.contains(at))?;
         match hit {
             Hit::Place(index) => match self.sidebar.get(*index) {
                 Some(Row::Place(place)) => Some((

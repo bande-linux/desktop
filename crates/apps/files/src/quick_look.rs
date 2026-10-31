@@ -8,7 +8,7 @@ use unbound_toolkit::{
 use unbound_xdg::DesktopEntry;
 
 use crate::L10N;
-use crate::view::{FilesView, Hit, Request, contains};
+use crate::view::{FilesView, Hit, Request};
 
 const SHARE: f32 = 0.8;
 const HEADER: f32 = 40.0;
@@ -219,7 +219,7 @@ impl FilesView {
     }
 
     pub(crate) fn quick_look_scroll(&mut self, scroll: &Scroll) -> bool {
-        if self.quick_look.is_none() || !contains(self.quick_look_frame(), scroll.position) {
+        if self.quick_look.is_none() || !self.quick_look_frame().contains(scroll.position) {
             return false;
         }
         let area = self.quick_look_area();

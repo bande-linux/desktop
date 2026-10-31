@@ -273,19 +273,16 @@ impl Card {
     }
 
     pub fn part_at(&self, point: Point, hovered: bool) -> Option<Part> {
-        if hovered && contains(self.close_rect(), point) {
+        if hovered && self.close_rect().contains(point) {
             return Some(Part::Close);
         }
-        if !contains(
-            Rect::new(0.0, 0.0, self.width, self.height + self.depth()),
-            point,
-        ) {
+        if !Rect::new(0.0, 0.0, self.width, self.height + self.depth()).contains(point) {
             return None;
         }
         Some(
             self.actions
                 .iter()
-                .find(|(_, _, rect)| contains(*rect, point))
+                .find(|(_, _, rect)| rect.contains(point))
                 .map_or(Part::Body, |(key, _, _)| Part::Action(key.clone())),
         )
     }
@@ -473,11 +470,4 @@ pub(crate) fn surface_with_edge(
             paint: palette.hairline.into(),
         });
     }
-}
-
-pub fn contains(rect: Rect, point: Point) -> bool {
-    point.x >= rect.x
-        && point.y >= rect.y
-        && point.x < rect.x + rect.width
-        && point.y < rect.y + rect.height
 }

@@ -147,7 +147,7 @@ impl State {
 
     pub(crate) fn view_origin_in_pixels(&self, screen: usize, scale: f64) -> Point<i32, Physical> {
         let rect = self.screen_rect(screen);
-        let origin = rect.location.to_f64();
+        let origin = rect.loc.to_f64();
         let level = self.zoom_on(screen);
         if level <= 1.0 {
             return origin.to_physical(scale).to_i32_round();

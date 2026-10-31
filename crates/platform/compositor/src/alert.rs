@@ -126,11 +126,11 @@ impl State {
                 }
             }
         };
-        let mut top = f64::from(output.location.y) + ALERT_MARGIN;
+        let mut top = f64::from(output.loc.y) + ALERT_MARGIN;
         let mut elements = Vec::new();
         for label in &rendered[index].labels {
             let location = Point::<f64, Logical>::from((
-                f64::from(output.location.x) + (f64::from(output.size.w) - label.size.w) / 2.0,
+                f64::from(output.loc.x) + (f64::from(output.size.w) - label.size.w) / 2.0,
                 top,
             ))
             .to_physical(scale)

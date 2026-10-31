@@ -1,7 +1,7 @@
-use smithay::utils::{Logical, Point, Size};
+use smithay::utils::{Logical, Point, Rectangle, Size};
 use std::time::Duration;
 
-use unbound_compositor::{Compositor, OutputConfig, OutputMode, Rect, Renderer};
+use unbound_compositor::{Compositor, OutputConfig, OutputMode, Renderer};
 use unbound_config::Config;
 use unbound_test_wayland::{
     Anchor, BLUE, ConstraintAdjustment, DecorationMode, GREEN, KeyboardInteractivity, Layer,
@@ -68,7 +68,7 @@ fn a_menu_on_the_second_display_closes_on_a_click_beside_it_and_the_next_click_l
     let mut server = two_displays();
     server.move_pointer_to(at(400.0, 100.0), 0);
     let mut editor = window(&mut server, RED, WINDOW);
-    let origin = geometry(&server).location;
+    let origin = geometry(&server).loc;
     server.move_pointer_to(at(f64::from(origin.x + 5), f64::from(origin.y + 5)), 0);
     server.press_button(BTN_LEFT, true, 1);
     roundtrip(&mut server, &mut [&mut editor]);
@@ -183,7 +183,7 @@ fn dragging_a_window_onto_another_display_moves_it_there() {
     roundtrip(&mut server, &mut [&mut app]);
 
     assert_eq!(server.output_of(&server.windows()[0]), SIDE);
-    assert_eq!(geometry(&server).location, (296, 72).into());
+    assert_eq!(geometry(&server).loc, (296, 72).into());
 }
 
 #[test]
@@ -200,8 +200,8 @@ fn windows_of_an_unplugged_display_come_over_and_go_back_when_it_returns() {
     assert_eq!(server.output_of(&server.windows()[0]), MAIN);
     let moved = geometry(&server);
     assert_eq!(moved.size, WINDOW.into());
-    assert!(moved.location.x >= 0 && moved.location.x + WINDOW.0 <= MAIN_SIZE.0);
-    assert!(moved.location.y >= 0 && moved.location.y + WINDOW.1 <= MAIN_SIZE.1);
+    assert!(moved.loc.x >= 0 && moved.loc.x + WINDOW.0 <= MAIN_SIZE.0);
+    assert!(moved.loc.y >= 0 && moved.loc.y + WINDOW.1 <= MAIN_SIZE.1);
 
     server.add_output(side_display());
     roundtrip(&mut server, &mut [&mut app]);
@@ -496,7 +496,7 @@ fn an_apps_windows_cascade_only_from_its_windows_on_the_same_display() {
     terminal.show_window_of(&mut server, &image, "org.example.Terminal");
     terminal.show_window_of(&mut server, &image, "org.example.Terminal");
 
-    let geometries: Vec<Rect> = server
+    let geometries: Vec<Rectangle<i32, Logical>> = server
         .windows()
         .iter()
         .map(|window| window.geometry().expect("mapped"))

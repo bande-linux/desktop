@@ -1,7 +1,7 @@
 use std::time::Duration;
 
-use smithay::utils::{Logical, Point, Size};
-use unbound_compositor::{Compositor, Rect, Renderer, Snapshot};
+use smithay::utils::{Logical, Point, Rectangle, Size};
+use unbound_compositor::{Compositor, Renderer, Snapshot};
 use unbound_test_wayland::{
     Anchor, GREEN, KeyboardInteractivity, Layer, LayerRequest, RED, ShmImage, TestClient, roundtrip,
 };
@@ -75,11 +75,8 @@ pub fn at(x: i32, y: i32) -> Point<f64, Logical> {
     (f64::from(x), f64::from(y)).into()
 }
 
-pub fn rect(x: i32, y: i32, w: i32, h: i32) -> Rect {
-    Rect {
-        location: (x, y).into(),
-        size: (w, h).into(),
-    }
+pub fn rect(x: i32, y: i32, w: i32, h: i32) -> Rectangle<i32, Logical> {
+    Rectangle::new((x, y).into(), (w, h).into())
 }
 
 pub fn click(server: &mut Compositor, x: i32, y: i32) {
@@ -148,6 +145,6 @@ pub fn top_bar(server: &mut Compositor) -> TestClient {
     shell
 }
 
-pub fn geometry(server: &Compositor) -> Rect {
+pub fn geometry(server: &Compositor) -> Rectangle<i32, Logical> {
     server.windows()[0].geometry().expect("a mapped window")
 }

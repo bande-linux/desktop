@@ -39,13 +39,6 @@ pub fn module_surface(palette: &Palette, rect: Rect, fill: f32, items: &mut Vec<
     }
 }
 
-fn contains(rect: Rect, point: Point) -> bool {
-    point.x >= rect.x
-        && point.y >= rect.y
-        && point.x < rect.x + rect.width
-        && point.y < rect.y + rect.height
-}
-
 pub struct Module {
     id: WidgetId,
     children: Vec<Box<dyn Widget>>,
@@ -237,7 +230,7 @@ impl Tile {
     }
 
     fn activate_at(&mut self, point: Point) {
-        if contains(self.disc().inset(-(Spacing::XS as f32)), point) || !self.show_details() {
+        if self.disc().inset(-(Spacing::XS as f32)).contains(point) || !self.show_details() {
             self.toggle();
         }
     }
@@ -357,10 +350,10 @@ impl Widget for Tile {
             }
             Event::PointerDown(pointer) if pointer.is_primary() => self.pressed = true,
             Event::PointerMove(pointer) if self.pressed => {
-                self.pressed = contains(self.frame, pointer.position);
+                self.pressed = self.frame.contains(pointer.position);
             }
             Event::PointerUp(pointer) if pointer.is_primary() => {
-                let activate = self.pressed && contains(self.frame, pointer.position);
+                let activate = self.pressed && self.frame.contains(pointer.position);
                 self.pressed = false;
                 if activate {
                     self.activate_at(pointer.position);

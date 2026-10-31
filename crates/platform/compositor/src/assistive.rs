@@ -5,7 +5,6 @@ use std::time::Duration;
 
 use rustix::process::{Pid, Signal, kill_process};
 use smithay::backend::renderer::element::Id;
-use smithay::utils::Rectangle;
 use unbound_config::{Accessibility, BUS_NAME, OBJECT_PATH, SCREEN_READER};
 use unbound_graphics::Palette;
 use unbound_spring::{Animation, Spring, State as Phase};
@@ -191,7 +190,7 @@ impl State {
         };
         let opacity = flash.opacity.state().position.clamp(0.0, 1.0) as f32;
         let rect = self.screen_rect(screen);
-        let area = Rectangle::new(rect.location.to_f64(), rect.size.to_f64()).to_physical(scale);
+        let area = rect.to_f64().to_physical(scale);
         vec![OutputElement::Fill(FillElement::new(
             flash.id.clone(),
             rounded(area, 0.0),

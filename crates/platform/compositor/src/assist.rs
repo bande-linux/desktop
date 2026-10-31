@@ -61,18 +61,15 @@ impl State {
         let area = self.usable_area(screen);
         let free = if tile == Tile::Left {
             Rectangle::new(
-                (tiled.location.x + tiled.size.w, area.location.y).into(),
+                (tiled.loc.x + tiled.size.w, area.loc.y).into(),
                 (
-                    area.location.x + area.size.w - tiled.location.x - tiled.size.w,
+                    area.loc.x + area.size.w - tiled.loc.x - tiled.size.w,
                     area.size.h,
                 )
                     .into(),
             )
         } else {
-            Rectangle::new(
-                area.location,
-                (tiled.location.x - area.location.x, area.size.h).into(),
-            )
+            Rectangle::new(area.loc, (tiled.loc.x - area.loc.x, area.size.h).into())
         };
         let opposite = tile.opposite();
         let taken = self.windows.iter().enumerate().any(|(other, window)| {

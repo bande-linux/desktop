@@ -26,8 +26,8 @@ use crate::model::{
 };
 use crate::preview::PreviewPane;
 use crate::rows::{
-    CELL_HEIGHT, Choice, Form, GLYPH_HEIGHT, ROW_HEIGHT, apply_menu_action, centered, contains,
-    fitted, hit_menu,
+    CELL_HEIGHT, Choice, Form, GLYPH_HEIGHT, ROW_HEIGHT, apply_menu_action, centered, fitted,
+    hit_menu,
 };
 use crate::tones::{TONES_WIDTH, Tones};
 
@@ -657,7 +657,7 @@ impl Widget for Backdrop {
     fn handle(&mut self, _cx: &mut Context, event: &Event) -> bool {
         if let Event::PointerDown(pointer) = event
             && pointer.is_primary()
-            && !contains(self.children[0].frame(), pointer.position)
+            && !self.children[0].frame().contains(pointer.position)
         {
             self.state
                 .borrow_mut()

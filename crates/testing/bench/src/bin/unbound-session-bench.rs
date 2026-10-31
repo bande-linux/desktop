@@ -275,8 +275,8 @@ impl Bench {
             .and_then(|window| window.geometry())
             .ok_or_else(|| format!("{app_id} has no window"))?;
         Ok((
-            f64::from(geometry.location.x),
-            f64::from(geometry.location.y),
+            f64::from(geometry.loc.x),
+            f64::from(geometry.loc.y),
             f64::from(geometry.size.w),
             f64::from(geometry.size.h),
         ))

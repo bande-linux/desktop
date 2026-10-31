@@ -62,13 +62,6 @@ fn scrubbable(player: &Player) -> bool {
     player.length.is_some() && player.position.is_some()
 }
 
-fn contains(rect: Rect, point: Point) -> bool {
-    point.x >= rect.x
-        && point.y >= rect.y
-        && point.x < rect.x + rect.width
-        && point.y < rect.y + rect.height
-}
-
 pub fn clock(duration: Duration) -> String {
     let seconds = duration.as_secs();
     let (hours, minutes, seconds) = (seconds / 3600, seconds / 60 % 60, seconds % 60);
@@ -538,20 +531,18 @@ impl Widget for NowPlaying {
             Event::PointerDown(pointer) if pointer.is_primary() => {
                 let point = pointer.position;
                 self.press = (0..CONTROLS.len())
-                    .find(|index| contains(self.control_rect(*index), point))
+                    .find(|index| self.control_rect(*index).contains(point))
                     .map(|index| Press::Control(CONTROLS[index]))
                     .or_else(|| {
                         (self.player.can_seek
                             && scrubbable(&self.player)
-                            && contains(self.scrub_hit(), point))
+                            && self.scrub_hit().contains(point))
                         .then(|| Press::Scrub(self.fraction_at(point)))
                     })
                     .or_else(|| {
-                        contains(
-                            Rect::new(self.frame.x, self.frame.y, self.frame.width, ART),
-                            point,
-                        )
-                        .then_some(Press::Card)
+                        Rect::new(self.frame.x, self.frame.y, self.frame.width, ART)
+                            .contains(point)
+                            .then_some(Press::Card)
                     });
             }
             Event::PointerMove(pointer) => match self.press {
@@ -565,7 +556,7 @@ impl Widget for NowPlaying {
                 match self.press.take() {
                     Some(Press::Control(control)) => {
                         let index = CONTROLS.iter().position(|known| *known == control);
-                        if index.is_some_and(|index| contains(self.control_rect(index), point)) {
+                        if index.is_some_and(|index| self.control_rect(index).contains(point)) {
                             self.run(control);
                         }
                     }
@@ -574,7 +565,7 @@ impl Widget for NowPlaying {
                             self.seek_to(length.mul_f32(self.fraction_at(point)));
                         }
                     }
-                    Some(Press::Card) if contains(self.frame, point) => {
+                    Some(Press::Card) if self.frame.contains(point) => {
                         self.send(Change::RaisePlayer);
                     }
                     _ => return false,

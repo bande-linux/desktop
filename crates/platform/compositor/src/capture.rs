@@ -96,9 +96,7 @@ impl State {
     fn window_area(&self, window: &Window) -> Option<(Rectangle<i32, Physical>, f64)> {
         let geometry = window.geometry()?;
         let scale = self.screens[self.screen_of(window)].scale();
-        let area = Rectangle::new(geometry.location.to_f64(), geometry.size.to_f64())
-            .to_physical(scale)
-            .to_i32_round::<i32>();
+        let area = geometry.to_f64().to_physical(scale).to_i32_round::<i32>();
         (area.size.w > 0 && area.size.h > 0).then_some((area, scale))
     }
 

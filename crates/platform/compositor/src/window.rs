@@ -14,7 +14,7 @@ use unbound_spring::Spring;
 use crate::frame::Frame;
 use crate::motion::{Look, Motion};
 use crate::scene::{Casting, Drawn};
-use crate::state::{Rect, State};
+use crate::state::State;
 use crate::tile::{TILED, Tile};
 
 pub struct Window {
@@ -22,7 +22,7 @@ pub struct Window {
     pub(crate) location: Point<i32, Logical>,
     pub(crate) size: Option<Size<i32, Logical>>,
     pub(crate) foreign: Option<ForeignToplevelHandle>,
-    pub(crate) restore: Option<Rect>,
+    pub(crate) restore: Option<Rectangle<i32, Logical>>,
     pub(crate) pending_location: Option<(Serial, Point<i32, Logical>)>,
     pub(crate) acked: Option<Serial>,
     pub(crate) resize: Option<Resize>,
@@ -32,7 +32,7 @@ pub struct Window {
     pub(crate) veil: Id,
     pub(crate) motion: Option<Motion>,
     pub(crate) drawn: Option<Drawn>,
-    pub(crate) tile: Option<(Tile, Rect)>,
+    pub(crate) tile: Option<(Tile, Rectangle<i32, Logical>)>,
     pub(crate) workspace: u64,
     pub(crate) recalled: Option<Point<i32, Logical>>,
     pub(crate) parent_anchor: Option<Point<i32, Logical>>,
@@ -43,7 +43,7 @@ pub struct Window {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Resize {
     pub(crate) edges: xdg_toplevel::ResizeEdge,
-    pub(crate) initial: Rect,
+    pub(crate) initial: Rectangle<i32, Logical>,
     pub(crate) active: bool,
 }
 
@@ -81,7 +81,7 @@ impl Resize {
     }
 
     pub(crate) fn location_for(&self, size: Size<i32, Logical>) -> Point<i32, Logical> {
-        let mut location = self.initial.location;
+        let mut location = self.initial.loc;
         if self.has(LEFT) {
             location.x += self.initial.size.w - size.w;
         }
@@ -126,13 +126,13 @@ impl Window {
         self.size
     }
 
-    pub fn geometry(&self) -> Option<Rect> {
+    pub fn geometry(&self) -> Option<Rectangle<i32, Logical>> {
         self.size?;
         let geometry = self.local_geometry();
-        Some(Rect {
-            location: self.location,
-            size: (geometry.size.w, geometry.size.h + self.title_bar_height()).into(),
-        })
+        Some(Rectangle::new(
+            self.location,
+            (geometry.size.w, geometry.size.h + self.title_bar_height()).into(),
+        ))
     }
 
     pub fn is_minimized(&self) -> bool {
@@ -143,7 +143,7 @@ impl Window {
         self.hidden
     }
 
-    pub fn tile(&self) -> Option<Rect> {
+    pub fn tile(&self) -> Option<Rectangle<i32, Logical>> {
         self.tile.map(|(_, rect)| rect)
     }
 
@@ -302,20 +302,13 @@ impl State {
             let acked = window.acked;
             if !mapped {
                 window.location = if window.has_state(xdg_toplevel::State::Fullscreen) {
-                    output.location
+                    output.loc
                 } else if window.has_state(xdg_toplevel::State::Maximized) {
-                    area.location
+                    area.loc
                 } else if let Some(at) = over_parent {
                     at
                 } else if let Some(at) = window.recalled.take() {
-                    crate::recall::clamp_into(
-                        Rect {
-                            location: at,
-                            size: geometry.size,
-                        },
-                        area,
-                    )
-                    .location
+                    crate::recall::clamp_into(Rectangle::new(at, geometry.size), area).loc
                 } else {
                     crate::cascade::cascaded(area, geometry.size, &siblings)
                 };
@@ -389,7 +382,12 @@ impl State {
         })
     }
 
-    fn place(&mut self, index: usize, state: xdg_toplevel::State, target: Option<Rect>) {
+    fn place(
+        &mut self,
+        index: usize,
+        state: xdg_toplevel::State,
+        target: Option<Rectangle<i32, Logical>>,
+    ) {
         let window = &mut self.windows[index];
         if window.restore.is_none()
             && window.tile.is_none()
@@ -424,7 +422,7 @@ impl State {
         if target.is_some() {
             window.tile = None;
         }
-        let location = target.or(window.restore).map(|rect| rect.location);
+        let location = target.or(window.restore).map(|rect| rect.loc);
         if target.is_none() {
             window.restore = None;
         }
@@ -579,10 +577,7 @@ impl State {
         let size = window.clamp_size(resize.size_for(delta));
         window.request_size(Some(size));
         window.configure();
-        let rect = Rect {
-            location: resize.location_for(size),
-            size,
-        };
+        let rect = Rectangle::new(resize.location_for(size), size);
         self.share_tiled_edge(index, rect);
     }
 
@@ -615,10 +610,7 @@ impl State {
             self.sync_surface_outputs();
             self.announce_workspaces();
         }
-        let top = self
-            .usable_area(self.screen_of(&self.windows[index]))
-            .location
-            .y;
+        let top = self.usable_area(self.screen_of(&self.windows[index])).loc.y;
         let window = &mut self.windows[index];
         window.location = (location.x, location.y.max(top)).into();
         window.pending_location = None;
@@ -639,16 +631,16 @@ impl State {
         let geometry = window.geometry()?;
         let tiled = window.tile.is_some();
         if !tiled && !window.has_state(xdg_toplevel::State::Maximized) {
-            return Some(geometry.location);
+            return Some(geometry.loc);
         }
         let restored = window.restore.map_or(geometry.size, |restore| restore.size);
-        let grabbed_at = pointer.x - geometry.location.x;
+        let grabbed_at = pointer.x - geometry.loc.x;
         let x = pointer.x
             - i32::try_from(
                 i64::from(grabbed_at) * i64::from(restored.w) / i64::from(geometry.size.w.max(1)),
             )
             .unwrap_or(0);
-        let location = Point::from((x, geometry.location.y));
+        let location = Point::from((x, geometry.loc.y));
         if tiled {
             self.untile(index);
         } else {

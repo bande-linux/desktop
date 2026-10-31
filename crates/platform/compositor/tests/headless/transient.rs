@@ -1,8 +1,8 @@
 use std::time::Duration;
 
 use crate::support::*;
-use smithay::utils::{Point, Size};
-use unbound_compositor::{Compositor, Rect, Renderer};
+use smithay::utils::{Logical, Point, Rectangle, Size};
+use unbound_compositor::{Compositor, Renderer};
 use unbound_test_wayland::{BLUE, GREEN, RED, TestClient, roundtrip};
 
 const OUTPUT: (i32, i32) = (480, 270);
@@ -23,7 +23,7 @@ fn other_app(server: &mut Compositor) -> TestClient {
     window(server, BLUE, (60, 60))
 }
 
-fn rect_of(server: &Compositor, width: i32) -> Rect {
+fn rect_of(server: &Compositor, width: i32) -> Rectangle<i32, Logical> {
     server
         .windows()
         .iter()
@@ -51,7 +51,7 @@ fn shown(server: &Compositor) -> Vec<i32> {
 
 fn beside_dialog(server: &Compositor) -> (i32, i32) {
     let parent = rect_of(server, PARENT.0);
-    (parent.location.x + 10, parent.location.y + 10)
+    (parent.loc.x + 10, parent.loc.y + 10)
 }
 
 #[test]
@@ -61,11 +61,11 @@ fn a_dialog_opens_centred_over_its_parent_after_the_parent_moved() {
     client.use_seat(&mut server);
     client.show_window(&mut server, &xrgb(&solid(RED, PARENT), PARENT));
     let parent = rect_of(&server, PARENT.0);
-    server.move_pointer_to(at(parent.location.x + 5, parent.location.y + 5), 0);
+    server.move_pointer_to(at(parent.loc.x + 5, parent.loc.y + 5), 0);
     server.press_button(BTN_LEFT, true, 0);
     roundtrip(&mut server, &mut [&mut client]);
     client.request_move(&mut server, 0);
-    server.move_pointer_to(at(parent.location.x - 95, parent.location.y + 45), 1);
+    server.move_pointer_to(at(parent.loc.x - 95, parent.loc.y + 45), 1);
     server.press_button(BTN_LEFT, false, 2);
     roundtrip(&mut server, &mut [&mut client]);
 
@@ -75,10 +75,10 @@ fn a_dialog_opens_centred_over_its_parent_after_the_parent_moved() {
     let parent = rect_of(&server, PARENT.0);
     let dialog = rect_of(&server, DIALOG.0);
     assert_eq!(
-        dialog.location,
+        dialog.loc,
         (
-            parent.location.x + (PARENT.0 - DIALOG.0) / 2,
-            parent.location.y + (PARENT.1 - DIALOG.1) / 2
+            parent.loc.x + (PARENT.0 - DIALOG.0) / 2,
+            parent.loc.y + (PARENT.1 - DIALOG.1) / 2
         )
             .into()
     );
@@ -121,7 +121,7 @@ fn a_dialog_of_a_background_app_opens_directly_above_its_parent() {
 fn moving_the_parent_carries_its_dialog() {
     let mut server = server();
     let mut editor = app_with_dialog(&mut server);
-    let before = rect_of(&server, DIALOG.0).location;
+    let before = rect_of(&server, DIALOG.0).loc;
     let (x, y) = beside_dialog(&server);
 
     server.move_pointer_to(at(x, y), 0);
@@ -132,7 +132,7 @@ fn moving_the_parent_carries_its_dialog() {
     roundtrip(&mut server, &mut [&mut editor]);
 
     assert_eq!(
-        rect_of(&server, DIALOG.0).location,
+        rect_of(&server, DIALOG.0).loc,
         before + Point::from((40, 25))
     );
 }
@@ -205,7 +205,7 @@ fn a_modal_dialog_takes_clicks_on_its_parent_and_shakes() {
     server.animate(Duration::from_millis(16));
     assert!(server.is_animating());
 
-    click(&mut server, dialog.location.x + 5, dialog.location.y + 5);
+    click(&mut server, dialog.loc.x + 5, dialog.loc.y + 5);
     roundtrip(&mut server, &mut [&mut editor, &mut other]);
     assert!(editor.buttons().len() > buttons);
 }
@@ -232,7 +232,7 @@ fn moving_a_dialog_to_the_next_workspace_takes_its_parent_along() {
     let (x, y) = beside_dialog(&server);
     click(&mut server, x, y);
     let dialog = rect_of(&server, DIALOG.0);
-    click(&mut server, dialog.location.x + 5, dialog.location.y + 5);
+    click(&mut server, dialog.loc.x + 5, dialog.loc.y + 5);
     roundtrip(&mut server, &mut [&mut editor, &mut other]);
     assert!(editor.keyboard_focus_on(1));
 

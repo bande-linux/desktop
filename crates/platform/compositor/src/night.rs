@@ -235,7 +235,7 @@ impl Compositor {
     pub fn night_light_tick(&mut self, now: Duration) -> NightTick {
         self.state
             .night_light
-            .advance(now, || (Zoned::now(), system_place()))
+            .advance(now, || (unbound_datetime::now(), system_place()))
     }
 }
 

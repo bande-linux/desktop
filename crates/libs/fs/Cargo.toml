@@ -14,6 +14,7 @@ lzma-rust2.workspace = true
 rustix = { workspace = true, features = ["fs", "process"] }
 ruzstd.workspace = true
 tar.workspace = true
+unbound-datetime.workspace = true
 unbound-l10n.workspace = true
 unbound-xdg.workspace = true
 zip.workspace = true

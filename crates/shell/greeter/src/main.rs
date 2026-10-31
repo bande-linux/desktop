@@ -83,7 +83,7 @@ impl Greeter {
         LockScreen::new(
             user,
             DateFormats::from_env(),
-            &jiff::Zoned::now(),
+            &unbound_datetime::now(),
             Appearance::default(),
             text,
         )
@@ -301,7 +301,7 @@ impl App for Greeter {
             if let Err(error) = self.minutes.wait() {
                 tracing::warn!("cannot follow the clock: {error}");
             }
-            self.screen.set_clock(&jiff::Zoned::now());
+            self.screen.set_clock(&unbound_datetime::now());
             window.request_redraw();
             return;
         }

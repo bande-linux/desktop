@@ -345,7 +345,7 @@ impl Screenshots {
             return;
         }
         let dir = self.destination_dir();
-        let taken = jiff::Zoned::now().datetime();
+        let taken = unbound_datetime::now().datetime();
         match save(&image, &dir, taken) {
             Ok(path) => {
                 tracing::info!("saved {}", path.display());
@@ -408,7 +408,7 @@ impl Screenshots {
             Target::RecordArea(region) => Some(scaled(*region, window.scale())),
             _ => None,
         };
-        let taken = jiff::Zoned::now().datetime();
+        let taken = unbound_datetime::now().datetime();
         let dir = self.destination_dir();
         if let Err(error) = std::fs::create_dir_all(&dir) {
             tracing::warn!("cannot create {}: {error}", dir.display());
@@ -701,7 +701,7 @@ impl Screenshots {
     ) {
         let path = self.shoot(window, target).and_then(|image| {
             let dir = self.portal_dir();
-            save(&image, &dir, jiff::Zoned::now().datetime())
+            save(&image, &dir, unbound_datetime::now().datetime())
                 .inspect_err(|error| tracing::warn!("cannot save to {}: {error}", dir.display()))
                 .ok()
         });

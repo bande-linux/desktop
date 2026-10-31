@@ -6,7 +6,6 @@ use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
-use jiff::Zoned;
 use jiff::civil::Date;
 use unbound_datetime::{DateFormats, Month};
 use unbound_l10n::Localizer;
@@ -147,7 +146,7 @@ fn hidden_offset(width: f32) -> f32 {
 
 impl Screen {
     pub fn new(palette: Palette, text: TextSystem, senders: Senders, dates: DateFormats) -> Self {
-        let now = Zoned::now();
+        let now = unbound_datetime::now();
         let today = now.date();
         Self {
             palette,
@@ -291,7 +290,7 @@ impl Screen {
             .get(&notification.id)
             .map(|seen| now.saturating_duration_since(*seen))
             .unwrap_or_default();
-        let wall = Zoned::now();
+        let wall = unbound_datetime::now();
         let age = age_label(&wall.saturating_sub(age), &wall, &self.dates);
         let (width, lines) = if wide {
             (CENTER_WIDTH - 2.0 * CENTER_PADDING, CENTER_BODY_LINES)

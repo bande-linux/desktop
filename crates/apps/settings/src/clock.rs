@@ -1,5 +1,5 @@
+use jiff::Timestamp;
 use jiff::tz::TimeZone;
-use jiff::{Timestamp, Zoned};
 use unbound_settings_panes::SettingId;
 use unbound_toolkit::Spacing;
 use unbound_toolkit::ui::{Axis, Button, SearchField, Stack, TextField, Widget};
@@ -30,7 +30,7 @@ impl SettingsView {
             return Vec::new();
         };
         let zone = TimeZone::get(&time.zone).unwrap_or(TimeZone::UTC);
-        let now = Zoned::now().with_time_zone(zone);
+        let now = Timestamp::now().to_zoned(zone);
         let text = self
             .drafts
             .get(&id)

@@ -118,7 +118,7 @@ impl App for Locker {
             if let Err(error) = self.minutes.wait() {
                 tracing::warn!("cannot follow the clock: {error}");
             }
-            self.screen.set_clock(&jiff::Zoned::now());
+            self.screen.set_clock(&unbound_datetime::now());
             window.request_redraw();
             return;
         }
@@ -194,7 +194,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     .inspect_err(|error| tracing::warn!("no clock format: {error}"))
                     .unwrap_or_default(),
             ),
-            &jiff::Zoned::now(),
+            &unbound_datetime::now(),
             window.appearance(),
             TextSystem::new(),
         ),

@@ -5,7 +5,6 @@ use std::sync::mpsc::{self, Receiver};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use jiff::Zoned;
 use unbound_datetime::DateFormats;
 
 use crate::{Request, Screen, Sender};
@@ -265,7 +264,7 @@ impl App for Notifications {
             match message {
                 Message::Presentation(presentation) => self.screen.present(presentation, now),
                 Message::Toggle => {
-                    self.screen.set_today(Zoned::now().date(), now);
+                    self.screen.set_today(unbound_datetime::now().date(), now);
                     self.screen.toggle(now);
                 }
                 Message::Focus { app, token } => self.focus(window, &app, &token),
@@ -293,7 +292,7 @@ impl App for Notifications {
         }
         self.hide_pending = false;
         if self.next_refresh.is_some_and(|refresh| refresh <= now) {
-            self.screen.set_today(Zoned::now().date(), now);
+            self.screen.set_today(unbound_datetime::now().date(), now);
             self.screen.rebuild(now);
             self.sync(window);
         }

@@ -14,6 +14,7 @@ jiff.workspace = true
 pipewire = { workspace = true, features = ["v0_3_34"] }
 rustix = { workspace = true, features = ["event", "fs", "process", "time"] }
 tracing.workspace = true
+unbound-datetime.workspace = true
 unbound-fs.workspace = true
 unbound-graphics.workspace = true
 unbound-inbox.workspace = true

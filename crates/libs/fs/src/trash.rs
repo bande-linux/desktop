@@ -401,7 +401,7 @@ impl Trash {
         }
         let path = std::path::absolute(path)?;
         self.dir_for(&path)?
-            .put(&path, jiff::Zoned::now().datetime())
+            .put(&path, unbound_datetime::now().datetime())
     }
 
     fn dirs(&self) -> Vec<TrashDir> {

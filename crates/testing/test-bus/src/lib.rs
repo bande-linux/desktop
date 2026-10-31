@@ -1,5 +1,6 @@
 pub mod bluez;
 pub mod networkmanager;
+pub mod permission_store;
 
 use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, Stdio};

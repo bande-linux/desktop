@@ -45,7 +45,9 @@ Recommends: unbound-term (= ${binary:Version}),
             xdg-user-dirs,
             upower,
             udisks2,
-            at-spi2-core
+            at-spi2-core,
+            systemd-oomd,
+            systemd-zram-generator
 Suggests: gnome-clocks
 Description: Unbound desktop environment
  The Unbound desktop: a pure Wayland desktop with its own compositor, shell,
@@ -55,3 +57,9 @@ Description: Unbound desktop environment
  It recommends a browser, text editor, image viewer, PDF viewer, calculator
  and video player, and opens files in them by default, and an unlocked
  keyring for the passwords browsers and editors keep.
+ .
+ So that running out of memory never freezes the computer, it recommends
+ compressed swap in memory (zram, sized like Fedora's and compressed with
+ zstd) and systemd-oomd, and makes the apps' slice the place where
+ systemd-oomd closes an app when memory stays under pressure, so the
+ compositor and the session services keep running.

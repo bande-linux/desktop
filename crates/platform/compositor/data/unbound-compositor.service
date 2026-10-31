@@ -10,3 +10,5 @@ Slice=session.slice
 Type=notify
 NotifyAccess=main
 ExecStart=/usr/bin/unbound-compositor
+OOMScoreAdjust=100
+ManagedOOMPreference=avoid
